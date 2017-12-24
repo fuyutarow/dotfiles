@@ -5,9 +5,7 @@ set tabstop=2
 set expandtab
 set softtabstop=2
 set shiftwidth=2 
-set tabstop=2
 set clipboard=unnamed,autoselect
-nnoremap O :<C-u>call append(expand('.'), '')<Cr>j
 
 
 autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
@@ -91,26 +89,26 @@ call vundle#end()            " required
 filetype plugin indent on    " required
 
 
-"""-------------------------------------------------------------------------------
-""" NeoBundle 
-"""-------------------------------------------------------------------------------
-""if has('vim_starting')
-""   " 初回起動時のみruntimepathにneobundleのパスを指定する
-""   set runtimepath+=~/.vim/bundle/neobundle.vim/
-""endif
-""
-""" NeoBundleを初期化
-""call neobundle#begin(expand('~/.vim/bundle/'))
-""
-""" インストールするプラグインをここに記述
-""NeoBundle 'Shougo/unite.vim'
-""NeoBundle 'Shougo/vimfiler'
-""NeoBundle 'Shougo/neocomplcache'
-""
-""call neobundle#end()
-""
-""" ファイルタイプ別のプラグイン/インデントを有効にする
-""filetype plugin indent on
+"-------------------------------------------------------------------------------
+" NeoBundle 
+"-------------------------------------------------------------------------------
+if has('vim_starting')
+   " 初回起動時のみruntimepathにneobundleのパスを指定する
+   set runtimepath+=~/.vim/bundle/neobundle.vim/
+endif
+
+" NeoBundleを初期化
+call neobundle#begin(expand('~/.vim/bundle/'))
+
+" インストールするプラグインをここに記述
+NeoBundle 'Shougo/unite.vim'
+NeoBundle 'Shougo/vimfiler'
+NeoBundle 'Shougo/neocomplcache'
+
+call neobundle#end()
+
+" ファイルタイプ別のプラグイン/インデントを有効にする
+filetype plugin indent on
 
 
 "-------------------------------------------------------------------------------
@@ -126,6 +124,7 @@ Plugin 'leafgarland/typescript-vim'
 " `:help :Glaive` for usage.
 Plugin 'google/vim-glaive'
 Plugin 'kana/vim-smartinput'
+Plugin 'cohama/lexima.vim'
 
 " ...
 call vundle#end()
@@ -167,51 +166,51 @@ nnoremap <S-f> :FormatCode<CR>
 ""autocmd FileType python nnoremap <S-f> :call Autopep8()<CR>
 
 
-"-------------------------------------------------------------------------------
-" Completion
-"-------------------------------------------------------------------------------
-
-" Parenthesis
-inoremap { {}<LEFT>
-inoremap [ []<LEFT>
-"inoremap ( ()<LEFT>
-inoremap ( ()<ESC>i
-inoremap " ""<LEFT>
-inoremap ' ''<LEFT>
-vnoremap { "zdi^V{<C-R>z}<ESC>
-vnoremap [ "zdi^V[<C-R>z]<ESC>
-vnoremap ( "zdi^V(<C-R>z)<ESC>
-vnoremap " "zdi^V"<C-R>z^V"<ESC>
-vnoremap ' "zdi'<C-R>z'<ESC>
-
-function! DeleteParenthesesAdjoin() " http://qiita.com/m_mysht/items/56e5d5a17d07a64d8b65
-    let pos = col(".") - 1
-    let str = getline(".")
-    let parentLList = ["(", "[", "{", "\'", "\""]
-    let parentRList = [")", "]", "}", "\'", "\""]
-    let cnt = 0
-
-    let output = ""
-
-    if pos == strlen(str)
-        return "\b"
-    endif
-    for c in parentLList
-        if str[pos-1] == c && str[pos] == parentRList[cnt]
-            call cursor(line("."), pos + 2)
-            let output = "\b"
-            break
-        endif
-        let cnt += 1
-    endfor
-    return output."\b"
-endfunction
-inoremap <silent> <BS> <C-R>=DeleteParenthesesAdjoin()<CR>
-inoremap <silent> <C-h> <C-R>=DeleteParenthesesAdjoin()<CR>
-
-
-nnoremap ^ I
-nnoremap $ A
+"""-------------------------------------------------------------------------------
+""" Completion
+"""-------------------------------------------------------------------------------
+""
+""" Parenthesis
+""inoremap { {}<LEFT>
+""inoremap [ []<LEFT>
+"""inoremap ( ()<LEFT>
+""inoremap ( ()<ESC>i
+""inoremap " ""<LEFT>
+""inoremap ' ''<LEFT>
+""vnoremap { "zdi^V{<C-R>z}<ESC>
+""vnoremap [ "zdi^V[<C-R>z]<ESC>
+""vnoremap ( "zdi^V(<C-R>z)<ESC>
+""vnoremap " "zdi^V"<C-R>z^V"<ESC>
+""vnoremap ' "zdi'<C-R>z'<ESC>
+""
+""function! DeleteParenthesesAdjoin() " http://qiita.com/m_mysht/items/56e5d5a17d07a64d8b65
+""    let pos = col(".") - 1
+""    let str = getline(".")
+""    let parentLList = ["(", "[", "{", "\'", "\""]
+""    let parentRList = [")", "]", "}", "\'", "\""]
+""    let cnt = 0
+""
+""    let output = ""
+""
+""    if pos == strlen(str)
+""        return "\b"
+""    endif
+""    for c in parentLList
+""        if str[pos-1] == c && str[pos] == parentRList[cnt]
+""            call cursor(line("."), pos + 2)
+""            let output = "\b"
+""            break
+""        endif
+""        let cnt += 1
+""    endfor
+""    return output."\b"
+""endfunction
+""inoremap <silent> <BS> <C-R>=DeleteParenthesesAdjoin()<CR>
+""inoremap <silent> <C-h> <C-R>=DeleteParenthesesAdjoin()<CR>
+""
+""
+""nnoremap ^ I
+""nnoremap $ A
 
 "-------------------------------------------------------------------------------
 " neocomplcache

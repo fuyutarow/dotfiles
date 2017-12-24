@@ -1,0 +1,10 @@
+[user]
+	email = fytro10@gmail.com
+	name = fytroo
+
+[alias]
+  g = log --graph --oneline --decorate=full
+  s = status
+  ss = status -s
+  co = checkout
+  b = branch

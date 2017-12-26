@@ -6,6 +6,8 @@
   ffs = flow feature start
   g = log --graph --oneline --decorate=full
   s = status
+  cm = commit -m
+  amend = commit --amend 
   ss = status -s
   co = checkout
   cb = checkout -b

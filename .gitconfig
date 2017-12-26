@@ -3,8 +3,10 @@
 	name = fytroo
 
 [alias]
+  ffs = flow feature start
   g = log --graph --oneline --decorate=full
   s = status
   ss = status -s
   co = checkout
+  cb = checkout -b
   b = branch

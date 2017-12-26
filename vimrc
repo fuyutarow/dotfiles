@@ -89,27 +89,6 @@ call vundle#end()            " required
 filetype plugin indent on    " required
 
 
-"-------------------------------------------------------------------------------
-" NeoBundle 
-"-------------------------------------------------------------------------------
-if has('vim_starting')
-   " 初回起動時のみruntimepathにneobundleのパスを指定する
-   set runtimepath+=~/.vim/bundle/neobundle.vim/
-endif
-
-" NeoBundleを初期化
-call neobundle#begin(expand('~/.vim/bundle/'))
-
-" インストールするプラグインをここに記述
-NeoBundle 'Shougo/unite.vim'
-NeoBundle 'Shougo/vimfiler'
-NeoBundle 'Shougo/neocomplcache'
-
-call neobundle#end()
-
-" ファイルタイプ別のプラグイン/インデントを有効にする
-filetype plugin indent on
-
 
 "-------------------------------------------------------------------------------
 " Google Code Format 
@@ -126,6 +105,9 @@ Plugin 'google/vim-glaive'
 Plugin 'kana/vim-smartinput'
 Plugin 'cohama/lexima.vim'
 
+Plugin 'Shougo/unite.vim'
+Plugin 'Shougo/vimfiler'
+Plugin 'Shougo/neocomplcache'
 " ...
 call vundle#end()
 

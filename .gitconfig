@@ -1,0 +1,18 @@
+[user]
+	email = fytro10@gmail.com
+	name = fytroo
+
+[alias]
+  ffs = flow feature start
+  g = log --graph --oneline --decorate=full
+  s = status
+  cm = commit -m
+  amend = commit --amend 
+  ss = status -s
+  co = checkout
+  cb = checkout -b
+  b = branch
+  ba = branch -a
+  f = fetch
+  r = remote
+  m = merge --no-ff 

@@ -116,6 +116,9 @@ alias node='nodejs'
 
 alias jp='jupyter nbconvert --to=python'
 
+export PYSH=$HOME/.pyscript
+alias fc='python $PYSH/fc.py'
+
 
 gpp () {
   if [ `echo $1 | fgrep '.c'` ] ; then
@@ -176,4 +179,4 @@ export LDFLAGS=-L/usr/local/cuda-8.0/lib64;
 export NVM_DIR="/home/fytroo/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
 
-alias rere='pip uninstall tuner; pip install ~/tuner'
+alias rere='pip uninstall tuner; pip install ~/Tuner'

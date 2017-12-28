@@ -6,6 +6,7 @@ cat .bashrc > ~/.bashrc
 cat .vimrc > ~/.vimrc
 cat .gitconfig > ~/.gitconfig 
 cat keyhac.py > keyhac/config.py
+cat pyscript > .pyscript
 ```
 
 ##### vim plugins install

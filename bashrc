@@ -117,7 +117,7 @@ alias node='nodejs'
 alias jp='jupyter nbconvert --to=python'
 
 export PYSH=$HOME/.pyscript
-alias fc='python $PYSH/fc.py'
+alias fc='python $PYSH/fc.py -r'
 
 
 gpp () {

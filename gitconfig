@@ -2,6 +2,10 @@
 	email = fytro10@gmail.com
 	name = fytroo
 
+[url "github:"]
+	InsteadOf = https://github.com/
+	InsteadOf = git@github.com:
+
 [alias]
   ffs = flow feature start
   g = log --graph --oneline --decorate=full
@@ -12,7 +16,6 @@
   co = checkout
   cb = checkout -b
   b = branch
-  ba = branch -a
-  f = fetch
-  r = remote
-  m = merge --no-ff 
+
+  dc = git diff --cached
+

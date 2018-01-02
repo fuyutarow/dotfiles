@@ -10,7 +10,8 @@ parser.add_argument('-f', dest='onlyfile', action='store_true')
 args = parser.parse_args()
 
 if args.recursive:
-    for dir in os.listdir(args.dir):
+    for d in os.listdir(args.dir):
+        dir = os.path.join(args.dir, d)
         if os.path.isdir(dir):
             res = len(os.listdir(dir))
             print('{}\t{}'.format(dir, res))

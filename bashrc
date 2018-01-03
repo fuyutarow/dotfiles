@@ -180,3 +180,7 @@ export NVM_DIR="/home/fytroo/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
 
 alias rere='pip uninstall tuner; pip install ~/Tuner'
+alias cat='lolcat'
+fortune | pokemonsay
+export GOPATH=$HOME/.local/go
+export PATH=$GOPATH/bin:$PATH

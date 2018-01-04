@@ -112,9 +112,6 @@ alias tarxz='tar Jxfv'
 alias htop='htop'
 alias nvidia-smi='nvidia-smi'
 alias mnt-d='sudo mount -t drvfs D: /mnt/d'
-alias node='nodejs'
-
-alias jp='jupyter nbconvert --to=python'
 
 export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
@@ -176,7 +173,7 @@ export CUDA_PATH=/usr/local/cuda-8.0
 export CFLAGS=-I/usr/local/cuda-8.0/include
 export LDFLAGS=-L/usr/local/cuda-8.0/lib64;
 
-export NVM_DIR="/home/fytroo/.nvm"
+export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
 
 alias rere='pip uninstall tuner; pip install ~/Tuner'
@@ -184,3 +181,4 @@ alias cat='lolcat'
 fortune | pokemonsay
 export GOPATH=$HOME/.local/go
 export PATH=$GOPATH/bin:$PATH
+alias node=$NVM_DIR/versions/node/v9.2.1/bin/node

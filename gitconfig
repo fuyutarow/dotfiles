@@ -8,6 +8,7 @@
 
 [alias]
   ffs = flow feature start
+  dc = git diff --cached
   g = log --graph --oneline --decorate=full
   s = status
   cm = commit -m
@@ -16,6 +17,13 @@
   co = checkout
   cb = checkout -b
   b = branch
-
-  dc = git diff --cached
-
+  ba = branch -a
+  bd = branch -d
+  bm = branch -m #old_name #new_name
+  f = fetch
+  r = remote
+  m = merge --no-ff 
+  pull-force = !git fetch origin & git reset --hard origin/master
+  l = ls-files
+[push]
+	default = simple

@@ -10,6 +10,10 @@ if [ -x /usr/bin/dircolors ]; then
     alias egrep='egrep --color=auto'
 fi
 
+if type lolcat > /dev/null 2>&1; then
+  alias cat='lolcat'
+fi
+
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -55,7 +59,6 @@ export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
 
 alias rere='pip uninstall tuner; pip install ~/Tuner'
-alias cat='lolcat'
 
 alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
 alias canary='/mnt/c/Users/fytroo/AppData/Local/Google/Chrome\ SxS/Application/chrome.exe'

@@ -138,6 +138,6 @@ export PATH=$HOME/.local/bin:$PATH
 
 if type fortune > /dev/null 2>&1; then
   if type pokemonsay > /dev/null 2>&1; then
-    fortune | pokemonsay
+    fortune | pokemonsay --think
   fi
 fi

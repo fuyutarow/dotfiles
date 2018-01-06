@@ -100,6 +100,9 @@ if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
+if [ -f ~/.bash_local ]; then
+    . ~/.bash_local
+fi
 # enable programmable completion features (you don't need to enable
 # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
 # sources /etc/bash.bashrc).
@@ -111,24 +114,12 @@ if ! shopt -oq posix; then
   fi
 fi
 
-# added by Anaconda3 installer
-export PATH=$HOME/anaconda3/bin:$PATH
-
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/cuda-8.0/lib64"
-export CUDA_HOME="/usr/local/cuda-8.0"
-
-export PATH="/usr/local/cuda-8.0/bin:$PATH"
-#export CPATH="/usr/local/cuda-8.0/include:$CPATH"
-#export LIBRARY_PATH="/usr/local/cuda-8.0/lib64:$LIBRARY_PATH"
-#export LD_LIBRARY_PATH="/usr/local/cuda-8.0/lib64:$LD_LIBRARY_PATH"
-#export CUDA_PATH="/usr/local/cuda-8.0"
-
-export LD_LIBRARY_PATH=/usr/local/cuda-8.0/lib64
-export CUDA_PATH=/usr/local/cuda-8.0
-export CFLAGS=-I/usr/local/cuda-8.0/include
-export LDFLAGS=-L/usr/local/cuda-8.0/lib64;
-
-source $HOME/.local/lazyenv/lazyenv.bash
+if [ -f $HOME/.local/lazyenv/lazyenv.bash ]; then
+  source $HOME/.local/lazyenv/lazyenv.bash 
+else
+  git clone https://github.com/takezoh/lazyenv.git $HOME/.local/lazyenv
+  source $HOME/.local/lazyenv/lazyenv.bash 
+fi
 
 _nvmenv_init() {
   export NVM_DIR="$HOME/.nvm"
@@ -143,7 +134,10 @@ _goenv_init() {
 }
 eval "$(lazyenv.load _goenv_init go)"
 
-alias rere='pip uninstall tuner; pip install ~/Tuner'
-alias cat='lolcat'
 export PATH=$HOME/.local/bin:$PATH
-fortune | pokemonsay
+
+if type fortune > /dev/null 2>&1; then
+  if type pokemonsay > /dev/null 2>&1; then
+    fortune | pokemonsay
+  fi
+fi

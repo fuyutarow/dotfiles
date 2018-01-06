@@ -1,15 +1,15 @@
 [user]
-	email = fytro10@gmail.com
-	name = fytroo
-
+  email = fytro10@gmail.com
+  name = fytroo
+  
 [url "github:"]
-	InsteadOf = https://github.com/
-	InsteadOf = git@github.com:
-
+  InsteadOf = https://github.com/
+  InsteadOf = git@github.com:
+  
 [alias]
   ffs = flow feature start
   dc = git diff --cached
-  g = log --graph --oneline --decorate=full
+  g = log --all --graph --oneline --decorate=full
   s = status
   cm = commit -m
   amend = commit --amend 
@@ -25,5 +25,6 @@
   m = merge --no-ff 
   pull-force = !git fetch origin & git reset --hard origin/master
   l = ls-files
+  
 [push]
-	default = simple
+  default = simple

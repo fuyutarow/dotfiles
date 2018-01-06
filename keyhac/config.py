@@ -14,9 +14,15 @@ from keyhac import *
 def configure(keymap):
     keymap_global = keymap.defineWindowKeymap()
 
+    ################################################################################
+    # Space and Shift
+    ################################################################################
     keymap.replaceKey('Space', 'RShift')
     keymap_global['O-RShift'] = 'Space'
 
+    ################################################################################
+    # vim like
+    ################################################################################
     keymap.defineModifier('Semicolon', 'User0')
     for any in ("", "S-", "C-", "C-S-", "A-", "A-S-", "A-C-", "A-C-S-", "W-",
                 "W-S-", "W-C-", "W-C-S-", "W-A-", "W-A-S-", "W-A-C-",
@@ -37,16 +43,42 @@ def configure(keymap):
         keymap_global[any + 'U0-n'] = any + 'Return'
         keymap_global[any + 'U0-m'] = any + 'Return'
 
-    keymap_global['U0-a'] = 'End'
+    keymap_global['U0-S-a'] = 'End'
+    keymap_global['U0-S-i'] = 'Home'
     keymap_global['U0-o'] = 'End', 'S-Return'
-    keymap_global['S-U0-o'] = 'Home', 'S-Return', 'Up'
-    keymap_global['S-U0-d'] = 'S-End', 'Delete'
+    keymap_global['U0-x'] = 'Delete'
+    keymap_global['U0-S-x'] = 'Left', 'Delete'
+    keymap_global['U0-S-o'] = 'Home', 'S-Return', 'Up'
+    keymap_global['U0-S-d'] = 'S-End', 'Delete'
     keymap_global['U0-d'] = keymap.defineMultiStrokeKeymap('')
     keymap_global['U0-d']['U0-d'] = 'Home', 'S-End', 'C-x'
+
     def launch_ubuntu():
         shellExecute(None, "ubuntu.exe", "", "")
 
     keymap_global['U0-t'] = launch_ubuntu
-    #keymap_global['U0-t'] = keymap.ShellExecuteCommand( None, None, 'bash.exe', '', '')
 
-    #keymap_global['U0-t'] = launch(ur'')
+    ################################################################################
+    # toggle IME
+    ################################################################################
+    def switch_ime(flag):
+        BALLOON_TIMEOUT_MSEC = 500
+
+        if flag:
+            ime_status = 1
+            message = u'[あ]'
+        else:
+            ime_status = 0
+            message = u'[_A]'
+        wnd = keymap.getTopLevelWindow()
+
+        def wrap():
+            keymap.wnd.setImeStatus(ime_status)
+            keymap.popBalloon('ime_status', message, BALLOON_TIMEOUT_MSEC)
+
+        return wrap
+
+    keymap_global['D-LAlt'] = 'D-LAlt', 'LCtrl'
+    keymap_global['D-RAlt'] = 'D-RAlt', 'LCtrl'
+    keymap_global['O-LAlt'] = switch_ime(False)
+    keymap_global['O-RAlt'] = switch_ime(True)

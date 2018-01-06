@@ -1,4 +1,4 @@
-# ~/.bashrc: executed by bash(1) for non-login shells.
+# ~/.bashrc: executed by bash(0) for non-login shells.
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
@@ -72,50 +72,8 @@ xterm*|rxvt*)
     ;;
 esac
 
-# enable color support of ls and also add handy aliases
-if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    alias ls='ls --color=auto'
-    #alias dir='dir --color=auto'
-    #alias vdir='vdir --color=auto'
-
-    alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
-fi
-
-# colored GCC warnings and errors
-#export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
-
-# some more ls aliases
-alias c='clear'
-alias cl='clear;ls'
-alias d='diff'
-alias e='echo'
-alias g='grep'
-alias h='history 500'
-alias j='jobs'
-alias k='kill -9'
-alias m='more'
-alias l='ls -CF'
-alias la='ls -A'
-alias ll='ls -alF'
-alias n='n'
-alias p='ps uxf'
-alias pp='ps auxf'
-alias s='source'
-alias t='touch'
-alias tf='tail -fF'
-alias v='view'
-
-alias tarxz='tar Jxfv'
-alias htop='htop'
-alias nvidia-smi='nvidia-smi'
-alias mnt-d='sudo mount -t drvfs D: /mnt/d'
-
 export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
-
 
 gpp () {
   if [ `echo $1 | fgrep '.c'` ] ; then
@@ -129,9 +87,6 @@ gpp () {
   fi
 }
 
-wf () {
-	ll $1 | wc -l
-}
 # Add an "alert" alias for long running commands.  Use like so:
 #   sleep 10; alert
 alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo error)" "$(history|tail -n1|sed -e '\''s/^\s*[0-9]\+\s*//;s/[;&|]\s*alert$//'\'')"'
@@ -173,12 +128,22 @@ export CUDA_PATH=/usr/local/cuda-8.0
 export CFLAGS=-I/usr/local/cuda-8.0/include
 export LDFLAGS=-L/usr/local/cuda-8.0/lib64;
 
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+source $HOME/.local/lazyenv/lazyenv.bash
+
+_nvmenv_init() {
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
+  [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+}
+eval "$(lazyenv.load _nvmenv_init nvm node npm)"
+
+_goenv_init() {
+  export GOPATH=$HOME/.local/go
+  export PATH=$GOPATH/bin:$PATH
+}
+eval "$(lazyenv.load _goenv_init go)"
 
 alias rere='pip uninstall tuner; pip install ~/Tuner'
 alias cat='lolcat'
+export PATH=$HOME/.local/bin:$PATH
 fortune | pokemonsay
-export GOPATH=$HOME/.local/go
-export PATH=$GOPATH/bin:$PATH
-alias node=$NVM_DIR/versions/node/v9.2.1/bin/node

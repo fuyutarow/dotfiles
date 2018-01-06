@@ -10,6 +10,7 @@
   ffs = flow feature start
   dc = git diff --cached
   g = log --all --graph --oneline --decorate=full
+  d = diff
   s = status
   cm = commit -m
   amend = commit --amend 

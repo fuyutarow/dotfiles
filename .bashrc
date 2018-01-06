@@ -121,18 +121,33 @@ else
   source $HOME/.local/lazyenv/lazyenv.bash 
 fi
 
+if type figlet > /dev/null 2>&1; then
+  :
+else
+  alias figlet='echo'
+fi
+
 _nvmenv_init() {
+  echo 'loading...'
   export NVM_DIR="$HOME/.nvm"
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"  # This loads nvm
   [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+  figlet 'NVM'
 }
 eval "$(lazyenv.load _nvmenv_init nvm node npm)"
 
 _goenv_init() {
+  echo 'loading...'
   export GOPATH=$HOME/.local/go
   export PATH=$GOPATH/bin:$PATH
+  figlet 'GO'
 }
 eval "$(lazyenv.load _goenv_init go)"
+
+_python_init() {
+  figlet 'Python on Anaconda'
+}
+eval "$(lazyenv.load _python_init python pip)"
 
 export PATH=$HOME/.local/bin:$PATH
 

@@ -96,6 +96,7 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 # ~/.bash_aliases, instead of adding them here directly.
 # See /usr/share/doc/bash-doc/examples in the bash-doc package.
 
+export PATH=$HOME/.local/bin:$PATH
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
@@ -147,12 +148,15 @@ eval "$(lazyenv.load _goenv_init go)"
 _python_init() {
   figlet 'Python on Anaconda'
 }
-eval "$(lazyenv.load _python_init python pip)"
+eval "$(lazyenv.load _python_init python ipython jupyter pip)"
 
-export PATH=$HOME/.local/bin:$PATH
 
 if type fortune > /dev/null 2>&1; then
   if type pokemonsay > /dev/null 2>&1; then
     fortune | pokemonsay --think
   fi
 fi
+
+export DISPLAY=localhost:0.0
+alias 223='2to3 -wf all'
+alias yapf-recursice='yapf -ir'

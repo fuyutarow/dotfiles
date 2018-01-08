@@ -14,6 +14,12 @@ if type lolcat > /dev/null 2>&1; then
   alias cat='lolcat'
 fi
 
+if [[ -x `which colordiff` ]]; then
+  alias diff='colordiff'
+else
+  echo 'not found colordiff'
+fi
+
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
@@ -27,7 +33,7 @@ alias ~='cd ~'
 alias c='clear'
 alias cl='clear;ls'
 alias cr='cp -R'
-alias d='diff'
+alias d='diff -u'
 alias e='echo'
 alias f='find'
 alias g='grep'
@@ -51,6 +57,9 @@ alias v='view'
 alias tarxz='tar Jxfv'
 alias htop='htop'
 alias nvidia-smi='nvidia-smi'
+
+alias juno='jupyter notebook'
+alias jupy='jupyter nbconvert --to=python'
 
 # for WSL
 alias mnt-d='sudo mount -t drvfs D: /mnt/d'

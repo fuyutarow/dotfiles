@@ -58,8 +58,27 @@ alias tarxz='tar Jxfv'
 alias htop='htop'
 alias nvidia-smi='nvidia-smi'
 
+gpp () {
+  if [ `echo $1 | fgrep '.c'` ] ; then
+    #gcc $1 -o ${1%.c}
+    gcc $1 -o ${1/.c/.out}
+  elif [ `echo $1 | fgrep '.cpp'` ] ; then
+    #g++ -std=c++11 $1 -o ${1%.cpp}
+    g++ -std=c++11 $1 -o ${1/.cpp/.out}
+  else
+    :
+  fi
+}
+
 alias juno='jupyter notebook'
-alias jupy='jupyter nbconvert --to=python'
+
+jupy () {
+  jupyter nbconvert --to=python $1
+  yapf -i ${1/.ipynb/.py}
+}
+
+#alias jupy='jupyter nbconvert --to=python'
+
 
 # for WSL
 alias mnt-d='sudo mount -t drvfs D: /mnt/d'

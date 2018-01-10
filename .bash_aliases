@@ -43,6 +43,7 @@ alias k='kill -9'
 alias l='ls -CF'
 alias la='ls -A'
 alias ll='ls -alF'
+alias lt='ls -ltr'
 alias lm='cpulimit -l 200 --'
 alias m='more'
 alias n='n'
@@ -85,6 +86,7 @@ alias mnt-d='sudo mount -t drvfs D: /mnt/d'
 
 export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
+alias alarm='python $PYSH/alarm.py'
 
 alias rere='pip uninstall tuner; pip install ~/Tuner'
 

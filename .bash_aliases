@@ -37,6 +37,7 @@ alias d='diff -u'
 alias e='echo'
 alias f='find'
 alias g='grep'
+alias gv='grep -v'
 alias h='history 500'
 alias j='jobs'
 alias k='kill -9'
@@ -56,6 +57,7 @@ alias du2='du -ah --max-depth=2'
 alias v='view'
 
 alias tarxz='tar Jxfv'
+alias tarbz2='tar xf'
 alias htop='htop'
 alias nvidia-smi='nvidia-smi'
 
@@ -88,6 +90,10 @@ export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
 alias alarm='python $PYSH/alarm.py'
 
+min () {
+  nohup python -u $PYSH/min.py $1 $2 > min.log &
+}
+
 alias rere='pip uninstall tuner; pip install ~/Tuner'
 
 alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
@@ -99,3 +105,16 @@ alias camico='chrome "camico.slack.com"'
 # for LINE
 alias ine='chrome --profile-directory=Default --app-id=menkifleemblimdogmoihpfopnplikde &'
 alias myip='dig +short myip.opendns.com @resolver1.opendns.com'
+alias jupyter-kernelspec-list='jupyter kernelspec list'
+
+
+alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
+julia-init () {
+julia -e '''
+Pkg.add("PyCall")
+Pkg.add("SymPy")
+Pkg.add("PyPlot")
+Pkg.add("Plots")
+Pkg.add("ZZ")
+'''
+}

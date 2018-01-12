@@ -138,6 +138,32 @@ _python_init() {
 }
 eval "$(lazyenv.load _python_init python ipython jupyter pip)"
 
+_rust_init() {
+  figlet 'Rust'
+  if [ -e ~/.cargo/env ]; then
+    :
+  else
+    curl https://sh.rustup.rs -sSf | sh
+  fi
+  source $HOME/.cargo/env
+}
+eval "$(lazyenv.load _rust_init rust cargo rustc rustup)"
+
+alias jip='julia-pkg'
+_julia_init() {
+  if [ -e ~/.local/bin/julia-pkg ]; then
+    :
+  else
+    PKG_PATH=$HOME/.tmp/julia-pkg
+    git clone https://github.com/ararslan/julia-pkg.git PKG_PATH
+    mv ~/.gitconfig ~/.gitconfig.tmp 
+    cd PKG_PATH 
+    make install prefix=$HOME/.local
+    cp -a target/release/julia-pkg $HOME/.local/bin/
+    mv ~/.gitconfig.tmp ~/.gitconfig
+  fi
+}
+eval "$(lazyenv.load _julia_init julia julia-pkg jip)"
 
 if type fortune > /dev/null 2>&1; then
   if type pokemonsay > /dev/null 2>&1; then

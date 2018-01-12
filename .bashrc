@@ -155,12 +155,11 @@ _julia_init() {
     :
   else
     PKG_PATH=$HOME/.tmp/julia-pkg
-    git clone https://github.com/ararslan/julia-pkg.git PKG_PATH
-    mv ~/.gitconfig ~/.gitconfig.tmp 
-    cd PKG_PATH 
+    git clone https://github.com/fytroo/julia-pkg.git $PKG_PATH
+    cd $PKG_PATH 
+    ./install_rust.sh
+    ./install.sh --prefix $HOME/.local
     make install prefix=$HOME/.local
-    cp -a target/release/julia-pkg $HOME/.local/bin/
-    mv ~/.gitconfig.tmp ~/.gitconfig
   fi
 }
 eval "$(lazyenv.load _julia_init julia julia-pkg jip)"

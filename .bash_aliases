@@ -80,7 +80,9 @@ jupy () {
   yapf -i ${1/.ipynb/.py}
 }
 
-#alias jupy='jupyter nbconvert --to=python'
+juju () {
+  jupyter nbconvert --to script $1
+}
 
 
 # for WSL

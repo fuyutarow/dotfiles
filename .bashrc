@@ -149,7 +149,6 @@ _rust_init() {
 }
 eval "$(lazyenv.load _rust_init rust cargo rustc rustup)"
 
-alias jip='julia-pkg'
 _julia_init() {
   if [ -e ~/.local/bin/julia-pkg ]; then
     :
@@ -173,3 +172,5 @@ fi
 export DISPLAY=localhost:0.0
 alias 223='2to3 -wf all'
 alias yapf-recursice='yapf -ir'
+
+alias publish-pypi='python setup.py sdist; twine upload dist/*'

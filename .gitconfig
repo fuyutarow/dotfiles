@@ -1,18 +1,22 @@
+[url "://danielkummer.github.io/git-flow-cheatsheet/ttps://"]
+	insteadOf = git://
+
 [user]
-  email = fytro10@gmail.com
-  name = fytroo
+  email = sktnkysh+dev@gmail.com
+  name = sktnkysh
   
 [url "github:"]
-  InsteadOf = https://github.com/
-  InsteadOf = git@github.com:
+  pushInsteadOf = https://github.com/
+  pushInsteadOf = git@github.com:
   
 [alias]
-  ffs = flow feature start
+  alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
+  ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
+  ll = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate --numstat
   dc = git diff --cached
   g = log --all --graph --oneline --decorate=full
   d = diff
   s = status
-  cm = commit -m
   amend = commit --amend 
   ss = status -s
   co = checkout
@@ -22,10 +26,22 @@
   bd = branch -d
   bm = branch -m #old_name #new_name
   f = fetch
-  r = remote
+  r = remote -v
   m = merge --no-ff 
   pull-force = !git fetch origin & git reset --hard origin/master
   l = ls-files
+
+  undo = reset HEAD~1 --mixed
+  cm = !git add -A && git commit -m 
+
+# git flow
+  flow-init = flow init
+  flow-help = !sh -c 'echo https://danielkummer.github.io/git-flow-cheatsheet/ && echo https://gist.github.com/JamesMGreene/cdd0ac49f90c987e45ac'
+  echoes = !sh -c 'echo hi && echo bye'
+
+  ff = flow feature
+  ffs = flow feature start
+  ffp = flow feature publish
   
 [push]
   default = simple

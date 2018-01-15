@@ -151,3 +151,28 @@ enja() {
 jaen() {
   google_translate "$*" "ja-en"
 }
+
+google() {
+local str opt
+if [ $ != 0 ]; then
+for i in $*; do
+str="$str+$i"
+done
+str=`echo $str | sed 's/^\+//'`
+opt='search?num=50&amp;hl=ja&amp;lr=lang_ja'
+opt="${opt}&amp;q=${str}"
+fi
+w3m http://www.google.co.jp/$opt
+}
+ 
+alc() {
+if [ $ != 0 ]; then
+w3m "http://eow.alc.co.jp/$*/UTF-8/?ref=sa"
+else
+w3m "http://www.alc.co.jp/"
+fi
+}
+
+lsix() {
+ montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-; }
+

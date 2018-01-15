@@ -177,10 +177,11 @@ _tiv_init() {
 	if type tiv > /dev/null 2>&1; then
 		:
 	else
-		git clone https://github.com/stefanhaustein/TerminalImageViewer.git $HOME/.tmp
+		git clone https://github.com/stefanhaustein/TerminalImageViewer.git $HOME/.tmp/TerminalImageViewer
 		cd $HOME/.tmp/TerminalImageViewer/src/main/cpp
 		make
 		sudo make install
+    cd -
 	fi
 }
 eval "$(lazyenv.load _tiv_init tiv)"

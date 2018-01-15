@@ -85,6 +85,7 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 # See /usr/share/doc/bash-doc/examples in the bash-doc package.
 
 export PATH=$HOME/.local/bin:$PATH
+
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
@@ -92,6 +93,13 @@ fi
 if [ -f ~/.bash_local ]; then
     . ~/.bash_local
 fi
+
+if [ -d ~/.bashrc.d ]; then
+    for file in $(/bin/ls ~/.bashrc.d/*.bashrc); do
+        . $file;
+    done
+fi
+
 # enable programmable completion features (you don't need to enable
 # this, if it's already enabled in /etc/bash.bashrc and /etc/profile
 # sources /etc/bash.bashrc).
@@ -162,6 +170,20 @@ _julia_init() {
   fi
 }
 eval "$(lazyenv.load _julia_init julia julia-pkg jip)"
+
+
+
+_tiv_init() {
+	if type tiv > /dev/null 2>&1; then
+		:
+	else
+		git clone https://github.com/stefanhaustein/TerminalImageViewer.git $HOME/.tmp
+		cd $HOME/.tmp/TerminalImageViewer/src/main/cpp
+		make
+		sudo make install
+	fi
+}
+eval "$(lazyenv.load _tiv_init tiv)"
 
 if type fortune > /dev/null 2>&1; then
   if type pokemonsay > /dev/null 2>&1; then

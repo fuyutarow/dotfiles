@@ -98,7 +98,11 @@ call vundle#begin()
 " (The latter must be installed before it can be used.)
 Plugin 'google/vim-maktaba'
 Plugin 'google/vim-codefmt'
+
+" ts syntax highlight
 Plugin 'leafgarland/typescript-vim'
+Plugin 'millermedeiros/vim-esformatter'
+
 " Also add Glaive, which is used to configure codefmt's maktaba flags. See
 " `:help :Glaive` for usage.
 Plugin 'google/vim-glaive'
@@ -113,8 +117,31 @@ Plugin 'Shougo/neocomplcache'
 call vundle#end()
 
 autocmd BufRead,BufNewFile *.ts set filetype=typescript
-" Shift + F で自動修正
-nnoremap <S-f> :FormatCode<CR>
+autocmd BufRead,BufNewFile *.tsx set filetype=typescript
+
+augroup autoformat_settings
+  autocmd FileType bzl AutoFormatBuffer buildifier
+  autocmd FileType c,cpp,proto AutoFormatBuffer clang-format
+  autocmd FileType dart AutoFormatBuffer dartfmt
+  autocmd FileType go AutoFormatBuffer gofmt
+  autocmd FileType gn AutoFormatBuffer gn
+  autocmd FileType html,css,json AutoFormatBuffer js-beautify
+  autocmd FileType java AutoFormatBuffer google-java-format
+  autocmd FileType python AutoFormatBuffer yapf
+  " Alternative: autocmd FileType python AutoFormatBuffer autopep8
+augroup END
+
+autocmd BufNewFile,BufRead *py nnoremap <S-f> :FormatCode<CR>
+
+
+autocmd BufNewFile,BufRead *.js nnoremap <S-f> :Esformatter<CR>
+autocmd BufNewFile,BufRead *.jsx nnoremap <S-f> :Esformatter<CR>
+autocmd BufNewFile,BufRead *.ts nnoremap <S-f> :Esformatter<CR>
+autocmd BufNewFile,BufRead *.tsx nnoremap <S-f> :Esformatter<CR>
+
+autocmd BufNewFile,BufRead *.rb nnoremap <C-e> :!ruby %
+autocmd BufNewFile,BufRead *.py nnoremap <C-e> :!python %
+autocmd BufNewFile,BufRead *.pl nnoremap <C-e> :!perl %
 
 
 "-------------------------------------------------------------------------------

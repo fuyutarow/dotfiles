@@ -108,9 +108,11 @@ Plugin 'cohama/lexima.vim'
 Plugin 'Shougo/unite.vim'
 Plugin 'Shougo/vimfiler'
 Plugin 'Shougo/neocomplcache'
+
 " ...
 call vundle#end()
 
+autocmd BufRead,BufNewFile *.ts set filetype=typescript
 " Shift + F で自動修正
 nnoremap <S-f> :FormatCode<CR>
 

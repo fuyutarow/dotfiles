@@ -131,7 +131,7 @@ _nvmenv_init() {
   [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
   figlet 'NVM'
 }
-eval "$(lazyenv.load _nvmenv_init nvm node npm)"
+eval "$(lazyenv.load _nvmenv_init nvm node npm yarn parcel esformatter)"
 
 _goenv_init() {
   echo 'loading...'
@@ -177,11 +177,10 @@ _tiv_init() {
 	if type tiv > /dev/null 2>&1; then
 		:
 	else
-		git clone https://github.com/stefanhaustein/TerminalImageViewer.git $HOME/.tmp/TerminalImageViewer
+		git clone https://github.com/stefanhaustein/TerminalImageViewer.git $HOME/.tmp
 		cd $HOME/.tmp/TerminalImageViewer/src/main/cpp
 		make
 		sudo make install
-    cd -
 	fi
 }
 eval "$(lazyenv.load _tiv_init tiv)"

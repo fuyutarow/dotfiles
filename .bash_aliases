@@ -51,6 +51,7 @@ alias n='n'
 alias p='ps uxf'
 alias pp='ps auxf'
 alias s='source'
+alias sb='source $HOME/.bashrc'
 alias t='touch'
 alias tf='tail -fF'
 alias du2='du -ah --max-depth=2'
@@ -73,6 +74,15 @@ gpp () {
   fi
 }
 
+#s () {
+#  if [ `echo $1`]; then
+#    echo qewrqerqwerqwerqwer
+#    source $1
+#  else
+#    echo ppppppppppppppppppppppppppppppppp
+#    source $HOME/.bashrc 
+#  fi
+#}
 alias juno='jupyter notebook'
 
 jupy () {
@@ -176,3 +186,10 @@ fi
 lsix() {
  montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-; }
 
+olos () {
+  if [ "$3" = "" ]; then
+    grep -rl $1 . | xargs sed -i "s/${1}/${2}/g"
+  else
+    grep -rl $1 $3 | xargs sed -i "s/${1}/${2}/g"
+  fi
+}

@@ -56,8 +56,12 @@ alias s='source'
 alias sb='source $HOME/.bashrc'
 alias t='touch'
 alias tf='tail -fF'
+alias tp='htop'
 alias du2='du -ah --max-depth=2'
 alias v='view'
+
+
+
 
 alias tarxz='tar Jxfv'
 alias tarbz2='tar xf'
@@ -195,3 +199,6 @@ olos () {
     grep -rl $1 $3 | xargs sed -i "s/${1}/${2}/g"
   fi
 }
+
+alias dn="deathnote"
+alias mem='cat /proc/meminfo |egrep -e "Active:|Inactive:|MemFree:"'

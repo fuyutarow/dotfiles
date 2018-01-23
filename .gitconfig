@@ -16,6 +16,7 @@
   dc = git diff --cached
   g = log --all --graph --oneline --decorate=full
   d = diff
+  diff-help = !echo 'http://dqn.sakusakutto.jp/2013/06/git_diff_branch_file.html'
   s = status
   amend = commit --amend 
   ss = status -s
@@ -30,6 +31,8 @@
   m = merge --no-ff 
   pull-force = !git fetch origin & git reset --hard origin/master
   l = ls-files
+  # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
+  stash-help = !echo 'https://qiita.com/akasakas/items/768c0b563b96f8a9be9d'
 
   undo = reset HEAD~1 --mixed
   cm = !git add -A && git commit -m 

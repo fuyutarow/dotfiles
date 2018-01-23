@@ -1,3 +1,9 @@
+def leftpad_conv(array, window):
+    res = np.convolve(array, window, 'valid')
+    pad = np.zeros(len(array) - len(res))
+    return np.append(pad, res)
+
+
 def normalized_data(xs, us, ys):
     return (np.swapaxes(xs / 255., 1, 3).astype(np.float32),
             maxmin_normalize(us).astype(np.float32), ys.astype(np.int8))

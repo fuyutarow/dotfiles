@@ -29,11 +29,12 @@
   f = fetch
   r = remote -v
   m = merge --no-ff 
-  pull-force = !git fetch origin & git reset --hard origin/master
+  pull-force = !git fetch origin & git reset --hard #origin/master
   l = ls-files
   # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
   stash-help = !echo 'https://qiita.com/akasakas/items/768c0b563b96f8a9be9d'
 
+  c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
   undo = reset HEAD~1 --mixed
   cm = !git add -A && git commit -m 
 

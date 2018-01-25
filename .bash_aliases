@@ -61,12 +61,14 @@ alias du2='du -ah --max-depth=2'
 alias v='view'
 
 
+alias expand-gz='gunzip'
+alias expand-Z='gunzip'
+alias expand-bz2='bunzip2'
+alias expand-targz='tar zxvf'
+alias expand-tgz='tar zxvf'
+alias expand-tarbz2='tar jxvf'
+alias expand-tbz2='tar jxvf'
 
-
-alias tarxz='tar Jxfv'
-alias tarbz2='tar xf'
-alias htop='htop'
-alias nvidia-smi='nvidia-smi'
 
 gpp () {
   if [ `echo $1 | fgrep '.c'` ] ; then
@@ -112,7 +114,7 @@ min () {
   nohup python -u $PYSH/min.py $1 $2 > min.log &
 }
 
-alias rere='pip uninstall tuner; pip install ~/Tuner'
+alias rere='pip uninstall tuner; pip install ~/Tuner --no-cache-dir -vvvv'
 
 alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
 alias canary='/mnt/c/Users/fytroo/AppData/Local/Google/Chrome\ SxS/Application/chrome.exe'
@@ -202,3 +204,9 @@ olos () {
 
 alias dn="deathnote"
 alias mem='cat /proc/meminfo |egrep -e "Active:|Inactive:|MemFree:"'
+
+alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c27077"'
+
+alias pip-help='echo """
+pip install git+https://github.com/user/repo.git@branch
+"""'

@@ -61,12 +61,14 @@ alias du2='du -ah --max-depth=2'
 alias v='view'
 
 
+alias expand-gz='gunzip'
+alias expand-Z='gunzip'
+alias expand-bz2='bunzip2'
+alias expand-targz='tar zxvf'
+alias expand-tgz='tar zxvf'
+alias expand-tarbz2='tar jxvf'
+alias expand-tbz2='tar jxvf'
 
-
-alias tarxz='tar Jxfv'
-alias tarbz2='tar xf'
-alias htop='htop'
-alias nvidia-smi='nvidia-smi'
 
 gpp () {
   if [ `echo $1 | fgrep '.c'` ] ; then

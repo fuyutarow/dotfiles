@@ -11,6 +11,10 @@ if [ -x /usr/bin/dircolors ]; then
 fi
 
 
+if type lolcat > /dev/null 2>&1; then
+  alias cat='lolcat'
+fi
+
 if [[ -x `which colordiff` ]]; then
   alias diff='colordiff'
 else

@@ -128,11 +128,10 @@ augroup autoformat_settings
   autocmd FileType html,css,json AutoFormatBuffer js-beautify
   autocmd FileType java AutoFormatBuffer google-java-format
   autocmd FileType python AutoFormatBuffer yapf
+  autocmd FileType javascript AutoFormatBuffer Esformatter
   " Alternative: autocmd FileType python AutoFormatBuffer autopep8
 augroup END
-
-autocmd BufNewFile,BufRead *py nnoremap <S-f> :FormatCode<CR>
-
+nnoremap <S-f> :FormatCode<CR>
 
 autocmd BufNewFile,BufRead *.js nnoremap <S-f> :Esformatter<CR>
 autocmd BufNewFile,BufRead *.jsx nnoremap <S-f> :Esformatter<CR>

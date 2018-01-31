@@ -11,32 +11,34 @@
   
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
-  ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
-  ll = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate --numstat
-  dc = git diff --cached
-  g = log --all --graph --oneline --decorate=full
-  d = diff
-  diff-help = !echo 'http://dqn.sakusakutto.jp/2013/06/git_diff_branch_file.html'
-  s = status
   amend = commit --amend 
-  ss = status -s
-  co = checkout
-  cb = checkout -b
   b = branch
   ba = branch -a
   bd = branch -d
   bm = branch -m #old_name #new_name
+  ca =! git add . && git commit --amend
+  cb = checkout -b
+  co = checkout
+  cm = !git add -A && git commit -m 
+  c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
+  d = diff
+  dc = git diff --cached
+  diff-help = !echo 'http://dqn.sakusakutto.jp/2013/06/git_diff_branch_file.html'
   f = fetch
-  r = remote -v
+  g = log --all --graph --oneline --decorate=full
+  l = ls-files
+  ll = log --pretty=format:"%C(yellow)%h%Cred%d\\ %Creset%s%Cblue\\ [%cn]" --decorate --numstat
   m = merge --no-ff 
   pull-force = !git fetch origin & git reset --hard #origin/master
-  l = ls-files
-  # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
+  s = status
+  ss = status -s
   stash-help = !echo 'https://qiita.com/akasakas/items/768c0b563b96f8a9be9d'
-
-  c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
+  ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
+  r = remote -v
+  reset = reset --hard HEAD^
   undo = reset HEAD~1 --mixed
-  cm = !git add -A && git commit -m 
+  # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
+
 
 # git flow
   flow-init = flow init

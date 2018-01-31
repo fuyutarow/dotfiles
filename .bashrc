@@ -196,3 +196,6 @@ alias 223='2to3 -wf all'
 alias yapf-recursice='yapf -ir'
 
 alias publish-pypi='python setup.py sdist; twine upload dist/*'
+export PATH="/usr/local/bin:/sbin:$PATH"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/cuda/lib64"
+export PATH="/usr/local/cuda/bin:$PATH"

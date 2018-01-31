@@ -10,9 +10,6 @@ if [ -x /usr/bin/dircolors ]; then
     alias egrep='egrep --color=auto'
 fi
 
-if type lolcat > /dev/null 2>&1; then
-  alias cat='lolcat'
-fi
 
 if [[ -x `which colordiff` ]]; then
   alias diff='colordiff'
@@ -47,6 +44,9 @@ alias la='ls -A'
 alias ll='ls -alF'
 alias lt='ls -ltr'
 alias lm='cpulimit -l 200 --'
+alias lm300='cpulimit -l 300 --'
+alias lm400='cpulimit -l 400 --'
+alias lm500='cpulimit -l 500 --'
 alias m='more'
 alias mp='mkdir -p'
 alias n='n'
@@ -114,7 +114,6 @@ min () {
   nohup python -u $PYSH/min.py $1 $2 > min.log &
 }
 
-alias rere='pip uninstall tuner; pip install ~/Tuner --no-cache-dir -vvvv'
 
 alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
 alias canary='/mnt/c/Users/fytroo/AppData/Local/Google/Chrome\ SxS/Application/chrome.exe'
@@ -204,7 +203,7 @@ olos () {
 
 alias dn="deathnote"
 alias mem='cat /proc/meminfo |egrep -e "Active:|Inactive:|MemFree:"'
-
+alias git-help='echo https://qiita.com/muran001/items/f13742b51da3a22117ee'
 alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c27077"'
 
 alias pip-help='echo """

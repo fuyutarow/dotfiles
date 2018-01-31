@@ -1,3 +1,4 @@
-for f in $(ls -A | egrep -v "README.md|.git|check.sh|update.sh") ; do
-  diff -u $HOME/$f $f | grep -v "^Only in"
-done 
+diff -u .gitconfig $HOME
+diff -u .bashrc $HOME
+diff -u .bash_aliases $HOME
+diff -u .vimrc $HOME

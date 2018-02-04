@@ -96,6 +96,7 @@ gpp () {
 #  fi
 #}
 alias juno='jupyter notebook'
+alias pyju='python -m py2nb' #<input.py> <output.ipynb>
 
 jupy () {
   jupyter nbconvert --to=python $1

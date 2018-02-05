@@ -48,6 +48,7 @@
   ff = flow feature
   ffs = flow feature start
   ffp = flow feature publish
+  fft = flow feature track
   
 [push]
   default = simple

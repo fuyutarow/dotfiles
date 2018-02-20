@@ -11,6 +11,10 @@ if [ -x /usr/bin/dircolors ]; then
 fi
 
 
+if type lolcat > /dev/null 2>&1; then
+  alias cat='lolcat'
+fi
+
 if [[ -x `which colordiff` ]]; then
   alias diff='colordiff'
 else
@@ -92,6 +96,7 @@ gpp () {
 #  fi
 #}
 alias juno='jupyter notebook'
+alias pyju='python -m py2nb' #<input.py> <output.ipynb>
 
 jupy () {
   jupyter nbconvert --to=python $1

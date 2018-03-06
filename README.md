@@ -64,3 +64,4 @@ Setup .ssh
 sudo apt install fortune cowsay lolcat fortune-mod
 ```
 
+conda install -c damianavila82 rise

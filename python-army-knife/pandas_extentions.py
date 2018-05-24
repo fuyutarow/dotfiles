@@ -17,3 +17,6 @@ def palse_plot(dataframe, columns=None):
         df[column] = dataframe[column] * 0.9 + i
     print(columns)
     df[columns].plot()
+
+
+self.teaching_df_raw.set_index('外注ID')['外注名'].to_dict()

@@ -65,8 +65,9 @@ def configure(keymap):
     # vim like
     ################################################################################
     keymap.defineModifier('Semicolon', 'User0')
-    for any in ("", "S-", "C-", "C-S-", "A-", "A-S-", "A-C-", "A-C-S-", "W-", "W-S-", "W-C-",
-                "W-C-S-", "W-A-", "W-A-S-", "W-A-C-", "W-A-C-S-"):
+    for any in ("", "S-", "C-", "C-S-", "A-", "A-S-", "A-C-", "A-C-S-", "W-",
+                "W-S-", "W-C-", "W-C-S-", "W-A-", "W-A-S-", "W-A-C-",
+                "W-A-C-S-"):
         keymap_global[any + 'O-Space'] = any + 'Space'
         keymap_global[any + 'O-Semicolon'] = any + 'Semicolon'
         keymap_global[any + 'O-S-Semicolon'] = any + 'Colon'
@@ -121,10 +122,11 @@ def configure(keymap):
 
         return wrap
 
-    keymap_global['D-LAlt'] = 'D-LAlt', 'LCtrl'
     keymap_global['D-RAlt'] = 'D-RAlt', 'LCtrl'
-    keymap_global['O-LAlt'] = switch_ime(False)
+    keymap_global['D-LAlt'] = 'D-LAlt', 'LCtrl'
     keymap_global['O-RAlt'] = switch_ime(True)
+    keymap_global['O-LAlt'] = switch_ime(False)
+    keymap_global['Escape'] = switch_ime(False)
 
     greek_upper = {
         'alpha': 'Α',
@@ -179,8 +181,10 @@ def configure(keymap):
         'omega': 'ω',
     }
 
-    entry_greek_upper = keymap_global['S-U0-LShift'] = keymap.defineMultiStrokeKeymap()
-    entry_greek_lower = keymap_global['U0-LShift'] = keymap.defineMultiStrokeKeymap()
+    entry_greek_upper = keymap_global[
+        'S-U0-LShift'] = keymap.defineMultiStrokeKeymap()
+    entry_greek_lower = keymap_global[
+        'U0-LShift'] = keymap.defineMultiStrokeKeymap()
 
     def input_greek_alphabet(name, case):
         d = {'upper': entry_greek_upper, 'lower': entry_greek_lower}[case]

@@ -1,5 +1,7 @@
 import time
 from keyhac import *
+import sys
+from datetime import datetime
 
 
 class Vi(object):
@@ -60,6 +62,9 @@ def configure(keymap):
     ################################################################################
     keymap.replaceKey('Space', 'RShift')
     keymap_global['O-RShift'] = 'Space'
+    keymap_global['O-LShift'] = 'Home'
+    keymap.replaceKey('RShift', 'End')
+    keymap_global['O-End'] = 'RShift'
 
     ################################################################################
     # vim like
@@ -83,6 +88,8 @@ def configure(keymap):
         keymap_global[any + 'U0-b'] = any + 'Back'
         keymap_global[any + 'U0-n'] = any + 'Return'
         keymap_global[any + 'U0-m'] = any + 'Return'
+    now = datetime.now().strftime('%Y-%m-%d %H:%m:%S')
+    keymap_global['U0-S-C-n'] = keymap.InputTextCommand(now)
 
     keymap_global['U0-S-a'] = 'End'
     keymap_global['U0-S-i'] = 'Home'
@@ -99,7 +106,11 @@ def configure(keymap):
     def launch_ubuntu():
         shellExecute(None, "ubuntu.exe", "", "")
 
+    def launch_edge():
+        shellExecute(None, None, "start", "microsoft-edge:", "")
+
     keymap_global['U0-t'] = launch_ubuntu
+    keymap_global['U0-e'] = launch_edge
 
     ################################################################################
     # toggle IME
@@ -126,79 +137,77 @@ def configure(keymap):
     keymap_global['D-LAlt'] = 'D-LAlt', 'LCtrl'
     keymap_global['O-RAlt'] = switch_ime(True)
     keymap_global['O-LAlt'] = switch_ime(False)
-    keymap_global['Escape'] = switch_ime(False)
+    #keymap_global['Escape'] = switch_ime(False), 'Escape'
 
-    greek_upper = {
-        'alpha': 'Α',
-        'beta': 'Β',
-        'gamma': 'Γ',
-        'delta': 'Δ',
-        'epsilon': 'Ε',
-        'zeta': 'Ζ',
-        'eta': 'Η',
-        'theta': 'Θ',
-        'iota': 'Ι',
-        'kappa': 'Κ',
-        'lambda': 'Λ',
-        'mu': 'Μ',
-        'nu': 'Ν',
-        'xi': 'Ξ',
-        'omicron': 'Ο',
-        'pi': 'Π',
-        'rho': 'Ρ',
-        'sigma': 'Σ',
-        'tau': 'Τ',
-        'upsilon': 'Υ',
-        'phi': 'Φ',
-        'chi': 'Χ',
-        'psi': 'Ψ',
-        'omega': 'Ω',
-    }
-    greek_lower = {
-        'alpha': 'α',
-        'beta': 'β',
-        'gamma': 'γ',
-        'delta': 'δ',
-        'epsilon': 'ε',
-        'zeta': 'ζ',
-        'eta': 'η',
-        'theta': 'θ',
-        'iota': 'ι',
-        'kappa': 'κ',
-        'lambda': 'λ',
-        'mu': 'μ',
-        'nu': 'ν',
-        'xi': 'ξ',
-        'omicron': 'ο',
-        'pi': 'π',
-        'rho': 'ρ',
-        'sigma': 'σ',
-        'tau': 'τ',
-        'upsilon': 'υ',
-        'phi': 'φ',
-        'chi': 'χ',
-        'psi': 'ψ',
-        'omega': 'ω',
-    }
+    #greek_upper = {
+    #    'alpha': 'Α',
+    #    'beta': 'Β',
+    #    'gamma': 'Γ',
+    #    'delta': 'Δ',
+    #    'epsilon': 'Ε',
+    #    'zeta': 'Ζ',
+    #    'eta': 'Η',
+    #    'theta': 'Θ',
+    #    'iota': 'Ι',
+    #    'kappa': 'Κ',
+    #    'lambda': 'Λ',
+    #    'mu': 'Μ',
+    #    'nu': 'Ν',
+    #    'xi': 'Ξ',
+    #    'omicron': 'Ο',
+    #    'pi': 'Π',
+    #    'rho': 'Ρ',
+    #    'sigma': 'Σ',
+    #    'tau': 'Τ',
+    #    'upsilon': 'Υ',
+    #    'phi': 'Φ',
+    #    'chi': 'Χ',
+    #    'psi': 'Ψ',
+    #    'omega': 'Ω',
+    #}
+    #greek_lower = {
+    #    'alpha': 'α',
+    #    'beta': 'β',
+    #    'gamma': 'γ',
+    #    'delta': 'δ',
+    #    'epsilon': 'ε',
+    #    'zeta': 'ζ',
+    #    'eta': 'η',
+    #    'theta': 'θ',
+    #    'iota': 'ι',
+    #    'kappa': 'κ',
+    #    'lambda': 'λ',
+    #    'mu': 'μ',
+    #    'nu': 'ν',
+    #    'xi': 'ξ',
+    #    'omicron': 'ο',
+    #    'pi': 'π',
+    #    'rho': 'ρ',
+    #    'sigma': 'σ',
+    #    'tau': 'τ',
+    #    'upsilon': 'υ',
+    #    'phi': 'φ',
+    #    'chi': 'χ',
+    #    'psi': 'ψ',
+    #    'omega': 'ω',
+    #}
 
-    entry_greek_upper = keymap_global[
-        'S-U0-LShift'] = keymap.defineMultiStrokeKeymap()
-    entry_greek_lower = keymap_global[
-        'U0-LShift'] = keymap.defineMultiStrokeKeymap()
+    #entry_greek_upper = keymap_global['S-U0-LShift'] = keymap.defineMultiStrokeKeymap()
+    #entry_greek_lower = keymap_global['U0-LShift'] = keymap.defineMultiStrokeKeymap()
 
-    def input_greek_alphabet(name, case):
-        d = {'upper': entry_greek_upper, 'lower': entry_greek_lower}[case]
-        s = ''
-        for c in name[:-1]:
-            s += c
-            keymap.popBalloon('ime_status', s, 500)
-            d[c] = keymap.defineMultiStrokeKeymap()
-            d = d[c]
-        d[name[-1]] = keymap.InputTextCommand({
-            'upper': greek_upper[name],
-            'lower': greek_lower[name]
-        }[case])
+    #def input_greek_alphabet(name, case):
+    #    d = {'upper': entry_greek_upper, 'lower': entry_greek_lower}[case]
+    #    s = ''
+    #    for c in name[:-1]:
+    #        s += c
+    #        keymap.popBalloon('ime_status', s, 500)
+    #        d[c] = keymap.defineMultiStrokeKeymap()
+    #        d = d[c]
+    #    d[name[-1]] = keymap.InputTextCommand({
+    #        'upper': greek_upper[name],
+    #        'lower': greek_lower[name]
+    #    }[case])
 
-    for name in greek_upper.keys():
-        input_greek_alphabet(name, 'upper')
-        input_greek_alphabet(name, 'lower')
+    #for name in greek_upper.keys():
+    #    input_greek_alphabet(name, 'upper')
+    #    input_greek_alphabet(name, 'lower')

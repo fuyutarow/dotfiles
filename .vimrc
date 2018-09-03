@@ -7,6 +7,7 @@ set softtabstop=2
 set shiftwidth=2 
 set clipboard=unnamed,autoselect
 
+inoremap <silent> jj <ESC>
 
 autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
 autocmd FileType html,markdown setlocal omnifunc=htmlcomplete#CompleteTags

@@ -113,6 +113,8 @@ Plugin 'Shougo/unite.vim'
 Plugin 'Shougo/vimfiler'
 Plugin 'Shougo/neocomplcache'
 
+Plugin 'davidhalter/jedi-vim'
+
 " ...
 call vundle#end()
 

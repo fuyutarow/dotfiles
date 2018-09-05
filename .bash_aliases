@@ -1,4 +1,4 @@
-# enable color support of ls and also add handy aliases
+ enable color support of ls and also add handy aliases
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
     alias ls='ls --color=auto'
@@ -58,7 +58,11 @@ alias p='ps uxf'
 alias pp='ps auxf'
 alias s='source'
 alias sb='source $HOME/.bashrc'
-alias t='touch'
+alias sz='source $HOME/.zshrc'
+#alias t='touch'
+alias t='tmux'
+alias tl='tmux ls'
+alias ta='tmux a'
 alias tf='tail -fF'
 alias tp='htop'
 alias du2='du -ah --max-depth=2'
@@ -214,3 +218,8 @@ alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c
 alias pip-help='echo """
 pip install git+https://github.com/user/repo.git@branch
 """'
+
+pi(){
+  pip install $1
+  pip freeze | g $!
+}

@@ -191,16 +191,3 @@ if type fortune > /dev/null 2>&1; then
   fi
 fi
 
-export DISPLAY=localhost:0.0
-alias 223='2to3 -wf all'
-alias yapf-recursice='yapf -ir'
-
-alias publish-pypi="
-echo '''[metadata]
-description-file = README.md''' > setup.cfg;
-twine upload dist/*;
-python setup.py sdist;
-"
-export PATH="/usr/local/bin:/sbin:$PATH"
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/cuda/lib64"
-export PATH="/usr/local/cuda/bin:$PATH"

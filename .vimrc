@@ -7,7 +7,6 @@ set softtabstop=2
 set shiftwidth=2 
 set clipboard=unnamed,autoselect
 
-inoremap <silent> jj <ESC>
 
 autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
 autocmd FileType html,markdown setlocal omnifunc=htmlcomplete#CompleteTags
@@ -32,8 +31,8 @@ set showmode
 " window 
 "-------------------------------------------------------------------------------
 " split window
-"nmap ss :split<Return><C-w>w
-nmap sv :vsplit<Return><C-w>w
+nmap ss :split<Return><C-w>w
+nmap vs :vsplit<Return><C-w>w
 " Move window
 nmap <Space> <C-w>w
 map s<left> <C-w>h

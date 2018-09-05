@@ -37,6 +37,7 @@
   r = remote -v
   reset = reset --hard HEAD^
   undo = reset HEAD~1 --mixed
+  ignore =! git rm -r --cached . & git add .
   # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
 
 
@@ -48,7 +49,6 @@
   ff = flow feature
   ffs = flow feature start
   ffp = flow feature publish
-  fft = flow feature track
   
 [push]
   default = simple

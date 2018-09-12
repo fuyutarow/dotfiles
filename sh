@@ -1,3 +1,7 @@
-curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
-echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt update && sudo apt install -y yarn
+cd $HOME/.tmp
+git clone https://github.com/hzeller/timg.git
+cd timg/src
+sudo apt install libwebp-dev libgraphicsmagick++-dev    # required libs.
+make
+sudo make install
+cd -

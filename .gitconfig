@@ -11,7 +11,9 @@
   
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
+  ap = add -p
   amend = commit --amend 
+  acm = !git add -A && git commit -m 
   b = branch
   ba = branch -a
   bd = branch -d
@@ -19,7 +21,7 @@
   ca =! git add . && git commit --amend
   cb = checkout -b
   co = checkout
-  cm = !git add -A && git commit -m 
+  cm = commit -m 
   c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
   d = diff
   dc = git diff --cached

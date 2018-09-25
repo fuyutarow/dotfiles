@@ -27,11 +27,11 @@ nnoremap <F2> :set invpaste paste?<CR>
 set pastetoggle=<F2>
 set showmode
 
+nmap W :w
 "-------------------------------------------------------------------------------
 " window 
 "-------------------------------------------------------------------------------
 " split window
-nmap ss :split<Return><C-w>w
 nmap vs :vsplit<Return><C-w>w
 " Move window
 nmap <Space> <C-w>w
@@ -114,12 +114,18 @@ Plugin 'Shougo/vimfiler'
 Plugin 'Shougo/neocomplcache'
 
 Plugin 'davidhalter/jedi-vim'
+Plugin 'posva/vim-vue'
+Plugin 'maksimr/vim-jsbeautify'
+
 
 " ...
 call vundle#end()
 
 autocmd BufRead,BufNewFile *.ts set filetype=typescript
 autocmd BufRead,BufNewFile *.tsx set filetype=typescript
+autocmd BufNewFile,BufRead *.{html,htm,vue*} set filetype=html
+
+
 
 augroup autoformat_settings
   autocmd FileType bzl AutoFormatBuffer buildifier
@@ -127,7 +133,7 @@ augroup autoformat_settings
   autocmd FileType dart AutoFormatBuffer dartfmt
   autocmd FileType go AutoFormatBuffer gofmt
   autocmd FileType gn AutoFormatBuffer gn
-  autocmd FileType html,css,json AutoFormatBuffer js-beautify
+  " autocmd FileType html,css,json AutoFormatBuffer js-beautify
   autocmd FileType java AutoFormatBuffer google-java-format
   autocmd FileType python AutoFormatBuffer yapf
   autocmd FileType javascript AutoFormatBuffer Esformatter

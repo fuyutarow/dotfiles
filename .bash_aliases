@@ -31,6 +31,7 @@ alias ~='cd ~'
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # some more ls aliases
+alias pi='pipenv'
 alias c='clear'
 alias cl='clear;ls'
 alias cr='cp -R'
@@ -220,8 +221,3 @@ alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c
 alias pip-help='echo """
 pip install git+https://github.com/user/repo.git@branch
 """'
-
-pi(){
-  pip install $1
-  pip freeze | g $!
-}

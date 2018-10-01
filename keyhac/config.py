@@ -5,7 +5,6 @@ from datetime import datetime
 
 
 class Vi(object):
-
     def __init__(self, keymap):
         self.keymap = keymap
         self.emacs = keymap.defineWindowKeymap()
@@ -28,7 +27,6 @@ class Vi(object):
         self.keymap.InputKeyCommand("C-x")()
 
     def mark(self, func):
-
         def _func():
             if self.emacs.is_marked:
                 # D-Shift だと、M-< や M-> 押下時に、D-Shift が解除されてしまう。その対策。
@@ -41,7 +39,6 @@ class Vi(object):
         return _func
 
     def delay(self, func, sec=0.01):
-
         def _func():
             time.sleep(sec)  # delay
             func()
@@ -62,9 +59,7 @@ def configure(keymap):
     ################################################################################
     keymap.replaceKey('Space', 'RShift')
     keymap_global['O-RShift'] = 'Space'
-    keymap_global['O-LShift'] = 'Home'
-    keymap.replaceKey('RShift', 'End')
-    keymap_global['O-End'] = 'RShift'
+    keymap_global['O-LShift'] = 'Escape'
 
     ################################################################################
     # vim like
@@ -93,6 +88,8 @@ def configure(keymap):
 
     keymap_global['U0-S-a'] = 'End'
     keymap_global['U0-S-i'] = 'Home'
+    keymap_global['U0-C-a'] = 'Home'
+    keymap_global['U0-C-e'] = 'End'
     keymap_global['U0-o'] = 'End', 'S-Return'
     #keymap_global['U0-x'] = 'Delete'
     keymap_global['U0-x'] = vi.delete_char
@@ -104,7 +101,8 @@ def configure(keymap):
     keymap_global['U0-d']['U0-d'] = 'Home', 'S-End', 'C-x'
 
     def launch_ubuntu():
-        shellExecute(None, "ubuntu.exe", "", "")
+        #shellExecute(None, "ubuntu.exe", "", "")
+        shellExecute(None, "ubuntu1804.exe", "", "")
 
     def launch_edge():
         shellExecute(None, None, "start", "microsoft-edge:", "")

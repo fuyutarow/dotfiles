@@ -62,6 +62,35 @@ def configure(keymap):
     keymap_global['O-LShift'] = 'Escape'
 
     ################################################################################
+    # Emacs bind
+    ################################################################################
+    keymap_global['W-A-a'] = 'W-a'  # for action center
+    keymap_global['W-a'] = 'C-a'  # for selection all range
+    keymap_global['C-a'] = 'Home'
+
+    keymap_global['C-e'] = 'End'
+
+    keymap_global['W-A-p'] = 'W-p'  # for display
+    keymap_global['W-p'] = 'C-p'  # for printer
+    keymap_global['C-p'] = 'Up'
+
+    keymap_global['W-n'] = 'C-n'  # for something new
+    keymap_global['C-n'] = 'Down'
+
+    keymap_global['C-b'] = 'Left'
+
+    keymap_global['W-f'] = 'C-f'  # for finder
+    keymap_global['C-f'] = 'Right'
+
+    keymap_global['W-A-g'] = 'W-g'  # for game
+    keymap_global['W-g'] = 'C-g'  # for finder
+
+    keymap_global['C-y'] = 'C-h'  # for history
+    keymap_global['C-h'] = 'Back'
+
+    keymap_global['C-d'] = 'Delete'
+
+    ################################################################################
     # vim like
     ################################################################################
     keymap.defineModifier('Semicolon', 'User0')

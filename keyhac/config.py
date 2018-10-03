@@ -80,7 +80,7 @@ def configure(keymap):
     keymap_global['C-b'] = 'Left'
 
     keymap_global['W-f'] = 'C-f'  # for finder
-    keymap_global['C-f'] = 'Right'
+    #keymap_global['C-f'] = 'Right'
 
     keymap_global['W-A-g'] = 'W-g'  # for game
     keymap_global['W-g'] = 'C-g'  # for finder
@@ -88,7 +88,18 @@ def configure(keymap):
     keymap_global['C-y'] = 'C-h'  # for history
     keymap_global['C-h'] = 'Back'
 
-    keymap_global['C-d'] = 'Delete'
+    keymap_global['W-q'] = 'A-F4'  # quit
+    keymap_global['W-w'] = 'C-w'  # owaru
+
+    #keymap_global['C-d'] = 'Delete'
+    keymap_global['S-W-h'] = 'W-Left'
+    keymap_global['S-W-j'] = 'W-Down'
+    keymap_global['S-W-k'] = 'W-Up'
+    keymap_global['S-W-l'] = 'W-Right'
+    keymap_global['W-C-h'] = 'W-C-Left'
+    keymap_global['W-C-j'] = 'W-C-Down'
+    keymap_global['W-C-k'] = 'W-C-Up'
+    keymap_global['W-C-l'] = 'W-C-Right'
 
     ################################################################################
     # vim like
@@ -104,10 +115,6 @@ def configure(keymap):
         keymap_global[any + 'U0-j'] = any + 'Down'
         keymap_global[any + 'U0-k'] = any + 'Up'
         keymap_global[any + 'U0-l'] = any + 'Right'
-        keymap_global[any + 'W-h'] = any + 'Left'
-        keymap_global[any + 'W-j'] = any + 'Down'
-        keymap_global[any + 'W-k'] = any + 'Up'
-        keymap_global[any + 'W-l'] = any + 'Right'
         keymap_global[any + 'U0-q'] = any + 'Escape'
         keymap_global[any + 'U0-b'] = any + 'Back'
         keymap_global[any + 'U0-n'] = any + 'Return'

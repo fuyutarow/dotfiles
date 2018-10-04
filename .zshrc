@@ -86,13 +86,21 @@ if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
-if [ -f ~/.bash_local ]; then
-    . ~/.bash_local
+if [ -d ~/.bashrc.d ]; then
+    for file in $(/bin/ls ~/.bashrc.d/*.bashrc); do
+        . $file;
+    done
 fi
+
 #
 # added by Miniconda3 installer
 export PATH="/home/yufukuda/.anaconda3/bin:$PATH"
+
+# for pipenv
+export PIPENV_VENV_IN_PROJECT=true
+
+# NVM
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion ]]
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 export PATH="$PATH:`yarn global bin`"

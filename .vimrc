@@ -86,9 +86,17 @@ Plugin 'rstacruz/sparkup', {'rtp': 'vim/'}
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
-filetype plugin indent on    " required
+autocmd FileType typescript :set makeprg=tsc
 
 
+"-------------------------------------------------------------------------------
+" Vundle 
+"-------------------------------------------------------------------------------
+call vundle#begin()
+Plugin 'leafgarland/typescript-vim'
+call vundle#end()            " required
+let g:typescript_compiler_binary = 'tsc'
+let g:typescript_compiler_options = ''
 
 "-------------------------------------------------------------------------------
 " Google Code Format 
@@ -133,10 +141,12 @@ augroup autoformat_settings
   autocmd FileType dart AutoFormatBuffer dartfmt
   autocmd FileType go AutoFormatBuffer gofmt
   autocmd FileType gn AutoFormatBuffer gn
-  " autocmd FileType html,css,json AutoFormatBuffer js-beautify
+  autocmd FileType html AutoFormatBuffer html-beautify -s 1
+  autocmd FileType html,css,json AutoFormatBuffer js-beautify
   autocmd FileType java AutoFormatBuffer google-java-format
   autocmd FileType python AutoFormatBuffer yapf
-  autocmd FileType javascript AutoFormatBuffer Esformatter
+  autocmd FileType typescript AutoFormatBuffer tsc
+  " autocmd FileType javascript AutoFormatBuffer Esformatter
   " Alternative: autocmd FileType python AutoFormatBuffer autopep8
 augroup END
 nnoremap <S-f> :FormatCode<CR>

@@ -34,18 +34,27 @@ alias ~='cd ~'
 alias c='clear'
 alias cl='clear;ls'
 alias cr='cp -R'
-alias d='diff -u'
-alias dk='docker'
+
+alias di='diff -u'
+alias d='docker'
 alias dc='docker-compose'
+
 alias e='echo'
+
 alias f='find'
-alias g='grep'
-alias gi='curl globalip.me'
-alias gr='grep -r'
+
+alias g='git'
+alias gip='curl globalip.me'
+alias gr='grep'
+alias grr='grep -r'
 alias gv='grep -v'
+
 alias h='history 500'
+
 alias j='jobs'
+
 alias k='kill -9'
+
 alias l='ls -CF'
 alias la='ls -A'
 alias ll='ls -alF'
@@ -54,26 +63,29 @@ alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
 alias lm400='cpulimit -l 400 --'
 alias lm500='cpulimit -l 500 --'
+
 alias m='more'
+
 alias mp='mkdir -p'
-alias n='n'
+
 alias p='ps uxf'
-alias pi='pipenv'
 alias pp='ps auxf'
+alias pi='pipenv'
+
 alias s='source'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
-#alias t='touch'
+
 alias t='tmux'
 alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
 alias tt='tmux a -t'
+alias to='touch'
 alias tf='tail -fF'
-alias tp='htop'
+
 alias du2='du -ah --max-depth=2'
 alias v='view'
-
 
 alias expand-gz='gunzip'
 alias expand-Z='gunzip'

@@ -11,6 +11,7 @@
   
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
+  a = add
   ap = add -p
   amend = commit --amend 
   acm = !git add -A && git commit -m 

@@ -73,6 +73,7 @@ alias pp='ps auxf'
 alias pi='pipenv'
 
 alias s='source'
+alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
 

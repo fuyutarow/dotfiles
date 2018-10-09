@@ -9,6 +9,9 @@
   pushInsteadOf = https://github.com/
   pushInsteadOf = git@github.com:
   
+[push]
+  default = simple
+
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
   a = add
@@ -54,5 +57,4 @@
   ffs = flow feature start
   ffp = flow feature publish
   
-[push]
-  default = simple
+  ch =! view $HOME/.comment_examples.md

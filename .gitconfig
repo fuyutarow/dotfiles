@@ -13,13 +13,14 @@
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
   a = add
   ap = add -p
+  aca =! git add . && git commit --amend
   amend = commit --amend 
   acm = !git add -A && git commit -m 
   b = branch
   ba = branch -a
   bd = branch -d
   bm = branch -m #old_name #new_name
-  ca =! git add . && git commit --amend
+  ca = commit --amend
   cb = checkout -b
   co = checkout
   cm = commit -m 

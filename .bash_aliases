@@ -44,6 +44,7 @@ alias e='echo'
 alias f='find'
 
 alias g='git'
+alias gi='git'
 alias gip='curl globalip.me'
 alias gr='grep'
 alias grr='grep -r'
@@ -65,7 +66,7 @@ alias lm400='cpulimit -l 400 --'
 alias lm500='cpulimit -l 500 --'
 
 alias m='more'
-
+alias md='mkdir'
 alias mp='mkdir -p'
 
 alias p='ps uxf'
@@ -87,6 +88,10 @@ alias tf='tail -fF'
 
 alias du2='du -ah --max-depth=2'
 alias v='view'
+alias vid='vim -d'
+alias vd='vim -d'
+alias sp='vim -o'
+alias vs='vim -O'
 
 alias expand-gz='gunzip'
 alias expand-Z='gunzip'

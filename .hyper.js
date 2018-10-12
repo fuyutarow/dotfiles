@@ -2,17 +2,18 @@
 // which will not automatically be merged into this file.
 // See https://hyper.is#cfg for all currently supported options.
 
-module.exports = {
+module.exports = 
   config: {
     // choose either `'stable'` for receiving highly polished,
     // or `'canary'` for less polished but more frequent updates
     updateChannel: 'stable',
 
     // default font size in pixels for all tabs
-    fontSize: 12,
+    fontSize: 14,
 
     // font family with optional fallbacks
-    fontFamily: 'Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
+    //fontFamily: 'Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
+    fontFamily: 'Ricty Diminished',
 
     // default font weight: 'normal' or 'bold'
     fontWeight: 'normal',
@@ -30,7 +31,7 @@ module.exports = {
     cursorShape: 'BLOCK',
 
     // set to `true` (without backticks and without quotes) for blinking cursor
-    cursorBlink: false,
+    cursorBlink: true,
 
     // color of the text
     foregroundColor: '#fff',
@@ -112,7 +113,7 @@ module.exports = {
     bell: 'SOUND',
 
     // if `true` (without backticks and without quotes), selected text will automatically be copied to the clipboard
-    copyOnSelect: false,
+    copyOnSelect: true,
 
     // if `true` (without backticks and without quotes), hyper will be set as the default protocol client for SSH
     defaultSSHApp: true,
@@ -133,15 +134,73 @@ module.exports = {
   //   `hyperpower`
   //   `@company/project`
   //   `project#1.0.1`
-  plugins: [],
+  plugins: [
+    'hyperlinks',
+    'hyper-tab-icons',
+    //'hyper-tab-icons-plus',
+    'hyper-ayu',
+    'hyper-opacity',
+    //'hyper-pokemon',
+],
 
   // in development, you can create a directory under
   // `~/.hyper_plugins/local/` and include it here
   // to load it and avoid it being `npm install`ed
   localPlugins: [],
 
+  //pokemon: 'gengar', // Choose your favorite pokemon theme
+  //unibody: 'true', // Choose the color of the window header
+  //poketab: 'false', // Deactivate your theme's poketab
   keymaps: {
-    // Example
-    // 'window:devtools': 'cmd+alt+o',
+  "window:devtools": "ctrl+shift+i",
+  "window:reload": "ctrl+shift+r",
+  "window:reloadFull": "ctrl+shift+f5",
+  "window:preferences": "ctrl+,",
+  "zoom:reset": "ctrl+0",
+  "zoom:in": "ctrl+plus",
+  "zoom:out": "ctrl+-",
+  "window:new": "ctrl+shift+n",
+  "window:minimize": "ctrl+shift+m",
+  "window:zoom": "ctrl+shift+alt+m",
+  "window:toggleFullScreen": "f11",
+  "window:close": [
+    "ctrl+shift+q",
+    "alt+f4"
+  ],
+  "tab:next": [
+    "ctrl+shift+]",
+    "ctrl+shift+right",
+    "ctrl+alt+right",
+    "ctrl+tab"
+  ],
+  "tab:prev": [
+    "ctrl+shift+[",
+    "ctrl+shift+left",
+    "ctrl+alt+left",
+    "ctrl+shift+tab"
+  ],
+  "tab:jump:prefix": "ctrl",
+  "pane:next": "ctrl+pageup",
+  "pane:prev": "ctrl+pagedown",
+  "pane:splitVertical": "ctrl+shift+d",
+  "pane:splitHorizontal": "ctrl+shift+e",
+  "pane:close": "alt+w",
+  "editor:undo": "ctrl+shift+z",
+  "editor:redo": "ctrl+shift+y",
+  "editor:cut": "ctrl+shift+x",
+  "editor:copy": "ctrl+shift+c",
+  "editor:paste": "ctrl+shift+v",
+  "editor:selectAll": "ctrl+shift+a",
+  "editor:movePreviousWord": "ctrl+left",
+  "editor:moveNextWord": "ctrl+right",
+  "editor:moveBeginningLine": "home",
+  "editor:moveEndLine": "end",
+  "editor:deletePreviousWord": "ctrl+backspace",
+  "editor:deleteNextWord": "ctrl+del",
+  "editor:deleteBeginningLine": "ctrl+home",
+  "editor:deleteEndLine": "ctrl+end",
+  "editor:clearBuffer": "ctrl+shift+k",
+  "editor:break": "ctrl+c",
+  "plugins:update": "ctrl+shift+u"
   },
 };

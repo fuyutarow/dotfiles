@@ -6,7 +6,7 @@ set expandtab
 set softtabstop=2
 set shiftwidth=2 
 set clipboard=unnamed,autoselect
-
+set fileformats=unix,dos,mac
 
 autocmd FileType css setlocal omnifunc=csscomplete#CompleteCSS
 autocmd FileType html,markdown setlocal omnifunc=htmlcomplete#CompleteTags

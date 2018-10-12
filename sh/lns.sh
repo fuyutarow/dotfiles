@@ -11,3 +11,4 @@ ln -s dotfiles/.jsbeautifyrc ~
 
 rm -i $HOME/.zshrc
 ln -s dotfiles/.zshrc ~
+ln -s dotfiles/.zproztorc ~

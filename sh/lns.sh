@@ -6,6 +6,6 @@ ln -s dotfiles/.zshrc ~
 ln -s dotfiles/.tmuxrc ~
 
 ln -s dotfiles/.gitconfig ~
-ln -s dotfiles/.comment_exmaples.md ~
+ln -s dotfiles/.comment_examples.md ~
 
 ln -s dotfiles/.jsbeautifyrc ~ 

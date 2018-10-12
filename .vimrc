@@ -52,6 +52,10 @@ nmap <C-w><down> <C-w>-
 
 
 
+" linebreak
+" nnoremap K i<CR><Esc>
+map K i<Enter><Esc>
+
 
 "-------------------------------------------------------------------------------
 " Vundle 
@@ -90,10 +94,17 @@ call vundle#end()            " required
 autocmd FileType typescript :set makeprg=tsc
 
 
+
+
+
 "-------------------------------------------------------------------------------
 " Vundle 
 "-------------------------------------------------------------------------------
 call vundle#begin()
+"-------------------------------------------------------------------------------
+" color schema
+"-------------------------------------------------------------------------------
+Plugin 'micha/vim-colors-solarized'
 Plugin 'leafgarland/typescript-vim'
 call vundle#end()            " required
 let g:typescript_compiler_binary = 'tsc'

@@ -9,11 +9,5 @@ ln -s dotfiles/.comment_examples.md ~
 
 ln -s dotfiles/.jsbeautifyrc ~ 
 
-rm -i $HOME/.zshrc
 ln -s dotfiles/.zshrc ~
-<<<<<<< HEAD
-
-cp ~/Home/.hyper.js ~/dotfiles
-=======
-ln -s dotfiles/.zproztorc ~
->>>>>>> 19a80af858014b1718b7b9c0072f6b918b66e179
+ln -s dotfiles/.zshrc.d ~

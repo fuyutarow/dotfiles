@@ -23,7 +23,7 @@ if [ -f ~/.bash_aliases ]; then
 fi
 
 if [ -d ~/.bashrc.d ]; then
-    for file in $(/bin/ls ~/.bashrc.d/*.bashrc); do
+    for file in $(/bin/ls ~/.bashrc.d/*); do
         . $file;
     done
 fi
@@ -35,7 +35,7 @@ fi
 source $ZPLUG_HOME/init.zsh
 
 if [ -d ~/.zshrc.d ]; then
-    for file in $(/bin/ls ~/.zshrc.d/*.zsh); do
+    for file in $(/bin/ls ~/.zshrc.d/*); do
         . $file;
     done
 fi

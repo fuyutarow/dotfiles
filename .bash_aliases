@@ -1,4 +1,4 @@
- enable color support of ls and also add handy aliases
+# enable color support of ls and also add handy aliases
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
     alias ls='ls --color=auto'
@@ -114,15 +114,6 @@ gpp () {
   fi
 }
 
-#s () {
-#  if [ `echo $1`]; then
-#    echo qewrqerqwerqwerqwer
-#    source $1
-#  else
-#    echo ppppppppppppppppppppppppppppppppp
-#    source $HOME/.bashrc 
-#  fi
-#}
 alias juno='jupyter notebook'
 alias pyju='python -m py2nb' #<input.py> <output.ipynb>
 
@@ -136,29 +127,17 @@ juju () {
 }
 
 
-# for WSL
-alias mnt-d='sudo mount -t drvfs D: /mnt/d'
 
 export PYSH=$HOME/.pyscript
 alias fc='python $PYSH/fc.py -r'
 alias alarm='python $PYSH/alarm.py'
-
 min () {
   nohup python -u $PYSH/min.py $1 $2 > min.log &
 }
 
 
-alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
-alias canary='/mnt/c/Users/fytroo/AppData/Local/Google/Chrome\ SxS/Application/chrome.exe'
-alias ggl=canary
-# for Slack
-alias bubbys='chrome "bubbys.slack.com"'
-alias camico='chrome "camico.slack.com"'
-# for LINE
-alias ine='chrome --profile-directory=Default --app-id=menkifleemblimdogmoihpfopnplikde &'
 alias myip='dig +short myip.opendns.com @resolver1.opendns.com'
 alias jupyter-kernelspec-list='jupyter kernelspec list'
-
 
 alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 julia-init () {
@@ -171,57 +150,6 @@ Pkg.add("ZZ")
 '''
 }
 
-
-google_translate() {
-  local str opt cond
- 
-  if [ $# != 0 ]; then
-    str=`echo $1 | sed -e 's/  */+/g'` # 1文字以上の半角空白を+に変換
-    cond=$2
-    if [ $cond = "ja-en" ]; then
-      # ja -> en 翻訳
-      opt='?hl=ja&sl=ja&tl=en&ie=UTF-8&oe=UTF-8'
-    else
-      # en -> ja 翻訳
-      opt='?hl=ja&sl=en&tl=ja&ie=UTF-8&oe=UTF-8'
-    fi
-  else
-    opt='?hl=ja&sl=en&tl=ja&ie=UTF-8&oe=UTF-8'
-  fi
- 
-  opt="${opt}&text=${str}"
-  w3m +13 "http://translate.google.com/${opt}"
-}
-
-enja() {
-  google_translate "$*" "en-ja"
-}
- 
-# w3m でGoogle translate Japanese->English
-jaen() {
-  google_translate "$*" "ja-en"
-}
-
-google() {
-local str opt
-if [ $ != 0 ]; then
-for i in $*; do
-str="$str+$i"
-done
-str=`echo $str | sed 's/^\+//'`
-opt='search?num=50&amp;hl=ja&amp;lr=lang_ja'
-opt="${opt}&amp;q=${str}"
-fi
-w3m http://www.google.co.jp/$opt
-}
- 
-alc() {
-if [ $ != 0 ]; then
-w3m "http://eow.alc.co.jp/$*/UTF-8/?ref=sa"
-else
-w3m "http://www.alc.co.jp/"
-fi
-}
 
 lsix() {
  montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-; }

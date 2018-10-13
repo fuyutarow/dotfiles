@@ -9,11 +9,11 @@ module.exports =
     updateChannel: 'stable',
 
     // default font size in pixels for all tabs
-    fontSize: 14,
+    fontSize: 15,
 
     // font family with optional fallbacks
     //fontFamily: 'Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
-    fontFamily: 'Ricty Diminished',
+    fontFamily: 'Ricty Diminished Discord',
 
     // default font weight: 'normal' or 'bold'
     fontWeight: 'normal',

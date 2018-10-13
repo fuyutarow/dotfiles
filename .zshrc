@@ -1,19 +1,21 @@
-#
-# Executes commands at the start of an interactive session.
-#
-# Authors:
-#   Sorin Ionescu <sorin.ionescu@gmail.com>
-#
+# Set up the prompt
+#autoload -Uz promptinit
+#promptinit
+#prompt adam1
 
-# Source Prezto.
-if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
-  source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
-fi
+setopt histignorealldups sharehistory
+
+# Use emacs keybindings even if our EDITOR is set to vi
+bindkey -e
 
 # Keep 1000 lines of history within the shell and save it to ~/.zsh_history:
-HISTSIZE=1000
-SAVEHIST=1000
+HISTSIZE=100000
+SAVEHIST=100000
 HISTFILE=~/.zsh_history
+
+# Use modern completion system
+#autoload -Uz compinit
+#compinit
 
 # Source aliases and other rcfiles.
 if [ -f ~/.bash_aliases ]; then
@@ -26,3 +28,35 @@ if [ -d ~/.bashrc.d ]; then
     done
 fi
 
+export ZPLUG_HOME=$HOME/.zplug
+if [[ ! -d $ZPLUG_HOME ]];then
+  git clone https://github.com/zplug/zplug $ZPLUG_HOME
+fi
+source $ZPLUG_HOME/init.zsh
+
+#zplug 'zplug/zplug', hook-build:'zplug --self-manage'
+zplug mafredri/zsh-async, from:github
+zplug "zsh-users/zsh-completions" # reinforce completions
+zplug "modules/git", from:prezto # git completion
+zplug "peterhurford/git-aliases.zsh" # git aliases completion
+zplug "zsh-users/zsh-autosuggestions" # suggest in input
+
+
+################################################################################
+# Styple
+################################################################################
+#zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
+#zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
+zplug "modules/osx", from:prezto, if:"[[ $OSTYPE == *darwin* ]]"
+zplug "modules/prompt", from:prezto
+# zstyle は zplug load の前に設定する
+zstyle ':prezto:module:prompt' theme 'giddie'
+
+
+if ! zplug check --verbose; then
+    printf "Install? [y/N]: "
+    if read -q; then
+        echo; zplug install
+    fi
+fi
+zplug load --verbose

@@ -1,5 +1,3 @@
-# zmodload zsh/zprof && zprof
-
 # Set up the prompt
 #autoload -Uz promptinit
 #promptinit
@@ -15,25 +13,17 @@ HISTSIZE=100000
 SAVEHIST=100000
 HISTFILE=~/.zsh_history
 
-# Use modern completion system
-#autoload -Uz compinit
-#compinit
-
 # Source aliases and other rcfiles.
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
-if [ -d ~/.bashrc.d ]; then
-    for file in $(/bin/ls ~/.bashrc.d/*); do
-        . $file;
-    done
-fi
-
+# Source any envs.
 if [ -f ~/.env.d/index.sh ]; then
     . ~/.env.d/index.sh
 fi
 
+# Zplug
 export ZPLUG_HOME=$HOME/.zplug
 if [[ ! -d $ZPLUG_HOME ]];then
     git clone https://github.com/zplug/zplug $ZPLUG_HOME
@@ -46,10 +36,5 @@ if [ -d ~/.zshrc.d ]; then
     done
 fi
 
-
 #zplug load --verbose
 zplug load
-
-if (which zprof > /dev/null 2>&1) ;then
-  zprof
-fi

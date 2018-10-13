@@ -35,11 +35,11 @@ fi
 source $ZPLUG_HOME/init.zsh
 
 #zplug 'zplug/zplug', hook-build:'zplug --self-manage'
-zplug mafredri/zsh-async, from:github
-zplug "zsh-users/zsh-completions" # reinforce completions
-zplug "modules/git", from:prezto # git completion
-zplug "peterhurford/git-aliases.zsh" # git aliases completion
-zplug "zsh-users/zsh-autosuggestions" # suggest in input
+zplug mafredri/zsh-async, from:github, lazy:true
+zplug "zsh-users/zsh-completions", lazy:true # reinforce completions
+zplug "modules/git", from:prezto, lazy:true # git completion
+zplug "peterhurford/git-aliases.zsh", lazy:true # git aliases completion
+zplug "zsh-users/zsh-autosuggestions", lazy:true # suggest in input
 
 
 ################################################################################
@@ -53,10 +53,11 @@ zplug "modules/prompt", from:prezto
 zstyle ':prezto:module:prompt' theme 'giddie'
 
 
-if ! zplug check --verbose; then
-    printf "Install? [y/N]: "
-    if read -q; then
-        echo; zplug install
-    fi
-fi
-zplug load --verbose
+#if ! zplug check --verbose; then
+#    printf "Install? [y/N]: "
+#    if read -q; then
+#        echo; zplug install
+#    fi
+#fi
+#zplug load --verbose
+zplug load

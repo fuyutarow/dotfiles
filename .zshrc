@@ -1,3 +1,5 @@
+# zmodload zsh/zprof && zprof
+
 # Set up the prompt
 #autoload -Uz promptinit
 #promptinit
@@ -28,6 +30,10 @@ if [ -d ~/.bashrc.d ]; then
     done
 fi
 
+if [ -f ~/.env.d/index.sh ]; then
+    . ~/.env.d/index.sh
+fi
+
 export ZPLUG_HOME=$HOME/.zplug
 if [[ ! -d $ZPLUG_HOME ]];then
     git clone https://github.com/zplug/zplug $ZPLUG_HOME
@@ -43,3 +49,7 @@ fi
 
 #zplug load --verbose
 zplug load
+
+if (which zprof > /dev/null 2>&1) ;then
+  zprof
+fi

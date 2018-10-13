@@ -11,3 +11,5 @@ ln -s dotfiles/.jsbeautifyrc ~
 
 ln -s dotfiles/.zshrc ~
 ln -s dotfiles/.zshrc.d ~
+
+ln -s dotfiles/.env.d ~

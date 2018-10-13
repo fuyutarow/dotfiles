@@ -101,6 +101,8 @@ alias expand-tgz='tar zxvf'
 alias expand-tarbz2='tar jxvf'
 alias expand-tbz2='tar jxvf'
 
+alias apt-remove-force='dpkg --force-all -r'
+alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 
 gpp () {
   if [ `echo $1 | fgrep '.c'` ] ; then
@@ -114,32 +116,9 @@ gpp () {
   fi
 }
 
-alias juno='jupyter notebook'
-alias pyju='python -m py2nb' #<input.py> <output.ipynb>
-
-jupy () {
-  jupyter nbconvert --to=python $1
-  yapf -i ${1/.ipynb/.py}
-}
-
-juju () {
-  jupyter nbconvert --to script $1
-}
 
 
 
-export PYSH=$HOME/.pyscript
-alias fc='python $PYSH/fc.py -r'
-alias alarm='python $PYSH/alarm.py'
-min () {
-  nohup python -u $PYSH/min.py $1 $2 > min.log &
-}
-
-
-alias myip='dig +short myip.opendns.com @resolver1.opendns.com'
-alias jupyter-kernelspec-list='jupyter kernelspec list'
-
-alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 julia-init () {
 julia -e '''
 Pkg.add("PyCall")

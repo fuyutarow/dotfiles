@@ -125,7 +125,17 @@ const config = {
   // bellSoundURL: 'http://example.com/bell.mp3',
 
 // for advanced config flags please refer to https://hyper.is/#cfg
-}
+};
+
+const plugins = [
+  'hyperlinks',
+  'hyper-tab-icons',
+  //'hyper-tab-icons-plus',
+  'hyper-ayu',
+  'hyper-opacity',
+//'hyper-pokemon',
+];
+
 const keymaps = {
   "window:devtools": "ctrl+shift+i",
   "window:reload": "ctrl+shift+r",
@@ -178,16 +188,9 @@ const keymaps = {
   "editor:clearBuffer": "ctrl+shift+k",
   "editor:break": "ctrl+c",
   "plugins:update": "ctrl+shift+u"
-}
-const plugins = [
-  'hyperlinks',
-  'hyper-tab-icons',
-  //'hyper-tab-icons-plus',
-  'hyper-ayu',
-  'hyper-opacity',
-//'hyper-pokemon',
-]
-module.exports = {
+};
+
+const master = {
   config: config,
 
   // a list of plugins to fetch and install from npm
@@ -209,3 +212,19 @@ module.exports = {
 //unibody: 'true', // Choose the color of the window header
 //poketab: 'false', // Deactivate your theme's poketab
 };
+
+
+const hypercwd = {
+  config: {
+    hypwercwd: {
+      initialWorkingDirectory: '~',
+    },
+  },
+  plugins: [
+    'hypercwd',
+  ],
+};
+
+master.cofig = Object.assign(master.config, hypercwd.config)
+master.plugins.concat(master.plugins, hypercwd.plugins)
+module.exports = master;

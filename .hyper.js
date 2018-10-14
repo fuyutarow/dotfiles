@@ -12,6 +12,7 @@ const config = {
 
   // font family with optional fallbacks
   //fontFamily: 'Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
+  //fontFamily: '"Source Code Pro for Powerline", Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
   fontFamily: 'Ricty Diminished Discord',
 
   // default font weight: 'normal' or 'bold'
@@ -112,7 +113,7 @@ const config = {
   bell: 'SOUND',
 
   // if `true` (without backticks and without quotes), selected text will automatically be copied to the clipboard
-  copyOnSelect: true,
+  copyOnSelect: false,
 
   // if `true` (without backticks and without quotes), hyper will be set as the default protocol client for SSH
   defaultSSHApp: true,
@@ -131,9 +132,11 @@ const plugins = [
   'hyperlinks',
   'hyper-tab-icons',
   //'hyper-tab-icons-plus',
-  'hyper-ayu',
   'hyper-opacity',
-//'hyper-pokemon',
+/* Sytle */
+  'hyper-ayu',
+  //'hyperterm-material',
+  //'hyper-pokemon',
 ];
 
 const keymaps = {

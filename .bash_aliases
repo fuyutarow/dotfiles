@@ -17,8 +17,6 @@ fi
 
 if [[ -x `which colordiff` ]]; then
   alias diff='colordiff'
-else
-  echo 'not found colordiff'
 fi
 
 alias ..='cd ..'

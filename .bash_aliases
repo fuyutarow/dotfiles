@@ -90,6 +90,7 @@ alias vid='vim -d'
 alias vd='vim -d'
 alias sp='vim -o'
 alias vs='vim -O'
+alias vi='vs'
 
 alias expand-gz='gunzip'
 alias expand-Z='gunzip'

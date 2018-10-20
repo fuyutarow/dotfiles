@@ -86,18 +86,14 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 
 export PATH=$HOME/.local/bin:$PATH
 
+# Source aliases and other rcfiles.
 if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
-if [ -f ~/.bash_local ]; then
-    . ~/.bash_local
-fi
-
-if [ -d ~/.bashrc.d ]; then
-    for file in $(/bin/ls ~/.bashrc.d/*.bashrc); do
-        . $file;
-    done
+# Source any envs.
+if [ -f ~/.env.d/index.sh ]; then
+    . ~/.env.d/index.sh
 fi
 
 # enable programmable completion features (you don't need to enable

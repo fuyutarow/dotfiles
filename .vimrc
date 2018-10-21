@@ -1,47 +1,18 @@
-let plugins = []
+let PLUGIN_LIST = []
 
-"-------------------------------------------------------------------------------
-" Markdown
-"-------------------------------------------------------------------------------
+
+" let filelist = glob("~/.vimrc.d/*")
+" let filelist = split(filelist, "\n")
+" for file in filelist
+" 	source file
+" endfor
+source ~/.vimrc.d/formater.vim
 source ~/.vimrc.d/markdown.vim
+source ~/.vimrc.d/alias.vim
+source ~/.vimrc.d/indent.vim
+source ~/.vimrc.d/color.vim
+source ~/.vimrc.d/completion.vim
 
-"-------------------------------------------------------------------------------
-" Split window
-"-------------------------------------------------------------------------------
-" split window
-nmap vs :vsplit<Return><C-w>w
-
-"-------------------------------------------------------------------------------
-" Move window
-"-------------------------------------------------------------------------------
-nmap <Space> <C-w>w
-map s<left> <C-w>h
-map s<up> <C-w>k
-map s<down> <C-w>j
-map s<right> <C-w>l
-map sh <C-w>h
-map sk <C-w>k
-map sj <C-w>j
-map sl <C-w>l
-
-"-------------------------------------------------------------------------------
-" Resize window
-"-------------------------------------------------------------------------------
-nmap <C-w><left> <C-w><
-nmap <C-w><right> <C-w>>
-nmap <C-w><up> <C-w>+
-nmap <C-w><down> <C-w>-
-
-"-------------------------------------------------------------------------------
-" Save
-"-------------------------------------------------------------------------------
-nmap W :w
-
-"-------------------------------------------------------------------------------
-" Linebreak
-"-------------------------------------------------------------------------------
-" nnoremap K i<CR><Esc>
-map K i<Enter><Esc>
 
 "-------------------------------------------------------------------------------
 " Vundle init
@@ -51,8 +22,8 @@ filetype off                  " required
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
 	Plugin 'VundleVim/Vundle.vim'
-	for plugin in plugins
+	for plugin in PLUGIN_LIST
 		Plugin plugin
 	endfor
 call vundle#end()
-filetype plugin indent on    " required
+filetype plugin indent on

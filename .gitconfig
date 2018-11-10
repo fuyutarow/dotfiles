@@ -5,7 +5,7 @@
   email = fuyutarow@gmail.com
   name = fuyutarow
   
-[url "github:"]
+[url "github.com:"]
   pushInsteadOf = https://github.com/
   pushInsteadOf = git@github.com:
   
@@ -34,18 +34,21 @@
   f = fetch
   g = log --all --graph --oneline --decorate=full
   l = ls-files
-  lo =! git log --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short
+  lo =! git log -10 --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short
   m = merge --no-ff 
+  merge-force = merge -Xtheirs
   pull-force = !git fetch origin & git reset --hard #origin/master
   s = status
   ss = status -s
   stash-help = !echo 'https://qiita.com/akasakas/items/768c0b563b96f8a9be9d'
   ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
   r = remote -v
-  reset = reset --hard HEAD^
   undo = reset HEAD~1 --mixed
   ignore =! git rm -r --cached . & git add .
   # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
+  #
+  rename-branch = branch -m #old_name #new_name
+
 
 
 # git flow

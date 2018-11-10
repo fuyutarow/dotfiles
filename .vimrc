@@ -1,5 +1,8 @@
 let PLUGIN_LIST = []
 
+nnoremap <F2> :set invpaste paste?<CR>
+set pastetoggle=<F2>
+set showmode
 
 " let filelist = glob("~/.vimrc.d/*")
 " let filelist = split(filelist, "\n")
@@ -12,6 +15,7 @@ source ~/.vimrc.d/alias.vim
 source ~/.vimrc.d/indent.vim
 source ~/.vimrc.d/color.vim
 source ~/.vimrc.d/completion.vim
+"source ~/.vimrc.d/html_css.vim
 
 
 "-------------------------------------------------------------------------------

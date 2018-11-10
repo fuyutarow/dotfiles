@@ -14,3 +14,9 @@ augroup autoformat_settings
   autocmd FileType python AutoFormatBuffer yapf
   " Alternative: autocmd FileType python AutoFormatBuffer autopep8
 augroup END
+nnoremap <S-f> :FormatCode<CR>
+
+autocmd BufRead,BufNewFile *.ts set filetype=typescript
+autocmd BufRead,BufNewFile *.tsx set filetype=typescript
+autocmd BufNewFile,BufRead *.{html,htm,vue*} set filetype=html
+

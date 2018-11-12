@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# install docker
 sudo apt remove docker docker-engine docker.io
 sudo apt update -y
 sudo apt install -y\
@@ -17,8 +18,12 @@ sudo apt update -y
 sudo apt install -y docker-ce
 sudo docker run hello-world
 
-
-# docker compose
+# install docker-compose
 sudo curl -L "https://github.com/docker/compose/releases/download/1.23.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 docker-compose --version
+
+# set permission
+sudo groupadd docker
+sudo gpasswd -a $USER docker
+sudo systemctl restart docker

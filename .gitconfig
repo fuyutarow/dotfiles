@@ -1,13 +1,6 @@
-[url "://danielkummer.github.io/git-flow-cheatsheet/ttps://"]
-	insteadOf = git://
-
 [user]
   email = fuyutarow@gmail.com
   name = fuyutarow
-  
-[url "github.com:"]
-  pushInsteadOf = https://github.com/
-  pushInsteadOf = git@github.com:
   
 [push]
   default = simple

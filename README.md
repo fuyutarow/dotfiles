@@ -7,6 +7,10 @@
 source ~/.bashrc
 ```
 
+text
+$$a_{ij} \ (i \neq j)$$
+
+
 ### Vim plugins install
 ```
 mkdir -p ~/.vim/bundle

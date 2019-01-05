@@ -48,7 +48,9 @@ alias gr='grep'
 alias grr='grep -r'
 alias gv='grep -v'
 
-alias h='history 500'
+alias h='history 100'
+alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
+alias hg="h|grep"
 
 alias j='jobs'
 

@@ -113,7 +113,7 @@ const config = {
   bell: 'SOUND',
 
   // if `true` (without backticks and without quotes), selected text will automatically be copied to the clipboard
-  copyOnSelect: false,
+  copyOnSelect: true,
 
   // if `true` (without backticks and without quotes), hyper will be set as the default protocol client for SSH
   defaultSSHApp: true,
@@ -155,7 +155,7 @@ const keymaps = {
     "ctrl+shift+q",
     "alt+f4"
   ],
-  "tab:new": "ctrl+t",
+  "tab:new": ["ctrl+t","ctrl+shift+t"],
   "tab:next": [
     "ctrl+shift+]",
     "ctrl+shift+right",
@@ -173,7 +173,7 @@ const keymaps = {
   "pane:prev": "ctrl+pagedown",
   "pane:splitVertical": "ctrl+shift+d",
   "pane:splitHorizontal": "ctrl+shift+e",
-  "pane:close": "ctrl+w",
+  "pane:close": ["ctrl+shift+w"],
   "editor:undo": "ctrl+shift+z",
   "editor:redo": "ctrl+shift+y",
   "editor:cut": "ctrl+shift+x",

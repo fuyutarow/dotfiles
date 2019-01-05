@@ -15,7 +15,7 @@ source ~/.vimrc.d/alias.vim
 source ~/.vimrc.d/indent.vim
 source ~/.vimrc.d/color.vim
 source ~/.vimrc.d/completion.vim
-"source ~/.vimrc.d/html_css.vim
+" source ~/.vimrc.d/html_css.vim
 
 
 "-------------------------------------------------------------------------------

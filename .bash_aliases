@@ -134,9 +134,9 @@ lsix() {
 
 olos () {
   if [ "$3" = "" ]; then
-    grep -rl $1 . | xargs sed -i "s/${1}/${2}/g"
+    grep -rl $1 ./* | xargs sed -i.bak -e "s/${1}/${2}/g"
   else
-    grep -rl $1 $3 | xargs sed -i "s/${1}/${2}/g"
+    grep -rl $1 $3 | xargs sed -i.bak -e "s/${1}/${2}/g"
   fi
 }
 
@@ -148,3 +148,6 @@ alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c
 alias pip-help='echo """
 pip install git+https://github.com/user/repo.git@branch
 """'
+alias md2pdf='markdown-pdf'
+
+##cat ~/.ssh/id_rsa.pub | ssh username@xx.xx.xx.xx "cat >> ~/.ssh/authorized_keys"

@@ -11,6 +11,7 @@ if [ -f ~/.bash_aliases ]; then
     . ~/.bash_aliases
 fi
 
+
 # Source any envs.
 if [ -f ~/.env.d/index.sh ]; then
     . ~/.env.d/index.sh

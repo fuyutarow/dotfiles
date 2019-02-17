@@ -1,0 +1,106 @@
+%%% usepackage
+  \usepackage{amsmath, amssymb}
+  \usepackage{mathrsfs}
+    % \mathscr
+  \usepackage{ascmac}
+    % \smallskip
+  \usepackage{braket}
+    % \set, \Set
+  \usepackage{physics}
+    % \pdv
+    % \bra, \ket
+  \usepackage{mathtools}
+    % \xleftrightarrow
+  \usepackage{graphics}
+    % \rotatebox
+  \usepackage{bm}
+  \usepackage{bbold}
+  \usepackage{color}
+  \usepackage{otf}
+    % ajRoman
+  \usepackage{here}
+    % 大文字のHを使用することで好きな位置に図を配置
+    % \begin{figure}[H]
+%%%
+
+%%% newtheorem
+  \usepackage{amsthm}
+  \theoremstyle{definition}
+
+  \newtheorem{Axiom}{公理}[section] % axiom
+  \newtheorem{Conj}{予想}[section] % conjecture
+  \newtheorem{Cor}{系}[section] % corollary
+  \newtheorem{Def}{定義}[section] % definition
+  \newtheorem{Ex}{例}[section] % example, exercise
+  \newtheorem{Lem}{補題}[section] % lemma
+  \newtheorem{Obs}{観察}[section] % observation
+  \newtheorem{pf}{証明}[section] % proof
+  \newtheorem{Prop}{命題}[section] % proposition
+  \newtheorem{Rmk}{注意}[section] % remark
+  \newtheorem{Thm}{定理}[section] % theorem
+%%%
+
+
+
+% %%% Header and Footer Date
+%   \usepackage{fancyhdr,datetime2}
+%   \pagestyle{fancy}
+%   \renewcommand{\headrulewidth}{0pt}
+%   \rhead{\thepage}
+%   \chead{}
+%   \lhead{}
+%   \cfoot{\texttt{\jobname, draft of \DTMnow}}%\today\ at \now}}
+% %%%
+
+%%% 体
+  \newcommand{\N}{\mathbb{N}}%自然数
+  \newcommand{\Z}{\mathbb{Z}}%整数
+  \newcommand{\Q}{\mathbb{Q}}%有理数
+  \newcommand{\R}{\mathbb{R}}%実数
+  \newcommand{\C}{\mathbb{C}}%複素数
+%%%
+
+%%% math
+  \newcommand{\indown}{\rotatebox{90}{$\in$}}
+  \newcommand{\im}{\mathrm{i}}
+  \newcommand{\mathif}{\quad\mathrm{if}~}
+  \DeclareMathOperator{\Det}{Det}
+  \DeclareMathOperator*{\spn}{span}
+%%%
+
+%%% skim
+  \newcommand{\smallskim}{\vspace{-1zh}}
+  \newcommand{\medskim}{\vspace{-2zh}}
+  \newcommand{\bigskim}{\vspace{-4zh}}
+%%%
+%%% custom
+  \newcommand{\trans}{^t{}}
+  \newcommand{\inv}{^{-1}{}}
+  \newcommand{\mrep}{^{(m)}{}}
+  \newcommand{\erep}{^{(e)}{}}
+  \newcommand{\alart}[1]{\textcolor{red}{\footnotesize {#1}}}
+  \newcommand{\what}{\widehat}
+  \newcommand{\wtilde}{\widetilde}
+  \newcommand{\wbar}{\overline}
+  \newcommand{\ctrans}{^\dagger{}}
+%%%
+
+%%% comma separate inner product <x, y> powered by usepackage{physics}
+  \DeclareDocumentCommand\cinnerproduct{ s m g }
+  { % comma Inner product
+  	\IfBooleanTF{#1}
+  	{ % No resize
+  		\IfNoValueTF{#3}
+  		{\vphantom{#2}\left\langle\smash{#2},\smash{#2}\right\rangle}
+  		{\vphantom{#2#3}\left\langle\smash{#2},\smash{#3}\right\rangle}
+  	}
+  	{ % Auto resize
+  		\IfNoValueTF{#3}
+  		{\left\langle{#2},{#2}\right\rangle}
+  		{\left\langle{#2},{#3}\right\rangle}
+  	}
+  }
+  \DeclareDocumentCommand\cbraket{}{\cinnerproduct} % Alternative for \cinnerproduct
+  \DeclareDocumentCommand\cip{}{\cinnerproduct} % Shorthand for \cinnerproduct
+  \newcommand{\hsip}[2]{\cip{#1}{#2}_{\mathrm{HS}}}
+%%%

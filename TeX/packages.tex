@@ -63,7 +63,6 @@
 %%% math
   \newcommand{\indown}{\rotatebox{90}{$\in$}}
   \newcommand{\im}{\mathrm{i}}
-  \newcommand{\mathif}{\quad\mathrm{if}~}
   \DeclareMathOperator{\Det}{Det}
   \DeclareMathOperator*{\spn}{span}
 %%%
@@ -80,27 +79,62 @@
   \newcommand{\erep}{^{(e)}{}}
   \newcommand{\alart}[1]{\textcolor{red}{\footnotesize {#1}}}
   \newcommand{\what}{\widehat}
-  \newcommand{\wtilde}{\widetilde}
+  \newcommand{\wtilde}{\wtilde}
   \newcommand{\wbar}{\overline}
   \newcommand{\ctrans}{^\dagger{}}
+  \newcommand{\expectation}{\mathrm{E}\qty}
+  \newcommand{\variance}{\mathrm{Var}\qty}
+  \newcommand{\qst}{\qq{s.t.}}
+  \newcommand{\qie}{\qq{i.e.}}
+  \newcommand{\qeg}{\qq{e.g.}}
+  \newcommand{\qwhere}{\qq{where}}
+  \newcommand{\vectorize}{\mathrm{vec}\qty}
 %%%
 
+\DeclarePairedDelimiterX{\infdivx}[2]{(}{)}{%
+  #1\;\delimsize\|\;#2%
+}
+\newcommand{\infdiv}{D\infdivx}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+
 %%% comma separate inner product <x, y> powered by usepackage{physics}
+  \newcommand{\cinnerproductDelimiter}{,}
   \DeclareDocumentCommand\cinnerproduct{ s m g }
   { % comma Inner product
   	\IfBooleanTF{#1}
   	{ % No resize
   		\IfNoValueTF{#3}
-  		{\vphantom{#2}\left\langle\smash{#2},\smash{#2}\right\rangle}
-  		{\vphantom{#2#3}\left\langle\smash{#2},\smash{#3}\right\rangle}
+  		{\vphantom{#2}\left\langle\smash{#2}\cinnerproductDelimiter\smash{#2}\right\rangle}
+  		{\vphantom{#2#3}\left\langle\smash{#2}\cinnerproductDelimiter\smash{#3}\right\rangle}
   	}
   	{ % Auto resize
   		\IfNoValueTF{#3}
-  		{\left\langle{#2},{#2}\right\rangle}
-  		{\left\langle{#2},{#3}\right\rangle}
+  		{\left\langle{#2}\cinnerproductDelimiter{#2}\right\rangle}
+  		{\left\langle{#2}\cinnerproductDelimiter{#3}\right\rangle}
   	}
   }
   \DeclareDocumentCommand\cbraket{}{\cinnerproduct} % Alternative for \cinnerproduct
   \DeclareDocumentCommand\cip{}{\cinnerproduct} % Shorthand for \cinnerproduct
   \newcommand{\hsip}[2]{\cip{#1}{#2}_{\mathrm{HS}}}
+%%%
+
+
+%%% comma separate inner product <x, y> powered by usepackage{physics}
+  \newcommand{\infodivDelimiter}{\,\middle\|\,}
+  \DeclareDocumentCommand\infodivparen{ s m g }
+  { % comma Inner product
+  	\IfBooleanTF{#1}
+  	{ % No resize
+  		\IfNoValueTF{#3}
+  		{\vphantom{#2}\left\lparen\smash{#2}\infodivDelimiter\smash{#2}\right\rparen}
+  		{\vphantom{#2#3}\left\lparen\smash{#2}\infodivDelimiter\smash{#3}\right\rparen}
+  	}
+  	{ % Auto resize
+  		\IfNoValueTF{#3}
+  		{\left\lparen{#2}\infodivDelimiter{#2}\right\rparenp}
+  		{\left\lparen{#2}\infodivDelimiter{#3}\right\rparen}
+  	}
+  }
+  \newcommand{\infodiv}[2]{D\infodivparen{#1}{#2}}
+  \newcommand{\kldiv}[2]{D_\mathrm{KL}\infodivparen{#1}{#2}}
 %%%

@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 
-#!/usr/bin/env perl
 $latex         = 'uplatex -synctex=1 -halt-on-error -shell-escape';
 $latex_silent  = 'uplatex -synctex=1 -halt-on-error -interaction=batchmode -shell-escape';
 $bibtex        = 'upbibtex';

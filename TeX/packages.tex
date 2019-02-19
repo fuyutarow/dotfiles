@@ -25,7 +25,7 @@
   % \begin{figure}[H]
 % \usepackage{xstring} 
   % \IfSubStr
-%%%
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -57,13 +57,22 @@
 \newcommand{\bigskim}{\vspace{-4zh}}
 
 %%% insert image from web
-\newcommand{\img}[2]{
-  \write18{wget "#1" -O #2}
+\DeclareDocumentCommand\img{ s m m } {
+  % #1:star - T: download image from online; F: not download
+  % #2:url - wget target-url
+  % #3:fname - image file name for save
+  \newcommand{\sss}{#1}
+  \newcommand{\durl}{#2} % define url
+  % \newcommand{\fname}{#3} %
+  \newcommand{\fname}{static/#3} %
+  \IfBooleanF{\sss}{
+    \immediate\write18{wget "\durl" -O \fname}
+  }
   \begin{figure}[h]
     \centering
-    {\includegraphics[width=0.5\linewidth]{#2}}
-    \href{#1}{src}
-    \label{#2}
+    {\includegraphics[width=0.5\linewidth]{\fname}}
+    \href{\durl}{src}
+    \label{#3}
   \end{figure}
 }
 
@@ -74,11 +83,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \DeclareMathOperator{\Det}{Det}
 
+%%% qq
+\newcommand{\qst}{\qq{s.t.}}
+\newcommand{\qie}{\qq{i.e.}}
+\newcommand{\qeg}{\qq{e.g.}}
+\newcommand{\qwhere}{\qq{where}}
 
 %%% vert
 \newcommand{\mv}{\,\middle\vert\,}
   % \qty(\frac{1}{d} \mv e) % for example
-
 
 %%% generic braket <x, y> powered by usepackage{physics}
 \DeclareDocumentCommand\genericBraket{ s o o o m g }
@@ -124,6 +137,7 @@
 \newcommand{\kldiv}[2]{D_\mathrm{KL}\infodivBraket{#1}{#2}}
 
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % math
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -134,30 +148,27 @@
 \newcommand{\R}{\mathbb{R}}%実数
 \newcommand{\C}{\mathbb{C}}%複素数
 
-% 下向き\in
-\newcommand{\indown}{\rotatebox{90}{$\in$}}
-
-% imaginary unit
-\newcommand{\im}{\mathrm{i}}
-\DeclareMathOperator*{\spn}{span}
-
-% linear algebra
-\newcommand{\trans}{^t{}}
-\newcommand{\inv}{^{-1}{}}
-
-\newcommand{\alart}[1]{\textcolor{red}{\footnotesize {#1}}}
-
+%%% wide
 \newcommand{\what}{\widehat}
 \newcommand{\wtilde}{\wtilde}
 \newcommand{\wbar}{\overline}
+
+%%% 下向き\in
+\newcommand{\indown}{\rotatebox{90}{$\in$}}
+
+%%% imaginary unit
+\newcommand{\im}{\mathrm{i}}
+\DeclareMathOperator*{\spn}{span}
+
+%%% linear algebra
+\newcommand{\trans}{^t{}}
+\newcommand{\inv}{^{-1}{}}
 \newcommand{\ctrans}{^\dagger{}}
+\newcommand{\vectorize}{\mathrm{vec}\qty}
+
+%%% statistics
 \newcommand{\expectation}{\mathrm{E}\qty}
 \newcommand{\variance}{\mathrm{Var}\qty}
-\newcommand{\qst}{\qq{s.t.}}
-\newcommand{\qie}{\qq{i.e.}}
-\newcommand{\qeg}{\qq{e.g.}}
-\newcommand{\qwhere}{\qq{where}}
-\newcommand{\vectorize}{\mathrm{vec}\qty}
 
 %%% infomation geometry
 \newcommand{\mrep}{^{(m)}{}}

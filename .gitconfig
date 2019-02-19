@@ -50,6 +50,11 @@
 
   pull-force = !git fetch origin & git reset --hard #origin/master
 
+### open
+  o =! open `git config remote.origin.url`
+
+
+
 ### status
   s = status
   ss = status -s

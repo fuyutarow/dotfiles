@@ -16,12 +16,13 @@ sh/***.sh
 
 ### SSH envirioment
 ```sh
-ln -s ~/Gdrive/ssh/config  ~/.ssh
+ln -s ~/Gdrive/ssh/config ~/.ssh
 ```
 
 
 ### Vim plugins install
 [sh/setup-vim.sh](sh/setup-vim.sh)
+
 Then, `:PluginInstall` on vim console.
 
 
@@ -73,6 +74,27 @@ Ref. [GitHub Flavored Markdwon Spac](https://github.github.com/gfm/)
 
 
 ## Rust
-[.vimrc.d/indent.vim](.vimrc.d/indent.vim)
+- [mds/rust.md](mds/rust.md)
+
+
+
+## Tools
+### Web browser
+- [Vivaldi](https://vivaldi.com/)
+  Best web browser
+- [Brave](https://brave.com)
+  Best YouTube Player
+- [Chrome Canary](https://www.google.com/chrome/canary/)
+  When use Gdocs, Gsheet or Gdrive.
+
+
+### Text editer
+- Vim
+  Best editer for programming.
+- [VS Code](https://code.visualstudio.com)
+  Vim keybinding.
+- [Atom](https://atom.io)
+  for edit TeX.  Emacs keybinding. 日本語を編集するときはIMEとの兼ね合いでemacsの方が楽ね.
+
 
 

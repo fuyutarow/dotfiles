@@ -4,13 +4,13 @@
 [mactex](http://www.tug.org/mactex/)
 
 - common usepackage and setting
-  [packages.tex](packages.tex)
+  : [packages.tex](packages.tex)
 - configuration for slides with beamer
-  [slides.config.tex](sliedes.config.tex)
+  : [slides.config.tex](sliedes.config.tex)
 - configuration for book with jsbook
-  [book.config.tex](book.config.tex)
+  : [book.config.tex](book.config.tex)
 - configuration for note with jsarticle
-  [note.config.tex](note.config.tex)
+  : [note.config.tex](note.config.tex)
 
 
 ### packages

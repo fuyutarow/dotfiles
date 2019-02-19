@@ -1,20 +1,28 @@
 # dotfiles
 
 ## Setup
+
+### Run shell
 ```sh
-./sh/lns.sh
+sh sh/***.sh
+. sh/***.sh
+./sh/***.sh
+sh/***.sh
 ```
 
+### Arange dotfiles
+[sh/lns.sh](sh/lns.sh)
+
+
 ### SSH envirioment
-cat ~/Gdrive/ssh/config > ./ssh/config
+```sh
+ln -s ~/Gdrive/ssh/config  ~/.ssh
+```
 
 
 ### Vim plugins install
-```sh
-./sh/setup-vim.sh
-```
-Then, `:PluginInstall` on vim console.
 [sh/setup-vim.sh](sh/setup-vim.sh)
+Then, `:PluginInstall` on vim console.
 
 
 ### Anaconda environment
@@ -26,9 +34,6 @@ rm Miniconda3-latest-Linux-x86_64.sh
 
 
 ### Jupyter envirionment
-```sh
-./sh/setup-jupyter.sh
-```
 [sh/setup-jupyter.sh](sh/setup-jupyter.sh)
 
 - nbextensions
@@ -62,5 +67,12 @@ Ref. [GitHub Flavored Markdwon Spac](https://github.github.com/gfm/)
 
 - two indent
   [.vimrc.d/indent.vim](.vimrc.d/indent.vim)
+
+### TeX
+- [TeX](TeX)
+
+
+## Rust
+[.vimrc.d/indent.vim](.vimrc.d/indent.vim)
 
 

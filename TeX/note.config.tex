@@ -1,0 +1,50 @@
+% \documentclass[report,12pt,a4paper,uplatex]{jsarticle}
+\documentclass[uplatex,a4paper]{jsarticle}
+
+
+%\documentclass[12pt,a4paper,twoside]{book} %12pt English
+\usepackage[dvipdfmx]{graphicx, color}
+\usepackage[
+  dvipdfm,
+  colorlinks=true,
+  linkcolor=blue,
+  bookmarks=true,
+  bookmarksnumbered=false,
+  pdfborder={0 0 0},
+  bookmarkstype=toc
+]{hyperref}
+
+\renewcommand{\bibname}{参考文献}
+
+
+%%% ページフォーマット
+  \setlength{\hoffset}{0mm}
+  \setlength{\voffset}{0mm}
+
+  \setlength{\topmargin}{27mm}
+  \addtolength{\topmargin}{-1in}
+  \addtolength{\topmargin}{-37pt}
+
+  \setlength{\oddsidemargin}{32mm}
+  \addtolength{\oddsidemargin}{-1in}
+
+  \setlength{\evensidemargin}{24mm}
+  \addtolength{\evensidemargin}{-1in}
+
+  \setlength{\textwidth}{159.5mm}
+  \setlength{\textheight}{241mm}
+%%%
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Timestamp on header and footer
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{fancyhdr,datetime2}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\rhead{\thepage}
+\chead{}
+\lhead{}
+\cfoot{\texttt{\jobname, draft of \DTMnow}}%\today\ at \now}}

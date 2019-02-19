@@ -94,6 +94,10 @@ alias sp='vim -o'
 alias vs='vim -O'
 alias vi='vs'
 
+alias x='latexmk'
+alias xx='latexmk -pvc'
+alias xc='latexmk -c'
+
 alias expand-gz='gunzip'
 alias expand-Z='gunzip'
 alias expand-bz2='bunzip2'

@@ -14,3 +14,5 @@ ln -s dotfiles/.env.d ~
 
 ln -s dotfiles/.vimrc ~
 ln -s dotfiles/.vimrc.d ~
+
+ln -s dotfiles/.latexmkrc ~

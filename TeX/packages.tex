@@ -21,6 +21,8 @@
   \usepackage{here}
     % 大文字のHを使用することで好きな位置に図を配置
     % \begin{figure}[H]
+  % \usepackage{xstring} 
+    % \IfSubStr
 %%%
 
 %%% newtheorem
@@ -95,7 +97,6 @@
   #1\;\delimsize\|\;#2%
 }
 \newcommand{\infdiv}{D\infdivx}
-\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
 
 %%% comma separate inner product <x, y> powered by usepackage{physics}
   \newcommand{\cinnerproductDelimiter}{,}
@@ -119,22 +120,50 @@
 %%%
 
 
+
 %%% comma separate inner product <x, y> powered by usepackage{physics}
-  \newcommand{\infodivDelimiter}{\,\middle\|\,}
-  \DeclareDocumentCommand\infodivparen{ s m g }
+  \DeclareDocumentCommand\pbraket{ s m g }
   { % comma Inner product
+    \newcommand{\sep}{\,\middle\vert\,}
   	\IfBooleanTF{#1}
   	{ % No resize
   		\IfNoValueTF{#3}
-  		{\vphantom{#2}\left\lparen\smash{#2}\infodivDelimiter\smash{#2}\right\rparen}
-  		{\vphantom{#2#3}\left\lparen\smash{#2}\infodivDelimiter\smash{#3}\right\rparen}
+  		{\vphantom{#2}\left\lparen\smash{#2}\pbraketDelimiter\smash{#2}\right\rparen}
+  		{\vphantom{#2#3}\left\lparen\smash{#2}\pbraketDelimiter\smash{#3}\right\rparen}
   	}
   	{ % Auto resize
   		\IfNoValueTF{#3}
-  		{\left\lparen{#2}\infodivDelimiter{#2}\right\rparenp}
-  		{\left\lparen{#2}\infodivDelimiter{#3}\right\rparen}
+  		{\left\lparen{#2}\pbraketDelimiter{#2}\right\rparen}
+  		{\left\lparen{#2}\pbraketDelimiter{#3}\right\rparen}
+  	}
+  }
+%%%
+
+
+%%% comma separate inner product <x, y> powered by usepackage{physics}
+  \DeclareDocumentCommand\infodivparen{ s m g }
+  { % comma Inner product
+    \newcommand{\sep}{\,\middle\|\,}
+  	\IfBooleanTF{#1}
+  	{ % No resize
+  		\IfNoValueTF{#3}
+  		{\vphantom{#2}\left\lparen\smash{#2}\sep\smash{#2}\right\rparen}
+  		{\vphantom{#2#3}\left\lparen\smash{#2}\sep\smash{#3}\right\rparen}
+  	}
+  	{ % Auto resize
+  		\IfNoValueTF{#3}
+  		{\left\lparen{#2}\sep{#2}\right\rparenp}
+  		{\left\lparen{#2}\sep{#3}\right\rparen}
   	}
   }
   \newcommand{\infodiv}[2]{D\infodivparen{#1}{#2}}
   \newcommand{\kldiv}[2]{D_\mathrm{KL}\infodivparen{#1}{#2}}
 %%%
+
+\newcommand{\highlight}[2][yellow]{\tikz[baseline=(x.base)]{\node[rectangle,rounded corners,fill=#1!10](x){#2};}}
+\newcommand{\highlightcap}[3][yellow]{\tikz[baseline=(x.base)]{\node[rectangle,rounded corners,fill=#1!10](x){#2} node[below of=x, color=#1]{#3};}}
+
+
+
+
+\newcommand{\mv}{\,\middle\vert\,}

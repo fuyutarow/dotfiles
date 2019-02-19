@@ -49,19 +49,6 @@
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Timestamp on header and footer
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   \usepackage{fancyhdr,datetime2}
-%   \pagestyle{fancy}
-%   \renewcommand{\headrulewidth}{0pt}
-%   \rhead{\thepage}
-%   \chead{}
-%   \lhead{}
-%   \cfoot{\texttt{\jobname, draft of \DTMnow}}%\today\ at \now}}
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % extended latex
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% skim
@@ -87,72 +74,55 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \DeclareMathOperator{\Det}{Det}
 
+
 %%% vert
 \newcommand{\mv}{\,\middle\vert\,}
   % \qty(\frac{1}{d} \mv e) % for example
 
 
-%%% comma separate inner product <x, y> powered by usepackage{physics}
-  \newcommand{\cinnerproductDelimiter}{,}
-  \DeclareDocumentCommand\cinnerproduct{ s m g }
-  { % comma Inner product
-  	\IfBooleanTF{#1}
-  	{ % No resize
-  		\IfNoValueTF{#3}
-  		{\vphantom{#2}\left\langle\smash{#2}\cinnerproductDelimiter\smash{#2}\right\rangle}
-  		{\vphantom{#2#3}\left\langle\smash{#2}\cinnerproductDelimiter\smash{#3}\right\rangle}
-  	}
-  	{ % Auto resize
-  		\IfNoValueTF{#3}
-  		{\left\langle{#2}\cinnerproductDelimiter{#2}\right\rangle}
-  		{\left\langle{#2}\cinnerproductDelimiter{#3}\right\rangle}
-  	}
-  }
-  \DeclareDocumentCommand\cbraket{}{\cinnerproduct} % Alternative for \cinnerproduct
-  \DeclareDocumentCommand\cip{}{\cinnerproduct} % Shorthand for \cinnerproduct
-  \newcommand{\hsip}[2]{\cip{#1}{#2}_{\mathrm{HS}}}
-%%%
+%%% generic braket <x, y> powered by usepackage{physics}
+\DeclareDocumentCommand\genericBraket{ s o o o m g }
+{
+  % #1:star
+  % #2:option - left bra
+  % #3:option - middle sep
+  % #4:option - right ket
+  % #5:mandatory
+  % #6:given inside
+  \newcommand{\sss}{#1}
+  \newcommand{\gbra}{\left#2} % generic bra
+  \newcommand{\gsep}{\,#3\,} % generic sep
+  \newcommand{\gket}{\right#4} % generic ket
+  \newcommand{\mm}{#5}
+  \newcommand{\nn}{#6}
+	\IfBooleanTF{\sss}
+	{ % No resize
+		\IfNoValueTF{\nn}
+		{\vphantom{\mm}\gbra\smash{\mm}\gsep\smash{\mm}\gket}
+		{\vphantom{\mm\nn}\gbra\smash{\mm}\gsep\smash{\nn}\gket}
+	}
+	{ % Auto resize
+		\IfNoValueTF{\nn}
+		{\gbra{\mm}\gsep{\mm}\gket}
+		{\gbra{\mm}\gsep{\nn}\gket}
+	}
+}
 
+%%% <x,y>
+\newcommand{\cinnerproduct}{\genericBraket[\lparen][,][\rparen]}
+\DeclareDocumentCommand\cbraket{}{\cinnerproduct} % Alternative for \cinnerproduct
+\DeclareDocumentCommand\cip{}{\cinnerproduct} % Shorthand for \cinnerproduct
+%%% Hilbert-Schmidt inner product <x,y>_HS
+\newcommand{\hsip}[2]{\cip{#1}{#2}_{\mathrm{HS}}}
+%%% (x|y)
+\newcommand{\pbraket}{\genericBraket[\lparen][\mv][\rparen]}
+%%% (x||y)
+\newcommand{\infodivBraket}{\genericBraket[\lparen][\middle\|][\rparen]}
+%%% D(x||y)
+\newcommand{\infodiv}[2]{D\infodivBraket{#1}{#2}}
+%%% D_KL(x||y)
+\newcommand{\kldiv}[2]{D_\mathrm{KL}\infodivBraket{#1}{#2}}
 
-
-%%% comma separate inner product <x, y> powered by usepackage{physics}
-  \DeclareDocumentCommand\pbraket{ s m g }
-  { % comma Inner product
-    \newcommand{\sep}{\,\middle\vert\,}
-  	\IfBooleanTF{#1}
-  	{ % No resize
-  		\IfNoValueTF{#3}
-  		{\vphantom{#2}\left\lparen\smash{#2}\pbraketDelimiter\smash{#2}\right\rparen}
-  		{\vphantom{#2#3}\left\lparen\smash{#2}\pbraketDelimiter\smash{#3}\right\rparen}
-  	}
-  	{ % Auto resize
-  		\IfNoValueTF{#3}
-  		{\left\lparen{#2}\pbraketDelimiter{#2}\right\rparen}
-  		{\left\lparen{#2}\pbraketDelimiter{#3}\right\rparen}
-  	}
-  }
-%%%
-
-
-%%% comma separate inner product <x, y> powered by usepackage{physics}
-  \DeclareDocumentCommand\infodivparen{ s m g }
-  { % comma Inner product
-    \newcommand{\sep}{\,\middle\|\,}
-  	\IfBooleanTF{#1}
-  	{ % No resize
-  		\IfNoValueTF{#3}
-  		{\vphantom{#2}\left\lparen\smash{#2}\sep\smash{#2}\right\rparen}
-  		{\vphantom{#2#3}\left\lparen\smash{#2}\sep\smash{#3}\right\rparen}
-  	}
-  	{ % Auto resize
-  		\IfNoValueTF{#3}
-  		{\left\lparen{#2}\sep{#2}\right\rparenp}
-  		{\left\lparen{#2}\sep{#3}\right\rparen}
-  	}
-  }
-  \newcommand{\infodiv}[2]{D\infodivparen{#1}{#2}}
-  \newcommand{\kldiv}[2]{D_\mathrm{KL}\infodivparen{#1}{#2}}
-%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % math
@@ -193,13 +163,9 @@
 \newcommand{\mrep}{^{(m)}{}}
 \newcommand{\erep}{^{(e)}{}}
 
-\DeclarePairedDelimiterX{\infdivx}[2]{(}{)}{%
-  #1\;\delimsize\|\;#2%
-}
-\newcommand{\infdiv}{D\infdivx}
 
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% highlight
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \newcommand{\highlight}[2][yellow]{\tikz[baseline=(x.base)]{\node[rectangle,rounded corners,fill=#1!10](x){#2};}}
 \newcommand{\highlightcap}[3][yellow]{\tikz[baseline=(x.base)]{\node[rectangle,rounded corners,fill=#1!10](x){#2} node[below of=x, color=#1]{#3};}}
-
-

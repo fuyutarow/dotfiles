@@ -1,6 +1,7 @@
 ln -s dotfiles/.bashrc ~
 ln -s dotfiles/.bashrc.d ~
-ln -s dotfiles/.bash_aliases ~
+
+ln -s dotfiles/.aliases ~
 ln -s dotfiles/.tmux.conf ~
 
 ln -s dotfiles/.gitconfig ~

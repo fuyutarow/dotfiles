@@ -7,8 +7,8 @@
 bindkey -e
 
 # Source aliases and other rcfiles.
-if [ -f ~/.bash_aliases ]; then
-    . ~/.bash_aliases
+if [ -f ~/.aliases ]; then
+    . ~/.aliases
 fi
 
 

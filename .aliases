@@ -69,11 +69,14 @@ alias m='more'
 alias md='mkdir'
 alias mp='mkdir -p'
 
+alias o='open'
+
 alias p='ps uxf'
 alias pp='ps auxf'
 alias pi='pipenv'
 
-alias s='source'
+alias s='start'
+
 alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
@@ -83,7 +86,9 @@ alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
 alias tt='tmux a -t'
+
 alias to='touch'
+
 alias tf='tail -fF'
 
 alias du2='du -ah --max-depth=2'

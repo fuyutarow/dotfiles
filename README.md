@@ -19,6 +19,8 @@ sh/***.sh
 ln -s ~/Gdrive/ssh/config ~/.ssh
 ```
 
+### Aliases
+[aliases](aliases.sh)
 
 ### Vim plugins install
 [sh/setup-vim.sh](sh/setup-vim.sh)
@@ -66,35 +68,45 @@ sudo apt install fortune cowsay lolcat fortune-mod
 ### Markdown
 Ref. [GitHub Flavored Markdwon Spac](https://github.github.com/gfm/)
 
-- two indent
+- two spaces indent
   [.vimrc.d/indent.vim](.vimrc.d/indent.vim)
 
-### TeX
-- [TeX](TeX)
+### Python
+- [Anaconda](https://www.anaconda.com/distribution/)
+- [Pipenv](https://pipenv.readthedocs.io/en/latest/)
+ 
+
+### [TeX](TeX)
+
+### [Rust](mds/rust.md)
 
 
-## Rust
-- [mds/rust.md](mds/rust.md)
+### Aliases
 
+[.env.d/start.env](.env.d/start.env)
+```sh
+chrome
+start slack
+```
 
 
 ## Tools
 ### Web browser
 - [Vivaldi](https://vivaldi.com/)
-  Best web browser
+  : Best web browser
 - [Brave](https://brave.com)
-  Best YouTube Player
+  : Best YouTube Player
 - [Chrome Canary](https://www.google.com/chrome/canary/)
-  When use Gdocs, Gsheet or Gdrive.
+  : When use Gdocs, Gsheet or Gdrive.
 
 
 ### Text editer
 - Vim
-  Best editer for programming.
+  : Best editer for programming.
 - [VS Code](https://code.visualstudio.com)
-  Vim keybinding.
+  : Vim keybinding.
 - [Atom](https://atom.io)
-  for edit TeX.  Emacs keybinding. 日本語を編集するときはIMEとの兼ね合いでemacsの方が楽ね.
+  : for edit TeX.  Emacs keybinding. 日本語を編集するときはIMEとの兼ね合いでemacsの方が楽ね.
 
 
 

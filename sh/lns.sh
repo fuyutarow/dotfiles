@@ -5,7 +5,6 @@ ln -s dotfiles/.aliases ~
 ln -s dotfiles/.tmux.conf ~
 
 ln -s dotfiles/.gitconfig ~
-ln -s dotfiles/.comment_examples.md ~
 
 ln -s dotfiles/.jsbeautifyrc ~ 
 

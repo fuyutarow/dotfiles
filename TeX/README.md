@@ -17,6 +17,7 @@
 view Package documentation
 - [xparse](https://ctan.org/pkg/xparse?lang=en)
 - [physics](https://ctan.org/pkg/physics?lang=en)
+- [fancyhdr](https://ctan.org/pkg/fancyhdr?lang=en)
 
 
 ## setup
@@ -61,3 +62,15 @@ tlmgr or TeX Live package Manager
 latexmk -pvc target.tex
 latexmk -c
 ```
+
+## [PDFMiner.six](https://github.com/pdfminer/pdfminer.six)
+### install
+```sh
+pip install pdfminer.six
+```
+
+### usage
+```sh
+pdf2txt.py ***.pdf
+```
+`alias pdf2txt`[aliase](../aliases)

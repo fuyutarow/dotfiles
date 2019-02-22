@@ -69,21 +69,27 @@ alias m='more'
 alias md='mkdir'
 alias mp='mkdir -p'
 
+alias o='open'
+
 alias p='ps uxf'
 alias pp='ps auxf'
 alias pi='pipenv'
 
-alias s='source'
+alias s='start'
+
 alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
 
+### tmux
 alias t='tmux'
 alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
 alias tt='tmux a -t'
+
 alias to='touch'
+
 alias tf='tail -fF'
 
 alias du2='du -ah --max-depth=2'
@@ -93,6 +99,12 @@ alias vd='vim -d'
 alias sp='vim -o'
 alias vs='vim -O'
 alias vi='vs'
+
+alias x='latexmk'
+alias xx='latexmk -pvc'
+alias xc='latexmk -c'
+
+alias pdf2txt='pdf2txt.py'
 
 alias expand-gz='gunzip'
 alias expand-Z='gunzip'

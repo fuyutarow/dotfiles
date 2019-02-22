@@ -1,0 +1,129 @@
+\documentclass[a4,twoside]{jarticle}
+\usepackage[dvipdfmx]{graphicx, color}
+\usepackage[
+  dvipdfm,
+  colorlinks=true,
+  linkcolor=blue,
+  bookmarks=true,
+  bookmarksnumbered=false,
+  pdfborder={0 0 0},
+  bookmarkstype=toc
+]{hyperref}
+
+
+
+%%%%%%%%%%%%%%%%%% %予稿のフォーマット
+% Margins and Offsets
+% 1in = 2.54cm
+% Top Margins
+
+% \voffset 0mm
+% \hoffset 0pt
+\oddsidemargin -13mm
+\evensidemargin -13mm
+\topmargin -25mm
+% \headheight 0pt
+% \headsep 0pt
+\columnsep 2zw
+% \marginparsep 0pt
+% \marginparwidth 13mm
+%\footskip 15mm
+% Contents area
+\textheight 275mm
+\textwidth 190mm
+%\baselineskip 0pt
+
+
+%\kanjiskip 0.5pt plus 0.2mm minus 0.2mm	%漢字間のスペース
+\renewcommand{\baselinestretch}{0.82}	%改行ピッチがbaselineskipの何倍か
+
+%
+%-------------------------------------------------
+% セクション
+%-------------------------------------------------
+\makeatletter
+%\renewcommand{\paragraph}{\@startsection{paragraph}{4}{\z@}%
+%		      {0.5zh plus 0.1zh minus 0.1zh}%上の空き
+%%	{0.5\Cvs \@plus.5\Cdp \@minus.2\Cdp}%
+%	{-1zw}% 改行せず 1zw のアキ
+%%    	{\normalfont\normalsize\headfont ■}}
+%        {\normalsize\bf}}
+\renewcommand\section{\@startsection {section}{1}{\z@}%
+		      {0.5zh plus 0.1zh minus 0.1zh}%上の空き
+		      {0.1zh plus 0.1zh minus 0.1zh}%下の空き
+%		      {\normalsize\textgt}}
+		      {\normalsize\large\bf}} % 字下げ
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+  		      {0.2zh plus 0.1zh minus 0.1zh}%上の空き
+		      {0.1zh plus 0.1zh minus 0.1zh}%下の空き
+%		      {\normalsize\textgt}}
+          {\normalsize\large\bf}} % 字下げ
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+  		      {0.1zh plus 0.1zh minus 0.1zh}%上の空き
+		      {0.1zh plus 0.1zh minus 0.1zh}%下の空き
+%		      {\small\textgt}}
+		      {\normalsize\bf}} % 字下げ
+\makeatother
+
+%-------------------------------------------------
+% float系
+%-------------------------------------------------
+%\renewcommand{\figurename}{Fig.}	%caption name
+%\renewcommand{\tablename}{Table}	%caption name
+\renewcommand{\figurename}{図}
+\renewcommand{\tablename}{表}
+\abovecaptionskip .1zh	%floatとcaptionの間の距離
+\belowcaptionskip .1zh	%captionとfloatの間の距離
+\intextsep .5zh		%本文中のフロートと本文との距離
+\textfloatsep .5zh	%ページ上部/下部のフロートと本文との距離
+
+%-------------------------------------------------
+% list系
+%-------------------------------------------------
+% enumerate
+\renewcommand{\labelenumi}{(\theenumi)} %enumerateのitemを(1)とする
+\itemsep 0pt
+\partopsep 0pt
+\topsep 0pt
+\parsep 0pt
+
+% itemize
+\renewenvironment{itemize}%
+{%
+   \begin{list}{\parbox{1zw}{$\bullet$}}% 見出し記号／直後の空白を調節
+   {%
+      \setlength{\topsep}{0zh}
+      \setlength{\itemindent}{0zw}
+%      \setlength{\leftmargin}{2zw}%  左のインデント
+      \setlength{\rightmargin}{0zw}% 右のインデント
+      \setlength{\labelsep}{1zw}%    黒丸と説明文の間
+      \setlength{\labelwidth}{3zw}%  ラベルの幅
+      \setlength{\itemsep}{0em}%     項目ごとの改行幅
+      \setlength{\parsep}{0em}%      段落での改行幅
+      \setlength{\listparindent}{0zh}% 段落での一字下り
+   }
+}{%
+   \end{list}%
+}
+
+%-------------------------------------------------
+% bibliography系
+%-------------------------------------------------
+\renewcommand{\refname}{参考文献}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage[dvips]{graphicx}
+%\usepackage{here}
+%\usepackage[footnotesize]{caption} %captionのサイズを変える
+%\usepackage{multirow}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The page numbering
+%
+% XXの部分に指定された先頭ページを入力して下さい．
+%
+\setcounter{page}{1}
+\renewcommand{\thepage}{--\arabic{page}--}
+\pagestyle{empty}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

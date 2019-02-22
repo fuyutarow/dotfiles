@@ -7,8 +7,8 @@
 bindkey -e
 
 # Source aliases and other rcfiles.
-if [ -f ~/.bash_aliases ]; then
-    . ~/.bash_aliases
+if [ -f ~/.aliases ]; then
+    . ~/.aliases
 fi
 
 
@@ -32,3 +32,5 @@ fi
 
 #zplug load --verbose
 zplug load
+export SAGE_ROOT=/Applications/SageMath-8.5.app/Contents/Resources/sage
+PATH=$PATH:${SAGE_ROOT}

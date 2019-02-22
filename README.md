@@ -1,72 +1,88 @@
 # dotfiles
 
-## setup
-### Shell
-```
-./update.sh
-source ~/.bashrc
+## Setup
+
+### Run shell
+```sh
+sh sh/***.sh
+. sh/***.sh
+./sh/***.sh
+sh/***.sh
 ```
 
-text
-$$a_{ij} \ (i \neq j)$$
+### Arange dotfiles
+[sh/lns.sh](sh/lns.sh)
 
+
+### SSH envirioment
+```sh
+ln -s ~/Gdrive/ssh/config ~/.ssh
+```
+
+### Aliases
+[aliases](aliases.sh)
 
 ### Vim plugins install
-```
-mkdir -p ~/.vim/bundle
-git clone https://github.com/gmarik/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-```
+[sh/setup-vim.sh](sh/setup-vim.sh)
 
 Then, `:PluginInstall` on vim console.
 
-### Anaconda environment
-```
-wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-rm Miniconda3-latest-Linux-x86_64.sh
-```
 
-### Jupyter envirionment
-```
-pip install -U https://github.com/ipython-contrib/jupyter_contrib_nbextensions/tarball/master
-pip install -U jupyter
-jupyter notebook --generate-config
-echo """
-c.IPKernelApp.pylab = 'inline'
-c.NotebookApp.ip = '*'
-c.NotebookApp.open_browser = False
-c.NotebookApp.port = 8888
-# c.NotebookApp.kernel_spec_manager_class = 'environment_kernels.EnvironmentKernelSpecManager'
-c.EnvironmentKernelSpecManager.conda_env_dirs = ['/anaconda_path/envs']
-""" >> ~/.jupyter/jupyter_notebook_config.py
-jupyter notebook password
-```
 
-#### nbextensions
-```
-pip install jupyter_contrib_nbextensions
-jupyter contrib nbextension install --user
-```
+### Keyhac install
+[Keyhac](https://sites.google.com/site/craftware/keyhac-en)
 
-#### vim bindings
-```
-# Create required directory in case (optional)
-mkdir -p $(jupyter --data-dir)/nbextensions
-# Clone the repository
-cd $(jupyter --data-dir)/nbextensions
-git clone https://github.com/lambdalisue/jupyter-vim-binding vim_binding
-# Activate the extension
-jupyter nbextension enable vim_binding/vim_binding
-```
 
-### SSH envirioment
-Setup .ssh
-
-### keyhac install
-<a href='https://sites.google.com/site/craftware/keyhac-en'>keyhac</a>
-
-```
+```sh
 sudo apt install fortune cowsay lolcat fortune-mod
 ```
 
-conda install -c damianavila82 rise
+
+## Env
+### Markdown
+Ref. [GitHub Flavored Markdwon Spac](https://github.github.com/gfm/)
+
+- two spaces indent
+  [.vimrc.d/indent.vim](.vimrc.d/indent.vim)
+
+ 
+
+### [./TeX](TeX)
+
+### [./Git](mds/git.md)
+
+### [./Rust](mds/rust.md)
+
+### [./Python](mds/python.md)
+
+
+
+### Aliases
+
+[.env.d/start.env](.env.d/start.env)
+```sh
+chrome
+start slack
+```
+
+
+## Tools
+### Web browser
+- [Vivaldi](https://vivaldi.com/)
+  : Best web browser
+- [Brave](https://brave.com)
+  : Best YouTube Player
+- [Chrome Canary](https://www.google.com/chrome/canary/)
+  : When use Gdocs, Gsheet or Gdrive.
+
+
+### Text editer
+- Vim
+  : Best editer for programming.
+- [VS Code](https://code.visualstudio.com)
+  : Vim keybinding.
+- [Atom](https://atom.io)
+  : for edit TeX.  Emacs keybinding. 日本語を編集するときはIMEとの兼ね合いでemacsの方が楽ね.
+
+
+

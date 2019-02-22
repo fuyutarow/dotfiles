@@ -5,7 +5,7 @@ git config remote.origin.url
 ```
 
 
-Let `alias g=git` in [aliases](../.bash_aliases)
+Let `alias g=git` in [aliases](../.aliases)
 
 
 ## Flow
@@ -46,4 +46,19 @@ aliases in [gitconfig](../.gitconfig)
   --------------------------------------------------------------------------------
   SUM:                             58            303            341           1532
   --------------------------------------------------------------------------------
+  ```
+
+- `git log -10 --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short`
+  ```
+  * - |f2b2d60| fuyuta.. | Add 'g ll' in gitconfig                 | 2019-02-22 09:51:17 +0900
+  * - |720e906| fuyuta.. | Add $_ostype in end.d/start             | 2019-02-22 09:44:52 +0900
+  * - |670ea2d| fuyuta.. | Rename bash_aliases -> aliases          | 2019-02-22 09:42:32 +0900
+  * - |b522815| fuyuta.. | Add mds/git                             | 2019-02-20 08:34:38 +0900
+  * - |55a2bba| fuyuta.. | Add Tex/README                          | 2019-02-20 08:09:15 +0900
+  *   - |5679edd| fuyuta.. | Merge                                   | 2019-02-20 07:20:25 +0900
+  |\  
+  | * - |3d32094| fuyuta.. | Add latexmkrc                           | 2019-02-19 15:43:01 +0900
+  * | - |7425095| fuyuta.. | Update README                           | 2019-02-20 07:17:31 +0900
+  * | - |5ff6ca8| fuyuta.. | Add img in TeX/packages                 | 2019-02-19 19:21:02 +0900
+  * | - |6136300| fuyuta.. | Add note.config.tex                     | 2019-02-19 18:35:11 +0900
   ```

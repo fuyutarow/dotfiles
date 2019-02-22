@@ -28,32 +28,6 @@ ln -s ~/Gdrive/ssh/config ~/.ssh
 Then, `:PluginInstall` on vim console.
 
 
-### Anaconda environment
-```
-wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-rm Miniconda3-latest-Linux-x86_64.sh
-```
-
-
-### Jupyter envirionment
-[sh/setup-jupyter.sh](sh/setup-jupyter.sh)
-
-- nbextensions
-  ```
-  pip install jupyter_contrib_nbextensions
-  jupyter contrib nbextension install --user
-  ```
-- vim bindings
-  ```sh
-  # Create required directory in case (optional)
-  mkdir -p $(jupyter --data-dir)/nbextensions
-  # Clone the repository
-  cd $(jupyter --data-dir)/nbextensions
-  git clone https://github.com/lambdalisue/jupyter-vim-binding vim_binding
-  # Activate the extension
-  jupyter nbextension enable vim_binding/vim_binding
-  ```
 
 ### Keyhac install
 [Keyhac](https://sites.google.com/site/craftware/keyhac-en)
@@ -71,14 +45,16 @@ Ref. [GitHub Flavored Markdwon Spac](https://github.github.com/gfm/)
 - two spaces indent
   [.vimrc.d/indent.vim](.vimrc.d/indent.vim)
 
-### Python
-- [Anaconda](https://www.anaconda.com/distribution/)
-- [Pipenv](https://pipenv.readthedocs.io/en/latest/)
  
 
-### [TeX](TeX)
+### [./TeX](TeX)
 
-### [Rust](mds/rust.md)
+### [./Git](mds/git.md)
+
+### [./Rust](mds/rust.md)
+
+### [./Python](mds/python.md)
+
 
 
 ### Aliases

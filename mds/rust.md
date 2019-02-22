@@ -10,6 +10,8 @@ Rust intsall
 ```sh
 curl https://sh.rustup.rs -sSf | sh
 ```
+[rust install](https://www.rust-lang.org/tools/install)
+
 The command install `rustc`, `cargo`, `rustup`.
 
 
@@ -22,6 +24,7 @@ The command install `rustc`, `cargo`, `rustup`.
   release channel, stable, beta, nightly
   ```sh
   rustup install nightly
+  rustup show
   rustup default stable
   ```
 - define version
@@ -42,4 +45,17 @@ The command install `rustc`, `cargo`, `rustup`.
   ```sh
   cargo generate --git https://github.com/rustwasm/wasm-pack-template
   ```
+
+
+## Rust WASM
+### [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
+```sh
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+```
+
+
+### [cargo generate](https://crates.io/crates/cargo-generate)
+```sh
+cargo install cargo-generate
+```
 

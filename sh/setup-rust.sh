@@ -1,10 +1,19 @@
-curl https://sh.rustup.rs -sSf | sh\n
-brew install zeromq pkg-config
-cargo install evcxr_jupyter
-brew install zeromq pkg-config
+#!/bin/bash
+curl https://sh.rustup.rs -sSf | sh
+source $HOME/.cargo/env
+
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+	sudo apt update
+	sudo apt build-essential
+	sudo apt install -y libzmq3-dev jupyter-notebook
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	brew install zeromq pkg-config
+else
+	echo "This OSTYPE not supported."
+fi
+
 rustc -V
 cargo -v
-rustup updatestable
 rustup update stable
 rustc -V
 cargo -V

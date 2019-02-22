@@ -81,6 +81,7 @@ alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
 
+### tmux
 alias t='tmux'
 alias tn='tmux new -s'
 alias tl='tmux ls'

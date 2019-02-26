@@ -87,8 +87,8 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 export PATH=$HOME/.local/bin:$PATH
 
 # Source aliases and other rcfiles.
-if [ -f ~/.bash_aliases ]; then
-    . ~/.bash_aliases
+if [ -f ~/.aliases ]; then
+    . ~/.aliases
 fi
 
 # Source any envs.

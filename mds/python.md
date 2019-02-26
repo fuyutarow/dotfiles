@@ -45,3 +45,19 @@ rm Miniconda3-latest-Linux-x86_64.sh
   ```sh
   conda clean --all
   ```
+
+### What's pipenv
+
+
+`alias pi=pipenv` in [aliases](../aliases)
+
+- `pipenv shell`
+- `pipenv install`
+- `pipenv install -d`
+- `pipenv lock -r > requirementes.txt`
+- `pipenv run <command>`
+
+
+### What's pip
+
+- `pip install -r requirements.txt`

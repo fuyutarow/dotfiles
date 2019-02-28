@@ -101,6 +101,7 @@ alias vs='vim -O'
 alias vi='vs'
 
 alias x='latexmk'
+alias xp='latexmk -pv'
 alias xx='latexmk -pvc'
 alias xc='latexmk -c'
 

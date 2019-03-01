@@ -51,6 +51,7 @@
   l = ls-files
   ll=! git ls-files | xargs cloc
   lo =! git log -10 --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short
+  list =! . ~/dotfiles/sh/list-repo.bash
 
 ### merge
   m = merge --no-ff 

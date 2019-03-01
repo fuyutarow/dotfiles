@@ -21,6 +21,14 @@ view Package documentation
 
 
 ## setup
+### TeX env
+```sh
+apt install texlive-full
+```
+2 hours - 3 hours
+
+
+
 ```sh
 ln ~/dotfiles/.latexmkrc .
 ln ~/dotfiles/TeX/note.config.tex .

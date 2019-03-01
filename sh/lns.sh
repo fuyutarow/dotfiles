@@ -5,6 +5,7 @@ ln -s dotfiles/.aliases ~
 ln -s dotfiles/.tmux.conf ~
 
 ln -s dotfiles/.gitconfig ~
+ln -s dotfiles/.gitignore_global ~
 
 ln -s dotfiles/.jsbeautifyrc ~ 
 

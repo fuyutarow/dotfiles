@@ -2,8 +2,14 @@
   email = fuyutarow@gmail.com
   name = fuyutarow
   
+
 [push]
   default = simple
+
+
+[core]
+  excludesfile = ~/.gitignore_global
+
 
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
@@ -55,8 +61,6 @@
 ### open
   o =! open `git config remote.origin.url`
 
-
-
 ### status
   s = status
   ss = status -s
@@ -69,8 +73,6 @@
   ignore =! git rm -r --cached . & git add .
   # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
   rename-branch = branch -m #old_name #new_name
-
-
 
 # git flow
   flow-init = flow init

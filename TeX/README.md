@@ -18,6 +18,7 @@ view Package documentation
 - [xparse](https://ctan.org/pkg/xparse?lang=en)
 - [physics](https://ctan.org/pkg/physics?lang=en)
 - [fancyhdr](https://ctan.org/pkg/fancyhdr?lang=en)
+- [markdown](https://ctan.org/pkg/markdown?lang=en)
 
 
 ## setup

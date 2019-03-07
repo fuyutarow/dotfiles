@@ -92,8 +92,10 @@ if [ -f ~/.aliases ]; then
 fi
 
 # Source any envs.
-if [ -f ~/.env.d/index.sh ]; then
-    . ~/.env.d/index.sh
+if [ -d ~/.env.d ]; then
+    for file in $(/bin/ls ~/.env.d/*); do
+        . $file;
+    done
 fi
 
 # enable programmable completion features (you don't need to enable

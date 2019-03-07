@@ -4,4 +4,4 @@ curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/instal
 export ZPLUG_HOME=$HOME/.zplug
 source $ZPLUG_HOME/init.zsh
 zplug install
-sudo -R 755 $ZPLUG_HOME
+chmod -R 755 $ZPLUG_HOME

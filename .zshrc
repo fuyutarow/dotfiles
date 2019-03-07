@@ -50,7 +50,3 @@ fi
 zplug load
 export SAGE_ROOT=/Applications/SageMath-8.5.app/Contents/Resources/sage
 PATH=$PATH:${SAGE_ROOT}
-
-if [[ ! -f .env.local ]]; then
-  . .env.local
-fi

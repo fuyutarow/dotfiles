@@ -1,4 +1,3 @@
-pip install -y -U jupyter
 jupyter notebook --generate-config
 echo """
 c.IPKernelApp.pylab = 'inline'

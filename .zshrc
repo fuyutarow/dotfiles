@@ -31,6 +31,11 @@ if [ -d ~/.env.d ]; then
     done
 fi
 
+if [ -d ~/.rc.d ]; then
+    for file in $(/bin/ls ~/.rc.d/*); do
+        . $file;
+    done
+fi
 ################################################################################
 # Zplug
 ################################################################################
@@ -45,6 +50,7 @@ if [ -d ~/.zshrc.d ]; then
         . $file;
     done
 fi
+
 
 #zplug load --verbose
 zplug load

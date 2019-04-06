@@ -1,3 +1,4 @@
+#!/bin/sh
 ln -s dotfiles/.bashrc ~
 ln -s dotfiles/.bashrc.d ~
 

@@ -62,3 +62,26 @@ aliases in [gitconfig](../.gitconfig)
   * | - |5ff6ca8| fuyuta.. | Add img in TeX/packages                 | 2019-02-19 19:21:02 +0900
   * | - |6136300| fuyuta.. | Add note.config.tex                     | 2019-02-19 18:35:11 +0900
   ```
+
+
+# git init
+
+…or create a new repository on the command line
+```sh
+echo "# tmp" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git remote add origin https://github.com/fuyutarow/tmp.git
+git push -u origin master
+```
+
+…or push an existing repository from the command line
+```sh
+git remote add origin https://github.com/fuyutarow/tmp.git
+git push -u origin master
+```
+
+…or import code from another repository
+You can initialize this repository with code from a Subversion, Mercurial, or TFS project.
+

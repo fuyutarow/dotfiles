@@ -59,3 +59,10 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 cargo install cargo-generate
 ```
 
+```sh
+cargo new myapp --lib
+rustc src/lib.rs
+./lib
+rustup target add wasm32-unknown-unknown
+cargo build --target wasm32-unknown-unknown
+```

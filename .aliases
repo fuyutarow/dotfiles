@@ -74,6 +74,7 @@ alias o='open'
 alias p='ps uxf'
 alias pp='ps auxf'
 alias pi='pipenv'
+alias pin='pipenv run'
 
 alias s='start'
 

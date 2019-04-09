@@ -1,6 +1,15 @@
 # dotfiles
 
 ## Setup
+```sh
+setup.d/lns.sh
+setup.d/brew.sh
+setup.d/zsh.sh
+zsh
+setup.d/zplug.sh
+setup.d/node.sh
+setup.d/vim.sh
+```
 
 ### Run shell
 ```sh

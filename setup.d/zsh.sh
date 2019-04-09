@@ -4,7 +4,3 @@ brew install zsh
 
 : ### change default shell
 which zsh | sudo tee -a /etc/shells > /dev/null
-chsh -s 
-
-: ### install zplug
-. ./zplug.zsh

@@ -78,6 +78,8 @@ alias pin='pipenv run'
 
 alias s='start'
 
+alias sudo='sudo -E '
+
 alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'

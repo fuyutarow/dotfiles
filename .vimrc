@@ -27,6 +27,7 @@ filetype off                  " required
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
 	Plugin 'VundleVim/Vundle.vim'
+  Plugin 'leafgarland/typescript-vim'
 	for plugin in PLUGIN_LIST
 		Plugin plugin
 	endfor

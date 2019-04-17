@@ -13,6 +13,9 @@ if [ -f ~/.aliases ]; then
     . ~/.aliases
 fi
 
+if [ -f ~/.env ]; then
+  source <(sed -E -n 's/[^#]+/export &/ p' ~/.env)
+fi
 
 ################################################################################
 # Source any envs

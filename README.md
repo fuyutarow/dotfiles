@@ -1,13 +1,18 @@
 # dotfiles
 
 ## Setup
-
-### Run shell
 ```sh
-sh sh/***.sh
-. sh/***.sh
-./sh/***.sh
-sh/***.sh
+echo "my_brew_path/bin/brew" >> .profile
+```
+
+```sh
+setup.d/lns.sh
+setup.d/brew.sh
+setup.d/zsh.sh
+zsh
+setup.d/zplug.sh
+setup.d/node.sh
+setup.d/vim.sh
 ```
 
 ### Arange dotfiles

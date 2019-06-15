@@ -9,6 +9,7 @@
 Rust intsall
 ```sh
 curl https://sh.rustup.rs -sSf | sh
+cargo intall cargo-edit
 ```
 [rust install](https://www.rust-lang.org/tools/install)
 

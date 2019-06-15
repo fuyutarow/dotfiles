@@ -1,6 +1,7 @@
 let PLUGIN_LIST += [
 	\'google/vim-maktaba',
 	\'google/vim-codefmt',
+  \'rust-lang/rust.vim',
 \]
 
 augroup autoformat_settings
@@ -20,3 +21,4 @@ autocmd BufRead,BufNewFile *.ts set filetype=typescript
 autocmd BufRead,BufNewFile *.tsx set filetype=typescript
 autocmd BufNewFile,BufRead *.{html,htm,vue*} set filetype=html
 
+autocmd BufWritePre *.rs RustFmt

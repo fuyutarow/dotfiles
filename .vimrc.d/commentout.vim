@@ -1,4 +1,4 @@
-" call add(PLUGIN_LIST, 'fuyutarow/commentout.vim')
+call add(PLUGIN_LIST, 'fuyutarow/commentout.vim')
 
 augroup commentout_settings
   autocmd FileType vue let b:comment_leader = '<!-- '

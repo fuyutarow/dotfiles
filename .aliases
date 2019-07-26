@@ -40,6 +40,7 @@ alias dc='docker-compose'
 alias e='echo'
 
 alias f='find'
+alias ft='echo $(/bin/date "+%Y-%m-%dT%T") $(/usr/local/bin/fast) | tee -a ~/.fast.log'
 
 alias g='git'
 alias gi='git'
@@ -47,6 +48,7 @@ alias gip='curl globalip.me'
 alias gr='grep'
 alias grr='grep -r'
 alias gv='grep -v'
+alias gl='grep -ilr'
 
 alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
@@ -54,7 +56,8 @@ alias hg="h|grep"
 
 alias j='jobs'
 
-alias k='kill -9'
+alias k='tak'
+alias kl='kill -9'
 
 alias l='ls -CF'
 alias la='ls -A'
@@ -96,7 +99,7 @@ alias to='touch'
 alias tf='tail -fF'
 
 alias du2='du -ah --max-depth=2'
-alias v='view'
+# alias v='view'
 alias vid='vim -d'
 alias vd='vim -d'
 alias sp='vim -o'

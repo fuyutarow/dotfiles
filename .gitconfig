@@ -33,7 +33,7 @@
   # c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
   commit-help=! open 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
   # examples
-  eg =! view $HOME/dotfiles/mds/comment_examples.md
+  examples =! view $HOME/dotfiles/mds/comment_examples.md
 
 ### checkout
   cb = checkout -b

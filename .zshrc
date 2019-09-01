@@ -24,11 +24,11 @@ export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 
-# if [ -d ~/.env.d ]; then
-#     for file in $(/bin/ls ~/.env.d/*); do
-#         . $file;
-#     done
-# fi
+if [ -d ~/.env.d ]; then
+    for file in $(/bin/ls ~/.env.d/*); do
+        . $file;
+    done
+fi
 
 # if (which zprof > /dev/null 2>&1) ;then
 #   zprof

@@ -1,0 +1,8 @@
+{
+    "coc.preferences.formatOnSaveFiletypes": [
+        "css",
+        "Markdown",
+        "rust"
+    ]
+}
+

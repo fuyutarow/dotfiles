@@ -20,3 +20,5 @@ ln -s dotfiles/.vimrc.d ~
 ln -s dotfiles/.latexmkrc ~
 
 ln -s dotfiles/.rc.d ~
+
+ln -s ./nvim ~/.config

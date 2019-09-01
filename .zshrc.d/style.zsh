@@ -10,6 +10,8 @@ case "$HOST" in
   ;;
   "conohatan")
     zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
+    zplugin ice pick"async.zsh" src"pure.zsh"
+    zplugin light sindresorhus/pure
   ;;
   "ringbell"|"ringbell.local")
     uname="%F{magenta}%n%f"
@@ -17,13 +19,12 @@ case "$HOST" in
     pwd="%F{green}%~%f"
     NEWLINE=$'\n'
     prompt="%F{blue})%f "
+    datetime="%F{cyan}%D{%m-%d %H:%M}%f"
 
-    PROMPT="${uname}@${host}|${pwd}${NEWLINE}${prompt}"
-    # RPROMPT="%F{cyan}%D{%m-%d %H:%M}%f"
+    PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"
   ;;
  *)
-    zplug "modules/osx", from:prezto, if:"[[ $OSTYPE == *darwin* ]]"
-    zplug "modules/prompt", from:prezto
-    zstyle ':prezto:module:prompt' theme 'giddie'
+    zplugin ice pick'spaceship.zsh' wait'!0'
+    zplugin light 'denysdovhan/spaceship-zsh-theme'
   ;;
 esac

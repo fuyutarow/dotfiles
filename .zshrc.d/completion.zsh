@@ -19,8 +19,3 @@ zstyle ':completion:*' verbose true
 
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
-
-zplug "zsh-users/zsh-completions", lazy:true # reinforce completions
-zplug "modules/git", from:prezto, lazy:true # git completion
-zplug "peterhurford/git-aliases.zsh", lazy:true # git aliases completion
-zplug "zsh-users/zsh-autosuggestions", lazy:true # suggest in input

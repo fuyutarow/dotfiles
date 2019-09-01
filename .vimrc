@@ -19,21 +19,4 @@ source ~/.vimrc.d/color.vim
 source ~/.vimrc.d/completion.vim
 source ~/.vimrc.d/commentout.vim
 " source ~/.vimrc.d/html_css.vim
-
-
-"-------------------------------------------------------------------------------
-" Vundle init
-"-------------------------------------------------------------------------------
-set nocompatible              " be iMproved, required
-filetype off                  " required
-set rtp+=~/.vim/bundle/Vundle.vim
-call vundle#begin()
-	Plugin 'VundleVim/Vundle.vim'
-  Plugin 'leafgarland/typescript-vim'
-  " Plugin 'vim-ctrlspace/vim-ctrlspace'
-	for plugin in PLUGIN_LIST
-		Plugin plugin
-	endfor
-call vundle#end()
-filetype plugin indent on
-
+source ~/.vimrc.d/dein.vim

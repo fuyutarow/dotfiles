@@ -6,7 +6,8 @@ case $(uname) in
     echo Linux
     sudo apt install -y build-essential curl file git
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/Linuxbrew/install/master/install.sh)"
-    eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
+    # eval $(/home/linuxbrew/.linuxbrew/bin/brew shellenv)
+    eval $(${HOME}/.linuxbrew/bin/brew shellenv)
 
     # git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew
     # mkdir ~/.linuxbrew/bin

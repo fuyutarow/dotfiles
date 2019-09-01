@@ -63,3 +63,9 @@ PATH=$PATH:${SAGE_ROOT}
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
+
+### Added by Zplugin's installer
+source '/home/fuyutarow/.zplugin/bin/zplugin.zsh'
+autoload -Uz _zplugin
+(( ${+_comps} )) && _comps[zplugin]=_zplugin
+### End of Zplugin's installer chunk

@@ -3,4 +3,7 @@
 brew install zsh
 
 : ### change default shell
-which zsh | sudo tee -a /etc/shells > /dev/null
+sudo chsh -s "$(command -v zsh)" "${USER}"
+
+: ### install zplugin
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"

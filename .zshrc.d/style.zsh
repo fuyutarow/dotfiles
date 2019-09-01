@@ -17,13 +17,13 @@ case "$HOST" in
     pwd="%F{green}%~%f"
     NEWLINE=$'\n'
     prompt="%F{blue})%f "
+    datetime="%F{cyan}%D{%m-%d %H:%M}%f"
 
-    PROMPT="${uname}@${host}|${pwd}${NEWLINE}${prompt}"
-    # RPROMPT="%F{cyan}%D{%m-%d %H:%M}%f"
+    PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"
   ;;
  *)
-    zplug "modules/osx", from:prezto, if:"[[ $OSTYPE == *darwin* ]]"
-    zplug "modules/prompt", from:prezto
-    zstyle ':prezto:module:prompt' theme 'giddie'
+    # zplug "modules/osx", from:prezto, if:"[[ $OSTYPE == *darwin* ]]"
+    # zplug "modules/prompt", from:prezto
+    # zstyle ':prezto:module:prompt' theme 'giddie'
   ;;
 esac

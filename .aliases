@@ -38,6 +38,7 @@ alias d='docker'
 alias dc='docker-compose'
 
 alias e='echo'
+alias em='emacs'
 
 alias f='find'
 alias ft='echo $(/bin/date "+%Y-%m-%dT%T") $(/usr/local/bin/fast) | tee -a ~/.fast.log'
@@ -73,6 +74,8 @@ alias md='mkdir'
 alias mp='mkdir -p'
 
 alias o='open'
+alias oo='open .'
+alias ooo='open ..'
 
 alias p='ps uxf'
 alias pp='ps auxf'
@@ -81,7 +84,7 @@ alias pin='pipenv run'
 
 alias s='start'
 
-alias sudo='sudo -E '
+# alias sudo='sudo -E '
 
 alias sa='source activate'
 alias sb='source $HOME/.bashrc'
@@ -99,12 +102,15 @@ alias to='touch'
 alias tf='tail -fF'
 
 alias du2='du -ah --max-depth=2'
-# alias v='view'
+
+alias vim='nvim'
 alias vid='vim -d'
 alias vd='vim -d'
 alias sp='vim -o'
 alias vs='vim -O'
 alias vi='vs'
+alias i='vi'
+# alias v='view'
 
 alias x='latexmk'
 alias xp='latexmk -pv'
@@ -172,3 +178,8 @@ pip install git+https://github.com/user/repo.git@branch
 alias md2pdf='markdown-pdf'
 
 ##cat ~/.ssh/id_rsa.pub | ssh username@xx.xx.xx.xx "cat >> ~/.ssh/authorized_keys"
+alias del-swp="rm ~/.local/share/nvim/swap/*"
+alias en2ja="trans -b -sl=en -tl=ja"
+
+
+alias line="line -o ~/Gdrive/stickers"

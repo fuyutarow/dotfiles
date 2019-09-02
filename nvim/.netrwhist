@@ -1,8 +1,0 @@
-let g:netrw_dirhistmax  =10
-let g:netrw_dirhist_cnt =6
-let g:netrw_dirhist_1='/Users/fuyutarow/.config/line-stickers/scripts'
-let g:netrw_dirhist_2='/Users/fuyutarow/dotfiles/qmk_firmware/keyboards/cocoa40/keymaps'
-let g:netrw_dirhist_3='/Users/fuyutarow/dotfiles/qmk_firmware/keyboards/hhkb/keymaps'
-let g:netrw_dirhist_4='/Users/fuyutarow/dotfiles/nvim'
-let g:netrw_dirhist_5='/Users/fuyutarow/dotfiles/.zshrc.d'
-let g:netrw_dirhist_6='/Users/fuyutarow/dotfiles/.env.d'

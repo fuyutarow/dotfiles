@@ -12,3 +12,11 @@ repo = 'neoclide/coc.nvim'
 build = './install.sh nightly'
 hook_add = 'source ~/.config/nvim/coc.vim'
 
+[[plugins]]
+repo = 'scrooloose/nerdcommenter'
+hook_add = '''
+let g:NERDSpaceDelims=1
+let g:NERDDefaultAlign='left'
+noremap ,, :call NERDComment("n", "Uncomment")<CR>
+noremap .. :call NERDComment("n", "Comment")<CR>
+'''

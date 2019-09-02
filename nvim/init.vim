@@ -3,6 +3,7 @@ let mapleader = ","
 if &compatible
   set nocompatible
 endif
+
 " Add the dein installation directory into runtimepath
 set runtimepath+=~/.cache/dein/repos/github.com/Shougo/dein.vim
 
@@ -89,47 +90,5 @@ nmap <C-b> :!make<CR>
 "-------------------------------------------------------------------------------
 " Linebreak
 "-------------------------------------------------------------------------------
-" nnoremap K i<CR><Esc>
-" map K i<Enter><Esc>
-
-"-------------------------------------------------------------------------------
-" Commentout
-"-------------------------------------------------------------------------------
-let b:comment_trailer = ''
-augroup commentout_settings
-  autocmd FileType c,cpp,java,scala,rust let b:comment_leader = '// '
-  autocmd FileType javascript,go let b:comment_leader = '// '
-
-  autocmd FileType sh,ruby,python let b:comment_leader = '# '
-  autocmd FileType toml,conf,fstab,make let b:comment_leader = '# '
-  autocmd FileType tex let b:comment_leader = '% '
-  autocmd FileType mail let b:comment_leader = '> '
-  autocmd FileType vim let b:comment_leader = '" '
-  autocmd FileType html,vue let b:comment_leader = '<!-- '
-  autocmd FileType html,vue let b:comment_trailer = ' -->'
-augroup End
-
-noremap <silent> .. :<C-B>silent <C-E>s/\(^\s*\)\(.\+\)/\1<C-R>=escape(b:comment_leader,'\/')<CR>\2<C-R>=escape(b:comment_trailer,'\/')<CR>/<CR>:nohlsearch<CR>
-noremap <silent> ,, :<C-B>silent <C-E>s/\(^\s*\)<C-R>=escape(b:comment_leader,'\/')<CR>\(.\+\)<C-R>=escape(b:comment_trailer,'\/')<CR>/\1\2/e<CR>:nohlsearch<CR>
-
-
-function! Commentout() range
-  let lines = getline(a:firstline, a:lastline)
-
-  let min_indent = 1000
-  for linetext in lines
-    if linetext != ""
-      let indent = matchend(linetext, '^\s*')
-      let min_indent = min_indent < indent? min_indent: indent
-    endif
-  endfor
-
-  let i = 0
-  for linetext in lines
-    let newline = linetext==""? linetext: substitute(linetext, '\(^\s\{'.min_indent.'\}\)', '\1'.b:comment_leader, '')
-    call setline(line("'<")+i, newline.b:comment_trailer)
-    let i = i + 1
-  endfor
-endfunction
-
-command! -range Commentout <line1>,<line2>call Commentout() 
+nnoremap K i<CR><Esc>
+map K i<Enter><Esc>

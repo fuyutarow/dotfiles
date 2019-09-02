@@ -12,8 +12,15 @@ add\:vim :
 	bash setup.d/dein.sh
 	ln -s ~/dotfiles/nvim ~/.config/nvim
 	vi +":call dein#install()" +qa
+
+add\:coc :
 	vi +":CocInstall coc-rls" +qa
 	vi +":CocInstall coc-python" +qa
+	vi +":CocInstall coc-tsserver" +qa
+	vi +":CocInstall coc-html" +qa
+	vi +":CocInstall coc-css" +qa
+	vi +":CocInstall coc-yaml" +qa
+	vi +":CocInstall coc-vetur" +qa
 
 add\:rust :
 	curl https://sh.rustup.rs -sSf | sh
@@ -22,6 +29,9 @@ add\:rust :
 
 add\:python :
 	brew install pyenv pipenv
+
+add\:jupyter :
+	bash setup.d/jupyter.sh
 
 add\:node :
 	. setup.d/node.sh

@@ -1,8 +1,6 @@
 # OS間のクリップボードの差異を吸収するコマンドを定義する oh-my-zsh のスニペットをロードします。
 zplugin snippet 'OMZ::lib/clipboard.zsh'
 
-zplugin snippet "${HOMEBREW_PREFIX}/opt/fzf/shell/key-bindings.zsh"
-
 zplugin snippet 'OMZ::lib/completion.zsh'
 zplugin snippet 'OMZ::lib/compfix.zsh'
 

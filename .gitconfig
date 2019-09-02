@@ -61,6 +61,7 @@
 
 ### open
   o =! open `git config remote.origin.url`
+  o-netlify =! open `git config remote.netlify.url`
 
 ### status
   s = status

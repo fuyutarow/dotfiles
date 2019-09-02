@@ -1,5 +1,3 @@
-eval $(${HOME}/.linuxbrew/bin/brew shellenv)
-
 # enable color support of ls and also add handy aliases
 if [ -x /usr/bin/dircolors ]; then
     test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
@@ -31,23 +29,24 @@ alias ~='cd ~'
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # some more ls aliases
-alias c='clear'
-alias cl='clear;ls'
 alias cr='cp -R'
 
 alias di='diff -u'
+
 alias d='docker'
 alias dc='docker-compose'
 
 alias e='echo'
+
 alias em='emacs'
 
 alias f='find'
+
 alias ft='echo $(/bin/date "+%Y-%m-%dT%T") $(/usr/local/bin/fast) | tee -a ~/.fast.log'
 
 alias g='git'
 alias gi='git'
-alias gip='curl globalip.me'
+
 alias gr='grep'
 alias grr='grep -r'
 alias gv='grep -v'
@@ -57,15 +56,19 @@ alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
 alias hg="h|grep"
 
+alias ip-get='curl globalip.me'
+
 alias j='jobs'
 
 alias k='tak'
+
 alias kl='kill -9'
 
 alias l='ls -CF'
 alias la='ls -A'
 alias ll='ls -alF'
 alias lt='ls -ltr'
+
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
 alias lm400='cpulimit -l 400 --'
@@ -102,6 +105,9 @@ alias tt='tmux a -t'
 alias to='touch'
 
 alias tf='tail -fF'
+
+alias rm='rmtrash'
+alias rr='rm -rf'
 
 alias du2='du -ah --max-depth=2'
 
@@ -184,4 +190,4 @@ alias del-swp="rm ~/.local/share/nvim/swap/*"
 alias en2ja="trans -b -sl=en -tl=ja"
 
 
-alias line="line -o ~/Gdrive/stickers"
+alias line-dl="line-dl -o ~/Gdrive/stickers"

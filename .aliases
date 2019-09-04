@@ -19,11 +19,42 @@ if [[ -x `which colordiff` ]]; then
   alias diff='colordiff'
 fi
 
-alias ..='cd ..'
-alias ...='cd ../..'
-alias ....='cd ../../..'
-alias .....='cd ../../../..'
-alias ~='cd ~'
+# change directory
+# ================
+# # traditional `cd` aliases
+# alias ..='cd ..'
+# alias ...='cd ../..'
+# alias ....='cd ../../..'
+# alias .....='cd ../../../..'
+# alias ~='cd ~'
+# alias -- -='cd -'
+
+# # from now on tonight
+function , {
+    if (($# > 0)); then
+        pushd $@ > /dev/null 2>&1
+    else
+        pushd $HOME > /dev/null 2>&1
+    fi
+}
+alias ,,=', +1' # change to previous directory.
+alias ,,,=', +2'
+alias ,,,,=', +3'
+alias ,,,,,=', +4'
+alias ,,,,,,=', +5'
+alias ..=', ..' # change to parent directory.
+alias ...=', ../..'
+alias ....=', ../../..'
+alias .....=', ../../../..'
+alias ......=', ../../../../..'
+alias ds='dirs -v'
+# Yes, `cd` stands for comma and dot.
+# # for examples
+# To type `,` is equivalent to `cd ~`.
+# To type `, <dir>` is equivalent to `cd <dir>`.
+# To type `,,` is equivalent to `cd -`.
+# To type `..` is equivalent to `cd ..`.
+
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'

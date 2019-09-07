@@ -4,6 +4,10 @@ link :
 add\:brew :
 	bash setup.d/brew.sh
 
+add\:dev :
+	brew update
+	brew install git exa fuyutarow/commad/commad lolcat colordiff
+
 add\:zsh :
 	bash setup.d/zsh.sh
 
@@ -35,3 +39,6 @@ add\:jupyter :
 
 add\:node :
 	. setup.d/node.sh
+
+add\:shc :
+	. setup.d/shc.sh

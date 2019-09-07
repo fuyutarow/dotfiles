@@ -54,36 +54,6 @@ alias docs='browse http://docs.google.com/document/u/0/'
 alias sheet='browse http://docs.google.com/spreadsheets/u/0/'
 
 
-google_translate() {
-  local str opt cond
- 
-  if [ $# != 0 ]; then
-    str=`echo $1 | sed -e 's/  */+/g'` # 1文字以上の半角空白を+に変換
-    cond=$2
-    if [ $cond = "ja-en" ]; then
-      # ja -> en 翻訳
-      opt='?hl=ja&sl=ja&tl=en&ie=UTF-8&oe=UTF-8'
-    else
-      # en -> ja 翻訳
-      opt='?hl=ja&sl=en&tl=ja&ie=UTF-8&oe=UTF-8'
-    fi
-  else
-    opt='?hl=ja&sl=en&tl=ja&ie=UTF-8&oe=UTF-8'
-  fi
- 
-  opt="${opt}&text=${str}"
-  w3m +13 "http://translate.google.com/${opt}"
-}
-
-enja() {
-  google_translate "$*" "en-ja"
-}
- 
-# w3m でGoogle translate Japanese->English
-jaen() {
-  google_translate "$*" "ja-en"
-}
-
 google() {
 local str opt
 if [ $ != 0 ]; then

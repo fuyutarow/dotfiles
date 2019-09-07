@@ -1,7 +1,7 @@
 # SSH
 
 ```sh
-ssh-keygen -t rsa
+ssh-keygen
 ```
 
 - `ip`
@@ -9,3 +9,11 @@ ssh-keygen -t rsa
 - `ping`
 - `traceroute`
 - `netstat`
+
+```sh
+ssh-copy-id
+```
+
+```sh
+ssh -vT git@github.com
+```

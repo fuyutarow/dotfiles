@@ -3,6 +3,7 @@
         "css",
         "Markdown",
         "rust",
+        "go",
         "sh",
         "zsh",
         "bash"

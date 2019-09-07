@@ -29,25 +29,44 @@ fi
 # alias ~='cd ~'
 # alias -- -='cd -'
 
-# # from now on tonight
-function , {
-    if (($# > 0)); then
-        pushd $@ > /dev/null 2>&1
-    else
-        pushd $HOME > /dev/null 2>&1
-    fi
-}
-alias ,,=', +1' # change to previous directory.
-alias ,,,=', +2'
-alias ,,,,=', +3'
-alias ,,,,,=', +4'
-alias ,,,,,,=', +5'
+# # # from now on tonight
+source ~/.config/commad/commadrc
+# source $(which commadrc)
+if type commad > /dev/null 2>&1; then
+    alias ,='commad'
+    alias ,,=', -1' # change to previous directory.
+    alias ,,,=', -2'
+    alias ,,,,=', -3'
+    alias ,,,,,=', -4'
+    alias ,,,,,,=', -5'
+    alias ,.=', +1' # change to next directory.
+    alias ,..=', +2'
+    alias ,...=', +3'
+    alias ,....=', +4'
+    alias ,.....=', +5'
+else
+    alias ,='cd'
+fi
 alias ..=', ..' # change to parent directory.
 alias ...=', ../..'
 alias ....=', ../../..'
 alias .....=', ../../../..'
 alias ......=', ../../../../..'
-alias ds='dirs -v'
+alias ~=', ~' # change to home directory.
+
+alias ,s='. ~/commad/commad.sh'
+alias ,e='vi ~/commad/commad.sh'
+alias ,c='cleard'
+alias ,l='listd'
+function ,d {
+    # ,d for debug print 
+
+    echo COMMAD_STACK:
+    ,l
+    echo
+    echo COMMAD_POINTER:
+    echo $COMMAD_POINTER
+}
 # Yes, `cd` stands for comma and dot.
 # # for examples
 # To type `,` is equivalent to `cd ~`.
@@ -95,10 +114,19 @@ alias k='tak'
 
 alias kl='kill -9'
 
-alias l='ls -CF'
-alias la='ls -A'
-alias ll='ls -alF'
-alias lt='ls -ltr'
+
+# ls
+# ==
+if type "exa" > /dev/null 2>&1; then
+  :
+else
+    alias exa='ls'
+fi
+# alias l='ls -CF'
+alias l='exa -F'
+alias la='exa -A'
+alias ll='exa -alF'
+alias lt='exa -ltr'
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
@@ -181,8 +209,20 @@ gpp () {
   fi
 }
 
-
-
+colorcode () {
+	for fore in `seq 30 37`; do
+		printf "\e[${fore}m \\\e[${fore}m \e[m\n"
+		for mode in 1 4 5; do
+			printf "\e[${fore};${mode}m \\\e[${fore};${mode}m \e[m"
+			for back in `seq 40 47`; do
+				printf "\e[${fore};${back};${mode}m \\\e[${fore};${back};${mode}m \e[m"
+			done
+			echo
+		done
+		echo
+	done
+	printf " \\\e[m\n"
+}
 
 julia-init () {
 julia -e '''
@@ -218,7 +258,8 @@ alias md2pdf='markdown-pdf'
 
 ##cat ~/.ssh/id_rsa.pub | ssh username@xx.xx.xx.xx "cat >> ~/.ssh/authorized_keys"
 alias del-swp="rm ~/.local/share/nvim/swap/*"
-alias en2ja="trans -b -sl=en -tl=ja"
+alias enja="trans -b -sl=en -tl=ja"
+alias jaen="trans -b -sl=ja -tl=en"
 
 
 alias line-dl="line-dl -o ~/Gdrive/stickers"

@@ -88,3 +88,9 @@ You can initialize this repository with code from a Subversion, Mercurial, or TF
 ```sh
 git submodule add 
 ```
+
+```sh
+git switch -c <branch> -t <remote>/<branch>
+```
+[ref.](https://git-scm.com/docs/git-switch/2.23.0)
+

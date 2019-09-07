@@ -2,7 +2,10 @@
     "coc.preferences.formatOnSaveFiletypes": [
         "css",
         "Markdown",
-        "rust"
+        "rust",
+        "sh",
+        "zsh",
+        "bash"
     ]
 }
 

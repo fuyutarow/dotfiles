@@ -19,4 +19,5 @@ let g:NERDSpaceDelims=1
 let g:NERDDefaultAlign='left'
 noremap ,, :call NERDComment("n", "Uncomment")<CR>
 noremap .. :call NERDComment("n", "Comment")<CR>
+noremap .A :call NERDComment("n", "Append")<CR>
 '''

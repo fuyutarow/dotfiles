@@ -12,6 +12,19 @@ repo = 'neoclide/coc.nvim'
 build = './install.sh nightly'
 hook_add = 'source ~/.config/nvim/coc.vim'
 
+
+# dev utils
+# =========
+
+[[plugins]] # helper for paren complement
+repo = 'Townk/vim-autoclose'
+
+[[plugins]]
+repo = 'scrooloose/nerdtree'
+hook_add = '''
+noremap ,t :NERDTreeToggle<CR>
+'''
+
 [[plugins]]
 repo = 'scrooloose/nerdcommenter'
 hook_add = '''
@@ -20,4 +33,19 @@ let g:NERDDefaultAlign='left'
 noremap ,, :call NERDComment("n", "Uncomment")<CR>
 noremap .. :call NERDComment("n", "Comment")<CR>
 noremap .A :call NERDComment("n", "Append")<CR>
+'''
+
+
+# color scheme
+# ============
+
+[[plugins]]
+repo = 'cocopon/pgmnt.vim,'
+
+[[plugins]]
+repo = 'cocopon/iceberg.vim'
+depends = 'cocopon/pgmnt.vim'
+hook_add = '''
+syntax on
+colorscheme iceberg
 '''

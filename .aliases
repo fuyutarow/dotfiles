@@ -263,3 +263,9 @@ alias jaen="trans -b -sl=ja -tl=en"
 
 
 alias line-dl="line-dl -o ~/Gdrive/stickers"
+
+new_tex () {
+    mkdir "$1"
+    cp ~/dotfiles/TeX/* "$1"
+    cd "$1"
+}

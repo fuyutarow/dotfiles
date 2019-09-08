@@ -1,15 +1,15 @@
 [user]
   email = fuyutarow@gmail.com
   name = fuyutarow
-  
 
 [push]
   default = simple
 
-
 [core]
   excludesfile = ~/.gitignore_global
 
+[http]
+  postBuffer = 8M
 
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort

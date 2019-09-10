@@ -42,3 +42,6 @@ add\:node :
 
 add\:shc :
 	. setup.d/shc.sh
+
+dd\:karabiner :
+	ln -s ${PWD}/karabiner ~/.config/

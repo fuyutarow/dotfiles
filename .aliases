@@ -21,15 +21,23 @@ fi
 
 # change directory
 # ================
-# # traditional `cd` aliases
+# traditional `cd` aliases
+# ------------------------
 # alias ..='cd ..'
 # alias ...='cd ../..'
 # alias ....='cd ../../..'
 # alias .....='cd ../../../..'
 # alias ~='cd ~'
 # alias -- -='cd -'
-
-# # # from now on tonight
+#
+# from now on tonight
+# -------------------
+# Yes, `cd` stands for comma and dot.
+# # for examples
+# To type `,` is equivalent to `cd ~`.
+# To type `, <dir>` is equivalent to `cd <dir>`.
+# To type `,,` is equivalent to `cd -`.
+# To type `..` is equivalent to `cd ..`.
 source ~/.config/commad/commadrc
 # source $(which commadrc)
 if type commad > /dev/null 2>&1; then
@@ -67,26 +75,26 @@ function ,d {
     echo COMMAD_POINTER:
     echo $COMMAD_POINTER
 }
-# Yes, `cd` stands for comma and dot.
-# # for examples
-# To type `,` is equivalent to `cd ~`.
-# To type `, <dir>` is equivalent to `cd <dir>`.
-# To type `,,` is equivalent to `cd -`.
-# To type `..` is equivalent to `cd ..`.
 
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 # some more ls aliases
-alias cr='cp -R'
+alias cr='cp -R $(dirname $1)'
 
 alias di='diff -u'
 
 alias d='docker'
 alias dc='docker-compose'
 
-alias e='echo'
+alias e='echo "$@"' 
+
+# log command 
+# ----------- 
+# Export the previous command as a log
+# $ ee ~/dotfiles/shell.md
+alias ee='echo "$(!!)" >> ' 
 
 alias em='emacs'
 
@@ -116,7 +124,7 @@ alias kl='kill -9'
 
 
 # ls
-# ==
+# --
 if type "exa" > /dev/null 2>&1; then
   :
 else
@@ -127,6 +135,7 @@ alias l='exa -F'
 alias la='exa -A'
 alias ll='exa -alF'
 alias lt='exa -ltr'
+
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
@@ -150,11 +159,21 @@ alias s='start'
 
 # alias sudo='sudo -E '
 
-alias sa='source activate'
+# Quick source and edit
+# ---------------------
+alias sa='source $HOME/.aliases'
+# alias sa='source activate'
 alias sb='source $HOME/.bashrc'
 alias sz='source $HOME/.zshrc'
+alias st='tmux source-file $HOME/.tmux.conf'
 
-### tmux
+alias sae='vi $HOME/.aliases'
+alias sbe='vi $HOME/.bashrc'
+alias sze='vi $HOME/.zshrc'
+alias ste='vi $HOME/.tmux.conf'
+
+# tmux
+# ----
 alias t='tmux'
 alias tn='tmux new -s'
 alias tl='tmux ls'
@@ -165,8 +184,13 @@ alias to='touch'
 
 alias tf='tail -fF'
 
-alias rm='rmtrash'
-alias rr='rm -rf'
+
+# rm
+# -- 
+if type "rmtrash" > /dev/null 2>&1; then
+    alias rm='rmtrash'
+fi
+# alias rr='rm -rf'
 
 alias du2='du -ah --max-depth=2'
 

@@ -18,13 +18,14 @@ add\:vim :
 	vi +":call dein#install()" +qa
 
 add\:coc :
-	vi +":CocInstall coc-rls" +qa
+	vi +":CocInstall coc-rls" +qa ;: Rust
 	vi +":CocInstall coc-python" +qa
-	vi +":CocInstall coc-tsserver" +qa
+	vi +":CocInstall coc-tsserver" +qa ;: TypeScript
 	vi +":CocInstall coc-html" +qa
 	vi +":CocInstall coc-css" +qa
 	vi +":CocInstall coc-yaml" +qa
-	vi +":CocInstall coc-vetur" +qa
+	vi +":CocInstall coc-vetur" +qa ;: Vue
+	vi +":CocInstall coc-solargraph" +qa ;: Ruby
 
 add\:rust :
 	curl https://sh.rustup.rs -sSf | sh
@@ -42,6 +43,9 @@ add\:node :
 
 add\:shc :
 	. setup.d/shc.sh
+
+add\:v :
+	. setup.d/v.sh
 
 dd\:karabiner :
 	ln -s ${PWD}/karabiner ~/.config/

@@ -6,7 +6,7 @@ add\:brew :
 
 add\:dev :
 	brew update
-	brew install git exa fuyutarow/commad/commad lolcat colordiff
+	brew install git exa fuyutarow/commad/commad lolcat colordiff mdr
 
 add\:zsh :
 	bash setup.d/zsh.sh
@@ -18,14 +18,7 @@ add\:vim :
 	vi +":call dein#install()" +qa
 
 add\:coc :
-	vi +":CocInstall coc-rls" +qa ;: Rust
-	vi +":CocInstall coc-python" +qa
-	vi +":CocInstall coc-tsserver" +qa ;: TypeScript
-	vi +":CocInstall coc-html" +qa
-	vi +":CocInstall coc-css" +qa
-	vi +":CocInstall coc-yaml" +qa
-	vi +":CocInstall coc-vetur" +qa ;: Vue
-	vi +":CocInstall coc-solargraph" +qa ;: Ruby
+	. setup.d/coc.sh
 
 add\:rust :
 	curl https://sh.rustup.rs -sSf | sh
@@ -47,5 +40,5 @@ add\:shc :
 add\:v :
 	. setup.d/v.sh
 
-dd\:karabiner :
+add\:karabiner :
 	ln -s ${PWD}/karabiner ~/.config/

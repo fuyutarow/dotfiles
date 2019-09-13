@@ -1,22 +1,20 @@
 #!/bin/bash
 # enable color support of ls and also add handy aliases
 if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-    alias ls='ls --color=auto'
-    #alias dir='dir --color=auto'
-    #alias vdir='vdir --color=auto'
-
-    alias grep='grep --color=auto'
+  test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+  alias ls='ls --color=auto'
+  #alias dir='dir --color=auto'
+  #alias vdir='vdir --color=auto'
+  alias grep='grep --color=auto'
     alias fgrep='fgrep --color=auto'
-    alias egrep='egrep --color=auto'
+  alias egrep='egrep --color=auto'
 fi
 
-
-if type lolcat > /dev/null 2>&1; then
+if type lolcat >/dev/null 2>&1; then
   alias cat='lolcat'
 fi
 
-if [[ -x `which colordiff` ]]; then
+if [[ -x $(which colordiff) ]]; then
   alias diff='colordiff'
 fi
 
@@ -41,20 +39,20 @@ fi
 # To type `..` is equivalent to `cd ..`.
 source ~/.config/commad/commadrc
 # source $(which commadrc)
-if type commad > /dev/null 2>&1; then
-    alias ,='commad'
-    alias ,,=', -1' # change to previous directory.
-    alias ,,,=', -2'
-    alias ,,,,=', -3'
-    alias ,,,,,=', -4'
-    alias ,,,,,,=', -5'
-    alias ,.=', +1' # change to next directory.
-    alias ,..=', +2'
-    alias ,...=', +3'
-    alias ,....=', +4'
-    alias ,.....=', +5'
+if type commad >/dev/null 2>&1; then
+  alias ,='commad'
+  alias ,,=', -1' # change to previous directory.
+  alias ,,,=', -2'
+  alias ,,,,=', -3'
+  alias ,,,,,=', -4'
+  alias ,,,,,,=', -5'
+  alias ,.=', +1' # change to next directory.
+  alias ,..=', +2'
+  alias ,...=', +3'
+  alias ,....=', +4'
+  alias ,.....=', +5'
 else
-    alias ,='cd'
+  alias ,='cd'
 fi
 alias ..=', ..' # change to parent directory.
 alias ...=', ../..'
@@ -67,16 +65,15 @@ alias ,s='. ~/commad/commad.sh'
 alias ,e='vi ~/commad/commad.sh'
 alias ,c='cleard'
 alias ,l='listd'
-function ,d {
-    # ,d for debug print 
+function ,d() {
+  # ,d for debug print
 
-    echo COMMAD_STACK:
-    ,l
-    echo
-    echo COMMAD_POINTER:
-    echo $COMMAD_POINTER
+  echo COMMAD_STACK:
+  ,l
+  echo
+  echo COMMAD_POINTER:
+  echo $COMMAD_POINTER
 }
-
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -89,13 +86,13 @@ alias di='diff -u'
 alias d='docker'
 alias dc='docker-compose'
 
-alias e='echo "$@"' 
+alias e='echo "$@"'
 
-# log command 
-# ----------- 
+# log command
+# -----------
 # Export the previous command as a log
 # $ ee ~/dotfiles/shell.md
-alias ee='echo "$(!!)" >> ' 
+alias ee='echo "$(!!)" >> '
 
 alias em='emacs'
 
@@ -123,20 +120,18 @@ alias k='tak'
 
 alias kl='kill -9'
 
-
 # ls
 # --
-if type "exa" > /dev/null 2>&1; then
+if type "exa" >/dev/null 2>&1; then
   :
 else
-    alias exa='ls'
+  alias exa='ls'
 fi
 # alias l='ls -CF'
 alias l='exa -F'
 alias la='exa -A'
 alias ll='exa -alF'
 alias lt='exa -ltr'
-
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
@@ -151,16 +146,15 @@ alias o='open'
 alias oo='open .'
 alias ooo='open ..'
 
-
-p () {
-    ext=${@##*.}
-    case $ext in 
-        'md') mdr $@ 2>/dev/null || cat $@
-            ;;
-        *) cat $@
-    esac 
+p() {
+  ext=${@##*.}
+  case $ext in
+    'md')
+      mdr $@ 2>/dev/null || cat $@
+      ;;
+    *) cat $@ ;;
+  esac
 }
-
 
 alias pp='ps auxf'
 alias pi='pipenv'
@@ -195,11 +189,10 @@ alias to='touch'
 
 alias tf='tail -fF'
 
-
 # rm
-# -- 
-if type "rmtrash" > /dev/null 2>&1; then
-    alias rm='rmtrash'
+# --
+if type "rmtrash" >/dev/null 2>&1; then
+  alias rm='rmtrash'
 fi
 # alias rr='rm -rf'
 
@@ -232,11 +225,11 @@ alias expand-tbz2='tar jxvf'
 alias apt-remove-force='dpkg --force-all -r'
 alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 
-gpp () {
-  if [ `echo $1 | fgrep '.c'` ] ; then
+gpp() {
+  if [ $(echo $1 | fgrep '.c') ]; then
     #gcc $1 -o ${1%.c}
     gcc $1 -o ${1/.c/.out}
-  elif [ `echo $1 | fgrep '.cpp'` ] ; then
+  elif [ $(echo $1 | fgrep '.cpp') ]; then
     #g++ -std=c++11 $1 -o ${1%.cpp}
     g++ -std=c++11 $1 -o ${1/.cpp/.out}
   else
@@ -244,23 +237,23 @@ gpp () {
   fi
 }
 
-colorcode () {
-	for fore in `seq 30 37`; do
-		printf "\e[${fore}m \\\e[${fore}m \e[m\n"
-		for mode in 1 4 5; do
-			printf "\e[${fore};${mode}m \\\e[${fore};${mode}m \e[m"
-			for back in `seq 40 47`; do
-				printf "\e[${fore};${back};${mode}m \\\e[${fore};${back};${mode}m \e[m"
-			done
-			echo
-		done
-		echo
-	done
-	printf " \\\e[m\n"
+colorcode() {
+  for fore in $(seq 30 37); do
+    printf "\e[${fore}m \\\e[${fore}m \e[m\n"
+    for mode in 1 4 5; do
+      printf "\e[${fore};${mode}m \\\e[${fore};${mode}m \e[m"
+      for back in $(seq 40 47); do
+        printf "\e[${fore};${back};${mode}m \\\e[${fore};${back};${mode}m \e[m"
+      done
+      echo
+    done
+    echo
+  done
+  printf " \\\e[m\n"
 }
 
-julia-init () {
-julia -e '''
+julia-init() {
+  julia -e '''
 Pkg.add("PyCall")
 Pkg.add("SymPy")
 Pkg.add("PyPlot")
@@ -269,11 +262,11 @@ Pkg.add("ZZ")
 '''
 }
 
-
 lsix() {
- montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-; }
+  montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-
+}
 
-olos () {
+olos() {
   if [ "$3" = "" ]; then
     grep -rl $1 ./* | xargs sed -i.bak -e "s/${1}/${2}/g"
   else
@@ -296,15 +289,13 @@ alias del-swp="rm ~/.local/share/nvim/swap/*"
 alias enja="trans -b -sl=en -tl=ja"
 alias jaen="trans -b -sl=ja -tl=en"
 
-
 alias line-dl="line-dl -o ~/Gdrive/stickers"
 
-new_tex () {
-    mkdir "$1"
-    cp ~/dotfiles/TeX/* "$1"
-    cd "$1"
+new_tex() {
+  mkdir "$1"
+  cp ~/dotfiles/TeX/* "$1"
+  cd "$1"
 }
-
 
 # start app
 # =========
@@ -313,10 +304,10 @@ local _ostype="$(uname -s)"
 local _cputype="$(uname -m)"
 
 if [ "$_ostype" = Darwin -a "$_cputype" = i386 ]; then
-    # Darwin `uname -s` lies
-    if sysctl hw.optional.x86_64 | grep -q ': 1'; then
-        local _cputype=x86_64
-    fi
+  # Darwin `uname -s` lies
+  if sysctl hw.optional.x86_64 | grep -q ': 1'; then
+    local _cputype=x86_64
+  fi
 fi
 
 case "$_ostype" in
@@ -337,13 +328,13 @@ case "$_ostype" in
 esac
 
 case "$_cputype" in
-    x86_64 | x86-64 | x64 | amd64)
-        local _cputype=x86_64
-        ;;
-    *)
-        err "no precompiled binaries available for CPU architecture: $_cputype"
+  x86_64 | x86-64 | x64 | amd64)
+    local _cputype=x86_64
+    ;;
+  *)
+    err "no precompiled binaries available for CPU architecture: $_cputype"
+    ;;
 esac
-
 
 # Launch native app
 alias slack="start slack"
@@ -355,7 +346,7 @@ chrome="/Applications/Google\ Chrome.app"
 #BROWSER="Firefox"
 #BROWSER="Safari"
 BROWSER="vivaldi"
-alias browse="start $BROWSER" 
+alias browse="start $BROWSER"
 alias trello="start $canary http://trello.com"
 alias youtube="start $chrome http://youtube.com"
 alias github='browse http://github.com'
@@ -364,24 +355,23 @@ alias timecard='browse http://docs.google.com/spreadsheets/d/1iRAxcGaQngB5LJslh_
 alias docs='browse http://docs.google.com/document/u/0/'
 alias sheet='browse http://docs.google.com/spreadsheets/u/0/'
 
-
 google() {
-local str opt
-if [ $ != 0 ]; then
-for i in $*; do
-str="$str+$i"
-done
-str=`echo $str | sed 's/^\+//'`
-opt='search?num=50&amp;hl=ja&amp;lr=lang_ja'
-opt="${opt}&amp;q=${str}"
-fi
-w3m http://www.google.co.jp/$opt
+  local str opt
+  if [ $ != 0 ]; then
+    for i in $*; do
+      str="$str+$i"
+    done
+    str=$(echo $str | sed 's/^\+//')
+    opt='search?num=50&amp;hl=ja&amp;lr=lang_ja'
+    opt="${opt}&amp;q=${str}"
+  fi
+  w3m http://www.google.co.jp/$opt
 }
- 
+
 alc() {
-if [ $ != 0 ]; then
-w3m "http://eow.alc.co.jp/$*/UTF-8/?ref=sa"
-else
-w3m "http://www.alc.co.jp/"
-fi
+  if [ $ != 0 ]; then
+    w3m "http://eow.alc.co.jp/$*/UTF-8/?ref=sa"
+  else
+    w3m "http://www.alc.co.jp/"
+  fi
 }

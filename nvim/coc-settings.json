@@ -5,10 +5,7 @@
         "rust",
         "ruby",
         "json",
-        "go",
-        "sh",
-        "zsh",
-        "bash"
+        "go"
     ]
-}
+  }
 

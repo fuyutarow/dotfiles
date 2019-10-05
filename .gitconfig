@@ -1,5 +1,5 @@
 [user]
-  email = fuyutarow@gmail.com
+    email = fuyutarow@gmail.com
   name = fuyutarow
 
 [push]
@@ -14,32 +14,37 @@
 [alias]
   alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
 
-### add
+# add
+# ---
   a = add
   ap = add -p
   aca =! git add . && git commit --amend
   amend = commit --amend 
   acm = !git add -A && git commit -m 
 
-### branch
+# branch
+# ------
   b = branch
   ba = branch -a
   bd = branch -d
   bm = branch -m #old_name #new_name
 
-### commit
+  cl = clone
+
+# commit
+# ------
   ca = commit --amend
   cm = commit -m 
-  # c-help= !echo 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
   commit-help=! open 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
-  # examples
   examples =! view $HOME/dotfiles/docs/comment_examples.md
 
-### checkout
+# checkout
+# --------
   cb = checkout -b
   co = checkout
 
-### diff
+# diff
+# ----
   d = diff
   dc = git diff --cached
   diff-help =! open 'http://dqn.sakusakutto.jp/2013/06/git_diff_branch_file.html' 
@@ -47,23 +52,28 @@
   f = fetch
   g = log --all --graph --oneline --decorate=full
 
-### ls
+# ls
+# --
   l = ls-files
   ll=! git ls-files | xargs cloc
   lo =! git log --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short
   list =! . ~/dotfiles/sh/list-repo.bash
 
-### merge
+# merge
+# -----
   m = merge --no-ff 
   merge-force = merge -Xtheirs
 
   pull-force = !git fetch origin & git reset --hard #origin/master
 
-### open
-  o =! open `git config remote.origin.url`
+# open
+# ----
+  o-url =! echo $(echo `git config remote.origin.url` | sed -e "s/git@/https:\\\\/\\\\//g" | sed -e "s/.com:/.com\\\\//g")
+  o =! open `git o-url`
   o-netlify =! open `git config remote.netlify.url`
 
-### status
+# status
+# ------
   s = status
   ss = status -s
 
@@ -79,6 +89,7 @@
   rename-branch = branch -m #old_name #new_name
 
 # git flow
+# --------
   flow-init = flow init
   flow-help = !sh -c 'echo https://danielkummer.github.io/git-flow-cheatsheet/ && echo https://gist.github.com/JamesMGreene/cdd0ac49f90c987e45ac'
   echoes = !sh -c 'echo hi && echo bye'

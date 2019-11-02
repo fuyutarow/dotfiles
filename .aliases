@@ -281,6 +281,12 @@ olos() {
   fi
 }
 
+reverse-pdf() {
+  orgfile=${1/.pdf/.org.pdf}
+  mv "$1" "$orgfile"
+  qpdf --empty "$1" --pages "$orgfile" z-1 --
+}
+
 alias dn="deathnote"
 alias mem='cat /proc/meminfo |egrep -e "Active:|Inactive:|MemFree:"'
 alias git-help='echo https://qiita.com/muran001/items/f13742b51da3a22117ee'

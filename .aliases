@@ -214,13 +214,20 @@ alias xc='latexmk -c'
 
 alias pdf2txt='pdf2txt.py'
 
-alias expand-gz='gunzip'
-alias expand-Z='gunzip'
-alias expand-bz2='bunzip2'
-alias expand-targz='tar zxvf'
-alias expand-tgz='tar zxvf'
-alias expand-tarbz2='tar jxvf'
-alias expand-tbz2='tar jxvf'
+expand() {
+  case "$1" in
+    *.zip) unzip $1 ;;
+    *.tar) tar xvf $1 ;;
+    *.tar.gz) tar zxvf $1 ;;
+    *.tgz) tar zxvf $1 ;;
+    *.tar.bz2) tar jxvf $1 ;;
+    *.tbz2) tar jxvf $1 ;;
+    *.gz) gunzip $1 ;;
+    *.Z) gunzip $1 ;;
+    *.bz2) bunzip2 $1 ;;
+    *) echo not support. ;;
+  esac
+}
 
 alias apt-remove-force='dpkg --force-all -r'
 alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'

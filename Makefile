@@ -28,6 +28,9 @@ add\:rust :
 add\:python :
 	brew install pyenv pipenv
 
+up\:pip:
+	pip install -Ur setup.d/requirements.txt
+
 add\:jupyter :
 	bash setup.d/jupyter.sh
 

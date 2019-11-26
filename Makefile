@@ -4,6 +4,11 @@ link :
 add\:brew :
 	bash setup.d/brew.sh
 
+up\:brew:
+	brew update
+	brew upgrade
+	brew cleanup
+
 add\:dev :
 	brew update
 	brew install git exa fuyutarow/commad/commad lolcat colordiff mdr

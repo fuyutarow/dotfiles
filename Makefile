@@ -43,6 +43,14 @@ add\:jupyter\:rust:
 	evcxr_jupyter --install
 	jupyter kernelspec list
 
+add\:wasm :
+	rustup update
+	rustup target add wasm32-unknown-unknown --toolchain nightly
+	cargo install wasm-pack
+
+new\:wasm :
+	. new/wasm.sh
+
 add\:python :
 	brew install pyenv pipenv
 

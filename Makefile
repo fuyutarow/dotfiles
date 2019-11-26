@@ -71,3 +71,7 @@ add\:v :
 
 add\:karabiner :
 	ln -s ${PWD}/karabiner ~/.config/
+
+add\:haskell :
+	. setup.d/haskell.sh
+	stack exec jupyter -- notebook

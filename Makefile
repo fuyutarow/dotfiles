@@ -22,8 +22,21 @@ add\:coc :
 
 add\:rust :
 	curl https://sh.rustup.rs -sSf | sh
+
+rm\:rust :
+	rustup self uninstall
+
+up\:rust :
 	rustup update
 	rustup component add rls rust-analysis rust-src ;: LPS
+	rustup component add clippy
+	cargo install cargo-edit ;: subcommand `add`, `rm`, `upgrade`
+	cargo install --force cargo-make
+
+add\:jupyter\:rust:
+	cargo install evcxr_jupyter
+	evcxr_jupyter --install
+	jupyter kernelspec list
 
 add\:python :
 	brew install pyenv pipenv

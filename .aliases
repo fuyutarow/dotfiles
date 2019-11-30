@@ -198,14 +198,13 @@ fi
 
 alias du2='du -ah --max-depth=2'
 
-alias vim='nvim'
-alias vid='vim -d'
-alias vd='vim -d'
-alias sp='vim -o'
-alias vs='vim -O'
+# vim
+# --
+alias vv='nvim -R'
+alias vd='nvim -d'
+alias sp='nvim -o'
+alias vs='nvim -O'
 alias vi='vs'
-alias i='vi'
-# alias v='view'
 
 alias x='latexmk'
 alias xp='latexmk -pv'

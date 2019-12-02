@@ -8,5 +8,9 @@ ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin
 SHELL=bash
 eval $(~/.linuxbrew/bin/brew shellenv)
 
+brew install zsh
 
-bash setup.d/zsh.sh
+: ### install zplugin
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
+brew install svn ;: for zplugin
+zsh

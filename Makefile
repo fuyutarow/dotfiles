@@ -1,7 +1,7 @@
 curdir := $(CURDIR)
 
 link :
-	@ls -A $(curdir)/dotfiles | xargs -I {} ln -sfv $(curdir)/{} ~
+	@ls -A $(curdir)/dotfiles | xargs -I {} ln -sfv $(curdir)/dotfiles/{} ~
 
 add\:brew :
 	bash setup.d/brew.sh

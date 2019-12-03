@@ -131,7 +131,7 @@ fi
 alias l='exa -F'
 alias la='exa -A'
 alias ll='exa -alF'
-alias lt='exa -ltr'
+alias lt='exa --tree'
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'

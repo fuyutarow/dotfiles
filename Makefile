@@ -17,6 +17,7 @@ add\:dev :
 
 add\:zsh :
 	bash setup.d/zsh.sh
+	sudo chsh -s "$(command -v zsh)" "${USER}"
 
 add\:vim :
 	brew install neovim

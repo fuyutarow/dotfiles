@@ -23,5 +23,5 @@ echo "$(~/.linuxbrew/bin/brew shellenv)" >> "~/.$(rcfile)"
 SHELL=bash
 eval $(~/.linuxbrew/bin/brew shellenv)
 
-make add:zsh
+bash setup.d/zsh.sh
 zsh

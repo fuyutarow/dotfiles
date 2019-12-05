@@ -216,18 +216,34 @@ alias xc='latexmk -c'
 alias pdf2txt='pdf2txt.py'
 
 expand() {
-  case "$1" in
-    *.zip) unzip $1 ;;
-    *.tar) tar xvf $1 ;;
-    *.tar.gz) tar zxvf $1 ;;
-    *.tgz) tar zxvf $1 ;;
-    *.tar.bz2) tar jxvf $1 ;;
-    *.tbz2) tar jxvf $1 ;;
-    *.gz) gunzip $1 ;;
-    *.Z) gunzip $1 ;;
-    *.bz2) bunzip2 $1 ;;
-    *) echo not support. ;;
-  esac
+  if [ "$2" = "" ]; then
+    case "$1" in
+        *.zip) unzip "$1" ;;
+        *.tar) tar xvf "$1" ;;
+        *.tar.gz) tar zxvf "$1" ;;
+        *.tgz) tar zxvf "$1" ;;
+        *.tar.bz2) tar jxvf "$1" ;;
+        *.tbz2) tar jxvf "$1" ;;
+        *.gz) gunzip "$1" ;;
+        *.Z) gunzip "$1" ;;
+        *.bz2) bunzip2 "$1";;
+        *) echo not support. ;;
+    esac
+  else
+    mkdir "$2"
+    case "$1" in
+        *.zip) unzip "$1" ;;
+        *.tar) tar xvf "$1" -C "$2" --strip-components 1;;
+        *.tar.gz) tar zxvf "$1" -C "$2" --strip-components 1;;
+        *.tgz) tar zxvf "$1" -C "$2" --strip-components 1;;
+        *.tar.bz2) tar jxvf "$1" -C "$2" --strip-components 1;;
+        *.tbz2) tar jxvf "$1" -C "$2" --strip-components 1;;
+        *.gz) gunzip "$1" ;;
+        *.Z) gunzip "$1" ;;
+        *.bz2) bunzip2 "$1" ;;
+        *) echo not support. ;;
+    esac
+  fi
 }
 
 alias apt-remove-force='dpkg --force-all -r'

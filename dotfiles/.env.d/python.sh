@@ -5,7 +5,6 @@ eval "$(pyenv init -)"
 export PIPENV_VENV_IN_PROJECT=true
 
 alias f8='flake8'
-alias juno='jupyter notebook'
 alias pyju='python -m py2nb' #<input.py> <output.ipynb>
 alias jupyter-kernelspec-list='jupyter kernelspec list'
 jupy () {

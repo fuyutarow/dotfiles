@@ -116,6 +116,8 @@ alias ip-get='curl globalip.me'
 
 alias j='jobs'
 
+alias ji='jupyter notebook'
+
 alias k='tak'
 
 alias kl='kill -9'

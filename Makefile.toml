@@ -1,4 +1,13 @@
 
+[tasks.echo]
+script = [
+'''
+echo okoo
+'''
+]
+
+
+
 [tasks.add-python-mac]
 script = [
 '''

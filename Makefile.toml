@@ -1,0 +1,18 @@
+
+[tasks.add-python-mac]
+script = [
+'''
+brew install pyenv
+curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
+poetry completions zsh > ~/.zfunc/_poetry
+'''
+]
+
+[tasks.add-python-linux]
+script = [
+'''
+curl https://pyenv.run | bash
+curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
+poetry completions zsh > ~/.zfunc/_poetry
+'''
+]

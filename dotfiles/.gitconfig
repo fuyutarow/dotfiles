@@ -30,6 +30,8 @@
     bm = branch -m #old_name #new_name
 
     c = clone
+    # C =! git clone "$1" "${1##*.com/}"
+    Config =! vi ~/.gitconfig
 
     # commit
     # ------
@@ -42,6 +44,11 @@
     # --------
     cb = checkout -b
     co = checkout
+
+    # switch
+    # ------
+    ch = switch
+    chc = switch -c
 
     # diff
     # ----
@@ -85,6 +92,8 @@
 
     ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
     r = remote -v
+
+    res = reset
     undo = reset HEAD~1 --mixed
     ignore =! git rm -r --cached . & git add .
     # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>

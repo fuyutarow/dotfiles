@@ -78,6 +78,9 @@ function ,d() {
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
+
+alias cake='cargo make'
+
 # some more ls aliases
 alias cr='cp -R $(dirname $1)'
 
@@ -85,6 +88,8 @@ alias di='diff -u'
 
 alias d='docker'
 alias dc='docker-compose'
+
+alias dl='youtube-dl'
 
 alias e='echo "$@"'
 
@@ -107,6 +112,12 @@ alias gr='grep'
 alias grr='grep -r'
 alias gv='grep -v'
 alias gl='grep -ilr'
+
+
+grl () {
+    grep "$@" -rl .
+}
+
 
 alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
@@ -133,7 +144,8 @@ fi
 alias l='exa -F'
 alias la='exa -A'
 alias ll='exa -alF'
-alias lt='exa -ltr'
+alias lll='ll --sort=time'
+alias lt='exa --tree'
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
@@ -176,6 +188,7 @@ alias st='tmux source-file $HOME/.tmux.conf'
 
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
+alias sge='vi $HOME/.gitignore'
 alias sze='vi $HOME/.zshrc'
 alias ste='vi $HOME/.tmux.conf'
 
@@ -208,6 +221,8 @@ alias sp='nvim -o'
 alias vs='nvim -O'
 alias vi='vs'
 
+alias wttr="curl wttr.in/Tokyo"
+
 alias x='latexmk'
 alias xp='latexmk -pv'
 alias xx='latexmk -pvc'
@@ -215,7 +230,7 @@ alias xc='latexmk -c'
 
 alias pdf2txt='pdf2txt.py'
 
-expand() {
+unpack() {
   if [ "$2" = "" ]; then
     case "$1" in
         *.zip) unzip "$1" ;;

@@ -65,3 +65,14 @@ curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.p
 poetry completions zsh > ~/.zfunc/_poetry
 '''
 ]
+
+[tasks.up-rust]
+script = [
+'''
+rustup update
+rustup component add rls rust-analysis rust-src ;: LPS
+rustup component add clippy
+cargo install cargo-edit ;: subcommand `add`, `rm`, `upgrade`
+cargo install --force cargo-make
+'''
+]

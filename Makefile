@@ -70,6 +70,8 @@ add\:julia :
 	wget https://julialang-s3.julialang.org/bin/linux/x64/1.3/julia-1.3.0-linux-x86_64.tar.gz -O julia.tar.gz
 	mkdir ~/.julia
 	tar zxvf julia.tar.gz -C ~/.julia --strip-components 1
+	julia -e 'import Pkg; Pkg.add("jlpkg")'
+	julia -e 'import jlpkg; jlpkg.install()'
 	echo ~/.env.d/julia.sh
 
 add\:shc :

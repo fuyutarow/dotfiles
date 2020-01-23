@@ -1,12 +1,52 @@
-
-[tasks.echo]
+[tasks.add-brew]
 script = [
 '''
-echo okoo
+git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew
+mkdir ~/.linuxbrew/bin
+ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin
+eval $(~/.linuxbrew/bin/brew shellenv)
+'''
+]
+
+[tasks.add-z]
+dependencies = ["add-zsh", "add-zplug"]
+
+[tasks.add-zplug]
+script = [
+'''
+curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
+export ZPLUG_HOME=$HOME/.zplug
+source $ZPLUG_HOME/init.zsh
+source ~/.zshrc
+zplug install
+chmod -R 755 $ZPLUG_HOME
+source ~/.zshrc
+'''
+]
+
+[tasks.add-zsh]
+script = [
+'''
+#!/bin/sh
+: ### install zsh
+brew install zsh
+
+: ### install zplugin
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
+brew install svn ;: for zplugin
 '''
 ]
 
 
+[tasks.add-vim]
+script = [
+'''
+brew install neovim
+bash setup.d/dein.sh
+ln -s ~/dotfiles/nvim ~/.config/nvim
+vi +":call dein#install()" +qa
+'''
+]
 
 [tasks.add-python-mac]
 script = [

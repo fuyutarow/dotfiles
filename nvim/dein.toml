@@ -151,3 +151,8 @@ colorscheme iceberg
 [[plugins]]
 repo = 'cocopon/pgmnt.vim'
 
+# lang
+# ====
+[[plugins]]
+repo = 'lazywei/vim-matlab'
+

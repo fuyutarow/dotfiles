@@ -1,0 +1,38 @@
+
+[tasks.echo]
+script = [
+'''
+echo okoo
+'''
+]
+
+
+
+[tasks.add-python-mac]
+script = [
+'''
+brew install pyenv
+curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
+poetry completions zsh > ~/.zfunc/_poetry
+'''
+]
+
+[tasks.add-python-linux]
+script = [
+'''
+curl https://pyenv.run | bash
+curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python
+poetry completions zsh > ~/.zfunc/_poetry
+'''
+]
+
+[tasks.up-rust]
+script = [
+'''
+rustup update
+rustup component add rls rust-analysis rust-src ;: LPS
+rustup component add clippy
+cargo install cargo-edit ;: subcommand `add`, `rm`, `upgrade`
+cargo install --force cargo-make
+'''
+]

@@ -1,0 +1,16 @@
+{
+    "coc.preferences.formatOnSaveFiletypes": [
+        "css",
+        "Markdown",
+        "python",
+        "javascript",
+        "typescript",
+        "rust",
+        "go",
+        "tex",
+        "vue",
+        "html",
+        "ruby",
+        "json"
+    ]
+}

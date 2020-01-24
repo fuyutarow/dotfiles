@@ -3,12 +3,12 @@ repo = 'Shougo/dein.vim'
 
 [[plugins]]
 repo = 'leico/autodate.vim'
-
+ 
 # format and lint
 # ===============
 [[plugins]]
 repo = 'sbdchd/neoformat'
-hook_source = '''
+hook_add = '''
     let g:neoformat_sh_shfmt = {
         \   'exe': 'shfmt',
         \   'args': ['-i', 2, '-ci', '-bn', '-s'],
@@ -57,8 +57,6 @@ hook_add = '''
     nnoremap <silent> ,uu :<C-u>Unite file_mru buffer<CR>
 '''
 
-[[plugins]]
-repo = 'godlygeek/tabular'
 
 
 # detect filetype
@@ -66,25 +64,32 @@ repo = 'godlygeek/tabular'
 [[plugins]]
 repo = 'sbdchd/vim-shebang'
 
-[[plugins]]
-repo = 'osyo-manga/vim-precious'
-depends = ['context_filetype.vim']
+# [[plugins]]
+# repo = 'osyo-manga/vim-precious'
+# depends = ['context_filetype.vim']
 
 [[plugins]]
 repo = 'Shougo/context_filetype.vim'
 
-# toml
-# ----
-[[plugins]]
+# syntax
+# ======
+[[plugins]] # toml
 repo = 'cespare/vim-toml'
 
+[[plugins]] # typescript
+repo = 'leafgarland/typescript-vim'
+
+[[plugins]] # vue
+repo = 'posva/vim-vue'
 
 # Markdown
 # --------
-[[plugins]]
-repo = 'plasticboy/vim-markdown'
-depends = 'godlygeek/tabular'
+# [[plugins]]
+# repo = 'plasticboy/vim-markdown'
+# depends = 'godlygeek/tabular'
 
+# [[plugins]]
+# repo = 'godlygeek/tabular'
 
 # enhance
 # =======
@@ -122,6 +127,9 @@ repo = 'Townk/vim-autoclose'
 [[plugins]]
 repo = 'scrooloose/nerdcommenter'
 hook_add = '''
+autocmd BufNewFile,BufRead *.pest setfiletype pest
+let g:NERDCustomDelimiters = { 'pest': { 'left': '//' } }
+
 let g:NERDSpaceDelims=1
 let g:NERDDefaultAlign='left'
 noremap ,, :call NERDComment("n", "Uncomment")<CR>
@@ -135,13 +143,13 @@ noremap .A :call NERDComment("n", "Append")<CR>
 [[plugins]]
 repo = 'cocopon/iceberg.vim'
 depends = 'cocopon/pgmnt.vim'
-hook_add = '''
+hook_source = '''
 syntax on
 colorscheme iceberg
 '''
 
 [[plugins]]
-repo = 'cocopon/pgmnt.vim,'
+repo = 'cocopon/pgmnt.vim'
 
 # lang
 # ====

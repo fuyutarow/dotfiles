@@ -84,6 +84,12 @@ add\:v :
 add\:karabiner :
 	ln -s ${PWD}/karabiner ~/.config/
 
+i1:
+	git clone https://github.com/Ikuyadeu/review_pattern_gen.git
+	cd review_pattern_gen
+	pip install antlr4-python3-runtime unidiff gitpython
+	git clone https://github.com/Ikuyadeu/CodeTokenizer.git
+
 add\:haskell :
 	. setup.d/haskell.sh
 	stack exec jupyter -- notebook

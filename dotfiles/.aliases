@@ -1,12 +1,10 @@
-#!/bin/bash
-# enable color support of ls and also add handy aliases
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   alias ls='ls --color=auto'
   #alias dir='dir --color=auto'
   #alias vdir='vdir --color=auto'
   alias grep='grep --color=auto'
-    alias fgrep='fgrep --color=auto'
+  alias fgrep='fgrep --color=auto'
   alias egrep='egrep --color=auto'
 fi
 
@@ -65,15 +63,9 @@ alias ,s='. ~/commad/commad.sh'
 alias ,e='vi ~/commad/commad.sh'
 alias ,c='cleard'
 alias ,l='listd'
-function ,d() {
-  # ,d for debug print
-
-  echo COMMAD_STACK:
-  ,l
-  echo
-  echo COMMAD_POINTER:
-  echo $COMMAD_POINTER
-}
+alias ,d=', ~/Desktop'
+alias ,g=', ~/Gdrive'
+alias ,v=', ~/violets'
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -82,7 +74,11 @@ function ,d() {
 alias cake='cargo make'
 
 # some more ls aliases
-alias cr='cp -R $(dirname $1)'
+# alias cr='cp -R ${1%/}'
+
+cr() {
+  cp -R "${1%/}" "$2"
+}
 
 alias di='diff -u'
 
@@ -123,7 +119,8 @@ alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
 alias hg="h|grep"
 
-alias ip-get='curl globalip.me'
+alias lip='ifconfig en0 inet'
+alias gip='curl globalip.me'
 
 alias j='jobs'
 
@@ -135,17 +132,14 @@ alias kl='kill -9'
 
 # ls
 # --
-if type "exa" >/dev/null 2>&1; then
-  :
-else
-  alias exa='ls'
-fi
-# alias l='ls -CF'
+[ ! type "exa" ] >/dev/null 2>&1 && alias exa='ls'
 alias l='exa -F'
 alias la='exa -A'
-alias ll='exa -alF'
-alias lll='ll --sort=time'
-alias lt='exa --tree'
+alias ll='exa -alF --git'
+alias lll='exa -alF --git -s=mod --time-style=long-iso'
+# alias lll='ll --sort=time'
+alias lt='exa -FT' # tree
+# alias lt='exa --tree'
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'
@@ -180,10 +174,10 @@ alias s='start'
 
 # Quick source and edit
 # ---------------------
-alias sa='source $HOME/.aliases'
+alias sa='. $HOME/.aliases'
 # alias sa='source activate'
-alias sb='source $HOME/.bashrc'
-alias sz='source $HOME/.zshrc'
+alias sb='. $HOME/.bashrc'
+alias sz='. $HOME/.zshrc'
 alias st='tmux source-file $HOME/.tmux.conf'
 
 alias sae='vi $HOME/.aliases'
@@ -206,6 +200,7 @@ alias tf='tail -fF'
 
 # rm
 # --
+alias del='/bin/rm'
 if type "rmtrash" >/dev/null 2>&1; then
   alias rm='rmtrash'
 fi
@@ -261,7 +256,8 @@ unpack() {
   fi
 }
 
-alias apt-remove-force='dpkg --force-all -r'
+alias apt-remove-force='dpkg --force-a
+ll -r'
 alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 
 gpp() {
@@ -386,19 +382,22 @@ alias slack="start slack"
 alias chrome="start /Applications/Google\ Chrome.app"
 
 # Launch web app
-canary="/Applications/Google\ Chrome\ Canary.app"
+CANARY="/Applications/Google\ Chrome\ Canary.app"
 chrome="/Applications/Google\ Chrome.app"
 #BROWSER="Firefox"
 #BROWSER="Safari"
 BROWSER="vivaldi"
 alias browse="start $BROWSER"
-alias trello="start $canary http://trello.com"
+alias trello="start $CANARY http://trello.com"
 alias youtube="start $chrome http://youtube.com"
 alias github='browse http://github.com'
+alias canary="open -a $CANARY"
 
 alias timecard='browse http://docs.google.com/spreadsheets/d/1iRAxcGaQngB5LJslh_BaREjFyey_LXZwiMgemfR866I/edit'
 alias docs='browse http://docs.google.com/document/u/0/'
 alias sheet='browse http://docs.google.com/spreadsheets/u/0/'
+
+alias math='canary https://develop.wolframcloud.com/'
 
 google() {
   local str opt

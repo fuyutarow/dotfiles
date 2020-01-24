@@ -42,6 +42,7 @@ nnoremap <C-space> <C-p>
 inoremap <silent> jj <ESC>:<C-u>w<CR>
 
 
+inoremap <C-d> <Del>
 
 "-------------------------------------------------------------------------------
 " Edit .sh
@@ -92,3 +93,8 @@ nmap ; :!
 "-------------------------------------------------------------------------------
 nnoremap K i<CR><Esc>
 map K i<Enter><Esc>
+
+" Move in insert mode
+" ===================
+inoremap <C-a> <C-o>^
+inoremap <C-e> <C-o>$

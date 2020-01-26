@@ -107,3 +107,46 @@ cargo install cargo-edit ;: subcommand `add`, `rm`, `upgrade`
 cargo install --force cargo-make
 '''
 ]
+
+[tasks.link-wsl]
+script = [
+'''
+ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
+ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
+ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
+ln -svf /mnt/c/Users/fuyutarow/Gdrive/ssh ~/.ssh
+'''
+]
+
+[tasks.add-scoop]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+scoop bucket add extras
+'''
+]
+
+[tasks.add-chrome]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+scoop install chromium googlechrome googlechrome-beta googlechrome-dev googlechrome-canary
+'''
+]
+
+[tasks.add-vscode]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+scoop install vscode
+'''
+]
+# usage
+# =====
+# ```
+# $ code
+# ```

@@ -150,6 +150,10 @@ alias m='more'
 alias md='mkdir'
 alias mp='mkdir -p'
 
+explorer() {
+    explorer.exe "$@"
+}
+[ `echo $(uname -r) | grep 'icrosoft'` ] && alias open="explorer"
 alias o='open'
 alias oo='open .'
 alias ooo='open ..'
@@ -419,3 +423,10 @@ alc() {
     w3m "http://www.alc.co.jp/"
   fi
 }
+
+
+if [ `echo $(uname -r) | grep 'icrosoft'` ]; then
+    pbcopy() {
+        tee <&0 | clip.exe
+    }
+fi

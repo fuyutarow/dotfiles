@@ -8,43 +8,74 @@ eval $(~/.linuxbrew/bin/brew shellenv)
 '''
 ]
 
-[tasks.add-z]
-dependencies = ["add-zsh", "add-zplug"]
-
-[tasks.add-zplug]
-script = [
-'''
-curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
-export ZPLUG_HOME=$HOME/.zplug
-source $ZPLUG_HOME/init.zsh
-source ~/.zshrc
-zplug install
-chmod -R 755 $ZPLUG_HOME
-source ~/.zshrc
-'''
-]
-
 [tasks.add-zsh]
 script = [
 '''
-#!/bin/sh
 : ### install zsh
 brew install zsh
 
 : ### install zplugin
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
 brew install svn ;: for zplugin
+sudo chsh -s "$(command -v zsh)" "${USER}"
 '''
 ]
-
 
 [tasks.add-vim]
 script = [
 '''
 brew install neovim
 bash setup.d/dein.sh
-ln -s ~/dotfiles/nvim ~/.config/nvim
-vi +":call dein#install()" +qa
+nvim +":call dein#install()" +qa
+'''
+]
+
+[tasks.add-coc]
+script = [
+'''
+vi +":CocInstall coc-rls" +qa ;: Rust
+vi +":CocInstall coc-python" +qa
+vi +":CocInstall coc-tsserver" +qa ;: TypeScript
+vi +":CocInstall coc-html" +qa
+vi +":CocInstall coc-css" +qa
+vi +":CocInstall coc-yaml" +qa
+vi +":CocInstall coc-vetur" +qa ;: Vue
+vi +":CocInstall coc-solargraph" +qa ;: Ruby
+vi +":CocInstall coc-emoji" +qa ;: for Markdown file only
+'''
+]
+
+[tasks.add-dev]
+script = [
+'''
+brew update
+brew install git
+brew install exa ;: alternative for `ls`
+brew install sl ;: alternative for `ls`
+brew install fuyutarow/commad/commad ;: alternative for `cd`
+brew install lolcat ;: alternative for `cat`
+brew install colordiff ;: alternative for `diff`
+brew install translate-shell ;: `trans`
+'''
+]
+
+[tasks.add-node]
+script = [
+'''
+curl -L git.io/nodebrew | perl - setup
+# export PATH=$HOME/.nodebrew/current/bin:$PATH
+nodebrew install latest
+nodebrew use latest
+npm install -g yarn
+npm install -g ts-node typescript
+'''
+]
+
+[tasks.add-python]
+script = [
+'''
+brew install pyenv poetry pipx
+poetry completions zsh > ~/.zfunc/_poetry
 '''
 ]
 

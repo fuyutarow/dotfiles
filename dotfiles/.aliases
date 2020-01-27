@@ -214,6 +214,8 @@ alias du2='du -ah --max-depth=2'
 
 # vim
 # --
+[ ! type "nvim" ] >/dev/null 2>&1 && alias nvim='vim'
+[ ! type "vim" ] >/dev/null 2>&1 && alias vim='vi'
 alias vv='nvim -R'
 alias vd='nvim -d'
 alias sp='nvim -o'

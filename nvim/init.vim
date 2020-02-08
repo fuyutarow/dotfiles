@@ -123,3 +123,15 @@ inoremap <C-f> <right>
 inoremap <C-b> <left>
 inoremap <C-u> <C-o>d^
 inoremap <C-k> <C-o>d$
+
+" bracketing
+" ==========
+nnoremap <Leader>s" ciw""<Esc>P
+nnoremap <Leader>s' ciw''<Esc>P
+nnoremap <Leader>s` ciw``<Esc>P
+nnoremap <Leader>s( ciw()<Esc>P
+nnoremap <Leader>s{ ciw{}<Esc>P
+nnoremap <Leader>s[ ciw[]<Esc>P
+
+nnoremap cx ciw
+nnoremap dx diw

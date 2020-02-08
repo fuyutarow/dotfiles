@@ -94,7 +94,20 @@ nmap ; :!
 nnoremap K i<CR><Esc>
 map K i<Enter><Esc>
 
-" Move in insert mode
-" ===================
-inoremap <C-a> <C-o>^
-inoremap <C-e> <C-o>$
+" " Move in insert mode
+" " ===================
+" inoremap <C-a> <C-o>^
+" inoremap <C-e> <C-o>$
+
+" Emacs keybind in insert mode
+" ============================
+inoremap <C-d> <Del>
+inoremap <C-h> <BS>
+inoremap <C-a> <home>
+inoremap <C-e> <End>
+inoremap <C-p> <Up>
+inoremap <C-n> <Down>
+inoremap <C-f> <right>
+inoremap <C-b> <left>
+inoremap <C-u> <C-o>d^
+inoremap <C-k> <C-o>d$

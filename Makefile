@@ -1,5 +1,6 @@
 curdir := $(CURDIR)
 
+
 link :
 	@ls -A $(curdir)/dotfiles | xargs -I {} ln -sfv $(curdir)/dotfiles/{} ~
 
@@ -28,13 +29,13 @@ add\:vim :
 add\:coc :
 	. setup.d/coc.sh
 
-add\:rust :
+add-rust :
 	curl https://sh.rustup.rs -sSf | sh
 
-rm\:rust :
+rm-rust :
 	rustup self uninstall
 
-up\:rust :
+up-rust :
 	rustup update
 	rustup component add rls rust-analysis rust-src ;: LPS
 	rustup component add clippy

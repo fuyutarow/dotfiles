@@ -44,7 +44,19 @@ inoremap <silent> jj <ESC>:<C-u>w<CR>
 
 inoremap <C-d> <Del>
 
-"-------------------------------------------------------------------------------
+" change
+" ======
+nnoremap cx ciw
+
+" bracket
+" =======
+nnoremap <Leader>s" ciw""<Esc>P
+nnoremap <Leader>s' ciw''<Esc>P
+nnoremap <Leader>s` ciw``<Esc>P
+nnoremap <Leader>s( ciw()<Esc>P
+nnoremap <Leader>s{ ciw{}<Esc>P
+nnoremap <Leader>s[ ciw[]<Esc>P
+
 " Edit .sh
 "-------------------------------------------------------------------------------
 autocmd FileType sh :noremap R :.w !$SHELL<Return>

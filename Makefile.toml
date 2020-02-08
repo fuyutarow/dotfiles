@@ -1,8 +1,58 @@
-
-[tasks.echo]
+[tasks.add-brew]
 script = [
 '''
-echo okoo
+git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew
+mkdir ~/.linuxbrew/bin
+ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin
+echo ~/.linuxbrew
+'''
+]
+
+[tasks.up-brew]
+script = [
+'''
+brew update
+brew upgrade
+brew cleanup
+'''
+]
+
+[tasks.add-zsh]
+script = [
+'''
+brew install zsh
+
+: ### install zplugin
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
+brew install svn ;: for zplugin
+command -v zsh | sudo tee -a /etc/shells
+sudo chsh -s "$(command -v zsh)" "${USER}"
+compaudit | xargs chmod go-w
+'''
+]
+
+[tasks.add-vim]
+script = [
+'''
+brew install neovim
+mkdir -p ~/.config/
+ln -svf ~/dotfiles/nvim ~/.config/nvim
+'''
+]
+
+[tasks.add-dein]
+script = [
+'''
+curl https://raw.githubusercontent.com/Shougo/dein.vim/master/bin/installer.sh > installer.sh
+sh ./installer.sh ~/.cache/dein
+nvim +":call dein#install()" +qa
+'''
+]
+
+[tasks.up-dein]
+script = [
+'''
+nvim +":call dein#update()" +qa
 '''
 ]
 
@@ -12,6 +62,74 @@ script = [
 rustup update
 rustup target add wasm32-unknown-unknown --toolchain nightly
 cargo install wasm-pack
+'''
+]
+
+[tasks.add-coc]
+script = [
+'''
+nvim +":CocInstall coc-rls" +qa ;: Rust
+nvim +":CocInstall coc-python" +qa
+nvim +":CocInstall coc-tsserver" +qa ;: TypeScript
+nvim +":CocInstall coc-html" +qa
+nvim +":CocInstall coc-css" +qa
+nvim +":CocInstall coc-yaml" +qa
+nvim +":CocInstall coc-vetur" +qa ;: Vue
+nvim +":CocInstall coc-solargraph" +qa ;: Ruby
+nvim +":CocInstall coc-emoji" +qa ;: for Markdown file only
+'''
+]
+
+[tasks.add-dev]
+script = [
+'''
+eval $(~/.linuxbrew/bin/brew shellenv)
+brew update
+brew install git
+brew install exa ;: alternative for `ls`
+brew install sl ;: alternative for `ls`
+brew install fuyutarow/commad/commad ;: alternative for `cd`
+brew install lolcat ;: alternative for `cat`
+brew install colordiff ;: alternative for `diff`
+brew install translate-shell ;: `trans`
+brew install jq
+'''
+]
+
+[tasks.add-node]
+script = [
+'''
+curl -L git.io/nodebrew | perl - setup
+# export PATH=$HOME/.nodebrew/current/bin:$PATH
+nodebrew install latest
+nodebrew use latest
+echo ~/.env.d/node.sh
+'''
+]
+
+[tasks.add-nodeapp]
+script = [
+'''
+npm install -g yarn
+npm install -g ts-node typescript
+npm i -g fast-cli
+'''
+]
+
+[tasks.add-python]
+script = [
+'''
+brew install pyenv poetry pipx
+poetry completions zsh > ~/.zfunc/_poetry
+echo ~/.env.d/python.sh
+'''
+]
+
+[tasks.add-pythonapp]
+script = [
+'''
+pipx install sshuttle
+pipx install jupyter-core notebook
 '''
 ]
 
@@ -57,5 +175,91 @@ script = [
 mkdir -p ~/.ssh
 ln -svf ~/Gdrive/ssh/common/config ~/.ssh/config
 ln -svf ~/Gdrive/ssh/common/config.d ~/.ssh/config.d
+'''
+]
+
+[tasks.link-ssh-wsl]
+script = [
+'''
+mkdir -p ~/.ssh
+cp /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config ~/.ssh/config
+cp -R /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config.d/ ~/.ssh/config.d
+chmod -R 644 ~/.ssh/config.d
+chmod 644 ~/.ssh/config
+chmod 700 ~/.ssh
+'''
+]
+
+[tasks.link-wsl]
+script = [
+'''
+ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
+ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
+ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
+'''
+]
+
+[tasks.add-scoop]
+script_runner = "powershell.exe"
+# script_extension = "ps1"
+script = [
+'''
+Invoke-Expression (New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh')
+scoop bucket add extras
+'''
+]
+
+[tasks.add-winapp-scoop]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+scoop install chromium vivaldi opera autohotkey discord terminus
+'''
+]
+
+[tasks.add-winapp]
+dependencies = ["add-winapp-scoop"]
+script = [
+'''
+open https://www.google.com/drive/download/backup-and-sync/
+open https://www.autohotkey.com
+'''
+]
+
+[tasks.add-pwa]
+dependencies = ["add-winapp-scoop"]
+script = [
+'''
+open https://drive.google.com
+open https://photos.google.com
+'''
+]
+
+[tasks.add-vscode]
+script = [
+'''
+scoop install vscode
+'''
+]
+
+[tasks.ls-scoop]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+scoop list
+'''
+]
+
+[tasks.add-julia]
+script = [
+'''
+wget https://julialang-s3.julialang.org/bin/linux/x64/1.3/julia-1.3.0-linux-x86_64.tar.gz -O julia.tar.gz
+mkdir -p ~/.julia
+tar zxvf julia.tar.gz -C ~/.julia --strip-components 1
+julia -e 'import Pkg; Pkg.add("jlpkg")'
+julia -e 'import jlpkg; jlpkg.install()'
+echo ~/.env.d/julia.sh
 '''
 ]

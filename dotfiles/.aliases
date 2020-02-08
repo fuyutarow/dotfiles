@@ -16,6 +16,15 @@ if [[ -x $(which colordiff) ]]; then
   alias diff='colordiff'
 fi
 
+# vim
+# ===
+[ ! type "nvim" ] >/dev/null 2>&1 && alias nvim='vim'
+alias view='nvim -R'
+alias vd='nvim -d'
+alias sp='nvim -o'
+alias vs='nvim -O'
+alias vi='vs'
+
 # change directory
 # ================
 # traditional `cd` aliases
@@ -150,6 +159,10 @@ alias m='more'
 alias md='mkdir'
 alias mp='mkdir -p'
 
+explorer() {
+    explorer.exe "$@"
+}
+[ `echo $(uname -r) | grep 'icrosoft'` ] && alias open="explorer"
 alias o='open'
 alias oo='open .'
 alias ooo='open ..'
@@ -183,9 +196,9 @@ alias st='tmux source-file $HOME/.tmux.conf'
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
 alias sge='vi $HOME/.gitignore'
-alias sze='vi $HOME/.zshrc'
 alias ste='vi $HOME/.tmux.conf'
 alias sve='vi $HOME/dotfiles/nvim/init.vim'
+alias sze='vi $HOME/.zshrc'
 
 # tmux
 # ----
@@ -208,14 +221,6 @@ fi
 # alias rr='rm -rf'
 
 alias du2='du -ah --max-depth=2'
-
-# vim
-# --
-alias vv='nvim -R'
-alias vd='nvim -d'
-alias sp='nvim -o'
-alias vs='nvim -O'
-alias vi='vs'
 
 alias wttr="curl wttr.in/Tokyo"
 
@@ -420,3 +425,10 @@ alc() {
     w3m "http://www.alc.co.jp/"
   fi
 }
+
+
+if [ `echo $(uname -r) | grep 'icrosoft'` ]; then
+    pbcopy() {
+        tee <&0 | clip.exe
+    }
+fi

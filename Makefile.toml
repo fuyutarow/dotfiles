@@ -25,7 +25,9 @@ brew install zsh
 : ### install zplugin
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
 brew install svn ;: for zplugin
+command -v zsh | sudo tee -a /etc/shells
 sudo chsh -s "$(command -v zsh)" "${USER}"
+compaudit | xargs chmod go-w
 '''
 ]
 
@@ -33,23 +35,39 @@ sudo chsh -s "$(command -v zsh)" "${USER}"
 script = [
 '''
 brew install neovim
-bash setup.d/dein.sh
+mkdir -p ~/.config/
+ln -svf ~/dotfiles/nvim ~/.config/nvim
+'''
+]
+
+[tasks.add-dein]
+script = [
+'''
+curl https://raw.githubusercontent.com/Shougo/dein.vim/master/bin/installer.sh > installer.sh
+sh ./installer.sh ~/.cache/dein
 nvim +":call dein#install()" +qa
+'''
+]
+
+[tasks.up-dein]
+script = [
+'''
+nvim +":call dein#update()" +qa
 '''
 ]
 
 [tasks.add-coc]
 script = [
 '''
-vi +":CocInstall coc-rls" +qa ;: Rust
-vi +":CocInstall coc-python" +qa
-vi +":CocInstall coc-tsserver" +qa ;: TypeScript
-vi +":CocInstall coc-html" +qa
-vi +":CocInstall coc-css" +qa
-vi +":CocInstall coc-yaml" +qa
-vi +":CocInstall coc-vetur" +qa ;: Vue
-vi +":CocInstall coc-solargraph" +qa ;: Ruby
-vi +":CocInstall coc-emoji" +qa ;: for Markdown file only
+nvim +":CocInstall coc-rls" +qa ;: Rust
+nvim +":CocInstall coc-python" +qa
+nvim +":CocInstall coc-tsserver" +qa ;: TypeScript
+nvim +":CocInstall coc-html" +qa
+nvim +":CocInstall coc-css" +qa
+nvim +":CocInstall coc-yaml" +qa
+nvim +":CocInstall coc-vetur" +qa ;: Vue
+nvim +":CocInstall coc-solargraph" +qa ;: Ruby
+nvim +":CocInstall coc-emoji" +qa ;: for Markdown file only
 '''
 ]
 
@@ -65,6 +83,7 @@ brew install fuyutarow/commad/commad ;: alternative for `cd`
 brew install lolcat ;: alternative for `cat`
 brew install colordiff ;: alternative for `diff`
 brew install translate-shell ;: `trans`
+brew install jq
 '''
 ]
 
@@ -134,15 +153,24 @@ cargo install --force cargo-make
 '''
 ]
 
+[tasks.link-ssh]
+script = [
+'''
+mkdir -p ~/.ssh
+cp /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config ~/.ssh/config
+cp -R /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config.d/ ~/.ssh/config.d
+chmod -R 644 ~/.ssh/config.d
+chmod 644 ~/.ssh/config
+chmod 700 ~/.ssh
+'''
+]
+
 [tasks.link-wsl]
 script = [
 '''
 ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
 ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
 ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
-mkdir -p ~/.ssh
-ln -svf /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config ~/.ssh/config
-ln -svf /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config.d/ ~/.ssh/config.d
 '''
 ]
 
@@ -174,12 +202,28 @@ open https://www.autohotkey.com
 '''
 ]
 
+[tasks.add-pwa]
+dependencies = ["add-winapp-scoop"]
+script = [
+'''
+open https://drive.google.com
+open https://photos.google.com
+'''
+]
+
 [tasks.add-vscode]
+script = [
+'''
+scoop install vscode
+'''
+]
+
+[tasks.ls-scoop]
 script_runner = "powershell.exe"
 script_extension = "ps1"
 script = [
 '''
-scoop install vscode
+scoop list
 '''
 ]
 

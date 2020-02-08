@@ -16,6 +16,15 @@ if [[ -x $(which colordiff) ]]; then
   alias diff='colordiff'
 fi
 
+# vim
+# ===
+[ ! type "nvim" ] >/dev/null 2>&1 && alias nvim='vim'
+alias view='nvim -R'
+alias vd='nvim -d'
+alias sp='nvim -o'
+alias vs='nvim -O'
+alias vi='vs'
+
 # change directory
 # ================
 # traditional `cd` aliases
@@ -187,8 +196,9 @@ alias st='tmux source-file $HOME/.tmux.conf'
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
 alias sge='vi $HOME/.gitignore'
-alias sze='vi $HOME/.zshrc'
 alias ste='vi $HOME/.tmux.conf'
+alias sve='vi $HOME/.config/nvim/init.vim'
+alias sze='vi $HOME/.zshrc'
 
 # tmux
 # ----
@@ -211,16 +221,6 @@ fi
 # alias rr='rm -rf'
 
 alias du2='du -ah --max-depth=2'
-
-# vim
-# --
-[ ! type "nvim" ] >/dev/null 2>&1 && alias nvim='vim'
-[ ! type "vim" ] >/dev/null 2>&1 && alias vim='vi'
-alias vv='nvim -R'
-alias vd='nvim -d'
-alias sp='nvim -o'
-alias vs='nvim -O'
-alias vi='vs'
 
 alias wttr="curl wttr.in/Tokyo"
 

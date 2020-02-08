@@ -8,7 +8,11 @@ case "$HOST" in
     zplugin ice pick"async.zsh" src"pure.zsh"
     zplugin light sindresorhus/pure
   ;;
-  "ringbell"|"ringbell.local")
+  "spaceshit")
+    zplugin ice pick'spaceship.zsh' wait'!0'
+    zplugin light 'denysdovhan/spaceship-zsh-theme'
+  ;;
+  *)
     uname="%F{magenta}%n%f"
     host="%F{yellow}%m%f"
     pwd="%F{green}%~%f"
@@ -17,9 +21,5 @@ case "$HOST" in
     datetime="%F{cyan}%D{%m-%d %H:%M}%f"
 
     PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"
-  ;;
- *)
-    zplugin ice pick'spaceship.zsh' wait'!0'
-    zplugin light 'denysdovhan/spaceship-zsh-theme'
   ;;
 esac

@@ -135,7 +135,7 @@ alias kl='kill -9'
 [ ! type "exa" ] >/dev/null 2>&1 && alias exa='ls'
 alias l='exa -F'
 alias la='exa -A'
-alias ll='exa -alF --git'
+alias ll='exa -alF'
 alias lll='exa -alF --git -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
 alias lt='exa -FT' # tree
@@ -185,6 +185,7 @@ alias sbe='vi $HOME/.bashrc'
 alias sge='vi $HOME/.gitignore'
 alias sze='vi $HOME/.zshrc'
 alias ste='vi $HOME/.tmux.conf'
+alias sve='vi $HOME/dotfiles/nvim/init.vim'
 
 # tmux
 # ----

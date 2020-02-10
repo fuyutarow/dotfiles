@@ -195,7 +195,7 @@ alias st='tmux source-file $HOME/.tmux.conf'
 
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
-alias sge='vi $HOME/.gitignore'
+alias sge='vi $HOME/.gitconfig'
 alias ste='vi $HOME/.tmux.conf'
 alias sve='vi $HOME/dotfiles/nvim/init.vim'
 alias sze='vi $HOME/.zshrc'

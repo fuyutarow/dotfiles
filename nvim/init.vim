@@ -47,6 +47,17 @@ set expandtab
 set smarttab
 set shiftround
 
+
+" show hidden character
+" ---------------------
+set list
+set listchars=tab:»-,trail:-,eol:↲,extends:»,precedes:«,nbsp:%
+
+" for paste in insert-mode
+" ------------------------
+:set paste
+
+
 nnoremap <C-space> <C-p>
 
 inoremap <silent> jj <ESC>:<C-u>w<CR>

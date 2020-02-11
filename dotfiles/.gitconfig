@@ -2,11 +2,15 @@
     email = fuyutarow@gmail.com
     name = fuyutarow
 
+[url "git@github.com:"]
+	insteadOf = https://github.com/
+
 [push]
     default = simple
 
 [core]
     excludesfile = ~/.gitignore_global
+	quotepath = false
 
 [http]
     postBuffer = 8M
@@ -108,4 +112,3 @@
     ff = flow feature
     ffs = flow feature start
     ffp = flow feature publish
-    

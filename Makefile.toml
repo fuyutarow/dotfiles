@@ -116,6 +116,13 @@ npm i -g fast-cli
 '''
 ]
 
+[tasks.add-go]
+script = [
+'''
+brew install go
+'''
+]
+
 [tasks.add-goapp]
 script = [
 '''

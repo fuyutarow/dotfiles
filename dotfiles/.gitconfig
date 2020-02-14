@@ -30,8 +30,11 @@
 	# ------
 	b = branch
 	ba = branch -a
-	bd = branch -d
-	bm = branch -m #old_name #new_name
+	branch-delete = branch -d
+	bd = branch-delete
+	branch-rename = branch -m #old_name #new_name
+	br = branch-rename
+	bm = branch-rename
 
 	c = clone
 	# C =! git clone "$1" "${1##*.com/}"

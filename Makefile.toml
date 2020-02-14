@@ -213,6 +213,22 @@ ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
 '''
 ]
 
+[tasks.add-macapp]
+script = [
+'''
+brew cask install\
+	karabiner-elements\
+	iterm2\
+	shiftit\
+	google-backup-and-sync\
+	discord\
+	slack\
+	vivaldi\
+	firefox\
+	opera\
+	chromium
+''']
+
 [tasks.add-scoop]
 script_runner = "powershell.exe"
 # script_extension = "ps1"
@@ -228,7 +244,13 @@ script_runner = "powershell.exe"
 script_extension = "ps1"
 script = [
 '''
-scoop install chromium vivaldi opera autohotkey discord terminus
+scoop install
+	autohotkey\
+	discord\
+	vivaldi\
+	opera\
+	terminus\
+	chromium
 '''
 ]
 

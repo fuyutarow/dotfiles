@@ -1,4 +1,5 @@
 
+
 [tasks.add-ssl]
 script = [
 '''
@@ -356,5 +357,30 @@ tar zxvf julia.tar.gz -C ~/.julia --strip-components 1
 julia -e 'import Pkg; Pkg.add("jlpkg")'
 julia -e 'import jlpkg; jlpkg.install()'
 echo ~/.env.d/julia.sh
+'''
+]
+
+[tasks.add-tex]
+script = [
+'''
+brew install texlive
+'''
+]
+
+[tasks.up-tex]
+script = [
+'''
+tlmgr update --self --all
+tlmgr install latexmk
+'''
+]
+
+
+[tasks.add-satysfi]
+script = [
+'''
+sudo apt install m4 unzip
+# sudo apt install bubblewrap
+brew install --HEAD nyuichi/satysfi/satysfi
 '''
 ]

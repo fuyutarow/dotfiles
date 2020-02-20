@@ -50,12 +50,12 @@ set shiftround
 
 " show hidden character
 " ---------------------
-set list
-set listchars=tab:»-,trail:-,eol:↲,extends:»,precedes:«,nbsp:%
+" set list
+" set listchars=tab:»-,trail:-,eol:↲,extends:»,precedes:«,nbsp:%
 
 " for paste in insert-mode
 " ------------------------
-:set paste
+set pastetoggle=<F2>
 
 
 nnoremap <C-space> <C-p>

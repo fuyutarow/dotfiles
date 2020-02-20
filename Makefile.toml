@@ -1,9 +1,32 @@
+
+[tasks.add-ssl]
+script = [
+'''
+sudo apt install pkg-config libssl-dev
+'''
+]
+
+[tasks.add-cargoapp]
+script = [
+'''
+cargo install cargo-make
+cargo install cargo-edit
+'''
+]
+
+[tasks.up-apt]
+script = [
+'''
+sudo apt update && sudo apt upgrade -y
+'''
+]
+
 [tasks.add-brew]
 script = [
 '''
 git clone https://github.com/Homebrew/brew ~/.linuxbrew/Homebrew
 mkdir ~/.linuxbrew/bin
-ln -s ../Homebrew/bin/brew ~/.linuxbrew/bin
+ln -s ~/.linuxbrew/Homebrew/bin/brew ~/.linuxbrew/bin
 echo ~/.linuxbrew
 '''
 ]
@@ -37,6 +60,18 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zinit/master/doc/i
 compaudit | xargs chmod go-w
 '''
 ]
+
+[tasks.install-dev]
+run_task = { name = [
+  "add-dev",
+  "install-vim",
+  "install-node",
+  "install-python",
+  "install-go",
+] }
+
+[tasks.install-vim]
+run_task = { name = ["add-vim", "add-dein", "up-dein", "add-coc"] }
 
 [tasks.add-vim]
 script = [
@@ -75,15 +110,15 @@ cargo install wasm-pack
 [tasks.add-coc]
 script = [
 '''
-nvim +":CocInstall coc-rls" +qa ;: Rust
+nvim +":CocInstall coc-rls" +qa # Rust
 nvim +":CocInstall coc-python" +qa
-nvim +":CocInstall coc-tsserver" +qa ;: TypeScript
+nvim +":CocInstall coc-tsserver" +qa # TypeScript
 nvim +":CocInstall coc-html" +qa
 nvim +":CocInstall coc-css" +qa
 nvim +":CocInstall coc-yaml" +qa
-nvim +":CocInstall coc-vetur" +qa ;: Vue
-nvim +":CocInstall coc-solargraph" +qa ;: Ruby
-nvim +":CocInstall coc-emoji" +qa ;: for Markdown file only
+nvim +":CocInstall coc-vetur" +qa # Vue
+nvim +":CocInstall coc-solargraph" +qa # Ruby
+nvim +":CocInstall coc-emoji" +qa # for Markdown file only
 '''
 ]
 
@@ -93,15 +128,18 @@ script = [
 eval $(~/.linuxbrew/bin/brew shellenv)
 brew update
 brew install git
-brew install exa ;: alternative for `ls`
-brew install sl ;: alternative for `ls`
-brew install fuyutarow/commad/commad ;: alternative for `cd`
-brew install lolcat ;: alternative for `cat`
-brew install colordiff ;: alternative for `diff`
-brew install translate-shell ;: `trans`
+brew install exa # alternative for `ls`
+brew install sl # alternative for `ls`
+brew install fuyutarow/commad/commad # alternative for `cd`
+# brew install lolcat # alternative for `cat`
+brew install colordiff # alternative for `diff`
+brew install translate-shell # `trans`
 brew install jq
 '''
 ]
+
+[tasks.install-node]
+run_task = { name = ["add-node", "add-nodeapp"] }
 
 [tasks.add-node]
 script = [
@@ -120,8 +158,12 @@ script = [
 npm install -g yarn
 npm install -g ts-node typescript
 npm i -g fast-cli
+npm i -g firebase-tools
 '''
 ]
+
+[tasks.install-go]
+run_task = { name = ["add-go", "add-goapp"] }
 
 [tasks.add-go]
 script = [
@@ -137,6 +179,9 @@ go get github.com/sclevine/yj
 '''
 ]
 
+[tasks.install-python]
+run_task = { name = ["add-python", "add-pythonapp"] }
+
 [tasks.add-python]
 script = [
 '''
@@ -150,7 +195,8 @@ echo ~/.env.d/python.sh
 script = [
 '''
 pipx install sshuttle
-pipx install jupyter-core notebook
+pipx install jupyter-core
+pipx install notebook
 '''
 ]
 
@@ -183,13 +229,6 @@ cargo install --force cargo-make
 '''
 ]
 
-[tasks.up-nodeapp]
-script = [
-'''
-npm i -g firebase-tools
-'''
-]
-
 [tasks.link-ssh]
 script = [
 '''
@@ -208,6 +247,19 @@ cp -R /mnt/c/Users/fuyutarow/Gdrive/ssh/common/config.d/ ~/.ssh/config.d
 chmod -R 644 ~/.ssh/config.d
 chmod 644 ~/.ssh/config
 chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+chmod 600 ~/.ssh/id_rsa.pub
+'''
+]
+
+[tasks.chmod-ssh]
+script = [
+'''
+chmod -R 644 ~/.ssh/config.d
+chmod 644 ~/.ssh/config
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa
+chmod 600 ~/.ssh/id_rsa.pub
 '''
 ]
 

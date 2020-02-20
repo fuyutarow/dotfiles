@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   alias ls='ls --color=auto'
@@ -18,7 +20,7 @@ fi
 
 # vim
 # ===
-[ ! type "nvim" ] >/dev/null 2>&1 && alias nvim='vim'
+type "nvim" > /dev/null 2>&1 || alias nvim="vim"
 alias view='nvim -R'
 alias vd='nvim -d'
 alias sp='nvim -o'
@@ -141,7 +143,7 @@ alias kl='kill -9'
 
 # ls
 # --
-[ ! type "exa" ] >/dev/null 2>&1 && alias exa='ls'
+type "exa" > /dev/null 2>&1 || alias exa="ls"
 alias l='exa -F'
 alias la='exa -A'
 alias ll='exa -alF'
@@ -195,7 +197,9 @@ alias st='tmux source-file $HOME/.tmux.conf'
 
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
+alias sde='vi $HOME/dotfiles/nvim/dein.toml'
 alias sge='vi $HOME/.gitconfig'
+alias sme='vi $HOME/dotfiles/Makefile.toml'
 alias ste='vi $HOME/.tmux.conf'
 alias sve='vi $HOME/dotfiles/nvim/init.vim'
 alias sze='vi $HOME/.zshrc'

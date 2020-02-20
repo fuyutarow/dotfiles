@@ -2,9 +2,6 @@
 	email = fuyutarow@gmail.com
 	name = fuyutarow
 
-[url "git@github.com:"]
-	insteadOf = https://github.com/
-
 [push]
 	default = simple
 

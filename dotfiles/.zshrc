@@ -4,18 +4,18 @@
 # Use emacs keybindings even if our EDITOR is set to vi
 bindkey -e
 
-# aliases
-# =======
-if [ -f ~/.aliases ]; then
-    . ~/.aliases
-fi
-
 # environment variables
 # =====================
 if [ -d ~/.env.d ]; then
     for file in $(/bin/ls ~/.env.d/*); do
         . $file;
     done
+fi
+
+# aliases
+# =======
+if [ -f ~/.aliases ]; then
+    . ~/.aliases
 fi
 
 

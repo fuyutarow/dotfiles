@@ -48,9 +48,9 @@ autoload -Uz _zinit
 # plugin manager
 # ==============
 # Use Zplugin
-source $HOME/.zplugin/bin/zplugin.zsh
-autoload -Uz _zplugin
-(( ${+_comps} )) && _comps[zplugin]=_zplugin
+# source $HOME/.zplugin/bin/zplugin.zsh
+# autoload -Uz _zplugin
+# (( ${+_comps} )) && _comps[zplugin]=_zplugin
 
 
 if [ -d ~/.zshrc.d ]; then

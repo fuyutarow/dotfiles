@@ -5,12 +5,12 @@ case "$HOST" in
   ;;
   "conohatan")
     zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
-    zplugin ice pick"async.zsh" src"pure.zsh"
-    zplugin light sindresorhus/pure
+    zinit ice pick"async.zsh" src"pure.zsh"
+    zinit light sindresorhus/pure
   ;;
   "spaceshit")
-    zplugin ice pick'spaceship.zsh' wait'!0'
-    zplugin light 'denysdovhan/spaceship-zsh-theme'
+    zinit ice pick'spaceship.zsh' wait'!0'
+    zinit light 'denysdovhan/spaceship-zsh-theme'
   ;;
   *)
     uname="%F{magenta}%n%f"

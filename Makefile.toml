@@ -17,16 +17,23 @@ brew cleanup
 '''
 ]
 
+[tasks.install-zsh]
+run_task = { name = ["add-zsh", "add-zinit"] }
+
 [tasks.add-zsh]
 script = [
 '''
 brew install zsh
-
-: ### install zplugin
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zplugin/master/doc/install.sh)"
-brew install svn ;: for zplugin
+# sudo apt install zsh
 command -v zsh | sudo tee -a /etc/shells
 sudo chsh -s "$(command -v zsh)" "${USER}"
+'''
+]
+
+[tasks.add-zinit]
+script = [
+'''
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zdharma/zinit/master/doc/install.sh)"
 compaudit | xargs chmod go-w
 '''
 ]

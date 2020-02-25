@@ -41,6 +41,13 @@ brew cleanup
 '''
 ]
 
+[tasks.up-cask]
+script = [
+'''
+brew cask upgrade
+'''
+]
+
 [tasks.install-zsh]
 run_task = { name = ["add-zsh", "add-zinit"] }
 
@@ -375,12 +382,39 @@ tlmgr install latexmk
 '''
 ]
 
-
-[tasks.add-satysfi]
+[tasks.add-ocaml]
 script = [
 '''
-sudo apt install m4 unzip
+brew install opam
+'''
+]
+
+
+[tasks.add-satysfi]
+dependencies = ['add-ocaml']
+script = [
+'''
+# sudo apt install m4 unzip
 # sudo apt install bubblewrap
 brew install --HEAD nyuichi/satysfi/satysfi
+'''
+]
+
+
+[tasks.add-mimium-mac]
+script = [
+'''
+brew install cmake bison flex libsndfile rt-audio
+git clone https://github.com/mimium-org/mimium mimium
+cd $_
+(
+export PATH="/usr/local/opt/llvm/bin:$PATH"
+export LDFLAGS="-L/usr/local/opt/llvm/lib"
+export CPPFLAGS="-I/usr/local/opt/llvm/include"
+mkdir build && cd build
+cmake ..
+cmake --build . --target default_build -j
+cmake --build . --target install
+)
 '''
 ]

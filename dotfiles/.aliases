@@ -20,7 +20,7 @@ fi
 
 # vim
 # ===
-type "nvim" > /dev/null 2>&1 || alias nvim="vim"
+type "nvim" >/dev/null 2>&1 || alias nvim="vim"
 alias view='nvim -R'
 alias vd='nvim -d'
 alias sp='nvim -o'
@@ -81,7 +81,6 @@ alias ,v=', ~/violets'
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-
 alias cake='cargo make'
 
 # some more ls aliases
@@ -120,11 +119,9 @@ alias grr='grep -r'
 alias gv='grep -v'
 alias gl='grep -ilr'
 
-
-grl () {
-    grep "$@" -rl .
+grl() {
+  grep "$@" -rl .
 }
-
 
 alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
@@ -143,10 +140,10 @@ alias kl='kill -9'
 
 # ls
 # --
-type "exa" > /dev/null 2>&1 || alias exa="ls"
+type "exa" >/dev/null 2>&1 || alias exa="ls"
 alias l='exa -F'
 alias la='exa -A'
-alias ll='exa -alF'
+alias ll='exa -alF --git'
 alias lll='exa -alF --git -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
 alias lt='exa -FT' # tree
@@ -162,9 +159,9 @@ alias md='mkdir'
 alias mp='mkdir -p'
 
 explorer() {
-    explorer.exe "$@"
+  explorer.exe "$@"
 }
-[ `echo $(uname -r) | grep 'icrosoft'` ] && alias open="explorer"
+[ $(echo $(uname -r) | grep 'icrosoft') ] && alias open="explorer"
 alias o='open'
 alias oo='open .'
 alias ooo='open ..'
@@ -198,8 +195,10 @@ alias st='tmux source-file $HOME/.tmux.conf'
 alias sae='vi $HOME/.aliases'
 alias sbe='vi $HOME/.bashrc'
 alias sde='vi $HOME/dotfiles/nvim/dein.toml'
+alias see='vi $HOME/.emacs'
 alias sge='vi $HOME/.gitconfig'
 alias sme='vi $HOME/dotfiles/Makefile.toml'
+alias sle='vi $HOME/.latexmkrc'
 alias ste='vi $HOME/.tmux.conf'
 alias sve='vi $HOME/dotfiles/nvim/init.vim'
 alias sze='vi $HOME/.zshrc'
@@ -211,6 +210,7 @@ alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
 alias tt='tmux a -t'
+alias tks='tmux kill-session -t'
 
 alias to='touch'
 
@@ -221,6 +221,11 @@ alias tf='tail -fF'
 alias del='/bin/rm'
 if type "rmtrash" >/dev/null 2>&1; then
   alias rm='rmtrash'
+else
+  rm() {
+    mkdir -p $HOME/.Trash
+    mv --backup=numbered --target-directory=$HOME/.Trash "$@"
+  }
 fi
 # alias rr='rm -rf'
 
@@ -236,36 +241,36 @@ alias xc='latexmk -c'
 alias pdf2txt='pdf2txt.py'
 
 trim() {
-    sed -ie 's/[ \t]*$//' "$@"
+  sed -ie 's/[ \t]*$//' "$@"
 }
 
 unpack() {
   if [ "$2" = "" ]; then
     case "$1" in
-        *.zip) unzip "$1" ;;
-        *.tar) tar xvf "$1" ;;
-        *.tar.gz) tar zxvf "$1" ;;
-        *.tgz) tar zxvf "$1" ;;
-        *.tar.bz2) tar jxvf "$1" ;;
-        *.tbz2) tar jxvf "$1" ;;
-        *.gz) gunzip "$1" ;;
-        *.Z) gunzip "$1" ;;
-        *.bz2) bunzip2 "$1";;
-        *) echo not support. ;;
+      *.zip) unzip "$1" ;;
+      *.tar) tar xvf "$1" ;;
+      *.tar.gz) tar zxvf "$1" ;;
+      *.tgz) tar zxvf "$1" ;;
+      *.tar.bz2) tar jxvf "$1" ;;
+      *.tbz2) tar jxvf "$1" ;;
+      *.gz) gunzip "$1" ;;
+      *.Z) gunzip "$1" ;;
+      *.bz2) bunzip2 "$1" ;;
+      *) echo not support. ;;
     esac
   else
     mkdir "$2"
     case "$1" in
-        *.zip) unzip "$1" ;;
-        *.tar) tar xvf "$1" -C "$2" --strip-components 1;;
-        *.tar.gz) tar zxvf "$1" -C "$2" --strip-components 1;;
-        *.tgz) tar zxvf "$1" -C "$2" --strip-components 1;;
-        *.tar.bz2) tar jxvf "$1" -C "$2" --strip-components 1;;
-        *.tbz2) tar jxvf "$1" -C "$2" --strip-components 1;;
-        *.gz) gunzip "$1" ;;
-        *.Z) gunzip "$1" ;;
-        *.bz2) bunzip2 "$1" ;;
-        *) echo not support. ;;
+      *.zip) unzip "$1" ;;
+      *.tar) tar xvf "$1" -C "$2" --strip-components 1 ;;
+      *.tar.gz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
+      *.tgz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
+      *.tar.bz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
+      *.tbz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
+      *.gz) gunzip "$1" ;;
+      *.Z) gunzip "$1" ;;
+      *.bz2) bunzip2 "$1" ;;
+      *) echo not support. ;;
     esac
   fi
 }
@@ -434,9 +439,8 @@ alc() {
   fi
 }
 
-
-if [ `echo $(uname -r) | grep 'icrosoft'` ]; then
-    pbcopy() {
-        tee <&0 | clip.exe
-    }
+if [ $(echo $(uname -r) | grep 'icrosoft') ]; then
+  pbcopy() {
+    tee <&0 | clip.exe
+  }
 fi

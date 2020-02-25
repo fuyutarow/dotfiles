@@ -384,3 +384,25 @@ sudo apt install m4 unzip
 brew install --HEAD nyuichi/satysfi/satysfi
 '''
 ]
+
+[tasks.add-llvm]
+mac_alias = "add-llvm-mac"
+linux_alias = "add-llvm-linux"
+
+[tasks.add-llvm-mac]
+script = [
+'''
+brew install llvm
+llvm-config --version
+'''
+]
+
+[tasks.add-llvm-linux]
+script = [
+'''
+sudo apt install libncurses5
+sudo ln -s /lib/x86_64-linux-gnu/libncursesw.so.5  /lib/x86_64-linux-gnu/libncursesw.so.6
+brew install llvm
+llvm-config --version
+'''
+]

@@ -120,6 +120,7 @@ nvim +":CocInstall coc-yaml" +qa
 nvim +":CocInstall coc-vetur" +qa # Vue
 nvim +":CocInstall coc-solargraph" +qa # Ruby
 nvim +":CocInstall coc-emoji" +qa # for Markdown file only
+brew install shfmt # sh
 '''
 ]
 
@@ -269,6 +270,7 @@ script = [
 '''
 ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
 ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
+ln -svf /mnt/c/Users/fuyutarow/Documents/ ~
 ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
 '''
 ]
@@ -336,6 +338,16 @@ open https://photos.google.com
 script = [
 '''
 scoop install vscode
+'''
+]
+
+[tasks.up-scoop]
+script_runner = "powershell.exe"
+script_extension = "ps1"
+script = [
+'''
+scoop update *
+scoop cleanup *
 '''
 ]
 

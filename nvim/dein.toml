@@ -134,7 +134,9 @@ repo = 'Townk/vim-autoclose'
 repo = 'scrooloose/nerdcommenter'
 hook_add = '''
 autocmd BufNewFile,BufRead *.pest setfiletype pest
+let g:NERDCustomDelimiters = { 'json': { 'left': '//' } }
 let g:NERDCustomDelimiters = { 'pest': { 'left': '//' } }
+let g:NERDCustomDelimiters = { 'ahk': { 'left': ';' } }
 
 let g:NERDSpaceDelims=1
 let g:NERDDefaultAlign='left'

@@ -24,6 +24,8 @@ endif
 filetype plugin indent on
 syntax enable
 
+set number
+set relativenumber
 set ignorecase
 set smartcase
 set wrapscan

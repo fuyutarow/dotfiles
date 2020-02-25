@@ -194,7 +194,7 @@ run_task = { name = ["add-python", "add-pythonapp"] }
 [tasks.add-python]
 script = [
 '''
-brew install pyenv poetry pipx
+brew install pyenv pipx
 poetry completions zsh > ~/.zfunc/_poetry
 echo ~/.env.d/python.sh
 '''
@@ -203,6 +203,7 @@ echo ~/.env.d/python.sh
 [tasks.add-pythonapp]
 script = [
 '''
+pipx install poetry
 pipx install sshuttle
 pipx install jupyter-core
 pipx install notebook

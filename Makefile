@@ -3,6 +3,7 @@ curdir := $(CURDIR)
 
 link :
 	@ls -A $(curdir)/dotfiles | xargs -I {} ln -sfv $(curdir)/dotfiles/{} ~
+	ln -sfv ~/dotfiles/config/nvim ~/.config/nvim
 
 add\:brew :
 	bash setup.d/brew.sh

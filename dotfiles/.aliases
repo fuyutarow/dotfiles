@@ -222,7 +222,7 @@ alias del='/bin/rm'
 if type "rmtrash" >/dev/null 2>&1; then
   alias rm='rmtrash'
 else
-  rm() {
+  function rm() {
     mkdir -p $HOME/.Trash
     mv --backup=numbered --target-directory=$HOME/.Trash "$@"
   }

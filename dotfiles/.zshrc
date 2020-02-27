@@ -12,12 +12,13 @@ if [ -d ~/.env.d ]; then
     done
 fi
 
+export PATH=$HOME/.local/bin:$PATH
+
 # aliases
 # =======
 if [ -f ~/.aliases ]; then
     . ~/.aliases
 fi
-
 
 # locale
 # ======

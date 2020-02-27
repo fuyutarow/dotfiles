@@ -17,7 +17,8 @@ case "$HOST" in
     host="%F{yellow}%m%f"
     pwd="%F{green}%~%f"
     NEWLINE=$'\n'
-    prompt="%F{blue})%f "
+    # prompt="%F{blue})%f "
+    prompt="%F{blue}$%f "
     datetime="%F{cyan}%D{%m-%d %H:%M}%f"
 
     PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"

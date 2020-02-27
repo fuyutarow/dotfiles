@@ -48,6 +48,13 @@ brew cask upgrade
 '''
 ]
 
+[tasks.up-vue]
+script = [
+'''
+yarn global upgrade --latest @vue/cli
+'''
+]
+
 [tasks.install-zsh]
 run_task = { name = ["add-zsh", "add-zinit"] }
 
@@ -342,13 +349,6 @@ open https://photos.google.com
 '''
 ]
 
-[tasks.add-vscode]
-script = [
-'''
-scoop install vscode
-'''
-]
-
 [tasks.up-scoop]
 script_runner = "powershell.exe"
 script_extension = "ps1"
@@ -474,4 +474,30 @@ sudo apt install libncurses5
 sudo ln -s /lib/x86_64-linux-gnu/libncursesw.so.5  /lib/x86_64-linux-gnu/libncursesw.so.6
 brew install llvm
 llvm-config --version
+'''
+]
+
+[tasks.install-vscode]
+linux_alias = "add-vscode-wsl"
+mac_alias = "add-vscode-mac"
+
+
+[tasks.add-vscode-wsl]
+script = [
+'''
+scoop install vscode
+scoop install vscode-insiders
+echo $ code .
+echo $ code-insiders .
+'''
+]
+
+[tasks.add-vscode-mac]
+script = [
+'''
+brew cask install visual-studio-code
+brew cask install visual-studio-code-insiders
+echo $ code .
+echo $ code-insiders .
+'''
 ]

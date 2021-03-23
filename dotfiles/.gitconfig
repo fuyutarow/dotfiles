@@ -44,6 +44,8 @@
 	commit-help=! open 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
 	examples =! view $HOME/dotfiles/docs/comment_examples.md
 
+	pick = cherry-pick
+
 	# checkout
 	# --------
 	cb = checkout -b

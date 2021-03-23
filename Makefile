@@ -33,7 +33,9 @@ add\:coc :
 	. setup.d/coc.sh
 
 add-rust :
-	curl https://sh.rustup.rs -sSf | sh
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+	rustup set profile minimal
+	rustup toolchain install nightly
 
 rm-rust :
 	rustup self uninstall

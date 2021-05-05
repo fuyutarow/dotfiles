@@ -1,4 +1,0 @@
-* * * * * /usr/local/bin/fast >> ~/.fast.log
-* * * * * echo  $(/bin/date "+\%Y-\%m-\%dT\%T") >> ~/.fast.log
-* * * * * /bin/bash ~/fast.sh
-* * * * * echo  $(/bin/date "+\%Y-\%m-\%dT\%T")$(/usr/local/bin/fast) >> ~/.fast.log

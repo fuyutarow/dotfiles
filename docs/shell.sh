@@ -1,4 +1,0 @@
-
-```sh
-brew install zsh
-```

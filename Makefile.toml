@@ -1,26 +1,23 @@
-
+[tasks.link]
+script = '''
+ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles/{} ~
+'''
 
 [tasks.add-ssl]
-script = [
-  '''
+script = ['''
 sudo apt install pkg-config libssl-dev
-''',
-]
+''']
 
 [tasks.add-cargoapp]
-script = [
-  '''
+script = ['''
 cargo install cargo-make
 cargo install cargo-edit
-''',
-]
+''']
 
 [tasks.up-apt]
-script = [
-  '''
+script = ['''
 sudo apt update && sudo apt upgrade -y
-''',
-]
+''']
 
 [tasks.add-brew]
 script = [
@@ -33,37 +30,29 @@ echo ~/.linuxbrew
 ]
 
 [tasks.up-brew]
-script = [
-  '''
+script = ['''
 brew update
 brew upgrade
 brew cleanup
-''',
-]
+''']
 
 [tasks.up-cask]
-script = [
-  '''
+script = ['''
 brew cask upgrade
-''',
-]
+''']
 
 [tasks.add-vue]
-script = [
-  '''
+script = ['''
 yarn global add @vue/cli
-''',
-]
+''']
 
 [tasks.up-vue]
-script = [
-  '''
+script = ['''
 yarn global upgrade --latest @vue/cli
-''',
-]
+''']
 
 [tasks.install-zsh]
-run_task = {name = ["add-zsh", "add-zinit"]}
+run_task = { name = ["add-zsh", "add-zinit"] }
 
 [tasks.add-zsh]
 script = [
@@ -84,16 +73,16 @@ compaudit | xargs chmod go-w
 ]
 
 [tasks.install-dev]
-run_task = {name = [
+run_task = { name = [
   "add-dev",
   "install-vim",
   "install-node",
   "install-python",
   "install-go",
-]}
+] }
 
 [tasks.install-vim]
-run_task = {name = ["add-vim", "add-dein", "up-dein", "add-coc"]}
+run_task = { name = ["add-vim", "add-dein", "up-dein", "add-coc"] }
 
 [tasks.add-vim]
 script = [
@@ -114,11 +103,9 @@ nvim +":call dein#install()" +qa
 ]
 
 [tasks.up-dein]
-script = [
-  '''
+script = ['''
 nvim +":call dein#update()" +qa
-''',
-]
+''']
 
 [tasks.add-wasm]
 script = [
@@ -164,7 +151,7 @@ brew install jq
 ]
 
 [tasks.install-node]
-run_task = {name = ["add-node", "add-nodeapp"]}
+run_task = { name = ["add-node", "add-nodeapp"] }
 
 [tasks.add-node]
 script = [
@@ -188,24 +175,20 @@ npm i -g firebase-tools
 ]
 
 [tasks.install-go]
-run_task = {name = ["add-go", "add-goapp"]}
+run_task = { name = ["add-go", "add-goapp"] }
 
 [tasks.add-go]
-script = [
-  '''
+script = ['''
 brew install go
-''',
-]
+''']
 
 [tasks.add-goapp]
-script = [
-  '''
+script = ['''
 go get github.com/sclevine/yj
-''',
-]
+''']
 
 [tasks.install-python]
-run_task = {name = ["add-python", "add-pythonapp"]}
+run_task = { name = ["add-python", "add-pythonapp"] }
 
 [tasks.add-python]
 script = [
@@ -352,29 +335,23 @@ open https://www.autohotkey.com
 
 [tasks.add-pwa]
 dependencies = ["add-winapp-scoop"]
-script = [
-  '''
+script = ['''
 open https://drive.google.com
 open https://photos.google.com
-''',
-]
+''']
 
 [tasks.up-scoop]
-script = [
-  '''
+script = ['''
 scoop update *
 scoop cleanup *
-''',
-]
+''']
 script_extension = "ps1"
 script_runner = "powershell.exe"
 
 [tasks.ls-scoop]
-script = [
-  '''
+script = ['''
 scoop list
-''',
-]
+''']
 script_extension = "ps1"
 script_runner = "powershell.exe"
 
@@ -406,11 +383,9 @@ echo ~/.env.d/julia.sh
 ]
 
 [tasks.add-tex]
-script = [
-  '''
+script = ['''
 brew install texlive
-''',
-]
+''']
 
 [tasks.up-tex]
 script = [
@@ -423,11 +398,9 @@ tlmgr install braket physics bbold here
 ]
 
 [tasks.add-ocaml]
-script = [
-  '''
+script = ['''
 brew install opam
-''',
-]
+''']
 
 [tasks.add-satysfi]
 dependencies = ['add-ocaml']
@@ -470,12 +443,10 @@ linux_alias = "add-llvm-linux"
 mac_alias = "add-llvm-mac"
 
 [tasks.add-llvm-mac]
-script = [
-  '''
+script = ['''
 brew install llvm
 llvm-config --version
-''',
-]
+''']
 
 [tasks.add-llvm-linux]
 script = [

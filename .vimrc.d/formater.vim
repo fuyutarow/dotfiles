@@ -1,2 +1,0 @@
-
-autocmd BufWritePre *.rs RustFmt

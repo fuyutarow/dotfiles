@@ -3,6 +3,14 @@ script = '''
 ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles/{} ~
 '''
 
+[tasks.link-wsl]
+script = '''
+ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
+ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
+ln -svf /mnt/c/Users/fuyutarow/Documents/ ~
+ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
+'''
+
 [tasks.add-ssl]
 script = ['''
 sudo apt install pkg-config libssl-dev
@@ -272,15 +280,6 @@ chmod 600 ~/.ssh/id_rsa.pub
 ''',
 ]
 
-[tasks.link-wsl]
-script = [
-  '''
-ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
-ln -svf /mnt/c/Users/fuyutarow/Downloads/ ~
-ln -svf /mnt/c/Users/fuyutarow/Documents/ ~
-ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
-''',
-]
 
 [tasks.add-macapp]
 script = [

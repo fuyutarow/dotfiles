@@ -4,21 +4,23 @@
 # Use emacs keybindings even if our EDITOR is set to vi
 bindkey -e
 
-# environment variables
-# =====================
-if [ -d ~/.env.d ]; then
-    for file in $(/bin/ls ~/.env.d/*); do
-        . $file;
-    done
-fi
 
-export PATH=$HOME/.local/bin:$PATH
+source ~/.zshrc_env
+# # environment variables
+# # =====================
+# if [ -d ~/.env.d ]; then
+#     for file in $(/bin/ls ~/.env.d/*); do
+#         . $file;
+#     done
+# fi
 
-# aliases
-# =======
-if [ -f ~/.aliases ]; then
-    . ~/.aliases
-fi
+# export PATH=$HOME/.local/bin:$PATH
+
+# # aliases
+# # =======
+# if [ -f ~/.aliases ]; then
+#     . ~/.aliases
+# fi
 
 # locale
 # ======

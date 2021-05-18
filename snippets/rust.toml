@@ -1,0 +1,17 @@
+lang = 'rust'
+
+[snippets.therad_scope]
+body = '''
+crossbeam_utils::thread::scope(|scope| {
+    ${1:element}
+    scope.spawn(move |_| {
+        ${2:element}
+    });
+})
+.unwrap();
+'''
+
+[snippets.sleep]
+body = '''
+std::thread::sleep(std::time::Duration::from_millis(${1:n)}));
+'''

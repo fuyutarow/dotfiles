@@ -1,9 +1,9 @@
 path = [
   "$HOMEBREW_PREFIX/bin",
   "$HOMEBREW_PREFIX/sbin",
-  "$HOME/.nodebrew/current/bin:$PATH",
-  "$(yarn global bin):$PATH",
+  "$HOME/.nodebrew/current/bin",
 ]
+# "$(yarn global bin):$PATH",
 
 [alias]
 "," = "cd"

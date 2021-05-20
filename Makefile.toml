@@ -1,7 +1,8 @@
 [tasks.link]
 script = '''
 ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/dotfiles/{} ~
-ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/config | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/config/{} ~/.config
+mkdir -p ~/.config
+ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/config | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/config/{} ~/.config/
 '''
 
 [tasks.link-wsl]

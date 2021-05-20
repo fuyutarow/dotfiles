@@ -14,6 +14,7 @@ path = [
 "....." = "cd ../../../.."
 "......" = "cd ../../../../.."
 cr = "cp -r"
+del = "rm"
 g = "git"
 h = "history"
 l = { command = "exa -F", or = "ls" }

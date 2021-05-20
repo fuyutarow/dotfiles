@@ -5,7 +5,7 @@
 bindkey -e
 
 
-source ~/.zshrc_env
+source ~/.config/env-make/.zshrc
 # # environment variables
 # # =====================
 # if [ -d ~/.env.d ]; then

@@ -114,3 +114,6 @@
 	ff = flow feature
 	ffs = flow feature start
 	ffp = flow feature publish
+
+[credential]
+	helper = manager

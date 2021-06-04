@@ -13,6 +13,8 @@ path = [
 "...." = "cd ../../../"
 "....." = "cd ../../../.."
 "......" = "cd ../../../../.."
+c."cfg(windows)" = "clip.exe"
+c."cfg(mac)" = "pbcopy"
 cr = "cp -r"
 del = "rm"
 g = "git"
@@ -23,8 +25,10 @@ ll = { command = "exa -alF --git", or = "ls -alF" }
 lll = { command = "exa -alF --git -s=mod --time-style=long-iso", or = "ls -alF" }
 f = "fd"
 gr = { command = "rg", dependencies = ["ripgrep"], or = "grep" }
-o = "open"
-oo = "open ."
+o."cfg(windows)" = "explorer.exe"
+o."cfg(mac)" = "open"
+oo."cfg(windows)" = "explorer.exe ."
+oo."cfg(mac)" = "open ."
 rm = { command = "rip", dependencies = ['rip'], or = "rm" }
 p = { command = "bat", or = "cat" }
 py = { command = "poetry", dependencies = ["poetry"] }
@@ -35,6 +39,7 @@ t = 'tmux'
 top = { command = "btm", dependencies = ["bottom"], or = "top" }
 ps = { command = "procs", dependencies = ["procs"] }
 vi = { command = "neovim", depedencies = ['neovim'], or = 'vim' }
+
 
 [dependencies]
 bat = "brew install bat"

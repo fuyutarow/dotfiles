@@ -15,3 +15,42 @@ crossbeam_utils::thread::scope(|scope| {
 body = '''
 std::thread::sleep(std::time::Duration::from_millis(${1:n)}));
 '''
+
+[snippets.rr]
+body = '''
+r#"$1"#
+'''
+
+[snippets.inspect]
+body = '''
+.inspect(|e| {
+    dbg!(e);
+})
+'''
+
+[snippets.main]
+body = '''
+fn main() -> anyhow::Result<()> {
+  $1
+
+  Ok(())
+}
+'''
+
+[snippets.result]
+body = '''
+anyhow::Result<$1>
+'''
+
+[snippets.bail]
+body = '''
+anyhow::bail!($1)
+'''
+
+[snippets.tests]
+body = '''
+#[cfg(test)]
+mod tests {
+    $1
+}
+'''

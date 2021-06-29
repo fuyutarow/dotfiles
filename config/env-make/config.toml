@@ -1,7 +1,8 @@
 path = [
-  "$HOMEBREW_PREFIX/bin",
-  "$HOMEBREW_PREFIX/sbin",
-  "$HOME/.nodebrew/current/bin",
+    "$HOMEBREW_PREFIX/bin",
+    "$HOMEBREW_PREFIX/sbin",
+    "$HOME/.fnm",
+    "$HOME/.cargo/bin",
 ]
 # "$(yarn global bin):$PATH",
 
@@ -13,31 +14,58 @@ path = [
 "...." = "cd ../../../"
 "....." = "cd ../../../.."
 "......" = "cd ../../../../.."
+c."cfg(windows)" = "clip.exe"
+c."cfg(mac)" = "pbcopy"
 cr = "cp -r"
+dc = 'docker-compose'
+dk = 'docker'
 del = "rm"
 g = "git"
 h = "history"
-l = { command = "exa -F", or = "ls" }
-la = { command = "exa -A", or = "ls -A" }
-ll = { command = "exa -alF --git", or = "ls -alF" }
-lll = { command = "exa -alF --git -s=mod --time-style=long-iso", or = "ls -alF" }
+l = { command="exa -F", or="ls" }
+la = { command="exa -A", or="ls -A" }
+ll = { command="exa -alF --git", or="ls -alF" }
+lll = { command="exa -alF --git -s=mod --time-style=long-iso", or="ls -alF" }
 f = "fd"
-gr = { command = "rg", dependencies = ["ripgrep"], or = "grep" }
-o = "open"
-oo = "open ."
-rm = { command = "rip", dependencies = ['rip'], or = "rm" }
-p = { command = "bat", or = "cat" }
-py = { command = "poetry", dependencies = ["poetry"] }
-procon = { command = "cargo compete", dependencies = ['cargo-compete'] }
-rust = { command = "evcxr" }
+gr = { command="rg", dependencies=["ripgrep"], or="grep" }
+o."cfg(windows)" = "explorer.exe"
+o."cfg(mac)" = "open"
+oo."cfg(windows)" = "explorer.exe ."
+oo."cfg(mac)" = "open ."
+p = { command="bat", or="cat" }
+py = { command="poetry", dependencies=["poetry"] }
+procon = { command="cargo compete", dependencies=['cargo-compete'] }
+rm = { command="rip", dependencies=['rm'], or="rm" }
+rust = { command="evcxr" }
 sz = "source $HOME/.zshrc"
 t = 'tmux'
-top = { command = "btm", dependencies = ["bottom"], or = "top" }
-ps = { command = "procs", dependencies = ["procs"] }
-vi = { command = "neovim", depedencies = ['neovim'], or = 'vim' }
+top = { command="btm", dependencies=["bottom"], or="top" }
+ps = { command="procs", dependencies=["procs"] }
+vi = { command="neovim", depedencies=['neovim'], or='vim' }
+
+
+[deps.node]
+install = '''
+brew install fnm
+fnm install v0.16.3
+fnm use v0.16.3
+'''
+rc = '''
+eval "$(fnm env)"
+'''
+
+# [deps.zsh]
+# install = '''
+# brew install zsh
+# command -v zsh | sudo tee -a /etc/shells
+# sudo chsh -s "$(command -v zsh)" "${USER}"
+# '''
+# env.path = "$HOME/.nodebrew/current/bin"
+
 
 [dependencies]
 bat = "brew install bat"
+rm = "brew install rm-improved"
 "trash-cli" = "brew install trash-cli"
 evcxr = "cargo install evcxr_repl"
 fd = "brew install fd"
@@ -47,7 +75,6 @@ poetry = "brew install poetry"
 neovim = 'brew install neovim'
 procs = "brew install procs"
 bottom = "brew install clementtsang/bottom/bottom"
-rip = "brew install rm-improved"
 
 [env]
 HOMEBREW_CELLAR = "$HOME/.linuxbrew/Cellar"
@@ -55,3 +82,5 @@ MANPATH = "$HOME/.linuxbrew/share/man${MANPATH+:$MANPATH}:"
 HOMEBREW_REPOSITORY = "$HOME/.linuxbrew/Homebrew"
 HOMEBREW_PREFIX = "$HOME/.linuxbrew"
 INFOPATH = "$HOME/.linuxbrew/share/info:${INFOPATH:-}"
+
+PKG_CONFIG_PATH = "/usr/lib/x86_64-linux-gnu/pkgconfig/"

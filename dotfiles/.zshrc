@@ -5,7 +5,6 @@
 bindkey -e
 
 
-source ~/.config/env-make/.zshrc
 # # environment variables
 # # =====================
 # if [ -d ~/.env.d ]; then
@@ -27,7 +26,6 @@ source ~/.config/env-make/.zshrc
 # Fix bug caused by oh-my-zsh
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
-
 
 
 # # stop time
@@ -66,11 +64,14 @@ fi
 export PATH="$PATH:/home/fuyutarow/.local/bin"
 ### End of Zinit's installer chunk
 
-# The next line updates PATH for the Google Cloud SDK.
-if [ -f '/mnt/c/Users/fuyutarow/WSL/google-cloud-sdk/path.zsh.inc' ]; then . '/mnt/c/Users/fuyutarow/WSL/google-cloud-sdk/path.zsh.inc'; fi
-
-# The next line enables shell command completion for gcloud.
-if [ -f '/mnt/c/Users/fuyutarow/WSL/google-cloud-sdk/completion.zsh.inc' ]; then . '/mnt/c/Users/fuyutarow/WSL/google-cloud-sdk/completion.zsh.inc'; fi
-
 # Created by `userpath` on 2020-05-26 17:52:27
 export PATH="$PATH:/mnt/c/Users/fuyutarow/WSL/.local/bin"
+
+
+source ~/.config/env-make/.zshrc
+eval "$(fnm env)"
+# The next line updates PATH for the Google Cloud SDK.
+if [ -f '/home/fuyutarow/google-cloud-sdk/path.zsh.inc' ]; then . '/home/fuyutarow/google-cloud-sdk/path.zsh.inc'; fi
+
+# The next line enables shell command completion for gcloud.
+if [ -f '/home/fuyutarow/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/fuyutarow/google-cloud-sdk/completion.zsh.inc'; fi

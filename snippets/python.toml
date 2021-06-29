@@ -1,0 +1,7 @@
+lang = 'python'
+
+[snippets."pp"]
+body = '''
+# %%
+$1
+'''

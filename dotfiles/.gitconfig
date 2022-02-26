@@ -117,3 +117,6 @@
 
 [credential]
 	helper = manager
+[init]
+	defautlBrnach = alpha
+	defautlBranch = alpha

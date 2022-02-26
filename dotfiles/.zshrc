@@ -70,6 +70,9 @@ export PATH="$PATH:/mnt/c/Users/fuyutarow/WSL/.local/bin"
 
 source ~/.config/env-make/.zshrc
 eval "$(fnm env)"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/shims:$PATH"
+eval "$(pyenv init -)"
 # The next line updates PATH for the Google Cloud SDK.
 if [ -f '/home/fuyutarow/google-cloud-sdk/path.zsh.inc' ]; then . '/home/fuyutarow/google-cloud-sdk/path.zsh.inc'; fi
 

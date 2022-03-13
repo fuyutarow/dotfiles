@@ -5,6 +5,7 @@ mkdir -p ~/.config
 ls -A ${CARGO_MAKE_WORKING_DIRECTORY}/config | xargs -I {} ln -sfv ${CARGO_MAKE_WORKING_DIRECTORY}/config/{} ~/.config/
 '''
 
+
 [tasks.link-wsl]
 script = '''
 ln -svf /mnt/c/Users/fuyutarow/Desktop/ ~
@@ -17,6 +18,13 @@ ln -svf /mnt/c/Users/fuyutarow/Gdrive/ ~
 script = ['''
 sudo apt install pkg-config libssl-dev
 ''']
+
+[task."add:basic"]
+script = '''
+cargo install cargo-make cargo-edit exa rip-improve bat 
+brew install pyenv pipx
+'''
+
 
 [tasks.add-cargoapp]
 script = ['''

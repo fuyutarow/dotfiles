@@ -9,6 +9,7 @@ path = [
 
 [alias]
 "," = "cd"
+",," = "cd /mnt/c/Users/fuyutarow/U20"
 ",_" = "cd $_"
 ".." = "cd .."
 "..." = "cd ../.."

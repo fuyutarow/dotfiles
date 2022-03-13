@@ -12,7 +12,7 @@ export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin"
 
 alias ,="cd"
-alias ,,="/mnt/c/Users/fuyutarow/U20"
+alias ,,="cd /mnt/c/Users/fuyutarow/U20"
 alias ,_="cd $_"
 alias ..="cd .."
 alias ...="cd ../.."

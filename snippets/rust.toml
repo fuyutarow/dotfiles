@@ -1,5 +1,10 @@
 lang = 'rust'
 
+[snippets.derive]
+body = '''
+#[derive(Debug, Default, Clone, $1)]
+'''
+
 [snippets.therad_scope]
 body = '''
 crossbeam_utils::thread::scope(|scope| {
@@ -9,6 +14,17 @@ crossbeam_utils::thread::scope(|scope| {
     });
 })
 .unwrap();
+'''
+
+[snippets.FromStr]
+body = '''
+impl FromStr for $1 {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        todo!();
+    }
+}
 '''
 
 [snippets.sleep]
@@ -51,6 +67,9 @@ anyhow::bail!($1)
 body = '''
 #[cfg(test)]
 mod tests {
-    $1
+    #[test]
+    fn test() {
+      $1
+    }
 }
 '''

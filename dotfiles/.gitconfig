@@ -116,4 +116,4 @@
 	ffp = flow feature publish
 
 [credential]
-	helper = manager
+	helper = osxkeychain

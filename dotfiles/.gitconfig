@@ -116,8 +116,8 @@
 	ffp = flow feature publish
 
 [credential]
-	# helper = osxkeychain
-	helper = manager
+	helper = osxkeychain
+	# helper = manager
 
 [init]
 	defautlBrnach = alpha

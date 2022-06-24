@@ -1,9 +1,4 @@
-export HOMEBREW_CELLAR="$HOME/.linuxbrew/Cellar"
-export MANPATH="$HOME/.linuxbrew/share/man${MANPATH+:$MANPATH}:"
-export HOMEBREW_REPOSITORY="$HOME/.linuxbrew/Homebrew"
-export HOMEBREW_PREFIX="$HOME/.linuxbrew"
-export INFOPATH="$HOME/.linuxbrew/share/info:${INFOPATH:-}"
-export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig/"
+eval $(/opt/homebrew/bin/brew shellenv)
 
 export PATH="$PATH:$HOMEBREW_PREFIX/bin"
 export PATH="$PATH:$HOMEBREW_PREFIX/sbin"
@@ -12,7 +7,8 @@ export PATH="$PATH:$HOME/.cargo/bin"
 export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin"
 
 alias ,="cd"
-alias ,,="cd /mnt/c/Users/fuyutarow/U20"
+# alias ,,="cd /mnt/c/Users/fuyutarow/U20"
+alias ,,="cd $HOME/U20"
 alias ,_="cd $_"
 alias ..="cd .."
 alias ...="cd ../.."

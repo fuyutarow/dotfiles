@@ -1,3 +1,5 @@
+# Fig pre block. Keep at the top of this file.
+. "$HOME/.fig/shell/zshrc.pre.zsh"
 # # start time
 # zmodload zsh/zprof && zprof
 
@@ -84,3 +86,6 @@ if [ -f '/home/fuyutarow/google-cloud-sdk/path.zsh.inc' ]; then . '/home/fuyutar
 
 # The next line enables shell command completion for gcloud.
 if [ -f '/home/fuyutarow/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/fuyutarow/google-cloud-sdk/completion.zsh.inc'; fi
+
+# Fig post block. Keep at the bottom of this file.
+. "$HOME/.fig/shell/zshrc.post.zsh"

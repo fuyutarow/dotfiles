@@ -55,6 +55,7 @@
 	# ------
 	ch = switch
 	chc = switch -c
+	chd = switch -d
 
 	# diff
 	# ----

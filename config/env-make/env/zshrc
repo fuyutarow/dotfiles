@@ -1,10 +1,13 @@
 eval $(/opt/homebrew/bin/brew shellenv)
+eval $(./.ghcup/env)
 
 export PATH="$PATH:$HOMEBREW_PREFIX/bin"
 export PATH="$PATH:$HOMEBREW_PREFIX/sbin"
 export PATH="$PATH:$HOME/.fnm"
 export PATH="$PATH:$HOME/.cargo/bin"
+export PATH="$PATH:$HOME/.local/bin"
 export PATH="$PATH:$HOME/.local/share/solana/install/active_release/bin"
+export PATH="$PATH:/opt/homebrew/opt/llvm@13/bin"
 
 alias ,="cd"
 # alias ,,="cd /mnt/c/Users/fuyutarow/U20"
@@ -37,5 +40,3 @@ alias sz="source $HOME/.zshrc"
 alias t="tmux"
 alias top="top"
 alias vi="vim"
-
-

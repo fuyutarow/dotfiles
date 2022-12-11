@@ -6,9 +6,12 @@
 # Use emacs keybindings even if our EDITOR is set to vi
 bindkey -e
 
+
 eval "$(sheldon source)"
 
 source $HOME/.config/env-make/env/*
+
+
 
 # # environment variables
 # # =====================
@@ -31,6 +34,7 @@ source $HOME/.config/env-make/env/*
 # Fix bug caused by oh-my-zsh
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
+
 
 # # stop time
 # if (which zprof > /dev/null 2>&1) ;then
@@ -57,9 +61,10 @@ export LANG=en_US.UTF-8
 # autoload -Uz _zplugin
 # (( ${+_comps} )) && _comps[zplugin]=_zplugin
 
+
 if [ -d ~/.zshrc.d ]; then
     for file in $(/bin/ls ~/.zshrc.d/*); do
-        . $file
+        . $file;
     done
 fi
 
@@ -69,6 +74,7 @@ export PATH="$PATH:/home/fuyutarow/.local/bin"
 
 # Created by `userpath` on 2020-05-26 17:52:27
 export PATH="$PATH:/mnt/c/Users/fuyutarow/WSL/.local/bin"
+
 
 source ~/.config/env-make/.zshrc
 eval "$(fnm env)"
@@ -84,7 +90,6 @@ if [ -f '/home/fuyutarow/google-cloud-sdk/completion.zsh.inc' ]; then . '/home/f
 # Fig post block. Keep at the bottom of this file.
 . "$HOME/.fig/shell/zshrc.post.zsh"
 
-#[ -f "/Users/fuyutarow/.ghcup/env" ] && source "/Users/fuyutarow/.ghcup/env" # ghcup-env
 #[ -f "/Users/fuyutarow/.ghcup/env" ] && source "/Users/fuyutarow/.ghcup/env" # ghcup-env
 #[ -f "/Users/fuyutarow/.ghcup/env" ] && source "/Users/fuyutarow/.ghcup/env" # ghcup-env
 #[ -f "/Users/fuyutarow/.ghcup/env" ] && source "/Users/fuyutarow/.ghcup/env" # ghcup-env

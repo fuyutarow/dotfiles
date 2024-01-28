@@ -1,0 +1,28 @@
+
+
+[plugins.zsh-envs]
+local = "$HOME/dotfiles/zsh-envs"
+
+[plugins.zsh-defer]
+github = "romkatv/zsh-defer"
+
+[plugins.zsh-autosuggestions]
+github = "zsh-users/zsh-autosuggestions"
+use = ["{{ name }}.zsh"]
+
+[plugins.autojump]
+github = "wting/autojump"
+dir = "bin"
+apply = ["PATH", "source"]
+
+[plugins.zsh-syntax-highlighting]
+github = "zsh-users/zsh-syntax-highlighting"
+
+[plugins.blackbox]
+github = "StackExchange/blackbox"
+
+[plugins.base16]
+github = "chriskempson/base16-shell"
+
+[plugins.spaceship]
+github = "spaceship-prompt/spaceship-prompt"

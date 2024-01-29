@@ -46,7 +46,7 @@ install-brew:
     brew install iterm2
     brew install tmux
     brew install visual-studio-code homebrew/cask-versions/visual-studio-code-insiders ;: editors
-    brew install microsoft-edge google-chrome chromium firefox opera ;: browsers
+    brew install microsoft-edge google-chrome chromium arc firefox opera brave-browser vivaldi ;: browsers
     brew install yippy alt-tab resolutionator ;: window management
     brew install deepl
     brew install topgrade ;: update all the things

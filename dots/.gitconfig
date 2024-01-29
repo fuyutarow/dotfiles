@@ -1,0 +1,124 @@
+[user]
+    email = fuyutarow@gmail.com
+    name = fuyutarow
+
+[push]
+    default = simple
+
+[core]
+    excludesfile = ~/.gitignore_global
+    quotepath = false
+
+[http]
+    postBuffer = 8M
+
+[alias]
+    alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
+
+    # add
+    # ---
+    a = add
+    ap = add -p
+    aca =! git add . && git commit --amend
+    amend = commit --amend
+    acm = !git add -A && git commit -m
+
+    # branch
+    # ------
+    b = branch
+    ba = branch -a
+    branch-delete = branch -d
+    bd = branch-delete
+    branch-rename = branch -m #old_name #new_name
+    br = branch-rename
+    bm = branch-rename
+
+    c = clone
+    # C =! git clone "$1" "${1##*.com/}"
+    Config =! vi ~/.gitconfig
+
+    # commit
+    # ------
+    ca = commit --amend
+    cm = commit -m
+    commit-help=! open 'https://qiita.com/muran001/items/f13742b51da3a22117ee'
+    examples =! view $HOME/dotfiles/docs/comment_examples.md
+
+    pick = cherry-pick
+
+    # checkout
+    # --------
+    cb = checkout -b
+    co = checkout
+
+    # switch
+    # ------
+    ch = switch
+    chc = switch -c
+    chd = switch -d
+
+    # diff
+    # ----
+    d = diff
+    dc = git diff --cached
+    diff-help =! open 'http://dqn.sakusakutto.jp/2013/06/git_diff_branch_file.html'
+
+    f = fetch
+    g = log --all --graph --oneline --decorate=full
+
+    # ls
+    # --
+    l = ls-files
+    ll=! git ls-files | xargs cloc
+    lo =! git log --graph --date=iso  --pretty=format:'- %C(blue)|%C(yellow)%h%C(blue)| %C(green)%<(8,trunc)%cn %C(blue)| %Creset%<(39,trunc)%s %C(blue)| %cd' --decorate=short
+    list =! . ~/dotfiles/sh/list-repo.bash
+
+    # merge
+    # -----
+    m = merge --no-ff
+    merge-force = merge -Xtheirs
+
+    pull-force = !git fetch origin & git reset --hard #origin/master'
+    pom = push origin master
+
+
+    # open
+    # ----
+    url =! echo $(echo `git config remote.origin.url` | sed -e "s/git@/https:\\\\/\\\\//g" | sed -e "s/.com:/.com\\\\//g")
+    o =! o `git url`
+    o-netlify =! o `git config remote.netlify.url`
+
+    # status
+    # ------
+    s = status
+    ss = status -s
+
+    sw = switch
+
+    stash-help =! open 'https://qiita.com/akasakas/items/768c0b563b96f8a9be9d'
+
+    ta = log --graph --branches --pretty=format:'%C(yellow)%h%C(cyan)%d%Creset %s %C(green)- %an, %cr%Creset'
+    r = remote -v
+
+    res = reset
+    undo = reset HEAD~1 --mixed
+    ignore =! git rm -r --cached . & git add .
+    # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
+    rename-branch = branch -m #old_name #new_name
+
+    # git flow
+    # --------
+    flow-init = flow init
+    flow-help = !sh -c 'echo https://danielkummer.github.io/git-flow-cheatsheet/ && echo https://gist.github.com/JamesMGreene/cdd0ac49f90c987e45ac'
+    echoes = !sh -c 'echo hi && echo bye'
+
+    ff = flow feature
+    ffs = flow feature start
+    ffp = flow feature publish
+
+[credential]
+    helper = osxkeychain
+    # helper = manager
+
+[init]
+    defautlBrnach = alpha

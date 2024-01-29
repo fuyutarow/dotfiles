@@ -46,37 +46,13 @@ alias vi='vs'
 # To type `, <dir>` is equivalent to `cd <dir>`.
 # To type `,,` is equivalent to `cd -`.
 # To type `..` is equivalent to `cd ..`.
-source ~/.config/commad/commadrc
-# source $(which commadrc)
-if type commad >/dev/null 2>&1; then
-  alias ,='commad'
-  alias ,,=', -1' # change to previous directory.
-  alias ,,,=', -2'
-  alias ,,,,=', -3'
-  alias ,,,,,=', -4'
-  alias ,,,,,,=', -5'
-  alias ,.=', +1' # change to next directory.
-  alias ,..=', +2'
-  alias ,...=', +3'
-  alias ,....=', +4'
-  alias ,.....=', +5'
-else
-  alias ,='cd'
-fi
+alias ,='cd'
 alias ..=', ..' # change to parent directory.
 alias ...=', ../..'
 alias ....=', ../../..'
 alias .....=', ../../../..'
 alias ......=', ../../../../..'
 alias ~=', ~' # change to home directory.
-
-alias ,s='. ~/commad/commad.sh'
-alias ,e='vi ~/commad/commad.sh'
-alias ,c='cleard'
-alias ,l='listd'
-alias ,d=', ~/Desktop'
-alias ,g=', ~/Gdrive'
-alias ,v=', ~/violets'
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -169,10 +145,10 @@ alias ooo='open ..'
 p() {
   ext=${@##*.}
   case $ext in
-    'md')
-      mdr $@ 2>/dev/null || cat $@
-      ;;
-    *) cat $@ ;;
+  'md')
+    mdr $@ 2>/dev/null || cat $@
+    ;;
+  *) cat $@ ;;
   esac
 }
 
@@ -218,15 +194,18 @@ alias tf='tail -fF'
 
 # rm
 # --
-alias del='/bin/rm'
-if type "rmtrash" >/dev/null 2>&1; then
-  alias rm='rmtrash'
-else
-  function rm() {
-    mkdir -p $HOME/.Trash
-    mv --backup=numbered --target-directory=$HOME/.Trash "$@"
-  }
-fi
+type "rip" >/dev/null 2>&1 || alias rip="rm"
+alias rm="rip"
+
+# alias del='/bin/rm'
+# if type "rmtrash" >/dev/null 2>&1; then
+#   alias rm='rmtrash'
+# else
+#   function rm() {
+#     mkdir -p $HOME/.Trash
+#     mv --backup=numbered --target-directory=$HOME/.Trash "$@"
+#   }
+# fi
 # alias rr='rm -rf'
 
 alias du2='du -ah --max-depth=2'
@@ -247,30 +226,30 @@ trim() {
 unpack() {
   if [ "$2" = "" ]; then
     case "$1" in
-      *.zip) unzip "$1" ;;
-      *.tar) tar xvf "$1" ;;
-      *.tar.gz) tar zxvf "$1" ;;
-      *.tgz) tar zxvf "$1" ;;
-      *.tar.bz2) tar jxvf "$1" ;;
-      *.tbz2) tar jxvf "$1" ;;
-      *.gz) gunzip "$1" ;;
-      *.Z) gunzip "$1" ;;
-      *.bz2) bunzip2 "$1" ;;
-      *) echo not support. ;;
+    *.zip) unzip "$1" ;;
+    *.tar) tar xvf "$1" ;;
+    *.tar.gz) tar zxvf "$1" ;;
+    *.tgz) tar zxvf "$1" ;;
+    *.tar.bz2) tar jxvf "$1" ;;
+    *.tbz2) tar jxvf "$1" ;;
+    *.gz) gunzip "$1" ;;
+    *.Z) gunzip "$1" ;;
+    *.bz2) bunzip2 "$1" ;;
+    *) echo not support. ;;
     esac
   else
     mkdir "$2"
     case "$1" in
-      *.zip) unzip "$1" ;;
-      *.tar) tar xvf "$1" -C "$2" --strip-components 1 ;;
-      *.tar.gz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
-      *.tgz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
-      *.tar.bz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
-      *.tbz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
-      *.gz) gunzip "$1" ;;
-      *.Z) gunzip "$1" ;;
-      *.bz2) bunzip2 "$1" ;;
-      *) echo not support. ;;
+    *.zip) unzip "$1" ;;
+    *.tar) tar xvf "$1" -C "$2" --strip-components 1 ;;
+    *.tar.gz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
+    *.tgz) tar zxvf "$1" -C "$2" --strip-components 1 ;;
+    *.tar.bz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
+    *.tbz2) tar jxvf "$1" -C "$2" --strip-components 1 ;;
+    *.gz) gunzip "$1" ;;
+    *.Z) gunzip "$1" ;;
+    *.bz2) bunzip2 "$1" ;;
+    *) echo not support. ;;
     esac
   fi
 }
@@ -371,29 +350,20 @@ if [ "$_ostype" = Darwin -a "$_cputype" = i386 ]; then
 fi
 
 case "$_ostype" in
-  Linux)
-    # for WSL
-    alias mnt-d='sudo mount -t drvfs D: /mnt/d'
-    alias start='cmd.exe /c start'
-    ;;
-  Darwin)
-    alias start='open -a'
-    ;;
-  MINGW* | MSYS* | CYGWIN*)
-    local _ostype=pc-windows-msvc
-    ;;
-  *)
-    err "no precompiled binaries available for OS: $_ostype"
-    ;;
-esac
-
-case "$_cputype" in
-  x86_64 | x86-64 | x64 | amd64)
-    local _cputype=x86_64
-    ;;
-  *)
-    err "no precompiled binaries available for CPU architecture: $_cputype"
-    ;;
+Linux)
+  # for WSL
+  alias mnt-d='sudo mount -t drvfs D: /mnt/d'
+  alias start='cmd.exe /c start'
+  ;;
+Darwin)
+  alias start='open -a'
+  ;;
+MINGW* | MSYS* | CYGWIN*)
+  local _ostype=pc-windows-msvc
+  ;;
+*)
+  err "no precompiled binaries available for OS: $_ostype"
+  ;;
 esac
 
 # Launch native app

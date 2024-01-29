@@ -40,7 +40,7 @@ install-brew:
     brew install git cmake pkg-config ;: core development tools
     brew install sheldon ;: package manager for shell
     brew install sshuttle
-    brew install exa bat rm-improved ripgrep ;: better cli
+    brew install eza bat rm-improved ripgrep ;: better cli
     brew install karabiner-elements ;: keyboard remapping
     brew install zoom slack discord telegram ;: communication
     brew install iterm2
@@ -50,7 +50,7 @@ install-brew:
     brew install yippy alt-tab resolutionator ;: window management
     brew install deepl
     brew install topgrade ;: update all the things
-    brew install fnm bun ;: for node
+    brew install fnm oven-sh/bun/bun ;: for node
 
 install-cargo:
     cargo install sccache

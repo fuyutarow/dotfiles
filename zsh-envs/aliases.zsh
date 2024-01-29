@@ -118,14 +118,14 @@ alias kl='kill -9'
 
 # ls
 # --
-type "exa" >/dev/null 2>&1 || alias exa="ls"
-alias l='exa -F'
-alias la='exa -A'
-alias ll='exa -alF --git'
-alias lll='exa -alF --git -s=mod --time-style=long-iso'
+type "eza" >/dev/null 2>&1 || alias eza="ls"
+alias l='eza -F'
+alias la='eza -A'
+alias ll='eza -alF --git'
+alias lll='eza -alF --git -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
-alias lt='exa -FT' # tree
-# alias lt='exa --tree'
+alias lt='eza -FT' # tree
+# alias lt='eza --tree'
 
 alias lm='cpulimit -l 200 --'
 alias lm300='cpulimit -l 300 --'

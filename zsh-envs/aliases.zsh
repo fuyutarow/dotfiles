@@ -106,7 +106,9 @@ alias hg="h|grep"
 alias lip='ifconfig en0 inet'
 alias gip='curl globalip.me'
 
-alias j='jobs'
+# alias j='jobs'
+alias j='just'
+alias jl='just -l'
 
 alias ji='jupyter notebook'
 

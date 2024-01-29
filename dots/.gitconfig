@@ -85,7 +85,7 @@
     # open
     # ----
     url =! echo $(echo `git config remote.origin.url` | sed -e "s/git@/https:\\\\/\\\\//g" | sed -e "s/.com:/.com\\\\//g")
-    o =! o `git url`
+    o =! open `git url`
     o-netlify =! o `git config remote.netlify.url`
 
     # status

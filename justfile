@@ -51,6 +51,7 @@ install-brew:
     brew install deepl
     brew install topgrade ;: update all the things
     brew install fnm oven-sh/bun/bun ;: for node
+    brew install figma
 
 install-cargo:
     cargo install sccache

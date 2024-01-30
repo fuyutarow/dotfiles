@@ -27,6 +27,10 @@ alias sp='nvim -o'
 alias vs='nvim -O'
 alias vi='vs'
 
+alias b='bun'
+alias bb='bun run build'
+alias bn='bun run'
+
 # change directory
 # ================
 # traditional `cd` aliases

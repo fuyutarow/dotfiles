@@ -52,9 +52,11 @@ install-brew:
     brew install topgrade ;: update all the things
     brew install fnm oven-sh/bun/bun ;: for node
     brew install figma
+    brew install rye
+    brew insatll gibo
 
 install-cargo:
     cargo install sccache
-    cargo install cargo-make cargo-edit
+    cargo install cargo-make cargo-edit cargo-update
     cargo install nu
     cargo install zellij

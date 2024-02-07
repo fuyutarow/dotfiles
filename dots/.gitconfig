@@ -79,7 +79,7 @@
     merge-force = merge -Xtheirs
 
     pull-force = !git fetch origin & git reset --hard #origin/master'
-    pom = push origin master
+    pu = push
 
 
     # open

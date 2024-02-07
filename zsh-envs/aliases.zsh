@@ -166,6 +166,17 @@ alias pp='ps auxf'
 alias pi='pipenv'
 alias pin='pipenv run'
 
+py() {
+  if [[ $1 == "add" ]]; then
+    command="rye $@"
+    command+=" && rye sync"
+  else
+    command="rye $@"
+  fi
+
+  eval $command
+}
+
 alias s='start'
 
 # alias sudo='sudo -E '

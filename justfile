@@ -54,6 +54,8 @@ install-brew:
     brew install figma
     brew install rye
     brew insatll gibo
+    brew install box-tools
+
 
 install-cargo:
     cargo install sccache

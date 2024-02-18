@@ -50,7 +50,22 @@ alias bn='bun run'
 # To type `, <dir>` is equivalent to `cd <dir>`.
 # To type `,,` is equivalent to `cd -`.
 # To type `..` is equivalent to `cd ..`.
-alias ,='cd'
+commad() {
+  if [ $# -eq 0 ]; then
+    cd
+  else
+    local target_path="$1"
+
+    if [ -d "$target_path" ]; then
+      cd "$target_path"
+    else
+      local fallback_path=$(dirname "$target_path")
+      cd "$fallback_path"
+    fi
+  fi
+}
+
+alias ,='commad'
 alias ..=', ..' # change to parent directory.
 alias ...=', ../..'
 alias ....=', ../../..'
@@ -79,7 +94,13 @@ alias dc='docker-compose'
 
 alias dl='youtube-dl'
 
-alias e='echo "$@"'
+e() {
+  if [ $# -eq 0 ]; then
+    code $(git rev-parse --show-toplevel)
+  else
+    code "$@"
+  fi
+}
 
 # log command
 # -----------
@@ -150,7 +171,7 @@ alias o='open'
 alias oo='open .'
 alias ooo='open ..'
 
-type "bat" >/dev/null 2>&1 || alias p="bat"
+type "bat" >/dev/null 2>&1 || alias bat="cat"
 alias p='bat'
 # p() {
 #   ext=${@##*.}

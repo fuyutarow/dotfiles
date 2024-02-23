@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   alias ls='ls --color=auto'
@@ -94,13 +95,25 @@ alias dc='docker-compose'
 
 alias dl='youtube-dl'
 
-e() {
-  if [ $# -eq 0 ]; then
-    code $(git rev-parse --show-toplevel)
-  else
-    code "$@"
-  fi
+editor () {
+    if [ $# -eq 0 ]; then
+        # Check if the current directory is part of a Git repository
+        gitTopLevel=$(git rev-parse --show-toplevel 2>/dev/null)
+        if [ -n "$gitTopLevel" ]; then
+            # Open the top-level directory of the Git repository
+            code "$gitTopLevel"
+        else
+            # Open the current directory
+            code .
+        fi
+    else
+        # Open the specified directory or file
+        code "$@"
+    fi
 }
+
+
+alias e="editor"
 
 # log command
 # -----------
@@ -191,6 +204,8 @@ py() {
   if [[ $1 == "add" ]]; then
     command="rye $@"
     command+=" && rye sync"
+  elif [[ $1 == "shell" ]]; then
+    source .venv/bin/activate
   else
     command="rye $@"
   fi

@@ -1,0 +1,25 @@
+
+
+# For Homebrew and Linuxbrew
+install-homebrew:
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+init:
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    brew install just sheldon
+    sudo apt install zsh ;: type q
+    ln -s ~/dotfiles/wsl/.zprofile ~
+    ln -s ~/dotfiles/common/.zshrc ~
+    zsh
+    mkdir -p ~/.config
+    ln -s ~/dotfiles/common/sheldon ~/.config/sheldon
+    brew install topgrade
+    topgrade
+    chsh -s $(which zsh) ;: Modify login shell
+
+link-dots:
+    ln -sf ~/dotfiles/wsl/.zprofile ~
+    ln -sf ~/dotfiles/common/.zshrc ~
+    ln -sf ~/dotfiles/common/sheldon ~/.config/sheldon
+    ln -sf ~/dotfiles/common/.gitconfig ~
+    ln -sf ~/dotfiles/common/.tmux.conf ~

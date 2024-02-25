@@ -122,3 +122,6 @@
 
 [init]
     defautlBrnach = alpha
+[safe]
+	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles
+	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles

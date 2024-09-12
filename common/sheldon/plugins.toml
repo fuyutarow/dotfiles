@@ -1,22 +1,26 @@
+shell = "zsh"
 
 [plugins.zsh-envs]
 local = "~/dotfiles/zsh-envs"
+apply = ["source"]
 
 [plugins.zsh-defer]
 github = "romkatv/zsh-defer"
+apply = ["source"]
 
 [plugins.zsh-autosuggestions]
 github = "zsh-users/zsh-autosuggestions"
 use = ["{{ name }}.zsh"]
+apply = ["source"]
 
 [plugins.zsh-syntax-highlighting]
 github = "zsh-users/zsh-syntax-highlighting"
+apply = ["source"]
 
 [plugins.blackbox]
 github = "StackExchange/blackbox"
+apply = ["source"]
 
 [plugins.base16]
 github = "chriskempson/base16-shell"
-
-# [plugins.spaceship]
-# github = "spaceship-prompt/spaceship-prompt"
+apply = ["source"]

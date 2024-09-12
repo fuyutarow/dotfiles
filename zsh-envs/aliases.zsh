@@ -114,12 +114,13 @@ editor () {
 
 
 alias e="editor"
+alias ee="editor ."
 
 # log command
 # -----------
 # Export the previous command as a log
 # $ ee ~/dotfiles/shell.md
-alias ee='echo "$(!!)" >> '
+# alias ee='echo "$(!!)" >> '
 
 alias em='emacs'
 
@@ -161,8 +162,8 @@ alias kl='kill -9'
 type "eza" >/dev/null 2>&1 || alias eza="ls"
 alias l='eza -F'
 alias la='eza -A'
-alias ll='eza -alF --git'
-alias lll='eza -alF --git -s=mod --time-style=long-iso'
+alias ll='eza -alF'
+alias lll='eza -alF -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
 alias lt='eza -FT' # tree
 # alias lt='eza --tree'
@@ -471,3 +472,9 @@ if [ $(echo $(uname -r) | grep 'icrosoft') ]; then
     tee <&0 | clip.exe
   }
 fi
+
+
+# =======
+# Python
+# =======
+alias mm="micromamba"

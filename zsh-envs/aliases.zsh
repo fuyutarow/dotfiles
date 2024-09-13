@@ -75,7 +75,7 @@ alias ......=', ../../../../..'
 alias ~=', ~' # change to home directory.
 
 # WSL-specific aliases
-if [[ "$(uname -r)" == *Microsoft* ]]; then
+if [[ "$(uname -r)" == *microsoft* ]]; then
   alias c='clip.exe'
   alias open='explorer.exe'
   alias o="open"

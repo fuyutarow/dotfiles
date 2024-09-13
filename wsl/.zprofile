@@ -20,14 +20,6 @@ source "$HOME/.cargo/env"
 source <(fnm env)
 source <(micromamba shell hook --shell zsh)
 
-# WSL-specific aliases
-if [[ "$(uname -r)" == *Microsoft* ]]; then
-  alias c='clip.exe'
-  alias open='explorer.exe'
-  alias o="open"
-  alias oo='open .'
-  alias winget='winget.exe'
-fi
 
 # X11 configuration
 if [[ -f /etc/resolv.conf ]]; then

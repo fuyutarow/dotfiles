@@ -74,7 +74,16 @@ alias .....=', ../../../..'
 alias ......=', ../../../../..'
 alias ~=', ~' # change to home directory.
 
-alias c="pbcopy"
+# WSL-specific aliases
+if [[ "$(uname -r)" == *Microsoft* ]]; then
+  alias c='clip.exe'
+  alias open='explorer.exe'
+  alias o="open"
+  alias oo='open .'
+  alias winget='winget.exe'
+fi
+
+# alias c="pbcopy"
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -181,9 +190,6 @@ explorer() {
   explorer.exe "$@"
 }
 [ $(echo $(uname -r) | grep 'icrosoft') ] && alias open="explorer"
-alias o='open'
-alias oo='open .'
-alias ooo='open ..'
 
 type "bat" >/dev/null 2>&1 || alias bat="cat"
 alias p='bat'

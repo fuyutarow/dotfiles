@@ -3,6 +3,7 @@
 - [Karabiner](https://pqrs.org/osx/karabiner/) -->
 
 
+知者不惑，仁者不憂，勇者不懼。
 
 ## WSL
 
@@ -19,7 +20,7 @@ just link-dots
 just install-homebrew
 zsh
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-brew install sheldon topgrade
+brew install git sheldon topgrade
 sheldon init
 chsh -s $(which zsh) ;: Modify login shell
 

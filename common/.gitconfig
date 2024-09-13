@@ -123,14 +123,6 @@
 
 [init]
     defautlBrnach = alpha
-[safe]
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/BE2
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/sophia-optim
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/torch-lure
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/umi-pathfinder
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/torch-lure
-	directory = /wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/torch-lure
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/torch-lure
-	directory = %(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/MMBOT/turbox
+
+[include]
+    path = ~/.gitconfig.credential

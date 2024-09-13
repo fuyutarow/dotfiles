@@ -17,6 +17,7 @@ init:
 link-dots:
     mkdir -p ~/.config
     ln -sf ~/dotfiles/wsl/.zprofile ~
+    ln -sf ~/dotfiles/wsl/.gitconfig.credential ~
     ln -sf ~/dotfiles/common/.zshrc ~
     ln -sf ~/dotfiles/common/sheldon ~/.config/sheldon
     ln -sf ~/dotfiles/common/.gitconfig ~

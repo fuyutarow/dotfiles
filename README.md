@@ -1,16 +1,28 @@
-
-## Require
+<!-- ## Require
 - macOS
-- [Karabiner](https://pqrs.org/osx/karabiner/)
+- [Karabiner](https://pqrs.org/osx/karabiner/) -->
 
-## Setup
-```sh
-cp ./metacolon.json ~/.config/karabiner/assets/complex_modifications/
-```
 
+
+## WSL
 
 ```sh
-cd $HOME
+sudo apt update
+sudo apt upgrade -y
+sudo apt install -y build-essential curl file git pkg-config libssl-dev cmake
+sudo apt install -y just zsh
+
+cd ~
 git clone https://github.com/fuyutarow/dotfiles
-cd dotfiles
+cd ~/dotfiles/wsl
+just link-dots
+just install-homebrew
+zsh
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+brew install sheldon topgrade
+sheldon init
+chsh -s $(which zsh) ;: Modify login shell
+
+cd ~/dotfiles
+just install-rust
 ```

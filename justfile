@@ -1,40 +1,15 @@
-
-install-homebrew:
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
 install-rust:
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-link-dots:
-    ls -A ${HOME}/dotfiles/dots | xargs -I {} ln -sfv ${HOME}/dotfiles/dots/{} ~
+install-conda:
+    mkdir -p ~/miniconda3
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+    bash ~/miniconda3/miniconda.sh -b -u -p ~/.config/conda
 
-
-improve-mac: speed-up-key-repeat hide-inactive-apps show-dots
-
-# Make it so that the key repeat is faster
-speed-up-key-repeat:
-    defaults write -g InitialKeyRepeat -int 20
-    defaults write -g KeyRepeat -int 3
-    defaults read -g InitialKeyRepeat
-    defaults read -g KeyRepeat
-
-# Hide inactive apps from the dock
-hide-inactive-apps:
-    defaults write com.apple.dock static-only -boolean true
-    killall Dock
-
-# Make it so that dot files is on the left side of the screen
-show-dots:
-    defaults write com.apple.finder AppleShowAllFiles TRUE
-    killall Finder
-
-
-link-sheldon:
-    ln -s ${HOME}/dotfiles/sheldon ${HOME}/.config
-
-link-karabiner:
-    ln -s ${HOME}/dotfiles/karabiner ${HOME}/.config
-
+install-mamba:
+    brew install micromamba
+    source <(micromamba shell hook --shell zsh)
+    micromamba config append channels conda-forge
 
 install-brew:
     brew install git cmake pkg-config ;: core development tools
@@ -62,3 +37,26 @@ install-cargo:
     cargo install cargo-make cargo-edit cargo-update
     cargo install nu
     cargo install zellij
+
+# improve-mac: speed-up-key-repeat hide-inactive-apps show-dots
+
+# # Make it so that the key repeat is faster
+# speed-up-key-repeat:
+#     defaults write -g InitialKeyRepeat -int 20
+#     defaults write -g KeyRepeat -int 3
+#     defaults read -g InitialKeyRepeat
+#     defaults read -g KeyRepeat
+
+# # Hide inactive apps from the dock
+# hide-inactive-apps:
+#     defaults write com.apple.dock static-only -boolean true
+#     killall Dock
+
+# # Make it so that dot files is on the left side of the screen
+# show-dots:
+#     defaults write com.apple.finder AppleShowAllFiles TRUE
+#     killall Finder
+
+
+# link-karabiner:
+#     ln -s ${HOME}/dotfiles/karabiner ${HOME}/.config

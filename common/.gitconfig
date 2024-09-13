@@ -12,6 +12,12 @@
 [http]
     postBuffer = 8M
 
+[init]
+    defautlBrnach = alpha
+
+[include]
+    path = ~/.local-gitconfig
+
 [alias]
     alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
 
@@ -85,9 +91,7 @@
     # open
     # ----
     url =! echo $(echo `git config remote.origin.url` | sed -e "s/git@/https:\\\\/\\\\//g" | sed -e "s/.com:/.com\\\\//g")
-    # o =! open `git url`
-    o =! explorer.exe `git url`
-    o-netlify =! o `git config remote.netlify.url`
+    # o = Defined in ~/.local-gitconfig
 
     # status
     # ------
@@ -120,9 +124,3 @@
 # [credential]
 #     helper = osxkeychain
 #     # helper = manager
-
-[init]
-    defautlBrnach = alpha
-
-[include]
-    path = ~/.gitconfig.credential

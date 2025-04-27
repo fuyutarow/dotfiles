@@ -35,6 +35,8 @@
     ba = branch -a
     branch-delete = branch -d
     bd = branch-delete
+    # branch-delete-all = !git branch | grep -v '\*' | xargs -n 1 git branch -D
+    # bda = branch-delete-all
     branch-rename = branch -m #old_name #new_name
     br = branch-rename
     bm = branch-rename
@@ -121,6 +123,9 @@
     ffs = flow feature start
     ffp = flow feature publish
 
-# [credential]
-#     helper = osxkeychain
-#     # helper = manager
+[credential "https://github.com"]
+    helper =
+    helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+    helper =
+    helper = !gh auth git-credential

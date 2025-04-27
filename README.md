@@ -10,7 +10,7 @@
 ```sh
 sudo apt update
 sudo apt upgrade -y
-sudo apt install -y build-essential curl file git pkg-config libssl-dev cmake
+sudo apt install -y build-essential curl file git pkg-config libssl-dev cmake clang
 sudo apt install -y just zsh
 
 cd ~
@@ -24,6 +24,7 @@ brew install git sheldon topgrade
 sheldon init
 chsh -s $(which zsh) ;: Modify login shell
 
+topgrade
 cd ~/dotfiles
 just install-rust
 ```

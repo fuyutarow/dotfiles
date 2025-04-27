@@ -110,10 +110,12 @@ editor () {
         gitTopLevel=$(git rev-parse --show-toplevel 2>/dev/null)
         if [ -n "$gitTopLevel" ]; then
             # Open the top-level directory of the Git repository
-            code "$gitTopLevel"
+            # code "$gitTopLevel"
+            cursor "$gitTopLevel"
         else
             # Open the current directory
-            code .
+            # code .
+            cursor .
         fi
     else
         # Open the specified directory or file
@@ -132,6 +134,19 @@ alias ee="editor ."
 # alias ee='echo "$(!!)" >> '
 
 alias em='emacs'
+
+
+ff() {
+  # Usage: ff [ext] [dir=.]
+  if [ -z "$1" ]; then
+    echo "Usage: ff [ext] [dir=.]" >&2
+    return 1
+  fi
+  local ext="$1"
+  local dir="${2:-.}"
+  find "$dir" -name "*.${ext}" -exec cat {} +
+}
+
 
 alias f='find'
 

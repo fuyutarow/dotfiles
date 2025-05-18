@@ -51,28 +51,44 @@ alias bn='bun run'
 # To type `, <dir>` is equivalent to `cd <dir>`.
 # To type `,,` is equivalent to `cd -`.
 # To type `..` is equivalent to `cd ..`.
+# To type `,. is equivalent to popd.
 commad() {
   if [ $# -eq 0 ]; then
-    cd
+    pushd ~ > /dev/null
   else
     local target_path="$1"
 
     if [ -d "$target_path" ]; then
-      cd "$target_path"
+      pushd "$target_path" > /dev/null
     else
       local fallback_path=$(dirname "$target_path")
-      cd "$fallback_path"
+      pushd "$fallback_path" > /dev/null
     fi
   fi
 }
 
+# Function for popping n directories off the stack
+commad_popd() {
+  local n=${1:-1}
+  while [ $n -gt 0 ]; do
+    popd > /dev/null
+    n=$((n-1))
+  done
+}
+
 alias ,='commad'
+alias ,,=', $_'
 alias ..=', ..' # change to parent directory.
 alias ...=', ../..'
 alias ....=', ../../..'
 alias .....=', ../../../..'
 alias ......=', ../../../../..'
 alias ~=', ~' # change to home directory.
+
+# Directory stack navigation (popd functionality)
+alias ,.='commad_popd 1' # popd once - go back one entry in directory stack
+alias ,..='commad_popd 2' # popd twice - go back two entries in stack
+alias ,...='commad_popd 3' # popd three times - go back three entries in stack
 
 # WSL-specific aliases
 if [[ "$(uname -r)" == *microsoft* ]]; then
@@ -144,7 +160,7 @@ ff() {
   fi
   local ext="$1"
   local dir="${2:-.}"
-  find "$dir" -name "*.${ext}" -exec cat {} +
+  find "$dir" -name "*.${ext}" | sort | xargs cat
 }
 
 

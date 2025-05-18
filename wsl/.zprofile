@@ -17,10 +17,8 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 export RUSTC_WRAPPER="$HOME/.cargo/bin/sccache"
 
 # Source commands
-source "$HOME/.rye/env"
 source "$HOME/.cargo/env"
 source <(fnm env)
-source <(micromamba shell hook --shell zsh)
 
 
 # X11 configuration
@@ -39,3 +37,7 @@ eval "$(direnv hook zsh)"
 # Sui version path configuration
 export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
 export PATH="$SUI_VERSION_PATH:$PATH"
+
+
+# for Rust
+export RUSTC_WRAPPER="sccache"

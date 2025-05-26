@@ -5,33 +5,22 @@ if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   #alias dir='dir --color=auto'
   #alias vdir='vdir --color=auto'
-  
-  # grep -> ripgrep suggestion
+
+  # ripgrep for faster searching
   type "rg" >/dev/null 2>&1 || alias rg="grep --color=auto"
-  grep() {
-    echo "Warning: 'grep' command is discouraged. Please use 'rg' (ripgrep) instead."
-    echo "If you really need to use 'grep', use 'command grep' or '/usr/bin/grep'"
-    return 1
-  }
-  alias fgrep='fgrep --color=auto'
-  alias egrep='egrep --color=auto'
+  alias fgrep='grep -F --color=auto'
+  alias egrep='grep -E --color=auto'
 fi
 
-# cat -> bat suggestion
+# bat for better file viewing
 type "bat" >/dev/null 2>&1 || alias bat="cat"
-cat() {
-  echo "Warning: 'cat' command is discouraged. Please use 'bat' instead for syntax highlighting."
-  echo "If you really need to use 'cat', use 'command cat' or '/bin/cat'"
-  return 1
-}
 
 if type lolcat >/dev/null 2>&1; then
   alias lcat='lolcat'
 fi
 
-if [[ -x $(which colordiff) ]]; then
-  alias diff='colordiff'
-fi
+# diff with better visualization
+type "delta" >/dev/null 2>&1 && alias diff='delta' || alias diff='diff --color=auto'
 
 # vim
 # ===
@@ -132,7 +121,7 @@ alias di='diff -u'
 alias d='docker'
 alias dc='docker-compose'
 
-alias dl='youtube-dl'
+alias dl='yt-dlp'
 
 editor () {
     if [ $# -eq 0 ]; then
@@ -182,20 +171,12 @@ ff() {
 }
 
 
-# find
-# ----
+# fd for better file finding
 type "fd" >/dev/null 2>&1 || alias fd="find"
-find() {
-  echo "Warning: 'find' command is discouraged. Please use 'fd' instead."
-  echo "If you really need to use 'find', use 'command find' or '/usr/bin/find'"
-  return 1
-}
 alias f='fd'
 
-alias ft='echo $(/bin/date "+%Y-%m-%dT%T") $(/usr/local/bin/fast) | tee -a ~/.fast.log'
 
 alias g='git'
-alias gi='git'
 
 alias gr='rg'
 alias grr='rg'
@@ -214,26 +195,20 @@ alias h='history 100'
 alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
 alias hg="h|grep"
 
-alias lip='ifconfig en0 inet'
-alias gip='curl globalip.me'
+# Network info
+alias lip='ip -4 addr show | grep inet'
+alias gip='curl -s ifconfig.me'
 
 # alias j='jobs'
 alias j='just'
 alias jl='just -l'
 
-alias ji='jupyter notebook'
 
-alias k='tak'
 
 alias kl='kill -9'
 
-# ls -> eza suggestion
-type "eza" >/dev/null 2>&1 || alias eza="ls"
-ls() {
-  echo "Warning: 'ls' command is discouraged. Please use 'eza' instead for better formatting."
-  echo "If you really need to use 'ls', use 'command ls' or '/bin/ls'"
-  return 1
-}
+# eza for better directory listing
+type "eza" >/dev/null 2>&1 || alias eza="ls --color=auto"
 alias l='eza -F'
 alias la='eza -A'
 alias ll='eza -alF'
@@ -242,19 +217,11 @@ alias lll='eza -alF -s=mod --time-style=long-iso'
 alias lt='eza -FT' # tree
 # alias lt='eza --tree'
 
-alias lm='cpulimit -l 200 --'
-alias lm300='cpulimit -l 300 --'
-alias lm400='cpulimit -l 400 --'
-alias lm500='cpulimit -l 500 --'
 
 alias m='more'
 alias md='mkdir'
 alias mp='mkdir -p'
 
-explorer() {
-  explorer.exe "$@"
-}
-[ $(echo $(uname -r) | grep 'icrosoft') ] && alias open="explorer"
 
 alias p='bat'
 # p() {
@@ -267,29 +234,9 @@ alias p='bat'
 #   esac
 # }
 
-# ps -> procs suggestion
+# procs for better process viewing
 type "procs" >/dev/null 2>&1 || alias procs="ps aux"
-ps() {
-  echo "Warning: 'ps' command is discouraged. Please use 'procs' instead for better formatting."
-  echo "If you really need to use 'ps', use 'command ps' or '/bin/ps'"
-  return 1
-}
-alias pp='procs --tree'
-alias pi='pipenv'
-alias pin='pipenv run'
-
-py() {
-  if [[ $1 == "add" ]]; then
-    command="rye $@"
-    command+=" && rye sync"
-  elif [[ $1 == "shell" ]]; then
-    source .venv/bin/activate
-  else
-    command="rye $@"
-  fi
-
-  eval $command
-}
+alias pp='procs --tree 2>/dev/null || ps auxf'
 
 alias s='start'
 
@@ -327,14 +274,8 @@ alias to='touch'
 
 alias tf='tail -fF'
 
-# rm
-# --
-type "rip" >/dev/null 2>&1 || alias rip="rm"
-rm() {
-  echo "Warning: 'rm' command is disabled. Please use 'rip' instead."
-  echo "If you really need to use 'rm', use 'command rm' or '/bin/rm'"
-  return 1
-}
+# rip for safer file removal
+type "rip" >/dev/null 2>&1 || alias rip="rm -i"
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then
@@ -347,14 +288,9 @@ rm() {
 # fi
 # alias rr='rm -rf'
 
-# du -> dust suggestion
+# dust for better disk usage visualization
 type "dust" >/dev/null 2>&1 || alias dust="du -ah"
-du() {
-  echo "Warning: 'du' command is discouraged. Please use 'dust' instead for better visualization."
-  echo "If you really need to use 'du', use 'command du' or '/usr/bin/du'"
-  return 1
-}
-alias du2='dust -d 2'
+alias du2='dust -d 2 2>/dev/null || du -ah --max-depth=2'
 
 alias wttr="curl wttr.in/Tokyo"
 
@@ -363,7 +299,6 @@ alias xp='latexmk -pv'
 alias xx='latexmk -pvc'
 alias xc='latexmk -c'
 
-alias pdf2txt='pdf2txt.py'
 
 trim() {
   sed -ie 's/[ \t]*$//' "$@"
@@ -430,19 +365,7 @@ colorcode() {
   printf " \\\e[m\n"
 }
 
-julia-init() {
-  julia -e '''
-Pkg.add("PyCall")
-Pkg.add("SymPy")
-Pkg.add("PyPlot")
-Pkg.add("Plots")
-Pkg.add("ZZ")
-'''
-}
 
-lsix() {
-  montage -tile 7x1 -label %f -background black -fill white "$@" gif:- | convert - -colors 16 sixel:-
-}
 
 subs() {
   if [ "$3" = "" ]; then
@@ -458,28 +381,16 @@ reverse-pdf() {
   qpdf --empty "$1" --pages "$orgfile" z-1 --
 }
 
-alias dn="deathnote"
 alias mem='cat /proc/meminfo |egrep -e "Active:|Inactive:|MemFree:"'
 alias git-help='echo https://qiita.com/muran001/items/f13742b51da3a22117ee'
-alias pypi-help='echo "https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c27077"'
 
-alias pip-help='echo """
-pip install git+https://github.com/user/repo.git@branch
-"""'
-alias md2pdf='markdown-pdf'
 
 ##cat ~/.ssh/id_rsa.pub | ssh username@xx.xx.xx.xx "cat >> ~/.ssh/authorized_keys"
 alias del-swp="rm ~/.local/share/nvim/swap/*"
 alias enja="trans -b -sl=en -tl=ja"
 alias jaen="trans -b -sl=ja -tl=en"
 
-alias line-dl="line-dl -o ~/Gdrive/stickers"
 
-new_tex() {
-  mkdir "$1"
-  cp ~/dotfiles/TeX/* "$1"
-  cd "$1"
-}
 
 # start app
 # =========
@@ -511,48 +422,7 @@ MINGW* | MSYS* | CYGWIN*)
   ;;
 esac
 
-# Launch native app
-alias slack="start slack"
-alias chrome="start /Applications/Google\ Chrome.app"
 
-# Launch web app
-CANARY="/Applications/Google\ Chrome\ Canary.app"
-chrome="/Applications/Google\ Chrome.app"
-#BROWSER="Firefox"
-#BROWSER="Safari"
-BROWSER="vivaldi"
-alias browse="start $BROWSER"
-alias trello="start $CANARY http://trello.com"
-alias youtube="start $chrome http://youtube.com"
-alias github='browse http://github.com'
-alias canary="open -a $CANARY"
-
-alias timecard='browse http://docs.google.com/spreadsheets/d/1iRAxcGaQngB5LJslh_BaREjFyey_LXZwiMgemfR866I/edit'
-alias docs='browse http://docs.google.com/document/u/0/'
-alias sheet='browse http://docs.google.com/spreadsheets/u/0/'
-
-alias math='canary https://develop.wolframcloud.com/'
-
-google() {
-  local str opt
-  if [ $ != 0 ]; then
-    for i in $*; do
-      str="$str+$i"
-    done
-    str=$(echo $str | sed 's/^\+//')
-    opt='search?num=50&amp;hl=ja&amp;lr=lang_ja'
-    opt="${opt}&amp;q=${str}"
-  fi
-  w3m http://www.google.co.jp/$opt
-}
-
-alc() {
-  if [ $ != 0 ]; then
-    w3m "http://eow.alc.co.jp/$*/UTF-8/?ref=sa"
-  else
-    w3m "http://www.alc.co.jp/"
-  fi
-}
 
 if [ $(echo $(uname -r) | grep 'icrosoft') ]; then
   pbcopy() {
@@ -561,7 +431,3 @@ if [ $(echo $(uname -r) | grep 'icrosoft') ]; then
 fi
 
 
-# =======
-# Python
-# =======
-alias mm="micromamba"

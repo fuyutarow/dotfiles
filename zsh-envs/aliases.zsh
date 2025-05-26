@@ -3,16 +3,30 @@
 
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
-  alias ls='ls --color=auto'
   #alias dir='dir --color=auto'
   #alias vdir='vdir --color=auto'
-  alias grep='grep --color=auto'
+  
+  # grep -> ripgrep suggestion
+  type "rg" >/dev/null 2>&1 || alias rg="grep --color=auto"
+  grep() {
+    echo "Warning: 'grep' command is discouraged. Please use 'rg' (ripgrep) instead."
+    echo "If you really need to use 'grep', use 'command grep' or '/usr/bin/grep'"
+    return 1
+  }
   alias fgrep='fgrep --color=auto'
   alias egrep='egrep --color=auto'
 fi
 
+# cat -> bat suggestion
+type "bat" >/dev/null 2>&1 || alias bat="cat"
+cat() {
+  echo "Warning: 'cat' command is discouraged. Please use 'bat' instead for syntax highlighting."
+  echo "If you really need to use 'cat', use 'command cat' or '/bin/cat'"
+  return 1
+}
+
 if type lolcat >/dev/null 2>&1; then
-  alias cat='lolcat'
+  alias lcat='lolcat'
 fi
 
 if [[ -x $(which colordiff) ]]; then
@@ -160,24 +174,40 @@ ff() {
   fi
   local ext="$1"
   local dir="${2:-.}"
-  find "$dir" -name "*.${ext}" | sort | xargs cat
+  if type "fd" >/dev/null 2>&1; then
+    fd --type f "\.${ext}$" "$dir" --exec-batch bat {} --style=plain --paging=never
+  else
+    /usr/bin/find "$dir" -name "*.${ext}" | sort | xargs cat
+  fi
 }
 
 
-alias f='find'
+# find
+# ----
+type "fd" >/dev/null 2>&1 || alias fd="find"
+find() {
+  echo "Warning: 'find' command is discouraged. Please use 'fd' instead."
+  echo "If you really need to use 'find', use 'command find' or '/usr/bin/find'"
+  return 1
+}
+alias f='fd'
 
 alias ft='echo $(/bin/date "+%Y-%m-%dT%T") $(/usr/local/bin/fast) | tee -a ~/.fast.log'
 
 alias g='git'
 alias gi='git'
 
-alias gr='grep'
-alias grr='grep -r'
-alias gv='grep -v'
-alias gl='grep -ilr'
+alias gr='rg'
+alias grr='rg'
+alias gv='rg -v'
+alias gl='rg -l -i'
 
 grl() {
-  grep "$@" -rl .
+  if type "rg" >/dev/null 2>&1; then
+    rg "$@" -l
+  else
+    /usr/bin/grep "$@" -rl .
+  fi
 }
 
 alias h='history 100'
@@ -197,9 +227,13 @@ alias k='tak'
 
 alias kl='kill -9'
 
-# ls
-# --
+# ls -> eza suggestion
 type "eza" >/dev/null 2>&1 || alias eza="ls"
+ls() {
+  echo "Warning: 'ls' command is discouraged. Please use 'eza' instead for better formatting."
+  echo "If you really need to use 'ls', use 'command ls' or '/bin/ls'"
+  return 1
+}
 alias l='eza -F'
 alias la='eza -A'
 alias ll='eza -alF'
@@ -222,7 +256,6 @@ explorer() {
 }
 [ $(echo $(uname -r) | grep 'icrosoft') ] && alias open="explorer"
 
-type "bat" >/dev/null 2>&1 || alias bat="cat"
 alias p='bat'
 # p() {
 #   ext=${@##*.}
@@ -234,7 +267,14 @@ alias p='bat'
 #   esac
 # }
 
-alias pp='ps auxf'
+# ps -> procs suggestion
+type "procs" >/dev/null 2>&1 || alias procs="ps aux"
+ps() {
+  echo "Warning: 'ps' command is discouraged. Please use 'procs' instead for better formatting."
+  echo "If you really need to use 'ps', use 'command ps' or '/bin/ps'"
+  return 1
+}
+alias pp='procs --tree'
 alias pi='pipenv'
 alias pin='pipenv run'
 
@@ -290,7 +330,11 @@ alias tf='tail -fF'
 # rm
 # --
 type "rip" >/dev/null 2>&1 || alias rip="rm"
-alias rm="rip"
+rm() {
+  echo "Warning: 'rm' command is disabled. Please use 'rip' instead."
+  echo "If you really need to use 'rm', use 'command rm' or '/bin/rm'"
+  return 1
+}
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then
@@ -303,7 +347,14 @@ alias rm="rip"
 # fi
 # alias rr='rm -rf'
 
-alias du2='du -ah --max-depth=2'
+# du -> dust suggestion
+type "dust" >/dev/null 2>&1 || alias dust="du -ah"
+du() {
+  echo "Warning: 'du' command is discouraged. Please use 'dust' instead for better visualization."
+  echo "If you really need to use 'du', use 'command du' or '/usr/bin/du'"
+  return 1
+}
+alias du2='dust -d 2'
 
 alias wttr="curl wttr.in/Tokyo"
 
@@ -349,8 +400,7 @@ unpack() {
   fi
 }
 
-alias apt-remove-force='dpkg --force-a
-ll -r'
+alias apt-remove-force='dpkg --force-all -r'
 alias cpu-temp='cat /sys/class/thermal/thermal_zone0/temp'
 
 gpp() {

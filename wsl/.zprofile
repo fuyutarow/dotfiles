@@ -13,8 +13,8 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 # export PATH="$HOME/miniconda3/bin:$PATH"
 # source $HOME/miniconda3/etc/profile.d/conda.sh
 
-# Other environment setups
-export RUSTC_WRAPPER="$HOME/.cargo/bin/sccache"
+export PATH="$HOME/.cargo/bin:$PATH"
+
 
 # Source commands
 source "$HOME/.cargo/env"

@@ -26,4 +26,9 @@ case "$HOST" in
 esac
 
 # Shopify Hydrogen alias to local projects
-alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
+alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'# Sui version path configuration
+export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
+export PATH="$SUI_VERSION_PATH:$PATH"
+
+# bun completions
+[ -s "/home/fuyu/.bun/_bun" ] && source "/home/fuyu/.bun/_bun"

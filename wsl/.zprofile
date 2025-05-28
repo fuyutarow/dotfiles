@@ -4,6 +4,7 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 # PATH exports
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.bun/bin:$PATH"
+export PATH="$HOME/.bun/install/global/node_modules/.bin:$PATH"
 
 export CUDA_HOME=/usr/local/cuda-12.4
 export PATH=$CUDA_HOME/bin:$PATH

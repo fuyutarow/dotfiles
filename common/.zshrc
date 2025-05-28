@@ -25,8 +25,14 @@ case "$HOST" in
   ;;
 esac
 
+# Initialize zsh completions
+autoload -Uz compinit
+compinit
+
 # Shopify Hydrogen alias to local projects
-alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'# Sui version path configuration
+alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
+
+# Sui version path configuration
 export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
 export PATH="$SUI_VERSION_PATH:$PATH"
 

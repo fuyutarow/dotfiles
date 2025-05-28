@@ -6,11 +6,6 @@ install-conda:
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
     bash ~/miniconda3/miniconda.sh -b -u -p ~/.config/conda
 
-install-mamba:
-    brew install micromamba
-    source <(micromamba shell hook --shell zsh)
-    micromamba config append channels conda-forge
-
 install-brew:
     brew install git cmake pkg-config ;: core development tools
     brew install sheldon ;: package manager for shell
@@ -27,7 +22,6 @@ install-brew:
     brew install topgrade ;: update all the things
     brew install fnm oven-sh/bun/bun ;: for node
     brew install figma
-    brew install rye
     brew insatll gibo
     brew install box-tools
 

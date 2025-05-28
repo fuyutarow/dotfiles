@@ -1,0 +1,30 @@
+# Local overrides
+local/
+*.local
+
+# Backups
+backups/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Secrets
+*.key
+*.pem
+.env
+
+# Karabiner automatic backups
+karabiner/automatic_backups/

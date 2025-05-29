@@ -20,6 +20,7 @@
 
 [alias]
     alias = !git config --get-regexp '^alias\\.' | sed 's/alias\\.\\([^ ]*\\) \\(.*\\)/\\1\\\t => \\2/' | sort
+    h = !echo '📚 Git Alias Help' && echo '================' && echo '' && echo '📊 Statistics & Analysis:' && echo '  git stats        - 過去1ヶ月のコミット頻度を日別集計' && echo '  git daily        - 過去1週間の日別コミット一覧' && echo '  git today        - 今日のコミット一覧' && echo '  git week         - 過去1週間のコミット履歴' && echo '  git month        - 過去1ヶ月のコミット履歴' && echo '  git contributors - コントリビューター別コミット数ランキング' && echo '  git files-changed- 最も変更されたファイル上位20件' && echo '  git recent       - 最近更新されたブランチ一覧' && echo '' && echo '📈 Visualization & Graphs:' && echo '  git tree         - カラフルなコミットツリー表示' && echo '  git timeline     - 過去2週間のタイムライン（グラフ付き）' && echo '  git activity     - 日別コミット数の活動状況' && echo '  git heatmap      - 過去3ヶ月のコミットヒートマップ' && echo '  git summary      - リポジトリの統計サマリー' && echo '  git impact       - 過去1ヶ月の貢献者インパクト' && echo '  git branches-visual - ブランチの視覚的表示' && echo '  git size         - リポジトリサイズ情報' && echo '' && echo '⚡ よく使うエイリアス:' && echo '  git g            - 全ブランチのグラフ表示' && echo '  git ta           - ブランチ付きログ表示' && echo '  git lo           - 詳細ログ表示' && echo '  git s            - ステータス確認' && echo '  git ss           - 短縮ステータス' && echo '' && echo '💡 Tips: git alias で全エイリアス一覧も見れます'
 
     # add
     # ---
@@ -112,6 +113,41 @@
     ignore =! git rm -r --cached . & git add .
     # cp-file-over-branch = !git co <dst_branch> & git co <src_branch> -- <src_file>
     rename-branch = branch -m #old_name #new_name
+
+    # statistics & analysis
+    # ---------------------
+    stats = !git log --pretty=format:'%ad' --date=short --since='1 month ago' | sort | uniq -c  # コミット頻度を日別に集計（過去1ヶ月）
+    daily = !git log --pretty=format:'%ad %s' --date=short --since='1 week ago' | sort  # 過去1週間の日別コミット一覧
+    today = !git log --pretty=format:'%h %s' --since='midnight'  # 今日のコミット一覧
+    week = !git log --pretty=format:'%h %ad %s' --date=short --since='1 week ago'  # 過去1週間のコミット
+    month = !git log --pretty=format:'%h %ad %s' --date=short --since='1 month ago'  # 過去1ヶ月のコミット
+    contributors = !git log --pretty=format:'%an' | sort | uniq -c | sort -rn  # コントリビューター別コミット数ランキング
+    files-changed = !git log --pretty=format: --name-only | sort | uniq -c | sort -rn | head -20  # 最も変更されたファイル上位20件
+    recent = !git for-each-ref --sort=-committerdate refs/heads/ --format='%(HEAD) %(color:yellow)%(refname:short)%(color:reset) - %(color:red)%(objectname:short)%(color:reset) - %(contents:subject) - %(authorname) (%(color:green)%(committerdate:relative)%(color:reset))'  # 最近更新されたブランチ一覧
+    
+    # visualization & graphs
+    # ----------------------
+    tree = !git log --graph --pretty=format:'%C(red)%h%C(reset) -%C(yellow)%d%C(reset) %s %C(green)(%cr) %C(bold blue)<%an>%C(reset)' --abbrev-commit --all  # カラフルなコミットツリー表示
+    timeline = !git log --graph --pretty=format:'%C(auto)%h%d %s %C(green)(%cr)%C(reset)' --date=relative --all --since='2 weeks ago'  # 過去2週間のタイムライン（グラフ付き）
+    activity = "!git log --since='1 month ago' --pretty=format:'%ad' --date=short | sort | uniq -c | awk '{print $2 \" \" $1}' | sort"  # 日別コミット数の活動状況
+    heatmap = "!git log --since='3 months ago' --pretty=format:'%ad' --date=format:'%Y-%m-%d' | sort | uniq -c | awk '{print $2 \" commits: \" $1}' | sort"  # 過去3ヶ月のコミットヒートマップ
+    summary = "!echo 'Repository Summary:' && echo '==================' && echo 'Total commits:' $(git rev-list --all --count) && echo 'Total contributors:' $(git log --format='%aN' | sort -u | wc -l) && echo 'Total files:' $(git ls-files | wc -l) && echo 'Repository age:' $(git log --reverse --pretty=format:'%cr' | head -1) && echo 'Latest commit:' $(git log -1 --pretty=format:'%cr')"  # リポジトリの統計サマリー
+    impact = "!git log --pretty=format:'%an' --since='1 month ago' | sort | uniq -c | sort -rn | head -10 | awk '{print $2 \" \" $3 \": \" $1 \" commits\"}'"  # 過去1ヶ月の貢献者ランキング
+    branches-visual = !git show-branch --all | head -20  # ブランチの視覚的表示
+    size = !git count-objects -v && echo 'Repository size:' && du -sh .git  # リポジトリサイズ情報
+    
+    # advanced visualization
+    # ----------------------
+    graph = "!git log --graph --pretty=format:'%C(auto)%h%C(reset) %C(cyan)(%cr)%C(reset) %C(green)%an%C(reset) %s %C(auto)%d%C(reset)' --all --date=relative"  # カラフルで見やすいグラフ表示
+    network = "!git log --graph --pretty=format:'%C(yellow)%h%C(cyan)%d%C(reset) %s %C(white)- %an, %ar%C(reset)' --all"  # ネットワークビュー風表示
+    contrib = "!git shortlog -sne --all | head -20 | awk '{printf \"%-50s %s\\n\", $2\" \"$3, $1}' | sed 's/^/│ /' | sed '1i\\ ┌─ Top Contributors ─────────────────────────────────┐' | sed '$a\\ └────────────────────────────────────────────────────┘'"  # コントリビューターボックス表示
+    punchcard = "!git log --pretty=format:'%ad' --date=format:'%u %H' | sort | uniq -c | awk 'BEGIN{for(h=0;h<24;h++) header=header sprintf(\"%02d \", h); print \"   \" header} {day=$2; hour=$3; count=$1; data[day,hour]=count} END {for(d=1;d<=7;d++) {line=sprintf(\"%d: \", d); for(h=0;h<24;h++) {if(data[d,h]>0) line=line \"●  \"; else line=line \"·  \"} print line}}'"  # 曜日×時間のパンチカード
+    bars = "!git log --pretty=format:'%ad' --date=format:'%Y-%m' --since='1 year ago' | sort | uniq -c | awk '{printf \"%s │\", $2; for(i=0;i<$1;i++) printf \"█\"; print \" \"$1}'"  # 月別コミット数バーチャート
+    bars-daily = "!git log --pretty=format:'%ad' --date=format:'%m-%d' --since='30 days ago' | sort | uniq -c | awk '{printf \"%s │\", $2; for(i=0;i<$1;i++) printf \"▓\"; print \" \"$1}'"  # 日別コミット数バーチャート（過去30日）
+    bars-authors = "!git shortlog -sn --since='1 month ago' | head -10 | awk '{name=$2\" \"$3; count=$1; printf \"%-20s │\", name; for(i=0;i<count;i++) printf \"■\"; print \" \"count}'"  # 作者別コミット数バーチャート
+    bars-files = "!git log --pretty=format: --name-only --since='1 month ago' | sort | uniq -c | sort -rn | head -10 | awk '{file=substr($0,index($0,$2)); count=$1; printf \"%-40s │\", substr(file,1,40); for(i=0;i<count;i++) printf \"▪\"; print \" \"count}'"  # ファイル別変更回数バーチャート
+    bars-hour = "!git log --pretty=format:'%ad' --date=format:'%H' --since='1 month ago' | sort | uniq -c | awk '{hour=$2; count=$1; data[hour]=count} END {for(h=0;h<24;h++) {c=data[sprintf(\"%02d\",h)]; printf \"%02d時 │\", h; for(i=0;i<c;i++) printf \"▬\"; print \" \"c}}'"  # 時間別コミット数バーチャート
+    sparkline = "!git log --pretty=format:'%ad' --date=format:'%Y-%m-%d' --since='30 days ago' | sort | uniq -c | awk '{print $1}' | spark"  # スパークライン（要spark）
 
     # git flow
     # --------

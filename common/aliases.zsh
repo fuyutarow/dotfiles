@@ -93,16 +93,38 @@ alias ,.='commad_popd 1' # popd once - go back one entry in directory stack
 alias ,..='commad_popd 2' # popd twice - go back two entries in stack
 alias ,...='commad_popd 3' # popd three times - go back three entries in stack
 
+# Cross-platform clipboard function
+copytoclipboard() {
+  # Use tee to both display and pipe to clipboard
+  if [[ "$(uname -r)" == *microsoft* ]]; then
+    # WSL
+    tee /dev/tty | clip.exe
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    tee /dev/tty | pbcopy
+  elif command -v xclip &> /dev/null; then
+    # Linux with xclip
+    tee /dev/tty | xclip -selection clipboard
+  elif command -v xsel &> /dev/null; then
+    # Linux with xsel
+    tee /dev/tty | xsel --clipboard --input
+  else
+    echo "No clipboard utility found" >&2
+    return 1
+  fi
+}
+
+# Clipboard aliases
+alias c='copytoclipboard'
+alias pwdc='pwd | c'
+
 # WSL-specific aliases
 if [[ "$(uname -r)" == *microsoft* ]]; then
-  alias c='clip.exe'
   alias open='explorer.exe'
   alias o="open"
   alias oo='open .'
   alias winget='winget.exe'
 fi
-
-# alias c="pbcopy"
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -276,6 +298,22 @@ alias tf='tail -fF'
 
 # rip for safer file removal
 type "rip" >/dev/null 2>&1 || alias rip="rm -i"
+
+# rm alias with warning to use rip
+alias rm='echo "Consider using rip instead of rm for safer file removal!" && /bin/rm'
+
+# Node.js package manager warnings
+alias npm='echo "Consider using bun instead of npm!" && npm'
+alias yarn='echo "Consider using bun instead of yarn!" && yarn'
+alias npx='echo "Consider using bunx instead of npx!" && bunx'
+
+# Traditional command warnings
+alias ls='echo "Consider using eza (alias: l, ll, la) instead of ls!" && /bin/ls'
+alias cat='echo "Consider using bat (alias: p) instead of cat!" && /bin/cat'
+alias grep='echo "Consider using rg (alias: gr) instead of grep!" && /bin/grep'
+alias find='echo "Consider using fd (alias: f) instead of find!" && /bin/find'
+alias du='echo "Consider using dust instead of du!" && /bin/du'
+alias ps='echo "Consider using procs (alias: pp) instead of ps!" && /bin/ps'
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then

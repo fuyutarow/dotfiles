@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 
+# Check for required tools and warn if not installed
+if ! type "fd" >/dev/null 2>&1; then
+  echo "⚠️  Warning: 'fd' is not installed. Consider installing it for better file finding."
+  echo "   Install: brew install fd (macOS) or cargo install fd-find (cross-platform)"
+fi
+
+if ! type "rg" >/dev/null 2>&1; then
+  echo "⚠️  Warning: 'rg' (ripgrep) is not installed. Consider installing it for faster searching."
+  echo "   Install: brew install ripgrep (macOS) or cargo install ripgrep (cross-platform)"
+fi
 
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
   #alias dir='dir --color=auto'
   #alias vdir='vdir --color=auto'
 
-  # ripgrep for faster searching
-  type "rg" >/dev/null 2>&1 || alias rg="grep --color=auto"
+  # ripgrep recommendation
+  # type "rg" >/dev/null 2>&1 && echo "Using ripgrep (rg) for faster searching"
   alias fgrep='grep -F --color=auto'
   alias egrep='grep -E --color=auto'
 fi
@@ -299,21 +309,64 @@ alias tf='tail -fF'
 # rip for safer file removal
 type "rip" >/dev/null 2>&1 || alias rip="rm -i"
 
-# rm alias with warning to use rip
-alias rm='echo "Consider using rip instead of rm for safer file removal!" && /bin/rm'
-
-# Node.js package manager warnings
-alias npm='echo "Consider using bun instead of npm!" && npm'
-alias yarn='echo "Consider using bun instead of yarn!" && yarn'
-alias npx='echo "Consider using bunx instead of npx!" && bunx'
-
-# Traditional command warnings
-alias ls='echo "Consider using eza (alias: l, ll, la) instead of ls!" && /bin/ls'
-alias cat='echo "Consider using bat (alias: p) instead of cat!" && /bin/cat'
-alias grep='echo "Consider using rg (alias: gr) instead of grep!" && /bin/grep'
-alias find='echo "Consider using fd (alias: f) instead of find!" && /bin/find'
-alias du='echo "Consider using dust instead of du!" && /bin/du'
-alias ps='echo "Consider using procs (alias: pp) instead of ps!" && /bin/ps'
+# Command recommendations
+rm() {
+  echo "⛔ Error: 'rm' command is disabled for safety!"
+  echo "   Please use 'rip' instead for safer file removal."
+  echo "   If you really need to use rm, use '/bin/rm' directly."
+  return 1
+}
+npm() {
+  echo "⚠️  Warning: Consider using bun instead of npm!"
+  echo "   Proceeding with npm..."
+  command npm "$@"
+}
+yarn() {
+  echo "⚠️  Warning: Consider using bun instead of yarn!"
+  echo "   Proceeding with yarn..."
+  command yarn "$@"
+}
+npx() {
+  echo "⚠️  Warning: Consider using bunx instead of npx!"
+  echo "   Proceeding with npx..."
+  command npx "$@"
+}
+ls() {
+  echo "⛔ Error: 'ls' command is disabled!"
+  echo "   Please use 'eza' or aliases: l, ll, la, lll, lt"
+  echo "   If you really need ls, use '/bin/ls' directly."
+  return 1
+}
+cat() {
+  echo "⛔ Error: 'cat' command is disabled!"
+  echo "   Please use 'bat' (alias: p) instead."
+  echo "   If you really need cat, use '/bin/cat' directly."
+  return 1
+}
+grep() {
+  echo "⛔ Error: 'grep' command is disabled!"
+  echo "   Please use 'rg' (ripgrep) or aliases: gr, grr, gv, gl"
+  echo "   If you really need grep, use '/bin/grep' directly."
+  return 1
+}
+find() {
+  echo "⛔ Error: 'find' command is disabled!"
+  echo "   Please use 'fd' (alias: f) instead."
+  echo "   If you really need find, use '/usr/bin/find' directly."
+  return 1
+}
+du() {
+  echo "⛔ Error: 'du' command is disabled!"
+  echo "   Please use 'dust' or alias: du2"
+  echo "   If you really need du, use '/usr/bin/du' directly."
+  return 1
+}
+ps() {
+  echo "⛔ Error: 'ps' command is disabled!"
+  echo "   Please use 'procs' (alias: pp) instead."
+  echo "   If you really need ps, use '/bin/ps' directly."
+  return 1
+}
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then

@@ -1,4 +1,7 @@
+echo "[DEBUG] Starting .zshrc"
+
 #zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
+echo "[DEBUG] Setting up theme based on HOST: $HOST"
 case "$HOST" in
 "tomatowk")
   zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
@@ -26,6 +29,7 @@ case "$HOST" in
 esac
 
 # Initialize zsh completions
+echo "[DEBUG] Initializing zsh completions"
 autoload -Uz compinit
 compinit
 
@@ -33,8 +37,16 @@ compinit
 alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
 
 # Sui version path configuration
-export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
-export PATH="$SUI_VERSION_PATH:$PATH"
+echo "[DEBUG] Setting up Sui in .zshrc"
+if [[ -f "$HOME/.suim/current" ]]; then
+  export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
+  export PATH="$SUI_VERSION_PATH:$PATH"
+else
+  echo "[DEBUG] Warning: $HOME/.suim/current not found in .zshrc"
+fi
 
 # bun completions
+echo "[DEBUG] Setting up bun completions in .zshrc"
 [ -s "/home/fuyu/.bun/_bun" ] && source "/home/fuyu/.bun/_bun"
+
+echo "[DEBUG] Finished .zshrc"

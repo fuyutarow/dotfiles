@@ -456,16 +456,16 @@ MINGW* | MSYS* | CYGWIN*)
   local _ostype=pc-windows-msvc
   ;;
 *)
-  err "no precompiled binaries available for OS: $_ostype"
   ;;
 esac
 
 
 
-if [ $(echo $(uname -r) | grep 'icrosoft') ]; then
-  pbcopy() {
-    tee <&0 | clip.exe
-  }
-fi
-
+# Temporarily disabled due to hanging issue
+# if [[ -n "$(uname -r 2>/dev/null | grep -i 'microsoft' || true)" ]]; then
+#   pbcopy() {
+#     tee <&0 | clip.exe
+#   }
+# else
+# fi
 

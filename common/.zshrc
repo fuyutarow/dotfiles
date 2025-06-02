@@ -41,7 +41,7 @@ echo "[DEBUG] Setting up Suim in .zshrc"
 if [[ -d "$HOME/.suim" ]]; then
   export PATH="$HOME/.suim:$PATH"
   if [[ -f "$HOME/.suim/current" ]]; then
-    export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
+    export SUI_VERSION_PATH="$HOME/.suim/versions/$(<$HOME/.suim/current)"
     export PATH="$SUI_VERSION_PATH:$PATH"
   fi
 else

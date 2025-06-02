@@ -23,7 +23,11 @@ if [ -x /usr/bin/dircolors ]; then
 fi
 
 # bat for better file viewing
-type "bat" >/dev/null 2>&1 || alias bat="cat"
+if ! type "bat" >/dev/null 2>&1; then
+  echo "⚠️  Warning: 'bat' is not installed. Consider installing it for better file viewing."
+  echo "   Install: brew install bat (macOS) or cargo install bat (cross-platform)"
+  alias bat="cat"
+fi
 
 if type lolcat >/dev/null 2>&1; then
   alias lcat='lolcat'
@@ -311,9 +315,10 @@ type "rip" >/dev/null 2>&1 || alias rip="rm -i"
 
 # Command recommendations
 rm() {
-  echo "⛔ Error: 'rm' command is disabled for safety!"
-  echo "   Please use 'rip' instead for safer file removal."
-  echo "   If you really need to use rm, use '/bin/rm' directly."
+  echo "⛔ FATAL ERROR: 'rm' command is PERMANENTLY DISABLED!"
+  echo "   This system ONLY supports 'rip' for file removal."
+  echo "   There is NO alternative. Use 'rip' or nothing."
+  echo "   This is non-negotiable for system safety."
   return 1
 }
 npm() {
@@ -333,37 +338,67 @@ npx() {
 }
 ls() {
   echo "⛔ Error: 'ls' command is disabled!"
-  echo "   Please use 'eza' or aliases: l, ll, la, lll, lt"
+  if type "eza" >/dev/null 2>&1; then
+    echo "   Please use 'eza' or aliases: l, ll, la, lll, lt"
+  else
+    echo "   'eza' is not installed. Install it for better directory listing:"
+    echo "   brew install eza (macOS) or cargo install eza (cross-platform)"
+  fi
   echo "   If you really need ls, use '/bin/ls' directly."
   return 1
 }
 cat() {
-  echo "⛔ Error: 'cat' command is disabled!"
-  echo "   Please use 'bat' (alias: p) instead."
-  echo "   If you really need cat, use '/bin/cat' directly."
-  return 1
+  if ! type "bat" >/dev/null 2>&1; then
+    echo "⚠️  Warning: 'bat' is not installed. Install it for better file viewing:"
+    echo "   brew install bat (macOS) or cargo install bat (cross-platform)"
+    echo "   Using standard cat instead..."
+  else
+    echo "⚠️  Warning: Consider using 'bat' (alias: p) instead of cat!"
+    echo "   Proceeding with cat..."
+  fi
+  command cat "$@"
 }
 grep() {
   echo "⛔ Error: 'grep' command is disabled!"
-  echo "   Please use 'rg' (ripgrep) or aliases: gr, grr, gv, gl"
+  if type "rg" >/dev/null 2>&1; then
+    echo "   Please use 'rg' (ripgrep) or aliases: gr, grr, gv, gl"
+  else
+    echo "   'rg' (ripgrep) is not installed. Install it for faster searching:"
+    echo "   brew install ripgrep (macOS) or cargo install ripgrep (cross-platform)"
+  fi
   echo "   If you really need grep, use '/bin/grep' directly."
   return 1
 }
 find() {
   echo "⛔ Error: 'find' command is disabled!"
-  echo "   Please use 'fd' (alias: f) instead."
+  if type "fd" >/dev/null 2>&1; then
+    echo "   Please use 'fd' (alias: f) instead."
+  else
+    echo "   'fd' is not installed. Install it for better file finding:"
+    echo "   brew install fd (macOS) or cargo install fd-find (cross-platform)"
+  fi
   echo "   If you really need find, use '/usr/bin/find' directly."
   return 1
 }
 du() {
   echo "⛔ Error: 'du' command is disabled!"
-  echo "   Please use 'dust' or alias: du2"
+  if type "dust" >/dev/null 2>&1; then
+    echo "   Please use 'dust' or alias: du2"
+  else
+    echo "   'dust' is not installed. Install it for better disk usage visualization:"
+    echo "   brew install dust (macOS) or cargo install du-dust (cross-platform)"
+  fi
   echo "   If you really need du, use '/usr/bin/du' directly."
   return 1
 }
 ps() {
   echo "⛔ Error: 'ps' command is disabled!"
-  echo "   Please use 'procs' (alias: pp) instead."
+  if type "procs" >/dev/null 2>&1; then
+    echo "   Please use 'procs' (alias: pp) instead."
+  else
+    echo "   'procs' is not installed. Install it for better process viewing:"
+    echo "   brew install procs (macOS) or cargo install procs (cross-platform)"
+  fi
   echo "   If you really need ps, use '/bin/ps' directly."
   return 1
 }

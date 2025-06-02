@@ -1,15 +1,61 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 
-# Check for required tools and warn if not installed
-if ! type "fd" >/dev/null 2>&1; then
-  echo "⚠️  Warning: 'fd' is not installed. Consider installing it for better file finding."
-  echo "   Install: brew install fd (macOS) or cargo install fd-find (cross-platform)"
-fi
+# ============================================
+# Unified Command Recommendation System
+# ============================================
 
-if ! type "rg" >/dev/null 2>&1; then
-  echo "⚠️  Warning: 'rg' (ripgrep) is not installed. Consider installing it for faster searching."
-  echo "   Install: brew install ripgrep (macOS) or cargo install ripgrep (cross-platform)"
-fi
+# Define command recommendations with their alternatives and installation info
+typeset -A COMMAND_RECOMMENDATIONS=(
+  ["cat"]="bat:brew install bat:cargo install bat"
+  ["ls"]="eza:brew install eza:cargo install eza"
+  ["grep"]="rg:brew install ripgrep:cargo install ripgrep"
+  ["find"]="fd:brew install fd:cargo install fd-find"
+  ["du"]="dust:brew install dust:cargo install du-dust"
+  ["ps"]="procs:brew install procs:cargo install procs"
+  ["top"]="btop:brew install btop:cargo install bottom"
+  ["htop"]="btop:brew install btop:cargo install bottom"
+  ["ping"]="gping:brew install gping:cargo install gping"
+  ["sed"]="sd:brew install sd:cargo install sd"
+  ["cut"]="choose:brew install choose-rust:cargo install choose"
+  ["man"]="tldr:brew install tldr:cargo install tealdeer"
+  ["cd"]="zoxide:brew install zoxide:cargo install zoxide"
+  ["tree"]="broot:brew install broot:cargo install broot"
+)
+
+# Function to check if a command exists
+command_exists() {
+  type "$1" >/dev/null 2>&1
+}
+
+# Function to get installation instructions
+get_install_instructions() {
+  local tool="$1"
+  local info="${COMMAND_RECOMMENDATIONS[$tool]}"
+  if [[ -n "$info" ]]; then
+    IFS=':' read -r recommended brew_install cargo_install <<< "$info"
+    echo "   Install: $brew_install (macOS) or $cargo_install (cross-platform)"
+  fi
+}
+
+# Check and warn for missing recommended tools at startup
+check_recommended_tools() {
+  local checked_tools=()
+  for cmd in ${(k)COMMAND_RECOMMENDATIONS}; do
+    local info="${COMMAND_RECOMMENDATIONS[$cmd]}"
+    IFS=':' read -r tool _ _ <<< "$info"
+    # Avoid duplicate checks
+    if [[ ! " ${checked_tools[@]} " =~ " ${tool} " ]]; then
+      checked_tools+=("$tool")
+      if ! command_exists "$tool"; then
+        echo "⚠️  Warning: '$tool' is not installed. Consider installing it for better experience."
+        get_install_instructions "$cmd"
+      fi
+    fi
+  done
+}
+
+# Run the check on startup
+check_recommended_tools
 
 if [ -x /usr/bin/dircolors ]; then
   test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
@@ -23,9 +69,7 @@ if [ -x /usr/bin/dircolors ]; then
 fi
 
 # bat for better file viewing
-if ! type "bat" >/dev/null 2>&1; then
-  echo "⚠️  Warning: 'bat' is not installed. Consider installing it for better file viewing."
-  echo "   Install: brew install bat (macOS) or cargo install bat (cross-platform)"
+if ! command_exists "bat"; then
   alias bat="cat"
 fi
 
@@ -34,11 +78,11 @@ if type lolcat >/dev/null 2>&1; then
 fi
 
 # diff with better visualization
-type "delta" >/dev/null 2>&1 && alias diff='delta' || alias diff='diff --color=auto'
+command_exists "delta" && alias diff='delta' || alias diff='diff --color=auto'
 
 # vim
 # ===
-type "nvim" >/dev/null 2>&1 || alias nvim="vim"
+command_exists "nvim" || alias nvim="vim"
 alias view='nvim -R'
 alias vd='nvim -d'
 alias sp='nvim -o'
@@ -208,7 +252,7 @@ ff() {
 
 
 # fd for better file finding
-type "fd" >/dev/null 2>&1 || alias fd="find"
+command_exists "fd" || alias fd="find"
 alias f='fd'
 
 
@@ -244,7 +288,7 @@ alias jl='just -l'
 alias kl='kill -9'
 
 # eza for better directory listing
-type "eza" >/dev/null 2>&1 || alias eza="ls --color=auto"
+command_exists "eza" || alias eza="ls --color=auto"
 alias l='eza -F'
 alias la='eza -A'
 alias ll='eza -alF'
@@ -271,7 +315,7 @@ alias p='bat'
 # }
 
 # procs for better process viewing
-type "procs" >/dev/null 2>&1 || alias procs="ps aux"
+command_exists "procs" || alias procs="ps aux"
 alias pp='procs --tree 2>/dev/null || ps auxf'
 
 alias s='start'
@@ -311,9 +355,94 @@ alias to='touch'
 alias tf='tail -fF'
 
 # rip for safer file removal
-type "rip" >/dev/null 2>&1 || alias rip="rm -i"
+command_exists "rip" || alias rip="rm -i"
 
-# Command recommendations
+# ============================================
+# Additional Recommended Tools (not replacements)
+# ============================================
+typeset -A ADDITIONAL_TOOLS=(
+  ["just"]="brew install just:cargo install just"
+  ["fzf"]="brew install fzf:cargo install skim"
+  ["lazygit"]="brew install lazygit:cargo install gitui"
+  ["lazydocker"]="brew install lazydocker:go install github.com/jesseduffield/lazydocker@latest"
+  ["jq"]="brew install jq:cargo install jaq"
+  ["yq"]="brew install yq:pip install yq"
+  ["direnv"]="brew install direnv:curl -sfL https://direnv.net/install.sh | bash"
+  ["starship"]="brew install starship:cargo install starship"
+  ["atuin"]="brew install atuin:cargo install atuin"
+  ["mcfly"]="brew install mcfly:cargo install mcfly"
+  ["navi"]="brew install navi:cargo install navi"
+)
+
+# Check additional tools
+check_additional_tools() {
+  echo "📦 Checking for additional recommended tools..."
+  for tool in ${(k)ADDITIONAL_TOOLS}; do
+    if ! command_exists "$tool"; then
+      local info="${ADDITIONAL_TOOLS[$tool]}"
+      IFS=':' read -r brew_install other_install <<< "$info"
+      echo "💡 Consider installing '$tool':"
+      echo "   Install: $brew_install (macOS) or $other_install"
+    fi
+  done
+}
+
+# ============================================
+# Command Override Functions
+# ============================================
+
+# Generic function to handle command overrides with warnings
+_command_warning() {
+  local cmd="$1"
+  shift
+  local info="${COMMAND_RECOMMENDATIONS[$cmd]}"
+
+  if [[ -n "$info" ]]; then
+    IFS=':' read -r recommended _ _ <<< "$info"
+
+    if ! command_exists "$recommended"; then
+      echo "⚠️  Warning: '$recommended' is not installed. Install it for better experience:"
+      get_install_instructions "$cmd"
+      echo "   Using standard $cmd instead..."
+    else
+      echo "⚠️  Warning: Consider using '$recommended' instead of $cmd!"
+      echo "   Proceeding with $cmd..."
+    fi
+  fi
+
+  command "$cmd" "$@"
+}
+
+# Generic function for disabled commands
+_command_disabled() {
+  local cmd="$1"
+  local info="${COMMAND_RECOMMENDATIONS[$cmd]}"
+
+  if [[ -n "$info" ]]; then
+    IFS=':' read -r recommended _ _ <<< "$info"
+
+    echo "⛔ Error: '$cmd' command is disabled!"
+    if ! command_exists "$recommended"; then
+      echo "   The recommended alternative '$recommended' is not installed."
+      get_install_instructions "$cmd"
+    else
+      echo "   Please use '$recommended' instead."
+      # Show relevant aliases if applicable
+      case "$cmd" in
+        "ls") echo "   Aliases available: l, ll, la, lll, lt" ;;
+        "grep") echo "   Aliases available: gr, grr, gv, gl" ;;
+        "find") echo "   Alias available: f" ;;
+        "du") echo "   Alias available: du2" ;;
+        "ps") echo "   Alias available: pp" ;;
+      esac
+    fi
+    echo "   If you really need $cmd, use the full path (e.g., /bin/$cmd, /usr/bin/$cmd)."
+  fi
+
+  return 1
+}
+
+# Special cases that don't fit the pattern
 rm() {
   echo "⛔ FATAL ERROR: 'rm' command is PERMANENTLY DISABLED!"
   echo "   This system ONLY supports 'rip' for file removal."
@@ -321,6 +450,8 @@ rm() {
   echo "   This is non-negotiable for system safety."
   return 1
 }
+
+# Package manager warnings (not disabled, just warned)
 npm() {
   echo "⚠️  Warning: Consider using bun instead of npm!"
   echo "   Proceeding with npm..."
@@ -336,72 +467,16 @@ npx() {
   echo "   Proceeding with npx..."
   command npx "$@"
 }
-ls() {
-  echo "⛔ Error: 'ls' command is disabled!"
-  if type "eza" >/dev/null 2>&1; then
-    echo "   Please use 'eza' or aliases: l, ll, la, lll, lt"
-  else
-    echo "   'eza' is not installed. Install it for better directory listing:"
-    echo "   brew install eza (macOS) or cargo install eza (cross-platform)"
-  fi
-  echo "   If you really need ls, use '/bin/ls' directly."
-  return 1
-}
-cat() {
-  if ! type "bat" >/dev/null 2>&1; then
-    echo "⚠️  Warning: 'bat' is not installed. Install it for better file viewing:"
-    echo "   brew install bat (macOS) or cargo install bat (cross-platform)"
-    echo "   Using standard cat instead..."
-  else
-    echo "⚠️  Warning: Consider using 'bat' (alias: p) instead of cat!"
-    echo "   Proceeding with cat..."
-  fi
-  command cat "$@"
-}
-grep() {
-  echo "⛔ Error: 'grep' command is disabled!"
-  if type "rg" >/dev/null 2>&1; then
-    echo "   Please use 'rg' (ripgrep) or aliases: gr, grr, gv, gl"
-  else
-    echo "   'rg' (ripgrep) is not installed. Install it for faster searching:"
-    echo "   brew install ripgrep (macOS) or cargo install ripgrep (cross-platform)"
-  fi
-  echo "   If you really need grep, use '/bin/grep' directly."
-  return 1
-}
-find() {
-  echo "⛔ Error: 'find' command is disabled!"
-  if type "fd" >/dev/null 2>&1; then
-    echo "   Please use 'fd' (alias: f) instead."
-  else
-    echo "   'fd' is not installed. Install it for better file finding:"
-    echo "   brew install fd (macOS) or cargo install fd-find (cross-platform)"
-  fi
-  echo "   If you really need find, use '/usr/bin/find' directly."
-  return 1
-}
-du() {
-  echo "⛔ Error: 'du' command is disabled!"
-  if type "dust" >/dev/null 2>&1; then
-    echo "   Please use 'dust' or alias: du2"
-  else
-    echo "   'dust' is not installed. Install it for better disk usage visualization:"
-    echo "   brew install dust (macOS) or cargo install du-dust (cross-platform)"
-  fi
-  echo "   If you really need du, use '/usr/bin/du' directly."
-  return 1
-}
-ps() {
-  echo "⛔ Error: 'ps' command is disabled!"
-  if type "procs" >/dev/null 2>&1; then
-    echo "   Please use 'procs' (alias: pp) instead."
-  else
-    echo "   'procs' is not installed. Install it for better process viewing:"
-    echo "   brew install procs (macOS) or cargo install procs (cross-platform)"
-  fi
-  echo "   If you really need ps, use '/bin/ps' directly."
-  return 1
-}
+
+# Commands that show warning but still execute
+cat() { _command_warning "cat" "$@"; }
+
+# Commands that are completely disabled
+ls() { _command_disabled "ls"; }
+grep() { _command_disabled "grep"; }
+find() { _command_disabled "find"; }
+du() { _command_disabled "du"; }
+ps() { _command_disabled "ps"; }
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then
@@ -415,7 +490,7 @@ ps() {
 # alias rr='rm -rf'
 
 # dust for better disk usage visualization
-type "dust" >/dev/null 2>&1 || alias dust="du -ah"
+command_exists "dust" || alias dust="du -ah"
 alias du2='dust -d 2 2>/dev/null || du -ah --max-depth=2'
 
 alias wttr="curl wttr.in/Tokyo"

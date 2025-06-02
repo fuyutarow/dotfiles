@@ -34,4 +34,95 @@ install-conda:
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
     bash ~/miniconda3/miniconda.sh -b -u -p ~/.config/conda
 
+# Install recommended CLI tools
+install-recommended-tools:
+    @echo "📦 Installing recommended CLI tools..."
+    # Command replacement tools
+    brew install bat         # better cat
+    brew install eza         # better ls
+    brew install ripgrep     # better grep
+    brew install fd          # better find
+    brew install dust        # better du
+    brew install procs       # better ps
+    brew install btop        # better top/htop
+    brew install gping       # better ping
+    brew install sd          # better sed
+    brew install choose-rust # better cut
+    brew install tldr        # better man
+    brew install zoxide      # better cd
+    brew install broot       # better tree
+    brew install delta       # better diff
+    # Additional useful tools
+    brew install just        # command runner
+    brew install fzf         # fuzzy finder
+    brew install lazygit     # git TUI
+    brew install lazydocker  # docker TUI
+    brew install jq          # JSON processor
+    brew install yq          # YAML processor
+    brew install direnv      # directory env manager
+    brew install starship    # prompt
+    brew install atuin       # shell history sync
+    brew install mcfly       # AI-based history
+    brew install navi        # interactive cheatsheet
+    brew install rip         # safe rm alternative
+    @echo "✅ All recommended tools installed!"
+
+# Install tools using cargo (if homebrew fails or for cross-platform)
+install-recommended-tools-cargo:
+    @echo "📦 Installing recommended CLI tools via cargo..."
+    cargo install bat
+    cargo install eza
+    cargo install ripgrep
+    cargo install fd-find
+    cargo install du-dust
+    cargo install procs
+    cargo install bottom      # btop alternative
+    cargo install gping
+    cargo install sd
+    cargo install choose
+    cargo install tealdeer    # tldr alternative
+    cargo install zoxide
+    cargo install broot
+    cargo install git-delta
+    cargo install just
+    cargo install skim        # fzf alternative
+    cargo install gitui       # lazygit alternative
+    cargo install jaq         # jq alternative
+    cargo install starship
+    cargo install atuin
+    cargo install mcfly
+    cargo install navi
+    cargo install rm-improved # rip
+    @echo "✅ All recommended tools installed via cargo!"
+
+# Show which recommended tools are missing
+check-tools:
+    @echo "🔍 Checking recommended tools..."
+    @command -v bat >/dev/null 2>&1 && echo "✅ bat" || echo "❌ bat (better cat)"
+    @command -v eza >/dev/null 2>&1 && echo "✅ eza" || echo "❌ eza (better ls)"
+    @command -v rg >/dev/null 2>&1 && echo "✅ ripgrep" || echo "❌ ripgrep (better grep)"
+    @command -v fd >/dev/null 2>&1 && echo "✅ fd" || echo "❌ fd (better find)"
+    @command -v dust >/dev/null 2>&1 && echo "✅ dust" || echo "❌ dust (better du)"
+    @command -v procs >/dev/null 2>&1 && echo "✅ procs" || echo "❌ procs (better ps)"
+    @command -v btop >/dev/null 2>&1 && echo "✅ btop" || echo "❌ btop (better top)"
+    @command -v gping >/dev/null 2>&1 && echo "✅ gping" || echo "❌ gping (better ping)"
+    @command -v sd >/dev/null 2>&1 && echo "✅ sd" || echo "❌ sd (better sed)"
+    @command -v choose >/dev/null 2>&1 && echo "✅ choose" || echo "❌ choose (better cut)"
+    @command -v tldr >/dev/null 2>&1 && echo "✅ tldr" || echo "❌ tldr (better man)"
+    @command -v zoxide >/dev/null 2>&1 && echo "✅ zoxide" || echo "❌ zoxide (better cd)"
+    @command -v broot >/dev/null 2>&1 && echo "✅ broot" || echo "❌ broot (better tree)"
+    @command -v delta >/dev/null 2>&1 && echo "✅ delta" || echo "❌ delta (better diff)"
+    @command -v just >/dev/null 2>&1 && echo "✅ just" || echo "❌ just"
+    @command -v fzf >/dev/null 2>&1 && echo "✅ fzf" || echo "❌ fzf"
+    @command -v lazygit >/dev/null 2>&1 && echo "✅ lazygit" || echo "❌ lazygit"
+    @command -v lazydocker >/dev/null 2>&1 && echo "✅ lazydocker" || echo "❌ lazydocker"
+    @command -v jq >/dev/null 2>&1 && echo "✅ jq" || echo "❌ jq"
+    @command -v yq >/dev/null 2>&1 && echo "✅ yq" || echo "❌ yq"
+    @command -v direnv >/dev/null 2>&1 && echo "✅ direnv" || echo "❌ direnv"
+    @command -v starship >/dev/null 2>&1 && echo "✅ starship" || echo "❌ starship"
+    @command -v atuin >/dev/null 2>&1 && echo "✅ atuin" || echo "❌ atuin"
+    @command -v mcfly >/dev/null 2>&1 && echo "✅ mcfly" || echo "❌ mcfly"
+    @command -v navi >/dev/null 2>&1 && echo "✅ navi" || echo "❌ navi"
+    @command -v rip >/dev/null 2>&1 && echo "✅ rip" || echo "❌ rip"
+
 

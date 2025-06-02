@@ -36,13 +36,16 @@ compinit
 # Shopify Hydrogen alias to local projects
 alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
 
-# Sui version path configuration
-echo "[DEBUG] Setting up Sui in .zshrc"
-if [[ -f "$HOME/.suim/current" ]]; then
-  export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
-  export PATH="$SUI_VERSION_PATH:$PATH"
+# Suim (Sui version manager) configuration
+echo "[DEBUG] Setting up Suim in .zshrc"
+if [[ -d "$HOME/.suim" ]]; then
+  export PATH="$HOME/.suim:$PATH"
+  if [[ -f "$HOME/.suim/current" ]]; then
+    export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
+    export PATH="$SUI_VERSION_PATH:$PATH"
+  fi
 else
-  echo "[DEBUG] Warning: $HOME/.suim/current not found in .zshrc"
+  echo "[DEBUG] Warning: $HOME/.suim directory not found in .zshrc"
 fi
 
 # bun completions

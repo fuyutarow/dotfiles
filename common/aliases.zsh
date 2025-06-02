@@ -176,6 +176,22 @@ copytoclipboard() {
 alias c='copytoclipboard'
 alias pwdc='pwd | c'
 
+# pc command: view file content and copy to clipboard (equivalent to 'p file | c')
+pc() {
+  if [ $# -eq 0 ]; then
+    echo "Usage: pc <file>" >&2
+    return 1
+  fi
+
+  # Handle encoding for WSL
+  if [[ "$(uname -r)" == *microsoft* ]]; then
+    bat "$1" | tee >(iconv -f UTF-8 -t UTF-16LE | clip.exe)
+  else
+    bat "$1" | copytoclipboard
+  fi
+}
+alias pcc='pc'
+
 # WSL-specific aliases
 if [[ "$(uname -r)" == *microsoft* ]]; then
   alias open='explorer.exe'

@@ -1,3 +1,7 @@
+
+up:
+    topgrade --disable containers || echo "Topgrade completed with some errors"
+
 cc-install-mcp:
     claude mcp add context7 -- bunx @upstash/context7-mcp@latest # ライブラリドキュメント検索・取得
     claude mcp add sequential-thinking -- bunx @modelcontextprotocol/server-sequential-thinking # 複雑タスクの段階的推論・分析強化

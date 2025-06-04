@@ -2,6 +2,18 @@
 up:
     topgrade --disable containers || echo "Topgrade completed with some errors"
 
+# Productivity tools installation and setup
+install-productivity:
+    brew install atuin zoxide lazygit
+    @echo "✅ Productivity tools installed"
+    @echo "🔄 Tools are auto-initialized in aliases.zsh"
+    @echo "📖 New aliases available:"
+    @echo "   , <dir>  - Smart directory jump (zoxide)"
+    @echo "   ,,       - Previous directory"
+    @echo "   j        - Just (task runner)"
+    @echo "   lg       - Lazygit"
+    @echo "   Ctrl+R   - Enhanced history search (atuin)"
+
 cc-install-mcp:
     claude mcp add context7 -- bunx @upstash/context7-mcp@latest # ライブラリドキュメント検索・取得
     claude mcp add sequential-thinking -- bunx @modelcontextprotocol/server-sequential-thinking # 複雑タスクの段階的推論・分析強化

@@ -4,6 +4,11 @@
 # Unified Command Recommendation System
 # ============================================
 
+# Function to check if a command exists
+command_exists() {
+  type "$1" >/dev/null 2>&1
+}
+
 # Define command recommendations with their alternatives and installation info
 typeset -A COMMAND_RECOMMENDATIONS=(
   ["cat"]="bat:brew install bat:cargo install bat"
@@ -22,10 +27,15 @@ typeset -A COMMAND_RECOMMENDATIONS=(
   ["tree"]="broot:brew install broot:cargo install broot"
 )
 
-# Function to check if a command exists
-command_exists() {
-  type "$1" >/dev/null 2>&1
-}
+# ============================================
+# Essential Tool Initialization
+# ============================================
+
+# Initialize zoxide (smart directory navigation)
+command_exists "zoxide" && eval "$(zoxide init zsh)"
+
+# Initialize atuin (enhanced history management)
+command_exists "atuin" && eval "$(atuin init zsh)"
 
 # Function to get installation instructions
 get_install_instructions() {
@@ -93,26 +103,23 @@ alias b='bun'
 alias bb='bun run build'
 alias bn='bun run'
 
-# change directory
-# ================
-# traditional `cd` aliases
-# ------------------------
-# alias ..='cd ..'
+# change directory with zoxide integration
+# ========================================
+# zoxide replaces cd with smart directory jumping
+# traditional `cd` aliases (now using zoxide)
+# -----------------------------------------------
+# alias ..='cd ..'    # → kept as is
 # alias ...='cd ../..'
 # alias ....='cd ../../..'
 # alias .....='cd ../../../..'
 # alias ~='cd ~'
 # alias -- -='cd -'
 #
-# from now on tonight
-# -------------------
-# Yes, `cd` stands for comma and dot.
-# # for examples
-# To type `,` is equivalent to `cd ~`.
-# To type `, <dir>` is equivalent to `cd <dir>`.
-# To type `,,` is equivalent to `cd -`.
-# To type `..` is equivalent to `cd ..`.
-# To type `,. is equivalent to popd.
+# Enhanced navigation with zoxide + custom system
+# ------------------------------------------------
+# `,` system is kept for compatibility
+# `j` for zoxide smart jumping
+# `zi` for interactive directory selection
 commad() {
   if [ $# -eq 0 ]; then
     pushd ~ > /dev/null
@@ -137,19 +144,63 @@ commad_popd() {
   done
 }
 
-alias ,='commad'
-alias ,,=', $_'
-alias ..=', ..' # change to parent directory.
+alias ,='z'        # Replace commad with zoxide
+alias ,,='z -'     # Go to previous directory with zoxide
+alias ..=', ..' # change to parent directory (now using zoxide)
 alias ...=', ../..'
 alias ....=', ../../..'
 alias .....=', ../../../..'
 alias ......=', ../../../../..'
-alias ~=', ~' # change to home directory.
+alias ~=', ~' # change to home directory (now using zoxide)
 
 # Directory stack navigation (popd functionality)
 alias ,.='commad_popd 1' # popd once - go back one entry in directory stack
 alias ,..='commad_popd 2' # popd twice - go back two entries in stack
 alias ,...='commad_popd 3' # popd three times - go back three entries in stack
+
+# ============================================
+# Productivity Tools Integration
+# ============================================
+
+# Zoxide integration is now handled above with , alias
+# Additional zoxide commands:
+alias zi='zi'         # Interactive directory selection
+alias zl='zoxide query --list'   # List frequent directories
+alias zs='zoxide query --stats'  # Show directory statistics
+
+# Enhanced navigation combining zoxide with existing system
+,d() {
+  # Jump to dotfiles subdirectory
+  z ~/dotfiles/"$1"
+}
+
+,p() {
+  # Jump to projects subdirectory
+  z ~/projects/"$1" 2>/dev/null || z ~/Projects/"$1"
+}
+
+# Lazygit - Beautiful Git TUI
+# ----------------------------
+alias lg='lazygit'
+alias lgd='cd ~/dotfiles && lazygit'    # Git operations in dotfiles
+alias lgp=',p && lazygit'               # Git operations in projects
+
+# Combined zoxide + lazygit
+lg,() {
+  if [ $# -eq 0 ]; then
+    lazygit
+  else
+    z "$1" && lazygit
+  fi
+}
+
+# Atuin - Enhanced history management
+# -----------------------------------
+# Note: eval "$(atuin init zsh)" should be in .zshrc
+# Ctrl+R is automatically replaced by atuin
+alias hs='atuin search'                 # CLI history search
+alias hst='atuin stats'                 # History statistics
+alias hi='atuin import auto'            # Import existing history
 
 # Cross-platform clipboard function
 copytoclipboard() {
@@ -287,9 +338,61 @@ grl() {
   fi
 }
 
-alias h='history 100'
-alias ha="h | sed 's/^[ ]*[0-9]\+[ ]*//'"
-alias hg="h|grep"
+# Help and History management
+alias h='tldr'                          # Better man pages with practical examples
+alias hh='atuin search --interactive'   # Interactive history search
+alias hhh='show_aliases_help'           # Show custom aliases help
+
+# History management with atuin integration
+alias ha='atuin history list'           # Show all history
+alias hg='atuin search'                  # Search history
+
+# Custom help function for our aliases
+show_aliases_help() {
+  cat << 'EOF'
+🚀 Custom Aliases & Productivity Tools
+======================================
+
+📁 Navigation (zoxide-powered):
+  ,  <dir>     Smart directory jump
+  ,,           Previous directory
+  ..           Parent directory
+  ...          Two levels up
+  ~            Home directory
+  ,d <subdir>  Jump to ~/dotfiles/<subdir>
+  ,p <subdir>  Jump to ~/projects/<subdir>
+
+📚 Help & History:
+  h  <cmd>     Better man pages (tldr)
+  hh           Interactive history search (atuin)
+  hhh          This help
+  ha           Show all history
+  hg <query>   Search history
+
+🔧 Development:
+  j            Just (task runner)
+  lg           Lazygit (Git TUI)
+  lgd          Lazygit in dotfiles
+  lg, <dir>    Lazygit in specific directory
+  e            Editor (cursor/code)
+
+📂 File Operations:
+  l            List files (eza)
+  ll           Detailed listing
+  p            View file (bat)
+  f            Find files (fd)
+  gr           Search in files (rg)
+
+🛠️  Modern Tools:
+  zi           Interactive directory selection
+  zl           List frequent directories
+  zs           Directory statistics
+  Ctrl+R       Enhanced history search
+
+💡 Tip: Most commands have enhanced modern versions!
+    ls→eza, cat→bat, grep→rg, find→fd, cd→zoxide
+EOF
+}
 
 # Network info
 alias lip='ip -4 addr show | grep inet'
@@ -312,6 +415,16 @@ alias lll='eza -alF -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
 alias lt='eza -FT' # tree
 # alias lt='eza --tree'
+
+# Enable file completion for eza aliases
+if command_exists "eza"; then
+  # Initialize zsh completion system if not already done
+  if ! type compdef >/dev/null 2>&1; then
+    autoload -Uz compinit && compinit
+  fi
+  # Set up completion for eza aliases to use file/directory completion
+  compdef '_files' l la ll lll lt
+fi
 
 
 alias m='more'

@@ -224,24 +224,10 @@ copytoclipboard() {
 }
 
 # Clipboard aliases
-alias c='copytoclipboard'
-alias pwdc='pwd | c'
+alias c='claude'
+alias cc='copytoclipboard'
+alias pwdc='pwd | cc'
 
-# pc command: view file content and copy to clipboard (equivalent to 'p file | c')
-pc() {
-  if [ $# -eq 0 ]; then
-    echo "Usage: pc <file>" >&2
-    return 1
-  fi
-
-  # Handle encoding for WSL
-  if [[ "$(uname -r)" == *microsoft* ]]; then
-    bat "$1" | tee >(iconv -f UTF-8 -t UTF-16LE | clip.exe)
-  else
-    bat "$1" | copytoclipboard
-  fi
-}
-alias pcc='pc'
 
 # WSL-specific aliases
 if [[ "$(uname -r)" == *microsoft* ]]; then
@@ -445,7 +431,21 @@ alias p='bat'
 
 # procs for better process viewing
 command_exists "procs" || alias procs="ps aux"
-alias pp='procs --tree 2>/dev/null || ps auxf'
+
+# pp command: view file content and copy to clipboard
+pp() {
+  if [ $# -eq 0 ]; then
+    echo "Usage: pp <file>" >&2
+    return 1
+  fi
+
+  # Handle encoding for WSL
+  if [[ "$(uname -r)" == *microsoft* ]]; then
+    bat "$1" | tee >(iconv -f UTF-8 -t UTF-16LE | clip.exe)
+  else
+    bat "$1" | copytoclipboard
+  fi
+}
 
 alias s='start'
 
@@ -472,12 +472,35 @@ alias sze='vi $HOME/.zshrc'
 
 # tmux
 # ----
-alias t='tmux'
+alias t='tmux a'
 alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
 alias tt='tmux a -t'
 alias tks='tmux kill-session -t'
+
+# tmux multiple horizontal panes
+th() {
+  local n=${1:-2}
+  if [ $n -lt 1 ] || [ $n -gt 6 ]; then
+    echo "Usage: th [1-6]"
+    return 1
+  fi
+
+  tmux new-session \; \
+    run-shell "
+      for i in \$(seq 2 $n); do
+        tmux split-window -h
+      done
+    " \; \
+    select-layout even-horizontal
+}
+
+alias t2='th 2'
+alias t3='th 3'
+alias t4='th 4'
+alias t5='th 5'
+alias t6='th 6'
 
 alias to='touch'
 

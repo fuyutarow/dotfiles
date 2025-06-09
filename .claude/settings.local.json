@@ -1,3 +1,23 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(htop:*)",
+      "Bash(iostat:*)",
+      "Bash(dmesg:*)",
+      "Bash(procs:*)",
+      "Bash(cat:*)",
+      "Bash(ulimit:*)",
+      "Bash(tmux show-options:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(winget install:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(t3)",
+      "Bash(find:*)",
+      "Bash(fd:*)",
+      "Bash(rg:*)",
+      "Bash(mkdir:*)",
+      "WebFetch(domain:hono.dev)"
+    ]
+  },
   "enableAllProjectMcpServers": false
 }

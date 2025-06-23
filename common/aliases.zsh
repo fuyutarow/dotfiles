@@ -145,7 +145,7 @@ commad_popd() {
 }
 
 alias ,='z'        # Replace commad with zoxide
-alias ,,='z -'     # Go to previous directory with zoxide
+alias ,,='cd "$_"' # Go to directory from previous command's last argument
 alias ..=', ..' # change to parent directory (now using zoxide)
 alias ...=', ../..'
 alias ....=', ../../..'
@@ -154,7 +154,7 @@ alias ......=', ../../../../..'
 alias ~=', ~' # change to home directory (now using zoxide)
 
 # Directory stack navigation (popd functionality)
-alias ,.='commad_popd 1' # popd once - go back one entry in directory stack
+alias ,.='z -'           # Go to previous directory with zoxide
 alias ,..='commad_popd 2' # popd twice - go back two entries in stack
 alias ,...='commad_popd 3' # popd three times - go back three entries in stack
 
@@ -394,7 +394,7 @@ alias kl='kill -9'
 
 # eza for better directory listing
 command_exists "eza" || alias eza="ls --color=auto"
-alias l='eza -F'
+alias l='eza -F always'
 alias la='eza -A'
 alias ll='eza -alF'
 alias lll='eza -alF -s=mod --time-style=long-iso'
@@ -409,7 +409,7 @@ if command_exists "eza"; then
     autoload -Uz compinit && compinit
   fi
   # Set up completion for eza aliases to use file/directory completion
-  compdef '_files' l la ll lll lt
+  compdef '_files -/' l la ll lll lt  # -/ means files and directories
 fi
 
 
@@ -476,7 +476,7 @@ alias t='tmux a'
 alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'
-alias tt='tmux a -t'
+alias tt='tmux new-session'
 alias tks='tmux kill-session -t'
 
 # tmux multiple horizontal panes

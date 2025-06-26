@@ -506,6 +506,9 @@ alias to='touch'
 
 alias tf='tail -fF'
 
+# File operation safety aliases
+alias mv='mv -n'           # 常に上書き禁止
+
 # rip for safer file removal
 command_exists "rip" || alias rip="rm -i"
 

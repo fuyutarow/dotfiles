@@ -46,7 +46,9 @@
       "Bash(tmux select-pane:*)",
       "Bash(true)",
       "Bash(ls:*)",
-      "Bash(la common/.tmux.conf)"
+      "Bash(la common/.tmux.conf)",
+      "Bash(gr \"mv\" /home/fuyu/dotfiles/common/aliases.zsh)",
+      "Bash(gr:*)"
     ]
   },
   "enableAllProjectMcpServers": false

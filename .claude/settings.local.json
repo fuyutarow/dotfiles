@@ -48,7 +48,12 @@
       "Bash(ls:*)",
       "Bash(la common/.tmux.conf)",
       "Bash(gr \"mv\" /home/fuyu/dotfiles/common/aliases.zsh)",
-      "Bash(gr:*)"
+      "Bash(gr:*)",
+      "Bash(tmux new-session:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux kill-session:*)",
+      "Bash(tmux display-panes:*)",
+      "Bash(tmux capture-pane:*)"
     ]
   },
   "enableAllProjectMcpServers": false

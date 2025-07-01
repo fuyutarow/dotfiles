@@ -11,8 +11,6 @@ command_exists() {
 
 # Define command recommendations with their alternatives and installation info
 typeset -A COMMAND_RECOMMENDATIONS=(
-  ["cat"]="bat:brew install bat:cargo install bat"
-  ["ls"]="eza:brew install eza:cargo install eza"
   ["grep"]="rg:brew install ripgrep:cargo install ripgrep"
   ["find"]="fd:brew install fd:cargo install fd-find"
   ["du"]="dust:brew install dust:cargo install du-dust"
@@ -206,8 +204,8 @@ alias hi='atuin import auto'            # Import existing history
 copytoclipboard() {
   # Use tee to both display and pipe to clipboard
   if [[ "$(uname -r)" == *microsoft* ]]; then
-    # WSL
-    tee /dev/tty | clip.exe
+    # WSL - convert UTF-8 to UTF-16LE for Windows clipboard
+    tee /dev/tty | iconv -f UTF-8 -t UTF-16LE | clip.exe
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     tee /dev/tty | pbcopy
@@ -224,9 +222,9 @@ copytoclipboard() {
 }
 
 # Clipboard aliases
-alias c='claude'
-alias cc='copytoclipboard'
-alias pwdc='pwd | cc'
+alias c='copytoclipboard'
+alias cc='claude'
+alias pwdc='pwd | copytoclipboard'
 
 
 # WSL-specific aliases
@@ -376,7 +374,7 @@ show_aliases_help() {
   Ctrl+R       Enhanced history search
 
 💡 Tip: Most commands have enhanced modern versions!
-    ls→eza, cat→bat, grep→rg, find→fd, cd→zoxide
+    grep→rg, find→fd, cd→zoxide
 EOF
 }
 
@@ -399,8 +397,10 @@ alias la='eza -A'
 alias ll='eza -alF'
 alias lll='eza -alF -s=mod --time-style=long-iso'
 # alias lll='ll --sort=time'
-alias lt='eza -FT' # tree
+alias lt='eza -FT --color=always' # tree
 # alias lt='eza --tree'
+alias lp='eza --absolute=on'
+alias llp='eza -alF --absolute=on'
 
 # Enable file completion for eza aliases
 if command_exists "eza"; then
@@ -409,7 +409,7 @@ if command_exists "eza"; then
     autoload -Uz compinit && compinit
   fi
   # Set up completion for eza aliases to use file/directory completion
-  compdef '_files -/' l la ll lll lt  # -/ means files and directories
+  compdef '_files -/' l la ll lll lt lp llp  # -/ means files and directories
 fi
 
 

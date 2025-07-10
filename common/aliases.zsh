@@ -413,7 +413,7 @@ if command_exists "eza"; then
 fi
 
 
-alias m='more'
+alias m='mise'
 alias md='mkdir'
 alias mp='mkdir -p'
 
@@ -606,22 +606,6 @@ rm() {
   return 1
 }
 
-# Package manager warnings (not disabled, just warned)
-npm() {
-  echo "⚠️  Warning: Consider using bun instead of npm!"
-  echo "   Proceeding with npm..."
-  command npm "$@"
-}
-yarn() {
-  echo "⚠️  Warning: Consider using bun instead of yarn!"
-  echo "   Proceeding with yarn..."
-  command yarn "$@"
-}
-npx() {
-  echo "⚠️  Warning: Consider using bunx instead of npx!"
-  echo "   Proceeding with npx..."
-  command npx "$@"
-}
 
 # Commands that show warning but still execute
 cat() { _command_warning "cat" "$@"; }
@@ -786,4 +770,3 @@ esac
 #   }
 # else
 # fi
-

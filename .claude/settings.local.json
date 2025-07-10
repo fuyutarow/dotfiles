@@ -53,7 +53,8 @@
       "Bash(tmux send-keys:*)",
       "Bash(tmux kill-session:*)",
       "Bash(tmux display-panes:*)",
-      "Bash(tmux capture-pane:*)"
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux source-file:*)"
     ]
   },
   "enableAllProjectMcpServers": false

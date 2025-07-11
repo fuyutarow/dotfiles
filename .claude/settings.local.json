@@ -54,7 +54,8 @@
       "Bash(tmux kill-session:*)",
       "Bash(tmux display-panes:*)",
       "Bash(tmux capture-pane:*)",
-      "Bash(tmux source-file:*)"
+      "Bash(tmux source-file:*)",
+      "Bash(mv:*)"
     ]
   },
   "enableAllProjectMcpServers": false

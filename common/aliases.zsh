@@ -413,7 +413,7 @@ if command_exists "eza"; then
 fi
 
 
-alias m='mise'
+alias m='mise run'
 alias md='mkdir'
 alias mp='mkdir -p'
 
@@ -507,7 +507,10 @@ alias to='touch'
 alias tf='tail -fF'
 
 # File operation safety aliases
-alias mv='mv -n'           # 常に上書き禁止
+alias mv='mv --update=none' # 常に上書き禁止
+alias cp='cp --update=none' # 常に上書き禁止
+alias mvf='mv --update=all' # 強制上書き
+alias cpf='cp --update=all' # 強制上書き
 
 # rip for safer file removal
 command_exists "rip" || alias rip="rm -i"

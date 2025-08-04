@@ -58,5 +58,13 @@
       "Bash(mv:*)"
     ]
   },
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "filesystem",
+    "memory",
+    "everything",
+    "context7",
+    "serena",
+    "cipher"
+  ]
 }

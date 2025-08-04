@@ -1,0 +1,53 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "bunx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": [
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "everything": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": [
+        "@modelcontextprotocol/server-everything"
+      ]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": [
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "cipher": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": [
+        "@byteover/cipher"
+      ]
+    },
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "."
+      ]
+    }
+  }
+}

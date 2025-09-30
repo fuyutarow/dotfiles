@@ -223,7 +223,7 @@ copytoclipboard() {
 
 # Clipboard aliases
 alias c='copytoclipboard'
-alias cc='claude'
+alias cc='claude --model opusplan --permission-mode plan'
 alias pwdc='pwd | copytoclipboard'
 
 

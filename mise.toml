@@ -1,0 +1,5 @@
+# Mise configuration for dotfiles management
+
+[tasks.up]
+description = "Update system packages"
+run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''

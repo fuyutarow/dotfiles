@@ -1,4 +1,3 @@
-
 up:
     topgrade --disable containers || echo "Topgrade completed with some errors"
 

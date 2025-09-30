@@ -55,7 +55,9 @@
       "Bash(tmux display-panes:*)",
       "Bash(tmux capture-pane:*)",
       "Bash(tmux source-file:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "WebSearch",
+      "WebFetch(domain:mise.jdx.dev)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -64,7 +66,7 @@
     "memory",
     "everything",
     "context7",
-    "serena",
-    "cipher"
+    "cipher",
+    "serena"
   ]
 }

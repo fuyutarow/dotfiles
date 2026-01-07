@@ -3,3 +3,29 @@
 [tasks.up]
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
+
+[tasks."install:bun_packages"]
+run = '''
+bun i -g @anthropic/claude-code @openapi/doex @google/gemini-cli
+'''
+
+[tasks."link:skills"]
+description = "Link commands directory to AI tools' skills/prompts directories"
+run = '''
+# Claude Code - commands (skills)
+mkdir -p ~/.claude
+ln -sfn ~/dotfiles/commands ~/.claude/commands
+
+# Codex - skills
+mkdir -p ~/.codex
+ln -sfn ~/dotfiles/commands ~/.codex/skills
+
+# Gemini - global_workflows
+mkdir -p ~/.gemini/antigravity
+ln -sfn ~/dotfiles/commands ~/.gemini/antigravity/global_workflows
+
+echo "✅ Skill links created successfully:"
+echo "   ~/.claude/commands -> ~/dotfiles/commands"
+echo "   ~/.codex/skills -> ~/dotfiles/commands"
+echo "   ~/.gemini/antigravity/global_workflows -> ~/dotfiles/commands"
+'''

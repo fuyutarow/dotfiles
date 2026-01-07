@@ -101,6 +101,9 @@ alias b='bun'
 alias bb='bun run build'
 alias bn='bun run'
 
+
+alias rgf='rg -F'
+
 # change directory with zoxide integration
 # ========================================
 # zoxide replaces cd with smart directory jumping
@@ -223,7 +226,6 @@ copytoclipboard() {
 
 # Clipboard aliases
 alias c='copytoclipboard'
-alias cc='claude --model opusplan --permission-mode plan'
 alias pwdc='pwd | copytoclipboard'
 
 
@@ -274,6 +276,8 @@ editor () {
 }
 
 
+alias a="agy"
+alias aa="agy ."
 alias e="editor"
 alias ee="editor ."
 
@@ -609,16 +613,6 @@ rm() {
   return 1
 }
 
-
-# Commands that show warning but still execute
-cat() { _command_warning "cat" "$@"; }
-
-# Commands that are completely disabled
-ls() { _command_disabled "ls"; }
-grep() { _command_disabled "grep"; }
-find() { _command_disabled "find"; }
-du() { _command_disabled "du"; }
-ps() { _command_disabled "ps"; }
 
 # alias del='/bin/rm'
 # if type "rmtrash" >/dev/null 2>&1; then

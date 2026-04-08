@@ -1,5 +1,11 @@
 echo "[DEBUG] Starting .zshrc"
 
+# Load sheldon if not already loaded (non-login shells skip .zprofile)
+if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
+  echo "[DEBUG] Loading sheldon from .zshrc"
+  eval "$(sheldon source)"
+fi
+
 #zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
 echo "[DEBUG] Setting up theme based on HOST: $HOST"
 case "$HOST" in
@@ -50,6 +56,6 @@ fi
 
 # bun completions
 echo "[DEBUG] Setting up bun completions in .zshrc"
-[ -s "/home/fuyu/.bun/_bun" ] && source "/home/fuyu/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 echo "[DEBUG] Finished .zshrc"

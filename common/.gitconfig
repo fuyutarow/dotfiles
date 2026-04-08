@@ -13,7 +13,7 @@
     postBuffer = 8M
 
 [init]
-    defautlBrnach = alpha
+    defaultBranch = alpha
 
 [include]
     path = ~/.local-gitconfig

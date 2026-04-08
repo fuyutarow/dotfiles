@@ -1,0 +1,6 @@
+
+[alias]
+    o =! open `git url`
+
+[credential "https://github.com"]
+    helper = osxkeychain

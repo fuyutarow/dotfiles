@@ -511,10 +511,17 @@ alias to='touch'
 alias tf='tail -fF'
 
 # File operation safety aliases
-alias mv='mv --update=none' # 常に上書き禁止
-alias cp='cp --update=none' # 常に上書き禁止
-alias mvf='mv --update=all' # 強制上書き
-alias cpf='cp --update=all' # 強制上書き
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  alias mv='mv -n'         # 上書き禁止 (BSD)
+  alias cp='cp -n'         # 上書き禁止 (BSD)
+  alias mvf='command mv'   # 強制上書き
+  alias cpf='command cp'   # 強制上書き
+else
+  alias mv='mv --update=none' # 上書き禁止 (GNU)
+  alias cp='cp --update=none' # 上書き禁止 (GNU)
+  alias mvf='mv --update=all' # 強制上書き (GNU)
+  alias cpf='cp --update=all' # 強制上書き (GNU)
+fi
 
 # rip for safer file removal
 command_exists "rip" || alias rip="rm -i"

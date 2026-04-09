@@ -57,7 +57,14 @@
       "Bash(tmux source-file:*)",
       "Bash(mv:*)",
       "WebSearch",
-      "WebFetch(domain:mise.jdx.dev)"
+      "WebFetch(domain:mise.jdx.dev)",
+      "Bash(defaults read:*)",
+      "Bash(awk 'NR==5, NR==3165' /Users/fuyu/dotfiles/karabiner/karabiner.json)",
+      "Bash(awk 'NR==8,NR==3163' /Users/fuyu/dotfiles/karabiner/karabiner.json)",
+      "Bash(python3)",
+      "Bash(awk 'NR==9,NR==3162' /Users/fuyu/dotfiles/karabiner/karabiner.json)",
+      "Bash(python3 /tmp/analyze_lines.py)",
+      "Bash(python3 -c ':*)"
     ]
   },
   "enableAllProjectMcpServers": true,

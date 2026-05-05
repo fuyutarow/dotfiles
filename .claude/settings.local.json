@@ -64,7 +64,8 @@
       "Bash(python3)",
       "Bash(awk 'NR==9,NR==3162' /Users/fuyu/dotfiles/karabiner/karabiner.json)",
       "Bash(python3 /tmp/analyze_lines.py)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(git check-ignore *)"
     ]
   },
   "enableAllProjectMcpServers": true,

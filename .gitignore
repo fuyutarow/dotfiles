@@ -1,4 +1,5 @@
 .serena/
+commands/.system/
 
 # Local overrides
 local/

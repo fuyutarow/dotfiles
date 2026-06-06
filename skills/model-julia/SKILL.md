@@ -78,9 +78,10 @@ result = A * B   # This is matmul, not element-wise!
 # RIGHT:
 result = A .* B  # Element-wise multiply (dot-broadcast)
 
-# WRONG: sort a Dict by keys (isless undefined for heterogeneous values)
-sort(collect(my_dict))
-# RIGHT:
+# PITFALL: sort(collect(my_dict)) sorts the Pairs. Fine for a typed Dict
+# (Dict{String,Int} → sorted by key), but it THROWS for non-comparable value
+# types (Dict{String,Any}): Pair `isless` evaluates the values eagerly even
+# though Dict keys are unique. To sort by key regardless of value type:
 for k in sort(collect(keys(my_dict)))
     v = my_dict[k]
 end
@@ -148,9 +149,13 @@ H     = hessian(f, backend, x)                 # Hessian
 # For input_dim ≫ 100, switch backend to AutoEnzyme() — see references/autodiff.md §2.7.3
 ```
 
-**Why**: FD derivative estimation has a precision floor at ~√(eps) ≈ 1e-8, forces step-size
-tuning, kills high-order derivatives (errors compound), and silently corrupts optimizer
-convergence. AD has machine precision, no tuning, and composes for higher derivatives.
+**Why**: FD derivative estimation trades truncation error against round-off, so it has an
+irreducible precision floor *and* needs step-size tuning. The floor depends on the scheme —
+forward difference bottoms out near √eps ≈ 1e-8 (measured 3e-9 for sin at x=1), central
+difference does better at ~eps^(2/3) ≈ 1e-11 (measured 1e-11) — but both stay far above machine
+precision, both need a tuned `h`, and high-order derivatives compound the error. AD has no
+truncation error (measured exactly 0.0 on the same test), needs no step size, and composes for
+higher derivatives.
 
 **Permitted exceptions** (write the exception in a comment):
 - Cross-checking an AD-computed gradient at one point during initial development (DI provides

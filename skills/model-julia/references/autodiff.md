@@ -119,6 +119,11 @@ minimum(eigvals(Hermitian(M)))
 # For an SPD check, evaluate the eigen-test in Float64 OUTSIDE the AD path:
 is_spd = minimum(eigvals(Hermitian(Float64.(M)))) > 0
 ```
+*Why it crashes*: `eigvals` dispatches to LAPACK, which only accepts BLAS floats, so a
+`Dual`-element matrix hits a `MethodError` (verified on ForwardDiff + Julia 1.12.6). `inv`/`tr`/
+`det` are pure-Julia generic and propagate `Dual` fine (verified). This is forward-mode
+specific — reverse-mode backends (Zygote/Enzyme via ChainRules) do carry eigen adjoints; if you
+genuinely need ∂eigval, differentiate that part with a reverse-mode backend instead of rewriting.
 
 **Rule 4 — Inner functions must be fully type-generic** (same `eltype(x)` discipline all the way down).
 

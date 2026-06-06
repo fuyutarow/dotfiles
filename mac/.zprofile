@@ -16,7 +16,6 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.bun/bin:$PATH"
 export PATH="$HOME/.bun/install/global/node_modules/.bin:$PATH"
 
-export PATH="$HOME/.cargo/bin:$PATH"
 
 # GNU coreutils (gtimeout etc.)
 if [[ -d /opt/homebrew/opt/coreutils/libexec/gnubin ]]; then
@@ -26,8 +25,7 @@ fi
 # Source commands
 echo "[DEBUG] Sourcing cargo env"
 if [[ -f "$HOME/.cargo/env" ]]; then
-  source "$HOME/.cargo/env"
-else
+  else
   echo "[DEBUG] Warning: $HOME/.cargo/env not found"
 fi
 

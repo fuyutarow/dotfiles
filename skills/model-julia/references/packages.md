@@ -20,6 +20,13 @@ Select only what the task needs — don't install everything.
 - `JET` — static type-error / dispatch scanner; `@test_opt` in suites.
 - `DispatchDoctor` — `@stable` to forbid instability at the definition site.
 - `AllocCheck` — `@check_allocs` for compile-time zero-allocation guarantee.
+- `Aqua` — **package-hygiene meta-tests** (`Aqua.test_all(MyPkg)` in `test/`): detects **type
+  piracy**, method ambiguities, unbound type parameters, undefined/undocumented exports, stale
+  deps, and `[compat]` gaps. The CI enforcement of the invariants the compiler does NOT check
+  (architecture.md §10.6). Distinct from JET (type/bug analysis) and Runic (formatting); add it to
+  every package you author.
+- `ExplicitImports` — namespace-hygiene check: flags implicit `using`-brought names and
+  unused/stale imports, pushing toward explicit `using A: f` (SciMLStyle). Complements Aqua.
 - `Chairmarks` — fast repeated benchmarking (`@b`); `BenchmarkTools` only for `BenchmarkGroup`.
 - `Runic` — code formatter. Zero-configuration by design (formatting is fixed, not tunable),
   which is exactly why it is the SciML-standard formatter — uniformity across a codebase over

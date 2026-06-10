@@ -135,6 +135,25 @@ MyPkgPlotsExt = "Plots"            # ext/MyPkgPlotsExt.jl is loaded when Plots i
 - **Keep it type-stable at scale** — wrap must-be-fast APIs with DispatchDoctor `@stable`; run JET
   `report_package` on the whole package (performance.md §2.8). Instability compounds in big trees.
 
+### §10.6.1 Convert these invariants into CI checks — the compiler won't
+
+Julia enforces almost none of §10.6 structurally (type piracy *compiles*; globals *compile*; the
+orphan rule that Rust enforces at compile time is, in Julia, a guideline). The discipline is real
+but **opt-in**, so re-impose it as automated checks in `test/` — this is how the ecosystem
+substitutes tooling for compiler guarantees. Three non-overlapping layers, all belong in CI:
+
+| Layer | Tool | Enforces |
+|---|---|---|
+| **Package hygiene** | **`Aqua.test_all(MyPkg)`** | **type piracy**, method ambiguities, unbound type params, undefined/undocumented exports, stale deps, `[compat]` gaps |
+| **Namespace hygiene** | `ExplicitImports.jl` | implicit/unused `using` imports → explicit `using A: f` |
+| **Type/bug analysis** | `JET.report_package` / `@test_opt` | type instability, nonexistent methods, error paths (performance.md §2.8) |
+| **Formatting** | `Runic` | fixed style, zero-config (packages.md) |
+
+`Aqua` is the direct enforcement of the §10.6 anti-piracy / dependency invariants — **add it to
+every package you author.** It is a *test suite*, not a formatter: it fails CI when discretion has
+been abused. `DispatchDoctor.@stable` (def-site) + `AllocCheck.@check_allocs` (hot kernels) round
+out the proactive side.
+
 ## §10.7 TTFX & invalidation hygiene at scale
 
 Cross-ref setup.md §3.5 (the layered TTFX map). For a **large** package specifically:

@@ -69,6 +69,49 @@ julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
 For an exact match, the Julia patch version, OS, glibc/libc, and CPU architecture should agree
 between machines (`Manifest.toml` records the Julia version it was resolved under).
 
+## 3.4 Experiment management — `DrWatson` (the layer above environment reproducibility)
+
+Reproducibility has **two layers**; §3.3 is only the lower one. For research that runs many
+parameterized experiments, **`DrWatson.jl` is the default** for the upper (experiment) layer — do
+not hand-roll path strings, ad-hoc filenames, or "did I already run this?" logic.
+
+```
+Experiment layer  : DrWatson — savename / produce_or_load / tagsave / datadir   ← this section
+Environment layer : Project.toml / Manifest.toml (§3.3)                          ← already covered
+```
+
+Core API (the parts that earn their keep):
+
+```julia
+using DrWatson
+@quickactivate "MyProject"          # activate the project env from anywhere in the tree
+
+params = Dict(:layer => 3, :lr => 1e-3, :act => "relu")
+savename("model", params, "bson")   # "model_act=relu_layer=3_lr=0.001.bson" — deterministic, sorted
+
+# Path resolution from the project ROOT regardless of cwd (never build paths by hand):
+datadir("sims", savename(params, "jld2"));  srcdir();  scriptsdir();  plotsdir()
+
+# Skip expensive recompute: load if a result for these params exists, else run f and save:
+data, file = produce_or_load(params, datadir("sims")) do p
+    run_expensive_simulation(p)     # only called on a cache miss
+end
+
+# Embed the git commit (+ dirty/patch state) INTO the saved data → trace any result to its code:
+@tagsave(datadir("res", savename(params, "jld2")), Dict("result" => out))
+```
+
+Discipline:
+- **`scripts/` runs experiments; `src/` holds reusable logic** (the experiment-level noun/verb
+  split). Make `src/` a proper module/package and have scripts call it — this is where §10
+  architecture and DrWatson meet: `src/` is your package, `scripts/` is the disposable driver.
+- **`tagsave`/`@tagsave` is the experiment-layer analogue of committing the Manifest** — it records
+  *which code* produced *which artifact*. Use it for any result you might cite later.
+- **`dict_list(Dict(:lr => [1e-2, 1e-3], :seed => 1:5))`** expands a parameter sweep into Dicts.
+  This is for legitimate **experimental design** (hyperparameters, physical regimes) — it is **NOT**
+  a license for the FORBIDDEN "grid sampling instead of solving the optimization" of §2.0.2. Sweep
+  experiments, not the math you should be optimizing or solving exactly.
+
 ## 3.5 TTFX (Time To First eXecution) — the layered countermeasure map
 
 **TTFX** (historically "time to first plot") is the latency before the *first* real result —

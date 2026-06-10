@@ -264,3 +264,36 @@ but separate workflow; the tools below shine when a JIT-warm REPL is preserved a
 - **Cthulhu.jl** — interactive descend into inferred IR; use when `@code_warntype` is too
   shallow (performance.md §2.1).
 - **Debugger.jl / Infiltrator.jl** — interactive REPL debugging.
+
+## 8.1 Notebooks, literate reports & documentation — one first choice each
+
+Three distinct jobs. These are where the DrWatson `notebooks/` / `papers/` / `docs/` folders
+(§3.4) get filled, and they are how a research project keeps **"which formula / which
+generalization is the current theory"** from going missing: the artifacts are Git-tracked text, so
+the evolution of the theory reads as a history rather than a pile of overwritten files.
+
+| Job | First choice | Avoid / legacy |
+|---|---|---|
+| Interactive / exploratory research notebook | **`Pluto.jl`** (`.jl`) | Jupyter `.ipynb` for anything version-controlled |
+| Literate publication report (HTML/PDF) | **`Quarto`** | `Weave.jl` (older, less maintained) |
+| Package API documentation site | **`Documenter.jl`** | hand-written HTML |
+
+- **`Pluto.jl` is the first choice for research notebooks.** Files are plain-text `.jl`
+  (Git-diffable line by line); the notebook is **reactive** — changing a cell re-runs its
+  dependents, so there is **no hidden out-of-order execution state** (the classic Jupyter
+  reproducibility trap); and the environment (`Project.toml` + `Manifest.toml`) is **embedded in
+  the file**, so it reproduces its exact deps. Honest caveat: a Pluto `.jl` is a valid script but
+  carries Pluto cell markers + the embedded Manifest — diffable and reproducible, **not** a "clean"
+  hand-written script.
+- **Avoid `.ipynb` under version control.** It is JSON with execution outputs baked in: diffs are
+  unreadable, merge conflicts corrupt the file, and saved cells hide stale execution order. Use it
+  only when an external deliverable (shared Jupyter/Colab) forces it.
+- **`Quarto`** for the "one step before the paper" literate report: `.qmd` → high-quality HTML/PDF
+  with LaTeX math beside live results. The modern successor to `Weave.jl`.
+- **`Documenter.jl`** builds the documentation site from docstrings; pair it with the `docs/`
+  folder DrWatson scaffolds.
+
+The practical answer to *"which formula is current?"*: current logic lives in `src/` (architecture.md
+§10), its **evolution** lives as Git-tracked Pluto/Quarto notebooks in `notebooks/`, and every
+saved result is bound to its code version via DrWatson `@tagsave` (§3.4). No artifact is orphaned
+from the theory state that produced it.

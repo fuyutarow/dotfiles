@@ -1,6 +1,6 @@
 ---
 name: model-julia
-description: Set up Julia and write correct, performant, modern Julia for theoretical research — one first choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant, JET, DispatchDoctor, AllocCheck, Chairmarks, OhMyThreads, ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit, SymPyPythonCall, Manopt, Julia setup, or TTFX / precompile latency. MANDATORY — read this skill BEFORE writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use optimization), and lerp-as-evaluation. All differentiation goes through DifferentiationInterface (raw backend calls are the exception); Dual-propagation rules apply whenever AutoForwardDiff is in the path. Symbolic tooling is chosen by ROLE: SymEngine for lightweight algebra, Symbolics+ModelingToolkit as the spine of AI4S/SciML projects (codegen/PDE/DAE), SymPyPythonCall as a thin-boundary service for heavy CAS (integrate/trigsimp/factor/assumptions).
+description: Set up Julia and write correct, performant, modern Julia for theoretical research — one first choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant, JET, DispatchDoctor, AllocCheck, Chairmarks, OhMyThreads, ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit, SymPyPythonCall, Manopt, Julia setup, TTFX / precompile latency, or large-package architecture (module/file organization, include order, submodules vs subpackages, package extensions / weakdeps, type piracy, public API). MANDATORY — read this skill BEFORE writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use optimization), and lerp-as-evaluation. All differentiation goes through DifferentiationInterface (raw backend calls are the exception); Dual-propagation rules apply whenever AutoForwardDiff is in the path. Symbolic tooling is chosen by ROLE: SymEngine for lightweight algebra, Symbolics+ModelingToolkit as the spine of AI4S/SciML projects (codegen/PDE/DAE), SymPyPythonCall as a thin-boundary service for heavy CAS (integrate/trigsimp/factor/assumptions).
 ---
 
 # Model Julia — Coding Discipline & Setup
@@ -37,6 +37,7 @@ reference file that matches the task.
 | `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
 | `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, viz) | deciding which package to install for a task |
 | `references/setup.md` | §3 install + project env + reproducibility + TTFX, §5 running, §6 idioms, §7 output, §8 local-dev pointers | setting up Julia or running code |
+| `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), TTFX & invalidation hygiene | structuring a package beyond one file, or organizing a large/growing codebase |
 
 ---
 
@@ -257,3 +258,9 @@ Environment — `references/setup.md`:
 - [ ] `--project=.` (or a named env) on every `julia` invocation (§5)
 - [ ] `Project.toml` / `Manifest.toml` committed for reproducibility (§3.3)
 - [ ] If symbolic computation is involved: the symbolic tool is chosen by ROLE, not preference (packages.md §4) — **SymEngine** for lightweight/throwaway algebra (no `simplify`/`integrate`); **Symbolics + ModelingToolkit** as the spine of an AI4S/SciML project (codegen, PDE/DAE, discovery — required there, not forbidden); **SymPyPythonCall** called as a service at a thin boundary for heavy CAS (`integrate`, `trigsimp`, `factor`, assumptions). Symbolic construction is localized in one module so the spine is never re-typed.
+
+Package architecture — `references/architecture.md` (when the code outgrows one file / a large package):
+- [ ] One top-level module; files split by role (types vs functions); **every `include` in the boss file in dependency order**, none in subfiles (§10.1)
+- [ ] Circular type deps resolved by hoisting abstract types to `interfaces.jl` loaded first (§10.2)
+- [ ] Growth handled by **subpackage / interface package**, not submodules; optional/heavy deps via **package extensions `[weakdeps]`**, not `Requires.jl` (§10.3–§10.4)
+- [ ] Anti-spaghetti invariants hold: no non-const globals, **no type piracy**, small dispatched functions (§10.6); public API via `export`/`public` (§10.5)

@@ -71,8 +71,9 @@ Select only what the task needs — don't install everything.
 
 These three packages are **not substitutes competing for one slot** — they are **three different
 categories** of tool, and a real project commonly uses more than one. SymEngine and SymPy are
-sister projects (SymEngine is the fast C++ core SymPy was factored out toward); Symbolics is a
-**different kind of tool entirely** — a symbolic-numeric *compiler*, not a CAS. Concretely:
+sister projects (SymEngine is a fast C++ CAS started by SymPy developers and usable as SymPy's
+compute backend), so expressions cross between them cheaply; Symbolics is a **different kind of
+tool entirely** — a symbolic-numeric *compiler*, not a CAS. Concretely:
 **SymPy and Symbolics are mutually non-supersetting** — SymPy has stronger algebra (`integrate`,
 `trigsimp`, assumptions) that Symbolics lacks; Symbolics has native codegen / solver / AD
 integration that SymPy cannot do. So "use only one" is a category error. Choose by the role the
@@ -80,9 +81,9 @@ symbolic layer plays:
 
 | Role in the project | Use | Why |
 |---|---|---|
-| **Lightweight / throwaway algebra** in a plain script (`expand`, `diff`, `subs`, `coeff`, `lambdify`) | **`SymEngine`** | Precompile **2.79s** (measured 2026-04-25). Fast startup wins when you just need a derivative or a substitution. |
+| **Lightweight algebra** — a script snippet *or* the main CAS of a non-SciML project (`expand`, `diff`, `subs`, `coeff`, `lambdify`) | **`SymEngine`** | Precompile **2.79s** (measured 2026-04-25). Fast startup wins when you just need a derivative or a substitution. |
 | **Spine of an AI4S / SciML project** (modeling, PDE/DAE, equation discovery, codegen, GPU) | **`Symbolics` + `ModelingToolkit`** | The whole AI4S stack is built on it. Native, NOT deprecated (v7.x, actively developed 2026). |
-| **Heavy CAS operations** SymEngine/Symbolics can't do (`integrate`, `dsolve`, `trigsimp`/`radsimp`, `factor`, assumptions, special functions) | **`SymPyPythonCall`**, called **as a service at a thin boundary** | Best-in-class algebraic simplification/integration. Never the spine — borrow the operation, don't rebuild on it. |
+| **Heavy CAS operations** SymEngine/Symbolics can't do (`integrate`, `dsolve`, `trigsimp`/`radsimp`, `factor`, assumptions, special functions) | **`SymPyPythonCall`**, called **as a service at a thin boundary** | The most complete general CAS practically callable from Julia (strong `simplify`/`integrate`). Never the spine — borrow the operation, don't rebuild on it. |
 
 **Decision rule** — answer one question first: *is this an AI4S / SciML project (you will generate
 fast Julia/C code, build an `ODESystem`/PDE, run `structural_simplify`, register symbolic
@@ -115,10 +116,10 @@ in the search loop is orders of magnitude too slow); convert to `Symbolics` only
    `subs`, `diff`, `coeff`, numerator/denominator extraction, symbolic linear algebra, and
    `lambdify`. C++ libsymengine wrapper distributed as a pre-built JLL; Julia-side precompile is
    seconds (**measured 2.79s on 2026-04-25**). The Julia package wraps only what SymEngine
-   exposes through its C wrapper, so it has **no general `simplify`** (only `expand`/`cse` are
-   wrapped) and **no `solve`/`integrate`/`dsolve`/`trigsimp`/assumptions** — those require path 3
-   (SymPyPythonCall), or path 2's native `simplify` inside a SciML project. Do not assume
-   SymPy-equivalent support.
+   exposes through its C wrapper, so it has **no general `simplify`** — of the simplification
+   family only `expand`/`cse` are wrapped — and **no `solve`/`integrate`/`dsolve`/`trigsimp`/
+   assumptions**. Those require path 3 (SymPyPythonCall), or path 2's native `simplify` inside a
+   SciML project. Do not assume SymPy-equivalent support.
    ```julia
    using SymEngine
    @vars x y

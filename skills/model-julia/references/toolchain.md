@@ -67,7 +67,7 @@ For clusters use `Distributed`/`MPI.jl`; for GPU kernels `KernelAbstractions.jl`
 | Job | Modern tool (use this) | Replaces / older |
 |---|---|---|
 | Differentiate anything | `DifferentiationInterface` + `ADTypes` | raw ForwardDiff/Zygote calls |
-| Fast reverse-mode AD | `AutoEnzyme()` | Zygote (when mutation/speed matters) |
+| Fast reverse-mode AD | `AutoEnzyme()` | Zygote (slower; weak on mutation — autodiff.md §2.7.3) |
 | GPU/TPU + NN | `Reactant` + `Lux` | hand-written CUDA.jl |
 | Detect instability (CI) | `JET.@test_opt` | manual `@code_warntype` |
 | Forbid instability (def site) | `DispatchDoctor.@stable` | hope |

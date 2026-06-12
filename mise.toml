@@ -1,8 +1,15 @@
-# Mise configuration for dotfiles management
+# Mise configuration for dotfiles management — the ONLY task runner for this repo.
+# (justfile was retired; `j`/`jl` aliases remain for per-project justfiles elsewhere.)
+# Single sources of truth: symlinks -> scripts/link-dots.sh, tools -> Brewfile,
+# tool check -> scripts/check-tools.sh.
 
 [tasks.up]
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
+
+[tasks."install:tools"]
+description = "Install the full CLI toolbox (single source: Brewfile)"
+run = 'brew bundle --file=~/dotfiles/Brewfile'
 
 [tasks."install:bun_packages"]
 run = '''
@@ -14,44 +21,51 @@ description = "Initialize Mac environment (all-in-one setup)"
 run = '''
 brew install sheldon coreutils
 brew bundle --file=~/dotfiles/Brewfile
-mise run mac:link-dots
+mise run link-dots
 mise run link:skills
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
 
-[tasks."mac:link-dots"]
-description = "Create symlinks for Mac dotfiles"
+[tasks.link-dots]
+description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
+run = 'bash ~/dotfiles/scripts/link-dots.sh'
+
+[tasks.check-tools]
+description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
+run = 'bash ~/dotfiles/scripts/check-tools.sh'
+
+[tasks."wsl:init"]
+description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = '''
-mkdir -p ~/.config
-ln -sf ~/dotfiles/mac/.zprofile ~
-ln -sf ~/dotfiles/mac/.local-gitconfig ~
-ln -sf ~/dotfiles/common/.zshrc ~
-ln -sf ~/dotfiles/common/sheldon ~/.config/sheldon
-ln -sf ~/dotfiles/common/.gitconfig ~
-ln -sf ~/dotfiles/common/.tmux.conf ~
-# Karabiner (link entire directory)
-rm -rf ~/.config/karabiner
-ln -sf ~/dotfiles/karabiner ~/.config/karabiner
-echo "Dotfiles linked."
+sudo apt install -y zsh
+brew install sheldon topgrade
+bash ~/dotfiles/scripts/link-dots.sh
+brew bundle --file=~/dotfiles/Brewfile
+topgrade
+chsh -s $(which zsh)
+echo "---"
+echo "Setup complete. Run: exec zsh"
 '''
 
-[tasks."mac:check-tools"]
-description = "Check which recommended tools are installed"
-run = '''
-echo "Checking recommended tools..."
-for tool in bat eza rg fd dust procs btop gping sd choose tldr zoxide broot delta just fzf lazygit lazydocker jq yq direnv starship atuin mcfly navi rip sheldon tmux gh mise; do
-  if command -v "$tool" >/dev/null 2>&1; then
-    echo "  $tool"
-  else
-    echo "  $tool"
-  fi
-done
-'''
+[tasks."wsl:fix-gitexe"]
+description = "Allow Windows git.exe to trust the WSL repo path"
+run = '''git.exe config --global --add safe.directory '%(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles' '''
 
 [tasks."install:rust"]
 description = "Install Rust toolchain"
 run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
+
+[tasks."cc:install-mcp"]
+description = "Install Claude Code MCP servers"
+run = '''
+claude mcp add context7 -- bunx @upstash/context7-mcp@latest
+claude mcp add sequential-thinking -- bunx @modelcontextprotocol/server-sequential-thinking
+claude mcp add github -- bunx @modelcontextprotocol/server-github
+claude mcp add memory -- bunx @modelcontextprotocol/server-memory
+claude mcp add postgres -- bunx @modelcontextprotocol/server-postgres
+claude mcp add playwright -- bunx @playwright/mcp@latest
+'''
 
 [tasks."link:skills"]
 description = "Link commands directory to AI tools' skills/prompts directories"

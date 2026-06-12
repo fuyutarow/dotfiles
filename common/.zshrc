@@ -63,16 +63,9 @@ _dbg "Setting up bun completions in .zshrc"
 
 _dbg "Finished .zshrc"
 
-# >>> juliaup initialize >>>
+# juliaup (cross-platform; guarded, $HOME-relative — do NOT let juliaup write
+# machine-absolute paths here; if it re-appends its managed block, fold it back into this form)
+[[ -d "$HOME/.juliaup/bin" ]] && path=("$HOME/.juliaup/bin" $path) && export PATH
+[[ -f "$HOME/.julia/juliaup/completions/zsh.zsh" ]] && source "$HOME/.julia/juliaup/completions/zsh.zsh"
 
-# !! Contents within this block are managed by juliaup !!
-
-path=('/Users/fuyu/.juliaup/bin' $path)
-export PATH
-# Tab completion for juliaup and julia channel selection
-[ -f "/Users/fuyu/.julia/juliaup/completions/zsh.zsh" ] && source "/Users/fuyu/.julia/juliaup/completions/zsh.zsh"
-
-# <<< juliaup initialize <<<
-
-# Added by Antigravity IDE
-export PATH="/Users/fuyu/.antigravity-ide/antigravity-ide/bin:$PATH"
+# Machine/OS-specific PATH entries belong in mac/.zprofile or wsl/.zprofile, not here.

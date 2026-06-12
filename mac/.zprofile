@@ -69,4 +69,9 @@ if command -v sccache &> /dev/null; then
   export RUSTC_WRAPPER="sccache"
 fi
 
+# Antigravity IDE (macOS-only; guarded so absence is harmless)
+if [[ -d "$HOME/.antigravity-ide/antigravity-ide/bin" ]]; then
+  export PATH="$HOME/.antigravity-ide/antigravity-ide/bin:$PATH"
+fi
+
 _dbg "Finished .zprofile (macOS)"

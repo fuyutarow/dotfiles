@@ -1,138 +1,95 @@
 # Claude Code Environment Information
 
-This file provides essential context for Claude Code to understand your development environment and preferences.
+This file provides essential context for Claude Code to understand this dotfiles repo and the
+user's environment. It is **OS-neutral**: the same repo drives **macOS** and **WSL2 (Ubuntu)**.
 
 ## Development Environment
 
-### Operating System
-- **Platform**: WSL2 (Ubuntu on Windows)
-- **Primary Shell**: zsh with sheldon plugin manager
-- **Terminal**: Windows Terminal with tmux sessions
-- **Editor**: Cursor (primary), VS Code (fallback)
+### Operating Systems (dual-target)
+- **macOS** (primary at the moment) and **WSL2 Ubuntu** — detect at runtime, never assume one.
+- Shell config detects OS **once** via `IS_MAC` / `IS_WSL` (defined at the top of
+  `common/aliases.zsh`). Use these booleans for any new OS-dependent logic; do not add new
+  inline `uname` / `$OSTYPE` checks.
+- **Shell**: zsh with sheldon plugin manager. **Terminal**: iTerm2 (mac) / Windows Terminal (WSL),
+  with tmux.
+- **Editor**: Cursor (primary), VS Code (fallback) — `e` opens the right one.
 
 ### Package Managers
-- **System**: apt (Ubuntu), brew (Homebrew on Linux)
-- **Node.js**: bun (preferred), npm (fallback)
-- **Rust**: cargo
-- **Python**: pip
+- **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile` is the single source of truth.
+- **Node.js**: bun (preferred). **Rust**: cargo. **Python**: pip/uv.
 
-### Key Tools & Preferences
-
-#### Modern CLI Replacements (all installed and aliased)
-- `ls` → `eza` (aliases: l, ll, la, lll, lt)
-- `cat` → `bat` (alias: p)
-- `grep` → `ripgrep` (aliases: gr, grr, gv, gl)
-- `find` → `fd` (alias: f)
-- `cd` → `zoxide` (aliases: , and ,,)
-- `du` → `dust` (alias: du2)
-- `ps` → `procs`
-- `rm` → `rip` (rm is DISABLED for safety)
-
-#### Development Tools
-- **Git TUI**: lazygit (alias: lg)
-- **Task Runner**: just (alias: j)
-- **Directory Navigation**: zoxide + custom commad system
-- **History Management**: atuin (Ctrl+R integration)
-- **File Viewer**: bat with syntax highlighting
-
-#### tmux Configuration
-- **Prefix Keys**: Alt+g (primary), Ctrl+g (secondary)
-- **Japanese Input Support**: Full-width character bindings
-- **Mouse Support**: Enabled with right-click context menus
-- **Status Bar**: Custom system monitor with colored indicators
-- **Window Naming**: Auto-detection of project names from package.json, Cargo.toml, etc.
-
-## Project Structure
+## Repo Architecture — responsibility map
 
 ```
 ~/dotfiles/
-├── common/              # Shared configurations
-│   ├── aliases.zsh      # 700+ lines of modern CLI aliases and functions
-│   ├── .tmux.conf       # Comprehensive tmux configuration
-│   └── sheldon/         # Zsh plugin management
-├── wsl/                 # WSL-specific files
-├── karabiner/           # Keyboard customization (unused in WSL)
-├── justfile             # Main task runner
-├── tmux-*.sh           # Custom tmux scripts
-└── CLAUDE.md           # This file
+├── common/              # Shared between OSes (MUST stay machine/OS-agnostic)
+│   ├── aliases.zsh      # All common aliases + IS_MAC/IS_WSL detection;
+│   │                    #   sources mac|wsl/aliases.zsh at the END (OS file can override)
+│   ├── .zshrc           # Shared zsh config ($HOME-relative, existence-guarded only)
+│   ├── .gitconfig       # Includes ~/.local-gitconfig (per-OS, linked from mac|wsl/)
+│   ├── .tmux.conf
+│   └── sheldon/         # Plugin manager config
+├── mac/                 # macOS-only: .zprofile, aliases.zsh, .local-gitconfig
+├── wsl/                 # WSL-only:   .zprofile, aliases.zsh, .local-gitconfig
+├── scripts/             # SINGLE SOURCES OF TRUTH (edit here, not in task runners)
+│   ├── link-dots.sh     # All symlink creation (OS-aware)
+│   └── check-tools.sh   # Tool-presence check
+├── Brewfile             # All CLI tools (mac casks gated by `if OS.mac?`)
+├── mise.toml            # THE task runner (justfile retired): mac:init, wsl:init,
+│                        #   link-dots, check-tools, install:tools, cc:install-mcp, link:skills
+├── commands/            # AI prompts/skills (linked to ~/.claude/commands etc. via link:skills)
+├── skills/              # Claude Code skills (e.g. model-julia)
+└── karabiner/           # Keyboard customization (macOS)
 ```
 
-## Command Conventions
+**Conventions to preserve:**
+1. `common/` must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
+   unguarded OS-specific commands. OS-specific → `mac/` or `wsl/`; machine-specific → guard with
+   existence checks.
+2. Symlink list lives ONLY in `scripts/link-dots.sh`. Tool list lives ONLY in `Brewfile`
+   (+ `scripts/check-tools.sh` for the check). Repo tasks live ONLY in `mise.toml` —
+   this repo has NO justfile (retired); never reintroduce one.
+3. OS-specific alias files load **after** common ones, so they may override.
+4. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 
-### Navigation
-- `, <path>` - Smart directory jump with zoxide
-- `,,` - Previous directory
-- `,d <subdir>` - Jump to ~/dotfiles/<subdir>
-- `,p <subdir>` - Jump to ~/projects/<subdir>
+## Setup / Tasks
 
-### File Operations
-- `p <file>` - View file with bat (syntax highlighted)
-- `pp <file>` - View file and copy to clipboard
-- `f <pattern>` - Find files with fd
-- `gr <pattern>` - Search in files with ripgrep
+All repo tasks go through **mise** (`mise tasks` to list):
 
-### Development
-- `j` - Run just commands (check justfile)
-- `lg` - Launch lazygit
-- `e` - Open editor (cursor for Git repos, code otherwise)
-- `c` - Claude Code CLI
-- `cc` - Copy to clipboard (cross-platform)
+- **mac bootstrap**: `mise run mac:init` · **WSL bootstrap**: `mise run wsl:init` (see README)
+- **Relink dotfiles**: `mise run link-dots` · **Install tools**: `mise run install:tools`
+- **Check tools**: `mise run check-tools` · **Update everything**: `mise run up`
+- **MCP servers**: `mise run cc:install-mcp`
 
-### Help & Discovery
-- `hhh` - Show all custom aliases and their descriptions
-- `h <command>` - Better man pages with tldr
-- `jl` - List available just commands
+(`j`/`jl` aliases for `just` remain for OTHER projects' justfiles — not used by this repo.)
 
-## Safety Features
+## Key Tools & Aliases
 
-### Disabled Commands
-- `rm` - Permanently disabled, must use `rip` for file removal
-- Standard commands show warnings when modern alternatives are available
+### Modern CLI replacements (installed via Brewfile, aliased in common/aliases.zsh)
+- `ls` → `eza` (l, ll, la) · `cat` → `bat` (p) · `grep` → `ripgrep` (gr) · `find` → `fd` (f)
+- `cd` → `zoxide` (`,` and `,,`) · `du` → `dust` (du2) · `ps` → `procs`
+- `rm` → **DISABLED** (function errors out); use `rip` for file removal
 
-### Clipboard Integration
-- Cross-platform clipboard support (WSL ↔ Windows)
-- UTF-8 encoding handling for Japanese text
-- Commands: `cc`, `pwdc`, `pp`
+### Daily commands
+- `lg` lazygit · `j` just · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
+- `o` open · `oo` open current dir (Finder on mac / Explorer on WSL) · `s`/`start` launch app
+- `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
+- History: atuin (Ctrl+R)
 
-## Git Configuration
+## Git
+- Default branch: **`alpha`** (not main/master)
+- Per-OS git config via `[include] ~/.local-gitconfig` (linked from mac/ or wsl/)
+- Prefer lazygit (`lg`) for interactive git work
 
-- Default branch: `alpha` (not main/master)
-- Automatic project detection in tmux windows
-- Branch status indicators: `*` (uncommitted), `+` (untracked), `↑` (unpushed), `↓` (unpulled)
-
-## Task Management
-
-### Available Just Commands
-- `just up` - System update with topgrade
-- `just install-productivity` - Install atuin, zoxide, lazygit
-- `just cc-install-mcp` - Install Claude MCP servers
-
-### Recommended Workflow
-1. Use `lg` for all Git operations (lazygit TUI)
-2. Navigate with `, <path>` instead of cd
-3. Use `j` for project-specific tasks
-4. Check `jl` for available commands
-5. Use `hhh` to discover aliases
-
-## Language Preferences
-
-- **Primary**: English for code and comments
-- **Secondary**: Japanese support enabled in tmux and clipboard
-- **Encoding**: UTF-8 with proper WSL integration
+## Safety Rules
+- `rm` is permanently disabled in shell config — **always use `rip`** (never suggest raw `rm`).
+- `mv`/`cp` are no-clobber by default (`mvf`/`cpf` to force).
+- Clipboard is cross-platform (`cc`, `pp`, `pwdc`) with UTF-8/UTF-16 handling for WSL.
 
 ## Notes for Claude
-
-1. **Always check `jl`** to see available just commands before suggesting manual installation
-2. **Use modern CLI tools** - they're all aliased and preferred over standard Unix tools
-3. **tmux is heavily customized** - reference .tmux.conf for advanced features
-4. **Safety first** - rm is disabled, use rip for file removal
-5. **Clipboard integration works** - use `cc` or `pp` commands for copying
-6. **zoxide is primary navigation** - use `, <path>` instead of cd
-
-## Testing & Development
-
-- **Preferred test runner**: Check package.json or justfile for project-specific commands
-- **Build systems**: Cargo for Rust, bun for Node.js, just for multi-language projects
-- **Linting**: Usually `bun run lint` or `cargo clippy` - check project files first
-
-This environment prioritizes safety, modern tooling, and efficient workflows. When in doubt, use `hhh` for help or `jl` for available tasks.
+1. Check `jl` / `mise tasks` before suggesting manual installs; prefer `brew bundle`.
+2. New OS-dependent logic: branch on `$IS_MAC` / `$IS_WSL`, place code in `mac/` / `wsl/`.
+3. Never write machine-absolute paths into `common/` (tools like juliaup may try to append
+   them to `.zshrc` — fold such blocks back into `$HOME`-relative guarded form).
+4. tmux is heavily customized (`common/.tmux.conf`); prefix is Alt+g / Ctrl+g.
+5. Language: English for code/comments; Japanese OK in docs and conversation.

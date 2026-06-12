@@ -9,6 +9,13 @@ command_exists() {
   type "$1" >/dev/null 2>&1
 }
 
+# OS detection — define once, reuse everywhere (and for the OS-specific files
+# sourced at the end of this file: mac/aliases.zsh, wsl/aliases.zsh)
+IS_WSL=false
+IS_MAC=false
+[[ "$(uname -r)" == *microsoft* ]] && IS_WSL=true
+[[ "$OSTYPE" == darwin* ]]         && IS_MAC=true
+
 # Define command recommendations with their alternatives and installation info
 typeset -A COMMAND_RECOMMENDATIONS=(
   ["grep"]="rg:brew install ripgrep:cargo install ripgrep"
@@ -229,13 +236,8 @@ alias c='copytoclipboard'
 alias pwdc='pwd | copytoclipboard'
 
 
-# WSL-specific aliases
-if [[ "$(uname -r)" == *microsoft* ]]; then
-  alias open='explorer.exe'
-  alias o="open"
-  alias oo='open .'
-  alias winget='winget.exe'
-fi
+# WSL/macOS-specific aliases (open, o, oo, winget, …) now live in
+# wsl/aliases.zsh and mac/aliases.zsh, sourced conditionally at the end of this file.
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -774,3 +776,9 @@ esac
 #   }
 # else
 # fi
+
+# ============================================
+# OS-specific aliases (loaded last so they can override the common ones above)
+# ============================================
+$IS_MAC && [[ -f "${HOME}/dotfiles/mac/aliases.zsh" ]] && source "${HOME}/dotfiles/mac/aliases.zsh"
+$IS_WSL && [[ -f "${HOME}/dotfiles/wsl/aliases.zsh" ]] && source "${HOME}/dotfiles/wsl/aliases.zsh"

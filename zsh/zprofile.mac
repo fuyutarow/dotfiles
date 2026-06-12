@@ -48,8 +48,8 @@ else
   _dbg "Warning: sheldon not found"
   # Fallback: load aliases directly
   _dbg "Loading aliases.zsh directly as fallback"
-  if [[ -f "$HOME/dotfiles/common/aliases.zsh" ]]; then
-    source "$HOME/dotfiles/common/aliases.zsh"
+  if [[ -f "$HOME/dotfiles/zsh/aliases.zsh" ]]; then
+    source "$HOME/dotfiles/zsh/aliases.zsh"
   fi
 fi
 

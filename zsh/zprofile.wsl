@@ -67,16 +67,16 @@ if command -v sheldon &> /dev/null; then
     _dbg "Warning: sheldon source timed out or failed"
     # Fallback: load aliases directly
     _dbg "Loading aliases.zsh directly as fallback"
-    if [[ -f "$HOME/dotfiles/common/aliases.zsh" ]]; then
-      source "$HOME/dotfiles/common/aliases.zsh"
+    if [[ -f "$HOME/dotfiles/zsh/aliases.zsh" ]]; then
+      source "$HOME/dotfiles/zsh/aliases.zsh"
     fi
   fi
 else
   _dbg "Warning: sheldon not found"
   # Fallback: load aliases directly
   _dbg "Loading aliases.zsh directly as fallback"
-  if [[ -f "$HOME/dotfiles/common/aliases.zsh" ]]; then
-    source "$HOME/dotfiles/common/aliases.zsh"
+  if [[ -f "$HOME/dotfiles/zsh/aliases.zsh" ]]; then
+    source "$HOME/dotfiles/zsh/aliases.zsh"
   fi
 fi
 

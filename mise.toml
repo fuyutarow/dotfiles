@@ -68,22 +68,24 @@ claude mcp add playwright -- bunx @playwright/mcp@latest
 '''
 
 [tasks."link:skills"]
-description = "Link commands directory to AI tools' skills/prompts directories"
+description = "Link agents/ (commands & skills) into AI tools' config directories"
 run = '''
-# Claude Code - commands (skills)
+# Claude Code — slash commands & skills
 mkdir -p ~/.claude
-ln -sfn ~/dotfiles/commands ~/.claude/commands
+ln -sfn ~/dotfiles/agents/commands ~/.claude/commands
+ln -sfn ~/dotfiles/agents/skills   ~/.claude/skills
 
-# Codex - skills
+# Codex — skills
 mkdir -p ~/.codex
-ln -sfn ~/dotfiles/commands ~/.codex/skills
+ln -sfn ~/dotfiles/agents/commands ~/.codex/skills
 
-# Gemini - global_workflows
+# Gemini — global_workflows
 mkdir -p ~/.gemini/antigravity
-ln -sfn ~/dotfiles/commands ~/.gemini/antigravity/global_workflows
+ln -sfn ~/dotfiles/agents/commands ~/.gemini/antigravity/global_workflows
 
-echo "✅ Skill links created successfully:"
-echo "   ~/.claude/commands -> ~/dotfiles/commands"
-echo "   ~/.codex/skills -> ~/dotfiles/commands"
-echo "   ~/.gemini/antigravity/global_workflows -> ~/dotfiles/commands"
+echo "✅ Agent links created:"
+echo "   ~/.claude/commands -> ~/dotfiles/agents/commands"
+echo "   ~/.claude/skills   -> ~/dotfiles/agents/skills"
+echo "   ~/.codex/skills    -> ~/dotfiles/agents/commands"
+echo "   ~/.gemini/antigravity/global_workflows -> ~/dotfiles/agents/commands"
 '''

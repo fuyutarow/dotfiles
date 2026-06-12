@@ -23,7 +23,7 @@ This directory contains tmux layout scripts and utilities.
 All scripts are executable and can be run directly:
 
 ```bash
-~/dotfiles/tmux-scripts/layout-6pane-mixed.sh
+~/dotfiles/tmux/scripts/layout-6pane-mixed.sh
 ```
 
 Or called via tmux keybindings as configured in `.tmux.conf`.

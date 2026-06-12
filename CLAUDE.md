@@ -8,7 +8,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 ### Operating Systems (dual-target)
 - **macOS** (primary at the moment) and **WSL2 Ubuntu** — detect at runtime, never assume one.
 - Shell config detects OS **once** via `IS_MAC` / `IS_WSL` (defined at the top of
-  `common/aliases.zsh`). Use these booleans for any new OS-dependent logic; do not add new
+  `zsh/aliases.zsh`). Use these booleans for any new OS-dependent logic; do not add new
   inline `uname` / `$OSTYPE` checks.
 - **Shell**: zsh with sheldon plugin manager. **Terminal**: iTerm2 (mac) / Windows Terminal (WSL),
   with tmux.
@@ -18,39 +18,40 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 - **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile` is the single source of truth.
 - **Node.js**: bun (preferred). **Rust**: cargo. **Python**: pip/uv.
 
-## Repo Architecture — responsibility map
+## Repo Architecture — topic-first, one tool = one directory
 
 ```
 ~/dotfiles/
-├── common/              # Shared between OSes (MUST stay machine/OS-agnostic)
-│   ├── aliases.zsh      # All common aliases + IS_MAC/IS_WSL detection;
-│   │                    #   sources mac|wsl/aliases.zsh at the END (OS file can override)
-│   ├── .zshrc           # Shared zsh config ($HOME-relative, existence-guarded only)
-│   ├── .gitconfig       # Includes ~/.local-gitconfig (per-OS, linked from mac|wsl/)
-│   ├── .tmux.conf
-│   └── sheldon/         # Plugin manager config
-├── mac/                 # macOS-only: .zprofile, aliases.zsh, .local-gitconfig
-├── wsl/                 # WSL-only:   .zprofile, aliases.zsh, .local-gitconfig
-├── scripts/             # SINGLE SOURCES OF TRUTH (edit here, not in task runners)
-│   ├── link-dots.sh     # All symlink creation (OS-aware)
-│   └── check-tools.sh   # Tool-presence check
+├── zsh/                 # ALL zsh: zshrc, aliases.zsh (common + IS_MAC/IS_WSL detection),
+│   │                    #   mac.zsh / wsl.zsh (OS aliases, sourced at END of aliases.zsh),
+│   │                    #   zprofile.mac / zprofile.wsl
+├── git/                 # ALL git: gitconfig (includes ~/.local-gitconfig), local.mac, local.wsl
+├── tmux/                # ALL tmux: tmux.conf + scripts/ (status bar, layouts)
+├── sheldon/             # zsh plugin manager config
+├── karabiner/           # Keyboard customization (macOS-only topic)
+├── agents/              # ALL AI-assistant content (linked via `mise run link:skills`)
+│   ├── commands/        #   slash-command prompts → ~/.claude/commands, ~/.codex/skills, gemini
+│   └── skills/          #   Claude Code skills (e.g. model-julia) → ~/.claude/skills
+├── scripts/             # Repo plumbing — SINGLE SOURCES OF TRUTH
+│   ├── link-dots.sh     #   all symlink creation (OS-aware)
+│   └── check-tools.sh   #   tool-presence check
 ├── Brewfile             # All CLI tools (mac casks gated by `if OS.mac?`)
-├── mise.toml            # THE task runner (justfile retired): mac:init, wsl:init,
-│                        #   link-dots, check-tools, install:tools, cc:install-mcp, link:skills
-├── commands/            # AI prompts/skills (linked to ~/.claude/commands etc. via link:skills)
-├── skills/              # Claude Code skills (e.g. model-julia)
-└── karabiner/           # Keyboard customization (macOS)
+└── mise.toml            # THE task runner (justfile retired): mac:init, wsl:init,
+                         #   link-dots, check-tools, install:tools, cc:install-mcp, link:skills
 ```
 
 **Conventions to preserve:**
-1. `common/` must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
-   unguarded OS-specific commands. OS-specific → `mac/` or `wsl/`; machine-specific → guard with
-   existence checks.
-2. Symlink list lives ONLY in `scripts/link-dots.sh`. Tool list lives ONLY in `Brewfile`
+1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.sh`.
+   Never recreate `common/`/`mac/`/`wsl/` top-level dirs — OS variance lives INSIDE a topic dir
+   as `*.mac` / `*.wsl` (or `mac.zsh` / `wsl.zsh`) files.
+2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
+   unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
+3. Symlink list lives ONLY in `scripts/link-dots.sh`. Tool list lives ONLY in `Brewfile`
    (+ `scripts/check-tools.sh` for the check). Repo tasks live ONLY in `mise.toml` —
    this repo has NO justfile (retired); never reintroduce one.
-3. OS-specific alias files load **after** common ones, so they may override.
-4. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
+4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
+   sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
+5. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 
 ## Setup / Tasks
 
@@ -65,7 +66,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Key Tools & Aliases
 
-### Modern CLI replacements (installed via Brewfile, aliased in common/aliases.zsh)
+### Modern CLI replacements (installed via Brewfile, aliased in zsh/aliases.zsh)
 - `ls` → `eza` (l, ll, la) · `cat` → `bat` (p) · `grep` → `ripgrep` (gr) · `find` → `fd` (f)
 - `cd` → `zoxide` (`,` and `,,`) · `du` → `dust` (du2) · `ps` → `procs`
 - `rm` → **DISABLED** (function errors out); use `rip` for file removal
@@ -78,7 +79,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Git
 - Default branch: **`alpha`** (not main/master)
-- Per-OS git config via `[include] ~/.local-gitconfig` (linked from mac/ or wsl/)
+- Per-OS git config via `[include] ~/.local-gitconfig` (linked from `git/local.mac` or `git/local.wsl`)
 - Prefer lazygit (`lg`) for interactive git work
 
 ## Safety Rules
@@ -88,8 +89,9 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Notes for Claude
 1. Check `jl` / `mise tasks` before suggesting manual installs; prefer `brew bundle`.
-2. New OS-dependent logic: branch on `$IS_MAC` / `$IS_WSL`, place code in `mac/` / `wsl/`.
-3. Never write machine-absolute paths into `common/` (tools like juliaup may try to append
+2. New OS-dependent logic: branch on `$IS_MAC` / `$IS_WSL`; OS-only files go INSIDE the
+   topic dir as `*.mac` / `*.wsl` (e.g. `zsh/mac.zsh`, `git/local.wsl`).
+3. Never write machine-absolute paths into shared files (`zsh/`, `git/`, `tmux/`) (tools like juliaup may try to append
    them to `.zshrc` — fold such blocks back into `$HOME`-relative guarded form).
-4. tmux is heavily customized (`common/.tmux.conf`); prefix is Alt+g / Ctrl+g.
+4. tmux is heavily customized (`tmux/tmux.conf`); prefix is Alt+g / Ctrl+g.
 5. Language: English for code/comments; Japanese OK in docs and conversation.

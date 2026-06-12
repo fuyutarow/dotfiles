@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Single source of truth for dotfile symlinks (macOS & WSL).
 # Called by `mise run link-dots` — do not duplicate link lists anywhere else;
-# add new links HERE.
+# add new links HERE. Layout is topic-first: one tool = one directory.
 set -euo pipefail
 
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
-# --- OS detection (same convention as common/aliases.zsh) ---
+# --- OS detection (same convention as zsh/aliases.zsh) ---
 IS_MAC=false
 IS_WSL=false
 [[ "$(uname -s)" == Darwin ]] && IS_MAC=true
@@ -20,24 +20,34 @@ link() { # link <repo-relative source> <target>
   echo "linked: $dst -> $src"
 }
 
-# --- Common (both OSes) ---
-link common/.zshrc      "$HOME/.zshrc"
-link common/.gitconfig  "$HOME/.gitconfig"
-link common/.tmux.conf  "$HOME/.tmux.conf"
-link common/sheldon     "$HOME/.config/sheldon"
-
-# --- OS-specific ---
+# --- zsh ---
+link zsh/zshrc       "$HOME/.zshrc"
 if $IS_MAC; then
-  link mac/.zprofile        "$HOME/.zprofile"
-  link mac/.local-gitconfig "$HOME/.local-gitconfig"
-  # Karabiner (whole directory)
+  link zsh/zprofile.mac "$HOME/.zprofile"
+elif $IS_WSL; then
+  link zsh/zprofile.wsl "$HOME/.zprofile"
+fi
+link sheldon         "$HOME/.config/sheldon"
+
+# --- git ---
+link git/gitconfig   "$HOME/.gitconfig"
+if $IS_MAC; then
+  link git/local.mac "$HOME/.local-gitconfig"
+elif $IS_WSL; then
+  link git/local.wsl "$HOME/.local-gitconfig"
+fi
+
+# --- tmux ---
+link tmux/tmux.conf  "$HOME/.tmux.conf"
+
+# --- karabiner (macOS only) ---
+if $IS_MAC; then
   rm -rf "$HOME/.config/karabiner"
   link karabiner "$HOME/.config/karabiner"
-elif $IS_WSL; then
-  link wsl/.zprofile        "$HOME/.zprofile"
-  link wsl/.local-gitconfig "$HOME/.local-gitconfig"
-else
-  echo "warn: neither macOS nor WSL detected — only common links created" >&2
+fi
+
+if ! $IS_MAC && ! $IS_WSL; then
+  echo "warn: neither macOS nor WSL detected — OS-specific links skipped" >&2
 fi
 
 echo "done."

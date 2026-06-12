@@ -2,8 +2,8 @@ shell = "zsh"
 
 # Local configurations - now pointing to new structure
 [plugins.common-configs]
-local = "~/dotfiles/common"
-use = ["*.zsh"]
+local = "~/dotfiles/zsh"
+use = ["aliases.zsh"]  # ONLY this; it sources mac.zsh/wsl.zsh conditionally itself
 apply = ["source"]
 
 # OS-specific configs will be loaded by .zshrc directly

@@ -1,5 +1,5 @@
 .serena/
-commands/.system/
+agents/commands/.system/
 
 # Local overrides
 local/

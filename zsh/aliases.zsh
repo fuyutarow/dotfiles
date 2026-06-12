@@ -10,7 +10,7 @@ command_exists() {
 }
 
 # OS detection — define once, reuse everywhere (and for the OS-specific files
-# sourced at the end of this file: mac/aliases.zsh, wsl/aliases.zsh)
+# sourced at the end of this file: zsh/mac.zsh, zsh/wsl.zsh)
 IS_WSL=false
 IS_MAC=false
 [[ "$(uname -r)" == *microsoft* ]] && IS_WSL=true
@@ -237,7 +237,7 @@ alias pwdc='pwd | copytoclipboard'
 
 
 # WSL/macOS-specific aliases (open, o, oo, winget, …) now live in
-# wsl/aliases.zsh and mac/aliases.zsh, sourced conditionally at the end of this file.
+# zsh/wsl.zsh and zsh/mac.zsh, sourced conditionally at the end of this file.
 
 # colored GCC warnings and errors
 #export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
@@ -741,7 +741,7 @@ alias jaen="trans -b -sl=ja -tl=en"
 # start app
 # =========
 
-# `start` (and `mnt-d`) are OS-specific → defined in mac/aliases.zsh and wsl/aliases.zsh
+# `start` (and `mnt-d`) are OS-specific → defined in zsh/mac.zsh and zsh/wsl.zsh
 
 
 
@@ -756,5 +756,5 @@ alias jaen="trans -b -sl=ja -tl=en"
 # ============================================
 # OS-specific aliases (loaded last so they can override the common ones above)
 # ============================================
-$IS_MAC && [[ -f "${HOME}/dotfiles/mac/aliases.zsh" ]] && source "${HOME}/dotfiles/mac/aliases.zsh"
-$IS_WSL && [[ -f "${HOME}/dotfiles/wsl/aliases.zsh" ]] && source "${HOME}/dotfiles/wsl/aliases.zsh"
+$IS_MAC && [[ -f "${HOME}/dotfiles/zsh/mac.zsh" ]] && source "${HOME}/dotfiles/zsh/mac.zsh"
+$IS_WSL && [[ -f "${HOME}/dotfiles/zsh/wsl.zsh" ]] && source "${HOME}/dotfiles/zsh/wsl.zsh"

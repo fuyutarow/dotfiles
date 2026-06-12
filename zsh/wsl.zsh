@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
-# WSL-specific aliases — sourced from common/aliases.zsh when $IS_WSL.
-# Common aliases live in common/aliases.zsh; only WSL-only ones belong here.
+# WSL-specific aliases — sourced from zsh/aliases.zsh when $IS_WSL.
+# Common aliases live in zsh/aliases.zsh; only WSL-only ones belong here.
 
 # Normalize `open` to the Windows file explorer, then build on it
 alias open='explorer.exe'

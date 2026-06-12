@@ -213,10 +213,10 @@ alias hi='atuin import auto'            # Import existing history
 # Cross-platform clipboard function
 copytoclipboard() {
   # Use tee to both display and pipe to clipboard
-  if [[ "$(uname -r)" == *microsoft* ]]; then
+  if $IS_WSL; then
     # WSL - convert UTF-8 to UTF-16LE for Windows clipboard
     tee /dev/tty | iconv -f UTF-8 -t UTF-16LE | clip.exe
-  elif [[ "$OSTYPE" == "darwin"* ]]; then
+  elif $IS_MAC; then
     # macOS
     tee /dev/tty | pbcopy
   elif command -v xclip &> /dev/null; then
@@ -446,7 +446,7 @@ pp() {
   fi
 
   # Handle encoding for WSL
-  if [[ "$(uname -r)" == *microsoft* ]]; then
+  if $IS_WSL; then
     bat "$1" | tee >(iconv -f UTF-8 -t UTF-16LE | clip.exe)
   else
     bat "$1" | copytoclipboard
@@ -513,7 +513,7 @@ alias to='touch'
 alias tf='tail -fF'
 
 # File operation safety aliases
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if $IS_MAC; then
   alias mv='mv -n'         # 上書き禁止 (BSD)
   alias cp='cp -n'         # 上書き禁止 (BSD)
   alias mvf='command mv'   # 強制上書き
@@ -526,7 +526,7 @@ else
 fi
 
 # rip for safer file removal
-command_exists "rip" || alias rip="rm -i"
+command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
 
 # ============================================
 # Additional Recommended Tools (not replacements)
@@ -741,31 +741,7 @@ alias jaen="trans -b -sl=ja -tl=en"
 # start app
 # =========
 
-local _ostype="$(uname -s)"
-local _cputype="$(uname -m)"
-
-if [ "$_ostype" = Darwin -a "$_cputype" = i386 ]; then
-  # Darwin `uname -s` lies
-  if sysctl hw.optional.x86_64 | grep -q ': 1'; then
-    local _cputype=x86_64
-  fi
-fi
-
-case "$_ostype" in
-Linux)
-  # for WSL
-  alias mnt-d='sudo mount -t drvfs D: /mnt/d'
-  alias start='cmd.exe /c start'
-  ;;
-Darwin)
-  alias start='open -a'
-  ;;
-MINGW* | MSYS* | CYGWIN*)
-  local _ostype=pc-windows-msvc
-  ;;
-*)
-  ;;
-esac
+# `start` (and `mnt-d`) are OS-specific → defined in mac/aliases.zsh and wsl/aliases.zsh
 
 
 

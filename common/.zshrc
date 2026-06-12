@@ -1,13 +1,16 @@
-echo "[DEBUG] Starting .zshrc"
+# Gate startup debug logs behind $DOTFILES_DEBUG (export DOTFILES_DEBUG=1 to see them)
+_dbg(){ [[ -n "$DOTFILES_DEBUG" ]] && echo "[DEBUG] $*"; }
+
+_dbg "Starting .zshrc"
 
 # Load sheldon if not already loaded (non-login shells skip .zprofile)
 if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
-  echo "[DEBUG] Loading sheldon from .zshrc"
+  _dbg "Loading sheldon from .zshrc"
   eval "$(sheldon source)"
 fi
 
 #zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
-echo "[DEBUG] Setting up theme based on HOST: $HOST"
+_dbg "Setting up theme based on HOST: $HOST"
 case "$HOST" in
 "tomatowk")
   zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
@@ -35,7 +38,7 @@ case "$HOST" in
 esac
 
 # Initialize zsh completions
-echo "[DEBUG] Initializing zsh completions"
+_dbg "Initializing zsh completions"
 autoload -Uz compinit
 compinit
 
@@ -43,7 +46,7 @@ compinit
 alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
 
 # Suim (Sui version manager) configuration
-echo "[DEBUG] Setting up Suim in .zshrc"
+_dbg "Setting up Suim in .zshrc"
 if [[ -d "$HOME/.suim" ]]; then
   export PATH="$HOME/.suim:$PATH"
   if [[ -f "$HOME/.suim/current" ]]; then
@@ -51,14 +54,14 @@ if [[ -d "$HOME/.suim" ]]; then
     export PATH="$SUI_VERSION_PATH:$PATH"
   fi
 else
-  echo "[DEBUG] Warning: $HOME/.suim directory not found in .zshrc"
+  _dbg "Warning: $HOME/.suim directory not found in .zshrc"
 fi
 
 # bun completions
-echo "[DEBUG] Setting up bun completions in .zshrc"
+_dbg "Setting up bun completions in .zshrc"
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
-echo "[DEBUG] Finished .zshrc"
+_dbg "Finished .zshrc"
 
 # >>> juliaup initialize >>>
 

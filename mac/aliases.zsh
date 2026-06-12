@@ -4,4 +4,5 @@
 
 # `open` is native on macOS; mirror the WSL shorthands so `o`/`oo` work the same on both
 alias o='open'
-alias oo='open .'   # open the current directory in Finder
+alias oo='open .'        # open the current directory in Finder
+alias start='open -a'    # launch a macOS app by name (`s` is the common shorthand)

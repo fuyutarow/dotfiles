@@ -247,17 +247,23 @@ AD — `references/autodiff.md` (if any function will be differentiated):
 - [ ] Backend choice justified by input dimension and profile, not habit (§2.7.3)
 - [ ] If `AutoForwardDiff` is in the path: all `zeros()` use `eltype(x)`, no `Float64()` casts, no `eigvals` in the AD path, branch selection done in Float64 first (§2.7.4)
 
-Performance & verification — `references/performance.md` (for hot paths):
+Performance & verification — `references/performance.md` (for hot paths; reach for a tool only when its need is real — see packages.md §4 header):
 - [ ] First call is warmup; timing on the second (§2.6); `@btime`/`@b` with `$`-interpolated args
-- [ ] Small fixed-size data uses `StaticArrays`; structured params use `ComponentArrays` (toolchain.md §2.9.1 / §2.9.2)
+- [ ] Small fixed-size data uses `StaticArrays`; *if* params are already structured into many named blocks, `ComponentArrays` (toolchain.md §2.9.1 / §2.9.2)
 - [ ] **JET**: `report_package` clean (or reports justified); consider `@stable` on must-be-fast functions (§2.8)
-- [ ] **AllocCheck**: `@check_allocs` passes on inner loops (§2.8)
+- [ ] *If* an inner loop must be allocation-free and you've added AllocCheck for it: `@check_allocs` passes (§2.8) — don't carry AllocCheck without a guarded loop
 - [ ] **Aqua** (if authoring a package): `Aqua.test_all` clean — no type piracy / ambiguities / stale deps / compat gaps (architecture.md §10.6.1)
-- [ ] Parallel reductions use `OhMyThreads`, never `threadid()`-keyed buffers (toolchain.md §2.9.4)
+- [ ] *If* the work is genuinely parallel: reductions use `OhMyThreads`, never `threadid()`-keyed buffers (toolchain.md §2.9.4) — serial code carries no threads dep
 
 Environment — `references/setup.md`:
 - [ ] `--project=.` (or a named env) on every `julia` invocation (§5)
 - [ ] `Project.toml` / `Manifest.toml` committed for reproducibility (§3.3)
+- [ ] **No declared-but-unused deps.** Every entry in `[deps]` is actually `using`/`import`ed in
+      committed code; packages added at point of use, not preemptively from the packages.md catalog;
+      a dep whose last use was deleted is `Pkg.rm`'d in the same commit. Heavy offenders to never carry
+      speculatively: `Enzyme`/`AllocCheck` (LLVM+GPUCompiler), `Manopt`+`Manifolds` (~100 transitive),
+      `Reactant`/`Lux` (XLA). Declared-but-unused deps inflate Manifest, instantiate, and TTFX, and make
+      every `Pkg` op trigger native recompiles for code never called (packages.md §4 header).
 - [ ] If symbolic computation is involved: the symbolic tool is chosen by ROLE, not preference (packages.md §4) — **SymEngine** for lightweight/throwaway algebra (no `simplify`/`integrate`); **Symbolics + ModelingToolkit** as the spine of an AI4S/SciML project (codegen, PDE/DAE, discovery — required there, not forbidden); **SymPyPythonCall** called as a service at a thin boundary for heavy CAS (`integrate`, `trigsimp`, `factor`, assumptions). Symbolic construction is localized in one module so the spine is never re-typed.
 
 Package architecture — `references/architecture.md` (when the code outgrows one file / a large package):

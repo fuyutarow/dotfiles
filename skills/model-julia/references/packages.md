@@ -1,6 +1,22 @@
 # Recommended Packages by Research Domain (§4)
 
-Select only what the task needs — don't install everything.
+> **This is a lookup catalog, not a starter kit. Add a package at the point of first
+> use, never preemptively.** A dependency you declared in `Project.toml` but never
+> `using`/`import` in committed code is not free: it inflates the `Manifest`, the
+> precompile/instantiate time, and TTFX — and the heavy ones drag in native-compile
+> toolchains that dominate every `Pkg` operation. Observed cost: `Enzyme` pulls
+> `Enzyme_jll` + LLVM IR compilation; `Manopt`+`Manifolds` pull ~100 transitive deps;
+> `AllocCheck` pulls GPUCompiler+LLVM. A project doing AD at `d≤5` with `ForwardDiff`,
+> and hand-rolled Riemannian steps, was carrying all of these **declared-but-unused** —
+> every Manifest touch triggered a multi-minute LLVM recompile storm for code never called.
+>
+> **The rule:** when a task needs differentiation, add `DifferentiationInterface`+`ForwardDiff`
+> — not the whole AD section. When you later profile ForwardDiff as the bottleneck at high
+> input dim, *then* add `Enzyme`. Same for every section below. Treat each entry as
+> "reach for this *when* the described need arises," not "install this because the domain
+> matches." If you delete the last use of a package, remove it from `Project.toml` in the
+> same commit (`Pkg.rm`). Aqua's stale-deps test + ExplicitImports surface drift, but the
+> discipline is upstream: **add at point of use, prune at point of disuse.**
 
 **Core (stdlib, no install needed):** `LinearAlgebra`, `Statistics`, `Random`, `SparseArrays`, `Printf`
 

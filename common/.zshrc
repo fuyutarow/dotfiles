@@ -59,3 +59,17 @@ echo "[DEBUG] Setting up bun completions in .zshrc"
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 echo "[DEBUG] Finished .zshrc"
+
+# >>> juliaup initialize >>>
+
+# !! Contents within this block are managed by juliaup !!
+
+path=('/Users/fuyu/.juliaup/bin' $path)
+export PATH
+# Tab completion for juliaup and julia channel selection
+[ -f "/Users/fuyu/.julia/juliaup/completions/zsh.zsh" ] && source "/Users/fuyu/.julia/juliaup/completions/zsh.zsh"
+
+# <<< juliaup initialize <<<
+
+# Added by Antigravity IDE
+export PATH="/Users/fuyu/.antigravity-ide/antigravity-ide/bin:$PATH"

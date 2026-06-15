@@ -99,18 +99,53 @@ end
 
 # Embed the git commit (+ dirty/patch state) INTO the saved data → trace any result to its code:
 @tagsave(datadir("res", savename(params, "jld2")), Dict("result" => out))
+
+# ONE driver sweeps MANY runs (never one script per parameter); then collect all runs into one table:
+for p in dict_list(Dict(:lr => [1e-2, 1e-3], :seed => 1:5))
+    produce_or_load(p, datadir("sims")) do q; run_expensive_simulation(q); end
+end
+df = collect_results!(datadir("sims"))   # every saved run → one DataFrame for comparison/plots
 ```
 
-Discipline:
-- **`scripts/` runs experiments; `src/` holds reusable logic** (the experiment-level noun/verb
-  split). Make `src/` a proper module/package and have scripts call it — this is where §10
-  architecture and DrWatson meet: `src/` is your package, `scripts/` is the disposable driver.
-- **`tagsave`/`@tagsave` is the experiment-layer analogue of committing the Manifest** — it records
-  *which code* produced *which artifact*. Use it for any result you might cite later.
-- **`dict_list(Dict(:lr => [1e-2, 1e-3], :seed => 1:5))`** expands a parameter sweep into Dicts.
-  This is for legitimate **experimental design** (hyperparameters, physical regimes) — it is **NOT**
-  a license for the FORBIDDEN "grid sampling instead of solving the optimization" of §2.0.2. Sweep
-  experiments, not the math you should be optimizing or solving exactly.
+Discipline — the experiment-script **lifecycle** (this is what prevents the #1 research-repo rot:
+hundreds of accreted one-off scripts, an ever-growing "canonical" index, results un-retrievable):
+
+- **An experiment is a *run* (parameterized, recorded) — NOT a file.** Never write one script per
+  parameter/seed/cell and commit it. Collapse near-duplicates (`foo_d3p5.jl`,`foo_d3p6.jl`,… or
+  `foo`,`foo2`,`foo_v3`) into ONE driver parameterized by `dict_list`/`@dict`/`ENV`, then sweep.
+  Numbered/suffixed variants are duplication fossils — merge on sight.
+- **Four-layer boundary** (DrWatson × RSE canon):
+  - `src/` — reusable functions/types, **produces no output**. Promotion rule: *the moment a logic
+    is needed by a 2nd script, lift it to `src/` and make both scripts thin callers* (DRY / single
+    authoritative representation). `src/` is a proper module/package.
+  - `scripts/` — **thin canonical drivers**: declare *which `src` fn × which config → which artifact*.
+    Logic does NOT live here. (Earlier guidance "scripts is the disposable driver" was wrong —
+    scripts/ is canonical; the disposable layer is `_research/`.)
+  - `_research/` — one-off exploration / WIP / alpha. **gitignore it** like `data/` (Wilson 2017
+    §3c: don't version what is auto-regenerable). This is the disposable layer, not VC-first-class.
+  - `test/` + `docs/` — the **distillation sink** for stable results.
+- **Distill, then discard.** When a result stabilizes → (a) a `src/` function, (b) a regression
+  `test`, (c) a `docs/` derivation; **then delete the exploration script.** The authoritative record
+  is the `@tagsave`d data (git-commit embedded) + the distilled src/test/docs — *not the script body*.
+  A "canonical scripts" index that only grows is the failure mode; distillation=deletion is the
+  lifecycle's terminal step.
+- **`produce_or_load` / `collect_results!` are the default driver form** (not optional): idempotent
+  re-runs remove the "keep the script around to re-run it" pressure; one
+  `collect_results!(datadir(...))` replaces a pile of `bench_*`/`compare_*` scripts.
+- **`@tagsave`** records *which code produced which artifact* — the experiment-layer analogue of
+  committing the Manifest. Use it for any result you might cite later.
+- **`dict_list`** is for **experimental design** (hyperparameters, physical regimes, seeds) — it is
+  **NOT** a license for the FORBIDDEN "grid sampling instead of solving the optimization" of §2.0.2.
+  Sweep experiments, not the math you should be optimizing or solving exactly.
+
+RSE grounding (this lifecycle is the literature consensus, not a style preference): DRY / single
+authoritative representation — Wilson 2014, *Best Practices for Scientific Computing*
+(10.1371/journal.pbio.1001745); `results/` are disposable / version only hand-made artifacts —
+Wilson 2017, *Good Enough Practices* (10.1371/journal.pcbi.1005510); track the provenance of every
+result (mechanized by `@tagsave`) — Sandve 2013, *Ten Simple Rules for Reproducible Computational
+Research* (10.1371/journal.pcbi.1003285); reusable logic in a package, analysis only calls it —
+Marwick 2018, *research compendium* (10.1080/00031305.2017.1375986); DrWatson — Datseris 2020, JOSS
+(10.21105/joss.02673).
 
 ## 3.5 TTFX (Time To First eXecution) — the layered countermeasure map
 

@@ -66,6 +66,51 @@ abstract type AbstractEnemy  end
 This is the single-namespace analogue of forward declarations: an abstract layer is the
 "common language" that removes the cycle without module walls.
 
+## §10.2.1 Behavior cuts ACROSS the type hierarchy → Holy trait, not a forced supertype
+
+Julia has **single inheritance**: a type has exactly one abstract supertype chain. So an
+**orthogonal** capability — one that classifies types the hierarchy doesn't ("is this iterable /
+sized / GPU-resident / addable?"), or that must classify types you **don't own** — cannot be
+expressed by adding a supertype. The idiomatic fix is the **Holy trait** (Tim Holy Trait Trick,
+THTT): encode the capability as a *value* returned by a small function, then dispatch on that
+value. This is still the standard pattern in 2026 — Julia has **no native traits** and Julia 2.0 /
+a built-in trait system is **not on the roadmap** (core devs judge multiple-inheritance traits ×
+multiple dispatch to risk an ambiguity explosion).
+
+```julia
+# the trait: a tiny closed value hierarchy (the "noun")
+abstract type Addability end
+struct IsAddable  <: Addability end
+struct NotAddable <: Addability end
+
+# classify types — defined AFTER the types exist, for types in ANY package
+addability(::Type) = NotAddable()          # safe default
+addability(::Type{<:Number}) = IsAddable()
+
+# dispatch through the trait (the "verb"): entry point peels the trait, then re-dispatches
+combine(x::T, y::T) where {T} = combine(addability(T), x, y)
+combine(::IsAddable,  x, y) = x + y
+combine(::NotAddable, x, y) = error("$(typeof(x)) is not addable")
+```
+
+- **Zero-cost — but only when the trait function is inferable.** It compiles out **iff**
+  `addability(T)` is constant-foldable: dispatch on `::Type{T}` and keep it pure. If the trait is
+  chosen from a **runtime value** (not the static type) it becomes a real **dynamic dispatch** with
+  cost — do not claim "zero-cost" unconditionally. Verify with `@code_typed` that the trait branch
+  resolved (it should not appear in the typed IR).
+- **The trait function obeys the no-piracy rule too (§10.6).** Adding `addability(::Type{TheirT})`
+  where both `addability` *and* `TheirT` are foreign is type piracy. Own the trait function (define
+  it in your package) OR own the type.
+- **Default to hand-rolled THTT — no dependency.** It's ~5 lines and used throughout `Base`
+  (`IteratorSize`, `IndexStyle`, `IteratorEltype`). Reach for a package only for ergonomics:
+  - **`SimpleTraits.jl`** — thin `@traitfn` sugar over THTT, actively maintained. Caveat: **one
+    trait per method** (can't dispatch on several traits at once) and occasional harmless
+    overwrite warnings. Use only if the boilerplate genuinely hurts.
+  - **`Interfaces.jl`** — *test-time* verification that a type satisfies an interface contract
+    (the trait analogue of Aqua; belongs in `test/`, §10.6.1). Different layer from dispatch.
+  - **Avoid** adding `BinaryTraits` / `WhereTraits` / `DuckDispatch` as deps: their coexistence
+    signals there is **no canonical trait library** — a heavy dep here is a liability, not a win.
+
 ## §10.3 Scale-out ladder: file → **subpackage / interface package**, NOT submodule
 
 The defining lesson of LARGE Julia packages: **when one module gets too big, split into PACKAGES,
@@ -154,6 +199,13 @@ every package you author.** It is a *test suite*, not a formatter: it fails CI w
 been abused. `DispatchDoctor.@stable` (def-site) + `AllocCheck.@check_allocs` (hot kernels) round
 out the proactive side.
 
+**Interactively answering "which method actually ran / where did it come from?"** — the cost of the
+single shared namespace is that a call like `f(x, y)` may resolve to a method from any loaded
+package. Three REPL macros trace it (use these, not guesswork):
+`@which f(x, y)` → the exact method + defining module/file:line; `methods(f)` → the full dispatch
+table for `f`; `@code_typed f(x, y)` → confirms the chosen method *and* that traits/branches folded
+away (§10.2.1). For invalidation/precompile-level provenance, `@snoop_invalidations` (§10.7).
+
 ## §10.7 TTFX & invalidation hygiene at scale
 
 Cross-ref setup.md §3.5 (the layered TTFX map). For a **large** package specifically:
@@ -182,6 +234,9 @@ Cross-ref setup.md §3.5 (the layered TTFX map). For a **large** package specifi
 |---|---|
 | File too long | split into another `include`d role-file; `include` only in the boss file |
 | A needs B's type and vice-versa | hoist shared abstract types to `interfaces.jl`, load first |
+| Behavior cuts ACROSS the hierarchy / classify types you don't own | **Holy trait** (THTT, §10.2.1) — keep the trait fn inferable; don't add a trait dep |
+| Verify a type satisfies an interface contract | `Interfaces.jl` in `test/` (§10.2.1 / §10.6.1) |
+| "Which method actually ran / where from?" | `@which` · `methods` · `@code_typed` (§10.6.1) |
 | Component independently testable/reusable | make it a **separate/sub package**, not a submodule |
 | Shared abstract API across packages | extract an **interface package** (SciMLBase-style) |
 | Optional / heavy dependency | **package extension** via `[weakdeps]` (not `Requires.jl`) |

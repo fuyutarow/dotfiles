@@ -1,11 +1,11 @@
 ---
-name: model-julia
+name: julia
 description: Set up Julia and write correct, performant, modern Julia for theoretical research — one first choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant, JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports, Chairmarks, OhMyThreads, ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit, SymPyPythonCall, Manopt, DrWatson, Pluto, Documenter, Quarto, Julia setup, experiment/project management, notebooks / literate reports, TTFX / precompile latency, or large-package architecture (module/file organization, include order, submodules vs subpackages, package extensions / weakdeps, type piracy, public API). MANDATORY — read this skill BEFORE writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use optimization), and lerp-as-evaluation. All differentiation goes through DifferentiationInterface (raw backend calls are the exception); Dual-propagation rules apply whenever AutoForwardDiff is in the path. Symbolic tooling is chosen by ROLE: SymEngine for lightweight algebra, Symbolics+ModelingToolkit as the spine of AI4S/SciML projects (codegen/PDE/DAE), SymPyPythonCall as a thin-boundary service for heavy CAS (integrate/trigsimp/factor/assumptions).
 ---
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2606.5.0 (2026-06-06, Julia 1.12.6 baseline)
+> **Version**: v2606.6.0 (2026-06-14, Julia 1.12.6 baseline)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -13,6 +13,11 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 > pointered from `references/setup.md` §8, not the focus here.
 >
 > **Changelog (recent)**:
+> - v2606.6.0: architecture.md **§10.2.1 Holy traits** added — when single inheritance can't
+>   express cross-hierarchy / foreign-type behavior; zero-cost **only when the trait fn is
+>   inferable**; hand-rolled THTT as default (SimpleTraits/Interfaces optional, no heavy trait
+>   dep); trait fn obeys no-piracy. §10.6.1 gains the `@which`/`methods`/`@code_typed` "which
+>   method ran / where from" dispatch-tracing workflow. Decision table + checklist updated.
 > - v2606.5.0: **reorganized into progressive-disclosure layout.** SKILL.md trimmed to §1 + §2.0
 >   + the reference index + the §9 checklist; performance/AD/toolchain/packages/setup split into
 >   `references/`. Environment setup rewritten **host-agnostic** (juliaup + `--project=.`) —
@@ -37,7 +42,7 @@ reference file that matches the task.
 | `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
 | `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, viz) | deciding which package to install for a task |
 | `references/setup.md` | §3 install + project env + reproducibility + **§3.4 experiment management (DrWatson)** + TTFX, §5 running, §6 idioms, §7 output, §8 local-dev pointers + **§8.1 notebooks/literate docs (Pluto / Quarto / Documenter)** | setting up Julia, running code, managing reproducible experiments, or choosing a notebook/report tool |
-| `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), TTFX & invalidation hygiene | structuring a package beyond one file, or organizing a large/growing codebase |
+| `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, **Holy traits for cross-hierarchy behavior (§10.2.1)**, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), **`@which`/`methods` dispatch tracing**, TTFX & invalidation hygiene | structuring a package beyond one file, organizing a large/growing codebase, or doing trait-based dispatch |
 
 ---
 
@@ -269,5 +274,6 @@ Environment — `references/setup.md`:
 Package architecture — `references/architecture.md` (when the code outgrows one file / a large package):
 - [ ] One top-level module; files split by role (types vs functions); **every `include` in the boss file in dependency order**, none in subfiles (§10.1)
 - [ ] Circular type deps resolved by hoisting abstract types to `interfaces.jl` loaded first (§10.2)
+- [ ] Cross-hierarchy / foreign-type behavior done via **Holy trait** with an **inferable** trait fn (not a forced supertype, not a trait dep); trait fn obeys no-piracy (§10.2.1)
 - [ ] Growth handled by **subpackage / interface package**, not submodules; optional/heavy deps via **package extensions `[weakdeps]`**, not `Requires.jl` (§10.3–§10.4)
 - [ ] Anti-spaghetti invariants hold: no non-const globals, **no type piracy**, small dispatched functions (§10.6); public API via `export`/`public` (§10.5)

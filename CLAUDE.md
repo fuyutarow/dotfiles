@@ -31,7 +31,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 ├── karabiner/           # Keyboard customization (macOS-only topic)
 ├── agents/              # ALL AI-assistant content (linked via `mise run link:skills`)
 │   ├── commands/        #   slash-command prompts → ~/.claude/commands, ~/.codex/skills, gemini
-│   └── skills/          #   Claude Code skills (e.g. model-julia) → ~/.claude/skills
+│   └── skills/          #   Claude Code skills (e.g. julia) → ~/.claude/skills
 ├── scripts/             # Repo plumbing — SINGLE SOURCES OF TRUTH
 │   ├── link-dots.sh     #   all symlink creation (OS-aware)
 │   └── check-tools.sh   #   tool-presence check

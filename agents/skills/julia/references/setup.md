@@ -1,7 +1,7 @@
 # Environment, Running, Output & Idioms (§3, §5, §6, §7) — portable
 
 Host-agnostic. Paths use a project-local environment (`--project=.`); adapt to your own
-project/output layout. None of this assumes a specific host or container.
+project/output layout. None of this assumes a specific host.
 
 Contents:
 - §3.1 Installing Julia

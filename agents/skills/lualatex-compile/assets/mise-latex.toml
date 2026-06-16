@@ -1,0 +1,92 @@
+# Copy/adapt into the repository's root mise.toml.
+# Adjust LATEX_DIR, LATEX_MAIN, and task prefixes to fit the repo.
+
+[env]
+LATEX_DIR = "papers/2606_001-title_name"
+LATEX_MAIN = "main.tex"
+TEXBIN = "/Library/TeX/texbin"
+
+[tasks."latex:setup"]
+description = "Install TeX Live packages and modern LaTeX tooling"
+depends = ["latex:setup:tex", "latex:setup:modern"]
+
+[tasks."latex:setup:tex"]
+description = "Install TeX Live packages through tlmgr"
+run = '''
+cd "$LATEX_DIR"
+PATH="$TEXBIN:$PATH" tlmgr install \
+  latexmk \
+  chktex \
+  beamer \
+  pgf \
+  luatexja \
+  haranoaji \
+  unicode-math \
+  booktabs \
+  mathtools \
+  collection-latexrecommended \
+  collection-luatex \
+  collection-langjapanese \
+  collection-fontsrecommended
+'''
+
+[tasks."latex:setup:modern"]
+description = "Install modern LaTeX formatter tooling"
+run = '''
+command -v tex-fmt >/dev/null 2>&1 && exit 0
+if command -v brew >/dev/null 2>&1; then
+  brew install tex-fmt
+elif command -v cargo >/dev/null 2>&1; then
+  cargo install tex-fmt
+else
+  echo "Install tex-fmt from https://github.com/WGUNDERWOOD/tex-fmt/releases"
+  exit 127
+fi
+'''
+
+[tasks."latex:fmt"]
+description = "Format LaTeX with tex-fmt"
+run = '''
+cd "$LATEX_DIR"
+tex-fmt "$LATEX_MAIN"
+'''
+
+[tasks."latex:fmt:check"]
+description = "Check LaTeX formatting with tex-fmt"
+run = '''
+cd "$LATEX_DIR"
+tex-fmt --check "$LATEX_MAIN"
+'''
+
+[tasks."latex:lint"]
+description = "Lint LaTeX with ChkTeX"
+run = '''
+cd "$LATEX_DIR"
+PATH="$TEXBIN:$PATH" chktex -q -v0 -n 1 "$LATEX_MAIN"
+'''
+
+[tasks.latex]
+description = "Build LaTeX PDF with latexmk"
+run = '''
+cd "$LATEX_DIR"
+PATH="$TEXBIN:$PATH" latexmk -r latexmkrc "$LATEX_MAIN"
+'''
+
+[tasks."latex:check"]
+description = "Format-check, lint, and build LaTeX"
+depends = ["latex:fmt:check", "latex:lint", "latex"]
+
+[tasks."latex:clean"]
+description = "Clean LaTeX build artifacts"
+run = '''
+cd "$LATEX_DIR"
+PATH="$TEXBIN:$PATH" latexmk -r latexmkrc -c "$LATEX_MAIN"
+'''
+
+[tasks."latex:distclean"]
+description = "Remove all LaTeX build artifacts"
+run = '''
+cd "$LATEX_DIR"
+PATH="$TEXBIN:$PATH" latexmk -r latexmkrc -C "$LATEX_MAIN"
+rm -rf build
+'''

@@ -1,0 +1,8 @@
+# Place at repository root so tex-fmt can discover it from paper subdirectories.
+wrap = true
+wraplen = 100
+tabsize = 2
+tabchar = "space"
+verbosity = "warn"
+lists = []
+no-indent-envs = ["verbatim", "lstlisting", "minted"]

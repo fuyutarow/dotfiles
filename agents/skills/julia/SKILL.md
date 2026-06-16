@@ -20,10 +20,8 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 >   method ran / where from" dispatch-tracing workflow. Decision table + checklist updated.
 > - v2606.5.0: **reorganized into progressive-disclosure layout.** SKILL.md trimmed to §1 + §2.0
 >   + the reference index + the §9 checklist; performance/AD/toolchain/packages/setup split into
->   `references/`. Environment setup rewritten **host-agnostic** (juliaup + `--project=.`) —
->   the prior Claude-container apparatus (S3 tarball, Cloudflare egress diagnosis,
->   `/home/claude`, `present_files`, ephemeral depot caching) removed. No coding-discipline
->   content changed.
+>   `references/`. Environment setup rewritten **host-agnostic** (juliaup + `--project=.`). No
+>   coding-discipline content changed.
 > - v2606.4.0: §3.5 TTFX layered countermeasure map; `juliac`/`JuliaC.jl` as the 1.12 AOT face.
 > - v2606.3.x: AD layer restructured around DifferentiationInterface + ADTypes as the single
 >   frontend; Chairmarks the default benchmarker; §4 package tables rewritten.

@@ -511,10 +511,10 @@ alias to='touch'
 alias tf='tail -fF'
 
 # File operation safety aliases
-alias mv='mv --update=none' # 常に上書き禁止
 alias cp='cp --update=none' # 常に上書き禁止
-alias mvf='mv --update=all' # 強制上書き
 alias cpf='cp --update=all' # 強制上書き
+alias mvs='command mv --update=none' # 上書き禁止（mv関数をバイパス）
+alias mvf='command mv --update=all' # 強制上書き（mv関数をバイパス）
 
 # rip for safer file removal
 command_exists "rip" || alias rip="rm -i"
@@ -610,6 +610,14 @@ rm() {
   echo "   This system ONLY supports 'rip' for file removal."
   echo "   There is NO alternative. Use 'rip' or nothing."
   echo "   This is non-negotiable for system safety."
+  return 1
+}
+
+mv() {
+  echo "⛔ FATAL ERROR: 'mv' command is PERMANENTLY DISABLED!"
+  echo "   In git repositories, use 'git mv' instead."
+  echo "   For non-git files, use '/bin/mv' directly."
+  echo "   This ensures proper git history tracking."
   return 1
 }
 

@@ -1,5 +1,8 @@
 .serena/
 
+# System-managed skill files (auto-generated)
+commands/.system/
+
 # Local overrides
 local/
 *.local

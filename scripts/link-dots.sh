@@ -46,6 +46,15 @@ if $IS_MAC; then
   link karabiner "$HOME/.config/karabiner"
 fi
 
+# --- wsl (WSL2 system config; /etc needs root, so sudo + gated on WSL) ---
+if $IS_WSL; then
+  if sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2>/dev/null; then
+    echo "linked: /etc/wsl.conf -> $DOTFILES/wsl/wsl.conf (sudo)"
+  else
+    echo "skip: /etc/wsl.conf needs root — run: sudo ln -sfn $DOTFILES/wsl/wsl.conf /etc/wsl.conf"
+  fi
+fi
+
 if ! $IS_MAC && ! $IS_WSL; then
   echo "warn: neither macOS nor WSL detected — OS-specific links skipped" >&2
 fi

@@ -29,6 +29,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 ├── tmux/                # ALL tmux: tmux.conf + scripts/ (status bar, layouts)
 ├── sheldon/             # zsh plugin manager config
 ├── karabiner/           # Keyboard customization (macOS-only topic)
+├── wsl/                 # WSL2 system config: wsl.conf → /etc/wsl.conf (sudo link; WSL-only topic)
 ├── agents/              # ALL AI-assistant content (linked via `mise run link:skills`)
 │   ├── commands/        #   slash-command prompts → ~/.claude/commands, ~/.codex/skills, gemini
 │   └── skills/          #   Claude Code skills (e.g. julia) → ~/.claude/skills
@@ -42,8 +43,10 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 **Conventions to preserve:**
 1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.sh`.
-   Never recreate `common/`/`mac/`/`wsl/` top-level dirs — OS variance lives INSIDE a topic dir
-   as `*.mac` / `*.wsl` (or `mac.zsh` / `wsl.zsh`) files.
+   Never recreate `common`/`mac`/`wsl` as OS-variance *bucket* dirs — OS variance of a
+   cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` (or `mac.zsh` /
+   `wsl.zsh`) files. A genuinely single-OS *topic* may still own its dir (e.g. `karabiner/`
+   for macOS, `wsl/` for the `wsl.conf` system config) — those are tools, not OS buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
 3. Symlink list lives ONLY in `scripts/link-dots.sh`. Tool list lives ONLY in `Brewfile`

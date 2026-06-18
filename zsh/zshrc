@@ -37,10 +37,21 @@ case "$HOST" in
   ;;
 esac
 
-# Initialize zsh completions
+# Initialize zsh completions (cached + resilient)
 _dbg "Initializing zsh completions"
+# Load completions from a cache that rebuilds at most once a day. On fresh starts we trust
+# the cache (compinit -C) and skip re-scanning the completion dirs — which also keeps a
+# dangling vendor completion (e.g. Docker Desktop's _docker symlink, broken whenever Docker
+# Desktop isn't running) from erroring on startup.
 autoload -Uz compinit
-compinit
+_zcd=${ZDOTDIR:-$HOME}/.zcompdump
+_fresh=( $_zcd(#qN.mh-24) )    # the dump iff it exists AND was rebuilt within the last 24h
+if (( $#_fresh )); then
+  compinit -C -d $_zcd         # fresh: fast load, no rescan
+else
+  compinit -d $_zcd            # missing or stale: full rebuild
+fi
+unset _zcd _fresh
 
 # Shopify Hydrogen alias to local projects
 alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'

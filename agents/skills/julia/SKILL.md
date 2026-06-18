@@ -5,7 +5,7 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2606.6.0 (2026-06-14, Julia 1.12.6 baseline)
+> **Version**: v2606.6.1 (2026-06-17, Julia 1.12.6 baseline)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -13,6 +13,10 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 > pointered from `references/setup.md` §8, not the focus here.
 >
 > **Changelog (recent)**:
+> - v2606.6.1: packages.md **Data & visualization** gains the CairoMakie **CJK-font root fix** —
+>   non-Latin (日本語/中文/한글) labels need a CJK-capable theme font (`set_theme!(fonts=…)` to a
+>   Noto/HaranoAji/Hiragino OTF path) or Makie crashes on missing glyphs; shared `scripts/plots.jl`
+>   preamble pattern; CairoMakie stays a script-only dep.
 > - v2606.6.0: architecture.md **§10.2.1 Holy traits** added — when single inheritance can't
 >   express cross-hierarchy / foreign-type behavior; zero-cost **only when the trait fn is
 >   inferable**; hand-rolled THTT as default (SimpleTraits/Interfaces optional, no heavy trait

@@ -194,3 +194,18 @@ in the search loop is orders of magnitude too slow); convert to `Symbolics` only
 
 ## Data & visualization
 `DataFrames`, `CSV`; `CairoMakie` (publication plots, heavy deps).
+- **CJK / non-Latin labels → set a CJK-capable theme font, or CairoMakie crashes.** Makie's
+  default font (DejaVu / TeX Gyre) has no CJK glyphs, so any 日本語 / 中文 / 한글 in a title or
+  label throws during text layout (or renders as tofu boxes). Root-fix with a theme — do **not**
+  band-aid by stripping the text to ASCII every time:
+  ```julia
+  # resolve a CJK-capable OTF by path (Noto Sans CJK JP / HaranoAjiGothic / Hiragino), then:
+  set_theme!(fonts = (; regular = font, bold = bold, italic = font, bold_italic = bold))
+  ```
+  Prefer a *path* to an installed OTF/TTF (most portable; name-resolution via Fontconfig is
+  flaky on macOS). Source-Han-based CJK fonts (Noto, HaranoAji) carry full **Latin** too, so one
+  font covers both scripts; they have **no italic face** → map `italic→regular`. Put the resolver
+  + `set_theme!` in a shared `scripts/plots.jl` preamble `include`d right after `using CairoMakie`
+  so every figure inherits it. Keep `CairoMakie` a **script/output dep**, never a `src/` package
+  dep — it drags the whole viz stack into every `using YourPkg` and inflates TTFX (see the
+  no-unused-deps rule, this file's header).

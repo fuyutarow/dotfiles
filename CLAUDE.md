@@ -55,6 +55,13 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
 5. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
+6. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:` **=**
+   the shortest **durable noun** for what the skill governs — a *bare* noun for a whole
+   non-swappable substrate/domain (`julia`, `latex`, `secure-remote-access`), a *domain+layer*
+   noun for one layer of an ecosystem (`python-tooling`). Never put a replaceable tool or a verb
+   in the name (no `uvx-`, `lualatex-`, `-compile`, `-run`) — those live ONLY in `description:`,
+   which is what the model matches on. Swap test: if today's tool were replaced, the name must
+   still be true.
 
 ## Setup / Tasks
 

@@ -76,5 +76,8 @@
     "context7",
     "cipher",
     "serena"
-  ]
+  ],
+  "remote": {
+    "defaultEnvironmentId": "env_011CUuh54k9VAHfpDR6FqmUA"
+  }
 }

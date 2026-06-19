@@ -97,7 +97,7 @@ Each is genuinely good at one thing and genuinely annoying at another.
 - *Real limits:* **server runs only on Linux + open‑source macOS — not the App Store/Standalone
   macOS app, not Windows/iOS/Android.** Port 22, tailnet only. Depends on Tailscale's
   coordination plane (or self‑hosted **Headscale**, single‑tailnet, no OIDC‑group ACLs).
-  **Historically broke VS Code Remote‑SSH (#5295), fixed only 2026‑04‑07.**
+  **Embedded SSH server lagged stock OpenSSH on IDE remoting (#5295 broke VS Code Remote‑SSH; CLOSED — see §4).**
 - *For:* teams/homelabs wanting the simplest no‑keys‑no‑ports zero‑trust SSH *to Linux/macOS
   hosts, for interactive shells.*
 
@@ -196,7 +196,7 @@ but is the emergency path, not the default.
 server, authorizing from tailnet identity + ACL `ssh` rules without touching
 `/etc/ssh/sshd_config` or `~/.ssh/authorized_keys` (uses SSH auth type `none` because identity
 is already known from WireGuard). Server platform limits (Linux/OSS‑macOS only) and the VS Code
-Remote‑SSH breakage (#5295, fixed 2026‑04‑07) are the load‑bearing caveats.
+Remote‑SSH breakage (#5295 — CLOSED, fixed 2026‑04‑07 via PR #19006, embedded SSH fork replaced) are the load‑bearing caveats.
 - https://tailscale.com/docs/features/tailscale-ssh
 - https://github.com/tailscale/tailscale/issues/5295
 

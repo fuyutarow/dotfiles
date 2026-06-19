@@ -44,8 +44,8 @@ else
 end
 brew "tex-fmt"      # Rust LaTeX formatter (NOT in TeX Live) — formula, bottles on both OSes
 brew "poppler"      # pdftoppm/pdfinfo — PDF→PNG visual verification
-# Note: chktex and biber ship INSIDE TeX Live (already on PATH) — do not add separate formulae
-#       (a standalone biber must match TeX Live's biblatex version; let the bundled one win).
+brew "biber"        # BibLaTeX backend — brew `texlive` bundles bibtex but NOT biber; match its version to TeX Live's biblatex
+# Note: chktex DOES ship inside TeX Live (already on PATH) — do not add a separate formula for it.
 
 # macOS-only GUI apps (skipped automatically on Linux/WSL)
 if OS.mac?

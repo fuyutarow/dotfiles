@@ -5,8 +5,12 @@ access**. Goal: from a Mac, reach a home Windows box's native shell *and* its WS
 environment, on‑LAN and remotely, with VS Code Remote‑SSH into either — and never get locked
 out. The lessons generalize to "expose both a host OS and a guest Linux behind one entry point."
 
-> This file carries a **Field notes** section at the bottom: the concrete things that bit
-> during a real 2026‑06 deployment. If you're retreading this, read those first.
+> **Identities & placeholders used throughout** (they genuinely differ — confirm with `whoami` on
+> each side): `<windows-account>` = your Windows login (this deployment: `fuyutarow`); `<wsl-user>`
+> = your Linux user inside the distro (`fuyu`); `<distro>` = the distro name from `wsl.exe -l -q`
+> (`Ubuntu-24.04`). The example values are this box's, not constants. There is also a **Field
+> notes** section at the bottom — the concrete things that bit during a real 2026‑06 deployment;
+> if you're retreading this, read those first.
 
 ## Design principle: make the always‑on anchor a Windows *service*, not WSL
 
@@ -70,7 +74,7 @@ New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server' -Enabled True `
 `C:\ProgramData\ssh\administrators_authorized_keys` (NOT `~/.ssh/authorized_keys`), and that file
 must be owned by Administrators/SYSTEM with no other write access:
 ```powershell
-$k = "ssh-ed25519 AAAA... fuyu@mac"     # your Mac's public key (FIDO2 sk-key recommended)
+$k = "ssh-ed25519 AAAA... <wsl-user>@mac"   # your Mac's public key (FIDO2 sk-key recommended)
 $f = "$env:ProgramData\ssh\administrators_authorized_keys"
 Add-Content $f $k
 icacls $f /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
@@ -100,7 +104,7 @@ EOF
 sudo ssh-keygen -A
 # install the Mac key (no sudo needed — it's your own file)
 install -d -m 700 ~/.ssh
-printf '%s\n' 'ssh-ed25519 AAAA... fuyu@mac' >> ~/.ssh/authorized_keys
+printf '%s\n' 'ssh-ed25519 AAAA... <wsl-user>@mac' >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 sudo sshd -t           # validate before relying on it
 ```
@@ -125,17 +129,45 @@ localhostForwarding=true     # bridges Windows 127.0.0.1:2222 → WSL sshd
 vmIdleTimeout=-1             # compute server: don't idle the VM out
 ```
 
-## Setup 4 — WSL auto‑start (so the inner hop is usually ready)
+## Setup 4 — keep WSL pinned so the inner hop is ready
 
-The Windows anchor is always up; WSL only needs to be running for `ssh wsl`. Boot it at logon
-and pin it so systemd/sshd stay live. Task Scheduler:
+The Windows anchor is always up; WSL only needs to be *running* for `ssh wsl`. As of mid‑2026
+(through WSL 2.7.x, verified on 2.7.8.0) a regression introduced around 2.5.7 still **suspends
+in‑VM services even with `vmIdleTimeout=-1`** (microsoft/WSL #13291, #13416 — open), so the VM
+needs a never‑exiting in‑distro process to stay resident. (If a future WSL keeps services resident
+on its own, this step becomes optional — re‑check those issues.) Pin it at logon:
+
 ```bat
-schtasks /create /tn "WSL-autostart" /sc onlogon /rl highest /f ^
-  /tr "wsl.exe -d Ubuntu-24.04 -u root -e /usr/bin/tail -f /dev/null"
+:: Created as — and runs as — your interactive Windows user; that is the requirement (see below).
+:: <distro> from `wsl.exe -l -q` (this box: Ubuntu-24.04). No /ru or /rl highest needed.
+schtasks /create /tn WSL-keepalive /sc onlogon /f ^
+  /tr "C:\Windows\System32\wsl.exe -d <distro> -u root --exec /usr/bin/tail -f /dev/null"
 ```
-(GUI equivalent: trigger *At log on*, action `wsl.exe` args `-d Ubuntu-24.04 -u root -e tail -f
-/dev/null`, tick **Hidden**.) `tail -f /dev/null` never exits, keeping the VM and your sshd
-alive for the session. Even if this fails, you're not locked out — `ssh win` then `wsl` recovers.
+
+`tail -f /dev/null` never exits, holding the VM (hence systemd → sshd) alive. **An onlogon task
+does not fire when created** — trigger it once with `schtasks /run /tn WSL-keepalive` (or log
+out/in), then confirm with `wsl.exe -l --running` and, inside the distro, `ss -tlnp | grep 2222`.
+Even if the task never runs you're not locked out — `ssh win` then `wsl` recovers.
+
+**Trigger choice — a real decision:**
+
+- **`onlogon` (above)** runs in your real interactive logon. WSL hands each Windows user its own
+  session/instance (the utility VM is shared machine‑wide, but `WslService` gives each user its own
+  `LxssUserSession`), and your inbound SSH rides *your* logged‑in user's instance. `onlogon` pins
+  exactly that — from a **non‑elevated** shell, with **no stored credential**. "Locked" still counts
+  as "logged on". Limit: after a fully *unattended* reboot it won't fire until someone logs in, but
+  `ssh win` still reaches the box to poke WSL (enable autologon if it must self‑heal).
+- **`onstart`** fires at boot with no session, but "run whether logged on or not" as a user needs a
+  **stored password** (fails for passwordless / Hello‑only accounts), and wants `powercfg /h off`
+  (elevated; disables hibernation machine‑wide) so hybrid‑shutdown doesn't make the boot trigger
+  fire inconsistently. None of that is needed for `onlogon`.
+- **Never `SYSTEM`.** `wsl.exe` from session 0 is unsupported — Access‑denied or a throwaway temp
+  instance (microsoft/WSL #9271, #9231) — so a SYSTEM task can't pin the instance your interactive
+  logon and SSH actually use.
+
+> `/ru <windows-account> /rl highest` also works but must be created from an **elevated** shell and
+> buys nothing for a `tail -f /dev/null` pin — prefer the minimal form above. Use absolute
+> `/usr/bin/tail` with `--exec` so `-f /dev/null` isn't parsed as wsl's own flags.
 
 ## Setup 5 — Mac `~/.ssh/config`
 
@@ -152,7 +184,7 @@ Host win
 Host wsl
     HostName 127.0.0.1
     Port 2222
-    User fuyu                         # the WSL Linux user (often DIFFERENT from the Windows account)
+    User <wsl-user>                   # the WSL Linux user (often DIFFERENT from the Windows account)
     ProxyJump win
     ControlMaster auto
     ControlPath ~/.ssh/cm-%r@%h:%p
@@ -165,19 +197,57 @@ Remote‑**SSH** here, not Remote‑WSL — see Field notes.)
 
 For the strongest credential, make the Mac key a FIDO2 hardware key (`ssh-keygen -t ed25519-sk
 -O resident -O verify-required`) and put *that* `.pub` in both authorized_keys files. For
-roaming terminal work: `mosh fuyu@<win-tailnet-name>` (to Windows) or run mosh+tmux inside
+roaming terminal work: `mosh <wsl-user>@<win-tailnet-name>` (to Windows) or run mosh+tmux inside
 WSL after jumping in.
 
-## Why NOT Tailscale SSH (`--ssh`) here — both verified
+## Tailscale placement — anchor on stock OpenSSH; the in‑WSL node is additive
 
-1. **Platform:** its SSH server runs only on Linux + open‑source macOS — never the Windows
-   client. It can't be the anchor on a Windows box.
-2. **VS Code:** Tailscale's embedded SSH server historically broke VS Code Remote‑SSH
-   (`unknown channel type`, issue #5295); fixed only **2026‑04‑07**, and stock OpenSSH is still
-   what the IDE is built against.
+Tailscale is unbeatable at **reachability with no open ports** — let it do only that, and keep
+**stock OpenSSH** as the server on both ends. Two reasons not to lean on **Tailscale SSH**
+(`--ssh`) as the load‑bearing server here:
 
-Let Tailscale do only what it's unbeatable at — reachability with no open ports — and keep
-stock OpenSSH as both the Windows anchor and the WSL server.
+1. **Platform:** its SSH server runs only on Linux and the open‑source macOS build — never the
+   Windows client — so it can't be the anchor on a Windows box (Tailscale FR #14942, still open).
+2. **Editor remoting:** embedded/forked SSH servers lag stock OpenSSH on IDE‑remoting edge cases
+   (Tailscale's #5295 broke VS Code Remote‑SSH for a long time, since fixed). Verify your editor
+   against the specific build rather than assuming parity — stock OpenSSH is what IDE remoting is
+   primarily developed and tested against. (Citation/date live in `survey.md`, not restated here.)
+
+**Putting Tailscale *inside* WSL is still worth it — as an additive convenience, not the primary.**
+Once WSL has a TUN device (`ls /dev/net/tun` exists → kernel mode, no userspace fallback), a Mac
+can reach Linux **directly**, skipping the Windows jump and `localhostForwarding`. Keep it additive:
+the in‑WSL daemon lives in the same VM that suspends (Setup 4), so when the VM dies the node goes
+*offline* — it can't be the always‑on anchor, and Setup 4's keep‑alive is what keeps it reachable.
+There are two ways to expose it; **prefer path 1**:
+
+- **Path 1 — plain sshd over the tailnet IP (verified, editor‑safe).** Just put the node on the
+  tailnet (`tailscale up`, *without* `--ssh`); WSL gets its own `100.x` address and your existing
+  `0.0.0.0:2222` sshd (Setup 2) is reachable at `<wsl-tailnet-ip>:2222` with the **same key already
+  in `authorized_keys`** — no new auth surface, fully compatible with editors and Claude Code. This
+  is what the live deployment runs (`RunSSH=false`).
+- **Path 2 — Tailscale SSH (`--ssh`), only if you want keyless tailnet‑identity auth.** Then the
+  ACL matters: authorize with `action: "accept"`, **not** `check` (on a headless/automated box
+  `check`'s periodic IdP re‑auth blocks non‑interactive reconnects — Claude Code, tmux‑resume,
+  cron), and **never tag this node** (an untagged node is authorized via `autogroup:self`; adding
+  any tag drops it and the SSH rule silently evaporates — a no‑error lockout).
+
+**Install `tailscaled` with apt, not Homebrew** — a systemd question, not taste. apt ships a **root
+system unit** (`/usr/lib/systemd/system/tailscaled.service`) that starts at boot, which is what a
+headless daemon and the Setup 4 chain need; `brew services` on Linux *defaults* to a **`--user`**
+unit that can't own the TUN device and needs `loginctl enable-linger` to survive logout. Treat
+`tailscaled` as system infrastructure (apt), not a Brewfile CLI.
+
+```bash
+# In WSL as root. Codename comes from the distro itself, so this isn't pinned to one release:
+. /etc/os-release          # sets $VERSION_CODENAME (e.g. noble on Ubuntu 24.04)
+curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${VERSION_CODENAME}.noarmor.gpg" \
+  -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${VERSION_CODENAME}.tailscale-keyring.list" \
+  -o /etc/apt/sources.list.d/tailscale.list
+apt update && apt install -y tailscale
+systemctl enable --now tailscaled
+tailscale up                                    # add --ssh only for Path 2
+```
 
 ## Field notes (from a real 2026‑06 Mac ↔ Win ↔ WSL deployment)
 
@@ -193,27 +263,31 @@ Things that actually bit, roughly in order — fold these into any retread:
 - **winget id must be exact.** `winget install tailscale` is ambiguous (also matches a
   Command‑Palette add‑on); use `--id Tailscale.Tailscale -e`. After install, `tailscale` isn't on
   PATH in the same shell — new window, or use the tray (which already shows it Connected + 100.x).
-- **`ssh.socket` overrides your `Port`.** Ubuntu 24.04 ships socket activation on `:22`; you only
-  see `:2222` after `systemctl disable --now ssh.socket` + `enable --now ssh.service`. This is the
-  single most confusing WSL‑sshd gotcha.
-- **Windows user ≠ WSL user.** `ssh win` → the Windows account (`fuyutarow`); `ssh wsl` → the
-  Linux user (`fuyu`). Mixing them fails auth with no clear reason.
+  (The `ssh.socket`‑overrides‑`Port` and `appendWindowsPath` traps are covered inline in Setup 2.)
+- **Windows user ≠ WSL user.** `ssh win` → the Windows account (`<windows-account>`); `ssh wsl` →
+  the Linux user (`<wsl-user>`). Mixing them fails auth with no clear reason.
 - **Enabling systemd broke `wsl.exe -e <cmd>`** with `Wsl/Service/E_UNEXPECTED "Catastrophic
   failure"` — which *also* broke **VS Code Remote‑WSL** (it shells out via `wsl -e`). Interactive
   `wsl` was fine. `wsl --update` clears it. Crucially `ssh wsl` (Remote‑SSH) was unaffected — it
   rides localhostForwarding, not `wsl -e` — so **when Remote‑WSL is flaky, use Remote‑SSH to the
   `wsl` host instead.**
-- **"Failed to start the systemd user session for 'fuyu'" is benign** — sshd is a *system*
+- **"Failed to start the systemd user session for '<wsl-user>'" is benign** — sshd is a *system*
   service. (`sudo apt install dbus-user-session` + `wsl --shutdown` often silences it; optional.)
-- **`appendWindowsPath=false` hides Windows tools in WSL** (`code`, `winget.exe` → "command not
-  found"). That's the setting working as intended, not breakage. `=true` inherits them (appended →
-  Linux still wins); or add just the dir you need, in `wsl/.zprofile` per a clean dotfiles layout.
 - **zsh does NOT treat `#` as an inline comment by default.** A command pasted with a trailing
   `… # note` sends the comment as arguments (you'll see `Invalid unit name "#"` etc.). When handing
   zsh users something to paste, omit inline comments.
 - **Editing WSL files when `wsl -e` is down:** reach them from Windows at
-  `\\wsl.localhost\<distro>\home\<user>\…` — the 9p file share works even when command‑exec
+  `\\wsl.localhost\<distro>\home\<wsl-user>\…` — the 9p file share works even when command‑exec
   (`wsl -e`) is throwing `E_UNEXPECTED`.
 - **Quoting through Windows → wsl → bash is lossy:** a `VAR="…"` assignment passed as a `wsl … -e`
   argument can silently arrive empty. Pipe data over **stdin** instead:
   `printf '%s\n' '<value>' | wsl -d <distro> -- bash -c 'cat > file'`.
+- **Claude Code honors `ProxyCommand`, not `ProxyJump`** (anthropics/claude-code#44838). The
+  `Host wsl` block uses `ProxyJump win` — correct for OpenSSH and VS Code. If you also drive this
+  host from Claude Code, give it an equivalent entry with `ProxyCommand ssh win -W %h:%p`, or it
+  won't traverse the jump.
+- **Auto-attaching tmux on inbound SSH must exclude the break-glass relay.** If you wrap logins in
+  tmux so long jobs survive drops, gate it so the **:2222 relay always yields a raw shell** (your
+  recovery path), skip when `$SSH_ORIGINAL_COMMAND` is set (editor / Claude Code bootstrap shells
+  must not be wrapped), and bound the calls with `timeout … || true` so a wedged tmux server can
+  never hang the login.

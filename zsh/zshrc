@@ -45,13 +45,13 @@ _dbg "Initializing zsh completions"
 # Desktop isn't running) from erroring on startup.
 autoload -Uz compinit
 _zcd=${ZDOTDIR:-$HOME}/.zcompdump
-_fresh=( $_zcd(#qN.mh-24) )    # the dump iff it exists AND was rebuilt within the last 24h
-if (( $#_fresh )); then
-  compinit -C -d $_zcd         # fresh: fast load, no rescan
+# Age check via `find` — no glob-qualifier / EXTENDED_GLOB dependency, works in any zsh.
+if [[ -f $_zcd ]] && [[ -z "$(find "$_zcd" -mtime +1 2>/dev/null)" ]]; then
+  compinit -C -d $_zcd         # cache exists and is <1 day old: fast load, no rescan
 else
   compinit -d $_zcd            # missing or stale: full rebuild
 fi
-unset _zcd _fresh
+unset _zcd
 
 # Shopify Hydrogen alias to local projects
 alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'

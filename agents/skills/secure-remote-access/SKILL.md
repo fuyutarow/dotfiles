@@ -95,8 +95,9 @@ Tailscale SSH:
 
 - **Its SSH server runs only on Linux and the open‑source macOS build — never the Windows
   client, never iOS/Android.** Port 22 over the tailnet only.
-- **It historically broke VS Code Remote‑SSH** (`unknown channel type`, issue #5295) — the
-  fix only landed **2026‑04‑07**. Stock OpenSSH is still what IDE remoting is tested against.
+- **Embedded SSH servers lag stock OpenSSH on IDE‑remoting edges** — Tailscale's #5295 broke VS
+  Code Remote‑SSH for a long time (since fixed; date/PR in `survey.md`). Verify your editor against
+  the specific build rather than assuming parity.
 
 So for an editor‑driven or Windows‑involved target, the most‑modern‑*yet‑practical* stack
 is **mesh for reachability + real OpenSSH for the server + FIDO2 for the credential**.
@@ -110,7 +111,8 @@ keyless/ACL convenience the platform ruled out anyway.
   a commonly repeated error. `ssh-rsa`/SHA‑1 has been off by default since **8.8**; DSA is
   gone in **10.0** (2025‑04), which also defaults to the post‑quantum hybrid KEX
   `mlkem768x25519-sha256`. `PerSourcePenalties` (in‑daemon rate‑limiting, makes fail2ban
-  largely optional) arrived in **9.8**.
+  largely optional) arrived in **9.8**. Treat these as feature‑availability floors, not the
+  current release — the OpenSSH series as of mid‑2026 is 10.3.
 - **Certificates don't auto‑replace `authorized_keys`.** Setting `TrustedUserCAKeys` makes
   the daemon *also* accept CA‑signed certs; `authorized_keys` stays active unless you
   explicitly set `AuthorizedKeysFile none`. And "principal == login name" holds only in the
@@ -126,11 +128,11 @@ keyless/ACL convenience the platform ruled out anyway.
   Prefer `ProxyJump` over `ForwardAgent`; FIDO2 `verify-required` / 1Password per‑use prompts
   blunt the risk.
 - **mosh has no scrollback** (it syncs only the visible screen — pair with tmux), needs UDP
-  60000–61000 open, is lightly maintained (1.4.0, Oct 2022), and **VS Code Remote‑SSH cannot
+  60000–61000 open, is maintenance‑only (last release 1.4.0, Oct 2022 — check for newer activity before leaning on it), and **VS Code Remote‑SSH cannot
   use it.** It's a terminal complement, never the editor's transport.
 - **WSL2 is the gotcha factory** for "reach my home box": no init by default (enable systemd),
   and the *idle‑shutdown trap* where the VM (and the sshd inside it) dies on `vmIdleTimeout`.
-  `vmIdleTimeout=-1` keeps the VM but a WSL 2.5.7+ regression still suspends services — you
+  `vmIdleTimeout=-1` keeps the VM but a regression (through WSL 2.7.x as of mid‑2026; microsoft/WSL #13291, #13416 open) still suspends in‑VM services — you
   need a Task Scheduler keep‑alive. See `references/wsl2-mac.md`.
 - **WSL2 host‑interop gotchas (learned the hard way — see `references/wsl2-mac.md`).** Reaching
   a Linux env *inside* Windows adds its own layer:
@@ -162,6 +164,8 @@ keyless/ACL convenience the platform ruled out anyway.
   full chain**. The key move — make the always‑on anchor a *Windows service* (Tailscale +
   native OpenSSH), not WSL, so you're never locked out — plus reaching WSL behind it via
   `ProxyJump` + `localhostForwarding` (no mirrored/portproxy), systemd, the idle/auto‑start
-  fix, the Windows `administrators_authorized_keys` gotcha, why **not** Tailscale SSH here, and
-  a **Field notes** section of everything that actually bit during a real deployment. Read for
+  fix, the Windows `administrators_authorized_keys` gotcha, why **not** Tailscale SSH here, an optional direct in‑WSL tailnet node (plain `sshd:2222`, or
+  Tailscale SSH if keyless wanted; installed via apt), and the keep‑alive trigger rationale
+  (onlogon, never SYSTEM). A **Field notes** section of everything that actually bit during a
+  real deployment. Read for
   any task exposing a host OS *and* a guest Linux from one machine.

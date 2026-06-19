@@ -173,8 +173,9 @@ Authorization is an ACL decision in the tailnet policy file, e.g.:
 ```
 **Refuse it when:** the server would be a Windows client (unsupported — it can only run on a
 Linux node, e.g. inside WSL2, which Tailscale itself recommends against), or the user needs
-VS Code/JetBrains remote (embedded SSH servers break IDE remoting; Tailscale's was broken until
-2026‑04‑07). In those cases use §5 (mesh transport) + stock OpenSSH instead.
+VS Code/JetBrains remote (embedded SSH servers lag stock OpenSSH on IDE remoting; Tailscale's
+#5295 was a long-standing example, since fixed — verify your build). In those cases use §5
+(mesh transport) + stock OpenSSH instead.
 
 ## 7. OpenSSH certificate authority — minimal starter
 

@@ -27,6 +27,30 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 export PATH="$HOME/.cargo/bin:$PATH"
 
+# --- Windows interop PATH -----------------------------------------------------
+# Under systemd=true, WSL boots systemd as PID 1 in a clean namespace and does NOT
+# inherit the Windows PATH that /init injects, so appendWindowsPath is effectively
+# ignored. Re-expose only what we use, and keep the huge /mnt/c/Windows/System32
+# OFF $PATH so TAB-completion stays fast over the 9p bridge.
+# WindowsApps holds the App Execution Aliases (winget.exe & co) — small dir, cheap.
+# (winget.exe is a 0-byte alias stub: it must live on PATH; it can NOT be symlinked.)
+for _wa in /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps(N); do
+  # Skip empty template profiles (Default / Default User) by requiring the winget
+  # alias as a sentinel; dedupe so repeated sourcing doesn't stack entries.
+  [[ -e "$_wa/winget.exe" && ":$PATH:" != *":$_wa:"* ]] && export PATH="$PATH:$_wa"
+done
+unset _wa
+# Real Windows PE tools used by the aliases (open=explorer, start=cmd, powershell):
+# symlink the actual binaries into ~/.local/bin (already on PATH) instead of putting
+# System32 on PATH. The guard makes this a single stat after first run.
+if [[ ! -e "$HOME/.local/bin/cmd.exe" ]]; then
+  mkdir -p "$HOME/.local/bin"
+  ln -sf /mnt/c/Windows/System32/cmd.exe                               "$HOME/.local/bin/cmd.exe"
+  ln -sf /mnt/c/Windows/explorer.exe                                   "$HOME/.local/bin/explorer.exe"
+  ln -sf /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe "$HOME/.local/bin/powershell.exe"
+fi
+# -----------------------------------------------------------------------------
+
 
 # Source commands
 _dbg "Sourcing cargo env"

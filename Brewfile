@@ -33,6 +33,20 @@ brew "procs"        # better ps
 brew "tldr"         # better man (h)
 brew "yq"
 
+# TeX / LaTeX — base distribution differs by OS (see skill: compiling-latex → Environment).
+#   mac:  mactex-no-gui cask  = full TeX Live, binaries via /Library/TeX/texbin; tlmgr needs sudo.
+#   WSL:  texlive formula     = effectively full TeX Live (Japanese incl.), binaries already on PATH;
+#         tlmgr is system-mode read-only → use `tlmgr --usermode install` for extras.
+if OS.mac?
+  cask "mactex-no-gui"
+else
+  brew "texlive"
+end
+brew "tex-fmt"      # Rust LaTeX formatter (NOT in TeX Live) — formula, bottles on both OSes
+brew "poppler"      # pdftoppm/pdfinfo — PDF→PNG visual verification
+# Note: chktex and biber ship INSIDE TeX Live (already on PATH) — do not add separate formulae
+#       (a standalone biber must match TeX Live's biblatex version; let the bundled one win).
+
 # macOS-only GUI apps (skipped automatically on Linux/WSL)
 if OS.mac?
   cask "iterm2"

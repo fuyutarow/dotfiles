@@ -8,6 +8,8 @@ set -uo pipefail
 TOOLS=(
   bat eza rg fd dust procs zoxide just fzf lazygit jq yq tldr
   atuin delta direnv rip sheldon tmux gh mise topgrade fnm bun
+  # LaTeX toolchain (mactex-no-gui / texlive + tex-fmt + poppler)
+  lualatex latexmk tlmgr chktex tex-fmt pdftoppm
 )
 
 missing=0

@@ -4,30 +4,38 @@
 [env]
 LATEX_DIR = "papers/2606_001-title_name"
 LATEX_MAIN = "main.tex"
-TEXBIN = "/Library/TeX/texbin"
+# TEXBIN is auto-detected per task (see the `TEXBIN=...` guard below): macOS MacTeX uses
+# /Library/TeX/texbin, while linuxbrew/install-tl put binaries on PATH already (TEXBIN stays empty).
+# install-tl users with a non-PATH tree: `export TEXBIN=$HOME/texlive/<year>/bin/<arch>-linux` first.
 
 [tasks."latex:setup"]
 description = "Install TeX Live packages and modern LaTeX tooling"
 depends = ["latex:setup:tex", "latex:setup:modern"]
 
 [tasks."latex:setup:tex"]
-description = "Install TeX Live packages through tlmgr"
+description = "Install TeX Live packages (sudo tlmgr on MacTeX/install-tl; user mode on linuxbrew)"
 run = '''
-cd "$LATEX_DIR"
-PATH="$TEXBIN:$PATH" tlmgr install \
-  latexmk \
-  chktex \
-  beamer \
-  pgf \
-  luatexja \
-  haranoaji \
-  unicode-math \
-  booktabs \
-  mathtools \
-  collection-latexrecommended \
-  collection-luatex \
-  collection-langjapanese \
-  collection-fontsrecommended
+TEXBIN="${TEXBIN:-$([ -d /Library/TeX/texbin ] && echo /Library/TeX/texbin)}"
+PATH="${TEXBIN:+$TEXBIN:}$PATH"
+PKGS="latexmk chktex beamer pgf luatexja haranoaji unicode-math booktabs mathtools \
+  collection-latexrecommended collection-luatex collection-langjapanese collection-fontsrecommended"
+
+if [ -d /Library/TeX/texbin ]; then
+  # macOS MacTeX: full system-mode tlmgr, but the tree is root-owned → sudo required.
+  sudo tlmgr install $PKGS
+elif kpsewhich -var-value TEXMFROOT 2>/dev/null | grep -qE 'linuxbrew|/Cellar/'; then
+  # linuxbrew texlive: full texmf tree already ships these and system-mode install is BLOCKED.
+  # Add only genuinely-missing, relocatable extras in user mode (collections live in the brew base).
+  tlmgr init-usertree >/dev/null 2>&1 || true
+  for p in $PKGS; do
+    case "$p" in collection-*) continue ;; esac
+    tlmgr info "$p" 2>/dev/null | grep -qi 'installed:.*yes' && continue
+    tlmgr --usermode install "$p" || echo "skip (not relocatable; use install-tl): $p"
+  done
+else
+  # TUG install-tl tree: full system-mode tlmgr (prefix with sudo only if the tree is root-owned).
+  tlmgr install $PKGS
+fi
 '''
 
 [tasks."latex:setup:modern"]
@@ -62,14 +70,16 @@ tex-fmt --check "$LATEX_MAIN"
 description = "Lint LaTeX with ChkTeX"
 run = '''
 cd "$LATEX_DIR"
-PATH="$TEXBIN:$PATH" chktex -q -v0 -n 1 "$LATEX_MAIN"
+TEXBIN="${TEXBIN:-$([ -d /Library/TeX/texbin ] && echo /Library/TeX/texbin)}"
+PATH="${TEXBIN:+$TEXBIN:}$PATH" chktex -q -v0 -n 1 "$LATEX_MAIN"
 '''
 
 [tasks.latex]
 description = "Build LaTeX PDF with latexmk"
 run = '''
 cd "$LATEX_DIR"
-PATH="$TEXBIN:$PATH" latexmk -r latexmkrc "$LATEX_MAIN"
+TEXBIN="${TEXBIN:-$([ -d /Library/TeX/texbin ] && echo /Library/TeX/texbin)}"
+PATH="${TEXBIN:+$TEXBIN:}$PATH" latexmk -r latexmkrc "$LATEX_MAIN"
 '''
 
 [tasks."latex:check"]
@@ -80,13 +90,16 @@ depends = ["latex:fmt:check", "latex:lint", "latex"]
 description = "Clean LaTeX build artifacts"
 run = '''
 cd "$LATEX_DIR"
-PATH="$TEXBIN:$PATH" latexmk -r latexmkrc -c "$LATEX_MAIN"
+TEXBIN="${TEXBIN:-$([ -d /Library/TeX/texbin ] && echo /Library/TeX/texbin)}"
+PATH="${TEXBIN:+$TEXBIN:}$PATH" latexmk -r latexmkrc -c "$LATEX_MAIN"
 '''
 
 [tasks."latex:distclean"]
 description = "Remove all LaTeX build artifacts"
 run = '''
 cd "$LATEX_DIR"
-PATH="$TEXBIN:$PATH" latexmk -r latexmkrc -C "$LATEX_MAIN"
-rm -rf build
+TEXBIN="${TEXBIN:-$([ -d /Library/TeX/texbin ] && echo /Library/TeX/texbin)}"
+PATH="${TEXBIN:+$TEXBIN:}$PATH" latexmk -r latexmkrc -C "$LATEX_MAIN"
+# rip is this repo's sanctioned remover; rm fallback keeps the template portable to other repos.
+command -v rip >/dev/null 2>&1 && rip build 2>/dev/null || rm -rf build
 '''

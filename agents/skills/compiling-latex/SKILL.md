@@ -18,9 +18,29 @@ Use executable repo configuration over long natural-language procedures. For pro
 - Use `latexmk` for builds; do not hand-roll repeated `lualatex`/`bibtex` loops for normal projects.
 - Use `tex-fmt` as the formatter for new LaTeX setup.
 - Use `chktex` for LaTeX linting, with explicit suppressions for known Beamer noise rather than accepting arbitrary warnings.
-- Use `tlmgr` for TeX Live packages. Use Homebrew/Cargo/binary release for non-TeX tools such as `tex-fmt`.
+- Get the base TeX distribution from Homebrew via the repo `Brewfile` (`mactex-no-gui` on mac, `texlive` on linuxbrew); get non-TeX tools (`tex-fmt`, `poppler`) from Homebrew too. See **Environment** below.
+- Use `tlmgr` for extra TeX Live packages — but on linuxbrew it MUST be **user mode** (`tlmgr --usermode install`), not system mode (which is blocked there). See **Environment**.
 - Put generated PDFs and aux files under a build directory whenever possible.
 - For papers/slides in `papers/`, prefer `{yymm}_{seq}-{title_name}` directories, where `title_name` uses underscores.
+
+## Environment (toolchain install)
+
+Install differs by OS. **Rule: Homebrew owns the base distribution; `tlmgr` only adds extras.** Probe first — `which lualatex latexmk tlmgr chktex kpsewhich` (all should resolve) and `tlmgr --version`. If anything is missing, `brew bundle --file=~/dotfiles/Brewfile` installs the base + `tex-fmt` + `poppler`.
+
+- **macOS** — `mactex-no-gui` cask (full TeX Live, no GUI). Binaries via `/Library/TeX/texbin` (stable across year upgrades; add once to shell PATH). Add packages with `sudo tlmgr install <pkg>` — the tree is root-owned, so **sudo is required** (running without it fails).
+- **WSL / linuxbrew (default)** — `texlive` formula. Effectively full TeX Live: complete `texmf-dist` tree incl. Japanese (`luatexja` + Harano Aji), only docs stripped. All binaries are already on PATH at `$(brew --prefix)/bin` — **no TEXBIN, no PATH export, no sudo**. Update the base with `brew upgrade texlive`, never `tlmgr update`.
+- **WSL escape hatch** — only when you need full *system-mode* `tlmgr` (`update --self --all`) or a package that ships executables (user mode can't): TUG `install-tl --texdir="$HOME/texlive/<year>"` (user-owned → sudo-free), then add `…/bin/<arch>-linux` to PATH (glob the year/arch — not added automatically on Unix). Not captured by `Brewfile`.
+
+### tlmgr: system vs user mode (the linuxbrew gotcha)
+
+Under brew `texlive`, system-mode `tlmgr install` / `update --self` / `update --all` are **BLOCKED** (`tlmgr: action not allowed in system mode`) and **`sudo` does NOT bypass it** — the keg is replaced wholesale on `brew upgrade` anyway. Add extras in **user mode**:
+
+```sh
+tlmgr init-usertree              # once (this action IS allowed in system mode)
+tlmgr --usermode install <pkg>   # → TEXMFHOME; found automatically; survives brew upgrade
+```
+
+`TEXMFHOME` is OS-dependent (`~/texmf` on Linux, `~/Library/texmf` on mac) — resolve with `kpsewhich -var-value TEXMFHOME`, never hardcode. User-mode limits: relocatable packages only (no executable/core packages → use `install-tl`/MacTeX for those), no auto dependent-collections, and `--usermode` must be passed on every call. MacTeX and `install-tl` have full system-mode tlmgr instead (`sudo tlmgr install <pkg>` on MacTeX). Note: the brew `texlive` full tree already ships the standard set (beamer, pgf, luatexja, collections), so on WSL extra installs are rarely needed.
 
 ## Setup Workflow
 
@@ -57,6 +77,7 @@ If `latexmk` fails because a package is missing:
 1. Identify the missing `.sty`/`.cls` in the log.
 2. Use `kpsewhich` to confirm absence.
 3. Use `tlmgr search --global --file <name>` to find the TeX Live package.
-4. Add the package to the repo’s setup task if it is a stable project dependency.
+4. Install it the right way for the platform: `sudo tlmgr install <pkg>` on MacTeX/`install-tl`; `tlmgr --usermode install <pkg>` on linuxbrew (system mode is blocked there — see **Environment**).
+5. Add the package to the repo’s setup task if it is a stable project dependency.
 
 If the TeX installation itself is broken, report the failing command and stop before inventing broad system-repair procedures.

@@ -68,24 +68,45 @@ claude mcp add playwright -- bunx @playwright/mcp@latest
 '''
 
 [tasks."link:skills"]
-description = "Link agents/ (commands & skills) into AI tools' config directories"
+description = "Link agents/ commands and skills into AI tools' config directories"
 run = '''
+DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+
+link_dir() {
+  src="$1"
+  dst="$2"
+  if [ ! -e "$src" ]; then
+    echo "skip (missing): $src"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  if [ -L "$dst" ] || [ ! -e "$dst" ]; then
+    ln -sfn "$src" "$dst"
+    echo "linked: $dst -> $src"
+  else
+    echo "skip (exists, not symlink): $dst"
+  fi
+}
+
 # Claude Code — slash commands & skills
 mkdir -p ~/.claude
-ln -sfn ~/dotfiles/agents/commands ~/.claude/commands
-ln -sfn ~/dotfiles/agents/skills   ~/.claude/skills
+link_dir "$DOTFILES/agents/commands" ~/.claude/commands
+link_dir "$DOTFILES/agents/skills"   ~/.claude/skills
 
-# Codex — skills
+# Codex — global guidance, skills, and legacy markdown prompts
 mkdir -p ~/.codex
-ln -sfn ~/dotfiles/agents/commands ~/.codex/skills
+mkdir -p ~/.agents
+link_dir "$DOTFILES/agents/codex/AGENTS.md" ~/.codex/AGENTS.md
+link_dir "$DOTFILES/agents/skills"          ~/.agents/skills
+link_dir "$DOTFILES/agents/commands"        ~/.codex/prompts
+if [ -L ~/.codex/skills ] && [ "$(readlink ~/.codex/skills)" = "$DOTFILES/agents/commands" ]; then
+  unlink ~/.codex/skills
+  echo "removed stale: ~/.codex/skills -> $DOTFILES/agents/commands"
+fi
 
 # Gemini — global_workflows
 mkdir -p ~/.gemini/antigravity
-ln -sfn ~/dotfiles/agents/commands ~/.gemini/antigravity/global_workflows
+link_dir "$DOTFILES/agents/commands" ~/.gemini/antigravity/global_workflows
 
-echo "✅ Agent links created:"
-echo "   ~/.claude/commands -> ~/dotfiles/agents/commands"
-echo "   ~/.claude/skills   -> ~/dotfiles/agents/skills"
-echo "   ~/.codex/skills    -> ~/dotfiles/agents/commands"
-echo "   ~/.gemini/antigravity/global_workflows -> ~/dotfiles/agents/commands"
+echo "✅ Agent link pass complete. Source root: $DOTFILES"
 '''

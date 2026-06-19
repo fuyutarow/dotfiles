@@ -1,5 +1,5 @@
 ---
-name: python-tooling
+name: running-python-tools
 description: Run ALL Python-based tooling through uv — `uvx <tool>` for CLI tools (ruff, black, pytest, jupyter, http, yt-dlp, marker, …) and `uv run --with <pkg>` for scripts/snippets needing libraries (pypdf, pdfplumber, numpy, pandas, matplotlib, requests, …). Read this BEFORE running any Python command. Trigger whenever you would otherwise type `pip install`, `pip3`, `python3 -m pip`, `pipx`, `conda`, a bare `python3 script.py` that imports third-party packages, or invoke a Python tool by name. Replaces system/global pip installs with isolated, cached, reproducible uv runs — no environment pollution.
 ---
 

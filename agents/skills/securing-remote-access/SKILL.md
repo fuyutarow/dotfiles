@@ -1,5 +1,5 @@
 ---
-name: secure-remote-access
+name: securing-remote-access
 description: >-
   Practical intelligence for designing, setting up, hardening, and debugging
   secure remote shell access the modern way — choosing between SSH keys,

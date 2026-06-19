@@ -55,13 +55,16 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
 5. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
-6. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:` **=**
-   the shortest **durable noun** for what the skill governs — a *bare* noun for a whole
-   non-swappable substrate/domain (`julia`, `latex`, `secure-remote-access`), a *domain+layer*
-   noun for one layer of an ecosystem (`python-tooling`). Never put a replaceable tool or a verb
-   in the name (no `uvx-`, `lualatex-`, `-compile`, `-run`) — those live ONLY in `description:`,
-   which is what the model matches on. Swap test: if today's tool were replaced, the name must
-   still be true.
+6. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
+   ALL skills use one consistent shape — the official-recommended **gerund** form
+   `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
+   `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
+   `operating-the-harness`). Hard rules: lowercase/numbers/hyphens only, ≤64 chars, and the name
+   **must not contain the reserved words `claude`/`anthropic`** (why `operating-the-harness`, not
+   `claude-code`). Keep tool names and trigger keywords in `description:` (3rd person, "what + when")
+   — that field, with the name, is what the model matches on. Don't mix naming shapes across the
+   collection (inconsistency is the documented anti-pattern). Ref: docs.claude.com Agent Skills →
+   best-practices.
 
 ## Setup / Tasks
 

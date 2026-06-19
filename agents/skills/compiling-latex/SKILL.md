@@ -1,5 +1,5 @@
 ---
-name: latex
+name: compiling-latex
 description: Use when working on LaTeX, LuaLaTeX, Beamer, papers, TeX build setup, PDF generation, LaTeX formatting/linting, or LaTeX repository hygiene. Prefer modern repo-native task setup: mise tasks, tex-fmt formatting, ChkTeX linting, latexmk builds, Poppler visual PDF verification, and deliberate .gitignore rules. Trigger for “compile/build PDF”, “LaTeX error”, “Beamer”, “format/lint TeX”, “tlmgr”, “tex-fmt”, “chktex”, “latexmk”, “papers directory”, or “gitignore for LaTeX artifacts”.
 ---
 

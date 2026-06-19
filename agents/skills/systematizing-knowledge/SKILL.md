@@ -1,5 +1,5 @@
 ---
-name: sok
+name: systematizing-knowledge
 description: >-
   Build a top-tier Systematization of Knowledge (SoK / 体系化) — evidence synthesis, contradiction
   reconciliation, taxonomy construction, and theoretical unification across a paper corpus — for a

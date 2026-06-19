@@ -70,10 +70,18 @@ claude mcp add playwright -- bunx @playwright/mcp@latest
 [tasks."link:skills"]
 description = "Link agents/ (commands & skills) into AI tools' config directories"
 run = '''
-# Claude Code — slash commands & skills
+# Claude Code — slash commands (whole-dir link is fine; nothing else writes here)
 mkdir -p ~/.claude
 ln -sfn ~/dotfiles/agents/commands ~/.claude/commands
-ln -sfn ~/dotfiles/agents/skills   ~/.claude/skills
+
+# Claude Code — skills: link each skill INDIVIDUALLY. Claude Code itself
+# populates ~/.claude/skills/ with plugin-installed skills (real dirs), so a
+# whole-dir symlink would either clobber them or silently nest. Per-skill
+# links coexist with plugin skills.
+mkdir -p ~/.claude/skills
+for skill in ~/dotfiles/agents/skills/*/; do
+  ln -sfn "${skill%/}" ~/.claude/skills/"$(basename "$skill")"
+done
 
 # Codex — skills
 mkdir -p ~/.codex
@@ -85,7 +93,7 @@ ln -sfn ~/dotfiles/agents/commands ~/.gemini/antigravity/global_workflows
 
 echo "✅ Agent links created:"
 echo "   ~/.claude/commands -> ~/dotfiles/agents/commands"
-echo "   ~/.claude/skills   -> ~/dotfiles/agents/skills"
+echo "   ~/.claude/skills/* -> ~/dotfiles/agents/skills/* (per-skill)"
 echo "   ~/.codex/skills    -> ~/dotfiles/agents/commands"
 echo "   ~/.gemini/antigravity/global_workflows -> ~/dotfiles/agents/commands"
 '''

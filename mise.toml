@@ -72,7 +72,7 @@ description = "Link agents/ commands and skills into AI tools' config directorie
 run = '''
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
-link_dir() {
+link_path() {
   src="$1"
   dst="$2"
   if [ ! -e "$src" ]; then
@@ -88,17 +88,35 @@ link_dir() {
   fi
 }
 
-# Claude Code — slash commands & skills
+# Claude Code — slash commands
 mkdir -p ~/.claude
-link_dir "$DOTFILES/agents/commands" ~/.claude/commands
-link_dir "$DOTFILES/agents/skills"   ~/.claude/skills
+link_path "$DOTFILES/agents/commands" ~/.claude/commands
+
+# Claude Code — skills: link each skill INDIVIDUALLY. Claude Code itself
+# populates ~/.claude/skills/ with plugin-installed skills (real dirs), so a
+# whole-dir symlink would either clobber them or silently nest. Per-skill
+# links coexist with plugin skills.
+if [ -L ~/.claude/skills ]; then
+  old_target="$(readlink ~/.claude/skills)"
+  unlink ~/.claude/skills
+  echo "removed whole-dir symlink: ~/.claude/skills -> $old_target"
+fi
+mkdir -p ~/.claude/skills
+if [ -d "$DOTFILES/agents/skills" ]; then
+  for skill in "$DOTFILES"/agents/skills/*/; do
+    [ -d "$skill" ] || continue
+    link_path "${skill%/}" ~/.claude/skills/"$(basename "$skill")"
+  done
+else
+  echo "skip (missing): $DOTFILES/agents/skills"
+fi
 
 # Codex — global guidance, skills, and legacy markdown prompts
 mkdir -p ~/.codex
 mkdir -p ~/.agents
-link_dir "$DOTFILES/agents/codex/AGENTS.md" ~/.codex/AGENTS.md
-link_dir "$DOTFILES/agents/skills"          ~/.agents/skills
-link_dir "$DOTFILES/agents/commands"        ~/.codex/prompts
+link_path "$DOTFILES/agents/codex/AGENTS.md" ~/.codex/AGENTS.md
+link_path "$DOTFILES/agents/skills"          ~/.agents/skills
+link_path "$DOTFILES/agents/commands"        ~/.codex/prompts
 if [ -L ~/.codex/skills ] && [ "$(readlink ~/.codex/skills)" = "$DOTFILES/agents/commands" ]; then
   unlink ~/.codex/skills
   echo "removed stale: ~/.codex/skills -> $DOTFILES/agents/commands"
@@ -106,7 +124,7 @@ fi
 
 # Gemini — global_workflows
 mkdir -p ~/.gemini/antigravity
-link_dir "$DOTFILES/agents/commands" ~/.gemini/antigravity/global_workflows
+link_path "$DOTFILES/agents/commands" ~/.gemini/antigravity/global_workflows
 
 echo "✅ Agent link pass complete. Source root: $DOTFILES"
 '''

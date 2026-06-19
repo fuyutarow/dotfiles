@@ -229,3 +229,4 @@ empirically and carve out only the genuinely formalizable sub-parts.
 
 (Current AI4Science results, which domains have crossed into "strong gravity" lately, and named
 projects: `state-of-the-art.md`.)
+

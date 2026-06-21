@@ -16,8 +16,8 @@ fi
 # PATH exports
 _dbg "Setting up PATH exports"
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$HOME/.bun/bin:$PATH"
-export PATH="$HOME/.bun/install/global/node_modules/.bin:$PATH"
+# bun global package bins (claude, gemini, …); bun itself now comes from Homebrew, not ~/.bun
+[ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
 
 
 # GNU coreutils (gtimeout etc.)

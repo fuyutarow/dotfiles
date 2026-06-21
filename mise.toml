@@ -7,6 +7,53 @@
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
 
+[tasks."cache:clean"]
+description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
+run = '''
+echo "before: $(df -h "$HOME" | awk 'NR==2{print $4" free"}')"
+
+command -v brew   >/dev/null 2>&1 && { echo "• brew cleanup --prune=all";  brew cleanup --prune=all || true; }
+
+# bun: native `bun pm cache rm` frees the space immediately, but errors outside a project
+# (oven-sh/bun #16101/#18733) — so run it inside an ephemeral package.json dir.
+if command -v bun >/dev/null 2>&1; then
+  echo "• bun pm cache rm"
+  _bt="$(mktemp -d)" && printf '{}' > "$_bt/package.json" && ( cd "$_bt" && bun pm cache rm ) || true
+  command -v rip >/dev/null 2>&1 && rip "$_bt" 2>/dev/null || rm -rf "$_bt"
+fi
+
+command -v npm    >/dev/null 2>&1 && { echo "• npm cache clean";      npm cache clean --force || true; }
+command -v pnpm   >/dev/null 2>&1 && { echo "• pnpm store prune";     pnpm store prune || true; }
+command -v yarn   >/dev/null 2>&1 && { echo "• yarn cache clean";     yarn cache clean || true; }  # Berry global: add --all
+# uv: `uv cache clean/prune` BLOCKS on the cache lock while ANY uv process runs — e.g. the
+# uvx-launched MCP servers during an AI session. Skip when uv/uvx is active so the task never hangs
+# (the [u] in the pattern stops pgrep from matching this script's own command line).
+if command -v uv >/dev/null 2>&1; then
+  if pgrep -f '[u]v tool|[u]vx' >/dev/null 2>&1; then
+    echo "• uv cache prune — skipped (uv/uvx active; would block on the cache lock)"
+  else
+    echo "• uv cache prune"; uv cache prune || true
+  fi
+fi
+command -v pip    >/dev/null 2>&1 && { echo "• pip cache purge";      pip cache purge || true; }
+command -v go     >/dev/null 2>&1 && { echo "• go clean -cache";      go clean -cache || true; }
+command -v docker >/dev/null 2>&1 && { echo "• docker builder prune"; docker builder prune -f 2>/dev/null || true; }
+
+# cargo: no built-in cache cleaner on stable (cargo-cache is external; `cargo clean gc` is nightly-only).
+# Rust 1.88+ auto-GCs stale entries; this rips the regenerable download caches (recoverable via rip's graveyard).
+if command -v cargo >/dev/null 2>&1 && command -v rip >/dev/null 2>&1; then
+  echo "• cargo registry/git caches (rip → graveyard)"
+  rip "$HOME"/.cargo/registry/src "$HOME"/.cargo/registry/cache "$HOME"/.cargo/git/checkouts 2>/dev/null || true
+fi
+
+echo "after:  $(df -h "$HOME" | awk 'NR==2{print $4" free"}')"
+echo "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects"
+'''
+
+[tasks."cache:projects"]
+description = "Clean project build artifacts (node_modules/target/build…) via kondo — interactive, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override."
+run = 'kondo --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
@@ -23,6 +70,7 @@ brew install sheldon coreutils
 brew bundle --file=~/dotfiles/Brewfile
 mise run link-dots
 mise run link:skills
+mise run tmux:plugins
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
@@ -30,6 +78,14 @@ echo "Setup complete. Run: exec zsh"
 [tasks.link-dots]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
 run = 'bash ~/dotfiles/scripts/link-dots.sh'
+
+[tasks."tmux:plugins"]
+description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
+run = '''
+TPM_DIR="$HOME/.tmux/plugins/tpm"
+[ -d "$TPM_DIR/.git" ] || git clone --depth 1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
+"$TPM_DIR/bin/install_plugins"
+'''
 
 [tasks.check-tools]
 description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
@@ -42,6 +98,7 @@ sudo apt install -y zsh
 brew install sheldon topgrade
 bash ~/dotfiles/scripts/link-dots.sh
 brew bundle --file=~/dotfiles/Brewfile
+mise run tmux:plugins
 topgrade
 chsh -s $(which zsh)
 echo "---"

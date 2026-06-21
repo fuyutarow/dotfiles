@@ -233,6 +233,31 @@ The most common LLM failure mode combines §2.0.2 and §2.0.3: "evaluate `f` on 
 then `lerp` to 10000 query points." Both forbidden. Either compute analytically/AD, or use a
 proper interpolant with documented error bounds — never the grid+lerp combination.
 
+### 2.0.4 Long-running scripts: flush per-step progress, or you fly blind
+
+Julia **block-buffers `stdout` when it is not a TTY** — redirected to a file, a pipe, a background
+task, or a Monitor. Without an explicit `flush(stdout)` after each step, a script that runs for 20
+minutes emits **nothing** until it exits: its whole runtime is unobservable, and you cannot tell
+"still working" from "hung." Every loop / multi-step probe MUST flush a progress line per iteration.
+
+```julia
+# WRONG — buffered: 0 bytes visible for the entire run, then a dump at exit
+for k in 1:K
+    r = solve(k); @printf("K=%d Φ=%.6f\n", k, r.phi)        # sits in the buffer
+end
+
+# RIGHT — flush per step so background-task / Monitor reads show live progress
+for k in 1:K
+    r = solve(k); @printf("K=%d Φ=%.6f\n", k, r.phi); flush(stdout)
+end
+```
+
+For real progress bars use `ProgressMeter.jl` (`@showprogress` / `next!(p)` flush internally). For a
+restart heuristic, print **each restart's** result flushed, not just the final summary. And match
+batch size to observability: a 40-solve sweep with no per-solve flush is a 20-minute blind spot —
+prefer the smallest N that answers the question, emitted incrementally (this *is* the lightweight-probe
+discipline; a buffered batch silently defeats it).
+
 ---
 
 ## 9. Checklist Before Submitting Julia Code
@@ -247,6 +272,7 @@ Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in
       (`gradient(f, backend, x)`), never `(f(x+h)-f(x))/h`. (FD *discretizations* like PDE stencils are fine.) (§2.0.1)
 - [ ] No grid sampling for continuous optima: `Optim`/`JuMP`/`Roots`/closed form (§2.0.2)
 - [ ] No lerp as evaluation substitute; no grid+lerp combination (§2.0.3)
+- [ ] Long-running / looping scripts `flush(stdout)` per step (or `ProgressMeter`); never a buffered batch that emits nothing until exit — background tasks and Monitor are blind otherwise (§2.0.4)
 
 AD — `references/autodiff.md` (if any function will be differentiated):
 - [ ] Differentiation goes through `DifferentiationInterface` with an `ADTypes` backend, not raw backend calls (§2.7.1)

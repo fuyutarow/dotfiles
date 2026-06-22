@@ -165,3 +165,9 @@
 [credential "https://gist.github.com"]
     helper =
     helper = !gh auth git-credential
+[pull]
+	rebase = true
+[merge]
+	ff = only
+[rebase]
+	autostash = true

@@ -40,6 +40,13 @@ fi
 # --- tmux ---
 link tmux/tmux.conf  "$HOME/.tmux.conf"
 
+# --- lazygit (cross-OS topic; config dir differs by OS — lazygit honors XDG_CONFIG_HOME on both) ---
+if $IS_MAC; then
+  link lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"
+elif $IS_WSL; then
+  link lazygit/config.yml "$HOME/.config/lazygit/config.yml"
+fi
+
 # --- karabiner (macOS only) ---
 if $IS_MAC; then
   rm -rf "$HOME/.config/karabiner"

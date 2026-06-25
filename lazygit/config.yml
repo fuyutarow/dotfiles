@@ -3,11 +3,13 @@
 #   WSL: ~/.config/lazygit/config.yml   (lazygit honors XDG_CONFIG_HOME on both OSes)
 # Edit ~/dotfiles/lazygit/* then `mise run link-dots` — never edit the linked copy.
 #
-# Alt+C in the Files panel → AI commit message via ~/dotfiles/lazygit/ai-commit.sh.
+# Ctrl+A in the Files panel → AI commit message via ~/dotfiles/lazygit/ai-commit.sh.
+# (Ctrl, not Alt: macOS terminals don't send Option as Meta by default, so <a-c>
+#  never reaches lazygit. Ctrl is transmitted reliably on both mac and WSL.)
 # PRIVACY: that sends your STAGED DIFF to Anthropic, and the keybinding is GLOBAL
 # (every repo, not just dotfiles) — never use it where the diff may hold secrets.
 customCommands:
-  - key: "<a-c>"                 # Alt+C; c/C/w/a/A are already bound in the files context
+  - key: "<c-a>"                 # Ctrl+A; free in the files context (c/C/w/a/A are taken)
     context: "files"             # canonical staged-files context (lazygit does NOT validate this — keep exact)
     description: "AI commit message (claude)"
     loadingText: "Asking claude for a commit message..."

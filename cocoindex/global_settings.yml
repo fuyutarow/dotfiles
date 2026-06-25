@@ -1,0 +1,19 @@
+# CocoIndex Code — global settings (dotfiles-managed).
+# Symlinked to ~/.cocoindex_code/global_settings.yml by scripts/link-dots.sh,
+# so `ccc init` is NOT needed on a fresh machine. After editing, run `ccc doctor`.
+#
+# Local SentenceTransformers embeddings — fully offline, no API key (the [full] install).
+
+embedding:
+  provider: sentence-transformers
+  model: Snowflake/snowflake-arctic-embed-xs
+  indexing_params: {}
+  query_params:
+    prompt_name: query
+
+# To use a cloud embedding provider via LiteLLM instead, set `provider`/`model`
+# above and inject keys here. DO NOT commit real secrets — keep keys in the
+# machine's environment and reference them, or keep this block commented.
+# envs:
+#   OPENAI_API_KEY: ...
+#   VOYAGE_API_KEY: ...

@@ -45,6 +45,9 @@ link tmux/tmux.conf  "$HOME/.tmux.conf"
 link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
 link agents/claude/settings.json         "$HOME/.claude/settings.json"
 
+# --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
+link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
+
 # --- lazygit (cross-OS topic; config dir differs by OS — lazygit honors XDG_CONFIG_HOME on both) ---
 if $IS_MAC; then
   link lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"

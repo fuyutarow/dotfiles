@@ -114,14 +114,32 @@ description = "Install Rust toolchain"
 run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
 
 [tasks."cc:install-mcp"]
-description = "Install Claude Code MCP servers"
+description = "Register MCP servers (context7 + cocoindex-code) into Claude Code (user scope) AND Codex — single source of truth, idempotent. mac & WSL."
 run = '''
-claude mcp add context7 -- bunx @upstash/context7-mcp@latest
-claude mcp add sequential-thinking -- bunx @modelcontextprotocol/server-sequential-thinking
-claude mcp add github -- bunx @modelcontextprotocol/server-github
-claude mcp add memory -- bunx @modelcontextprotocol/server-memory
-claude mcp add postgres -- bunx @modelcontextprotocol/server-postgres
-claude mcp add playwright -- bunx @playwright/mcp@latest
+set -e
+# cocoindex's MCP is the SEPARATE official `cocoindex-code` product (binary `ccc`,
+# `ccc mcp` stdio) — NOT the core cocoindex engine. [full] = local SentenceTransformer
+# embeddings, no API key. uv (pipx not assumed).
+command -v ccc >/dev/null 2>&1 || uv tool install --upgrade 'cocoindex-code[full]'
+
+# Single canonical list -> each tool via its own add CLI (formats differ:
+# Claude = JSON in ~/.claude.json user scope; Codex = TOML in ~/.codex/config.toml).
+# Idempotent: remove-then-add.
+register() {  # register <name> <command...>
+  name=$1; shift
+  claude mcp remove -s user "$name" 2>/dev/null || true
+  claude mcp add -s user "$name" -- "$@"
+  if command -v codex >/dev/null 2>&1; then
+    codex mcp remove "$name" 2>/dev/null || true
+    codex mcp add "$name" -- "$@"
+  fi
+}
+
+register context7       bunx -y @upstash/context7-mcp
+register cocoindex-code ccc mcp
+
+echo "registered (Claude user + Codex): context7, cocoindex-code"
+echo "tip: run 'ccc index' inside a repo to build its code index before first MCP query."
 '''
 
 [tasks."link:skills"]

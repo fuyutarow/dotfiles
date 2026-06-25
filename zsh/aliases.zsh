@@ -512,18 +512,75 @@ alias to='touch'
 
 alias tf='tail -fF'
 
-# File operation safety aliases
-if $IS_MAC; then
-  alias mv='mv -n'         # 上書き禁止 (BSD)
-  alias cp='cp -n'         # 上書き禁止 (BSD)
-  alias mvf='command mv'   # 強制上書き
-  alias cpf='command cp'   # 強制上書き
-else
-  alias mv='mv --update=none' # 上書き禁止 (GNU)
-  alias cp='cp --update=none' # 上書き禁止 (GNU)
-  alias mvf='mv --update=all' # 強制上書き (GNU)
-  alias cpf='cp --update=all' # 強制上書き (GNU)
-fi
+# File operation safety: cp / mv overwrite-guard
+# 旧実装は silent no-clobber (cp -n / cp --update=none) で、上書きをブロックしても
+# exit 0 のまま「成功」に見え、呼び出し側（特に LLM エージェント）を騙していた。
+# 代わりに上書き衝突を検知したら *大声で中止 (exit 1)* し、cpf / mvf を案内する
+# ── rm() が rip を案内するのと同じ思想。cpf / mvf (= command cp / mv) は強制上書き。
+# OS 非依存: cp/mv のフラグを一切注入せず存在チェックを zsh 内で行うため macOS(BSD) /
+# WSL(GNU) で同一挙動 → IS_MAC 分岐は不要（旧分岐の理由 -n vs --update=none は消滅）。
+# 注: 従来の `cp -i`/`mv -i` プロンプトは置き換わる。明示的な -n も衝突時は大声中止に
+# 昇格。再帰コピー (-r) の衝突検知は第1階層のみ（深いマージは real cp に委譲）。
+unalias cp mv 2>/dev/null   # 上流に stray な `alias cp=...` が残ると関数定義がパースエラーで全滅するのを防ぐ
+_overwrite_guard() {
+  local tool="$1"; shift
+  local -a args=("$@") opts srcs conflicts
+  local target="" use_t=0 no_target_dir=0
+  local end_opts=0 a i n
+  n=${#args[@]}
+  for (( i = 1; i <= n; i++ )); do
+    a="${args[i]}"
+    if (( end_opts )); then
+      srcs+=("$a")
+    elif [[ "$a" == "--" ]]; then
+      end_opts=1
+    elif [[ "$a" == "--target-directory="* ]]; then
+      target="${a#--target-directory=}"; use_t=1; opts+=("$a")
+    elif [[ "$a" == "-t" || "$a" == "--target-directory" ]]; then
+      opts+=("$a"); (( i++ )); target="${args[i]}"; use_t=1
+    elif [[ "$a" == "-T" || "$a" == "--no-target-directory" ]]; then
+      no_target_dir=1; opts+=("$a")
+    elif [[ "$a" == "-S" || "$a" == "--suffix" ]]; then
+      opts+=("$a"); (( i++ )); opts+=("${args[i]}")
+    elif [[ "$a" == -* && "$a" != "-" ]]; then
+      opts+=("$a")
+    else
+      srcs+=("$a")
+    fi
+  done
+
+  if (( ! use_t )); then
+    if (( ${#srcs[@]} >= 2 )); then
+      target=${srcs[-1]}; srcs=("${(@)srcs[1,-2]}")
+    else
+      command "$tool" "${args[@]}"; return $?   # 操作対象が足りない等は real cp/mv に委譲
+    fi
+  fi
+
+  if [[ -d "$target" && $no_target_dir -eq 0 ]]; then
+    local s base tdir="${target%/}"
+    for s in "${srcs[@]}"; do
+      s="${s%/}"; base="${s:t}"          # 末尾スラッシュを剥がしてから basename
+      [[ -z "$base" ]] && continue
+      [[ -e "$tdir/$base" || -L "$tdir/$base" ]] && conflicts+=("$tdir/$base")
+    done
+  else
+    [[ -e "$target" || -L "$target" ]] && conflicts+=("$target")
+  fi
+
+  if (( ${#conflicts[@]} )); then
+    print -u2 "⛔ ${tool}: 上書きを中止しました（既存ファイルを保護）。"
+    local c; for c in "${conflicts[@]}"; do print -u2 "     既存: $c"; done
+    print -u2 "   上書きするには ${tool}f を使ってください:  ${tool}f ${(q-)args[@]}"
+    print -u2 "   （${tool}f = 強制上書き。元に戻せないので注意）"
+    return 1
+  fi
+  command "$tool" "${args[@]}"
+}
+cp() { _overwrite_guard cp "$@"; }
+mv() { _overwrite_guard mv "$@"; }
+alias cpf='command cp'   # 強制上書き (両OS共通)
+alias mvf='command mv'   # 強制上書き (両OS共通)
 
 # rip for safer file removal
 command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above

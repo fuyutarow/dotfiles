@@ -98,7 +98,12 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Safety Rules
 - `rm` is permanently disabled in shell config — **always use `rip`** (never suggest raw `rm`).
-- `mv`/`cp` are no-clobber by default (`mvf`/`cpf` to force).
+- `mv`/`cp` are shell **functions** that **refuse loudly and abort (exit 1)** when they would
+  overwrite an existing path — they print the conflict and tell you to re-run with `mvf`/`cpf`
+  (= `command mv`/`command cp`, force-overwrite). This replaces the old *silent* no-clobber skip
+  (`-n` / `--update=none`) that exited 0 and fooled callers (esp. agents) into thinking a
+  copy/move succeeded when it was dropped. Mirrors `rm`→`rip`; OS-agnostic (same on BSD/GNU).
+  When you *intend* to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
 - Clipboard is cross-platform (`cc`, `pp`, `pwdc`) with UTF-8/UTF-16 handling for WSL.
 
 ## Notes for Claude

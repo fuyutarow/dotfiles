@@ -129,6 +129,10 @@ description = "Link agents/ commands and skills into AI tools' config directorie
 run = '''
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
+# Activate the post-merge hook so future `git pull`s auto-relink skills (OS-agnostic;
+# every setup runs this task). Idempotent. See .githooks/post-merge.
+git -C "$DOTFILES" config core.hooksPath .githooks 2>/dev/null || true
+
 link_path() {
   src="$1"
   dst="$2"

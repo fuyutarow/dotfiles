@@ -1,0 +1,7 @@
+#!/bin/sh
+# post-merge: auto-relink agent skills after `git pull`/merge so newly-pulled
+# skills (e.g. agents/skills/*) appear in ~/.claude/skills/ without a manual
+# `mise run link:skills`. Idempotent (ln -sfn; skips real dirs). Non-blocking:
+# git ignores this hook's exit status, so a failure never aborts the pull.
+command -v mise >/dev/null 2>&1 || { echo "post-merge: mise not on PATH; run 'mise run link:skills' manually"; exit 0; }
+exec mise run link:skills

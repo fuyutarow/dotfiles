@@ -10,6 +10,8 @@ TOOLS=(
   atuin delta direnv rip sheldon tmux gh mise topgrade fnm bun kondo
   # LaTeX toolchain (mactex-no-gui / texlive + tex-fmt + poppler)
   lualatex latexmk tlmgr chktex tex-fmt pdftoppm
+  # Markdown lint+format (Rust; qoed `mise run lint:md`)
+  rumdl
 )
 
 missing=0

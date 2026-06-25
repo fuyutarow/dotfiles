@@ -95,6 +95,9 @@ fi
 # diff with better visualization
 command_exists "delta" && alias diff='delta' || alias diff='diff --color=auto'
 
+# cocoindex-code (ccc): AST code-search CLI, run via uvx (ephemeral; no persistent install)
+command_exists "uvx" && alias ccc='uvx --from "cocoindex-code[full]" ccc'
+
 # vim
 # ===
 command_exists "nvim" || alias nvim="vim"

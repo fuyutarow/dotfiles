@@ -1,0 +1,11 @@
+# topgrade — dotfiles-managed (symlinked to ~/.config/topgrade.toml by scripts/link-dots.sh).
+# Shared across mac & WSL. Step identifiers are the clap values from
+# `topgrade --disable __x__` (e.g. flutter, tlmgr, claude_code, juliaup, ...).
+
+[misc]
+# Steps to skip on every run.
+disable = ["flutter", "tlmgr"]
+
+# Keep a flaky step running but don't let its failure mark the whole run FAILED.
+# (Uncomment to silence the recurring "Claude Code: FAILED" without skipping it.)
+# ignore_failures = ["claude_code"]

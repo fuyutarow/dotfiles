@@ -13,9 +13,11 @@ fi
 
 # PATH exports
 _dbg "Setting up PATH exports"
-export PATH="$HOME/.local/bin:$PATH"
 # bun global package bins (claude, gemini, …); bun itself now comes from Homebrew, not ~/.bun
 [ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
+# Keep ~/.local/bin after Bun insertion so official standalone CLIs (e.g. Codex)
+# beat stale npm/Bun shims in login shells too. Non-login SSH gets this from .zshenv.
+export PATH="$HOME/.local/bin:$PATH"
 
 export CUDA_HOME=/usr/local/cuda-12.4
 export PATH=$CUDA_HOME/bin:$PATH
@@ -115,7 +117,7 @@ fi
 
 # bun completions
 _dbg "Setting up bun completions"
-[ -s "/home/fuyu/.bun/_bun" ] && source "/home/fuyu/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # Sui version path configuration
 _dbg "Setting up Sui"

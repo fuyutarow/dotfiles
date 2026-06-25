@@ -21,6 +21,7 @@ link() { # link <repo-relative source> <target>
 }
 
 # --- zsh ---
+link zsh/zshenv      "$HOME/.zshenv"
 link zsh/zshrc       "$HOME/.zshrc"
 if $IS_MAC; then
   link zsh/zprofile.mac "$HOME/.zprofile"

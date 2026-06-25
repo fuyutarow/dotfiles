@@ -1,0 +1,28 @@
+# Minimal environment for every zsh invocation, including `ssh host 'cmd'`.
+#
+# Architecture note for future agents:
+# - `ssh host 'cmd'` with a zsh login shell runs a non-interactive command shell.
+#   zsh reads .zshenv there, but skips .zprofile and .zshrc.
+# - Remote bootstrap tools such as Codex App SSH connections need standalone user
+#   CLIs like ~/.local/bin/codex to be visible even in that thin environment.
+# - Keep this file silent and cheap. No Homebrew `shellenv`, plugin managers,
+#   prompts, completions, timeouts, or commands that may print or hang.
+# - Bun globals stay in .zprofile; ~/.local/bin must win over old npm/Bun shims.
+
+_zshenv_path_prefix=()
+for _zshenv_dir in \
+  "$HOME/.local/bin" \
+  "$HOME/.local/share/mise/shims" \
+  "$HOME/.cargo/bin" \
+  "$HOME/.foundry/bin"; do
+  [[ -d "$_zshenv_dir" ]] && _zshenv_path_prefix+=("$_zshenv_dir")
+done
+
+for _zshenv_dir in "${_zshenv_path_prefix[@]}"; do
+  path=("${(@)path:#$_zshenv_dir}")
+done
+path=($_zshenv_path_prefix $path)
+
+typeset -U path
+unset _zshenv_dir _zshenv_path_prefix
+export PATH

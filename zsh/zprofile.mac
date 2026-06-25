@@ -15,9 +15,11 @@ fi
 
 # PATH exports
 _dbg "Setting up PATH exports"
-export PATH="$HOME/.local/bin:$PATH"
 # bun global package bins (claude, gemini, …); bun itself now comes from Homebrew, not ~/.bun
 [ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
+# Keep ~/.local/bin after Bun insertion so official standalone CLIs (e.g. Codex)
+# beat stale npm/Bun shims in login shells too. Non-login SSH gets this from .zshenv.
+export PATH="$HOME/.local/bin:$PATH"
 
 
 # GNU coreutils (gtimeout etc.)

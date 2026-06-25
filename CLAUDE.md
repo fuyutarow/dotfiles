@@ -22,7 +22,8 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 ```
 ~/dotfiles/
-├── zsh/                 # ALL zsh: zshrc, aliases.zsh (common + IS_MAC/IS_WSL detection),
+├── zsh/                 # ALL zsh: zshenv (minimal non-interactive SSH PATH),
+│   │                    #   zshrc, aliases.zsh (common + IS_MAC/IS_WSL detection),
 │   │                    #   mac.zsh / wsl.zsh (OS aliases, sourced at END of aliases.zsh),
 │   │                    #   zprofile.mac / zprofile.wsl
 ├── git/                 # ALL git: gitconfig (includes ~/.local-gitconfig), local.mac, local.wsl
@@ -55,7 +56,11 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
    this repo has NO justfile (retired); never reintroduce one.
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
-5. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
+5. `zsh/zshenv` is deliberately tiny and quiet because zsh reads it for **every** invocation,
+   including `ssh host 'cmd'`. It exists so standalone user CLIs in `~/.local/bin` (notably
+   Codex remote bootstrap) work in non-login SSH command shells. Do not put Homebrew shellenv,
+   plugins, prompts, completions, or anything that can print/hang there.
+6. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 6. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    ALL skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,

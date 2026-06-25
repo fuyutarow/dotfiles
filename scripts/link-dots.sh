@@ -40,6 +40,10 @@ fi
 # --- tmux ---
 link tmux/tmux.conf  "$HOME/.tmux.conf"
 
+# --- claude code (user-level config; the repo's own project .claude/ is separate) ---
+link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
+link agents/claude/settings.json         "$HOME/.claude/settings.json"
+
 # --- lazygit (cross-OS topic; config dir differs by OS — lazygit honors XDG_CONFIG_HOME on both) ---
 if $IS_MAC; then
   link lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"

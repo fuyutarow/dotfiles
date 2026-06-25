@@ -77,7 +77,7 @@ echo "Setup complete. Run: exec zsh"
 
 [tasks.link-dots]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
-run = 'bash ~/dotfiles/scripts/link-dots.sh'
+run = 'bash ~/dotfiles/scripts/link-dots.sh --force'
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
@@ -96,7 +96,7 @@ description = "Initialize WSL environment (after: install linuxbrew, brew instal
 run = '''
 sudo apt install -y zsh
 brew install sheldon topgrade
-bash ~/dotfiles/scripts/link-dots.sh
+bash ~/dotfiles/scripts/link-dots.sh --force
 brew bundle --file=~/dotfiles/Brewfile
 mise run tmux:plugins
 topgrade
@@ -137,6 +137,8 @@ register() {  # register <name> <command...>
 
 register context7       bunx -y @upstash/context7-mcp
 register cocoindex-code ccc mcp
+register serena         uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project .
+register fetch          uvx mcp-server-fetch
 
 echo "registered (Claude user + Codex): context7, cocoindex-code"
 echo "tip: run 'ccc index' inside a repo to build its code index before first MCP query."

@@ -2,9 +2,19 @@
 # Single source of truth for dotfile symlinks (macOS & WSL).
 # Called by `mise run link-dots` — do not duplicate link lists anywhere else;
 # add new links HERE. Layout is topic-first: one tool = one directory.
+#
+# Modes (ONE script + a flag, not two scripts):
+#   (default)  SAFE   — idempotent/harmless: never clobber a non-symlink file,
+#                       never sudo/rm unless actually needed. This is the default
+#                       so the post-merge hook can relink on every `git pull`.
+#   --force           — overwrite a regular file with the symlink. For the
+#                       intentional `mise run link-dots` (initial setup / fix drift).
 set -euo pipefail
 
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+
+FORCE=false
+[[ "${1:-}" == "--force" ]] && FORCE=true
 
 # --- OS detection (same convention as zsh/aliases.zsh) ---
 IS_MAC=false
@@ -15,6 +25,10 @@ IS_WSL=false
 link() { # link <repo-relative source> <target>
   local src="$DOTFILES/$1" dst="$2"
   [[ -e "$src" ]] || { echo "skip (missing): $src"; return 0; }
+  [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]] && return 0   # already correct -> no-op
+  if ! $FORCE && [[ -e "$dst" && ! -L "$dst" ]]; then
+    echo "skip (exists, not symlink): $dst"; return 0             # safe (default): don't clobber a real file
+  fi
   mkdir -p "$(dirname "$dst")"
   ln -sfn "$src" "$dst"
   echo "linked: $dst -> $src"
@@ -58,15 +72,24 @@ elif $IS_WSL; then
   link lazygit/config.yml "$HOME/.config/lazygit/config.yml"
 fi
 
-# --- karabiner (macOS only) ---
+# --- karabiner (macOS only; whole-dir replace, so guard the rm against repeat runs) ---
 if $IS_MAC; then
-  rm -rf "$HOME/.config/karabiner"
-  link karabiner "$HOME/.config/karabiner"
+  kdst="$HOME/.config/karabiner"
+  if [[ -L "$kdst" && "$(readlink "$kdst")" == "$DOTFILES/karabiner" ]]; then
+    :                                                   # already linked -> nothing to rm
+  elif ! $FORCE && [[ -e "$kdst" && ! -L "$kdst" ]]; then
+    echo "skip (exists, not symlink): $kdst"            # safe (default): don't rm a real dir
+  else
+    rm -rf "$kdst"
+    link karabiner "$kdst"
+  fi
 fi
 
-# --- wsl (WSL2 system config; /etc needs root, so sudo + gated on WSL) ---
+# --- wsl (WSL2 system config; /etc needs root — guard sudo so pulls don't re-prompt) ---
 if $IS_WSL; then
-  if sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2>/dev/null; then
+  if [[ "$(readlink /etc/wsl.conf 2>/dev/null)" == "$DOTFILES/wsl/wsl.conf" ]]; then
+    :                                                   # already linked -> no sudo prompt
+  elif sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2>/dev/null; then
     echo "linked: /etc/wsl.conf -> $DOTFILES/wsl/wsl.conf (sudo)"
   else
     echo "skip: /etc/wsl.conf needs root — run: sudo ln -sfn $DOTFILES/wsl/wsl.conf /etc/wsl.conf"

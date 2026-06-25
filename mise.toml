@@ -114,34 +114,38 @@ description = "Install Rust toolchain"
 run = 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh'
 
 [tasks."cc:install-mcp"]
-description = "Register MCP servers (context7 + cocoindex-code) into Claude Code (user scope) AND Codex — single source of truth, idempotent. mac & WSL."
+description = "Apply .mcp.json (single declarative source) to Claude Code (user scope) AND Codex. Idempotent. mac & WSL."
 run = '''
-set -e
-# cocoindex's MCP is the SEPARATE official `cocoindex-code` product (binary `ccc`,
-# `ccc mcp` stdio) — NOT the core cocoindex engine. [full] = local SentenceTransformer
-# embeddings, no API key. uv (pipx not assumed).
+set -eu
+MCP_JSON="${DOTFILES:-$HOME/dotfiles}/.mcp.json"
+# cocoindex-code's MCP server is the binary `ccc` (a separate uv tool); ensure it exists.
+# [full] = local SentenceTransformer embeddings, no API key.
 command -v ccc >/dev/null 2>&1 || uv tool install --upgrade 'cocoindex-code[full]'
 
-# Single canonical list -> each tool via its own add CLI (formats differ:
-# Claude = JSON in ~/.claude.json user scope; Codex = TOML in ~/.codex/config.toml).
-# Idempotent: remove-then-add.
-register() {  # register <name> <command...>
-  name=$1; shift
+# SINGLE SOURCE OF TRUTH = .mcp.json. Read each server and register into BOTH tools
+# (Claude user scope -> ~/.claude.json ; Codex -> ~/.codex/config.toml), idempotently.
+# Formats differ (Claude JSON / Codex TOML) so each tool's own `mcp add` CLI applies it.
+# Two kinds: remote (type http/sse -> has .url) and local stdio (.command + .args).
+# stdio args are space-free tokens by construction, so word-splitting $cmd $args is safe.
+for name in $(jq -r '.mcpServers | keys[]' "$MCP_JSON"); do
+  type=$(jq -r --arg n "$name" '.mcpServers[$n].type // "stdio"' "$MCP_JSON")
+  url=$(jq -r --arg n "$name" '.mcpServers[$n].url // ""' "$MCP_JSON")
+  cmd=$(jq -r --arg n "$name" '.mcpServers[$n].command // ""' "$MCP_JSON")
+  args=$(jq -r --arg n "$name" '.mcpServers[$n].args // [] | join(" ")' "$MCP_JSON")
   claude mcp remove -s user "$name" 2>/dev/null || true
-  claude mcp add -s user "$name" -- "$@"
+  if [ -n "$url" ]; then
+    claude mcp add -s user --transport "$type" "$name" "$url"      # remote http/sse
+  else
+    claude mcp add -s user "$name" -- $cmd $args                   # local stdio
+  fi
   if command -v codex >/dev/null 2>&1; then
     codex mcp remove "$name" 2>/dev/null || true
-    codex mcp add "$name" -- "$@"
+    if [ -n "$url" ]; then codex mcp add "$name" --url "$url"; else codex mcp add "$name" -- $cmd $args; fi
   fi
-}
-
-register context7       bunx -y @upstash/context7-mcp
-register cocoindex-code ccc mcp
-register serena         uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project .
-register fetch          uvx mcp-server-fetch
-
-echo "registered (Claude user + Codex): context7, cocoindex-code"
-echo "tip: run 'ccc index' inside a repo to build its code index before first MCP query."
+  echo "registered: $name (${url:-$cmd $args})"
+done
+echo "applied $MCP_JSON -> Claude(user) + Codex"
+echo "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model."
 '''
 
 [tasks."link:skills"]

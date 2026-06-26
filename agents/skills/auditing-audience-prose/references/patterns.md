@@ -1,0 +1,274 @@
+# Patterns
+
+## Contents
+
+- [Fast lint](#fast-lint)
+- [Pattern families](#pattern-families)
+- [Rewrite ledger](#rewrite-ledger)
+- [Claim-calibration ledger](#claim-calibration-ledger)
+- [Deck-level rules](#deck-level-rules)
+- [Document-level rules](#document-level-rules)
+- [Denylist as a machine gate](#denylist-as-a-machine-gate)
+- [Terminology normalization](#terminology-normalization)
+
+## Fast lint
+
+Run these checks on every title, header, summary sentence, or script line:
+
+1. Can I point to the subject?
+2. Can I name the comparison class?
+3. Can I tell whether the sentence is about the object, or about the convenience of packaging it?
+4. If I delete the emphasis phrase, does any meaning disappear?
+5. If the title or paragraph lead mentions only tools, modules, or infrastructure, where is the
+   audience message?
+
+If two or more answers are "no", rewrite from scratch instead of editing locally.
+
+## Pattern families
+
+### Processing/meta language
+
+These words are common in engineering conversation but weak in audience-facing prose:
+
+- `返す`
+- `閉じる`
+- `通す`
+- `乗る`
+- `接続する`
+- `再走`
+- `一度に`
+
+Use them only when the control flow is itself the content. Otherwise, rewrite in terms of inputs,
+outputs, and relations.
+
+### Architecture-as-rhetoric
+
+These words often hide a missing object:
+
+- `中核`
+- `コア`
+- `エンジン`
+- `基盤`
+- `パイプライン`
+- `層`
+
+If removing the word does not change the technical meaning, delete it.
+
+### Writer self-emphasis
+
+These phrases try to force attention instead of earning it:
+
+- `ここが肝心`
+- `今日いちばん大事`
+- `合否を分ける`
+- `この実務の執念から`
+
+Replace them with the reason the statement changes a decision, bound, or comparison.
+
+### False unity
+
+These phrases collapse distinctions too early:
+
+- `一つに返す`
+- `一つの仕様に乗る`
+- `一本に通す`
+- `そのまま接続できる`
+
+Rewrite by splitting:
+
+- shared formulation
+- differing inputs
+- differing outputs
+- differing deployment phases
+
+### Tool-first framing
+
+Tool names are useful evidence, not a thesis. Avoid titles like:
+
+- `製造前設計: PDK・GDSFactory/SAX`
+- `QASM に挿す`
+
+Prefer:
+
+- task or decision first
+- toolchain second
+- deployment phase explicit
+
+The same rule applies to headings in proposals and submission documents. A section header should
+state the question, claim, or deliverable, not merely the implementation vocabulary.
+
+### Metaphor and decorative imagery
+
+A common LLM-style failure mode: a structural or body-part metaphor replaces the literal term. Map each
+to the standard word in the field instead of paraphrasing it with another image.
+
+| metaphor | literal term |
+|---|---|
+| `床` (floor) | lower bound |
+| `鎖` (chain) | inequality / ordering |
+| `扇` (fan) | spread / variance |
+| `背骨` / `spine` | (drop; name the through-line) |
+| `顔` (face) | side / use-case |
+| `橋` (bridge) | connection / shared part |
+| `土台` (foundation) | lower bound / basis |
+| `山場` (climax) | the core step |
+| `持ち上げ` (lift) | apply / extend |
+| `挟む` (sandwich) | bound from above and below |
+| `段差` (step) | difference / gap |
+
+This family often recurs during revision. Check tikz style names, variable names, and diagram
+labels (`face`, `bridge`) too. For everyday words such as `顔`, `橋`, or `土台`, prefer phrase-level
+review or a soft lint over a blind hard-ban.
+
+### Coined and fabricated translations
+
+Do not invent a native-language translation for an established term. Keep the established term, or
+give an operational description.
+
+- Bad: a fabricated word for "most informative bound".
+- Better: keep "most informative (CR) bound", or "the minimum cost achievable by individual measurements".
+
+### Claim-theater and mis-calibration
+
+A claim that is inflated and then walked back is usually a calibration failure:
+
+- `業界の基盤になる` + `（ただし市場はまだ無い）` — grandiose noun offset by a deflating caveat.
+- `決定的に違う` / `今日の合否を分ける一文` — stakes-language with no proposition.
+
+Rewrite to the single claim the evidence supports, with the limit stated inside the claim and set in
+gray, not bolted on as a counter-weight.
+
+## Rewrite ledger
+
+### Example 1
+
+- Bad: `既存ツールは一つに返さない`
+- Better: `既存ツールは測定設計・本数設計・誤差限界評価を別々に扱う`
+
+Why: the rewrite names the missing decomposition instead of talking about packaging.
+
+### Example 2
+
+- Bad: `測定を変えると分布が変わる`
+- Better: `測定選択は、同じ rho(theta) からどの古典統計モデルを実装するかの選択である`
+
+Why: the rewrite makes agency explicit. The measurement is not a passive perturbation; it defines
+the induced model.
+
+### Example 3
+
+- Bad: `製造前設計: PDK・GDSFactory/SAX`
+- Better: `製造前設計では、候補設計を較正しやすさ込みで比較する`
+
+Why: the rewrite leads with the job to be done. Tool names can appear in the subtitle, caption, or
+speaker notes.
+
+### Example 4
+
+- Bad: `pre-fab も post-fab も一つの仕様に乗る`
+- Better: `pre-fab と post-fab は入力重みが異なるが、同じ最適化問題として記述できる`
+
+Why: the rewrite preserves the distinction while still stating the shared formulation.
+
+### Example 5
+
+- Bad: `ここが肝心です`
+- Better: `この制約が測定本数と達成誤差の下限を決める`
+
+Why: the rewrite replaces writer emphasis with a causal statement.
+
+### Example 6
+
+- Bad: `共通の床を提供する`
+- Better: `共通の下界を与える`
+
+Why: the rewrite drops the floor metaphor for the field-standard term.
+
+### Example 7
+
+- Bad: `業界の基盤になる（ただし市場はまだ無い）`
+- Better: `このギャップを最初に埋める実装である`
+
+Why: the rewrite replaces a grandiose noun + deflating caveat (claim-theater) with the one claim the
+evidence supports.
+
+## Claim-calibration ledger
+
+Audit titles, abstracts, and rebuttals for the calibration failure, not only the wording failure.
+
+| failure | symptom | fix |
+|---|---|---|
+| overclaim | platform / hero / flywheel / "first ever" without proof | match the evidence; name the exact, smaller true claim |
+| underclaim | the real contribution buried under three caveats | lead with the contribution; demote caveats to gray secondary |
+| hedge-after-hype | big noun, then a canceling parenthetical | one calibrated claim; limit stated first, inside it |
+| pendulum | evaluation flips weak→great→weak across drafts | only revise on newly-read evidence; cite it; do not move on mood |
+| stakes-without-claim | "this decides everything" with no proposition | state what changes (a decision, a bound, a comparison) |
+
+## Deck-level rules
+
+- A divider with no message should remain a divider. Do not promote it into a fake claim.
+- A section title should tell the audience what changes in their understanding at that point.
+- If SCQ/A structure is used, section boundaries must match claim boundaries. Do not let section
+  titles blur `C` and `Q`, or merge a benchmark section with an application section.
+- When broad readership matters, on-board the task before the toolchain. Say what `PDK`,
+  `GDSFactory`, or `QASM` are doing in the argument, not just that they exist.
+
+## Document-level rules
+
+- Abstracts and executive summaries should open with the task and claim, not with internal
+  workflow vocabulary.
+- Cover letters, research statements, and application essays should avoid writer-hype phrasing for
+  the same reason slide scripts should avoid stage-emphasis phrasing.
+- Rebuttals and review responses should answer the objection in the first sentence, then provide
+  the evidence or clarification.
+- Section headers in submission documents should survive the same titles-only test as slides:
+  reading the headers alone should reconstruct the logic.
+
+## Denylist as a machine gate
+
+When the rendered audience-facing text is greppable, turn these families into a check so they cannot
+regress (see the `operating-the-harness` skill for wiring). A portable starting set:
+
+```
+# audience-facing prose denylist (tune per project; strip comments before matching)
+返[すさ]            # processing verb — but exclude 繰り返す/裏返す/折り返す via lookbehind
+一行で閉じ          # false unity
+そのまま.{0,3}接続   # false unity
+(?<!見)(?<!人)通[すし] # processing verb — exclude 見通し/人通り
+に乗[るっ]           # rhetoric
+主因                # effect-word meta
+一度に|一度の実行     # convenience copy
+再走                # insider verb
+中核|エンジン|\bcore\b|\bengine\b   # architecture-as-rhetoric
+tape-out            # normalize to テープアウト
+床|鎖|扇|背骨|山場|持ち上げ|挟[んみ]|段差   # metaphor candidates; audit 顔/橋/土台 in context
+```
+
+Rules that make a gate real, not decorative:
+
+- **Scope to rendered audience-facing files** (the built deck source, the proposal `.md`/`.tex`,
+  the script). Exclude design docs, the denylist ledger itself, and orphan drafts — they contain the
+  banned words legitimately as the things-being-banned.
+- **Strip comments** before matching so `% ...` notes do not trip it.
+- **Guard bare common verbs** with lookbehinds or collocations (`返す` matches `繰り返す`;
+  `通す` matches `見通し`; `床`/`顔`/`橋`/`土台` are ordinary words — match the phrase, or keep them
+  human-reviewed rather than hard-gated).
+- **Wire the check into the aggregate command you actually run** (the CI target, the pre-commit). A
+  rule that lives in a script nobody invokes is not enforced.
+- **Prove it fires** by injecting a known-bad line, watching it fail, and reverting.
+- **The gate is necessary, not sufficient** — overflow, mid-word title wraps, and crushed figures
+  only appear on the rendered page. Render and read every page.
+
+Use a hard gate only for low-ambiguity phrases. Prefer soft lint or human review for ambiguous
+everyday words and for claim-calibration judgments.
+
+## Terminology normalization
+
+Normalize terminology across the deck, memo, or script:
+
+- `テープアウト`, not `tape-out`
+- choose one of `pre-fab` / `prefab` / `manufacturing-phase design` and use it consistently
+- choose one of `post-fab calibration` / `device-specific calibration` and use it consistently
+- do not alternate between `library`, `engine`, and `core` for the same artifact
+
+When the user has already chosen a surface form, follow it.

@@ -1,0 +1,38 @@
+# Anti-patterns — self-audit: observable TELL + recovery for every misuse mode
+
+> Scope: in-skill MISUSE diagnostics only (the decks' 「ないとき / 下手」 columns). Each row has an
+> **observable TELL** (something you can detect in your own output) + a **recovery**. This file is
+> distinct from `boundaries.md` (external/inter-skill routing) and from the three verb files (which hold
+> *correct* technique; their per-file tables catch phase-local slips — this file is the consolidated
+> whole-skill self-audit, including the GATE-level and cross-phase failure modes those files cannot see).
+
+Run this list on your own output before declaring a Map/Loop/Leap cycle done.
+
+## The eight named misuse modes
+
+| # | mode | observable TELL | recovery |
+|---|---|---|---|
+| 1 | **Freeze / over-ask** | you asked the user a clarifying question, or said "let me research more", about something you could instead cheaply TEST | R1: convert the "I'm not sure" into a NAMED node (確信度×影響度) + the single cheapest discriminating action. Uncertainty is a test coordinate, not a reason to ask. |
+| 2 | **Big-bang on unvalidated assumptions** | you built/committed code/design/decision at full scale on a load-bearing node with NO written pre-test threshold | R2: stop; write the pass/fail threshold; run the cheapest test FIRST. Felt confidence ≠ earned confidence. |
+| 3 | **Vanity test** | the two "next action" cells of your discrimination table are identical | R3: do NOT run it (zero 学び). Find a test whose two outcomes fork the next action, or admit nothing testable is uncertain here. (`loop.md` §2) |
+| 4 | **Endless Loop** | still testing a node whose 確信度 is already decision-sufficient (fatal risk retired) | STOP — this is analysis-paralysis in a Loop costume. Force the Leap. (`loop.md` §6) |
+| 5 | **Endless Map** | polishing the hypothesis tree, no test has run yet | time-box the Map, STOP, hand the load-bearing node to Loop. (`map.md` §4) |
+| 6 | **Reckless irreversible Leap** | you committed a one-way door (irreversible/unbounded loss) at mid 確信度 | demand more Loop OR restructure into staged/reversible (two-way-door) commits. (`leap.md` §4) |
+| 7 | **Small-bet disease** | you defaulted to the safe small bet — 君の仮説は小さくまとまっているね | re-evaluate weighting **影響度** (確信度は後で上げられる, 影響度は上げづらい); resist the default. (`leap.md` §2) |
+| 8 | **Felt-Loop on an unrunnable node** | you re-ran a "loop" with no access to the real signal, hoping it turns | the node is not falsifiable here: switch it to DIALOGUE/CO-CREATION-mode, or escalate that access/location is the blocker — 回らないなら、いる場所が悪いのかも. (`loop.md` §7) |
+
+## Three structural anti-patterns (the GATE + cross-phase modes the verb files cannot self-detect)
+
+| mode | observable TELL | recovery |
+|---|---|---|
+| **Be-bold theater (over-firing)** — the PRIMARY liability | you ran the three-phase ceremony on routine / deterministic / known-method work | STEP 0 GATE: fire ONLY when a load-bearing belief is untested AND the work is expensive (>~1 reversible session) OR hard to reverse. Otherwise just do it. |
+| **Relabeling present-understanding as a Loop** | you "Looped" something that was actually citing a fixed present fact (no confidence-delta on an undecided outcome) | that was a resolution gap: route to raising-resolution (or the inline fallback in `boundaries.md`). Do not call inspection a Loop. (the cut: `boundaries.md` §1) |
+| **Mis-filed try-it probe** | you called something a Loop but you would KEEP it if it succeeded (keep-possible, not discard) | file it as a **Leap with a built-in kill condition + loss cap**, not a Loop. The Loop/Leap action partition is clean for *designed* tests; the try-it probe is the one keep-possible action. (`leap.md` §1) |
+
+## The recap anti-pattern (what this skill must not become)
+
+Reciting 馬田『仮説行動』 back to the user (Lean Canvas walkthroughs, the startup examples, the book's
+TOC) is itself a misuse: the book is **lineage, not content to recite**. The contribution is the verb-seam
+MECE + R1/R2/R3 artifact rules + the inter-skill cut. If your output is a book summary rather than a
+Map/Loop/Leap cycle with the named artifacts (a tagged node, a discrimination table, a WIN/KILL/LOSS
+triple), you have produced the recap anti-pattern.

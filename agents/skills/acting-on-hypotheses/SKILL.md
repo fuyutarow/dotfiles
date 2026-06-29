@@ -26,7 +26,6 @@ references:
 
 # 仮説行動 — Map · Loop · Leap (act under irreducible uncertainty)
 
-> **Version**: v2606.1.0 (2026-06-29)
 > **Scope**: A domain-neutral decision discipline (refactor, research direction, architecture choice,
 > product bet — not startups only). Distilled from 馬田隆明『仮説行動』; the book is *lineage*, not
 > *content to recite*. This file holds the precedence-setting CORE inline; phase technique and

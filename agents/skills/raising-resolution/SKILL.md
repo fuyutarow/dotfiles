@@ -32,7 +32,6 @@ description: >-
 
 # Raising resolution — inspect THIS thing before you assert, don't guess harder
 
-> **Version**: v2606.2.0 (2026-06-29)
 > **What this is**: an operational procedure that turns 馬田隆明『解像度を上げる』(英治出版, 2022;
 > built on the 2021 SpeakerDeck『解像度を上げる🔬』) into a single agent-checkable discipline —
 > raise the 解像度 of your grasp of ONE problem/solution by acquiring primary information, then act.

@@ -14,7 +14,10 @@ description: >-
   ピボット / pivot, 撤退条件 / kill condition, de-risk / validate the approach, spike / prototype to decide,
   MVP, build-measure-learn, "will this scale", "should we commit to X", "approach に賭けるべきか".
   DOES NOT fire on understanding a present, knowable-but-blurry reality (unclear bug, vague spec,
-  unfamiliar codebase, "what do users do today") → that is raising-resolution. This skill is English;
+  unfamiliar codebase, "what do users do today") → that is raising-resolution. It also does NOT INVENT the
+  bet: constructing a NOVEL thesis (first-principles decompose / structure-transfer / recombine, and that
+  thesis's why-now / future-state extrapolation) → forging-novel-theses; this skill only TESTS & COMMITS a
+  bet already in hand (and forging's Phase 3 reuses this skill's Loop/Leap to do so). This skill is English;
   respond to the user in their language (default Japanese).
 references:
   - map

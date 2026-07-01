@@ -38,7 +38,8 @@ description: >-
 > **Scope**: sharpening YOUR OWN understanding of THIS code / data / API / library / source / problem
 > before you commit a claim, plan, or fix. Content-agnostic, upstream, LOWEST-precedence.
 > **Out of scope**: producing domain artifacts (defer to the owners in §4); the book's 第8章
-> 未来の解像度 (future-forecasting) is deliberately EXCLUDED — it belongs to acting-on-hypotheses.
+> 未来の解像度 (future-forecasting) is deliberately EXCLUDED — it belongs to acting-on-hypotheses (bet
+> timing) / forging-novel-theses (a thesis's why-now / future-state extrapolation, e.g. SF プロトタイピング).
 >
 > **Build order (ATOMIC — ship in ONE commit).** This skill is `SKILL.md` + one reference. Self-check
 > (run from the skill dir): `test -f references/reference.md || echo MISSING reference.md` (must print

@@ -10,13 +10,15 @@ TOOLS=(
   atuin delta direnv rip sheldon tmux gh mise topgrade fnm bun kondo
   # LaTeX toolchain (mactex-no-gui / texlive + tex-fmt + poppler)
   lualatex latexmk tlmgr chktex tex-fmt pdftoppm
-  # Markdown lint+format (Rust; qoed `mise run lint:md`)
+  # Markdown lint+format (Rust; `mise run fmt:md` / `lint:md`)
   rumdl
+  # Shell fmt+lint (`mise run f` / `lint`) — shfmt=bash formatter, shellcheck=bash linter (zsh gated by `zsh -n`)
+  shfmt shellcheck
 )
 
 missing=0
 for tool in "${TOOLS[@]}"; do
-  if command -v "$tool" >/dev/null 2>&1; then
+  if command -v "$tool" > /dev/null 2>&1; then
     echo "✅ $tool"
   else
     echo "❌ $tool"

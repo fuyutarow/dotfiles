@@ -19,8 +19,8 @@
 set -uo pipefail
 
 input=$(cat)
-command -v jq >/dev/null 2>&1 || exit 0
-transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+command -v jq > /dev/null 2>&1 || exit 0
+transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2> /dev/null)
 [ -n "$transcript" ] && [ -f "$transcript" ] || exit 0
 
 # Current turn's assistant text = assistant text blocks after the last user entry.
@@ -31,7 +31,7 @@ turn_text=$(jq -rs '
   | map(select(.type=="assistant") | (.message.content // [])[]
         | select(.type=="text") | .text)
   | join("\n")
-' "$transcript" 2>/dev/null || true)
+' "$transcript" 2> /dev/null || true)
 [ -n "$turn_text" ] || exit 0
 
 # Strip fenced code blocks, then inline backtick spans (so tag *mentions* don't fire).
@@ -43,14 +43,16 @@ stripped=$(printf '%s\n' "$turn_text" \
 if printf '%s' "$stripped" \
   | grep -Eq '<(antml:)?invoke name=|<(antml:)?function_calls'; then
   log="$HOME/.claude/leaked-toolcall.log"
-  printf '%s  leaked-toolcall  %s\n' "$(date -Is 2>/dev/null || date)" "$transcript" >>"$log" 2>/dev/null || true
-  ( printf '\a' >/dev/tty ) 2>/dev/null || true   # terminal bell (best-effort)
+  printf '%s  leaked-toolcall  %s\n' "$(date -Is 2> /dev/null || date)" "$transcript" >> "$log" 2> /dev/null || true
+  (printf '\a' > /dev/tty) 2> /dev/null || true # terminal bell (best-effort)
   msg='tool-call が漏れました — Esc Esc で /rewind を'
   case "$(uname -s)" in
     Darwin)
-      osascript -e "display notification \"$msg\" with title \"Claude Code\"" >/dev/null 2>&1 || true ;;
+      osascript -e "display notification \"$msg\" with title \"Claude Code\"" > /dev/null 2>&1 || true
+      ;;
     *) # Linux / WSL2
-      command -v notify-send >/dev/null 2>&1 && notify-send 'Claude Code' "$msg" >/dev/null 2>&1 || true ;;
+      command -v notify-send > /dev/null 2>&1 && notify-send 'Claude Code' "$msg" > /dev/null 2>&1 || true
+      ;;
   esac
 fi
 exit 0

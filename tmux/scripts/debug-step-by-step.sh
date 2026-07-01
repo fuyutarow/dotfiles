@@ -3,8 +3,8 @@
 # デバッグ用：ステップごとに確認
 
 if [ $(tmux list-panes | wc -l) -gt 1 ]; then
-    tmux display-message "Layout already applied"
-    exit 1
+  tmux display-message "Layout already applied"
+  exit 1
 fi
 
 echo "Step 1: 6分割"
@@ -31,9 +31,9 @@ tmux list-panes -F 'Pane #{pane_index}'
 
 echo "Step 4: ペイン7,8を結合"
 if tmux join-pane -h -s 8 -t 7; then
-    echo "join-pane成功"
+  echo "join-pane成功"
 else
-    echo "join-pane失敗"
+  echo "join-pane失敗"
 fi
 echo "ペイン数: $(tmux list-panes | wc -l)"
 tmux list-panes -F 'Pane #{pane_index}'

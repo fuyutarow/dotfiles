@@ -9,15 +9,15 @@
 input=$(cat)
 
 user=$(whoami)
-host=$(hostname -s 2>/dev/null || hostname)
+host=$(hostname -s 2> /dev/null || hostname)
 dt=$(date "+%m-%d %H:%M")
 
 # zsh %~ : leading $HOME -> ~  (POSIX case; dash-safe, unlike bash ${var/#})
 shorten() {
   case "$1" in
-    "$HOME")   printf '~' ;;
+    "$HOME") printf '~' ;;
     "$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
-    *)         printf '%s' "$1" ;;
+    *) printf '%s' "$1" ;;
   esac
 }
 
@@ -29,7 +29,7 @@ line1() {
 
 # Graceful degradation if jq is absent (e.g. fresh WSL before `apt install jq`):
 # still render line 1; hint on line 2 instead of a blank/garbled status bar.
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   line1 "$PWD"
   printf '\033[2mModel: ? | install jq for line 2\033[0m'
   exit 0
@@ -45,7 +45,7 @@ fields=$(printf '%s' "$input" | jq -r '[
   (.cost.total_lines_added // 0),
   (.cost.total_lines_removed // 0)
 ] | @tsv')
-IFS="$TAB" read -r cwd model model_id ctx_tok add del <<EOF
+IFS="$TAB" read -r cwd model model_id ctx_tok add del << EOF
 $fields
 EOF
 [ -n "$cwd" ] || cwd="$PWD"
@@ -55,8 +55,10 @@ EOF
 case "$model" in
   *[0-9]*) : ;;
   *)
-    base=${model_id#claude-}; base=${base%%"["*}
-    fam=${base%%-*}; ver=${base#*-}
+    base=${model_id#claude-}
+    base=${base%%"["*}
+    fam=${base%%-*}
+    ver=${base#*-}
     ver=$(printf '%s' "$ver" | tr '-' '.')
     f1=$(printf '%s' "$fam" | cut -c1 | tr '[:lower:]' '[:upper:]')
     model="${f1}$(printf '%s' "$fam" | cut -c2-) ${ver}"
@@ -67,7 +69,7 @@ esac
 # Ctx: live context tokens -> 100800 -> "100.8k"
 ctx=$(awk -v t="$ctx_tok" 'BEGIN{ if(t>=1000) printf "%.1fk",t/1000; else printf "%d",t }')
 # git branch from cwd (segment omitted if not a repo)
-branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null)
+branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2> /dev/null)
 
 # --- render ---
 line1 "$cwd"

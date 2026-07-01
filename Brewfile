@@ -50,7 +50,9 @@ else
   brew "texlive"
 end
 brew "tex-fmt"      # Rust LaTeX formatter (NOT in TeX Live) — formula, bottles on both OSes
-brew "rumdl"        # Rust Markdown linter+formatter ("ruff for markdown", markdownlint-compatible) — used by qoed `mise run lint:md`
+brew "rumdl"        # Rust Markdown linter+formatter ("ruff for markdown", markdownlint-compatible) — dotfiles & qoed `mise run fmt:md`/`lint:md`
+brew "shfmt"        # shell formatter (bash/POSIX/mksh; "gofmt for shell") — dotfiles `mise run fmt:sh`
+brew "shellcheck"   # shell static-analysis linter (bash/sh; not zsh) — dotfiles `mise run lint:sh`
 brew "poppler"      # pdftoppm/pdfinfo — PDF→PNG visual verification
 brew "biber"        # BibLaTeX backend — brew `texlive` bundles bibtex but NOT biber; match its version to TeX Live's biblatex
 # Note: chktex DOES ship inside TeX Live (already on PATH) — do not add a separate formula for it.

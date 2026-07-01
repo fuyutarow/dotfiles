@@ -6,27 +6,27 @@ echo "=========================================="
 
 # True Color プリセット表示関数
 show_truecolor_preset() {
-    local name="$1"
-    local active_hex="$2"
-    local nonactive_hex="$3"
-    local desc="$4"
-    local current="$5"
+  local name="$1"
+  local active_hex="$2"
+  local nonactive_hex="$3"
+  local desc="$4"
+  local current="$5"
 
-    # HEXをRGBに変換
-    active_r=$((16#${active_hex:1:2}))
-    active_g=$((16#${active_hex:3:2}))
-    active_b=$((16#${active_hex:5:2}))
+  # HEXをRGBに変換
+  active_r=$((16#${active_hex:1:2}))
+  active_g=$((16#${active_hex:3:2}))
+  active_b=$((16#${active_hex:5:2}))
 
-    nonactive_r=$((16#${nonactive_hex:1:2}))
-    nonactive_g=$((16#${nonactive_hex:3:2}))
-    nonactive_b=$((16#${nonactive_hex:5:2}))
+  nonactive_r=$((16#${nonactive_hex:1:2}))
+  nonactive_g=$((16#${nonactive_hex:3:2}))
+  nonactive_b=$((16#${nonactive_hex:5:2}))
 
-    printf "%-20s " "$name:"
-    printf "\033[48;2;%d;%d;%dm\033[38;2;255;255;255m active %s \033[0m" $active_r $active_g $active_b "$active_hex"
-    printf "\033[48;2;%d;%d;%dm\033[38;2;255;255;255m non-active %s \033[0m" $nonactive_r $nonactive_g $nonactive_b "$nonactive_hex"
-    printf " %s" "$desc"
-    [ "$current" = "true" ] && printf " ← 推奨"
-    echo
+  printf "%-20s " "$name:"
+  printf "\033[48;2;%d;%d;%dm\033[38;2;255;255;255m active %s \033[0m" $active_r $active_g $active_b "$active_hex"
+  printf "\033[48;2;%d;%d;%dm\033[38;2;255;255;255m non-active %s \033[0m" $nonactive_r $nonactive_g $nonactive_b "$nonactive_hex"
+  printf " %s" "$desc"
+  [ "$current" = "true" ] && printf " ← 推奨"
+  echo
 }
 
 echo -e "\n🎨 正確な Tailwind Slate 色:"
@@ -52,8 +52,8 @@ show_truecolor_preset "purple-slate" "#191218" "#2e1f2d" "パープルスレー�
 
 echo -e "\n📋 tmux.conf 設定例:"
 echo "# True Color 対応設定（既に設定済み）"
-echo "set -g default-terminal \"tmux-256color\""
-echo "set -ga terminal-overrides \",*256col*:Tc\""
+echo 'set -g default-terminal "tmux-256color"'
+echo 'set -ga terminal-overrides ",*256col*:Tc"'
 echo ""
 echo "# Tailwind Slate-925 の設定"
 echo "set -g window-active-style 'bg=#0f172a'"

@@ -7,7 +7,9 @@ alias open='explorer.exe'
 alias o='open'
 alias oo='explorer.exe .'   # open the current directory in Windows Explorer
 alias winget='winget.exe'
-alias start='cmd.exe /c start'              # launch via Windows (`s` is the common shorthand)
+alias start='/mnt/c/Windows/System32/cmd.exe /c start'  # abs path, NOT a bare `cmd.exe` PATH shim.
+# WHY abs path: a bare `cmd.exe` on PATH makes Zed's remote-SSH probe (`cmd.exe /c ver`) exec the
+# real Windows cmd via WSL interop -> Zed misdetects this Linux box as Windows. See zprofile.wsl.
 alias mnt-d='sudo mount -t drvfs D: /mnt/d' # mount Windows D: drive
 
 # ── tmux: manual attach by design ─────────────────────────────────────────────

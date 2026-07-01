@@ -1,0 +1,56 @@
+# rumdl — Markdown linter/formatter config for the dotfiles repo.
+#
+# Stance (ported from the qoed repo): a STRUCTURAL-INTEGRITY gate, not a
+# cosmetic-style enforcer. Keep only the rules that catch render-breaking or
+# genuinely-wrong defects (broken/empty/reversed links, link fragments, heading
+# hierarchy, list-numbering, trailing-newline); disable everything that is
+# (a) cosmetic, (b) fighting this repo's intentional bilingual/dense/frontmatter
+# conventions, or (c) a false positive on this corpus.
+#
+# Measured at adoption (2026-07-01, rumdl 0.2.26): with this config the authored
+# docs are a GREEN gate (0 issues) — so `mise run lint:md` costs zero one-time
+# churn and only fires on FUTURE defects (incl. AI-generated malformed markdown).
+# Counts in comments = repo hits before disabling.
+#
+# Tasks:  `mise run lint:md` (rumdl check, wired into `lint`/`check`)
+#         `mise run fmt:md`  (rumdl fmt,  wired into `fmt` / alias `f`)
+
+[global]
+flavor = "gfm"
+respect-gitignore = true
+
+disable = [
+  # — Fighting intentional conventions —
+  "MD036", # emphasis-as-heading — the **太字：** pseudo-heading convention is deliberate (11)
+  "MD025", # single-H1 — many docs are multi-section / frontmatter-led
+  "MD033", # inline HTML — <!-- sentinel --> blocks & intentional spans (21)
+  "MD041", # first-line-H1 — command docs start with frontmatter (31)
+  "MD064", # multiple consecutive spaces — manual column alignment (8)
+
+  # — Cosmetic line-noise (formatter territory, not a defect; not worth corpus churn) —
+  "MD013", # line-length — dense JP technical prose is long by design (6934)
+  "MD012", # multiple blank lines (26)
+  "MD040", # fenced-code language — many blocks are raw output dumps (176)
+  "MD022", # blanks around headings (158)
+  "MD032", # blanks around lists (811)
+  "MD031", # blanks around fences (744)
+  "MD058", # blanks around tables (12)
+  "MD065", # blanks around horizontal rules (4)
+  "MD076", # list-item spacing (3)
+  "MD077", # list continuation indentation
+  "MD028", # blank line inside blockquote (6)
+  "MD024", # duplicate headings — repeated **Why:/How:** labels are intentional
+  "MD049", # emphasis-style consistency — cosmetic
+  "MD004", # unordered-list-style — asterisk/dash mix is harmless (5)
+  "MD009", # trailing spaces — occasionally intentional (26)
+  "MD034", # bare URLs — only hits WIP sources lists where bare URLs are conventional (98)
+  "MD056", # table column count — false positive from inline-math pipes; disabling also keeps `rumdl fmt` from mangling tables (1)
+  "MD075", # orphaned table rows — same cause as MD056
+]
+
+# Authored docs only — exclude the agent-skills tree. Skills are largely vendored
+# (Cloudflare et al.) and self-contained with their own SKILL.md conventions;
+# their residual issues (MD051/MD057/MD055 link fragments) are upstream, not ours.
+exclude = [
+  "agents/skills/**",
+]

@@ -61,7 +61,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
    Codex remote bootstrap) work in non-login SSH command shells. Do not put Homebrew shellenv,
    plugins, prompts, completions, or anything that can print/hang there.
 6. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
-6. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
+7. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    ALL skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,

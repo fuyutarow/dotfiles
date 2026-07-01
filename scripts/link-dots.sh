@@ -14,7 +14,7 @@ set -euo pipefail
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
 FORCE=false
-[[ "${1:-}" == "--force" ]] && FORCE=true
+[[ ${1:-} == "--force" ]] && FORCE=true
 
 # --- OS detection (same convention as zsh/aliases.zsh) ---
 IS_MAC=false
@@ -24,10 +24,14 @@ IS_WSL=false
 
 link() { # link <repo-relative source> <target>
   local src="$DOTFILES/$1" dst="$2"
-  [[ -e "$src" ]] || { echo "skip (missing): $src"; return 0; }
-  [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]] && return 0   # already correct -> no-op
-  if ! $FORCE && [[ -e "$dst" && ! -L "$dst" ]]; then
-    echo "skip (exists, not symlink): $dst"; return 0             # safe (default): don't clobber a real file
+  [[ -e $src ]] || {
+    echo "skip (missing): $src"
+    return 0
+  }
+  [[ -L $dst && "$(readlink "$dst")" == "$src" ]] && return 0 # already correct -> no-op
+  if ! $FORCE && [[ -e $dst && ! -L $dst ]]; then
+    echo "skip (exists, not symlink): $dst"
+    return 0 # safe (default): don't clobber a real file
   fi
   mkdir -p "$(dirname "$dst")"
   ln -sfn "$src" "$dst"
@@ -35,17 +39,17 @@ link() { # link <repo-relative source> <target>
 }
 
 # --- zsh ---
-link zsh/zshenv      "$HOME/.zshenv"
-link zsh/zshrc       "$HOME/.zshrc"
+link zsh/zshenv "$HOME/.zshenv"
+link zsh/zshrc "$HOME/.zshrc"
 if $IS_MAC; then
   link zsh/zprofile.mac "$HOME/.zprofile"
 elif $IS_WSL; then
   link zsh/zprofile.wsl "$HOME/.zprofile"
 fi
-link sheldon         "$HOME/.config/sheldon"
+link sheldon "$HOME/.config/sheldon"
 
 # --- git ---
-link git/gitconfig   "$HOME/.gitconfig"
+link git/gitconfig "$HOME/.gitconfig"
 if $IS_MAC; then
   link git/local.mac "$HOME/.local-gitconfig"
 elif $IS_WSL; then
@@ -53,12 +57,12 @@ elif $IS_WSL; then
 fi
 
 # --- tmux ---
-link tmux/tmux.conf  "$HOME/.tmux.conf"
+link tmux/tmux.conf "$HOME/.tmux.conf"
 
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
-link agents/claude/statusline-command.sh    "$HOME/.claude/statusline-command.sh"
+link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
 link agents/claude/detect-leaked-toolcall.sh "$HOME/.claude/detect-leaked-toolcall.sh"
-link agents/claude/settings.json            "$HOME/.claude/settings.json"
+link agents/claude/settings.json "$HOME/.claude/settings.json"
 
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
 link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
@@ -76,10 +80,10 @@ fi
 # --- karabiner (macOS only; whole-dir replace, so guard the rm against repeat runs) ---
 if $IS_MAC; then
   kdst="$HOME/.config/karabiner"
-  if [[ -L "$kdst" && "$(readlink "$kdst")" == "$DOTFILES/karabiner" ]]; then
-    :                                                   # already linked -> nothing to rm
-  elif ! $FORCE && [[ -e "$kdst" && ! -L "$kdst" ]]; then
-    echo "skip (exists, not symlink): $kdst"            # safe (default): don't rm a real dir
+  if [[ -L $kdst && "$(readlink "$kdst")" == "$DOTFILES/karabiner" ]]; then
+    : # already linked -> nothing to rm
+  elif ! $FORCE && [[ -e $kdst && ! -L $kdst ]]; then
+    echo "skip (exists, not symlink): $kdst" # safe (default): don't rm a real dir
   else
     rm -rf "$kdst"
     link karabiner "$kdst"
@@ -88,9 +92,9 @@ fi
 
 # --- wsl (WSL2 system config; /etc needs root — guard sudo so pulls don't re-prompt) ---
 if $IS_WSL; then
-  if [[ "$(readlink /etc/wsl.conf 2>/dev/null)" == "$DOTFILES/wsl/wsl.conf" ]]; then
-    :                                                   # already linked -> no sudo prompt
-  elif sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2>/dev/null; then
+  if [[ "$(readlink /etc/wsl.conf 2> /dev/null)" == "$DOTFILES/wsl/wsl.conf" ]]; then
+    : # already linked -> no sudo prompt
+  elif sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2> /dev/null; then
     echo "linked: /etc/wsl.conf -> $DOTFILES/wsl/wsl.conf (sudo)"
   else
     echo "skip: /etc/wsl.conf needs root — run: sudo ln -sfn $DOTFILES/wsl/wsl.conf /etc/wsl.conf"

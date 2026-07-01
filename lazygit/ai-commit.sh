@@ -5,9 +5,10 @@
 set -u
 
 LOG="/tmp/lazygit-ai-debug.log"
-{ echo "===== run $(date '+%F %T') ====="
+{
+  echo "===== run $(date '+%F %T') ====="
   echo "PWD=$PWD"
-  echo "SHELL=${SHELL:-?}  TERM=${TERM:-?}  TTY=$(tty 2>/dev/null || echo none)"
+  echo "SHELL=${SHELL:-?}  TERM=${TERM:-?}  TTY=$(tty 2> /dev/null || echo none)"
   echo "PATH=$PATH"
 } >> "$LOG" 2>&1
 
@@ -32,17 +33,22 @@ msg="$(mktemp "${TMPDIR:-/tmp}/lazygit-ai-msg.XXXXXX")"
 echo "msg=$msg" >> "$LOG"
 
 # claude stderr -> log (this is where the real error message lands).
-{ git diff --staged --stat; echo; git diff --staged | head -c 100000; } \
+{
+  git diff --staged --stat
+  echo
+  git diff --staged | head -c 100000
+} \
   | "$cl" -p 'Write a Conventional Commit message for the staged diff on stdin.
 Output ONLY the message, no markdown, code fences, or preamble. Subject line:
 "type(scope): summary" imperative, max 72 chars (types: feat, fix, refactor,
 chore, docs, build; scope = tool/topic dir e.g. zsh, tmux, git). If non-trivial
 add a blank line then 1-3 short body lines explaining why. If the diff is empty
 or you cannot determine a message, output exactly the single token NO_MESSAGE.' \
-      --model haiku --allowed-tools '' --strict-mcp-config --output-format text \
-  > "$msg" 2>>"$LOG"
+    --model haiku --allowed-tools '' --strict-mcp-config --output-format text \
+    > "$msg" 2>> "$LOG"
 rc=$?
-{ echo "claude rc=$rc  msg_bytes=$(wc -c < "$msg")"
+{
+  echo "claude rc=$rc  msg_bytes=$(wc -c < "$msg")"
   echo "--- msg content (between markers) ---"
   cat "$msg"
   echo "--- end msg ---"

@@ -7,6 +7,75 @@
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
 
+# ── Format / Lint ────────────────────────────────────────────────────────────
+# fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
+# mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
+# bash. zsh is syntax-gated with `zsh -n` ONLY: shfmt's zsh dialect (v3.13+) is
+# real but incomplete, and these zsh files are boot-critical config (break = no
+# interactive shell), so we do NOT auto-format them. Bash file discovery is
+# centralised via `shfmt -f <dirs>` (extension+shebang detection); agents/skills/**
+# is excluded simply by not listing it. `-ln bash` pins the dialect deterministically
+# (and makes shfmt ignore any stray .editorconfig).
+
+[tasks.fmt]
+alias = "f"
+description = "Format the repo in place: Markdown (rumdl) + bash (shfmt). alias: f"
+depends = ["fmt:md", "fmt:sh"]
+
+[tasks."fmt:md"]
+dir = "{{config_root}}"
+description = "Format Markdown with rumdl (config = .rumdl.toml: structural gate, authored docs only, agents/skills/** excluded)"
+run = "rumdl fmt"
+
+[tasks."fmt:sh"]
+dir = "{{config_root}}"
+description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
+run = '''
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+[ -z "$files" ] && { echo "no shell files"; exit 0; }
+printf '%s\n' "$files" | xargs shfmt -w -ln bash -i 2 -ci -sr -bn -s
+'''
+
+[tasks."fmt:sh:check"]
+dir = "{{config_root}}"
+description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
+run = '''
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+[ -z "$files" ] && { echo "no shell files"; exit 0; }
+printf '%s\n' "$files" | xargs shfmt -d -ln bash -i 2 -ci -sr -bn -s
+'''
+
+[tasks.lint]
+description = "Lint the repo: Markdown (rumdl) + bash (shellcheck) + zsh (zsh -n)"
+depends = ["lint:md", "lint:sh", "lint:zsh"]
+
+[tasks."lint:md"]
+dir = "{{config_root}}"
+description = "Markdown structural gate: rumdl check (render-breaking defects only; cosmetic disabled → green at adoption, catches future/AI-generated defects)"
+run = "rumdl check"
+
+[tasks."lint:sh"]
+dir = "{{config_root}}"
+description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
+run = '''
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+[ -z "$files" ] && { echo "no shell files"; exit 0; }
+printf '%s\n' "$files" | xargs shellcheck -x
+'''
+
+[tasks."lint:zsh"]
+dir = "{{config_root}}"
+description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary, never bash -n)"
+run = '''
+rc=0
+for f in zsh/aliases.zsh zsh/mac.zsh zsh/wsl.zsh \
+         zsh/zshrc zsh/zshenv zsh/zprofile.mac zsh/zprofile.wsl; do
+  [ -f "$f" ] || continue
+  if zsh -n "$f"; then echo "✅ $f"; else echo "❌ $f"; rc=1; fi
+done
+exit $rc
+'''
+
 [tasks."cache:clean"]
 description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
 run = '''

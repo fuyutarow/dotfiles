@@ -42,15 +42,21 @@ for _wa in /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps(N); do
   [[ -e "$_wa/winget.exe" && ":$PATH:" != *":$_wa:"* ]] && export PATH="$PATH:$_wa"
 done
 unset _wa
-# Real Windows PE tools used by the aliases (open=explorer, start=cmd, powershell):
+# Real Windows PE tools used by the aliases (open=explorer, powershell):
 # symlink the actual binaries into ~/.local/bin (already on PATH) instead of putting
 # System32 on PATH. The guard makes this a single stat after first run.
-if [[ ! -e "$HOME/.local/bin/cmd.exe" ]]; then
+# DELIBERATELY NO bare-name `cmd.exe` shim here: Zed's remote-SSH OS probe runs
+# `cmd.exe /c ver`, and via WSL interop that execs the REAL Windows cmd.exe printing
+# "Microsoft Windows [...]", so Zed misdetects this Linux box as Windows and aborts with
+# "windows-%PROCESSOR_ARCHITECTURE%". `start` (zsh/wsl.zsh) calls cmd by absolute path instead.
+if [[ ! -e "$HOME/.local/bin/explorer.exe" ]]; then
   mkdir -p "$HOME/.local/bin"
-  ln -sf /mnt/c/Windows/System32/cmd.exe                               "$HOME/.local/bin/cmd.exe"
   ln -sf /mnt/c/Windows/explorer.exe                                   "$HOME/.local/bin/explorer.exe"
   ln -sf /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe "$HOME/.local/bin/powershell.exe"
 fi
+# Migration: purge any legacy bare-name cmd.exe shim an older rev created (breaks Zed WSL2 detect).
+[[ -e "$HOME/.local/bin/cmd.exe" || -e "$HOME/.local/bin/cmd.exe.zed-disabled" ]] &&
+  command rm -f "$HOME/.local/bin/cmd.exe" "$HOME/.local/bin/cmd.exe.zed-disabled"
 # -----------------------------------------------------------------------------
 
 

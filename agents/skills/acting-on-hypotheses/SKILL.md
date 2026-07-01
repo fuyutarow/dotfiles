@@ -1,24 +1,7 @@
 ---
 name: acting-on-hypotheses
 description: >-
-  Operational discipline for open-ended, uncertain, or ambitious work, distilled from 馬田隆明『仮説行動』
-  (マップ・ループ・リープ / Map-Loop-Leap). Forces an agent to neither freeze / over-ask / collect-more
-  until "certain", nor big-bang on unvalidated assumptions: frame explicit hypotheses (Map), run the
-  single cheapest test that could PROVE YOU WRONG (Loop), commit boldly only where the map shows
-  asymmetric, ideally-reversible upside (Leap). Use whenever the answer cannot be fully known by
-  understanding what already exists — you must ACT to learn or to create it: de-risking an approach,
-  deciding what to build/try next under uncertainty, spiking/prototyping to decide, choosing whether
-  to commit to X, sizing a bet, or setting a kill condition. Trigger on: 仮説検証 (of a FORWARD bet / an
-  outcome you must ACT to learn — NOT verifying a present fact, which is raising-resolution), 仮説行動,
-  マップ・ループ・リープ, 学びの最大化, 確信度 / 影響度, 不確実 / uncertainty, 実験 / experiment, 大胆 / 賭け / bet,
-  ピボット / pivot, 撤退条件 / kill condition, de-risk / validate the approach, spike / prototype to decide,
-  MVP, build-measure-learn, "will this scale", "should we commit to X", "approach に賭けるべきか".
-  DOES NOT fire on understanding a present, knowable-but-blurry reality (unclear bug, vague spec,
-  unfamiliar codebase, "what do users do today") → that is raising-resolution. It also does NOT INVENT the
-  bet: constructing a NOVEL thesis (first-principles decompose / structure-transfer / recombine, and that
-  thesis's why-now / future-state extrapolation) → forging-novel-theses; this skill only TESTS & COMMITS a
-  bet already in hand (and forging's Phase 3 reuses this skill's Loop/Leap to do so). This skill is English;
-  respond to the user in their language (default Japanese).
+  Operational discipline for open-ended, uncertain, or ambitious work when the answer CANNOT be known by understanding what already exists — you must ACT to learn or create it: de-risk an approach, decide what to build/try next under uncertainty, spike/prototype to decide, choose whether to commit to X, size a bet, set a kill condition. Distilled from 馬田隆明『仮説行動』 (マップ・ループ・リープ / Map-Loop-Leap): don't freeze / over-ask / collect-until-certain, and don't big-bang on unvalidated assumptions — frame explicit hypotheses (Map), run the single cheapest test that could PROVE YOU WRONG (Loop), commit boldly only on asymmetric, ideally-reversible upside (Leap). CUT vs raising-resolution: does NOT fire on understanding a present, knowable-but-blurry reality (unclear bug, vague spec, unfamiliar codebase, "what do users do today") → raising-resolution. CUT vs forging-novel-theses: does NOT INVENT the bet (first-principles decompose / structure-transfer / recombine + why-now) → forging-novel-theses; this skill only TESTS & COMMITS a bet already in hand. Trigger on: 仮説検証 (of a FORWARD bet, NOT verifying a present fact), 仮説行動, マップ・ループ・リープ, 学びの最大化, 確信度 / 影響度, 不確実 / uncertainty, 実験 / experiment, 大胆 / 賭け / bet, ピボット / pivot, 撤退条件 / kill condition, de-risk / validate the approach, spike / prototype to decide, MVP, build-measure-learn, "will this scale", "should we commit to X", "approach に賭けるべきか". English skill; respond in the user's language (default Japanese).
 references:
   - map
   - loop
@@ -81,7 +64,7 @@ session to build) OR hard to reverse.** Then run the cut and the cheapness rule:
 - **Cheapness rule (folds the trivial case into "just do it" without breaking R2).** If the cheapest
   discriminating test costs **more** than just trying the obvious method and watching it fail, **skip the
   ceremony and try it.** If you would **discard** the trial on success, it is a Loop; if you would **keep**
-  it, it is a **try-it probe = a Leap with a built-in kill condition** (NOT a Loop — `leap.md` §1). Either
+  it, it is a **try-it probe = a Leap with a built-in kill condition** (NOT a Loop — `references/leap.md` §1). Either
   way, size the loss and set the kill condition first.
 - **Under-firing guard (subordinate to the gate).** When a load-bearing belief is untested AND the work
   is expensive-or-irreversible, fire **even if you feel confident** — felt confidence is not earned
@@ -93,7 +76,7 @@ session to build) OR hard to reverse.** Then run the cut and the cheapness rule:
 |---|---|---|---|
 | **MAP** | **STRUCTURE & POSITION** | adds/removes/repositions nodes, tags each 確信度×影響度, names the load-bearing node; **performs** integration/統合 (merging sub-maps) | produces no evidence; writes no test-derived confidence |
 | **LOOP** | **TEST & WRITE-VALUES** | the **only** phase that runs a test and **writes a confidence value** onto an EXISTING node; owns 学びの最大化 | never adds/removes nodes — if a test reveals a missing node, **FLAG** it and hand a cheap in-place Map pass the restructure |
-| **LEAP** | **COMMIT & REALIZE** | the **only** phase that stakes a kept output and produces the outcome itself (仮説を正解にする); owns reversibility sizing (one-way vs two-way door); changes confidence only as a POST-COMMIT byproduct of reality | never runs a discard-intent probe (that is Loop's verb) — the one keep-possible try-it probe is filed HERE as a Leap-with-kill-condition (see the action-Disambiguation below / `leap.md` §1) |
+| **LEAP** | **COMMIT & REALIZE** | the **only** phase that stakes a kept output and produces the outcome itself (仮説を正解にする); owns reversibility sizing (one-way vs two-way door); changes confidence only as a POST-COMMIT byproduct of reality | never runs a discard-intent probe (that is Loop's verb) — the one keep-possible try-it probe is filed HERE as a Leap-with-kill-condition (see the action-Disambiguation below / `references/leap.md` §1) |
 
 **Disambiguation — the object "hypothesis" has EXACTLY ONE role per phase** (exhaustive across the
 three): **POSITIONED** (Map: a node placed in the tree + tagged) → **FALSIFIED** (Loop: a target a test
@@ -108,12 +91,12 @@ Leap is **STILL Leap**, because you keep and depend on stage 1. *Tie-break tell:
 **discard** this (Loop) or to **keep-and-depend-on** it (Leap)?" **The one keep-possible exception** —
 STEP 0's "the trial IS the Loop" — is a *try-it probe* you would KEEP on success; it is filed as a
 **Leap-with-a-kill-condition** (bounded loss), NOT a Loop, so the discard-only Loop category stays clean
-(`leap.md` §1). The partition is clean for *designed* tests; the try-it probe is the single exception.
+(`references/leap.md` §1). The partition is clean for *designed* tests; the try-it probe is the single exception.
 
 **Ordering is a dependency, not a waterfall.** Map → Loop → Leap; **Loop feeds back into Map** (a
 surprising result triggers a Map restructure and can demote a planned Leap). A single iteration may
 legitimately run **Loop (test) → Map (node-add)** — the verbs co-occur in one cycle; what stays separable
-is the **ARTIFACT** (Loop emits `NEW NODE flagged by Loop iteration N`, Map places it — `map.md` §6), not
+is the **ARTIFACT** (Loop emits `NEW NODE flagged by Loop iteration N`, Map places it — `references/map.md` §6), not
 the wall-clock moment. The stagnation check recurs whenever Loop runs. Never skip Map → Leap without Loop
 retiring the fatal risks on the load-bearing node.
 
@@ -173,7 +156,7 @@ retiring the fatal risks on the load-bearing node.
 | `references/map.md` | overarching 言い切り; sub-hypothesis node sets; 確信度×影響度 tagging; rough-first + TIME-BOX; the two prioritization scans; integration/統合; "can't name nodes → resolution gap"; hand-off to Loop | drawing/auditing the hypothesis map |
 | `references/loop.md` | B-M-L planned in reverse; the R3 discrimination table; metric pre-commitment + vanity avoidance; minimum-scope discard-intent probes; "Loop never edits structure"; the STOP condition; 学びの最大化; the 反証=disconfirming-signal honest limit | designing/running a test |
 | `references/leap.md` | evaluate→decide→realize; the written WIN/KILL/LOSS triple; door-type (one-way vs two-way) + keep-vs-discard intent; reversibility sizing; 大きく考え小さく踏み出せ; provenance bridge-tags | committing a bet |
-| `references/boundaries.md` | the inter-skill cut as a PURPOSE test; co-fire arbitration for braided tasks; canonical user-interview tie-break; self-contained inline-resolution fallback; lineage vs 仮説思考 / lean+OODA / effectuation / SoK | routing away / placing this skill |
+| `references/boundaries.md` | the inter-skill cut as a PURPOSE test; co-fire arbitration + ordering for braided tasks (worked example); self-contained inline-resolution fallback; repo-neighbor differentiation; lineage vs 仮説思考 / lean+OODA / effectuation / SoK | routing away / placing this skill |
 | `references/anti-patterns.md` | in-skill misuse diagnostics with observable TELL + recovery: freeze, big-bang, endless-Loop, endless-Map, vanity test, reckless irreversible Leap, small-bet disease, felt-Loop on an unrunnable node | auditing your own output |
 
 ## See also

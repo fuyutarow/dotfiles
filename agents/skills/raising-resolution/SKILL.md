@@ -1,33 +1,7 @@
 ---
 name: raising-resolution
 description: >-
-  Raise the RESOLUTION (解像度) of your understanding of THIS code/data/API/source/problem BEFORE you
-  assert or act, by INSPECTING primary information instead of guessing — an operational procedure
-  distilled from 馬田隆明『解像度を上げる』. Load-bearing CITATION GATE: before a factual claim about
-  local code/data/an API/a source, ask — can you cite a line you Read, a command you ran, or a source
-  you fetched that grounds THIS exact claim? NO → stop and inspect; YES → assert and act. This skill is
-  LOWEST precedence and yields to any domain owner: multi-paper / corpus synthesis →
-  systematizing-knowledge / sok, OSS adoption → growing-oss-adoption, .claude / CLAUDE.md / hooks /
-  SKILL.md authoring or auditing → operating-the-harness, Julia / Lean execution →
-  writing-julia / proving-theorems, a future-bet (MVP / prototype / spike / 賭け / kill-condition /
-  will-it-scale) → acting-on-hypotheses. If any owner applies, this skill does NOT fire (it is at most a
-  silent sub-step). It FIRES only when ALL hold AND no owner applies: (a) you are about to SPECULATE
-  INSTEAD OF inspect a fact about THIS local artifact, (b) nothing yet grounds it, (c) the un-grounded
-  claim is BLOCKING a concrete next action AND inspecting is non-trivial. It does NOT fire as a reminder
-  to read files during ordinary edit/debug where inspecting is already the obvious next step — not
-  "read before asserting" (baseline) but "you are about to speculate INSTEAD of inspecting." Two routing
-  cuts decide overlap. DECISIVE CUT vs acting-on-hypotheses (agrees in substance with acting-on-hypotheses
-  STEP 0 — same smart-person test, same YES/NO routing): "Could a smart person, given enough primary
-  info about what ALREADY EXISTS, know the answer? YES → raising-resolution; NO (needs a forward TEST
-  reality has not decided) → acting-on-hypotheses." CARDINALITY CUT vs systematizing-knowledge: "single
-  local artifact → here; a CORPUS of papers/sources synthesized into a position → systematizing-knowledge."
-  Trigger on the speculation language the model actually emits: probably / likely / usually / typically /
-  I think / should be / in my experience / this kind of library / たぶん / おそらく / 一般的に / はず, plus
-  推測するな / ちゃんと調べて / inspect / guessing / speculating / 一次情報 / primary information / 解像度 /
-  resolution / 解像度を上げる. Concept-token tail (mnemonic): 深さ・広さ・構造・時間, 症状 vs 病因,
-  なぜなぜ / Why so, 課題 vs 解決策. If a vagueness symptom is needed it must bind to a code object
-  (不明なバグ挙動 / 仕様が未確認), never bare 曖昧 / vague.
-  This skill is English; respond to the user in their language (Japanese by default).
+  Raise the RESOLUTION (解像度) of THIS code/data/API/source/problem BEFORE you assert or act — INSPECT, don't guess — from 馬田隆明『解像度を上げる』. CITATION GATE: before a factual claim, ask — can you cite a line Read, a command run, or a source fetched for THIS claim? NO → stop and inspect; YES → assert and act. LOWEST precedence; yields to any owner: multi-paper/corpus synthesis → systematizing-knowledge/sok; OSS adoption → growing-oss-adoption; .claude/CLAUDE.md/hooks/SKILL.md authoring/auditing → operating-the-harness; Julia/Lean → writing-julia/proving-theorems; a future-bet (MVP/prototype/spike/賭け/kill-condition/will-it-scale) → acting-on-hypotheses. Owner applies → does NOT fire (silent sub-step); else FIRES only when about to SPECULATE INSTEAD OF inspect a fact about THIS artifact that nothing grounds yet, BLOCKING a next action, inspecting non-trivial — not a "read before asserting" baseline. DECISIVE CUT vs acting-on-hypotheses: a smart person could know it from what ALREADY EXISTS → here; needs a forward TEST reality hasn't decided → there. CARDINALITY CUT vs systematizing-knowledge: single artifact → here; a CORPUS of papers/sources → there. Trigger: probably/likely/usually/typically/I think/should be/in my experience/たぶん/おそらく/一般的に/はず; 推測するな/ちゃんと調べて/inspect/guessing/speculating/一次情報/primary information/解像度/resolution/解像度を上げる; 深さ・広さ・構造・時間, 症状 vs 病因, なぜなぜ/Why so, 課題 vs 解決策. English skill; reply in user's language, Japanese default.
 ---
 
 # Raising resolution — inspect THIS thing before you assert, don't guess harder
@@ -45,7 +19,7 @@ description: >-
 > (run from the skill dir): `test -f references/reference.md || echo MISSING reference.md` (must print
 > nothing) AND `test -f references/action-loop.md && echo STALE-FILE || echo OK` (must print `OK` — there
 > is deliberately NO `action-loop.md`; the acquisition mechanism lives in `references/reference.md §D`).
-> Every pointer below that touches the HOW-layer resolves to `reference.md §D`; do not reintroduce a
+> Every pointer below that touches the HOW-layer resolves to `references/reference.md §D`; do not reintroduce a
 > separate action-loop file.
 
 ## §0. The load-bearing rule — the CITATION GATE (precedence over everything below)
@@ -81,10 +55,10 @@ description: >-
 ## §1. The diagnostic table — 4 LENSES applied ASYMMETRICALLY across {課題, 解決策}
 
 The 4 are **lenses you ROTATE THROUGH**, NOT a MECE partition and NOT a symmetric 4×2 grid — depth weights
-to the problem side (`reference.md §B.3`). Use this table to find **WHERE your thinking is thin**, problem
+to the problem side (`references/reference.md §B.3`). Use this table to find **WHERE your thinking is thin**, problem
 first. Every HIGH cell **requires a citable artifact** (a lens whose HIGH needs no observation is decorative
 and is cut); a 構造/時間 HIGH claim decomposes into per-element sub-claims, **each needing its own citation
-(N-for-N)**. This table is the SOLE home of the LOW/HIGH tells; `reference.md §A` deepens the Unit/boundary only.
+(N-for-N)**. This table is the SOLE home of the LOW/HIGH tells; `references/reference.md §A` deepens the Unit/boundary only.
 
 | Lens | LOW tell (no citation) | HIGH tell (cited) |
 |---|---|---|
@@ -95,10 +69,10 @@ and is cut); a 構造/時間 HIGH claim decomposes into per-element sub-claims, 
 
 **Overall deck test:** can you state the hypothesis **明確 かつ 簡潔 かつ ユニーク**? If not, the table tells you which lens is thin.
 
-**Disambiguation (ONE-LINE pointers only — owner is `reference.md §A.5`):**
-- **Bottleneck split** — ROOT-CAUSE of one phenomenon = **深さ**; HIGHEST-LEVERAGE among already-surfaced candidates = **構造**. (`reference.md §A.5`.)
-- **Causality split** — "cause" has 3 senses (snapshot root cause = 深さ / atemporal relative-weight map = 構造 / time-indexed sequence-or-feedback = 時間); **state WHICH sense you mean before saying "cause."** (`reference.md §A.5`.)
-- **解決策×深さ is INTENTIONALLY THIN** — owner `reference.md §B.3`.
+**Disambiguation (ONE-LINE pointers only — owner is `references/reference.md §A.5`):**
+- **Bottleneck split** — ROOT-CAUSE of one phenomenon = **深さ**; HIGHEST-LEVERAGE among already-surfaced candidates = **構造**. (`references/reference.md §A.5`.)
+- **Causality split** — "cause" has 3 senses (snapshot root cause = 深さ / atemporal relative-weight map = 構造 / time-indexed sequence-or-feedback = 時間); **state WHICH sense you mean before saying "cause."** (`references/reference.md §A.5`.)
+- **解決策×深さ is INTENTIONALLY THIN** — owner `references/reference.md §B.3`.
 
 ## §2. The trigger-time GATE (run when about to assert or commit)
 
@@ -119,10 +93,10 @@ and worked 起業家 ladder live in `references/reference.md §D`). Interlocks, 
 mandatory pre-pass that scores all four lenses (that pre-pass IS the box-ticking the skill forbids). Each is a
 one-line imperative POINTING to its owner; never re-explained here:
 
-- **PROBLEM BEFORE SOLUTION** — raise 課題 resolution before 解決策; lead 深さ-first on 課題, 広さ→構造→時間 on 解決策 (`reference.md §B.2`). Cardinal anti-pattern: 課題の解像度が低いまま解決策に飛びつく — coding / refactoring / library-picking before inspecting the problem.
-- **バーニングニーズ GATE before deepening** — is anyone actually paying time/money/effort, or does leaving it unsolved block the goal? If not, you may be deepening the WRONG problem (`reference.md §B.5`).
-- **PER-NODE 広さ INTERLOCK** — at EVERY Why-so node, before descending: "what sibling causes am I skipping, and why this branch?" (`reference.md §A.6`; EXECUTION in `reference.md §D`).
-- **ROOT-STATE rule** — at the empty tree, 広さ runs FIRST: enumerate ≥2 candidate causes from one cheap observation BEFORE committing a drill direction (`reference.md §D`).
+- **PROBLEM BEFORE SOLUTION** — raise 課題 resolution before 解決策; lead 深さ-first on 課題, 広さ→構造→時間 on 解決策 (`references/reference.md §B.2`). Cardinal anti-pattern: 課題の解像度が低いまま解決策に飛びつく — coding / refactoring / library-picking before inspecting the problem.
+- **バーニングニーズ GATE before deepening** — is anyone actually paying time/money/effort, or does leaving it unsolved block the goal? If not, you may be deepening the WRONG problem (`references/reference.md §B.5`).
+- **PER-NODE 広さ INTERLOCK** — at EVERY Why-so node, before descending: "what sibling causes am I skipping, and why this branch?" (`references/reference.md §A.6`; EXECUTION in `references/reference.md §D`).
+- **ROOT-STATE rule** — at the empty tree, 広さ runs FIRST: enumerate ≥2 candidate causes from one cheap observation BEFORE committing a drill direction (`references/reference.md §D`).
 - **STOP & ACT** — once the blocking claim has its one citation, stop raising and act. Acting yields new primary info → re-enter at the gate.
 
 ## §3. Worked before/after exemplar
@@ -154,8 +128,8 @@ not an appendix. Each guardrail is a **one-line imperative**; its rationale is o
 
 ### Routing / owner-filter table (SUBTRACTIVE — sole owner of routing)
 
-This skill is **LOWEST precedence**, realized MECHANICALLY: the owner filter runs BEFORE the keyword net,
-so this skill cannot out-fire the owners it yields to. Fires standalone ONLY when no owner applies and the
+This skill is **LOWEST precedence**: once loaded, apply the owner filter FIRST (before the trigger keywords),
+so it yields to any owner that applies — auto-activation is description-matched, never a hard guarantee (verify invocation). Fires standalone ONLY when no owner applies and the
 blocker is purely your own un-grounded understanding. The bare token "survey" is NOT a trigger here (it is sok's word).
 
 | If the task is… | Route to | Cut |
@@ -167,12 +141,12 @@ blocker is purely your own un-grounded understanding. The bare token "survey" is
 | a future-bet (MVP / prototype / spike / 賭け / kill-condition / will-it-scale) | **acting-on-hypotheses** | DECISIVE (see below) |
 
 **See also — acting-on-hypotheses (the forward-bet sibling).** Cut by PURPOSE/OBJECT; the SOLE owner of the
-boundary is `reference.md §C.7` (cross-referenced, not duplicated, here). raising-resolution = **現状理解の明晰さ**:
+boundary is `references/reference.md §C.7` (cross-referenced, not duplicated, here). raising-resolution = **現状理解の明晰さ**:
 sharpen YOUR OWN grasp of a PRESENT, KNOWABLE-BUT-BLURRY reality by acquiring PRIMARY INFORMATION.
 acting-on-hypotheses = **不確実な未来への前進**: bet and ACT on an UNCERTAIN FUTURE that cannot be known by
 inspecting what already exists. **DECISIVE CUT** (agrees in substance with acting-on-hypotheses STEP 0 — same
 smart-person test, same YES/NO routing; the QUESTION clause is identical, the routing destination flips because
-each file names the other, so do NOT diff for byte-identity — canonical phrasing owned by `reference.md §C.7`):
+each file names the other, so do NOT diff for byte-identity — canonical phrasing owned by `references/reference.md §C.7`):
 *"Could a smart person, given enough primary info about what ALREADY EXISTS, know the answer? YES →
 present-understanding gap → raising-resolution. NO → future-bet gap → acting-on-hypotheses."*
 **SEQUENCING (self-imposed by THIS skill, one-directional)** — when a single task contains BOTH gaps (e.g.

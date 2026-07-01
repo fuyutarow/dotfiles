@@ -265,12 +265,34 @@ map(collection) do x; x^2 + 1; end
 
 ## 7. Output Files
 
-Write results with standard IO into your project/output directory:
+Write results into your project/output directory. **Pick the tool by data shape — don't hand-roll a
+parser:**
+
+- **Simple numeric matrix / homogeneous array** → `DelimitedFiles` (`writedlm` / `readdlm`). The
+  zero-extra-dependency choice; fast + low compile-latency on small homogeneous data.
+- **Real tabular data** (headers, quoting, embedded delimiters/newlines, `missing`, mixed/typed
+  columns, large or multithreaded reads) → `CSV.jl` + `DataFrames.jl` / `Tables.jl` (packages.md §4).
+- **Hand-rolled `readlines` + `split` + `tryparse` is an ANTI-PATTERN for real CSV** — it silently
+  mishandles quoting/escaping/`missing`/mixed types. Justified only as a niche perf trick for a
+  *guaranteed-trivial, fixed* format (lazy/partial reads, minimal allocation), never as the default.
+  If you don't want a dependency, `readdlm` already IS the no-extra-dep answer — reach for it, not a
+  bespoke parser.
 
 ```julia
-using DelimitedFiles
+using DelimitedFiles          # ← must be in [deps] + [compat]; see note
 writedlm("results.csv", data, ',')
 ```
+
+**`DelimitedFiles` is an *upgradeable* stdlib** (since Julia 1.9), and this changes how you depend on
+it. It is bundled/pre-installed — so `using DelimitedFiles` works in the *default* env via `@stdlib`
+— and there is **no plan to remove or unbundle it** (the roadmap makes *more* stdlibs upgradeable,
+not fewer; JuliaLang/julia#50697). BUT because it ships as a versioned *package* (not baked into the
+sysimage), any package that `using`s it **must declare it in `[deps]` + `[compat]`** like a normal
+dependency: omitting `[deps]` breaks loading, omitting `[compat]` fails registration /
+`Aqua.test_deps_compat` and forgoes upgrade protection. This is just the §3.2 / §9 rule ("every
+`using` is in `[deps]`, added at point of use") applied to stdlibs — leaning on implicit `@stdlib`
+loading in a script works today but is the fragile pattern. So the fix for "DelimitedFiles is a
+dependency risk" is **declare it**, not rewrite I/O by hand.
 
 (If the runtime has its own output/sharing convention — a designated outputs directory, an
 artifact upload step — follow that host's convention for the final deliverable.)

@@ -5,7 +5,7 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2606.6.1 (2026-06-17, Julia 1.12.6 baseline)
+> **Version**: v2606.6.2 (2026-07-01, Julia 1.12.6 baseline)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -13,6 +13,13 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 > pointered from `references/setup.md` §8, not the focus here.
 >
 > **Changelog (recent)**:
+> - v2606.6.2: setup.md **§7 Output Files** corrected + expanded. `DelimitedFiles` clarified as an
+>   *upgradeable* stdlib (bundled/pre-installed since 1.9, **NOT** being removed/unbundled —
+>   JuliaLang/julia#50697) that a package must still declare in **`[deps]` + `[compat]`** (Aqua-
+>   enforced); the real "dependency risk" is undeclared implicit `@stdlib` loading, fixed by
+>   declaring — not by rewriting I/O. I/O tool now chosen by data shape (readdlm/writedlm = simple
+>   numeric · CSV.jl+DataFrames = real tabular); hand-rolled `readlines`+`split`+`tryparse` flagged
+>   an anti-pattern for real CSV (niche perf trick only).
 > - v2606.6.1: packages.md **Data & visualization** gains the CairoMakie **CJK-font root fix** —
 >   non-Latin (日本語/中文/한글) labels need a CJK-capable theme font (`set_theme!(fonts=…)` to a
 >   Noto/HaranoAji/Hiragino OTF path) or Makie crashes on missing glyphs; shared `scripts/plots.jl`

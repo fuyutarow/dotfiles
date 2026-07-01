@@ -1,6 +1,6 @@
 ---
-name: auditing-audience-prose
-description: Audits wording and sentence-level claims in audience-facing prose so they state the object, comparison, condition, and output directly instead of sounding LLM-ish, managerial, or tooling-first. Use when the task is to review or rewrite style in slide titles, headers, abstracts, executive summaries, proposals, rebuttals, or technical summaries for "LLMっぽい表現", "AI臭い文体", jargon drift, rhetorical fluff, claim calibration, coined translations, or terminology normalization such as "テープアウト". Triggers: wording audit, prose audit, style rewrite, claim calibration, tooling-first titles, "中核エンジン", "一つに返す", "乗る", "閉じる", "主因", "ここが肝心", and metaphor jargon such as 床/鎖/背骨/橋/土台. Not for document structure, literature synthesis, or domain-content generation.
+name: auditing-audience-facing-prose
+description: Audits wording and sentence-level claims in audience-facing prose so they state the object, comparison, condition, and output directly instead of sounding LLM-ish, managerial, or tooling-first. Use when the task is to review or rewrite style in slide titles, headers, abstracts, executive summaries, reports, memos, proposals, rebuttals, or technical summaries for "LLMっぽい表現", "AI臭い文体", jargon drift, rhetorical fluff, claim calibration, coined translations, or terminology normalization such as "テープアウト". Triggers: wording audit, prose audit, style rewrite, claim calibration, tooling-first titles, "中核エンジン", "一つに返す", "乗る", "閉じる", "主因", "ここが肝心", and metaphor jargon such as 床/鎖/背骨/橋/土台. Not for document structure, literature synthesis, or domain-content generation.
 ---
 
 # Auditing audience-facing prose
@@ -105,6 +105,10 @@ A newly invented translation for an established term (e.g. fabricating a native 
 Audit for over- and under-claiming as carefully as for wording — this is where proposals and
 rebuttals fail hardest.
 
+- **Prose-only ⇒ no truth verdict.** When you are given only the text (not the underlying evidence or
+  data), audit textual over-/under-claiming only; do NOT rule on whether a claim is factually true —
+  flag any claim whose evidence you have not read as *truth unverified (内容未確認)*, rather than
+  endorsing or refuting it.
 - **No overclaim.** Match the evidence exactly. Grandiose nouns (platform, hero, flywheel, winner) are banned unless literally earned.
 - **No underclaim.** Do not bury the real contribution under caveats; a caveat is secondary, set in gray.
 - **Limits go inside the claim, stated first** — not as a separate hedge bolted on afterward.

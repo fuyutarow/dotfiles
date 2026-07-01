@@ -76,6 +76,16 @@ done
 exit $rc
 '''
 
+# NOTE: deliberately NOT in `[tasks.lint].depends` — dotfiles has no reports/memos/
+# proposals to scan (they live in research repos), so wiring it into the blocking gate
+# would add friction with no target. Portable: run it against real files with `-- <paths>`,
+# or copy/link scripts/check-audience-prose.sh into a repo that has a prose corpus and add
+# "lint:audience-prose" to that repo's lint depends.
+[tasks."lint:audience-prose"]
+dir = "{{config_root}}"
+description = "Audience-prose gate: fail on audit-theater / metaphor-packaging / unbounded PASS in persisted reports/memos/proposals. Pass paths: `mise run lint:audience-prose -- report.md docs/`"
+run = "bash scripts/check-audience-prose.sh"
+
 [tasks."cache:clean"]
 description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
 run = '''

@@ -17,6 +17,14 @@
             "command": "bash ~/.claude/detect-leaked-toolcall.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/detect-audit-theater.sh"
+          }
+        ]
       }
     ]
   }

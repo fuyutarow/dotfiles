@@ -6,6 +6,7 @@
 - [Pattern families](#pattern-families)
 - [Rewrite ledger](#rewrite-ledger)
 - [Claim-calibration ledger](#claim-calibration-ledger)
+- [Audit-report failure ledger](#audit-report-failure-ledger)
 - [Deck-level rules](#deck-level-rules)
 - [Document-level rules](#document-level-rules)
 - [Denylist as a machine gate](#denylist-as-a-machine-gate)
@@ -21,6 +22,8 @@ Run these checks on every title, header, summary sentence, or script line:
 4. If I delete the emphasis phrase, does any meaning disappear?
 5. If the title or paragraph lead mentions only tools, modules, or infrastructure, where is the
    audience message?
+6. If this is an audit report, does each PASS/GREEN/verified claim name exactly what was checked?
+7. Did the report introduce a factual verdict without citing the source lines or data it inspected?
 
 If two or more answers are "no", rewrite from scratch instead of editing locally.
 
@@ -51,6 +54,10 @@ These words often hide a missing object:
 - `基盤`
 - `パイプライン`
 - `層`
+- `核`
+- `本体`
+- `HUB`
+- `live`
 
 If removing the word does not change the technical meaning, delete it.
 
@@ -62,6 +69,9 @@ These phrases try to force attention instead of earning it:
 - `今日いちばん大事`
 - `合否を分ける`
 - `この実務の執念から`
+- `正直な到達点`
+- `これは重要な pattern`
+- `好例`
 
 Replace them with the reason the statement changes a decision, bound, or comparison.
 
@@ -111,10 +121,17 @@ to the standard word in the field instead of paraphrasing it with another image.
 | `顔` (face) | side / use-case |
 | `橋` (bridge) | connection / shared part |
 | `土台` (foundation) | lower bound / basis |
-| `山場` (climax) | the core step |
+| `山場` (climax) | the main step |
 | `持ち上げ` (lift) | apply / extend |
 | `挟む` (sandwich) | bound from above and below |
 | `段差` (step) | difference / gap |
+| `アンカー` (anchor) | current source / required reference / fixed assumption |
+| `足場` (scaffold) | preliminary assumption / validation step |
+| `ノブ` (knob) | optimization variable / configuration parameter |
+| `畳む` (fold) | replace / supersede / remove |
+| `溶ける` (melt) | fail to remain defensible / cease to be durable |
+| `囲う` (fence) | own exclusively / restrict access |
+| `殺す` (kill) | falsify / reject / terminate, unless "kill experiment" is the chosen term |
 
 This family often recurs during revision. Check tikz style names, variable names, and diagram
 labels (`face`, `bridge`) too. For everyday words such as `顔`, `橋`, or `土台`, prefer phrase-level
@@ -137,6 +154,34 @@ A claim that is inflated and then walked back is usually a calibration failure:
 
 Rewrite to the single claim the evidence supports, with the limit stated inside the claim and set in
 gray, not bolted on as a counter-weight.
+
+### Audit-report theater
+
+The audit report can reproduce the failure it is supposed to catch. These phrases convert a repair
+into a self-defense memo:
+
+- `監査完了`
+- `PASS` / `GREEN`
+- `通過`
+- `核は stable`
+- `私の起因でない`
+- `好例`
+- `正直な到達点`
+
+Rewrite as bounded evidence:
+
+- what artifact was checked
+- which rule or command was applied
+- what the check can and cannot prove
+- what remains uninspected
+
+Bad: `banned PASS なので監査完了`
+
+Better: `denylist scan found no listed strings in R2607_008; sentence clarity and factual consistency were not checked by that scan`
+
+Bad: `R2607_007 は私の起因でない`
+
+Better: `R2607_007 still fails the prose gate; this change either fixes it or excludes it explicitly from scope`
 
 ## Rewrite ledger
 
@@ -203,6 +248,24 @@ Audit titles, abstracts, and rebuttals for the calibration failure, not only the
 | hedge-after-hype | big noun, then a canceling parenthetical | one calibrated claim; limit stated first, inside it |
 | pendulum | evaluation flips weak→great→weak across drafts | only revise on newly-read evidence; cite it; do not move on mood |
 | stakes-without-claim | "this decides everything" with no proposition | state what changes (a decision, a bound, a comparison) |
+| PASS theater | gate result treated as total proof | name the command, scope, and residual unchecked claims |
+| ownership deflection | "not my cause" instead of a scope decision | fix it or state it is outside scope without self-excuse |
+| unverified factual verdict | prose audit declares a contradiction without source lines | cite both lines/data or mark as possible only |
+| repair spiral | repeated local patches introduce new contradictions | stop patching; rewrite the smallest coherent block from source |
+
+## Audit-report failure ledger
+
+Use this when the output being reviewed is an agent's own prose audit, status update, or repair
+report.
+
+| failure | symptom | required rewrite |
+|---|---|---|
+| self-justifying audit | long story about diligence, rounds, or "正直な到達点" | target / violation / evidence / replacement, then stop |
+| gate overreach | `PASS` or `GREEN` presented as correctness | "command X passed over files Y; it does not check Z" |
+| blame displacement | "my cause / not my cause" | scope statement: fixed, not touched, or outside requested task |
+| metaphor repair table still metaphorical | replacement column contains `anchor`, `scaffold`, `moat`, `melt`, `fence`, `kill` | replace with literal domain relation |
+| factual repair from wording only | "prose audit found factual contradiction" without citations | cite both source lines or downgrade to "possible" |
+| convergence claim | "stable", "done", "asymptotic", "core passed" after repeated failed edits | report exact remaining risk and stop claiming convergence |
 
 ## Deck-level rules
 
@@ -239,9 +302,11 @@ regress (see the `operating-the-harness` skill for wiring). A portable starting 
 主因                # effect-word meta
 一度に|一度の実行     # convenience copy
 再走                # insider verb
-中核|エンジン|\bcore\b|\bengine\b   # architecture-as-rhetoric
+核|本体|中核|エンジン|\bcore\b|\bengine\b|\bHUB\b|\blive\b   # architecture-as-rhetoric
 tape-out            # normalize to テープアウト
 床|鎖|扇|背骨|山場|持ち上げ|挟[んみ]|段差   # metaphor candidates; audit 顔/橋/土台 in context
+アンカー|足場|ノブ|畳[むん]|溶け|囲[うわい]|殺[すし]   # metaphor candidates; allow chosen technical terms with context
+PASS|GREEN|監査完了|好例|私の起因でない   # audit-report theater; prefer bounded evidence
 ```
 
 Rules that make a gate real, not decorative:
@@ -258,6 +323,9 @@ Rules that make a gate real, not decorative:
 - **Prove it fires** by injecting a known-bad line, watching it fail, and reverting.
 - **The gate is necessary, not sufficient** — overflow, mid-word title wraps, and crushed figures
   only appear on the rendered page. Render and read every page.
+- **A green gate is not a prose verdict.** It proves only that the configured patterns did not match
+  the scoped text. Report residual checks separately: clarity, factual consistency, rendering, and
+  audience fit.
 
 Use a hard gate only for low-ambiguity phrases. Prefer soft lint or human review for ambiguous
 everyday words and for claim-calibration judgments.

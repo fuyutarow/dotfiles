@@ -62,6 +62,7 @@ link tmux/tmux.conf "$HOME/.tmux.conf"
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
 link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
 link agents/claude/detect-leaked-toolcall.sh "$HOME/.claude/detect-leaked-toolcall.sh"
+link agents/claude/detect-audit-theater.sh "$HOME/.claude/detect-audit-theater.sh"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---

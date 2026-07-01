@@ -74,9 +74,31 @@ _dbg "Setting up bun completions in .zshrc"
 
 _dbg "Finished .zshrc"
 
-# juliaup (cross-platform; guarded, $HOME-relative — do NOT let juliaup write
-# machine-absolute paths here; if it re-appends its managed block, fold it back into this form)
-[[ -d "$HOME/.juliaup/bin" ]] && path=("$HOME/.juliaup/bin" $path) && export PATH
-[[ -f "$HOME/.julia/juliaup/completions/zsh.zsh" ]] && source "$HOME/.julia/juliaup/completions/zsh.zsh"
+# julia is mise-managed; juliaup intentionally NOT used (the two juliaup guards here were
+# dead no-ops and were removed). If juliaup is ever installed and re-appends a machine-absolute
+# block, fold it back into a $HOME-relative existence-guarded form (INV-4).
+#
+# mise: interactive per-directory tool activation (cross-OS). ONLY mise activation in the shell.
+# NOT in .zshenv (ssh host 'cmd' reads only .zshenv and gets tools from the static shim dir).
+# Here in zshrc so it covers BOTH login and non-login interactive shells (tmux panes, bare zsh),
+# after every PATH edit in this file so __MISE_ORIG_PATH captures them and mise prepends tool
+# dirs ahead of everything (this, not the removed brew julia, is what makes mise beat a brew dup).
+# Homebrew provides the mise binary and `brew shellenv` runs login-only in .zprofile, so in a
+# NON-login interactive shell `command -v mise` fails; locate the binary via an existence-guarded
+# cross-OS scan. mise bakes its own absolute path into the generated hook, so the hook stays
+# self-contained even where mise is not otherwise on PATH.
+_mise_bin=""
+if command -v mise &>/dev/null; then
+  _mise_bin=mise
+else
+  for _mise_cand in "$HOME/.local/bin/mise" /opt/homebrew/bin/mise /usr/local/bin/mise /home/linuxbrew/.linuxbrew/bin/mise; do
+    [[ -x "$_mise_cand" ]] && { _mise_bin="$_mise_cand"; break; }
+  done
+fi
+if [[ -n "$_mise_bin" ]]; then
+  _dbg "Activating mise ($_mise_bin)"
+  eval "$("$_mise_bin" activate zsh)"
+fi
+unset _mise_bin _mise_cand
 
 # Machine/OS-specific PATH entries belong in mac/.zprofile or wsl/.zprofile, not here.

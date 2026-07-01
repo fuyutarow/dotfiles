@@ -35,6 +35,7 @@ turn_text=$(jq -rs '
 [ -n "$turn_text" ] || exit 0
 
 # Strip fenced code blocks, then inline backtick spans (so tag *mentions* don't fire).
+# shellcheck disable=SC2016  # single-quoted sed is intentional: literal backticks, no shell expansion wanted
 stripped=$(printf '%s\n' "$turn_text" \
   | awk 'BEGIN{f=0} /^[[:space:]]*```/{f=!f; next} !f' \
   | sed 's/`[^`]*`//g')

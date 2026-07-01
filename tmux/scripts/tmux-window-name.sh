@@ -84,7 +84,8 @@ get_git_branch() {
   local path="$1"
 
   if git -C "$path" rev-parse --git-dir > /dev/null 2>&1; then
-    local branch=$(git -C "$path" branch --show-current 2> /dev/null)
+    local branch
+    branch=$(git -C "$path" branch --show-current 2> /dev/null)
     local status=""
 
     # Check for uncommitted changes
@@ -98,13 +99,15 @@ get_git_branch() {
     fi
 
     # Check for unpushed commits
-    local unpushed=$(git -C "$path" rev-list --count @{upstream}..HEAD 2> /dev/null)
+    local unpushed
+    unpushed=$(git -C "$path" rev-list --count "@{upstream}..HEAD" 2> /dev/null)
     if [[ -n $unpushed && $unpushed -gt 0 ]]; then
       status="${status}↑$unpushed"
     fi
 
     # Check for unpulled commits
-    local unpulled=$(git -C "$path" rev-list --count HEAD..@{upstream} 2> /dev/null)
+    local unpulled
+    unpulled=$(git -C "$path" rev-list --count "HEAD..@{upstream}" 2> /dev/null)
     if [[ -n $unpulled && $unpulled -gt 0 ]]; then
       status="${status}↓$unpulled"
     fi
@@ -144,5 +147,5 @@ elif [[ -n $PROJECT_NAME ]]; then
 elif [[ -n $GIT_BRANCH ]]; then
   echo "$(basename "$CURRENT_PATH") [$GIT_BRANCH]"
 else
-  echo "$(basename "$CURRENT_PATH")"
+  basename "$CURRENT_PATH"
 fi

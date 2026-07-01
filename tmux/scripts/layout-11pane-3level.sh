@@ -21,7 +21,7 @@
 
 create_complex_3split_layout() {
   # 冪等性チェック
-  if [ $(tmux list-panes | wc -l) -gt 1 ]; then
+  if [ "$(tmux list-panes | wc -l)" -gt 1 ]; then
     tmux display-message "Layout already applied"
     return
   fi

@@ -35,7 +35,7 @@
 
 create_6pane_mixed_layout() {
   # 既にペインが複数ある場合は処理をスキップ（冪等性保証）
-  if [ $(tmux list-panes | wc -l) -gt 1 ]; then
+  if [ "$(tmux list-panes | wc -l)" -gt 1 ]; then
     tmux display-message "Layout already applied"
     return
   fi

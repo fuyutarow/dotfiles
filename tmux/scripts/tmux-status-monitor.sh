@@ -5,19 +5,22 @@
 
 get_compact_stats() {
   # Memory
-  local mem_info=$(free -m)
-  local mem_used=$(echo "$mem_info" | awk '/^Mem:/ {print $3}')
-  local mem_total=$(echo "$mem_info" | awk '/^Mem:/ {print $2}')
+  local mem_info mem_used mem_total
+  mem_info=$(free -m)
+  mem_used=$(echo "$mem_info" | awk '/^Mem:/ {print $3}')
+  mem_total=$(echo "$mem_info" | awk '/^Mem:/ {print $2}')
   local mem_percent=$((mem_used * 100 / mem_total))
 
   # CPU Load
-  local load_1min=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
-  local cpu_cores=$(nproc)
+  local load_1min cpu_cores
+  load_1min=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+  cpu_cores=$(nproc)
 
   # CPU Temperature
   local cpu_temp="N/A"
   if [[ -f /sys/class/thermal/thermal_zone0/temp ]]; then
-    local temp_milliC=$(cat /sys/class/thermal/thermal_zone0/temp 2> /dev/null)
+    local temp_milliC
+    temp_milliC=$(cat /sys/class/thermal/thermal_zone0/temp 2> /dev/null)
     if [[ -n $temp_milliC && $temp_milliC != "0" ]]; then
       cpu_temp=$((temp_milliC / 1000))
     fi
@@ -26,26 +29,25 @@ get_compact_stats() {
   fi
 
   # CPU Usage
-  local cpu_usage=$(top -bn1 | awk '/^%Cpu/ {print 100-$8}' | cut -d. -f1 2> /dev/null || echo "0")
+  local cpu_usage
+  cpu_usage=$(top -bn1 | awk '/^%Cpu/ {print 100-$8}' | cut -d. -f1 2> /dev/null || echo "0")
 
   # File descriptors
-  local current_files=$(lsof 2> /dev/null | wc -l)
-  local max_files=$(ulimit -n)
+  local current_files max_files
+  current_files=$(lsof 2> /dev/null | wc -l)
+  max_files=$(ulimit -n)
   # Subtract 1 for lsof header line
   current_files=$((current_files - 1))
   [[ $current_files -lt 0 ]] && current_files=0
   local fd_percent=$((current_files * 100 / max_files))
 
-  # Processes
-  local current_procs=$(ps aux | wc -l)
-  local max_procs=$(ulimit -u)
-  local proc_percent=$((current_procs * 100 / max_procs))
-
   # Disk usage
-  local disk_usage=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+  local disk_usage
+  disk_usage=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
 
   # Claude processes
-  local claude_procs=$(ps aux | grep -E "(claude|python.*claude)" | grep -v grep | wc -l)
+  local claude_procs
+  claude_procs=$(pgrep -fc "claude|python.*claude" 2> /dev/null || echo 0)
 
   # Pressure (if available)
   local mem_pressure="0"
@@ -64,7 +66,8 @@ get_compact_stats() {
   [[ $fd_percent -gt 80 ]] && fd_color="#[fg=colour1]" # Red
 
   local load_color="#[fg=colour2]" # Green
-  local load_ratio=$(echo "scale=1; $load_1min / $cpu_cores" | bc -l 2> /dev/null || echo "0")
+  local load_ratio
+  load_ratio=$(echo "scale=1; $load_1min / $cpu_cores" | bc -l 2> /dev/null || echo "0")
   [[ $(echo "$load_ratio > 1.0" | bc -l 2> /dev/null || echo "0") -eq 1 ]] && load_color="#[fg=colour3]"
   [[ $(echo "$load_ratio > 2.0" | bc -l 2> /dev/null || echo "0") -eq 1 ]] && load_color="#[fg=colour1]"
 

@@ -2,7 +2,7 @@
 
 # デバッグ用：ステップごとに確認
 
-if [ $(tmux list-panes | wc -l) -gt 1 ]; then
+if [ "$(tmux list-panes | wc -l)" -gt 1 ]; then
   tmux display-message "Layout already applied"
   exit 1
 fi

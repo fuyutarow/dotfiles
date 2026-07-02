@@ -5,7 +5,7 @@ called repeatedly or on large data. A one-off computation can ignore pre-allocat
 a tight numeric loop cannot.
 
 Contents:
-- §2.1 Type stability
+- §2.1 Type stability (multiple vs dynamic dispatch · instability sources · function barrier)
 - §2.2 No globals in hot paths
 - §2.3 Pre-allocate outputs
 - §2.4 Broadcasting (dot syntax)
@@ -15,25 +15,112 @@ Contents:
 
 ---
 
-## 2.1 Type Stability
+## 2.1 Type Stability — the load-bearing discipline
 
-Every function must return a consistent type for given argument types.
+**Type stability** = the return type (and every local's type) is predictable from the argument
+TYPES alone, never from their values. It is the single property Julia's speed rests on:
+inferable types → dispatch resolved at compile time → devirtualized, inlined, SIMD-able native
+code. When inference loses a concrete type, values get boxed and every subsequent call becomes a
+runtime method lookup on the boxed value — the 10–100× slowdowns, the GC pressure, and (at a
+compile boundary) `juliac --trim` verifier errors (setup.md §3.5.1) all trace back to this one
+property.
+
+### 2.1.1 Multiple dispatch ≠ dynamic dispatch — never "ban dispatch"
+
+The two are routinely conflated, and the conflation produces a wrong coding rule ("avoid
+dispatch"). Keep them apart:
+
+| | What it is | Cost | Verdict |
+|---|---|---|---|
+| **Multiple dispatch** | method selection on the types of ALL arguments (abstract or concrete) — the paradigm | **zero** when the call-site arg types are inferable: resolved statically at compile time | use freely; it is why Julia composes |
+| **Dynamic dispatch** | *runtime* method lookup, emitted only where inference lost the concrete type | real: lookup + boxing on every affected call | eliminate from hot paths; localize elsewhere (§2.1.3) |
+
+`f(x::AbstractArray)` called with a `Vector{Float64}` the compiler can see is **static** — full
+speed. The bug is never "used multiple dispatch"; it is "let the concrete type become unknowable
+mid-hot-path". The inverse rule ("no dynamic dispatch anywhere") is equally wrong: top-level
+script code, config parsing, and once-per-run setup dispatch dynamically at zero relevant cost.
+The discipline is SCOPED to three places: **hot loops, AD paths, and compile/`@ccallable`
+boundaries** (setup.md §3.5.1 — only the last is where trim makes it a hard error).
+
+### 2.1.2 The instability sources — each with its fix
+
+**(a) Value-dependent return type** — return `zero(x)`, not a literal of another type:
 
 ```julia
-# BAD: returns Int or Float64 depending on the value of x
-function bad(x)
-    x > 0 ? x : 0.0
+# BAD: returns Int or Float64 depending on the VALUE of x
+bad(x)  = x > 0 ? x : 0.0
+# GOOD: consistent type for given argument types
+good(x) = x > 0 ? x : zero(x)
+```
+
+**(b) Non-concrete struct fields** — after untyped containers, the most common LLM-authored
+instability. An abstract or missing field annotation makes every access *of that field* return
+an unknown type, and the instability spreads into each function that touches it. Unlike
+§2.1.1's scoping, this rule is UNCONDITIONAL: a struct definition doesn't know its future call
+sites, and the parametric form costs nothing — so parametrize even "cold" structs:
+
+```julia
+# BAD: every field access is type-unstable
+struct Model
+    data::AbstractMatrix    # abstract annotation
+    coeffs::Vector          # missing eltype ⇒ Vector{T} where T
+    tol                     # no annotation ⇒ Any
 end
 
-# GOOD: consistent return type
-function good(x)
-    x > 0 ? x : zero(x)
+# GOOD: parametrize — concrete per instance, still fully generic
+struct Model{M<:AbstractMatrix,T<:Real}
+    data::M
+    coeffs::Vector{T}
+    tol::T
 end
 ```
 
-Detect instability three ways, escalating in power:
+Same rule for containers: `Vector{Real}` is a container of boxes (abstract eltype); a generic
+container is `Vector{T}` with `T` concrete per instance, built via `similar`/`zero(A)` (§2.3).
+
+**(c) Untyped containers & non-const globals** — SKILL.md §1.2 and §2.2; same mechanism, `Any`
+enters the loop.
+
+**(d) NOT a source — small unions.** `Union{Int,Nothing}` (e.g. a `findfirst` result) is
+handled by union-splitting (a cheap, well-predicted branch; applies up to ~4 targets); don't
+contort code to avoid `nothing`. Only wide/`Any` unions are instability.
+
+### 2.1.3 Function barrier — localize unavoidable dynamism, don't forbid it
+
+When types genuinely exist only at runtime (file contents, config, heterogeneous columns), the
+idiom is the **function barrier**: do the dynamic work in an outer shell, then call an inner
+kernel — that call is ONE dynamic dispatch, and from the kernel's signature down everything is
+concrete and static again:
+
+```julia
+# outer shell — dynamic, cold: types known only at runtime
+function run(cfg_path)
+    cfg  = parse_config(cfg_path)     # Dict{String,Any} — fine here
+    data = load_matrix(cfg)           # concrete type opaque to inference
+    return kernel(data, cfg["iters"]) # ← the barrier: dispatch resolves at runtime HERE,
+end                                   #    once per call — never per iteration
+
+# inner kernel — from here down, T is concrete: static dispatch throughout
+function kernel(A::AbstractMatrix{T}, iters) where {T}
+    acc = zero(T)
+    for _ in 1:iters
+        acc += step(A, acc)
+    end
+    return acc
+end
+```
+
+Architecture-level form of the same rule: **dynamic shell outside (I/O, config, parsing),
+type-stable compute core inside.** This layering is also what makes the kernel extractable as a
+shared library later — but note the barrier itself is then *replaced* by the C boundary, never
+compiled inside the artifact (setup.md §3.5.1).
+
+### 2.1.4 Detection
+
+Escalating in power:
 - `@code_warntype f(args...)` — quick, shows `Any`/`Union` in red, but only the outermost frame.
-- `JET.@test_opt f(args...)` — descends the whole call tree; use in test suites (§2.8).
+- `JET.@report_opt f(args...)` / `@test_opt` — descends the whole call tree and flags every
+  "runtime dispatch" site; use in test suites (§2.8).
 - `Cthulhu.@descend f(args...)` — interactive, follows inference into callees (local dev — see setup.md).
 
 ## 2.2 No Globals in Hot Paths

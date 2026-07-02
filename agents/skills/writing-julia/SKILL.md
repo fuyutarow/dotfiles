@@ -1,11 +1,28 @@
 ---
 name: writing-julia
-description: Set up Julia and write correct, performant, modern Julia for theoretical research — one first choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant, JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports, Chairmarks, OhMyThreads, ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit, SymPyPythonCall, Manopt, DrWatson, Pluto, Documenter, Quarto, Julia setup, experiment/project management, notebooks / literate reports, TTFX / precompile latency, or large-package architecture (module/file organization, include order, submodules vs subpackages, package extensions / weakdeps, type piracy, public API). MANDATORY — read this skill BEFORE writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use optimization), and lerp-as-evaluation. All differentiation goes through DifferentiationInterface (raw backend calls are the exception); Dual-propagation rules apply whenever AutoForwardDiff is in the path. Symbolic tooling is chosen by ROLE: SymEngine for lightweight algebra, Symbolics+ModelingToolkit as the spine of AI4S/SciML projects (codegen/PDE/DAE), SymPyPythonCall as a thin-boundary service for heavy CAS (integrate/trigsimp/factor/assumptions).
+description: >-
+  Set up Julia and write correct, performant, modern Julia for theoretical research — one first
+  choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical
+  experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential
+  equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant,
+  JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports, Chairmarks, OhMyThreads,
+  ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit,
+  SymPyPythonCall, Manopt, DrWatson, Pluto, Documenter, Quarto, Julia setup, experiment/project
+  management, notebooks / literate reports, TTFX / precompile latency, type stability / 型安定,
+  dynamic dispatch, function barrier, PackageCompiler, juliac --trim, @ccallable, shipping a .so
+  / shared library / AOT binary, or large-package architecture (include order, submodules vs
+  subpackages, package extensions / weakdeps, type piracy, public API). MANDATORY — read BEFORE
+  writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use
+  optimization), and lerp-as-evaluation. All differentiation goes through
+  DifferentiationInterface; Dual-propagation rules apply when AutoForwardDiff is in the path.
+  Symbolic tool chosen by ROLE — SymEngine (light algebra) / Symbolics+ModelingToolkit (SciML
+  spine) / SymPyPythonCall (heavy-CAS service). Multiple dispatch is never banned — the bug is
+  type-unstable hot paths; barrier the dynamism.
 ---
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2606.6.2 (2026-07-01, Julia 1.12.6 baseline)
+> **Version**: v2607.1.0 (2026-07-03, Julia 1.12.6 baseline)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -13,6 +30,17 @@ description: Set up Julia and write correct, performant, modern Julia for theore
 > pointered from `references/setup.md` §8, not the focus here.
 >
 > **Changelog (recent)**:
+> - v2607.1.0: **type discipline reforged.** performance.md §2.1 rewritten as the type-stability
+>   home: **multiple dispatch ≠ dynamic dispatch** (never "ban dispatch" — discipline is SCOPED to
+>   hot loops / AD paths / compile boundaries); instability sources incl. **non-concrete struct
+>   fields → parametrize** (`struct A{M<:AbstractMatrix}`); small `Union`s explicitly fine;
+>   **§2.1.3 function barrier** (dynamic shell / type-stable core). setup.md **§3.5.1 shipping a
+>   `.so` — two routes**: PackageCompiler `create_library` (STABLE — fat bundle, `init_julia`
+>   contract, one Julia runtime per process) vs `juliac --trim` (EXPERIMENTAL — dispatch-free
+>   `@ccallable` surface + type-stable deps); Layer-2 "not for research code" refined to "not for
+>   whole research codebases — an extracted type-stable kernel is exactly what trim compiles".
+>   Trigger keywords added (type stability/型安定, function barrier, PackageCompiler, juliac
+>   --trim, @ccallable, .so). `tests/trigger-set.md` added (F3).
 > - v2606.6.2: setup.md **§7 Output Files** corrected + expanded. `DelimitedFiles` clarified as an
 >   *upgradeable* stdlib (bundled/pre-installed since 1.9, **NOT** being removed/unbundled —
 >   JuliaLang/julia#50697) that a package must still declare in **`[deps]` + `[compat]`** (Aqua-
@@ -46,11 +74,11 @@ reference file that matches the task.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/performance.md` | §2.1–§2.6 hot-path performance (type stability, globals, pre-alloc, broadcast, `@inbounds`/`@simd`, benchmarking) + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, or before claiming code is correct |
+| `references/performance.md` | §2.1–§2.6 hot-path performance — **§2.1 type discipline: multiple vs dynamic dispatch, instability sources (non-concrete struct fields → parametrize), function barriers**, globals, pre-alloc, broadcast, `@inbounds`/`@simd`, benchmarking + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, any struct definition, or before claiming code is correct |
 | `references/autodiff.md` | §2.7 DifferentiationInterface frontend, `prepare_*`, backend selection, **§2.7.4 Dual-propagation rules** | any function that will be differentiated |
 | `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
 | `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, viz) | deciding which package to install for a task |
-| `references/setup.md` | §3 install + project env + reproducibility + **§3.4 experiment-script lifecycle (DrWatson: an experiment is a *run* not a file; `src`/`scripts`/`_research`/distill 4-layer boundary; parameterize-don't-duplicate; distill-then-discard — prevents hundreds of accreted one-off scripts)** + TTFX, §5 running, §6 idioms, §7 output, §8 local-dev pointers + **§8.1 notebooks/literate docs (Pluto / Quarto / Documenter)** | setting up Julia, running code, managing reproducible experiments / avoiding experiment-script accretion, or choosing a notebook/report tool |
+| `references/setup.md` | §3 install + project env + reproducibility + **§3.4 experiment-script lifecycle (DrWatson: an experiment is a *run* not a file; `src`/`scripts`/`_research`/distill 4-layer boundary; parameterize-don't-duplicate; distill-then-discard — prevents hundreds of accreted one-off scripts)** + TTFX + **§3.5.1 shipping a `.so` (PackageCompiler `create_library` vs `juliac --trim`)**, §5 running, §6 idioms, §7 output, §8 local-dev pointers + **§8.1 notebooks/literate docs (Pluto / Quarto / Documenter)** | setting up Julia, running code, managing reproducible experiments / avoiding experiment-script accretion, compiling a shared library / AOT binary, or choosing a notebook/report tool |
 | `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, **Holy traits for cross-hierarchy behavior (§10.2.1)**, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), **`@which`/`methods` dispatch tracing**, TTFX & invalidation hygiene | structuring a package beyond one file, organizing a large/growing codebase, or doing trait-based dispatch |
 
 ---
@@ -288,6 +316,7 @@ AD — `references/autodiff.md` (if any function will be differentiated):
 - [ ] If `AutoForwardDiff` is in the path: all `zeros()` use `eltype(x)`, no `Float64()` casts, no `eigvals` in the AD path, branch selection done in Float64 first (§2.7.4)
 
 Performance & verification — `references/performance.md` (for hot paths; reach for a tool only when its need is real — see packages.md §4 header):
+- [ ] **Type discipline (§2.1)**: struct fields concrete or parametric (`struct A{M<:AbstractMatrix}`, never bare `data::AbstractMatrix` / untyped fields); runtime-typed data (config, I/O, `Any` columns) crosses a **function barrier** before the hot loop (§2.1.3); multiple dispatch used freely — only *runtime* dispatch inside hot loops / AD paths / `@ccallable` boundaries is the bug, never dispatch per se (§2.1.1)
 - [ ] First call is warmup; timing on the second (§2.6); `@btime`/`@b` with `$`-interpolated args
 - [ ] Small fixed-size data uses `StaticArrays`; *if* params are already structured into many named blocks, `ComponentArrays` (toolchain.md §2.9.1 / §2.9.2)
 - [ ] **JET**: `report_package` clean (or reports justified); consider `@stable` on must-be-fast functions (§2.8)
@@ -296,6 +325,7 @@ Performance & verification — `references/performance.md` (for hot paths; reach
 - [ ] *If* the work is genuinely parallel: reductions use `OhMyThreads`, never `threadid()`-keyed buffers (toolchain.md §2.9.4) — serial code carries no threads dep
 
 Environment — `references/setup.md`:
+- [ ] If shipping a `.so`/AOT binary: route chosen per §3.5.1 — PackageCompiler `create_library` (stable, fat) vs `juliac --trim` (experimental; needs a dispatch-free `@ccallable` surface + type-stable deps) — never "Julia can't make a .so" and never trim-by-default
 - [ ] `--project=.` (or a named env) on every `julia` invocation (§5)
 - [ ] `Project.toml` / `Manifest.toml` committed for reproducibility (§3.3)
 - [ ] **No declared-but-unused deps.** Every entry in `[deps]` is actually `using`/`import`ed in

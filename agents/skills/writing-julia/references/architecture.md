@@ -179,6 +179,8 @@ MyPkgPlotsExt = "Plots"            # ext/MyPkgPlotsExt.jl is loaded when Plots i
   of organization; the compiler inlines aggressively, so granularity is free at runtime.
 - **Keep it type-stable at scale** — wrap must-be-fast APIs with DispatchDoctor `@stable`; run JET
   `report_package` on the whole package (performance.md §2.8). Instability compounds in big trees.
+  Package-level shape — dynamic shell outside, type-stable core inside, joined by function
+  barriers — is owned by performance.md §2.1.3; its `.so`-extraction consequence by setup.md §3.5.1.
 
 ### §10.6.1 Convert these invariants into CI checks — the compiler won't
 

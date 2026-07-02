@@ -7,12 +7,15 @@ Contents:
 - §3.1 Installing Julia
 - §3.2 Project environment & packages
 - §3.3 Reproducibility
+- §3.4 Experiment management — DrWatson
 - §3.5 TTFX (time to first execution) — the layered countermeasure map
+- §3.5.1 Shipping a `.so` — PackageCompiler `create_library` vs `juliac --trim`
 - §3.6 Julia 1.12 runtime notes
 - §5 Running Julia code
 - §6 Quick reference: Julia idioms
 - §7 Output files
 - §8 Related: interactive local development
+- §8.1 Notebooks, literate reports & documentation
 
 ---
 
@@ -194,9 +197,40 @@ deployment target:
   (§8). The right tool for local interactive dev when startup latency dominates your loop.
 - **`juliac` / `JuliaC.jl`** (Julia ≥1.12, §3.6) is the modern gcc-like driver that wraps the
   experimental `--trim` AOT path to emit small executables/libraries (a trimmed "hello" is
-  ~1 MB). A *companion* to PackageCompiler, not a replacement. **Not for research code**:
-  trimming requires no dynamic dispatch reachable from entry points, which research code
-  routinely violates. Binary deployment only.
+  ~1 MB). A *companion* to PackageCompiler, not a replacement. **Not for whole research
+  codebases** (trimming requires every reachable call statically resolvable, which exploratory
+  code routinely violates) — but an extracted type-stable kernel is exactly what it CAN compile;
+  route per §3.5.1.
+
+### 3.5.1 Shipping a `.so` / shared library — two routes
+
+"Can Julia produce a shared library?" — **yes, stably, and it has for years.** Only the *small
+trimmed* variant is unstable. Never answer "Julia can't make a .so", and never default to trim.
+(Facts verified against PackageCompiler docs / julia release branches, 2026-07-03.)
+
+| | Route A — PackageCompiler `create_library` | Route B — `juliac --trim` |
+|---|---|---|
+| Status | production route; docs carry no "experimental" label | **experimental** in BOTH 1.12 and 1.13 (the `julia` binary rejects `--trim` without `--experimental`; JuliaC forwards the flag when needed) |
+| Artifact | full bundle: your lib + `libjulia` + stdlibs + `artifacts/` — order 100 MB+ | small executables/libraries (trimmed "hello" ~1 MB) |
+| Hard requirement | `@ccallable` C-ABI entry functions; PackageCompiler's app-relocatability rules apply | ALL code reachable from the `entrypoint` statically resolvable — one leftover dynamic dispatch = compile-time **"Verifier error: unresolved call / invoke / ccallable"** (safe mode) |
+| Use when | server-side / internal deploy / embedding into a Python wheel — size irrelevant; usable TODAY | size-constrained / edge deploy, and ONLY when kernel + deps are type-stable end-to-end |
+
+**Route A contract**: entry points are `Base.@ccallable` functions with C-ABI types; the bundle
+emits `include/julia_init.h` + `lib/` (+ `share/julia`); the caller **must** call
+`init_julia(argc, argv)` before any entry point (thread count etc. pass as CLI-style args) and
+should call `shutdown_julia(retcode)` at exit. Plan **one Julia runtime per process**:
+`jl_init` may only be called once per process lifetime (embedding manual), so never design two
+Julia-built libraries into one host process — and two libraries cannot even share a `dest_dir`
+(each owns `share/julia`).
+
+**Route B discipline**: the `@ccallable` surface uses concrete C-ABI types (`Ptr{Float64}`,
+`Csize_t`, …) and must be dispatch-free; every reachable path obeys type stability
+(performance.md §2.1). Note the barrier inversion: a function barrier (§2.1.3) does NOT help
+*inside* a trimmed artifact — the barrier's dynamic call is precisely an unresolved site. Put
+the dynamic shell in the HOST language (Python/C caller) and compile only the static kernel.
+Deps must be type-stable by construction: runtime-typed packages (TOML, CSV, DataFrames)
+conflict with trim; type-stable alternatives (TypedTables, StructArrays) work
+("This Month in Julia World" newsletter, julialang.org/blog/2026/02/this-month-in-julia-world).
 
 ## 3.6 Julia 1.12 runtime notes
 
@@ -209,7 +243,7 @@ deployment target:
 - **`OncePerProcess{T}`**: "compute once per process" cache primitive; pairs with `@compile_workload`.
 - **`juliac` / `JuliaC.jl` + `--trim` (experimental)**: 1.12's gcc-like AOT driver wrapping the
   `--trim` dead-code-elimination path; emits trimmed executables/libraries/sysimages (companion
-  to PackageCompiler). For binary deployment only — **not for research code** (see §3.5 Layer 2).
+  to PackageCompiler). For binary deployment of type-stable kernels only — route per §3.5.1.
 
 ## 5. Running Julia Code
 

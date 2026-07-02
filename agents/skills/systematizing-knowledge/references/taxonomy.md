@@ -157,6 +157,9 @@ Rules:
   text in capability cells** — free text defeats column-wise comparison.
 - **Every non-trivial cell carries a section/citation anchor** (e.g. `●[§4.2, 12]`) — auditable, not
   vibes. A green check with no source is claim-laundering (§ANTI).
+- **Where an axis is quantitative, cells carry the value, not a symbol** — `10⁻³ @ d≤8`, not `●`.
+  A `●` where the source states a number is a low-resolution cell (`resolution.md`); reserve the
+  closed symbol legend for genuinely categorical capabilities.
 - Add a final **"our framework / this work"** row if the SoK proposes one — but the Ours row is held
   to the SAME citation-anchor + GRADE + leakage gates as every other row (no self-awarded `●` without
   §-anchored evidence; it is the single most-gamed cell). Route it through the §9 hold-out / `/linus`

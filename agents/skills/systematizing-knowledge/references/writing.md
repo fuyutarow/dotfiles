@@ -156,7 +156,11 @@ incomplete in threats-to-validity.
 - every contradiction has a **located moderator** OR an explicit **live-with-discriminating-experiment** flag (`synthesis.md`);
 - every empirical number **cleared the AI4S gates A–F or is quarantined** (`ai4s-gates.md`) — none silently dropped;
 - the **systematization figure stands alone** (§3);
-- the gap analysis is present (even if "0 open").
+- the gap analysis is present (even if "0 open");
+- the **substance-audit table is complete** — every section passes the expert-surprise test, every
+  load-bearing claim fills the resolution grammar, the vague-quantifier grep is clean
+  (`resolution.md`) — a document that passes the four gates above but fails this one is
+  **scaffold theater**, not done.
 
 Failing the first gate → scope sprawl. Failing the second → shipping ungraded claims / ignored
 contradictions. Both are failure modes; the gates convert "done" from a feeling into a checklist.
@@ -175,7 +179,10 @@ execution**):
 - surface **every** ignored contradiction;
 - flag **every** "N papers say X" (vote-counting, banned — `synthesis.md`);
 - verify the **figure stands alone** (§3);
-- check **no claim ends at "未検証"** (§1; `synthesis.md`, the boundary / flip-condition step).
+- check **no claim ends at "未検証"** (§1; `synthesis.md`, the boundary / flip-condition step);
+- run the **resolution audit** — expert-surprise test per section, six-slot grammar per
+  load-bearing claim, deny-list grep (`resolution.md`): "what does an expert LEARN here?" is the
+  question `/linus` should be unable to answer with "nothing".
 
 Run the three passes in order — `/linus` (find the holes) → `/MECE` (relocate scattered facts,
 backward-only references) → `/REORG` (topic-sentence narrative).

@@ -29,6 +29,11 @@ collide on the same canonical claim (prerequisite for both vote-counting avoidan
 Tag each claim's **direction** (↑/↓/=), **magnitude if given** (effect size — see `synthesis.md`),
 and **claim type**: empirical-result / theoretical-result / definition / conjecture / methodological.
 
+**Extract results, not gists.** For a load-bearing claim the MAGNITUDE (number + units + conditions)
+and the locus (theorem/table/figure) are mandatory, pulled from methods/results — an abstract-level
+gist is *spin inheritance* (§ANTI). A row still at `dir-only` with no recorded reason may not render
+as a load-bearing sentence in prose (`resolution.md` owns this bar and its worked example).
+
 ## The context vector — the raw material for reconciliation
 
 Every claim row carries a **context vector** on the Nickerson dimensions — the same axes the
@@ -135,4 +140,5 @@ Build the table FIRST and generate the prose AS A VIEW over it. Then invariants 
 | Corpus provenance fields, PRISMA flow & screening | `workflow.md` |
 | Weighing without counting, heterogeneity & GRADE grading | `synthesis.md` |
 | 8-type leakage triage + quarantine table | `ai4s-gates.md` |
+| The content bar: resolution grammar, magnitude/regime/anchor slots | `resolution.md` |
 | Versioning, SOT sync, staleness audit | `grenza-doc-discipline` |

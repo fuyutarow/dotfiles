@@ -1,13 +1,4 @@
 {
-  "skipWorkflowUsageWarning": true,
-  "theme": "dark",
-  "switchModelsOnFlag": true,
-  "agentPushNotifEnabled": true,
-  "tui": "fullscreen",
-  "statusLine": {
-    "type": "command",
-    "command": "sh ~/.claude/statusline-command.sh"
-  },
   "hooks": {
     "Stop": [
       {
@@ -27,5 +18,15 @@
         ]
       }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "sh ~/.claude/statusline-command.sh"
+  },
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "switchModelsOnFlag": true,
+  "agentPushNotifEnabled": true,
+  "model": "claude-fable-5[1m]"
 }

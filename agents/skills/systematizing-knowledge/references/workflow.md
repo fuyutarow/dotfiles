@@ -237,6 +237,12 @@ lives only here:
 | editorial narrative (topic-sentence flow) | `/REORG` |
 | the PRISMA / systematization diagrams (quote node labels) | `/AA` |
 | ruthless, evidence-demanding review pass | `/linus` |
+| multi-agent execution: solo/fan-out/barrier map, agent contract, trust boundary | `orchestration.md` |
+
+The corpus stage itself is the pipeline's most parallel joint: multi-modal search fan-out with the
+loop-until-dry saturation rule (§3), then a dedup barrier, then per-paper screening — the full
+execution map, including what must stay solo, lives in `orchestration.md` (one home; not restated
+here).
 
 ## Anti-patterns (corpus-scoped) — name the failure AND the fix
 

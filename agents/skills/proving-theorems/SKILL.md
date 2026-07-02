@@ -5,8 +5,9 @@ description: >-
   trust anchor, AI drafts proofs and statements at scale, and the human owns FAITHFULNESS (does the
   formal statement mean the intended theorem). Use whenever the task involves formalizing a theorem,
   autoformalizing a natural-language statement, checking whether a formal statement is faithful,
-  choosing or driving an AI theorem prover, running a blueprint-driven formalization, or deciding
-  whether to formalize at all vs. stay informal. Trigger on: Lean / Lean 4 / Mathlib, Rocq (Coq),
+  choosing or driving an AI theorem prover, running a blueprint-driven formalization, orchestrating
+  parallel proof/gate agents against a locked-statement blueprint, or deciding whether to formalize
+  at all vs. stay informal. Trigger on: Lean / Lean 4 / Mathlib, Rocq (Coq),
   Isabelle/HOL, Metamath, theorem proving / 定理証明, formal proof / 形式証明, formal verification,
   autoformalization / 自動形式化, faithfulness, statement drift / vacuous statement, blueprint
   formalization, hammer / Sledgehammer / premise selection, AlphaProof, DeepSeek-Prover,
@@ -110,6 +111,16 @@ INTO a mature library neighborhood; if the needed definitions/typeclasses do not
 port them first**. Formalizing into a *definition vacuum* is precisely where faithfulness collapses —
 the wall is missing definitions and dependency chains, not theorem phrasing.
 
+### Execution model — the blueprint is the fan-out map
+
+When the harness offers workflows/subagents, parallelism follows the blueprint DAG: **proof drafting
+fans out per node** whose dependencies are stated (the kernel validates every return), and **gate
+layers fan out per statement across model families**. Decisions 1–2, blueprint authorship, statement
+blessing, and the lock decision stay **solo/human** — a statement blessed by the agent that wrote it
+is not gated. Trust boundary in one line: **kernel-checked returns are trusted regardless of author;
+every other agent return is prose** — gate, grep, or fetch-primary before it enters. No harness →
+same DAG, serial. Full stage map, agent contract, and scale calibration: `references/workflow.md` §6.
+
 ## The faithfulness gate
 
 **The binding constraint of AI-assisted proof is faithfulness (NL → formal statement), not proof
@@ -196,7 +207,7 @@ and compiler-feedback self-correction.
 | Need | Read |
 |---|---|
 | Proof assistants & AI-prover landscape; kernels, foundations, the flywheel architecture | `references/landscape.md` |
-| Concrete workflows: blueprint-driven & AI-assisted formalization, hammers, grounding | `references/workflow.md` |
+| Concrete workflows: blueprint-driven & AI-assisted formalization, hammers, grounding, orchestration (stage map, agent contract, trust boundary — §6) | `references/workflow.md` |
 | The faithfulness problem in depth: gate methods, metrics, their failure modes & circularity | `references/faithfulness.md` |
 | Reading benchmarks/leaderboards adversarially (pass@k, contamination, end-to-end vs blessed-statement) | `references/benchmarks-and-trust.md` |
 | Epistemics: formal vs informal proof, the coverage/certifiability split, open problems | `references/epistemics.md` |

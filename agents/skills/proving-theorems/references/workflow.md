@@ -20,7 +20,7 @@ to let machines absorb the proof body.
 3. The per-artifact loop: draft → hammer → kernel → human reviews statement+structure only
 4. Scaling with the flywheel: sample-keep-verified-retrain; when to add search/critic
 5. `sorry`/`admitted` as a typed TODO list: tracking open obligations to closure
-6. Collaboration: many humans + agents against one blueprint; review discipline
+6. Collaboration & orchestration: humans + agents against one blueprint
 7. Anti-patterns (quick reference)
 
 ---
@@ -221,7 +221,7 @@ whether you actually have that.
 
 ---
 
-## 6. Collaboration: many humans + agents against one blueprint; review discipline
+## 6. Collaboration & orchestration: humans + agents against one blueprint
 
 The blueprint is what makes a *crowd* — humans and agents mixed — converge instead of collide.
 
@@ -252,6 +252,91 @@ The blueprint is what makes a *crowd* — humans and agents mixed — converge i
   over leaderboard percentages, which compound faithfulness error end-to-end and overstate
   real ability.
 
+**The blocks below are the execution model on a multi-agent harness — durable operating
+guidance from a frontier model (2026-07) to whatever model orchestrates this skill later**
+(the model name lives outside this file, per the durability footer).
+When the harness offers workflows/subagents, run the loop on this map; without one, see the
+degradation rule at the end.
+
+### The stage map (solo / fan-out / barrier)
+
+The blueprint DAG is the fan-out map: parallelism follows the graph, not enthusiasm. Modes:
+**SOLO** = the orchestrator's own context; **HUMAN** = never delegated at all; **FAN-OUT** =
+one agent per item; **PIPELINE** = each item flows on as soon as it is ready; **BARRIER** =
+wait for all before proceeding.
+
+| Stage | Mode | Why |
+|---|---|---|
+| Decision 1 (formalize?) / Decision 2 (toolchain) | **SOLO** | judgment over stakes and ecosystem gravity; everything downstream depends on it |
+| Grounding retrieval (§1) | **FAN-OUT per symbol**; the **binding decision is confirmed solo** | agents search and return candidate bindings with loci, but lookalikes typecheck and lie — a delegated binding poisons every statement built on it |
+| Blueprint authoring (§2) | **HUMAN** — agents may *propose* decompositions, never own the argument | the blueprint is the faithfulness anchor; a machine-authored anchor anchors nothing |
+| Faithfulness gate layers (§3) | **PIPELINE per statement**; the semantic round-trip is judged by a **different model family** than the statement's writer | same-family judges inherit the writer's biases and are gameable by them |
+| Statement blessing + expert spot-check | **HUMAN — never the writing model** | the gate's backstop; delegating it re-opens the hole the gate exists to close |
+| Statement **LOCK** | **BARRIER before proof fan-out** | proofs compose at the statement boundary; fanning out against unlocked statements invites the churn that strands workers |
+| Proof drafting | **FAN-OUT per blueprint node whose dependencies are stated** | the epistemically safest fan-out anywhere: the kernel validates every return, and the proof body is a commodity |
+| Hammer / compiler-feedback repair | **PIPELINE inside the node loop** | error → re-draft is node-local; no cross-node context needed |
+| `sorry`/`axiom`/`native_decide` closure audit (§5) | **BARRIER — grep/CI only, never agent prose** | "no `sorry`s left" is a mechanical fact; an agent asserting it is prose about a grep it may not have run |
+| Statement + structural-shape review | **SOLO** | accidental strengthening and degenerate paths are whole-argument judgments |
+| Benchmark / capability claims | agents **FETCH primary sources**; the quarantine verdict is **SOLO** | fetching is mechanical; the adversarial reading (`benchmarks-and-trust.md`) is a judgment |
+
+### The agent contract
+
+An underspecified agent returns plausible prose; a contracted agent returns checkable work.
+Every spawned prover/gate agent carries five elements:
+
+1. **Exact inputs** — blueprint node id, the **locked statement text (or its hash)**, and the
+   file paths to read or edit. "Prove the lemma" is not an input; "close node `X` in
+   `Foo/Bar.lean` against statement hash `h`" is.
+2. **The bar** — the reference section that defines quality for the task (grounding → §1; the
+   gate → `faithfulness.md`; closure → §5), **read by the agent, not paraphrased into the
+   prompt** (paraphrase drifts).
+3. **The output schema** — per node:
+   `{node_id, statement_hash, kernel_status, sorry_count, axiom_footprint, error_or_tactics}`.
+   The domain twist: `kernel_status` is **re-validated by compiling** and `sorry_count` **by
+   grep at the tool layer** — never taken from the agent's word. The schema structures the
+   return; it is not believed.
+4. **Read-only declaration** for gate/audit agents — a gate agent that edits the statement
+   under gate destroys the evidence chain.
+5. **"Your final message is the return value"** — data, not a human-facing report.
+
+### Agent epistemics — the deltas this domain adds
+
+The generic rule (agents agreeing is not evidence — see the systematizing-knowledge
+orchestration reference) holds; proving adds four sharpenings:
+
+- **k agents agreeing a statement is faithful = k correlated same-family judges** — a
+  collusion risk, not a gate. Diversify the gate **layer** (negation filter, round-trip,
+  bidirectional provability) and the **model family**, never the count.
+- **"It proves!" from an agent is not faithfulness evidence** — provability is exactly what
+  vacuous and contradictory-hypothesis statements exhibit. The negation filter fires before
+  any proves-report is believed.
+- **Never let the writing agent run its own gate.** Writer and judge in one model/context is
+  the most reliable way to launder drift.
+- **An agent's "node closed" claim is quarantined** until zero-`sorry` and gated-statement are
+  verified mechanically (compile + grep + the gate ledger).
+
+**The trust boundary — a deliberate divergence from generic orchestration.** The generic rule
+treats every agent return like an abstract: suspect until located. Here the kernel splits agent
+output in two: **kernel-checked returns are trusted unconditionally, regardless of author** — a
+compiling, `sorry`-free proof body needs no reading, whoever or whatever produced it. **Only
+prose claims — faithfulness, done-ness, dated capability facts — get the abstract treatment**
+(gate, grep, or fetch-primary before they enter). This is the core asymmetry executing at fleet
+scale: machine-checkable claims ride the kernel; everything else is a claim about *meaning*,
+and meaning is never delegated.
+
+### Scale calibration + graceful degradation
+
+| Scale | Execution |
+|---|---|
+| A handful of lemmas | **solo per-artifact loop (§3) + hammer** — no orchestration; overhead exceeds the work |
+| More than a handful, or ANY collaborative effort | **blueprint + locked-statement fan-out** (the stage map above) |
+| Prover-building / large-corpus grinding | **the flywheel (§4)** — the fan-out becomes the sampling loop |
+
+No harness? The map degrades gracefully: the blueprint DAG becomes the **serial TODO order**
+(topological, dependencies first), and the gate layers become **sequential passes — with
+different models where available** — instead of parallel ones. The trust boundary does not
+change.
+
 ---
 
 ## 7. Anti-patterns (quick reference)
@@ -273,7 +358,20 @@ The blueprint is what makes a *crowd* — humans and agents mixed — converge i
 - **Default-on tree search.** Adding search/critic machinery before whole-proof + best-first
   generation has actually stalled on depth — cost without need.
 - **Statement churn after others have built on it.** Breaks composition at the contract
-  boundary; lock and review statements before parallelizing proofs against them.
+  boundary; lock and review statements before parallelizing proofs against them. At fan-out
+  scale the cost multiplies: re-opening a locked statement strands every agent building on it —
+  their proofs certify a goal that no longer exists.
+- **Green-checkmark relay.** Relaying an agent's kernel-pass as "theorem proved" while the
+  statement is ungated — green-check-as-truth at fleet speed; the relay launders the gap
+  between stated and intended (§6).
+- **Self-blessing statement agent.** The statement's writer and its faithfulness gate in one
+  model/context — single-judge faithfulness with the judge on the writer's payroll (§6).
+- **Vote-counted faithfulness.** Accepting a statement because k judge-agents concur —
+  correlated same-family agreement is one observation, not k; diversify gate layer and model
+  family instead (§6).
+
+Harness mechanics — workflow/agent tools, hooks, permissions — are owned by the
+`operating-the-harness` skill; not restated here.
 
 ---
 

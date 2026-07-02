@@ -15,8 +15,9 @@ description: >-
   you ALREADY hold (Map/Loop/Leap, no invention); THIS fires only when you must GENERATE the novel thesis —
   nothing to invent, or a bare 反証 / kill / pivot / MVP ask on an idea in hand → acting-on-hypotheses (whose
   Loop/Leap this skill's Phase 3 reuses). Deck / talk DELIVERY → designing-presentations; distributing an
-  EXISTING tool → growing-oss-adoption; inspecting a PRESENT fact → raising-resolution. English skill; respond
-  in the user's language (default Japanese).
+  EXISTING tool → growing-oss-adoption; inspecting a PRESENT fact → raising-resolution. Workflow-native: on a
+  multi-agent harness, forge solo — agents verify facts and refute gates only; agent consensus is an
+  ANTI-signal. English skill; respond in the user's language (default Japanese).
 references:
   - generation-engine
   - control-loop
@@ -192,6 +193,14 @@ Phase 3 は 1 回の判定でなく反復ループ：(1) 3a で殺しにかか�
 Phase 1 へ → (3) 3c、合わねば beachhead を差し替え Phase 2 へ → (4) 3d で撤退基準を固定 → (5) 実装で現実接触 →
 新観測 → (1)。**発生は易しい。生き延びさせる制御ループが難しく、そこが実利の中心。**
 
+## Execution model — forge solo, delegate only facts and refutation → `references/boundaries.md` 実行モデル節
+
+生成・ゲート判定・資本適合・撤退コミットは**常に solo** — forger は bettor の代理人、agents は fact-checker と
+assassin であって共著者ではない。fan out するのは**現在事実の検証・graveyard sweep・deep-tech の hard instance・
+Phase 4 の read-only per-gate skeptics** のみ（solo/fan-out/barrier の地図・agent 証拠規律・skeptic lens set は
+`references/boundaries.md` の実行モデル節）。**Agent 合意は、合意非依存を要求する thesis にとって ANTI-signal** —
+agent が返す現在事実は locus か「未検証」か。No harness → 同じ地図を直列の self-audit で回す。
+
 ## 失敗時の復旧・境界 → `references/boundaries.md`
 
 in-skill anti-patterns (箱B 未達・表層転移・反証不能・後付け検証・タイミング欠落・金尽き撤退・10 個羅列・気質を
@@ -210,7 +219,7 @@ in-skill anti-patterns (箱B 未達・表層転移・反証不能・後付け検
 |---|---|---|
 | `references/generation-engine.md` | 分解 3 drill (テアダウン・公理列挙 箱A/箱B・フェルミ)・構造写像・表層類似棄却・再結合・2〜3 往復 | Phase 1–2 を実際に回す / 箱B が出せない |
 | `references/control-loop.md` | 3a–3d checklist・deep-tech の型・early/on-time/late・time-to-truth vs runway・kill-criteria・反復 | Phase 3 を実際に回す |
-| `references/boundaries.md` | routing 表・DECISIVE CUT 詳細・co-fire・in-skill anti-patterns・除外運用層 | 発火可否を迷う / 別スキルへ回す / 自分の出力を監査 |
+| `references/boundaries.md` | routing 表・DECISIVE CUT 詳細・co-fire・in-skill anti-patterns・除外運用層・multi-agent 実行の solo/fan-out 境界 | 発火可否を迷う / 別スキルへ回す / 自分の出力を監査 |
 | `references/lineage.md` | 着想系書籍の 2 欠陥の詳論・名指しソースの役割・6 機能への収束・**隣接理論との差分 (Lean/TRIZ/Effectuation/Design Fiction/Gentner/DDP)** | 「なぜこの構造か / なぜ既存理論で代替不能か」を説明するとき (実行には不要) |
 | `references/source-map.md` | 原典『天才思考』10 章題 → 6 機能 → 本スキルの Phase/ゲート/除外 への写像 (章題は一次資料で検証済) | 原典のどの思考法がどこへ変換されたかを示すとき |
 | `references/case-ledger.md` | 成功 4 + 失敗 6 例。各失敗を「最初に落ちるゲート」に 1 対 1 で紐付け、ゲート集合が MECE な判別器であることを実証 | thesis を実例と突き合わせる / 判別器として使う |

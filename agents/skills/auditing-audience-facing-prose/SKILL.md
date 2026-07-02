@@ -10,7 +10,8 @@ description: >-
   packaging. Triggers: wording audit, prose audit, style rewrite, claim calibration, tooling-first
   titles, "核", "本体", "中核エンジン", "一つに返す", "乗る", "閉じる", "主因", "ここが肝心", "PASS", and metaphor
   jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document structure, literature synthesis, or
-  domain-content generation.
+  domain-content generation. Workflow-native: runs the gate script first and fans out read-only
+  flaggers only at corpus scale.
 ---
 
 # Auditing audience-facing prose
@@ -192,6 +193,12 @@ audience-facing text is greppable, convert each denylist into a machine check (s
 - **Close recurring feedback with three artifacts when appropriate:** (1) fix the instance, (2) the
   gate, (3) the skill rule. For one-off cases, a local rewrite may be enough.
 
+Scripts own the greppable tier — never spawn an agent to run this regex. Agents enter only at
+corpus scale (a multi-file package, or this skill running as the prose lens in another skill's
+audit fleet), and an agent return claiming `PASS` / `監査完了` / `GREEN` is bounced under Denylist 8.
+The stage map and the flagger contract live in `references/patterns.md` ("Running the audit on a
+harness").
+
 ## Rewrite patterns
 
 - Packaging → proposition · Bad `既存ツールは一つに返さない` · Better `既存ツールは測定設計・本数設計・誤差限界評価を別々に扱う`
@@ -208,5 +215,6 @@ audience-facing text is greppable, convert each denylist into a machine check (s
 
 Open `references/patterns.md` for: the full pattern families and rewrite ledger, the metaphor and
 coined-translation tables, the claim-calibration ledger, deck-level (SCQA / divider / header)
-rules, the portable denylist-as-regex appendix, and terminology normalization across a deck, memo,
-proposal, or script.
+rules, the portable denylist-as-regex appendix, terminology normalization across a deck, memo,
+proposal, or script, and the harness execution map (script-first stage table, flagger contract)
+for running the audit with subagents at corpus scale.

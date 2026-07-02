@@ -13,13 +13,15 @@ description: >-
   positioning / タグライン, single static binary, package manager (Homebrew/cargo/npm/pip),
   framework default / embedding, marketplace (VS Code/Chrome), community / contributor / governance,
   license (MIT/Apache/AGPL/BSL/SSPL) / relicensing, COSS / open-core / monetization, maintainer
-  burnout / bus factor, adoption / diffusion / crossing the chasm, 矜持 / 指導書 for OSS. This
-  skill is English; respond to the user in their language.
+  burnout / bus factor, adoption / diffusion / crossing the chasm, 矜持 / 指導書 for OSS.
+  Workflow-native: on a multi-agent harness, channel inspection and hostile verification fan out
+  to subagents while regime, fork, and diagnosis verdicts stay solo. This skill is English;
+  respond to the user in their language.
 ---
 
 # Growing OSS adoption — why developer tools spread, and how to build one that does
 
-> **Version**: v2606.1.0 (2026-06-23)
+> **Version**: v2607.1.0 (2026-07-02)
 > **What this is**: a field guide and creed (矜持) for the author of a developer-facing OSS project,
 > distilled from a 90-agent, adversarially-verified survey of why tools like ripgrep, Vite, uv,
 > SolidJS, fzf, Tailwind, and Rust spread — and why equally-good tools died. Every principle here
@@ -145,6 +147,11 @@ Every spread story is sampled on the *winners* and on *one era*. Discount accord
 - **Hold this survey's own numbers to its own standard.** The headline aggregator-launch statistics it leans on
   circulate without a firm published source — illustrative estimates, not measurements.
 
+When the harness offers subagents, hold them to the same standard: the decision forks and the diagnosis
+verdict stay **solo**; channel evidence and hostile verification **fan out**. The solo/fan-out map and the
+admissibility rule for agent evidence live in `references/epistemics.md` §5. N agents agreeing a tactic will
+work is a synthetic launch story, not evidence.
+
 The reflexive frame plus the 14 open research questions (LLM-era diffusion, MCP-as-new-regime, non-English-community
 inversion, the true size of the invisible graveyard): → `references/epistemics.md`.
 
@@ -157,4 +164,4 @@ inversion, the true size of the invisible graveyard): → `references/epistemics
 | `references/playbook.md` | The full six-phase checklist with regime branches | Actually building/launching — working the steps |
 | `references/decisions.md` | All 14 decision rules + all 20 anti-patterns | At a fork (drop-in vs category, speed-or-not, license, governance) or auditing for failure modes |
 | `references/case-studies.md` | 14 exemplars (ripgrep, eza, fnm, fzf, Vite, SolidJS, esbuild/SWC/Bun, Rust, Tailwind, Prettier, uv/Ruff, Starship, lazygit) as "what to steal" lists | Wanting concrete, copyable moves from a project like yours |
-| `references/epistemics.md` | Survivorship bias, the platform-era conditioning, the LLM-era shift, and the 14 open questions | Reasoning about durability, the future of discovery, or a research agenda on diffusion |
+| `references/epistemics.md` | Survivorship bias, the platform-era conditioning, the LLM-era shift, and the 14 open questions | Reasoning about durability, the future of discovery, or a research agenda on diffusion — or before delegating any diagnosis/verification to subagents |

@@ -1,6 +1,15 @@
 ---
 name: designing-presentations
-description: Designs high-stakes presentations as engineered cognition change, not information transfer — for researchers, founders, and engineers giving talks, pitches, defenses, exec readouts, and demos. Use when planning or critiquing a talk/deck/pitch, choosing an order (pyramid, SCQA/SCR, BLUF, strategic narrative), writing a governing sentence, designing assertion-evidence slides, building a Q&A/objection plan, or sanity-checking a "science of presentations" claim. Triggers — slide deck, pitch deck, keynote, conference talk, thesis defense, exec/board readout, demo, "make my slides better", "how should I open/close", "is this presentation myth true", storytelling stats, 7-38-55, attention span, 10/20/30.
+description: >-
+  Designs high-stakes presentations as engineered cognition change, not information transfer — for
+  researchers, founders, and engineers giving talks, pitches, defenses, exec readouts, and demos. Use
+  when planning or critiquing a talk/deck/pitch, choosing an order (pyramid, SCQA/SCR, BLUF, strategic
+  narrative), writing a governing sentence, designing assertion-evidence slides, building a
+  Q&A/objection plan, or sanity-checking a "science of presentations" claim. Triggers — slide deck,
+  pitch deck, keynote, conference talk, thesis defense, exec/board readout, demo, "make my slides
+  better", "how should I open/close", "is this presentation myth true", storytelling stats, 7-38-55,
+  attention span, 10/20/30. Workflow-native: design stays solo; slide/myth audits and objection
+  red-teams fan out read-only.
 ---
 
 # Designing presentations
@@ -10,6 +19,7 @@ description: Designs high-stakes presentations as engineered cognition change, n
 - [The one idea](#the-one-idea)
 - [The procedure (STEPs 0–9)](#the-procedure-steps-09)
 - [The non-negotiables (apply at every STEP)](#the-non-negotiables-apply-at-every-step)
+- [Execution model — design solo, audit fan-out](#execution-model--design-solo-audit-fan-out)
 - [Pointers (depth lives in references/)](#pointers-depth-lives-in-references)
 
 ## The one idea
@@ -129,6 +139,30 @@ against the clock, budget by leverage. (`references/delivery-objections-and-evid
   `references/delivery-objections-and-evidence.md`; cite the accurate version or drop the number. Tool
   names and contested empirical specifics live in references with citations — never as undated
   assertions here.
+
+## Execution model — design solo, audit fan-out
+
+Operating guidance from a frontier model (Fable 5, 2026-07) to whatever model runs this skill: a talk
+is **ONE argument for ONE real room** — STEPs 0–5, 7, 9 and the slide DRAFT are one-context by
+construction; a harness buys the *read-only audit layer* and objection red-teaming, never the design.
+
+| Mode | What | Bar |
+|---|---|---|
+| **SOLO — never shard** | medium gate · goal · gap · governing sentence · ordering (vertical logic is a whole-tree test) · slide drafting (the titles-only test is a whole-deck property) · binding-constraint diagnosis | this file |
+| **FAN-OUT, read-only — only after the front-half pre-flight passes** | per-slide checklist audit; deck-wide myth/attribution grep with primary-source fetches; lens-diverse persona red-team that *proposes* doubts-inventory candidates, confirmed against the user's room model | slide-layer pre-flight + anti-pattern table (`references/slides-visuals-cognitive-load.md`); myths-vs-evidence ledger (`references/delivery-objections-and-evidence.md`), refutation-prompted |
+| **PIPELINE** | one backup slide per routed objection | `references/delivery-objections-and-evidence.md` |
+| **NOT delegable** | the audience's initial state — elicit the five axes from the user; agents cannot know this room — and rehearsal / the real room | — |
+
+Anti-patterns: **simulated-audience laundering** — persona-agent reactions ("N agents found it
+convincing") treated as facts about the room; they are candidates only. **Sharded spine** —
+governing sentence / staircase / titles merged from per-section agents; the two global tests exist
+to catch exactly the shard-boundary defect. **Folklore-confirming verifier** — an agent asked to
+SUPPORT a choice returns training-data folklore; verifiers are refutation-prompted against the ledger.
+
+Scale: single talk → fully solo, run the checklists yourself; large deck / defense backup arsenal →
+solo design + read-only audit fan-out + per-objection pipeline; multi-deck portfolio → audit fan-out
+per deck, design still solo per deck. No harness → same order, the audits become separate focused
+passes. Harness mechanics → operating-the-harness; wording-level prose audits → auditing-audience-facing-prose.
 
 ## Pointers (depth lives in references/)
 

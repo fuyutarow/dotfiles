@@ -1,8 +1,9 @@
 # The epistemic frame — how to read all of the above
 
 Parent: SKILL.md §6. The two `robust` principles (the only ones that survived without a regime caveat), the
-forces re-parameterizing the whole frame, and a 14-item research agenda. This is the reflexive layer: *the survey
-demands hostile re-running of every tool author's claims, so it must hold its own claims to the same standard.*
+forces re-parameterizing the whole frame, a 14-item research agenda, and the multi-agent execution map (§5).
+This is the reflexive layer: *the survey demands hostile re-running of every tool author's claims, so it must
+hold its own claims to the same standard.*
 
 ---
 
@@ -121,3 +122,58 @@ Genuine unknowns this survey could not resolve. For a researcher, these are the 
     without the lab decision?
 14. **For the protocol regime, what is the minimum viable implementer count + sponsor reach** that tips a spec from
     "library with extra steps" to self-sustaining N×M complementarity, and can an unsponsored author ever ignite it?
+
+---
+
+## 5. Running this skill on a multi-agent harness — hold agents to the survey's own standard
+
+Scope: developer-facing OSS diagnosis, verification, and launch-readiness work executed with
+subagents — WHO runs each step of this skill, nothing more. Harness mechanics (spawn tools,
+permissions, hooks) belong to the `operating-the-harness` skill. Agents are **channel inspectors
+and hostile readers, never diffusion oracles**. The evidence boundary: **Tier-1** — present,
+observable channel state (a registry page, a ranking, a command's output today) — is admissible
+from an agent **with provenance** (URL or command output); **Tier-2** — future or counterfactual
+adoption ("this will spread", "X would have won") — is inadmissible from agents *by construction*:
+no fetchable source can exist for it. Operating guidance from a frontier model (Fable 5, 2026-07):
+if a constraint here feels unnecessary, that feeling is the failure mode.
+
+**The map — what fans out, what stays solo:**
+
+| Step | Mode | Why / how |
+|---|---|---|
+| Regime classification (SKILL.md §1) | **SOLO** | the precedence rule; seconds, and every downstream tactic depends on it |
+| Decision forks (SKILL.md §3) | **SOLO** | the modal invocation of this skill — zero agents |
+| Diagnosis: channel sweep | **FAN-OUT, one agent per channel** | package managers (brew/cargo/npm/AUR) · marketplace listing + ratings · tutorial/SO/awesome-list coverage · transitive-dep + flagship-repo configs · LLM-prior probe (ask a clean model what it recommends for the task) · repo health |
+| Hostile verification | **FAN-OUT, refutation-framed, read-only** | re-run the published benchmark harness · clean-room <5-min trial · README vs `playbook.md` Phase 3 — "did not reproduce" is the default verdict the agent must overturn with evidence |
+| Plan/README audit | **FAN-OUT, one SURVEY LENS per agent** | survivorship · regime-mismatch · era-boundedness — the lenses that forged this skill, reused at runtime |
+| Two-gate verdict (§0 DISCOVERY vs ADOPTION) | **BARRIER on the sweep, then SOLO** | which gate failed is a judgment over the whole channel picture, not any shard of it |
+| Prescription / positioning / drafting | **SOLO** | one voice; the slot-claim sentence is one judgment |
+| Adoption outcome / wedge commitment | **NOT DELEGABLE** | a forward bet reality has not priced — hand it to the acting-on-hypotheses skill |
+
+The channel sweep IS this skill's inspection duty, internalized — every "is it discoverable /
+adopted" claim rests on a channel actually inspected, whoever executes the sweep.
+
+**The agent contract** — five elements per spawn, mirroring the systematizing-knowledge
+orchestration reference: (1) exact inputs — repo URL, registry names, file paths, never "look into
+the project"; (2) the bar — the named reference file of THIS skill the agent reads itself
+(`regimes.md` for regime checks, `playbook.md` Phase 3 for README audits), never a paraphrase;
+(3) structured return: `{channel, fact, number, source_url_or_command_output, verdict}`;
+(4) read-only declaration for every audit/verify agent — read-only with respect to the project/repo
+under audit; scratch-workspace execution (benchmark re-run, clean-room trial install) is in-bounds;
+(5) the final message is data, not a report.
+
+| Anti-pattern (orchestration-scoped) | Fix |
+|---|---|
+| **SYNTHETIC SURVIVORSHIP** — fanning out "will this spread?" opinion agents and vote-counting | N concurring agents = ONE correlated launch story (§1 applied to agents); agents report present-state facts and refutations only — the diffusion judgment is solo |
+| **UNPROVENANCED CHANNEL STATS** — agent-asserted stars/downloads/spike medians entering advice unsourced | anti-pattern 7 (`decisions.md`) at machine speed: fetchable source or quarantine |
+| **DELIBERATED ADOPTION** — reading an agent consensus pass as validation of the wedge/launch bet | reality has not voted; route the commitment to the acting-on-hypotheses skill — agents may CHEAPEN the test (run the trial), never replace the signal |
+| **CORPUS CREEP** — a diagnosis mutating into a re-survey of the adoption literature | that is the systematizing-knowledge pipeline, not a fan-out of this one |
+
+| Task shape | Fleet |
+|---|---|
+| Single question / one decision fork | solo, zero agents — the modal case |
+| Full adoption diagnosis or launch-readiness audit of ONE project | 3–8 channel/lens agents + a solo verdict |
+| Corpus-scale adoption-research question (§4 agenda) | the systematizing-knowledge map, not this one |
+
+No harness? The channel sweep degrades to a serial inspection checklist walked personally; the three
+lenses become sequential self-review passes; provenance-or-quarantine is unchanged.

@@ -1,7 +1,7 @@
 ---
 name: raising-resolution
 description: >-
-  Raise the RESOLUTION (解像度) of THIS code/data/API/source/problem BEFORE you assert or act — INSPECT, don't guess — from 馬田隆明『解像度を上げる』. CITATION GATE: before a factual claim, ask — can you cite a line Read, a command run, or a source fetched for THIS claim? NO → stop and inspect; YES → assert and act. LOWEST precedence; yields to any owner: multi-paper/corpus synthesis → systematizing-knowledge/sok; OSS adoption → growing-oss-adoption; .claude/CLAUDE.md/hooks/SKILL.md authoring/auditing → operating-the-harness; Julia/Lean → writing-julia/proving-theorems; a future-bet (MVP/prototype/spike/賭け/kill-condition/will-it-scale) → acting-on-hypotheses. Owner applies → does NOT fire (silent sub-step); else FIRES only when about to SPECULATE INSTEAD OF inspect a fact about THIS artifact that nothing grounds yet, BLOCKING a next action, inspecting non-trivial — not a "read before asserting" baseline. DECISIVE CUT vs acting-on-hypotheses: a smart person could know it from what ALREADY EXISTS → here; needs a forward TEST reality hasn't decided → there. CARDINALITY CUT vs systematizing-knowledge: single artifact → here; a CORPUS of papers/sources → there. Trigger: probably/likely/usually/typically/I think/should be/in my experience/たぶん/おそらく/一般的に/はず; 推測するな/ちゃんと調べて/inspect/guessing/speculating/一次情報/primary information/解像度/resolution/解像度を上げる; 深さ・広さ・構造・時間, 症状 vs 病因, なぜなぜ/Why so, 課題 vs 解決策. English skill; reply in user's language, Japanese default.
+  Raise the RESOLUTION (解像度) of THIS code/data/API/source/problem BEFORE you assert or act — INSPECT, don't guess — from 馬田隆明『解像度を上げる』. CITATION GATE: before a factual claim, ask — can you cite a line Read, a command run, or a source fetched for THIS claim? NO → stop and inspect; YES → assert and act. LOWEST precedence; yields to any owner: multi-paper/corpus synthesis → systematizing-knowledge/sok; OSS adoption → growing-oss-adoption; .claude/CLAUDE.md/hooks/SKILL.md authoring/auditing → operating-the-harness; Julia/Lean → writing-julia/proving-theorems; a future-bet (MVP/prototype/spike/賭け/kill-condition/will-it-scale) → acting-on-hypotheses. Owner applies → does NOT fire (silent sub-step); else FIRES only when about to SPECULATE INSTEAD OF inspect a fact about THIS artifact that nothing grounds yet, BLOCKING a next action, inspecting non-trivial — not a "read before asserting" baseline. DECISIVE CUT vs acting-on-hypotheses: a smart person could know it from what ALREADY EXISTS → here; needs a forward TEST reality hasn't decided → there. CARDINALITY CUT vs systematizing-knowledge: single artifact → here; a CORPUS of papers/sources → there. Trigger: probably/likely/usually/typically/I think/should be/in my experience/たぶん/おそらく/一般的に/はず; 推測するな/ちゃんと調べて/inspect/guessing/speculating/一次情報/primary information/解像度/resolution/解像度を上げる; 深さ・広さ・構造・時間, 症状 vs 病因, なぜなぜ/Why so, 課題 vs 解決策. Agent relay is NOT a citation — harness note in §C.8. English skill; reply in user's language, Japanese default.
 ---
 
 # Raising resolution — inspect THIS thing before you assert, don't guess harder
@@ -40,8 +40,10 @@ description: >-
   `grep/glob → read the file/source → run / probe / log / measure → reproduce n=1 → web-fetch → ASK`.
   Allowed evidence is ONLY one of these.
 - **NEGATIVE-EVIDENCE LIST** (never counts as a rung): *"in my experience" / "usually" / "this kind of
-  library typically" / "probably" / "should be"* / たぶん・おそらく・はず・一般的に. A claim resting on any
-  of these is un-grounded — the gate fires.
+  library typically" / "probably" / "should be"* / たぶん・おそらく・はず・一般的に; a (sub)agent's conclusion
+  WITHOUT its verbatim observable (output + locus) — a relayed "probably"; N agents agreeing is still
+  ZERO citations (`references/reference.md §C.8`). A claim resting on any of these is un-grounded —
+  the gate fires.
 - **STOP CONDITION** — operationalizes 『十分』(SUFFICIENT, not maximal): fire at **ZERO** citations on a
   blocking claim, **STOP at ONE**. Per-claim and countable, never a global "am I sufficient overall?"
   judgment. A multi-element structural/temporal claim is **N blocking claims** (one per grouped element),
@@ -98,6 +100,9 @@ one-line imperative POINTING to its owner; never re-explained here:
 - **PER-NODE 広さ INTERLOCK** — at EVERY Why-so node, before descending: "what sibling causes am I skipping, and why this branch?" (`references/reference.md §A.6`; EXECUTION in `references/reference.md §D`).
 - **ROOT-STATE rule** — at the empty tree, 広さ runs FIRST: enumerate ≥2 candidate causes from one cheap observation BEFORE committing a drill direction (`references/reference.md §D`).
 - **STOP & ACT** — once the blocking claim has its one citation, stop raising and act. Acting yields new primary info → re-enter at the gate.
+- **HARNESS NOTE** — independent 広さ candidate checks and N-for-N element citations may run as parallel
+  rung-executions; evidence crosses an agent boundary only as verbatim output + locus; the Why-so descent,
+  the 構造 grouping, and the stop-at-one call never shard (rationale + map: `references/reference.md §C.8`).
 
 ## §3. Worked before/after exemplar
 
@@ -161,4 +166,4 @@ then COMMITTED) and INTERLEAVE at the seam but never overlap. Pattern: **Diagnos
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/reference.md` | **§A** the four lenses (Unit / boundary / citable HIGH cell + the SOLE home of all owner rules: bottleneck, causality tripartite, MECE分解, プロセス/流れ, 関係性, システム思考; per-node 広さ interlock; lenses-are-revisable-hypotheses) · **§B** 課題 vs 解決策 (order, depth-asymmetry / 解決策×深さ thin by design, 良い課題の3条件, バーニングニーズ gate, research mapping) · **§C** limits/epistemics (stop-at-十分 rationale, six failure modes, over/under-firing calibration, 既視感 honesty, source-grade table, the acting-on-hypotheses boundary + SEQUENCING handoff) · **§D** the ACQUISITION MECHANISM (action-ladder rationale, 内化⇄外化 kata-by-function table, Why-so / 症状-vs-病因 protocol with per-node 広さ EXECUTION, root-state rule, n=1, 語彙, the worked 起業家 ladder; SOLE owner of "the loop must close on an action") | you need to justify a guardrail, confirm book fidelity, deepen a lens beyond the §1 table, or actually go acquire primary information |
+| `references/reference.md` | **§A** the four lenses (Unit / boundary / citable HIGH cell + the SOLE home of all owner rules: bottleneck, causality tripartite, MECE分解, プロセス/流れ, 関係性, システム思考; per-node 広さ interlock; lenses-are-revisable-hypotheses) · **§B** 課題 vs 解決策 (order, depth-asymmetry / 解決策×深さ thin by design, 良い課題の3条件, バーニングニーズ gate, research mapping) · **§C** limits/epistemics (stop-at-十分 rationale, six failure modes, over/under-firing calibration, 既視感 honesty, source-grade table, the acting-on-hypotheses boundary + SEQUENCING handoff, the §C.8 agent-boundary harness note) · **§D** the ACQUISITION MECHANISM (action-ladder rationale, 内化⇄外化 kata-by-function table, Why-so / 症状-vs-病因 protocol with per-node 広さ EXECUTION, root-state rule, n=1, 語彙, the worked 起業家 ladder; SOLE owner of "the loop must close on an action") | you need to justify a guardrail, confirm book fidelity, deepen a lens beyond the §1 table, or actually go acquire primary information |

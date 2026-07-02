@@ -45,7 +45,7 @@ Everything mechanical — searching, extracting, gate-walking, verifying, auditi
 | 8 bound / flip conditions | **PIPELINE per claim** | regime statement is claim-local |
 | 9 gap analysis | **SOLO** | importance × tractability is a judgment over the whole map |
 | 10 write: draft | **SOLO** | one voice, one argument |
-| 10 write: audit | **FAN-OUT** | adversarial verification per load-bearing claim; resolution audit per section (`resolution.md` §3–4); prose audit — all read-only (§4). Findings loop back to step 3 |
+| 10 write: audit | **FAN-OUT** | adversarial verification per load-bearing claim; resolution audit per section (`resolution.md` §3–4); prose audit (the `auditing-audience-facing-prose` lens) — all read-only (§4). Findings loop back to step 3 |
 
 The default between stages is **pipeline** (item flows on as soon as ITS previous stage is done);
 a **barrier** (wait for ALL) is justified only where the table says so — dedup, the relate matrix,

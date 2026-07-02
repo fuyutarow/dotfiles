@@ -1,7 +1,7 @@
 ---
 name: acting-on-hypotheses
 description: >-
-  Operational discipline for open-ended, uncertain, or ambitious work when the answer CANNOT be known by understanding what already exists — you must ACT to learn or create it: de-risk an approach, decide what to build/try next under uncertainty, spike/prototype to decide, choose whether to commit to X, size a bet, set a kill condition. Distilled from 馬田隆明『仮説行動』 (マップ・ループ・リープ / Map-Loop-Leap): don't freeze / over-ask / collect-until-certain, and don't big-bang on unvalidated assumptions — frame explicit hypotheses (Map), run the single cheapest test that could PROVE YOU WRONG (Loop), commit boldly only on asymmetric, ideally-reversible upside (Leap). CUT vs raising-resolution: does NOT fire on understanding a present, knowable-but-blurry reality (unclear bug, vague spec, unfamiliar codebase, "what do users do today") → raising-resolution. CUT vs forging-novel-theses: does NOT INVENT the bet (first-principles decompose / structure-transfer / recombine + why-now) → forging-novel-theses; this skill only TESTS & COMMITS a bet already in hand. Trigger on: 仮説検証 (of a FORWARD bet, NOT verifying a present fact), 仮説行動, マップ・ループ・リープ, 学びの最大化, 確信度 / 影響度, 不確実 / uncertainty, 実験 / experiment, 大胆 / 賭け / bet, ピボット / pivot, 撤退条件 / kill condition, de-risk / validate the approach, spike / prototype to decide, MVP, build-measure-learn, "will this scale", "should we commit to X", "approach に賭けるべきか". English skill; respond in the user's language (default Japanese).
+  Operational discipline for open-ended, uncertain, or ambitious work when the answer CANNOT be known by understanding what already exists — you must ACT to learn or create it: de-risk an approach, decide what to build/try next under uncertainty, spike/prototype to decide, choose whether to commit to X, size a bet, set a kill condition. Distilled from 馬田隆明『仮説行動』 (マップ・ループ・リープ / Map-Loop-Leap): don't freeze / over-ask / collect-until-certain, and don't big-bang on unvalidated assumptions — frame explicit hypotheses (Map), run the single cheapest test that could PROVE YOU WRONG (Loop), commit boldly only on asymmetric, ideally-reversible upside (Leap). CUT vs raising-resolution: does NOT fire on understanding a present, knowable-but-blurry reality (unclear bug, vague spec, unfamiliar codebase, "what do users do today") → raising-resolution. CUT vs forging-novel-theses: does NOT INVENT the bet (first-principles decompose / structure-transfer / recombine + why-now) → forging-novel-theses; this skill only TESTS & COMMITS a bet already in hand. Trigger on: 仮説検証 (of a FORWARD bet, NOT verifying a present fact), 仮説行動, マップ・ループ・リープ, 学びの最大化, 確信度 / 影響度, 不確実 / uncertainty, 実験 / experiment, 大胆 / 賭け / bet, ピボット / pivot, 撤退条件 / kill condition, de-risk / validate the approach, spike / prototype to decide, MVP, build-measure-learn, "will this scale", "should we commit to X", "approach に賭けるべきか". Workflow-native: agents may run probes; 確信度 writes and Leap stay solo. English skill; respond in the user's language (default Japanese).
 references:
   - map
   - loop
@@ -123,7 +123,10 @@ retiring the fatal risks on the load-bearing node.
   self-reported enthusiasm. Build the minimum that yields the signal (sell-before-build / concierge /
   single spike). WRITE the confidence value onto the node; if a missing node surfaced, FLAG it and run a
   cheap in-place Map pass (Loop never edits structure). **STOP when fatal risks on the load-bearing node
-  are retired — NOT at 100% confidence** (it never comes). (Technique + 学びの最大化 → `references/loop.md`.)
+  are retired — NOT at 100% confidence** (it never comes). On a multi-agent harness, only the probe's
+  **Build→Measure** may run as a subagent under the probe contract (`references/loop.md` §8); the
+  discrimination table, the pass/fail adjudication, the confidence write, and the Leap never leave your
+  context — an agent's opinion is never a signal. (Technique + 学びの最大化 → `references/loop.md`.)
 
 - **RECURRING — STAGNATION CHECK** *(runs whenever Loop is active — it has a home, not orphaned).* Is
   the hypothesis written and shared? Is the node-under-test named? Are you tuning on results, or
@@ -154,7 +157,7 @@ retiring the fatal risks on the load-bearing node.
 | File | Covers | Read when |
 |---|---|---|
 | `references/map.md` | overarching 言い切り; sub-hypothesis node sets; 確信度×影響度 tagging; rough-first + TIME-BOX; the two prioritization scans; integration/統合; "can't name nodes → resolution gap"; hand-off to Loop | drawing/auditing the hypothesis map |
-| `references/loop.md` | B-M-L planned in reverse; the R3 discrimination table; metric pre-commitment + vanity avoidance; minimum-scope discard-intent probes; "Loop never edits structure"; the STOP condition; 学びの最大化; the 反証=disconfirming-signal honest limit | designing/running a test |
+| `references/loop.md` | B-M-L planned in reverse; the R3 discrimination table; metric pre-commitment + vanity avoidance; minimum-scope discard-intent probes; "Loop never edits structure"; the STOP condition; 学びの最大化; the 反証=disconfirming-signal honest limit; the §8 probe-delegation contract (multi-agent harness) | designing/running a test |
 | `references/leap.md` | evaluate→decide→realize; the written WIN/KILL/LOSS triple; door-type (one-way vs two-way) + keep-vs-discard intent; reversibility sizing; 大きく考え小さく踏み出せ; provenance bridge-tags | committing a bet |
 | `references/boundaries.md` | the inter-skill cut as a PURPOSE test; co-fire arbitration + ordering for braided tasks (worked example); self-contained inline-resolution fallback; repo-neighbor differentiation; lineage vs 仮説思考 / lean+OODA / effectuation / SoK | routing away / placing this skill |
 | `references/anti-patterns.md` | in-skill misuse diagnostics with observable TELL + recovery: freeze, big-bang, endless-Loop, endless-Map, vanity test, reckless irreversible Leap, small-bet disease, felt-Loop on an unrunnable node | auditing your own output |

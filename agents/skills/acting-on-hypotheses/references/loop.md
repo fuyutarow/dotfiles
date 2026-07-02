@@ -144,6 +144,58 @@ scientific rigor the author himself disclaims.
   check's DIALOGUE/CO-CREATION exit (see SKILL.md RECURRING — STAGNATION CHECK), and it has a home
   here, not a footnote.
 
+## §8 — Delegating the probe (execution model on a multi-agent harness)
+
+When the harness offers subagents/workflows, the ONLY delegable work in this skill is the probe's
+**B→M execution**: an agent builds the designed artifact and runs the designed measurement; design and
+adjudication never leave the orchestrator (the editor-in-chief stance of systematizing-knowledge). No
+harness? The default scale row below is already solo — nothing degrades. This §8 is entirely
+**skill-supplied** — 『仮説行動』 says nothing about subagents (frontier-model operating guidance,
+Fable 5, 2026-07: if a constraint here feels unnecessary, that feeling is the failure mode).
+
+**Delegation boundary (mini-map).**
+
+| step | mode | owner / why |
+|---|---|---|
+| GATE | **SOLO** | judgment everything downstream depends on (SKILL.md STEP 0) |
+| Map — nodes, tags, load-bearing node | **SOLO** | the map is the orchestrator's belief state (`map.md`) |
+| Loop DESIGN — R3 table + threshold | **never delegable** | the discrimination table and pre-committed threshold ARE the bet's terms (§2–§3) |
+| Loop B→M EXECUTION | **delegable per designed probe** | mechanical once designed; concurrent probes PIPELINE, no barrier — adjudicate each on arrival |
+| Confidence WRITE | **never delegable** | only the orchestrator moves a node's 確信度 (§5) |
+| Stagnation check | **SOLO** | judges the whole loop, not one probe (SKILL.md RECURRING) |
+| LEAP | **never delegable** | staking a kept output is the orchestrator's commitment (`leap.md`) |
+| STEP 4 output | **SOLO** | one voice, the user's language |
+
+**The probe contract** — five elements per spawned probe (mirrors the systematizing-knowledge agent contract):
+
+1. **Exact probe spec** — the artifact to build + the command to run, verbatim. "Test whether X works"
+   is not a spec; "build the stub at <path>, run <command>, report the output" is.
+2. **Refutation framing** — "make it fail" / "find the input that breaks it", never "check it works"
+   (a confirm-framed agent confirms at a rate that makes the probe worthless).
+3. **Raw signal back, never a verdict.** State the threshold for context, but the agent returns the RAW
+   signal — command output / the number / the failure locus + how to reproduce — and the ORCHESTRATOR
+   adjudicates pass/fail against the pre-committed threshold (§3). An agent's PASS is an opinion, not a signal.
+4. **Discard-intent declaration** — spike code must not be wired into kept paths (guards the Loop/Leap
+   intent cut, `leap.md` §1); the agent is barred from editing the map (verb seam, §5).
+5. **Structured return** — the final message is data (signal + locus + reproduce steps), not a report.
+
+**The reality-contact boundary — two probe classes.**
+
+- **Agent-runnable (admissible):** engineering signals — a green test, a reproduced number, a load run.
+  Admissible only WITH the raw output + locus; unlocatable output moves nothing.
+- **External-reality (NOT producible by an agent):** payment, a real user, real sustained attention —
+  §3's sacrifice-bearing signals. An agent role-playing the sacrificing party is a **counterfeit
+  signal** — a vanity metric by construction: nothing was sacrificed. Route the node to §7 (name the
+  missing signal; DIALOGUE/CO-CREATION or escalate access). N simulated users < 1 real one.
+
+**Scale calibration** — 学び is delta-per-COST, and orchestration is a cost:
+
+| situation | execution |
+|---|---|
+| default: one load-bearing node, probe runs in-context in minutes | **solo, no agents** — spawn overhead exceeds the probe; delegating violates 学び=delta-per-cost |
+| probe is mechanical AND long-running, or 2–3 INDEPENDENT fatal-risk nodes | one contracted agent per probe, concurrent; no barrier. Multiple nodes ONLY when `map.md` §5's two scans genuinely TIE them on fatal risk — each keeps its own R3 table + threshold |
+| >3 concurrent probes wanted | Map failed to name THE load-bearing node — return to `map.md` §5, do not fan out |
+
 ## Loop anti-patterns (run this on your own output)
 
 | tell | what's wrong | recovery |
@@ -155,3 +207,6 @@ scientific rigor the author himself disclaims.
 | Loop added/removed a node | crossed Map's verb seam | flag the node, hand a cheap Map pass (§5) |
 | Still testing a decision-sufficient node | over-learning / paralysis | STOP, force the Leap (§6) |
 | Re-running an unrunnable loop, hoping | felt-Loop, no real signal accessible | name the missing signal + rule out a cheaper proxy; only then switch to DIALOGUE/CO-CREATION or escalate location (§7) |
+| 確信度 moved on an agent's PASS / summary, no raw signal in context | delegated verdict as earned confidence | demand the raw output + locus; re-adjudicate against the pre-committed threshold yourself (§8) |
+| N agents deliberated or role-played the user; agreement scored as a confidence-delta | simulated sacrifice / agent-consensus Loop — zero 学び (nothing was sacrificed) | get the real signal, or route to §7's named-missing-signal / DIALOGUE/CO-CREATION exit (§8) |
+| Agent set/adjusted the pass/fail after seeing results, or probes fanned out over non-fatal nodes | agent-side threshold drift / fan-out theater | threshold pre-committed BEFORE spawn (§3); one probe per fatal-risk node, multiple nodes only on a genuine `map.md` §5 tie (§8) |

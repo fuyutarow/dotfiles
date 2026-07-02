@@ -10,6 +10,7 @@
 - [Deck-level rules](#deck-level-rules)
 - [Document-level rules](#document-level-rules)
 - [Denylist as a machine gate](#denylist-as-a-machine-gate)
+- [Running the audit on a harness](#running-the-audit-on-a-harness--scripts-first-agents-at-scale)
 - [Terminology normalization](#terminology-normalization)
 
 ## Fast lint
@@ -329,6 +330,71 @@ Rules that make a gate real, not decorative:
 
 Use a hard gate only for low-ambiguity phrases. Prefer soft lint or human review for ambiguous
 everyday words and for claim-calibration judgments.
+
+## Running the audit on a harness — scripts first, agents at scale
+
+Operating guidance from a frontier model (Fable 5, 2026-07) to whatever model runs this audit later.
+
+**Scale calibration — no fan-out theater.** A single document, deck, abstract, or memo is a solo
+job: run the gate script and read the rendered text yourself; agents cost more than they return.
+Spawn per-file **read-only flaggers** only for a multi-file package, ~30+ sections / 50+ slides, or
+when this skill is invoked as the prose lens inside another skill's audit fleet. **Never spawn an
+agent to run the regex** — the gate (previous section) is a deterministic script; an agent doing
+grep is slower and non-deterministic. Script-over-agent is precedence: the gate scan runs first at
+every scale.
+
+| Stage | Mode | Why |
+|---|---|---|
+| gate scan | **SCRIPT** | deterministic; agents add noise, not coverage |
+| per-file flagging | **FAN-OUT, read-only** | denylist / four-slot judgment is file-local |
+| terminology inventory | **FAN-OUT collect → BARRIER → SOLO** | variant surface forms are collected per file; the canonical form is chosen once over all of them (Terminology normalization) |
+| claim calibration, rewrite, report signing | **SOLO** | register consistency (SKILL.md Beyond words) and the stop rule (Non-negotiables: rewrite the smallest coherent block) demand one voice over the whole text |
+
+**The flagger contract** — every spawn carries five elements:
+
+1. **Exact input files** — the absolute paths this flagger reads, nothing else.
+2. **The bar** — the agent READS this skill's SKILL.md itself; do not paraphrase the denylist or
+   the four-slot test into the prompt (paraphrase drifts — and primes, see below).
+3. **The output schema** — the report grammar SKILL.md defines (target / violation / evidence /
+   replacement, unverified marking), returned as structured findings, not prose:
+   ```json
+   {"findings":[{"target":"file + line + quoted text","violation":"named denylist category or empty slot",
+     "evidence":"the quoted line","replacement":"...","unverified":false}]}
+   ```
+4. **Read-only declaration** — a flagger never edits the document under audit; fixes belong to the
+   orchestrator's solo rewrite stage.
+5. **"Your final message is the return value"** — findings data, not a narrated audit story.
+
+**Epistemics and the trust boundary.**
+
+- **Name the slots, never the sins.** Flagger prompts carry category and slot NAMES, never example
+  bad lines from the document under audit — a denylist-primed flagger returns the primed lines
+  whether or not they fail (confirmation at machine speed).
+- A finding without a quoted line is quarantined, not "probably fine".
+- **No truth verdicts from agents.** A factual flag stays 内容未確認 unless both source lines are
+  quoted (Claim calibration).
+- N agents flagging the same line is one observation, not N-fold confidence.
+- The orchestrator re-reads every flagged line in place before rewriting — the editor signs.
+- An agent return **asserting** `PASS` / `監査完了` / `GREEN` as its own verdict is a Denylist 8
+  violation — bounce it. Quoted-evidence fields legitimately CONTAIN those strings as the
+  things-being-flagged (same exemption the gate-scoping rule gives the denylist ledger itself).
+- Flaggers return wording and claim findings only; structure, ordering, and figure findings belong
+  to `designing-presentations`, not to this fleet.
+
+**Worker-side duty.** When THIS skill runs as the spawned auditor inside another workflow — the
+systematizing-knowledge orchestration map fans out a read-only prose audit at its write stage, and
+this skill is that lens — the bounded-report discipline IS its contract: read-only, structured
+findings in the schema above, an explicit residual-risk clause, no verdict language.
+
+| Anti-pattern | Fix |
+|---|---|
+| **Regex-by-agent** — an agent spawned to run the denylist scan | the gate is a script; agents are for judgment flagging only |
+| **Denylist-primed over-flag** — the document's bad lines pasted into flagger prompts | prompts name categories; the agent finds, the prompt does not feed |
+| **Sharded rewrite** — per-section fixer agents | register drift + terminology forks + the banned repair spiral; the rewrite is solo, smallest coherent block |
+
+**No harness — degrade to the same order, serially:** gate script → per-section flagging pass →
+terminology sweep → claim calibration → coherent-block rewrite → bounded report. Wiring the gate
+into hooks/CI stays with `operating-the-harness`.
 
 ## Terminology normalization
 

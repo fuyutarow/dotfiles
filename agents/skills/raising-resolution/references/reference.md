@@ -9,7 +9,8 @@ Four single-homed concerns, each concept appearing exactly once:
 1. **§A — the four lenses**, deep treatment + the OWNER RULES that impose MECE on shared concepts.
 2. **§B — 課題 vs 解決策**, the two-object distinction, order, depth-asymmetry, problem-quality, バーニングニーズ.
 3. **§C — limits / epistemics**, the stop condition, the six failure modes, calibration, repackaging
-   honesty, the acting-on-hypotheses boundary + sequencing rule, and the SOLE source-grade table.
+   honesty, the acting-on-hypotheses boundary + sequencing rule, the SOLE source-grade table, and the
+   §C.8 agent-boundary harness note.
 4. **§D — the acquisition MECHANISM** (the HOW layer): the action-ladder rationale, the 内化⇄外化 kata
    table, the Why-so? / 症状-vs-病因 protocol with per-node 広さ execution, the root-state rule, n=1, 語彙,
    and the single worked 起業家 ladder. Every acquisition RULE is owned HERE; other sites point in.
@@ -380,7 +381,8 @@ on this table. Hold the skill's own claims to the standard the load-bearing rule
   プロセス / 関係性 / システム思考 owner rules (A.5(3)/(4)/(5)/(6)); the reorder/feedback discriminator (A.5(4));
   the binary citation-gate detector; the agent-side over-firing calibration (C.4); the root-cause-vs-leverage
   bottleneck rule (A.5(1)); the depth-budget framing of 解決策×深さ (B.3); the root-state rule (§D.3); the
-  cheapest-first ordering of the action ladder (§D.1).
+  cheapest-first ordering of the action ladder (§D.1); the ENTIRE §C.8 agent-boundary harness note — relay
+  law, consensus rule, micro-map, harness-scale calibration — 馬田's book says nothing about subagents.
 - **Third-party (non-author):** the バーニングニーズ (a)/(b) criteria (IntraStar wiki); the イシュー
   complementarity relation (reader-supplied).
 - **Constructed, not cited:** no strong adversarial / methodological objection to the framework was found in
@@ -428,6 +430,37 @@ present by inspection; there: a node to be FALSIFIED by a forward test, then COM
 seam but never overlap. **No content overlap:** raising-resolution EXCLUDES the book's 第8章 未来の解像度
 precisely because future-forecasting belongs to the sibling.
 
+### C.8 The citation gate across an agent boundary (skill-supplied harness note)
+
+Entirely **skill-supplied** (graded in §C.6). On a harness with
+subagents/workflows the gate's SEMANTICS do not change; only WHO runs a rung may. Two laws, one map:
+
+- **RELAY LAW.** A citation crosses an agent boundary ONLY as the triple **{rung run, verbatim observable
+  output, locus}**. A conclusion-only agent return ("it's the N+1") is a relayed "probably" — quarantine it
+  as NEGATIVE EVIDENCE (§0 list); the gate still fires. The ASSERTER signs every claim: whoever ran the
+  rung, the one who asserts holds the citation.
+- **CONSENSUS RULE.** Correlated agent agreement is ONE observation and ZERO citations — N agents
+  concurring on like prompts is not a rung.
+
+**MICRO-MAP** — what may shard, what never does:
+
+| Work | Mode | Contract / why |
+|---|---|---|
+| 広さ rule-in/rule-out probes | **FAN-OUT** | one READ-ONLY prober per candidate; the prompt names the candidate SLOT + the rung to run, never the expected verdict; default verdict `uncertain`; return schema `{verdict: ruled-in/ruled-out/uncertain, evidence: verbatim output + locus}` |
+| N-for-N element citations (A.3/A.4 HIGH) | **FAN-OUT** | per-element; each return carries its own observable + locus |
+| 構造 grouping / leverage call | **BARRIER → SOLO** | wait for ALL probe returns, then ONE judgment over the whole surfaced set |
+| root-state observation · Why-so descent · stop-at-one · the closing action | **NEVER SHARD** | the per-node 広さ interlock (§A.6/§D.3) needs the WHOLE tree in one context — a sharded descent drills branches no observation justified |
+
+- **SCALE CALIBRATION.** Default (almost every firing of this skill): **solo** — one claim, one rung. 2–4
+  independent probes: parallel tool calls in ONE context, no spawn. Subagent fan-out ONLY when ≥3
+  candidates/elements AND each probe is context-heavy. Spawning an agent to run one grep is §C.4
+  over-firing at harness scale.
+- **Anti-patterns (3):** relay-as-citation (asserting on an agent's conclusion, observable unread);
+  consensus-as-citation ("3 agents agree"); the sharded Why-so tree (interlock lost at shard boundaries).
+- **Degradation.** No harness → nothing changes; the action ladder (§D.1) is already the solo form.
+- **Seams:** many-source sweeps → `systematizing-knowledge` (the cardinality cut, §B.6); forward-test
+  probes → `acting-on-hypotheses` (§C.7); spawn/hook/workflow mechanics → `operating-the-harness`.
+
 ---
 
 ## §D — The acquisition MECHANISM (the HOW layer; SOLE owner of every acquisition RULE)
@@ -452,7 +485,8 @@ grep/glob  →  read file/source  →  run / probe / log / measure  →  reprodu
   one bare line and flags "rationale in reference.md §D"; this is the rationale.
 - **NEGATIVE-EVIDENCE LIST (never a rung; owned by SKILL.md §0, restated for completeness):** "in my
   experience" / "usually" / "this kind of library typically" / "probably" / "should be" /
-  たぶん・おそらく・はず・一般的に. None of these grounds a claim.
+  たぶん・おそらく・はず・一般的に; an agent's conclusion without its verbatim observable (§C.8). None of
+  these grounds a claim.
 - **THE LOOP-MUST-CLOSE-ON-AN-ACTION RULE (LAW, owned HERE):** **行動なき情報収集 is a banned dead form — the
   loop must close on an ACTION** (a fix shipped, a probe run, a recommendation given, a smallest experiment
   launched), and acting yields new primary info → re-enter at the gate. §C.2 #3 owns only the epistemic

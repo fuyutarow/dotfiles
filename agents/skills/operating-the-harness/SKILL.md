@@ -1,6 +1,22 @@
 ---
 name: operating-the-harness
-description: Operate Claude Code itself well — keep CLAUDE.md lean as a context budget and engineer the harness (hooks, permissions, a runnable verification loop) so Claude checks its own work instead of you. Use whenever setting up or auditing a CLAUDE.md / AGENTS.md / .claude/ directory, writing or debugging hooks, settings.json permissions, MCP servers (.mcp.json), slash commands or Skills (SKILL.md), subagents (.claude/agents), or designing a plan-mode / verification / parallel (worktree, headless, /workflows) workflow. MANDATORY — read this before editing any .claude/ config, memory, or hook file. Two precedence-setting rules live inline: (1) CLAUDE.md is a context budget — target under 200 lines, lazy-load the rest via path-scoped .claude/rules/*.md or Skills, never config-as-prose; (2) give Claude a machine-readable check and put hard enforcement in hooks/settings.json, not in prose. Trigger on CLAUDE.md, AGENTS.md, .claude/rules, .claude/settings.json, settings.local.json, managed settings, /memory, /init, /compact, /clear, /rewind, /goal, /context, /usage, /permissions, /hooks, /doctor, /statusline, /config, plan mode, Shift+Tab, opusplan, ultrathink, /effort, hooks, PreToolUse, PostToolUse, Stop hook, SessionStart, permissionDecision, allow/ask/deny, bypassPermissions, --dangerously-skip-permissions, auto mode, sandbox, subagent, .claude/agents, Agent tool, /fork, worktree, agent teams, SKILL.md, slash command, $ARGUMENTS, MCP, .mcp.json, claude mcp add, headless, claude -p, --output-format json, --bare, claude-code-action, @claude, statusLine, output styles, verification loop, /code-review, context window, context rot, Superpowers, Spec-Kit, BMAD.
+description: >-
+  Operate Claude Code itself well — keep CLAUDE.md lean as a context budget and engineer the harness
+  (hooks, permissions, a runnable verification loop) so Claude checks its own work instead of you.
+  Use whenever setting up or auditing a CLAUDE.md / AGENTS.md / .claude/ directory, writing or
+  debugging hooks, settings.json permissions, MCP servers (.mcp.json), slash commands or Skills
+  (SKILL.md), subagents (.claude/agents), or designing a plan-mode / verification / parallel
+  (worktree, headless) workflow. Also fires on skill-mechanics symptoms: skill not listed, not
+  triggering, スキルが発火しない, listing budget, /doctor. Cut: skill CONTENT craft — distillation, sibling
+  cuts, fire/no-fire trigger sets, description wording → forging-skills (co-fires on skill
+  authoring; this skill owns the harness contract). MANDATORY — read this before editing any
+  .claude/ config, memory, or hook file. Two precedence-setting rules live inline: (1) CLAUDE.md is
+  a context budget — target under 200 lines, lazy-load the rest via path-scoped .claude/rules/*.md
+  or Skills, never config-as-prose; (2) give Claude a machine-readable check and put hard
+  enforcement in hooks/settings.json, not in prose. Trigger on CLAUDE.md, AGENTS.md, .claude/rules,
+  settings.json, /memory, /init, /compact, /permissions, /hooks, /doctor, plan mode, hooks,
+  PreToolUse, PostToolUse, bypassPermissions, sandbox, subagent, .claude/agents, worktree, SKILL.md,
+  slash command, $ARGUMENTS, MCP, .mcp.json, headless, claude -p, verification loop.
 ---
 
 # Claude Code — Operating Discipline & Harness Engineering
@@ -12,6 +28,8 @@ description: Operate Claude Code itself well — keep CLAUDE.md lean as a contex
 > **Out of scope**: the Anthropic *API/SDK* (→ `claude-api` skill); mechanical settings.json
 > edits the harness performs for you (→ `update-config` skill); writing domain skills like
 > Julia (→ that skill). This skill is the *strategy* layer; those are the *mechanics*.
+> The CRAFT of skill content — what deserves a skill, distillation, sibling cuts, trigger test
+> sets, adversarial proof — → the `forging-skills` skill; this skill owns the harness contract.
 > **Lineage**: distilled from a 172-tip survey (Zenn "5万スターのClaude Code Tips集、本質は2つ
 > だけ" → `shanraisshan/claude-code-best-practice` → `code.claude.com/docs` +
 > `anthropic.com/engineering`). Version-pinned facts (e.g. "v2.1.83+") were current in 2026-06;

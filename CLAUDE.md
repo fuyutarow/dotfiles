@@ -70,7 +70,8 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
    `claude-code`). Keep tool names and trigger keywords in `description:` (3rd person, "what + when")
    — that field, with the name, is what the model matches on. Don't mix naming shapes across the
    collection (inconsistency is the documented anti-pattern). Ref: docs.claude.com Agent Skills →
-   best-practices.
+   best-practices. The full CRAFT of creating/reforging skills (gates, pipeline, trigger test
+   sets, verification fleet) is the `forging-skills` skill — read it before any skill work.
 
 ## Setup / Tasks
 

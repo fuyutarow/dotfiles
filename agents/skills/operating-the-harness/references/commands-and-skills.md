@@ -138,6 +138,8 @@ Auto-activation is **description-matched**, never guaranteed. **Verify invocatio
 2. Run **`/doctor`** — shows how many descriptions are **shortened or dropped** and which.
 3. Skill *names* are always listed, but **descriptions share a ~1% context budget**; when it
    overflows, the **least-used skills' descriptions drop first**, stripping match keywords.
+4. Listed and intact but still not firing → the description's **lexical surface** is the cause
+   → the `forging-skills` skill (fire/no-fire set + description-optimization loop).
 
 Raise the budget: `skillListingBudgetFraction` (e.g. `0.02` = 2%) or
 `SLASH_COMMAND_TOOL_CHAR_BUDGET` (fixed char count). Free budget: set low-priority skills to
@@ -155,6 +157,11 @@ Raise the budget: `skillListingBudgetFraction` (e.g. `0.02` = 2%) or
 - **Bundle scripts** under `scripts/` and call them with `${CLAUDE_SKILL_DIR}` so Claude
   *composes* a known-good tool rather than reconstructing logic each run.
 - Push large reference material to `references/*.md`; keep `SKILL.md` a focused entrypoint.
+- The **craft layer** — what deserves a skill, source distillation, sibling-cut design,
+  fire/no-fire trigger sets, verifying the skill itself — is owned by the `forging-skills`
+  skill; this file owns only the harness contract (the description-writing bullets above are
+  the CONTRACT-side summary of that seam — synced, do not diff for byte-identity; the arguing
+  home for description CRAFT is `forging-skills`' triggering reference).
 
 ## Writing tool / MCP descriptions
 

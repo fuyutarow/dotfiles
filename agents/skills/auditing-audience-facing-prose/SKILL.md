@@ -9,9 +9,9 @@ description: >-
   claim calibration, coined translations, terminology normalization, PASS/gate theater, or metaphor
   packaging. Triggers: wording audit, prose audit, style rewrite, claim calibration, tooling-first
   titles, "核", "本体", "中核エンジン", "一つに返す", "乗る", "閉じる", "主因", "ここが肝心", "PASS", and metaphor
-  jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document structure, literature synthesis, or
-  domain-content generation. Workflow-native: runs the gate script first and fans out read-only
-  flaggers only at corpus scale.
+  jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document structure, literature synthesis,
+  domain-content generation, or model-facing SKILL.md prose (→ forging-skills). Workflow-native:
+  runs the gate script first and fans out read-only flaggers only at corpus scale.
 ---
 
 # Auditing audience-facing prose

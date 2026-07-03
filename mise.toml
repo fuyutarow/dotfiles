@@ -81,6 +81,10 @@ exit $rc
 # would add friction with no target. Portable: run it against real files with `-- <paths>`.
 # Machine floor = textlint presets (agents/skills/linting-prose/references/machine-floor.md); the
 # hand-maintained scripts/check-prose-grounding.sh was RETIRED in the linting-prose reforge (2026-07-04).
+# PREREQ (once, GLOBAL): `bun add -g textlint textlint-rule-preset-ja-technical-writing
+# @textlint-ja/textlint-rule-preset-ai-writing textlint-rule-prh` — verified: after a global install
+# both `bunx textlint` and `textlint` resolve the presets from ANY cwd, so no per-repo `bun add -d`.
+# (CI / fresh machines need their own install; for reproducibility a repo may still `bun add -d` + lock.)
 # External-register docs (外賓/社外/顧客): swap in assets/textlintrc-external.json (adds the C9 set).
 [tasks."lint:prose"]
 dir = "{{config_root}}"

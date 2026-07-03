@@ -17,14 +17,20 @@ House rule: use `bunx`. Every upstream doc says `npx`; translate. No global inst
 `bunx` fetches on demand.
 
 ```bash
-# one-time: dev-dep the presets in the target repo (or rely on bunx auto-fetch)
-bun add -d textlint textlint-rule-preset-ja-technical-writing \
+# one-time, GLOBAL (install once, works in every repo — verified: after this both `bunx textlint`
+# and `textlint` resolve these presets from any cwd, so no per-repo `bun add -d` is needed):
+bun add -g textlint textlint-rule-preset-ja-technical-writing \
   @textlint-ja/textlint-rule-preset-ai-writing textlint-rule-prh
 
 # lint a file / tree with the house config
 bunx textlint --config assets/textlintrc.json path/to/doc.md
 bunx textlint --format json path/to/doc.md   # structured findings for an agent loop
 ```
+
+Global vs local: the global install is the ergonomic default for a personal multi-repo setup. A
+shared repo or CI job that needs reproducibility should still `bun add -d` the same packages and
+commit the lockfile — a global install is not captured by any lockfile. Either way the config and
+commands are identical; only where the packages live differs.
 
 MCP (generation → lint → fix loop, textlint ≥ v14.8.0):
 `claude mcp add textlint -s project -- bunx textlint --mcp`. Four tools: `lintFile`, `lintText`,

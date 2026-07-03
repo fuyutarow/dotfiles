@@ -198,6 +198,34 @@ with one bar highlighted. Prose that survives compression to a figure should bec
 prose whose whole value is precise logical connection between claims may be better as *prose*
 (Bezos's counter-condition — fragments can mask weak reasoning).
 
+### Mermaid diagram picker — the concrete tool mapping
+
+Once a diagram passes the "what inference does this make free?" test above, this maps the relation
+to the Mermaid type (and the pitfall that most often ruins it). **Restraint first**: don't reach
+for Mermaid by reflex — pick only the diagrams with real visual payoff. **Syntax gotcha**: quote
+node labels (`A["text (with parens)"]`) or special characters break the render.
+
+| Purpose / question | Mermaid | keyword | pitfall |
+|---|---|---|---|
+| steps / branches | Flowchart | `flowchart` / `graph` | nodes named too abstractly |
+| call / message order | Sequence | `sequenceDiagram` | parallel & loop mis-drawn |
+| type / data relations | Class | `classDiagram` | design & implementation blur |
+| state changes + transitions | State | `stateDiagram-v2` | undefined event → dead state |
+| entity relations / schema | ERD | `erDiagram` | many-to-many under-resolved |
+| CX stages / emotion | Journey | `journey` | inconsistent granularity |
+| schedule / dependency | Gantt | `gantt` | brittle to change, overcrowds |
+| ratio / breakdown | Pie / Treemap | `pie` / `treemap` | slices too fine; area misread |
+| 2-axis positioning | Quadrant | `quadrantChart` | subjective axis definitions |
+| requirement / verification trace | Requirement | `requirementDiagram` | vague definitions |
+| branch history / strategy | GitGraph | `gitGraph` | poor at large scale |
+| system hierarchy (C4) / cloud arch | C4 / Architecture | `C4Context` / `architecture-beta` | one-slide overstuffing; symbol soup |
+| idea divergence | Mindmap | `mindmap` | infinite hierarchy sprawl |
+| events over time | Timeline | `timeline` | mixed time scales |
+| flow-quantity allocation | Sankey | `sankey` | data updates are laborious |
+| XY series comparison / KPI | XY Chart / Radar | `xychart` / `radar` | axis/units unlabeled; axis meaning vague |
+| I/O block diagram | Block / Packet | `block` / `packet` | over-fine granularity; byte-boundary errors |
+| board / WIP | Kanban | `kanban` | no WIP limit → chaos |
+
 ---
 
 ## Part F — Data-ink, chartjunk, preattentive cues, Gestalt

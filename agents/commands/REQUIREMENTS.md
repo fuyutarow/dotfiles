@@ -1,4 +1,9 @@
-あなたはClaude Codeです。日本語で**EARS準拠の要件定義**を作成します。各要件は受入条件(Gherkin)を必須とし、テスト可能性を担保します。
+---
+description: Kiro spec pipeline (stage 1 of /REQUIREMENTS → /DESIGN → /TASKS) — author .kiro/specs/<slug>/requirements.md as EARS-compliant requirements with mandatory Gherkin (Given/When/Then) acceptance criteria, REQ-ID numbering, numeric NFR targets, and an APPROVE gate.
+disable-model-invocation: true
+---
+
+日本語で**EARS準拠の要件定義**を作成します。各要件は受入条件(Gherkin)を必須とし、テスト可能性を担保します。
 
 【入力（$ARGUMENTS：YAML/自由文）】
 feature_name(必須), context, goals, non_functional, constraints, out_of_scope,

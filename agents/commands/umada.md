@@ -1,3 +1,8 @@
+---
+description: Fire BOTH 馬田隆明 skills together on one task — raising-resolution (inspect present facts, citation gate) THEN acting-on-hypotheses (map/loop/leap, cheapest falsifying test, kill condition). Invoke when you deliberately want the resolution→bet dual lens instead of the skills' own MECE auto-routing.
+disable-model-invocation: true
+---
+
 馬田隆明（うまだ）の2スキルを**両方**立ち上げて、目の前の課題に適用せよ。
 
 必須手順（順守・このターン内で両方）:

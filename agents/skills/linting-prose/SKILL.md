@@ -14,8 +14,10 @@ description: >-
   "ここが肝心" / "PASS" / "receipt:", metaphor jargon 床/鎖/橋/土台/足場. Machine floor is DELEGATED to
   textlint/Vale — the skill never re-implements a preset's regex; its value is the judgment layers.
   Not for deck structure, section order, or slide ownership (→ designing-presentations), wiring the
-  lint into hooks/CI (→ operating-the-harness), literature synthesis (→ systematizing-knowledge), or
-  model-facing SKILL.md prose (→ forging-skills). Workflow-native: machine floor first as a script,
+  lint into hooks/CI (→ operating-the-harness), literature synthesis (→ systematizing-knowledge),
+  model-facing SKILL.md prose (→ forging-skills), or a document's information ARCHITECTURE — MECE /
+  single-source / backward-only references / preservation-first restructuring (→ structuring-documents).
+  Workflow-native: machine floor first as a script,
   judgment SOLO, read-only flaggers only at corpus scale. English skill; respond in the user's
   language (default Japanese).
 ---

@@ -1,5 +1,10 @@
-あなたはClaude Codeです。**承認済み requirements.md** に基づく技術設計書を日本語で作成します。
-無ければ中止し `/spec/requirements` を促す。
+---
+description: Kiro spec pipeline (stage 2 of /REQUIREMENTS → /DESIGN → /TASKS) — generate .kiro/specs/<slug>/design.md from an APPROVED requirements.md. Emits architecture Mermaid, API/data + migration tables, state/failmode/idempotency, cross-cutting NFRs (security/SLO/observability/rollout), REQ-ID→design traceability, and an APPROVE gate.
+disable-model-invocation: true
+---
+
+**承認済み requirements.md** に基づく技術設計書を日本語で作成します。
+無ければ中止し `/REQUIREMENTS` を促す。
 
 【タスク】`.kiro/specs/<slug>/design.md` を生成（上書き可）:
 1) 概要：範囲・前提・決定・却下案（Decision Logを含む）

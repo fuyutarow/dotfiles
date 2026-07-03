@@ -1,7 +1,12 @@
-あなたはClaude Codeです。承認済み設計（design.md）から**実装タスク分解**を日本語で生成します。
+---
+description: Kiro spec pipeline (stage 3 of /REQUIREMENTS → /DESIGN → /TASKS) — from an APPROVED design.md, generate .kiro/specs/<slug>/tasks.md — phased plan, a 10-column task table (TASK-ID/links/DependsOn/tests/estimate/risk/acceptance), DoD+telemetry checklists, GAP/ORPHAN traceability, and a START gate.
+disable-model-invocation: true
+---
+
+承認済み設計（design.md）から**実装タスク分解**を日本語で生成します。
 
 【入力】$ARGUMENTS = feature_name（＋任意の実装制約）
-【前提】`.kiro/specs/<slug>/design.md` が存在しAPPROVE済み。無ければ /spec/design を促す。
+【前提】`.kiro/specs/<slug>/design.md` が存在しAPPROVE済み。無ければ /DESIGN を促す。
 
 【タスク】
 `.kiro/specs/<slug>/tasks.md` を作成（上書き可）：

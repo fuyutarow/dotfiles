@@ -1,28 +1,23 @@
 ---
 name: writing-julia
 description: >-
-  Set up Julia and write correct, performant, modern Julia for theoretical research — one first
-  choice per task, no ambiguous alternatives. Use whenever the user runs Julia or does numerical
-  experiments, AD/gradients, optimization, polynomial/symbolic computation, or differential
-  equations. Trigger on DifferentiationInterface, ADTypes, ForwardDiff, Enzyme, Zygote, Reactant,
-  JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports, Chairmarks, OhMyThreads,
-  ComponentArrays, StaticArrays, HomotopyContinuation, SymEngine, Symbolics, ModelingToolkit,
-  SymPyPythonCall, Manopt, DrWatson, Pluto, Documenter, Quarto, Julia setup, experiment/project
-  management, notebooks / literate reports, TTFX / precompile latency, type stability / 型安定,
-  dynamic dispatch, function barrier, PackageCompiler, juliac --trim, @ccallable, shipping a .so
-  / shared library / AOT binary, or large-package architecture (include order, submodules vs
-  subpackages, package extensions / weakdeps, type piracy, public API). MANDATORY — read BEFORE
-  writing ANY Julia code. §2.0 forbids FD derivative estimation (use AD), grid sampling (use
-  optimization), and lerp-as-evaluation. All differentiation goes through
-  DifferentiationInterface; Dual-propagation rules apply when AutoForwardDiff is in the path.
-  Symbolic tool chosen by ROLE — SymEngine (light algebra) / Symbolics+ModelingToolkit (SciML
-  spine) / SymPyPythonCall (heavy-CAS service). Multiple dispatch is never banned — the bug is
-  type-unstable hot paths; barrier the dynamism.
+  Write correct, performant Julia for research. Use whenever the user
+  runs Julia, writes hot numeric code, or does numerical experiments, AD/gradients, optimization,
+  symbolic algebra, differential equations, package architecture, TTFX, or .so/AOT. Trigger on
+  scope/let/const, Val, column-major loops, immutable/mutable struct,
+  type stability / 型安定, dynamic vs multiple dispatch, function barrier, DifferentiationInterface,
+  ADTypes, ForwardDiff, Enzyme, Zygote, JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports,
+  Chairmarks, StaticArrays, ComponentArrays, OhMyThreads, Optim/JuMP/Manopt,
+  SymEngine/Symbolics/ModelingToolkit/SymPyPythonCall, DrWatson/Pluto/Documenter/Quarto,
+  PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
+  weakdeps, type piracy, public API. MANDATORY — read BEFORE writing ANY Julia code. §2.0 forbids
+  FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
+  is not banned — the bug is type-unstable hot paths.
 ---
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2607.1.0 (2026-07-03, Julia 1.12.6 baseline)
+> **Version**: v2607.1.1 (2026-07-03, Julia 1.12.6 baseline)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -30,6 +25,12 @@ description: >-
 > pointered from `references/setup.md` §8, not the focus here.
 >
 > **Changelog (recent)**:
+> - v2607.1.1: **Effective Julia gap patch.** Added the missing guardrails surfaced by the
+>   `let`/`const` + "Effective Julia" near-miss: `let` is a scope/fresh-binding tool (not normal
+>   declaration syntax), `const` is global/const-field only; `Val` is a type-domain contract, not
+>   a runtime speed spell; dense `Array` loops respect column-major memory order or use
+>   `eachindex`; immutable `struct` remains the default, with `mutable struct` reserved for real
+>   identity/state mutation. Trigger rows updated.
 > - v2607.1.0: **type discipline reforged.** performance.md §2.1 rewritten as the type-stability
 >   home: **multiple dispatch ≠ dynamic dispatch** (never "ban dispatch" — discipline is SCOPED to
 >   hot loops / AD paths / compile boundaries); instability sources incl. **non-concrete struct
@@ -74,7 +75,7 @@ reference file that matches the task.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/performance.md` | §2.1–§2.6 hot-path performance — **§2.1 type discipline: multiple vs dynamic dispatch, instability sources (non-concrete struct fields → parametrize), function barriers**, globals, pre-alloc, broadcast, `@inbounds`/`@simd`, benchmarking + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, any struct definition, or before claiming code is correct |
+| `references/performance.md` | §2.1–§2.6 hot-path performance — **§2.1 type discipline: multiple vs dynamic dispatch, instability sources (non-concrete struct fields → parametrize), function barriers, `Val` guardrails**, globals/`const`/captured `let`, pre-alloc, broadcast, column-major loop order, `@inbounds`/`@simd`, benchmarking + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, any struct definition, or before claiming code is correct |
 | `references/autodiff.md` | §2.7 DifferentiationInterface frontend, `prepare_*`, backend selection, **§2.7.4 Dual-propagation rules** | any function that will be differentiated |
 | `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
 | `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, viz) | deciding which package to install for a task |
@@ -301,6 +302,7 @@ Correctness (§1):
 - [ ] All indices start at 1; matrix multiply uses `*` (not `@`); element-wise ops use dot (`.+`, `.*`, `sin.()`)
 - [ ] No untyped containers (`Float64[]` not `[]`); no globals captured in hot loops
 - [ ] Functions return consistent types; `end` closes every block; `$` interpolation; `time_ns()`
+- [ ] `let` creates a hard local scope / fresh binding; `const` is for globals or const fields in `mutable struct`, never a local variable declaration (setup.md §6 / performance.md §2.2)
 
 Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in code):
 - [ ] No FD *derivative estimation*: gradients/derivatives of smooth objectives go through DI
@@ -317,8 +319,11 @@ AD — `references/autodiff.md` (if any function will be differentiated):
 
 Performance & verification — `references/performance.md` (for hot paths; reach for a tool only when its need is real — see packages.md §4 header):
 - [ ] **Type discipline (§2.1)**: struct fields concrete or parametric (`struct A{M<:AbstractMatrix}`, never bare `data::AbstractMatrix` / untyped fields); runtime-typed data (config, I/O, `Any` columns) crosses a **function barrier** before the hot loop (§2.1.3); multiple dispatch used freely — only *runtime* dispatch inside hot loops / AD paths / `@ccallable` boundaries is the bug, never dispatch per se (§2.1.1)
+- [ ] `Val` appears only when the value is already a compile-time/type-domain fact; never wrap runtime config/user input in `Val(x)` to "make it fast" (§2.1.4)
 - [ ] First call is warmup; timing on the second (§2.6); `@btime`/`@b` with `$`-interpolated args
+- [ ] Dense `Array` loops respect column-major memory order (`eachindex` or innermost first index); `@inbounds` follows an `axes`/`eachindex` proof, not hope (§2.5)
 - [ ] Small fixed-size data uses `StaticArrays`; *if* params are already structured into many named blocks, `ComponentArrays` (toolchain.md §2.9.1 / §2.9.2)
+- [ ] Default to immutable `struct`; use `mutable struct` only for identity/state mutation, with typed fields and `const` fields for invariants when useful (§2.1.2 / setup.md §6)
 - [ ] **JET**: `report_package` clean (or reports justified); consider `@stable` on must-be-fast functions (§2.8)
 - [ ] *If* an inner loop must be allocation-free and you've added AllocCheck for it: `@check_allocs` passes (§2.8) — don't carry AllocCheck without a guarded loop
 - [ ] **Aqua** (if authoring a package): `Aqua.test_all` clean — no type piracy / ambiguities / stale deps / compat gaps (architecture.md §10.6.1)

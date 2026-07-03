@@ -5,11 +5,11 @@ called repeatedly or on large data. A one-off computation can ignore pre-allocat
 a tight numeric loop cannot.
 
 Contents:
-- §2.1 Type stability (multiple vs dynamic dispatch · instability sources · function barrier)
-- §2.2 No globals in hot paths
+- §2.1 Type stability (multiple vs dynamic dispatch · instability sources · function barrier · `Val`)
+- §2.2 No globals in hot paths (`const` globals, `let` for captured fresh bindings)
 - §2.3 Pre-allocate outputs
 - §2.4 Broadcasting (dot syntax)
-- §2.5 `@inbounds` / `@simd`
+- §2.5 Memory-order loops · `@inbounds` / `@simd`
 - §2.6 Benchmarking
 - §2.8 Static verification (JET / DispatchDoctor / AllocCheck)
 
@@ -78,6 +78,13 @@ end
 Same rule for containers: `Vector{Real}` is a container of boxes (abstract eltype); a generic
 container is `Vector{T}` with `T` concrete per instance, built via `similar`/`zero(A)` (§2.3).
 
+**Struct mutability rule.** Default to immutable `struct` with typed/parametric fields. Reach for
+`mutable struct` only when object identity or long-lived state mutation is part of the model
+(solver state, cache, handle, actor, UI state). If only one or two invariants must not change
+inside an otherwise mutable object, mark those fields `const` (Julia 1.8+) instead of making the
+whole object immutable by contortion. Do not make a `mutable struct` merely because a variable
+bound to the object will be reassigned; rebinding the name is not mutating the object.
+
 **(c) Untyped containers & non-const globals** — SKILL.md §1.2 and §2.2; same mechanism, `Any`
 enters the loop.
 
@@ -115,7 +122,40 @@ type-stable compute core inside.** This layering is also what makes the kernel e
 shared library later — but note the barrier itself is then *replaced* by the C boundary, never
 compiled inside the artifact (setup.md §3.5.1).
 
-### 2.1.4 Detection
+### 2.1.4 `Val` is a type-domain contract, not a speed spell
+
+Use `Val` only when the value is already a compile-time / type-domain fact (a literal at the call
+site, a type parameter, a generated small static dimension, a trait tag). It is not a way to turn
+runtime config, parsed symbols, or user input into fast code. Wrapping a runtime value in
+`Val(mode)` usually just moves the instability into the type domain and can explode method
+specializations.
+
+```julia
+# BAD: runtime Symbol from config/user input; Val does not make it statically known
+function energy(mode::Symbol, x)
+    return energy(Val(mode), x)
+end
+energy(::Val{:kinetic}, x) = 0.5 * x^2
+energy(::Val{:potential}, x) = 9.8 * x
+
+# GOOD: keep runtime choice in the cold shell, then barrier into a concrete function
+kinetic(x) = 0.5 * x^2
+potential(x) = 9.8 * x
+
+function run_energy(mode::Symbol, x)
+    f = mode === :kinetic ? kinetic : potential   # cold config decision
+    return kernel_energy(f, x)                    # one barrier call
+end
+
+kernel_energy(f::F, x) where {F} = f(x)
+```
+
+Good `Val` use looks like `ntuple(f, Val(N)) where {N}` or dispatch on a trait value that came
+from a type (`addability(::Type{T})`, architecture.md §10.2.1). If the value came from TOML/JSON,
+CLI args, a DataFrame column, or a random branch, keep it outside the hot loop or use an explicit
+function barrier.
+
+### 2.1.5 Detection
 
 Escalating in power:
 - `@code_warntype f(args...)` — quick, shows `Any`/`Union` in red, but only the outermost frame.
@@ -133,6 +173,25 @@ const SIGMA = 10.0   # const → type-stable
 const RHO = 28.0
 const BETA = 8.0 / 3.0
 ```
+
+`const` is for globals and for `const` fields inside `mutable struct`; it is not a local variable
+declaration. Inside functions, assign locals normally (`x = ...`) or write `local x` only when
+you intentionally shadow an outer local.
+
+`let` is also not ordinary declaration syntax. It creates a hard local scope and fresh bindings.
+Use it at top level to turn a procedural scratch block into local code, or in closures when a hot
+captured value must stop being boxed:
+
+```julia
+function scale_by(r::T) where {T}
+    return let r = r
+        x -> x * r
+    end
+end
+```
+
+In ordinary performance-sensitive code, prefer a named function with explicit arguments over a
+capturing closure. If you do keep the closure and it is hot, verify with `@code_warntype` / JET.
 
 ## 2.3 Pre-allocate Outputs
 
@@ -174,7 +233,25 @@ w .= sin.(v)
 y = @. sin(v) + cos(v) * 2   # one pass, zero intermediates
 ```
 
-## 2.5 Use @inbounds and @simd for tight numeric loops
+## 2.5 Use memory-order loops, @inbounds, and @simd for tight numeric loops
+
+Julia dense `Array`s are column-major. For explicit nested loops over `A[i, j]`, the first index
+varies fastest, so put `i` in the innermost loop:
+
+```julia
+# BAD for dense Array: jumps by columns in memory
+for i in axes(A, 1), j in axes(A, 2)
+    A[i, j] = i + j
+end
+
+# GOOD: contiguous access for Array
+for j in axes(A, 2), i in axes(A, 1)
+    A[i, j] = i + j
+end
+```
+
+When element order does not matter, prefer `eachindex(A)`; it follows the array's efficient
+indexing style and avoids hard-coding `1:length(A)`.
 
 `@inbounds` disables bounds checking — only use when you have verified that all indices are
 in range. `@simd` requires loop iterations to be independent.

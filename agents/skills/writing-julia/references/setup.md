@@ -288,7 +288,14 @@ f(x::AbstractArray) = "array of $(eltype(x))"
 # Annotate as generally as possible (SciML style):
 splicer(arr::AbstractArray, step::Integer) = arr[begin:step:end]   # not Array{Int}, Int
 
-# Struct (immutable by default) / mutable struct
+# Scope: normal locals need no keyword; let creates a fresh hard-local binding.
+# const is for globals or const fields in mutable structs, not local variables.
+const MAX_ITERS = 100
+let x = 5
+    println(x)
+end
+
+# Struct: immutable by default; mutable only for identity/state mutation.
 struct Point; x::Float64; y::Float64; end
 mutable struct State; position::Float64; velocity::Float64; end
 

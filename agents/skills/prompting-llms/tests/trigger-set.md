@@ -22,7 +22,7 @@ plus likely sibling descriptions.
 | "Responses API の system prompt の最新仕様を調べて" | no-fire | `openai-docs` |
 | "CLAUDE.md に hooks のルールを書きたい" | no-fire | `operating-the-harness` |
 | "この SKILL.md の description を改善して" | no-fire | `forging-skills` |
-| "この文章をもっと自然な日本語に直して" | no-fire | direct answer or `auditing-audience-facing-prose` if high-stakes prose audit |
+| "この文章をもっと自然な日本語に直して" | no-fire | direct answer or `linting-prose` if high-stakes prose audit |
 | "React app のバグを直して" | no-fire | coding/debugging workflow |
 | "Cloudflare Workers AI の binding 設定を教えて" | no-fire | Cloudflare / Workers skill |
 | "one-line prompt: make this shorter" | no-fire | direct answer unless model-specific/high-risk context is present |

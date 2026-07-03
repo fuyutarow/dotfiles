@@ -1,0 +1,13 @@
+{
+  "//": "linting-prose machine floor for EXTERNAL-register docs (外賓/社外/顧客). Adds the C9 register set.",
+  "//use": "bunx textlint --config assets/textlintrc-external.json doc.md  — when the audience line says external",
+  "rules": {
+    "preset-ja-technical-writing": true,
+    "@textlint-ja/preset-ai-writing": {
+      "ai-tech-writing-guideline": { "severity": "info" }
+    },
+    "prh": {
+      "rulePaths": ["./prh-house.yml", "./prh-external.yml"]
+    }
+  }
+}

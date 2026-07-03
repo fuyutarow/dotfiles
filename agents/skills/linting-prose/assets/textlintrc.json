@@ -1,0 +1,14 @@
+{
+  "//": "linting-prose machine floor (JA). Ships INTO a consuming repo. Run: bunx textlint --config <this> doc.md",
+  "//presets": "preset-ja-technical-writing = HARD L1/L2; preset-ai-writing = AI-slop (was C8); ai-tech-writing-guideline set to info (suggestion, not blocker)",
+  "//prh": "house dict carries 表記ゆれ + coined-label graveyard + the C9 --external register set (ledger IDs, verdict enums, receipt:). Detect-only for coinage.",
+  "rules": {
+    "preset-ja-technical-writing": true,
+    "@textlint-ja/preset-ai-writing": {
+      "ai-tech-writing-guideline": { "severity": "info" }
+    },
+    "prh": {
+      "rulePaths": ["./prh-house.yml"]
+    }
+  }
+}

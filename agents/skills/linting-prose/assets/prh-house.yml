@@ -1,0 +1,24 @@
+version: 1
+
+# linting-prose house prh dict — ALWAYS ON (loaded by textlintrc.json). Two roles:
+#   1. terminology normalization (表記ゆれ → the canonical surface form of the SAME word) — PORTABLE
+#   2. coined-label graveyard (a repo's KNOWN bad coinage) — SEED PER REPO; the entries below are
+#      QOED examples, fenced, and meant to be REPLACED with your repo's own coined labels.
+# The C9 register set (ledger IDs, verdict enums, receipt:, PASS) lives in prh-external.yml and is
+# loaded ONLY by textlintrc-external.json — those tokens are legitimate in internal working docs.
+#
+# DETECT-ONLY for role 2: prh flags, the model applies the human-legible fix (five-slot discipline).
+# Never auto-substitute coinage — see references/machine-floor.md (the 非飽和iciency case).
+
+rules:
+  # === role 1: terminology normalization — PORTABLE, safe to keep ================================
+  - expected: テープアウト
+    pattern: /tape-out/
+
+  # === role 2: coined-label graveyard — ⚠ PER-REPO EXAMPLES (QOED); REPLACE with your own =========
+  # Each entry: the coined label -> a pointer to its plain-language meaning. Detect-only.
+  - expected: "中心の未解決問題（研究フロンティア）と平文で述べる"
+    pattern: "§0 frontier"
+  - expected: "最適値を決める双対面の層、と平文で述べる"
+    pattern: value face
+  # === end per-repo section =======================================================================

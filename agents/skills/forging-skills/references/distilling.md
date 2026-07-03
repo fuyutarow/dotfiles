@@ -84,7 +84,7 @@ not a mechanical flip:
 | acting-on-hypotheses | human freeze / collect-until-certain | INVERSE: be-bold THEATER | STEP 0 over-firing guard + a dual under-firing guard ("fire even at felt confidence") |
 | growing-oss-adoption | author optimism | SAME axis, new form: reciting mechanisms as causes | mechanisms demoted to table-stakes; regime classification first |
 | forging-novel-theses | idea-books' missing control loop | evidence-type inversion: a consensus estimator judging 合意非依存 theses | agent consensus = ANTI-signal; advocates forbidden |
-| grounding-prose | human blindness to LLM-ish prose | the audit skill ITSELF over-flags at machine speed | "name the slots, never the sins" anti-priming |
+| linting-prose | human blindness to LLM-ish prose | the audit skill ITSELF over-flags at machine speed | "name the slots, never the sins" anti-priming |
 
 Both directions can need guards (acting-on-hypotheses keeps both); the table forces you to argue
 which is DOMINANT and give it the first-class slot.

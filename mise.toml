@@ -78,13 +78,14 @@ exit $rc
 
 # NOTE: deliberately NOT in `[tasks.lint].depends` — dotfiles has no reports/memos/
 # proposals to scan (they live in research repos), so wiring it into the blocking gate
-# would add friction with no target. Portable: run it against real files with `-- <paths>`,
-# or copy/link scripts/check-prose-grounding.sh into a repo that has a prose corpus and add
-# "lint:prose-grounding" to that repo's lint depends.
-[tasks."lint:prose-grounding"]
+# would add friction with no target. Portable: run it against real files with `-- <paths>`.
+# Machine floor = textlint presets (agents/skills/linting-prose/references/machine-floor.md); the
+# hand-maintained scripts/check-prose-grounding.sh was RETIRED in the linting-prose reforge (2026-07-04).
+# External-register docs (外賓/社外/顧客): swap in assets/textlintrc-external.json (adds the C9 set).
+[tasks."lint:prose"]
 dir = "{{config_root}}"
-description = "Prose-grounding gate: fail on audit-theater / metaphor-packaging / unbounded PASS in persisted reports/memos/proposals. Pass paths: `mise run lint:prose-grounding -- report.md docs/`"
-run = "bash scripts/check-prose-grounding.sh"
+description = "Prose lint (linting-prose machine floor): bunx textlint with the house config. Pass paths: `mise run lint:prose -- report.md docs/`. External register → textlintrc-external.json."
+run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json"
 
 [tasks."cache:clean"]
 description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."

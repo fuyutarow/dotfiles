@@ -134,7 +134,7 @@ When a user asks "for Opus", "for Fable 5", "Sonnet 5 向け", or similar:
 | OpenAI API, ChatGPT, Responses API, OpenAI model prompting | `openai-docs` |
 | Claude Code hooks, Skills, `CLAUDE.md`, MCP setup, permissions, harness mechanics | `operating-the-harness` |
 | Creating or improving a Codex/Claude Skill itself | `forging-skills` |
-| Audience-facing prose rewrite with no LLM prompt artifact | `auditing-audience-facing-prose` |
+| Audience-facing prose rewrite with no LLM prompt artifact | `linting-prose` |
 | Debugging application code where the prompt is not the object | the relevant coding/debugging workflow |
 | Generic one-line prompt rewrite with no model-specific or high-risk behavior | answer directly; do not run the full procedure |
 

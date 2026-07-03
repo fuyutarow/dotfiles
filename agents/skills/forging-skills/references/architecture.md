@@ -88,8 +88,8 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
   (precedents: forging-novel-theses `gate-check.sh`; this skill's `scripts/skill-check.sh`). The
   script owns the floor, judgment owns the ceiling, and the skill states the boundary between them.
 - **Never spawn an agent to run a regex** — script-over-agent is precedence
-  (`grounding-prose`); agents add noise, not coverage.
-- **Prove the gate fires** (absorbed from `grounding-prose`): inject a known-bad
+  (`linting-prose`); agents add noise, not coverage.
+- **Prove the gate fires** (absorbed from `linting-prose`): inject a known-bad
   input, watch the script FAIL, revert. Once at build, again after any script edit. A gate never
   seen red is decoration, and a green from it is theater.
 

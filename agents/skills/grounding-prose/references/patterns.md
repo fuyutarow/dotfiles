@@ -1,13 +1,13 @@
 # Patterns
 
-Arguing home for the `grounding-prose` violation classes (C1–C8): full instance families, mapping
+Arguing home for the `grounding-prose` violation classes (C1–C9): full instance families, mapping
 tables, the terminology-table format, the ledgers, the machine gate, and the harness execution
 map. SKILL.md states each class compactly with its tokens; this file argues it.
 
 ## Contents
 
 - [Fast lint](#fast-lint)
-- [The violation classes in full](#the-violation-classes-in-full)
+- [The violation classes in full](#the-violation-classes-in-full) — C1–C9
 - [The terminology table](#the-terminology-table)
 - [Terminology normalization](#terminology-normalization)
 - [Rewrite ledger](#rewrite-ledger)
@@ -24,6 +24,7 @@ map. SKILL.md states each class compactly with its tokens; this file argues it.
 
 Run these checks on every title, header, summary sentence, or script line:
 
+0. Is the audience line written — and does every term in this line resolve for THAT reader?
 1. Can I point to the subject?
 2. Can I name the comparison class?
 3. Can I tell whether the sentence is about the object, or about the convenience of packaging it?
@@ -149,6 +150,12 @@ carry an explicit terminology table:
 Placement: front matter (a deck's early slide, a paper's notation/terminology block) or a named
 appendix — somewhere the reader meets it at or before first use, not buried mid-text.
 
+**The budget bound.** The table discloses necessary terms; it does not license coinage. For an
+external register the term budget (SKILL.md → AUDIENCE check) caps define-at-first-use terms at
+three per page-equivalent. A document that "needs" ten tabled terms for an external reader is
+mis-structured, not under-tabled — rewrite around the reader's vocabulary; a table cannot repair
+over-budget coinage.
+
 The table changes what review means: once it exists, review checks USAGE against the table.
 Every occurrence of a table term must match the table's definition and surface form; drift
 between table and text — a mid-document redefinition, a synonym creeping in, a table term used in
@@ -204,6 +211,37 @@ Better: `denylist scan found no listed strings in R2607_008; sentence clarity an
 Bad: `R2607_007 は私の起因でない`
 
 Better: `R2607_007 still fails the prose gate; this change either fixes it or excludes it explicitly from scope`
+
+### C9 — Insider register export (declared novel): defined-for-us, undefined-for-them
+
+Internal project grammar in a document whose declared register is external: ledger IDs
+(`R2607_016 §7`), `receipt:` provenance lines, `gated`, verdict enums (`CELL_DEGENERATE`,
+`AUDIT_APPLICABLE`), house dichotomies (`agnostic`/`aware`). Each such term IS grounded in a
+shared taxonomy — the project's — so a reader-less LAW is satisfied while the declared reader
+resolves nothing. Hence a class of its own:
+
+- **C7** polices missing definitions (nobody has them);
+- **C9** polices definitions the declared reader was never given (the project has them).
+
+The most dangerous C9 source is this skill's own audit grammar: bounded-evidence clauses,
+receipts, PASS-with-bounds, five-slot findings. In an internal audit report they are the required
+form; in a deliverable they are noise that *reads* like diligence. Register containment
+(SKILL.md → Report discipline) is the rule; this table is the mapping (provenance of the class:
+`tests/forge-verification-ledger.md`, 2026-07-03 reforge #2):
+
+| insider form | reader-facing form |
+|---|---|
+| `receipt: R2607_016 §7` | appendix reference or the reader's citation format — or drop |
+| `R2607_008 gated`, `field 未検証（… gated）` | 「実機検証は未実施」 stated once, in prose |
+| `agnostic` / `aware`（house dichotomy） | the plain contrast it names: 「業界標準の設計」/「設計空間を踏まえた再設計」 |
+| verdict enums (`CELL_DEGENERATE` …) | the finding in one sentence: 「この構成では設計変更の余地がない」 |
+| `PASS` / `certified`（as insider verdicts） | what was shown, for whom it holds, what remains |
+| internal cell/coordinate taxonomy used as headers | the reader's question each cell answers |
+
+Detection heuristic when the token list inevitably lags: any ALL-CAPS enum, any `ID §n` pattern,
+any two-sided house dichotomy used without introduction is C9-suspect in an external register.
+The `--external` mode of the gate script encodes the greppable subset; the judgment pass owns the
+rest.
 
 ### Claim-theater and mis-calibration
 
@@ -276,6 +314,14 @@ gray, not bolted on as a counter-weight.
 - Better: `R2607_007 still fails the prose gate; fix or report it as outside this change`
 - Why: the rewrite replaces blame displacement with a scope decision the reader can act on.
 
+### Example 10 — insider register → reader's vocabulary (C9)
+
+- Bad: `aware：adaptive（SW のみ）0.4570（61.6%）… receipt: R2607_016 §7・PPT/cut-PPT 証明書`
+- Better: `測定順序をソフトウェアで適応化するだけで、装置を変えずに改善余地の約6割を回収できる（数値の導出は付録A）`
+- Why: the rewrite states the one decision-relevant sentence in the reader's vocabulary; the
+  house dichotomy, verdict shorthand, and provenance IDs move to an appendix the insider can
+  still follow.
+
 ## Claim-calibration ledger
 
 Audit titles, abstracts, and rebuttals for the calibration failure, not only the wording failure.
@@ -305,6 +351,7 @@ report.
 | metaphor repair table still metaphorical | replacement column contains `anchor`, `scaffold`, `moat`, `melt`, `fence`, `kill` | replace with literal domain relation |
 | factual repair from wording only | "prose audit found factual contradiction" without citations | cite both source lines or downgrade to "possible" |
 | convergence claim | "stable", "done", "asymptotic", "core passed" after repeated failed edits | report exact remaining risk and stop claiming convergence |
+| register leak (C9) | audit grammar (receipts, verdict enums, bounded-PASS) inside the deliverable itself | translate to the reader's vocabulary; provenance to appendix; audit grammar stays in the report |
 
 ## Deck-level rules
 
@@ -349,6 +396,11 @@ tape-out            # normalize to テープアウト
 床|鎖|扇|背骨|山場|持ち上げ|挟[んみ]|段差   # metaphor candidates; audit 顔/橋/土台 in context
 アンカー|足場|ノブ|畳[むん]|溶け|囲[うわい]|殺[すし]   # metaphor candidates; allow chosen technical terms with context
 PASS|GREEN|監査完了|好例|私の起因でない   # audit-report theater; prefer bounded evidence
+# --- C9 set: enable ONLY for external-register documents (--external in the house script) ---
+receipt:                              # provenance line exported to a reader
+\b[A-Z]{1,3}[0-9]{4}_[0-9]{2,3}\b      # ledger/provenance IDs (R2607_016-style)
+\bgated\b                             # insider verdict verb
+\b[A-Z]{3,}_[A-Z_]{3,}\b               # verdict enums (CELL_DEGENERATE, AUDIT_APPLICABLE, …)
 ```
 
 Rules that make a gate real, not decorative:
@@ -400,7 +452,7 @@ every scale.
    evidence / replacement / unchecked risk, plus unverified marking), returned as structured
    findings, not prose:
    ```json
-   {"findings":[{"target":"file + line + quoted text","violation":"named class (C1-C8) or empty slot",
+   {"findings":[{"target":"file + line + quoted text","violation":"named class (C1-C9) or empty slot",
      "evidence":"the quoted line","replacement":"...","unchecked_risk":"what this flag cannot prove",
      "unverified":false}]}
    ```
@@ -456,6 +508,10 @@ quoted source.
   <https://digital.gov/guides/plain-language/principles/avoid-jargon>; ISO 24495-1:2023 "Plain
   language — Part 1: Governing principles and guidelines" — <https://www.iso.org/standard/78907.html>;
   International Plain Language Federation definition — <https://www.iplfederation.org/plain-language/>
+- C9's anchor is the audience-first half of the same plain-language canon — digital.gov
+  "understand your users / write for your audience", ISO 24495-1 governing principle "readers get
+  what they need" — named; the class itself (defined-for-us, undefined-for-them) is declared
+  novel — provenance: `tests/forge-verification-ledger.md`.
 - Kobak, González-Márquez, Horvát & Lause, "Delving into LLM-assisted writing in biomedical
   publications through excess vocabulary," *Science Advances* 11(27), 2025 — verified.
   <https://arxiv.org/abs/2406.07016>

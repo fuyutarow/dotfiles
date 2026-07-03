@@ -1,30 +1,32 @@
 ---
 name: grounding-prose
 description: >-
-  Grounds audience-facing prose at the word and sentence level: every load-bearing TERM in a shared
-  taxonomy or an explicit terminology table (用語表), every CLAIM in its object, comparison, and
-  condition, every EMPHASIS in structure or information — ungrounded language is mapped to the
-  standard term, restated literally, or deleted. Use when reviewing or rewriting slide titles,
-  headers, abstracts, executive summaries, reports, memos, proposals, rebuttals, technical
-  summaries, or an agent's prose review for "LLMっぽい表現", "AI臭い文体", AI slop, jargon drift,
-  ジャーゴン / jargon, 造語, 定義されていない用語, 修辞 / rhetorical fluff, plain language, coined
-  translations, terminology normalization, PASS/gate theater, or metaphor packaging. Triggers:
-  grounding, wording audit, prose audit, style rewrite, claim calibration, 用語表 / terminology
-  table, tooling-first titles, "核", "本体", "中核エンジン", "一つに返す", "乗る", "閉じる", "主因",
-  "ここが肝心", "PASS", and metaphor jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document
-  structure, literature synthesis, domain-content generation, or model-facing SKILL.md prose
-  (→ forging-skills). Workflow-native: runs the gate script first and fans out read-only flaggers
-  only at corpus scale.
+  Grounds audience-facing prose at the word and sentence level FOR A DECLARED READER: every
+  load-bearing TERM resolvable by the named audience or defined in an explicit terminology table
+  (用語表) under a hard term budget, every CLAIM in its object, comparison, and condition, every
+  EMPHASIS in structure or information — and internal register (ledger IDs, "receipt:", "gated",
+  PASS verdicts, house dichotomies) never exported to external readers. Use BEFORE writing and
+  when reviewing or rewriting slide titles, headers, abstracts, executive summaries, one-pagers,
+  reports, memos, proposals, rebuttals, or an agent's prose review — 外賓向け / 社外向け / 顧客向け
+  資料, "LLMっぽい表現", "AI臭い文体", AI slop, jargon drift, ジャーゴン / jargon, 造語, 内輪用語 /
+  insider jargon, 定義されていない用語, 修辞, plain language, terminology normalization, PASS/gate
+  theater, metaphor packaging. Triggers: grounding, wording audit, prose audit, style rewrite,
+  claim calibration, 用語表 / terminology table, tooling-first titles, "核", "本体", "一つに返す",
+  "乗る", "主因", "ここが肝心", "PASS", "receipt:", and metaphor jargon such as
+  床/鎖/背骨/橋/土台/足場/アンカー. Not for document structure, literature synthesis, domain-content
+  generation, or model-facing SKILL.md prose (→ forging-skills). Workflow-native: runs the gate
+  script first and fans out read-only flaggers only at corpus scale.
 ---
 
 # Grounding prose
 
-> **Version** v2607.2.0 (2026-07-03) · **Scope** the word and sentence level of anything a human
+> **Version** v2607.3.0 (2026-07-03) · **Scope** the word and sentence level of anything a human
 > audience reads — slide titles and scripts, abstracts, executive summaries, reports, memos,
 > proposals, application statements, rebuttals, and an agent's own review/status prose.
-> **Lineage** reforged 2026-07-03 from `auditing-audience-facing-prose` — same battle-tested
-> tokens, re-anchored to the established taxonomy (Fable 5). **Build order** ATOMIC — this file
-> ships with its reference and its F3 ledger; verify:
+> **Lineage** reforged 2026-07-03 from `auditing-audience-facing-prose` (re-anchoring, Fable 5);
+> v2607.3.0 same day adds the reader anchor — AUDIENCE check, C9, term budget, write-time
+> protocol (postmortem: `tests/forge-verification-ledger.md`, reforge #2).
+> **Build order** ATOMIC — this file ships with its reference and its F3 ledger; verify:
 > `test -f references/patterns.md && test -f tests/forge-verification-ledger.md || echo MISSING`.
 
 Three PURPOSE cuts, each a runtime-answerable question — "is the finding about wording, or about
@@ -36,15 +38,21 @@ order, literature position, or technical content.
 
 ## The law
 
-> Every load-bearing expression must be **GROUNDED**: a **TERM** in a shared taxonomy or an
-> explicit local definition; a **CLAIM** in its object, comparison, and condition; an **EMPHASIS**
-> in structure or information. Ungrounded language — dying metaphors, verbal false limbs,
-> pretentious diction, meaningless words, undefined coinage, asserted emphasis, theater, slop —
-> is mapped to the standard term, stated as the literal relation, or deleted.
+> Every load-bearing expression must be **GROUNDED — FOR THE DECLARED READER**: a **TERM** in a
+> taxonomy the named audience already holds, or an explicit local definition within the term
+> budget; a **CLAIM** in its object, comparison, and condition; an **EMPHASIS** in structure or
+> information. Ungrounded language — dying metaphors, verbal false limbs, pretentious diction,
+> meaningless words, undefined coinage, insider register, asserted emphasis, theater, slop — is
+> mapped to the reader's standard term, stated as the literal relation, or deleted.
+>
+> **Reader corollary.** "Shared taxonomy" ALWAYS means shared WITH THE READER, never with the
+> authoring project. A document grounded only in the project's internal ledger is ungrounded for
+> everyone else. No declared audience ⇒ the prose cannot be graded; declare the reader before
+> writing or auditing a single line.
 >
 > **Enforcement corollary.** What cannot be grounded is mapped, restated literally, or deleted —
-> and a document that NEEDS new terms carries an explicit terminology table. Implicit coinage is
-> the violation, never coinage itself.
+> and a document that NEEDS new terms carries an explicit terminology table WITHIN the term
+> budget. Implicit coinage is the violation; so is tabled coinage past the budget.
 
 ## This skill's own terminology table
 
@@ -67,21 +75,44 @@ is the worked example of the terminology-table mandate (C7).
 | pendulum | novel — declared | re-evaluating on mood between drafts; revise only on newly-read evidence, cited |
 | stakes-without-claim | novel — declared | raising the stakes of a point whose claim slots are still empty |
 | worker-side duty | novel — declared | this skill's contract when spawned as a lens in another skill's fleet: read-only, schema findings, no verdict language |
+| audience line | novel — declared | the one-line reader declaration (reader / holds / register) that must exist before any drafting or grading; no audience line ⇒ prose not gradeable |
+| term budget | novel — declared | hard cap for external registers: ≤3 define-at-first-use terms per page-equivalent; past it, restructure — never extend the table |
+| insider register export | novel — declared (C9) | internally-defined grammar (ledger IDs, receipts, verdict tokens, house dichotomies) shipped to a reader who was never given the definitions |
+| register containment | novel — declared | the audit grammar (receipts, bounded-PASS, five-slot findings) is audit-artifact register only; its appearance in a deliverable is C9, not diligence |
 
 ## The grounding gate
 
-Run three checks on every load-bearing expression — title, header, claim line, summary sentence,
-report line. If a line paraphrases to "this feels neatly organized" or "this matters a lot"
-rather than "X implies Y under Z", it is ungrounded packaging — rewrite it.
+Run the AUDIENCE check once per document, then three checks on every load-bearing expression —
+title, header, claim line, summary sentence, report line. If a line paraphrases to "this feels
+neatly organized" or "this matters a lot" rather than "X implies Y under Z", it is ungrounded
+packaging — rewrite it.
+
+### AUDIENCE check — declare the reader first (runs before everything)
+
+Write the **audience line** at the top of the audit (and before drafting): **reader** (who
+actually reads this — 外賓, reviewer, customer, teammate), **holds** (what vocabulary that reader
+can be assumed to hold), **register** (internal | external). Then classify every load-bearing
+term into exactly one of:
+
+- **reader-resolvable** — in the declared reader's taxonomy; use the reader's standard form;
+- **define-at-first-use** — necessary, not held by the reader; counts against the term budget;
+- **internal-only** — project ledger IDs, house dichotomies, verdict tokens, audit grammar;
+  for an external register these are C9 violations: translate, move to an appendix, or delete.
+
+**Term budget.** An external-audience document earns at most **three** define-at-first-use terms
+per page-equivalent (a slide, a one-pager section, an abstract). Past the budget, the fix is to
+restructure around the reader's vocabulary — never to extend the terminology table. The table is
+a disclosure device, not a coinage license.
 
 ### TERM check
 
-- **Field-standard term exists?** Use THE standard surface form, one per concept — never alternate
-  synonyms for the same artifact (terminology normalization, under C7).
-- **Necessary but not standard?** Define at first use. At **three or more** such terms the document
-  MUST carry an explicit terminology table: term | definition | nearest standard term and why it
-  fails (format and placement: `references/patterns.md` → The terminology table).
-- **Neither?** Map to the standard term or delete.
+- **Reader-standard term exists?** Use THE standard surface form the declared audience holds, one
+  per concept — never alternate synonyms for the same artifact (terminology normalization, under C7).
+- **Necessary but not held by the reader?** Define at first use, within the term budget. At
+  **three or more** such terms the document MUST carry an explicit terminology table: term |
+  definition | nearest standard term and why it fails (format and placement:
+  `references/patterns.md` → The terminology table).
+- **Neither?** Map to the reader's standard term or delete.
 
 ### CLAIM check — the four-slot test
 
@@ -120,8 +151,10 @@ reason the point changes a decision, bound, or comparison.
 
 ## The violation classes
 
-The old Denylist 1–8, renamed to their anchors (each class is quoted and argued in
-`references/patterns.md`). Each token list is the battle-tested house instance set.
+The old Denylist 1–8 renamed to their anchors, plus C9 (declared novel; provenance in the F3
+ledger). Each class is quoted and argued in `references/patterns.md`. Each token list is the
+battle-tested house instance set — instances from PAST failures; the class judgment, not the
+token grep, is what catches the next project's coinage.
 
 **C1 — Dying metaphors (Orwell).** Structural / body-part metaphors standing in for the literal
 term: `床`(floor), `鎖`(chain), `扇`(fan), `背骨`/`spine`, `顔`(face), `橋`(bridge),
@@ -181,6 +214,17 @@ sycophantic openers, hedging boilerplate, em-dash overuse.
 and explicit residual risk. A passing denylist scan only says the scan found no listed strings in
 its scope; it does not prove clarity, correctness, or consistency.
 
+**C9 — Insider register export (DECLARED NOVEL; cousin of C7 with the definition PRESENT).**
+Internal project grammar shipped to an external reader: ledger/provenance IDs (`R2607_016 §7`),
+`receipt:`, `gated`, verdict tokens (`PASS`, `certified`, `CELL_DEGENERATE`-style enums), house
+dichotomies (`agnostic`/`aware`) and internal cell taxonomies. Every one of these IS defined —
+in the project — so C7's "undefined" never fires; the violation is that the DECLARED READER holds
+none of it. C7 polices missing definitions; C9 polices definitions the reader was never given.
+→ Translate each to the reader's vocabulary; provenance moves to an appendix or a citation in the
+reader's format, or is dropped; a house dichotomy becomes the plain contrast it names (e.g.
+"standard practice" vs "the audited redesign"). The audit grammar this skill itself mandates
+(receipts, bounded-PASS, five-slot findings) is the most dangerous C9 source — see Report discipline.
+
 ## Claim calibration
 
 Anchored to Grice **QUANTITY** (as informative as required — no more) and **QUALITY** (adequate
@@ -204,12 +248,18 @@ as carefully as for wording — this is where proposals and rebuttals fail harde
 
 The audit report is itself audience-facing prose — it obeys the same LAW. Do not let it become a
 performance about how carefully the audit was run. Every finding fills the unified five-slot
-grammar: **target** (file + line + quoted text) / **violation** (the named class C1–C8 or the
+grammar: **target** (file + line + quoted text) / **violation** (the named class C1–C9 or the
 empty claim slot) / **cited evidence** (the quoted line or source actually read) /
 **replacement** (the grounded rewrite) / **unchecked risk** (what this finding's check cannot
 prove). If you cannot cite the text or source you read, mark the finding **unverified** rather
 than turning it into a confident factual verdict. Gate output is evidence about one check only;
 it is not a verdict that the prose or substance is correct.
+
+**Register containment.** The five-slot grammar, bounded-evidence clauses, receipts, and
+PASS-with-bounds are **audit-artifact register** — they address the operator, never the audience.
+A bounded-evidence clause, a `receipt:` line, or a verdict enum inside an external-audience
+deliverable is a C9 violation, not diligence. When a finding from an audit must reach the
+audience, translate it into the reader's vocabulary and citation format.
 
 ## Non-negotiables
 
@@ -242,6 +292,23 @@ it is not a verdict that the prose or substance is correct.
   collaboration you have not verified. A factual **past** affiliation (a CV line) is fine; a claimed
   **present** partnership is a hallucination risk — leave it out until confirmed.
 
+## Write-time protocol — this skill fires at generation, not only at review
+
+A review-only skill enters after the damage; grounding is cheapest before the first draft line.
+Before writing ANY audience-facing prose:
+
+1. **Write the audience line** (reader / holds / register) — it goes at the top of the working
+   notes, and the reader/holds decision drives every later choice.
+2. **Set the term budget** and list the define-at-first-use candidates BEFORE drafting; if the
+   plan already needs more than the budget, restructure the plan, not the table.
+3. **Draft** in the reader's vocabulary; internal ledger IDs and verdict tokens never enter the
+   draft — they stay in the working notes.
+4. **Run the gate** on the draft (`--external` when register = external) — a green gate is step
+   4 of 5, not "done".
+5. **Titles-only test + read the rendered page** with the declared reader's eyes; then the C1–C9
+   judgment pass. The denylist is instance-overfit BY DESIGN (past failures); novel coinage of
+   the same classes is caught only by this pass — never skip it because the grep was green.
+
 ## Make the audit a gate
 
 Word-level discipline regresses under deadline — willpower is not a harness. Where the rendered
@@ -260,7 +327,8 @@ audience-facing text is greppable, convert each class token list into a machine 
 
 House wiring: the Stop hook `detect-audit-theater.sh` (C8 on the agent's own turn text) and the
 portable repo lint `scripts/check-prose-grounding.sh` (mise task `lint:prose-grounding`) over
-persisted prose files. Scripts own the greppable tier — never spawn an agent to run this regex.
+persisted prose files — pass `--external` when the audience line says external, which adds the
+C9 pattern set (ledger IDs, `receipt:`, `gated`, verdict enums). Scripts own the greppable tier — never spawn an agent to run this regex.
 Agents enter only at corpus scale (a multi-file package, or this skill running as the prose lens
 in another skill's audit fleet), and an agent return claiming `PASS` / `監査完了` / `GREEN` is
 bounced under C8. The stage map and the flagger contract live in `references/patterns.md`
@@ -268,7 +336,7 @@ bounced under C8. The stage map and the flagger contract live in `references/pat
 
 ## When to open the reference file
 
-Open `references/patterns.md` for: the fast lint, the full class families (C1–C8) and mapping
+Open `references/patterns.md` for: the fast lint, the full class families (C1–C9) and mapping
 tables, the terminology-table format (C7's arguing home) and terminology normalization, the
 rewrite ledger, the claim-calibration and audit-report failure ledgers, deck-level and
 document-level rules, the portable denylist-as-regex appendix, the harness execution map

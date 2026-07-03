@@ -1,4 +1,5 @@
 {
+  "model": "opus[1m]",
   "hooks": {
     "Stop": [
       {
@@ -27,6 +28,5 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "switchModelsOnFlag": true,
-  "agentPushNotifEnabled": true,
-  "model": "claude-fable-5[1m]"
+  "agentPushNotifEnabled": true
 }

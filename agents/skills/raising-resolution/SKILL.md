@@ -144,6 +144,7 @@ blocker is purely your own un-grounded understanding. The bare token "survey" is
 | `.claude` / CLAUDE.md / hooks config or harness mechanics | **operating-the-harness** | owner (closes the meta-loop) |
 | skill creation / SKILL.md authoring/auditing (craft) | **forging-skills** | owner |
 | Julia / Lean execution | **writing-julia / proving-theorems** | owner |
+| reading a PERSON's personality from their language/behavior (profile / dossier / traits / HEXACO) | **profiling-personality** | owner — domain instrument for one artifact class (a person); its G2/G3 gates are the personality-specific form of inspect-before-assert |
 | a future-bet (MVP / prototype / spike / 賭け / kill-condition / will-it-scale) | **acting-on-hypotheses** | DECISIVE (see below) |
 
 **See also — acting-on-hypotheses (the forward-bet sibling).** Cut by PURPOSE/OBJECT; the SOLE owner of the

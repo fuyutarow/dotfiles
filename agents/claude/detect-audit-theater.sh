@@ -3,14 +3,14 @@
 #
 # BLOCKS (exit 2) when the assistant's own prose-audit / style-review report uses
 # self-justifying or unbounded gate language — the "監査完了 / PASS / 核は stable /
-# 私の起因でない" performance the auditing-audience-facing-prose skill forbids. The
+# 私の起因でない" performance the grounding-prose skill forbids. The
 # skill states the criterion; this hook makes it actually FAIL instead of "be careful".
 #
 # Safety (mirrors detect-leaked-toolcall.sh, plus a Stop-loop guard):
 #   0. FAIL-SAFE   — no jq / no transcript / parse error ⇒ exit 0 (never break a turn).
 #   1. LOOP-GUARD  — stop_hook_active ⇒ exit 0 (force-stop cap is 8 consecutive blocks).
 #   2. CONTEXT-GATE— only audit/review turns: the user asked for a prose/style/skill
-#                    review, OR the assistant invoked auditing-audience-facing-prose.
+#                    review, OR the assistant invoked grounding-prose.
 #   3. TURN-SCOPED — scans only THIS turn's assistant text (after the last user entry).
 #   4. CODE-STRIPPED — removes ``` fences, `inline` spans, and > blockquotes first, so a
 #                    QUOTED bad example ("Bad: 監査完了") never fires.
@@ -50,7 +50,8 @@ user_text=$(jq -rs '
 # 2. context gate — (a) user asked for a prose/style/skill review, OR (b) skill invoked.
 ctx=0
 printf '%s' "$user_text" | grep -Eqi 'prose audit|prose review|文体|style (review|rewrite)|skill ?review|skill ?レビュー|レビュー|audit|監査' && ctx=1
-printf '%s' "$turn_text" | grep -q 'auditing-audience-facing-prose' && ctx=1
+# old name kept as a back-compat alternate: transcripts and older sessions may still carry it.
+printf '%s' "$turn_text" | grep -Eq 'grounding-prose|auditing-audience-facing-prose' && ctx=1
 [ "$ctx" = "1" ] || exit 0
 
 # 4. strip fenced blocks, inline backtick spans, then markdown blockquotes.

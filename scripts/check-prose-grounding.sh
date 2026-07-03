@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Audience-prose gate — FAILS (exit 1) when a persisted audience-facing file uses
+# Prose-grounding gate — FAILS (exit 1) when a persisted audience-facing file uses
 # audit-theater / metaphor-packaging / unbounded-gate language.
 #
 # Portable BY DESIGN: pass files or dirs as arguments, so it runs in ANY repo where
 # reports / memos / proposals actually live (this dotfiles repo has none):
-#   bash scripts/check-audience-prose.sh report.md docs/proposals/
-#   mise run lint:audience-prose -- report.md          # thin mise wrapper
+#   bash scripts/check-prose-grounding.sh report.md docs/proposals/
+#   mise run lint:prose-grounding -- report.md         # thin mise wrapper
 #
-# Semantic source of the word list: the auditing-audience-facing-prose skill denylist.
+# Semantic source of the word list: the grounding-prose skill denylist.
 # EXCLUDES (so the things-being-banned don't self-trip the gate): skill bodies,
 # denylist tables, design docs, fenced code blocks, `inline` spans, > blockquotes
 # (where bad examples are quoted).
@@ -24,7 +24,7 @@ for p in "$@"; do
   fi
 done
 if [ "${#targets[@]}" -eq 0 ]; then
-  echo "check-audience-prose: no target files (pass reports/memos/proposals as args)"
+  echo "check-prose-grounding: no target files (pass reports/memos/proposals as args)"
   exit 0
 fi
 
@@ -56,7 +56,7 @@ done
 
 if [ "$status" -ne 0 ]; then
   echo
-  echo "audience-prose gate FAILED — rewrite with: target / violation / cited evidence / replacement / unchecked risk."
-  echo "(criteria: the auditing-audience-facing-prose skill — denylist + bounded-PASS rule)"
+  echo "prose-grounding gate FAILED — rewrite with: target / violation / cited evidence / replacement / unchecked risk."
+  echo "(criteria: the grounding-prose skill — denylist + bounded-PASS rule)"
 fi
 exit "$status"

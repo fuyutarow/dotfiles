@@ -14,7 +14,7 @@ description: >-
   operating-the-harness owns the harness contract: skill NOT LISTED / truncated → it ALONE;
   listed but never fires → co-fire, its diagnostics FIRST, then description craft here.
   SKILL.md prose is model-facing — wording audits of it live here, not
-  auditing-audience-facing-prose. Cut: novel thesis → forging-novel-theses; multi-paper
+  grounding-prose. Cut: novel thesis → forging-novel-theses; multi-paper
   synthesis → systematizing-knowledge. Workflow-native: design and cuts stay solo; harvest,
   drafting, and verification fleets fan out. English skill; respond in the user's language
   (default Japanese).
@@ -136,7 +136,7 @@ MUST NOT fire (with route):
 | the two defaults — `.system:skill-creator`, `anthropic-skills:skill-creator` | SUPERSEDED as defaults: step lists with no LAW, no gates, no MUST-NOT-FIRE, no verification of the skill itself. Their format/packaging/eval MACHINERY stays live and is invoked by pointer, never rebuilt — trigger-eval + description-optimization loop via `references/triggering.md` §6; validators, grader/comparator/analyzer, viewer, packaging via `references/verifying.md` §4. PURPOSE cut: need their MACHINERY (evals/packaging/scaffold) → invoke by pointer under this pipeline; need GUIDANCE → here. Reciprocal edit impossible (marketplace-managed, read-only) — deferral recorded here. `$PLUGIN` = `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator`; `$CODEX` = `~/.codex/skills/.system/skill-creator` (defined ONCE here; references point). |
 | `forging-novel-theses` | PURPOSE cut — name-adjacent, zero overlap: a thesis is a BET about the world; a skill is an OPERATING MANUAL for executors. 鍛錬 of an idea → there; 鍛錬 of a manual → here. |
 | `systematizing-knowledge` | Co-fire, sequential never racing: a paper-corpus source runs as an SoK FIRST (ledger, GRADE, reconciliation), THEN the SoK's position distills into a skill here. Never skill-ify a raw corpus. |
-| `auditing-audience-facing-prose` | PURPOSE cut — audience: skills are MODEL-facing prose; do NOT run audience-prose gates on a SKILL.md. Human-facing deliverables → there. |
+| `grounding-prose` | PURPOSE cut — audience: skills are MODEL-facing prose; do NOT run prose-grounding gates on a SKILL.md. Human-facing deliverables → there. |
 | `raising-resolution` | owner-filter chain: its yield list routes skill craft here and harness contract to `operating-the-harness` (reciprocal edit landed 2026-07-02); inspect-before-assert runs as a silent sub-step inside every forge. |
 
 **Co-fire clause (`operating-the-harness`).** On every skill authoring/edit, CO-FIRE: read that

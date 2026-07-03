@@ -1,55 +1,104 @@
 ---
-name: auditing-audience-facing-prose
+name: grounding-prose
 description: >-
-  Audits wording, sentence-level claims, and the agent's own audit reports in audience-facing prose
-  so they state the object, comparison, condition, evidence, and output directly instead of sounding
-  LLM-ish, managerial, self-justifying, or tooling-first. Use when reviewing or rewriting slide
-  titles, headers, abstracts, executive summaries, reports, memos, proposals, rebuttals, technical
-  summaries, or an agent's prose review for "LLMっぽい表現", "AI臭い文体", jargon drift, rhetorical fluff,
-  claim calibration, coined translations, terminology normalization, PASS/gate theater, or metaphor
-  packaging. Triggers: wording audit, prose audit, style rewrite, claim calibration, tooling-first
-  titles, "核", "本体", "中核エンジン", "一つに返す", "乗る", "閉じる", "主因", "ここが肝心", "PASS", and metaphor
-  jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document structure, literature synthesis,
-  domain-content generation, or model-facing SKILL.md prose (→ forging-skills). Workflow-native:
-  runs the gate script first and fans out read-only flaggers only at corpus scale.
+  Grounds audience-facing prose at the word and sentence level: every load-bearing TERM in a shared
+  taxonomy or an explicit terminology table (用語表), every CLAIM in its object, comparison, and
+  condition, every EMPHASIS in structure or information — ungrounded language is mapped to the
+  standard term, restated literally, or deleted. Use when reviewing or rewriting slide titles,
+  headers, abstracts, executive summaries, reports, memos, proposals, rebuttals, technical
+  summaries, or an agent's prose review for "LLMっぽい表現", "AI臭い文体", AI slop, jargon drift,
+  ジャーゴン / jargon, 造語, 定義されていない用語, 修辞 / rhetorical fluff, plain language, coined
+  translations, terminology normalization, PASS/gate theater, or metaphor packaging. Triggers:
+  grounding, wording audit, prose audit, style rewrite, claim calibration, 用語表 / terminology
+  table, tooling-first titles, "核", "本体", "中核エンジン", "一つに返す", "乗る", "閉じる", "主因",
+  "ここが肝心", "PASS", and metaphor jargon such as 床/鎖/背骨/橋/土台/足場/アンカー. Not for document
+  structure, literature synthesis, domain-content generation, or model-facing SKILL.md prose
+  (→ forging-skills). Workflow-native: runs the gate script first and fans out read-only flaggers
+  only at corpus scale.
 ---
 
-# Auditing audience-facing prose
+# Grounding prose
 
-Scoped to the **word and sentence level** of anything an audience reads: slide titles and scripts,
-but equally abstracts, executive summaries, reports, memos, proposals, application statements,
-rebuttals, and an agent's own review/status prose.
-Structure, figures, ordering, and slide ownership belong to `designing-presentations`; turning a
-recurring fix into a machine check belongs to `operating-the-harness`. This skill identifies
-recurring prose failures and, where they are greppable, hands them to a gate. It does **not**
-decide the argument, section order, literature position, or technical content.
+> **Version** v2607.2.0 (2026-07-03) · **Scope** the word and sentence level of anything a human
+> audience reads — slide titles and scripts, abstracts, executive summaries, reports, memos,
+> proposals, application statements, rebuttals, and an agent's own review/status prose.
+> **Lineage** reforged 2026-07-03 from `auditing-audience-facing-prose` — same battle-tested
+> tokens, re-anchored to the established taxonomy (Fable 5). **Build order** ATOMIC — this file
+> ships with its reference and its F3 ledger; verify:
+> `test -f references/patterns.md && test -f tests/forge-verification-ledger.md || echo MISSING`.
 
-## The one idea
+Three PURPOSE cuts, each a runtime-answerable question — "is the finding about wording, or about
+…?": structure, figures, ordering, and slide ownership belong to `designing-presentations`;
+turning a recurring fix into a machine check belongs to `operating-the-harness`; model-facing
+SKILL.md prose belongs to `forging-skills`. This skill identifies recurring prose failures and,
+where they are greppable, hands them to a gate. It does **not** decide the argument, section
+order, literature position, or technical content.
 
-Audience-facing prose must describe the **object**: what is being chosen, compared, constrained,
-proved, or delivered. The failure is prose about packaging, integration, convenience, importance,
-or vivid imagery. If a line paraphrases to "this feels neatly organized" or "this matters a lot"
-rather than "X implies Y under Z", rewrite it. Packaging language often obscures whether the writer
-has named the object and relation clearly enough.
+## The law
 
-The audit report is also audience-facing prose. Do not let the report become a performance about
-how carefully the audit was run. State the target line, the violated rule, the evidence, and the
-replacement. Gate output is evidence about one check only; it is not a verdict that the prose or
-substance is correct.
+> Every load-bearing expression must be **GROUNDED**: a **TERM** in a shared taxonomy or an
+> explicit local definition; a **CLAIM** in its object, comparison, and condition; an **EMPHASIS**
+> in structure or information. Ungrounded language — dying metaphors, verbal false limbs,
+> pretentious diction, meaningless words, undefined coinage, asserted emphasis, theater, slop —
+> is mapped to the standard term, stated as the literal relation, or deleted.
+>
+> **Enforcement corollary.** What cannot be grounded is mapped, restated literally, or deleted —
+> and a document that NEEDS new terms carries an explicit terminology table. Implicit coinage is
+> the violation, never coinage itself.
 
-## The four-slot test
+## This skill's own terminology table
 
-Before keeping any title, header, or claim line, fill four slots. If a slot is empty, the line is
-not ready.
+The skill practices what it enforces: every house term is ANCHORED to the established taxonomy
+(named; URLs once in the Sources block of `references/patterns.md`) or DECLARED novel. This table
+is the worked example of the terminology-table mandate (C7).
+
+| house term | status | definition |
+|---|---|---|
+| four-slot test | derived — cousin of PICO and Minto's governing thought | a claim line must fill object / action / comparison / scope; kept because the flagger contract and the anti-priming epigram hang on the word "slots" |
+| bounded evidence / bounded-PASS | novel — declared | `PASS`/`GREEN` is legal only with a same-line checked/unchecked clause naming what was checked and what remains |
+| audit-report theater | novel — declared; echoes Schneier's security theater | the audit report reproducing the failure it polices; the Stop hook `detect-audit-theater.sh` is named for it |
+| packaging | derived — house umbrella over Orwell's four vices (dying metaphors, verbal false limbs, pretentious diction, meaningless words) | prose about integration, convenience, importance, or imagery instead of the object |
+| name-the-slots-never-the-sins | novel — declared | anti-priming rule for spawned auditors: prompts carry slot and class NAMES, never example bad lines from the document under audit |
+| repair spiral | novel — declared | two failed correction passes or one newly introduced contradiction ⇒ stop patching locally; rewrite the smallest coherent block |
+| grounding | anchored — symbol grounding (Harnad 1990), linguistics; plain-language "define your terms" | the property the LAW demands: every load-bearing expression resolves to a shared referent or an explicit local definition |
+| false unity | derived — premature abstraction / lumping | claiming one formulation where inputs, outputs, or phases differ (C5); fix = the four-way split |
+| titles-only test | derived — assertion-evidence titles (Alley) | reading only the titles must reconstruct the claim chain |
+| claim-theater | novel — declared | inflating with a big word and offsetting with a caveat in the same line |
+| pendulum | novel — declared | re-evaluating on mood between drafts; revise only on newly-read evidence, cited |
+| stakes-without-claim | novel — declared | raising the stakes of a point whose claim slots are still empty |
+| worker-side duty | novel — declared | this skill's contract when spawned as a lens in another skill's fleet: read-only, schema findings, no verdict language |
+
+## The grounding gate
+
+Run three checks on every load-bearing expression — title, header, claim line, summary sentence,
+report line. If a line paraphrases to "this feels neatly organized" or "this matters a lot"
+rather than "X implies Y under Z", it is ungrounded packaging — rewrite it.
+
+### TERM check
+
+- **Field-standard term exists?** Use THE standard surface form, one per concept — never alternate
+  synonyms for the same artifact (terminology normalization, under C7).
+- **Necessary but not standard?** Define at first use. At **three or more** such terms the document
+  MUST carry an explicit terminology table: term | definition | nearest standard term and why it
+  fails (format and placement: `references/patterns.md` → The terminology table).
+- **Neither?** Map to the standard term or delete.
+
+### CLAIM check — the four-slot test
+
+Anchored to Grice's **QUANTITY** (as informative as required — no more) and **QUALITY** (adequate
+evidence) maxims, "Logic and Conversation" (1975) — quoted in full in `references/patterns.md`
+C4/C5. Before keeping any title, header, or claim line, fill four slots; if a slot is empty, the
+line is not ready.
 
 - **object** — what entity is designed, estimated, compared, certified, delivered, or argued for?
 - **action** — what relation is claimed about it?
 - **comparison** — against what baseline, alternative, or decomposition?
 - **scope** — under what condition, phase, audience, or use case?
 
-For an audit report, fill the same discipline as: **target** / **violation** / **evidence** /
-**replacement**. If you cannot cite the text or source you read, mark the issue as unverified
-rather than turning it into a confident factual verdict.
+**Prose-only ⇒ no truth verdict.** When you are given only the text (not the underlying evidence
+or data), audit textual over-/under-claiming only; do NOT rule on whether a claim is factually
+true — flag any claim whose evidence you have not read as *truth unverified (内容未確認)*, rather
+than endorsing or refuting it.
 
 When a line is weak, the fix is almost always one of four substitutions:
 
@@ -60,27 +109,115 @@ When a line is weak, the fix is almost always one of four substitutions:
 | an effect word ("effective", "wins") | the comparison condition |
 | a summary word ("everything", "all-in-one") | the enumeration |
 
-## Procedure
+### EMPHASIS check
 
-1. **Recover the proposition.** What is the concrete claim? No subject / comparison / output ⇒ not ready.
-2. **Fill the four slots** (above).
-3. **Delete meta-language.** Remove "returning", "closing", "flowing through", "connecting as-is",
-   "one line / one engine / one spec" — unless the mechanism *is* the claim.
-4. **Demote vivid imagery to the literal term** (Denylist 6). Do not paraphrase one metaphor into
-   another; map it to the standard word in the field.
-5. **Lead with the audience message.** Titles, section headers, opening sentences, and summaries
-   start from the task or decision, not tool names, architecture labels, or internal module nouns.
-6. **Calibrate the claim** (Claim calibration) — neither inflated nor buried.
-7. **Preserve distinctions until earned.** Do not collapse distinct modes / phases / applications
-   into one phrase before the audience has seen why they share a formulation.
-8. **Normalize terminology, register, and notation** consistently (Beyond words).
-9. **Audit the audit report before sending it.** Remove self-congratulation, blame-shifting,
-   "good example" narration, and PASS/GREEN claims that exceed the check actually run.
+Anchored to Gopen & Swan's **stress position** and **topic position** ("The Science of Scientific
+Writing", 1990 — quoted in full in `references/patterns.md` C4/C6).
+
+Emphasis is structural — it lives in the stress position, the topic position, and information the
+reader can check — never asserted. Delete `ここが肝心`-class assertions (C4), or state the factual
+reason the point changes a decision, bound, or comparison.
+
+## The violation classes
+
+The old Denylist 1–8, renamed to their anchors (each class is quoted and argued in
+`references/patterns.md`). Each token list is the battle-tested house instance set.
+
+**C1 — Dying metaphors (Orwell).** Structural / body-part metaphors standing in for the literal
+term: `床`(floor), `鎖`(chain), `扇`(fan), `背骨`/`spine`, `顔`(face), `橋`(bridge),
+`土台`(foundation), `山場`(climax), `持ち上げ`(lift), `挟む`(sandwich), `段差`(step), `アンカー`,
+`足場`, `ノブ`, `畳む`, `溶ける`, `囲う` — and `殺す` in the full table.
+→ Map each to the standard term (floor→lower bound, chain→inequality/ordering, fan→spread,
+face→side/use-case, bridge→connection/shared, foundation→lower bound/basis); do not paraphrase one
+metaphor into another. Recurs during revision — check diagram/style/variable names too. When the
+term is also a common everyday word, prefer phrase-level review over a blind hard-ban.
+
+**C2 — Verbal false limbs (Orwell).** Processing / meta verbs that pad the sentence and dodge the
+relation: `返す`(returning), `閉じる`(closing), `通す`(flowing through), `乗る`, `接続する`, `再走`,
+`一度に`.
+→ Replace with explicit input/output or causal relation. Use only when the control flow is the content.
+
+**C3 — Zombie nouns & pretentious diction (Sword + Orwell).** Architecture nouns as rhetoric —
+abstract entities hiding the missing object: `核`, `中核`, `コア`, `エンジン`, `基盤`, `パイプライン`,
+`層`, `本体`, `HUB`, `live`.
+→ Name the concrete function, optimization problem, deliverable, or question. If deleting the word
+does not change the meaning, delete it.
+
+**C4 — Asserted emphasis (derived: Gopen & Swan stress position + Grice QUANTITY).** Emphasis the
+structure has not earned: `ここが肝心`, `今日いちばん大事`, `合否を分ける`, `執念`, `ようやく`,
+`肝心`, `核心`, `正直な到達点`, `これは重要な pattern` — plus `この実務の執念から` and `好例` in the
+patterns.md variant list.
+→ Delete, or state the factual reason the point changes a decision/bound/comparison.
+
+**C5 — Unearned abstraction (Grice QUALITY: "Do not say that for which you lack adequate
+evidence").** A claimed unity ("one line / one engine / one spec") asserted before it is earned:
+`一つに返す`, `一つの仕様に乗る`, `一本に通す`, `そのまま接続(できる)`.
+→ Split into: shared formulation / differing inputs / differing outputs / differing phases. Do not
+collapse distinct modes/phases/applications before the audience has seen why they share a formulation.
+
+**C6 — Topic-position violations (Gopen & Swan principle 3).** The tool occupies the topic
+position that belongs to the task — tooling-first titles: `製造前設計: PDK・GDSFactory/SAX`,
+`QASM に挿す`.
+→ State the task or outcome first; the toolchain is a subtitle or caption. Same rule for headings
+in proposals and submission documents — and for opening sentences and summaries.
+
+**C7 — Undefined coinage (plain language: avoid-jargon + define-your-terms; digital.gov,
+ISO 24495-1).** A newly invented translation for an established term (e.g. fabricating a native
+phrase for "most informative").
+→ Keep the established term, or give an operational description ("the minimum cost achievable by
+individual measurements"). Do not invent vocabulary the field does not use. When new terms are
+genuinely needed, the terminology-table mandate applies (TERM check above; format in patterns.md).
+
+**C8 — AI slop & audit-report theater (DECLARED NOVEL).** The theater token family itself is
+covered by the established taxonomy (Grice QUALITY/QUANTITY, Orwell's meaningless words); what is
+declared novel is the self-auditing-agent failure taxonomy and the statistical machine fingerprint,
+for which the pre-2023 taxonomy has no term — anchored to the emerging vocabulary: Kobak et al.
+(excess vocabulary), Liang et al. (AI-modified content), "slop" (Merriam-Webster and American
+Dialect Society 2025 Word of the Year), and Wikipedia's "Signs of AI writing" list. House instances: `監査完了`, `PASS`,
+`GREEN`, `好例`, `核は stable`, `私の起因でない`, `gate を通過` — plus `通過` and `正直な到達点` in
+the patterns.md variant list — and the LLM markers: not-just-X-but-Y negative parallelism,
+sycophantic openers, hedging boilerplate, em-dash overuse.
+→ Replace with a bounded statement: checked file/line or rendered artifact, command if any, result,
+and explicit residual risk. A passing denylist scan only says the scan found no listed strings in
+its scope; it does not prove clarity, correctness, or consistency.
+
+## Claim calibration
+
+Anchored to Grice **QUANTITY** (as informative as required — no more) and **QUALITY** (adequate
+evidence), and to the hedges-and-boosters literature (Hyland). Audit for over- and under-claiming
+as carefully as for wording — this is where proposals and rebuttals fail hardest.
+
+- **Prose-only ⇒ no truth verdict** — stated verbatim in the CLAIM check; it governs calibration too.
+- **No overclaim.** Match the evidence exactly. Grandiose nouns (platform, hero, flywheel, winner)
+  are banned unless literally earned.
+- **No underclaim.** Do not bury the real contribution under caveats; a caveat is secondary, set in gray.
+- **Limits go inside the claim, stated first** — not as a separate hedge bolted on afterward.
+- **No claim-theater.** Avoid inflating with a big word and offsetting it with a caveat. Calibrate
+  to the single claim the evidence supports.
+- **No pendulum.** Do not swing the evaluation ("weak" → "amazing" → "weak again"). If you revise,
+  cite the new evidence you read; do not oscillate on mood.
+- **No factual verdict from prose alone.** If a wording audit reveals a possible contradiction,
+  cite both source lines. Without that, write "possible contradiction; evidence not inspected" and
+  do not repair the technical claim.
+
+## Report discipline
+
+The audit report is itself audience-facing prose — it obeys the same LAW. Do not let it become a
+performance about how carefully the audit was run. Every finding fills the unified five-slot
+grammar: **target** (file + line + quoted text) / **violation** (the named class C1–C8 or the
+empty claim slot) / **cited evidence** (the quoted line or source actually read) /
+**replacement** (the grounded rewrite) / **unchecked risk** (what this finding's check cannot
+prove). If you cannot cite the text or source you read, mark the finding **unverified** rather
+than turning it into a confident factual verdict. Gate output is evidence about one check only;
+it is not a verdict that the prose or substance is correct.
 
 ## Non-negotiables
 
-- Titles and headers must pass the titles-only test, unless the document deliberately uses
-  label-titles (see Titles: label vs assertion).
+- Titles and headers must pass the titles-only test (the argument survives reading titles/headers
+  alone), unless the document deliberately uses label-titles. Two legitimate conventions — pick one
+  per document, apply it uniformly: **assertion-title** (a falsifiable sentence) or **label-title**
+  (a short noun phrase; the assertion moves to the first body line just under it). Either way: no
+  tool/module names, no product-copy, no metaphor, no writer emphasis in the title.
 - Dividers and section separators are separators, not pseudo-claims. If they carry no message, keep them minimal.
 - Never substitute writer emphasis for logic. Delete "this is the key point" unless it adds information.
 - Avoid convenience verbs for mathematical or system claims. State input, output, and relation directly.
@@ -88,72 +225,11 @@ When a line is weak, the fix is almost always one of four substitutions:
 - Tool names are secondary — use them only after the audience-facing task is named.
 - The same discipline holds in slide titles, abstracts, executive summaries, application statements, and rebuttals.
 - The report must not excuse itself. Do not write "not my cause", "good example", "core is stable",
-  "PASS", "GREEN", or "verified" unless the sentence names exactly what was checked and what remains
-  unchecked.
+  "PASS", "GREEN", or "verified" unless the sentence names exactly what was checked and what
+  remains unchecked.
 - After two failed correction passes or one newly introduced contradiction, stop patching locally.
   Re-read the target section and rewrite the smallest coherent block; report that prior edits were
   unstable instead of claiming convergence.
-
-## Denylist categories
-
-### 1. Processing / meta verbs
-`返す`, `閉じる`, `通す`, `乗る`, `接続する`, `再走`, `一度に`.
-→ Replace with explicit input/output or causal relation. Use only when the control flow is the content.
-
-### 2. Architecture nouns as rhetoric
-`核`, `中核`, `コア`, `エンジン`, `基盤`, `パイプライン`, `層`, `本体`, `HUB`, `live`.
-→ Name the concrete function, optimization problem, deliverable, or question. If deleting the word does not change the meaning, delete it.
-
-### 3. Writer emphasis
-`ここが肝心`, `今日いちばん大事`, `合否を分ける`, `執念`, `ようやく`, `肝心`, `核心`,
-`正直な到達点`, `これは重要な pattern`.
-→ Delete, or state the factual reason the point changes a decision/bound/comparison.
-
-### 4. False unity
-`一つに返す`, `一つの仕様に乗る`, `一本に通す`, `そのまま接続`.
-→ Split into: shared formulation / differing inputs / differing outputs / differing phases.
-
-### 5. Tooling-first titles
-`製造前設計: PDK・GDSFactory/SAX`, `QASM に挿す`.
-→ State the task or outcome first; the toolchain is a subtitle or caption.
-
-### 6. Metaphor & decorative imagery  *(a common LLM-style failure mode)*
-Structural / body-part metaphors stand in for the literal term: `床`(floor), `鎖`(chain), `扇`(fan),
-`背骨`/`spine`, `顔`(face), `橋`(bridge), `土台`(foundation), `山場`(climax), `持ち上げ`(lift),
-`挟む`(sandwich), `段差`(step), `アンカー`, `足場`, `ノブ`, `畳む`, `溶ける`, `囲う`.
-→ Map each to the standard term (floor→lower bound, chain→inequality/ordering, fan→spread,
-face→side/use-case, bridge→connection/shared, foundation→lower bound/basis). This category often
-reappears during revision, so check diagram/style/variable names too. When the term is also a
-common everyday word, prefer phrase-level review over a blind hard-ban.
-
-### 7. Coined / fabricated translations
-A newly invented translation for an established term (e.g. fabricating a native phrase for "most informative").
-→ Keep the established term, or give an operational description ("the minimum cost achievable by individual measurements"). Do not invent vocabulary the field does not use.
-
-### 8. Audit-report theater
-`監査完了`, `PASS`, `GREEN`, `好例`, `核は stable`, `私の起因でない`, `gate を通過`.
-→ Replace with a bounded statement: checked file/line or rendered artifact, command if any, result,
-and explicit residual risk. A passing denylist scan only says the scan found no listed strings in
-its scope; it does not prove clarity, correctness, or consistency.
-
-## Claim calibration
-
-Audit for over- and under-claiming as carefully as for wording — this is where proposals and
-rebuttals fail hardest.
-
-- **Prose-only ⇒ no truth verdict.** When you are given only the text (not the underlying evidence or
-  data), audit textual over-/under-claiming only; do NOT rule on whether a claim is factually true —
-  flag any claim whose evidence you have not read as *truth unverified (内容未確認)*, rather than
-  endorsing or refuting it.
-- **No overclaim.** Match the evidence exactly. Grandiose nouns (platform, hero, flywheel, winner) are banned unless literally earned.
-- **No underclaim.** Do not bury the real contribution under caveats; a caveat is secondary, set in gray.
-- **Limits go inside the claim, stated first** — not as a separate hedge bolted on afterward.
-- **No claim-theater.** Avoid inflating with a big word and offsetting it with a caveat. Calibrate
-  to the single claim the evidence supports.
-- **No pendulum.** Do not swing the evaluation ("weak" → "amazing" → "weak again"). If you revise, cite the new evidence you read; do not oscillate on mood.
-- **No factual verdict from prose alone.** If a wording audit reveals a possible contradiction,
-  cite both source lines. Without that, write "possible contradiction; evidence not inspected" and
-  do not repair the technical claim.
 
 ## Beyond words: register, notation, disclosure
 
@@ -166,21 +242,10 @@ rebuttals fail hardest.
   collaboration you have not verified. A factual **past** affiliation (a CV line) is fine; a claimed
   **present** partnership is a hallucination risk — leave it out until confirmed.
 
-## Titles: label vs assertion
-
-Two legitimate conventions; pick one per document and apply it uniformly:
-
-- **assertion-title** — a falsifiable sentence; the document passes the *titles-only test* (the argument survives reading titles/headers alone).
-- **label-title** — a short noun phrase; the message moves to the first body line just under it.
-
-A label-title document trades the titles-only test for a cleaner skim — if you choose it, make sure
-the first body line carries the assertion. **Either way:** no tool/module names, no product-copy, no
-metaphor, no writer emphasis in the title.
-
 ## Make the audit a gate
 
 Word-level discipline regresses under deadline — willpower is not a harness. Where the rendered
-audience-facing text is greppable, convert each denylist into a machine check (see
+audience-facing text is greppable, convert each class token list into a machine check (see
 `operating-the-harness`):
 
 - A regex over the **rendered** audience-facing files only — strip comments; exclude design docs,
@@ -193,28 +258,19 @@ audience-facing text is greppable, convert each denylist into a machine check (s
 - **Close recurring feedback with three artifacts when appropriate:** (1) fix the instance, (2) the
   gate, (3) the skill rule. For one-off cases, a local rewrite may be enough.
 
-Scripts own the greppable tier — never spawn an agent to run this regex. Agents enter only at
-corpus scale (a multi-file package, or this skill running as the prose lens in another skill's
-audit fleet), and an agent return claiming `PASS` / `監査完了` / `GREEN` is bounced under Denylist 8.
-The stage map and the flagger contract live in `references/patterns.md` ("Running the audit on a
-harness").
-
-## Rewrite patterns
-
-- Packaging → proposition · Bad `既存ツールは一つに返さない` · Better `既存ツールは測定設計・本数設計・誤差限界評価を別々に扱う`
-- Passive drift → agency · Bad `測定を変えると分布が変わる` · Better `測定選択は、同じ rho(theta) からどの古典統計モデルを実装するかの選択である`
-- Tool-first → task-first · Bad `製造前設計: PDK・GDSFactory/SAX` · Better `製造前設計では、候補設計を較正しやすさ込みで比較する`
-- Emphasis → reason · Bad `ここが肝心です` · Better `この制約が測定本数と達成誤差の下限を決める`
-- Fake unity → scoped commonality · Bad `pre-fab も post-fab も一つの仕様に乗る` · Better `pre-fab と post-fab は入力重みが異なるが、同じ最適化問題として記述できる`
-- Metaphor → literal term · Bad `共通の床` · Better `共通の下界`
-- Claim-theater → calibrated · Bad `業界の基盤になる（ただし市場は未成立）` · Better `この空セルを最初に埋める実装である`
-- Audit theater → bounded evidence · Bad `banned PASS なので監査完了` · Better `denylist scan found no listed terms in R2607_008; claim consistency was not checked`
-- Self-excusing report → owned correction · Bad `R2607_007 は私の起因でない` · Better `R2607_007 still fails the prose gate; fix or report it as outside this change`
+House wiring: the Stop hook `detect-audit-theater.sh` (C8 on the agent's own turn text) and the
+portable repo lint `scripts/check-prose-grounding.sh` (mise task `lint:prose-grounding`) over
+persisted prose files. Scripts own the greppable tier — never spawn an agent to run this regex.
+Agents enter only at corpus scale (a multi-file package, or this skill running as the prose lens
+in another skill's audit fleet), and an agent return claiming `PASS` / `監査完了` / `GREEN` is
+bounced under C8. The stage map and the flagger contract live in `references/patterns.md`
+("Running the audit on a harness").
 
 ## When to open the reference file
 
-Open `references/patterns.md` for: the full pattern families and rewrite ledger, the metaphor and
-coined-translation tables, the claim-calibration ledger, deck-level (SCQA / divider / header)
-rules, the portable denylist-as-regex appendix, terminology normalization across a deck, memo,
-proposal, or script, and the harness execution map (script-first stage table, flagger contract)
-for running the audit with subagents at corpus scale.
+Open `references/patterns.md` for: the fast lint, the full class families (C1–C8) and mapping
+tables, the terminology-table format (C7's arguing home) and terminology normalization, the
+rewrite ledger, the claim-calibration and audit-report failure ledgers, deck-level and
+document-level rules, the portable denylist-as-regex appendix, the harness execution map
+(script-first stage table, flagger contract) for corpus-scale audits, and the Sources block with
+the URL for every anchor named above.

@@ -66,7 +66,7 @@ constraining epistemics already live.** Walk down; take the FIRST tier that fits
 |---|---|---|
 | **1 Full dedicated reference** | the modal invocation IS a fleet, or the file owns generic machinery other skills point at | systematizing-knowledge (its orchestration reference) |
 | **2 Large section of the workflow-owning reference** | fan-out is central but inseparable from an existing workflow home | proving-theorems (the blueprint DAG is the fan-out map) |
-| **3 Compact section beside the epistemics owner** | modal case is SOLO; only a narrow slice is delegable — the model lives next to the epistemics that constrain it | acting-on-hypotheses · forging-novel-theses · growing-oss-adoption · auditing-audience-facing-prose · raising-resolution |
+| **3 Compact section beside the epistemics owner** | modal case is SOLO; only a narrow slice is delegable — the model lives next to the epistemics that constrain it | acting-on-hypotheses · forging-novel-theses · growing-oss-adoption · grounding-prose · raising-resolution |
 | **4 Fully inline in SKILL.md** (deliberate outlier) | nearly everything is SOLO by construction and no reference exists to house the small delegable layer — a separate file would be an index pointer to nothing | designing-presentations |
 | **5 NONE** | even a paragraph would be fan-out theater | — write nothing |
 
@@ -93,8 +93,8 @@ forged it (survivorship · regime-mismatch · era-boundedness).
 **Worker-side duty.** If the target will itself be SPAWNED as a lens inside other skills' fleets,
 its execution model writes BOTH sides: the orchestrator-side model above AND a worker-side
 contract — read-only, a declared output schema, findings returned as data, no verdict theater
-(no PASS a downstream reader cannot check). Precedent: auditing-audience-facing-prose declares
-itself the prose lens that the systematizing-knowledge write stage fans out, with its flagger
+(no PASS a downstream reader cannot check). Precedent: grounding-prose declares itself the
+prose lens that the systematizing-knowledge write stage fans out, with its flagger
 schema — and both sides name each other.
 
 ## Anti-patterns

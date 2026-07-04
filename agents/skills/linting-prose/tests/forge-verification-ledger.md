@@ -11,6 +11,7 @@ future reforge; never overwrite.
 - Admissibility is READER-relative; internal register waives comprehension, never hygiene (verb calques, exact-equivalent loan nouns banned in any register).
 - Sourcing ladder ADOPT > CONFIGURE > AUTHOR — and ADOPT is reader-gated too (an established dictionary fails if its implied reader ≠ the declared reader).
 - Fire/no-fire desk-check set lives in `tests/triggers.md`; re-run on any description edit.
+- L4's label is **document logic** (renamed from "structure" — it collided with the sibling skill name). MODE cut vs `structuring-documents`: this skill AUDITS (findings), that skill REBUILDS (section moves, MECE, dedup); L4 findings needing reorganization hand off there.
 
 **Open defects:**
 - EN machine floor UNSHIPPED (no .vale.ini/Vocab) — English prose is VIBE-only; SKILL.md says so.
@@ -281,3 +282,13 @@ the contract is one-home + lean, landed ~150; (2) claim calibration NOT absorbed
 (would bury the most-fired check) — promoted to a third axis instead, which also satisfies the
 no-secret-families bar; (3) a pinned-token table is house pattern (forging-skills keeps one) — the
 defect was SIZE in core, fixed by moving the full table to patterns.md.
+
+## 2026-07-04 v2607.5.1 — seam completion (addendum to reforge #4)
+
+Owner falsified the "orthogonal axes" justification of the structuring-documents cut. Corrections,
+landed on BOTH sides: (1) L4 label "structure" → **document logic** (SKILL.md scope+taxonomy,
+patterns.md headings/C-map/glossary) — the old label collided with the sibling's name;
+(2) handoff protocol stated in the L4 row (flag here, rebuild there) and mirrored in
+structuring-documents' routing row + its new F3 ledger; (3) patterns.md flagger contract fixed —
+it mis-routed document-structure findings to designing-presentations (deck-era residue); now:
+L3/L4 findings are OWN, slide/figure → designing-presentations, reorganization → structuring-documents.

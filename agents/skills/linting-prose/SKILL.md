@@ -23,7 +23,7 @@ description: >-
 
 # Linting prose
 
-> **Version** v2607.5.0 (2026-07-04) · **Scope** word, sentence, paragraph, and structure of anything
+> **Version** v2607.5.1 (2026-07-04) · **Scope** word, sentence, paragraph, and document logic of anything
 > a human audience reads — slides, abstracts, reports, proposals, rebuttals, READMEs, an agent's own
 > review prose. **Lineage** grounding-prose → reforge #3 (machine-floor delegation, Kinoshita layers,
 > HARD/MIX/VIBE) → reforge #4 (hostile audit: one-home compression; history: `tests/forge-verification-ledger.md`).
@@ -97,7 +97,7 @@ Layers (Kinoshita); axes cross all layers. Arguing home, token lists, C1–C9 in
 | **L1 word** | HARD/MIX/VIBE | dying metaphors (`床`/`鎖`/`橋`), zombie nouns (`核`/`基盤`), hype vocab, novel coinage |
 | **L2 sentence** | HARD + VIBE | length/読点/negation/助詞 = floor; 一文一義・主述近接・修飾語順・逆茂木 = read |
 | **L3 paragraph** | VIBE | topic sentence present and leading; 1-paragraph-1-topic; known→unknown flow |
-| **L4 structure** | VIBE | conclusion-first/BLUF; **スリカエ** (fact written as opinion, then used as fact — the canon's worst failure); 目標規定文; tool-first titles |
+| **L4 document logic** | VIBE | conclusion-first/BLUF; **スリカエ** (fact written as opinion, then used as fact — the canon's worst failure); 目標規定文; tool-first titles. This layer FLAGS; a fix that moves sections is a REBUILD → hand off to `structuring-documents` |
 | **A-register** | HARD/VIBE | insider export (IDs, `receipt:`, verdict enums → external prh dict); prose-language hygiene; dearu/desumasu |
 | **A-lifecycle** | VIBE | retraction reaches EVERY surface (table cell, heading, abstract); no self line-number refs; no undated volatile numbers |
 | **A-calibration** | VIBE | claim = evidence, exactly: no overclaim, no underclaim, limits inside the claim stated first; prose-only ⇒ no truth verdict (内容未確認); revise only on newly-read evidence |

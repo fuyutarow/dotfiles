@@ -1,6 +1,6 @@
 # Patterns — the six families in full
 
-Arguing home for the six families (F-L1 word · F-L2 sentence · F-L3 paragraph · F-L4 structure ·
+Arguing home for the six families (F-L1 word · F-L2 sentence · F-L3 paragraph · F-L4 document logic ·
 F-register · F-lifecycle). SKILL.md states each family compactly with its layer and tier; this file
 argues it, carries the full token lists, the old C1–C9 mapping (preserved as instances), the
 terminology-table format, the ledgers, and the harness execution map. The deterministic (HARD) tier
@@ -10,7 +10,7 @@ itself lives in `machine-floor.md` — this file owns the JUDGMENT.
 
 - [The C1–C9 → six-family map](#the-c1c9--six-family-map)
 - [F-L1 word](#f-l1--word) · [F-L2 sentence](#f-l2--sentence) · [F-L3 paragraph](#f-l3--paragraph)
-- [F-L4 structure](#f-l4--structure) · [F-register](#f-register) · [F-lifecycle](#f-lifecycle)
+- [F-L4 document logic](#f-l4--document-logic) · [F-register](#f-register) · [F-lifecycle](#f-lifecycle)
 - [The terminology table](#the-terminology-table) · [Terminology normalization](#terminology-normalization)
 - [Rewrite ledger](#rewrite-ledger)
 - [Claim-calibration ledger](#claim-calibration-ledger) · [Audit-report failure ledger](#audit-report-failure-ledger)
@@ -29,9 +29,9 @@ retained instance name (and the denylist regression handle). The tier says who c
 | C1 dying metaphors (`床`/`鎖`/`橋`…) | F-L1 word | MIX | house prh dict (known tokens) + VIBE (novel imagery) |
 | C2 verbal false limbs (`返す`/`乗る`…) | F-L2 sentence | MIX | prh dict + VIBE (is control flow the content?) |
 | C3 zombie nouns (`核`/`本体`/`基盤`…) | F-L1 word | VIBE | model — name the object or delete |
-| C4 asserted emphasis (`ここが肝心`…) | F-L4 structure | VIBE | model; textlint `no-ai-emphasis-patterns` catches the **bold** form (HARD) |
-| C5 unearned abstraction (`一つに返す`…) | F-L4 structure | VIBE | model — split into shared / differing inputs / outputs / phases |
-| C6 tool-first titles | F-L4 structure | VIBE | model — task in the topic position |
+| C4 asserted emphasis (`ここが肝心`…) | F-L4 document logic | VIBE | model; textlint `no-ai-emphasis-patterns` catches the **bold** form (HARD) |
+| C5 unearned abstraction (`一つに返す`…) | F-L4 document logic | VIBE | model — split into shared / differing inputs / outputs / phases |
+| C6 tool-first titles | F-L4 document logic | VIBE | model — task in the topic position |
 | C7 undefined coinage | F-register | MIX | prh dict (known) + VIBE (novel translation for an established term) |
 | C8 AI slop | F-L1/F-L2/F-L4 | HARD | **textlint `preset-ai-writing` + slopless** — DELEGATED, not hand-maintained |
 | C8 audit-report theater (`監査完了`/`PASS`…) | F-register | VIBE | model + the Stop hook (agent's own turn text) |
@@ -121,7 +121,7 @@ similarity-based redundancy, not topic structure.
   paragraph scale.
 - **総論 first** (倉島 R1). A section opens with an overview paragraph before its details.
 
-## F-L4 — structure
+## F-L4 — document logic
 
 Layer: the whole document's order and claim discipline (Kinoshita ch.2/3/7; Minto pyramid). Tier:
 VIBE — no off-the-shelf tool measures conclusion placement or fact/opinion separation.
@@ -352,8 +352,9 @@ declaration; (5) "your final message is the return value".
 - The orchestrator re-reads every flagged line in place before rewriting — the editor signs.
 - An agent return asserting `PASS`/`監査完了`/`GREEN` as its own verdict is an audit-theater violation
   — bounce it. Quoted-evidence fields legitimately CONTAIN those strings as the things flagged.
-- Flaggers return wording/claim/register/lifecycle findings only; structure, ordering, and figure
-  findings belong to `designing-presentations`.
+- Flaggers return wording / claim / register / lifecycle / document-logic (L3/L4) findings — those
+  are THIS skill's own. Slide/figure findings belong to `designing-presentations`; a finding whose
+  fix is a REORGANIZATION (section moves, MECE partition, dedup) is handed to `structuring-documents`.
 
 **Worker-side duty.** When THIS skill runs as the spawned auditor inside another workflow (the
 `systematizing-knowledge` orchestration map fans out a read-only prose audit at its write stage), the

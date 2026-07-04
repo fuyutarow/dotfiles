@@ -1,11 +1,30 @@
 ---
 name: structuring-documents
-description: Organize and restructure a DOCUMENT'S information architecture — the layer beneath sentence readability. Make it MECE (every fact in exactly ONE section; every fact has a home), single-source-of-truth (no claim/number duplicated across sections → one update point), a backward-only reference DAG (later sections cite earlier, never forward), and coherent as a whole 認識体系. Restructure preservation-first: fear the edit that destroys a load-bearing argument, don't rewrite what's already adequate, preserve ambitious claims' implications, and delete genuine nonsense sections — 構造化 is the goal, not 圧縮. Use when a report/spec/design-doc/README/notes is scattered, repeats itself, references forward, or needs reorganizing; also for internal / model-facing docs (reader = the next agent/LLM). Triggers: MECE, 局所化, 情報が散在, 重複, 単一の情報源, 前方参照, ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化, 章立て, single source of truth, restructure/reorganize a doc. NOT sentence/word/register readability → linting-prose; NOT slide/deck order or inserting diagrams → designing-presentations; NOT a paper corpus → systematizing-knowledge; NOT SKILL.md prose → forging-skills. English skill; respond in the user's language (default Japanese).
+description: >-
+  Organize and restructure a DOCUMENT'S information architecture — the layer beneath sentence
+  readability. Make it MECE (every fact in exactly ONE section; every fact has a home),
+  single-source-of-truth (no claim/number duplicated across sections → one update point), a
+  backward-only reference DAG (later sections cite earlier, never forward), and coherent as a
+  whole 認識体系. Restructure preservation-first: fear the edit that destroys a load-bearing
+  argument, don't rewrite what's already adequate, preserve ambitious claims' implications, and
+  delete genuine nonsense sections — 構造化 is the goal, not 圧縮. Use when a
+  report/spec/design-doc/README/notes is scattered, repeats itself, references forward, or needs
+  reorganizing; also for internal / model-facing docs (reader = the next agent/LLM), and when a
+  linting-prose L4 finding needs the actual REBUILD. Triggers: MECE, 局所化, 情報が散在, 重複,
+  単一の情報源, 前方参照, ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化, 章立て, single
+  source of truth, restructure/reorganize a doc. NOT sentence/word/register readability (AUDIT
+  verb → linting-prose; this skill is the REBUILD verb); NOT slide/deck order or inserting
+  diagrams (→ designing-presentations); NOT a paper corpus (→ systematizing-knowledge); NOT
+  SKILL.md prose (→ forging-skills). English skill; respond in the user's language (default
+  Japanese).
 ---
 
 # Structuring documents — information architecture, not sentence polish
 
-> **Version**: v2607.1.0 (2026-07-04) — distilled from the house `/MECE` + `/REORG` + `/LINT_PAGER` prompts.
+> **Version**: v2607.2.0 (2026-07-04) — distilled from the house `/MECE` + `/REORG` + `/LINT_PAGER`
+> prompts; v2 fixed the `linting-prose` cut from "orthogonal axes" (overclaim) to the MODE cut
+> (audit vs rebuild) with a declared seam. F3 artifacts: `tests/forge-verification-ledger.md`.
+> **Build order** ATOMIC — verify: `test -f tests/forge-verification-ledger.md || echo MISSING ledger`
 > **Scope**: how a document's information is ORGANIZED — partition, references, single-source,
 > whole-document coherence, and safe restructuring. Sits BELOW readability (`linting-prose`) and
 > BESIDE deck design (`designing-presentations`).
@@ -72,7 +91,7 @@ it. Guards, in order of precedence:
 
 | Sibling | Cut (runtime-answerable) |
 |---|---|
-| `linting-prose` | PURPOSE cut — AXIS. "Will a READER misread a sentence / word / register?" → there (readability vs a declared reader). "Is the document's INFORMATION badly organized — scattered, duplicated, forward-referenced, incoherent, or being destructively over-edited?" → here. Co-fire on different axes; a doc can be perfectly readable yet non-MECE. Note: `linting-prose` lints prose for ANY declared reader (external or internal — its hygiene checks are register-independent); this skill owns the *structure* axis for the same documents, including model-facing ones (reader = the next agent/LLM). |
+| `linting-prose` | MODE cut — AUDIT vs REBUILD, with a declared seam at document organization. `linting-prose` audits read-only (word/sentence/paragraph/structure findings — including FLAGGING a buried conclusion, its L4); THIS skill performs the generative REBUILD (MECE partition, single-source, reference DAG, section reorder) under preservation guards. Runtime question: "findings, or a reorganization?" A lint L4 finding that requires moving sections hands off HERE. The seam is expected, not a defect: Kinoshita ch.2–4 lives in linting-prose; this skill's spine (MECE=Minto, single-source=DRY, DAG) is a different canon — skills cut by runtime verb, never by book. Both sides are register-independent; model-facing docs included. |
 | `designing-presentations` | Medium cut. Slide/deck structure, talk section ORDER, and inserting diagrams/tables/ASCII/Mermaid for visual effect → there. Prose-document information architecture → here. (The Mermaid diagram-picker lives in `designing-presentations`.) |
 | `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, taxonomy, synthesis). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |

@@ -293,6 +293,30 @@ Use when the reviewed text is an agent's own prose audit, status update, or repa
 - Submission-document headers survive the titles-only test.
 - READMEs: the front door states scope in 2–3 sentences of the reader's vocabulary; internal record
   IDs go in a footnote, never as the load-bearing scope statement (QOED README failure).
+- **Notation hygiene.** One symbol per object; spell out each acronym + gloss at first use, then
+  abbreviate; never bare-emit notation the reader cannot pause on (worst in a spoken script).
+- **Disclosure of names.** Never print an unconfirmed proper name or a claimed *current* collaboration;
+  a factual PAST affiliation is fine — a claimed present partnership is a hallucination risk.
+
+## Skill glossary (house tokens — moved from SKILL.md at reforge #4)
+
+| house term | status | definition |
+|---|---|---|
+| HARD / MIX / VIBE | derived — JakobThumm/proofreading | deterministic-delegable / pattern+judgment / reading-comprehension |
+| machine floor | novel — declared | the delegated deterministic tier (`bunx textlint` JA); the skill configures, never re-codes it |
+| the four layers | anchored — Kinoshita, *理科系の作文技術* (1981) | word / sentence / paragraph / structure |
+| register (axis) | anchored — sociolinguistic register | which terms/claims are admissible for the DECLARED reader |
+| lifecycle (axis) | novel — declared | document-over-time integrity: retracted claims left standing, line-number refs, undated numbers |
+| calibration (axis) | anchored — Grice QUANTITY/QUALITY; Hyland hedges/boosters | claim-evidence fit: over/underclaim, limits-in-claim, no truth verdicts from prose alone |
+| insider register export | novel — declared (was C9) | internal grammar (IDs, receipts, verdict tokens, dichotomies) shipped to a reader never given the definitions |
+| audience line | novel — declared | reader / holds / register / prose-language declaration required before drafting or grading |
+| term budget | novel — declared | ≤3 define-at-first-use terms per external page-equivalent (number's runtime home: SKILL.md gate 0) |
+| スリカエ | anchored — Kinoshita ch.7 | opinion written, then treated as fact — the canon's worst failure |
+| bounded-PASS | novel — declared | PASS/GREEN legal only with a same-line what-was-checked / what-remains clause |
+| audit-report theater | novel — declared; echoes Schneier | the lint report reproducing the failure it polices; Stop hook `detect-audit-theater.sh` |
+| packaging | derived — house umbrella over Orwell's vices | prose about integration/convenience/importance/imagery instead of the object |
+| repair spiral | novel — declared | 2 failed patches or 1 new contradiction ⇒ rewrite the smallest coherent block |
+| worker-side duty | novel — declared | as a spawned lens: read-only, five-slot findings, no verdict language |
 
 ## Running the audit on a harness
 

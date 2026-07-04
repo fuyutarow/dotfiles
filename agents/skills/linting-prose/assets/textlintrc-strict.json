@@ -1,0 +1,9 @@
+{
+  "//": "STRICT code-mixing profile — HARD-enforces latin exclusion (community 決定版 intent, real impl). Run: bunx -p textlint -p textlint-rule-prh -p textlint-filter-rule-allowlist textlint -c <this> doc.md. Maintain the allowlist as the repo's legit-vocabulary registry.",
+  "filters": { "allowlist": { "allow": ["QOED", "CNOT", "fidelity", "RDM", "SPAM", "Bell", "simulator"] } },
+  "rules": {
+    "preset-ja-technical-writing": true,
+    "@textlint-ja/preset-ai-writing": { "ai-tech-writing-guideline": { "severity": "info" } },
+    "prh": { "rulePaths": ["./prh-house.yml", "./prh-codemix.yml"] }
+  }
+}

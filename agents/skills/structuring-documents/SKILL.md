@@ -72,7 +72,7 @@ it. Guards, in order of precedence:
 
 | Sibling | Cut (runtime-answerable) |
 |---|---|
-| `linting-prose` | PURPOSE cut — AXIS. "Will a READER misread a sentence / word / register?" → there (readability vs a declared reader). "Is the document's INFORMATION badly organized — scattered, duplicated, forward-referenced, incoherent, or being destructively over-edited?" → here. Co-fire on different axes; a doc can be perfectly readable yet non-MECE. Note: `linting-prose` scopes to EXTERNAL human readers and routes model-facing prose away — this skill handles internal / model-facing document *structure* (reader = the next agent/LLM). |
+| `linting-prose` | PURPOSE cut — AXIS. "Will a READER misread a sentence / word / register?" → there (readability vs a declared reader). "Is the document's INFORMATION badly organized — scattered, duplicated, forward-referenced, incoherent, or being destructively over-edited?" → here. Co-fire on different axes; a doc can be perfectly readable yet non-MECE. Note: `linting-prose` lints prose for ANY declared reader (external or internal — its hygiene checks are register-independent); this skill owns the *structure* axis for the same documents, including model-facing ones (reader = the next agent/LLM). |
 | `designing-presentations` | Medium cut. Slide/deck structure, talk section ORDER, and inserting diagrams/tables/ASCII/Mermaid for visual effect → there. Prose-document information architecture → here. (The Mermaid diagram-picker lives in `designing-presentations`.) |
 | `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, taxonomy, synthesis). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |

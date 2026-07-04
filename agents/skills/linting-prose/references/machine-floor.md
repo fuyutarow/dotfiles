@@ -105,7 +105,26 @@ as a SUGGESTION, not a blocker. It does not judge topic-sentence presence; that 
   working docs, so they are gated behind the external config, never the base one. Proven to fire on
   QOED `RESEARCH_STATE.md`; see `tests/forge-verification-ledger.md`.
 
-## EN stack
+## Wiring the gate (mise/CI/hook) — moved from SKILL.md at reforge #4
+
+Willpower is not a harness; the floor is only real when it is in the command you actually run.
+
+- Wire `scripts/lint-floor.sh` (never raw `textlint` — the wrapper refuses `--fix`) into the repo's
+  mise task / CI over rendered audience-facing files; exclude design docs, denylist ledgers, and
+  orphan drafts (they legitimately contain the banned tokens). Pick the register profile per the
+  SKILL.md gate table.
+- **Prove it fires**: inject a known-bad string, watch it FAIL, revert. A rule never seen red is
+  decoration.
+- A check not in the aggregate command is not enforced; a noisy misconfigured floor gets
+  `|| true`-ignored and is equally dead (the QOED lesson — see ledger).
+- The Stop hook `detect-audit-theater.sh` co-polices the agent's own turn text; scripts own the
+  greppable tier — never spawn an agent to run the lint.
+
+## EN stack — **STATUS: UNSHIPPED (guidance only)**
+
+> No `.vale.ini`, no Vocab assets ship with this skill yet. Until they do, English prose gets the
+> VIBE pass only — do NOT claim a Vale run (ledger: open defect). Packaging path when needed:
+> `vale sync` the packages below, prove-fire, then ship the config here.
 
 - **Vale** (`errata-ai/vale`) + the Google (31 rules) and Microsoft (~39 rules) packages +
   `proselint` (50+ checks: hedging, weasel, jargon, cliches, corporate_speak). Rule types:
@@ -192,10 +211,16 @@ paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-w
 (keep) / pinned house token (keep, identifier) / gratuitous (violate). The earlier framing
 "internal register leaves ルー語 alone" was WRONG and is retracted: internal waives comprehension,
 not hygiene. Blanket translation is the opposite error (非飽和iciency) — pinned tokens and domain
-terms stay. The 国語研「外来語」言い換え提案 is now ADOPTED, not just cited: `assets/prh-gairaigo.yml` (161/176
-語 machine-extracted from the 総集編 PDF, 15 multi-sense words skipped; source URL in the file
-header), loaded ONLY by `textlintrc-external.json` — proven firing on external
-(アジェンダ→検討課題, コンセンサス→合意), silent on internal (technical カタカナ is legitimate).
+terms stay. **Katakana rootedness is READER-relative — no dictionary floor.** The 国語研「外来語」言い換え提案
+(2002-2006, 公共文書/一般層向け) was adopted wholesale as an external floor and REVERSED the same
+day: it flags ツール→道具, バリアフリー→障壁なし, ガバナンス→統治 (the official JPX term is
+コーポレートガバナンス・コード) — absurd against any 2026 professional reader. A 20-year-old
+general-public list must not stand in for the DECLARED reader; 定着した外来語はそのまま使う.
+Katakana admissibility is a VIBE judgment against the audience line. The list stays a REFERENCE
+(<https://www2.ninjal.ac.jp/gairaigo/>) to consult ONLY if a repo genuinely writes for 一般層/行政
+register — seed per-repo, per-reader, never as a shipped floor. The ルー語 floor that SURVIVES is
+the incident class: latin-script mixing (prh role 3 verb-calque + deliverable/framing/moat) and the
+density flagger — those target 地の文への英字混入, not rooted katakana.
 
 ## The FP-advisory boundary
 
@@ -210,12 +235,39 @@ flags). Therefore:
 - Prove any newly added rule fires: inject a known-bad line, watch it FAIL, revert. A rule never seen
   red is decoration.
 
+## vs the community "AI時代 決定版" config — subsume + exceed (2026-07-04)
+
+The Zenn/Qiita/note consensus config (technical-writing × ai-writing × code-mixing × spacing +
+allowlist + MCP --fix loop) is SUBSUMED and exceeded. Verified component by component:
+
+| Community 決定版 component | this skill | verdict |
+|---|---|---|
+| `preset-ja-technical-writing` | in all 3 base profiles | subsumed |
+| `@textlint-ja/preset-ai-writing` | in all 3 base profiles | subsumed |
+| `ja-unnatural-alphabet` (single-char) | bundled inside ja-technical-writing | subsumed |
+| `en-ja-translator-find-english` (their code-mixing rule) | **E404 — does not exist** (npm-verified). Replaced by the WORKING impl: `prh-codemix.yml` catch-all `/[A-Za-z…]/` + `textlint-filter-rule-allowlist` (real v4.0.0) in `textlintrc-strict.json` — proven: flags validation/deliverable, allowlists fidelity/CNOT, excludes code spans | **EXCEED** (working impl of their fake package) |
+| `textlint-filter-rule-allowlist` | wired (`textlintrc-strict.json`); `bun add -g textlint-filter-rule-allowlist` | subsumed |
+| `preset-ja-spacing` (real v3.0.2) | OPT-IN, not forced — 和欧間スペース is a per-repo orthography policy (space vs no-space); baking one in false-positives the other (the gairaigo lesson) | consciously per-repo |
+| MCP `--fix` auto-rewrite loop | `lint-floor.sh` **REFUSES `--fix`** — prh replacements are guidance text, `--fix` injects them into the doc (proven) | **EXCEED** (evidence-based safety they lack) |
+| — (they have none) | **register profiles**: base ですます / research である体 / external insider — their single config false-positives every である sentence | **EXCEED** |
+| — (they have none) | **VIBE layer**: L3 topic-sentence, L4 BLUF/スリカエ, register-export, lifecycle — no textlint config reaches these | **EXCEED** |
+| — (they have none) | **kanji-compound coinage** (機械床): `coinage-flag.py` (SudachiPy) — their config is latin-only | **EXCEED** |
+
+Three code-mixing tiers, effort matched to need: prh role 3 (always-on, catches the common calques
+deliverable/framing/moat/verb-する, no allowlist) → `codemix-flag.py` (MIX density, zero-dep, zero
+allowlist) → `textlintrc-strict.json` (HARD catch-all + allowlist, needs a maintained vocabulary).
+Strict is register-orthogonal — it defaults ですます; a である体 repo copies the research profile's
+`no-mix-dearu-desumasu` override into it (do not ship a strict×dearu combinatorial config).
+
 ## Sources (tooling)
 
 - textlint <https://github.com/textlint/textlint> · MCP docs <https://textlint.org/docs/mcp/>
 - `preset-ja-technical-writing` <https://github.com/textlint-ja/textlint-rule-preset-ja-technical-writing>
 - `@textlint-ja/preset-ai-writing` (v1.7.0) <https://github.com/textlint-ja/textlint-rule-preset-ai-writing>
 - `prh` <https://github.com/prh/prh>
+- Code-mixing HARD path (community "決定版" intent, real impl): `textlint-filter-rule-allowlist` v4.0.0
+  <https://github.com/textlint/textlint-filter-rule-allowlist> + prh catch-all. Their
+  `en-ja-translator-find-english` is E404 (verified npm). `preset-ja-spacing` v3.0.2 (opt-in orthography).
 - Vale <https://github.com/errata-ai/vale> (+ `errata-ai/Google`, `errata-ai/Microsoft`) · Vocab
   <https://vale.sh/docs/keys/vocab>
 - proselint <https://github.com/amperser/proselint> · slopless <https://github.com/seochecks-ai/slopless>

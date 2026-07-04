@@ -23,275 +23,116 @@ description: >-
 
 # Linting prose
 
-> **Version** v2607.4.0 (2026-07-04) · **Scope** the word, sentence, paragraph, and structure of
-> anything a human audience reads — slide titles and scripts, abstracts, executive summaries,
-> reports, memos, proposals, application statements, rebuttals, READMEs, and an agent's own
-> review/status prose.
-> **Lineage** reforged 2026-07-04 from `grounding-prose` (Opus 4.8). Adds: machine-floor delegation
-> to `textlint`/`Vale` (the hand-maintained L1/L2 denylist was a degraded self-textlint); the
-> Kinoshita four-layer frame (word/sentence/paragraph/structure) + two cross-cutting axes (register,
-> lifecycle); the HARD/MIX/VIBE tier split (credited: JakobThumm/proofreading); and the
-> lifecycle-integrity family (from the QOED 71-finding audit). Postmortem:
-> `tests/forge-verification-ledger.md`, reforge #3.
-> **Build order** ATOMIC — this file ships with its references and its F3 ledger; verify:
-> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-research textlintrc-external prh-house prh-external prh-gairaigo; do test -f assets/$a.* || echo MISSING asset $a; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test -f scripts/codemix-flag.py || echo MISSING codemix-flag; test ! -d ../grounding-prose || echo STALE-DIR`
+> **Version** v2607.5.0 (2026-07-04) · **Scope** word, sentence, paragraph, and structure of anything
+> a human audience reads — slides, abstracts, reports, proposals, rebuttals, READMEs, an agent's own
+> review prose. **Lineage** grounding-prose → reforge #3 (machine-floor delegation, Kinoshita layers,
+> HARD/MIX/VIBE) → reforge #4 (hostile audit: one-home compression; history: `tests/forge-verification-ledger.md`).
+> **Build order** ATOMIC — verify:
+> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-research textlintrc-external textlintrc-strict prh-house prh-external prh-codemix; do test -f assets/$a.* || echo MISSING asset $a; done; for t in forge-verification-ledger.md triggers.md; do test -f tests/$t || echo MISSING $t; done; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test -f scripts/codemix-flag.py || echo MISSING codemix-flag; test ! -d ../grounding-prose || echo STALE-DIR`
 
 ## The law
 
-> Audience-facing prose must be **READ CORRECTLY ON ONE PASS BY ITS DECLARED READER**. That
-> decomposes by layer: every load-bearing **TERM** grounded in a taxonomy the named reader already
-> holds or defined within the term budget (**register**); every **SENTENCE** single-valued and short
-> enough to parse (**L2**); every **PARAGRAPH** led by its topic sentence (**L3**); the document's
-> **CONCLUSION** reachable without reading to the end (**L4**); and **no retracted claim left
-> standing** (**lifecycle**). What a machine can check, a machine checks FIRST; what needs reading
-> comprehension, the model judges — and the two are never confused (HARD vs VIBE).
+> Audience-facing prose must be **READ CORRECTLY ON ONE PASS BY ITS DECLARED READER**: every
+> load-bearing TERM held by the reader or defined within the term budget; every SENTENCE
+> single-valued; every PARAGRAPH led by its topic sentence; the CONCLUSION reachable without reading
+> to the end; no retracted claim left standing. What a machine can check, a machine checks FIRST;
+> what needs reading comprehension, the model judges; the two are never confused (HARD vs VIBE).
 >
-> **Reader corollary.** "Shared taxonomy" ALWAYS means shared WITH THE READER, never with the
-> authoring project. A document grounded only in the project's internal ledger is ungrounded for
-> everyone else. No declared audience ⇒ the prose cannot be graded; declare the reader before
-> writing or linting a single line.
+> **Reader corollary.** "Shared taxonomy" means shared WITH THE READER, never with the authoring
+> project. No declared audience ⇒ the prose cannot be graded — declare the reader before writing or
+> linting a single line. **Hygiene corollary:** an internal register waives the COMPREHENSION check,
+> never the HYGIENE check (verb calques, exact-equivalent loan nouns are violations in any register).
 >
 > **Enforcement corollary.** What cannot be grounded is mapped to the reader's standard term, stated
-> as the literal relation, or deleted — and a document that NEEDS new terms carries an explicit
-> terminology table WITHIN the budget. Implicit coinage is the violation; so is tabled coinage past
-> the budget. What a preset already greps, the preset greps — this skill re-implements no HARD check.
+> as the literal relation, or deleted; a document that NEEDS new terms carries a terminology table
+> WITHIN the budget. Implicit coinage is the violation. What a preset already greps, the preset greps.
 
-## The tier — what a machine does vs what the model must read
+## Tiers — who decides
 
-Borrowed from `JakobThumm/proofreading` and made the skill's spine. Every check carries a tier:
+- **HARD** — a textlint rule or unambiguous prh entry decides alone. Owned by
+  `references/machine-floor.md`; never re-implemented here. Runs first.
+- **MIX** — a pattern narrows (metaphor tokens, coined labels, coinage/code-mix flaggers), the model
+  confirms.
+- **VIBE** — reading comprehension; no regex reaches it. The skill's differentiated value.
+- prh entries are HARD or MIX **by which entry matched** (normalization/IDs = HARD; graveyard/metaphor
+  tokens = MIX, detect-only).
 
-- **HARD** — deterministic; a `textlint`/`Vale` rule or an unambiguous prh pattern (ledger IDs,
-  verdict enums, `receipt:`, known 表記ゆれ, dearu/desumasu mixing) decides it alone. **Owned by the
-  machine floor** (`references/machine-floor.md`); the skill never re-implements one. Runs FIRST.
-- **MIX** — a pattern flags a candidate, but a reader confirms it: a dying-metaphor or
-  verbal-false-limb token that is also an ordinary word (`橋`/`返す`), a coined label in the house
-  denylist, terminology drift against the table. Machine narrows; model decides.
-- **VIBE** — reading comprehension; no regex reaches it. This is the skill's differentiated ceiling —
-  paragraph logic, structure, register export (house dichotomies), lifecycle. The model reads and judges.
+## The gate — audience → floor → judgment
 
-> **The prh-dict split (stated once, load-bearing).** The house prh dict carries BOTH tiers: its
-> deterministic entries (IDs, verdict enums, `receipt:`, normalization) are **HARD**; its
-> coined-label graveyard and metaphor tokens, which fire on ordinary words and need context, run
-> detect-only and are **MIX**. A prh hit is HARD or MIX by WHICH entry matched, never both at once.
+**0 · AUDIENCE.** Write the audience line: **reader / holds / register (internal|external) / prose
+language**. Classify each load-bearing term: reader-resolvable · define-at-first-use (≤ **3** per
+external page-equivalent — past the budget, restructure, never extend the table) · internal-only
+(ledger IDs, verdict tokens, house dichotomies — for an external register: translate, appendix, or
+delete). An English token in Japanese prose is admissible only as a standard domain term or a pinned
+house identifier — never a verb calque (`citeする`) or an exact-equivalent noun (`deliverable`).
 
-> "HARD → a tool already does it, so delegate; VIBE → the model must read, so this is where the
-> skill earns its keep." A green machine floor is step 1 of N, never "done."
+**1 · FLOOR (HARD).** Run `scripts/lint-floor.sh` (refuses `--fix`; prh is detect-only). Pick the
+config by register — the choice is load-bearing, the base config false-positives every である
+sentence:
 
-## This skill's own terminology table
+| register | config |
+|---|---|
+| ですます / general (default) | `assets/textlintrc.json` |
+| である体 internal/research | `assets/textlintrc-research.json` |
+| external deliverable (+C9 insider-register set) | `assets/textlintrc-external.json` |
+| strict code-mixing (latin catch-all + allowlist) | `assets/textlintrc-strict.json` (opt-in) |
 
-The skill practices what it enforces: every house term is ANCHORED to the established taxonomy
-(named; URLs in the Sources block of `references/patterns.md`), DECLARED novel here, or defined
-inline at first use in the body.
+JA only. **EN floor is UNSHIPPED** — English prose gets the VIBE pass; do not claim a Vale run
+(status + packaging path: `references/machine-floor.md`). MIX pre-filters when the smell warrants:
+`scripts/coinage-flag.py` (novel kanji compounds), `scripts/codemix-flag.py` (latin density).
 
-| house term | status | definition |
+**2 · JUDGMENT (VIBE).** A green floor proves only the listed patterns absent — the taxonomy below
+is where the value lives. Read the rendered page with the reader's eyes; titles-only test first.
+
+At write time the same gate runs in order 0 → draft in the reader's vocabulary (IDs/verdict tokens
+stay in working notes) → 1 → 2.
+
+## The taxonomy — four layers × three axes
+
+Layers (Kinoshita); axes cross all layers. Arguing home, token lists, C1–C9 instances:
+`references/patterns.md`.
+
+| check | tier | one-line test |
 |---|---|---|
-| HARD / MIX / VIBE tier | derived — JakobThumm/proofreading | a check's rigor class: deterministic-delegable / pattern-plus-judgment / reading-comprehension |
-| machine floor | novel — declared | the delegated deterministic tier: `bunx textlint` (JA) + `Vale` (EN) run before any judgment pass; the skill configures, never re-codes it |
-| the four layers | anchored — Kinoshita, *理科系の作文技術* (1981) | word (L1) / sentence (L2) / paragraph (L3) / structure (L4) granularity of a document |
-| register (axis) | anchored — sociolinguistic register; plain-language "write for your audience" | the for-whom axis crossing all layers: which terms/claims are admissible for the DECLARED reader |
-| lifecycle (axis) | novel — declared | document-over-time integrity: a retracted/superseded claim left standing in a table, heading, or self line-number reference; undated "本セッション再走" numbers |
-| insider register export | novel — declared (was C9) | internally-defined grammar (ledger IDs, receipts, verdict tokens, house dichotomies) shipped to a reader who was never given the definitions |
-| audience line | novel — declared | the one-line reader declaration (reader / holds / register) that must exist before any drafting or grading |
-| term budget | novel — declared | ≤3 define-at-first-use terms per page-equivalent for external registers; past it, restructure — never extend the table |
-| スリカエ (fact/opinion swap) | anchored — Kinoshita ch.7 | a sentence written as opinion, then treated as established fact in the next — the canon's stated worst failure |
-| bounded-PASS | novel — declared | `PASS`/`GREEN` is legal only with a same-line clause naming what was checked and what remains |
-| audit-report theater | novel — declared; echoes Schneier's security theater | the lint report reproducing the failure it polices; the Stop hook `detect-audit-theater.sh` is named for it |
-| packaging | derived — house umbrella over Orwell's four vices | prose about integration/convenience/importance/imagery instead of the object |
-| repair spiral | novel — declared | two failed correction passes or one new contradiction ⇒ stop patching; rewrite the smallest coherent block |
-| worker-side duty | novel — declared | this skill's contract when spawned as a lens in another skill's fleet: read-only, schema findings, no verdict language |
+| **L1 word** | HARD/MIX/VIBE | dying metaphors (`床`/`鎖`/`橋`), zombie nouns (`核`/`基盤`), hype vocab, novel coinage |
+| **L2 sentence** | HARD + VIBE | length/読点/negation/助詞 = floor; 一文一義・主述近接・修飾語順・逆茂木 = read |
+| **L3 paragraph** | VIBE | topic sentence present and leading; 1-paragraph-1-topic; known→unknown flow |
+| **L4 structure** | VIBE | conclusion-first/BLUF; **スリカエ** (fact written as opinion, then used as fact — the canon's worst failure); 目標規定文; tool-first titles |
+| **A-register** | HARD/VIBE | insider export (IDs, `receipt:`, verdict enums → external prh dict); prose-language hygiene; dearu/desumasu |
+| **A-lifecycle** | VIBE | retraction reaches EVERY surface (table cell, heading, abstract); no self line-number refs; no undated volatile numbers |
+| **A-calibration** | VIBE | claim = evidence, exactly: no overclaim, no underclaim, limits inside the claim stated first; prose-only ⇒ no truth verdict (内容未確認); revise only on newly-read evidence |
 
-## The gate — audience, then floor, then judgment
+## Report contract
 
-Run in this order on any document; do not start the judgment pass before the floor is green.
+Every finding fills five slots: **target** (file+line+quote) / **check+tier** / **cited evidence** /
+**replacement** / **unchecked risk**. No quote or rule ⇒ mark **unverified**. `PASS`/`GREEN`/
+"verified" are legal only with a same-line clause naming what was checked and what remains
+(**bounded-PASS**). The five-slot grammar and verdict tokens are audit-artifact register — they
+address the operator; inside an external deliverable they are themselves an A-register violation.
+After two failed correction passes or one new contradiction: stop patching, rewrite the smallest
+coherent block (**repair spiral**).
 
-### 0. AUDIENCE check — declare the reader first (before everything)
+## Execution model
 
-Write the **audience line**: **reader** (外賓, reviewer, customer, teammate — who actually reads
-this), **holds** (the vocabulary that reader can be assumed to hold), **register** (internal |
-external). Then classify every load-bearing term:
+Floor = script, never an agent. Single document = SOLO end-to-end. Read-only five-slot flaggers only
+for a multi-file package / 50+ slides / as another skill's prose lens (worker duty: read-only,
+findings as data, no verdict language). Calibration, rewrite, and report signing stay SOLO. Stage
+map + flagger contract: `references/patterns.md`.
 
-- **reader-resolvable** — in the reader's taxonomy; use the reader's standard surface form;
-- **define-at-first-use** — necessary, not held; counts against the term budget;
-- **internal-only** — ledger IDs, house dichotomies, verdict tokens, audit grammar; for an external
-  register these are register-export violations: translate, move to an appendix, or delete.
+## Fire / no-fire
 
-**Term budget.** An external-audience page-equivalent (a slide, a one-pager section, an abstract)
-earns at most **three** define-at-first-use terms. Past it, restructure around the reader's
-vocabulary — never extend the table. The table is a disclosure device, not a coinage license.
+FIRES: 文章校正・推敲 of a report/abstract/README/proposal · "LLMっぽい/AI臭い" · ルー語/ジャーゴン
+complaints · reviewing an agent's own review prose · BEFORE drafting external-facing prose · choosing
+the textlint profile for a document. MUST NOT fire: deck/section order (→ designing-presentations) ·
+MECE/scatter/restructuring (→ structuring-documents) · SKILL.md prose (→ forging-skills) · hook/CI
+wiring (→ operating-the-harness) · paper-corpus synthesis (→ systematizing-knowledge) · a one-line
+typo fix. Full desk-check set: `tests/triggers.md` — re-run it after ANY description edit.
 
-### 1. Machine floor (HARD) — `bunx textlint` / `Vale`, run as a script
+## References
 
-The deterministic tier is DELEGATED, not re-implemented. For Japanese prose run
-`bunx textlint` with the house config (`assets/textlintrc.json`: `preset-ja-technical-writing` +
-`@textlint-ja/preset-ai-writing` + `prh` house dict); for English, `Vale` with the Google/Microsoft
-packages + `proselint`. Setup, the per-rule coverage map, MCP wiring, and the anti-auto-substitution
-rule live in `references/machine-floor.md`. **The skill never writes a regex a preset already
-ships.** A green floor proves only that the listed patterns are absent in scope — not clarity,
-logic, register, or lifecycle.
-
-### 2. Judgment ceiling (VIBE) — the six families the floor cannot reach
-
-The floor is instance-overfit BY DESIGN (past failures). The families below are where the skill's
-value lives; each is argued in `references/patterns.md`. If a line paraphrases to "this feels neatly
-organized" or "this matters a lot" rather than "X implies Y under Z", it is ungrounded packaging.
-
-## The six families (layer · dominant tier)
-
-Each family names its layer and where the check lands. The old C1–C9 classes are preserved as
-INSTANCES within these families (mapping and full token lists: `references/patterns.md`).
-
-**F-L1 — word (HARD→textlint · VIBE for novel coinage).** Dying metaphors (`床`→lower bound,
-`鎖`→ordering, `橋`→shared part), zombie nouns / architecture-as-rhetoric (`核`, `本体`, `基盤`,
-`エンジン` — name the concrete object or delete), AI hype vocab, undefined coinage. The token grep is
-`textlint` + the house prh dict; **novel compound coinage** (機械床-class) has a MIX pre-filter —
-`scripts/coinage-flag.py` (SudachiPy dict-membership, high-recall/low-precision) surfaces candidates,
-the model confirms; the CLASS JUDGMENT stays VIBE. Full options + what was dis/proven:
-`references/machine-floor.md` (the 機械床 gap).
-
-**F-L2 — sentence (HARD→textlint · MIX/VIBE for meaning).** Sentence length, 読点 ≤3, double
-negatives, doubled 助詞, weak phrases — all HARD via `preset-ja-technical-writing`. Verbal false
-limbs (`返す`/`閉じる`/`乗る` — state input→output instead) are **MIX**: the prh dict flags the token,
-the model confirms whether the control flow IS the content. What no preset can do (no off-the-shelf
-OSS exists): 一文一義, 主述近接/距離, 修飾語順 (本多), 逆茂木型 — dependency-parse-hard, handled VIBE.
-
-**F-L3 — paragraph (VIBE).** Topic-sentence presence and lead position; 1-paragraph-1-topic; known→
-unknown flow (Kinoshita ch.4, 倉島's 7 rules). No linter reaches this. Reading only the topic
-sentences must reconstruct the argument.
-
-**F-L4 — structure (VIBE).** Conclusion-first / BLUF (the conclusion reachable without reading to the
-end); **fact/opinion separation** — the スリカエ, Kinoshita's stated most-important rule; 目標規定文
-present; tool-first titles (the toolchain in the topic position that belongs to the task —
-`製造前設計: PDK・GDSFactory` → task first, tools in the subtitle). Titles must pass the titles-only
-test.
-
-**F-register — for-whom (VIBE · MIX where a denylist exists).** **Insider register export**: internal
-project grammar shipped to an external reader — ledger IDs (`R2607_016 §7`), `receipt:`, `gated`,
-verdict enums (`IMPLEMENTATION_GATED`, `CELL_DEGENERATE`), house dichotomies (`agnostic`/`aware`).
-Every one IS defined — in the project — so "undefined" never fires; the violation is that the
-DECLARED READER holds none of it. The greppable subset (ID patterns, verdict enums, `receipt:`) is
-HARD via the external prh dict (`assets/textlintrc-external.json`); house dichotomies are VIBE. Also
-here: dearu/desumasu mixing (HARD), 心情的要素 in a technical register (VIBE), non-specialist
-vocabulary (3MT). **Prose-language discipline (ANY register, incl. internal):** an English token in
-Japanese prose is admissible only as (1) a standard domain term or (2) a pinned house token used as
-an identifier; a **verb calque** (`cite する` — prh role 3, HARD) or a noun with an exact JP
-equivalent (`deliverable`→成果物) is a violation even when the reader holds the term — internal
-register waives the COMPREHENSION check, never the HYGIENE check (QOED R2607_021: 15 latin/100字
-passed a green floor). Density pre-filter: `scripts/codemix-flag.py` (MIX).
-
-**F-lifecycle — over-time (VIBE).** A retracted or superseded claim left standing in a summary table,
-a section heading, or a self line-number cross-reference while the body retracts it (QOED
-`R2606_081`: body retracts "唯一ギャップ", the table keeps it); tag-system drift across files;
-undated "本セッション再走" numbers. No canon and no tool covers this — declared novel. Fix: the
-retraction must reach every surface (table cell, heading, abstract), or the claim is not retracted.
-
-## Claim calibration
-
-Anchored to Grice **QUANTITY** (as informative as required — no more) and **QUALITY** (adequate
-evidence), and the hedges-and-boosters literature (Hyland). Audit for over- and under-claiming as
-carefully as for wording.
-
-- **Prose-only ⇒ no truth verdict.** Given only text (not the evidence), flag any claim whose
-  evidence you have not read as *truth unverified (内容未確認)* — do not endorse or refute it.
-- **No overclaim.** Match the evidence exactly. Grandiose nouns (platform, hero, flywheel, winner)
-  are banned unless literally earned.
-- **No underclaim.** Do not bury the real contribution under caveats; a caveat is secondary, in gray.
-- **Limits go inside the claim, stated first** — not as a separate hedge bolted on afterward.
-- **No claim-theater** (inflate with a big word, offset with a caveat in the same line). **No
-  pendulum** (re-evaluating on mood; revise only on newly-read evidence, cited).
-
-## Report discipline
-
-The lint report is itself audience-facing prose — it obeys the same law. Every finding fills the
-five-slot grammar: **target** (file + line + quoted text) / **family + tier** (F-L1…F-lifecycle;
-HARD/MIX/VIBE) / **cited evidence** (the quoted line or the `textlint` rule that fired) /
-**replacement** (the grounded rewrite) / **unchecked risk** (what this finding cannot prove). If you
-cannot cite the text or the rule, mark the finding **unverified**. A `textlint` result is evidence
-about one check only; it is not a verdict that the prose is correct.
-
-**Register containment.** The five-slot grammar, bounded-PASS, receipts, and verdict tokens are
-**audit-artifact register** — they address the operator, never the audience. Any of them inside an
-external-audience deliverable is an insider-register-export violation (F-register), not diligence.
-
-## Non-negotiables
-
-- Titles/headers pass the titles-only test (argument survives reading titles alone), unless the
-  document deliberately uses label-titles. No tool/module names, product-copy, metaphor, or writer
-  emphasis in the title.
-- Never substitute writer emphasis for logic. Delete "this is the key point" (`ここが肝心`) unless it
-  adds information — state the decision, bound, or comparison it changes.
-- Avoid convenience verbs for mathematical or system claims. State input, output, and relation.
-- When claiming benefit, state the comparison class. Replace "effective" / "wins" / "main factor"
-  with the exact contrast.
-- The report must not excuse itself. No "not my cause", "core is stable", "PASS", "GREEN", or
-  "verified" unless the sentence names exactly what was checked and what remains unchecked.
-- After two failed correction passes or one new contradiction, stop patching locally. Re-read the
-  target section and rewrite the smallest coherent block (repair spiral).
-
-## Beyond words: register, notation, disclosure
-
-- **Register consistency.** Hold the venue's register (formal/declarative for a proposal). No casual
-  asides, keigo drift, or "honestly, …" — dearu/desumasu mixing is HARD-checked by textlint.
-- **Notation hygiene.** One symbol per object. Spell out each acronym + gloss on first use, then
-  abbreviate. Do not bare-emit notation a reader cannot pause on (especially in a spoken script).
-- **Disclosure of names.** Do not print an unconfirmed proper name or a *current/ongoing*
-  collaboration you have not verified. A factual PAST affiliation is fine; a claimed PRESENT
-  partnership is a hallucination risk — leave it out until confirmed.
-
-## Write-time protocol — this skill fires at generation, not only at review
-
-Grounding is cheapest before the first draft line. Before writing ANY audience-facing prose:
-
-1. **Write the audience line** (reader / holds / register) — it drives every later choice.
-2. **Set the term budget** and list define-at-first-use candidates BEFORE drafting; if the plan needs
-   more than the budget, restructure the plan, not the table.
-3. **Draft** in the reader's vocabulary; internal ledger IDs and verdict tokens never enter the
-   draft — they stay in the working notes.
-4. **Run the machine floor** via `scripts/lint-floor.sh` — pick the config by register:
-   `textlintrc.json` (default, body = **ですます**), `LINT_PROSE_CONFIG=assets/textlintrc-research.json`
-   for **である体** internal/research docs (base FALSE-POSITIVES every である sentence — see
-   machine-floor.md), or `assets/textlintrc-external.json` when register = external (adds the C9
-   register set). A green floor is step 4 of 5, not "done".
-5. **Titles-only test + read the rendered page** with the reader's eyes; then the VIBE pass over the
-   six families. The floor is instance-overfit by design; novel coinage of the same classes is caught
-   only here — never skip it because textlint was green.
-
-## Make the lint a gate
-
-Word-level discipline regresses under deadline — willpower is not a harness. The machine floor is a
-real gate, wired via `operating-the-harness`:
-
-- **`bunx textlint` via `scripts/lint-floor.sh`** (refuses `--fix`; prh is detect-only) over the
-  rendered audience-facing files (strip comments; exclude design docs,
-  denylist ledgers, orphan drafts — they legitimately contain the banned words). This SUPERSEDES the
-  retired hand-maintained `check-prose-grounding.sh`; the house-specific patterns textlint's presets
-  do not carry (ledger IDs, verdict enums, coined labels) live in `assets/prh-external.yml`, loaded
-  by `textlintrc-external.json`.
-- **Wire it into the command you actually run** (the mise task / CI). A check not in the aggregate is
-  not enforced.
-- **Prove it fires.** Inject a known-bad string, watch it FAIL, revert. The external prh set
-  (`textlintrc-external.json`) is proven to fire on QOED `RESEARCH_STATE.md` (verdict enums, ledger
-  IDs) while the base config leaves them alone; see the ledger.
-- **The gate is necessary, not sufficient.** Overflow, mid-word title wraps, crushed figures, and
-  every VIBE family never show in a lint — render the document and read it before saying "verified".
-
-House wiring: the Stop hook `detect-audit-theater.sh` (audit-report theater on the agent's own turn
-text) STAYS; the document floor is now `bunx textlint`. Scripts own the greppable tier — never spawn
-an agent to run the lint.
-
-## Execution model — floor is a script, judgment is SOLO, flaggers fan out at scale
-
-A single document/deck/abstract is a SOLO job: run `bunx textlint`, then read the rendered text
-yourself. Spawn per-file **read-only flaggers** only for a multi-file package, a 50+ slide deck, or
-when this skill is the prose lens inside another skill's audit fleet. **Never spawn an agent to run
-the lint** — it is a deterministic script. Claim calibration, the coherent-block rewrite, and report
-signing stay SOLO (one voice over the whole text). Worker-side duty when spawned as a lens: read-only,
-five-slot findings as data, no verdict language, an explicit residual-risk clause. No harness → the
-same order serially: floor → per-section flagging → terminology sweep → calibration → rewrite →
-bounded report. Full stage map + flagger contract: `references/patterns.md`.
-
-## When to open the reference files
-
-| File | Covers | Read when |
+| file | sole owner of | open when |
 |---|---|---|
-| `references/patterns.md` | the six families in full (C1–C9 mapped in as instances, token lists, mapping tables), the terminology-table format + normalization, the rewrite ledger, claim-calibration and audit-report failure ledgers, deck/document rules, the harness execution map + flagger contract, the Sources block | any VIBE judgment pass; a family judgment; deciding what survives; corpus-scale audits |
-| `references/machine-floor.md` | the delegated deterministic tier: `bunx textlint` + presets + `prh` (JA), `Vale` + packages + `proselint` (EN), the per-preset coverage-by-layer map (what NOT to re-check), MCP wiring, LaTeX caveat, the anti-auto-substitution rule, the FP-advisory boundary | configuring or running the machine floor; deciding whether a check is already off-the-shelf |
+| `references/patterns.md` | the layer/axis checks argued in full, C1–C9 instances, token lists, terminology-table format, rewrite/calibration/audit-failure ledgers, deck/document rules, flagger contract, skill glossary, sources | any VIBE pass |
+| `references/machine-floor.md` | everything deterministic: presets, profiles, prh dicts, coinage/code-mix tooling incl. what was disproven, EN status (UNSHIPPED), gate wiring (mise/CI/hook), FP-advisory boundary ("green ≠ done" lives THERE), anti-auto-substitution | configuring/running the floor |
+| `tests/triggers.md` | the F3 fire/no-fire desk-check set | any description edit |
+| `tests/forge-verification-ledger.md` | history: current invariants → open defects → retired decisions → append-only reforge log | reforging; "is this stale?" |

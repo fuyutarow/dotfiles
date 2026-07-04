@@ -11,8 +11,7 @@
     "prh": {
       "rulePaths": [
         "./prh-house.yml",
-        "./prh-external.yml",
-        "./prh-gairaigo.yml"
+        "./prh-external.yml"
       ]
     }
   }

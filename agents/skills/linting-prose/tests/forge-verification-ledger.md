@@ -3,6 +3,25 @@
 The adversarial-verification findings ledger the forging-skills gate F3 demands. Append on any
 future reforge; never overwrite.
 
+## CURRENT STATE (read this first — everything below is append-only HISTORY; dead decisions live there)
+
+**Invariants (live):**
+- Floor is detect-only via `scripts/lint-floor.sh` (`--fix` refused); prh replacements are guidance text.
+- 4 JA profiles (base ですます / research である / external +C9 / strict codemix opt-in); profile choice is load-bearing.
+- Admissibility is READER-relative; internal register waives comprehension, never hygiene (verb calques, exact-equivalent loan nouns banned in any register).
+- Sourcing ladder ADOPT > CONFIGURE > AUTHOR — and ADOPT is reader-gated too (an established dictionary fails if its implied reader ≠ the declared reader).
+- Fire/no-fire desk-check set lives in `tests/triggers.md`; re-run on any description edit.
+
+**Open defects:**
+- EN machine floor UNSHIPPED (no .vale.ini/Vocab) — English prose is VIBE-only; SKILL.md says so.
+- coinage-flag / codemix-flag are high-recall/low-precision MIX aids; precision levers (sudachidict-full, collocation, LM-surprisal) designed, not shipped.
+- 15 multi-sense 国語研 words were never hand-added — MOOT (the dictionary itself was retired, below).
+
+**Retired decisions (do not resurrect):**
+- `prh-gairaigo.yml` (161-word 国語研 dict as external floor) — REVERSED same day; 2006 public-register list ≠ 2026 declared reader.
+- Hand-maintained bash denylist (`check-prose-grounding.sh`) — superseded by textlint delegation.
+- "internal register leaves ルー語 alone" — RETRACTED; replaced by the hygiene corollary.
+
 ## Lineage of reforges
 
 - **#1 (2026-07-03)** rename `auditing-audience-facing-prose` → `grounding-prose` + re-anchor every
@@ -205,3 +224,60 @@ but nothing was wired — while 3 hand-picked nouns went into prh role 3. Instan
 | Adopted the primary source mechanically: 総集編 PDF → 161/176 pairs auto-extracted (pypdf; 15 multi-sense words e.g. アクセス skipped, listed in file header) → `assets/prh-gairaigo.yml` | extraction log; YAML valid (161 rules) |
 | Wired into `textlintrc-external.json` ONLY (internal technical カタカナ is legitimate) | external: アジェンダ→検討課題/コンセンサス→合意/ガバナンス→統治 fire; base config: 0 hits |
 | Sourcing ladder made explicit in machine-floor.md: ADOPT > CONFIGURE > AUTHOR (author only with a survey receipt that nothing exists) | the remaining custom pieces each carry that receipt: verb-calque regex, coinage-flag (Breen technique, no package), codemix-flag (density, no package) |
+
+## 2026-07-04 reversal — gairaigo dictionary floor removed (owner falsified, same day)
+
+`prh-gairaigo.yml` (161 語, 国語研 2002-2006 言い換え提案の機械採録, external-only) was shipped and
+REVERSED within hours. Owner's one-line refutation: 根付いているカタカナ外来語はそのまま使えばいい.
+
+| Why the adoption was wrong | Evidence |
+|---|---|
+| Violated the skill's own DECLARED READER law: substituted a 2006 general-public/公共文書 list for the actual 2026 reader's vocabulary | dict flags ツール→道具, バリアフリー→障壁なし, ガバナンス→統治 — the official JPX term is コーポレートガバナンス・コード |
+| 20-year staleness: the list's own design is 理解度-stratified for 2004-06 readers; many entries have since rooted | インフラ→社会基盤, コミュニティー→地域社会 are standard 2026 vocabulary |
+| A noisy floor is a dead floor (the QOED `\|\| true` lesson) — blanket adoption would train consumers to ignore the external config | — |
+
+Mechanism note (vs pendulum): reversal on NEW cited evidence (rooted-word hits), not mood. The
+ADOPT>CONFIGURE>AUTHOR ladder survives — but ADOPT is also reader-gated: an established dictionary
+still fails if its implied reader is not the declared reader. What survives for ルー語: prh role 3
+(latin verb-calque + exact-equivalent nouns) + codemix-flag density — the actual incident class.
+Katakana rootedness = VIBE against the audience line; the 国語研 list = per-repo reference only.
+
+## 2026-07-04 subsume+exceed — dominated the community "AI時代 決定版" config
+
+Owner: "Gemini の回答を包摂して上回れ." Result: every real component subsumed, 2 exceed-points
+where the community config is WRONG, 3 layers it lacks entirely. All npm/run-verified.
+
+| Community claim | Reality (verified) | Skill's answer |
+|---|---|---|
+| `en-ja-translator-find-english` = the code-mixing rule | **E404, does not exist** | working impl: prh catch-all `/[A-Za-z…]/` + `allowlist` filter (v4.0.0) in `textlintrc-strict.json` — proven flags validation/deliverable, allowlists fidelity/CNOT, excludes `code` spans |
+| MCP `--fix` loop = the modern workflow | `--fix` injects prh guidance text into the doc | `lint-floor.sh` refuses `--fix` (exit 2) |
+| one config for all writing | false-positives every である sentence | 3 register profiles |
+| L1/L2 machine layer is the goal | misses logic/coinage | VIBE (L3/L4/スリカエ/register/lifecycle) + kanji-coinage flagger |
+
+Shipped: `assets/prh-codemix.yml`, `assets/textlintrc-strict.json` (opt-in; `bun add -g
+textlint-filter-rule-allowlist`). `preset-ja-spacing` v3.0.2 = opt-in per-repo orthography, NOT
+forced (gairaigo lesson: an orthography policy is reader/repo-relative). Note: article's package
+names have been wrong 3×/3 (〜と思う ban, en-ja-translator-find-english, foreign-language-writing
+scope) — trust npm view, not the blog aggregation.
+
+## 2026-07-04 reforge #4 (v2607.5.0) — hostile audit: append-only decay
+
+External hostile audit (owner-commissioned) found the disease precisely: 8 same-day hot-fixes were
+all APPENDED, never consolidated — the skill violated its own repair-spiral rule at skill level.
+Verdict accepted; reforged, not patched.
+
+| audit finding | action |
+|---|---|
+| SKILL.md kitchen-sink (298 lines: glossary, calibration chapter, notation, gate wiring in core) | core rewritten to ~150 lines: law / tiers / gate / taxonomy / report contract / execution / fire-no-fire / index. Glossary+notation → patterns.md; wiring → machine-floor.md |
+| six families + secret extra chapters (calibration, non-negotiables, beyond-words) | taxonomy restated as **4 layers × 3 axes** (register, lifecycle, **calibration promoted to axis**) — no hidden chapters; non-negotiables folded into report contract & L4 row |
+| EN floor promised in core, unshipped in assets | core says "EN floor is UNSHIPPED — VIBE only"; machine-floor EN section banner STATUS: UNSHIPPED |
+| fire/no-fire buried in ledger | `tests/triggers.md` created (7 fire / 7 near-miss no-fire); core points to it; build-order verifies it |
+| "green floor ≠ done" in 5 places | ONE home: machine-floor FP-advisory boundary; core states it once inside gate step 2 |
+| ledger = undifferentiated append log | CURRENT STATE head added (invariants / open / retired) so a reader model cannot absorb dead policy |
+| sibling drift: structuring-documents described linting-prose as external-only | reciprocal row updated (register-independent hygiene) |
+
+Dissents recorded (not adopted from the audit): (1) the 120-line hard cap has no house source —
+the contract is one-home + lean, landed ~150; (2) claim calibration NOT absorbed into F-L4/register
+(would bury the most-fired check) — promoted to a third axis instead, which also satisfies the
+no-secret-families bar; (3) a pinned-token table is house pattern (forging-skills keeps one) — the
+defect was SIZE in core, fixed by moving the full table to patterns.md.

@@ -50,8 +50,13 @@ stripped=$(printf '%s\n' "$turn_text" \
 # lowercase-initial latin word (≥2) immediately + a する-conjugation = verb calque.
 # (^|[^A-Za-z]) = word boundary, so GitHub/JavaScript (uppercase-initial) never match via an
 # internal lowercase run; [a-z] first char ⇒ English verbs (commit/cite), not proper nouns.
+# The conjugation list is EXHAUSTIVE across voice/tense/aspect on purpose: the passive-past
+# `された` gap let `flag された` slip an entire session (2026-07-05) while `される` was present.
+# The lowercase-latin guard still exempts 漢語 passives (`解消されている` has no latin ⇒ PASS).
+# Regression cases — BLOCK: `flag された` / `sweep されない` / `citeする` / `de-risk する`;
+#                    PASS : `解消されている` / `commit を実行する` / `GitHubした` / `設計した`.
 printf '%s' "$stripped" \
-  | grep -Eoq '(^|[^A-Za-z])[a-z][a-zA-Z]+ ?(する|します|した|して|される|できる|しない|せず|しよう|すれば|すべき)' \
+  | grep -Eoq '(^|[^A-Za-z])[a-z][a-zA-Z]+ *(する|します|した|して|している|していた|しています|しており|される|された|されて|されない|されました|できる|できた|できない|しない|しなかった|せず|しよう|すれば|すべき|しろ|せよ)' \
   || exit 0
 
 cat >&2 << 'MSG'

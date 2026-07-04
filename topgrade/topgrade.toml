@@ -4,7 +4,9 @@
 
 [misc]
 # Steps to skip on every run.
-disable = ["flutter", "tlmgr"]
+# gcloud: installed via mise, so `gcloud components update` is blocked by the SDK (managed-by-
+# package-manager) and marks the run FAILED — mise itself updates it. Skip it. (2026-07-05)
+disable = ["flutter", "tlmgr", "gcloud"]
 
 # Keep a flaky step running but don't let its failure mark the whole run FAILED.
 # (Uncomment to silence the recurring "Claude Code: FAILED" without skipping it.)

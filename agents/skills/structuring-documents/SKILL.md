@@ -10,20 +10,26 @@ description: >-
   delete genuine nonsense sections — 構造化 is the goal, not 圧縮. Use when a
   report/spec/design-doc/README/notes is scattered, repeats itself, references forward, or needs
   reorganizing; also for internal / model-facing docs (reader = the next agent/LLM), and when a
-  linting-prose L4 finding needs the actual REBUILD. Triggers: MECE, 局所化, 情報が散在, 重複,
-  単一の情報源, 前方参照, ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化, 章立て, single
-  source of truth, restructure/reorganize a doc. NOT sentence/word/register readability (AUDIT
-  verb → linting-prose; this skill is the REBUILD verb); NOT slide/deck order or inserting
-  diagrams (→ designing-presentations); NOT a paper corpus (→ systematizing-knowledge); NOT
-  SKILL.md prose (→ forging-skills). English skill; respond in the user's language (default
-  Japanese).
+  linting-prose finding needs a fix that MOVES information (relocate/dedupe/reorder). Owns the
+  pre-writing architecture of 木下『理科系の作文技術』第2〜3章: 目標規定文・一文書一主題・内容の精選・
+  重点先行(document scale). Triggers: MECE, 局所化, 情報が散在, 重複, 単一の情報源, 前方参照,
+  ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化, 章立て, 目標規定文, 内容の精選, 重点先行,
+  single source of truth, restructure/reorganize a doc. Cut vs linting-prose is FIX-LOCALITY:
+  rewrite-words-in-place → linting-prose; move-information-across-the-document → here. NOT
+  sentence/word/register readability or a paragraph's own topic sentence (→ linting-prose); NOT
+  slide/deck order or inserting diagrams (→ designing-presentations); NOT a paper corpus (→
+  systematizing-knowledge); NOT SKILL.md prose (→ forging-skills). English skill; respond in the
+  user's language (default Japanese).
 ---
 
 # Structuring documents — information architecture, not sentence polish
 
-> **Version**: v2607.2.0 (2026-07-04) — distilled from the house `/MECE` + `/REORG` + `/LINT_PAGER`
-> prompts; v2 fixed the `linting-prose` cut from "orthogonal axes" (overclaim) to the MODE cut
-> (audit vs rebuild) with a declared seam. F3 artifacts: `tests/forge-verification-ledger.md`.
+> **Version**: v2607.3.0 (2026-07-05) — distilled from the house `/MECE` + `/REORG` + `/LINT_PAGER`
+> prompts; v2 fixed the `linting-prose` cut from "orthogonal axes" (overclaim) to a MODE cut; v3
+> re-cut that boundary to **FIX-LOCALITY** (rewrite-words-in-place → linting-prose; move-information-
+> across-the-document → here) and grounded this skill's pre-writing design in 木下『理科系の作文技術』
+> **第2〜3章** — 目標規定文・一文書一主題・内容の精選・重点先行(document scale) now live HERE, not in
+> linting-prose L4. F3 artifacts: `tests/forge-verification-ledger.md`.
 > **Build order** ATOMIC — verify: `test -f tests/forge-verification-ledger.md || echo MISSING ledger`
 > **Scope**: how a document's information is ORGANIZED — partition, references, single-source,
 > whole-document coherence, and safe restructuring. Sits BELOW readability (`linting-prose`) and
@@ -39,6 +45,16 @@ description: >-
 > references point backward only (a DAG), each fact has a single source of truth, the whole reads
 > as one coherent 認識体系, and a restructuring pass preserves the thesis it found.** 構造化 is the
 > goal; 圧縮 is not.
+>
+> The architecture rests on a pre-writing anchor (木下『理科系の作文技術』第2〜3章): the document
+> asserts **one thing** (**目標規定文** — a single sentence stating what it claims or denies;
+> **一文書一主題**), its content is **selected against that thesis** (**内容の精選** — necessary
+> facts omitted none, unnecessary facts admitted none: the 木下 grounding of MECE's *home*
+> decision), and its information is ordered **conclusion-first** (**重点先行主義** at document /
+> section scale — the abstract states the answer, sections run 概観→細部). The paragraph-scale
+> instance of 重点先行 (a topic sentence at the paragraph head) is a rewrite-in-place and belongs to
+> `linting-prose`; the document-scale instance (which section leads, what the abstract says, section
+> order) is a move and belongs HERE.
 
 ## MUST NOT FIRE — stay off the readability layer
 
@@ -57,6 +73,8 @@ Run these against the document as a whole; each failure names a concrete restruc
     same content 散在 across sections; consolidate it to one locus (局所化).
   - *Collectively Exhaustive* — every piece of information has an appropriate home; flag orphans
     and gaps (content that belongs to no section, or a section a fact should exist in but doesn't).
+    The inclusion test is 木下's **内容の精選**: necessary facts omitted none, unnecessary facts
+    admitted none — measured against the **目標規定文**, not against "is it true / interesting."
 - **Single source of truth (document DRY).** No claim or figure is repeated across sections. Each
   fact has ONE canonical location; everything else references it. Test: to change this fact, do
   you edit one place or many? Many → a maintenance bug waiting to drift.
@@ -73,8 +91,9 @@ Structural edits are destructive by nature; the danger is losing the argument wh
 it. Guards, in order of precedence:
 
 - **Grasp the thesis before you touch.** Extract and hold the document's own purpose, scope, and
-  the perspective/statements behind it. Do NOT restructure a document whose governing thesis you
-  have not reconstructed.
+  the perspective/statements behind it — reconstruct its **目標規定文** (or write it if the document
+  never stated one; an absent thesis is itself the first structural finding). Do NOT restructure a
+  document whose governing thesis you have not reconstructed.
 - **Fear destructive overwrite.** An edit that drops a load-bearing point is a regression. When in
   doubt, preserve — 論点喪失をする上書き破壊を極端に恐れる.
 - **Don't edit what's adequate.** If a section is already well-organized and sufficient, leave it.
@@ -91,7 +110,7 @@ it. Guards, in order of precedence:
 
 | Sibling | Cut (runtime-answerable) |
 |---|---|
-| `linting-prose` | MODE cut — AUDIT vs REBUILD, with a declared seam at document organization. `linting-prose` audits read-only (word/sentence/paragraph/structure findings — including FLAGGING a buried conclusion, its L4); THIS skill performs the generative REBUILD (MECE partition, single-source, reference DAG, section reorder) under preservation guards. Runtime question: "findings, or a reorganization?" A lint L4 finding that requires moving sections hands off HERE. The seam is expected, not a defect: Kinoshita ch.2–4 lives in linting-prose; this skill's spine (MECE=Minto, single-source=DRY, DAG) is a different canon — skills cut by runtime verb, never by book. Both sides are register-independent; model-facing docs included. |
+| `linting-prose` | **FIX-LOCALITY cut** — the runtime question is *how does the fix land?* **Rewrite words in place** (a word, a sentence, a paragraph's topic sentence) → `linting-prose`. **Move information across the document** (relocate a fact to its one home, dedupe, reorder sections, reference DAG, write/repair the 目標規定文, select content by 内容の精選) → HERE. Grounding split, one home per 木下 chapter: **第4〜8章** (paragraph・topic sentence・逆茂木・言い切り・事実と意見/スリカエ・一義/簡潔) = rewrite-in-place = `linting-prose`; **第2〜3章** (目標規定文・一文書一主題・内容の精選・重点先行 at document scale) = move = HERE, unified with this skill's Minto=MECE / DRY / DAG spine. The one shared concept — **重点先行** — is split by scale and stated identically on both sides: paragraph topic-sentence → `linting-prose`; document/section order & abstract → HERE. `linting-prose` may FLAG a buried document-scale conclusion and hand off HERE (one-directional). Both sides register-independent; model-facing docs included. |
 | `designing-presentations` | Medium cut. Slide/deck structure, talk section ORDER, and inserting diagrams/tables/ASCII/Mermaid for visual effect → there. Prose-document information architecture → here. (The Mermaid diagram-picker lives in `designing-presentations`.) |
 | `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, taxonomy, synthesis). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |

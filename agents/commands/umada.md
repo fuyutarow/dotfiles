@@ -1,18 +1,12 @@
 ---
-description: Fire BOTH 馬田隆明 skills together on one task — raising-resolution (inspect present facts, citation gate) THEN acting-on-hypotheses (map/loop/leap, cheapest falsifying test, kill condition). Invoke when you deliberately want the resolution→bet dual lens instead of the skills' own MECE auto-routing.
+description: Alias — deliberately fire BOTH 馬田隆明 skills on one task, in order: raising-resolution (inspect present facts, citation gate) then acting-on-hypotheses (map/loop/leap, cheapest falsifying test, kill condition). All the craft lives in the two skills; this command only triggers them together.
 disable-model-invocation: true
 ---
 
-馬田隆明（うまだ）の2スキルを**両方**立ち上げて、目の前の課題に適用せよ。
+馬田隆明（うまだ）の2スキルを、この順で両方このターン内に起動し、目の前の課題に適用せよ:
 
-必須手順（順守・このターン内で両方）:
-1. **Skill ツールで `raising-resolution` を起動** ── 主張・行動の前に、一次情報（読んだ行・実行したコマンド・取得した出典）を見て「今あるもの」の解像度を上げる。引用ゲート: 接地できない事実は speculate せず inspect する。
-2. **Skill ツールで `acting-on-hypotheses` を起動** ── 不確実下では map / loop / leap。明示的な仮説を立て、最も安く「自分を否定できる」実験を1つ回し、非対称な上振れにだけ大胆に賭ける。撤退条件も持つ。
-
-順序の意図（両者は補完関係）:
-- `raising-resolution` = **今ある現実**（コード・データ・API・出典）を inspect して接地する＝後ろ向きの事実確認。
-- `acting-on-hypotheses` = **まだ無いもの／前進の賭け**（試作・spike・MVP・「これはスケールするか」）＝行動して学ぶ。
-- まず解像度を上げ、その上で賭けへ進む。ルーティング上どちらか一方が主役でも、**両レンズを併用**して判断の質を上げること。
+1. **Skill ツールで `raising-resolution` を起動** — 今ある現実を inspect して解像度を上げる。
+2. **Skill ツールで `acting-on-hypotheses` を起動** — 不確実下の前進の賭け（map / loop / leap）。
 
 対象:
 $ARGUMENTS

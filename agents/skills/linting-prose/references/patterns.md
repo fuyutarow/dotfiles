@@ -123,8 +123,11 @@ similarity-based redundancy, not topic structure.
 
 ## F-L4 — document logic
 
-Layer: the whole document's order and claim discipline (Kinoshita ch.2/3/7; Minto pyramid). Tier:
-VIBE — no off-the-shelf tool measures conclusion placement or fact/opinion separation.
+Layer: the whole document's claim discipline and the FLAGGING of its order (Kinoshita ch.7 owned
+here; ch.2/3 document design is FLAGGED here, OWNED by `structuring-documents`). Tier: VIBE — no
+off-the-shelf tool measures conclusion placement or fact/opinion separation. **FIX-LOCALITY line:**
+a fix that rewrites words/one sentence stays here; a fix that MOVES sections, writes/repairs the
+目標規定文, or reselects content (内容の精選) is a REBUILD → `structuring-documents`.
 
 - **C4 asserted emphasis (Gopen & Swan stress position + Grice QUANTITY).** Emphasis lives in the
   stress position and in checkable information, never asserted: `ここが肝心`, `今日いちばん大事`,
@@ -143,12 +146,15 @@ VIBE — no off-the-shelf tool measures conclusion placement or fact/opinion sep
   named failure: a sentence written as opinion in one line, then treated as established fact in the
   next, so the logic silently rests on the unproven. State facts as facts, opinions with their
   subject ("we infer …"). This is where proposals and rebuttals fail hardest.
-- **Conclusion-first / BLUF (重点先行, Kinoshita ch.3).** The conclusion, purpose, and method reach the
-  reader without their having to read to the end. A document whose thesis is only assembled in the
-  last paragraph buries its conclusion. Abstracts and executive summaries open with the task and
-  claim, not internal workflow vocabulary.
-- **目標規定文 (Kinoshita ch.2).** One sentence stating what the document asserts or denies exists
-  before drafting, and the document does not drift from it.
+- **Conclusion-first / BLUF — FLAG only (重点先行 at document scale, Kinoshita ch.3, OWNED by
+  `structuring-documents`).** Flag a document whose thesis is only assembled in the last paragraph,
+  or an abstract that opens with internal workflow vocabulary instead of task+claim. The paragraph-
+  scale instance (a topic sentence at the paragraph head) IS owned here as an L3 rewrite; the
+  document-scale fix (reorder sections, rewrite the abstract lead) MOVES information → hand off to
+  `structuring-documents`.
+- **目標規定文 — FLAG only (Kinoshita ch.2, OWNED by `structuring-documents`).** Flag a document with
+  no single governing thesis, or one that drifts from the thesis it stated. Writing or repairing the
+  目標規定文 and reselecting content against it (内容の精選) is a REBUILD → `structuring-documents`.
 
 ## F-register
 

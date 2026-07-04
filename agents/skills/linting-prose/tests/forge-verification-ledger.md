@@ -11,7 +11,7 @@ future reforge; never overwrite.
 - Admissibility is READER-relative; internal register waives comprehension, never hygiene (verb calques, exact-equivalent loan nouns banned in any register).
 - Sourcing ladder ADOPT > CONFIGURE > AUTHOR — and ADOPT is reader-gated too (an established dictionary fails if its implied reader ≠ the declared reader).
 - Fire/no-fire desk-check set lives in `tests/triggers.md`; re-run on any description edit.
-- L4's label is **document logic** (renamed from "structure" — it collided with the sibling skill name). MODE cut vs `structuring-documents`: this skill AUDITS (findings), that skill REBUILDS (section moves, MECE, dedup); L4 findings needing reorganization hand off there.
+- L4's label is **document logic** (renamed from "structure" — it collided with the sibling skill name). **FIX-LOCALITY cut** vs `structuring-documents` (v6, supersedes the MODE cut): rewrite-words-in-place = HERE; move-information-across-the-document = there. This skill owns 木下 **ch.4–8** (paragraph→word) + 事実と意見/スリカエ (ch.7); it only FLAGS document structure and has RELINQUISHED 目標規定文 + doc-scale 重点先行 (木下 ch.2–3) to `structuring-documents`. 重点先行 is split by scale: paragraph topic-sentence = HERE (L3), document/section order = there.
 
 **Open defects:**
 - EN machine floor UNSHIPPED (no .vale.ini/Vocab) — English prose is VIBE-only; SKILL.md says so.
@@ -32,6 +32,14 @@ future reforge; never overwrite.
 - **#3 (2026-07-04, v2607.4.0)** rename `grounding-prose` → `linting-prose`; machine-floor delegation
   to `textlint`/`Vale`; the Kinoshita four-layer + register/lifecycle frame; the HARD/MIX/VIBE tier
   (JakobThumm); the lifecycle-integrity family. THIS section documents #3; #1/#2 findings preserved below.
+- **#5 (2026-07-05, v2607.6.0)** FIX-LOCALITY re-cut with `structuring-documents` (user: the split
+  read ARBITRARY). Grounded in an 11-agent survey of 木下『理科系の作文技術』 (provenance-verified:
+  修飾語の語順/係り受け/「黒い目のきれいな女の子」 = 本多勝一・井上ひさし, NOT 木下; 格調 ≠ 木下 goal).
+  RELINQUISHED 目標規定文 + document-scale 重点先行 (木下 ch.2–3) to `structuring-documents`; this skill
+  keeps 木下 ch.4–8 (paragraph→word, rewrite-in-place) + 事実と意見/スリカエ, and L4 now only FLAGS
+  document structure. Edits: SKILL.md (description/scope/lineage/L4 row + Kinoshita layer note) +
+  patterns.md F-L4. Runtime cut question: "rewrite words in place, or move information across the
+  document?" Verification: 5-lens adversarial fleet — results appended on completion.
 
 ## 2026-07-04 reforge #3 (v2607.4.0)
 

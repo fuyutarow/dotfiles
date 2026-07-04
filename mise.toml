@@ -46,8 +46,8 @@ printf '%s\n' "$files" | xargs shfmt -d -ln bash -i 2 -ci -sr -bn -s
 '''
 
 [tasks.lint]
-description = "Lint the repo: Markdown (rumdl) + bash (shellcheck) + zsh (zsh -n)"
-depends = ["lint:md", "lint:sh", "lint:zsh"]
+description = "Lint the repo: Markdown (rumdl) + bash (shellcheck) + zsh (zsh -n) + skills index"
+depends = ["lint:md", "lint:sh", "lint:zsh", "lint:skills-index"]
 
 [tasks."lint:md"]
 dir = "{{config_root}}"
@@ -73,6 +73,22 @@ for f in zsh/aliases.zsh zsh/mac.zsh zsh/wsl.zsh \
   [ -f "$f" ] || continue
   if zsh -n "$f"; then echo "✅ $f"; else echo "❌ $f"; rc=1; fi
 done
+exit $rc
+'''
+
+[tasks."lint:skills-index"]
+dir = "{{config_root}}"
+description = "Catalog completeness: every agents/skills/*/ with a SKILL.md must be linked in agents/skills/README.md"
+run = '''
+idx="agents/skills/README.md"
+[ -f "$idx" ] || { echo "❌ missing $idx"; exit 1; }
+rc=0
+for d in agents/skills/*/; do
+  n="$(basename "$d")"
+  [ -f "$d/SKILL.md" ] || continue          # skip dangling symlinks / non-skill dirs
+  if grep -q "]($n/)" "$idx"; then :; else echo "❌ not in index: $n"; rc=1; fi
+done
+[ "$rc" -eq 0 ] && echo "✅ skills index complete"
 exit $rc
 '''
 

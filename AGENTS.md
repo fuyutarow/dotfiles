@@ -2,9 +2,11 @@
 
 ## Canonical Context
 
-This repository's detailed operating context lives in `CLAUDE.md`. Before any non-trivial edit, read `CLAUDE.md` and treat it as repository guidance unless the current user request overrides it.
+This repository's detailed operating context lives in `CLAUDE.md`. Before any non-trivial edit, read `CLAUDE.md` and treat it as repository guidance unless the current user request overrides it. The human-facing *why* behind these rules is `README` → **Design — the invariants** (the canonical statement of intent).
 
 ## Repository Rules
+
+These mirror `CLAUDE.md`'s "Conventions to preserve" for Codex, which does not auto-load `CLAUDE.md`; on any conflict, `CLAUDE.md` wins and `README`'s **Design — the invariants** explains the reasoning.
 
 - Preserve the topic-first layout: one tool owns one directory.
 - Keep dotfile symlinks centralized in `scripts/link-dots.sh`.

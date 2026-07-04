@@ -3,6 +3,10 @@
 This file provides essential context for Claude Code to understand this dotfiles repo and the
 user's environment. It is **OS-neutral**: the same repo drives **macOS** and **WSL2 (Ubuntu)**.
 
+> The human-facing map and rationale live in `README` — **Architecture** (the annotated topic
+> tree) and **Design — the invariants** (why the repo is shaped this way). This file is the
+> agent-facing operational encoding; treat those README sections as canonical and keep them in sync.
+
 ## Development Environment
 
 ### Operating Systems (dual-target)
@@ -20,28 +24,12 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 ## Repo Architecture — topic-first, one tool = one directory
 
-```
-~/dotfiles/
-├── zsh/                 # ALL zsh: zshenv (minimal non-interactive SSH PATH),
-│   │                    #   zshrc, aliases.zsh (common + IS_MAC/IS_WSL detection),
-│   │                    #   mac.zsh / wsl.zsh (OS aliases, sourced at END of aliases.zsh),
-│   │                    #   zprofile.mac / zprofile.wsl
-├── git/                 # ALL git: gitconfig (includes ~/.local-gitconfig), local.mac, local.wsl
-├── tmux/                # ALL tmux: tmux.conf + scripts/ (status bar, layouts)
-├── sheldon/             # zsh plugin manager config
-├── karabiner/           # Keyboard customization (macOS-only topic)
-├── wsl/                 # WSL2 system config: wsl.conf → /etc/wsl.conf (sudo link; WSL-only topic)
-├── agents/              # ALL AI-assistant content (linked via `mise run link:skills`)
-│   ├── codex/           #   Codex global guidance → ~/.codex/AGENTS.md
-│   ├── commands/        #   slash-command prompts → ~/.claude/commands, ~/.codex/prompts, gemini
-│   └── skills/          #   Agent Skills → ~/.claude/skills, ~/.agents/skills
-├── scripts/             # Repo plumbing — SINGLE SOURCES OF TRUTH
-│   ├── link-dots.sh     #   all symlink creation (OS-aware)
-│   └── check-tools.sh   #   tool-presence check
-├── Brewfile             # All CLI tools (mac casks gated by `if OS.mac?`)
-└── mise.toml            # THE task runner (justfile retired): mac:init, wsl:init,
-                         #   link-dots, check-tools, install:tools, cc:install-mcp, link:skills
-```
+The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
+**README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
+`zsh git tmux sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` (mac), `wsl` (WSL).
+Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
+`scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
+OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (or `mac.zsh` / `wsl.zsh`).
 
 **Conventions to preserve:**
 1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.sh`.

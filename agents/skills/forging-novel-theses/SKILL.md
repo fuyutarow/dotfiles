@@ -13,11 +13,11 @@ description: >-
   資本適合 / time-to-truth / runway, beachhead / wedge, 撤退基準 / kill criteria, ピッチで語る thesis の中身,
   イノベーションの型, 後付けでない検証. DECISIVE CUT vs acting-on-hypotheses: that skill TESTS & COMMITS a bet
   you ALREADY hold (Map/Loop/Leap, no invention); THIS fires only when you must GENERATE the novel thesis —
-  nothing to invent, or a bare 反証 / kill / pivot / MVP ask on an idea in hand → acting-on-hypotheses (whose
-  Loop/Leap this skill's Phase 3 reuses). Deck / talk DELIVERY → designing-presentations; distributing an
-  EXISTING tool → growing-oss-adoption; inspecting a PRESENT fact → raising-resolution. Workflow-native: on a
-  multi-agent harness, forge solo — agents verify facts and refute gates only; agent consensus is an
-  ANTI-signal. English skill; respond in the user's language (default Japanese).
+  nothing to invent, or a bare 反証 / kill / pivot / MVP ask on an idea in hand → acting-on-hypotheses.
+  Deck / talk DELIVERY → designing-presentations; distributing an EXISTING tool → growing-oss-adoption;
+  inspecting a PRESENT fact → raising-resolution. Workflow-native: forge solo — agents verify facts and
+  refute gates only; agent consensus is an ANTI-signal. English skill; respond in the user's language
+  (default Japanese).
 references:
   - generation-engine
   - control-loop

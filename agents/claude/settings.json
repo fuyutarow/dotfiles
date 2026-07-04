@@ -1,5 +1,5 @@
 {
-  "model": "claude-fable-5[1m]",
+  "model": "opus[1m]",
   "hooks": {
     "Stop": [
       {
@@ -15,6 +15,14 @@
           {
             "type": "command",
             "command": "bash ~/.claude/detect-audit-theater.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/detect-codemix.sh"
           }
         ]
       }

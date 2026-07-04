@@ -183,6 +183,27 @@ post-hoc, it cannot block or undo**):
 
 → Every event, matcher rules, and the recipe book: `references/hooks.md`.
 
+### Recipe — cure a *generation* pathology (code-switching) in layers, don't gate it
+
+Code-switching (an LLM leaking English into Japanese prose — `commitする`, `deliverable である`)
+is **Language Confusion**, a named generation-time pathology (Marchisio et al., EMNLP 2024): English-
+centric weights pull toward English under load, worse with complex prompts + high temperature. The
+root cause is in the weights — you cannot fix it, and **a hook cannot cure generation** (the
+legit-vs-gratuitous line is semantic; a blanket latin gate is register-relative and false-positives
+on real domain terms). So SHAPE generation and CATCH only the deterministic residue, across layers:
+
+1. **Behavior (the primary lever)** — a negative-framed language-lock in CLAUDE.md / an output-style:
+   *「思考から最終出力まで一言語で統一。英語動詞を する に接がない(コミットする, not commitする)。専門語はカタカナか日本語で。」* Negative constraints bind harder than "please write in Japanese"; a few-shot example of the fixed form helps most (the paper's finding).
+2. **Context** — your own prompt's English licenses the model to mix; feed cleaner input.
+3. **Feedback** — detection is `linting-prose` (`codemix-flag.py` + prh, at *deliverable* time, not
+   every turn). The one always-wrong class (latin verb + する) is gated by the Stop hook
+   `agents/claude/detect-codemix.sh` (narrow, code/quote-stripped, exit 2 → forces a rewrite).
+4. **Operation** — long context drifts toward English; refresh/summarize in the target language.
+
+Register-relative: internal engineering chat legitimately mixes; the guard is for external/deliverable
+prose (`linting-prose` hygiene corollary). This is the model for any generation pathology: shape at
+the source, gate only the residue that is deterministically always-wrong.
+
 ---
 
 ## §4. Anti-patterns (do **not**)

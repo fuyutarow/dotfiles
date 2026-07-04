@@ -63,6 +63,7 @@ link tmux/tmux.conf "$HOME/.tmux.conf"
 link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
 link agents/claude/detect-leaked-toolcall.sh "$HOME/.claude/detect-leaked-toolcall.sh"
 link agents/claude/detect-audit-theater.sh "$HOME/.claude/detect-audit-theater.sh"
+link agents/claude/detect-codemix.sh "$HOME/.claude/detect-codemix.sh"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 

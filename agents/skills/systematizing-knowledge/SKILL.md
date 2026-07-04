@@ -6,22 +6,18 @@ description: >-
   top-tier-science / AI4S researcher. Use whenever the task is to turn many papers into ONE
   defensible position. Trigger on: systematization of knowledge, SoK, survey, literature review /
   文献レビュー, taxonomy / 分類, comparison matrix, meta-analysis / メタアナリシス, evidence synthesis /
-  エビデンス統合, vote counting / 票数集計, contradictory or conflicting results / 矛盾する結果, reconcile /
+  エビデンス統合, vote counting / 票数集計, conflicting results / 矛盾する結果, reconcile /
   moderator / 調整変数, boundary condition / 境界条件, effect size / 効果量, heterogeneity / I-squared,
-  GRADE / certainty of evidence / エビデンスの確実性, PRISMA / Kitchenham / Nickerson taxonomy, claim
-  provenance / ledger / 来歴, theoretical unification / 理論統合, scaling laws (Kaplan vs Chinchilla),
-  emergence (Schaeffer mirage), data leakage / REFORMS, gap analysis / research agenda, genre-fit,
-  content resolution / 解像度 / shallow survey / 稚拙 / scaffold theater.
-  MANDATORY — read BEFORE producing ANY multi-paper synthesis. Precedence: an SoK is an ARGUMENT
-  anchored to a load-bearing claim ledger, NOT per-paper summaries; "N papers say X" is forbidden;
-  every contradiction is resolved by its moderator; every claim carries a GRADE certainty and a flip
-  regime; formal machinery is NOT the deliverable — every load-bearing claim states mechanism +
-  magnitude + regime anchored to the specific result, and every section must teach a domain expert
-  something non-obvious (scaffold theater = checklist-complete but shallow = the highest-frequency
-  failure). Workflow-native: on a multi-agent harness the build fans out (corpus sweep, per-paper
-  extraction, per-claim adversarial verification, per-section resolution audit) while framing,
-  reconciliation, and the argument stay solo — see the orchestration map. Output documents default
-  to the user's language (Japanese); this skill is English.
+  GRADE / エビデンスの確実性, PRISMA / Kitchenham / Nickerson taxonomy, claim
+  provenance / ledger / 来歴, theoretical unification / 理論統合, scaling laws, emergence, data
+  leakage / REFORMS, gap analysis / research agenda, genre-fit, 解像度 / shallow survey / 稚拙 /
+  scaffold theater. MANDATORY — read BEFORE ANY multi-paper synthesis. An SoK is an ARGUMENT
+  anchored to a claim ledger, NOT per-paper summaries: "N papers say X" is forbidden, every
+  contradiction is resolved by its moderator, every claim carries GRADE + a flip regime, and every
+  section must teach a domain expert something non-obvious (scaffold theater = checklist-complete
+  but shallow — the top failure). Workflow-native: corpus sweep / per-paper extraction / per-claim
+  adversarial verification fan out; framing, reconciliation, and the argument stay solo. Output in
+  the user's language (Japanese); skill is English.
 ---
 
 # SoK — Evidence Synthesis, Reconciliation, Taxonomy & Unification

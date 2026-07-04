@@ -208,7 +208,11 @@ a generated doc hit 15 latin/100字 with "cite する / deliverable である / 
 green): **prh role 3** in `prh-house.yml` HARD-catches verb calques (`/[a-zA-Z]{2,} ?する/`) and
 exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`** (zero-dep) flags
 paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-way: standard domain term
-(keep) / pinned house token (keep, identifier) / gratuitous (violate). The earlier framing
+(keep) / pinned house token (keep, identifier) / gratuitous (violate). This skill is the
+FEEDBACK/detection layer at *deliverable* time; the UPSTREAM cure (the generation guardrail + the
+always-on `detect-codemix.sh` Stop hook gating the latin-verb+する residue every turn) is owned by
+`operating-the-harness` — code-switching is Language Confusion (Marchisio, EMNLP 2024), and a gate
+cannot cure a generation pathology. The earlier framing
 "internal register leaves ルー語 alone" was WRONG and is retracted: internal waives comprehension,
 not hygiene. Blanket translation is the opposite error (非飽和iciency) — pinned tokens and domain
 terms stay. **Katakana rootedness is READER-relative — no dictionary floor.** The 国語研「外来語」言い換え提案

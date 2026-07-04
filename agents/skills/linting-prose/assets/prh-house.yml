@@ -28,3 +28,16 @@ rules:
   - expected: '「捉え直す/再考」等の平文へ — reframe の calque「再フレーム」を避ける'
     pattern: 再フレーム
   # === end per-repo section =======================================================================
+
+  # === role 3: code-mixing floor (ルー語) — ALWAYS ON. Added 2026-07-04 (QOED R2607_021 incident:
+  # 15 latin tokens/100 JA chars in prose; "cite する", "deliverable である", "moat を主張しない").
+  # Verb calque is never house style in ANY register; the nouns below have exact JP equivalents.
+  # Detect-only; JA-prose oriented (hits inside English docs are advisory).
+  - expected: '日本語動詞へ（cite する→引用する 等）— 英語動詞+する の calque は register を問わず不可'
+    pattern: /[a-zA-Z]{2,} ?する/
+  - expected: 成果物
+    pattern: deliverable
+  - expected: '位置づけ（または 枠組み）'
+    pattern: framing
+  - expected: '参入障壁 — 事業 register の語を研究/技術 prose に持ち込まない'
+    pattern: moat

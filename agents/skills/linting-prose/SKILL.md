@@ -34,7 +34,7 @@ description: >-
 > lifecycle-integrity family (from the QOED 71-finding audit). Postmortem:
 > `tests/forge-verification-ledger.md`, reforge #3.
 > **Build order** ATOMIC — this file ships with its references and its F3 ledger; verify:
-> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-external prh-house prh-external; do test -f assets/$a.* || echo MISSING asset $a; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test ! -d ../grounding-prose || echo STALE-DIR`
+> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-research textlintrc-external prh-house prh-external prh-gairaigo; do test -f assets/$a.* || echo MISSING asset $a; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test -f scripts/codemix-flag.py || echo MISSING codemix-flag; test ! -d ../grounding-prose || echo STALE-DIR`
 
 ## The law
 
@@ -171,7 +171,12 @@ Every one IS defined — in the project — so "undefined" never fires; the viol
 DECLARED READER holds none of it. The greppable subset (ID patterns, verdict enums, `receipt:`) is
 HARD via the external prh dict (`assets/textlintrc-external.json`); house dichotomies are VIBE. Also
 here: dearu/desumasu mixing (HARD), 心情的要素 in a technical register (VIBE), non-specialist
-vocabulary (3MT).
+vocabulary (3MT). **Prose-language discipline (ANY register, incl. internal):** an English token in
+Japanese prose is admissible only as (1) a standard domain term or (2) a pinned house token used as
+an identifier; a **verb calque** (`cite する` — prh role 3, HARD) or a noun with an exact JP
+equivalent (`deliverable`→成果物) is a violation even when the reader holds the term — internal
+register waives the COMPREHENSION check, never the HYGIENE check (QOED R2607_021: 15 latin/100字
+passed a green floor). Density pre-filter: `scripts/codemix-flag.py` (MIX).
 
 **F-lifecycle — over-time (VIBE).** A retracted or superseded claim left standing in a summary table,
 a section heading, or a self line-number cross-reference while the body retracts it (QOED
@@ -241,9 +246,11 @@ Grounding is cheapest before the first draft line. Before writing ANY audience-f
    more than the budget, restructure the plan, not the table.
 3. **Draft** in the reader's vocabulary; internal ledger IDs and verdict tokens never enter the
    draft — they stay in the working notes.
-4. **Run the machine floor** — `bunx textlint --config assets/textlintrc.json`, or
-   `assets/textlintrc-external.json` when register = external (it adds the C9 register set). A green
-   floor is step 4 of 5, not "done".
+4. **Run the machine floor** via `scripts/lint-floor.sh` — pick the config by register:
+   `textlintrc.json` (default, body = **ですます**), `LINT_PROSE_CONFIG=assets/textlintrc-research.json`
+   for **である体** internal/research docs (base FALSE-POSITIVES every である sentence — see
+   machine-floor.md), or `assets/textlintrc-external.json` when register = external (adds the C9
+   register set). A green floor is step 4 of 5, not "done".
 5. **Titles-only test + read the rendered page** with the reader's eyes; then the VIBE pass over the
    six families. The floor is instance-overfit by design; novel coinage of the same classes is caught
    only here — never skip it because textlint was green.

@@ -27,6 +27,23 @@ bunx textlint --config assets/textlintrc.json path/to/doc.md
 bunx textlint --format json path/to/doc.md   # structured findings for an agent loop
 ```
 
+## Register profiles — pick the config by the document's register (2026-07-04)
+
+The floor ships THREE JA configs; run all via `scripts/lint-floor.sh` (`LINT_PROSE_CONFIG=<path>`).
+The choice is not cosmetic: `preset-ja-technical-writing` sets `no-mix-dearu-desumasu` with
+`preferInBody = ですます` by DEFAULT, so the base config **false-positives EVERY である sentence** in
+a dearu-style doc (verified: a pure である体 record → 2 spurious errors; caught by a consuming repo,
+QOED, on its internal research records).
+
+| Config | Body register | Use for |
+|---|---|---|
+| `assets/textlintrc.json` | **ですます** (default) | external-ish / customer / general docs written in ですます |
+| `assets/textlintrc-research.json` | **である体** (`preferInBody:である`, `strict:false`) | internal / research / academic records (paper-style である体). Pure である → clean; ですます-dominant → flagged; minor mixing tolerated |
+| `assets/textlintrc-external.json` | ですます + C9 register set | field-facing deliverables — also HARD-detects insider register (ledger IDs, verdict enums, `PASS`, `receipt:`) |
+
+A consuming repo whose records are である体 (research logs, design docs) MUST point its lint task at
+`textlintrc-research.json`, never the base — otherwise the floor is all-noise and gets `|| true`-ignored.
+
 Global vs local: the global install is the ergonomic default for a personal multi-repo setup. A
 shared repo or CI job that needs reproducibility should still `bun add -d` the same packages and
 commit the lockfile — a global install is not captured by any lockfile. Either way the config and
@@ -41,7 +58,12 @@ non-destructively — see the anti-auto-substitution rule before trusting them.
 
 `preset-ja-technical-writing` (23 rules, mostly morphology/kuromoji) and
 `@textlint-ja/preset-ai-writing` (5 rules) between them own the entire HARD tier for Japanese. Every
-rule below is HARD. The map is the "do not re-implement" contract — if a row is here, the skill
+rule below is HARD. The sourcing ladder is **ADOPT > CONFIGURE > AUTHOR**: adopt a published
+preset/dictionary first (ja-technical-writing, ai-writing, prh-gairaigo); configure an existing
+rule's options second (the research profile is `no-mix-dearu-desumasu`'s own `preferInBody`);
+author a custom pattern/script ONLY with a survey receipt that nothing exists (verb-calque regex,
+coinage/codemix flaggers — 2026-07-04 survey, ledger). The map is the "do not re-implement"
+contract — if a row is here, the skill
 delegates it and never writes a matching regex. **Family/layer assignment is NOT decided here** — its
 single home is the C1–C9 map in `patterns.md`; this table stays rule→check so the layer taxonomy has
 one owner.
@@ -160,13 +182,20 @@ the bigram is also rare in a web n-gram corpus — NWJC/BCCWJ); or score LM surp
 is how a noisy MIX detection becomes a zero-FP HARD rule for that specific term.
 
 **ルー語 / 外来語 濫用 (English/katakana over-mixing).** No clean off-the-shelf overuse detector.
-The HARD lever is a **prh substitution dict seeded from the 国立国語研究所「外来語」言い換え提案**
-(loanword → 和語 map) in `prh-external.yml`, applied only in `register = external`. Off-the-shelf,
-verified: `@textlint-ja/preset-foreign-language-writing` is katakana *spelling* orthography (WIP), not
-overuse; `textlint-rule-ja-sudachi-synonym-suggestion` nudges katakana→和語 but is a noisy VIBE
-suggester. A katakana/latin-token **ratio** heuristic is a usable MIX signal (spike ⇒ review), never HARD.
-Reframe holds: ルー語 is only a defect against a DECLARED reader who lacks the terms (see SKILL.md
-F-register) — internal register leaves it alone.
+Off-the-shelf, verified: `@textlint-ja/preset-foreign-language-writing` is katakana *spelling*
+orthography (WIP), not overuse; `textlint-rule-ja-sudachi-synonym-suggestion` nudges katakana→和語
+but is a noisy VIBE suggester. House floor (ALWAYS ON since 2026-07-04, QOED R2607_021 incident —
+a generated doc hit 15 latin/100字 with "cite する / deliverable である / moat" and the floor was
+green): **prh role 3** in `prh-house.yml` HARD-catches verb calques (`/[a-zA-Z]{2,} ?する/`) and
+exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`** (zero-dep) flags
+paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-way: standard domain term
+(keep) / pinned house token (keep, identifier) / gratuitous (violate). The earlier framing
+"internal register leaves ルー語 alone" was WRONG and is retracted: internal waives comprehension,
+not hygiene. Blanket translation is the opposite error (非飽和iciency) — pinned tokens and domain
+terms stay. The 国語研「外来語」言い換え提案 is now ADOPTED, not just cited: `assets/prh-gairaigo.yml` (161/176
+語 machine-extracted from the 総集編 PDF, 15 multi-sense words skipped; source URL in the file
+header), loaded ONLY by `textlintrc-external.json` — proven firing on external
+(アジェンダ→検討課題, コンセンサス→合意), silent on internal (technical カタカナ is legitimate).
 
 ## The FP-advisory boundary
 

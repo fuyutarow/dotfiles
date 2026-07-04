@@ -4,10 +4,16 @@
   "rules": {
     "preset-ja-technical-writing": true,
     "@textlint-ja/preset-ai-writing": {
-      "ai-tech-writing-guideline": { "severity": "info" }
+      "ai-tech-writing-guideline": {
+        "severity": "info"
+      }
     },
     "prh": {
-      "rulePaths": ["./prh-house.yml", "./prh-external.yml"]
+      "rulePaths": [
+        "./prh-house.yml",
+        "./prh-external.yml",
+        "./prh-gairaigo.yml"
+      ]
     }
   }
 }

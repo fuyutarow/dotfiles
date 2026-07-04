@@ -158,3 +158,50 @@ this skill; the deterministic floor passed it. 15-agent web/GitHub/npm survey + 
 
 Open: `sudachidict-full`/NEologd + collocation-PMI or LM-surprisal (rinna/japanese-gpt2) would lift
 precision — heavier, not shipped. EN machine floor still unpackaged (prior finding, still OPEN).
+
+## 2026-07-04 consuming-repo finding (QOED) — dearu-register false positive
+
+A consuming session (QOED, である体 research records) exercised the shipped floor and correctly
+diagnosed a defect I shipped, verified here empirically:
+
+| Severity | Finding | Verification | Resolution |
+|---|---|---|---|
+| high | base `textlintrc.json` hard-prefers ですます (`no-mix-dearu-desumasu` preset default `preferInBody:ですます`) → false-positives EVERY である sentence in a dearu-style internal/research doc | pure である体 (である:2, ですます:0, no mixing) → 2 spurious `no-mix-dearu-desumasu` errors; pure ですます → silent | shipped `assets/textlintrc-research.json` (`preferInBody:である`, strict:false): pure である → clean, ですます-dominant → flagged, prh coinage + ai-writing preserved. Wired into SKILL.md step 4, build-order verify, machine-floor.md profile table |
+
+Note on the correct override syntax (cost one iteration): a preset-internal rule is overridden by
+NESTING it inside the preset object (`"preset-ja-technical-writing": { "no-mix-dearu-desumasu": {..} }`),
+NOT via a top-level `preset/rule` key — the latter yields textlint "No rules found".
+
+Consumer behavior was exemplary: it did NOT obey the false positive, diagnosed the config mismatch,
+declined to churn a house-wide `**bold**:` pattern (AI-slop `no-ai-list-formatting`, ~40 hits, a
+house-wide style decision, not per-edit), and surfaced that the repo's own `mise.toml lint:prose`
+points at a non-existent `scripts/textlintrc-research.json` and silently passes via `|| true` — a
+real harness defect ON THE CONSUMING SIDE (fix: repoint it at this skill's `textlintrc-research.json`).
+
+## 2026-07-04 incident — code-mixing (ルー語) passed a green floor (QOED R2607_021)
+
+Symptom: a consuming session, following this skill mechanically (audience line declared, floor
+green, five-slot report), generated NEW prose at 15 latin tokens/100 JA chars — "cite する",
+"deliverable である", "moat を主張しない" — and the owner rejected the document quality.
+
+| Cause (in the SKILL, not the agent) | Evidence | Fix |
+|---|---|---|
+| F-register modeled register ONLY as vocabulary-sharing → "internal reader holds the terms" fired nothing; the survey note even said "internal register leaves ルー語 alone" | R2607_021 diff: agent's own new §0/§2 lines carry the calques; floor 0 problems | Prose-language discipline added to F-register: comprehension vs HYGIENE split; verb calque + exact-equivalent noun = violation in ANY register. machine-floor.md sentence RETRACTED in place |
+| Survey distilled code-mixing levers as notes but shipped NO check (external-only prh idea, ratio "usable MIX signal" unwired) | assets/ had no rule; grep floor green on the incident doc | prh role 3 (verb-calque regex + deliverable/framing/moat) ALWAYS ON; scripts/codemix-flag.py (zero-dep density flagger, threshold 8; incident doc = 15) |
+| Register contagion: the operator/audit register (this skill's own tokens, the session's mixed prose) is the few-shot the generating model mirrors | agent report + new doc lines share the register | Not fixable by a rule alone — the write-time protocol's step 3 (draft in the READER's vocabulary) now has a floor that goes red; residual is VIBE |
+
+Boundary kept: only the GRATUITOUS class is a defect. Standard domain terms (fidelity, CNOT) and
+pinned house tokens (campaign, IF-1, decision cost — grep anchors) STAY; blanket translation would
+repeat 非飽和iciency. Agent behavior was correct throughout — the skill was the defect.
+
+## 2026-07-04 adopt-first correction — 国語研 dictionary wired (was documented-but-unwired)
+
+Owner challenge: "presets were surveyed — why hand-roll?" Verdict: partially right. The survey
+HAD found the one ready-made resource (国語研「外来語」言い換え提案) and machine-floor.md cited it,
+but nothing was wired — while 3 hand-picked nouns went into prh role 3. Instance-overfit again.
+
+| Action | Receipt |
+|---|---|
+| Adopted the primary source mechanically: 総集編 PDF → 161/176 pairs auto-extracted (pypdf; 15 multi-sense words e.g. アクセス skipped, listed in file header) → `assets/prh-gairaigo.yml` | extraction log; YAML valid (161 rules) |
+| Wired into `textlintrc-external.json` ONLY (internal technical カタカナ is legitimate) | external: アジェンダ→検討課題/コンセンサス→合意/ガバナンス→統治 fire; base config: 0 hits |
+| Sourcing ladder made explicit in machine-floor.md: ADOPT > CONFIGURE > AUTHOR (author only with a survey receipt that nothing exists) | the remaining custom pieces each carry that receipt: verb-calque regex, coinage-flag (Breen technique, no package), codemix-flag (density, no package) |

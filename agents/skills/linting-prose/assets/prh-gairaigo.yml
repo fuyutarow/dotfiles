@@ -1,0 +1,332 @@
+version: 1
+
+# 国立国語研究所「外来語」言い換え提案 第1回〜第4回 総集編 (2006) — 161/176 語を機械抽出。
+# Source: https://www2.ninjal.ac.jp/gairaigo/Teian1_4/iikae_teian1_4.pdf (extracted 2026-07-04;
+# 15 multi-sense words e.g. アクセス/イニシアチブ not auto-extractable — add by hand if needed).
+# ADOPTED dictionary, not house-authored: the established loanword→JP map for EXTERNAL register.
+# Loaded ONLY by textlintrc-external.json — internal/technical docs legitimately use カタカナ terms.
+# DETECT-ONLY advisory: a hit is a candidate for the declared reader, never an auto-substitution.
+
+rules:
+  - expected: 保存記録
+    pattern: アーカイブ
+  - expected: 独自性
+    pattern: アイデンティティー
+  - expected: 停車時エンジン停止
+    pattern: アイドリングストップ
+  - expected: 外部委託
+    pattern: アウトソーシング
+  - expected: 説明責任
+    pattern: アカウンタビリティー
+  - expected: 実行計画
+    pattern: アクションプログラム
+  - expected: 利用しやすさ
+    pattern: アクセシビリティー
+  - expected: 検討課題
+    pattern: アジェンダ
+  - expected: 影響評価
+    pattern: アセスメント
+  - expected: 分析家
+    pattern: アナリスト
+  - expected: 娯楽
+    pattern: アミューズメント
+  - expected: 快適環境
+    pattern: アメニティー
+  - expected: 技術革新
+    pattern: イノベーション
+  - expected: 起業支援
+    pattern: インキュベーション
+  - expected: 内部関係者
+    pattern: インサイダー
+  - expected: 意欲刺激
+    pattern: インセンティブ
+  - expected: 就業体験
+    pattern: インターンシップ
+  - expected: 双方向的
+    pattern: インタラクティブ
+  - expected: 衝撃
+    pattern: インパクト
+  - expected: 納得診療
+    pattern: インフォームドコンセント
+  - expected: 社会基盤
+    pattern: インフラ
+  - expected: 能力開化
+    pattern: エンパワーメント
+  - expected: 法執行
+    pattern: エンフォースメント
+  - expected: まとめ役
+    pattern: オーガナイザー
+  - expected: 世論形成者
+    pattern: オピニオンリーダー
+  - expected: 原子力防災センター
+    pattern: オフサイトセンター
+  - expected: 注文対応
+    pattern: オンデマンド
+  - expected: 指針
+    pattern: ガイドライン
+  - expected: 対応相手
+    pattern: カウンターパート
+  - expected: 特注生産
+    pattern: カスタムメード
+  - expected: 統治
+    pattern: ガバナンス
+  - expected: 追い上げ
+    pattern: キャッチアップ
+  - expected: 資産益
+    pattern: キャピタルゲイン
+  - expected: 顧客
+    pattern: クライアント
+  - expected: 全体構想
+    pattern: グランドデザイン
+  - expected: 地球規模化
+    pattern: グローバリゼーション
+  - expected: 地球規模
+    pattern: グローバル
+  - expected: 手当て
+    pattern: ケア
+  - expected: 事例研究
+    pattern: ケーススタディー
+  - expected: 中核
+    pattern: コア
+  - expected: 熱電併給
+    pattern: コージェネレーション
+  - expected: 共同声明
+    pattern: コミュニケ
+  - expected: 地域社会
+    pattern: コミュニティー
+  - expected: 共同制作
+    pattern: コラボレーション
+  - expected: 基本概念
+    pattern: コンセプト
+  - expected: 合意
+    pattern: コンセンサス
+  - expected: 共同事業体
+    pattern: コンソーシアム
+  - expected: 情報内容
+    pattern: コンテンツ
+  - expected: 会議
+    pattern: コンファレンス
+  - expected: 法令遵守
+    pattern: コンプライアンス
+  - expected: たい肥
+    pattern: コンポスト
+  - expected: 調査監視
+    pattern: サーベイランス
+  - expected: 供給側
+    pattern: サプライサイド
+  - expected: 栄養補助食品
+    pattern: サプリメント
+  - expected: 要約
+    pattern: サマリー
+  - expected: 内
+    pattern: サムターン
+  - expected: 種
+    pattern: シーズ
+  - expected: 移行
+    pattern: シフト
+  - expected: 模擬実験
+    pattern: シミュレーション
+  - expected: 政策研究機関
+    pattern: シンクタンク
+  - expected: 計画
+    pattern: スキーム
+  - expected: 技能
+    pattern: スキル
+  - expected: 登校授業
+    pattern: スクーリング
+  - expected: ふるい分け
+    pattern: スクリーニング
+  - expected: 規模効果
+    pattern: スケールメリット
+  - expected: 立場
+    pattern: スタンス
+  - expected: 紋切り型
+    pattern: ステレオタイプ
+  - expected: 一時保管所
+    pattern: ストックヤード
+  - expected: 緊急輸入制限
+    pattern: セーフガード
+  - expected: 安全網
+    pattern: セーフティーネット
+  - expected: 第二診断
+    pattern: セカンドオピニオン
+  - expected: 安全
+    pattern: セキュリティー
+  - expected: 部門
+    pattern: セクター
+  - expected: 壁面後退
+    pattern: セットバック
+  - expected: 排出ゼロ
+    pattern: ゼロエミッション
+  - expected: 全数調査
+    pattern: センサス
+  - expected: 軟着陸
+    pattern: ソフトランディング
+  - expected: 問題解決
+    pattern: ソリューション
+  - expected: 時間差
+    pattern: タイムラグ
+  - expected: 作業課題
+    pattern: タスク
+  - expected: 特別作業班
+    pattern: タスクフォース
+  - expected: 不当廉売
+    pattern: ダンピング
+  - expected: 道具
+    pattern: ツール
+  - expected: 日帰り介護
+    pattern: デイサービス
+  - expected: 情報格差
+    pattern: デジタルデバイド
+  - expected: 預かり金
+    pattern: デポジット
+  - expected: 配達
+    pattern: デリバリー
+  - expected: 原則
+    pattern: ドクトリン
+  - expected: 心の傷
+    pattern: トラウマ
+  - expected: 履歴管理
+    pattern: トレーサビリティー
+  - expected: 超微細技術
+    pattern: ナノテクノロジー
+  - expected: 等生化
+    pattern: ノーマライゼーション
+  - expected: 無段差バス
+    pattern: ノンステップバス
+  - expected: 仮想
+    pattern: バーチャル
+  - expected: 協力関係
+    pattern: パートナーシップ
+  - expected: 協調
+    pattern: ハーモナイゼーション
+  - expected: 生命工学
+    pattern: バイオテクノロジー
+  - expected: 生物由来資源
+    pattern: バイオマス
+  - expected: 複合型
+    pattern: ハイブリッド
+  - expected: 災害予測地図
+    pattern: ハザードマップ
+  - expected: 事務管理部門
+    pattern: バックオフィス
+  - expected: 住民参画
+    pattern: パブリックインボルブメント
+  - expected: 意見公募
+    pattern: パブリックコメント
+  - expected: 障壁なし
+    pattern: バリアフリー
+  - expected: 都市高温化
+    pattern: ヒートアイランド
+  - expected: 生物生息空間
+    pattern: ビオトープ
+  - expected: 展望
+    pattern: ビジョン
+  - expected: 選別
+    pattern: フィルタリング
+  - expected: 研究奨学金
+    pattern: フェローシップ
+  - expected: 追跡調査
+    pattern: フォローアップ
+  - expected: 優先順位
+    pattern: プライオリティー
+  - expected: 自由契約
+    pattern: フリーランス
+  - expected: 突破
+    pattern: ブレークスルー
+  - expected: 枠組み
+    pattern: フレームワーク
+  - expected: 存在感
+    pattern: プレゼンス
+  - expected: 発表
+    pattern: プレゼンテーション
+  - expected: 自由勤務時間制
+    pattern: フレックスタイム
+  - expected: 原型
+    pattern: プロトタイプ
+  - expected: 新分野
+    pattern: フロンティア
+  - expected: 新興企業
+    pattern: ベンチャー
+  - expected: 無境界
+    pattern: ボーダーレス
+  - expected: 積極的
+    pattern: ポジティブ
+  - expected: 潜在能力
+    pattern: ポテンシャル
+  - expected: 支障
+    pattern: ボトルネック
+  - expected: 市場戦略
+    pattern: マーケティング
+  - expected: 巨視的
+    pattern: マクロ
+  - expected: 経営管理
+    pattern: マネジメント
+  - expected: 複合媒体
+    pattern: マルチメディア
+  - expected: 人的資源
+    pattern: マンパワー
+  - expected: 不釣り合い
+    pattern: ミスマッチ
+  - expected: 使節団
+    pattern: ミッション
+  - expected: 医学的検査
+    pattern: メディカルチェック
+  - expected: 心の健康
+    pattern: メンタルヘルス
+  - expected: 車社会化
+    pattern: モータリゼーション
+  - expected: 動機付け
+    pattern: モチベーション
+  - expected: 継続監視
+    pattern: モニタリング
+  - expected: 移動性
+    pattern: モビリティー
+  - expected: 猶予
+    pattern: モラトリアム
+  - expected: 倫理崩壊
+    pattern: モラルハザード
+  - expected: 全国一律サービス
+    pattern: ユニバーサルサービス
+  - expected: 万人向け設計
+    pattern: ユニバーサルデザイン
+  - expected: 生涯過程
+    pattern: ライフサイクル
+  - expected: 生活線
+    pattern: ライフライン
+  - expected: 図書館
+    pattern: ライブラリー
+  - expected: 即時
+    pattern: リアルタイム
+  - expected: 事前所要時間
+    pattern: リードタイム
+  - expected: ちらし
+    pattern: リーフレット
+  - expected: 回収再使用
+    pattern: リターナブル
+  - expected: ごみ発生抑制
+    pattern: リデュース
+  - expected: 読み書き能力
+    pattern: リテラシー
+  - expected: 刷新
+    pattern: リニューアル
+  - expected: 揺り戻し
+    pattern: リバウンド
+  - expected: 再使用
+    pattern: リユース
+  - expected: 発表
+    pattern: リリース
+  - expected: 移植患者
+    pattern: レシピエント
+  - expected: 道路課金
+    pattern: ロードプライシング
+  - expected: 接続開始
+    pattern: ログイン
+  - expected: 作業部会
+    pattern: ワーキンググループ
+  - expected: 仕事の分かち合い
+    pattern: ワークシェアリング
+  - expected: 研究集会
+    pattern: ワークショップ
+  - expected: 一箇所
+    pattern: ワンストップ

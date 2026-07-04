@@ -21,4 +21,10 @@ rules:
     pattern: "§0 frontier"
   - expected: "最適値を決める双対面の層、と平文で述べる"
     pattern: value face
+  # agent-coinage: English house-token calqued into Japanese (house rule: keep the token in English,
+  # never translate/calque it). Caught live 2026-07-04 — the model coined these describing THIS skill.
+  - expected: 'machine floor は英語 token のまま — 日本語へ calque しない（house rule: token を訳すな）'
+    pattern: 機械床
+  - expected: '「捉え直す/再考」等の平文へ — reframe の calque「再フレーム」を避ける'
+    pattern: 再フレーム
   # === end per-repo section =======================================================================

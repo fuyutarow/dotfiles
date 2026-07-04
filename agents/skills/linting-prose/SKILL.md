@@ -12,12 +12,11 @@ description: >-
   トピックセンテンス, 結論ファースト, 撤回済み / 言い切り. Triggers: grounding, prose lint, wording
   audit, claim calibration, textlint, Vale, prh, tooling-first titles, "核" / "本体" / "一つに返す" /
   "ここが肝心" / "PASS" / "receipt:", metaphor jargon 床/鎖/橋/土台/足場. Machine floor is DELEGATED to
-  textlint/Vale — the skill never re-implements a preset's regex; its value is the judgment layers.
+  textlint/Vale.
   Not for deck structure, section order, or slide ownership (→ designing-presentations), wiring the
   lint into hooks/CI (→ operating-the-harness), literature synthesis (→ systematizing-knowledge),
-  model-facing SKILL.md prose (→ forging-skills), or a document's information ARCHITECTURE — MECE /
-  single-source / backward-only references / preservation-first restructuring (→ structuring-documents).
-  Workflow-native: machine floor first as a script,
+  model-facing SKILL.md prose (→ forging-skills), or document information architecture — MECE /
+  restructuring (→ structuring-documents). Workflow-native: machine floor first as a script,
   judgment SOLO, read-only flaggers only at corpus scale. English skill; respond in the user's
   language (default Japanese).
 ---
@@ -35,7 +34,7 @@ description: >-
 > lifecycle-integrity family (from the QOED 71-finding audit). Postmortem:
 > `tests/forge-verification-ledger.md`, reforge #3.
 > **Build order** ATOMIC — this file ships with its references and its F3 ledger; verify:
-> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-external prh-house prh-external; do test -f assets/$a.* || echo MISSING asset $a; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger; test -d ../grounding-prose && echo STALE-DIR`
+> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-external prh-house prh-external; do test -f assets/$a.* || echo MISSING asset $a; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test ! -d ../grounding-prose || echo STALE-DIR`
 
 ## The law
 
@@ -144,7 +143,10 @@ INSTANCES within these families (mapping and full token lists: `references/patte
 **F-L1 — word (HARD→textlint · VIBE for novel coinage).** Dying metaphors (`床`→lower bound,
 `鎖`→ordering, `橋`→shared part), zombie nouns / architecture-as-rhetoric (`核`, `本体`, `基盤`,
 `エンジン` — name the concrete object or delete), AI hype vocab, undefined coinage. The token grep is
-`textlint` + the house prh dict; the CLASS JUDGMENT (this project's novel coinage) is VIBE.
+`textlint` + the house prh dict; **novel compound coinage** (機械床-class) has a MIX pre-filter —
+`scripts/coinage-flag.py` (SudachiPy dict-membership, high-recall/low-precision) surfaces candidates,
+the model confirms; the CLASS JUDGMENT stays VIBE. Full options + what was dis/proven:
+`references/machine-floor.md` (the 機械床 gap).
 
 **F-L2 — sentence (HARD→textlint · MIX/VIBE for meaning).** Sentence length, 読点 ≤3, double
 negatives, doubled 助詞, weak phrases — all HARD via `preset-ja-technical-writing`. Verbal false
@@ -251,7 +253,8 @@ Grounding is cheapest before the first draft line. Before writing ANY audience-f
 Word-level discipline regresses under deadline — willpower is not a harness. The machine floor is a
 real gate, wired via `operating-the-harness`:
 
-- **`bunx textlint`** over the rendered audience-facing files (strip comments; exclude design docs,
+- **`bunx textlint` via `scripts/lint-floor.sh`** (refuses `--fix`; prh is detect-only) over the
+  rendered audience-facing files (strip comments; exclude design docs,
   denylist ledgers, orphan drafts — they legitimately contain the banned words). This SUPERSEDES the
   retired hand-maintained `check-prose-grounding.sh`; the house-specific patterns textlint's presets
   do not carry (ledger IDs, verdict enums, coined labels) live in `assets/prh-external.yml`, loaded

@@ -132,3 +132,29 @@ skill's own audit grammar — while satisfying the v2607.2.0 LAW verbatim.
 Preservation regression (carried into #3): all C1–C9 tokens (床/鎖/背骨/殺す/moat/好例/この実務の執念から/
 通過/正直な到達点), the terminology table, the calibration + audit-report ledgers, and the six
 declared-novel items are preserved — mapped into the six families in `patterns.md`, not deleted.
+
+## 2026-07-04 external review — 4 findings (all reproduced live before fixing)
+
+| Severity | Finding | Verification | Resolution |
+|---|---|---|---|
+| high | description 1636 chars > the 1536 truncation contract; ledger's "→ 1486" stale vs the file | python fold-count: 1636 (over by 100) | CAUSE: the 2026-07-04 reciprocal-pointer edit (structuring-documents cut) added ~150 chars AFTER the ledger row — the ledger was correct at forge time. Description re-cut (pointer compressed; "never re-implements a preset's regex" now body-only — it was a second home of the Enforcement corollary) |
+| high | prh detect-only was prose-only — `textlint --fix` substitutes, and the house replacements are GUIDANCE text, so --fix injects meta-instructions into the document | `--fix --stdin` smoke: `receipt:`/`R2607_016`/`PASS` → "Fixed 3 problems" | `scripts/lint-floor.sh` wrapper refuses `--fix` (exit 2); SKILL.md gate + machine-floor.md route the floor through it; wrapper added to the build-order verify line |
+| medium | build-order verify one-liner exits 1 on a CLEAN tree (`test -d X && echo` is false when X absent) | clean run: EXIT 1 | inverted to `test ! -d ../grounding-prose || echo STALE-DIR`; `test -x scripts/lint-floor.sh` check added |
+| medium | EN machine floor unpackaged — machine-floor.md describes Vale/proselint but no `.vale.ini`/vocab ship | `ls assets/`: JA-only (4 files) | OPEN — deliberately NOT shipping an untested config; packaging needs a Vale-packages survey + a proven-to-fire smoke first. Until then the EN floor section is guidance and EN prose gets the VIBE pass only |
+
+## 2026-07-04 survey — novel-coinage detection (prior-art distilled, prototype-verified)
+
+Trigger: the model calqued the English house-token *machine floor* → 「機械床」 while explaining
+this skill; the deterministic floor passed it. 15-agent web/GitHub/npm survey + local prototype.
+
+| What | Finding | Status |
+|---|---|---|
+| AI-slop preset | `@textlint-ja/preset-ai-writing` v1.7.0 = FIXED ~25-phrase hype list; zero generalization to unseen coinage (source-read) | explains the miss; already installed |
+| naive freq | `wordfreq` scores 機械床 zipf 4.37 ("common") — re-tokenizes & estimates from components | DISPROVEN, recorded so nobody wires it |
+| dict-membership | SudachiPy SplitMode.C splits non-headword compounds → `scripts/coinage-flag.py` | PROVEN fires on 機械床/再フレーム; MIX (FP on 量子計算/責務分離) — high recall, low precision |
+| retroactive | 機械床/再フレーム added to `prh-house.yml` graveyard (detect-only) | HARD for those terms thereafter |
+| ルー語/外来語 | prh dict from 国語研 外来語言い換え (HARD, external-only); katakana-ratio (MIX); off-the-shelf = orthography-WIP or noisy | distilled into machine-floor.md |
+| config presets | AGENTS.md/CLAUDE.md preset ecosystem surveyed (config-preset lane) | routes to operating-the-harness — separate distillation, NOT done here |
+
+Open: `sudachidict-full`/NEologd + collocation-PMI or LM-surprisal (rinna/japanese-gpt2) would lift
+precision — heavier, not shipped. EN machine floor still unpackaged (prior finding, still OPEN).

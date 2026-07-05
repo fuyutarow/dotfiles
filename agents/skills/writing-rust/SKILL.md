@@ -7,13 +7,12 @@ description: >-
   feature/bugfix); behavior-preserving restructure → refactoring-code (governs; this supplies the
   clippy / cargo-check / tests oracle); Python tooling → running-python-tools (but PyO3 / maturin
   bindings FROM Rust stay HERE); prose/README → linting-prose; Julia/TS → writing-julia /
-  writing-typescript. NOT for installing a Rust-written CLI tool (ripgrep/eza) — that is not
-  writing Rust. Trigger on: Rust, cargo, crate, Cargo.toml, どの crate, blazing fast / 高速化,
+  writing-typescript. NOT for installing Rust-written CLI tools (ripgrep/eza) or concept
+  explainers with no code. Trigger on: Rust, cargo, crate, Cargo.toml, どの crate, blazing fast / 高速化,
   依存選定, async / tokio, borrow checker / 所有権 / lifetime, clone / Arc<Mutex>, unsafe / SAFETY,
   anyhow / thiserror / eyre / miette, serde / rkyv, clap / argh / bpaf, rayon /
   dashmap, once_cell / lazy_static / OnceLock / LazyLock, bon / derive_more / strum / nutype,
-  jiff / chrono / time, winnow / nom, reqwest / ureq / axum, tracing, edition 2024,
-  cargo-nextest. MANDATORY — read BEFORE writing ANY Rust or adding ANY dependency. Crate facts
+  jiff / chrono / time, winnow / nom, reqwest / ureq / axum, tracing, edition 2024. MANDATORY — read BEFORE writing ANY Rust or adding ANY dependency. Crate facts
   ROT: verify against crates.io / lib.rs before recommending (RG4). Sync before async; ownership
   before clone; lightest crate before the famous one. Workflow-native: crate-landscape harvest +
   adversarial verification fan out; the selection decision stays SOLO. English skill; respond in
@@ -77,8 +76,9 @@ paths: "**/*.rs"
 
 ## MUST NOT FIRE
 
-A question ABOUT the Rust ecosystem with no code to write (licensing, "what is crates.io", Rust
-history, "is Rust faster than Go") — plain answer. Installing or using a **Rust-written end-user
+A question ABOUT the Rust ecosystem or language with no code to write (licensing, "what is
+crates.io", Rust history, "is Rust faster than Go", a pure concept explainer like "what is a
+lifetime") — plain answer. Installing or using a **Rust-written end-user
 CLI tool** (ripgrep, eza, bat, fd, starship) — that is package management (Brewfile / cargo
 install), **not writing Rust**. Prose/docs ABOUT a Rust project (README narrative, paper text) →
 `linting-prose` / `structuring-documents`. Non-Rust code with no Rust in play (Go/C++/Python
@@ -126,7 +126,7 @@ condition — that condition is in selection.md):
 | Lazy static / global | **std `OnceLock` / `LazyLock`** | complex cases only → `once_cell` |
 | Builder | `bon` | — (or plain `Default` + struct-update for simple cases) |
 | Logging / tracing | `tracing` + `tracing-subscriber` | trivial CLI with no async → `log` + `env_logger` is enough |
-| Date/time | see supersession table (jiff vs chrono) | — |
+| Date/time | `jiff` (modern option, pre-1.0) or `chrono` (still fine) — selection.md | existing chrono code → stay chrono |
 | Hash map (non-DoS, fast) | `rustc-hash` (`FxHashMap`) / `foldhash` | untrusted input → keep the DoS-resistant std default |
 
 **Supersessions — a former default has been replaced; using the old one now is a tell that
@@ -138,8 +138,11 @@ training data is stale** `[dated:2026-07]` (SOLE home; verified in the forge led
 | `crossbeam::scope` for scoped threads | std `thread::scope` | 1.63 | `crossbeam` still for channels / deque / epoch GC |
 | `async-trait` on every async trait | native `async fn` in traits (AFIT) | 1.75 | `async-trait` still for `dyn`-dispatch / object-safe async traits + explicit `Send` bounds → see async.md |
 | `structopt` | `clap` v4 derive | clap 4 | none — structopt is retired, its author merged it into clap |
-| `chrono` as the only reasonable choice | `jiff` is the modern, correctness-first option | jiff GA | `chrono`/`time` remain valid; verify current standing in selection.md `[dated:]` |
-| `nom` for a new parser | `winnow` (nom's maintainer's successor) | — | `nom` fine for existing code; `pest` for grammar-file PEG; `chumsky` for great error messages |
+| `nom` for a new parser | `winnow` 1.0 (nom's maintainer's successor) | winnow 1.0, 2026-03 | `nom` fine for existing code; `pest` for grammar-file PEG; `chumsky` for great error messages |
+
+*(Deliberately NOT in this table: `chrono` → `jiff`. Using chrono is NOT a stale-training tell —
+chrono is maintained and fine in 2026; `jiff` is the modern, correctness-first **option** and still
+pre-1.0. The date/time decision lives in selection.md.)*
 
 *(This table is reconciled against the adversarial harvest before every freeze — do not edit a
 row without re-checking crates.io; the ledger records the last verification.)*
@@ -155,6 +158,7 @@ named reference):
 |---|---|---|
 | A `Config` struct (or many positional args) just to fake named arguments | **`bon`** | `#[builder]` on a struct *or a plain function* → named, compile-checked args; the struct becomes unnecessary (selection.md) |
 | A newtype `UserId(u32)`, then hand-writing `Display`/`Add`/`From`/`Deref` | **`derive_more`** | one derive line generates the delegations you'd hand-roll |
+| Hand-writing `FromStr`/`Display` match arms and an all-variants array for an enum | **`strum`** | derives enum↔string, `EnumIter`, variant metadata — the match-arm boilerplate disappears |
 | Validating a `String` (email, non-empty, trimmed) at every call site | **`nutype`** | `validate`+`sanitize` baked into the type — an invalid value is *unconstructable*, guaranteed by the type system, not by remembering to check |
 | Hand-maintaining a long expected value in `assert_eq!` | **`insta`** | snapshot on first run; `cargo insta accept` updates all expected values on a spec change |
 | Repeating the same setup (db conn, fixtures) at the top of every test | **`rstest`** fixtures | name the fixture as a test *argument*; the macro runs it and injects the value |

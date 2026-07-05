@@ -67,9 +67,9 @@ owns the state and others send it messages, instead of every task locking it.
 - **Every `unsafe` block carries a `// SAFETY:` comment** stating the invariant it upholds and why
   it holds here. This is greppable and clippy-enforceable (`clippy::undocumented_unsafe_blocks`).
   An `unsafe` block with no SAFETY line is an RG2 violation.
-- **Edition 2024**: `unsafe_op_in_unsafe_fn` is warn-by-default `[dated:2026-07]` — an `unsafe fn`
-  body no longer gets a free pass; wrap the actual unsafe ops in explicit `unsafe { }`. Also mark
-  `unsafe extern` blocks and some attributes `unsafe(...)`. (project.md covers the edition.)
+- **Edition 2024 tightens the `unsafe` surface** — the edition rules are OWNED by
+  `references/project.md` (read them there). The one practical consequence for this file: inside an
+  `unsafe fn`, still wrap each unsafe op in its own explicit `unsafe { }` block with its `// SAFETY:` line.
 - **Keep the unsafe surface small**: wrap it in a safe abstraction whose public API upholds the
   invariant, so callers never touch `unsafe`. Isolation makes it auditable.
 

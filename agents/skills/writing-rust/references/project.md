@@ -13,7 +13,8 @@ prefers dependency versions compatible with your `rust-version`. Notable edition
 model must account for:
 
 - `unsafe_op_in_unsafe_fn` is warn-by-default — an `unsafe fn` body must wrap its unsafe ops in
-  explicit `unsafe { }` (ownership.md).
+  explicit `unsafe { }`. (SOLE home of the edition-2024 unsafe rules; the `// SAFETY:`-comment
+  discipline itself is ownership.md's.)
 - `unsafe extern "C"` blocks and some attributes (`unsafe(no_mangle)`, `unsafe(link_section)`) now
   take an `unsafe(...)` marker.
 - Tighter RPIT lifetime capture, `gen`/`async` reserved, `Box<dyn Future>` temporary-scope changes.

@@ -127,7 +127,7 @@
 
 | Job | Default | Alternative | Switch when |
 |---|---|---|---|
-| Test runner | `cargo-nextest` | `cargo test` | **doctests** (nextest can't run them — run `cargo test --doc` too) |
+| Test runner | `cargo-nextest` | `cargo test` | **doctests** (nextest can't — full CI rule in `project.md`) |
 | Fixtures / parameterized | `rstest` 0.26 | plain `#[test]` | single trivial test |
 | Snapshot / golden | `insta` 1.x | `expect-test` | inline-only expectations → expect-test |
 | Property-based | `proptest` 1.x | `quickcheck` | simple type-directed `Arbitrary` → quickcheck |

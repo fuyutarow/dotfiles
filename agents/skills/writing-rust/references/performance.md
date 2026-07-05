@@ -60,7 +60,7 @@
   (`references/selection.md`). Don't build a `String` you immediately parse and drop.
 - **Small collections on the stack** — `compact_str`/`smallvec`(pin 1.x)/`arrayvec`/`tinyvec` avoid
   heap allocs for usually-small data. Only after profiling shows allocation pressure; keep the inline
-  size small. Note `compact_str` clone is O(n) (below / `selection.md`).
+  size small (clone-cost caveats and version pins → `selection.md`).
 
 ### Rung 3 — measured micro-levers
 
@@ -73,7 +73,7 @@
 | **Integer / small trusted keys** | `rustc-hash` (`FxHashMap`) | fastest for ints; seedless |
 | **Already-unique integer keys** (IDs) | a **No-op / identity `Hasher`** | the key IS the hash — skip hashing entirely (advanced; Rung 4) |
 
-`rustc-hash` 2.0 changed its algorithm (same name, different bytes — pin 1.x if you persist hashes).
+(Version pins and the rustc-hash 2.0 algorithm-change caveat → `selection.md`, which owns crate facts.)
 
 **Parallelism** — `rayon` (`.iter()`→`.par_iter()`) for CPU-bound data parallelism. **Never an async
 runtime for CPU work** (async is for concurrent I/O — `references/async.md`); reductions go through
@@ -112,9 +112,9 @@ so you apply them by default:
 - **CPU profile**: `samply record ./target/release/bin` (cross-platform, Firefox-profiler UI) or
   `cargo flamegraph`; `perf` on Linux, Instruments on macOS. Profile a **release** build with
   debuginfo (the `[profile.profiling]` in `references/project.md`), never debug.
-- **Microbenchmark**: `criterion` (`harness = false`) — statistical, the ecosystem default (moved to
-  the `criterion-rs` org, 0.8; *not* stuck at bheisler 0.5.1). `divan` is a nicer API but **dormant**.
-  Use `black_box` around inputs/outputs. The built-in `#[bench]` is still nightly-only.
+- **Microbenchmark**: `criterion` (`harness = false`) — statistical, the ecosystem default; `divan`
+  is dormant (status/versions → `selection.md`). Use `black_box` around inputs/outputs. The built-in
+  `#[bench]` is still nightly-only.
 - **Allocations**: `dhat` (as a dep) or `valgrind --tool=dhat`. **Compile speed** is a different axis
   — a faster linker (`lld`/`mold`) speeds *iteration*, not the binary (`references/project.md`).
 - **Always** warm up, run release, compare to a baseline. A "faster" change you didn't measure is a guess.

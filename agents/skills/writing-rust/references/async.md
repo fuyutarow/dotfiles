@@ -42,8 +42,10 @@ Native `async fn` in traits is stable `[dated:2026-07]` (since 1.75). It is the 
 traits and needs no crate. But it does **not** cover every case; know the three gaps:
 
 1. **`dyn` dispatch.** A trait with a native `async fn` is not automatically `dyn`-compatible — you
-   can't (directly) make a `Box<dyn MyTrait>` of it. If you need a trait object of an async trait,
-   the `async-trait` crate (which boxes the returned future) is still the pragmatic answer.
+   can't (directly) make a `Box<dyn MyTrait>` of it. For new code prefer **`dynosaur`** (from the
+   rust-lang async-WG folks — generates the `dyn`-usable wrapper on top of native AFIT); the
+   `async-trait` crate (which boxes every returned future) remains the familiar fallback and the
+   answer for existing codebases already on it.
 2. **`Send` bounds on the returned future.** Native AFIT gives you no way to say "the future this
    returns is `Send`" in the trait definition — so a public trait meant for a multithreaded runtime
    (tokio) can produce futures that won't `spawn`. Fix with the **`trait-variant`** crate
@@ -52,9 +54,9 @@ traits and needs no crate. But it does **not** cover every case; know the three 
 3. **Naming the future type** (e.g. to store it) — native AFIT hides it; use RPITIT / `impl Trait`
    patterns or `async-trait` when you must name or bound it.
 
-Decision: **internal or single-implementor async trait → native AFIT** (no crate). **Public async
-trait needing `dyn` or guaranteed-`Send` futures → `async-trait` (for `dyn`) or `trait-variant`
-(for the `Send` variant).** Reaching for `async-trait` on *every* async trait out of habit is the
+Decision: **internal or single-implementor async trait → native AFIT** (no crate). **Need `dyn` →
+`dynosaur` (new code) or `async-trait` (existing/fallback); need guaranteed-`Send` futures →
+`trait-variant`.** Reaching for `async-trait` on *every* async trait out of habit is the
 stale-training tell — it boxes a future you often don't need boxed.
 
 ## Cancellation is `drop`, and `select!` can lose work

@@ -14,6 +14,7 @@ description: >-
   framework default / embedding, marketplace (VS Code/Chrome), community / contributor / governance,
   license (MIT/Apache/AGPL/BSL/SSPL) / relicensing, COSS / open-core / monetization, maintainer
   burnout / bus factor, adoption / diffusion / crossing the chasm, 矜持 / 指導書 for OSS.
+  Cut: the tool's Rust code & crate selection → writing-rust; here owns the adoption surface.
   Workflow-native: on a multi-agent harness, channel inspection and hostile verification fan out
   to subagents while regime, fork, and diagnosis verdicts stay solo. This skill is English;
   respond to the user in their language.

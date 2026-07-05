@@ -84,3 +84,26 @@ mechanical floor is the shared `forging-skills/scripts/skill-check.sh`.
 `>-`); build-verify one-liner clean; strict-YAML parse OK; verification fleet (self-contradiction /
 sibling-cut / trigger desk-check) run before link. (Recorded in the forge-session shell log,
 2026-07-06.)
+
+## 2026-07-06 verification fleet — adjudication (4 read-only lenses, all findings resolved)
+
+**Crate-fact RG4 self-audit lens: ZERO findings** — every version/date/stale-flag in selection.md
+and SKILL.md §1 held against a fresh crates.io re-check.
+
+| Finding | Verdict | Resolution |
+|---|---|---|
+| MAJOR: chrono→jiff row inside the "old = stale tell" supersession table contradicts selection.md ("chrono is fine; jiff pre-1.0 option"); "jiff GA" false | **Accepted** | Row removed from the table; explicit anti-resurrection note left in place ("deliberately NOT in this table"); default-stack row now names both with the switch condition |
+| MAJOR: selection.md prefers `dynosaur` for dyn async traits, async.md (the owner) said `async-trait` and never named dynosaur | **Accepted** | async.md gap-1 + decision line now prefer `dynosaur` for new code, `async-trait` as existing-code fallback — owner carries the current pick |
+| MINOR: edition-2024 unsafe rules argued in both ownership.md and project.md with circular pointers | **Accepted** | project.md declared SOLE home; ownership.md reduced to a pointer + the one SAFETY-block consequence |
+| MINOR: performance.md restated version facts selection.md owns (rustc-hash 2.0, criterion org, compact_str O(n)) | **Accepted** | Restatements stripped to pointers; decision content (hasher-by-trust table, ladder) retained |
+| NIT: nextest-doctest rule in full in two files | **Accepted** | project.md keeps the full rule; selection.md cell now points |
+| MINOR: growing-oss-adoption lists Rust/cargo/blazing-fast tokens with no reciprocal cut | **Accepted** | Reciprocal landed in its description: "Cut: the tool's Rust code & crate selection → writing-rust" (1487/1500 chars) |
+| MINOR: running-python-tools has no maturin/PyO3 reciprocal | **Accepted** | Reciprocal landed + its plain-scalar description converted to `>-` (fixed its pre-existing WARN) |
+| MINOR: impl-and-debugging / refactoring-code don't name language skills | **Rejected as by-design** | Generic discipline skills stay language-neutral; language skills point up (identical to the writing-julia precedent). Do not add language enumerations there |
+| MINOR: `strum` was a dead trigger token (keyword with no body home) | **Accepted** | Given a home: その手があったか row (hand FromStr/Display/variant arrays → strum) |
+| MINOR: "explain lifetimes" could over-fire via the `lifetime` keyword | **Accepted** | Concept-explainer carve-out added to the description NOT-clause and the body MUST-NOT-FIRE list; balanced by dropping `cargo-nextest` from keywords (lexically covered by `cargo`) |
+| NIT: "uv で Python 環境" no-fire row was a far-miss testing nothing | **Accepted** | Replaced with the genuinely contested maturin boundary: PyO3-architecture FIRE row + maturin-invocation-only NO-FIRE row |
+
+**Floor after fixes**: `skill-check.sh` clean over writing-rust + both edited siblings; strict-YAML
+re-parse OK; growing-oss-adoption description 1487/1500; live listing reload confirmed for the
+edited siblings (2026-07-06).

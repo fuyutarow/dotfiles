@@ -4,12 +4,14 @@
 > branch). The moderator for each debate is in `tests/refactoring-survey-sok.md` §3. Provenance:
 > Fowler, Beck *Tidy First?*, Spolsky, Humble/Farley, Ellnestam/Brolund, DORA/Accelerate.
 
-## 1. The two hats (the frame for everything)
+## 1. The two hats (sequencing detail — the invariant itself is G1)
 
-You wear the **adding-function** hat OR the **refactoring** hat — never both at once. Adding function
-adds capability + tests and does not restructure; refactoring restructures and adds no tests (only
-changes tests you had to change to move code). **Swap often, but know which hat is on**, and keep the
-two in **separate commits** (this is the DECISIVE cut against `implementing-and-debugging`).
+You wear the **adding-function** hat OR the **refactoring** hat — never both at once (the invariant,
+its edited-assertion tell, and the split-diff artifact are owned by **SKILL.md G1**). Adding function
+adds capability + new expectations; refactoring restructures and **never changes behavior
+expectations** — it may be *preceded* by characterization tests that pin current behavior
+(`safety-net.md` §2, part of building the net, not part of the structural diff), and only adjusts
+existing tests mechanically where code moved. **Swap often, but know which hat is on.**
 
 ## 2. When to refactor — mostly opportunistic, always motivated
 
@@ -25,19 +27,24 @@ to do something else"). The high-value triggers:
   anyway; **third time, refactor**. Do not abstract on the 2nd occurrence.
 
 **When NOT to refactor** — throwaway/spike code, code slated for deletion, code you don't need to
-modify. Under a deadline, the productivity payoff comes *after* the deadline, so prefer the smallest
-targeted change and **name the debt** (deliberate + prudent) rather than a risky big cleanup with no
-time to test. `git checkout -- <file>` / `git stash` and restart cleanly if a pass tangles structure
-with behavior — don't untangle a mixed diff in place.
+modify. Under a deadline, prefer the smallest targeted change and **name the debt** (deliberate +
+prudent) rather than a risky big cleanup you have no time to test (the deferred-payoff claim behind
+"refactor anyway" is the Design-Stamina *hypothesis* — GRADE Low, §8 — not a fact to spend deadline
+risk on). If a pass tangles structure with behavior, restart cleanly rather than untangling a mixed
+diff in place: set aside **your own** uncommitted changes with `git stash` (recoverable) and redo the
+tidying alone — never a destructive `git checkout .` / file-restore without explicit user approval.
 
 ## 3. Tidy first / after / never (D2) — the option-pricing rule
 
-Cleanup is an **option**: pay a small premium now to make a later change cheaper. Whether it's
-in-the-money is one economic quantity — **(coupling of the tidy to the pending edit) × (probability
-the code is touched again soon) × (your comprehension level)**:
+Beck *models* cleanup as an **option** — pay a small premium now for a cheaper later change. This
+DCF/optionality framing is a **conceptual model, GRADE Low (§8), not a measured fact**; what it
+licenses operationally is only the coupled case below. The decision quantity: **(coupling of the
+tidy to the pending edit) × (probability the code is touched again soon) × (your comprehension
+level)**:
 
 - **FIRST** — the cleanup is on the path of the edit you're about to make AND you already understand
-  the code AND the change is likely to survive. Payback is immediate, same-session.
+  the code AND the change is likely to survive: the tidy is coupled to a present, in-session edit
+  (this is what the moderator licenses — a present-grounded coupled edit, not a promised speedup).
 - **AFTER** — comprehension is low, or the change is an uncertain spike, or the mess isn't on the
   critical path. Make the behavior change first, confirm it survives, THEN tidy the parts it taught
   you, as a **separate behavior-preserving commit.**
@@ -45,6 +52,10 @@ the code is touched again soon) × (your comprehension level)**:
   (speculative). And **never** as a big-bang rewrite (§5).
 
 ## 4. DRY vs AHA/WET (D6) — is the axis of change known yet?
+
+> **SOLE home of Rule of Three and the DRY-vs-AHA cut.** `architecture.md` §7's ≥3 threshold and
+> `catalog.md`'s duplication row point here for the *meaning*: three is a **sampling procedure**,
+> not a magic count.
 
 DRY governs **knowledge duplication** (one fact, one owner, changes in lockstep — a business rule,
 invariant, protocol constant): dedup immediately, divergent copies are silent bugs. AHA/WET governs
@@ -100,9 +111,10 @@ a **seam where old and new cohabit**:
   working system.
 - **Mikado Method** — for a large tangled change: naively attempt the goal, let it break, **record
   each prerequisite it surfaces as a dependency-graph node, then REVERT to green.** Do leaves first
-  (prereqs with no further prereqs), bottom-up, each its own green commit. **Do not dig forward
-  through a growing pile of red** — on the first explosion, capture prereqs, `git checkout .`,
-  re-plan bottom-up.
+  (prereqs with no further prereqs), bottom-up, each its own green step. **Do not dig forward
+  through a growing pile of red** — on the first explosion, capture the prereq list, set aside
+  **your own** probe edits with `git stash` (recoverable; a destructive `git checkout .` needs
+  explicit user approval), and re-plan bottom-up.
 - **Keystone Interface / feature flags** — ship incomplete work by **hiding** it, not branching:
   build+integrate the back-end first (tested but unreachable), add the tiny user-visible entry point
   LAST. Use a flag only when the entry point can't be a simple keystone; guard the **smallest**
@@ -115,8 +127,8 @@ a **seam where old and new cohabit**:
 ## 8. Epistemic honesty — the motivational claims are hypotheses
 
 The **Design Stamina Hypothesis** ("good design makes you faster long-term") and Beck's
-**DCF/optionality** economics are **conceptual models / hypotheses, not measured facts** — the
-empirical base is thin (GRADE **Low**). Do **not** cite "you'll go faster" as established fact to
-justify a refactor. The **behavior-preservation definition** (D7) is analytic (GRADE High); the
-oracle-provenance reconciliation (D1/D7) is the field's most robust result. Ground a refactor in a
-**present** named smell + property-delta (`architecture.md` §6), not in a promised future speedup.
+**DCF/optionality** economics are **conceptual models / hypotheses, not measured facts** (GRADE
+**Low**; full GRADE bookkeeping lives in `tests/refactoring-survey-sok.md` §5.1). The one operative
+rule: **"future speedup" / "better design" / "cleaner" is never a valid MOTIVE filler** — the
+deny-gate denies it (`architecture.md` §6). Ground a refactor in a **present** cited smell +
+property-delta, not in a promised future.

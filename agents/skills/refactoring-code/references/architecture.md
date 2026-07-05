@@ -12,11 +12,16 @@
 > how clean each individual file/layer looks.** Every source below is one checkable refinement of
 > this test.
 
-Concretely, before proposing or accepting a decomposition: name the single most-likely next change
-(ground it in issues / TODOs / `git log` co-change / the formats & algorithms actually present),
+Concretely, before proposing or accepting a decomposition: name the single most-likely next change,
 then `Grep`/`Glob` where that change's code lives today and count the edit-set. Prefer the layout
 where that count is 1 and the edits are adjacent. **Reject a refactor that increases the scatter of
 a probable change even if each resulting piece looks cleaner.**
+
+**Provenance gate on the next-change (hard precondition, not advice):** the most-likely-next-change
+must be **cited from a real source** — an open issue #, a TODO at `file:line`, or `git log`
+co-change frequency ≥2. A next-change you cannot cite is a hypothetical, and **a decomposition
+justified by a hypothetical next-change is Speculative Generality (§6 over-refactor check) —
+DENIED.** This closes the astronaut loophole where 局所化 is invoked on an invented future.
 
 ## 1. Parnas — 局所化 as a falsifiable predicate
 
@@ -122,8 +127,19 @@ re-classify coupling only after. Named fixes by class:
 
 ## 5. Connascence — the locality rule for coupling
 
-Connascence (Page-Jones) grades coupling by *what two elements must agree on*, weak → strong: **Name
-→ Type → Meaning → Position → Algorithm → Identity → Timing** (× static vs dynamic). Two rules:
+> **SOLE home of the connascence spectrum.** Any other file (including the SoK snapshot) quoting a
+> connascence ordering defers to this list.
+
+Connascence (Page-Jones; the Degree/Locality rules as popularized by Jim Weirich) grades coupling by
+*what two elements must agree on*, weak → strong:
+
+- **static** (visible in the source): **Name → Type → Meaning → Position → Algorithm**
+  (Meaning = agreeing on what a value *means*, e.g. magic numbers — some authors write it "Value";
+  this skill uses **Meaning** for the static form);
+- **dynamic** (only visible at runtime, stronger than any static): **Execution(order) → Timing →
+  Value(runtime invariants) → Identity**.
+
+Two rules:
 
 - **Rule of Degree:** convert strong to weak (magic value → named constant [Meaning→Name];
   positional args → named object [Position→Name]; duplicated algorithm → one shared function).
@@ -133,21 +149,41 @@ Connascence (Page-Jones) grades coupling by *what two elements must agree on*, w
 
 ## 6. The deny-gate — harshly separate principled refactoring from 場当たり churn
 
-> This is G3 in full. The model's dominant error here is **over-firing** (restructuring working code
-> on sight). The gate is first-class *because* churn is the default, not the exception.
+> **SOLE owner of the deny-gate wording** — G3 in SKILL.md is the abbreviation; the SoK §3.5 is the
+> distillation snapshot; edits land HERE first. The gate is first-class because churn's counterfeit
+> is cheap to ship and hard to detect (design posture; both failure directions in SoK §4.1).
 
 **THE TWO-LINE DENY-GATE.** Before ANY structural edit (extract / inline / move / rename-for-structure
-/ introduce-or-remove pattern / split-or-merge module), emit exactly two lines with concrete fillers:
+/ introduce-or-remove pattern / split-or-merge module), emit exactly two lines. **Each line must cite
+a mechanical observation (a command you ran + `file:line`); a line with no citation is a vacuous
+fill and counts as a FAILED gate** — self-certified prose is itself 場当たり:
 
-1. **MOTIVE** — `smell removed: <named smell — Shotgun Surgery / Divergent Change / Feature Envy /
-   Wrong Abstraction / Middle Man / lockstep-requiring knowledge-duplication>` ∨
-   `imminent change enabled: <the specific change I am about to make>` ∨
-   `Rule-of-Three: <the third real duplication, pointed at>`.
-2. **PROPERTY-DELTA** — at least one, concrete: `cohesion raised: <module> <level>→<level>` ∨
-   `coupling lowered: <edge> <level>→<level>` ∨ `connascence lowered/localized: <strong>→<weak> / into <one home>` ∨
-   `responsibility relocated to one home: <resp> now lives only in <place>, localizing <the multi-file change>`.
+1. **MOTIVE** — one of, **with evidence cited**:
+   - `smell removed: <named smell> — <the citation that PROVES it>`, e.g. Shotgun Surgery: `git log
+     --oneline -- <glob>` showing change X touched N files (list them); Feature Envy / Divergent
+     Change: the `find_referencing_symbols`/`grep` hits at `file:line`; Wrong Abstraction: the
+     flag/branch accretion at `file:line`.
+   - `imminent change enabled: <the specific change I am about to make in THIS session>`.
+   - `Rule-of-Three: <the three occurrences at file:line, file:line, file:line>` (the sampling
+     meaning of the rule — do the callers move together? — is owned by `strategy.md` §4).
+   - **Invalid fillers, always denied:** "future speedup" / "better design" / "cleaner" / "more
+     SOLID" (Design-Stamina and DCF are GRADE-Low hypotheses — `strategy.md` §8); a named smell
+     **without** its citation.
+2. **PROPERTY-DELTA** — at least one, **citing the measured BEFORE state** so the delta is checkable
+   against a pre-edit observation, not asserted post-hoc:
+   - `cohesion raised: <module> <level>→<level> — one-sentence test before: "<the ...and/then...
+     sentence>", after: "<the single-verb sentence>"` (§2 grammar);
+   - `coupling lowered: <edge> <level>→<level> — before-state: <the grep/read that shows the flag /
+     whole-record / global access at file:line>`;
+   - `connascence lowered/localized: <strong>→<weak> / into <one home> — instance at file:line` (§5);
+   - `responsibility relocated to one home: <resp> now lives only in <place>, localizing <the
+     multi-file change>` — **REQUIRED sub-fillers for any split/relocate** (the anti-astronaut
+     binding): the actor served `<A>`, the **named distinct second actor** `<B>` (a stakeholder/role,
+     not a noun/topic), and the concrete change-for-A-that-breaks-B, **cited**. Cannot name a real
+     second actor + cross-break → the split is **DENIED as SRP-over-application** (fragmenting one
+     actor's cohesive logic — §3).
 
-**If you cannot write BOTH lines with concrete fillers, the edit is 場当たり churn and MUST NOT
+**If you cannot write BOTH lines with cited fillers, the edit is 場当たり churn and MUST NOT
 happen.** Leave the working code; say why. This gate gates `Edit` / `Write` / `replace_symbol_body`
 / `rename_symbol` / `move`.
 
@@ -177,8 +213,9 @@ present in the code I'm touching, or a future axis I'm predicting?*
 
 **The 3-slot MANDATORY test** (state in one sentence before touching): *"the present named smell this
 demarcation pushes back on is ___ (a real Shotgun Surgery / Divergent Change / Feature Envy /
-lockstep-requiring knowledge-duplication), its real occurrences number ___ now (**≥3** or
-safety-critical), and this edit is behavior-preserving with oracle ___ (green test / engine
+lockstep-requiring knowledge-duplication, **cited** per §6), its real occurrences number ___ now
+(**≥3** — the sampling meaning of Rule of Three, and DRY-vs-AHA, are owned by `strategy.md` §4 —
+or safety-critical), and this edit is behavior-preserving with oracle ___ (green test / engine
 precondition / characterization test)."*
 
 - **All three slots concrete → Regime A: MANDATORY, refactor mercilessly** — but only **within the
@@ -187,7 +224,11 @@ precondition / characterization test)."*
   OR it fails the depth test** (name+signature can't let a caller skip the body) → **Regime B: YAGNI
   STOP** — inline the duplication and **wait for the third real occurrence.**
 - **Regime C: safety-critical override** (crypto / tax / auth / wire formats) — one drifted copy is a
-  live bug, so localize even below 3 occurrences (D6).
+  live bug, so localize even below 3 occurrences (`strategy.md` §4).
+- **MOVE/SPLIT branch (not exempt from a present-driver floor):** the ADD direction is gated by ≥3
+  occurrences; the **relocate/split direction is gated by the named second actor + cross-break**
+  (§6's required sub-fillers). "This class does too much" with no named second actor is the
+  SRP-over-application smell, not a driver — DENIED.
 
 **Flips:** B→A when a tolerated duplicate starts requiring lockstep edits, or the 3rd occurrence
 lands (a future axis turned present). A→B when a new caller needs a flag/branch through your

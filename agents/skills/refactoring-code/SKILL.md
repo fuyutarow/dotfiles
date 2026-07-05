@@ -1,6 +1,22 @@
 ---
 name: refactoring-code
-description: Behavior-preserving structural change done as a discipline — improve HOW code is organized without changing WHAT it does, toward 責務分界 (one home per responsibility) and 局所化 (change stays local), and HARSHLY refuse 場当たり churn (motive-less/aesthetic restructuring). Use when refactoring, cleaning up, extracting/inlining/moving/renaming for structure, untangling a God class, removing duplication, reducing coupling / raising cohesion, breaking dependencies to add tests, or doing a large structure migration (Strangler Fig / Branch by Abstraction / Parallel Change / Mikado) — and BEFORE a feature when the code must be reshaped first (preparatory refactoring: make the change easy, then make the easy change). Enforces the two-line deny-gate (name the smell/imminent-change + the architecture property improved, or do NOT edit), the two hats (never mix a refactor with a feature/bugfix), name-your-oracle-before-you-touch (green tests / engine precondition / characterization tests first — an LLM edits text not a precondition-checked AST), small reversible Edits over whole-file Write, and prefer LSP/ast-grep/codemod. Triggers: refactor, リファクタ, リファクタリング, 場当たりリファクタ, clean up / 掃除 / tidy, code smell, 責務分界 / separation of concerns / SRP / SOLID, 局所化 / locality / cohesion / coupling / connascence, extract / inline / move / rename, God class / Feature Envy / Shotgun Surgery / Divergent Change / dead code, DRY vs YAGNI / wrong abstraction, behavior-preserving / 振る舞い保存, two hats, preparatory refactoring, characterization test / legacy code / seam, Strangler Fig / Branch by Abstraction / Parallel Change / Mikado, rewrite vs refactor / 書き直し. DECISIVE cut vs implementing-and-debugging = Beck's two hats: does OBSERVABLE BEHAVIOR change? yes (feature/bugfix) → implementing-and-debugging; no (structure only) → here (they co-fire in sequence for preparatory refactoring). Post-hoc review of a written diff → /code-review; restructuring a DOCUMENT/prose (not code) → structuring-documents; wiring a refactor-lint into hooks/CI → operating-the-harness. English skill; respond in the user's language (default Japanese).
+description: >-
+  Behavior-preserving structural change as a discipline. DECISIVE cut vs implementing-and-debugging
+  (Beck's two hats) — does OBSERVABLE behavior change? YES (feature / bugfix / performance work;
+  latency, allocation, logs are observables) → implementing-and-debugging. NO (structure only) →
+  here. Co-fire in sequence for preparatory refactoring (reshape here, then change behavior there).
+  Pursues 責務分界 (one home per responsibility) and 局所化 (change stays local); HARSHLY refuses
+  場当たり churn via the two-line deny-gate (cite the smell's occurrences + the property improved,
+  or do NOT edit); name your oracle before touching (green tests / engine precondition /
+  characterization test first); small reversible Edits, never whole-file rewrites; prefer
+  LSP/ast-grep/codemod. Use when — refactor / リファクタ / リファクタリング, behavior-preserving
+  cleanup / 掃除, code smell, extract / inline / move, cross-file rename-for-structure, God class,
+  duplication / DRY vs YAGNI / wrong abstraction, coupling / cohesion / connascence / 責務分界 /
+  局所化 / separation of concerns, characterization test / legacy code / seam, Strangler Fig /
+  Branch by Abstraction / Parallel Change / Mikado, rewrite vs refactor / 書き直し, 振る舞い保存,
+  preparatory refactoring, two hats, 場当たりリファクタ. Post-hoc diff review → /code-review;
+  document/prose restructuring → structuring-documents; hooks/CI wiring → operating-the-harness.
+  English skill; respond in the user's language (default Japanese).
 ---
 
 # Refactoring — behavior-preserving structural change, on purpose
@@ -15,11 +31,11 @@ description: Behavior-preserving structural change done as a discipline — impr
 
 ## Language & stable tokens
 
-English skill; respond in the user's language (default Japanese). Keep these technical tokens
-stable even inside Japanese prose — they are identifiers, not translatable words: **two hats**,
-**oracle**, **behavior-preserving / 振る舞い保存**, **smell**, **責務分界**, **局所化**,
-**cohesion / coupling / connascence**, **deny-gate**, **MOTIVE / PROPERTY-DELTA**, **characterization
-test**, **seam**, **Strangler Fig / Branch by Abstraction / Parallel Change / Mikado**.
+English skill; respond in the user's language (default Japanese). Emit the deny-gate lines (G3) with
+these EXACT grep-able token strings even inside Japanese prose — `MOTIVE`, `PROPERTY-DELTA`,
+`smell removed:`, `imminent change enabled:`, `Rule-of-Three:` — so a reviewer can grep a
+transcript/commit for them. Other technical tokens (two hats, oracle, 責務分界, 局所化, connascence,
+seam) stay in English/standard form as identifiers.
 
 ## THE LAW — two poles
 
@@ -38,8 +54,8 @@ test**, **seam**, **Strangler Fig / Branch by Abstraction / Parallel Change / Mi
 >
 > Pursuing good architecture and obeying YAGNI are the **same** check, not rival dials: demarcate a
 > responsibility that a **present** smell already tangles → do it mercilessly; add a layer for an
-> **imagined future** with no present caller → refuse it. The discriminator is *present consumer vs
-> hypothetical*, never volume ("smaller", "more SOLID", "cleaner").
+> **imagined future** with no present caller → refuse it. (The full cut — present consumer vs
+> hypothetical, never volume — is owned by `references/architecture.md` §7.)
 
 ## MUST NOT FIRE — this is not ceremony
 
@@ -48,8 +64,10 @@ mechanical tidy you could describe in one sentence. Gating a trivial edit behind
 this skill failing its own PURPOSE pole. It fires on a **non-trivial** structural change: a refactor
 task, a cleanup pass, an extract/move/untangle, dependency-breaking to place tests, a large
 structure migration, or the preparatory reshape before a feature. And it fires HARD to **refuse**
-場当たり churn — the model's dominant error here is over-firing (restructuring on sight), not
-under-firing.
+場当たり churn. (Design posture, not a measured fact: the survey's agent-failure table — SoK §4.1 —
+lists both over-firing (churn, #5/#6/#9) and under-firing (structure+behavior jammed into one diff,
+#1/#4); this skill tunes hard against churn because its counterfeit is cheaper to ship and harder to
+detect, while the under-firing direction is already guarded by G1.)
 
 ## The five gates — each names a checkable artifact
 
@@ -59,11 +77,12 @@ irrelevant — never because it "looks like just a cleanup."
 ### G1 — One hat (behavior-preservation IS the definition)
 A diff labeled *refactor* changes **structure only**. If you notice a bug or want a feature
 mid-refactor, **STOP and flag it** — do not fix/add it in the same diff. Feature/bugfix goes in a
-**separate commit**. **An edited test assertion is the tell** that behavior changed — a true
-refactor commit keeps every expected value identical and green. When a feature needs a new shape, do
-the **preparatory refactor first** as its own green commit, then the easy change (co-fire with
-`implementing-and-debugging`). → mechanics in `references/strategy.md`.
-*Artifact*: two commits, not one; refactor commit has zero edited assertions.
+**separate step/diff** (separate commits, if committing at all — commit only when asked). **An
+edited test assertion is the tell** that behavior changed — a true refactor step keeps every
+expected value identical and green. When a feature needs a new shape, do the **preparatory refactor
+first** as its own green step, then the easy change (co-fire with `implementing-and-debugging`). →
+sequencing in `references/strategy.md` §2–3.
+*Artifact*: two separable diffs, not one; the refactor diff has zero edited assertions.
 
 ### G2 — Name your oracle before you touch
 Before the first structural Edit, **name the behavior-preservation oracle**: (a) a real refactoring
@@ -78,27 +97,29 @@ touch; install the bracket first. → regimes, seams, mutation/golden-master in 
 
 ### G3 — 場当たり禁止 / 責務分界・局所化 へ  ★ the spine — emit the deny-gate or do NOT edit
 Before **any** structural edit (extract/inline/move/rename-for-structure/introduce-or-remove
-pattern/split-or-merge module), emit **two concrete lines**:
+pattern/split-or-merge module), emit **two lines, each citing a mechanical observation** — a line
+with no cited command/file:line is a vacuous fill and **counts as a failed gate**:
 - **MOTIVE** — `smell removed: <named>` ∨ `imminent change enabled: <the specific change>` ∨
-  `Rule-of-Three: <the 3rd real duplication, pointed at>`.
-- **PROPERTY-DELTA** — at least one, concrete: `cohesion raised: <module> <level>→<level>` ∨
-  `coupling lowered: <edge> <level>→<level>` ∨ `connascence lowered/localized: <strong>→<weak> / into <one home>` ∨
-  `responsibility relocated to one home: <resp> now lives only in <place>, localizing <the multi-file change>`.
+  `Rule-of-Three: <the 3rd real duplication>` — **with the evidence cited** (the grep/`git log`
+  hits or occurrence list at `file:line`). "future speedup" / "better design" / "cleaner" are
+  **invalid fillers** (Design-Stamina is a GRADE-Low hypothesis, `references/strategy.md` §8).
+- **PROPERTY-DELTA** — at least one, **citing the measured BEFORE state**: `cohesion raised` /
+  `coupling lowered` / `connascence lowered/localized` / `responsibility relocated to one home` —
+  exact filler grammar, citation rules, and the second-actor requirement for splits are owned by
+  `references/architecture.md` §6 (SOLE owner of the gate wording — read it before first use).
 
-**Cannot fill BOTH with concrete fillers → it is 場当たり churn → do NOT edit** (leave the working
-code, say why). Supporting rules: **SMELL ≠ EDIT** — on spotting a smell the next call is a
-**Read/investigation**, never an Edit; if fine, record "investigated, left as-is". **Over-refactor
-check** — before *adding* an abstraction/layer/pattern/param, confirm a **present** consumer exists;
-none → Speculative Generality (YAGNI), don't add it. **Removal passes the gate** (`smell removed:
-Speculative Generality / Middle Man`). **Wrong-abstraction reversal** — a shared abstraction growing
-flags/branches → inline it back to callers, don't add param N. **No "while I'm here".** →
-`references/architecture.md` (Parnas locality predicate, cohesion/coupling/connascence, SRP/CCP,
-the deny-gate in full).
-*Artifact*: the MOTIVE + PROPERTY-DELTA pair in the message/commit for every structural edit.
+**Cannot fill BOTH with cited fillers → it is 場当たり churn → do NOT edit** (leave the working
+code, say why). Supporting rules (full text in `architecture.md` §6): **SMELL ≠ EDIT** — next call
+after spotting a smell is a **Read/investigation**, never an Edit. **Over-refactor check** — a
+present consumer must exist before adding any abstraction; **removal passes the gate**.
+**Wrong-abstraction reversal** — inline back, don't add param N. **No "while I'm here".**
+*Artifact*: the cited MOTIVE + PROPERTY-DELTA pair in the message/commit for every structural edit.
 
 ### G4 — Small reversible steps; Edit, not Write
 Refactor as a chain of **small, individually-reversible, named** steps (Extract Function here, Rename
-there), **test between each**, commit on green, **never hand off a red tree**. Prefer many scoped
+there), **test between each**, checkpoint on green (commit only when asked), **never hand off a red
+tree**. On red: revert **your own last step** — re-apply the inverse edit or `git stash` (recoverable);
+never a destructive `git checkout .` / file-restore without explicit user approval. Prefer many scoped
 **Edit** calls over one **Write** that regenerates a file (a whole-file rewrite loses comments/blame,
 balloons the diff, and hides behavior changes — that is a rewrite, not a refactor). Prefer
 symbol-aware tools (LSP `rename_symbol` / `find_referencing_symbols`, ast-grep, codemods) over
@@ -120,7 +141,8 @@ and even then, replace behind a facade with the old system as live fallback. →
 
 | Sibling | Cut |
 |---|---|
-| `implementing-and-debugging` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **Yes** (add/change a feature, fix a bug) → there (the anti-flailing guards for behavior change). **No** (structure only, outputs/API/side-effects identical) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor here (hat 1, own commit) → feature there (hat 2). If a diff does both, it violates G1 — split it. |
+| `implementing-and-debugging` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **Yes** (add/change a feature, fix a bug) → there (the anti-flailing guards for behavior change). **No** (structure only, outputs/API/side-effects identical) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor here (hat 1, own step) → feature there (hat 2). If a diff does both, it violates G1 — split it. |
+| PERFORMANCE / OPTIMIZATION asks | Goal = change a runtime observable (latency / throughput / memory / allocation) — "make it faster", "optimize", "this is slow" — is **behavior-changing on the declared observable surface** (`references/safety-net.md` §5) → `implementing-and-debugging`, **even when phrased as "clean up"**. Fowler separates refactoring from optimization (optimization often trades clarity away — the opposite of the PURPOSE pole). A preparatory reshape BEFORE the measured optimization co-fires in sequence: reshape here → optimize there, profiler-first (`references/strategy.md`). |
 | `structuring-documents` | **PURPOSE cut = object**: that skill localizes information in a DOCUMENT/prose (MECE one-home, single-source-of-truth, backward-only reference DAG). This skill localizes responsibility in CODE. Same 認識体系 (Parnas's uses-DAG = its reference DAG; Martin's CCP = its single-update-point), different artifact — never run one on the other's object. |
 | `/code-review`, `/simplify` (built-in) | **TIME cut**: they review/clean an already-written DIFF post-hoc. This governs BEFORE/DURING the change. Complementary — `/code-review` after a refactor can catch a smuggled behavior change (a G1 violation). `/simplify` applies quality cleanups to a diff; this owns the discipline of doing them safely. |
 | `implementing-and-debugging` (again, on `raising-resolution`) | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
@@ -136,8 +158,10 @@ migration (Strangler / Branch by Abstraction / Mikado), "reshape this before I a
 (preparatory), "is this refactor safe without tests", "should we rewrite or refactor X".
 
 MUST NOT fire: a single trivial tool-done rename / a pure formatter run / a one-line mechanical tidy ·
-adding or changing a feature, or fixing a bug (→ `implementing-and-debugging`) · reviewing an
-already-written diff (→ `/code-review`) · restructuring a DOCUMENT or prose, not code (→
+adding or changing a feature, or fixing a bug (→ `implementing-and-debugging`) · a performance
+optimization that targets the timing/allocation observable surface — "make it faster / optimize /
+this is slow" (→ `implementing-and-debugging`, two hats; see the PERFORMANCE routing row) · reviewing
+an already-written diff (→ `/code-review`) · restructuring a DOCUMENT or prose, not code (→
 `structuring-documents`) · wiring a refactor-lint into hooks/CI (→ `operating-the-harness`) · a
 from-scratch greenfield build with no existing code to preserve.
 
@@ -145,7 +169,7 @@ from-scratch greenfield build with no existing code to preserve.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/architecture.md` | 責務分界 + 局所化 as checkable predicates: Parnas information-hiding + the `|modules touched by change|=1` locality test + uses-DAG; Constantine one-sentence cohesion test + coupling spectrum; SRP-actor + CCP (+ the structuring-documents isomorphism); DDD/Conway/vertical-slice next-change test; connascence degree+locality; the deny-gate in full + the YAGNI 3-slot reconciliation | applying G3; deciding where a responsibility belongs; judging a decomposition; is this architecture or churn |
+| `references/architecture.md` | 責務分界 + 局所化 as checkable predicates: Parnas information-hiding + the `|modules touched by change|=1` locality test + uses-DAG; Constantine one-sentence cohesion test + coupling spectrum; SRP-actor + CCP (+ the structuring-documents isomorphism); DDD/Conway/vertical-slice next-change test; connascence spectrum (§5, SOLE home); the deny-gate (§6, SOLE owner of the wording); the YAGNI reconciliation (§7) incl. the 3-slot MANDATORY test | applying G3; deciding where a responsibility belongs; judging a decomposition; is this architecture or churn |
 | `references/catalog.md` | Smells as triggers (the ~24, read as coupling/cohesion failures); the named refactorings' mechanics + common shape; the depth test for extraction; Remove Flag Argument / narrow-signature / encapsulate-global by coupling class; Kerievsky refactor-to/away-from patterns | picking the transform for a smell; the mechanics of a named move; when to extract vs inline |
 | `references/safety-net.md` | The oracle regimes (tool/test/characterization); characterization tests + seams + Legacy Code Change Algorithm; mutation / golden-master / approval / property-based oracles; tools-still-ship-bugs; non-static-reference hunt before rename; the observable-surface boundary (timing/concurrency/serialization/logs/metrics); AST-vs-text gap; dynamic-language caveat | applying G2; refactoring untested or legacy code; any rename/move; deciding if "behavior-preserving" is trustworthy |
 | `references/strategy.md` | WHETHER/WHEN: two hats, preparatory, Rule of Three, tidy first/after/never, DRY-vs-AHA, rewrite-vs-refactor decision, hotspot prioritization (churn×complexity), when NOT to refactor, epistemic status (Design-Stamina/DCF are hypotheses). HOW-BIG: Strangler / Branch by Abstraction / Parallel Change / Mikado / keystone / codemods at scale | deciding whether/when to refactor at all; sequencing a large change; a rewrite proposal |

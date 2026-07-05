@@ -12,7 +12,7 @@ Every refactoring step needs an oracle that behavior is unchanged. There are exa
 | Regime | Oracle | When it holds |
 |---|---|---|
 | **1 — tool-verified** | the refactoring engine's checked **precondition** | a real engine (LSP rename, gopls/Roslyn/rope, ast-grep/comby/codemod) performs an atomic Rename/Extract/Move/Inline/Change-Signature. Tests are optional defense-in-depth. **The agent is here ONLY if it actually invokes the tool.** |
-| **2 — manual & local** | a human/agent **eyeball** | a hand edit whose entire effect fits in one screen / one reviewer's working memory, no shared mutable state, no reflection/serialization/public-API/concurrency crossed. Tests strongly advised. |
+| **2 — manual & local** | a human/agent **eyeball** | a hand edit whose entire effect fits in one screen / one reviewer's working memory, no shared mutable state, no reflection/serialization/DI/public-API/concurrency crossed. Tests strongly advised. |
 | **3 — manual & non-local** | a **test/characterization** bracket | anything larger, or crossing a coupling a tool can't statically prove. **Feathers holds absolutely: characterization tests first, no exceptions.** |
 
 **The reflex (G2):** before edit #1, say which regime and name the oracle. If you can't name one and

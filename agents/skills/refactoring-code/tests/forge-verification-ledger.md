@@ -29,7 +29,9 @@ Append on reforge; never overwrite. The fire/no-fire desk-check set lives inline
   (present consumer vs hypothetical), not rival dials. The 3-slot MANDATORY test gates merciless
   refactoring; volume ("smaller/cleaner/more SOLID") never justifies a demarcation — run the depth test.
 
-**Open defects:** (pending verification fleet — appended below on completion).
+**Open defects:** none blocking. Deferred (recorded, not fixed): house-wide plain-scalar
+descriptions in OTHER skills still fail strict YAML (this skill, implementing-and-debugging, and
+structuring-documents are fixed/already `>-`; a repo-wide sweep is `operating-the-harness` territory).
 
 **Retired decisions (do not resurrect):** none yet.
 
@@ -63,4 +65,57 @@ how-big) + tests (this ledger + the SoK survey). One-home map: coupling/cohesion
 oracle regimes + characterization/seams/mutation + AST-vs-text → safety-net.md; two-hats/rule-of-
 three/tidy-first/rewrite/hotspot + Strangler/BbA/Parallel-Change/Mikado → strategy.md.
 
-**Verification (independent read-only fleet)**: results appended on completion below.
+**Verification pass 1 — 6-lens adversarial fleet (read-only, same day)**: cut-refuter / one-home /
+survey-fidelity / trigger desk-check / F1-operationality / user-acceptance. Result: **0 blockers,
+8 major, 12 minor, 6 nits** — all lenses `defects-found`, all findings fixed same day (below).
+Notable CLEAN verdicts: the four adversarial routing asks (preparatory refactor, mixed
+extract+bugfix, rename, review+cleanup) route without a race; the SKILL.md LAW/PURPOSE poles do not
+cite "faster" as fact.
+
+Major findings → fixes (all landed v2607.1.0):
+1. PERFORMANCE/OPTIMIZATION raced between siblings and the two-hats cut wasn't runtime-answerable
+   for it → PERF routing row added HERE + i&d gained perf FIRES/triggers; "this is slow" is
+   behavior-changing on the declared observable surface (safety-net §5).
+2. Connascence spectrum split-brained across 3 files with an undefined "Value" level →
+   architecture.md §5 declared SOLE home (static/dynamic canonical lists); SoK now points.
+3. Rule of Three split-brained (numeric gate vs sampling procedure) → strategy.md §4 declared SOLE
+   home; architecture.md §7 points and keeps only the motive-direction cut.
+4. strategy.md §3 stated Beck's DCF/optionality as fact → marked conceptual model GRADE Low at
+   point of use.
+5. strategy.md §2 asserted deferred-payoff (Design Stamina) as fact → reworded; hypothesis flagged.
+6. **G3 deny-gate was self-certifiable prose** (template-fill without evidence) → each line now
+   REQUIRES a cited mechanical observation (grep/git-log/one-sentence-test at file:line); uncited
+   line = failed gate. "future speedup / better design / cleaner" = invalid fillers.
+7. **"responsibility relocated" filler had no present-driver floor** (astronaut license through the
+   split direction) → bound to the SRP-actor predicate: named distinct second actor + cited
+   cross-break required, else DENIED as SRP-over-application; §7 gained the MOVE/SPLIT branch.
+8. Same as 6 (two lenses converged on the self-certification hole from different directions).
+
+Minor/nit fixes: description truncation risk (DECISIVE cut moved to FRONT, triggers trimmed);
+rename disambiguated (cross-file rename-for-structure vs trivial); locality predicate's next-change
+input gated by provenance (issue # / TODO file:line / git-log co-change ≥2, else Speculative
+Generality); "over-firing is dominant" reframed as design posture reconciled with SoK §4.1 (both
+directions listed; under-firing guarded by G1); G1 pointer retargeted; token block made operational
+(grep-able gate tokens); DI added to safety-net Regime 2; SoK §3.5/§2.2/§2.4-E marked
+architecture.md as owner; SoK §4/§4.1 stale gate numbers fixed to shipped G1–G5; structuring-
+documents gained the reciprocal NOT-code pointer; Weirich attribution added.
+
+**Verification pass 2 — external independent review (user-run, Codex/strict-YAML lens, same day)**:
+P0 frontmatter fails strict YAML (plain scalar with ": ") — **partially refuted** (Claude Code's
+lenient parser demonstrably loads the identical pattern — i&d fired in-session while strictly
+invalid), **but fix accepted**: the repo dual-deploys to Codex (strict PyYAML), the house floor
+script (`skill-check.sh`) demands `>-` with a 2026-07-02 incident note, and 16 house skills already
+use `>-`. → description converted to `>-` AND compressed ~2117→~1500 chars with the DECISIVE cut
+front-loaded; i&d converted too (same latent defect; reloaded live, verified). P1 ledger-pending →
+this entry completes it. P1 destructive git (`git checkout --` / `git checkout .`) taught in
+strategy.md → replaced with `git stash` (recoverable) + explicit-approval rule for destructive
+restores (G4 + strategy §2/§7). P2 commit-as-artifact over-demanded → G1/G4 artifacts reworded to
+separable diffs/steps; "commit only when asked". P2 tests-contradiction (Fowler's "adds no tests"
+vs characterization-first) → strategy §1 clarified: the refactoring hat never changes behavior
+EXPECTATIONS; characterization tests may PRECEDE the refactor as net-building. P2 one-home erosion
+on the deny-gate (3 copies, stale numbering) → architecture.md §6 declared SOLE owner; G3
+abbreviated + points; SoK marked snapshot; stale gate numbers fixed.
+
+**Floor-script + parse status at freeze**: `skill-check.sh` clean run and strict-YAML parse of all
+three touched skills recorded in the shell log of the forge session (2026-07-05); description
+~1500 chars (≤1500 warn threshold), `>-` folded.

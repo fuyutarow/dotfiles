@@ -1,6 +1,23 @@
 ---
 name: implementing-and-debugging
-description: Discipline for the ACT of writing or fixing non-trivial code that CHANGES observable behavior — the guards that stop flailing once you start changing things. Reconstruct the ORIGINAL code's design intent before any rewrite; scope the edit surface (which files, how many) before touching; ground each changed file against a reference implementation; fix the 病因 (root cause) not the 症状 (symptom) — no band-aid / 一時しのぎ / 場当たり patch; fear the change that makes it WORSE (regression); declare your unknowns; for a hard bug present a divide-and-conquer plan, not guesses. Use when implementing a feature or debugging — especially when a fix keeps missing, you're guessing at causes, or about to redesign code you haven't fully understood. Triggers: 実装, 機能追加, デバッグ, バグ修正, 思い付きdebug, 場当たり(なバグ修正), 一時しのぎ, 根本原因, 症状 vs 病因, 意図を理解せず, なぜなぜ, "this fix isn't working", "keep guessing". DECISIVE cut = Beck's two hats: behavior-PRESERVING structural change (refactor / リファクタ / clean up / 責務分界 / extract-move-rename for structure, no behavior change) is refactoring-code, NOT here — the two co-fire in sequence for preparatory refactoring (reshape there, then change behavior here). Upstream fact-inspection is raising-resolution; forward bets/durability are acting-on-hypotheses; post-hoc diff review is /code-review. English skill; respond in the user's language (default Japanese).
+description: >-
+  Discipline for the ACT of writing or fixing non-trivial code that CHANGES observable behavior —
+  the guards that stop flailing once you start changing things. Reconstruct the ORIGINAL code's
+  design intent before any rewrite; scope the edit surface (which files, how many) before touching;
+  ground each changed file against a reference implementation; fix the 病因 (root cause) not the
+  症状 (symptom) — no band-aid / 一時しのぎ / 場当たり patch; fear the change that makes it WORSE
+  (regression); declare your unknowns; for a hard bug present a divide-and-conquer plan, not
+  guesses. Use when implementing a feature, debugging, or optimizing performance (高速化 / make it
+  faster — latency/allocation are observables, so perf work lives here) — especially when a fix
+  keeps missing, you're guessing at causes, or about to redesign code you haven't fully understood. Triggers — 実装, 機能追加, デバッグ, バグ修正, パフォーマンス最適化 /
+  高速化, 思い付きdebug, 場当たり(なバグ修正), 一時しのぎ, 根本原因, 症状 vs 病因, 意図を理解せず,
+  なぜなぜ, "this fix isn't working", "keep guessing". DECISIVE cut (Beck's two hats) —
+  behavior-PRESERVING structural change (refactor / リファクタ / clean up / 責務分界 /
+  extract-move-rename for structure, no behavior change) is refactoring-code, NOT here; the two
+  co-fire in sequence for preparatory refactoring (reshape there, then change behavior here).
+  Upstream fact-inspection is raising-resolution; forward bets/durability are acting-on-hypotheses;
+  post-hoc diff review is /code-review. English skill; respond in the user's language (default
+  Japanese).
 ---
 
 # Implementing & debugging — the discipline of the act
@@ -81,7 +98,9 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 ## Fire / no-fire
 
 FIRES: "implement / build this feature", add or change behavior in a non-trivial module, "debug this
-/ このバグ直して", a fix that keeps missing, guessing at causes, about to rewrite code you don't fully
+/ このバグ直して", performance optimization — "make it faster / optimize / this is slow / 高速化"
+(latency/allocation are observables; measure with a profiler first, then change only the measured hot
+path), a fix that keeps missing, guessing at causes, about to rewrite code you don't fully
 understand, "なぜ動かないのか分からない", 場当たり的な*バグ修正*の兆候.
 
 MUST NOT fire: a typo / rename / one-line obvious edit · a purely mechanical change · a

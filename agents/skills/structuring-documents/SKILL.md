@@ -18,8 +18,8 @@ description: >-
   rewrite-words-in-place → linting-prose; move-information-across-the-document → here. NOT
   sentence/word/register readability or a paragraph's own topic sentence (→ linting-prose); NOT
   slide/deck order or inserting diagrams (→ designing-presentations); NOT a paper corpus (→
-  systematizing-knowledge); NOT SKILL.md prose (→ forging-skills). English skill; respond in the
-  user's language (default Japanese).
+  systematizing-knowledge); NOT SKILL.md prose (→ forging-skills); NOT code structure — module/責務
+  boundaries (→ refactoring-code). English skill; respond in the user's language (default Japanese).
 ---
 
 # Structuring documents — information architecture, not sentence polish

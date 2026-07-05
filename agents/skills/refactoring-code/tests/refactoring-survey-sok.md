@@ -90,9 +90,10 @@ cohesion** に還元される。決定的なのは:
 - **Divergent Change（1箇所が多理由で変わる＝cohesion 欠落）と Shotgun Surgery（1変更が多箇所に散る＝
   過剰 coupling）は反対の失敗で、修正は反対方向に押す。** smell 名を1つの refactoring に短絡させると、
   逆問題を悪化させる。まず coupling か cohesion かを判定してから変換を選ぶ。
-- **connascence**（Page-Jones: Name→Type→Meaning→Position→Algorithm、static vs dynamic）が「感触で
-  coupled」を置き換える定量語彙。弱い/局所的な connascence を選ぶ（positional args→named object、
-  magic value→named constant）。
+- **connascence**（Page-Jones）が「感触で coupled」を置き換える定量語彙。弱い/局所的な connascence を
+  選ぶ（positional args→named object、magic value→named constant）。**スペクトラムの正準表記は
+  `references/architecture.md` §5 が SOLE home**（static: Name→Type→Meaning→Position→Algorithm、
+  dynamic: Execution→Timing→Value→Identity）。
 
 ### 2.3 extraction の判定 = module DEPTH（size ではない）
 
@@ -146,10 +147,10 @@ Behaviour > DRY（衝突時は「ここだけ読めば分かる」を優先し�
 agent テスト**: *「最も来そうな次の変更で、別々の何箇所を編集し、それらは寄っているか。少なく・寄って
 いる＝良い分界/局所化。多く・散在＝各層が綺麗でも悪い」*。
 
-**E. connascence の locality rule（Page-Jones / Weirich）**: 強い connascence（Position / Algorithm /
-Value / Identity / Timing）は *局所*（同一 function/class）に留め、弱い connascence（Name / Type）だけ
-がモジュール境界を跨いでよい。refactor が局所化を改善したと言えるのは、強い遠隔 connascence を弱め
-（Rule of Degree）たか1つの家に引き込んだ（Rule of Locality）と名指せる時だけ。
+**E. connascence の locality rule（Page-Jones / Weirich）**: 強い connascence（正準スペクトラムは
+`references/architecture.md` §5）は *局所*（同一 function/class）に留め、弱い connascence（Name /
+Type）だけがモジュール境界を跨いでよい。refactor が局所化を改善したと言えるのは、強い遠隔 connascence
+を弱め（Rule of Degree）たか1つの家に引き込んだ（Rule of Locality）と名指せる時だけ。
 
 ---
 
@@ -171,6 +172,9 @@ Value / Identity / Timing）は *局所*（同一 function/class）に留め、�
 | **D9** | **良いアーキテクチャの追求 vs YAGNI**（責務分界・局所化 を追うことは反・投機的一般化と矛盾するか） | **motive-direction × 分界軸の provenance**＝その分界が押し戻す coupling/cohesion の失敗は *今触るコードに present な変更軸* か *まだ現れぬ future の変更軸* か。二次変数: present 側の実 occurrence 数（Rule of Three）・生まれる interface の depth・oracle bracket の有無。**volume（行数・抽象数・「綺麗さ」）では断じてない** | 矛盾しない。直交2軸の別投影。**Regime A（MANDATORY/merciless）**: present に named smell が実在（Shotgun Surgery / Divergent Change / Feature Envy / lockstep 要求の knowledge-dup）× occurrence ≥3 × behavior-preserving で oracle bracket → Parnas/Martin が勝ち、掃除しないことが負債（ただし *当該変更の surface 内*）。**Regime B（YAGNI STOP）**: 現 caller ゼロ / N=1 / 浅い interface（depth 不合格）→ Fowler/Beck/Metz/Ousterhout が勝ち inline して待つ。**Regime C**: safety-critical（crypto/tax/auth/wire）は3未満でも局所化へ | B→A: 放置 dup が lockstep 修正を要求 or 3度目到達で future 軸が present 軸に転じる。A→B: 抽出後に新 caller が flag/branch を要求（coincidental だった→inline 戻す）or surface 超過 or oracle 欠如。A→STOP: 同一 diff で振る舞いも変える（two hats 違反）or edit surface が検証能力超過。throwaway/spike は present でも掃除は負 EV | Moderate |
 
 ### 3.5 D9 の harsh test — 場当たりを機械的に弾く2つの gate（skill G3 の核）
+
+> **操作的な正文（citation 要件・SRP-actor sub-filler 含む）は `references/architecture.md` §6 が
+> SOLE owner。本節は蒸留時点の snapshot であり、齟齬があれば §6 が勝つ。**
 
 分野の *積極的目的*（責務分界・局所化）を追いつつ、その **counterfeit（場当たり churn）を厳罰**する
 checkable な関門。二つは同一 gate の別表現:
@@ -229,19 +233,21 @@ inline 戻す（Metz）。(4) **no "while I'm here"** — 構造変更を behavi
 ## 4. 蒸留された agent 操作規則（10 source の高収束コア → skill の 5 gates）
 
 10 source-class 全てが独立に収束した規則群。skill の gate へ蒸留される（provenance: 全 source で反復）。
+括弧の gate ID は出荷版 SKILL.md の最終番号（G1 one-hat / G2 oracle / G3 deny-gate / G4 small-steps /
+G5 how-big）に対応:
 
-1. **behavior preservation は定義**。'refactor' diff は構造のみ変える。bug/feature を見つけたら STOP して
-   別 diff に。**edited test assertion は振る舞いを混入した tell**（refactor commit で期待値が変わったら
-   それは refactor ではない）。
-2. **oracle を名指してから触る**。tool transform か green test bracket か（legacy なら characterization
-   test 先）。手編集は precondition 証明ゼロ。
-3. **small・可逆ステップ、Write ではなく Edit**。named refactoring を1つずつ、間で test、green で commit、
-   red で hand-off しない。ref を全更新する LSP/ast-grep/codemod を freehand より優先。
-4. **named smell から、present need に向けて**。aimless churn 禁止。YAGNI（speculative abstraction 禁止）。
-   Rule of Three。extraction は depth test。tiny-function dogma を過剰適用しない。**WHY-comment と
-   load-bearing な「奇妙さ」（＝過去の bug fix）を保存**。
-5. **大変更は trunk 上で incremental**（Strangler/BbA/Parallel Change/Mikado）。long-lived rewrite
-   branch 禁止。rewrite は *ラベル付き高 risk 賭け* であって黙って 'refactor' と呼ばない。
+1. **behavior preservation は定義**（→ G1）。'refactor' diff は構造のみ変える。bug/feature を見つけたら
+   STOP して別 diff に。**edited test assertion は振る舞いを混入した tell**（refactor step で期待値が
+   変わったらそれは refactor ではない）。
+2. **oracle を名指してから触る**（→ G2）。tool transform か green test bracket か（legacy なら
+   characterization test 先）。手編集は precondition 証明ゼロ。
+3. **small・可逆ステップ、Write ではなく Edit**（→ G4）。named refactoring を1つずつ、間で test、green で
+   checkpoint、red で hand-off しない。ref を全更新する LSP/ast-grep/codemod を freehand より優先。
+4. **named smell から、present need に向けて**（→ G3）。aimless churn 禁止。YAGNI（speculative
+   abstraction 禁止）。Rule of Three。extraction は depth test。tiny-function dogma を過剰適用しない。
+   **WHY-comment と load-bearing な「奇妙さ」（＝過去の bug fix）を保存**。
+5. **大変更は trunk 上で incremental**（→ G5）（Strangler/BbA/Parallel Change/Mikado）。long-lived
+   rewrite branch 禁止。rewrite は *ラベル付き高 risk 賭け* であって黙って 'refactor' と呼ばない。
 
 ### 4.1 agent 固有の calibration（このコアが *なぜ* LLM に効くか）
 
@@ -249,17 +255,17 @@ completeness critic の最重要指摘: **LLM は IDE tool より遥かに高頻
 —— テキストを編集し AST を編集しないから**。よって「two hats + green bracket + 別 diff」は任意の衛生
 ではなく *agent 自身の失敗モードに対する第一防御*。具体的 default failure（agent-era lens が列挙）:
 
-| # | agent の default 失敗 | 矯正する gate |
+| # | agent の default 失敗 | 矯正する gate（出荷版番号） |
 |---|---|---|
 | 1 | 'refactor' と言いつつ endpoint 改名・off-by-one 修正・default 変更を同 diff に混入 | G1 two hats |
-| 2 | 小刻みでなく file 丸ごと Write で再生成（comment/edge-case/blame 消失、bisect 不能） | G3 |
+| 2 | 小刻みでなく file 丸ごと Write で再生成（comment/edge-case/blame 消失、bisect 不能） | G4 |
 | 3 | test を一度も走らせず「done」と宣言 | G2 |
 | 4 | feature/bugfix を 'refactor' diff に混ぜ review 不能に | G1 |
-| 5 | 「clean だから」speculative abstraction を発明（YAGNI 違反） | G4 |
-| 6 | Clean-Code tiny-function dogma を過剰適用、可読な30行を12個の1行 helper に粉砕 | G4 depth test |
+| 5 | 「clean だから」speculative abstraction を発明（YAGNI 違反） | G3 deny-gate |
+| 6 | Clean-Code tiny-function dogma を過剰適用、可読な30行を12個の1行 helper に粉砕 | G3 + depth test (catalog §4) |
 | 7 | test 無き code を pin せず refactor（characterization 無し） | G2 |
-| 8 | 検証能力を超える巨大 edit surface を選ぶ | G3 scope |
-| 9 | 広域 reformat/rename で diff を膨張させ実変更を隠す | G3 |
+| 8 | 検証能力を超える巨大 edit surface を選ぶ | G4 scope |
+| 9 | 広域 reformat/rename で diff を膨張させ実変更を隠す | G4 (safety-net §6) |
 | 10 | green test 実行の証拠なく「振る舞い不変」と主張 | G2 final |
 | 11 | text 検索置換 rename が reflection/string/config/serialization 参照を取り逃す | safety-net: non-static ref hunt |
 | 12 | tool の 'safe' 出力を test bracket 無しで盲信（tool も bug を出す） | safety-net: tool-still-brackets |

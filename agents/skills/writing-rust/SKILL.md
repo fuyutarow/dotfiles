@@ -3,22 +3,21 @@ name: writing-rust
 description: >-
   Write correct, MODERN (2025/2026) Rust — crate SELECTION is the spine. Use whenever writing or
   reviewing Rust, editing Cargo.toml / dependencies, or choosing a crate. Cuts (resolve at match
-  time): language-agnostic change/debug discipline → implementing-and-debugging (co-fire FIRST on
-  a feature/bugfix); behavior-preserving restructure → refactoring-code (governs; this supplies
-  the Rust oracle — clippy / cargo check / tests); Python tooling → running-python-tools (but
-  PyO3 / maturin bindings FROM Rust stay HERE); prose/README → linting-prose; Julia →
-  writing-julia; TypeScript → writing-typescript. NOT for installing a Rust-written CLI tool
-  (ripgrep / eza / bat) — that is not writing Rust. Trigger on: Rust, cargo, crate, Cargo.toml,
-  どの crate を使う, 依存(crate)選定, async / tokio, borrow checker / 所有権 / lifetime, clone /
-  Arc<Mutex>, unsafe / SAFETY, error handling (anyhow / thiserror / eyre / miette / snafu),
-  serde / serde_json / rkyv, clap / argh / bpaf, rayon / parking_lot / crossbeam / dashmap /
-  flume, once_cell / lazy_static / OnceLock / LazyLock, bon / derive_more / strum / nutype,
-  jiff / chrono / time, winnow / nom / pest, reqwest / ureq / axum, sqlx / diesel, tracing,
-  edition 2024, clippy, cargo-nextest, workspace, MSRV. MANDATORY — read BEFORE writing ANY Rust
-  or adding ANY dependency. Crate facts ROT: verify against crates.io / lib.rs before recommending
-  (RG4). Sync before async; ownership before clone; lightest crate before the famous one.
-  Workflow-native: crate-landscape harvest + adversarial verification fan out; the selection
-  decision and the gate calls stay SOLO. English skill; respond in the user's language (default Japanese).
+  time): language-agnostic change/debug → implementing-and-debugging (co-fire FIRST on a
+  feature/bugfix); behavior-preserving restructure → refactoring-code (governs; this supplies the
+  clippy / cargo-check / tests oracle); Python tooling → running-python-tools (but PyO3 / maturin
+  bindings FROM Rust stay HERE); prose/README → linting-prose; Julia/TS → writing-julia /
+  writing-typescript. NOT for installing a Rust-written CLI tool (ripgrep/eza) — that is not
+  writing Rust. Trigger on: Rust, cargo, crate, Cargo.toml, どの crate, blazing fast / 高速化,
+  依存選定, async / tokio, borrow checker / 所有権 / lifetime, clone / Arc<Mutex>, unsafe / SAFETY,
+  anyhow / thiserror / eyre / miette, serde / rkyv, clap / argh / bpaf, rayon /
+  dashmap, once_cell / lazy_static / OnceLock / LazyLock, bon / derive_more / strum / nutype,
+  jiff / chrono / time, winnow / nom, reqwest / ureq / axum, tracing, edition 2024,
+  cargo-nextest. MANDATORY — read BEFORE writing ANY Rust or adding ANY dependency. Crate facts
+  ROT: verify against crates.io / lib.rs before recommending (RG4). Sync before async; ownership
+  before clone; lightest crate before the famous one. Workflow-native: crate-landscape harvest +
+  adversarial verification fan out; the selection decision stays SOLO. English skill; respond in
+  the user's language (default Japanese).
 paths: "**/*.rs"
 ---
 
@@ -100,7 +99,7 @@ wrong line. Then open the reference that matches the task.
 | `references/async.md` | The async coloring cost — sync-by-default; `tokio` only for concurrent I/O; **native async-fn-in-traits (AFIT) vs `async-trait`** — what AFIT still can't do; `futures` vs `futures-lite`; cancellation (`CancellationToken`); `spawn_blocking`; common async footguns | any decision to introduce `async` / a runtime; a trait with an async method; "why is my async slow / stuck" |
 | `references/errors.md` | RG3 home — the app-vs-library error split; `anyhow`/`eyre` context vs `thiserror` enums; `miette`/`snafu`/`error-stack` niches; `?` and `From`; no-`unwrap`-in-lib; error-enum design | writing any error type; designing a public API's fallibility; choosing an error crate |
 | `references/ownership.md` | RG2 home — the borrow-checker-discipline: restructure ownership instead of `.clone()`/`Arc<Mutex>`/`unsafe`; references, `Cow`, split borrows, `Rc`/`Arc` when sharing is real, interior mutability, when `.clone()` IS correct; `unsafe` + `// SAFETY:` discipline | fighting the borrow checker; reaching for `.clone()`/`Arc<Mutex>`/`unsafe`; a lifetime error |
-| `references/performance.md` | Hot-path & memory — avoid needless allocation/`collect`, iterators, `SmallVec`/`compact_str`, allocator swap (`mimalloc`/`jemalloc`), faster hashers (`FxHashMap`/`foldhash`/`ahash`), `rayon`, profiling (`samply`/`cargo-flamegraph`/`divan`) — reach for a tool only when the need is real | code is measured slow; a genuinely hot loop; choosing a hasher/allocator |
+| `references/performance.md` | **Rust is NOT automatically fast** — the measured, layered ladder (grounded in *The Rust Performance Book*): build settings → don't-allocate/clone → data layout, buffered I/O, iterators → hashers/allocator/`rayon` → the advanced tier (SIMD/PGO/`unsafe`/`transmute`) gated behind profiling. The model's over-reach trap: reaching for `unsafe`/`get_unchecked` before measuring | asked to make code faster / 高速化 / "blazing fast"; a **measured**-slow hot path; choosing a hasher/allocator |
 | `references/project.md` | RG1 home — edition 2024, dependency hygiene (unused-dep pruning, feature trimming, `cargo deny`/`audit`/`machete`), workspace + dependency inheritance, `[profile]` release tuning, MSRV, `xtask`, test/lint tooling (`cargo-nextest`, clippy lint config) | setting up / auditing a project or workspace; CI; `Cargo.toml` structure; lint & test configuration |
 
 ---
@@ -118,7 +117,7 @@ condition — that condition is in selection.md):
 |---|---|---|
 | Errors — app binary | `anyhow` (or `eyre`/`color-eyre` for rich reports) | — |
 | Errors — library | `thiserror` (typed enum) | — |
-| Serialize / deserialize | `serde` + `serde_json` | zero-copy/perf → `rkyv`; embedded/compact → `postcard`/`bincode 2` |
+| Serialize / deserialize | `serde` + `serde_json` | zero-copy → `rkyv`; compact Rust↔Rust → `postcard`/`bitcode` (**not `bincode` — unmaintained**) |
 | CLI args | `clap` (derive) | tiny tool / fast build / small binary → `argh` / `bpaf` / `lexopt` |
 | Data-parallelism | `rayon` | — |
 | Async runtime | `tokio` — **only if the job is concurrent I/O** | simple/one-shot → stay sync; tiny → `smol` |

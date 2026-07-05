@@ -20,6 +20,9 @@ states the order. Created v2607.1.0 (2026-07-06).
 | "pick a date/time crate for a new Rust project" | §1 supersession + selection.md → jiff vs chrono/time |
 | "which crate for a fast concurrent hashmap in Rust?" | selection.md → `dashmap`/`scc` (not `Arc<Mutex<HashMap>>`) |
 | review this `src/parser.rs` (paths auto-activation on `**/*.rs`) | general Rust idiom review — RG0–RG4 |
+| 「この Rust、思ったより速くない。blazing fast にしたい」 | performance.md — the measured ladder (Rust ≠ automatically fast; measure first) |
+| "should I add jemalloc or a custom hasher to speed up my Rust service?" | performance.md — allocator/hasher are measure-gated; by key trust, not reflex |
+| 「Rust で書いたのに Go より遅い。なんで?」 | performance.md — the thesis + the ladder (with code to inspect); measure to find the 1% |
 
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 
@@ -35,6 +38,7 @@ states the order. Created v2607.1.0 (2026-07-06).
 | "format / fix the types in this `app.tsx`" | different language → `writing-typescript` |
 | 「Rust リポジトリを git subtree で分割したい」 | VCS surgery, not Rust code → plain task (`refactoring-code` if code moves) |
 | "explain what lifetimes are, conceptually" | concept explainer, no code to write → plain answer (fires here only if Rust code is in play) |
+| 「Rust ってなんで速い言語なの?」 | language-design question, no code → plain answer (fires only when there's actual code to profile/optimize) |
 
 ## Co-fire order checks (not fire/no-fire — sequencing)
 

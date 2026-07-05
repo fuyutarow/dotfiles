@@ -209,7 +209,7 @@
 | Job | Default | Alternative | Switch when |
 |---|---|---|---|
 | Swap the global allocator | `mimalloc` 0.1 | `tikv-jemallocator` 0.7 | need jemalloc heap profiling / long-run fragmentation — **only after profiling** |
-| Fast internal HashMap, TRUSTED keys | `foldhash` 0.2 (hashbrown default) | `rustc-hash` (`FxHashMap`) | integer/small keys → rustc-hash |
+| Fast internal HashMap, TRUSTED keys — *profiled hot spot only* | `foldhash` 0.2 (hashbrown default) | `rustc-hash` (`FxHashMap`) | integer/small keys → rustc-hash; unprofiled → stay std |
 | Map keyed by UNTRUSTED input | **std `HashMap` (SipHash)** | `ahash` (keyed) | only if profiling proves SipHash is the hot spot |
 | Wipe secret bytes on drop | `zeroize` 1.x | — | need Debug/serde masking → `secrecy` |
 | Carry a secret without leaking | `secrecy` 0.10 (`SecretBox`/`SecretString`) | `zeroize` alone | just wiping a local buffer → zeroize |

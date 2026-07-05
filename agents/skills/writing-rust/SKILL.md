@@ -34,8 +34,10 @@ paths: "**/*.rs"
 >   embedded-specific stacks beyond a pointer (embassy / heapless named, not expanded).
 > **Build verify (atomic — all ship in one commit)**:
 >   `for f in selection async errors ownership performance project; do test -f references/$f.md || echo MISSING $f; done; for t in trigger-set forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
-> **Staleness registry** — fast-moving facts carry an in-place `[dated:YYYY-MM]` tag (locality >
->   isolation: the fact IS the decision input where it sits). Before trusting one,
+> **Staleness registry** — fast-moving facts carry a `[dated:YYYY-MM]` tag at TWO grains: per-fact
+>   in prose files (locality: the fact IS the decision input where it sits), and ONCE at file
+>   level for `references/selection.md` (the whole file is one dated snapshot table — per-row tags
+>   would be noise). Before trusting one,
 >   `grep -rn '\[dated:' agents/skills/writing-rust/` and re-verify anything older than ~2 quarters
 >   against crates.io / lib.rs: the §1 supersession table · every version in `references/selection.md`
 >   · edition-2024 baseline · the async-trait / AFIT boundary (async.md) · the allocator/hasher
@@ -127,7 +129,7 @@ condition — that condition is in selection.md):
 | Builder | `bon` | — (or plain `Default` + struct-update for simple cases) |
 | Logging / tracing | `tracing` + `tracing-subscriber` | trivial CLI with no async → `log` + `env_logger` is enough |
 | Date/time | `jiff` (modern option, pre-1.0) or `chrono` (still fine) — selection.md | existing chrono code → stay chrono |
-| Hash map (non-DoS, fast) | `rustc-hash` (`FxHashMap`) / `foldhash` | untrusted input → keep the DoS-resistant std default |
+| Hash map | **std `HashMap`** (SipHash — DoS-safe) | *profiled* hot + trusted keys only → `foldhash` / `rustc-hash` (performance.md) |
 
 **Supersessions — a former default has been replaced; using the old one now is a tell that
 training data is stale** `[dated:2026-07]` (SOLE home; verified in the forge ledger):
@@ -136,7 +138,7 @@ training data is stale** `[dated:2026-07]` (SOLE home; verified in the forge led
 |---|---|---|---|
 | `lazy_static` / `once_cell` for a global | std `OnceLock` (1.70, 2023-06) / `LazyLock` (1.80, 2024-07) | 1.80 | `once_cell` only for `get_or_try_init` (fallible init — still nightly in std) or `no_std` |
 | `crossbeam::scope` for scoped threads | std `thread::scope` | 1.63 | `crossbeam` still for channels / deque / epoch GC |
-| `async-trait` on every async trait | native `async fn` in traits (AFIT) | 1.75 | `async-trait` still for `dyn`-dispatch / object-safe async traits + explicit `Send` bounds → see async.md |
+| `async-trait` on every async trait | native `async fn` in traits (AFIT) | 1.75 | `dyn` dispatch → `dynosaur` (new code) / `async-trait` (existing); `Send`-bounded futures → `trait-variant` — the split is async.md's |
 | `structopt` | `clap` v4 derive | clap 4 | none — structopt is retired, its author merged it into clap |
 | `nom` for a new parser | `winnow` 1.0 (nom's maintainer's successor) | winnow 1.0, 2026-03 | `nom` fine for existing code; `pest` for grammar-file PEG; `chumsky` for great error messages |
 
@@ -168,7 +170,7 @@ named reference):
 | Manually stripping leading indentation from a multiline string literal | **`indoc`** | keep the source indentation; the macro removes the common leading whitespace at compile time |
 | `std::time::Instant`/`SystemTime` in a wasm-targeting library (panics in the browser) | **`web-time`** | drop-in shim: native `std::time` off-wasm, `performance.now()` on wasm — no runtime panic |
 | A plain-text error dump for a user-facing tool | **`miette`** | graphical diagnostics — source snippet, underlines, help text — instead of an opaque string |
-| `Arc<Mutex<HashMap<_,_>>>` for a shared concurrent map | **`dashmap`** / **`scc`** | sharded/lock-free concurrent map — no global lock to contend on (ownership.md / selection.md) |
+| `Arc<Mutex<HashMap<_,_>>>` for a shared concurrent map | **`scc`** (or `RwLock<HashMap>` at low contention) | sharded concurrent map — no global lock; `dashmap` only if you know its deadlock footgun (selection.md) |
 | `.to_string()` everywhere for short strings (IDs, statuses, enum names) | **`compact_str`** | small-string optimization: ≤24 bytes stay on the stack, serde-compatible drop-in for `String` |
 
 ## 2. The four over-reaches (READ FIRST — these are the default failures)

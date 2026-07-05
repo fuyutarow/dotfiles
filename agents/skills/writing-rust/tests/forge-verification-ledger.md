@@ -107,3 +107,22 @@ and SKILL.md §1 held against a fresh crates.io re-check.
 **Floor after fixes**: `skill-check.sh` clean over writing-rust + both edited siblings; strict-YAML
 re-parse OK; growing-oss-adoption description 1487/1500; live listing reload confirmed for the
 edited siblings (2026-07-06).
+
+## 2026-07-06 external review #2 — adjudication (5 findings; 4 accepted, 1 partial)
+
+All five findings are the SAME defect class: **read-first shorthand (SKILL.md §1 tables /
+ownership.md quick lists) dropping the calibration the owning reference carries (measure-first
+gates, hazard flags)** — i.e. the read-first layer re-creating the §2 over-reach it forbids.
+Named as a standing reforge lens: after any §1/table edit, diff each row against its owner file
+for lost qualifiers.
+
+| Finding | Verdict | Resolution |
+|---|---|---|
+| #1 ownership.md "prefer parking_lot" contradicts selection.md's std-first/features-only rule | **Accepted in full** | ownership.md §4 rewritten: std `sync` first; `parking_lot` for features, never "because faster" |
+| #2 SKILL.md async-trait supersession row folds `Send` bounds into async-trait, missing the dynosaur/trait-variant split | **Accepted** | Residual cell now carries the split (`dyn` → dynosaur new / async-trait existing; `Send` → trait-variant), owner named (async.md) |
+| #3 dashmap/scc "並列推奨" in read-first + trigger-set | **Partial**: trigger-set half REFUTED — that row was already scc-first + selection.md pointer after fleet round 1, and desk-check rows are routing artifacts, not guidance. SKILL.md その手があったか row half ACCEPTED (dashmap-first, no hazard) | Row flipped: `scc` (or `RwLock<HashMap>` low-contention) first; dashmap demoted behind its deadlock-footgun flag; ownership.md §4 aligned in the same edit |
+| #4 fast hashers presented as "default stack" vs performance.md's measured-micro-lever | **Accepted — sharpest finding** | §1 row inverted: std `HashMap` IS the default; `foldhash`/`rustc-hash` behind *profiled + trusted* (performance.md); selection.md trusted-hasher row gains the same gate ("unprofiled → stay std") |
+| #5 "[dated:] per fact" wording stronger than selection.md's file-level dating | **Accepted as wording; design retained** | Header now states the TWO grains explicitly: per-fact in prose files; file-level for selection.md (whole file = one snapshot table; per-row tags would be noise — same Locality rationale as the writing-julia 2026-07-05 裁定) |
+
+**Floor after round 2**: `skill-check.sh` clean (no warnings); strict-YAML parse OK; description
+unchanged (≤1500).

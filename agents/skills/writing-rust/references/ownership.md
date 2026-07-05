@@ -51,9 +51,12 @@ Order of preference:
    share. For a rarely-updated global read from many threads, `arc-swap` beats `RwLock` (selection.md).
 3. **Shared mutable, single-thread** → `Rc<RefCell<T>>` — but `RefCell` moves borrow-checking to
    *runtime*: a double mutable borrow panics. Keep the borrows short and local.
-4. **Shared mutable, multi-thread** → `Arc<Mutex<T>>` / `Arc<RwLock<T>>` (prefer `parking_lot`,
-   selection.md). For a concurrent *map*, don't wrap a `HashMap` — use `dashmap`/`scc` (sharded).
-   For counters, prefer `Atomic*` over a `Mutex<u64>`.
+4. **Shared mutable, multi-thread** → `Arc<Mutex<T>>` / `Arc<RwLock<T>>` — **std `sync` first**;
+   `parking_lot` only when you need one of its *features* (no-poison, guard mapping, timeouts),
+   never "because faster" (selection.md). For a concurrent *map*, don't wrap a `HashMap` — use
+   `scc` (or `RwLock<HashMap>` at low contention; `dashmap` only knowing its
+   hold-a-`Ref`-across-ops deadlock footgun — selection.md). For counters, prefer `Atomic*` over
+   a `Mutex<u64>`.
 
 If you find `Arc<Mutex<_>>` spreading across the whole program, that's the async-plus-shared-state
 smell: consider message passing (a channel — `flume`/`tokio::sync::mpsc`, selection.md) so one task

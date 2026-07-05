@@ -73,9 +73,10 @@ Julia has **single inheritance**: a type has exactly one abstract supertype chai
 sized / GPU-resident / addable?"), or that must classify types you **don't own** — cannot be
 expressed by adding a supertype. The idiomatic fix is the **Holy trait** (Tim Holy Trait Trick,
 THTT): encode the capability as a *value* returned by a small function, then dispatch on that
-value. This is still the standard pattern in 2026 — Julia has **no native traits** and Julia 2.0 /
-a built-in trait system is **not on the roadmap** (core devs judge multiple-inheritance traits ×
-multiple dispatch to risk an ambiguity explosion).
+value. This is still the standard pattern `[dated:2026-07]` — Julia has **no native traits** and
+Julia 2.0 / a built-in trait system is **not on the roadmap** (core devs judge multiple-inheritance
+traits × multiple dispatch to risk an ambiguity explosion). Load-bearing for a design → re-verify
+via the staleness registry (SKILL.md header).
 
 ```julia
 # the trait: a tiny closed value hierarchy (the "noun")

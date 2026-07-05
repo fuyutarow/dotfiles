@@ -12,19 +12,39 @@ description: >-
   PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
   weakdeps, type piracy, public API. MANDATORY — read BEFORE writing ANY Julia code. §2.0 forbids
   FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
-  is not banned — the bug is type-unstable hot paths.
+  is not banned — the bug is type-unstable hot paths. Co-fires with ORDER: Julia feature/bugfix →
+  implementing-and-debugging first (change-safety), this for idiom; Julia refactor →
+  refactoring-code governs (two hats/oracle), this supplies JET/Aqua brackets + Julia-safe
+  transforms. Lean/formal proofs → proving-theorems; Python tooling → running-python-tools
+  (PythonCall/SymPyPythonCall from Julia stays here).
 ---
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2607.1.1 (2026-07-03, Julia 1.12.6 baseline)
+> **Version**: v2607.2.0 (2026-07-05, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
 > **Out of scope**: live REPL iteration tooling (Revise, TestItems, JETLS, Cthulhu) —
 > pointered from `references/setup.md` §8, not the focus here.
+> **Staleness registry**: fast-moving facts are tagged `[dated:YYYY-MM]` in place (locality
+> beats physical isolation — the fact IS the decision input where it sits). Before trusting one,
+> `grep -rn '\[dated:' agents/skills/writing-julia/` and re-verify anything older than ~2 quarters:
+> Julia version baseline (here) · `juliac --trim` experimental status (setup.md §3.5/§3.5.1/§3.6) ·
+> JETLS-replaces-LanguageServer (setup.md §8) · no-native-traits / not-on-roadmap (architecture.md
+> §10.2.1).
 >
 > **Changelog (recent)**:
+> - v2607.2.0: **house-bar reforge (LAW + gates + routing).** External review accepted in part:
+>   added THE LAW + named gates JG0–JG4 (JG3 promotes architecture.md §10 from
+>   read-when-needed to a first-class gate — fires the moment a package outgrows one file);
+>   added the Routing table (reciprocal cuts: implementing-and-debugging / refactoring-code
+>   co-fire order, proving-theorems, running-python-tools) — the sibling side had these landed
+>   since 2026-07-04/05, this side was missing (F2 asymmetry). Trigger set overhauled: fire set
+>   gains the architecture asks (include order, circular deps, submodule-vs-subpackage,
+>   weakdeps, piracy, public/export, ambiguity, invalidation), no-fire set rebuilt as true
+>   near-misses. Dated-facts registry added (grep `[dated:`). `tests/forge-verification-ledger.md`
+>   added (F3 was incomplete: trigger set only, no findings ledger).
 > - v2607.1.1: **Effective Julia gap patch.** Added the missing guardrails surfaced by the
 >   `let`/`const` + "Effective Julia" near-miss: `let` is a scope/fresh-binding tool (not normal
 >   declaration syntax), `const` is global/const-field only; `Val` is a type-domain contract, not
@@ -66,6 +86,44 @@ description: >-
 > - v2606.3.x: AD layer restructured around DifferentiationInterface + ADTypes as the single
 >   frontend; Chairmarks the default benchmarker; §4 package tables rewritten.
 > - v2604.2.0: §2.0 numerical methodology discipline added (FD / grid / lerp forbidden by default).
+
+## THE LAW
+
+> A fast implementation of the wrong method is still wrong, and an idiomatic-looking Julia file
+> can still be a Python program in disguise. Precedence: **method before speed, types before
+> tuning, architecture before growth.** §2.0 (methodology) and §1 (pitfalls) are read FIRST and
+> outrank everything in `references/`; and the moment a package outgrows one file, its structure
+> passes the architecture gate (JG3) — not "when someone asks about architecture."
+
+## The gates — JG0–JG4, each with a checkable artifact
+
+| Gate | Rule | Artifact |
+|---|---|---|
+| **JG0 methodology** (§2.0, deny-gate) | FD derivative estimation / grid sampling / lerp-as-evaluation **FORBIDDEN by default**; long-running scripts flush per step | an invoked exception carries a **one-line comment in the code** naming which permitted exception applies — no comment = violation |
+| **JG1 pitfalls** (§1) | 1-indexing, `.*` vs `*`, no globals in hot loops, typed containers, `let`/`const` semantics | §9 Correctness checklist rows green |
+| **JG2 type discipline** (performance.md §2.1) | concrete/parametric struct fields; function barrier for runtime-typed data; dispatch discipline SCOPED to hot paths — never "ban dispatch" | **JET** `report_package` clean (or reports justified); `@code_warntype`/DispatchDoctor on must-be-fast fns |
+| **JG3 ARCHITECTURE** (architecture.md §10) ★ | **Fires the moment a package outgrows ONE file, adds a dep/extension, or defines public API** — do not wait to be asked: one top-level module; ALL `include`s in the boss file in dependency order (an `include` in a subfile is a defect); circular type deps → hoist to `interfaces.jl`; growth → **subpackage/interface package, not submodules**; optional/heavy deps → **`[weakdeps]` extensions, not Requires.jl**; API via `export`/`public`; **no type piracy, no non-const globals**; cross-hierarchy behavior → inferable Holy trait | **Aqua** `test_all` clean (piracy/ambiguities/stale deps); boss-file include order readable top-to-bottom; ExplicitImports clean |
+| **JG4 reproducibility** (setup.md) | `--project=.` on every invocation; `Project.toml`+`Manifest.toml` committed; no declared-but-unused deps; experiment scripts follow the DrWatson lifecycle | `Pkg.status` matches `using`s; §9 Environment rows green |
+
+## Routing — sibling cuts (reciprocal; the sibling side landed 2026-07-04/05)
+
+| Sibling | Cut |
+|---|---|
+| `implementing-and-debugging` | **Co-fire on any non-trivial Julia feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Julia looks like inside that frame (JG0–JG4). Its reciprocal row: "language skills own correctness/perf idiom." |
+| `refactoring-code` | **Co-fire on any behavior-preserving Julia restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Julia-specific oracle components (JET / Aqua / `report_package` as the green bracket) and the Julia-safe transforms (JG3: include-order moves, subpackage extraction, weakdeps migration). A Julia refactor that improves no named property is still 場当たり churn — its G3 applies unchanged. |
+| `proving-theorems` | PURPOSE cut: formalizing/machine-checking a THEOREM (Lean, proof assistants) → there, even when the math started life as Julia numerics. Numerical computation/experiment in Julia → here. "Port this Julia result to a formal proof" → there, this stays for the Julia side only. |
+| `running-python-tools` | LANGUAGE cut: Python CLIs/scripts/uv/pip territory → there. Calling Python FROM Julia (SymPyPythonCall, PythonCall/juliacall boundary) → HERE — that is a Julia dependency-architecture decision (JG3/packages.md), not Python tooling. |
+| `raising-resolution` | Silent sub-step (its owner-filter chain routes Julia work here): inspect the actual code/env (`versioninfo()`, `Pkg.status`, `@which`) before asserting a Julia fact. |
+
+## MUST NOT FIRE
+
+A question ABOUT the Julia ecosystem with no code to write (licensing, history, "what is JuliaHub")
+— plain answer. Prose/docs ABOUT a Julia project (README, paper text → `linting-prose` /
+`structuring-documents`). Formal proofs (→ `proving-theorems`). Python/R/C++ numerics with no Julia
+in play (Python tooling → `running-python-tools`). The full near-miss set is
+`tests/trigger-set.md` — desk-check it after any description edit.
+
+---
 
 This skill provides coding rules partitioned by consequence. **Read §1 and §2.0 below first** —
 they set precedence: a fast implementation of the wrong method is still wrong. Then open the

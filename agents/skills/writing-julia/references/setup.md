@@ -206,7 +206,9 @@ deployment target:
 
 "Can Julia produce a shared library?" — **yes, stably, and it has for years.** Only the *small
 trimmed* variant is unstable. Never answer "Julia can't make a .so", and never default to trim.
-(Facts verified against PackageCompiler docs / julia release branches, 2026-07-03.)
+(Facts verified against PackageCompiler docs / julia release branches `[dated:2026-07]` — the
+trim status row below is the fastest-moving fact in this skill; re-verify per the staleness
+registry, SKILL.md header.)
 
 | | Route A — PackageCompiler `create_library` | Route B — `juliac --trim` |
 |---|---|---|
@@ -357,8 +359,9 @@ but separate workflow; the tools below shine when a JIT-warm REPL is preserved a
   preserved across edits — irrelevant to one-shot `julia -e` processes (nothing to keep warm).
 - **TestItems.jl / ReTestItems.jl** — modern test discovery integrated with the VS Code Julia
   extension (`@testitem` blocks).
-- **JETLS** — new compiler-powered language server (needs 1.12+); will replace LanguageServer.jl
-  as the VS Code default; real-time type-error diagnostics while editing.
+- **JETLS** — new compiler-powered language server (needs 1.12+); slated to replace
+  LanguageServer.jl as the VS Code default `[dated:2026-07]` (re-check before recommending as
+  default); real-time type-error diagnostics while editing.
 - **Cthulhu.jl** — interactive descend into inferred IR; use when `@code_warntype` is too
   shallow (performance.md §2.1).
 - **Debugger.jl / Infiltrator.jl** — interactive REPL debugging.

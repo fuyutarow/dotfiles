@@ -1,11 +1,11 @@
 ---
-name: transcribe-media
+name: transcribing-media
 description: Transcribe speech from any audio or video file (or URL) to text / subtitles using Whisper, run through uv — no global installs. On Apple Silicon use mlx-whisper (fastest); portable fallback is faster-whisper (whisper-ctranslate2), reference fallback is openai-whisper. Pipeline is always video/audio → ffmpeg-decoded audio → Whisper STT → txt/srt/vtt/json. Trigger whenever the user wants to transcribe, caption, or subtitle a `.mp4`/`.mov`/`.m4a`/`.wav`/`.mp3` (or YouTube/URL), asks for 文字起こし / 字幕 / キャプション, or mentions whisper/STT/speech-to-text/transcription.
 ---
 
 # Media transcription via Whisper (uv)
 
-**Goal: turn an audio/video file (or URL) into text or subtitles, locally, with zero global installs.** Every Python tool runs through `uv` — this skill is a specialization of the `uvx-python` skill. Read that skill's rule (never `pip install`) first; it applies here.
+**Goal: turn an audio/video file (or URL) into text or subtitles, locally, with zero global installs.** Every Python tool runs through `uv` — this skill is a specialization of the `running-python-tools` skill. Read that skill's rule (never `pip install`) first; it applies here.
 
 ```
 video/audio ──ffmpeg──▶ audio (wav/m4a) ──Whisper──▶ txt · srt · vtt · json
@@ -97,9 +97,9 @@ uvx --from mlx-whisper mlx_whisper "dl.m4a" --model mlx-community/whisper-large-
 
 ## Notes / gotchas
 
-- **Invocation gotcha (command name ≠ package name — the `uvx-python` case):** the package is `mlx-whisper` but the executable is `mlx_whisper` (underscore) → always `uvx --from mlx-whisper mlx_whisper …`, never `uvx mlx-whisper`. Likewise faster-whisper ships the CLI `whisper-ctranslate2`, and openai-whisper ships `whisper` (use `uvx --from openai-whisper whisper`).
+- **Invocation gotcha (command name ≠ package name — the `running-python-tools` case):** the package is `mlx-whisper` but the executable is `mlx_whisper` (underscore) → always `uvx --from mlx-whisper mlx_whisper …`, never `uvx mlx-whisper`. Likewise faster-whisper ships the CLI `whisper-ctranslate2`, and openai-whisper ships `whisper` (use `uvx --from openai-whisper whisper`).
 - **Quote paths with spaces** (`"Coral demo.mp4"`) — common with `~/Downloads` files.
 - **CPU-only host?** Skip openai-whisper `large` (very slow); use `whisper-ctranslate2` with `--compute_type int8`.
 - **Long files (>30 min):** transcribe in the backend directly (Whisper chunks internally) rather than loading the whole thing yourself; consider `medium` for first-pass drafts.
 - **Diarization** (who-spoke-when) is out of scope for plain Whisper — needs `whisperx` or `pyannote`; add only if asked.
-- This skill never installs Python packages globally — see `uvx-python`. ffmpeg is the sole system dependency.
+- This skill never installs Python packages globally — see `running-python-tools`. ffmpeg is the sole system dependency.

@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**22 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**23 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Authored
@@ -33,6 +33,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 ### Coding & proofs
 
 - [`implementing-and-debugging`](implementing-and-debugging/) — Discipline for writing or fixing non-trivial code: understand intent, fix the root cause, avoid flailing.
+- [`refactoring-code`](refactoring-code/) — Behavior-preserving structural change toward 責務分界/局所化; harshly refuses 場当たり churn; enforces the two hats and name-your-oracle.
 - [`writing-julia`](writing-julia/) — Write correct, fast Julia for research — reach for it before any Julia coding or numerics.
 - [`writing-typescript`](writing-typescript/) — House TypeScript idioms (`satisfies` over `as`, `??` over `||`, ts-pattern, zod) when writing or reviewing `.ts`.
 - [`proving-theorems`](proving-theorems/) — Formalize and machine-check math proofs, with AI drafting and human-owned statement faithfulness.
@@ -46,7 +47,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 ### People & media
 
 - [`profiling-personality`](profiling-personality/) — Build a careful, provisional personality or compatibility read of someone from their text and behavior.
-- [`transcribe-media`](transcribe-media/) — Transcribe or subtitle audio/video with Whisper via uv — for 文字起こし and captions.
+- [`transcribing-media`](transcribing-media/) — Transcribe or subtitle audio/video with Whisper via uv — for 文字起こし and captions.
 
 ## Vendored (upstream)
 

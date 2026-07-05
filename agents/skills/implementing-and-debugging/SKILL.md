@@ -1,6 +1,6 @@
 ---
 name: implementing-and-debugging
-description: Discipline for the ACT of writing or fixing non-trivial code — the guards that stop flailing once you start changing things. Reconstruct the ORIGINAL code's design intent before any rewrite; scope the edit surface (which files, how many) before touching; ground each changed file against a reference implementation; fix the 病因 (root cause) not the 症状 (symptom) — no band-aid / 一時しのぎ / 場当たり patch; fear the change that makes it WORSE (regression); declare your unknowns; for a hard bug present a divide-and-conquer plan, not guesses. Use when implementing a feature, refactoring, or debugging — especially when a fix keeps missing, you're guessing at causes, or about to redesign code you haven't fully understood. Triggers: 実装, リファクタ, デバッグ, バグ修正, 思い付きdebug, 場当たり, 一時しのぎ, 根本原因, 症状 vs 病因, 意図を理解せず, なぜなぜ, "this fix isn't working", "keep guessing". Upstream fact-inspection is raising-resolution; forward bets/durability are acting-on-hypotheses; post-hoc diff review is /code-review. English skill; respond in the user's language (default Japanese).
+description: Discipline for the ACT of writing or fixing non-trivial code that CHANGES observable behavior — the guards that stop flailing once you start changing things. Reconstruct the ORIGINAL code's design intent before any rewrite; scope the edit surface (which files, how many) before touching; ground each changed file against a reference implementation; fix the 病因 (root cause) not the 症状 (symptom) — no band-aid / 一時しのぎ / 場当たり patch; fear the change that makes it WORSE (regression); declare your unknowns; for a hard bug present a divide-and-conquer plan, not guesses. Use when implementing a feature or debugging — especially when a fix keeps missing, you're guessing at causes, or about to redesign code you haven't fully understood. Triggers: 実装, 機能追加, デバッグ, バグ修正, 思い付きdebug, 場当たり(なバグ修正), 一時しのぎ, 根本原因, 症状 vs 病因, 意図を理解せず, なぜなぜ, "this fix isn't working", "keep guessing". DECISIVE cut = Beck's two hats: behavior-PRESERVING structural change (refactor / リファクタ / clean up / 責務分界 / extract-move-rename for structure, no behavior change) is refactoring-code, NOT here — the two co-fire in sequence for preparatory refactoring (reshape there, then change behavior here). Upstream fact-inspection is raising-resolution; forward bets/durability are acting-on-hypotheses; post-hoc diff review is /code-review. English skill; respond in the user's language (default Japanese).
 ---
 
 # Implementing & debugging — the discipline of the act
@@ -23,8 +23,10 @@ description: Discipline for the ACT of writing or fixing non-trivial code — th
 
 Do **not** invoke on a typo, a rename, a one-line obvious edit, a mechanical change, or any task
 you could describe in one sentence. Gating a trivial edit behind this discipline is this skill
-failing. It fires on **non-trivial** implementation/refactor, or a debug that is **not going
-cleanly** (a fix that keeps missing, guessing at causes, about to rewrite unfamiliar code).
+failing. It fires on **non-trivial** behavior-changing implementation, or a debug that is **not going
+cleanly** (a fix that keeps missing, guessing at causes, about to rewrite unfamiliar code). A
+**behavior-preserving** restructuring (structure only, no behavior change) is `refactoring-code`, not
+here (Beck's two hats).
 
 ## The BUILD gate — before implementing something non-trivial
 
@@ -70,6 +72,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 
 | Sibling | Cut |
 |---|---|
+| `refactoring-code` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **No** (structure only — refactor, clean up, extract/move/rename for structure, 責務分界/局所化, break deps to add tests, Strangler/Branch-by-Abstraction) → there. **Yes** (add/change a feature, fix a bug) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor there (hat 1, own commit) → behavior change here (hat 2). One diff doing both violates the two hats — split it. |
 | `raising-resolution` | DECISIVE cut: "am I about to *speculate instead of inspect a present fact*?" → there (upstream, content-agnostic, produces no artifact). "Am I about to *write/change code* and need to do it without flailing?" → here. It runs as a silent sub-step inside every gate above. |
 | `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. Forward bets (spike/MVP/will-it-scale) and **future-durability** (陳腐化しない設計) → there. Executing a defined change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
@@ -77,10 +80,12 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 
 ## Fire / no-fire
 
-FIRES: "implement / build this feature", refactor a non-trivial module, "debug this / このバグ直して",
-a fix that keeps missing, guessing at causes, about to rewrite code you don't fully understand,
-"なぜ動かないのか分からない", 場当たり的な修正の兆候.
+FIRES: "implement / build this feature", add or change behavior in a non-trivial module, "debug this
+/ このバグ直して", a fix that keeps missing, guessing at causes, about to rewrite code you don't fully
+understand, "なぜ動かないのか分からない", 場当たり的な*バグ修正*の兆候.
 
-MUST NOT fire: a typo / rename / one-line obvious edit · a purely mechanical change · a request
-to *inspect a fact* with no change pending (→ `raising-resolution`) · deciding whether to *bet on*
-an approach (→ `acting-on-hypotheses`) · reviewing an already-written diff (→ `/code-review`).
+MUST NOT fire: a typo / rename / one-line obvious edit · a purely mechanical change · a
+**behavior-preserving refactor / cleanup** (structure only, no behavior change) (→ `refactoring-code`,
+Beck's two hats) · a request to *inspect a fact* with no change pending (→ `raising-resolution`) ·
+deciding whether to *bet on* an approach (→ `acting-on-hypotheses`) · reviewing an already-written
+diff (→ `/code-review`).

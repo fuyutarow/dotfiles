@@ -3,7 +3,9 @@
 # Source of truth: ~/dotfiles/agents/claude/statusline-command.sh
 #   -> symlinked to ~/.claude/statusline-command.sh by scripts/link-dots.sh
 #   line 1: PS1 mirror   user@host:MM-DD HH:MM|cwd    (mirrors .zshrc PROMPT)
-#   line 2: Model: <name> | Ctx: <tok>k | <git branch> | (+added,-removed)
+#   line 2: Model: <name> | Eff: <effort> | Ctx: <tok>k | <git branch> | (+added,-removed)
+#   Eff segment: live /effort level (.effort.level); omitted when the model has no
+#   reasoning-effort param (field absent). ultracode reports as xhigh.
 # Input: JSON via stdin from Claude Code.
 
 input=$(cat)
@@ -43,9 +45,10 @@ fields=$(printf '%s' "$input" | jq -r '[
   (.model.id // ""),
   (.context_window.total_input_tokens // .context_window.current_usage.input_tokens // 0),
   (.cost.total_lines_added // 0),
-  (.cost.total_lines_removed // 0)
+  (.cost.total_lines_removed // 0),
+  (.effort.level // "")
 ] | @tsv')
-IFS="$TAB" read -r cwd model model_id ctx_tok add del << EOF
+IFS="$TAB" read -r cwd model model_id ctx_tok add del effort << EOF
 $fields
 EOF
 [ -n "$cwd" ] || cwd="$PWD"
@@ -74,6 +77,7 @@ branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2> /dev/null)
 # --- render ---
 line1 "$cwd"
 printf '\033[38;5;30mModel:\033[0m %s' "$model"
+[ -n "$effort" ] && printf ' \033[2m|\033[0m \033[38;5;209mEff:\033[0m %s' "$effort"
 printf ' \033[2m|\033[0m \033[38;5;66mCtx:\033[0m %s' "$ctx"
 [ -n "$branch" ] && printf ' \033[2m|\033[0m \033[38;5;96m\342\216\207 %s\033[0m' "$branch"
 printf ' \033[2m|\033[0m \033[38;5;178m(+%s,-%s)\033[0m' "$add" "$del"

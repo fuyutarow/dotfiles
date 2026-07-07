@@ -8,6 +8,8 @@
 #         the model has no reasoning-effort param (field absent). ultracode -> xhigh.
 #   Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
 #   Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
+#         5h also shows its reset as ⟳HH:MM(remaining) from .five_hour.resets_at (epoch s);
+#         omitted when the field is absent (7d unchanged — reset shown for 5h only).
 #   wt:   worktree.name — shown only in --worktree sessions.
 #   Fit:  the whole of line 2 stays on one row when the pane is wide; when it would
 #         overflow $COLUMNS, the Rate/wt/branch/diff tail wraps onto a 3rd row. Claude
@@ -61,9 +63,10 @@ fields=$(printf '%s' "$input" | jq -r '[
   (.rate_limits.five_hour.used_percentage // ""),
   (.rate_limits.seven_day.used_percentage // ""),
   (.thinking.enabled // false),
-  (.worktree.name // "")
+  (.worktree.name // ""),
+  (.rate_limits.five_hour.resets_at // "")
 ] | map(tostring) | join("\u001f")')
-IFS="$US" read -r cwd model model_id ctx_tok add del effort ctx_pct rl5 rl7 thinking wt << EOF
+IFS="$US" read -r cwd model model_id ctx_tok add del effort ctx_pct rl5 rl7 thinking wt rl5_reset << EOF
 $fields
 EOF
 [ -n "$cwd" ] || cwd="$PWD"
@@ -104,6 +107,20 @@ pct_fmt() {
   PCOL=${_pf#* }
 }
 
+# Rate-limit reset epoch (s) -> "⟳HH:MM(<h>h<mm>m)" local clock + time remaining.
+# Portable: BSD `date -r <epoch>` (mac) is tried first, GNU `date -d @<epoch>` (WSL)
+# is the fallback (on GNU, `-r <n>` fails as "no such file" and drops through). Sets
+# $RRESET; guarded by caller on empty input, and blanked if both date variants fail.
+rate_reset() {
+  RRESET=""
+  [ -n "$1" ] || return 0
+  _rc=$(date -r "$1" +%H:%M 2> /dev/null || date -d "@$1" +%H:%M 2> /dev/null)
+  [ -n "$_rc" ] || return 0
+  _rr=$(awk -v s="$(($1 - $(date +%s)))" \
+    'BEGIN{ if(s<0)s=0; printf "%dh%02dm", int(s/3600), int(s%3600/60) }')
+  RRESET="${RSET}${_rc}(${_rr})"
+}
+
 # Escapes/glyphs as vars so segments can be assembled into strings (then measured &
 # fitted to width). ESC-based, so `printf '%s'` emits them literally later.
 ESC=$(printf '\033')
@@ -113,6 +130,7 @@ SEP=" ${DIM}|${RST} "
 SPARK=$(printf '\342\234\246') # ✦ extended-thinking marker
 MID=$(printf '\302\267')       # · meter middot
 BR=$(printf '\342\216\207')    # ⎇ git branch glyph
+RSET=$(printf '\342\237\263')  # ⟳ rate-limit reset marker
 
 # HEAD = identity: Model [| Eff ✦] | Ctx [· pct%]
 head="${ESC}[38;5;30mModel:${RST} ${model}"
@@ -133,6 +151,8 @@ if [ -n "$rl5" ] || [ -n "$rl7" ]; then
   [ -n "$rl5" ] && {
     pct_fmt "$rl5"
     tail="${tail} 5h ${ESC}[${PCOL}m${PCT}%${RST}"
+    rate_reset "$rl5_reset"
+    [ -n "$RRESET" ] && tail="${tail} ${DIM}${RRESET}${RST}"
   }
   [ -n "$rl7" ] && {
     pct_fmt "$rl7"

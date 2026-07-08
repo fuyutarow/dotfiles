@@ -67,9 +67,14 @@ For every objection the red-team surfaces, **triage by answerability** and route
      a stated bias direction*, not a confession.
    - **Unanswerable-but-survivable** → state as an explicit **scoped limitation** ("we do not claim …;
      future work"), not a full engagement you will lose.
-   - **Fatal-if-true** → either **resolve it with evidence** (run the experiment, add the proof) or, if
-     you cannot, do **not** raise it unprompted — but know it is the paper's real weakness. Pre-emption
-     is a scalpel, not a confession.
+   - **Fatal-if-true** → **resolve it with evidence** (run the experiment, add the proof) OR **rescope
+     the governing claim** so the objection no longer reaches it (retreat to the regime you can defend).
+     If it is actually true and you can do neither, the paper is **not ready** — that is a submission
+     block, not something to keep quiet about and ship. You need not *volunteer* a speculative kill-shot
+     that is neither certain-to-be-raised nor actually true (pre-emption is a scalpel), but an
+     **unresolved fatal-if-true that is real is never "ship silently" — it is "the claim is not yet
+     defensible."** Shipping a claim you know is fatally flawed is the record-surface-completeness
+     violation the LAW forbids, not a rhetorical option.
    - **Certain-to-be-raised regardless** → you **must** address it; omitting the objection a reviewer
      will certainly raise is the losing move.
 3. **Route** surviving-but-narrow objections to a **backup / appendix** (the exhaustive defense for

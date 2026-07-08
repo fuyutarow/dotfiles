@@ -51,6 +51,12 @@ function has_named_ref(v){
   return 0
 }
 function has_unfilled_template(v){ return (v ~ /\[X\]|\[Y\]|\[Z\]/) }
+# A value that is WHOLLY one [ ... ] bracket is an unfilled deferral ([VERIFY], [CITATION NEEDED — …],
+# [VALUE], [BASELINE …], [STAT …]). These are the SANCTIONED anti-fabrication placeholder for the G2
+# evidence ANCHOR ONLY (SKILL.md §G2 / calibration.md §6). Everywhere else a bracket-only value means
+# the gate is not filled -> FAIL. So ph() is applied to every load-bearing slot EXCEPT the anchor.
+function is_bracket_ph(v){ return (v ~ /^\[[^]]*\]$/) }
+function ph(v){ return (is_placeholder(v) || is_bracket_ph(v)) }
 
 /[Gg]overning claim/            && g1c!=1 { v=value_after_last_colon($0); g1cv=v; g1c=1 }
 /[Ii]nstability.*cost|reader-cost/ && g1k!=1 { v=value_after_last_colon($0); g1kv=v; g1k=1 }
@@ -75,10 +81,10 @@ END{
 
   # ---- G1 ----
   if(!g1c)                        { print "G1  MISSING  『Governing claim』の行が無い"; fails++ }
-  else if(is_placeholder(g1cv))   { print "G1  FAIL     governing claim 未記入 -> まだ主張が絞れていない (絞る)"; fails++ }
+  else if(ph(g1cv))               { print "G1  FAIL     governing claim が未記入/placeholder ([VERIFY] 等) -> まだ主張が絞れていない (絞る)"; fails++ }
   else                            { print "G1  PASS     governing claim あり" }
   if(!g1k)                        { print "G1  MISSING  『Instability + reader-cost』の行が無い"; fails++ }
-  else if(is_placeholder(g1kv))   { print "G1  FAIL     instability/cost 未記入 -> gap without a cost は problem ではない"; fails++ }
+  else if(ph(g1kv))               { print "G1  FAIL     instability/cost が未記入/placeholder -> gap without a cost は problem ではない"; fails++ }
   else                            { print "G1  PASS     instability + reader-cost あり" }
 
   # ---- G2 ----
@@ -90,18 +96,18 @@ END{
     if (g2av ~ /[0-9]/ && g2av !~ /\[VERIFY|\[VALUE|\[CITATION|\[BASELINE|\[STAT/) {
       print "G2  WARN     anchor に数値があるが [VERIFY]/[VALUE] placeholder も locus 明示も無い -> 実在確認 or placeholder 化 (捏造禁止, calibration.md §6)"; warns++ }
   }
-  if(!g2s)                        { print "G2  WARN     『Scope qualifier』の行が無い -> claim の scope を hedge したか不明"; warns++ }
-  else if(is_placeholder(g2sv))   { print "G2  WARN     scope qualifier 未記入 -> \"in regime S ... unless Y\" を書く (scope-hedge/importance-bold)"; warns++ }
+  if(!g2s)                        { print "G2  FAIL     『Scope qualifier』の行が無い -> scope を hedge していない (SKILL.md §G2 の必須 artifact)"; fails++ }
+  else if(ph(g2sv))               { print "G2  FAIL     scope qualifier が未記入/placeholder -> \"in regime S ... unless Y\" を書く (scope-hedge/importance-bold)"; fails++ }
   else                            { print "G2  PASS     scope qualifier + rebuttal あり" }
 
   # ---- G3 ----
   if(!g3p)                        { print "G3  MISSING  『Nearest prior work』の行が無い"; fails++ }
-  else if(is_placeholder(g3pv))   { print "G3  FAIL     positioning 未記入"; fails++ }
+  else if(ph(g3pv))               { print "G3  FAIL     positioning が未記入/placeholder ([CITATION NEEDED] 等) -> 具体の prior を NAMED で"; fails++ }
   else if(has_unfilled_template(g3pv)) { print "G3  FAIL     positioning が template のまま ([X]/[Y]/[Z]) -> 具体の prior method と gap を名指し"; fails++ }
   else if(!has_named_ref(g3pv))   { print "G3  FAIL     bare positioning -> 具体の prior work を NAMED で (\"unlike prior work\" 禁止, CARS Move 2)"; fails++ }
   else                            { print "G3  PASS     named prior work + gap あり" }
   if(!g3o)                        { print "G3  MISSING  『reviewer objection』の行が無い"; fails++ }
-  else if(is_placeholder(g3ov))   { print "G3  FAIL     sharpest objection 未記入 -> red-team を回す (reviewer-defense.md §2)"; fails++ }
+  else if(ph(g3ov))               { print "G3  FAIL     sharpest objection が未記入/placeholder -> red-team を回す (reviewer-defense.md §2)"; fails++ }
   else                            { print "G3  PASS     hostile-reviewer objection あり" }
 
   # ---- whole-spec deny-list (advisory) ----

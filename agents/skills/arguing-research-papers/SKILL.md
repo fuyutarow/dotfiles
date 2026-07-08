@@ -93,6 +93,10 @@ not-yet-ready there (never paper over it with fluent prose).
 ```markdown
 # Claim spec: [paper working title]
 
+## G0 — materials audit (fill FIRST; a missing item becomes a placeholder below, never a confident assertion)
+- In hand: results/figures/theorems (by locus) · nearest prior (retrievable, read) · target venue + reward: [...]
+- Missing → mark `[VERIFY]`/`[CITATION NEEDED]` here and do NOT assert it downstream as if held: [...]
+
 ## G1 — the one claim (絞る)
 - Governing claim (ONE sentence, "This paper shows that ___"): [...]
 - Instability + reader-cost (who in the community pays what if this stays unknown): [...]
@@ -122,6 +126,12 @@ overclaiming?", "reframe this one claim", "is this positioning real?"), skip the
 straight to the cited reference and answer; the full spec + floor are for drafting or auditing a WHOLE
 argument, not a single-claim question.
 
+0. **G0 — materials audit (do you HAVE the evidence, or only a summary?).** List what is actually in
+   hand vs. taken on the user's word: the **results** (tables/figures/theorems, citable by locus), the
+   **nearest prior work** (retrievable/read, not recalled), the **target venue**. Every item you do NOT
+   have becomes an explicit `[VERIFY]`/`[CITATION NEEDED]` placeholder — never a confident assertion
+   built on a paraphrase (that is how fabrication and mis-positioning enter). *Fast-path single-claim
+   diagnostics are exempt; this is for drafting/auditing a WHOLE argument.* → `references/calibration.md` §6.
 1. **Reset the goal** (McEnerney). Not "explain what I did" → "change what this community believes."
    Name the reader community, its accepted belief, and its doubt. → `references/reconciliation.md` §5.
 2. **Fill the CLAIM SPEC** (G1–G3 above). Write to discover the claim if you don't have it yet; the
@@ -249,7 +259,7 @@ placeholder. **An agent that agrees the claim is great is not evidence; an agent
 
 | Stage | Mode | Why |
 |---|---|---|
-| Reset goal · fill CLAIM SPEC · **the governing claim & its calibration** · the reconciliation moderators · commit to a position | **SOLO — never shard** | the argument must sit in one context; assembled from shards it is not an argument |
+| **G0 materials audit** · reset goal · fill CLAIM SPEC · **the governing claim & its calibration** · the reconciliation moderators · commit to a position | **SOLO — never shard** | the argument must sit in one context; assembled from shards it is not an argument. Calibration still **consumes** the fan-out red-team + fact-check below (domain evidence feeds IN); only the final synthesis & signature are SOLO |
 | **Reviewer red-team** (3–5 skeptics, one lens each: novelty/significance · soundness/evidence · related-work completeness · reproducibility · clarity) | **FAN-OUT, read-only** | independent hostile lenses catch what one context won't; **refutation-prompted** — name the LENS, never the expected finding |
 | Citation / number / baseline / prior-work **verification** | **FAN-OUT, read-only** | fetch the real source; return locus or "[VERIFY]" — never a plausible-looking reference |
 | Fixing the claim / conceding / the rebuttal | **SOLO** | findings braid; one author signs every concession and every claim |

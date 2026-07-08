@@ -51,17 +51,41 @@ stripped=$(printf '%s\n' "$turn_text" \
 # (^|[^A-Za-z]) = word boundary, so GitHub/JavaScript (uppercase-initial) never match via an
 # internal lowercase run; [a-z] first char ⇒ English verbs (commit/cite), not proper nouns.
 # The conjugation list is EXHAUSTIVE across voice/tense/aspect on purpose: the passive-past
-# `された` gap let `flag された` slip an entire session (2026-07-05) while `される` was present.
+# `された` gap let `flag された` slip an entire session (2026-07-05) while `される` was present;
+# the causative/desiderative gap let `improveさせたい` slip (2026-07-06) while plain する was
+# present — させ*/したい/したく forms added the same day.
 # The lowercase-latin guard still exempts 漢語 passives (`解消されている` has no latin ⇒ PASS).
-# Regression cases — BLOCK: `flag された` / `sweep されない` / `citeする` / `de-risk する`;
+# Regression cases — BLOCK: `flag された` / `sweep されない` / `citeする` / `de-risk する` /
+#                           `improveさせたい` / `refactorさせる` / `deployしたい`;
 #                    PASS : `解消されている` / `commit を実行する` / `GitHubした` / `設計した`.
-printf '%s' "$stripped" \
-  | grep -Eoq '(^|[^A-Za-z])[a-z][a-zA-Z]+ *(する|します|した|して|している|していた|しています|しており|される|された|されて|されない|されました|できる|できた|できない|しない|しなかった|せず|しよう|すれば|すべき|しろ|せよ)' \
-  || exit 0
-
-cat >&2 << 'MSG'
+if printf '%s' "$stripped" \
+  | grep -Eq '(^|[^A-Za-z])[a-z][a-zA-Z]+ *(する|します|した|して|している|していた|しています|しており|される|された|されて|されない|されました|できる|できた|できない|しない|しなかった|せず|しよう|すれば|すべき|しろ|せよ|させる|させます|させた|させて|させている|させたい|させない|させず|させよう|したい|したく|したければ)'; then
+  cat >&2 << 'MSG'
 Code-switching: you calqued an English verb onto する (e.g. "commitする").
 Rewrite it — katakana verb (コミットする) or Japanese verb (引用する / 実行する).
 Latin verbs never take する directly; this is register-independent (linting-prose hygiene corollary).
 MSG
-exit 2
+  exit 2
+fi
+
+# ── layer 2: loan-NOUN density, delegated to `qlint codemix` (2026-07-06 user 直命「根治・proactive slop lint」) ──
+# The calque grep above catches VERBS (deterministic, always-wrong). Loan NOUNS (`gate へ落とす`
+# `judge に丸投げ` `residue へ登録`) are register-relative, so no enumeration here — judgment is
+# DELEGATED to the one corpus engine (qlint codemix: latin density per JA paragraph; identifiers
+# with _/digits, ALLCAPS acronyms (POVM/SDP), and taxonomy-registered terms are engine-exempt).
+# Threshold 8/100字, calibrated on session material (2026-07-06): the assistant's real slop
+# reply = 10, its clean rewrite = 0, legitimate technical prose (POVM/Fisher/OED) = 0.
+# Paragraphs under 40 JA chars are engine-skipped ⇒ short/English replies never fire.
+# FAIL-SAFE: no qlint on PATH (`cargo install --path lint/qlint` in qoed) ⇒ this layer is silent.
+if command -v qlint > /dev/null 2>&1; then
+  hot=$(printf '%s\n' "$stripped" | qlint codemix --threshold 8 2> /dev/null | grep -c '^⚑') || true
+  if [ "${hot:-0}" -gt 0 ]; then
+    {
+      printf '%s\n' "$stripped" | qlint codemix --threshold 8 2> /dev/null | head -8
+      echo 'ルー語密度: この返答の段落が閾値 8 latin/100字 を超えた（上に段落と語彙）。'
+      echo '英単語を対訳やカタカナの衣で残さず、概念を日本語の文で書き直すこと。記号・ALLCAPS 略語・taxonomy 登録語は判定から除外済み。'
+    } >&2
+    exit 2
+  fi
+fi
+exit 0

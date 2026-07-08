@@ -1,5 +1,6 @@
 ---
 description: Alias — deliberately fire BOTH 馬田隆明 skills on one task, in order: raising-resolution (inspect present facts, citation gate) then acting-on-hypotheses (map/loop/leap, cheapest falsifying test, kill condition). All the craft lives in the two skills; this command only triggers them together.
+argument-hint: [TASK]
 disable-model-invocation: true
 ---
 

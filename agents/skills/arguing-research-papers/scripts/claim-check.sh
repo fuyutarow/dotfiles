@@ -1,10 +1,15 @@
 #!/bin/sh
 # claim-check.sh — FLOOR check for a filled arguing-research-papers CLAIM SPEC.
 #
-# Verifies the STRUCTURAL presence of the load-bearing artifacts of the three gates:
+# Verifies the STRUCTURAL presence of the load-bearing artifacts of the gates:
+#   G0  materials     — the "In hand" audit line (what results/priors/venue actually exist), filled
 #   G1  絞る          — governing claim (ONE) + instability/reader-cost, non-empty & non-placeholder
-#   G2  calibrate     — evidence anchor + scope qualifier present; scans for fabrication-risk & superlatives
+#   G2  calibrate     — evidence anchor + scope qualifier (BOTH required; scope missing = FAIL);
+#                       scans for fabrication-risk & superlatives
 #   G3  position      — nearest NAMED prior work (NOT bare "unlike prior work") + a reviewer objection
+# Placeholder discipline: a slot whose value is WHOLLY a [ ... ] bracket ([VERIFY] etc.) counts as
+# UNFILLED (FAIL) — except the G2 anchor, where the bracket is the sanctioned anti-fabrication
+# deferral (calibration.md §6).
 #
 # THIS IS NOT A SEMANTIC CHECK. It cannot tell whether an anchor really licenses its claim, whether a
 # "gap" is consequential, or whether a citation is real — only whether the slots are filled, the
@@ -16,6 +21,11 @@
 #
 # Portable across BSD awk (macOS default) and gawk (Linux/WSL): full-width colon normalized to ASCII;
 # value taken after the LAST colon (labels contain parenthetical colons); UTF-8 keeps 0x3A ASCII-only.
+#
+# Spec contract (SKILL.md CLAIM SPEC): slot labels are grep-anchors — keep them verbatim (English),
+# ONE line per slot, the value ON the label line (a value on the next line reads as empty -> FAIL).
+# Slot lines are matched at bullet-label START (- Label: / **Label**:) so prose mentioning a label
+# phrase cannot steal a slot.
 
 input="${1:-}"
 if [ -z "$input" ] || [ "$input" = "-" ]; then
@@ -38,7 +48,7 @@ function value_after_last_colon(line,   v,i,p){
 function is_placeholder(v){
   if (v=="") return 1
   if (v ~ /^\[\.\.\.\]$|^\[…\]$|^\[ *\]$/) return 1                 # the unfilled [...] template slot
-  if (v ~ /^(未回答|未記入|未定|TBD|N\/?A|NA|-|—|ー|―|\?+|\.\.\.)$/) return 1
+  if (v ~ /^(未回答|未記入|未定|TBD|N\/?A|NA|[Nn]one( yet)?|[Nn]othing|なし|-|—|ー|―|\?+|\.\.\.)$/) return 1
   return 0
 }
 # a "named" token: a citation year, a Capitalized multi-char name, or a quoted/bracketed real name
@@ -55,15 +65,32 @@ function has_unfilled_template(v){ return (v ~ /\[X\]|\[Y\]|\[Z\]/) }
 # [VALUE], [BASELINE …], [STAT …]). These are the SANCTIONED anti-fabrication placeholder for the G2
 # evidence ANCHOR ONLY (SKILL.md §G2 / calibration.md §6). Everywhere else a bracket-only value means
 # the gate is not filled -> FAIL. So ph() is applied to every load-bearing slot EXCEPT the anchor.
-function is_bracket_ph(v){ return (v ~ /^\[[^]]*\]$/) }
-function ph(v){ return (is_placeholder(v) || is_bracket_ph(v)) }
+function is_bracket_ph(v,   t){
+  # wholly-placeholder = starts with "[" and nothing but [..] segments + separators remains.
+  # Catches the compound forms the template itself teaches ([VERIFY]/[CITATION NEEDED],
+  # "[VERIFY] [VERIFY]", nested "[VERIFY (see [3])]") while "Table 3 [VERIFY] on C-bench"
+  # and "[VERIFY] ただし低SNR域では成立見込み" (real content outside brackets) still pass.
+  t=v
+  gsub(/\[[^]]*\]/,"",t)                  # drop every [...] segment
+  gsub(/[][()\/ \t·・、,;:-]/,"",t)       # drop separators / stray bracket bits
+  return (v ~ /^\[/ && t=="")
+}
+function ph(v){
+  gsub(/［/,"[",v); gsub(/］/,"]",v)      # full-width brackets -> ASCII (JA-writing model)
+  gsub(/【/,"[",v); gsub(/】/,"]",v)
+  return (is_placeholder(v) || is_bracket_ph(v))
+}
 
-/[Gg]overning claim/            && g1c!=1 { v=value_after_last_colon($0); g1cv=v; g1c=1 }
-/[Ii]nstability.*cost|reader-cost/ && g1k!=1 { v=value_after_last_colon($0); g1kv=v; g1k=1 }
-/evidence anchor/               && g2a!=1 { v=value_after_last_colon($0); g2av=v; g2a=1 }
-/[Ss]cope qualifier/            && g2s!=1 { v=value_after_last_colon($0); g2sv=v; g2s=1 }
-/[Nn]earest prior work/         && g3p!=1 { v=value_after_last_colon($0); g3pv=v; g3p=1 }
-/reviewer objection|Sharpest.*objection/ && g3o!=1 { v=value_after_last_colon($0); g3ov=v; g3o=1 }
+# Slot capture: anchored to bullet-label START (kills prose-steal: "doma[in hand]-crafted",
+# a Sub-contributions label mentioning "governing claim", etc.). A later duplicate line may
+# OVERWRITE a still-placeholder capture (iterating agents append rather than rewrite).
+/^[ \t]*[-*][ \t*]*[Ii]n hand/                        { v=value_after_last_colon($0); if(!g0 || ph(g0v)) { g0v=v; g0=1 } }
+/^[ \t]*[-*][ \t*]*[Gg]overning claim/                { v=value_after_last_colon($0); if(!g1c || ph(g1cv)){ g1cv=v; g1c=1 } }
+/^[ \t]*[-*][ \t*]*([Ii]nstability|[Rr]eader-cost)/   { v=value_after_last_colon($0); if(!g1k || ph(g1kv)){ g1kv=v; g1k=1 } }
+/^[ \t]*[-*][ \t*]*([Ee]vidence anchor|[Pp]er claim.*anchor)/ { v=value_after_last_colon($0); if(!g2a || ph(g2av)){ g2av=v; g2a=1 } }
+/^[ \t]*[-*][ \t*]*[Ss]cope qualifier/                { v=value_after_last_colon($0); if(!g2s || ph(g2sv)){ g2sv=v; g2s=1 } }
+/^[ \t]*[-*][ \t*]*[Nn]earest prior/                  { v=value_after_last_colon($0); if(!g3p || ph(g3pv)){ g3pv=v; g3p=1 } }
+/^[ \t]*[-*][ \t*]*([Ss]harpest|[Rr]eviewer objection)/ { v=value_after_last_colon($0); if(!g3o || ph(g3ov)){ g3ov=v; g3o=1 } }
 
 # deny-list scans (references/calibration.md §7) — scan the VALUE of spec bullets, not the template
 # labels (else the scaffolding text itself trips the scan). Prose lines are scanned whole.
@@ -79,6 +106,11 @@ function ph(v){ return (is_placeholder(v) || is_bracket_ph(v)) }
 END{
   fails=0; warns=0
 
+  # ---- G0 ----
+  if(!g0)                         { print "G0  FAIL     『In hand』(materials audit) の行が無い -> 手元の results/priors/venue を監査してから主張を組む (SKILL.md G0)"; fails++ }
+  else if(ph(g0v))                { print "G0  FAIL     materials audit 未記入 -> 実際に手元にある物を列挙 (無い物は placeholder 化し下流で断言しない)"; fails++ }
+  else                            { print "G0  PASS     materials audit あり" }
+
   # ---- G1 ----
   if(!g1c)                        { print "G1  MISSING  『Governing claim』の行が無い"; fails++ }
   else if(ph(g1cv))               { print "G1  FAIL     governing claim が未記入/placeholder ([VERIFY] 等) -> まだ主張が絞れていない (絞る)"; fails++ }
@@ -93,7 +125,9 @@ END{
   else {
     print "G2  PASS     evidence anchor あり (中身が主張を licence するかは人が判定)"
     # fabrication-risk: a bare number / cite-shaped token with no placeholder token
-    if (g2av ~ /[0-9]/ && g2av !~ /\[VERIFY|\[VALUE|\[CITATION|\[BASELINE|\[STAT/) {
+    # WARN only when a number rides with NEITHER a placeholder NOR a stated locus (Table/Fig/…) —
+    # a locus-explicit anchor ("Table 3, 0.24") is the canonical CORRECT fill, not a risk.
+    if (g2av ~ /[0-9]/ && g2av !~ /\[VERIFY|\[VALUE|\[CITATION|\[BASELINE|\[STAT/ && g2av !~ /[Tt]able|[Ff]ig|[Tt]heorem|[Ll]emma|§|[Aa]ppendix|表|図|定理|補題|付録/) {
       print "G2  WARN     anchor に数値があるが [VERIFY]/[VALUE] placeholder も locus 明示も無い -> 実在確認 or placeholder 化 (捏造禁止, calibration.md §6)"; warns++ }
   }
   if(!g2s)                        { print "G2  FAIL     『Scope qualifier』の行が無い -> scope を hedge していない (SKILL.md §G2 の必須 artifact)"; fails++ }

@@ -138,8 +138,10 @@ reuse those, do not re-derive them here. (The *bulleted list* itself is a venue 
 
 **Disclose vs. don't-arm-the-reviewer → TRIAGE BY ANSWERABILITY.** Objections you can answer or bound:
 raise and engage in-text (inoculation raises credibility, pre-empts the review). Objections you cannot
-answer: convert to an explicitly stated scope/limitation ("we do not claim …; future work"), not a
-full engagement you will lose. **Never omit an objection the reviewer will certainly raise regardless**
+answer **but that are survivable** (they do not void the claim's anchor): convert to an explicitly
+stated scope/limitation ("we do not claim …; future work"), not a full engagement you will lose. A
+real — or undeterminable — **fatal-if-true** is never converted to a limitation: it is a submission
+block (resolve / rescope / stop — `reviewer-defense.md` §3 owns the triage). **Never omit an objection the reviewer will certainly raise regardless**
 — *undisclosed-but-discoverable is the losing quadrant.* Concede the survivable specifically; defend
 the load-bearing; do not hedge diffusely across every claim (uniform hedging reads as no result).
 

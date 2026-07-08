@@ -136,7 +136,7 @@ finding, why-this-venue, competing-interest + suggested/opposed reviewers) and t
 statement** (e.g. PNAS's is a short non-technical word cap [venue-fact — re-verify]). These are maximally editor-register assertive
 (`reconciliation.md` §3, editor-vs-reviewer).
 
-## §5 — Two cross-cutting tools
+## §5 — Cross-cutting tools
 
 - **Contribution type (Michael Black — "Novelty in Science").** Reviewers conflate novelty with
   technical *complexity*, so a simple idea reads as "not novel". State explicitly **which kind** of
@@ -148,3 +148,12 @@ statement** (e.g. PNAS's is a short non-technical word cap [venue-fact — re-ve
   three datasets"), then the evidence — not a topic label ("Results on CIFAR"). Eliminate ambiguous
   referents ("this", "it") and vague quantifiers so a reviewer cannot read a weaker/stronger claim than
   intended. (The *wording* of the caption is `linting-prose`; *which claim the caption asserts* is here.)
+- **Resource / artifact papers (dataset · benchmark · software · model · corpus).** A distinct
+  contribution whose value is *a reusable OBJECT the community adopts*, not *a belief changed* — so the
+  McEnerney value-reset re-points: the reader-cost is **what they cannot currently do / measure without
+  this**, and the claim gains object-specific slots the belief-frame omits — **coverage /
+  representativeness**, **access & format** (how to obtain and use it), **license** (reuse terms; an
+  unclear or restrictive license kills adoption), **maintenance / versioning** (who keeps it alive), and
+  **reuse evidence** (baselines run on it, early adoption, comparison to existing resources). Novelty
+  here = "no existing resource covers this need," not technical complexity; position (CARS Move 2 still
+  applies) against the nearest EXISTING resource by a **coverage / access / quality** gap.

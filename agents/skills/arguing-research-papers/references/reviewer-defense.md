@@ -67,19 +67,28 @@ For every objection the red-team surfaces, **triage by answerability** and route
      a stated bias direction*, not a confession.
    - **Unanswerable-but-survivable** → state as an explicit **scoped limitation** ("we do not claim …;
      future work"), not a full engagement you will lose.
-   - **Fatal-if-true** → **resolve it with evidence** (run the experiment, add the proof) OR **rescope
-     the governing claim** so the objection no longer reaches it (retreat to the regime you can defend).
-     If it is actually true and you can do neither, the paper is **not ready** — that is a submission
-     block, not something to keep quiet about and ship. You need not *volunteer* a speculative kill-shot
-     that is neither certain-to-be-raised nor actually true (pre-emption is a scalpel), but an
-     **unresolved fatal-if-true that is real is never "ship silently" — it is "the claim is not yet
-     defensible."** Shipping a claim you know is fatally flawed is the record-surface-completeness
-     violation the LAW forbids, not a rhetorical option.
+   - **Fatal-if-true** (the test is mechanical, not felt: *if the objection holds, does the G2 anchor
+     still license the governing claim?* No → fatal. A candidate "limitation" that would void the
+     anchor is fatal, not survivable) → **resolve it with evidence** (run the experiment, add the
+     proof) OR **rescope the governing claim** so the objection no longer reaches it. A rescope must
+     **surface in the text** — the new qualifier stated (G2) and the excluded regime in Limitations
+     with its bias direction (§4); a rescope living only in the spec is the hide with extra steps.
+     If it is true — **or you cannot determine whether it is true** ("cannot check" is never "not
+     true") — and you can do neither, the paper is **not ready**: a submission block, not something
+     to keep quiet about and ship. The only objection you may leave unvolunteered is one you can
+     **positively rule out** AND that is not certain-to-be-raised — and that non-volunteer is
+     **logged in the spec's G3 block with the ruling-out evidence** (an unlogged non-volunteer is a
+     hide). Shipping a claim you know — or suspect and won't check — is fatally flawed is the
+     record-surface-completeness violation the LAW forbids, not a rhetorical option.
+   *Categories are ordered by severity and Fatal-if-true DOMINATES: an objection both fatal-if-true
+   and certain-to-be-raised triages as fatal — category 4's "address it" never substitutes for
+   resolve / rescope / block.*
    - **Certain-to-be-raised regardless** → you **must** address it; omitting the objection a reviewer
      will certainly raise is the losing move.
 3. **Route** surviving-but-narrow objections to a **backup / appendix** (the exhaustive defense for
    "reviewer 2" lives in the supplement; the main text keeps the clean single story for the editor and
-   skimmer — main-text-vs-appendix split, `reconciliation.md` §3).
+   skimmer — main-text-vs-appendix split, `reconciliation.md` §3). An objection touching the governing
+   claim's **anchor or scope is never "narrow"** — it stays in the main line or Limitations.
 
 **The losing quadrant is undisclosed-but-discoverable.** Concede the survivable specifically; defend the
 load-bearing; never hedge diffusely across every claim (uniform hedging reads as no result). Plant the
@@ -127,7 +136,8 @@ meta-analyst does:
   paper must be told *which* gate it fails.
 - **The spin self-scan** (`calibration.md` §4) — title/abstract-conclusion/results, each spin device.
 - **The fabrication self-audit** (`calibration.md` §6) — every citation/number/baseline grounded or
-  placeheld.
+  placeheld, and every confirmed-real citation passing the quality check (support / currency /
+  load-bearing strength).
 
 ## §7 — Worker-side contract (when this skill is a lens in another fleet)
 
@@ -137,7 +147,7 @@ Each finding fills five slots so a downstream reader can act without re-deriving
 
 ```
 { "claim": "<the paper claim under audit>",
-  "gate":  "G1 | G2 | G3",
+  "gate":  "G0 | G1 | G2 | G3",
   "locus": "<the table/theorem/figure/citation the finding keys on — or [VERIFY]>",
   "fix":   "<the calibrated rewrite or the scoped concession>",
   "unchecked_risk": "<what this lens did NOT check>" }

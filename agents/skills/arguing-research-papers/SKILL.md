@@ -72,23 +72,30 @@ tokens stable even inside Japanese prose — they are identifiers, not translata
 ## The three gates — each demands a grep-able artifact in the CLAIM SPEC
 
 同型 with the house discipline (systematizing-knowledge's ledger, forging-novel-theses' G1/G2/G3):
-a gate is passed only when its **artifact exists in the filled CLAIM SPEC** (template below).
+a gate is passed only when its **artifact exists in the filled CLAIM SPEC** (template below). The
+three gates judge the ARGUMENT; they are preceded by **G0 — materials audit** (build-step 0), which
+is not a rhetoric gate but the **input precondition**: it fixes WHAT evidence exists before G1–G3
+decide what to claim from it (its artifact — the in-hand line — is also floor-checked).
 感触では通れない — no artifact, gate un-passed. `scripts/claim-check.sh` is the *floor* that checks the
-load-bearing slots (governing claim, instability/cost, anchor, scope, positioning, objection) are
-present and non-placeholder; it is NOT a semantic check, and it does not check every gate artifact
-(contribution-type, warrant, novelty-scope are judged here, not by the floor).
+load-bearing slots (the G0 in-hand line, governing claim, instability/cost, anchor, scope, positioning,
+objection) are present and non-placeholder — the ONLY slot where a `[…]` placeholder passes is the G2
+anchor (the sanctioned anti-fabrication deferral); it is NOT a semantic check, and it does not check
+every gate artifact (contribution-type, warrant, novelty-scope are judged here, not by the floor).
 
 | # | Gate | Inverts (the failure) | ARTIFACT (must exist, non-placeholder) |
 |---|---|---|---|
 | **G1** | **絞る — one claim** | coverage-seeking sprawl; a topic, not a problem; a flat list of co-equal "contributions" | the **governing-claim** line (ONE sentence) + the **instability + named reader-cost** + the contribution **type**; sub-contributions each shown to ladder up |
 | **G2** | **calibrate — claim = evidence** | over-hedge into mush *and* over-claim / **fabrication** | per claim: the **evidence anchor** (real table/theorem/figure, or an explicit placeholder) + the **warrant** in the field's currency + the **scope qualifier + rebuttal**; every superlative / "significant" / "first" carries an inline warrant or is downgraded |
-| **G3** | **position + reviewer-proof** | fake positioning ("unlike prior work"); boilerplate limitations; missing the fatal objection | the **nearest NAMED prior method + the specific gap** ("Unlike [X], which [Y], we [Z]") + the **sharpest hostile-reviewer objection** with an answer OR a scoped concession + the **novelty scope** ("to our knowledge, first to __ under __") |
+| **G3** | **position + reviewer-proof** | fake positioning ("unlike prior work"); boilerplate limitations; missing the fatal objection | the **nearest NAMED prior method + the specific gap** ("Unlike [X], which [Y], we [Z]") + the **sharpest hostile-reviewer objection** with an answer OR a scoped concession (a concession never covers a fatal-if-true — reviewer-defense.md §3) + the **novelty scope** ("to our knowledge, first to __ under __") |
 
 ## The CLAIM SPEC — fill this BEFORE drafting prose (and to audit any draft)
 
 The spec is the paper's argument as a checkable artifact. Fill it; run the floor; then write. An
 unfillable slot is a finding, not a formatting gap — say which gate it fails and treat the paper as
-not-yet-ready there (never paper over it with fluent prose).
+not-yet-ready there (never paper over it with fluent prose). **A floor FAIL from an honest placeholder
+is the CORRECT output — report it; filling a slot from memory to turn the floor green is fabrication
+at the spec layer.** Slot labels are the floor's grep-anchors: keep them verbatim (English), one line
+per slot, the value on the label line.
 
 ```markdown
 # Claim spec: [paper working title]
@@ -123,15 +130,20 @@ discipline; it cannot judge whether the anchor really licenses the claim — you
 Run in this order; each step routes to a reference. This is a decision procedure, not a template to
 fill top-to-bottom in prose. **Fast path** — for a *targeted one-claim diagnostic* ("is this
 overclaiming?", "reframe this one claim", "is this positioning real?"), skip the CLAIM SPEC and go
-straight to the cited reference and answer; the full spec + floor are for drafting or auditing a WHOLE
-argument, not a single-claim question.
+straight to the cited reference and answer. The boundary is **diagnostic vs. production**, not
+whole-vs-part: the moment you produce manuscript text (a section, an abstract, a contributions list —
+however small), the spec + G0 govern — piecewise asks that accumulate into drafting re-enter the full
+path at the first production step.
 
 0. **G0 — materials audit (do you HAVE the evidence, or only a summary?).** List what is actually in
-   hand vs. taken on the user's word: the **results** (tables/figures/theorems, citable by locus), the
-   **nearest prior work** (retrievable/read, not recalled), the **target venue**. Every item you do NOT
-   have becomes an explicit `[VERIFY]`/`[CITATION NEEDED]` placeholder — never a confident assertion
-   built on a paraphrase (that is how fabrication and mis-positioning enter). *Fast-path single-claim
-   diagnostics are exempt; this is for drafting/auditing a WHOLE argument.* → `references/calibration.md` §6.
+   hand vs. taken on the user's word: the **results** (tables/figures/theorems), the **nearest prior
+   work**, the **target venue**. **"In hand" = the artifact ITSELF is readable in this session** (the
+   table's numbers, the theorem's statement, the prior's text) — the user's *description* of it, even
+   one citing a locus ("our Table 2 shows 12%"), is "taken on the user's word" and goes on the Missing
+   line as `[VERIFY — user-reported]`. Every missing item becomes an explicit placeholder — never a
+   confident assertion built on a paraphrase (that is how fabrication and mis-positioning enter).
+   *Exempt: answering a question about one claim (fast path). NOT exempt: producing manuscript text —
+   a section, an abstract, a contributions list, however small.* → `references/calibration.md` §6.
 1. **Reset the goal** (McEnerney). Not "explain what I did" → "change what this community believes."
    Name the reader community, its accepted belief, and its doubt. → `references/reconciliation.md` §5.
 2. **Fill the CLAIM SPEC** (G1–G3 above). Write to discover the claim if you don't have it yet; the
@@ -188,8 +200,10 @@ regime) in `references/reconciliation.md`. Apply the moderator, do not pick a si
 - **Disclose vs. don't-arm-the-reviewer** → **triage by answerability**: the generic *pre-stated
   limitation builds ethos; contradiction-laundering surfaces anyway* principle is
   `designing-presentations`; the paper delta is triage against an **absent** reviewer — raise+answer
-  what you can bound (inoculation), convert the unanswerable to a scoped limitation, never omit the one
-  a reviewer will certainly raise. *Undisclosed-but-discoverable is the losing quadrant.*
+  what you can bound (inoculation), convert the unanswerable-**but-survivable** to a scoped limitation,
+  never omit the one a reviewer will certainly raise — and a real or undeterminable **fatal-if-true is
+  a submission block, never a limitation** (`reviewer-defense.md` §3). *Undisclosed-but-discoverable is
+  the losing quadrant.*
 - **Editor vs. reviewer register** → assertive about *significance* to the editor (cover letter,
   abstract framing); calibrated/modest about *claims* to the reviewer (body).
 
@@ -261,13 +275,13 @@ placeholder. **An agent that agrees the claim is great is not evidence; an agent
 |---|---|---|
 | **G0 materials audit** · reset goal · fill CLAIM SPEC · **the governing claim & its calibration** · the reconciliation moderators · commit to a position | **SOLO — never shard** | the argument must sit in one context; assembled from shards it is not an argument. Calibration still **consumes** the fan-out red-team + fact-check below (domain evidence feeds IN); only the final synthesis & signature are SOLO |
 | **Reviewer red-team** (3–5 skeptics, one lens each: novelty/significance · soundness/evidence · related-work completeness · reproducibility · clarity) | **FAN-OUT, read-only** | independent hostile lenses catch what one context won't; **refutation-prompted** — name the LENS, never the expected finding |
-| Citation / number / baseline / prior-work **verification** | **FAN-OUT, read-only** | fetch the real source; return locus or "[VERIFY]" — never a plausible-looking reference |
+| Citation / number / baseline / prior-work **verification** | **FAN-OUT, read-only** | fetch the real source; return the locus **plus a support / currency / load-bearing-strength assessment** (calibration.md §6), or "[VERIFY]" — never a plausible-looking reference, never bare "it exists" |
 | Fixing the claim / conceding / the rebuttal | **SOLO** | findings braid; one author signs every concession and every claim |
 
 Scale: a single claim → fully SOLO, run the red-team lenses yourself. A high-stakes submission /
 resubmission → SOLO argument + fan-out red-team + fact-check. **No harness → same map, serial** (the
 red-team lenses become separate focused passes). Worker-side: if THIS skill is spawned as a lens inside
-another skill's fleet, it returns findings as data (five-slot: claim / gate G1-G3 / cited locus /
+another skill's fleet, it returns findings as data (five-slot: claim / gate G0-G3 / cited locus /
 the calibrated fix / unchecked risk), read-only, no verdict a downstream reader cannot check.
 *If a constraint here feels unnecessary, that feeling is the failure mode — follow the map.*
 
@@ -276,8 +290,8 @@ the calibrated fix / unchecked risk), read-only, no verdict a downstream reader 
 | File | Covers | Read when |
 |---|---|---|
 | `references/reconciliation.md` | the Aufhebung: every split-by moderator argued with its camps + regime + the runtime decision variable; the McEnerney value-reset (§5); the zone-split law (§1); the editor-vs-reviewer register split (§3) | any tension between two pieces of writing advice; deciding narrative vs. austerity; step 1 & 7 |
-| `references/calibration.md` | the 主張の仕方 core: importance-vs-certainty, the two-pass calibration procedure, Hyland hedges/boosters, Latour modalities, Boutron spin taxonomy, MAGIC, effect-size/estimation, and the **anti-fabrication protocol** + placeholder tokens | writing or auditing any claim; the abstract/conclusion; whenever a number or citation is about to be written; step 2 & 4 |
-| `references/frameworks.md` | the named toolkit — CARS, Toulmin, CoR (Topic-Question-Significance; claim/reasons/evidence/warrant/acknowledgment), OCAR/ABT/LD, C-C-C, Heilmeier; abstract genres (Nature "here we show", SPJ four-sentence, structured), title craft, contribution-bullet convention, editor-facing genres (cover letter, significance statement) | drafting/auditing the intro, abstract, title, or contributions; the cover letter; picking a structural frame; step 2,3,5 |
+| `references/calibration.md` | the 主張の仕方 core: importance-vs-certainty, the two-pass calibration procedure, Hyland hedges/boosters, Latour modalities, Boutron spin taxonomy, MAGIC, effect-size/estimation, the **anti-fabrication protocol** + placeholder tokens, and the citation-QUALITY check (support/currency/strength) | writing or auditing any claim; the abstract/conclusion; whenever a number or citation is about to be written; step 2 & 4 |
+| `references/frameworks.md` | the named toolkit — CARS, Toulmin, CoR (Topic-Question-Significance; claim/reasons/evidence/warrant/acknowledgment), OCAR/ABT/LD, C-C-C, Heilmeier; abstract genres (Nature "here we show", SPJ four-sentence, structured), title craft, contribution-bullet convention, editor-facing genres (cover letter, significance statement), the resource/artifact-paper claim slots (coverage·access·license·maintenance·reuse) | drafting/auditing the intro, abstract, title, or contributions; the cover letter; picking a structural frame; step 2,3,5 |
 | `references/genre-playbooks.md` | field-dependent fill: empirical-science, CS/ML top-venue (contributions, ablation-as-control, reproducibility, Fig-1, review rubric, rebuttal), math-theory (Halmos motivation→statement→proof, notation, significance-legibility), Japanese review (新規性・有用性・信頼性, 事実と意見) | instantiating the target venue's conventions; step 5 |
 | `references/reviewer-defense.md` | surviving the absent adversary: the reviewer red-team lens set, Bordage rejection taxonomy, review decision-axes, objection triage, limitations-as-ethos, the rebuttal genre; the worker-side lens contract | step 6; before submission/resubmission; writing a rebuttal; running the red-team fan-out |
 | `references/sources.md` | the SOLE provenance ledger: every distilled source graded (author-confirmed / paraphrase / third-party / constructed / needs-verification), the calibration-inversion argument, the lineage, and the reflexive grading of this skill's own claims | grading any claim to a source; "is this attribution safe to state as the author's?"; reforge |

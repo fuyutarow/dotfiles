@@ -153,6 +153,22 @@ names; suspiciously round or suspiciously precise numbers that fill an argumenta
 poisons trust irreversibly and, once one is found, a reviewer re-reads the whole paper hunting for the
 gap between every claim and its evidence.
 
+**Existence is necessary, not sufficient — the citation-QUALITY check (distinct from the fabrication
+gate above).** A real, retrievable source can still be MIS-used, and that is a separate failure the
+existence gate does not catch. Once a citation is confirmed to exist, verify three more things before
+it counts as support:
+- **Support** — the cited work actually establishes THIS point (not a tangential result, not a
+  misremembered finding). A real paper cited for a claim it does not make is a mis-citation the
+  reviewer who knows that work will catch — as damaging as an invented one.
+- **Currency** — it is not retracted / withdrawn / superseded, and not so dated the field has moved
+  past it (a 2015 "SOTA" baseline in a 2026 paper is a weakness, not support).
+- **Load-bearing strength** — the source can carry the weight you put on it (a workshop abstract, a
+  blog post, or an un-reviewed preprint cannot anchor a central claim a reviewer will contest).
+
+Existence answers "is this real?"; these answer "does this real thing support what I use it for?" The
+fan-out fact-check lens returns BOTH — the locus AND a support/currency/strength assessment keyed to
+that locus — never just "it exists."
+
 Under a harness, **citation/number verification fans out read-only** — an agent fetches the primary
 source and returns the *locus* or "[VERIFY]", and an agent's felt confidence is never the signal
 (`SKILL.md` execution model; the CITATION-RELAY archetype).

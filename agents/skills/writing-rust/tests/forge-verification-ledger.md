@@ -126,3 +126,76 @@ for lost qualifiers.
 
 **Floor after round 2**: `skill-check.sh` clean (no warnings); strict-YAML parse OK; description
 unchanged (≤1500).
+
+## 2026-07-08 RG0 prominence reforge — recurrence-driven (self-reported from a live session)
+
+**Trigger**: a live session (`correo` crate: rename → mise setup → clap adoption) where writing-rust
+co-fired in its `refactoring-code`/`implementing` "oracle" role and the **RG0 BIDIRECTIONAL
+entry-sweep never fired unprompted** — the user had to say "適切な crate選択がなされていない" before any
+adopted/declined table appeared. This is the SAME failure the RG0 row already names as its
+"defining failure mode" (the clap+anyhow one-at-a-time session) — a **recurrence**, proving the
+prose gate alone did not hold.
+
+**Root-cause split** (post-mortem): ~70% executor (a clearly-MANDATORY gate not run), ~30% skill
+design — the highest-value proactive action was (a) buried in a dense RG0 table cell while §2
+over-reaches get prominent `###` headings (calibration-inversion: the default-failure-direction
+rule is the least visible), (b) thresholded on undefined "substantive work" (is a rename
+substantive?), (c) framed away by the `refactoring-code` routing row's passive "supplies the
+oracle" wording.
+
+| Fix | Where | One-home note |
+|---|---|---|
+| Promote entry-sweep to a prominent `### … ★` callout (models refactoring-code's G3 spine) | new callout above Routing | Salience+trigger home; POINTS to RG0 row for the artifact spec (no restatement) |
+| Trigger sharpened: "first edit to a crate THIS SESSION (rename/refactor/config incl — not gated on new logic)" | RG0 rule cell + artifact cell + callout | Replaces ambiguous "first substantive work" |
+| Co-fire does NOT suspend RG0 | callout + refactoring-code routing row (pointer) | Kills the passive-"oracle" framing at its source |
+| Durable fix named: PreToolUse hook blocking the first `*.rs`/`Cargo.toml` edit until the table exists | callout pointer → `operating-the-harness` | Not shipped here (this skill ships no `scripts/`) |
+
+**Floor after reforge**: `skill-check.sh` clean over writing-rust; fire/no-fire desk-check — the
+`correo` rename now correctly FIRES the entry-sweep under the new threshold (old "substantive work"
+could ambiguously no-fire). Adversarial 3-lens verify (over-fire / trigger-desk-check / one-home
+consistency) **round 1 → 3 ISSUE (all `minor`), converging on ONE defect**: the callout's "reading
+before writing all count" + the dropped word "substantive" over-broadened the trigger — it compelled
+the full sweep on typo / `cargo fmt` / private-local-rename (= the F1 ceremony the skill forbids),
+contradicted trigger-set's `implementing-and-debugging` DEBUG-first row (a debug starts by reading →
+sweep-as-first-output overrides "diagnose first"), and disagreed with the RG0 row's edit-only
+enumeration (two-home trigger drift; the callout's own edit-gated hook fix contradicted its
+"reading counts" prose). **Fixes (solo)**: scoped the trigger to a crate's SELECTION surface
+(`Cargo.toml` / `use` / dependency / non-trivial change); added an explicit NO-FIRE trivia carve-out
+(restoring the escape the deleted "substantive" gave); reframed "first output" → "first artifact
+WITHIN its turn" so i-and-d's DEBUG-gate-first order holds; dropped the read-only "reading before
+writing" widening; aligned "reviewer" wording; added two trigger-set desk-check rows (trivia NO-FIRE
++ rename-entry-sweep FIRE). The motivating failure stays closed: a crate rename IS a `Cargo.toml`
+edit and clap IS selection surface, so "correo rename + mise + clap" still fires.
+
+**Round 2 re-verify** → **3 ISSUE (all `minor`), one self-defeating bug**: the round-1 fix anchored
+the exemption on "zero dependency delta," but a crate *rename* (the must-fire case) also has zero
+dependency delta — a model could rationalize skipping it and reproduce the original miss; and "any
+`Cargo.toml` edit" fired on version bumps (F1 ceremony), self-contradicting the same line. **Fix**:
+re-anchored every home on ONE criterion — crate-SELECTION opportunity (dependency change or code
+restructure) — dropping the leaky "Cargo.toml-touch" / "dep-delta" / "private-local" proxies.
+
+**Round 3** → over-fire CLEAN; TRIGGER + ONE-HOME converged on the callout's co-fire parenthetical
+"(a rename/restructure is still first-crate-entry)" being unqualified — colliding with its own
+NO-FIRE carve-out and the `correo` example. **Fix**: qualified it (substantive restructure vs
+mechanical rename); added feature-flag-toggle + mechanical-rename (any file count) to NO-FIRE.
+
+**Round 4** → over-fire CLEAN; TRIGGER + ONE-HOME converged on a contradiction the round-3 fix itself
+introduced: the RG0 row still fired on "or **feature**" while the callout NO-FIRE exempted a single
+feature-flag toggle. Root cause (named by the one-home lens): the trigger was DUPLICATED across the
+row and the callout, so every patch had to be hand-synced and kept drifting. **Fix**: dropped the
+leaky "or feature"; made the FIRE phrasing verbatim-identical across both homes.
+
+**Round 5 (capped final)** → over-fire CLEAN (severity **none** — "textbook-defended"); two remaining
+`minor` items: a scope nuance (a selection-inert substantive refactor read as edited-lines-scoped →
+under-fire vs the routing row) + the residual trigger duplication. Both encode a genuine design
+tension (should a selection-inert substantive refactor fire?) that the fleet surfaces but cannot
+resolve — an editor call. **Resolution (stated design decision)**: RG0's sweep is a **once-per-session
+ENTRY audit** — first substantive engagement fires ONE codebase-wide sweep; the "hand-roll" clause is
+the sweep's TARGET, not a fire gate. Implemented R5's own recommended fixes: scoped the sweep to the
+whole codebase (removes the under-fire edge, makes both homes verbatim-consistent); reduced the
+refactoring-code routing row to a pointer (the ★ callout is the sole fire/no-fire boundary home).
+
+**Convergence + F3 waiver**: 5 fleet rounds went real bug (R2) → wording collision (R3) →
+self-introduced contradiction (R4) → editor-judgment residuals (R5). The final structural pass is
+`skill-check.sh`-clean + desk-read for coherence but **NOT fleet-re-verified** — a bounded waiver: a
+6th round would over-fit a single gate. Convergence declared 2026-07-08.

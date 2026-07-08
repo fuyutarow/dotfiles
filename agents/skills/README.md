@@ -15,6 +15,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 - [`designing-presentations`](designing-presentations/) — Plan or critique talks and decks to change what the audience decides, not just inform.
 - [`prompting-llms`](prompting-llms/) — Write and audit Claude/Anthropic prompts, system prompts, and evals as testable contracts.
 - [`compiling-latex`](compiling-latex/) — Modern repo-native LaTeX/Beamer: mise, latexmk, tex-fmt, chktex for building and linting papers.
+- [`writing-technical-japanese`](writing-technical-japanese/) — Portable one-file 木下『理科系の作文技術』distillation for harnesses without SD/LP; yields to them here.
 
 ### Research & thinking
 

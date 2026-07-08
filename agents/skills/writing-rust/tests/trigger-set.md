@@ -40,6 +40,7 @@ states the order. Created v2607.1.0 (2026-07-06).
 | 「Rust リポジトリを git subtree で分割したい」 | VCS surgery, not Rust code → plain task (`refactoring-code` if code moves) |
 | "explain what lifetimes are, conceptually" | concept explainer, no code to write → plain answer (fires here only if Rust code is in play) |
 | 「Rust ってなんで速い言語なの?」 | language-design question, no code → plain answer (fires only when there's actual code to profile/optimize) |
+| 「Rust crate の comment typo / `cargo fmt` / metadata-only な `Cargo.toml` 編集（version 等）/ **既存 crate の feature-flag 単独トグル** / 他コードを restructure しない mechanical rename」 | 選定機会を露出しない edit → RG0 の入場 sweep は owe **ない**（dependency 追加 か code restructure で初めて sweep・typo に ceremony は F1 違反） |
 
 ## Co-fire order checks (not fire/no-fire — sequencing)
 
@@ -48,4 +49,5 @@ states the order. Created v2607.1.0 (2026-07-06).
 | 「この Rust モジュールに機能を足して」 | `implementing-and-debugging` BUILD gate first (intent/edit-surface/root-cause) → this skill for the Rust inside (RG0–RG4) |
 | 「この Rust パッケージ、リファクタして」 | `refactoring-code` governs (two hats / oracle / deny-gate) → this skill supplies the Rust oracle (`cargo check`+clippy+nextest) + Rust-safe transforms |
 | 「動かない Rust コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Rust-specific diagnosis (`clippy`, `cargo check`, the error model) |
+| 「Rust crate を rebrand（rename＋dep 追加/コード改修・refactoring-code 統治下）」 | `refactoring-code` two-hats/oracle が統治 → だが **dep 追加/コード改修**を伴うので RG0 の**入場 sweep は依然 owed**（`[package].name` の string 変更単体でなく実作業が trigger・"oracle" 役でも免除されない） |
 | "publish my Rust CLI and also fix the arg parsing" | `growing-oss-adoption` (publish/adoption) + this skill (the arg-parsing code / crate choice) — parallel, different concerns |

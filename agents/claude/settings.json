@@ -32,6 +32,9 @@
     "type": "command",
     "command": "sh ~/.claude/statusline-command.sh"
   },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
   "effortLevel": "xhigh",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,

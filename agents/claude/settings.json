@@ -1,5 +1,8 @@
 {
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
+  },
   "hooks": {
     "Stop": [
       {
@@ -33,7 +36,8 @@
     "command": "sh ~/.claude/statusline-command.sh"
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true
   },
   "effortLevel": "xhigh",
   "tui": "fullscreen",

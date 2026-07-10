@@ -219,14 +219,14 @@ alias hi='atuin import auto'            # Import existing history
 # PATH/interop. Over SSH we emit an OSC 52 escape so the copy lands in the terminal
 # CLIENT's clipboard. Needs a terminal that supports OSC 52 (Windows Terminal,
 # iTerm2, WezTerm, …) and, inside tmux, `set -g set-clipboard on` (tmux/clipboard.conf).
-_osc52_copy() { printf '\e]52;c;%s\a' "$(base64 | tr -d '\n')" > /dev/tty; }
+osc52_copy() { printf '\e]52;c;%s\a' "$(base64 | tr -d '\n')" > /dev/tty; }
 
 copytoclipboard() {
   # Over SSH (incl. WSL-over-SSH): route to the terminal client via OSC 52.
   if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]; then
     local data; data=$(cat)
     printf '%s\n' "$data" > /dev/tty          # echo for the human (like tee)
-    printf '%s' "$data" | _osc52_copy
+    printf '%s' "$data" | osc52_copy
     return
   fi
   # Local sessions: use the native clipboard (no OSC 52 size limits).
@@ -246,7 +246,7 @@ copytoclipboard() {
     # headless / no clipboard tool -> OSC 52
     local data; data=$(cat)
     printf '%s\n' "$data" > /dev/tty
-    printf '%s' "$data" | _osc52_copy
+    printf '%s' "$data" | osc52_copy
   fi
 }
 
@@ -541,10 +541,10 @@ alias tf='tail -fF'
 # 注: 従来の `cp -i`/`mv -i` プロンプトは置き換わる。明示的な -n も衝突時は大声中止に
 # 昇格。再帰コピー (-r) の衝突検知は第1階層のみ（深いマージは real cp に委譲）。
 unalias cp mv 2>/dev/null   # 上流に stray な `alias cp=...` が残ると関数定義がパースエラーで全滅するのを防ぐ
-_overwrite_guard() {
+overwrite_guard() {
   local tool="$1"; shift
   local -a args=("$@") opts srcs conflicts
-  local target="" use_t=0 no_target_dir=0
+  local target="" use_t=0 no_target_dir=0 parents_flag=0
   local end_opts=0 a i n
   n=${#args[@]}
   for (( i = 1; i <= n; i++ )); do
@@ -557,8 +557,12 @@ _overwrite_guard() {
       target="${a#--target-directory=}"; use_t=1; opts+=("$a")
     elif [[ "$a" == "-t" || "$a" == "--target-directory" ]]; then
       opts+=("$a"); (( i++ )); target="${args[i]}"; use_t=1
+    elif [[ "$a" == -t?* && "$a" != --* ]]; then
+      target="${a#-t}"; use_t=1; opts+=("$a")   # GNU attached form: -tDEST (e.g. `cp -t/tmp/x src`)
     elif [[ "$a" == "-T" || "$a" == "--no-target-directory" ]]; then
       no_target_dir=1; opts+=("$a")
+    elif [[ "$a" == "--parents" ]]; then
+      parents_flag=1; opts+=("$a")   # GNU: recreates the source path under the target dir
     elif [[ "$a" == "-S" || "$a" == "--suffix" ]]; then
       opts+=("$a"); (( i++ )); opts+=("${args[i]}")
     elif [[ "$a" == -* && "$a" != "-" ]]; then
@@ -577,27 +581,57 @@ _overwrite_guard() {
   fi
 
   if [[ -d "$target" && $no_target_dir -eq 0 ]]; then
-    local s base tdir="${target%/}"
+    local s base tdir="${target%/}" cpath
     for s in "${srcs[@]}"; do
-      s="${s%/}"; base="${s:t}"          # 末尾スラッシュを剥がしてから basename
-      [[ -z "$base" ]] && continue
-      [[ -e "$tdir/$base" || -L "$tdir/$base" ]] && conflicts+=("$tdir/$base")
+      s="${s%/}"
+      [[ -z "$s" ]] && continue
+      if (( parents_flag )); then
+        cpath="$tdir/${s#/}"   # --parents: GNU cp recreates the source path under target (first level only, see note above)
+      else
+        base="${s:t}"          # 末尾スラッシュを剥がしてから basename
+        [[ -z "$base" ]] && continue
+        cpath="$tdir/$base"
+      fi
+      [[ -e "$cpath" || -L "$cpath" ]] && conflicts+=("$cpath")
     done
   else
     [[ -e "$target" || -L "$target" ]] && conflicts+=("$target")
   fi
 
   if (( ${#conflicts[@]} )); then
-    print -u2 "⛔ ${tool}: 上書きを中止しました（既存ファイルを保護）。"
-    local c; for c in "${conflicts[@]}"; do print -u2 "     既存: $c"; done
-    print -u2 "   上書きするには ${tool}f を使ってください:  ${tool}f ${(q-)args[@]}"
-    print -u2 "   （${tool}f = 強制上書き。元に戻せないので注意）"
+    print -u2 "⛔ ${tool}: BLOCKED — refusing to overwrite existing path(s) (shell overwrite guard)."
+    local c; for c in "${conflicts[@]}"; do print -u2 "     exists: $c"; done
+    print -u2 "   This is intentional. Plain cp/mv NEVER overwrite in this shell. Do NOT retry the same command."
+    print -u2 "   To overwrite on purpose, re-run with '${tool}f':  ${tool}f ${(q-)args[@]}"
+    print -u2 "   (${tool}f = force overwrite via 'command ${tool}'; cannot be undone)"
     return 1
   fi
   command "$tool" "${args[@]}"
 }
-cp() { _overwrite_guard cp "$@"; }
-mv() { _overwrite_guard mv "$@"; }
+# Claude Code's shell-snapshot mechanism drops every function whose name starts with a
+# single leading underscore (collateral of filtering zsh completion widgets `_foo`), so
+# overwrite_guard must NOT be underscore-prefixed. If the snapshot strips it anyway, the
+# wrappers below fail CLOSED: they refuse to run an unguarded cp/mv and return 1 — they
+# never fall through to the real command. Both wrappers are generated from ONE template
+# below so they cannot drift, but each generated function stays self-contained at runtime
+# (no shared helper-function dependency, which would recreate the stripped-helper fragility).
+() {
+  local t tmpl='
+__TOOL__() {
+  if (( ! $+functions[overwrite_guard] )); then
+    print -u2 "⛔ __TOOL__: BLOCKED — overwrite-guard helper is not loaded in this shell (snapshot stripped it)."
+    print -u2 "   Refusing to run an unguarded __TOOL__. To proceed deliberately:"
+    print -u2 "     __TOOL__f <args>          # force overwrite"
+    print -u2 "     command __TOOL__ <args>   # vanilla __TOOL__ (overwrites!)"
+    return 1
+  fi
+  overwrite_guard __TOOL__ "$@"
+}
+'
+  for t in cp mv; do
+    eval "${tmpl//__TOOL__/$t}"
+  done
+}
 alias cpf='command cp'   # 強制上書き (両OS共通)
 alias mvf='command mv'   # 強制上書き (両OS共通)
 
@@ -691,10 +725,8 @@ _command_disabled() {
 
 # Special cases that don't fit the pattern
 rm() {
-  echo "⛔ FATAL ERROR: 'rm' command is PERMANENTLY DISABLED!"
-  echo "   This system ONLY supports 'rip' for file removal."
-  echo "   There is NO alternative. Use 'rip' or nothing."
-  echo "   This is non-negotiable for system safety."
+  print -u2 "⛔ rm: BLOCKED — 'rm' is permanently disabled in this shell."
+  print -u2 "   Use 'rip' for file removal (moves to trash, recoverable). Do NOT retry rm."
   return 1
 }
 

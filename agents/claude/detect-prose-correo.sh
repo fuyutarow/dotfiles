@@ -22,8 +22,8 @@ set -uo pipefail
 input=$(cat)
 # PATH が狭い実行コンテキスト（subprocess 起動方式の変化等）でも correo を見つける保険。
 command -v correo > /dev/null 2>&1 || PATH="$PATH:/home/linuxbrew/.linuxbrew/bin:$HOME/.cargo/bin:/usr/local/bin"
-command -v correo > /dev/null 2>&1 || exit 0   # fallback でも無ければ opt-in で沈黙 fail-safe
-command -v jq > /dev/null 2>&1 || exit 0       # jq も fallback 後に判定（correo と同居する brew 環境を拾う）
+command -v correo > /dev/null 2>&1 || exit 0 # fallback でも無ければ opt-in で沈黙 fail-safe
+command -v jq > /dev/null 2>&1 || exit 0     # jq も fallback 後に判定（correo と同居する brew 環境を拾う）
 
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2> /dev/null)" = "true" ] && exit 0
 

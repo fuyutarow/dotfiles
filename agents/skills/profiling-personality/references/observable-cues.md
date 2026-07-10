@@ -83,6 +83,10 @@ compression of modest, heavily-moderated effects.
 - **Capitalization (ALL-CAPS / lowercase) → any trait** — FOLKLORE, zero peer-reviewed Big Five
   link. "Caps = shouting" is a netiquette convention, not a personality cue.
 - **Microexpression / nonverbal → lie-detection** — DEBUNKED (calibration-and-ethics.md §5).
+- **This §4 is the SOLE HOME of TEXT folklore only.** Perceptual folklore — body-language cue
+  dictionaries, gaze aversion, physiognomy / 人相, fWHR, power posing, mirroring, 7-38-55, NLP
+  eye-accessing cues, 血液型, PUA "indicators of interest" — is owned by the `reading-people-in-person`
+  skill (`references/quarantine.md`). Point there; do not grow a second list here.
 - **MBTI-from-text** — the construct is invalid; any accuracy claim is fragile-by-construction.
 - **PAN cross-platform personality numbers** — do not generalize across platforms (2016 cross-genre
   transfer collapsed to baseline).

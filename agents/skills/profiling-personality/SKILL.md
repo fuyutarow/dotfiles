@@ -1,10 +1,10 @@
 ---
 name: profiling-personality
 description: >-
-  Build a rigorous, provisional personality read (dossier) of a SPECIFIC person — or a dyadic
+  Build a provisional personality read (dossier) of a SPECIFIC person — or a dyadic
   相性 / compatibility read of TWO people — from everyday language and behavior: chat history,
-  messages, word choice, verbal habits. For understanding and proactively building healthier,
-  closer relationships (non-clinical, non-forensic). Use when the user wants to
+  messages, word choice, verbal habits. For understanding and building closer
+  relationships (non-clinical, non-forensic). Use when the user wants to
   analyze / profile someone's personality or communication style from text or behavior, understand
   "what kind of person is X", read someone from their トーク履歴 / 発言 / 言動のクセ, or assess
   traits / values / attachment / motivation / 相性. Backbone: HEXACO. Trigger on: personality
@@ -12,10 +12,11 @@ description: >-
   OCEAN, HEXACO, trait inference from text, attachment style / 愛着スタイル, values / 価値観
   (Schwartz), Dark Triad, communication style, 相性分析 / compatibility / dyadic fit,
   相手を理解したい, 人間理解, プロファイリング. MBTI / Enneagram / DISC / astrology asks FIRE this
-  skill to REFRAME (they are invalid) — never to deliver a type. Enforces: aggregate never
+  skill to REFRAME — never to deliver a type. Enforces: aggregate never
   point-predict (text ceiling r≈.4 = stranger-level), confidence scaled to trait visibility,
-  per-person baseline before deviations, competing hypotheses, the Barnum filter, an ethics gate.
+  per-person baseline, competing hypotheses, the Barnum filter, an ethics gate.
   This skill READS; it does not coach moves — dating next-move / 返信文 / 誘い方 → courting-on-apps.
+  LANGUAGE → here; 外見・顔・声・仕草・写真 → reading-people-in-person.
   NOT for: explaining a framework in the abstract, writing a personality quiz, criminal / offender
   profiling, lie-detection, DSM diagnosis, or covert manipulation / psychographic targeting.
 ---
@@ -182,13 +183,14 @@ behaviors — do not conflate "fires-to-reframe" with "stays silent":
 | `raising-resolution` | PURPOSE cut: raising-resolution says "inspect before you assert" about any artifact; this skill is the domain instrument for one artifact class — a person. Its G2/G3 (aggregate, calibrate) are the personality-specific form of that discipline. raising-resolution yields (lowest precedence). |
 | `acting-on-hypotheses` | DECISIVE cut: reading a person from evidence that ALREADY EXISTS (chat logs) is knowable-from-what-exists → here. Deciding a forward bet/experiment whose outcome reality hasn't set → there. Note the edge case this skill owns: a person is *inspectable but permanently under-determined* (the r≈.4 ceiling never closes) — still not a forward bet, but the irreducible uncertainty is exactly why the calibration gates (G2/G3) exist. The "competing hypotheses / flip indicator" discipline is shared vocabulary, not shared territory. |
 | `forging-skills` | PURPOSE cut: forging-skills makes operating manuals for *executors*; this makes a read of a *person*. Name-adjacent ("profiling"), zero overlap. |
+| `reading-people-in-person` | **DECISIVE cut — the evidence CHANNEL.** Runtime question: *"Is the evidence LANGUAGE (chat logs, messages, word choice), or a PERCEPTUAL channel (appearance, face, voice, behavior, their space)?"* Language → here. Perceptual → there, **whether live or captured** — a photo or video is stored *and* perceptual, and this skill's own scope disclaims images. **Seam contract:** this skill's `calibration-and-ethics.md` §1 stays the SOLE HOME of the confidence tiers and the accuracy ceiling, §3 of the Barnum filter, §6 of the general ethics gate; `observable-cues.md` §4 stays the SOLE HOME of **TEXT** folklore. That skill owns **channel validity** and **PERCEPTUAL** folklore. Agrees in SUBSTANCE — do **not** diff for byte-identity; re-diff only if either side's question clause changes. Natural sequential co-fire: its encounter note feeds this skill's dossier. Canonical phrasing of the cut is owned **there**. |
 | `courting-on-apps` (Personal-Drive/skills — separate collection, co-installed on claude.ai projects) | PURPOSE cut — **READ vs MOVE**. Runtime question: "is the deliverable an understanding/forecast of person(s), or the next move/message in a courtship?" Understanding/forecast (dossier, 相性, friction, flip indicators) → here. Next move (何を送る・いつ誘う・デート設計・復帰・文例, stage discipline) → there. Natural sequential co-fire: this skill produces the read, that skill converts it into a hand. Both scripting moves here and re-profiling there are boundary breaches (observed 2026-07-03, encoded both sides). |
 
-**Reciprocal pointers (F2).** No sibling names this skill (verified: no personality/HEXACO/Big-Five
-territory elsewhere in the collection). Reciprocal edits are **deferred** except one landed change:
-`raising-resolution`'s subtractive owner-filter is updated to yield to this skill (it enumerates the
-domain owners it defers to, and profiling-personality is a domain-artifact owner). The other three
-cuts are non-racing and need no reciprocal edit.
+**Reciprocal pointers (F2).** Two landed: (1) `raising-resolution`'s subtractive owner-filter yields to
+this skill (it enumerates the domain owners it defers to, and profiling-personality is a
+domain-artifact owner); (2) `reading-people-in-person` names this skill in its description and routing
+table, and this skill names it above — the cut's canonical phrasing is owned **there** (2026-07-09).
+The remaining cuts are non-racing and need no reciprocal edit.
 
 ## Reference index — load the file you need
 

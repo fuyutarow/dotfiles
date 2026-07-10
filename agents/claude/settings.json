@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/detect-codemix.sh"
+            "command": "bash ~/.claude/detect-prose-correo.sh"
           }
         ]
       }

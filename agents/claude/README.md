@@ -9,8 +9,11 @@ this repo. Keep the two separate.
 
 | repo file | symlinked to | holds |
 |---|---|---|
-| `settings.json` | `~/.claude/settings.json` | statusLine, model, theme, flags |
+| `settings.json` | `~/.claude/settings.json` | statusLine, model, theme, flags, hooks |
+| `CLAUDE.md` | `~/.claude/CLAUDE.md` | user-global policy (sonnet-agent rule nudge) |
 | `statusline-command.sh` | `~/.claude/statusline-command.sh` | two-line statusline |
+| `enforce-sonnet-agents.sh` | `~/.claude/enforce-sonnet-agents.sh` | PreToolUse gate: every spawned agent (Agent/Task/Workflow `agent()`) is pinned to Sonnet — inject `model:'sonnet'` when omitted, deny non-sonnet, ask on unverifiable (named workflow / child `workflow()`) |
+| `detect-*.sh` | `~/.claude/detect-*.sh` | Stop-hook prose/toolcall guards |
 
 `~/.claude/settings.local.json` (machine-specific permissions) stays **local**,
 not shared.

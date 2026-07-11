@@ -5,6 +5,17 @@
   },
   "model": "claude-fable-5[1m]",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/enforce-sonnet-agents.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

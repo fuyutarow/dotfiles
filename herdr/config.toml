@@ -12,6 +12,7 @@
 # - status-line CPU/RAM: herdr sidebar replaces it.
 # - 11/12-pane layout scripts: tmux-only.
 # - synchronize-panes/swap-pane/rotate/join-pane: no herdr equivalent.
+# - tmux custom m/M mark-then-recall pair (bind m/M): herdr has no persistent pane mark; last_pane (prefix+;) is only a recency toggle.
 # - tmux-fzf-url: set ui.mouse_capture=false if you want Cmd+click URL opening.
 
 [theme]
@@ -30,7 +31,7 @@ previous_tab = "prefix+ctrl+h"     # tmux C-h window nav; tab ~= tmux window
 next_tab = "prefix+ctrl+l"         # tmux C-l
 new_tab = "prefix+c"               # equals default; = tmux c
 copy_mode = "prefix+["             # equals default; = tmux copy-mode. Written explicitly because `herdr --default-config` omits this real key (vi: h/j/k/l move, v select, y copy)
-last_pane = "prefix+m"             # approximates tmux mark/jump (m/M)
+last_pane = "prefix+;"             # tmux DEFAULT last-pane key; herdr last_pane is the same recency toggle. Raw ; is valid (also a named token "semicolon")
 focus_pane_left = "prefix+h"       # equals defaults; = tmux h/j/k/l - kept explicit as self-documentation
 focus_pane_down = "prefix+j"       # equals default; = tmux j
 focus_pane_up = "prefix+k"         # equals default; = tmux k
@@ -50,15 +51,16 @@ key = "prefix+alt+g"
 type = "pane"
 command = "lazygit"
 
-[[keys.command]] # btop popup - tmux bind G analog (prefix+shift+g stays herdr new_worktree)
+[[keys.command]] # btop popup - tmux bind G analog; runs via /bin/sh -c, so the || fallback works (prefix+shift+g stays herdr new_worktree)
 key = "prefix+shift+b"
 type = "pane"
-command = "btop"
+command = "btop 2>/dev/null || top"
 
 [ui]
 prompt_new_tab_name = false # tmux c created windows instantly - no name prompt
 
 # mouse_scroll_lines=3 default already equals tmux WheelUp 3-line scroll.
+# confirm_close=true default kept — matches tmux's confirm-before kill-pane habit.
 
 [session]
 # resume_agents_on_restore = true (default)

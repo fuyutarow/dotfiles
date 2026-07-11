@@ -133,6 +133,13 @@ and it fits reality better (nature usually has several co-acting causes). For an
 sycophancy (§4) pulls it to the one hypothesis it was handed. The SPEC's G4 live-hypotheses slot is the
 artifact; Platt's rule closes it: design the experiment that **excludes** members of the set.
 
+**≥3 is the default, not a magic number.** Hold an ensemble of ≥3 UNLESS the hypothesis space is
+explicitly **exhaustive-binary** (H vs. ¬H, nothing else conceivable) or **nested-within-one-tree**
+(sub-nodes of a single parent hypothesis, not independent explanations) — **and you say so.** What
+load-bears is a **discriminating test** plus the **named EXCLUDED alternative classes**, not the raw
+count: padding the ensemble with fake alternatives just to hit "3" is exactly the ceremony THE LAW
+forbids. The floor's `ge3` check stays a WARN either way — it cannot see whether the exception is real.
+
 ## §8 — The scout self-tests (Galef): symmetry checks on your own conclusion
 
 Feynman says "don't fool yourself"; Galef gives **executable checks** — a battery of counterfactual swaps

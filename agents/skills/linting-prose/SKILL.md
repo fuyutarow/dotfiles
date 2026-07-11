@@ -2,26 +2,23 @@
 name: linting-prose
 description: >-
   Lints audience-facing prose against a DECLARED READER — machine floor (bunx textlint / Vale) for
-  word/sentence tics, model judgment for the layers a linter cannot reach: paragraph logic (topic
-  sentences), document logic (fact/opinion separation & スリカエ; FLAGGING — not fixing — a buried
-  conclusion/BLUF), REGISTER export
-  (internal ledger IDs, receipts, verdict tokens, 造語/内輪ジャーゴン shipped to a reader who lacks
-  them), and LIFECYCLE integrity (retracted claims left standing in tables/headers). Use BEFORE
-  writing and when reviewing slide titles, abstracts, reports, proposals, rebuttals, READMEs, or an
-  agent's own review prose — 外賓向け / 社外向け / 顧客向け 資料, 文章校正 / 推敲, "LLMっぽい表現" /
-  "AI臭い文体" / AI slop, ジャーゴン / jargon / 造語, 用語表 / terminology table, 事実と意見,
-  トピックセンテンス, 結論ファースト, 撤回済み / 言い切り. Triggers: grounding, prose lint, wording
-  audit, claim calibration, textlint, Vale, prh, tooling-first titles, "核" / "本体" / "一つに返す" /
-  "ここが肝心" / "PASS" / "receipt:", metaphor jargon 床/鎖/橋/土台/足場. Machine floor is DELEGATED to
-  textlint/Vale.
-  Not for deck structure, section order, or slide ownership (→ designing-presentations), wiring the
-  lint into hooks/CI (→ operating-the-harness), literature synthesis (→ systematizing-knowledge),
-  model-facing SKILL.md prose (→ forging-skills), or a fix that MOVES information across the
-  document — MECE / 目標規定文 / 内容の精選 / section reorder / 重点先行 at document scale
-  (→ structuring-documents; cut is FIX-LOCALITY — rewrite-words-in-place here, move-information
-  -across-the-document there). Workflow-native: machine floor first as a script,
-  judgment SOLO, read-only flaggers only at corpus scale. English skill; respond in the user's
-  language (default Japanese).
+  word/sentence tics, model judgment for what a linter cannot reach: paragraph logic (topic
+  sentences), document logic (fact/opinion & スリカエ; FLAGGING not fixing a buried
+  conclusion/BLUF), REGISTER export (ledger IDs, verdict tokens, 造語/ジャーゴン reader lacks), and
+  LIFECYCLE integrity (retracted claims in tables/headers). Use BEFORE writing/reviewing
+  slides/abstracts/reports/proposals/rebuttals/READMEs, or agent review prose — 外賓向け / 顧客向け
+  資料, 文章校正 / 推敲, "LLMっぽい表現" / "AI臭い文体", ジャーゴン / jargon, 用語表 / terminology
+  table, 事実と意見, トピックセンテンス, 結論ファースト, 撤回済み / 言い切り. Triggers: grounding,
+  prose lint, wording audit, sentence-level claim calibration, textlint, Vale, prh, tooling-first
+  titles, "核" / "本体" / "PASS" / "receipt:", metaphor jargon 床/鎖/土台. Machine floor is
+  DELEGATED to textlint/Vale.
+  Not for deck/section/slide ownership (→ designing-presentations); hooks/CI (→
+  operating-the-harness); literature synthesis (→ systematizing-knowledge); SKILL.md prose (→
+  forging-skills); argument/contribution-level claim=evidence & 新規性 positioning (→
+  arguing-research-papers); or info-MOVING fixes — MECE / 目標規定文 / 内容の精選 / 重点先行 at
+  document scale (→ structuring-documents; cut FIX-LOCALITY: rewrite-words-in-place here,
+  move-information there). Workflow-native: floor = script, judgment SOLO, read-only flaggers at
+  corpus scale. English skill; respond in the user's language (default Japanese).
 ---
 
 # Linting prose

@@ -38,15 +38,18 @@ and the dated forge log with its adversarial-verification results.
   placeholders are the honest alternative to fabrication and PASS the anchor check ONLY.
 
 **Open defects / deferred:**
-- **Reciprocal-cut debt (deferred, owner-named).** `linting-prose` (≈1674 chars) and
-  `structuring-documents` (≈1649) descriptions are already **over the ~1500 listing budget**, so the
-  reciprocal DESCRIPTION cut — ceding *argument/contribution-level* claim calibration back to this
-  skill — cannot be landed without worsening their truncation. Deferred to each sibling's own
-  trim-reforge (owner = that sibling). The cut is one-directional until then; the F7 decisive-signal
-  note in `tests/triggers.md` resolves the sharpest race from this side. Also for a future SD/FNT
-  reforge: SD's un-earned-claim line should also route argument-level overclaim here; `forging-novel-
-  theses` should name arguing for finished-paper novelty positioning (it currently only routes the
-  reverse). Re-run the trigger desk-check after any sibling reforge.
+- **Reciprocal-cut debt (partially LANDED, owner-named).** `linting-prose`'s reciprocal cut **LANDED
+  2026-07-11** (S3, external-review-#2 fix cycle — see that section below): its "claim calibration"
+  trigger narrowed to **"sentence-level claim calibration"**; its Not-for gained **"argument/
+  contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"**; description
+  trimmed ≈1674→≈1473 chars (re-verified ≤1500 in the same cycle's cross-verification sweep).
+  `structuring-documents` (≈1649 chars, still **over the ~1500 listing budget**) remains **DEFERRED**
+  to its own trim-reforge (owner = structuring-documents); the cut from that side is still
+  one-directional, and the F7 decisive-signal note in `tests/triggers.md` still covers the sharpest
+  race from this side. Also still open for a future SD/FNT reforge: SD's un-earned-claim line should
+  also route argument-level overclaim here; `forging-novel-theses` should name arguing for
+  finished-paper novelty positioning (it currently only routes the reverse). Re-run the trigger
+  desk-check after any sibling reforge.
 
 **Retired decisions (do not resurrect):** none yet.
 
@@ -183,3 +186,26 @@ scope; `sh -n` clean; `skill-check.sh` clean; build-order one-liner empty.
 **Consciously narrowed (2):** fuzz-F8 multiline support — documented as a contract instead of parsing
 continuations (parser stays one-pass simple); consistency-F7 G0 sub-bullet decomposition — same
 resolution (ONE-line contract stated at the spec intro), template unchanged.
+
+## 2026-07-11 external review #2 (Codex) — adjudication & fix cycle
+
+**Codex verdict: do-not-ship** (2 blockers + 2 major + 1 minor, `scripts/claim-check.sh` blockers named
+explicitly). Every finding re-verified against the script/source before ruling, per this ledger's own
+adjudication discipline.
+
+| # | Severity | Verdict | Resolution |
+|---|---|---|---|
+| **1** | blocker | **ACCEPT** | `claim-check.sh` false-FAILed the canonical positioning form `Unlike ResNet, which requires labels, we remove them.` — fixed by **S1**; landed with 6 red/green fixtures (incl. gawk `--posix` + mawk portability) |
+| **2** | blocker | **ACCEPT** | `claim-check.sh` false-PASSed the bare deny-list dodge `Existing Methods fail; our approach wins.` — fixed by **S1**, same fixture suite, now correctly FAILs (exit 1) |
+| **3** | major | **ACCEPT** | zone-split over-rigid — recast by **S2** to the 4-invariant record-zone form (completeness / uncertainty / hypothesis timing / claim's reach — "austerity-of-persuasion, not austerity-of-navigation"), landed in `references/reconciliation.md` |
+| **4** | major | **ACCEPT** | linting-prose reciprocal cut, previously deferred debt — **LANDED** by **S3**: `linting-prose`'s "claim calibration" trigger narrowed to "sentence-level claim calibration"; its Not-for gained "argument/contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"; description trimmed ≈1674→≈1473 chars (see CURRENT STATE bullet above) |
+| **5** | minor | **ACCEPT** | C-C-C (L3) / 事実と意見 (L4) re-owning linting-prose territory — resolved by **S2**'s LP-execution pointers alongside the zone-split recast: this skill retains argument-level claim/positioning, linting-prose keeps sentence-level execution |
+
+**Codex non-findings (recorded):** the arguing↔directing HARKing seam is clean; source spot-checks
+sound (Swales / Toulmin / C-C-C / Boutron / Bordage — and, shared with the directing-research review,
+Lakatos / Chamberlin / Platt / Goodhart / Kapoor-Narayanan, all with primary links).
+
+Fix execution was delegated to Sonnet-5 agents (S1–S3, disjoint file ownership: S1 →
+`scripts/claim-check.sh`; S2 → `references/reconciliation.md` + `tests/triggers.md` LP-execution
+pointers; S3 → `linting-prose/SKILL.md`) under Fable-5 direction, with floor (`claim-check.sh`)
+verification green after fixes.

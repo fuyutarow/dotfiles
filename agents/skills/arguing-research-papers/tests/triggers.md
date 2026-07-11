@@ -57,14 +57,17 @@ linting-prose. The **decisive signal** that routes it HERE is "**if I only ran o
 that is an *evidence-sufficiency* question (does the evidence license the claim's scope = G2), which is
 argument-level, not word-choice. Route on the evidence question, not the quoted phrase.
 
-**Unreciprocated-cut debt (explicitly DEFERRED, owner named).** The cuts above are currently
-**one-directional** — they live in this skill's description; the siblings do not yet point back:
-`linting-prose` lists "claim calibration" as a bare trigger and fires on abstracts/rebuttals without
-ceding argument-level calibration here; `structuring-documents` routes un-earned-claim calibration only
-to linting-prose; `forging-novel-theses` never names arguing for finished-paper novelty. The reciprocal
-DESCRIPTION cut **cannot be landed now**: `linting-prose` (≈1674 chars) and `structuring-documents`
-(≈1649) descriptions are **already over the ~1500 listing budget**, so adding to them worsens
-truncation — the reciprocal cut is deferred to each sibling's own trim-reforge (owner = that sibling).
-On MY side the cut is as sharp as possible (the F7 decisive-signal note above resolves the sharpest
-race unilaterally). Debt recorded in `forge-verification-ledger.md`; re-run this desk-check after any
+**Unreciprocated-cut debt — `linting-prose` LANDED, `structuring-documents` still deferred (owner
+named).** The cuts above were one-directional — they lived in this skill's description while the
+siblings didn't point back. `linting-prose`'s reciprocal is now **landed**: its "claim calibration"
+trigger token is narrowed to "sentence-level claim calibration" and its Not-for list now names
+"argument/contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"; its
+description was simultaneously trimmed from ≈1674 to ≈1473 chars, back under the ~1500 listing
+budget (verified via `forging-skills/scripts/skill-check.sh`, exit 0, no WARN). `structuring-documents`
+routes un-earned-claim calibration only to linting-prose and still does not name this skill — its
+description (≈1649 chars) is **still over the ~1500 listing budget**, so its reciprocal cut remains
+**deferred to its own trim-reforge** (owner = structuring-documents); `forging-novel-theses` also
+still never names arguing for finished-paper novelty (unchanged, no owner action taken). On MY side
+the cut is as sharp as possible (the F7 decisive-signal note above resolves the sharpest race
+unilaterally). Debt recorded in `forge-verification-ledger.md`; re-run this desk-check after any
 sibling reforge.

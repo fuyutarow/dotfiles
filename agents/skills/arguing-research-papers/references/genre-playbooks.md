@@ -130,13 +130,13 @@ the terms; the rule is in English.
   model's **「〜について」exposition** ("This paper explores X") which has no arguable spine: pose a sharp
   問い with a definite answer, not a topic.
 - **事実と意見の峻別** (Kinoshita) — every statement is either **事実** (a fact whose truth is in
-  principle verifiable by others) or **意見** (the author's judgment/inference). The writer must know
-  which each sentence is and *mark* it: 意見 gets a judgment-marker ("〜と考えられる", "we interpret"),
-  事実 does not — and **never the reverse** (a 意見 written as a 事実 is the スリカエ a reviewer catches;
-  it is the model's silent-overclaim failure). Map onto sections: **事実 in the record zone
-  (Methods/Results), 意見 in the framing zones (intro/discussion)** — this is 木下's grounding of the
-  zone-split. This per-sentence 事実/意見 pass is the single most effective corrective to model
-  overclaiming.
+  principle verifiable by others) or **意見** (the author's judgment/inference); the two must stay
+  **distinguishable and zone-mapped** — **事実 in the record zone (Methods/Results), 意見 in the
+  framing zones (intro/discussion)** — this is 木下's grounding of the zone-split
+  (`reconciliation.md` §1). A 意見 written as a 事実 is the **スリカエ**, never legitimate the reverse
+  way: the model's silent-overclaim failure. HERE owns this epistemic rule (which zone a claim
+  belongs in, and whether it is mismarked); the per-sentence marking pass (judgment-markers,
+  rewrite-in-place) is executed by `linting-prose` (L4 事実と意見/スリカエ) — reuse it by pointer.
 - **主張を絞る** (Sakai) — commit to ONE governing 主張; list sub-contributions only as its components,
   never as co-equal theses (the corrective to model sprawl; = G1). If two claims cannot be subordinated
   to one, they are two papers.

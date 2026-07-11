@@ -33,6 +33,18 @@ entirely** ("we've invested so much" is not a reason to continue) AND **ignore "
 clothes?** (Full regime + the agent's premature-pivot bias: `reconciliation.md` §4.) A single experiment's
 kill condition is `acting-on-hypotheses`; this aggregates across many to decide the whole direction.
 
+**The learning ledger — making dLearning/dt computable, not felt.** "Still learning" is unfalsifiable
+without a record: **dLearning/dt is ESTIMATED from a ledger, never felt** — a direction with no ledger
+cannot claim to be still learning. Keep one row per period:
+
+| Period | Compute/time spent | Learning events (facts established / predictions that FAILED / alternatives RULED OUT) | Hypothesis-space delta (now believed that wasn't; what DIED) | Structural-block evidence (if any) |
+|---|---|---|---|---|
+| e.g. wk3 | 40 GPU-h | 0 facts, 0 failed predictions, 0 ruled-out | none | none |
+
+**Pre-set the kill threshold in these terms, before the period starts, not after** — e.g. *"2
+consecutive periods with zero ruled-out alternatives AND zero failed-prediction surprises → kill."* A
+period that only re-confirms what you already believed is a zero-row even if the metric ticked up.
+
 ## §2 — The barbell portfolio (allocate across bets)
 
 Without an explicit allocation policy the agent defaults to **all-in on one bet** (fatal if it dies) or
@@ -114,7 +126,7 @@ over discovery is here.)
 ## §8 — Engineer the environment: the open-door / exploration budget
 
 Some research judgment is not about the problem but about **engineering the environment that keeps you
-coupled to which problems matter.** Hamming's measured finding: researchers who work with their **door
+coupled to which problems matter.** Hamming's reported observation: researchers who work with their **door
 open** are less productive day-to-day but do the **more important** work, because openness keeps them
 tuned to the field's live problems — a real exploration/exploitation trade. **Mechanism for an agent**:
 hold an explicit **open-door / exploration budget** — a standing fraction of effort spent sampling

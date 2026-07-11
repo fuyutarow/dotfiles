@@ -67,9 +67,10 @@ and order*, never the facts — the zone-split (`reconciliation.md` §1) bounds 
   still report all results (including mixed ones) in the record-zone Results.
 - **C-C-C** (Mensh-Kording) — **Context → Content → Conclusion**, applied *self-similarly* at three
   scales: paper (intro/results/discussion), section (orient/body/close), paragraph (topic sentence /
-  body / conclusion-to-remember). The last sentence of the *context* block states the gap. Pairs with
-  "avoid zig-zag, use parallelism". The most useful **paragraph-level audit** the model needs (its
-  paragraphs zig-zag and lack a message-bearing topic sentence).
+  body / conclusion-to-remember). The last sentence of the *context* block states the gap. **Here**
+  it is the structure that carries the CLAIM at paper/section scale — an argument-level frame, not a
+  prose fix. The paragraph-level instance (topic-sentence-first, no zig-zag) is executed as an audit
+  by `linting-prose` (L3); reuse it by pointer, don't re-run it here.
 
 ## §3 — The introduction (where most papers are won or lost)
 

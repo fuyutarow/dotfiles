@@ -1,8 +1,9 @@
 {
-  "model": "claude-fable-5[1m]",
   "env": {
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5",
+    "CLAUDE_CODE_DISABLE_MOUSE": "1"
   },
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "Stop": [
       {

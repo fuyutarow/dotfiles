@@ -59,9 +59,10 @@ tokens stable even inside Japanese prose — they are identifiers, not translata
 > 3. **Positioned** against a **SPECIFIC named** prior method by a **specific gap** (never bare
 >    "unlike prior work"); the **sharpest hostile-reviewer objection** pre-empted or conceded.
 > 4. **Zone-split honored**: narrative and value-framing live only on the **persuasion surfaces**
->    (title / abstract / intro / discussion); the **record surfaces** (methods / results / supplement)
->    stay austere and complete. **Persuasion changes SALIENCE and ORDER, never the facts or the
->    claim's reach.**
+>    (title / abstract / intro / discussion); **record surfaces** (methods / results / supplement) may
+>    carry factual assertion headers and evidence-chain signposting, but never move **completeness,
+>    uncertainty, hypothesis timing, or the claim's reach** — austerity-of-persuasion, not
+>    austerity-of-navigation.
 >
 > Above all — the model-specific cardinal sin: **NEVER invent a citation, baseline, dataset, or
 > number to make the argument land.** A fabricated support is not weak writing; shipped, it is

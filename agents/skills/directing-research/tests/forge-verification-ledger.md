@@ -93,3 +93,40 @@ attributions (Wilson, Cajal, Millikan-as-Feynman-told-it) and added the missing 
 disambiguated. Two nits **rejected** as house-inconsistent (the immunization sentence and 同型 /
 感触では通れない are house-mandated). Post-fix floor: build-order clean, skill-check exit 0, spec
 red-on-empty / green-on-well-formed re-verified.
+
+## 2026-07-11 external review #2 (Codex) — adjudication & fix cycle
+
+**Codex verdict: ship-with-fixes** (6 major + 2 minor, all in/around `scripts/research-check.sh` and
+the SKILL.md gate table).
+
+| # | Severity | Verdict | Resolution |
+|---|---|---|---|
+| **1** | major | **ACCEPT** | floor WARN-vs-FAIL contradiction with "no artifact, gate un-passed" — fixed by **S4** (severity-map header added to `research-check.sh`, mirroring SKILL.md's `[floor: FAIL]`/`[floor: WARN]` gate-table annotation) + **S5** (†-marker hard/advisory legend added to SKILL.md so the gate table and the script agree) |
+| **2** | major | **ACCEPT** | `has_threshold` passing on bare timestamp digits (a pre-reg date alone read as a kill-threshold) — fixed by **S4**: `strip_timestamp()` removes `YYYY-MM[-DD]`/`YYYY/MM[/DD]` tokens from a COPY of the value before the threshold check runs |
+| **3** | major | **ACCEPT** | slot-presence ≠ mechanism-presence (a filled-but-hollow slot still reads as "done") — fixed by **S4**: 4 bounded token-minimum checks added on top of slot presence (firewall optimize/witness = FAIL; the other 3 = WARN) |
+| **4** | major | **ACCEPT** | dLearning/dt underspecified as a kill signal — fixed by **S5**: a learning ledger added to `references/steering.md` §1 |
+| **5** | major | **ACCEPT** | witness lifecycle missing (adaptive-data-analysis contamination — a witness re-used across rounds stops being held-out) — fixed by **S5**: witness lifecycle added to `references/formulating.md` §2 |
+| **6** | major | **ACCEPT** | cardinality cut vs `acting-on-hypotheses` undecidable pre-Map (can't classify single-bet vs. portfolio before the Map step exists) — fixed by **S5**: explicit decision-order added to the routing row + `tests/triggers.md` |
+| **7** | minor | **ACCEPT** | ≥3-hypotheses ceremony risk (padding a live-hypotheses list just to clear the floor's count) — fixed by **S5**: exhaustive-binary / nested-in-one-tree exception added, naming the excluded alternative classes instead of padding |
+| **8** | minor | **ACCEPT** | Hamming's "measured finding" phrasing overclaims for judgment-layer work — fixed by **S5**: downgraded to "reported observation" |
+
+**Codex non-findings (recorded):** the arguing↔directing HARKing seam is clean; source spot-checks
+sound (Lakatos / Chamberlin / Platt / Goodhart / Kapoor-Narayanan, with primary links — and, shared
+with the arguing-research-papers review, Swales / Toulmin / C-C-C / Boutron / Bordage).
+
+**S4 residual-risk adjudication.** Firewall optimize/witness token check's case/space brittleness
+(`Optimize` capitalized not matched, `held out` with a space not matched) is **FIXED in this wave**
+(task 1 of this cycle: `has_optimize_token`/`has_witness_token` now match on a `tolower()` copy) —
+re-verified via stdin fixtures: `Optimize on seen MAE || Witness: held out families` → PASS;
+`we track validation MAE` → still FAIL; the full unfilled RESEARCH SPEC template → still FAIL=7
+WARN=6, exit 1; a fully-good spec → exit 0. Two residuals **accepted as known, documented residuals,
+not fixed this wave**: (a) `has_independence_token`'s WARN-level risk that "indifferent"
+substring-matches "different" (a false PASS on the independence check, WARN-level not FAIL-level); (b)
+the dropped `→ 0` threshold pattern (an explicit "kill when metric → 0" phrasing is not recognized as
+a threshold token by `has_threshold` — no comparator/percent/keyword token accompanies the digit).
+Both left for a future reforge.
+
+Fix execution was delegated to Sonnet-5 agents (S4 → `scripts/research-check.sh`; S5 → `SKILL.md` +
+`references/steering.md` + `references/formulating.md` + `tests/triggers.md`; disjoint file ownership)
+under Fable-5 direction, with floor (`research-check.sh`) verification green after fixes: fixtures
+green, no regressions (unfilled template FAIL=7 WARN=6).

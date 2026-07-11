@@ -58,6 +58,21 @@ Seam test: **ONE hypothesis tree → there; ≥2 uncorrelated directions, the st
 problem-choice/formulation → here.** They co-fire in sequence (C1). The two share the word "kill": a single
 tree's kill condition = acting-on-hypotheses; the *aggregate*-learning-rate kill across ≥2 directions = here.
 
+**Runtime decision order (cardinality may be UNDECIDABLE before Mapping).** "≥2 UNCORRELATED directions"
+can be unknown at ask-time, so a naive cardinality check races — apply this order instead of guessing:
+1. Selection / formulation / the standing honesty policy → **directing-research**, ALWAYS (true even
+   inside a single tree — these judgments never move).
+2. A single experiment's pre-registration threshold, pass/fail, outcome table, commit/kill →
+   **acting-on-hypotheses** (its R2/R3), ALWAYS.
+3. When it is ONE direction, or correlation across directions is UNKNOWN → run
+   **acting-on-hypotheses**'s Map FIRST; return to **directing-research** ONLY for portfolio allocation
+   across the ≥2 independent directions the Map reveals (Map confirms only one → stay in
+   acting-on-hypotheses).
+
+**The pre-registration seam** (do not double-book this artifact): the PER-EXPERIMENT threshold —
+prediction + kill-threshold for THIS run — is acting-on-hypotheses R2; the STANDING, timestamped
+pre-registration + denominator + generator≠auditor policy held ACROSS runs is here.
+
 **Unreciprocated-cut debt (LIVE, mitigated — owner named).** `acting-on-hypotheses`'s description
 (≈1900 chars) is well over the ~1500 listing budget AND enumerates "research direction" as in-scope with
 no cut ceding the ≥2-direction portfolio altitude here — so at stage-1 (descriptions alone) a

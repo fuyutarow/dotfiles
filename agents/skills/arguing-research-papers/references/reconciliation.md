@@ -15,14 +15,16 @@
 
 ## §1 — The zone-split law (the master structural moderator)
 
-> **Narrative, value-framing, and persuasion live only on the PERSUASION surfaces; the RECORD
-> surfaces stay austere and complete. Persuasion changes SALIENCE and ORDER — never the facts, the
-> timing of a hypothesis, or a claim's reach.**
+> **Narrative and value-framing live on the PERSUASION surfaces, where they change SALIENCE and
+> ORDER only. The RECORD surfaces MAY use factual assertion headers, evidence-chain signposting,
+> and enough interpretation to let the evidence be read — what they may NOT do is alter
+> COMPLETENESS, UNCERTAINTY statements, HYPOTHESIS TIMING, or a CLAIM'S REACH. That quartet is the
+> invariant: austerity-of-persuasion, not austerity-of-navigation.**
 
 | Surface | Zone | Governed by | The wrong test to apply |
 |---|---|---|---|
 | Title · Abstract · Introduction · Discussion | **PERSUASION** | value, story arc (OCAR/ABT), the funnel/CARS, field-code, bold significance, editor-facing pitch | "is this complete / neutral?" — no; it is *selective and framed* on purpose |
-| Methods · Results · Supplement · released code | **RECORD** | austerity, completeness, neutral reporting, 事実 (fact) marking, reproducibility | "does this create value / tell a story?" — a **category error**; completeness for the record is the test |
+| Methods · Results · Supplement · released code | **RECORD** | **austerity-of-persuasion, not of navigation**: factual assertion headers, evidence-chain signposting, and reading-guidance interpretation are permitted; completeness, full uncertainty, true hypothesis timing, and the claim's reach are the invariants that may never move | "does this create value / tell a story?" — a **category error**; nor "must the heading stay a bare neutral label" — the quartet, not silence, is the test |
 
 This one law resolves a whole family of tensions at once — *story vs facts*, *narrative vs
 mathematical austerity*, *value-cutting vs reproducibility*, *one clean message vs exhaustive

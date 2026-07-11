@@ -8,10 +8,26 @@
 #   G3  honesty    — pre-registration (TIMESTAMP + threshold) + denominator + generator!=auditor (+ negation)
 #   G4  steer      — portfolio + learning-rate kill/persist + >=3 live hypotheses
 #
+# Hard (FAIL) vs advisory (WARN) when a slot is MISSING or a PLACEHOLDER — the agreed severity map
+# (mirrors SKILL.md's [floor: FAIL] / [floor: WARN] gate-table annotation; this is the full split, not
+# a partial list):
+#   FAIL — consequence-ranked slate (G1); cheap victory (G2); optimize/trust firewall (G2);
+#          pre-registration (G3); denominator (G3); generator≠auditor (G3); learning-rate kill/persist (G4)
+#   WARN — fresh lever (G1); fluency check (G1); throws-away (G2); negation (G3); portfolio (G4);
+#          live hypotheses (G4)
+# On top of slot presence, a few slots get a BOUNDED check of the already-filled VALUE, because slot
+# presence != mechanism presence (a filled-but-hollow slot still reads as "done"):
+#   FAIL — firewall value missing EITHER an optimize-side token OR a witness/held-out token (a firewall
+#          without a witness is definitionally not a firewall, so this one is hard even though the other
+#          three bounded checks below are advisory)
+#   WARN — generator≠auditor value missing an independence token; portfolio value showing <2 bets;
+#          learning-rate kill/persist value missing a learning-signal token
+#
 # THIS IS NOT A SEMANTIC CHECK. It cannot tell whether the witness is truly un-gameable, the lever truly
 # fresh, or the kill-rule truly keyed to learning-rate — only whether the mechanism slots are filled,
-# not placeholders, and carry the load-bearing tokens (a timestamp, a threshold, a denominator number,
-# >=3 hypotheses). A human/agent still judges MEANING against G1-G4 in SKILL.md and the references.
+# not placeholders, carry the load-bearing tokens (a timestamp, a genuine threshold signal, a denominator
+# number, >=2/>=3 items), and clear the bounded token-minimum checks above. A human/agent still judges
+# MEANING against G1-G4 in SKILL.md and the references.
 #
 # Usage:  research-check.sh <spec.md>   |   cat spec.md | research-check.sh   |   research-check.sh -
 # Exit:   0 = no FAIL (WARN allowed)   1 = >=1 gate FAIL   2 = usage / file error
@@ -47,9 +63,22 @@ function is_placeholder(v){
 }
 function has_number(v){ return (v ~ /[0-9]/) }
 function has_timestamp(v){ return (v ~ /(19|20)[0-9][0-9][-\/][0-9]|timestamp|TIMESTAMP|dated|[0-9]{4}-[0-9]{2}/) }
-function has_threshold(v){
-  if (v ~ /[0-9]/) return 1
-  if (v ~ /割|超|未満|以上|以下|%|％|閾値|threshold|kill|below|above|<|>|→ *0|stall/) return 1
+function strip_timestamp(v){
+  # remove timestamp-like tokens (YYYY-MM[-DD] / YYYY/MM[/DD]) from a COPY of v, so a bare pre-reg
+  # date is not mistaken for a threshold by the digit checks in has_threshold() below (finding 2: the
+  # old has_threshold() returned true on ANY digit, so a timestamp alone silently passed the gate).
+  gsub(/(19|20)[0-9][0-9][-\/][0-9][0-9]?([-\/][0-9][0-9]?)?/,"",v)
+  return v
+}
+function has_threshold(v,   t){
+  t = strip_timestamp(v)
+  # a genuine threshold signal on the TIMESTAMP-STRIPPED copy: a comparator/percent WITH a number, a
+  # threshold keyword WITH a number, or an explicit qualitative stop-condition keyword (no number needed).
+  # Alternation (not a [...] class) for the wide/multi-byte chars, matching the rest of this script.
+  # A bracket class mixing multi-byte UTF-8 with ASCII is not safe on a byte-oriented BSD awk.
+  if (t ~ /<|>|≤|≥|%|％/ && t ~ /[0-9]/) return 1
+  if (t ~ /threshold|閾値|kill|以上|以下|未満|超|below|above|stall/ && t ~ /[0-9]/) return 1
+  if (t ~ /stop condition|stop rule/) return 1
   return 0
 }
 function ge3_items(v,   n,i){
@@ -58,6 +87,16 @@ function ge3_items(v,   n,i){
   n=gsub(/;|·|、|, | vs | \/ /,"&",v)
   return (n>=2)
 }
+function ge2_items(v,   n){
+  # same separator-counting idea as ge3_items, but for the >=2-bets portfolio floor (finding 3c)
+  if (v ~ /[2-9]|[0-9][0-9]/) return 1
+  n=gsub(/;|·|、|, | vs | \/ /,"&",v)
+  return (n>=1)
+}
+function has_optimize_token(v){ return (tolower(v) ~ /optimi[sz]/) }
+function has_witness_token(v,   t){ t=tolower(v); return (t ~ /witness|held[- ]?out|holdout/) }
+function has_independence_token(v){ return (v ~ /independent|different|separate|別|独立|外部/) }
+function has_learning_token(v){ return (v ~ /learn|information|bits|novel|surprise|understanding|uncertainty|学習|情報|新規/) }
 
 /[Cc]onsequence-ranked slate/ && g1s!=1 { g1sv=value_after_label($0); g1s=1 }
 /[Ff]resh lever|why-now/       && g1l!=1 { g1lv=value_after_label($0); g1l=1 }
@@ -101,6 +140,8 @@ END{
   else                         { print "G2  PASS     cheap victory あり" }
   if(!g2f)                     { print "G2  MISSING  『Optimize/trust firewall』の行が無い"; fails++ }
   else if(is_placeholder(g2fv)){ print "G2  FAIL     firewall 未記入 -> held-out witness 無し = optimize した数字を trust している"; fails++ }
+  else if(!(has_optimize_token(g2fv) && has_witness_token(g2fv))) {
+                                  print "G2  FAIL     firewall に optimize/witness の両輪が無い -> 分離になっていない"; fails++ }
   else                         { print "G2  PASS     optimize/trust firewall あり" }
   if(!g2t)                     { print "G2  WARN     『What the formalization throws away』の行が無い"; warns++ }
   else if(is_placeholder(g2tv)){ print "G2  WARN     throws-away 未記入 -> 捨てた所に難しさが有れば frame が誤り (Type III)"; warns++ }
@@ -119,6 +160,8 @@ END{
   else                         { print "G3  PASS     denominator あり" }
   if(!g3a)                     { print "G3  MISSING  『generator≠auditor』の行が無い"; fails++ }
   else if(is_placeholder(g3av)){ print "G3  FAIL     generator≠auditor 未記入 -> 生成者が自分を監査している (leakage 不可視)"; fails++ }
+  else if(!has_independence_token(g3av)) {
+                                  print "G3  WARN     同一モデルの自己再読の疑い -> 真の独立監査を"; warns++ }
   else                         { print "G3  PASS     generator≠auditor あり" }
   if(!g3n)                     { print "G3  WARN     『Negation』の行が無い"; warns++ }
   else if(is_placeholder(g3nv)){ print "G3  WARN     negation 未記入 -> 反対仮説を先に述べる (anti-sycophancy)"; warns++ }
@@ -126,9 +169,12 @@ END{
   # G4
   if(!g4p)                     { print "G4  WARN     『Portfolio』の行が無い"; warns++ }
   else if(is_placeholder(g4pv)){ print "G4  WARN     portfolio 未記入 -> all-in or scatter の疑い"; warns++ }
+  else if(!ge2_items(g4pv))    { print "G4  WARN     portfolio が単一 bet に見える (>=2 必要) -> all-in or scatter の疑い"; warns++ }
   else                         { print "G4  PASS     portfolio あり" }
   if(!g4k)                     { print "G4  MISSING  『Learning-rate kill/persist』の行が無い"; fails++ }
   else if(is_placeholder(g4kv)){ print "G4  FAIL     kill/persist 未記入 -> 方向レベルの kill 基準が無い"; fails++ }
+  else if(!has_learning_token(g4kv)) {
+                                  print "G4  WARN     metric の停滞ではなく学習率で kill する条件になっていない疑い"; warns++ }
   else                         { print "G4  PASS     learning-rate kill/persist あり" }
   if(!g4h)                     { print "G4  WARN     『Live hypotheses』の行が無い"; warns++ }
   else if(is_placeholder(g4hv)){ print "G4  WARN     live hypotheses 未記入"; warns++ }

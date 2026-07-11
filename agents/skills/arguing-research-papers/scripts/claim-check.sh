@@ -52,13 +52,42 @@ function is_placeholder(v){
   return 0
 }
 # a "named" token: a citation year, a Capitalized multi-char name, or a quoted/bracketed real name
-function has_named_ref(v){
+function has_named_ref(v,   u){
   if (v ~ /(19|20)[0-9][0-9]/) return 1                             # a 4-digit year
   if (v ~ /[A-Z][A-Za-z0-9.+-]*[A-Za-z0-9] +et al/) return 1        # Author et al.
   if (v ~ /"[^"]+"|“[^”]+”/) return 1                               # a quoted method name
-  # a Capitalized multi-char word that is NOT one of the scaffold words:
-  if (v ~ /[A-Z][A-Za-z0-9-][A-Za-z0-9-]+/ && v !~ /^Unlike[, ]/) return 1
+  # Strip scaffold/frame phrases (case-insensitive) BEFORE the capitalized-word test:
+  #  - "Unlike " is the templates OWN connector ("Unlike [X], which [Y], we [Z]") — stripping it
+  #    (instead of blanket-suppressing the WHOLE check whenever v started with "Unlike ", the old
+  #    bug) lets the named prior INSIDE the frame ("Unlike ResNet, which requires labels, ...")
+  #    still be found.
+  #  - "Existing Methods"/"Prior Work"/"Current Approaches"/"Previous Work" are scaffold nouns,
+  #    capitalized only because they sit at a clause start, not real names. Stripped so a scaffold
+  #    phrase alone can never BE the "capitalized word" that satisfies this check.
+  u = strip_scaffold(v)
+  if (u ~ /[A-Z][A-Za-z0-9-][A-Za-z0-9-]+/) return 1
   return 0
+}
+# Case-insensitive removal of scaffold/frame phrases, portable (no gensub/IGNORECASE — BSD awk +
+# gawk both support match()/substr() and a dynamic (string) regex): walk the lower-cased copy for
+# match positions, splice the SAME-length span out of the original (ASCII case-fold preserves
+# length) — repeat until no more matches.
+function strip_scaffold(v,   pat,rest,out,s){
+  pat = "(existing methods?|prior work|current approaches?|previous work|unlike)"
+  rest = v; out = ""
+  while ((s = match(tolower(rest), pat)) > 0) {
+    out = out substr(rest, 1, s-1)
+    rest = substr(rest, s + RLENGTH)
+  }
+  return out rest
+}
+# Bare-positioning phrase in the slots OWN value — checked BEFORE has_named_ref (in the G3 chain
+# below) so a scaffold sentence like "Existing Methods fail; our approach wins." FAILs even though,
+# pre-strip, it looked capitalized enough to pass as a name. Mirrors the whole-spec advisory
+# deny-scan later in this script, but as a hard FAIL scoped to the G3 slot itself.
+function is_bare_positioning(v,   low){
+  low = tolower(v)
+  return (low ~ /unlike prior work|(existing methods?|prior work|current approaches?|previous work) (struggle|fail|cannot|are)/)
 }
 function has_unfilled_template(v){ return (v ~ /\[X\]|\[Y\]|\[Z\]/) }
 # A value that is WHOLLY one [ ... ] bracket is an unfilled deferral ([VERIFY], [CITATION NEEDED — …],
@@ -138,6 +167,7 @@ END{
   if(!g3p)                        { print "G3  MISSING  『Nearest prior work』の行が無い"; fails++ }
   else if(ph(g3pv))               { print "G3  FAIL     positioning が未記入/placeholder ([CITATION NEEDED] 等) -> 具体の prior を NAMED で"; fails++ }
   else if(has_unfilled_template(g3pv)) { print "G3  FAIL     positioning が template のまま ([X]/[Y]/[Z]) -> 具体の prior method と gap を名指し"; fails++ }
+  else if(is_bare_positioning(g3pv)) { print "G3  FAIL     bare positioning 句 (\"unlike prior work\"/\"existing methods fail\" 等) -> 具体の named prior method + gap に置換 (CARS Move 2)"; fails++ }
   else if(!has_named_ref(g3pv))   { print "G3  FAIL     bare positioning -> 具体の prior work を NAMED で (\"unlike prior work\" 禁止, CARS Move 2)"; fails++ }
   else                            { print "G3  PASS     named prior work + gap あり" }
   if(!g3o)                        { print "G3  MISSING  『reviewer objection』の行が無い"; fails++ }

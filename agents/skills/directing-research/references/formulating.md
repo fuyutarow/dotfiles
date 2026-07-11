@@ -45,6 +45,21 @@ direction is a proxy; a genuine measurement must define what result would FALSIF
   (composes with `not-fooling-yourself.md` §1, §6). Ground the metric in a **real downstream use** when you
   can — a real task can't be Goodharted as easily as a synthetic one (Pasteur's quadrant, `reconciliation.md` §4).
 
+**The witness lifecycle (repeated peeking contaminates even WITHOUT direct optimization).** A witness you
+can look at freely is not held out — it is being hill-climbed one judgment call at a time between looks.
+Treat it as a budgeted, logged resource, not a free oracle:
+- **Budgeted peeks**: pre-declare HOW MANY TIMES the witness may be consulted before the first look; every
+  access is LOGGED (who, when, what was seen).
+- **Frozen analysis plan**: write the analysis you will run on the witness BEFORE the first peek — a plan
+  chosen after seeing the data is not a plan, it is the leak.
+- **Witness-is-SPENT criteria**: once the peek budget is exhausted, OR any decision (model choice, stopping
+  rule, hyperparameter) was conditioned on what the witness showed, it is no longer a witness — it has
+  joined the optimize side whether or not you meant to optimize against it.
+- **Replacement**: retire a spent witness to the optimize side and stand up a FRESH witness (new split /
+  new data / new task) before continuing to adjudicate.
+- **The adaptive-data-analysis caveat**: each look leaks bits — model-selection pressure contaminates a
+  held-out set even with no explicit optimization step, purely from the analyst adapting to what was seen.
+
 ## §3 — The representation is the crux (Pólya + Simon)
 
 **Simon**: "solving a problem simply means representing it so as to make the solution transparent." The

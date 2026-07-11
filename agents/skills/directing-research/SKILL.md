@@ -82,16 +82,19 @@ stable even inside Japanese prose — identifiers, not translatable words: **LAW
 
 同型 with the house discipline (systematizing-knowledge's ledger, forging-novel-theses' G1/G2/G3): a
 gate is passed only when its **artifact exists in the filled RESEARCH SPEC** (template below).
-感触では通れない — no artifact, gate un-passed. `scripts/research-check.sh` is the *floor* that checks
-the mechanism-slots are present and non-placeholder; it is NOT a semantic check (whether the mechanism
-actually binds is judged here). **Each gate is a virtue turned into a mechanism.**
+感触では通れない — gate-passing is judged against ALL artifacts; `scripts/research-check.sh` is the
+*floor* that HARD-blocks the seven **†-marked load-bearing** artifacts below and WARNs on the rest —
+it is NOT a semantic check (whether the mechanism actually binds is judged here). **Each gate is a virtue turned into a mechanism.**
 
 | # | Gate (the mechanism) | Replaces the virtue | Inverts the agent failure | ARTIFACT (must exist) |
 |---|---|---|---|---|
-| **G1** | **Select by consequence, not fluency** | "have courage / work on important problems" | tractability substitution; over-solubility; median-taste | a **consequence-ranked slate** (≥3 candidates, each: what becomes POSSIBLE / gets FALSIFIED — written BEFORE any method sketch) + the **fresh lever** (why attackable NOW) + a **fluency check** (effortless method = crowdedness alarm → downgrade) |
-| **G2** | **Formulate un-gameable** | "pose the problem well" | Goodhart / spec-gaming; premature formalization; solving the wrong problem (Type III) | the **cheap victory** (one way to score well WITHOUT solving it — then close it or reject the metric) + the **optimize/trust firewall** (a held-out **witness** you never optimize or select on; witness↔metric divergence = Goodhart stop) + **what the formalization throws away** |
-| **G3** | **Don't fool yourself (structural)** | "be honest / don't fool yourself" | HARKing; sycophancy→confirmation; machine-scale multiple comparisons; scaffold theater; self-leakage | a **timestamped pre-registration** (prediction + kill-threshold, BEFORE running) + the **denominator** (N configs/seeds tried; the distribution, never the argmax) + **generator≠auditor** (an independent read-only pass whose SOLE job is leakage/contamination/artifact) + the **negation** (strongest case AGAINST, stated first) |
-| **G4** | **Steer by learning-rate** | "persist / let go" | sink-compute-on-dead-direction OR premature-pivot/thrashing; no portfolio; collapse-to-one-hypothesis | a **portfolio** (≥2 uncorrelated but capped bets; risk tiers) + the **learning-rate kill/persist** ("kill when dLearning/dt→0 AND the block is structural; persist while novel surprises continue" — never on the local metric, elapsed time, or sunk cost) + **≥3 live competing hypotheses** until a discriminating test |
+| **G1** | **Select by consequence, not fluency** | "have courage / work on important problems" | tractability substitution; over-solubility; median-taste | a **consequence-ranked slate**† (≥3 candidates, each: what becomes POSSIBLE / gets FALSIFIED — written BEFORE any method sketch) + the **fresh lever** (why attackable NOW) + a **fluency check** (effortless method = crowdedness alarm → downgrade) |
+| **G2** | **Formulate un-gameable** | "pose the problem well" | Goodhart / spec-gaming; premature formalization; solving the wrong problem (Type III) | the **cheap victory**† (one way to score well WITHOUT solving it — then close it or reject the metric) + the **optimize/trust firewall**† (a held-out **witness** you never optimize or select on; witness↔metric divergence = Goodhart stop) + **what the formalization throws away** |
+| **G3** | **Don't fool yourself (structural)** | "be honest / don't fool yourself" | HARKing; sycophancy→confirmation; machine-scale multiple comparisons; scaffold theater; self-leakage | a **timestamped pre-registration**† (prediction + kill-threshold, BEFORE running) + the **denominator**† (N configs/seeds tried; the distribution, never the argmax) + **generator≠auditor**† (an independent read-only pass whose SOLE job is leakage/contamination/artifact) + the **negation** (strongest case AGAINST, stated first) |
+| **G4** | **Steer by learning-rate** | "persist / let go" | sink-compute-on-dead-direction OR premature-pivot/thrashing; no portfolio; collapse-to-one-hypothesis | a **portfolio** (≥2 uncorrelated but capped bets; risk tiers) + the **learning-rate kill/persist**† ("kill when dLearning/dt→0 AND the block is structural; persist while novel surprises continue" — never on the local metric, elapsed time, or sunk cost) + **≥3 live competing hypotheses** (default; states an exhaustive-binary/nested-in-one-tree exception instead of padding the count) until a discriminating test |
+
+*Floor enforcement*: † = hard-FAILs at `scripts/research-check.sh` (script exits 1 without it); the
+rest floor-WARN only — present or not, their MEANING is judged here, not blocked at the floor.
 
 ## The RESEARCH SPEC — fill this to direct a research effort (and to audit one in flight)
 
@@ -103,30 +106,30 @@ signal must live in this external artifact.
 # Research judgment spec: [direction / question]
 
 ## G1 — select by consequence (not fluency)
-- Consequence-ranked slate (≥3 candidates; per candidate: what becomes POSSIBLE / gets FALSIFIED if solved — BEFORE any method): [...]
+- Consequence-ranked slate† (≥3 candidates; per candidate: what becomes POSSIBLE / gets FALSIFIED if solved — BEFORE any method): [...]
 - Fresh lever / why-now (the new tool/data/angle making this attackable NOW; no lever → shelve with a trigger): [...]
 - Fluency check (did a full method appear effortlessly? effortless ⇒ crowdedness alarm, downgrade importance): [...]
 
 ## G2 — formulate un-gameable
-- The cheap victory (one concrete way to score well WITHOUT solving the problem → then close it in the metric, or reject the metric): [...]
-- Optimize/trust firewall (metric you OPTIMIZE  ||  held-out WITNESS you never optimize/select on; witness↔metric divergence = Goodhart stop): [...]
+- The cheap victory† (one concrete way to score well WITHOUT solving the problem → then close it in the metric, or reject the metric): [...]
+- Optimize/trust firewall† (metric you OPTIMIZE  ||  held-out WITNESS you never optimize/select on; witness↔metric divergence = Goodhart stop): [...]
 - What the formalization throws away (if the hard part is discarded → wrong frame / Type III error): [...]
 
 ## G3 — don't fool yourself (structural)
-- Pre-registration (TIMESTAMP + the prediction + the kill-threshold, written BEFORE running): [...]
-- Denominator (N configs/seeds/analyses tried; report the DISTRIBUTION, never the argmax): [...]
-- generator≠auditor (the independent red-team pass — leakage / contamination / artifactual explanation): [...]
+- Pre-registration† (TIMESTAMP + the prediction + the kill-threshold, written BEFORE running): [...]
+- Denominator† (N configs/seeds/analyses tried; report the DISTRIBUTION, never the argmax): [...]
+- generator≠auditor† (the independent red-team pass — leakage / contamination / artifactual explanation): [...]
 - Negation (the strongest case AGAINST the hypothesis, stated first): [...]
 
 ## G4 — steer by learning-rate
 - Portfolio (≥2 uncorrelated, capped bets; a safe core + a high-variance probe; avoid the fragile middle): [...]
-- Learning-rate kill/persist (kill when dLearning/dt→0 AND block structural; persist on novel surprises; NOT on metric/time/sunk-cost): [...]
-- Live hypotheses (≥3 competing, held until a discriminating test): [...]
+- Learning-rate kill/persist† (kill when dLearning/dt→0 AND block structural; persist on novel surprises; NOT on metric/time/sunk-cost): [...]
+- Live hypotheses (≥3 by default — UNLESS the space is stated exhaustive-binary or nested-in-one-tree; name the EXCLUDED alternative classes, held until a discriminating test): [...]
 ```
 
 Then: `scripts/research-check.sh <spec.md>` (floor: slot presence + timestamp/threshold/denominator
 tokens + the ≥3-hypothesis check + the firewall/witness slot-presence check; it cannot judge whether the
-witness is truly un-gameable or the lever truly fresh — you do).
+witness is truly un-gameable or the lever truly fresh — you do). † marks the seven artifacts the floor hard-FAILs on; unmarked slots floor-WARN and are judged here.
 
 ## The procedure — mechanism before motion
 
@@ -212,7 +215,7 @@ compute across these bets?" · a messy "I got 94% but something feels too good."
 
 | Sibling | Cut |
 |---|---|
-| `acting-on-hypotheses` | **CARDINALITY-OF-INDEPENDENT-BETS — the sharpest cut.** ONE hypothesis tree — a single direction with its sub-nodes, **however many experiments it spans** — is that skill's Map/Loop/Leap: size it, commit it, kill it, run its cheapest disconfirming test → **there** (its Scope explicitly names "research direction", so "one direction" alone does NOT come here). This skill fires only on (a) **≥2 UNCORRELATED directions** — the portfolio: which problem earns effort, allocation across bets, killing a whole line on its *aggregated* learning-rate; (b) the **standing self-honesty policy** (pre-register / denominator / generator≠auditor as a program discipline over MANY runs); or (c) **selection & formulation** (which problem, posed how). Seam test: **ONE hypothesis tree → there; ≥2 uncorrelated directions, the standing honesty policy, or problem-choice/formulation → here.** Co-fire in sequence: here selects, formulates, and sets the honesty policy → there runs each individual tree. |
+| `acting-on-hypotheses` | **CARDINALITY-OF-INDEPENDENT-BETS — the sharpest cut.** ONE hypothesis tree — a single direction with its sub-nodes, **however many experiments it spans** — is that skill's Map/Loop/Leap: size it, commit it, kill it, run its cheapest disconfirming test → **there** (its Scope explicitly names "research direction", so "one direction" alone does NOT come here). This skill fires only on (a) **≥2 UNCORRELATED directions** — the portfolio: which problem earns effort, allocation across bets, killing a whole line on its *aggregated* learning-rate; (b) the **standing self-honesty policy** (pre-register / denominator / generator≠auditor as a program discipline over MANY runs); or (c) **selection & formulation** (which problem, posed how). Seam test: **ONE hypothesis tree → there; ≥2 uncorrelated directions, the standing honesty policy, or problem-choice/formulation → here.** Co-fire in sequence: here selects, formulates, and sets the honesty policy → there runs each individual tree. **Runtime decision order when cardinality is undecidable before Mapping**: (1) selection / formulation / the standing honesty policy → here, ALWAYS; (2) a single experiment's pre-registration threshold, pass/fail, outcome table, commit/kill → `acting-on-hypotheses` (its R2/R3), ALWAYS; (3) if it is ONE direction or correlation is UNKNOWN, run `acting-on-hypotheses`'s Map FIRST, then return here ONLY for portfolio allocation across the ≥2 independent directions the Map reveals (Map confirms only one → stay there). **Pre-registration seam**: the PER-EXPERIMENT threshold artifact is AOH R2; the STANDING timestamped pre-reg + denominator + generator≠auditor policy ACROSS runs is here. |
 | `forging-novel-theses` | **PURPOSE** — GENERATE / invent a novel thesis (decompose, structure-transfer, recombine, why-now) → there; the JUDGMENT of which problem to select, whether the frame is right, whether a direction stays in the portfolio → here. (Adjacent on "the tool-gap is the project" — inventing the tool is there; choosing to → here.) |
 | `raising-resolution` | **VERB** — physically INSPECT a present, knowable artifact (the data's actual contents, a leaky feature, a codebase) → there; the JUDGMENT to DISTRUST the number and MANDATE the audit, and the 定式化 of what the eval must measure → here. |
 | `implementing-and-debugging` | **PURPOSE** — FIX the code / build the pipeline / locate-and-repair the bug → there; the ADMISSION GATE deciding a number is invalid and the direction may need killing → here. |

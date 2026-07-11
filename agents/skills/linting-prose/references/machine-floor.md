@@ -117,7 +117,7 @@ Willpower is not a harness; the floor is only real when it is in the command you
   decoration.
 - A check not in the aggregate command is not enforced; a noisy misconfigured floor gets
   `|| true`-ignored and is equally dead (the QOED lesson — see ledger).
-- The Stop hook `detect-audit-theater.sh` co-polices the agent's own turn text; scripts own the
+- The Stop hook `detect-audit-theater.ts` co-polices the agent's own turn text; scripts own the
   greppable tier — never spawn an agent to run the lint.
 
 ## EN stack — **STATUS: UNSHIPPED (guidance only)**
@@ -210,7 +210,7 @@ exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`**
 paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-way: standard domain term
 (keep) / pinned house token (keep, identifier) / gratuitous (violate). This skill is the
 FEEDBACK/detection layer at *deliverable* time; the UPSTREAM cure (the generation guardrail + the
-always-on `detect-codemix.sh` Stop hook gating the latin-verb+する residue every turn) is owned by
+always-on `detect-prose-correo.ts` Stop hook (correo calque layer) gating the latin-verb+する residue every turn) is owned by
 `operating-the-harness` — code-switching is Language Confusion (Marchisio, EMNLP 2024), and a gate
 cannot cure a generation pathology. The earlier framing
 "internal register leaves ルー語 alone" was WRONG and is retracted: internal waives comprehension,

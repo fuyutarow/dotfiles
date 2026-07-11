@@ -197,7 +197,7 @@ on real domain terms). So SHAPE generation and CATCH only the deterministic resi
 2. **Context** — your own prompt's English licenses the model to mix; feed cleaner input.
 3. **Feedback** — detection is `linting-prose` (`codemix-flag.py` + prh, at *deliverable* time, not
    every turn). The one always-wrong class (latin verb + する) is gated by the Stop hook
-   `agents/claude/detect-codemix.sh` (narrow, code/quote-stripped, exit 2 → forces a rewrite).
+   `agents/claude/hooks/detect-prose-correo.ts` (narrow, code/quote-stripped, exit 2 → forces a rewrite).
 4. **Operation** — long context drifts toward English; refresh/summarize in the target language.
 
 Register-relative: internal engineering chat legitimately mixes; the guard is for external/deliverable

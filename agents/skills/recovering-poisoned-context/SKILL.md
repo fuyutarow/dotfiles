@@ -55,7 +55,7 @@ Three intervention points (full survey → `reference.md`):
 | **P3** remove after | `/rewind`, `/clear`, fresh context | ✅ **this is your only layer** — plus reducing occurrence (lean context, `/model`) |
 
 So **contamination cannot be *prevented* from user config or a hook.** The `Stop` hook
-`detect-leaked-toolcall.sh` is a P3 **alarm** (it pings you to rewind) — a smoke detector,
+`detect-leaked-toolcall.ts` is a P3 **alarm** (it pings you to rewind) — a smoke detector,
 not a fire extinguisher. Real prevention (P1/P2) is the model provider's and Claude Code's
 job. Calibrate expectations accordingly.
 

@@ -59,13 +59,12 @@ fi
 # --- tmux ---
 link tmux/tmux.conf "$HOME/.tmux.conf"
 
+# --- herdr (agent multiplexer; link the config file only — ~/.config/herdr/ also holds live sockets/logs) ---
+link herdr/config.toml "$HOME/.config/herdr/config.toml"
+
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
 link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
-link agents/claude/detect-leaked-toolcall.sh "$HOME/.claude/detect-leaked-toolcall.sh"
-link agents/claude/detect-audit-theater.sh "$HOME/.claude/detect-audit-theater.sh"
-link agents/claude/detect-codemix.sh "$HOME/.claude/detect-codemix.sh"
-link agents/claude/detect-prose-correo.sh "$HOME/.claude/detect-prose-correo.sh"
-link agents/claude/enforce-sonnet-agents.sh "$HOME/.claude/enforce-sonnet-agents.sh"
+link agents/claude/hooks "$HOME/.claude/hooks"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"

@@ -18,6 +18,7 @@ brew "ripgrep"      # better grep (gr)
 brew "rm-improved"  # rip — the ONLY sanctioned file remover (rm is disabled)
 brew "sheldon"
 brew "tmux"
+brew "herdr"        # agent multiplexer (tmux-like workspace for AI coding agents) — config in herdr/, cross-OS
 brew "topgrade"
 brew "zoxide"       # better cd (,)
 brew "bun"          # JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)

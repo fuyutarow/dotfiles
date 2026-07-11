@@ -11,7 +11,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/enforce-sonnet-agents.sh"
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-sonnet-agents.ts"
           }
         ]
       }
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/detect-leaked-toolcall.sh"
+            "command": "sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"
           }
         ]
       },
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/detect-audit-theater.sh"
+            "command": "sh ~/.claude/hooks/run.sh detect-audit-theater.ts"
           }
         ]
       },
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/detect-prose-correo.sh"
+            "command": "sh ~/.claude/hooks/run.sh detect-prose-correo.ts"
           }
         ]
       }

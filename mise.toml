@@ -92,6 +92,11 @@ done
 exit $rc
 '''
 
+[tasks."test:hooks"]
+dir = "{{config_root}}"
+description = "Claude Code hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
+run = "bun test agents/claude/hooks"
+
 # NOTE: deliberately NOT in `[tasks.lint].depends` — dotfiles has no reports/memos/
 # proposals to scan (they live in research repos), so wiring it into the blocking gate
 # would add friction with no target. Portable: run it against real files with `-- <paths>`.

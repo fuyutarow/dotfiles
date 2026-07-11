@@ -190,7 +190,7 @@ verdict enum, `receipt:`, and `PASS`-as-verdict fire deterministically (proven o
 The lint report reproducing the failure it polices: `監査完了`, `PASS`/`GREEN`, `通過`,
 `核は stable`, `私の起因でない`, `正直な到達点`. Rewrite as bounded evidence — what artifact was
 checked, which rule ran, what it cannot prove, what remains uninspected. The Stop hook
-`detect-audit-theater.sh` co-enforces on the agent's own turn text.
+`detect-audit-theater.ts` co-enforces on the agent's own turn text.
 
 ### Register consistency
 
@@ -319,7 +319,7 @@ Use when the reviewed text is an agent's own prose audit, status update, or repa
 | term budget | novel — declared | ≤3 define-at-first-use terms per external page-equivalent (number's runtime home: SKILL.md gate 0) |
 | スリカエ | anchored — Kinoshita ch.7 | opinion written, then treated as fact — the canon's worst failure |
 | bounded-PASS | novel — declared | PASS/GREEN legal only with a same-line what-was-checked / what-remains clause |
-| audit-report theater | novel — declared; echoes Schneier | the lint report reproducing the failure it polices; Stop hook `detect-audit-theater.sh` |
+| audit-report theater | novel — declared; echoes Schneier | the lint report reproducing the failure it polices; Stop hook `detect-audit-theater.ts` |
 | packaging | derived — house umbrella over Orwell's vices | prose about integration/convenience/importance/imagery instead of the object |
 | repair spiral | novel — declared | 2 failed patches or 1 new contradiction ⇒ rewrite the smallest coherent block |
 | worker-side duty | novel — declared | as a spawned lens: read-only, five-slot findings, no verdict language |

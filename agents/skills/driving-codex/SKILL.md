@@ -9,8 +9,8 @@ description: >-
   Use when embedding codex/GPT into a pipeline (sonnet draft → codex audit, heterogeneous
   cross-vendor verification), probing which GPT models an account can run when the model picker or
   cache disagrees, choosing --sandbox / --skip-git-repo-check / model_reasoning_effort flags,
-  parsing --json usage or --output-last-message, tracking codex spend with ccusage, or unsticking
-  a hanging or failing codex exec. Triggers: codex, codex exec, Codex CLI, OpenAI CLI, gpt-5.6,
+  parsing --json usage or --output-last-message, codex spend / モデル使い分け・コスト比較
+  (ccusage), or unsticking a hanging or failing codex exec. Triggers: codex, codex exec, Codex CLI, OpenAI CLI, gpt-5.6,
   sol / terra / luna, unknown model, models_cache, codex を workflow に組み込む, codex で監査,
   GPT にもレビューさせて, 異種モデル検証, モデルが一覧に出ない. LAW: the local
   model cache is a delivery snapshot, not the catalog — availability is a probe exit code, never
@@ -22,7 +22,8 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2607.1.1 (2026-07-12 — reforged same day on a second session's production trace)
+> **Version**: v2607.1.2 (2026-07-12 — .1: reforged on a second session's production trace;
+> .2: C4 gains the sonnet baseline arm + cost-by-measurement, user-directed)
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
 > subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
 > spend accounting. The `claude` harness itself (hooks, settings, Workflow tool semantics) is
@@ -57,7 +58,8 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 > Sandboxing is **LEAST-PRIVILEGE**: probes and audits run `read-only`; only edit tasks get
 > `workspace-write`; `danger-full-access` never leaves an isolated runner. And availability is
 > not rank — **RANK-BY-MEASUREMENT**: promotion to a standing role takes a measured
-> head-to-head (C4), never name/version arithmetic.
+> head-to-head (C4), never name/version arithmetic — and the same goes for COST: "vendor X is
+> cheaper" is a hypothesis until both sides' ledgers are read (ccusage), never a premise.
 
 ## Gates
 
@@ -66,7 +68,7 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 | **C1 PROBE** | Before any claim that a model is / is not available: resolve the EXACT model ID (`references/model-catalog.md`, else official docs), run the probe, cite its RESULT line. ASYMMETRY — AVAILABLE is proof; UNAVAILABLE-400 is ambiguous (a short/typo'd name of a real model 400s byte-identically to a nonexistent or unrolled one; probe-verified). A negative probe on an unverified ID is a verdict about the STRING, not the model — no availability verdict | output of `bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh <exact-id>...` + where the ID came from |
 | **C2 FLAGS** | Every embedded call passes `-m`, `-c 'model_reasoning_effort=...'`, and `--sandbox` explicitly — a bare `codex exec` silently inherits `~/.codex/config.toml` defaults (model, effort) and the directory's trust level (sandbox) | the flag triplet greppable in the call |
 | **C3 RELAY** | A worker that ran codex relays VERBATIM: exit code, the `tokens used` line, and the last agent message — "codex said PASS" without the observables is zero evidence | the verbatim triple in the worker's return |
-| **C4 SELECT** | Availability is not rank: before promoting a model to a standing role (default auditor, standard reviewer), run one measured head-to-head on the actual task and cite it | the comparison (both models' verdicts + tokens) in the promotion decision |
+| **C4 SELECT** | Availability is not rank: before promoting a model to a standing role (default auditor, standard reviewer), run one measured head-to-head on the actual task — INCLUDING the house baseline arm (a sonnet worker) — and cite it | the comparison (verdicts + tokens + wall time, quota drain via ccusage both sides) in the promotion decision |
 
 ## The invocation recipe — LOW freedom; deviations cost hangs and misfires
 
@@ -115,7 +117,12 @@ timeout 600 codex exec \
 | machine return value | `-o FILE` | file contains only the last agent message |
 | full accounting | `--json` | JSONL events `thread.started / turn.started / item.completed / turn.completed`; usage = `jq 'select(.type=="turn.completed").usage'` → `{input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens}` |
 
-Aggregate spend across sessions: ccusage MCP tools `codex-daily` / `codex-monthly`.
+Aggregate spend: a mixed pipeline is costed on BOTH ledgers — ccusage MCP `codex-daily` /
+`codex-monthly` (codex side) and `daily` / `monthly` (Claude side). Headless
+`claude -p --output-format json` additionally reports per-run `total_cost_usd` (API-equivalent);
+codex reports tokens only — on subscriptions the binding constraint is each plan's QUOTA, not
+dollars. Cross-vendor cost beliefs are C4 material: measure, don't assume. Cost-model facts and
+the dated cross-vendor benchmark → `references/model-catalog.md`.
 
 ## Embedding in Workflow scripts — the sonnet-wrapper pattern
 
@@ -148,8 +155,11 @@ const codexAudit = (target) => agent(
   DISAGREEMENT is the signal to investigate; cross-vendor agreement is still not proof).
 - **Selection (C4)**: the probe proves AVAILABILITY, never rank — model names and version
   numbers carry no quality ordering. Before promoting a model to a standing role (e.g. standard
-  auditor), run one measured head-to-head on your own task: same prompt to both candidates,
-  compare verdict quality and tokens used, then promote.
+  auditor), run one measured head-to-head on your own task: same prompt to every candidate PLUS
+  the house baseline arm (a sonnet worker via `agent({model:'sonnet'})`, or headless `claude -p`
+  — mechanics owned by `operating-the-harness`); compare verdict quality, tokens, wall time, and
+  quota drain (ccusage both sides), then promote. A dated worked example lives in
+  `references/model-catalog.md`.
 
 ## Execution model — the modal invocation is SOLO
 
@@ -178,6 +188,7 @@ FIRES:
 | 「この diff、GPT にもレビューさせて」 (no headline keyword) | heterogeneous verify |
 | "codex exec hangs / returns nothing" | gotchas table |
 | 「codex の今月のトークン消費は？」 | spend accounting |
+| 「sol と sonnet5、監査にはどっち？コスパも見て」 | C4 head-to-head + cost-by-measurement |
 
 MUST NOT fire (route):
 
@@ -206,6 +217,6 @@ wiring FIRST; this skill supplies the codex invocation line.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/model-catalog.md` | DATED snapshot: probe-verified account catalog, CLI version floor, cache-refresh behavior, config defaults, per-call token overhead, error strings, provenance grades | any model-name, availability, or cost question |
+| `references/model-catalog.md` | DATED snapshot: probe-verified account catalog, CLI version floor, cache-refresh behavior, config defaults, per-call token overhead, error strings, cost model + cross-vendor baseline bench (C4 worked example), provenance grades | any model-name, availability, cost, or 使い分け question |
 | `scripts/probe-models.sh` | deterministic availability probe (floor — NOT semantic) | C1 gate — before asserting availability |
 | `tests/forge-verification-ledger.md` | forge provenance, calibration table, verification results | reforging this skill |

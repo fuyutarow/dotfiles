@@ -58,6 +58,40 @@ skills, capped at a 2% skills budget + MCP), not output. `--json` usage on a rep
 Repeat calls in the same workdir hit the cache for roughly half the input. Aggregate spend:
 ccusage MCP `codex-daily` / `codex-monthly`.
 
+## Cost model & cross-vendor baseline — 2026-07-12
+
+**Economics of THIS setup (both sides subscription):** codex runs on a ChatGPT plan, Claude Code
+on a Claude plan → marginal dollar cost per call ≈ 0 until a QUOTA binds; the real currencies
+are each plan's quota drain, wall time, and context overhead. Measure quota drain with ccusage:
+`codex-daily`/`codex-monthly` vs `daily`/`monthly`. Headless `claude -p --output-format json`
+reports per-run `total_cost_usd` (API-equivalent); codex reports blended `tokens used` only —
+the two token counts are NOT unit-comparable (blended total vs in/cache/out split).
+
+**Hypothesis on file (user, 2026-07-12, UNVERIFIED):** "codex (terra/luna) is effectively
+cheaper than sonnet-5 because OpenAI absorbs inference losses on subscriptions." Plausible,
+not encodable as fact — subsidy levels and quota policies are unpublished and repriceable at
+any time. Decision procedure (C4): compare quota drain per unit of ACCEPTED work on both
+ccusage ledgers over a real week; re-evaluate on any repricing announcement.
+
+**n=1 smoke benchmark (2026-07-12)** — same planted-bug prompt (one wrong expression in a
+moving-average function), codex arms `--sandbox read-only` effort medium, Claude arm `claude -p`
+defaults. WORKED EXAMPLE of the C4 procedure, NOT a ranking: all four arms answered correctly
+(exact expression + correct mechanism) — a ceiling effect; a task at your real difficulty is
+required before any promotion decision.
+
+| Arm | Correct | Wall | Reported usage |
+|---|---|---|---|
+| `gpt-5.6-sol` | yes | 10 s | 9,643 tokens (blended) |
+| `gpt-5.6-terra` | yes | 10 s | 8,914 tokens (blended) |
+| `gpt-5.6-luna` | yes | 9 s | 9,321 tokens (blended) |
+| `claude-sonnet-5` (via `claude -p`) | yes | 8 s | in 12,993 + cache-read 23,314 + out 482; $0.0908 API-equiv |
+
+Comparability caveats (carry with any reuse): effort settings differ (codex `medium` vs Claude
+CLI defaults); each side loads different fixed context (AGENTS.md/skills vs CLAUDE.md/system);
+n=1 discriminates nothing — this table's value is the PROCEDURE and the overhead shape, not the
+ordering. Trivial-ping overhead for `claude -p`: ~13k input + 23k cache-read, ~$0.082 — same
+overhead class as codex's 9–12k.
+
 ## Error strings — exact triage table (probe-captured)
 
 | Observation | Meaning |
@@ -77,3 +111,5 @@ ccusage MCP `codex-daily` / `codex-monthly`.
 | `danger-full-access` / `xhigh` observed in flagless & explicit run headers; cache lacking the 5.6 family pre-rollout | user transcript / user-relayed (2026-07-12) — seen, but not by this forge's own probes |
 | ≥0.144.0 floor, staged rollout, plan eligibility, recommended default | third-party — a ChatGPT answer relayed by the user (2026-07-12), not checked against official docs |
 | `high` effort value; `codex-auto-review` = internal routing | unverified / third-party |
+| n=1 smoke benchmark table, `claude -p` overhead & `total_cost_usd` shape | author-confirmed — runs 2026-07-12, artifacts in the forge ledger |
+| "codex is effectively cheaper (OpenAI absorbs losses)" | user-hypothesis, UNVERIFIED — never assert; decide via the C4 ccusage procedure above |

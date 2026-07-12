@@ -159,3 +159,40 @@ its verdicts stand.
 Post-fix floor (v2607.1.1 final): `skill-check.sh` PASS 0 FAIL 0 WARN; strict YAML parse PASS
 (description unchanged, 1494 chars); `bash -n probe-models.sh` PASS; description confirmed live
 in a session's skill listing (smoke test, 2026-07-12).
+
+## Revision v2607.1.2 — user-directed: sonnet baseline arm + cost-by-measurement (2026-07-12)
+
+User ask: make 使い分け evaluation fair across sol/terra/luna/sonnet-5, and add cost awareness
+(their hypothesis: codex effectively cheaper because OpenAI absorbs subscription losses).
+
+| Change | Where |
+|---|---|
+| C4 SELECT now REQUIRES the house baseline arm (sonnet worker) in every head-to-head; artifact extended to wall time + ccusage quota drain both sides | SKILL.md Gates + Selection bullet |
+| RANK-BY-MEASUREMENT extended to COST in LAW ("cheaper" is a hypothesis until both ledgers are read) | SKILL.md LAW |
+| Accounting section: both-ledger costing (ccusage `daily` vs `codex-daily`), `claude -p` `total_cost_usd`, quota-not-dollars framing | SKILL.md Output contracts |
+| New catalog section: cost model, the user hypothesis graded UNVERIFIED with a C4 decision procedure, and a dated n=1 smoke benchmark | references/model-catalog.md |
+| Description: "tracking codex spend with ccusage" → "codex spend / モデル使い分け・コスト比較 (ccusage)"; new F3 fire row 「sol と sonnet5、監査にはどっち？コスパも見て」 | SKILL.md frontmatter + F3 |
+
+Grounding runs (2026-07-12, artifacts: session scratchpad `bench/`):
+
+- `claude -p --model sonnet --output-format json` headless probe: exit 0, trivial ping usage
+  in 12,993 / cache-read 23,314 / out 4, `total_cost_usd` 0.0823 — the symmetric sonnet arm works
+  and self-reports API-equivalent cost.
+- 4-arm planted-bug smoke bench (codex arms read-only/medium; Claude arm defaults): ALL FOUR
+  correct (exact expression + mechanism); wall 10/10/9/8 s; codex blended tokens 9,643 / 8,914 /
+  9,321; sonnet-5 $0.0908. Verdict: ceiling effect — recorded as a C4 WORKED EXAMPLE, explicitly
+  NOT a ranking; caveats (effort mismatch, non-comparable token units, n=1) written next to the
+  table in the catalog.
+- The user's subsidy hypothesis is graded user-hypothesis/UNVERIFIED in the catalog's provenance
+  table — encoding it as fact would be the same failure class this skill was forged to kill
+  (asserting live vendor economics from belief).
+
+Description edit desk-check (solo re-run over the now-14-row F3 set, stage-1 view): the token
+swap removes no load-bearing keyword (q6 still fires on "codex spend"/"ccusage"); the added
+使い分け・コスト比較 tokens capture row 14; no new race — `claude-api` still owns Anthropic
+pricing FACTS (its SKIP yields when codex/GPT is the working provider), `operating-the-harness`
+unaffected. Verdict: GREEN.
+
+Post-revision floor (v2607.1.2 final, run 2026-07-12): `skill-check.sh` PASS 0 FAIL 0 WARN;
+strict YAML parse PASS (description 1498 chars ≤ 1500); `bash -n probe-models.sh` PASS; the
+revised description confirmed live in a session's skill listing (smoke test).

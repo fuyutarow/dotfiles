@@ -228,6 +228,12 @@ the source, gate only the residue that is deterministically always-wrong.
 - **Heavyweight frameworks on small/solo tasks** (BMAD, Spec-Kit, 21-agent orchestration).
 - **Trusting MCP servers** — every server that fetches external content is a **prompt-injection
   boundary**; keep personal-credential servers at *user* scope, never in a committed `.mcp.json`.
+- **Config present ≠ server live** — an MCP entry registered in `.mcp.json` AND enabled in
+  settings can still produce ZERO tools in-session (server exits before the handshake; e.g. a
+  cwd-gated stdio server spawned in the wrong directory). Diagnose with `claude mcp list` +
+  the per-server client log, never by re-reading the config; a tool-specific `driving-*` skill
+  (driving-cocoindex, driving-codex) supplies the expected surface + fallback AFTER liveness
+  is settled here.
 
 ---
 

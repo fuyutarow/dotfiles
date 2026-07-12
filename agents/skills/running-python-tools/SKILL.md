@@ -9,9 +9,10 @@ description: >-
   or invoke a Python tool by name. Replaces system/global pip installs with isolated, cached,
   reproducible uv runs — no environment pollution. Cut: this skill = invoking a tool/one-off
   snippet NOW; writing/reviewing Python that will LIVE in a repo (project, module, kept script —
-  pyproject.toml, dependency selection, typing/lint discipline) → writing-python. maturin/PyO3 as
-  a Rust binding-architecture decision → writing-rust; running the maturin command itself stays
-  here.
+  pyproject.toml, dependency selection, typing/lint discipline) → writing-python. A tool with
+  its own driving-* skill (ccc → driving-cocoindex; codex → driving-codex) is DRIVEN there once
+  installed — install/pin/upgrade of the binary stays here. maturin/PyO3 as a Rust
+  binding-architecture decision → writing-rust; running the maturin command itself stays here.
 ---
 
 # Python tooling via uv (uvx)

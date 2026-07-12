@@ -495,9 +495,17 @@ alias ste='vi $HOME/.tmux.conf'
 alias sve='vi $HOME/dotfiles/nvim/init.vim'
 alias sze='vi $HOME/.zshrc'
 
+# herdr
+# -----
+# `t` = launch-or-attach the herdr persistent session; hosts without herdr keep the old tmux attach
+if command -v herdr >/dev/null 2>&1; then
+  alias t='herdr'
+else
+  alias t='tmux a'
+fi
+
 # tmux
 # ----
-alias t='tmux a'
 alias tn='tmux new -s'
 alias tl='tmux ls'
 alias ta='tmux a'

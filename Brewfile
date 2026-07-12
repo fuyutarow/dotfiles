@@ -53,6 +53,7 @@ end
 brew "tex-fmt"      # Rust LaTeX formatter (NOT in TeX Live) — formula, bottles on both OSes
 brew "rumdl"        # Rust Markdown linter+formatter ("ruff for markdown", markdownlint-compatible) — dotfiles & qoed `mise run fmt:md`/`lint:md`
 brew "shfmt"        # shell formatter (bash/POSIX/mksh; "gofmt for shell") — dotfiles `mise run fmt:sh`
+brew "biome"        # Rust TS/JS/JSON formatter+linter ("the web toolchain") — dotfiles `mise run fmt:ts` (formatter only, house 2-space style pinned via CLI flags)
 brew "shellcheck"   # shell static-analysis linter (bash/sh; not zsh) — dotfiles `mise run lint:sh`
 brew "poppler"      # pdftoppm/pdfinfo — PDF→PNG visual verification
 brew "biber"        # BibLaTeX backend — brew `texlive` bundles bibtex but NOT biber; match its version to TeX Live's biblatex

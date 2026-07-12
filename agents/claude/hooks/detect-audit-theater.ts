@@ -17,49 +17,60 @@
 // Detection: specific phrases fire directly; PASS/GREEN fire only when the text carries
 // NO "what was checked / what is unchecked" clause (the skill's bounded-PASS rule).
 
-import { lastUserText, readStdinJson, readTranscript, stripCode, turnText } from './lib.ts'
+import {
+  lastUserText,
+  readStdinJson,
+  readTranscript,
+  stripCode,
+  turnText,
+} from "./lib.ts";
 
 function main(): number {
-  const payload = readStdinJson()
-  if (payload?.stop_hook_active) return 0
-  const transcript = payload?.transcript_path
-  if (typeof transcript !== 'string' || transcript === '') return 0
+  const payload = readStdinJson();
+  if (payload?.stop_hook_active) return 0;
+  const transcript = payload?.transcript_path;
+  if (typeof transcript !== "string" || transcript === "") return 0;
 
-  const entries = readTranscript(transcript)
-  const turn = turnText(entries)
-  if (turn === '') return 0
+  const entries = readTranscript(transcript);
+  const turn = turnText(entries);
+  if (turn === "") return 0;
 
-  const user = lastUserText(entries)
+  const user = lastUserText(entries);
   const ctx =
     /prose audit|prose review|文体|style (review|rewrite)|skill ?review|skill ?レビュー|レビュー|audit|監査/i.test(
       user,
     ) ||
     // old skill names kept as back-compat alternates: older transcripts may still carry them
-    /linting-prose|grounding-prose|auditing-audience-facing-prose/.test(turn)
-  if (!ctx) return 0
+    /linting-prose|grounding-prose|auditing-audience-facing-prose/.test(turn);
+  if (!ctx) return 0;
 
-  const stripped = stripCode(turn, { blockquotes: true })
+  const stripped = stripCode(turn, { blockquotes: true });
 
-  let hit = /監査完了|核は stable|私の起因でない|好例|gate を通過/.test(stripped)
+  let hit = /監査完了|核は stable|私の起因でない|好例|gate を通過/.test(
+    stripped,
+  );
   if (!hit && /\b(PASS|GREEN)\b/.test(stripped)) {
-    hit = !/検査|チェック|scan|checked|未検査|not checked|未確認|remains|残/i.test(stripped)
+    hit =
+      !/検査|チェック|scan|checked|未検査|not checked|未確認|remains|残/i.test(
+        stripped,
+      );
   }
-  if (!hit) return 0
+  if (!hit) return 0;
 
   console.error(
     [
-      'Your audit report used self-justifying or unbounded gate language.',
-      'Rewrite with: target / violation / cited evidence / replacement / unchecked risk.',
-      'Do not say PASS, GREEN, 監査完了, 好例, 核, 本体, or 私の起因でない unless bounded to an exact check.',
-    ].join('\n'),
-  )
-  return 2
+      "Your audit report used self-justifying or unbounded gate language.",
+      "Rewrite with: target / violation / cited evidence / replacement / unchecked risk.",
+      "Do not say PASS, GREEN, 監査完了, 好例, 核, 本体, or 私の起因でない unless bounded to an exact check.",
+    ].join("\n"),
+  );
+  return 2;
 }
 
-let code = 0
+let code = 0;
 try {
-  code = main()
+  code = main();
 } catch {
-  code = 0 // FAIL OPEN
+  code = 0; // FAIL OPEN
 }
-process.exit(code)
+process.exit(code);

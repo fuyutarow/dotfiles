@@ -10,17 +10,21 @@ run = '''topgrade --disable containers || echo "Topgrade completed with some err
 # ── Format / Lint ────────────────────────────────────────────────────────────
 # fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
 # mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
-# bash. zsh is syntax-gated with `zsh -n` ONLY: shfmt's zsh dialect (v3.13+) is
-# real but incomplete, and these zsh files are boot-critical config (break = no
-# interactive shell), so we do NOT auto-format them. Bash file discovery is
-# centralised via `shfmt -f <dirs>` (extension+shebang detection); agents/skills/**
-# is excluded simply by not listing it. `-ln bash` pins the dialect deterministically
-# (and makes shfmt ignore any stray .editorconfig).
+# bash. TypeScript = biome (formatter only, 2-space pinned via CLI flags to match
+# the house style — biome's own default is tabs). zsh is syntax-gated with `zsh -n`
+# ONLY: shfmt's zsh dialect (v3.13+) is real but incomplete, and these zsh files are
+# boot-critical config (break = no interactive shell), so we do NOT auto-format them.
+# Bash file discovery is centralised via `shfmt -f <dirs>` (extension+shebang
+# detection); TS via `fd -e ts -E agents/skills` (house source only — agents/skills/**
+# holds vendored skill templates, excluded like it is for shfmt/rumdl). JSON/TOML are
+# deliberately NOT auto-formatted: the JSON population is dominated by karabiner's
+# vendored/auto-backup files and boot-critical config. `-ln bash` pins shfmt's dialect
+# deterministically (and makes shfmt ignore any stray .editorconfig).
 
 [tasks.fmt]
 alias = "f"
-description = "Format the repo in place: Markdown (rumdl) + bash (shfmt). alias: f"
-depends = ["fmt:md", "fmt:sh"]
+description = "Format the repo in place: Markdown (rumdl) + bash (shfmt) + TypeScript (biome). alias: f"
+depends = ["fmt:md", "fmt:sh", "fmt:ts"]
 
 [tasks."fmt:md"]
 dir = "{{config_root}}"
@@ -43,6 +47,24 @@ run = '''
 files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
 [ -z "$files" ] && { echo "no shell files"; exit 0; }
 printf '%s\n' "$files" | xargs shfmt -d -ln bash -i 2 -ci -sr -bn -s
+'''
+
+[tasks."fmt:ts"]
+dir = "{{config_root}}"
+description = "Format TypeScript in place with biome (house 2-space; agents/skills/** templates excluded)"
+run = '''
+files="$(fd -e ts -E agents/skills .)"
+[ -z "$files" ] && { echo "no ts files"; exit 0; }
+printf '%s\n' "$files" | xargs biome format --write --indent-style=space --indent-width=2
+'''
+
+[tasks."fmt:ts:check"]
+dir = "{{config_root}}"
+description = "Check TS formatting without writing (CI gate; prints diff + non-zero on drift)"
+run = '''
+files="$(fd -e ts -E agents/skills .)"
+[ -z "$files" ] && { echo "no ts files"; exit 0; }
+printf '%s\n' "$files" | xargs biome format --indent-style=space --indent-width=2
 '''
 
 [tasks.lint]

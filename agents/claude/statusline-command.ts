@@ -130,7 +130,8 @@ if (!/[0-9]/.test(model)) {
 }
 if (!model) model = "?";
 // Trim the verbose extended-context tag: "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)".
-if (model.endsWith(" context)")) model = `${model.slice(0, -" context)".length)})`;
+if (model.endsWith(" context)"))
+  model = `${model.slice(0, -" context)".length)})`;
 
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
@@ -138,10 +139,14 @@ const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
 // git branch from cwd (segment omitted if not a repo)
 let branch: string | undefined;
 try {
-  branch = execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    encoding: "utf8",
-  }).trim();
+  branch = execFileSync(
+    "git",
+    ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+    {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+    },
+  ).trim();
 } catch {
   branch = undefined;
 }
@@ -225,5 +230,7 @@ const usable = (Number.isFinite(cols) && cols > 0 ? cols : 999) - 2;
 
 // --- render: one row if head + " | " + tail fits $COLUMNS, else wrap tail to row 3 ---
 const out2 =
-  vlen(head) + 3 + vlen(tail) <= usable ? head + SEP + tail : `${head}\n${tail}`;
+  vlen(head) + 3 + vlen(tail) <= usable
+    ? head + SEP + tail
+    : `${head}\n${tail}`;
 process.stdout.write(`${line1(cwd)}\n${out2}`);

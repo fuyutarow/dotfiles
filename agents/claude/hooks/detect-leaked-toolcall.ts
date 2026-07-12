@@ -15,45 +15,49 @@
 //                      mentions of the tags live in code spans.
 // FAIL OPEN: any error -> exit 0 (never break a turn).
 
-import { spawnSync } from 'node:child_process'
-import { appendFileSync, writeFileSync } from 'node:fs'
-import { readStdinJson, readTranscript, stripCode, turnText } from './lib.ts'
+import { spawnSync } from "node:child_process";
+import { appendFileSync, writeFileSync } from "node:fs";
+import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
 
 function main(): void {
-  const payload = readStdinJson()
-  const transcript = payload?.transcript_path
-  if (typeof transcript !== 'string' || transcript === '') return
+  const payload = readStdinJson();
+  const transcript = payload?.transcript_path;
+  if (typeof transcript !== "string" || transcript === "") return;
 
-  const turn = turnText(readTranscript(transcript))
-  if (turn === '') return
+  const turn = turnText(readTranscript(transcript));
+  if (turn === "") return;
 
-  const stripped = stripCode(turn)
-  if (!/<(antml:)?invoke name=|<(antml:)?function_calls/.test(stripped)) return
+  const stripped = stripCode(turn);
+  if (!/<(antml:)?invoke name=|<(antml:)?function_calls/.test(stripped)) return;
 
   try {
     appendFileSync(
-      `${process.env.HOME ?? ''}/.claude/leaked-toolcall.log`,
+      `${process.env.HOME ?? ""}/.claude/leaked-toolcall.log`,
       `${new Date().toISOString()}  leaked-toolcall  ${transcript}\n`,
-    )
+    );
   } catch {
     /* best-effort */
   }
 
-  if (process.env.CLAUDE_HOOK_QUIET) return // tests: skip bell + desktop notification
+  if (process.env.CLAUDE_HOOK_QUIET) return; // tests: skip bell + desktop notification
   try {
-    writeFileSync('/dev/tty', '\u0007') // terminal bell (best-effort)
+    writeFileSync("/dev/tty", "\u0007"); // terminal bell (best-effort)
   } catch {
     /* no tty */
   }
-  const msg = 'tool-call が漏れました — Esc Esc で /rewind を'
+  const msg = "tool-call が漏れました — Esc Esc で /rewind を";
   try {
-    if (process.platform === 'darwin') {
-      spawnSync('osascript', ['-e', `display notification "${msg}" with title "Claude Code"`], {
-        stdio: 'ignore',
-      })
+    if (process.platform === "darwin") {
+      spawnSync(
+        "osascript",
+        ["-e", `display notification "${msg}" with title "Claude Code"`],
+        {
+          stdio: "ignore",
+        },
+      );
     } else {
       // Linux / WSL2
-      spawnSync('notify-send', ['Claude Code', msg], { stdio: 'ignore' })
+      spawnSync("notify-send", ["Claude Code", msg], { stdio: "ignore" });
     }
   } catch {
     /* best-effort */
@@ -61,8 +65,8 @@ function main(): void {
 }
 
 try {
-  main()
+  main();
 } catch {
   /* FAIL OPEN */
 }
-process.exit(0)
+process.exit(0);

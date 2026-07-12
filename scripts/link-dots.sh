@@ -63,7 +63,7 @@ link tmux/tmux.conf "$HOME/.tmux.conf"
 link herdr/config.toml "$HOME/.config/herdr/config.toml"
 
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
-link agents/claude/statusline-command.sh "$HOME/.claude/statusline-command.sh"
+link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"

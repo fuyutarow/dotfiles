@@ -93,7 +93,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 | `raising-resolution` | DECISIVE cut: "am I about to *speculate instead of inspect a present fact*?" → there (upstream, content-agnostic, produces no artifact). "Am I about to *write/change code* and need to do it without flailing?" → here. It runs as a silent sub-step inside every gate above. |
 | `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. Forward bets (spike/MVP/will-it-scale) and **future-durability** (陳腐化しない設計) → there. Executing a defined change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
-| `writing-julia`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
+| `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
 
 ## Fire / no-fire
 

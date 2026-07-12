@@ -23,8 +23,16 @@
 ## Environment facts (observed 2026-07-12)
 
 - CLI: `codex-cli 0.144.1` at `~/.local/bin/codex`.
+  - **CORRECTION (same day, later session)**: `~/.local/bin/codex` NO LONGER EXISTS on this host;
+    the only binary is `/opt/homebrew/bin/codex` = **0.141.0** — a dual-install/PATH-shadowing
+    trap: workers resolving `codex` from PATH got 0.141.0 and `gpt-5.6-sol` failed with a NEW
+    error shape, exit 1 + 400 `"The 'gpt-5.6-sol' model requires a newer version of Codex.
+    Please upgrade..."` — a VERSION-GATE 400, distinct from the ambiguous not-supported 400 in
+    the triage table below. `gpt-5.5` probe-verified AVAILABLE on 0.141.0 (exit 0, 15,184
+    tokens). Rule reinforced: `which -a codex` + version check before any model assumption.
 - GPT-5.6 requires CLI ≥ 0.144.0; rollout is staged per account/workspace, so a current CLI can
-  still lack a model [third-party — re-verify against official docs before load-bearing use].
+  still lack a model [third-party — re-verify against official docs before load-bearing use;
+  the version-gate 400 above is now probe-confirmed first-party evidence of the CLI floor].
 - `~/.codex/config.toml` defaults: `model = "gpt-5.5"`, `model_reasoning_effort = "medium"` — a
   flagless `codex exec` runs THAT, at whatever sandbox the directory's trust level implies
   (a flagless run header showed `sandbox: danger-full-access` in a trusted workspace

@@ -7,8 +7,11 @@ description: >-
   any Python command. Trigger whenever you would otherwise type `pip install`, `pip3`,
   `python3 -m pip`, `pipx`, `conda`, a bare `python3 script.py` that imports third-party packages,
   or invoke a Python tool by name. Replaces system/global pip installs with isolated, cached,
-  reproducible uv runs — no environment pollution. Cut: maturin/PyO3 as a Rust binding-architecture
-  decision → writing-rust; running the maturin command itself stays here.
+  reproducible uv runs — no environment pollution. Cut: this skill = invoking a tool/one-off
+  snippet NOW; writing/reviewing Python that will LIVE in a repo (project, module, kept script —
+  pyproject.toml, dependency selection, typing/lint discipline) → writing-python. maturin/PyO3 as
+  a Rust binding-architecture decision → writing-rust; running the maturin command itself stays
+  here.
 ---
 
 # Python tooling via uv (uvx)
@@ -66,6 +69,6 @@ uvx --from jupyterlab jupyter lab
 ## Notes
 
 - `uv run --with` layers an ephemeral env on the current project (or `--no-project` for a clean one) so the named packages are guaranteed present **without touching system Python**.
-- When a dependency is **permanent to a project**, add it to that project's `pyproject.toml` and use plain `uv run`; use `--with` only for ad-hoc/one-off needs.
+- When a dependency is **permanent to a project**, add it to that project's `pyproject.toml` (`uv add`) and use plain `uv run`; use `--with` only for ad-hoc/one-off needs. Project-level work — env setup, dependency SELECTION, typing/lint discipline, authoring kept code — is `writing-python`'s territory (PURPOSE cut; seam note: the two descriptions agree in substance, do not diff for byte-identity).
 - Inside this host's repos that pin Python via uv, prefer `uv run` over `uvx` so the project's locked interpreter/deps apply; reach for `uvx` for project-independent tools.
 - If `uv` is somehow missing, install it (`curl -LsSf https://astral.sh/uv/install.sh | sh`) rather than falling back to `pip`.

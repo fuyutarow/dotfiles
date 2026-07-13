@@ -96,3 +96,81 @@ resolve in the body's ccc→serena pipeline note, accepted as a description-budg
 **Reciprocal edits landed at ship**: running-python-tools (driving-* carve-out clause),
 raising-resolution (ccc/cocoindex owner row), operating-the-harness (body gotcha:
 MCP config present ≠ server live).
+
+---
+
+## Reforge v2607.2.0 (2026-07-13) — markdown-corpus + LANGUAGE-WALL trial
+
+**Trigger**: user asked whether ccc is effective on markdown, and whether that answer was
+distilled into the skill. It was not — markdown appeared only as the doc-over-code bias's
+noise source, never as a target corpus; the assistant's own first-pass answer ("your
+markdown vault is an ideal ccc target") was then partially REFUTED by measurement, which is
+exactly what earned the reforge.
+
+**Source & grade**: live trial, this host, all probes direct command output (grade HIGH) —
+md-only mirror of `agents/skills/` (526 files / 5,432 chunks) + 1 planted unique-topic JA
+note = 527 files / 5,434 chunks; 2 EN→EN concept queries with known ground truth, 4 wall
+probes (one an EN-language query testing EN→JA), then raw-model cosine matrices via the ccc
+uvx env (arctic-embed-xs vs granite-107m-multilingual) to isolate model-level cause from
+ccc plumbing. Full numbers → `references/catalog.md` §Markdown-corpus
+trial. One probe INVALIDATED mid-trial and redone: the first JA→JA ground truth
+(courting-on-apps) turned out to be absent from the corpus (private skill, not in dotfiles)
+— replaced with an in-corpus truth + the plant. Lesson re-learned: verify ground-truth
+presence BEFORE scoring recall (CC1's spirit applied to eval design).
+
+**Findings folded in**: (1) EN→EN prose concept recall usable but truth ranks #3–#4 with
+flat score bands → "top-k is a candidate set" rule (SKILL.md §Markdown, operations §4b.1);
+(2) LANGUAGE-WALL — new LAW clause (d), new stable token, new Gotchas row, 2 new FIRES rows,
+1 new no-fire row: the default model's topical signal is EN-only, established at the MODEL
+level (wrong-doc-beats-right-doc 0.593>0.545; no EN↔JA bridging; symmetric-encode control);
+post-fleet refinement: code-switching onto a mixed note's EN tokens is a MEASURED craft fix
+(truth #1 @ 0.763), pure-JA paraphrases unreliable; (3) fix candidate
+granite-107m-multilingual restores JA + cross-lingual at the raw-model pairwise level
+[end-to-end ranking UNVERIFIED], and is SAME-DIM (384) — ties directly into §6's
+silent-mixing hazard, swap is global (no per-project embedding override, source-verified in
+v2607.1.0) so it re-embeds every registered project; its CODE-search effect UNVERIFIED,
+flagged in catalog.
+
+**Adjudicated, NOT changed**: description keeps code-first framing (code search remains the
+dominant ask); the doc-over-code Gotchas row unchanged (still correct for mixed corpora);
+no per-project model workaround invented (none exists — checked ProjectSettings schema in
+v2607.1.0 source read).
+
+**Verification**: skill-check floor (exit 0) + read-only fleet, 4 sonnet lenses
+(claims-vs-evidence refuter, JA-degeneracy methodologist, trigger desk-check, one-home
+consistency) → 21 findings: 2 blocker / 7 major / 9 minor / 3 nit. All adjudicated; the two
+blockers were resolved by NEW MEASUREMENT, not wording:
+
+- **Blocker "rephrasing does not help" was FALSE as shipped** — 3 rephrase probes run
+  post-fleet: a code-switched query (the note's own EN technical tokens) put the truth at
+  #1 @ 0.763 sweeping the top-8; pure-JA paraphrases stayed unreliable (1 of 2 recovered to
+  #3, 1 missed). The shipped sentence was replaced by the measured CODE-SWITCH craft rule —
+  the refuter improved the content, not just the wording. LANGUAGE-WALL refined from
+  "EN-only model" to "topical signal flows through EN tokens only."
+- **Blocker structural-hunt F3 row unsupported by description** (pre-existing since
+  v2607.1.0): trigger token added (multi-line/構造検索 → ccc grep) + the description's
+  literal-string Cuts clause qualified so it no longer steers the structural case away.
+- **JA exact-token miss re-attributed**: an EN exact-token control (`CoRNStack`, unique to
+  one file) missed identically → general CC3 limitation in both languages, REMOVED from
+  LANGUAGE-WALL evidence (was double-counting a non-language-specific phenomenon).
+- **granite downgraded to raw-model-verified**: an end-to-end ccc re-run with granite was
+  adjudicated NOT RUN — the model is global (dotfiles-symlinked settings) and a swap
+  re-embeds every registered project; consent-gated, flagged [UNVERIFIED at ranking level].
+- **P2 recast as ranking success + anomaly** (cross-query score comparison is not
+  commensurable evidence; the raw-model matrix is the cleaner plank); verdict bands
+  restated to cite only tabled values; the symmetric-encode counter-probe (rules out
+  `prompt_name` asymmetry) published in catalog; probe-count caveat corrected; Q2 rg
+  control added; adjacent-diff band widened to include exact ties; §4b.4's wrong (§3)
+  pointer repointed to LAW (b)/§2; SKILL.md §Markdown trimmed to directive+pointer
+  (one-home); §7's unverifiable "client timeout" comparison dropped; corpus-size/plant
+  provenance noted in catalog.
+- **New sibling cut** (desk-check): systematizing-knowledge / structuring-documents —
+  SEARCH-vs-SYNTHESIS on the shared 「メモ/ノート」 vocabulary; 全文検索 added to the
+  markdown no-fire row.
+
+**Adjudicated, NOT changed (fleet round)**: description keeps the unconditional 純和文
+posture despite the single-corpus caveat — calibration inversion: the executor's default
+failure is overpromising JA search, so the fail-safe direction is stated flat (LAW (d)
+carries the caveat); the MEMORY.md-single-known-file near-miss is left to CC1's Grep
+fallback (rated minor); bare `ccc`/`cocoindex` tokens stand per the v2607.1.0 adjudication
+above.

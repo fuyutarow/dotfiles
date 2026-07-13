@@ -32,9 +32,13 @@
   commented and export the key in the machine's environment instead, so the committed YAML
   carries the SLOT, never the secret.
 - This dotfiles config's shape: `provider: sentence-transformers`, `model:
-  Snowflake/snowflake-arctic-embed-xs`, `indexing_params: {}`, `query_params: {prompt_name: query}`
-  — the `prompt_name` distinguishes the query-time embedding call from the indexing-time one
-  (asymmetric encoding, common for retrieval-tuned embedding models).
+  ibm-granite/granite-embedding-97m-multilingual-r2`, `indexing_params: {}`,
+  `query_params: {prompt_name: query}` — the `prompt_name` distinguishes the query-time
+  embedding call from the indexing-time one (asymmetric encoding; granite-r2 defines
+  `query` as an empty-string prompt, so the setting is a valid no-op there). The house
+  default was SWAPPED from the shipped `Snowflake/snowflake-arctic-embed-xs` on 2026-07-13
+  over the LANGUAGE-WALL (§4b; measurements and swap history → `catalog.md` and the
+  settings file's own header comment).
 - **"Offline" nuance**: the daemon still makes live HTTP HEAD/GET calls to the HF Hub at model
   *load* time (cache-freshness/revision resolution — `resolve/main/modules.json`, `config.json`,
   a recursive tree listing), even though the weights are already cached and the embedding
@@ -130,6 +134,60 @@ doc section heading would use — a query that echoes a heading verbatim invites
 failure mode above. **Pagination**: `--limit`/`--offset` to look past a shallow top-N before
 concluding "not found" — the correct hit is often present, just outranked, not absent.
 
+### 4b. Markdown / prose corpora — where the bias flips, until the language wall
+
+A pure-markdown corpus (notes vault, docs tree, knowledge base) is a first-class
+PROJECT-REGISTER target, and the doc-over-code bias of §4 becomes moot by construction —
+there is no code for the prose to outrank. What the markdown trial (numbers, ranks, and
+cosine matrices → `catalog.md` §Markdown-corpus trial) actually measured:
+
+1. **EN→EN concept recall: usable, not oracular.** On a ~500-file corpus, vocabulary-mismatch
+   concept queries put the true target in the top-5 but NOT at #1, with flat score bands
+   (adjacent scores differ by 0–0.015, exact ties included — rank order carries weak
+   confidence signal). Operational form: `--limit 10`, read the candidate set, never accept
+   #1 on rank alone. `rg` controls on both queries hit only vocabulary coincidences (the
+   true targets used different words; controls → `catalog.md`) — this is exactly the query
+   shape where ccc earns its keep on prose.
+2. **The LANGUAGE-WALL (load-bearing).** With the shipped default
+   `Snowflake/snowflake-arctic-embed-xs`, topical signal flows through ENGLISH tokens only.
+   Measured at the ccc level AND at the raw-model level — including a symmetric-encode
+   counter-probe that rules out ccc's `prompt_name` asymmetry as the cause (matrices →
+   `catalog.md`) — so it is the model, not ccc's search pipeline. Consequences, each probed:
+   - **Pure-JA queries against pure-JA prose are topic-blind**: an unrelated JA document
+     outranked the correct one; extra pure-JA paraphrases were unreliable (1 of 2 recovered
+     the truth into top-8, never to #1; 1 of 2 missed entirely) — pure-JA phrasing is not a
+     dependable craft fix.
+   - **Code-switching IS a measured craft fix for JA/EN-MIXED notes**: a query that reuses
+     the note's own English technical tokens (「malformed な tool call を context に入れない
+     対策」) put the truth at #1 and swept the top-8 — the strongest retrieval of the trial.
+     Technical notes that mix 日本語 prose with EN terms stay searchable through their EN
+     vocabulary; deliberately carry the note's EN terms into the query.
+   - **No EN↔JA bridging** in either direction.
+   - Exact-token misses are NOT wall evidence: an EN control token unique to one file was
+     missed just as completely as the JA one — that is CC3's general top-k limitation;
+     route exact-token lookups to `rg` in any language.
+   A pure-Japanese notes vault gets no dependable semantic search from the default model —
+   route literal lookups to `rg` and gate any semantic promise on the model swap below.
+3. **The fix, executed and END-TO-END VERIFIED (2026-07-13, this host).** The measured
+   recommendation is `ibm-granite/granite-embedding-97m-multilingual-r2` — ccc's own
+   curated Multi-Lingual tier, whose curated CODE score also beats the shipped default's
+   (candidate matrices and the comparison → `catalog.md` §Multilingual swap candidates).
+   The swap was executed into the house global settings and re-verified end-to-end on the
+   same corpus: every failing wall probe recovered (JA→JA truths into the top ranks, EN→JA
+   bridging to #1) and the EN→EN control IMPROVED to #1 — swapping cost nothing measurable
+   on the English side (before/after table → `catalog.md`). The code-switch craft above
+   remains the first aid for hosts still on an EN-only model. Two swap consequences, both source-verified: (a) the embedding
+   model is GLOBAL — `EmbeddingSettings` lives only in `global_settings.yml`;
+   `ProjectSettings` has no embedding field — so the swap re-embeds EVERY registered project
+   (`ccc reset && ccc index` in each, code projects included; weigh their code-search
+   quality against ccc's own EMBEDDINGS.md scores before swapping); (b) this candidate is
+   SAME-DIM (384 = arctic-xs's 384), so §6's silent-mixing hazard is LIVE for exactly this
+   swap — reset is mandatory and no dimension error will catch a skipped one.
+4. **Freshness pressure is higher, not lower.** Notes churn harder than code and edits are
+   often the very thing you next search for — no file watcher exists (SKILL.md LAW (b);
+   RE-INDEX → §2), so `--refresh` every load-bearing lookup, and a vault-wide re-index
+   before any batch of lookups.
+
 ## 5. `ccc grep` craft — structural, by-example matching
 
 The only project-independent verb: it needs neither a daemon nor an index, and runs cleanly even
@@ -195,9 +253,8 @@ Linux/WSL: expected under `~/.cache/claude-cli-nodejs/…` by the same layout, b
 on macOS this forge [dated:2026-07, UNVERIFIED elsewhere] — fallback:
 `find ~/.cache ~/Library/Caches -path '*mcp-logs-cocoindex*' 2>/dev/null`. For an unregistered
 cwd it shows the literal `Not in an initialized project directory` stderr line followed
-near-instantly by a connection-closed error (fast-fail, nowhere near the client timeout —
-timings → `catalog.md`), i.e. a project-root gate firing, not a slow start, a crash, or a
-timeout. If the log instead shows a long stall before failing, that is a *different* class of
+near-instantly by a connection-closed error (an immediate fast-fail — timings →
+`catalog.md`), i.e. a project-root gate firing, not a slow start, a crash, or a timeout. If the log instead shows a long stall before failing, that is a *different* class of
 problem (owned by `operating-the-harness`'s MCP-lifecycle diagnostics, not this one).
 
 **CLI vs MCP, when to bother**: the CLI exposes the full verb set (`init`/`index`/`search`/

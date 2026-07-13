@@ -92,6 +92,92 @@ multiple (black-formatted) lines; a naive `rg '^\s*def __init__\(.*\) -> None:'`
 **2 of 9** — a 7-of-9 miss for line-based regex on real formatter-wrapped code. This is the
 concrete case for ccc grep's AST/structural, whitespace-invariant matching.
 
+## Markdown-corpus trial (2026-07-13, this host) — prose recall + the LANGUAGE-WALL
+
+Corpus: md-only mirror of the house `agents/skills/` tree (526 files / 5,432 chunks; 4.6MB
+per `du -sh`, this session) + 1 planted JA note (`nukadoko.md`, authored for the trial —
+unique topic by construction) = 527 files / 5,434 chunks. Model: shipped default
+`Snowflake/snowflake-arctic-embed-xs` (dim-384). All grades **HIGH** (direct measurement)
+unless noted. Caveat: one corpus, single-digit probe count (2 EN→EN concept + 4 wall +
+3 rephrase + 1 EN token control) — indicative, not a benchmark.
+
+| Metric | Value |
+|---|---|
+| Full first index | 93.5s wall (526 files / 5,432 chunks) |
+| Incremental re-index, 1 md file added | 0.97s |
+
+**EN→EN concept queries** (vocabulary-mismatch, ground truth known):
+
+| Query | Truth rank / top-10 score band |
+|---|---|
+| "why do search results become outdated after editing files" → driving-cocoindex stale-row | **#3** (0.648; band 0.664–0.636) |
+| "prevent two skills from both activating on the same request" → forging-skills F2 | **#4** (0.617; band 0.631–0.597) — also #8 |
+
+`rg` controls: Q1 `outdated` hit 5 files, none the truth (it says "stale"); Q2 `activating`
+(vendor dirs excluded) hit 2 files, none the truth (it says "trigger"/"collision").
+Truth-in-top-5 but flat bands → top-k is a candidate set, not an oracle (operational form →
+`operations.md` §4b).
+
+**Wall probes** (3 of 4 failed; the one success carries an anomaly):
+
+| Probe | Result |
+|---|---|
+| JA→JA, real doc ("おかしな形式のツール出力が会話履歴に紛れ込むのを止めたい" → recovering-poisoned-context) | truth absent from top-8; **#1 = the unrelated nukadoko plant @ 0.595** |
+| JA→JA, plant ("野菜を漬ける発酵床の日々の手入れ" → nukadoko) | ranking SUCCESS — #1 @ 0.545. Anomaly: the unrelated query above scored this same doc HIGHER (0.595 > 0.545); cross-query score comparison is suggestive, not conclusive — the raw-model matrix below is the cleaner evidence |
+| EN→JA ("daily care routine for a fermented rice bran pickling bed" → nukadoko) | absent from top-8 — no cross-lingual bridging |
+| JA exact-token (「ぬか床」 → the only file containing it) | missed entirely; top-8 = random JA-ish files @ ~0.65 — but see the EN token control below: NOT language-specific evidence |
+
+**Rephrase probes** (run during adversarial verification; truth =
+`recovering-poisoned-context/reference.md`, a JA/EN-MIXED technical doc):
+
+| Paraphrase | Result |
+|---|---|
+| 「壊れたツールコールが履歴を汚染しないようにする方法」 (pure JA, closer vocab) | truth recovered at #3/#4/#8 — below the nukadoko attractor (#1 @ 0.587) |
+| 「malformed な tool call を context に入れない対策」 (code-switched — reuses the doc's own EN technical tokens) | **truth #1 @ 0.763 and its chunks sweep the entire top-8** — strongest retrieval of the whole trial |
+| 「ツール呼び出しの失敗出力を検出して透過的に除去する仕組み」 (pure JA, different vocab) | truth absent from top-8 |
+
+Rephrase verdict: topical signal flows through ENGLISH tokens. Pure-JA phrasing is
+unreliable (1 of 2 extra paraphrases recovered, never to #1); code-switching onto the
+note's EN vocabulary is a real, measured craft fix for JA/EN-mixed notes (`operations.md`
+§4b owns the rule).
+
+**EN exact-token control**: `CoRNStack` (rg-confirmed unique to 1 file) — `ccc search`
+missed it entirely (top-8 noise @ 0.55–0.58). Exact-token misses are the GENERAL
+embedding-top-k limitation (CC3), in BOTH languages — the JA exact-token miss above is
+consistent with it and does not distinguish the language wall.
+
+**Raw-model cosine matrices** (query-side, normalized, via the ccc uvx env — isolates the
+model from ccc plumbing):
+
+| Pair | arctic-embed-xs | granite-107m-multilingual |
+|---|---|---|
+| JA query ↔ correct JA doc (tool-output topic) | 0.545 | **0.676** |
+| same JA query ↔ WRONG JA doc (nukadoko) | 0.593 (**wrong beats right**) | 0.483 |
+| JA query ↔ correct JA doc (nukadoko topic) | 0.556 | **0.670** |
+| reverse pair: nukadoko query ↔ tool doc | 0.471 | 0.458 |
+| EN query ↔ JA doc, same topic (cross-lingual) | 0.465 | **0.639** |
+| JA query ↔ EN doc, same topic (cross-lingual) | 0.342 | **0.686** |
+| EN query ↔ correct EN doc (control) | 0.756 | 0.792 |
+
+Verdict, citing only tabled values: arctic's JA↔JA pairs land at 0.471–0.593 with
+wrong-beats-right on the tool topic, while its EN control separates cleanly (0.756 on-topic
+vs 0.342–0.465 for everything cross-lingual). A symmetric-encode counter-probe (no
+`prompt_name: query`, doc-side encoding of both JA queries against `JAdoc_nuka`) reproduced
+the blindness — 0.633 for the WRONG query vs 0.635 for the right one — so ccc's asymmetric
+prompt config is not the cause; this is the model. granite restores JA discrimination
+(0.670/0.676 on-topic vs 0.458/0.483 off-topic) and EN↔JA bridging (0.639/0.686) at the
+raw-model pairwise level. [Superseded same day: the swap was subsequently executed with
+the sibling `97m-multilingual-r2` and verified END-TO-END — §Multilingual swap candidates
+above holds the before/after ranking table.] **granite multilingual models measured here
+are dim-384 — SAME dimension as arctic-xs** (measured via
+`get_sentence_embedding_dimension()`), so this exact swap is the silent-mixing case
+`operations.md` §6 warns about: `ccc reset && ccc index` mandatory, nothing will error.
+Note: `granite-embedding-97m-multilingual-r2` (curated table (a)) and
+`granite-embedding-107m-multilingual` (this matrix) are DIFFERENT model ids — do not
+conflate; both verified to exist on HF via raw API 2026-07-13. CODE-search quality after
+the swap: curated table (a) scores it 0.80 vs arctic's 0.67; qoed re-index + sanity search
+result recorded below when run.
+
 ## Embedding models — two DISJOINT sets, do not conflate
 
 **(a) ccc's own curated table** (`EMBEDDINGS.md`, snapshot dated 2026-06-15 in the doc itself):
@@ -113,6 +199,41 @@ table (a) — a real gap, not an oversight to paper over):
 | `jinaai/jina-embeddings-v2-base-code` | 161M / 768 | Local (`trust_remote_code=True`) | Yes — GitHub-code + 150M+ code/docstring pairs, 30 langs | 8192-token via ALiBi; Oct-2023-era, Jina's own current lineup has moved to general v3/v4 |
 | `voyageai/voyage-code-3` | undisclosed | **API-only** | Yes, purpose-built | Matryoshka 2048/1024/512/256 + int8/binary; vendor claims beat OpenAI-v3-large/CodeSage by 13.8/16.8% (self-reported, CONSENSUS-tier) |
 | `nomic-ai/nomic-embed-code` | 7B (Qwen2.5-Coder base) / 3584 | Local-capable, GPU-class | Yes, CoRNStack hard-negative trained | Apache-2.0; 32,768-token context; self-reported CodeSearchNet wins (vendor-reported); heavy for a laptop CPU despite "local" |
+
+**Multilingual swap candidates — measured 2026-07-13** (raw-model pairwise cosine, this
+host, same JA texts as the markdown trial + a code-concept pair; HF existence verified
+live via API — `granite-embedding-97m-multilingual-r2` EXISTS, JA-tagged, dim 384,
+max_pos 32768; the v2607.1.0 possible-summarizer-artifact flag on that id is retracted,
+the curation was right):
+
+| Margin | `granite-97m-multilingual-r2` (curated (a) Multi-Lingual tier, code score 0.80) | `intfloat/multilingual-e5-small` (dim 384, 512 ctx, needs `query:`/`passage:` prefixes) |
+|---|---|---|
+| JA on-topic vs off-topic | 0.801/0.848 vs 0.738/0.698 — clear | 0.845/0.833 vs 0.766/0.770 — tight |
+| EN→JA bridge | **0.827** | 0.746 |
+| code concept on vs off | **0.879 vs 0.700** | 0.861 vs 0.787 |
+
+Verdict: 97m-r2 dominates every margin measured, is ccc's OWN curated Multi-Lingual pick,
+and its curated code score (0.80) EXCEEDS the shipped default arctic-xs's 0.67 — the
+standing swap recommendation for a JA-notes + code host. Also measured earlier:
+`granite-107m-multilingual` (non-r2) — works, superseded by 97m-r2 on margins and curation.
+All three candidates are dim-384 = arctic's dim → §6/§4b same-dim reset rule applies
+everywhere.
+
+**Swap EXECUTED 2026-07-13 (user-instructed)**: house `global_settings.yml` now ships
+`granite-embedding-97m-multilingual-r2`; every registered project reset + re-indexed.
+End-to-end verification on the same 527-file md corpus, granite active vs the arctic
+baselines above:
+
+| Probe | arctic (before) | granite-97m-r2 (after) |
+|---|---|---|
+| JA→JA real doc (P1) | truth absent top-8; nukadoko attractor #1 | truth **#2 @ 0.845** (+#4); attractor gone |
+| JA→JA plant (P2) | #1 @ 0.545, flat band | **#1+#2 @ 0.882/0.875**, clear 0.087 gap to #3 |
+| EN→JA bridge (P3) | absent top-8 | **#1+#2 @ 0.851/0.848** |
+| EN→EN control (Q1) | truth #3, flat band | truth **#1 @ 0.861** — English IMPROVED, no regression |
+
+Full md-corpus rebuild under granite: 159s / 527 files / 5,434 chunks (arctic: 93.5s —
+1.7× slower, far under the ~4.4× param-ratio naive estimate; ModernBERT-era encoder).
+P1's truth at #2-not-#1 keeps the "top-k is a candidate set" rule in force even post-swap.
 
 Model-swap procedure and same-dim silent-mixing hazard: `operations.md` (owner).
 

@@ -1,7 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5",
-    "CLAUDE_CODE_DISABLE_MOUSE_CLICKS": "1"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
   },
   "permissions": {
     "defaultMode": "auto"
@@ -60,6 +59,6 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "switchModelsOnFlag": true,
-  "agentPushNotifEnabled": true,
-  "remoteControlAtStartup": true
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true
 }

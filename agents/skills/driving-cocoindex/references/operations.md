@@ -107,6 +107,7 @@ explicitly if you need the index back, and verify with `ccc status` before trust
 | Uptime field | Backed by a monotonic-since-boot-awake clock, **not** wall-clock daemon age — it does not advance while the machine sleeps, so it silently undercounts real age across sleep/lid-close cycles. For true age, use `ps -o lstart -p $(cat ~/.cocoindex_code/daemon.pid)`, never the `doctor`/`daemon status` "Uptime" line. |
 | Logs | `~/.cocoindex_code/daemon.log`. Known, recurring `BrokenPipeError` / "Error during streaming response" crash noise on client disconnect — cosmetic, not a sign the daemon is unhealthy by itself. |
 | Multi-project | One daemon serves every registered project (loads the embedder model once); `ccc daemon status` lists each project with an `idle`/`indexing` state — poll this before issuing a search if you want to avoid racing an in-flight (re)index. |
+| Index-job ownership | The `ccc index` CLI process is a thin client WATCHING a daemon-side job — killing the client (Ctrl-C, timeout, harness kill) does NOT stop indexing; the daemon carries the job to completion (observed live: a client killed at 473/853 files finished daemon-side minutes later). After any interrupted `ccc index`, poll `ccc daemon status` for `[indexing]`→`[idle]` rather than blindly re-running — and don't trust a search issued mid-build. |
 
 ## 4. Search craft — routing around the doc-over-code bias
 

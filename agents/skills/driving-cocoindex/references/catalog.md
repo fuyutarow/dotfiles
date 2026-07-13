@@ -175,8 +175,8 @@ are dim-384 — SAME dimension as arctic-xs** (measured via
 Note: `granite-embedding-97m-multilingual-r2` (curated table (a)) and
 `granite-embedding-107m-multilingual` (this matrix) are DIFFERENT model ids — do not
 conflate; both verified to exist on HF via raw API 2026-07-13. CODE-search quality after
-the swap: curated table (a) scores it 0.80 vs arctic's 0.67; qoed re-index + sanity search
-result recorded below when run.
+the swap: curated table (a) scores it 0.80 vs arctic's 0.67; qoed sanity result →
+§Multilingual swap candidates (JA/EN query convergence on the real corpus).
 
 ## Embedding models — two DISJOINT sets, do not conflate
 
@@ -234,6 +234,15 @@ baselines above:
 Full md-corpus rebuild under granite: 159s / 527 files / 5,434 chunks (arctic: 93.5s —
 1.7× slower, far under the ~4.4× param-ratio naive estimate; ModernBERT-era encoder).
 P1's truth at #2-not-#1 keeps the "top-k is a candidate set" rule in force even post-swap.
+
+qoed (real project, 853 files / 11,962 chunks, julia+latex): full granite rebuild ~7 min
+wall — during which the `ccc index` CLIENT was killed mid-run and the daemon COMPLETED the
+job anyway (853 listed | 473 added at kill time → [idle] with all 11,962 chunks ~4 min
+later; the client is a watcher, not the worker — operations §3 owns the rule). Sanity,
+overlap-based (qoed ground truth not hand-scored): the JA concept query
+「境界条件の正規化に相当するコード」 and its EN twin "boundary condition normalization code"
+now share 3 of their top-4 hits (same latex/yaml loci, scores 0.85–0.88) — pre-swap, JA
+queries were topic-blind noise. Cross-lingual retrieval works on the real code corpus.
 
 Model-swap procedure and same-dim silent-mixing hazard: `operations.md` (owner).
 

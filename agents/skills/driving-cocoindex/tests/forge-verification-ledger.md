@@ -174,3 +174,23 @@ failure is overpromising JA search, so the fail-safe direction is stated flat (L
 carries the caveat); the MEMORY.md-single-known-file near-miss is left to CC1's Grep
 fallback (rated minor); bare `ccc`/`cocoindex` tokens stand per the v2607.1.0 adjudication
 above.
+
+### v2607.3.0 addendum (2026-07-13, user-instructed 「すすめて / スキル蒸留」) — swap executed
+
+`cocoindex/global_settings.yml` (dotfiles) switched to
+`ibm-granite/granite-embedding-97m-multilingual-r2` with a dated history comment; candidate
+chosen by live HF verification + local pairwise matrices (97m-r2 dominated 107m and
+multilingual-e5-small on every margin; it is ccc's own curated Multi-Lingual tier, curated
+code score 0.80 > arctic's 0.67; its empty-string `query` prompt keeps `query_params`
+valid). End-to-end verification on the same md corpus: all four probes recovered or
+improved — JA→JA real truth #2 (was absent), plant #1+#2 with a clear gap, EN→JA #1+#2
+(was absent), EN→EN control improved to #1 (before/after table → catalog). qoed reset +
+rebuilt (11,962 chunks, ~7 min); JA/EN twin concept queries now converge (3 of top-4
+shared) on the real code corpus — overlap-based sanity, not hand-scored ground truth.
+[UNVERIFIED at ranking level] flags cleared; code-switch craft retained for unswapped
+hosts; LAW (d) unchanged (it describes the SHIPPED default, which remains arctic).
+Windfall fact folded in: a killed `ccc index` client does NOT stop the daemon-side job
+(observed at 473/853 files, completed minutes later) — new Gotchas row + operations §3
+Index-job-ownership row; also `ccc reset` needs `--force` non-interactively (daily-loop
+reset row updated). Stale registry entry (prior session's starlette trial bed)
+deregistered via `ccc reset --all --force`.

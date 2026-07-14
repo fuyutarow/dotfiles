@@ -291,7 +291,10 @@ editor () {
         [ -n "$target" ] || target=.
         set -- "$target"
     fi
-    command code "$@"
+    # NOT `command code`: on WSL, `code` is a FUNCTION (zsh/wsl.zsh) that opens a Remote-WSL
+    # window via a remote-authority URI. Bypassing it with `command` would call the raw launcher
+    # and reopen the whole UNC-path / non-remote-window failure. On mac `code` is just the binary.
+    code "$@"
 }
 
 

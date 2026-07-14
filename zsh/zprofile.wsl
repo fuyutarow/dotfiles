@@ -47,65 +47,15 @@ for _wa in /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps(N); do
   [[ -e "$_wa/winget.exe" && ":$PATH:" != *":$_wa:"* ]] && export PATH="$PATH:$_wa"
 done
 unset _wa
-# Real Windows PE tools used from WSL: symlink the actual binaries into ~/.local/bin
-# (already on PATH) instead of putting their huge parent dirs on $PATH.
-# DOCTRINE — curated allowlist, NOT full interop:
-#  * Windows-ONLY tools earn a symlink here (explorer, powershell, agy, ...).
-#  * Cross-platform tools (uv/uvx, codex, claude, rg, ...) use the LINUX install — never
-#    link their .exe twins even though winget ships them; the Linux binary must win.
-#  * Why symlinks and not PATH: ~/.local/bin is already on the PATH of every long-lived
-#    env snapshot (herdr server included, which freezes its env at start and has no way
-#    to refresh it). A new symlink changes directory CONTENT, not PATH — so it becomes
-#    visible in ALL live panes instantly, no reload/restart/new-tab needed.
-# DELIBERATELY NO bare-name `cmd.exe` shim here: Zed's remote-SSH OS probe runs
-# `cmd.exe /c ver`, and via WSL interop that execs the REAL Windows cmd.exe printing
-# "Microsoft Windows [...]", so Zed misdetects this Linux box as Windows and aborts with
-# "windows-%PROCESSOR_ARCHITECTURE%". `start` (zsh/wsl.zsh) calls cmd by absolute path instead.
-typeset -gA _WIN_EXES=(
-  explorer.exe   '/mnt/c/Windows/explorer.exe'
-  powershell.exe '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
-  agy.exe        '/mnt/c/Users/*/AppData/Local/Microsoft/WinGet/Packages/Google.AntigravityCLI_*/agy.exe'
-  # Bare name too: `alias agy=agy.exe` only fires in an interactive zsh, but scripts resolve
-  # via PATH — agents/skills/driving-antigravity/scripts/probe-models.sh gates on `command -v agy`.
-  agy            '/mnt/c/Users/*/AppData/Local/Microsoft/WinGet/Packages/Google.AntigravityCLI_*/agy.exe'
-  # `code` is NOT an .exe: it is the sh launcher VS Code ships FOR WSL (opens Windows
-  # VS Code attached to this distro). It self-locates via `realpath "$0"`, so a symlink
-  # is safe. Do NOT link Code.exe directly — it would open a blank Windows-side window.
-  code           '/mnt/c/Users/*/AppData/Local/Programs/Microsoft VS Code/bin/code'
-  # Antigravity IDE (the GUI, a VS Code fork) ships the same sh launcher; the CLI is `agy`.
-  antigravity-ide '/mnt/c/Users/*/AppData/Local/Programs/Antigravity IDE/bin/antigravity-ide'
-)
-link-win-exes() {
-  local name pat
-  local -a hits
-  mkdir -p "$HOME/.local/bin"
-  for name pat in "${(@kv)_WIN_EXES}"; do
-    # -e follows symlinks: a healthy link = single stat. A DANGLING link fails -e and gets
-    # relinked here (that self-heal is why a Windows-side reinstall/upgrade can't rot a shim).
-    [[ -e "$HOME/.local/bin/$name" ]] && continue
-    hits=( ${~pat}(N) )
-    (( $#hits )) && ln -sf "$hits[1]" "$HOME/.local/bin/$name"
-  done
-  # Sweep shims this allowlist no longer owns AND that no longer resolve — e.g. `agy` when
-  # Antigravity moved from a direct install to a winget package dir. A dangling shim is worse
-  # than a missing one: `command -v` fails while the name still looks present to a human.
-  for name in "$HOME"/.local/bin/*(N@); do
-    [[ -e "$name" ]] && continue                       # resolves → keep
-    [[ -n "${_WIN_EXES[${name:t}]:-}" ]] && continue   # allowlisted → relinked above
-    command rm -f -- "$name"
-  done
-}
-link-win-exes
-# sshd/herdr-born sessions lack the WSL identity vars that Windows-launched sessions get
-# (WSL_DISTRO_NAME & co). VS Code's bin/code probes $WSL_DISTRO_NAME, then falls back to a
-# WSL1-era `uname -r` regex ("...-Microsoft") that today's "-microsoft-standard-WSL2" kernels
-# never match — so it misdetects non-WSL and launches Code.exe ATTACHED to the terminal
-# (prompt blocks until the window closes). Derive the name; never hardcode it.
-if [[ -z "$WSL_DISTRO_NAME" ]] && command -v wslpath >/dev/null 2>&1; then
-  _wsl_root="$(wslpath -w / 2>/dev/null)"; _wsl_root="${_wsl_root%\\}"
-  [[ "$_wsl_root" == '\\'* ]] && export WSL_DISTRO_NAME="${_wsl_root##*\\}"
-  unset _wsl_root
-fi
+# The Windows-exe symlink farm (_WIN_EXES / link-win-exes) and the WSL_DISTRO_NAME derivation
+# deliberately do NOT live here: this file is read by LOGIN shells only, and herdr spawns its
+# panes as plain `/usr/bin/zsh` (interactive, non-login) — they would never run. Their home is
+# zsh/wsl.zsh, which zsh/aliases.zsh sources for EVERY interactive shell (zshrc loads sheldon
+# when .zprofile was skipped). Keep it that way.
+# DELIBERATELY NO bare-name `cmd.exe` shim: Zed's remote-SSH OS probe runs `cmd.exe /c ver`,
+# and via WSL interop that execs the REAL Windows cmd.exe printing "Microsoft Windows [...]",
+# so Zed misdetects this Linux box as Windows and aborts with "windows-%PROCESSOR_ARCHITECTURE%".
+# `start` (zsh/wsl.zsh) calls cmd by absolute path instead.
 # Migration: purge any legacy bare-name cmd.exe shim an older rev created (breaks Zed WSL2 detect).
 [[ -e "$HOME/.local/bin/cmd.exe" || -e "$HOME/.local/bin/cmd.exe.zed-disabled" ]] &&
   command rm -f "$HOME/.local/bin/cmd.exe" "$HOME/.local/bin/cmd.exe.zed-disabled"

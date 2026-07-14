@@ -281,23 +281,17 @@ alias dc='docker-compose'
 
 alias dl='yt-dlp'
 
+# `e` with no args opens the git top-level (falling back to $PWD); with args, opens them.
+# Editor is VS Code. On WSL it must be the `code` launcher VS Code ships FOR WSL — it opens a
+# Remote-WSL window (authority wsl+$WSL_DISTRO_NAME) and returns immediately; see zsh/zprofile.wsl.
 editor () {
+    local target
     if [ $# -eq 0 ]; then
-        # Check if the current directory is part of a Git repository
-        gitTopLevel=$(git rev-parse --show-toplevel 2>/dev/null)
-        if [ -n "$gitTopLevel" ]; then
-            # Open the top-level directory of the Git repository
-            # code "$gitTopLevel"
-            cursor "$gitTopLevel"
-        else
-            # Open the current directory
-            # code .
-            cursor .
-        fi
-    else
-        # Open the specified directory or file
-        code "$@"
+        target=$(git rev-parse --show-toplevel 2>/dev/null) || target=.
+        [ -n "$target" ] || target=.
+        set -- "$target"
     fi
+    command code "$@"
 }
 
 
@@ -387,7 +381,7 @@ show_aliases_help() {
   lg           Lazygit (Git TUI)
   lgd          Lazygit in dotfiles
   lg, <dir>    Lazygit in specific directory
-  e            Editor (cursor/code)
+  e            Editor (VS Code; Remote-WSL on WSL)
 
 📂 File Operations:
   l            List files (eza)

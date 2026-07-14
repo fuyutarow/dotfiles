@@ -16,6 +16,8 @@
 // TURN-SCOPED / CODE+QUOTE-STRIPPED (correo also strips internally; doubled is harmless).
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   findExe,
   readStdinJson,
@@ -23,6 +25,37 @@ import {
   stripCode,
   turnText,
 } from "./lib.ts";
+
+// correo.toml discovery for the coinage layer. The bare `coinage` subcommand reads
+// NO config (only `correo check` auto-discovers correo.toml), yet this hook's own
+// guidance says "register in correo.toml's allow" — so honor that contract HERE by
+// filtering allow-listed terms out of the findings. We deliberately do NOT pass
+// --allow to correo: in correo 0.2607.4 the --allow flag itself breaks engine init
+// (exit 2 even with --dict-dir), which would FAIL-SAFE-skip the whole guard.
+// Discovery order matches `correo check`: cwd upward to root, then $HOME.
+function coinageAllowTerms(): Set<string> {
+  const candidates: string[] = [];
+  let dir = process.cwd();
+  for (;;) {
+    candidates.push(join(dir, "correo.toml"));
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  if (process.env.HOME) candidates.push(join(process.env.HOME, "correo.toml"));
+  for (const p of candidates) {
+    let text: string;
+    try {
+      text = readFileSync(p, "utf8");
+    } catch {
+      continue;
+    }
+    const arr = text.match(/^allow\s*=\s*\[([\s\S]*?)\]/m);
+    if (arr === null) continue;
+    return new Set([...arr[1].matchAll(/"([^"\n]+)"/g)].map((m) => m[1]));
+  }
+  return new Set();
+}
 
 // PATH insurance for narrow hook-execution contexts (mirrors the bash predecessor).
 const CORREO_FALLBACK_DIRS = [
@@ -79,15 +112,22 @@ function main(): number {
   // layer 3: coinage (out-of-dictionary compounds) — exit 1 => block; exit 2 => skip
   const coinage = run("coinage", "--strict");
   if (coinage.status === 1) {
-    console.error(
-      [
-        "COINAGE GUARD: 辞書外の比喩ラベル複合（造語）がある。標準語へ書き直すか correo.toml の allow に理由つきで登録:",
-        ...coinage.lines
-          .filter((l) => l.includes("not a dictionary headword"))
-          .slice(0, 5),
-      ].join("\n"),
-    );
-    return 2;
+    const allow = coinageAllowTerms();
+    const findings = coinage.lines
+      .filter((l) => l.includes("not a dictionary headword"))
+      .filter((l) => {
+        const term = l.match(/「(.+?)」/);
+        return term === null || !allow.has(term[1]);
+      });
+    if (findings.length > 0) {
+      console.error(
+        [
+          "COINAGE GUARD: 辞書外の比喩ラベル複合（造語）がある。標準語へ書き直すか correo.toml の allow に理由つきで登録:",
+          ...findings.slice(0, 5),
+        ].join("\n"),
+      );
+      return 2;
+    }
   }
 
   return 0;

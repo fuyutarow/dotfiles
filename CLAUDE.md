@@ -16,7 +16,8 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
   inline `uname` / `$OSTYPE` checks.
 - **Shell**: zsh with sheldon plugin manager. **Terminal**: iTerm2 (mac) / Windows Terminal (WSL),
   with tmux.
-- **Editor**: Cursor (primary), VS Code (fallback) — `e` opens the right one.
+- **Editor**: VS Code — `e` / `ee` open it (on WSL via the Remote-WSL launcher, see `zsh/zprofile.wsl`).
+  Cursor was retired 2026-07-14; do not reintroduce it.
 
 ### Package Managers
 - **System**: Homebrew (both OSes — linuxbrew on WSL). `Brewfile` is the single source of truth.

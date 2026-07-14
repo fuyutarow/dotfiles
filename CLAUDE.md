@@ -40,9 +40,13 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (
    for macOS, `wsl/` for the `wsl.conf` system config) — those are tools, not OS buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
-3. Symlink list lives ONLY in `scripts/link-dots.sh`. Tool list lives ONLY in `Brewfile`
-   (+ `scripts/check-tools.sh` for the check). Repo tasks live ONLY in `mise.toml` —
-   this repo has NO justfile (retired); never reintroduce one.
+3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.sh`
+   (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
+   tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
+   phantom skill or a dead hook link behind. Tool list lives ONLY in `Brewfile` (+
+   `scripts/check-tools.sh` — a tool in the Brewfile but absent from that array is drift the
+   check cannot catch). Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
+   (retired); never reintroduce one.
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
 5. `zsh/zshenv` is deliberately tiny and quiet because zsh reads it for **every** invocation,

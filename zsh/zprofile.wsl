@@ -19,9 +19,14 @@ _dbg "Setting up PATH exports"
 # beat stale npm/Bun shims in login shells too. Non-login SSH gets this from .zshenv.
 export PATH="$HOME/.local/bin:$PATH"
 
-export CUDA_HOME=/usr/local/cuda-12.4
-export PATH=$CUDA_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+# CUDA — guarded like every other PATH addition here. Unguarded, it pinned a version-specific
+# absolute path onto PATH/LD_LIBRARY_PATH even on machines without it (measured: this box has no
+# /usr/local/cuda-12.4, so it was a dead entry on every shell).
+if [ -d /usr/local/cuda-12.4 ]; then
+  export CUDA_HOME=/usr/local/cuda-12.4
+  export PATH="$CUDA_HOME/bin:$PATH"
+  export LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH:-}"
+fi
 
 # # Conda
 # export PATH="$HOME/miniconda3/bin:$PATH"
@@ -60,6 +65,9 @@ typeset -gA _WIN_EXES=(
   explorer.exe   '/mnt/c/Windows/explorer.exe'
   powershell.exe '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
   agy.exe        '/mnt/c/Users/*/AppData/Local/Microsoft/WinGet/Packages/Google.AntigravityCLI_*/agy.exe'
+  # Bare name too: `alias agy=agy.exe` only fires in an interactive zsh, but scripts resolve
+  # via PATH — agents/skills/driving-antigravity/scripts/probe-models.sh gates on `command -v agy`.
+  agy            '/mnt/c/Users/*/AppData/Local/Microsoft/WinGet/Packages/Google.AntigravityCLI_*/agy.exe'
   # `code` is NOT an .exe: it is the sh launcher VS Code ships FOR WSL (opens Windows
   # VS Code attached to this distro). It self-locates via `realpath "$0"`, so a symlink
   # is safe. Do NOT link Code.exe directly — it would open a blank Windows-side window.
@@ -72,10 +80,19 @@ link-win-exes() {
   local -a hits
   mkdir -p "$HOME/.local/bin"
   for name pat in "${(@kv)_WIN_EXES}"; do
-    # -e follows symlinks: a healthy link = single stat; a broken one gets relinked.
+    # -e follows symlinks: a healthy link = single stat. A DANGLING link fails -e and gets
+    # relinked here (that self-heal is why a Windows-side reinstall/upgrade can't rot a shim).
     [[ -e "$HOME/.local/bin/$name" ]] && continue
     hits=( ${~pat}(N) )
     (( $#hits )) && ln -sf "$hits[1]" "$HOME/.local/bin/$name"
+  done
+  # Sweep shims this allowlist no longer owns AND that no longer resolve — e.g. `agy` when
+  # Antigravity moved from a direct install to a winget package dir. A dangling shim is worse
+  # than a missing one: `command -v` fails while the name still looks present to a human.
+  for name in "$HOME"/.local/bin/*(N@); do
+    [[ -e "$name" ]] && continue                       # resolves → keep
+    [[ -n "${_WIN_EXES[${name:t}]:-}" ]] && continue   # allowlisted → relinked above
+    command rm -f -- "$name"
   done
 }
 link-win-exes
@@ -104,14 +121,16 @@ else
 fi
 
 _dbg "Setting up fnm"
+# NOTE (both eval blocks below): the old form piped into the FIXED names /tmp/fnm_env and
+# /tmp/sheldon_source, then sourced them as shell code. /tmp is world-writable and sticky, so on
+# any shared host another user could pre-create those paths (or a symlink through them) and get
+# their code sourced into this login shell; concurrent shells also raced on the same file. Eval
+# the output directly — no file, no race, no plant surface. The 5s timeout survives (a wedged
+# `fnm`/`sheldon` must not hang the shell); with $() the timeout's exit status is what we test.
 if command -v fnm &> /dev/null; then
-  # Use timeout to prevent hanging
-  timeout 5s bash -c 'fnm env' > /tmp/fnm_env 2>/dev/null
-  if [[ $? -eq 0 ]]; then
-    source /tmp/fnm_env
-  else
+  _fnm_env="$(timeout 5s fnm env 2>/dev/null)" && eval "$_fnm_env" ||
     _dbg "Warning: fnm env timed out or failed"
-  fi
+  unset _fnm_env
 else
   _dbg "Warning: fnm not found"
 fi
@@ -126,10 +145,9 @@ fi
 # Sheldon (load this last)
 _dbg "Setting up sheldon"
 if command -v sheldon &> /dev/null; then
-  # Use timeout to prevent hanging
-  timeout 5s bash -c 'sheldon source' > /tmp/sheldon_source 2>/dev/null
-  if [[ $? -eq 0 ]]; then
-    source /tmp/sheldon_source
+  # Eval directly — see the /tmp note above the fnm block.
+  if _sheldon_src="$(timeout 5s sheldon source 2>/dev/null)"; then
+    eval "$_sheldon_src"
   else
     _dbg "Warning: sheldon source timed out or failed"
     # Fallback: load aliases directly
@@ -138,6 +156,7 @@ if command -v sheldon &> /dev/null; then
       source "$HOME/dotfiles/zsh/aliases.zsh"
     fi
   fi
+  unset _sheldon_src
 else
   _dbg "Warning: sheldon not found"
   # Fallback: load aliases directly

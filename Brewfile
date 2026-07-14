@@ -63,4 +63,8 @@ brew "biber"        # BibLaTeX backend — brew `texlive` bundles bibtex but NOT
 if OS.mac?
   cask "iterm2"
   cask "karabiner-elements"
+  # The editor `e`/`ee` open (zsh/aliases.zsh `editor()`), so it is a hard dependency, not taste.
+  # WSL has no cask: there `code` is a symlink to the Windows VS Code WSL launcher, wired by
+  # zsh/zprofile.wsl's _WIN_EXES allowlist — which is why check-tools.sh does not check `code`.
+  cask "visual-studio-code"
 end

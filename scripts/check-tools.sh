@@ -14,6 +14,11 @@ TOOLS=(
   rumdl
   # Shell fmt+lint (`mise run f` / `lint`) — shfmt=bash formatter, shellcheck=bash linter (zsh gated by `zsh -n`)
   shfmt shellcheck
+  # TS/JS fmt (`mise run fmt:ts`) — its absence used to fail the task with a bare
+  # "xargs: biome: No such file or directory" instead of being caught by this check.
+  biome
+  # BibLaTeX backend (`compiling-latex`); system monitor (tmux prefix+shift+B popup)
+  biber btop
 )
 
 missing=0

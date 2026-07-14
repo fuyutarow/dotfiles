@@ -234,7 +234,14 @@ echo "Setup complete. Run: exec zsh"
 
 [tasks."wsl:fix-gitexe"]
 description = "Allow Windows git.exe to trust the WSL repo path"
-run = '''git.exe config --global --add safe.directory '%(prefix)///wsl.localhost/Ubuntu-22.04/home/fuyutarow/dotfiles' '''
+# Derive the UNC path (wslpath knows the distro AND the user); the old literal baked in a stale
+# distro (Ubuntu-22.04) and the WINDOWS username as if it were the Linux one — wrong on both axes.
+run = '''
+command -v git.exe >/dev/null 2>&1 || { echo "git.exe not on PATH (Windows git not installed?)"; exit 1; }
+unc=$(wslpath -w "$PWD" | tr '\\' '/')   # \\wsl.localhost\<distro>\home\<user>\dotfiles → //…
+git.exe config --global --add safe.directory "%(prefix)/$unc"
+echo "trusted: %(prefix)/$unc"
+'''
 
 [tasks."install:rust"]
 description = "Install Rust toolchain"
@@ -318,6 +325,16 @@ if [ -d "$DOTFILES/agents/skills" ]; then
   for skill in "$DOTFILES"/agents/skills/*/; do
     [ -d "$skill" ] || continue
     link_path "${skill%/}" ~/.claude/skills/"$(basename "$skill")"
+  done
+  # Prune renamed/deleted skills: this loop only ADDS, so a rename (transcribe-media →
+  # transcribing-media) leaves the old link dangling and Claude keeps listing a skill that is
+  # gone. Remove only dangling links INTO this repo; plugin skills (real dirs) are untouched.
+  for old in ~/.claude/skills/*; do
+    [ -L "$old" ] || continue
+    [ -e "$old" ] && continue
+    case "$(readlink "$old")" in
+      "$DOTFILES"/*) rm -f "$old" && echo "pruned (renamed/deleted): $old" ;;
+    esac
   done
 else
   echo "skip (missing): $DOTFILES/agents/skills"

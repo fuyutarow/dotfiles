@@ -102,3 +102,12 @@ fi
 unset _mise_bin _mise_cand
 
 # Machine/OS-specific PATH entries belong in mac/.zprofile or wsl/.zprofile, not here.
+
+# ── PATH hygiene: one final normalization pass ────────────────────────────────
+# `typeset -U path` (zshenv) only dedupes writes made THROUGH the array; every
+# `export PATH="X:$PATH"` in zprofile/zshrc/tool-installers bypasses it (measured: 6 duplicate
+# entries in a login shell). Rewriting the array once, here at the end of the load chain,
+# applies uniqueness AND drops entries whose directory has vanished (stale fnm multishells,
+# uninstalled CUDA, retired plugin bins) — a shorter PATH is a faster command lookup.
+typeset -U path PATH
+path=( ${(u)^path}(N-/) )

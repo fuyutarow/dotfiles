@@ -63,6 +63,17 @@ link tmux/tmux.conf "$HOME/.tmux.conf"
 link herdr/config.toml "$HOME/.config/herdr/config.toml"
 
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
+# Prune first: a link this script USED to create keeps pointing into the repo after the source is
+# renamed (the .sh → .ts hook migration left six dangling links under ~/.claude). Only symlinks
+# INTO this repo that no longer resolve are removed — foreign or healthy links are untouched.
+for _stale in "$HOME"/.claude/*; do
+  [ -L "$_stale" ] || continue
+  [ -e "$_stale" ] && continue
+  case "$(readlink "$_stale")" in
+    "$DOTFILES"/*) rm -f "$_stale" && echo "pruned (dangling): $_stale" ;;
+  esac
+done
+unset _stale
 link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"

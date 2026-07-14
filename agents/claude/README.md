@@ -11,11 +11,25 @@ this repo. Keep the two separate.
 |---|---|---|
 | `settings.json` | `~/.claude/settings.json` | statusLine, model, theme, flags, hooks |
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | user-global policy (sonnet-agent rule nudge) |
-| `statusline-command.sh` | `~/.claude/statusline-command.sh` | two-line statusline (stays POSIX sh: degrades gracefully without jq/bun; cosmetic-only failure mode) |
-| `hooks/` | `~/.claude/hooks/` (whole dir) | all hooks — TypeScript on bun (see below) |
+| `statusline-command.ts` | `~/.claude/statusline-command.ts` | two-line statusline, run via bun (`settings.json` → `statusLine.command`) |
+| `hooks/` | `~/.claude/hooks/` (whole dir) | all hooks — TypeScript on bun (see below), plus `herdr-agent-state.sh` |
 
 `~/.claude/settings.local.json` (machine-specific permissions) stays **local**,
 not shared.
+
+### `hooks/herdr-agent-state.sh` — vendor-managed, not ours
+
+Written by `herdr integration install claude` (it lands **inside this repo**, because
+`~/.claude/hooks` is a symlink to `agents/claude/hooks/`). On `SessionStart` it reports Claude's
+`session_id` + `transcript_path` to the herdr server over its unix socket
+(`pane.report_agent_session`), which is what lets herdr show per-pane agent state and resume
+agents on server restore. It no-ops unless `HERDR_ENV`/`HERDR_SOCKET_PATH`/`HERDR_PANE_ID` are set,
+so it is inert outside herdr.
+
+**Re-running the installer rewrites the script AND re-injects an absolute
+`/home/<user>/...` path into `settings.json`.** That path breaks the other machine (this file is
+shared macOS↔WSL). After any `herdr integration install claude`, re-normalize the SessionStart
+hook to the house form: `sh ~/.claude/hooks/herdr-agent-state.sh session`.
 
 ## Hooks (`hooks/` — TypeScript on bun)
 

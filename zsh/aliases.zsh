@@ -95,8 +95,12 @@ fi
 # diff with better visualization
 command_exists "delta" && alias diff='delta' || alias diff='diff --color=auto'
 
-# cocoindex-code (ccc): AST code-search CLI, run via uvx (ephemeral; no persistent install)
-command_exists "uvx" && alias ccc='uvx --from "cocoindex-code[full]" ccc'
+# cocoindex-code (ccc): provided by the PERSISTENT uv tool — installed by
+# `mise run cc:install-mcp` (`uv tool install cocoindex-code[full]`), on PATH at
+# ~/.local/bin/ccc. Deliberately NO uvx alias: an ephemeral `uvx --from cocoindex-code[full]`
+# alias would shadow that binary and, because the ccc daemon is shared state, let an
+# interactive ccc and the .mcp.json daemon (bare `ccc`, version-pinned) run one daemon at two
+# client versions (skew). One binary, one home. If `ccc` is missing, run `mise run cc:install-mcp`.
 
 # vim
 # ===

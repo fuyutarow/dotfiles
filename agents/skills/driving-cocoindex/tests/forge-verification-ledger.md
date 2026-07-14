@@ -194,3 +194,35 @@ Windfall fact folded in: a killed `ccc index` client does NOT stop the daemon-si
 Index-job-ownership row; also `ccc reset` needs `--force` non-interactively (daily-loop
 reset row updated). Stale registry entry (prior session's starlette trial bed)
 deregistered via `ccc reset --all --force`.
+
+---
+
+## 2026-07-14 — PDF-boundary reforge (minimal)
+
+**Change**: added the PDF/binary non-support boundary to SKILL.md (Scope caveat, a Gotchas
+row for the silent skip, a FIRES row routing PDF asks to the convert-first workaround) + this
+ledger entry. No references/ expansion (user chose the minimal scope).
+
+**Why**: a user asked whether ccc supports PDF (believed it did). It does NOT — confirmed
+high-confidence by a 3-agent probe fleet (2 sonnet + codex heterogeneous cross-check), which
+also showed the failure is SILENT (no error), exactly the class of trap this skill exists to
+prevent.
+
+**Evidence (loci, as installed cocoindex-code v0.2.37 / cocoindex framework v1.0.14)**:
+- `cocoindex_code/settings.py` `DEFAULT_INCLUDED_PATTERNS` (~55 globs): no `.pdf` entry.
+- `cocoindex_code/indexer.py` `process_file()`: `read_text()` + `except UnicodeDecodeError:
+  return` → binary/PDF silently skipped even if force-included.
+- Package METADATA: no docling/pypdf/pdfminer/pymupdf/pdfplumber dependency.
+- Live probe: probe.md/probe.txt/probe.pdf → `ccc index` = "2 files listed" (PDF pre-filtered,
+  no error, not counted); `ccc search` never returned the PDF; .md/.txt positive controls hit.
+- codex (2nd opinion) verbatim: "No. The installed `ccc` does not ingest `.pdf` as a built-in
+  corpus extension."
+- Framework distinction: `cocoindex` can do PDF only via user pipeline code calling an external
+  parser (official "PDF to Markdown"/`examples/pdf_embedding` use `docling.DocumentConverter`);
+  a commented-out `**/*.pdf` line in `cocoindex/cli.py` scaffold template is NOT active support.
+  ccc neither depends on nor exposes any of this.
+
+**Gate check**: F1 — each added line changes a tool call (recognize silent skip → convert-first;
+route PDF asks correctly). F2 — no new sibling; extends existing one-homes. F3 — FIRES set
+extended; this entry is the adversarial-provenance artifact. Durability contract honored: no
+version number asserted in the SKILL.md body (dated facts live here).

@@ -4,8 +4,8 @@ description: >-
   Drives cocoindex-code (ccc) — daemon-backed SEMANTIC search over code AND markdown/notes
   corpora — from setup to daily driving. Use when a search names a CONCEPT rather than a
   literal string (「どこで実装されてる？識別子不明」, "find the code that handles X", 意味検索 /
-  セマンティック検索 / コード検索, markdown・ノート・メモ・ナレッジベースの意味検索,
-  「どこかに書いたはずだが言葉を思い出せない」想起検索, ccc, cocoindex, コードインデックス
+  セマンティック検索 / コード検索, markdown・ノート・メモ・ナレッジベースの意味検索;
+  PDF・バイナリは非対応→要変換, 「どこかに書いたはずだが言葉を思い出せない」想起検索, ccc, cocoindex, コードインデックス
   作成/更新, ccc search が古い・ヒットしない, 日本語クエリだけヒットしない, ccc の embedding
   モデル変更, multi-line/formatter-wrapped signature の構造検索 → ccc grep), or any
   ccc/daemon/index operation. LAW: PROJECT-BY-CWD — every verb except ccc grep needs a
@@ -23,10 +23,11 @@ description: >-
 
 # Driving CocoIndex Code — semantic code search as a disciplined subprocess
 
-> **Version**: v2607.3.0 (2026-07-13 — LANGUAGE-WALL fix executed: house model swapped to
-> granite-97m-multilingual-r2, end-to-end verified; markdown-corpus trial folded in)
+> **Version**: v2607.4.0 (2026-07-14 — PDF/binary non-support distilled as a boundary: silent-skip
+> Gotcha + FIRES convert-first routing, 3-agent+codex-verified; prior v2607.3.0 2026-07-13 =
+> LANGUAGE-WALL model swap to granite-97m-multilingual-r2, markdown-corpus trial folded in)
 > **Scope**: operating `ccc` (cocoindex-code) — setup → project lifecycle → search/grep over
-> code AND markdown/notes corpora → daemon → MCP surface → embedding in Workflow scripts;
+> code AND markdown/notes corpora (NOT PDF/binary — §Gotchas) → daemon → MCP surface → embedding in Workflow scripts;
 > host-agnostic, with a note on this repo's dotfiles-declarative global-settings wiring.
 > **Out of scope**: authoring `cocoindex` (the framework) pipelines yourself — that's plain
 > data-engineering, no skill needed; contributing to `cocoindex-code`'s own Python source →
@@ -102,6 +103,7 @@ cd <repo> && ccc init && ccc index
 | search hits look stale after an edit | PULL-BASED — no file watcher exists; `ccc status` carries no timestamp/dirty field | `ccc index` or `--refresh` before trusting a load-bearing hit |
 | `ccc grep` returns zero matches on a `def`-shaped pattern clearly in the file | bare trailing `):` doesn't match a return-type-annotated signature | wildcard the return type — `-> \RET:` — or drop the trailing colon |
 | top hits are all markdown/docs, real implementation missing or buried | embedding model has a measured doc-over-code/prose bias | `--path` filter to the source tree; re-run before trusting the global top-k |
+| PDF (or any binary) file silently missing from the index — `ccc index` lists FEWER files than the dir holds, with no error and no count for it | ccc's include-allowlist (`DEFAULT_INCLUDED_PATTERNS`) has no `.pdf`, and the reader is `read_text()` which drops non-UTF-8 input on `UnicodeDecodeError` — a PDF is pre-filtered and never even attempted, so nothing warns (verified end-to-end + codex cross-check, ledger 2026-07-14) | ccc indexes code + markdown/text ONLY. Convert PDF→Markdown/text FIRST (`docling` / `markitdown` / `pdftotext`), then PROJECT-REGISTER the `.md` output — no flag or config makes ccc read a raw PDF |
 | daemon "Uptime" looks lower than the process's real age | uptime is a monotonic-awake clock — it does not advance across machine sleep | `ps -o lstart -p $(cat ~/.cocoindex_code/daemon.pid)` for true age |
 | edited `global_settings.yml`, expected to need a manual daemon restart | NOT needed — the next `ccc`/MCP call's handshake detects the settings-mtime mismatch and auto-restarts | just re-invoke; no `ccc daemon restart` required |
 | "offline" local embedding still shows HF Hub traffic in `daemon.log` | model LOAD still pings the Hub for cache-freshness/revision resolution even with cached weights | set `HF_HUB_OFFLINE=1` (and `TRANSFORMERS_OFFLINE=1`) for a true air-gap |
@@ -192,6 +194,7 @@ FIRES:
 | a multi-line/formatter-wrapped signature structural hunt | `ccc grep`'s AST-invariant matching is the answer, not naive regex |
 | 「markdown のメモ/ノート群も意味検索できる？『どこかに書いたはず』を概念で探したい」 | markdown corpora are in-scope — PROJECT-REGISTER the vault; 日本語ノートなら LANGUAGE-WALL gate first (§Markdown) |
 | 「日本語で ccc search してもまともな結果が出ない」 | LANGUAGE-WALL gotcha — code-switch first aid for JA/EN-mixed notes; pure-JA needs the model swap, not query massaging |
+| 「PDF/論文(ドキュメント)を ccc で意味検索したい」 | ccc は PDF 非対応 — 生 PDF は無言スキップ(§Gotchas)。境界を示し PDF→Markdown 変換 → 変換後 `.md` を PROJECT-REGISTER へ誘導するのがこのスキルの責務(cocoindex フレームワークの docling PDF→MD example は別層・スコープ外) |
 
 MUST NOT fire (route):
 

@@ -68,7 +68,7 @@ For clusters use `Distributed`/`MPI.jl`; for GPU kernels `KernelAbstractions.jl`
 |---|---|---|
 | Differentiate anything | `DifferentiationInterface` + `ADTypes` | raw ForwardDiff/Zygote calls |
 | Fast reverse-mode AD | `AutoEnzyme()` | Zygote (slower; weak on mutation — autodiff.md §2.7.3) |
-| GPU/TPU + NN | `Reactant` + `Lux` | hand-written CUDA.jl |
+| NN / array code on GPU/TPU via XLA | `Reactant` + `Lux` | `Flux`+`CUDA.jl` for that NN job — NOT a general `CUDA.jl` replacement (Reactant is XLA tracing; direct GPU-array/kernel work still uses `CUDA.jl` / `Metal.jl` / `KernelAbstractions`) |
 | Detect instability (CI) | `JET.@test_opt` | manual `@code_warntype` |
 | Forbid instability (def site) | `DispatchDoctor.@stable` | hope |
 | Guarantee zero alloc | `AllocCheck.@check_allocs` | eyeballing `@time` |

@@ -21,7 +21,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2607.2.0 (2026-07-05, Julia 1.12.6 baseline `[dated:2026-07]`)
+> **Version**: v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -35,6 +35,19 @@ description: >-
 > §10.2.1).
 >
 > **Changelog (recent)**:
+> - v2607.3.0: **package-catalog gap patch (audit-driven: Terra 5.6 + a 5-lens fleet).** Closed the
+>   holes where the catalog omitted anchors its OWN philosophy demands (frontend-per-primitive;
+>   "each shape has one answer"; the mandatory DrWatson lifecycle) — NOT starter-kit inflation.
+>   packages.md gains: a **Numerical integration** block (`QuadGK` 1-D · `Integrals` frontend), a
+>   **linear & nonlinear systems at scale** block (`LinearSolve` frontend · `Krylov` backend — not
+>   IterativeSolvers, superseded · `NonlinearSolve` for N-D F(x)=0), `Distributions` as the first
+>   non-stdlib probability add, and `JLD2` as the DrWatson result-serialization anchor. Bugs fixed:
+>   §2.0.2's "each shape has one answer" table was missing the N-D nonlinear-system row
+>   (`NonlinearSolve` added; §9 checklist synced); setup.md §3.4's DrWatson example mixed a stale
+>   `.bson` savename with `.jld2` @tagsave (now `.jld2` throughout — DrWatson's BSON default is
+>   retired); toolchain.md §2.9.5 wrongly framed `Reactant` as replacing hand-written `CUDA.jl`
+>   (they are parallel choices — XLA tracing vs GPU arrays). Deliberately deferred (point-of-use /
+>   narrower audience): Optimization.jl frontend promotion, direct GPU-array entries (CUDA/Metal).
 > - v2607.2.0: **house-bar reforge (LAW + gates + routing).** External review accepted in part:
 >   added THE LAW + named gates JG0–JG4 (JG3 promotes architecture.md §10 from
 >   read-when-needed to a first-class gate — fires the moment a package outgrows one file);
@@ -282,7 +295,8 @@ using Optim
 result = Optim.optimize(v -> f(v[1], v[2]), [x0, y0], LBFGS();
                        autodiff = :forward)  # AD per §2.0.1
 # Unconstrained smooth → Optim (above). Constrained/structured → JuMP.
-# 1-D root → Roots.jl. Feasible set is a manifold → Manopt (packages.md). Closed form → use it.
+# 1-D root → Roots.jl; N-D nonlinear system F(x)=0 → NonlinearSolve.jl (never Optim on ‖F‖²).
+# Feasible set is a manifold → Manopt (packages.md). Closed form → use it.
 ```
 
 **Why**: N^D scaling (curse of dimensionality), resolution-bounded, no convergence guarantee,
@@ -366,7 +380,7 @@ Correctness (§1):
 Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in code):
 - [ ] No FD *derivative estimation*: gradients/derivatives of smooth objectives go through DI
       (`gradient(f, backend, x)`), never `(f(x+h)-f(x))/h`. (FD *discretizations* like PDE stencils are fine.) (§2.0.1)
-- [ ] No grid sampling for continuous optima: `Optim`/`JuMP`/`Roots`/closed form (§2.0.2)
+- [ ] No grid sampling for continuous optima: `Optim`/`JuMP`/`Roots` (1-D) / `NonlinearSolve` (N-D systems F(x)=0) / closed form (§2.0.2)
 - [ ] No lerp as evaluation substitute; no grid+lerp combination (§2.0.3)
 - [ ] Long-running / looping scripts `flush(stdout)` per step (or `ProgressMeter`); never a buffered batch that emits nothing until exit — background tasks and Monitor are blind otherwise (§2.0.4)
 

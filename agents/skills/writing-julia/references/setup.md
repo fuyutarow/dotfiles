@@ -90,7 +90,7 @@ using DrWatson
 @quickactivate "MyProject"          # activate the project env from anywhere in the tree
 
 params = Dict(:layer => 3, :lr => 1e-3, :act => "relu")
-savename("model", params, "bson")   # "model_act=relu_layer=3_lr=0.001.bson" — deterministic, sorted
+savename("model", params, "jld2")   # "model_act=relu_layer=3_lr=0.001.jld2" — deterministic, sorted
 
 # Path resolution from the project ROOT regardless of cwd (never build paths by hand):
 datadir("sims", savename(params, "jld2"));  srcdir();  scriptsdir();  plotsdir()

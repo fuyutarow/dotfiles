@@ -20,6 +20,13 @@
 
 **Core (stdlib, no install needed):** `LinearAlgebra`, `Statistics`, `Random`, `SparseArrays`, `Printf`
 
+**Probability (the first non-stdlib add — infrastructure tier, beside the core trio):** `Distributions`
+— named distributions, `pdf`/`logpdf`, sampling, and fit-to-data. `Random` alone gives only basic RNG;
+reach for `Distributions` the moment you do Monte Carlo, likelihood-based fitting, or supply an SDE
+noise process (the `DifferentialEquations` entry below covers **SDEs**, which need one). Heavier
+Bayesian PPL work (`Turing`, which re-exports `Distributions` and owns `MCMCChains`/`AdvancedHMC`/
+`Bijectors` transitively) is a point-of-use add layered on top — not carried preemptively.
+
 ---
 
 ## AD frontend & backends (the modern spine — autodiff.md §2.7)
@@ -61,6 +68,27 @@
   `COSMO`, or `Hypatia`; `Mosek` if a commercial license is acceptable. A restricted-master SDP
   must use one of these, not HiGHS.
 - `Optim` — gradient-based and derivative-free; pass `autodiff = :forward`.
+
+## Numerical integration (quadrature) — the frontend pattern, same shape as DI for AD
+- `QuadGK` — 1-D adaptive Gauss–Kronrod; the "evaluate the integral **exactly**" tool for a smooth
+  1-D integrand (the integration analogue of §2.0's no-grid / no-lerp rule — reach for real
+  quadrature, not a Riemann sum). Near-universal, near-zero compile cost.
+- `Integrals` — the SciML **unified frontend** (structurally like `DifferentiationInterface` for
+  AD): dispatches to QuadGK / HCubature / Cubature / Monte-Carlo by problem shape, and is
+  AD-composable (differentiate through the integral). Use it for multi-dimensional or
+  differentiate-through cases; `HCubature` is a backend it routes to, not a separate catalog add.
+
+## Linear & nonlinear systems at scale — name the frontend, not a menu of backends
+- `LinearSolve` — the SciML **unified `Ax=b` frontend**: auto-selects a dense factorization vs an
+  iterative method by matrix type / size / sparsity, with preconditioner support. Reach for it once
+  a system outgrows a dense `\` — `SparseArrays` in Core already implies you will.
+- `Krylov` — the preferred modern iterative/Krylov **backend** (CG, GMRES, MINRES, LSQR…; CPU+GPU)
+  that LinearSolve routes to. Prefer over `IterativeSolvers` (superseded). Name it directly only to
+  pin a specific method; otherwise go through `LinearSolve`.
+- `NonlinearSolve` — the SciML frontend for **multivariate** root-finding / nonlinear systems
+  F(x)=0 and steady states (Newton, Newton–Krylov, trust-region; consumes `ADTypes`/DI for the
+  Jacobian). The N-D sibling of `Roots.jl` (1-D). SKILL.md §2.0.2's "each shape has one answer"
+  routes here for N-D systems — never fake it with `Optim.optimize(‖F‖²)` (numerically inferior).
 
 ## Differential equations (heavy)
 - `DifferentialEquations` — full ODE/SDE/DDE/DAE suite (100+ solvers).
@@ -194,6 +222,12 @@ in the search loop is orders of magnitude too slow); convert to `Symbolics` only
 
 ## Data & visualization
 `DataFrames`, `CSV`; `CairoMakie` (publication plots, heavy deps).
+- **Result persistence → `JLD2`** — the Julia-native `.jld2` save/load format DrWatson's
+  `@tagsave` / `wsave` / `produce_or_load` write **by default** (setup.md §3.4). Reach for it
+  whenever an experiment must checkpoint or persist a result struct/array — this is the
+  serialization anchor the DrWatson lifecycle (JG4) already depends on. Escalate only by
+  persistence boundary: `HDF5` when a non-Julia tool must read the arrays, `Arrow` for columnar
+  tables shared with Python/R. (DrWatson's older `.bson` default is retired — use `.jld2`.)
 - **CJK / non-Latin labels → set a CJK-capable theme font, or CairoMakie crashes.** Makie's
   default font (DejaVu / TeX Gyre) has no CJK glyphs, so any 日本語 / 中文 / 한글 in a title or
   label throws during text layout (or renders as tofu boxes). Root-fix with a theme — do **not**

@@ -240,6 +240,7 @@ skin over the identical `agy -p` call, not a different path to the model:
 | Sibling | Cut |
 |---|---|
 | `driving-codex` | CARDINALITY/PURPOSE — which BINARY + its contract. `codex exec` (HAS per-call metering + a real `--sandbox read-only`, single-vendor GPT) → driving-codex; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → here. Both embed a headless CLI as a worker; decide by which binary you invoke. |
+| `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `grok -p` (xAI Grok Build — METERED, real sandbox, carries an EXFIL-RISK data-leak law) → `driving-grok`; `agy` (Antigravity, NO-METER, UNCONFINED, multi-vendor) → here. |
 | `operating-the-harness` | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, Workflow tool semantics, subagent policy) → there; the `agy` subprocess → here. |
 | `claude-api` | Anthropic API / Claude model facts + pricing → there (it may co-fire on "Claude" — no exclusivity claimed here). Driving the agy binary that routes to a Claude model, with no API/pricing question → here. |
 | `prompting-llms` | prompt WORDING → there; agy CLI mechanics → here. |

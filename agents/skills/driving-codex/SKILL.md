@@ -209,6 +209,7 @@ wiring FIRST; this skill supplies the codex invocation line.
 | Sibling | Cut |
 |---|---|
 | `driving-antigravity` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (per-call metering + a real `--sandbox read-only`, single-vendor GPT) → here; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → `driving-antigravity`. Both embed a headless CLI as a worker; pick by which binary. |
+| `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT) → here; `grok -p` (xAI Grok Build — metered + sandboxed like codex, but carries an EXFIL-RISK data-leak law) → `driving-grok`. |
 | `operating-the-harness` | PURPOSE — which binary is being configured: `claude` (hooks, settings, Workflow tool semantics, subagent policy) → there; the `codex` subprocess → here. Reciprocal pointer deferred — recorded in the ledger. |
 | `prompting-llms` | PURPOSE — prompt WORDING → there; codex CLI mechanics → here. Its OpenAI cut names `openai-docs` (nonexistent, 2026-07-12); until that exists, OpenAI prompt craft is model-native, never this skill's excuse to fire. |
 | `claude-api` | Anthropic API / Claude model facts → there; its own SKIP clause already routes OpenAI-named work away from itself. |

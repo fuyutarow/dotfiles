@@ -37,21 +37,37 @@ fi
 have_jq=0
 command -v jq >/dev/null 2>&1 && have_jq=1
 
+# EXFIL-RISK (SKILL.md G1/G2): grok bundles the whole tracked repo even on a trivial prompt, so the
+# ping must NOT run in a real repo. Run every ping from a fresh throwaway dir under --sandbox
+# read-only; the trap cleans it up. (The sandbox does NOT close the in-process upload channel — the
+# empty cwd is the real control; the sandbox only bounds filesystem blast radius.)
+PROBE_TMP=$(mktemp -d 2>/dev/null) || { echo "FATAL: mktemp -d failed — cannot make a scrubbed probe dir" >&2; exit 2; }
+trap 'rm -rf "$PROBE_TMP" 2>/dev/null' EXIT
+
 FAILS=0
 for model in "$@"; do
-  out=$(timeout 120 "$GROK" -p 'Reply with exactly: OK' -m "$model" --output-format json </dev/null 2>&1)
+  out=$(cd "$PROBE_TMP" && timeout 120 "$GROK" -p 'Reply with exactly: OK' -m "$model" \
+        --output-format json --sandbox read-only </dev/null 2>&1)
   rc=$?
 
   text=""
   tokens=""
   if [ "$rc" -eq 0 ]; then
     if [ "$have_jq" -eq 1 ]; then
+      # jq parse doubles as a JSON-wellformedness check — a truncated envelope fails here.
       text=$(printf '%s' "$out" | jq -r '.text // empty' 2>/dev/null)
       tokens=$(printf '%s' "$out" | jq -r '.usage.total_tokens // empty' 2>/dev/null)
     else
-      # grep fallback: crude field extraction from the single-line json envelope
-      text=$(printf '%s' "$out" | grep -oE '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/^"text"[[:space:]]*:[[:space:]]*"([^"]*)"$/\1/')
-      tokens=$(printf '%s' "$out" | grep -oE '"total_tokens"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+$')
+      # grep fallback: crude field extraction. Guard against a TRUNCATED envelope whose intact
+      # "text":"OK" precedes the cut point — require the payload to end in '}' AND carry a usage
+      # block, else treat as malformed (INCONCLUSIVE), not a clean AVAILABLE. (Does NOT unescape \" —
+      # safe here only because $text is compared for exact equality against the literal OK.)
+      case "$out" in
+        *'}') if printf '%s' "$out" | grep -q '"usage"'; then
+                text=$(printf '%s' "$out" | grep -oE '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed -E 's/^"text"[[:space:]]*:[[:space:]]*"([^"]*)"$/\1/')
+                tokens=$(printf '%s' "$out" | grep -oE '"total_tokens"[[:space:]]*:[[:space:]]*[0-9]+' | head -n1 | grep -oE '[0-9]+$')
+              fi ;;
+      esac
     fi
   fi
 

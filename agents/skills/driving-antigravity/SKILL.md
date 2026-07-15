@@ -22,7 +22,8 @@ description: >-
 
 # Driving Antigravity — the agy CLI as a headless worker
 
-> **Version**: v2607.1.1 (2026-07-14 — initial forge, hardened after an adversarial verify fleet
+> **Version**: v2607.1.2 (2026-07-15 — .2: +reciprocal cuts to driving-grok (Routing + MUST-NOT-FIRE)
+> when the xAI-grok sibling was forged; 2026-07-14 — .1: initial forge, hardened after an adversarial verify fleet
 > (Terra/codex + agy self-dogfood + sonnet refuters) flagged shell-injection, false containment,
 > and a too-low version floor)
 > **Scope**: embedding `agy` (Antigravity CLI) as a headless worker under Claude Code. The
@@ -220,6 +221,7 @@ MUST NOT fire (route):
 | `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | "which Claude model + Anthropic pricing / API" | `claude-api` — it owns Claude model facts & the Anthropic API and may co-fire on any "Claude" mention; no exclusivity claimed here. Runtime cut: asking about the API/pricing → claude-api; DRIVING the agy binary that routes to a Claude model → here |
 | 「プロンプトを改善して」 | `prompting-llms` |
+| the `grok`/Grok Build subprocess (xAI, METERED, EXFIL-RISK) or the `codex` subprocess (OpenAI GPT) | `driving-grok` / `driving-codex` — decide by which binary you invoke |
 | "what is Antigravity?" | trivial — no skill |
 | anything about gemini-cli | it is DEPRECATED (consumer OAuth dead 2026-06-18; brew-disable slated ~2026-12 [third-party, catalog]) — this skill NOTES that and drives agy instead; no gemini skill exists or should fire |
 

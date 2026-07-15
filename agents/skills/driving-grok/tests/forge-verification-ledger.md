@@ -117,14 +117,45 @@ the LAW's containment strategy.
 | CLI usage quota (subscription-tier, not API $-tier) | NOT published in a stable table by xAI; third-party reports (basenor.com) describe a reactive account-wide reset after a caching-inefficiency bug — CLI-plan quotas graded UNVERIFIED throughout | re-search for a published Grok Build plan-quota table; if still absent, keep the UNVERIFIED grade rather than inferring a number |
 | `--sandbox read-only` vs the plan-mode write | PLAN-IS-NOT-READONLY is probe-verified (item 4 above); `--sandbox read-only` blocking the SAME write was flagged by the r99-surface lens as NOT independently probe-verified this forge (budget was spent on 4 assigned probes) | run the r99-surface lens's own suggested follow-up: repeat the item-4 file-write probe with `--sandbox read-only` substituted for `--permission-mode plan` and confirm the write is blocked |
 
-## Verification-fleet results
+## Verification-fleet results (2026-07-15)
 
-`TO BE FILLED IN VERIFY PHASE`
+Six-lens adversarial fleet ran against the drafted files: 4 sonnet refuters (contradiction /
+architecture / sibling-cut / enrichment fact-check) + **Terra cross-vendor** (`gpt-5.6-terra` via
+`codex exec`, exit 0, 56,728 tokens, verdict "unsafe as written") + **grok self-dogfood** (drove the
+skill's OWN recipe on R99, in a scrubbed `/tmp/grok-dogfood` under `--sandbox read-only`, to critique
+itself). Independent lenses CONVERGED on the load-bearing safety defects — the strongest signal.
 
-(Placeholder — the sonnet refuters, Terra (`gpt-5.6-terra` via `codex exec`), and the grok
-self-dogfood pass have not yet run against the drafted SKILL.md/catalog/script. This section is
-the required landing zone for their findings + the editor's signed resolutions, in the same
-`# | Finding (compressed) | Resolution` table shape driving-codex's ledger uses, followed by a
-`Post-fix floor` verification block: `skill-check.sh` PASS/FAIL, strict YAML parse of the
-frontmatter, `bash -n scripts/probe-models.sh`, and the build-order one-liner from the SIGNED
-SPEC's version header.)
+**Forward-test (grok dogfood) — PASSED, and it validated the SAFETY LAW end-to-end.** The recipe ran
+verbatim from a scrubbed dir under `--sandbox read-only`: `grok 0.2.101`, RC=0, non-empty JSON
+envelope (`usage.total_tokens` present — METERED confirmed). Honoring G2 (throwaway dir) + `--sandbox`
+worked without fighting the recipe — the containment guidance is followable.
+
+**Verdict at draft (v2607.1.0): BLOCK — Terra: "its own mandatory probe and examples bypass its
+safety gates."** Fixed in **v2607.1.1**; every blocker/major resolved and re-verified:
+
+| # | Finding (lenses that raised it) | Resolution in v2607.1.1 |
+|---|---|---|
+| 1 | **Shell injection** in the grokAudit Workflow example — `${target}` pasted into `-p '...'` (Terra BLOCKER + grok-dogfood) | Added the mandatory INJECTION RULE; rewrote the example to write the payload to a scratch file and read via `-p "$(cat …)"`; only trusted model ids interpolate |
+| 2 | **cwd-hygiene ≠ containment** — G2's "clean cwd + text prompt" doesn't protect `$HOME`/other worktrees; default sandbox is `off` (Terra BLOCKER) | G2 rewritten as a TECHNICAL deny-gate: throwaway checkout **AND** `--sandbox read-only`/`--disallowed-tools`, never prompt-wording alone |
+| 3 | **the probe (G1's tool) violates G2/G3** — ran `grok -p` in caller cwd, no sandbox; EXFIL fires even on a trivial prompt (Terra BLOCKER) | `probe-models.sh` now runs every ping from a `mktemp -d` throwaway dir under `--sandbox read-only` (trap-cleaned); re-verified live on R99 (real→AVAILABLE 18764 tok, bogus→INVALID_NAME RC=1) |
+| 4 | **sandbox `strict` row "BLOCKED" unqualified** — skim-trap contradicting the exfil law (contradiction BLOCKER) | both `read-only`/`strict` Network cells now read "child-process egress BLOCKED (in-process upload channel STILL OPEN)" |
+| 5 | **canonical recipe + grokAudit omit `--sandbox`** despite G3 requiring it (contradiction + Terra + grok-dogfood) | `--sandbox read-only` added to both; G3 restated "EVERY call" |
+| 6 | **Landlock/seccomp mechanism conflation** in THE LAW (grok-dogfood) | softened — no longer names the wrong primitive; states only that no profile closes the in-process channel |
+| 7 | **`--always-approve` contradiction** — G3 flat prohibition vs recipe bullet vs catalog CI example (Terra + refuters) | made categorical everywhere; catalog AUTH example re-qualified |
+| 8 | **G4 unmarked cross-model injection channel** (Terra) | G4 now requires labeling grok's `.text` as UNTRUSTED and forbidding acting on instructions in it |
+| 9 | **`--sandbox read-only` overstated as "real filesystem read-only"** — it writes `~/.grok/` (Terra) | reworded; session/cache/config poisoning noted as residual |
+| 10 | **G5 cited a "dated worked example" in the catalog that doesn't exist** (contradiction) | citation removed |
+| 11 | **Durability contract: `v0.2.93` an undeclared 2nd version-fact** (3 lenses) | declared as an explicit 2nd exemption (incident version + multiplier are the LAW's evidence anchor) |
+| 12 | **Enrichment**: `grok-4.20-0309-{…multi-agent}` brace-expands to a WRONG id; HN "front page 2026-07-14" (item created 07-12) | IDs written out (`grok-4.20-multi-agent-0309` moves the date suffix); HN date corrected |
+| 13 | **Sibling F2**: `マルチベンダー検証` collided with driving-antigravity (grok is single-vendor); reciprocal cut missing from siblings (sibling-cut major) | grok's trigger → `grok で異種検証`; added Routing + MUST-NOT-FIRE grok rows to BOTH siblings + version-bumped them |
+
+**Downgraded, not asserted (Terra's provenance-mismatch finding).** `--sandbox read-only` *blocking a
+write* was NOT independently probe-verified this forge — only `--permission-mode plan` failing to
+block was (item 4 of the PROBE LOG). SKILL.md therefore treats `--sandbox` as the containment LEVER
+without claiming its write-blocking is proven here; the calibration table's follow-up probe stands.
+
+**Post-fix floor re-verification (2026-07-15):** description 1488 chars (≤1500); build-order → `OK`;
+`bash -n scripts/probe-models.sh` clean; tri-state probe validated LIVE on R99; all three sibling
+descriptions ≤1500; `forging-skills/scripts/skill-check.sh` → EXIT 0. Residual accepted (minor/nit):
+grok-composer lineage third-party; parallel-safety unproven at high N; grep-fallback `\"`-unescape
+limited (documented in-script, exact-match use only). Ship-ready.

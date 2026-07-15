@@ -22,7 +22,8 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2607.1.2 (2026-07-12 — .1: reforged on a second session's production trace;
+> **Version**: v2607.1.3 (2026-07-15 — .3: +reciprocal cuts to driving-grok (Routing + MUST-NOT-FIRE)
+> when the xAI-grok sibling was forged; 2026-07-12 — .1: reforged on a second session's production trace;
 > .2: C4 gains the sonnet baseline arm + cost-by-measurement, user-directed)
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
 > subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
@@ -199,6 +200,7 @@ MUST NOT fire (route):
 | "OpenAI API function calling の書き方" | no codex CLI involved — model-native (prompting-llms names an `openai-docs` owner; nonexistent as of 2026-07-12) |
 | "which Claude model should I use, and pricing?" | `claude-api` |
 | 「プロンプトを改善して」 | `prompting-llms` |
+| the `grok`/Grok Build subprocess (xAI, EXFIL-RISK) or the `agy`/Antigravity subprocess | `driving-grok` / `driving-antigravity` — decide by which binary you invoke |
 | "what is Codex?" | trivial — no skill |
 
 Co-fire: 「codex を呼ぶ hook を settings.json に足して」 → `operating-the-harness` owns the hook

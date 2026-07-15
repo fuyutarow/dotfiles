@@ -17,7 +17,9 @@ Probe form: `grok -p 'Reply with exactly: OK' -m <id> --output-format json </dev
 `.text == "OK"` = AVAILABLE. Verified this session for `grok-4.5`.
 
 **Broader `-m`-reachable catalog** (docs.x.ai, not in the default `grok models` menu — candidates,
-not confirmed-served): `grok-4.3` (1M context), `grok-4.20-0309-{reasoning,non-reasoning,multi-agent}`,
+not confirmed-served): `grok-4.3` (1M context), and the non-uniformly-named trio
+`grok-4.20-0309-reasoning`, `grok-4.20-0309-non-reasoning`, `grok-4.20-multi-agent-0309` (note the
+multi-agent one moves the date suffix — do NOT infer `grok-4.20-0309-multi-agent`), plus
 `grok-build-0.1` (absorbed the older `grok-code-fast-1` as a legacy alias) [official-docs]. An
 unknown `-m` id is a FREE client-side RC=1 fast-fail: `Couldn't set model ...: Invalid params:
 "unknown model id". Run 'grok models' to see available models.` — rejected against the local
@@ -59,7 +61,8 @@ chunks (~75 MB each), every one HTTP 200**. Synthetic API keys / DB passwords in
 server-side retention, not transmission — the upload fires whether or not the user opted out;
 disabling "Improve the model" did not stop it either.
 
-**Response.** Hit Hacker News's front page 2026-07-14; Elon Musk publicly promised a data purge.
+**Response.** The cereblab report was posted to Hacker News 2026-07-12 and stayed active through
+2026-07-14, when xAI's mitigation and Musk's public data-purge promise landed.
 xAI's mitigation is **server-side only**: flag `disable_codebase_upload: true` flipped
 2026-07-13/14 — the upload code path reportedly remains in the shipped client binary, no
 client-side fix, no formal statement or scope/retention account. This host runs 0.2.101
@@ -101,8 +104,8 @@ Real filesystem containment is `--sandbox <profile>` (env `GROK_SANDBOX`), appli
 |---|---|---|---|
 | `off` (default) | everywhere | everywhere | allowed |
 | `workspace` | everywhere | cwd + `/tmp` + `~/.grok/` | allowed |
-| `read-only` | everywhere | `~/.grok/` only | child-process network BLOCKED |
-| `strict` | cwd + system paths | cwd + system paths | BLOCKED |
+| `read-only` | everywhere | `~/.grok/` only | child-process egress BLOCKED (in-process upload channel STILL OPEN) |
+| `strict` | cwd + system paths | cwd + system paths | child-process egress BLOCKED (in-process upload channel STILL OPEN) |
 
 `~/.ssh/`, `~/.aws/`, `~/.gnupg/`, `~/.grok/auth/` are write-protected under every profile incl.
 `off`. Landlock (Linux ≥5.13) / Seatbelt (macOS) implements this, covering in-process tools and
@@ -119,7 +122,7 @@ Four documented session-authentication methods [official-docs, docs.x.ai/build/e
 | **Browser OIDC** (default) | `grok login` | Tokens in `~/.grok/auth.json` (chmod 600), expire 7d, auto-refresh 5min before expiry (`GROK_AUTH_EARLY_INVALIDATION_SECS`) or on 401 |
 | **Device code** | `grok login --device-auth` (RFC 8628) | URL + short code, for SSH/containers with no browser |
 | **External auth provider** | `GROK_OIDC_ISSUER`/`GROK_OIDC_CLIENT_ID`, or a custom binary via `sh -c` (stdout = ONLY the token/JSON) | Corporate IdPs (Entra ID, Okta, Auth0…); pin via `force_login_team_uuid`; recommended for sandboxed VMs/CI/air-gapped hosts |
-| **API key** | `XAI_API_KEY` env (or `model.api_key`) | **Takes precedence** over browser session; best for "scripts, CI/CD, headless automation" per xAI's own docs, e.g. `grok -p "..." --output-format json --always-approve` |
+| **API key** | `XAI_API_KEY` env (or `model.api_key`) | **Takes precedence** over browser session; best for "scripts, CI/CD, headless automation" per xAI's own docs. (xAI's example adds `--always-approve`, but the auth METHOD does not make the repo/task trusted — keep G3: no `--always-approve` on untrusted input, and G2 DATA-MINIMIZE regardless.) |
 
 **This setup (R99)**: session auth (browser OIDC), `XAI_*`/`GROK_*` unset. A prior interactive
 `grok login` persists and is reused by later `-p` calls.

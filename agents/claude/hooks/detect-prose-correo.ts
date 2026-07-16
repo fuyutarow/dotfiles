@@ -130,6 +130,25 @@ function main(): number {
     }
   }
 
+  // layer 4 (2026-07-16, user-mandated): readability floor — the gap that let
+  // fragment-chains / 100+ char sentences / style mixing through while only
+  // coinage/codemix/calque were hook-enforced. correo `readability` reads stdin;
+  // exit 1 => block. exit 2 (engine skip) => fail open like the other layers.
+  const readability = run("readability", "--max-ten", "3");
+  if (readability.status === 1) {
+    const findings = readability.lines.filter((l) => /^L\d+: \[/.test(l));
+    if (findings.length > 0) {
+      console.error(
+        [
+          "READABILITY FLOOR: 文の床に違反（文長 >100 字 / 読点 >3 / 文体混在 / の連鎖など）。",
+          "一文一義へ分割し、文体を統一してから出し直すこと。",
+          ...findings.slice(0, 5),
+        ].join("\n"),
+      );
+      return 2;
+    }
+  }
+
   return 0;
 }
 

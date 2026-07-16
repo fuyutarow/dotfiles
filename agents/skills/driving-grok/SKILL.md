@@ -50,6 +50,7 @@ Stable tokens even inside Japanese prose: **METERED**, **CATALOG-BY-PROBE**, **E
 grok = xAI's "Grok Build" (https://x.ai/cli), a closed-source terminal coding agent, cask
 `grok-build` (binaries `grok` + `agent`). You embed it by running `grok -p` via Bash (main-loop or
 a sonnet Workflow worker); the return is exit code + stdout, or a rich JSON envelope. It is the
+<<<<<<< HEAD
 MOST Claude-Code-like of the house's three drive-* targets — it reads Claude Code's CLAUDE.md,
 hooks, MCP servers, and skills on first launch, and resumes Claude/Codex/Cursor sessions. Its
 strengths over the siblings: the richest structured output (`--output-format json` with full
@@ -59,6 +60,20 @@ data-exfiltration incident** (THE LAW) that makes DATA MINIMIZATION, not sandbox
 containment law. grok is SINGLE-VENDOR (xAI) — it is one arm of a cross-vendor panel, not a
 multi-vendor gateway (that is `agy`/`driving-antigravity`). On this host it lives on R99 (WSL2,
 `ssh R99-wsl`, binary at `/home/linuxbrew/.linuxbrew/bin/grok`), authenticated via a grok.com session.
+=======
+MOST Claude-Code-like of the house's three drive-* targets — it even reads Claude Code's
+CLAUDE.md, hooks, MCP servers, and skills on first launch, and resumes Claude/Codex/Cursor
+sessions. Its strengths over the siblings: the richest structured output (`--output-format json`
+with full per-call token usage + `modelUsage`; `--json-schema` schema-constrained
+`structuredOutput`) and a real OS-level sandbox (Landlock/Seatbelt). Its defining liability: a
+**verified 2026-07 data-exfiltration incident** (THE LAW, below) that makes DATA MINIMIZATION, not
+sandboxing, the containment law. It is installed LOCALLY on the main workstation
+(`/home/linuxbrew/.linuxbrew/bin/grok`, auth live — probe-verified 2026-07-16, rc=0 with usage
+envelope) — prefer the local binary; the older R99 route below needs the R99 Windows host to be
+UP (observed offline 2026-07-16: tailscale MagicDNS resolution failed, direct-IP ssh refused).
+R99 fallback (WSL2, `ssh R99-wsl`, binary at
+`/home/linuxbrew/.linuxbrew/bin/grok`), authenticated via a grok.com session.
+>>>>>>> ca96431 (feat: add readability floor enforcement to detect-prose-correo hook, update probe-models.sh for agy command timeout handling, enhance SKILL.md with local grok installation details, and modify herdr config for auto_switch option)
 
 ## THE LAW
 
@@ -102,10 +117,19 @@ multi-vendor gateway (that is `agy`/`driving-antigravity`). On this host it live
 
 ## The invocation recipe — LOW freedom
 
+<<<<<<< HEAD
 Step 0 (G1+G2): resolve the exact model id, verify auth, AND confirm the checkout is safe to expose
 to xAI. Never hand-roll a probe — run `bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh` (no args →
 version + roster; an id → a tri-state ping from a throwaway dir). HOST NOTE: on R99, non-login
 `ssh R99-wsl` lacks linuxbrew on PATH — use `/home/linuxbrew/.linuxbrew/bin/grok`, or
+=======
+Step 0 (G1): resolve the exact model id and verify auth — never hand-roll a probe, run
+`bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh` (no args → version + roster; an id → a tri-state
+ping). HOST NOTE: grok is LOCAL on the main workstation (2026-07-16) — run it directly from an
+empty scratch dir (G2); use R99 only as fallback and check the host is up first (`tailscale
+status`). On R99, non-login `ssh R99-wsl` lacks linuxbrew on PATH — use the full path
+`/home/linuxbrew/.linuxbrew/bin/grok`, or
+>>>>>>> ca96431 (feat: add readability floor enforcement to detect-prose-correo hook, update probe-models.sh for agy command timeout handling, enhance SKILL.md with local grok installation details, and modify herdr config for auto_switch option)
 `ssh R99-wsl 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; grok ...'`.
 
 ```bash

@@ -20,7 +20,10 @@ command -v agy >/dev/null 2>&1 || { echo "FATAL: agy not on PATH — environment
 
 # Version floor (A1 / THE LAW): below 1.1.2, an invalid --model silently downgrades and a swallowed
 # server error returns exit-0 + empty stdout — so probes below the floor can LIE. Warn, don't hard-fail.
-ver=$(agy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+# </dev/null on EVERY agy call in this script — a bare call hangs on the non-TTY stdin
+# status check (antigravity-cli#76 class; observed live 2026-07-16: bare `agy models`
+# below hung >2 min under Claude Code's Bash while `agy models </dev/null` returned in seconds).
+ver=$(timeout 30 agy --version </dev/null 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
 floor="1.1.2"
 if [ -n "$ver" ] && [ "$(printf '%s\n%s\n' "$floor" "$ver" | sort -V | head -n1)" != "$floor" ]; then
   echo "WARNING: agy $ver is below the $floor floor — invalid-model downgrade + empty-stdout-swallow bugs may make probes unreliable (SKILL.md A1)" >&2
@@ -29,7 +32,7 @@ fi
 if [ "$#" -eq 0 ]; then
   echo "agy version: ${ver:-unknown}"
   echo "roster (copy display strings VERBATIM — spaces/parens/capitalization are literal):"
-  agy models || { echo "FATAL: \`agy models\` failed (rc $?) — cannot list the roster" >&2; exit 2; }
+  timeout 60 agy models </dev/null || { echo "FATAL: \`agy models\` failed (rc $?) — cannot list the roster" >&2; exit 2; }
   exit 0
 fi
 

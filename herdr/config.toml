@@ -17,8 +17,9 @@ onboarding = false
 # - tmux-fzf-url: set ui.mouse_capture=false if you want Cmd+click URL opening.
 
 [theme]
-name = "one-dark" # tmux status line was One Half Dark; one-dark is bit-identical on panel_bg #282c34 / accent #61afef
+name = "one-dark"
 
+auto_switch = false
 [keys]
 prefix = "ctrl+g" # tmux prefix C-g
 

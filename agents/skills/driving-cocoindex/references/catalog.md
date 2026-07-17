@@ -166,17 +166,8 @@ vs 0.342–0.465 for everything cross-lingual). A symmetric-encode counter-probe
 the blindness — 0.633 for the WRONG query vs 0.635 for the right one — so ccc's asymmetric
 prompt config is not the cause; this is the model. granite restores JA discrimination
 (0.670/0.676 on-topic vs 0.458/0.483 off-topic) and EN↔JA bridging (0.639/0.686) at the
-raw-model pairwise level. [Superseded same day: the swap was subsequently executed with
-the sibling `97m-multilingual-r2` and verified END-TO-END — §Multilingual swap candidates
-above holds the before/after ranking table.] **granite multilingual models measured here
-are dim-384 — SAME dimension as arctic-xs** (measured via
-`get_sentence_embedding_dimension()`), so this exact swap is the silent-mixing case
-`operations.md` §6 warns about: `ccc reset && ccc index` mandatory, nothing will error.
-Note: `granite-embedding-97m-multilingual-r2` (curated table (a)) and
-`granite-embedding-107m-multilingual` (this matrix) are DIFFERENT model ids — do not
-conflate; both verified to exist on HF via raw API 2026-07-13. CODE-search quality after
-the swap: curated table (a) scores it 0.80 vs arctic's 0.67; qoed sanity result →
-§Multilingual swap candidates (JA/EN query convergence on the real corpus).
+raw-model pairwise level. The current house model is `granite-311m-multilingual-r2`; see
+§Active model for the JA-notes + code A/B pilot that chose it and the reindex-on-swap rule.
 
 ## Embedding models — two DISJOINT sets, do not conflate
 
@@ -200,51 +191,31 @@ table (a) — a real gap, not an oversight to paper over):
 | `voyageai/voyage-code-3` | undisclosed | **API-only** | Yes, purpose-built | Matryoshka 2048/1024/512/256 + int8/binary; vendor claims beat OpenAI-v3-large/CodeSage by 13.8/16.8% (self-reported, CONSENSUS-tier) |
 | `nomic-ai/nomic-embed-code` | 7B (Qwen2.5-Coder base) / 3584 | Local-capable, GPU-class | Yes, CoRNStack hard-negative trained | Apache-2.0; 32,768-token context; self-reported CodeSearchNet wins (vendor-reported); heavy for a laptop CPU despite "local" |
 
-**Multilingual swap candidates — measured 2026-07-13** (raw-model pairwise cosine, this
-host, same JA texts as the markdown trial + a code-concept pair; HF existence verified
-live via API — `granite-embedding-97m-multilingual-r2` EXISTS, JA-tagged, dim 384,
-max_pos 32768; the v2607.1.0 possible-summarizer-artifact flag on that id is retracted,
-the curation was right):
+**Active model — `granite-embedding-311m-multilingual-r2` (dim 768), swapped 2026-07-17.**
+Chosen by a local A/B pilot on the house JA-notes + code corpus (278 chunks, 28 vocabulary-
+mismatched concept queries, candidate local models on this host). nDCG@10:
 
-| Margin | `granite-97m-multilingual-r2` (curated (a) Multi-Lingual tier, code score 0.80) | `intfloat/multilingual-e5-small` (dim 384, 512 ctx, needs `query:`/`passage:` prefixes) |
-|---|---|---|
-| JA on-topic vs off-topic | 0.801/0.848 vs 0.738/0.698 — clear | 0.845/0.833 vs 0.766/0.770 — tight |
-| EN→JA bridge | **0.827** | 0.746 |
-| code concept on vs off | **0.879 vs 0.700** | 0.861 vs 0.787 |
+| Model (dim) | notes | code | all | vs prior |
+|---|---|---|---|---|
+| `granite-97m-r2` (384) — prior active | 0.341 | 0.300 | 0.322 | — |
+| **`granite-311m-r2` (768) — chosen** | **0.595** | **0.493** | **0.548** | **+70%** |
+| `cl-nagoya/ruri-v3-70m` (384) | 0.584 | 0.124 | 0.370 | notes win, code collapse |
+| `cl-nagoya/ruri-v3-310m` (768) | 0.555 | 0.281 | 0.428 | dominated by 311m-r2 |
 
-Verdict: 97m-r2 dominates every margin measured, is ccc's OWN curated Multi-Lingual pick,
-and its curated code score (0.80) EXCEEDS the shipped default arctic-xs's 0.67 — the
-standing swap recommendation for a JA-notes + code host. Also measured earlier:
-`granite-107m-multilingual` (non-r2) — works, superseded by 97m-r2 on margins and curation.
-All three candidates are dim-384 = arctic's dim → §6/§4b same-dim reset rule applies
-everywhere.
+311m-r2 is the only candidate that beats the prior model on BOTH halves. ruri-v3 (JA-prose
+specialist, no code training) wins Japanese notes but collapses on code — its tmux / editor /
+symlink-prune queries land at ranks 23–244 — so it cannot serve as ccc's GLOBAL single model.
+NVIDIA Nemotron-3-Embed rejected upstream: 1B/8B decoder-embedders, GPU-required, no CPU
+backend, no isolated JA evidence.
 
-**Swap EXECUTED 2026-07-13 (user-instructed)**: house `global_settings.yml` now ships
-`granite-embedding-97m-multilingual-r2`; every registered project reset + re-indexed.
-End-to-end verification on the same 527-file md corpus, granite active vs the arctic
-baselines above:
+Reindex under ccc's daemon: ~100 chunks/s — qoed 16,090 / 159s, beateater 12,551 / 161s,
+min-sys-dpp-mvp 3,649 / 32s. End-to-end smoke: the JA query 「境界条件の正規化」 returns
+`\section{適用境界}` at 0.90 in qoed.
 
-| Probe | arctic (before) | granite-97m-r2 (after) |
-|---|---|---|
-| JA→JA real doc (P1) | truth absent top-8; nukadoko attractor #1 | truth **#2 @ 0.845** (+#4); attractor gone |
-| JA→JA plant (P2) | #1 @ 0.545, flat band | **#1+#2 @ 0.882/0.875**, clear 0.087 gap to #3 |
-| EN→JA bridge (P3) | absent top-8 | **#1+#2 @ 0.851/0.848** |
-| EN→EN control (Q1) | truth #3, flat band | truth **#1 @ 0.861** — English IMPROVED, no regression |
-
-Full md-corpus rebuild under granite: 159s / 527 files / 5,434 chunks (arctic: 93.5s —
-1.7× slower, far under the ~4.4× param-ratio naive estimate; ModernBERT-era encoder).
-P1's truth at #2-not-#1 keeps the "top-k is a candidate set" rule in force even post-swap.
-
-qoed (real project, 853 files / 11,962 chunks, julia+latex): full granite rebuild ~7 min
-wall — during which the `ccc index` CLIENT was killed mid-run and the daemon COMPLETED the
-job anyway (853 listed | 473 added at kill time → [idle] with all 11,962 chunks ~4 min
-later; the client is a watcher, not the worker — operations §3 owns the rule). Sanity,
-overlap-based (qoed ground truth not hand-scored): the JA concept query
-「境界条件の正規化に相当するコード」 and its EN twin "boundary condition normalization code"
-now share 3 of their top-4 hits (same latex/yaml loci, scores 0.85–0.88) — pre-swap, JA
-queries were topic-blind noise. Cross-lingual retrieval works on the real code corpus.
-
-Model-swap procedure and same-dim silent-mixing hazard: `operations.md` (owner).
+Lineage: 311m-r2 supersedes granite-97m-r2 (active 2026-07-13→07-17), which replaced the
+EN-only `snowflake-arctic-embed-xs` to fix the Japanese language-wall. Both granite tiers
+define an empty "query" prompt, so `query_params.prompt_name: query` stays valid. Swap
+procedure and the reset-on-change rule: `operations.md` (owner).
 
 ## Known issues (provenance-graded)
 

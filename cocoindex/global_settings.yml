@@ -8,13 +8,17 @@
 #   2026-07-13  Snowflake/snowflake-arctic-embed-xs → ibm-granite/granite-embedding-97m-multilingual-r2
 #     Why: arctic's topical signal is EN-only (Japanese queries were topic-blind); granite-97m-r2
 #     is ccc's own curated Multi-Lingual tier, code score 0.80 > arctic's 0.67, same dim (384).
-#     Any model change here → `ccc reset --force && ccc index` in EVERY registered project
-#     (same-dim swaps silently mix vectors otherwise; the daemon auto-restarts on next call).
-#     granite-r2 defines a "query" prompt (empty string), so query_params stays valid.
+#   2026-07-17  granite-97m-multilingual-r2 → granite-311m-multilingual-r2  (dim 384 → 768)
+#     Why: house JA-notes+code A/B pilot — 311m-r2 beat 97m-r2 on both halves (notes and code),
+#     total nDCG@10 +70%; ruri-v3-70m won notes but lost code, unfit as ccc's single global model.
+#
+# On any model change, run `ccc reset --force && ccc index` in EVERY registered project (the
+# daemon auto-restarts on the next call). granite-r2 defines an empty "query" prompt, so the
+# query_params below stays valid.
 
 embedding:
   provider: sentence-transformers
-  model: ibm-granite/granite-embedding-97m-multilingual-r2
+  model: ibm-granite/granite-embedding-311m-multilingual-r2
   indexing_params: {}
   query_params:
     prompt_name: query

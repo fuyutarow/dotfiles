@@ -32,13 +32,14 @@
   commented and export the key in the machine's environment instead, so the committed YAML
   carries the SLOT, never the secret.
 - This dotfiles config's shape: `provider: sentence-transformers`, `model:
-  ibm-granite/granite-embedding-97m-multilingual-r2`, `indexing_params: {}`,
+  ibm-granite/granite-embedding-311m-multilingual-r2`, `indexing_params: {}`,
   `query_params: {prompt_name: query}` — the `prompt_name` distinguishes the query-time
   embedding call from the indexing-time one (asymmetric encoding; granite-r2 defines
   `query` as an empty-string prompt, so the setting is a valid no-op there). The house
-  default was SWAPPED from the shipped `Snowflake/snowflake-arctic-embed-xs` on 2026-07-13
-  over the LANGUAGE-WALL (§4b; measurements and swap history → `catalog.md` and the
-  settings file's own header comment).
+  default is `granite-311m-multilingual-r2` (dim 768), chosen 2026-07-17 by a JA-notes+code
+  A/B pilot; it superseded granite-97m-r2, which had replaced the shipped
+  `snowflake-arctic-embed-xs` over the LANGUAGE-WALL (§4b; swap history → `catalog.md` and
+  the settings file's own header comment).
 - **"Offline" nuance**: the daemon still makes live HTTP HEAD/GET calls to the HF Hub at model
   *load* time (cache-freshness/revision resolution — `resolve/main/modules.json`, `config.json`,
   a recursive tree listing), even though the weights are already cached and the embedding
@@ -169,21 +170,17 @@ cosine matrices → `catalog.md` §Markdown-corpus trial) actually measured:
      route exact-token lookups to `rg` in any language.
    A pure-Japanese notes vault gets no dependable semantic search from the default model —
    route literal lookups to `rg` and gate any semantic promise on the model swap below.
-3. **The fix, executed and END-TO-END VERIFIED (2026-07-13, this host).** The measured
-   recommendation is `ibm-granite/granite-embedding-97m-multilingual-r2` — ccc's own
-   curated Multi-Lingual tier, whose curated CODE score also beats the shipped default's
-   (candidate matrices and the comparison → `catalog.md` §Multilingual swap candidates).
-   The swap was executed into the house global settings and re-verified end-to-end on the
-   same corpus: every failing wall probe recovered (JA→JA truths into the top ranks, EN→JA
-   bridging to #1) and the EN→EN control IMPROVED to #1 — swapping cost nothing measurable
-   on the English side (before/after table → `catalog.md`). The code-switch craft above
-   remains the first aid for hosts still on an EN-only model. Two swap consequences, both source-verified: (a) the embedding
-   model is GLOBAL — `EmbeddingSettings` lives only in `global_settings.yml`;
-   `ProjectSettings` has no embedding field — so the swap re-embeds EVERY registered project
-   (`ccc reset && ccc index` in each, code projects included; weigh their code-search
-   quality against ccc's own EMBEDDINGS.md scores before swapping); (b) this candidate is
-   SAME-DIM (384 = arctic-xs's 384), so §6's silent-mixing hazard is LIVE for exactly this
-   swap — reset is mandatory and no dimension error will catch a skipped one.
+3. **The fix, chosen and END-TO-END VERIFIED.** The measured recommendation is
+   `ibm-granite/granite-embedding-311m-multilingual-r2` (dim 768) — chosen 2026-07-17 by a
+   JA-notes + code A/B pilot in which it beat the prior granite-97m-r2 on BOTH halves, notes
+   and code (`catalog.md` §Active model). A JA-specialist like `cl-nagoya/ruri-v3-70m` wins
+   Japanese notes but collapses on code, so it cannot be the single GLOBAL model. The
+   code-switch craft above remains the first aid for hosts still on an EN-only model. Two
+   consequences, both source-verified: (a) the embedding model is GLOBAL — `EmbeddingSettings`
+   lives only in `global_settings.yml`, `ProjectSettings` has no embedding field — so a swap
+   re-embeds EVERY registered project (`ccc reset --force && ccc index` in each); (b) a
+   dimension change (here 384 → 768) hard-requires the reset — the sqlite-vec table's dim is
+   fixed at creation and no error will catch a skipped reindex.
 4. **Freshness pressure is higher, not lower.** Notes churn harder than code and edits are
    often the very thing you next search for — no file watcher exists (SKILL.md LAW (b);
    RE-INDEX → §2), so `--refresh` every load-bearing lookup, and a vault-wide re-index

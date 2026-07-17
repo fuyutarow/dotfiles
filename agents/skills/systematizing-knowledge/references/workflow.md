@@ -233,8 +233,8 @@ lives only here:
 | Concern | Hand to |
 |---|---|
 | corpus ledger as SOT, `{yymm}.y.z` versioning, staleness | `grenza-doc-discipline` |
-| final document structure (local non-repeating MECE) | `/MECE` |
-| editorial narrative (topic-sentence flow) | `/REORG` |
+| final document structure (local non-repeating MECE) | `structuring-documents` |
+| editorial narrative (topic-sentence flow) | `structuring-documents` |
 | the PRISMA / systematization diagrams (quote node labels) | `/AA` |
 | ruthless, evidence-demanding review pass | `/linus` |
 | multi-agent execution: solo/fan-out/barrier map, agent contract, trust boundary | `orchestration.md` |

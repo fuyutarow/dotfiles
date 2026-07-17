@@ -75,7 +75,7 @@ UNPROMPTED; it is NOT gated on writing NEW logic. **NO-FIRE**
 pass, a **metadata-only `Cargo.toml` change** (version / `[profile]` / authors / edition), a **single
 feature-flag toggle on an already-declared crate**, or a **mechanical rename** (identifier
 substitution only, however many files it touches) that changes no dependency and reshapes no
-ownership/API — ceremony on these fails RG0's own F1. A crate *rebrand* still fires when it adds a dep or reworks code: the `correo` case fired on
+ownership/API — ceremony on these fails RG0's own F1. A crate *rebrand* still fires when it adds a dep or reworks code: an observed rebrand fired on
 clap + `main.rs`, not on `[package].name`. Co-firing does not exempt you: under `refactoring-code` the passive-sounding "oracle"
 role does **not** suspend RG0 (a substantive restructure — one that adds a dep or reworks code — is still first-crate-entry; a mechanical rename that only substitutes an identifier is the NO-FIRE case above); under
 `implementing-and-debugging` its DEBUG/BUILD gate still runs FIRST and the sweep is writing-rust's

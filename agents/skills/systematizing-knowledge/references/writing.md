@@ -6,8 +6,8 @@
 > *deliverable and the agenda*; it **consumes, never re-derives**: the taxonomy (`taxonomy.md`),
 > the graded/reconciled claims (`synthesis.md`), the quarantine record (`ai4s-gates.md`). The
 > generated SoK document defaults to the user's language (**Japanese**); method/GRADE/ledger
-> tokens stay English. Narrative *editing* → `/REORG`; structure → `/MECE`; figure choice →
-> `/AA`; ruthless review → `/linus`; versioning/SOT → `grenza-doc-discipline`.
+> tokens stay English. Structure & narrative reorg → `structuring-documents`; figure choice →
+> `/AA`; ruthless review → `/linus`; versioning/staleness has no shipped owner (handle inline).
 
 ## 1. Gap analysis = the research agenda
 
@@ -77,7 +77,7 @@ The whole document is one argument following the five rhetorical moves (`genre.m
 | **Agenda** | the importance × tractability priorities with why-matters + obstacle | §1 above |
 
 **Topic-sentence discipline**: every paragraph runs **topic-sentence → evidence → implication**.
-This file says *what the arc must contain*; `/REORG` owns *how the prose flows* — hand the
+This file says *what the arc must contain*; `structuring-documents` owns *how the prose flows* — hand the
 editorial pass there, do not re-implement it here.
 
 **The inversion that kills the annotated-bibliography failure mode**: section headings are
@@ -184,8 +184,8 @@ execution**):
   load-bearing claim, deny-list grep (`resolution.md`): "what does an expert LEARN here?" is the
   question `/linus` should be unable to answer with "nothing".
 
-Run the three passes in order — `/linus` (find the holes) → `/MECE` (relocate scattered facts,
-backward-only references) → `/REORG` (topic-sentence narrative).
+Run the two passes in order — `/linus` (find the holes) → `structuring-documents` (relocate
+scattered facts with backward-only references, then the topic-sentence narrative flow).
 
 ## 7. Language reminder
 
@@ -208,7 +208,7 @@ lives in **SKILL.md's anti-pattern list** — not restated here. This table owns
 
 | Anti-pattern | Why wrong | Fix |
 |---|---|---|
-| **Bullet soup / no narrative** | scattered facts, no argument | topic-sentence → evidence → implication; hand to `/REORG` (§2) |
+| **Bullet soup / no narrative** | scattered facts, no argument | topic-sentence → evidence → implication; hand to `structuring-documents` (§2) |
 | **Multiple competing hero figures** | splits the thesis; reader can't find the load-bearing artifact | **exactly one**; choose type via `/AA` (§3) |
 | **"Future work" dump / "X is unexplored"** | a wishlist with no stakes or obstacle | importance × tractability + the WHY-MATTERS / OBSTACLE template (§1) |
 | **Living-SoK drift / version bump with no axis-of-change** | abstract and ledger diverge; bump means nothing | `{yymm}.y.z` with a **named axis**; ledger = SOT; defer to `grenza-doc-discipline` (§4) |

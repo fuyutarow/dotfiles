@@ -27,9 +27,10 @@ description: >-
 > top-tier-science / AI4S researcher. Method-grounded (PRISMA 2020, Kitchenham SLR, Nickerson 2013,
 > GRADE, Cochrane, REFORMS / Kapoor-Narayanan). This file holds the precedence-setting CORE inline;
 > everything else lives in `references/` and loads on demand.
-> **Out of scope** (delegate, do not duplicate): MECE local structure → `/MECE`; editorial narrative
-> → `/REORG`; diagram/Mermaid choice → `/AA`; ruthless review → `/linus`; versioning /
-> Single-Source-of-Truth / staleness / ledger↔doc sync → `grenza-doc-discipline` skill.
+> **Out of scope** (delegate, do not duplicate): MECE structure / editorial reorg / one-home /
+> single-source-of-truth / forward-ref DAG → `structuring-documents`; diagram/Mermaid choice →
+> `/AA`; ruthless review → `/linus`; doc versioning / staleness / ledger↔doc sync have no shipped
+> owner here — handle inline (no `grenza-doc-discipline` skill is installed).
 > **Corpus tooling**: the arxiv MCP (six tools: `search_papers`, `get_abstract`, `download_paper`,
 > `read_paper`, `citation_graph`, `semantic_search`) — see `references/workflow.md`.
 > **Build order (atomic).** This SKILL.md and its **9 reference targets** (genre, workflow, taxonomy,
@@ -124,7 +125,7 @@ separate chapter). **Steps 4–8 are the synthesis** that distinguishes an SoK f
 9–10 are the deliverable** (gap analysis + write), both owned by `references/writing.md`. The
 **resolution gate (invariant 9) fires at step 3** (extract the specific result — number + regime +
 locus — never the abstract's gist) **and at step 10** (substance-audit table + expert-surprise test
-per section, `references/resolution.md`). Hand structure to `/MECE`, narrative to `/REORG`,
+per section, `references/resolution.md`). Hand structure and narrative reorg to `structuring-documents`,
 diagrams to `/AA`, the adversarial pass to `/linus`.
 
 ### Execution model — orchestrate by default, argue solo
@@ -200,7 +201,7 @@ Gaps & delivery (`references/writing.md`):
 - [ ] **Open questions scored by importance × tractability**, each = why-it-matters + the blocking obstacle (not "future work")
 - [ ] Exactly **one** systematization figure / comparison-table-as-hero that carries the thesis standalone
 - [ ] Document is in the **user's language** (Japanese default); method/GRADE/ledger tokens kept as standard identifiers
-- [ ] Structure → `/MECE`, narrative → `/REORG`, diagrams → `/AA`, review → `/linus` (versioning/SOT is delegated in the scope header)
+- [ ] Structure & narrative reorg → `structuring-documents`, diagrams → `/AA`, review → `/linus` (versioning/staleness handled inline per the scope header)
 
 ## Anti-pattern quick list (precedence-setting only; full catalogs in each reference file's own table)
 

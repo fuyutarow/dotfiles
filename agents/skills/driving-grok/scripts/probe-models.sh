@@ -10,10 +10,9 @@
 #                                    `grok models` or references/model-catalog.md) and run a
 #                                    trivial --output-format json ping per model.
 #
-# HOST NOTE (R99): grok lives on R99 (WSL2, `ssh R99-wsl`), not the Mac. A non-login `ssh R99-wsl`
-# shell lacks linuxbrew on PATH — either point GROK at the full path, e.g.
-#   GROK=/home/linuxbrew/.linuxbrew/bin/grok probe-models.sh ...
-# or wrap the call: ssh R99-wsl 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"; grok ...'
+# PATH NOTE: if `grok` is not on PATH (e.g. a linuxbrew install absent from a non-login shell's
+# PATH, or a binary on a remote host reached over ssh), point GROK at the full path, e.g.
+#   GROK=/path/to/grok probe-models.sh ...
 # GROK overrides the binary this script invokes (default: grok, resolved off PATH).
 #
 # Verdicts are TRI-STATE (a nonzero exit is NOT automatically "unavailable"):

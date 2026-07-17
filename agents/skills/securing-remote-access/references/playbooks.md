@@ -33,7 +33,7 @@ AuthenticationMethods publickey
 PubkeyAuthentication yes
 PermitRootLogin no
 # Optionally scope who can log in at all:
-# AllowUsers fuyu
+# AllowUsers you
 
 # --- exposure reduction ---
 X11Forwarding no
@@ -68,14 +68,14 @@ daemon behind a mesh, automate security updates (`unattended-upgrades`).
 
 **Software key (fine for personal use, especially behind a mesh):**
 ```bash
-ssh-keygen -t ed25519 -C "fuyu@mac-$(date +%Y%m)"
+ssh-keygen -t ed25519 -C "you@mac-$(date +%Y%m)"
 ```
 
 **FIDO2 hardware‑bound key (non‑exfiltrable — the strongest practical credential):**
 ```bash
 # ed25519-sk needs OpenSSH >=8.2 on BOTH ends and a FIDO2 authenticator
 # (YubiKey firmware >=5.2.3 for ed25519-sk; older keys fall back to ecdsa-sk).
-ssh-keygen -t ed25519-sk -O resident -O verify-required -C "fuyu-yubikey"
+ssh-keygen -t ed25519-sk -O resident -O verify-required -C "you-yubikey"
 #   -O resident         => credential stored on the token, re-derivable elsewhere via `ssh-keygen -K`
 #   -O verify-required  => PIN on every use   (NOTE: this flag needs OpenSSH >=8.4, not 8.2)
 #   default behavior     => physical touch required to sign
@@ -110,7 +110,7 @@ Host *
 
 Host devbox
     HostName devbox.tailnet-name.ts.net   # a stable mesh name works on-LAN and remote
-    User fuyu
+    User you
     # IdentityAgent ~/.1password/agent.sock   # if using 1Password
     # IdentitiesOnly yes
 
@@ -148,7 +148,7 @@ tailscale status                                     # note the MagicDNS name, e
 
 # On the client (Mac):
 brew install --cask tailscale && tailscale up        # join the same tailnet
-ssh fuyu@devbox.<tailnet>.ts.net                      # routes over WireGuard; no port forwarding, no firewall holes
+ssh you@devbox.<tailnet>.ts.net                      # routes over WireGuard; no port forwarding, no firewall holes
 ```
 MagicDNS gives a name that's identical on‑LAN and remote, so one `~/.ssh/config` entry and one
 VS Code Remote‑SSH host work everywhere. NAT traversal succeeds directly the large majority of
@@ -168,7 +168,7 @@ Authorization is an ACL decision in the tailnet policy file, e.g.:
   "action": "check",                 // force IdP re-auth periodically (default 12h); "accept" to skip
   "src":    ["autogroup:member"],
   "dst":    ["autogroup:self"],
-  "users":  ["autogroup:nonroot", "fuyu"]
+  "users":  ["autogroup:nonroot", "you"]
 }]
 ```
 **Refuse it when:** the server would be a Windows client (unsupported — it can only run on a
@@ -188,7 +188,7 @@ ssh-keygen -t ed25519 -f user_ca -C "user CA"
 ssh-keygen -t ed25519 -f host_ca -C "host CA"
 
 # --- sign a USER key: short validity + principals = the logins this cert may use ---
-ssh-keygen -s user_ca -I fuyu@mac -n fuyu -V +8h id_ed25519.pub
+ssh-keygen -s user_ca -I you@mac -n you -V +8h id_ed25519.pub
 #   -V +8h  => self-expiring (this is your revocation strategy; DON'T forget it)
 
 # --- server trusts user certs, and presents its own host cert to kill client TOFU ---
@@ -207,7 +207,7 @@ without running this by hand, use **step‑ca** (`step ssh`) or **Vault**'s SSH 
 # both ends:
 brew install mosh        # mac;  sudo apt install mosh on the server
 # connect (rides your Tailscale path; survives Mac sleep, Wi-Fi->cellular, IP changes):
-mosh fuyu@devbox.<tailnet>.ts.net -- tmux new -A -s main
+mosh you@devbox.<tailnet>.ts.net -- tmux new -A -s main
 ```
 mosh needs UDP 60000–61000 reachable (the mesh handles this). It syncs only the visible
 screen — **run tmux for scrollback and session persistence.** mosh is terminal‑only; VS Code

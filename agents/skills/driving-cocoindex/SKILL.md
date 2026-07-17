@@ -99,7 +99,7 @@ cd <repo> && ccc init && ccc index
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| MCP shows "Failed to connect" for cocoindex-code in a repo | cwd is not `ccc init`-ed — the process exits before the MCP handshake even starts (every logged connection attempt on this host failed with the identical error; counts → `references/catalog.md`) | `ccc init` in that cwd, or accept CLI-only until you do |
+| MCP shows "Failed to connect" for cocoindex-code in a repo | cwd is not `ccc init`-ed — the process exits before the MCP handshake even starts (every logged connection attempt failed with the identical error; counts → `references/catalog.md`) | `ccc init` in that cwd, or accept CLI-only until you do |
 | search hits look stale after an edit | PULL-BASED — no file watcher exists; `ccc status` carries no timestamp/dirty field | `ccc index` or `--refresh` before trusting a load-bearing hit |
 | `ccc grep` returns zero matches on a `def`-shaped pattern clearly in the file | bare trailing `):` doesn't match a return-type-annotated signature | wildcard the return type — `-> \RET:` — or drop the trailing colon |
 | top hits are all markdown/docs, real implementation missing or buried | embedding model has a measured doc-over-code/prose bias | `--path` filter to the source tree; re-run before trusting the global top-k |
@@ -188,7 +188,7 @@ FIRES:
 |---|---|
 | 「レートリミットってこのサービスのどこで掛けてる？該当コードが見つからない」 | concept, not literal string — CC1 first move: confirm registration |
 | "set up semantic search for this repo" | PROJECT-REGISTER is exactly this skill's territory |
-| 「qoed で『境界条件の正規化』に相当するコード探して」 | named project, concept query — core case |
+| 「この repo で『境界条件の正規化』に相当するコード探して」 | concept query, identifier unknown — core case |
 | "ccc search returning stale/no results" | CC2 freshness gotcha |
 | 「ccc の embedding モデル変えたい」 | model-change procedure (`ccc reset && ccc index`, always); a bare 「embedding モデル選定」 with no ccc/code-index context is writing-python's ML-selection territory instead |
 | a multi-line/formatter-wrapped signature structural hunt | `ccc grep`'s AST-invariant matching is the answer, not naive regex |

@@ -34,6 +34,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 - [`recovering-poisoned-context`](recovering-poisoned-context/) — Rescue a session broken by a leaked/malformed tool call by rewinding, not retrying.
 - [`driving-codex`](driving-codex/) — Drive the OpenAI Codex CLI (`codex exec`) as a headless worker: sonnet-wrapper pattern, sandbox flags, availability by probe, spend accounting.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.
+- [`driving-grok`](driving-grok/) — Drive xAI's Grok Build CLI (`grok`) as a headless worker: metered + real sandbox, but an EXFIL-RISK data-minimize law, catalog by probe.
 - [`driving-cocoindex`](driving-cocoindex/) — Drive `ccc` semantic code/notes search: project-by-cwd, pull-based freshness, route by query shape.
 
 ### Coding & proofs
@@ -54,7 +55,6 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ### People & media
 
-- [`profiling-personality`](profiling-personality/) — Build a careful, provisional personality or compatibility read of someone from their text and behavior.
 - [`transcribing-media`](transcribing-media/) — Transcribe or subtitle audio/video with Whisper via uv — for 文字起こし and captions.
 
 ## Vendored (upstream)

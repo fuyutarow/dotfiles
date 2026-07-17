@@ -25,7 +25,7 @@ Use executable repo configuration over long natural-language procedures. For pro
 
 ## Environment (toolchain install)
 
-Install differs by OS. **Rule: Homebrew owns the base distribution; `tlmgr` only adds extras.** Probe first — `which lualatex latexmk tlmgr chktex kpsewhich` (all should resolve) and `tlmgr --version`. If anything is missing, `brew bundle --file=~/dotfiles/Brewfile` installs the base + `tex-fmt` + `poppler`.
+Install differs by OS. **Rule: Homebrew owns the base distribution; `tlmgr` only adds extras.** Probe first — `which lualatex latexmk tlmgr chktex kpsewhich` (all should resolve) and `tlmgr --version`. If anything is missing, install the per-OS base described below plus `tex-fmt` and `poppler` (Homebrew: `brew install tex-fmt poppler`, then the OS-specific TeX package below; a dotfiles repo may bundle all three in its `Brewfile`).
 
 - **macOS** — `mactex-no-gui` cask (full TeX Live, no GUI). Binaries via `/Library/TeX/texbin` (stable across year upgrades; add once to shell PATH). Add packages with `sudo tlmgr install <pkg>` — the tree is root-owned, so **sudo is required** (running without it fails).
 - **WSL / linuxbrew (default)** — `texlive` formula. Effectively full TeX Live: complete `texmf-dist` tree incl. Japanese (`luatexja` + Harano Aji), only docs stripped. All binaries are already on PATH at `$(brew --prefix)/bin` — **no TEXBIN, no PATH export, no sudo**. Update the base with `brew upgrade texlive`, never `tlmgr update`.

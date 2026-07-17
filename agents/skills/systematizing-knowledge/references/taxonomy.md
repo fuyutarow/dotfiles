@@ -105,9 +105,9 @@ Within a SINGLE dimension the values must be:
 required **WITHIN each facet, NOT across facets** — facets are *meant* to co-vary independently (that
 is what makes them facets). An object having a value on every axis is correct, not a MECE violation.
 
-This is the **schema-level** MECE; it complements the user's `/MECE` command, which enforces
+This is the **schema-level** MECE; it complements `structuring-documents`, which enforces
 **prose-level** non-repetition (each fact stated once, backward-only references) in the written
-document. Run schema-MECE here; route prose-MECE to `/MECE`.
+document. Run schema-MECE here; route prose-MECE to `structuring-documents`.
 
 ## 6. Dimension-selection scoring rubric
 
@@ -142,7 +142,7 @@ metadata columns; **cut** axes failing **d** as unverifiable. Apply whenever the
 The capability/comparison table is what readers screenshot and cite — design it FIRST and let it
 **discipline the taxonomy**: an all-yes or all-no column is a dead axis (§6); two indistinguishable
 rows mean the scheme fails to discriminate those works. Build it before finalizing prose; the
-narrative serves the table (route narrative to `/REORG`).
+narrative serves the table (route narrative to `structuring-documents`).
 
 **Template (column order is load-bearing):**
 
@@ -255,6 +255,6 @@ gate E).
 | Cell certainty (GRADE) on claim-columns | `synthesis.md` |
 | Cell leakage/admissibility check (REFORMS, metric-artifact) | `ai4s-gates.md` |
 | Matrix rendering (table vs figure, Mermaid) + making it the hero | `/AA`, `writing.md` |
-| Prose-level non-repetition of dimensions | `/MECE` |
+| Prose-level non-repetition of dimensions | `structuring-documents` |
 | Adversarial stress-test of the scheme | `/linus` |
 | Versioning the taxonomy as it iterates (SOT) | `grenza-doc-discipline` |

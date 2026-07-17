@@ -322,4 +322,4 @@ reference file carries its own table). The live decision rules are Parts A–E a
 | **Kaplan↔Chinchilla bookkeeping mistaken for physics** | Treating a fitting-regime difference as a real disagreement | Apply the LR-schedule/token-accounting/fitting-procedure discriminator (Part E) |
 
 Provenance/leakage admissibility is gated by `ai4s-gates.md`; structure/narrative/diagram/review are
-routed to `/MECE`, `/REORG`, `/AA`, `/linus` — do not re-implement them here.
+routed to `structuring-documents`, `/AA`, `/linus` — do not re-implement them here.

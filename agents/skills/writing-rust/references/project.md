@@ -83,7 +83,9 @@ For a **library**, add `unwrap_used`/`expect_used` (RG3 — no panicking on fall
 - **Repo dev tasks** ("build the release, run the migration, regen the fixtures"): the Rust-native
   pattern is **`xtask`** (a `cargo xtask <task>` binary in the workspace — no extra toolchain).
   `just` / `cargo-make` / `mise` are fine alternatives when the team already uses one; pick the
-  project's existing runner rather than adding a second.
+  project's existing runner rather than adding a second. House repos: mise is the standard runner
+  and the cross-language verb contract (fmt/lint/test/up/check) is owned by `wiring-mise-tasks` —
+  xtask stays legitimate inside a task body (`run = "cargo xtask codegen"`).
 - **Faster linker for dev iteration** (build speed, NOT runtime speed): the default GNU `ld` dominates
   incremental link time once LTO is on. Switch to `lld` or **`mold`** (10×+ link speedup) via
   `.cargo/config.toml` `[target.*] rustflags = ["-C", "link-arg=-fuse-ld=mold"]`. This speeds the

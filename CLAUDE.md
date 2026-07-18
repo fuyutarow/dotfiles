@@ -71,8 +71,8 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (
 All repo tasks go through **mise** (`mise tasks` to list):
 
 - **mac bootstrap**: `mise run mac:init` · **WSL bootstrap**: `mise run wsl:init` (see README)
-- **Relink dotfiles**: `mise run link-dots` · **Install tools**: `mise run install:tools`
-- **Check tools**: `mise run check-tools` · **Update everything**: `mise run up`
+- **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
+- **Check tools**: `mise run check:tools` · **Update everything**: `mise run up`
 - **MCP servers**: `mise run cc:install-mcp`
 
 (`j`/`jl` aliases for `just` remain for OTHER projects' justfiles — not used by this repo.)

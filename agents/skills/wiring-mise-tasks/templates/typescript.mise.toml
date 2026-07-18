@@ -1,0 +1,45 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。bun 管理プロジェクト前提 (package.json + bun.lock)。
+# biome は fmt と lint を別タスクに保ち (check 合流は不使用)、設定は committed
+# biome.json に置く — 両裁定とも wiring-mise-tasks/references/recipes.md §4。
+# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+
+[tasks.setup]
+alias = "i"
+description = "bun install --frozen-lockfile (lockfile 固定・CI-safe)"
+run = "bun install --frozen-lockfile"
+
+[tasks.fmt]
+alias = "f"
+description = "TS/JS/JSON を biome で整形 (config = biome.json)"
+run = "bunx biome format --write ."
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): --write を渡さない biome format は報告のみ"
+run = "bunx biome format ."
+
+[tasks.lint]
+alias = "l"
+description = "biome lint (報告のみ・整形は fmt)"
+run = "bunx biome lint ."
+
+[tasks.test]
+alias = "t"
+description = "bun test (bun 内蔵 runner・別フレームワーク不要)"
+run = "bun test"
+
+# 素の bun update は package.json の semver 範囲内 (bun.lock 書換)。
+# 範囲を跨ぐなら --latest。事前調査は bun outdated (読み取り専用)。
+[tasks.up]
+alias = "u"
+description = "依存を semver 範囲内で一括更新 (bun update → bun.lock 書換)。実行後は mise run check"
+run = "bun update"
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"

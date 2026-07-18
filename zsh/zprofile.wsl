@@ -28,6 +28,11 @@ if [ -d /usr/local/cuda-12.4 ]; then
   export LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH:-}"
 fi
 
+# WSL-provided GPU tools: nvidia-smi lives HERE, not in the CUDA toolkit's bin.
+# WSL auto-mounts this dir and registers it in ld.so.conf (ld.wsl.conf) but NOT on
+# PATH, so nvidia-smi is unreachable by name until we add it. LD already handled → PATH-only.
+[ -d /usr/lib/wsl/lib ] && export PATH="/usr/lib/wsl/lib:$PATH"
+
 # # Conda
 # export PATH="$HOME/miniconda3/bin:$PATH"
 # source $HOME/miniconda3/etc/profile.d/conda.sh

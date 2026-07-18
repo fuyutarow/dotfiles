@@ -1,0 +1,59 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
+# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+
+[tasks.setup]
+alias = "i"
+description = "Julia依存関係のインスタンス化 + precompile (Project.toml/Manifest.toml)"
+run = "julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'"
+
+[tasks.fmt]
+alias = "f"
+description = "一括フォーマット: Julia (Runic) + Markdown (rumdl)"
+depends = ["fmt:julia", "fmt:md"]
+
+[tasks."fmt:julia"]
+description = "JuliaソースをRunicで整形"
+run = "julia --project=. -m Runic --inplace ."
+
+[tasks."fmt:md"]
+description = "Markdownをrumdlで整形 (config = .rumdl.toml)"
+run = "rumdl fmt"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): Runic + rumdl"
+run = '''
+julia --project=. -m Runic --check .
+rumdl check .
+'''
+
+# lint は二段構え（裁定は wiring-mise-tasks/references/recipes.md §Julia）:
+#   starter — fmt:check 流用。導入判断を明記して先送りする（beateater 方式）。
+#   full    — package 化したら Aqua + ExplicitImports + JET へ昇格（writing-julia JG2/JG3）。
+[tasks.lint]
+alias = "l"
+description = "静的チェック。現状はRunicの非破壊checkを流用 (JET/Aqua導入は package 化時に昇格)"
+depends = ["fmt:check"]
+# full 昇格時: depends = ["lint:aqua", "lint:imports", "lint:jet"] に差し替え
+# [tasks."lint:aqua"]    run = "julia --project=. test/test_aqua.jl"
+# [tasks."lint:imports"] run = "julia --project=. test/check_imports.jl"
+# [tasks."lint:jet"]     run = "julia --project=. test/test_jet.jl"
+
+[tasks.test]
+alias = "t"
+description = "Julia側テスト (Pkg.test)。重くなったら qoed 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
+run = "julia --project=. -e 'using Pkg; Pkg.test()'"
+
+[tasks.up]
+alias = "u"
+description = "依存パッケージを [compat] 範囲内で一括更新 (Pkg.update → Manifest.toml 書換)"
+run = "julia --project=. -e 'using Pkg; Pkg.update()'"
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"

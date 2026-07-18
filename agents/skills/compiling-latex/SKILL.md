@@ -15,6 +15,7 @@ Use executable repo configuration over long natural-language procedures. For pro
 ## Core Decisions
 
 - Use `mise` as the single task surface. Do not introduce a second LaTeX task surface; migrate legacy shell/build wrappers into `mise` unless the user explicitly asks to preserve them.
+- The cross-language mise task GRAPH (repo-level verb contract fmt/lint/test/up/check, naming grammar, aggregation shape) is owned by `wiring-mise-tasks` — this skill owns only the TeX leaf tasks (`latex:*`); the repo-level `check` aggregates `latex:check`. Agrees in substance with that skill's routing table; do not diff for byte-identity.
 - Use `latexmk` for builds; do not hand-roll repeated `lualatex`/`bibtex` loops for normal projects.
 - Use `tex-fmt` as the formatter for new LaTeX setup.
 - Use `chktex` for LaTeX linting, with explicit suppressions for known Beamer noise rather than accepting arbitrary warnings.

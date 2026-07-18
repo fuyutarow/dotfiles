@@ -63,13 +63,13 @@ Symlinks are declared in `scripts/link-dots.sh` (Claude Code section, force
 `ln -sfn` — overwrites the default `settings.json` that Claude Code auto-creates).
 
 ```sh
-mise run link-dots     # one-time per machine; creates/refreshes the symlinks
+mise run link:dots     # one-time per machine; creates/refreshes the symlinks
 ```
 
 After that, `git pull` updates these repo files and the symlinks reflect the
 changes automatically (no relink needed). Note: if Claude Code ever rewrites
 `~/.claude/settings.json` as a real file (atomic save can replace a symlink),
-re-run `mise run link-dots`.
+re-run `mise run link:dots`.
 
 ## statusline requirements
 

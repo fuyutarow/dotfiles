@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Single source of truth for dotfile symlinks (macOS & WSL).
-# Called by `mise run link-dots` — do not duplicate link lists anywhere else;
+# Called by `mise run link:dots` — do not duplicate link lists anywhere else;
 # add new links HERE. Layout is topic-first: one tool = one directory.
 #
 # Modes (ONE script + a flag, not two scripts):
@@ -8,7 +8,7 @@
 #                       never sudo/rm unless actually needed. This is the default
 #                       so the post-merge hook can relink on every `git pull`.
 #   --force           — overwrite a regular file with the symlink. For the
-#                       intentional `mise run link-dots` (initial setup / fix drift).
+#                       intentional `mise run link:dots` (initial setup / fix drift).
 set -euo pipefail
 
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"

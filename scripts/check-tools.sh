@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Single source of truth for "is my CLI toolbox installed?" (macOS & WSL).
-# Called by `mise run check-tools`.
+# Called by `mise run check:tools`.
 # Install everything via: brew bundle --file=~/dotfiles/Brewfile
 set -uo pipefail
 

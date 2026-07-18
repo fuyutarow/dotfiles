@@ -1,0 +1,56 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。[tools] は宣言しない: Rust toolchain は既存の
+# cargo/rustup をそのまま使う (mise 管理外・correo 方式)。
+# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+
+# setup は意図的に無い: cargo が build 時に依存を解決する (correo 前例)。
+# ↓ は生きている免除宣言 (可視の免除が無言の欠落に勝る。消せば WARN に戻る):
+# mise-contract: waive setup -- cargo resolves deps at build
+
+[tasks.fmt]
+alias = "f"
+description = "Rust source を rustfmt で整形"
+run = "cargo fmt --all"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊)"
+run = "cargo fmt --all -- --check"
+
+# 恒久設定は Cargo.toml の [workspace.lints.clippy] 表が本筋 — 裁定は
+# wiring-mise-tasks/references/recipes.md §2。表を導入したら -D warnings を落とす。
+[tasks.lint]
+alias = "l"
+description = "clippy 静的解析 (全 target/feature・warning を deny)"
+run = "cargo clippy --all-targets --all-features -- -D warnings"
+
+[tasks.test]
+alias = "t"
+description = "cargo test。高速化するなら cargo nextest run + cargo test --doc の対 (nextest は doctest を走らせない)"
+run = "cargo test"
+
+# cargo 標準の update は Cargo.lock しか触らない → cargo-edit (cargo upgrade) で
+# Cargo.toml の要求 version 自体を上げる。破壊は後段の check が捕える運用。
+[tasks.up]
+alias = "u"
+description = "依存を最新へ一括更新 (要求を最新 major へ + lock 同期)。実行後は mise run check"
+run = '''
+command -v cargo-upgrade >/dev/null 2>&1 || cargo install cargo-edit
+cargo upgrade --incompatible allow
+cargo update
+'''
+
+[tasks."up:check"]
+description = "依存更新の dry-run (書き換えず候補を一覧)"
+run = '''
+command -v cargo-upgrade >/dev/null 2>&1 || cargo install cargo-edit
+cargo upgrade --incompatible allow --dry-run
+'''
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"

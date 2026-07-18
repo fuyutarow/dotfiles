@@ -2,8 +2,12 @@
 # (justfile was retired; `j`/`jl` aliases remain for per-project justfiles elsewhere.)
 # Single sources of truth: symlinks -> scripts/link-dots.sh, tools -> Brewfile,
 # tool check -> scripts/check-tools.sh.
+# 命名は wiring-mise-tasks 契約 (fmt/f fmt:check lint/l test/t up/u check/c)。この repo は
+# 言語プロジェクトでなく機械設定ゆえ setup は OS 別 init に分割:
+# mise-contract: waive setup -- OS-split into mac:init / wsl:init
 
 [tasks.up]
+alias = "u"
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
 
@@ -67,7 +71,14 @@ files="$(fd -e ts -E agents/skills .)"
 printf '%s\n' "$files" | xargs biome format --indent-style=space --indent-width=2
 '''
 
+# Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
+# rumdl, kept there since rumdl check is a structural lint not a format-verify).
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): bash (shfmt) + TypeScript (biome)"
+depends = ["fmt:sh:check", "fmt:ts:check"]
+
 [tasks.lint]
+alias = "l"
 description = "Lint the repo: Markdown (rumdl) + bash (shellcheck) + zsh (zsh -n) + skills index"
 depends = ["lint:md", "lint:sh", "lint:zsh", "lint:skills-index"]
 
@@ -114,10 +125,22 @@ done
 exit $rc
 '''
 
+[tasks.test]
+alias = "t"
+description = "Test the repo: Claude Code hooks (bun test). Umbrella over test:*"
+depends = ["test:hooks"]
+
 [tasks."test:hooks"]
 dir = "{{config_root}}"
 description = "Claude Code hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
 run = "bun test agents/claude/hooks"
+
+# CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
+# lint.depends: dotfiles has no reports/memos to scan (they live in research repos).
+[tasks.check]
+alias = "c"
+description = "全gate集約 (CI): fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
 
 # NOTE: deliberately NOT in `[tasks.lint].depends` — dotfiles has no reports/memos/
 # proposals to scan (they live in research repos), so wiring it into the blocking gate
@@ -195,14 +218,14 @@ description = "Initialize Mac environment (all-in-one setup)"
 run = '''
 brew install sheldon coreutils
 brew bundle --file=~/dotfiles/Brewfile
-mise run link-dots
+mise run link:dots
 mise run link:skills
 mise run tmux:plugins
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
 
-[tasks.link-dots]
+[tasks."link:dots"]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
 run = 'bash ~/dotfiles/scripts/link-dots.sh --force'
 
@@ -214,7 +237,7 @@ TPM_DIR="$HOME/.tmux/plugins/tpm"
 "$TPM_DIR/bin/install_plugins"
 '''
 
-[tasks.check-tools]
+[tasks."check:tools"]
 description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 

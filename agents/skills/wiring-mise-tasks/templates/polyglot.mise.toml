@@ -1,0 +1,74 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
+# 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (qoed 前例)。
+# 各セルの中身は単言語 template から移植し、TeX は compiling-latex の
+# latex:* template に委ねて check が latex:check を集約する。
+# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+
+[tasks.setup]
+alias = "i"
+description = "dev 一括セットアップ (言語別 setup:* を集約してから主言語を instantiate)"
+depends = ["setup:tools"]
+run = "julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'"
+
+[tasks."setup:tools"]
+description = "外部 CLI 導入 (brew/bun 前提・冪等)"
+run = '''
+brew install rumdl
+bun install --frozen-lockfile
+'''
+
+[tasks.fmt]
+alias = "f"
+description = "一括フォーマット: 言語別 fmt:* を集約"
+depends = ["fmt:julia", "fmt:rust", "fmt:md"]
+
+[tasks."fmt:julia"]
+description = "JuliaソースをRunicで整形"
+run = "julia --project=. -m Runic --inplace ."
+
+[tasks."fmt:rust"]
+description = "Rust (サブ crate) を rustfmt で整形"
+run = "cargo fmt --manifest-path harness/Cargo.toml"
+
+[tasks."fmt:md"]
+description = "Markdownをrumdlで整形 (config = .rumdl.toml)"
+run = "rumdl fmt"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): 全言語ぶんを一括"
+run = '''
+julia --project=. -m Runic --check .
+cargo fmt --manifest-path harness/Cargo.toml --check
+rumdl check .
+'''
+
+# lint:julia/lint:rust は未配線 — 明記された先送り (recipes.md §1 の tier 裁定:
+# 無言の starter はドリフト)。package 化した言語から lint:<lang> を足して集約へ。
+[tasks.lint]
+alias = "l"
+description = "lint 一括: 言語別 lint:* を集約 (現状 md のみ・Julia/Rust は package 化時に昇格)"
+depends = ["lint:md"]
+
+[tasks."lint:md"]
+description = "Markdown 構造 gate: rumdl check"
+run = "rumdl check"
+
+[tasks.test]
+alias = "t"
+description = "主言語テスト。重くなったら qoed 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
+run = "julia --project=. -e 'using Pkg; Pkg.test()'"
+
+[tasks.up]
+alias = "u"
+description = "主言語の依存を一括更新。他言語ぶん (cargo upgrade / bun update) は up:* に分ける"
+run = "julia --project=. -e 'using Pkg; Pkg.update()'"
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test (+ 採用した gate は同じ編集で必ずここへ足す)"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"

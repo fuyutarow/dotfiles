@@ -1,0 +1,49 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。uv 管理プロジェクト前提 (pyproject.toml + uv.lock)。
+# pip install / uv pip install は禁止 (writing-python PG0)。ruff は uv run 経由で
+# project-pinned 実行 (裸の ruff / uvx ruff は pin からドリフトする)。
+# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+
+# CI では uv sync --locked (uv.lock 不変を主張) を直接呼ぶ — このタスクは手元用。
+[tasks.setup]
+alias = "i"
+description = "uv.lock から .venv を再現"
+run = "uv sync"
+
+[tasks.fmt]
+alias = "f"
+description = "Python を ruff で整形"
+run = "uv run ruff format"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊)"
+run = "uv run ruff format --check"
+
+[tasks.lint]
+alias = "l"
+description = "ruff check (報告のみ・--fix は手元専用で CI に入れない)"
+run = "uv run ruff check"
+
+[tasks.test]
+alias = "t"
+description = "pytest (uv run 経由で venv 自動同期)"
+run = "uv run pytest"
+
+# uv.lock は自動では動かない — uv lock --upgrade だけが pin を進める。
+# lock の書換と .venv への反映は二段 (Julia の Pkg.update 一発と違う)。
+[tasks.up]
+alias = "u"
+description = "依存を一括更新: uv.lock を進めて .venv へ反映。実行後は mise run check"
+run = '''
+uv lock --upgrade
+uv sync
+'''
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"

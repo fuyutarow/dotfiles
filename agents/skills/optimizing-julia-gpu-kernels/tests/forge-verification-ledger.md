@@ -13,8 +13,8 @@ Forge: 2026-07-22, v2607.1.0 (initial). Editor: Opus 4.8 (solo design/fixes); fl
    api-changes.md's verified signature table.
 3. **AD study**: dedicated agent ran all example code LIVE on this machine's RTX 3060
    (CUDA.jl 6.2.1 / Zygote 0.7.11 / Julia 1.12.6); gradients checked against an independent
-   ForwardDiff CPU oracle (0.0 err elementwise, ~1e-6 SSM). Script preserved at forge time in
-   session scratchpad (`cuda_ad_verify/verify.jl`, 276 lines, all passing).
+   ForwardDiff CPU oracle (0.0 err elementwise, ~1e-6 SSM). Script preserved in this repo:
+   `tests/verify-ad-kernels.jl` (all parts passing at forge time).
 4. **Drafting**: 8 reference files, one drafter each, disjoint file ownership, editor-signed
    specs; every line then read and signed by the editor.
 5. **Verification fleet**: 11 auditors — 8 per-file fact-checks (draft vs pre-verified source,

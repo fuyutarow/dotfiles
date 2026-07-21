@@ -16,7 +16,8 @@ description: >-
   implementing-and-debugging first (change-safety), this for idiom; Julia refactor →
   refactoring-code governs (two hats/oracle), this supplies JET/Aqua brackets + Julia-safe
   transforms. Lean/formal proofs → proving-theorems; Python tooling → running-python-tools
-  (PythonCall/SymPyPythonCall from Julia stays here).
+  (PythonCall/SymPyPythonCall from Julia stays here); GPU kernels / CuArray performance /
+  CUDA.jl → optimizing-julia-gpu-kernels (host-side type & package discipline stays here).
 ---
 
 # Model Julia — Coding Discipline & Setup
@@ -35,6 +36,9 @@ description: >-
 > §10.2.1).
 >
 > **Changelog (recent)**:
+> - v2607.3.1: **GPU sibling landed.** The "direct GPU-array entries (CUDA/Metal)" deferral
+>   below is now CLOSED for CUDA: `optimizing-julia-gpu-kernels` owns device kernels, CuArray
+>   performance, and kernel-under-AD (reciprocal routing row added). Metal remains deferred.
 > - v2607.3.0: **package-catalog gap patch (audit-driven: Terra 5.6 + a 5-lens fleet).** Closed the
 >   holes where the catalog omitted anchors its OWN philosophy demands (frontend-per-primitive;
 >   "each shape has one answer"; the mandatory DrWatson lifecycle) — NOT starter-kit inflation.
@@ -125,6 +129,7 @@ description: >-
 | `implementing-and-debugging` | **Co-fire on any non-trivial Julia feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Julia looks like inside that frame (JG0–JG4). Its reciprocal row: "language skills own correctness/perf idiom." |
 | `refactoring-code` | **Co-fire on any behavior-preserving Julia restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Julia-specific oracle components (JET / Aqua / `report_package` as the green bracket) and the Julia-safe transforms (JG3: include-order moves, subpackage extraction, weakdeps migration). A Julia refactor that improves no named property is still 場当たり churn — its G3 applies unchanged. |
 | `proving-theorems` | PURPOSE cut: formalizing/machine-checking a THEOREM (Lean, proof assistants) → there, even when the math started life as Julia numerics. Numerical computation/experiment in Julia → here. "Port this Julia result to a formal proof" → there, this stays for the Julia side only. |
+| `optimizing-julia-gpu-kernels` | DECISIVE cut — **does the code run on (or manage) the device?** CUDA.jl / KernelAbstractions kernels, CuArray performance, launch config, GPU profiling, kernel-under-AD (rrule for a kernel) → there. Host-side type discipline, AD frontend choice, package architecture → HERE. Co-fire with ORDER on GPU-in-Julia work: JG2 type discipline is that skill's GK1 precondition — instability that is merely slow on CPU is a COMPILE ERROR inside a kernel. toolchain.md §2.9.5's Reactant-vs-CUDA.jl framing stays here; the moment a hand kernel or CuArray perf question appears → there. |
 | `running-python-tools` | LANGUAGE cut: invoking a Python CLI/one-off → there. Calling Python FROM Julia (SymPyPythonCall, PythonCall/juliacall boundary) → HERE — that is a Julia dependency-architecture decision (JG3/packages.md), not Python tooling. |
 | `writing-python` | LANGUAGE cut: authoring/reviewing Python that lives in a repo (a Python project beside the Julia one, pyproject.toml, Python library selection) → there; the PythonCall/juliacall boundary itself stays HERE. |
 | `raising-resolution` | Silent sub-step (its owner-filter chain routes Julia work here): inspect the actual code/env (`versioninfo()`, `Pkg.status`, `@which`) before asserting a Julia fact. |

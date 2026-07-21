@@ -22,7 +22,8 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2607.1.3 (2026-07-15 — .3: +reciprocal cuts to driving-grok (Routing + MUST-NOT-FIRE)
+> **Version**: v2607.2.0 (2026-07-21 — .2.0: +LONG-RUN law from 7 measured calls: wrapper-embedded codex is killed by the 120s Bash-tool default + the wrapper StructuredOutput deadline (2/7 survived); effort=high sol-class runs go main-loop background (1/1, 30-min theory review). Gotcha row added.)
+> (prior: v2607.1.3, 2026-07-15 — .3: +reciprocal cuts to driving-grok (Routing + MUST-NOT-FIRE)
 > when the xAI-grok sibling was forged; 2026-07-12 — .1: reforged on a second session's production trace;
 > .2: C4 gains the sonnet baseline arm + cost-by-measurement, user-directed)
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
@@ -109,6 +110,25 @@ timeout 600 codex exec \
 | 401 / 403 errors | auth vs workspace permission | `codex login status`; wrong account ≠ missing model |
 | run uses an unexpected model/effort/sandbox | flags omitted → config.toml + trust defaults applied | C2: pass the triplet explicitly |
 | picker or cache lacks a model that actually works | cache is a snapshot, refreshed on use — authoritative in neither direction | C1: probe with direct `-m`; never conclude from the cache |
+| wrapper-embedded codex dies mid-reasoning (~1-2 min), no `-o` file, worker falls back to its own answer | the harness Bash TOOL's default 120s timeout kills the call regardless of a longer shell `timeout 900`; the wrapper agent's forced StructuredOutput deadline also preempts polling (measured 2026-07-21: 5/7 wrapper runs cut, incl. one at 64s) | see LONG-RUN below: effort=high runs belong in the MAIN loop as background Bash; wrapper-embedded codex is for effort=medium quick verdicts with the Bash tool `timeout` parameter passed explicitly (max 600000ms) |
+
+### LONG-RUN invocations (effort=high / sol-class) — main-loop background, never a wrapper (2026-07-21, measured)
+
+Session evidence (7 calls): main-loop background = 1/1 success (a 30-min theory review, the session's best
+contribution); sonnet-wrapper-embedded = 2/7 (five cut mid-reasoning by the 120s Bash-tool default + the
+wrapper's StructuredOutput deadline). sol-class effort=high takes 10-30+ min — no wrapper survives that.
+
+```bash
+# from the MAIN loop, Bash run_in_background: true — NOT inside a Workflow agent()
+timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
+  -m gpt-5.6-sol -c 'model_reasoning_effort="high"' -o "$SCRATCH/out.txt" \
+  "$(cat "$BRIEF_FILE")" </dev/null
+# collect on task-notification; the answer is $SCRATCH/out.txt (C3: relay verbatim + tokens line)
+```
+
+Panel pattern with sol: pre-launch sol in the main loop as background BEFORE starting the Workflow panel;
+run the panel's other arms normally; merge sol's `-o` file into the synthesizer (or a follow-up turn) when
+the notification lands. The panel never blocks on sol; sol never gets cut by a wrapper's lifecycle.
 
 ## Output contracts — pick one of three
 

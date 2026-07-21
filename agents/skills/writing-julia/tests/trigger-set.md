@@ -51,6 +51,8 @@ asks — Rust/TS/C++ — which test nothing).
 | 「この Julia リポジトリを git subtree で分割したい」 | VCS surgery, not Julia structure — plain task (refactoring-code if code moves) |
 | 「NumPy の column-major/row-major の違いは?」 | memory-order vocabulary but Python/NumPy — plain answer (fires here ONLY if a Julia port is in play) |
 | 「行列積の計算量を説明して」 | math theory, no Julia code — plain answer |
+| 「CUDA.jl の `@cuda` カーネルが `InvalidIRError` で落ちる」 | device-side → `optimizing-julia-gpu-kernels` (this skill co-fires only for the host-side type discipline underneath) |
+| "CuArray のコードが遅い / occupancy を上げたい" | GPU performance → `optimizing-julia-gpu-kernels` (DECISIVE cut: runs on the device) |
 
 ## Co-fire order checks (not fire/no-fire — sequencing)
 
@@ -58,4 +60,5 @@ asks — Rust/TS/C++ — which test nothing).
 |---|---|
 | 「Julia のこのモジュールに機能を足して」 | `implementing-and-debugging` BUILD gate first → this skill for the Julia inside |
 | 「この Julia パッケージ、リファクタして」 | `refactoring-code` (two hats / oracle / deny-gate) governs → this skill supplies JET/Aqua bracket + JG3 transforms |
+| 「Julia で数値計算を GPU 化したい」(型設計から) | this skill (JG2 type discipline) co-fires BEFORE `optimizing-julia-gpu-kernels` — instability that is slow on CPU is a compile error in a kernel |
 | 「動かない Julia コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Julia-specific diagnosis (`@code_warntype`, JET) |

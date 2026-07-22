@@ -22,7 +22,10 @@ description: >-
 
 # Implementing & debugging — the discipline of the act
 
-> **Version**: v2607.1.0 (2026-07-04) — distilled from the house `/impl` + `/debug` prompts.
+> **Version**: v2607.2.0 (2026-07-23) — DEBUG gate gained the combinatorial-flags verification
+> rule (firedancer 実装台帳#14, 2026-07-23: orthogonal flags passed every unit test yet silently
+> froze one flag's function only in combination).
+> (prior: v2607.1.0, 2026-07-04 — distilled from the house `/impl` + `/debug` prompts.)
 > **Scope**: the guards that govern WRITING or FIXING code once understanding is in hand.
 > Understanding a present fact is upstream (`raising-resolution`, a silent sub-step here);
 > a forward bet on the world is `acting-on-hypotheses`. This skill owns the act between them.
@@ -84,6 +87,12 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
   reference for this fix?
 - **Verify the fix reproduces-then-passes.** Write the failing test first when you can; a fix
   with no check that it worked is unverified (→ close the loop, don't assert "done").
+- **Combinatorial flags need combinatorial tests.** An API with orthogonal-looking flags (e.g.
+  `feedback=:shared/:fa` × `credit_agg=:aggregate`) can have one flag's function silently frozen
+  only when combined with another — every flag passes alone, only the *combination* is broken
+  (firedancer 実装台帳#14, 2026-07-23). Test flag combinations, at minimum every pair, not each
+  flag in isolation. And test that the function actually fired: assert a non-zero **functional
+  observable** (e.g. the update actually happened), never just "no error was raised."
 
 ## Routing — sibling cuts
 

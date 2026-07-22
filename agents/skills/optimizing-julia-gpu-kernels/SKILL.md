@@ -24,7 +24,13 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2607.1.0 (2026-07-22, CUDA.jl v6.2.1 / KernelAbstractions 0.9.42 / Julia 1.12
+> **Version**: v2607.1.1 (2026-07-23 — +latency-bound regime patch from the firedancer
+> throughput postmortem: the GK0 GEMM row's un-caveated `mul!` advice reintroduced a known
+> per-call `CuRef(α,β)` alloc+H2D overhead (profile-verified 3× at batch 128), and the skill
+> had ZERO coverage of CUDA Graph capture — the decisive tool for launch-overhead-bound
+> pipelines. GK2's profile discipline caught the regression in-task, which is how both gaps
+> were found.)
+> (prior: v2607.1.0, 2026-07-22, CUDA.jl v6.2.1 / KernelAbstractions 0.9.42 / Julia 1.12
 > baseline `[dated:2026-07]`)
 > **Scope**: writing, optimizing, differentiating, and verifying GPU kernels in Julia with
 > CUDA.jl and KernelAbstractions — plus the host-side CuArray discipline that dominates real
@@ -100,7 +106,7 @@ any `@cuda`, walk this table; if a row matches, use the row and stop.**
 
 | Shape of the computation | Use — NOT a hand kernel |
 |---|---|
-| Dense matmul / GEMM (any precision incl. Float16) | `A * B`, `mul!(C, A, B)` → cuBLAS; tensor cores via `CUDA.math_mode!(CUDA.FAST_MATH; precision=:TensorFloat32)` `[dated:2026-07]` |
+| Dense matmul / GEMM (any precision incl. Float16) | `A * B`, `mul!(C, A, B)` → cuBLAS; tensor cores via `CUDA.math_mode!(CUDA.FAST_MATH; precision=:TensorFloat32)` `[dated:2026-07]`. **Hot-loop caveat `[dated:2026-07]`**: CUDA.jl's `mul!` allocates + uploads `CuRef(α,β)` on EVERY call — in a small-GEMM hot loop this dominates (profile: 2 allocs+H2D per GEMM; fixing it gave 3× at batch 128). Keep persistent `CuRef`s and call the cuBLAS `gemm!` wrapper with them |
 | Linear solve / factorization (`\`, `qr`, `svd`, `eigen`, `lu`) | LinearAlgebra verbs on CuArray → cuSOLVER |
 | FFT | `fft`/`ifft`/`plan_fft` (AbstractFFTs) → cuFFT |
 | Sparse ops on `CuSparseMatrixCSC/CSR` | `*`, `mul!`, `\` → cuSPARSE |
@@ -112,7 +118,13 @@ any `@cuda`, walk this table; if a row matches, use the row and stop.**
 What legitimately passes GK0: fused multi-op kernels the broadcast compiler cannot express
 (e.g. a scan with a data-dependent operator), stencil patterns with shared-memory reuse,
 custom sampling/argmin-with-payload logic, and anything the profiler proves is
-launch-overhead-bound from many small vendor calls that one fused kernel replaces. Write the
+launch-overhead-bound from many small vendor calls that one fused kernel replaces.
+**Launch-overhead-bound PIPELINES first try CUDA Graph capture, not hand fusion**
+`[dated:2026-07]`: dozens of small kernels per step (profile signature: `cuLaunchKernelEx`
+count × ~5–30 µs ≈ the whole step) collapse into one graph replay with zero kernel rewrites
+— measured motive: an eval path at 60 launches/call, 30.9 µs mean, while the training path
+with graph capture ran the same shapes far cheaper. Graphs require stable shapes/addresses
+(preallocated buffers — which GK2's pool discipline already forces). Write the
 GK0 comment naming which row you checked and why it fails, then proceed to GK1.
 
 ## §2 The device-compiler contract (the 5 errors you will actually see)

@@ -10,7 +10,7 @@ description: >-
   Chairmarks, StaticArrays, ComponentArrays, OhMyThreads, Optim/JuMP/Manopt,
   SymEngine/Symbolics/ModelingToolkit/SymPyPythonCall, DrWatson/Pluto/Documenter/Quarto,
   PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
-  weakdeps, type piracy, public API. MANDATORY — read BEFORE writing ANY Julia code. §2.0 forbids
+  weakdeps, type piracy, public API. MANDATORY — read BEFORE writing ANY Julia code, and BEFORE RUNNING any experiment/benchmark whose numbers may be recorded (実験を回す, ベンチ実行, 事前登録の実験, GB実験 — JG5 fires on the RUN, not only the code). §2.0 forbids
   FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
   is not banned — the bug is type-unstable hot paths. Co-fires with ORDER: Julia feature/bugfix →
   implementing-and-debugging first (change-safety), this for idiom; Julia refactor →
@@ -22,7 +22,8 @@ description: >-
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
+> **Version**: v2607.4.0 (2026-07-22) — JG5 EXPERIMENT PROVENANCE added from the firedancer postmortem: JG4 carried the DrWatson clause since v2607.3.0 yet 70 accreted scripts + lost provenance happened anyway — because the skill fired on WRITING code, not on RUNNING experiments, and the artifact was not mechanical. JG5 makes the run the trigger and the committed provenance the artifact.
+> (prior: v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -121,6 +122,7 @@ description: >-
 | **JG2 type discipline** (performance.md §2.1) | concrete/parametric struct fields; function barrier for runtime-typed data; dispatch discipline SCOPED to hot paths — never "ban dispatch" | **JET** `report_package` clean (or reports justified); `@code_warntype`/DispatchDoctor on must-be-fast fns |
 | **JG3 ARCHITECTURE** (architecture.md §10) ★ | **Fires the moment a package outgrows ONE file, adds a dep/extension, or defines public API** — do not wait to be asked: one top-level module; ALL `include`s in the boss file in dependency order (an `include` in a subfile is a defect); circular type deps → hoist to `interfaces.jl`; growth → **subpackage/interface package, not submodules**; optional/heavy deps → **`[weakdeps]` extensions, not Requires.jl**; API via `export`/`public`; **no type piracy, no non-const globals**; cross-hierarchy behavior → inferable Holy trait | **Aqua** `test_all` clean (piracy/ambiguities/stale deps); boss-file include order readable top-to-bottom; ExplicitImports clean |
 | **JG4 reproducibility** (setup.md) | `--project=.` on every invocation; `Project.toml`+`Manifest.toml` committed; no declared-but-unused deps; experiment scripts follow the DrWatson lifecycle | `Pkg.status` matches `using`s; §9 Environment rows green |
+| **JG5 EXPERIMENT PROVENANCE** (setup.md §3.4) ★ | Fires on RUNNING any experiment/benchmark whose numbers may enter a results record — not just on writing package code. A result-producing run MUST be reproducible from the repo: runner script lives in the repo (scratchpad-only runners are FORBIDDEN for recordable results), inputs/params declared, output written via DrWatson `@tagsave`/`savename` (git commit auto-recorded) or an equivalent registry binding experiment-ID → script+commit+params. Protocol constants (seeds, data slices, eval windows) come from ONE shared module, never copy-pasted per script | the run's output file contains the commit hash (tagsave `gitcommit` field) or the registry row exists; `grep` finds the runner under version control, not only in a scratchpad |
 
 ## Routing — sibling cuts (reciprocal; the sibling side landed 2026-07-04/05)
 

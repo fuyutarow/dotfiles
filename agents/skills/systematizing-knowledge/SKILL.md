@@ -179,6 +179,7 @@ Ledger & provenance (`references/ledger.md`):
 - [ ] **Every** claim in the prose resolves to ≥1 source by stable ID in the claim ledger; zero orphan claims
 - [ ] Each ledger row carries the **context vector** (setting, scale, metric, population, measure) — the raw material for moderator search
 - [ ] Author-original synthetic claims are **labeled as such** (not silently attributed to a source)
+- [ ] **Novelty-attack arms ran** (added 2026-07-22, firedancer postmortem): when the SoK underwrites a project's novelty claims, EVERY load-bearing claim got a dedicated kill-search (an arm tasked to find the paper that already proves or refutes it — search by mechanism synonyms across adjacent fields, not by the project's own vocabulary). A novelty-supporting SoK without attack arms is corpus bias: the 7/17 corpus missed the mechanism's direct 2017 prior art that one attack pass found immediately
 
 AI4S admissibility (`references/ai4s-gates.md`):
 - [ ] **Every empirical number cleared gates A–F** or is in the **quarantine table** with the gate it failed + the consequence

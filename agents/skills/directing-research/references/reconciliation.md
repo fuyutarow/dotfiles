@@ -120,6 +120,22 @@ chases the newest idea); secondarily flips to sunk-cost persistence once compute
 learning-rate gauge + a minimum persistence budget; never cite prior compute either way.]* This is the
 DIRECTION/portfolio altitude — a single experiment's kill condition is `acting-on-hypotheses`.
 
+**Negative results vs. exhaustion** (Lakatos's family-scoped degenerating-programme test vs. naive
+space-exhaustion — constructed, 2026-07-22 counseling post-mortem). MODERATOR = **the tested family's
+generative closure**: what a kill legitimately retires is exactly the closure of variants the family's
+generator could produce and that were actually run — never the surrounding space. A kill is licensed once
+that closure is named and every live hypothesis inside it (G4) has degenerated (only ad-hoc patches, no
+novel out-of-sample predictions); it says nothing about untested families outside the closure, which stay
+queued at the head of the portfolio, not buried. Discriminator: **can you name the boundary of what was
+actually run, or only the boundary of what you feel you've tried?** A nameable closure → the family is
+legitimately dead; a felt-only boundary → you have exhausted your patience, not the space. *[AGENT DEFAULT
+BIAS: over-generalizes ONE family's kills into "the space is empty" and proposes pivoting out of the whole
+domain — cheap search lets it exhaust a family fast, and with no felt fatigue to flag the overreach, local
+exhaustion reads as global. Correct by requiring the closure statement inside the G4 kill/persist verdict
+AND feeding any advisor panel the survivor-ledger at equal weight to the kill-ledger — concordant advice
+fed only kills is same-premise induction, not independent confirmation. Power-limited kills (small n)
+additionally carry their own false-negative rate.]*
+
 **Depth (frog) vs. breadth (bird)** (Dyson). MODERATOR = **be a frog by default, schedule bird-flights
 when depth stalls.** A real contribution requires going deep enough in one domain to reach bedrock (raw
 material others lack); deliberately import a tool/structure from an adjacent field precisely when

@@ -21,7 +21,8 @@
 #          without a witness is definitionally not a firewall, so this one is hard even though the other
 #          three bounded checks below are advisory)
 #   WARN — generator≠auditor value missing an independence token; portfolio value showing <2 bets;
-#          learning-rate kill/persist value missing a learning-signal token
+#          learning-rate kill/persist value missing a learning-signal token, OR missing a family-boundary
+#          token (which tested family — its generative closure — the kill retires; reconciliation.md §4)
 #
 # THIS IS NOT A SEMANTIC CHECK. It cannot tell whether the witness is truly un-gameable, the lever truly
 # fresh, or the kill-rule truly keyed to learning-rate — only whether the mechanism slots are filled,
@@ -97,6 +98,7 @@ function has_optimize_token(v){ return (tolower(v) ~ /optimi[sz]/) }
 function has_witness_token(v,   t){ t=tolower(v); return (t ~ /witness|held[- ]?out|holdout/) }
 function has_independence_token(v){ return (v ~ /independent|different|separate|別|独立|外部/) }
 function has_learning_token(v){ return (v ~ /learn|information|bits|novel|surprise|understanding|uncertainty|学習|情報|新規/) }
+function has_family_boundary_token(v){ return (v ~ /family|closure|tested family|族|境界|閉包/) }
 
 /[Cc]onsequence-ranked slate/ && g1s!=1 { g1sv=value_after_label($0); g1s=1 }
 /[Ff]resh lever|why-now/       && g1l!=1 { g1lv=value_after_label($0); g1l=1 }
@@ -175,7 +177,10 @@ END{
   else if(is_placeholder(g4kv)){ print "G4  FAIL     kill/persist 未記入 -> 方向レベルの kill 基準が無い"; fails++ }
   else if(!has_learning_token(g4kv)) {
                                   print "G4  WARN     metric の停滞ではなく学習率で kill する条件になっていない疑い"; warns++ }
-  else                         { print "G4  PASS     learning-rate kill/persist あり" }
+  else {
+    print "G4  PASS     learning-rate kill/persist あり"
+    if(!has_family_boundary_token(g4kv)) { print "G4  WARN     kill/persist に『族(tested family)の境界』の言及が無い -> family-scoped kill か space 全体の kill か不明"; warns++ }
+  }
   if(!g4h)                     { print "G4  WARN     『Live hypotheses』の行が無い"; warns++ }
   else if(is_placeholder(g4hv)){ print "G4  WARN     live hypotheses 未記入"; warns++ }
   else if(!ge3_items(g4hv))    { print "G4  WARN     live hypotheses が >=3 に見えない -> 1 つに collapse させない (Chamberlin)"; warns++ }

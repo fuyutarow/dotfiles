@@ -17,6 +17,7 @@ standing honesty policy).
 | F6 | "I got a suspiciously clean SOTA number and I'm about to write it up" (**no headline keyword**) | the denominator + generator≠auditor mechanisms = G3 |
 | F7 | "how should I allocate compute across these 5 bets?" | portfolio / barbell allocation = G4 |
 | F8 | 「研究テーマの選び方 / 重要な問題の見分け方 / 観察眼」 (JP) | research taste / selection = G1 |
+| F9 | 「全部の変種が死んだ — この方向ごと棄てていい?」 (JP) | family-scoped kill (the tested family's generative closure) vs abandoning the whole direction/domain = G4 (Negative-results-vs-exhaustion, `reconciliation.md` §4) |
 
 ## MUST NOT FIRE (≥5 — near-miss negatives, each names who fires instead)
 

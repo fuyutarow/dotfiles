@@ -5,7 +5,8 @@
     {
       "context": "Chat",
       "bindings": {
-        "ctrl+l": null
+        "ctrl+l": null,
+        "escape": null
       }
     }
   ]

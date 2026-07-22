@@ -176,6 +176,14 @@ push toward the pole the agent under-weights (its default bias is in brackets).
 - **Scale vs. domain structure** → inject only a **theorem, not a hunch** (an exactly-true cheap
   invariant); let scale learn the rest. *[agent over-engineers principled-looking scaffolding that gets
   Goodharted].*
+- **Negative results vs. exhaustion** → a kill retires the **tested family** (the generative closure of
+  what was actually run), never the space: state the family's boundary inside this skill's own **G4
+  learning-rate kill/persist verdict**, keep untested
+  survivors at the head of the queue, and hand any advisor panel the kill-ledger AND the survivor-ledger
+  at equal weight — concordant advice fed only kills is same-premise induction, not independent
+  confirmation. Power-limited kills (small n) additionally carry their false-negative rate. *[agent
+  over-generalizes a family's kills into "the space is empty", then proposes pivoting out of the domain;
+  added 2026-07-22 from a counseling post-mortem, argued in `references/reconciliation.md` §4].*
 
 ## Calibration inversion — the two flips
 
@@ -197,7 +205,7 @@ Ceremony on a discrete action, or on a trivial ask, is this skill failing its ow
 "is my benchmark gameable / am I Goodharting this metric?" · "am I fooling myself here — could this be
 leakage?" · "should I keep pushing this direction or pivot?" · "how do I formulate this scientific
 question as an ML task without the metric drifting?" · 「研究プログラムの舵取り」/ "how should I allocate
-compute across these bets?" · a messy "I got 94% but something feels too good."
+compute across these bets?" · 「全部の変種が死んだ — この方向ごと棄てていい?」· a messy "I got 94% but something feels too good."
 
 **MUST NOT fire (with route):**
 

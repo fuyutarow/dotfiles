@@ -159,3 +159,15 @@ without claiming its write-blocking is proven here; the calibration table's foll
 descriptions ≤1500; `forging-skills/scripts/skill-check.sh` → EXIT 0. Residual accepted (minor/nit):
 grok-composer lineage third-party; parallel-safety unproven at high N; grep-fallback `\"`-unescape
 limited (documented in-script, exact-match use only). Ship-ready.
+
+## 2026-07-22 深夜: 初の実運用(水平思考の相談)——G2 の worked example
+
+- 用法: 依頼文 brief.md だけを置いた使い捨ての作業場(git init 済み・秘密なし)から
+  `grok -p "$(cat brief.md)" -m grok-4.5 --effort high --output-format json --sandbox read-only
+  --disable-web-search </dev/null`。リポジトリ本体は見せない(EXFIL-RISK の G2 準拠)。
+- 実測: rc=0、usage input 46224 / output 10953 / reasoning 3081 / total 181209。
+  出力 12165 字、他分野からの移植案3問×5件、判別実験つき——独立に走らせた sol
+  (codex effort=high)と第1問の本命が一致した(合致は証明でないことも同夜の判別実験で
+  実証: 両社の本命は反証された)。
+- 教訓: 水平思考の相談は「リポジトリを見せず、問題の最小記述だけを渡す」形で品質が
+  十分出る——G2 と品質は両立する。

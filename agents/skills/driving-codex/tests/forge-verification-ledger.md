@@ -196,3 +196,11 @@ unaffected. Verdict: GREEN.
 Post-revision floor (v2607.1.2 final, run 2026-07-12): `skill-check.sh` PASS 0 FAIL 0 WARN;
 strict YAML parse PASS (description 1498 chars ≤ 1500); `bash -n probe-models.sh` PASS; the
 revised description confirmed live in a session's skill listing (smoke test).
+
+## 2026-07-22 深夜: LONG-RUN 法の追加実測(2件成功)
+
+- 主ループ背景の codex effort=high(gpt-5.6-sol)を2回実行、いずれも完走:
+  (1) 命題の敵対的検査+実装の連鎖律監査(-o 経由 318 行、交絡表と判別実験つき)、
+  (2) 水平思考の相談(680 行)。累計成功 3/3——wrapper 埋め込みの 2/7 と対照的。
+- 追加の教訓: timeout パラメタ(Bash tool)は run_in_background でも効くため、
+  sol 級には 600000ms を渡さず shell の timeout 1800 だけで包む方が安全。

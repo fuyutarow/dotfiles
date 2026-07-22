@@ -55,7 +55,7 @@ measuring.md, debugging.md (post-editor-fix #1).
 - `skill-check.sh`: PASS (0 FAIL, 0 WARN) — name regex/length/reserved-words, description
   present + ≤1500 folded, no dangling reference files, body <500 lines.
 - Strict YAML parse of frontmatter: PASS.
-- Trigger set: 13 FIRES + 5 co-fire + 9 no-fire rows, desk-checked (see log in trigger-set.md).
+- Trigger set: 14 FIRES + 5 co-fire + 9 no-fire rows, desk-checked (see log in trigger-set.md).
 
 ## Known deferrals (not defects)
 
@@ -64,3 +64,42 @@ measuring.md, debugging.md (post-editor-fix #1).
 - `#1482` struct-op scan regression on v6.2.1, KernelForge.jl claims, `test_rrule` tolerance
   defaults, DI+AutoEnzyme-on-GPU robustness: carried as explicit UNVERIFIED in
   differentiating-kernels.md §9 — do not promote without re-verification.
+
+## Reforge v2607.2.0 (2026-07-23) — firedancer fd_evaluate graph-cache postmortem
+
+**敗因 (source failure, 検収4)**: `fd_evaluate`'s GPU path cached a captured CUDA graph +
+scratch buffers keyed on the evaluation input `Xte`'s identity ALONE. A captured graph binds
+to the device addresses of every array its closure touched at capture time, but the caller
+passed a fresh per-cell state (`st.h` etc.) each cell; the cache key never saw that array, so
+from the 2nd cell onward the graph silently replayed the 1st cell's weights — 5 of 6 cells'
+primary metric locked to cell 1's value. The smoke test stayed green: it read "primary metric
+differs from `min(best,final)`" as evidence of a fix, but that observation is compatible with
+a broken cache too. A third-party audit (検収4) that diffed saved artifacts numerically found
+it, not the passing test.
+
+**Distilled into this skill** (this session, editor solo — no fleet; scope: 3 rules on top of
+an existing forged skill, below the fleet threshold in `forging-skills` references/verifying.md §7):
+
+1. **CAPTURE-PINS-ADDRESSES** (SKILL.md §1, law-level) — cache captured graphs on the
+   `objectid` fingerprint of EVERY closed-over device array, never the primary input alone;
+   symptom signature named (same output, different inputs, no error).
+2. **Cached-path acceptance pattern** (`debugging.md` §11, new) — a difference-only
+   observation between two cached-path outputs is not a correctness check; state-separation
+   test (2 states, same path, each independently reference-matched) + a permanent in-body
+   consistency assert (not test-only) are both required for cache/capture paths.
+3. **Pre-merge GPU-parity checklist line** (SKILL.md §9) — a GPU-path change merges only
+   after an actual GPU run, CPU-only green does not clear the box.
+
+**Grafted, not duplicated**: all three land on already-existing lines/sections — the CUDA
+Graphs paragraph SKILL.md §1 already added in v2607.1.1 (extends its "graphs require stable
+shapes/addresses" sentence rather than re-explaining graph capture), the GK3 oracle gate
+(table row + §9 checklist item already existed), and debugging.md §8's oracle discipline (new
+§11 built as a specialization of it, pointing back rather than restating the whole-array
+compare rule).
+
+**Not verified by a fleet this round**: this reforge is 3 rules on an already-audited skill
+(F3 fleet-scale calibration in `forging-skills` references/verifying.md §7 reserves fleets for forges/
+reforge-of-N; a small procedural addition runs editor-solo). No live GPU re-run was performed
+against this session's `objectid`-fingerprint wording — it is stated as a rule, not
+demonstrated against a running `fd_evaluate`-shaped repro in this repo. Flagged here as the
+honest gap rather than claimed as re-verified.

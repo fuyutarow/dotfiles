@@ -23,6 +23,7 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | "Mamba / selective scan を Julia の GPU で実装したい" | the justified-kernel case — differentiating-kernels.md SSM verdict (description carries the literal tokens "Mamba selective scan") |
 | 「`cumsum` より速い scan カーネル自作できる?」 | GK0 tension: cumsum IS a Blelloch kernel — deny-gate walk |
 | 「`sm_90` 向けにコンパイルしたい / `cap=` が deprecated と言われた」 | api-changes.md (`arch=sm"90"`) |
+| "CUDA Graph でキャッシュしてる評価パスが、2回目以降ずっと同じ値を返す" / "graph capture のキャッシュが古い結果を返す" | CAPTURE-PINS-ADDRESSES (SKILL.md §1) — cache key missed a closed-over device array; debugging.md §11 for the state-separation + permanent-assert fix |
 
 ### Co-fire (with ORDER)
 
@@ -58,3 +59,9 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
   (no GPU token in the ask → writing-julia legitimately fires first); "Mamba / selective scan"
   added to this description as literal tokens; Reactant no-fire row added. Reciprocal edits
   landed in writing-julia (routing row, description cut, trigger rows) same commit.
+- 2026-07-23 v2607.2.0: added a FIRES row for the CAPTURE-PINS-ADDRESSES class ("graph
+  capture のキャッシュが古い結果を返す") — distilled from the firedancer fd_evaluate
+  graph-cache postmortem (検収4). The ask already carries "CUDA Graph"/"CUDA"/"GPU" tokens
+  matched by the existing description surface (`CUDA.jl`, `GPU カーネル`) — no description
+  edit needed; description-token consistency re-checked against the new row per the
+  precedent in finding #16.

@@ -267,3 +267,32 @@ using Test
 ```
 KA syntax (`@index`, `@localmem`, `@uniform`, launch config, `unsafe_indices`) is
 `portable-kernels.md`'s territory — this section owns only the oracle-choice rule.
+
+## §11 Cached / graph-capture GPU paths — independent verification, not a difference observation
+
+A GPU path that memoizes state (a captured CUDA graph + its scratch buffers, a pooled
+handle, any keyed cache) can look healthy while returning wrong numbers: two different calls
+producing two different outputs is consistent with BOTH a correct cache and a broken one (the
+broken cache can be stale by a different, non-zero amount each time). "The outputs differ" is
+not a correctness check by itself — the §8 whole-array CPU-reference oracle still applies, but
+a cache/capture path needs two additional acceptance patterns on top of it.
+
+**State-separation test.** Push two DISTINCT states through the SAME cached/captured code
+path and assert BOTH (a) the two outputs differ, AND (b) EACH output independently matches a
+reference computed on an uncached path (CPU, or a fresh non-cached GPU call) for that exact
+state. Checking (a) alone is the gap that let CAPTURE-PINS-ADDRESSES (SKILL.md §1) through in
+production: an eval path silently replayed cell 1's captured graph for 5 of 6 cells, and
+"primary metric differs across cells" was true even while every cell after the first was
+wrong — the smoke test read that difference as health.
+
+**Permanent consistency assert.** For any pipeline whose primary reported metric could
+decouple from its own inputs without an error (a cache, a captured graph, an approximation
+path), place a machine `@assert`/error INSIDE the pipeline body itself, not only in a test
+file, that diffs the primary output against an independently computed reference quantity —
+e.g. `abs(loss - mean(per_position_losses)) < 1e-6` (measured slack in the fixed incident:
+4.9e-8). A test-file-only check is silent on every real run of the pipeline; a body-level
+assert fires every time the pipeline executes, including in production.
+
+**Artifact**: a test exercising ≥2 distinct states through the same cache/capture path with
+both the differ-check and the per-state reference-match check; a non-test-only assert line in
+the pipeline source comparing the primary output to an independently computed reference.

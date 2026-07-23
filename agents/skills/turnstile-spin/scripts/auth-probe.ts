@@ -12,13 +12,16 @@ async function main(): Promise<void> {
   if (token === undefined || token === "") {
     diagnostic("auth-probe: $CLOUDFLARE_API_TOKEN is not set.");
     output({ status: "missing_token", reason: "no_env_var" });
+    process.exitCode = 1;
     return;
   }
 
-  const whoami = Bun.spawn(["bunx", "wrangler", "whoami", "--json"], {
+  const whoami = Bun.spawn(["bunx", "wrangler@4.113.0", "whoami", "--json"], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 120_000,
+    killSignal: "SIGTERM",
   });
   const [stdout, exitCode] = await Promise.all([
     new Response(whoami.stdout).text(),
@@ -35,6 +38,7 @@ async function main(): Promise<void> {
       "auth-probe: wrangler whoami returned no JSON. Token may be invalid or expired.",
     );
     output({ status: "missing_token", reason: "whoami_failed" });
+    process.exitCode = 1;
     return;
   }
   const accounts = asRecords(body.accounts);
@@ -43,6 +47,7 @@ async function main(): Promise<void> {
       "auth-probe: wrangler whoami succeeded but no accounts found on the token.",
     );
     output({ status: "missing_token", reason: "no_accounts" });
+    process.exitCode = 1;
     return;
   }
   const declared = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -54,6 +59,7 @@ async function main(): Promise<void> {
       `auth-probe: $CLOUDFLARE_ACCOUNT_ID (${declared}) is not one of the token's accounts.`,
     );
     output({ status: "account_mismatch", declared, accounts });
+    process.exitCode = 1;
     return;
   }
   if (declared === undefined && accounts.length !== 1) {
@@ -61,6 +67,7 @@ async function main(): Promise<void> {
       `auth-probe: token covers ${accounts.length} accounts; ask the user to pick one, then export $CLOUDFLARE_ACCOUNT_ID and re-run.`,
     );
     output({ status: "multiple_accounts", accounts });
+    process.exitCode = 1;
     return;
   }
   const accountId = declared ?? accountIds[0];
@@ -76,6 +83,7 @@ async function main(): Promise<void> {
       account_id: accountId,
       http_code: widgets.response.status,
     });
+    process.exitCode = 1;
     return;
   }
   const workers = await cloudflare(`/accounts/${accountId}/workers/scripts`);
@@ -88,6 +96,7 @@ async function main(): Promise<void> {
       account_id: accountId,
       http_code: workers.response.status,
     });
+    process.exitCode = 1;
     return;
   }
   output({ status: "ok", account_id: accountId, accounts });
@@ -98,4 +107,5 @@ main().catch((error) => {
     `auth-probe: ${error instanceof Error ? error.message : String(error)}`,
   );
   output({ status: "missing_token", reason: "whoami_failed" });
+  process.exitCode = 1;
 });

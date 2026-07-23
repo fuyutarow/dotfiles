@@ -90,6 +90,12 @@ Sharp edges (each is a rule):
   hooks/CI/scripts. `[gh #6375 → #4989]`
 - `bun pm cache rm` does NOT clear the preferred global install — remove the global bin too
   when a stale version persists. `[gh #6375 family]`
+- **The pin-breaks-plugins corollary** (observed in-house 2026-07-23): a tool whose PLUGINS
+  resolve as sibling packages of a bun GLOBAL install (textlint + its rule packages) works
+  under unpinned `bunx tool` only BECAUSE bunx prefers that global install; pinning
+  `bunx tool@x.y.z` switches to an isolated install without the plugins ("No rules found").
+  Pinning such tools requires GRADUATION (a package.json pinning tool + plugins together) —
+  a bare version pin is not available to them. `[corpus: linting-prose lint-floor]`
 - Can be slower than npx for some CLIs (resolver overhead) — benchmark before claiming a win.
   `[gh #16801]`
 - WSL: bunx has mis-selected musl over glibc binaries `[gh via opencode #8826]`; interactive

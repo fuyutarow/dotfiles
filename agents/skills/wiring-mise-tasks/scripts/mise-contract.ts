@@ -43,12 +43,14 @@ function tasks(value: unknown): Task[] {
 async function miseTasks(
   root: string,
 ): Promise<{ tasks: Task[]; error?: string }> {
-  // bounded: mise tasks ls exits promptly; env failures surface via captured stderr (timeout hardening tracked in the behavior-hat commit)
+  // bounded: mise tasks ls exits promptly; env failures surface via captured stderr
   const child = Bun.spawn(["mise", "tasks", "ls", "--json"], {
     cwd: root,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 60_000,
+    killSignal: "SIGTERM",
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),

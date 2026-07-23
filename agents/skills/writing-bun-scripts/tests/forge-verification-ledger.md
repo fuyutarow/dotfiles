@@ -114,3 +114,21 @@ by the editor and re-proven red→green via the new bun-test suite.
 Post-fix re-verification: `bun test` 9/9 · floor self-scan FAIL=0 WARN=0 · corpus spot-run
 reproduces exactly the Refactor-map signals (probe-models W5+W6, lint-floor W5+W7, hooks W8) ·
 `skill-check.ts` clean · strict-YAML parse OK.
+
+## Refactor map — EXECUTED 2026-07-23 (the standing work order was run same-day)
+
+Commits: baseline cdc5407 (migration frozen) → hat 1 6d50530 (behavior-preserving) → hat 2
+(behavior: auth-probe exits, timeouts, bunx pins). Orchestration: 19-agent sonnet Workflow
+(Characterize → Refactor → Verify ×6 families + no-churn Sweep; ~1.26M subagent tokens), then
+solo editor fixes. G5 inventory: 21 files, extension-blind (caught 2 .py — both KEEP: coinage
+needs sudachipy via uvx; codemix keeps pair coherence, G3 deny-gate unfillable).
+
+| Outcome | Detail |
+|---|---|
+| Every REFACTOR row landed | 8 files, −41/+28 (hat 1): native AbortSignal.timeout ×4, lib command() → Bun.$ (escape/quiet/cwd/stdin parity proven by 5 independent probes), Bun.file in skill-check, bounded notes ×2 |
+| Oracle installed FIRST (G2) | 92 new characterization tests before any edit + 4 pre-existing (assertions untouched, G1); suites total 105 green |
+| Fleet caught a real preservation bug | agy/grok workers used `signalCode !== null` (any signal death reads as timeout); verifier refuted empirically; editor re-aligned both to AbortSignal.timeout |
+| Floor caught its own gap twice | shorthand `signal,` not recognized as W5 evidence (fixed + test); W5 window truncation at next-spawn boundary (fixed + test) |
+| Behavior hat (2nd commit) | auth-probe: 8 error paths now exit 1 (+ pinning test); auth-probe/mise-contract spawns gained timeouts; pins landed: wrangler@4.113.0 ×3, degit@3.6.1 ×2 |
+| textlint pin REVERTED — discovery | pin-breaks-plugins corollary (bun-facts §5): rules resolve from the bun GLOBAL install; pinned bunx switches to an isolated dir → "No rules found"; characterization test caught the hat-2 change. DEFERRED with owner: linting-prose floor graduation (package.json pinning textlint+rules) |
+| Completion criterion (G5, narrowed openly) | floor FAIL=0 WARN=0 EXCEPT lint-floor W7 ×1 (the declared graduation deferral); zero .sh under scripts/; every inventory file carries REFACTORED / KEEP / declared-exception |

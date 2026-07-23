@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const result = await command([
     "bunx",
     "--yes",
-    "degit",
+    "degit@3.6.1",
     "cloudflare/skills/skills/turnstile-spin",
     target,
   ]);

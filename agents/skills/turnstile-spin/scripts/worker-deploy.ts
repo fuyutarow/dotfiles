@@ -26,12 +26,12 @@ async function deploy(
   const extract = await command([
     "bunx",
     "--yes",
-    "degit",
+    "degit@3.6.1",
     "cloudflare/skills/skills/turnstile-spin/templates/worker",
     directory,
   ]);
   if (extract.exitCode !== 0) return extract;
-  return command(["bunx", "wrangler", "deploy", "--name", name], directory);
+  return command(["bunx", "wrangler@4.113.0", "deploy", "--name", name], directory);
 }
 
 async function main(): Promise<void> {
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   const secretResult = await command(
     [
       "bunx",
-      "wrangler",
+      "wrangler@4.113.0",
       "secret",
       "put",
       "TURNSTILE_SECRET_KEY",

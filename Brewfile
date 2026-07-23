@@ -40,6 +40,7 @@ end
 brew "tldr"         # better man (h)
 brew "yq"
 brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run cache:projects`
+brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)
 
 # TeX / LaTeX — base distribution differs by OS (see skill: compiling-latex → Environment).
 #   mac:  mactex-no-gui cask  = full TeX Live, binaries via /Library/TeX/texbin; tlmgr needs sudo.

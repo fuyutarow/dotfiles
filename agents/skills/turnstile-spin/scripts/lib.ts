@@ -74,21 +74,13 @@ export async function command(
   cwd?: string,
   stdin?: string,
 ): Promise<{ exitCode: number; output: string }> {
-  const child = Bun.spawn(commandLine, {
-    cwd,
-    stdin: stdin === undefined ? "ignore" : "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (stdin !== undefined && child.stdin !== null) {
-    child.stdin.write(stdin);
-    child.stdin.end();
-  }
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  // bounded: wrangler/degit calls are bounded operations; timeout hardening tracked in the
+  // behavior-hat commit. `< ${new Blob([stdin ?? ""])}` always supplies an explicit stdin
+  // source (empty when `stdin` is undefined) so the child never inherits our own real stdin
+  // and blocks on it — this reproduces the old `stdin: "ignore"` immediate-EOF guarantee.
+  let shell = Bun.$`${commandLine} < ${new Blob([stdin ?? ""])}`.quiet().nothrow();
+  if (cwd !== undefined) shell = shell.cwd(cwd);
+  const { exitCode, stdout, stderr } = await shell;
   return { exitCode, output: `${stdout}${stderr}` };
 }
 

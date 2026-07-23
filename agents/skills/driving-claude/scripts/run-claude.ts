@@ -78,24 +78,22 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   if (config.jsonSchema !== undefined)
     args.push("--json-schema", config.jsonSchema);
 
+  const signal = AbortSignal.timeout(config.timeoutMs);
   const child = Bun.spawn([config.claudeBin, ...args], {
     cwd: config.target,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    signal: signal,
+    killSignal: "SIGTERM",
   });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill();
-  }, config.timeoutMs);
 
   const [stdout, stderr, exitCode] = await Promise.all([
     readStream(child.stdout),
     readStream(child.stderr),
     child.exited,
   ]);
-  clearTimeout(timer);
+  const timedOut = signal.aborted;
 
   let claude: unknown | undefined;
   let parseError: string | undefined;

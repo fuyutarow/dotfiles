@@ -127,7 +127,9 @@ async function checkFile(file: string): Promise<void> {
   spawnAt.forEach((at, i) => {
     const end = Math.min(at + 400, spawnAt[i + 1] ?? source.length);
     const window = source.slice(at, end);
-    if (/\b(?:timeout|signal|maxBuffer)\s*:/.test(window)) return;
+    // shorthand `signal,` / `signal }` counts: the house AbortSignal idiom passes a
+    // shorthand property, not `signal:`
+    if (/\b(?:timeout\s*:|maxBuffer\s*:|killSignal\s*:|signal\s*[:,}])/.test(window)) return;
     const before = source.slice(Math.max(0, at - 200), at);
     if (BOUNDED_NOTE.test(before) || BOUNDED_NOTE.test(window)) return;
     unbounded += 1;

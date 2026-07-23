@@ -74,6 +74,17 @@ describe("script-check floor", () => {
     expect(out).toContain("spawn call(s) without timeout:/signal:");
   });
 
+  test("shorthand AbortSignal property (`signal,`) counts as W5 evidence", () => {
+    const { out, code } = runFloor(
+      [
+        "const signal = AbortSignal.timeout(1000);",
+        'const b = Bun.spawn(["cli"], { stdin: "ignore", signal, killSignal: "SIGTERM" });',
+      ].join("\n"),
+    );
+    expect(out).toContain("FAIL=0 WARN=0");
+    expect(code).toBe(0);
+  });
+
   test("a real `// bounded: <reason>` beside the call silences W5", () => {
     const { out, code } = runFloor(
       ["// bounded: version probe, exits fast", 'const b = Bun.spawn(["cli", "--version"]);'].join(

@@ -43,6 +43,7 @@ function tasks(value: unknown): Task[] {
 async function miseTasks(
   root: string,
 ): Promise<{ tasks: Task[]; error?: string }> {
+  // bounded: mise tasks ls exits promptly; env failures surface via captured stderr (timeout hardening tracked in the behavior-hat commit)
   const child = Bun.spawn(["mise", "tasks", "ls", "--json"], {
     cwd: root,
     stdin: "ignore",

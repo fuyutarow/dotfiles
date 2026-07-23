@@ -16,6 +16,7 @@ if (
 const here = dirname(resolve(import.meta.path));
 const config =
   process.env.LINT_PROSE_CONFIG ?? resolve(here, "../assets/textlintrc.json");
+// bounded: foreground lint passthrough; the child inherits stdio and the user can interrupt
 const child = Bun.spawn(["bunx", "textlint", "--config", config, ...args], {
   stdin: "inherit",
   stdout: "inherit",

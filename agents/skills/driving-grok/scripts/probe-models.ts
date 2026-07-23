@@ -13,23 +13,25 @@ async function run(
   cwd: string | undefined,
   timeoutMs: number,
 ): Promise<CommandResult> {
+  // Native timeout via AbortSignal (bun-facts §3): kills the child with SIGTERM (same
+  // signal the old hand-rolled `child.kill()` sent) after timeoutMs — and signal.aborted
+  // is true IFF the budget elapsed, so a child that crashes or self-signals early keeps
+  // its real exit code. The sentinel 124 is preserved verbatim for the timeout case.
+  const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn(command, {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
+    signal,
+    killSignal: "SIGTERM",
   });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    child.kill();
-  }, timeoutMs);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
-  clearTimeout(timer);
+  const timedOut = signal.aborted;
   return {
     exitCode: timedOut ? 124 : exitCode,
     output: `${stdout}${stderr}`,

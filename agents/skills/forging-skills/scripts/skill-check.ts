@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 let failures = 0;
@@ -59,7 +59,7 @@ async function checkDirectory(input: string): Promise<void> {
     fail(directory, "SKILL.md missing");
     return;
   }
-  const source = await readFile(skillPath, "utf8");
+  const source = await Bun.file(skillPath).text();
   const lines = source.split("\n");
   const metadata = frontmatter(lines);
   if (metadata.lines.length === 0)

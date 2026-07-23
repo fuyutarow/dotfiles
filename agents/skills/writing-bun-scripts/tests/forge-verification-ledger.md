@@ -1,0 +1,116 @@
+# Forge verification ledger — writing-bun-scripts F3 artifact (2026-07-23)
+
+Adversarial-verification findings ledger demanded by gate F3 (`forging-skills`). Append on
+reforge, never overwrite. The fire/no-fire trigger set lives in SKILL.md (MUST-NOT-FIRE
+section) and is desk-checked after every description edit.
+
+## Mission context (calibration)
+
+Ordered 2026-07-23 by the user, mid-forge, verbatim intent: the 2026-07 bash→TS migration
+corpus is 拙い (crude) and will be WHOLLY refactored; this skill is forged FIRST to be the
+normative oracle for that refactor. Consequence: the corpus is graded KEEP/REFACTOR (SKILL.md
+Refactor map), never treated as house law. The user named Bun.$'s zero usage in the corpus as
+an example of the crudeness ("当然利用しろよって話でしょ").
+
+## Harvest fleet (AUDIT phase)
+
+3 read-only sonnet agents, 2026-07-23 (≈278k subagent tokens, 124 tool calls, 0 errors):
+
+1. **House corpus inventory** — 18 skill scripts + driving-claude tests + 4 hooks + lib.ts ×2
+   + mise.toml; every claim with file:line receipts. Key: no root package.json/bunfig/tsconfig;
+   `bun <path>` invocation, shebang only on binary-substituted fixtures; parseArgs strict vs
+   Bun.argv split; envelope vs verdict-line families; exit 0/1/2 + FATAL exit 2; Bun.spawn +
+   hand-rolled setTimeout/kill ×4; zero npm imports; bunx for external CLIs; fixture-binary
+   tests; hooks stated rule "node:-APIs only, zero npm deps" (hooks/lib.ts:1-4); Bun.$ zero
+   hits corpus-wide.
+2. **Official docs verification** — every load-bearing Bun claim graded
+   CONFIRMED/NUANCED/REFUTED with bun.com URLs; landed in references/bun-facts.md (auto-install
+   cwd rule + inline pins, Bun.$ semantics, native spawn timeout/killSignal/signal, test
+   discovery, --compile targets, no native .bun-version/packageManager, bun 1.3.14 stable).
+3. **Pitfall survey** — GH-issue-grounded failure modes; landed in bun-facts.md (§2 sharp
+   edges, §4 cwd trap incl. magarcia Claude-skills postmortem, §5 bunx staleness #6375,
+   §9 .env cwd-relative, §12 long-running leaks).
+
+Follow-up solo fetches (same day): bun.com/docs/api/spawn + /docs/runtime/shell — confirmed
+native `timeout:`/`killSignal:`/`signal:` on Bun.spawn and NO timeout on Bun.$; these two facts
+license the Refactor map's setTimeout+kill verdict and the $-vs-spawn split.
+
+## Corpus drift baseline — receipts (harvest 1, spot-re-verified by the editor)
+
+| # | Drift | Receipt | Skill's disposition |
+|---|---|---|---|
+| 1 | exit-style split `process.exitCode` vs `process.exit` | claim-check.ts:242,250 / research-check.ts:261,269 vs gate-check.ts:120,127 + skill-check.ts:143,150 + mise-contract.ts:238,245 | RULE row: boundary-only, either form |
+| 2 | auth-probe error envelopes exit 0 | turnstile-spin/auth-probe.ts:37-90 (`output(...); return;`, no exit) vs every sibling's `process.exit(1)` | REFACTOR row (bug); fix belongs to the corpus refactor, not this commit |
+| 3 | run()/timeout helper duplicated ×3, never shared | driving-{codex,antigravity,grok}/scripts/probe-models.ts:9-38 | RULE row: shrink via native timeout; never import across skill dirs |
+| 4 | turnstile lib command() has no timeout/kill | turnstile-spin/scripts/lib.ts:72-93 | BG2 + Refactor row ($ or timeout:) |
+| 5 | envelope vs verdict-lines split | turnstile lib.ts:27-33 + run-claude.ts:147-169 vs probe/gate families | KEEP as the two declared consumer contracts (BG1) |
+| 6 | hooks avoid Bun natives wholesale | hooks/lib.ts:1-4 stated rule | KEEP sync+zero-dep as load-bearing; Bun globals ruled equally legal |
+| 7 | CI gap: fmt:ts excludes agents/skills/**; skill tests unreachable from `mise run test` | mise.toml:56-71 (fd -E agents/skills), mise.toml:128-136 | recorded; owner `wiring-mise-tasks`, DEFERRED |
+| 8 | writing-typescript's zod/ts-pattern rows vs zero-dep corpus, no stated override outside hooks | corpus grep: no zod/ts-pattern anywhere | SEAM RULING in Routing (canonical here) + reciprocal line landed in writing-typescript |
+| 9 | unpinned bunx (textlint, wrangler) | lint-floor.ts:19, turnstile scripts ×5 | REFACTOR row; floor W7 |
+
+## Proof-of-fire — scripts/script-check.ts (build day, 2026-07-23)
+
+- Known-bad fixture (node shebang, bare import, pinned import, require, execSync, spawn
+  without timeout): **FAIL=4 WARN=2, exit 1** — every detector observed red.
+- Self-scan: initially 3 false positives (detector token sequences inside its own FAIL
+  messages); messages reworded (self-scan guard comment added) → **FAIL=0 WARN=0, exit 0**.
+- Corpus spot-run: driving-codex/probe-models.ts → W6 hand-rolled timeout (intended);
+  linting-prose/lint-floor.ts → W5 spawn-unbounded + W7 unpinned bunx (both true findings,
+  match Refactor map rows 4/9); forging-skills/skill-check.ts → clean.
+- `forging-skills/scripts/skill-check.ts` over the skill dir: clean after description trimmed
+  1646 → ≤1500 chars; strict-YAML parse OK (keys: name, description).
+
+## Provenance — this skill's own claims
+
+| Content class | Grade | Notes |
+|---|---|---|
+| Bun API semantics (auto-install, $, spawn timeout, test, --compile, env) | official-docs, dated 2026-07-23 | URLs in bun-facts.md; re-verify when `bun --version` moves |
+| Sharp edges / staleness / leaks / WSL quirks | gh-issue + named third-party | issue numbers in bun-facts.md; several are OPEN issues — re-check on reforge |
+| Corpus conventions & drift | corpus-observed 2026-07-23 | file:line receipts above and in harvest 1 |
+| KEEP/REFACTOR verdicts, BG gates, dependency ladder, shim classes, RULE rows | skill-supplied (constructed) | this skill's operationalization under the user's normative directive; engineered, not measured |
+| CWD-HOSTILE law | official-docs mechanism + third-party postmortem | the one law grounded in BOTH docs (§4 resolution rule) and an observed production failure (magarcia) |
+
+## Deferred (owner named)
+
+| Item | Owner / when |
+|---|---|
+| Corpus refactor itself (incl. auth-probe exit-0 bug; hooks' unnecessary shebangs flagged by floor W8) | next session's standing work order; Refactor map is the spec |
+| fmt:ts / test coverage gap for agents/skills/** | `wiring-mise-tasks` next touch |
+| Reciprocal pointers in wiring-mise-tasks / forging-skills / operating-the-harness / driving-* / writing-python | their next reforge — those working-tree files are dirty with another session's in-flight migration (refactoring-code was clean → its co-fire list edit LANDED 2026-07-23); cut is named from this side |
+| operating-the-harness hooks reference carries generic bash/npx recipe examples that contradict NO-NEW-BASH for house hooks | clarifying clause added to this skill's routing row; a reciprocal "house hook bodies → writing-bun-scripts" note lands on its next reforge |
+
+README.md index rows (this skill + two pre-existing omissions acting-as-director /
+optimizing-julia-gpu-kernels) LANDED same-day; `mise run lint:skills-index` green.
+
+## Verification fleet (VERIFY phase) — findings
+
+Fleet: 2 read-only sonnet lenses (A: sibling-cut fidelity vs the live collection text +
+trigger desk-check from the stage-1 view + invented near-misses; B: self-contradiction +
+one-home + fact spot-check vs live sources + floor-script attack with executed evasion
+fixtures), per `forging-skills` references/verifying.md §2. 28 findings
+(A: 1 BLOCKER · 5 MAJOR · 10 MINOR; B: 4 BLOCKER · 3 MAJOR · 5 MINOR); every fix applied solo
+by the editor and re-proven red→green via the new bun-test suite.
+
+| Severity | Lens | Finding | Resolution |
+|---|---|---|---|
+| BLOCKER | B one-home | body said "forged against bun 1.3.14" while its own Durability clause bans version numbers from the body | version number removed; runtime snapshot lives only in bun-facts.md |
+| BLOCKER | B floor-attack | W5 scope was file-wide: one bounded spawn (or an unrelated `boundedRegion` token) silenced the warning for a hangable spawn elsewhere — evasion reproduced | per-call windows capped at the next spawn call; bounded note must be `// bounded: <reason>` (colon + text) beside the call; regression tests added |
+| BLOCKER | B floor-attack | backtick dynamic import (`` import(`left-pad`) ``) evaded F3 entirely | backtick literals classified; computed specifiers WARN for hand review; tests added |
+| BLOCKER | B self-application | the skill mandates tested floors (BG4) but shipped its floor without a bun test | tests/script-check.test.ts added — 9 cases incl. every fleet evasion, 9/9 green |
+| BLOCKER | A cut-fidelity | operating-the-harness's hooks reference ships generic bash/npx recipes, contradicting NO-NEW-BASH with no reconciliation | routing row now names the recipes as upstream-doc illustrations, not house style; reciprocal deferred with owner |
+| MAJOR | B fact-error | bun-facts cited #6375 as "closed not-planned = accepted behavior"; live check: closed as DUPLICATE, partial fix v1.0.29, tracking issue #4989 OPEN/reopened | §5 provenance corrected; the pin-always rule unchanged |
+| MAJOR | B floor-attack | multi-line `/* */` interiors were scanned as live code → false-positive FAILs | codeLines() block-comment state machine; regression test |
+| MAJOR | A cut-fidelity | "JS-side home its description already points at" overstated running-python-tools' pointer (body prose, not description) | routing row reworded to cite the body line + landed reciprocal |
+| MAJOR | A trigger | 「bun で CLI 作って npm に publish」 would misfire — no scope suppression for product/package work | MUST-NOT-FIRE row added |
+| MAJOR ×3 | A cut-fidelity | forging-skills / driving-* / wiring-mise-tasks carry no reciprocal rows | F2 deferral path: owners named above; their trees are another session's in-flight work |
+| MINOR ×2 | B | WARN-vs-exit-code contract ambiguity; `bun run` name-collision nuance unrecorded | BG1 row now says WARNs don't gate; nuance added to bun-facts §11 |
+| MINOR | B coverage | floor accepted any non-node shebang while BG1 restricts shebangs to fixtures | W8 added: any other shebang WARNs; hooks corpus now (correctly) flags — refactor input |
+| MINOR ×2 | A trigger | refactor asks co-fire refactoring-code; --json-flag co-fire vs implementing-and-debugging's one-line exclusion | co-fire is the intended outcome; FIRES rows softened ("when non-trivial", context marker); refactoring-code's clean co-fire list gained this skill |
+| MINOR ×2 | A near-miss | Express-server refactor / wrangler-deploy-script races | no-fire row (app/server) added; Worker row gained the deploy-SCRIPT co-fire clause |
+| no_change | B bloat | lineage/immunization sentence flagged | KEPT — mandated header formula (forging-skills execution-models components f+g) |
+| no_change | A | codex token in description inflates recall on codex asks | KEPT — cuts-in-description is the house pattern; MUST-NOT-FIRE row covers it |
+
+Post-fix re-verification: `bun test` 9/9 · floor self-scan FAIL=0 WARN=0 · corpus spot-run
+reproduces exactly the Refactor-map signals (probe-models W5+W6, lint-floor W5+W7, hooks W8) ·
+`skill-check.ts` clean · strict-YAML parse OK.

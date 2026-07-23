@@ -19,7 +19,8 @@ description: >-
 
 **Rule: never `pip install` into system/user Python, and never run `python3` relying on globally-installed third-party packages. Route every Python tool through `uv`.** (`uv` is already installed on this host; `uvx` = `uv tool run`.)
 
-This is the Python analogue of the `bunx`-over-`npx` rule already used for JS.
+This is the Python analogue of the `bunx`-over-`npx` rule already used for JS (that rule's
+home: `writing-bun-scripts`).
 
 ## Decision table
 

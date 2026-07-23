@@ -1,6 +1,6 @@
 ---
 name: writing-typescript
-description: House TypeScript style — prefer type inference or `satisfies` over `as` casts; use `??` (nullish coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with zod `safeParse` instead of hand-written type guards. Auto-activates when .ts/.tsx files are in play; also use when writing or reviewing TypeScript. Not for language-agnostic change discipline (→ implementing-and-debugging) or prose (→ linting-prose).
+description: House TypeScript style — prefer type inference or `satisfies` over `as` casts; use `??` (nullish coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with zod `safeParse` instead of hand-written type guards. Auto-activates when .ts/.tsx files are in play; also use when writing or reviewing TypeScript. Not for language-agnostic change discipline (→ implementing-and-debugging), prose (→ linting-prose), or Bun script/runtime craft — spawn, bunx, deps, script anatomy (→ writing-bun-scripts, whose zero-dep floor wins in standalone scripts).
 paths: "**/*.{ts,tsx}"
 ---
 
@@ -31,3 +31,8 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
 
 Language-agnostic change discipline (intent, scope, root-cause, regression) → `implementing-and-debugging`.
 Prose/wording → `linting-prose`. This skill is ONLY the TypeScript-idiom floor.
+Bun runtime & script craft — how a local script is built/run/tested/shipped, spawn/timeout,
+bunx, the dependency ladder → `writing-bun-scripts`; in zero-config standalone scripts its
+zero-dep floor beats this file's `ts-pattern`/`zod` rows (hand-rolled narrowing is the accepted
+form until the script graduates to a package.json project). Seam owned there — agrees in
+substance, do not diff for byte-identity.

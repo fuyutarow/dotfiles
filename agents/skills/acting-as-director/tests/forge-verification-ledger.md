@@ -129,3 +129,25 @@ F3 desk-check(name + description のみで判定):
 | 「新しい研究計画の目標台帳を作る前に、監督として既存の計画を確認して」 | FIRE | FIRE — 「研究」「計画」「監督」の中核 ask |
 | 「この関数の最初の呼び出し箇所を全部列挙して」 | NO-FIRE(`rg` / `serena`) | NO-FIRE — 「最初」は新規性主張でなく exact-symbol enumeration |
 | 「既知の定理を初学者向けに一文で説明して」 | NO-FIRE(domain skill / plain answer) | NO-FIRE — 監督・委任・検収の運転を求めていない |
+
+## 2026-07-23: P0 answer-time denominator artifact + pre-acceptance reconciliation arm (v2607.3.0)
+
+Reforge record: 能力・成熟度・不在を述べる応答本文へ、実行した recall/検索と hit の
+`file:line`(no-hit を含む)を分母として強制した。fluency は問題選定時の crowdedness flag
+(`directing-research` G1)とは切り分け、監督の即答時には正本の照合トリガとした。委任契約の
+既存行へ、査読後・検収前の read-only 照合腕(corpus 再発明・既知帰着・資産不参照の専任)を
+統合した。新 gate は追加せず、堆積の門は 12 のまま。
+
+出自: 2026-07-23、能力・成熟度照会への回答で会話記憶から三回連続即答し、solver 決着・
+Gale・whitening frame の正本を引き損ねた。同日中に P0 と意味検索の二 skill を改鍛した後も
+行動が変わらず、検索の「痕跡」でなく答える瞬間の応答本文に分母を出す artifact が必要と判明。
+
+F3 desk-check(name + description のみで判定):
+
+| Ask | 期待 | desk-check |
+|---|---|---|
+| 「監督として、solver 実装の能力と成熟度を答えて。正本照合の分母も本文に出して」 | FIRE | FIRE — 「監督」が本 skill の中核、能力・成熟度は P0 の応答時 artifact を起動 |
+| 「委任成果を検収する前に、既知帰着と既存資産を read-only の照合腕で確認して」 | FIRE | FIRE — 「委任」「検収」が description に直結し、受入前照合は委任契約の運転 |
+| 「どんどん進めて。ただし『他に表現は無い』と答える前に普遍層と撤回台帳まで照合して」 | FIRE | FIRE — 「どんどん進めて」が trigger、否定主張は P0 の最低照会軸を要求 |
+| 「この solver ライブラリは現在どの機能に対応していますか」 | NO-FIRE(project skill / plain answer) | NO-FIRE — 監督・委任体制の運転を求めない分野の能力質問。発火した project skill 側で現物照合する |
+| 「このディレクトリで whitening を含む行を rg して」 | NO-FIRE(`rg` / `serena`) | NO-FIRE — 単一の検索操作であり、能力・成熟度・不在の主張も委任の運転も無い |

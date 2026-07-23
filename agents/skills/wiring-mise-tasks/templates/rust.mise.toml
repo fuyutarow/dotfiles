@@ -1,7 +1,7 @@
 # <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
 # wiring-mise-tasks/SKILL.md。[tools] は宣言しない: Rust toolchain は既存の
 # cargo/rustup をそのまま使う (mise 管理外・correo 方式)。
-# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
 # setup は意図的に無い: cargo が build 時に依存を解決する (correo 前例)。
 # ↓ は生きている免除宣言 (可視の免除が無言の欠落に勝る。消せば WARN に戻る):
@@ -53,4 +53,4 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"

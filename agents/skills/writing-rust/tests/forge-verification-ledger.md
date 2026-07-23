@@ -78,9 +78,9 @@ niche is the *trait-level* asserts — std `const`-assert now owns const/size ch
 
 **Files shipped (atomic, one commit):** SKILL.md + references/{selection,async,errors,ownership,
 performance,project}.md + tests/{trigger-set,forge-verification-ledger}.md. No `scripts/` — the
-mechanical floor is the shared `forging-skills/scripts/skill-check.sh`.
+mechanical floor is the shared `forging-skills/scripts/skill-check.ts`.
 
-**Floor status at freeze**: `skill-check.sh` pass; description trimmed to ≤1500 chars (block scalar
+**Floor status at freeze**: `skill-check.ts` pass; description trimmed to ≤1500 chars (block scalar
 `>-`); build-verify one-liner clean; strict-YAML parse OK; verification fleet (self-contradiction /
 sibling-cut / trigger desk-check) run before link. (Recorded in the forge-session shell log,
 2026-07-06.)
@@ -104,7 +104,7 @@ and SKILL.md §1 held against a fresh crates.io re-check.
 | MINOR: "explain lifetimes" could over-fire via the `lifetime` keyword | **Accepted** | Concept-explainer carve-out added to the description NOT-clause and the body MUST-NOT-FIRE list; balanced by dropping `cargo-nextest` from keywords (lexically covered by `cargo`) |
 | NIT: "uv で Python 環境" no-fire row was a far-miss testing nothing | **Accepted** | Replaced with the genuinely contested maturin boundary: PyO3-architecture FIRE row + maturin-invocation-only NO-FIRE row |
 
-**Floor after fixes**: `skill-check.sh` clean over writing-rust + both edited siblings; strict-YAML
+**Floor after fixes**: `skill-check.ts` clean over writing-rust + both edited siblings; strict-YAML
 re-parse OK; growing-oss-adoption description 1487/1500; live listing reload confirmed for the
 edited siblings (2026-07-06).
 
@@ -124,7 +124,7 @@ for lost qualifiers.
 | #4 fast hashers presented as "default stack" vs performance.md's measured-micro-lever | **Accepted — sharpest finding** | §1 row inverted: std `HashMap` IS the default; `foldhash`/`rustc-hash` behind *profiled + trusted* (performance.md); selection.md trusted-hasher row gains the same gate ("unprofiled → stay std") |
 | #5 "[dated:] per fact" wording stronger than selection.md's file-level dating | **Accepted as wording; design retained** | Header now states the TWO grains explicitly: per-fact in prose files; file-level for selection.md (whole file = one snapshot table; per-row tags would be noise — same Locality rationale as the writing-julia 2026-07-05 裁定) |
 
-**Floor after round 2**: `skill-check.sh` clean (no warnings); strict-YAML parse OK; description
+**Floor after round 2**: `skill-check.ts` clean (no warnings); strict-YAML parse OK; description
 unchanged (≤1500).
 
 ## 2026-07-08 RG0 prominence reforge — recurrence-driven (self-reported from a live session)
@@ -150,7 +150,7 @@ oracle" wording.
 | Co-fire does NOT suspend RG0 | callout + refactoring-code routing row (pointer) | Kills the passive-"oracle" framing at its source |
 | Durable fix named: PreToolUse hook blocking the first `*.rs`/`Cargo.toml` edit until the table exists | callout pointer → `operating-the-harness` | Not shipped here (this skill ships no `scripts/`) |
 
-**Floor after reforge**: `skill-check.sh` clean over writing-rust; fire/no-fire desk-check — the
+**Floor after reforge**: `skill-check.ts` clean over writing-rust; fire/no-fire desk-check — the
 `correo` rename now correctly FIRES the entry-sweep under the new threshold (old "substantive work"
 could ambiguously no-fire). Adversarial 3-lens verify (over-fire / trigger-desk-check / one-home
 consistency) **round 1 → 3 ISSUE (all `minor`), converging on ONE defect**: the callout's "reading
@@ -197,5 +197,5 @@ refactoring-code routing row to a pointer (the ★ callout is the sole fire/no-f
 
 **Convergence + F3 waiver**: 5 fleet rounds went real bug (R2) → wording collision (R3) →
 self-introduced contradiction (R4) → editor-judgment residuals (R5). The final structural pass is
-`skill-check.sh`-clean + desk-read for coherence but **NOT fleet-re-verified** — a bounded waiver: a
+`skill-check.ts`-clean + desk-read for coherence but **NOT fleet-re-verified** — a bounded waiver: a
 6th round would over-fit a single gate. Convergence declared 2026-07-08.

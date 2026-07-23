@@ -1,5 +1,5 @@
 {
-  "//": "linting-prose machine floor — である体 (dearu-style) profile for internal/research/academic docs. Run: LINT_PROSE_CONFIG=<this> scripts/lint-floor.sh doc.md",
+  "//": "linting-prose machine floor — である体 (dearu-style) profile for internal/research/academic docs. Run: LINT_PROSE_CONFIG=<this> scripts/lint-floor.ts doc.md",
   "//why": "base textlintrc.json enforces preferInBody=ですます (preset default), so it false-positives EVERY である sentence in a dearu-style research record. This profile prefers である; a stray ですます in a dearu doc is still flagged (consistency preserved, register inverted).",
   "//scope": "for INTERNAL である体 records only. Field-facing/customer prose is usually ですます → use textlintrc.json; insider-register export → textlintrc-external.json.",
   "//syntax": "preset-internal rules are overridden by NESTING inside the preset object (short rule name); other preset rules stay on with defaults.",

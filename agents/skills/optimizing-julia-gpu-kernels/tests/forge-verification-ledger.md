@@ -52,7 +52,7 @@ measuring.md, debugging.md (post-editor-fix #1).
 
 ## Mechanical floor
 
-- `skill-check.sh`: PASS (0 FAIL, 0 WARN) — name regex/length/reserved-words, description
+- `skill-check.ts`: PASS (0 FAIL, 0 WARN) — name regex/length/reserved-words, description
   present + ≤1500 folded, no dangling reference files, body <500 lines.
 - Strict YAML parse of frontmatter: PASS.
 - Trigger set: 14 FIRES + 5 co-fire + 9 no-fire rows, desk-checked (see log in trigger-set.md).

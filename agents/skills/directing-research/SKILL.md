@@ -34,7 +34,7 @@ description: >-
 > Tetlock, Klein, Olah-Carter). Full graded provenance: `references/sources.md`; the survey fleet:
 > `tests/forge-verification-ledger.md`.
 > **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
-> `for f in selecting formulating not-fooling-yourself steering reconciliation sources; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/research-check.sh || echo MISSING research-check.sh; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
+> `for f in selecting formulating not-fooling-yourself steering reconciliation sources; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/research-check.ts || echo MISSING research-check.ts; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
 > (must print nothing).
 
 ## Language & stable tokens
@@ -82,7 +82,7 @@ stable even inside Japanese prose — identifiers, not translatable words: **LAW
 
 同型 with the house discipline (systematizing-knowledge's ledger, forging-novel-theses' G1/G2/G3): a
 gate is passed only when its **artifact exists in the filled RESEARCH SPEC** (template below).
-感触では通れない — gate-passing is judged against ALL artifacts; `scripts/research-check.sh` is the
+感触では通れない — gate-passing is judged against ALL artifacts; `scripts/research-check.ts` is the
 *floor* that HARD-blocks the seven **†-marked load-bearing** artifacts below and WARNs on the rest —
 it is NOT a semantic check (whether the mechanism actually binds is judged here). **Each gate is a virtue turned into a mechanism.**
 
@@ -93,7 +93,7 @@ it is NOT a semantic check (whether the mechanism actually binds is judged here)
 | **G3** | **Don't fool yourself (structural)** | "be honest / don't fool yourself" | HARKing; sycophancy→confirmation; machine-scale multiple comparisons; scaffold theater; self-leakage | a **timestamped pre-registration**† (prediction + kill-threshold, BEFORE running) + the **denominator**† (N configs/seeds tried; the distribution, never the argmax) + **generator≠auditor**† (an independent read-only pass whose SOLE job is leakage/contamination/artifact) + the **negation** (strongest case AGAINST, stated first) |
 | **G4** | **Steer by learning-rate** | "persist / let go" | sink-compute-on-dead-direction OR premature-pivot/thrashing; no portfolio; collapse-to-one-hypothesis | a **portfolio** (≥2 uncorrelated but capped bets; risk tiers) + the **learning-rate kill/persist**† ("kill when dLearning/dt→0 AND the block is structural; persist while novel surprises continue" — never on the local metric, elapsed time, or sunk cost) + **≥3 live competing hypotheses** (default; states an exhaustive-binary/nested-in-one-tree exception instead of padding the count) until a discriminating test |
 
-*Floor enforcement*: † = hard-FAILs at `scripts/research-check.sh` (script exits 1 without it); the
+*Floor enforcement*: † = hard-FAILs at `scripts/research-check.ts` (script exits 1 without it); the
 rest floor-WARN only — present or not, their MEANING is judged here, not blocked at the floor.
 
 ## The RESEARCH SPEC — fill this to direct a research effort (and to audit one in flight)
@@ -127,7 +127,7 @@ signal must live in this external artifact.
 - Live hypotheses (≥3 by default — UNLESS the space is stated exhaustive-binary or nested-in-one-tree; name the EXCLUDED alternative classes, held until a discriminating test): [...]
 ```
 
-Then: `scripts/research-check.sh <spec.md>` (floor: slot presence + timestamp/threshold/denominator
+Then: `bun scripts/research-check.ts <spec.md>` (floor: slot presence + timestamp/threshold/denominator
 tokens + the ≥3-hypothesis check + the firewall/witness slot-presence check; it cannot judge whether the
 witness is truly un-gameable or the lever truly fresh — you do). † marks the seven artifacts the floor hard-FAILs on; unmarked slots floor-WARN and are judged here.
 

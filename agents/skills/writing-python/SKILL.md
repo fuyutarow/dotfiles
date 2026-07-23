@@ -37,7 +37,7 @@ paths: "**/*.py"
 >   (`research.md`): hydra maintenance/instantiate-blocklist state, Neptune shutdown / Aim
 >   stall, marimo-under-CoreWeave, the seaborn release-freeze, the torch CUDA-backend list,
 >   the 3.14 forkserver default. Mechanical floor =
->   `forging-skills/scripts/skill-check.sh` (shared; this skill ships no `scripts/`).
+>   `forging-skills/scripts/skill-check.ts` (shared; this skill ships no `scripts/`).
 
 ## THE LAW
 

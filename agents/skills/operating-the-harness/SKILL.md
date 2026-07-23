@@ -25,7 +25,8 @@ description: >-
 > **Scope**: how to *operate and configure Claude Code itself* well — CLAUDE.md/memory
 > discipline, the verification loop, hooks, permissions/settings, MCP, Skills/commands,
 > subagents/parallelism, plan-mode & context workflow. Host-agnostic.
-> **Out of scope**: the Anthropic *API/SDK* (→ `claude-api` skill); mechanical settings.json
+> **Out of scope**: the Anthropic *API/SDK* (→ `claude-api` skill); `claude -p` as a subprocess
+> driven by Codex (→ Codex-only `driving-claude`); mechanical settings.json
 > edits the harness performs for you (→ `update-config` skill); writing domain skills like
 > Julia (→ that skill). This skill is the *strategy* layer; those are the *mechanics*.
 > The CRAFT of skill content — what deserves a skill, distillation, sibling cuts, trigger test
@@ -89,7 +90,7 @@ loop.** Hand it a machine-readable pass/fail and demand evidence, not assertion.
 | `references/commands-and-skills.md` | commands⇄Skills unification, `SKILL.md` frontmatter & progressive disclosure, invocation control (`disable-model-invocation`, `context: fork`), `$ARGUMENTS`/`!cmd`, **and** writing good tool/MCP descriptions | authoring a slash command, Skill, or tool/MCP description |
 | `references/subagents-and-parallelism.md` | subagents (fresh isolated context) vs `/fork` (inherits), `.claude/agents/*.md`, built-in agents, writer/reviewer & TDD splits, worktrees, agent teams, `/workflows`, headless fan-out | delegating, isolating a big search, or running work in parallel |
 | `references/workflow-and-context.md` | Explore→Plan→Code→Commit, plan mode, `opusplan`, `/effort` & `ultrathink`, `/clear`/`/compact`/`/btw`, `/rewind` checkpoints, `/context`/`/usage`, prompt specificity, SPEC.md flow | running a session well or managing the context window |
-| `references/headless-and-ci.md` | output styles, `statusLine`, headless (`claude -p`, `--output-format json`, `--json-schema`, `--bare`), GitHub Actions (`@claude`, `claude-code-action`) | automating, scripting, or wiring CI |
+| `references/headless-and-ci.md` | output styles, `statusLine`, CI/GitHub Actions; Codex-driven `claude -p` subprocess execution routes to `driving-claude` | automating, scripting, or wiring CI |
 | `references/methodologies.md` | the vanilla-vs-framework decision ladder; Superpowers / Spec-Kit / BMAD — what to steal, what to skip | tempted by a heavyweight workflow framework |
 
 ---

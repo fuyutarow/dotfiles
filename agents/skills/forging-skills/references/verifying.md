@@ -96,9 +96,9 @@ routing table; this is the synced working copy — re-sync on reforge, do not di
 | Codex-target scaffold | `$CODEX/scripts/init_skill.py <name> --path <dir>` | Codex-target scaffolds ONLY — house skills use the house shape; a pointer, not a default |
 | Codex target only | `$CODEX/scripts/generate_openai_yaml.py <skill-dir>` + `$CODEX/references/openai_yaml.md` | ONLY when the skill must also live in `~/.codex/skills` |
 
-## §5 The mechanical floor — scripts/skill-check.sh
+## §5 The mechanical floor — scripts/skill-check.ts
 
-Run this skill's `scripts/skill-check.sh <skill-dir>` over the target BEFORE any semantic
+Run this skill's `bun scripts/skill-check.ts <skill-dir>` over the target BEFORE any semantic
 lens; run it over the whole collection whenever a description or cut changed. It is a floor,
 not a bar: it catches structure, never meaning. And prove any NEWLY added check fires —
 inject a known-bad string, watch it FAIL, revert. A gate never seen failing is decoration.
@@ -134,7 +134,7 @@ boundary. If you cannot write the cut, it is the same skill — and you are refo
 
 | Job | Fleet |
 |---|---|
-| Small procedural skill (one task, no contested siblings) | SOLO end-to-end, zero agents — `skill-check.sh` + a hand trigger desk-check suffice; write the F3 waiver into the produced skill (gate table, SKILL.md) |
+| Small procedural skill (one task, no contested siblings) | SOLO end-to-end, zero agents — `skill-check.ts` + a hand trigger desk-check suffice; write the F3 waiver into the produced skill (gate table, SKILL.md) |
 | Standard skill | 2–4 agents: 1 audit, 1–2 verify lenses, 1 trigger desk-check |
 | Flagship / reforge-of-N / superseding an incumbent | the full §1 workflow with the full §2 fleet, comparative judge included |
 

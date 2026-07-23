@@ -63,7 +63,7 @@ siblings didn't point back. `linting-prose`'s reciprocal is now **landed**: its 
 trigger token is narrowed to "sentence-level claim calibration" and its Not-for list now names
 "argument/contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"; its
 description was simultaneously trimmed from ≈1674 to ≈1473 chars, back under the ~1500 listing
-budget (verified via `forging-skills/scripts/skill-check.sh`, exit 0, no WARN). `structuring-documents`
+budget (verified via `forging-skills/scripts/skill-check.ts`, exit 0, no WARN). `structuring-documents`
 routes un-earned-claim calibration only to linting-prose and still does not name this skill — its
 description (≈1649 chars) is **still over the ~1500 listing budget**, so its reciprocal cut remains
 **deferred to its own trim-reforge** (owner = structuring-documents); `forging-novel-theses` also

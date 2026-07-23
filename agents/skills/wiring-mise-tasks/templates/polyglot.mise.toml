@@ -3,7 +3,7 @@
 # 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (qoed 前例)。
 # 各セルの中身は単言語 template から移植し、TeX は compiling-latex の
 # latex:* template に委ねて check が latex:check を集約する。
-# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
 [tasks.setup]
 alias = "i"
@@ -71,4 +71,4 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"

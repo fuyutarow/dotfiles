@@ -49,5 +49,5 @@ JG4 reproducibility.
 | P2 "LAW/gates 形でない" | **Partially refuted**: §2.0 was already a deny-gate in substance (FORBIDDEN-by-default + MANDATORY exception comment = a grep-able artifact) with explicit precedence ("read §1/§2.0 first"); missing was the house FORM | THE LAW block + JG0–JG4 gate map added, naming existing sections as gates (no content rewrite) — form brought to bar, substance preserved |
 | (self-reported, reviewer missed) no forge ledger | F3 was incomplete: trigger set existed, findings ledger did not | this file |
 
-**Floor status at freeze**: `skill-check.sh` pass, strict-YAML parse OK, description ≤1500 chars
+**Floor status at freeze**: `skill-check.ts` pass, strict-YAML parse OK, description ≤1500 chars
 (recorded in forge-session shell log, 2026-07-05).

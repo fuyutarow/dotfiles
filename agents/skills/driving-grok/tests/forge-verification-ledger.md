@@ -10,7 +10,7 @@
 |---|---|---|
 | Orchestrator ground truth (SOLO probes on R99, `grok 0.2.101`): metered json envelope, roster, sandbox flags, auth shape, subcommand list | live SESSION — highest grade | author-confirmed; verbatim excerpts below |
 | Harvest fleet, 3 parallel sonnet lenses (`{model:'sonnet'}`): **r99-surface** (deep CLI + shipped `~/.grok/README.md`, 4 budgeted model probes), **official-docs** (docs.x.ai fetched directly), **community** (GitHub/HN/press) | live SESSION, fanned out | probe-verified rows author-confirmed; shipped-readme/official-docs rows first-party-quoted; third-party rows graded per-row below |
-| Draft fleet: sonnet drafters, one per SKILL.md/model-catalog.md/probe-models.sh/this ledger, against the editor's SIGNED SPEC | live SESSION | this file is one such draft |
+| Draft fleet: sonnet drafters, one per SKILL.md/model-catalog.md/probe-models.ts/this ledger, against the editor's SIGNED SPEC | live SESSION | this file is one such draft |
 | Verify fleet: sonnet refuters (read-only) + Terra (`gpt-5.6-terra` via `codex exec`, cross-vendor adjudication) + a grok self-dogfood pass (grok reviewing its own skill) | scheduled, this forge | **results not yet in — see Verification-fleet results below** |
 | Director: Opus 4.8, SOLO — wrote the SIGNED SPEC, the four PER-FILE CONTRACTS, and will resolve refuter/Terra/grok findings in FIX | live SESSION | author-confirmed (the spec itself) |
 
@@ -111,7 +111,7 @@ the LAW's containment strategy.
 
 | Fact | State captured this forge (2026-07-15) | Re-verify how |
 |---|---|---|
-| Model roster | `grok models` (free/local) shows `grok-4.5` (default) + `grok-composer-2.5-fast`; broader `-m`-reachable catalog (grok-4.3, grok-4.20-0309-*, grok-build-0.1) per docs.x.ai only, not in the local roster | `scripts/probe-models.sh` no-arg + `grok models`; diff against `references/model-catalog.md`'s dated header |
+| Model roster | `grok models` (free/local) shows `grok-4.5` (default) + `grok-composer-2.5-fast`; broader `-m`-reachable catalog (grok-4.3, grok-4.20-0309-*, grok-build-0.1) per docs.x.ai only, not in the local roster | `scripts/probe-models.ts` no-arg + `grok models`; diff against `references/model-catalog.md`'s dated header |
 | CLI version | `grok 0.2.101 (5bc4b5dfad) [stable]`, dated 2026-07-13, near-daily self-updating point releases | `grok --version` + `~/.grok/CHANGELOG.md` before any load-bearing version claim |
 | EXFIL-RISK client capability | server-side flag `disable_codebase_upload:true` flipped 2026-07-13; **upload code path reportedly still present client-side**; no client fix, no formal xAI statement, no full post-incident report as of 2026-07-15 | search for an xAI post-incident report / changelog entry naming a client-side fix; re-check the cited HN thread (item 48877371) and gist.github.com/cereblab for updates; do NOT downgrade EXFIL-RISK without a first-party or independently-corroborated fix, and do not upgrade its severity without new evidence either |
 | CLI usage quota (subscription-tier, not API $-tier) | NOT published in a stable table by xAI; third-party reports (basenor.com) describe a reactive account-wide reset after a caching-inefficiency bug — CLI-plan quotas graded UNVERIFIED throughout | re-search for a published Grok Build plan-quota table; if still absent, keep the UNVERIFIED grade rather than inferring a number |
@@ -137,7 +137,7 @@ safety gates."** Fixed in **v2607.1.1**; every blocker/major resolved and re-ver
 |---|---|---|
 | 1 | **Shell injection** in the grokAudit Workflow example — `${target}` pasted into `-p '...'` (Terra BLOCKER + grok-dogfood) | Added the mandatory INJECTION RULE; rewrote the example to write the payload to a scratch file and read via `-p "$(cat …)"`; only trusted model ids interpolate |
 | 2 | **cwd-hygiene ≠ containment** — G2's "clean cwd + text prompt" doesn't protect `$HOME`/other worktrees; default sandbox is `off` (Terra BLOCKER) | G2 rewritten as a TECHNICAL deny-gate: throwaway checkout **AND** `--sandbox read-only`/`--disallowed-tools`, never prompt-wording alone |
-| 3 | **the probe (G1's tool) violates G2/G3** — ran `grok -p` in caller cwd, no sandbox; EXFIL fires even on a trivial prompt (Terra BLOCKER) | `probe-models.sh` now runs every ping from a `mktemp -d` throwaway dir under `--sandbox read-only` (trap-cleaned); re-verified live on R99 (real→AVAILABLE 18764 tok, bogus→INVALID_NAME RC=1) |
+| 3 | **the probe (G1's tool) violates G2/G3** — ran `grok -p` in caller cwd, no sandbox; EXFIL fires even on a trivial prompt (Terra BLOCKER) | `probe-models.ts` now runs every ping from a `mktemp -d` throwaway dir under `--sandbox read-only` (trap-cleaned); re-verified live on R99 (real→AVAILABLE 18764 tok, bogus→INVALID_NAME RC=1) |
 | 4 | **sandbox `strict` row "BLOCKED" unqualified** — skim-trap contradicting the exfil law (contradiction BLOCKER) | both `read-only`/`strict` Network cells now read "child-process egress BLOCKED (in-process upload channel STILL OPEN)" |
 | 5 | **canonical recipe + grokAudit omit `--sandbox`** despite G3 requiring it (contradiction + Terra + grok-dogfood) | `--sandbox read-only` added to both; G3 restated "EVERY call" |
 | 6 | **Landlock/seccomp mechanism conflation** in THE LAW (grok-dogfood) | softened — no longer names the wrong primitive; states only that no profile closes the in-process channel |
@@ -155,8 +155,8 @@ block was (item 4 of the PROBE LOG). SKILL.md therefore treats `--sandbox` as th
 without claiming its write-blocking is proven here; the calibration table's follow-up probe stands.
 
 **Post-fix floor re-verification (2026-07-15):** description 1488 chars (≤1500); build-order → `OK`;
-`bash -n scripts/probe-models.sh` clean; tri-state probe validated LIVE on R99; all three sibling
-descriptions ≤1500; `forging-skills/scripts/skill-check.sh` → EXIT 0. Residual accepted (minor/nit):
+`bun build --no-bundle scripts/probe-models.ts` clean; tri-state probe validated LIVE on R99; all three sibling
+descriptions ≤1500; `forging-skills/scripts/skill-check.ts` → EXIT 0. Residual accepted (minor/nit):
 grok-composer lineage third-party; parallel-safety unproven at high N; grep-fallback `\"`-unescape
 limited (documented in-script, exact-match use only). Ship-ready.
 

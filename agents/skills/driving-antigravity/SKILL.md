@@ -36,7 +36,7 @@ description: >-
 > `references/model-catalog.md` owns the roster, exact display strings, versions, and quota. Code
 > examples use PLACEHOLDERS for model strings (resolve live via `agy models`); any inline fact
 > carries an "as of" date.
-> **Build order (atomic)**: `test -f references/model-catalog.md && test -x scripts/probe-models.sh
+> **Build order (atomic)**: `test -f references/model-catalog.md && test -f scripts/probe-models.ts
 > && test -f tests/forge-verification-ledger.md && echo OK || echo INCOMPLETE`
 
 ## Language
@@ -78,7 +78,7 @@ Stable tokens even inside Japanese prose: **NO-METER**, **UNCONFINED**, **CATALO
 
 | Gate | Rule | Artifact |
 |---|---|---|
-| **A1 PROBE** | Verify `agy --version` ≥ 1.1.2 FIRST. Then `agy models` (free, local, no quota) → copy the EXACT display string → a trivial `agy -p` probe; cite RC + the string. On ≥ 1.1.2 an invalid `--model` is a FREE client-side fast-fail (RC=1, ~4s, prints the valid list) — candidate-probing costs NO quota (below 1.1.2 it silently downgrades instead → probes lie). | `scripts/probe-models.sh` output + the version + where the string came from |
+| **A1 PROBE** | Verify `agy --version` ≥ 1.1.2 FIRST. Then `agy models` (free, local, no quota) → copy the EXACT display string → a trivial `agy -p` probe; cite RC + the string. On ≥ 1.1.2 an invalid `--model` is a FREE client-side fast-fail (RC=1, ~4s, prints the valid list) — candidate-probing costs NO quota (below 1.1.2 it silently downgrades instead → probes lie). | `scripts/probe-models.ts` output + the version + where the string came from |
 | **A2 RECIPE** | Every embedded call passes explicit `--model "<exact display string>"`, wraps in shell `timeout N`, redirects `</dev/null`, reads `rc=$?` on the NEXT line (never `$?` after a pipe). Shell `timeout` bounds the PARENT's wait only — it does NOT reap agy's tool/background children (catalog records an unreaped-process incident); kill the process group if a call spawns work. A bare `agy -p` inherits the config-default model AND auto-approves tools. | the flag set greppable in the call |
 | **A3 CONTAINMENT** | agy is UNCONFINED and a cwd is NOT a security boundary — it writes under `$HOME` regardless of cwd. **TEXT-RETURN** (prompt requests NO mutation) is the default mode — but agy MAY still use tools, so run with NO secrets you'd mind exposed in the env. **FILE-MUTATING or untrusted input** → a disposable identity: a git worktree limits blast radius for *repo* files only (NOT `$HOME`/creds); real isolation needs a container/VM with read-only inputs and no secrets. Never point agy at a repo you care about, or a shell with live credentials, on untrusted input. | a TEXT-RETURN (no-tool) prompt, OR a container/disposable-identity run — a bare worktree is NOT sufficient for untrusted input |
 | **A4 RELAY** | A worker that ran agy relays a BOUNDED, delimited record: exit code + the stdout answer (large → store as an artifact and relay a reference) + the literal `usage: UNAVAILABLE (agy exposes no per-call metering)`. Never fabricate a token count (NO-METER); never blindly reinsert unbounded model text into an orchestrator prompt (injection + context-exhaustion). | the delimited triple in the worker's return |
@@ -90,8 +90,8 @@ Step 0 (A1): verify the version floor and resolve the EXACT display string, via 
 never hand-roll a probe:
 
 ```bash
-bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh              # no args → version + roster
-bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh "<display string>"   # ping one model
+bun ${CLAUDE_SKILL_DIR}/scripts/probe-models.ts              # no args → version + roster
+bun ${CLAUDE_SKILL_DIR}/scripts/probe-models.ts "<display string>"   # ping one model
 ```
 
 Then the call (payload comes from a variable/file — see the INJECTION RULE below, never inlined):
@@ -223,6 +223,7 @@ MUST NOT fire (route):
 | Ask | Route |
 |---|---|
 | the `codex` subprocess | `driving-codex` |
+| the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
 | GPT review — OpenAI's GPT via codex vs open-weight GPT-OSS via agy | OpenAI GPT (`codex exec`) → `driving-codex`; GPT-OSS through agy's Google-subscription roster → here |
 | `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | "which Claude model + Anthropic pricing / API" | `claude-api` — it owns Claude model facts & the Anthropic API and may co-fire on any "Claude" mention; no exclusivity claimed here. Runtime cut: asking about the API/pricing → claude-api; DRIVING the agy binary that routes to a Claude model → here |
@@ -249,6 +250,7 @@ skin over the identical `agy -p` call, not a different path to the model:
 |---|---|
 | `driving-codex` | CARDINALITY/PURPOSE — which BINARY + its contract. `codex exec` (HAS per-call metering + a real `--sandbox read-only`, single-vendor GPT) → driving-codex; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → here. Both embed a headless CLI as a worker; decide by which binary you invoke. |
 | `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `grok -p` (xAI Grok Build — METERED, real sandbox, carries an EXFIL-RISK data-leak law) → `driving-grok`; `agy` (Antigravity, NO-METER, UNCONFINED, multi-vendor) → here. |
+| `driving-claude` | CARDINALITY/PURPOSE — which BINARY: `agy` (Antigravity multi-vendor) → here; `claude -p` driven by Codex (Claude Code) → Codex-only `driving-claude`. |
 | `operating-the-harness` | PURPOSE — which binary is being CONFIGURED: the `claude` harness (hooks, settings, Workflow tool semantics, subagent policy) → there; the `agy` subprocess → here. |
 | `claude-api` | Anthropic API / Claude model facts + pricing → there (it may co-fire on "Claude" — no exclusivity claimed here). Driving the agy binary that routes to a Claude model, with no API/pricing question → here. |
 | `prompting-llms` | prompt WORDING → there; agy CLI mechanics → here. |
@@ -258,5 +260,5 @@ skin over the identical `agy -p` call, not a different path to the model:
 | File | Covers | Read when |
 |---|---|---|
 | `references/model-catalog.md` | DATED snapshot: probe-verified roster + display strings, version floor + self-update history, NO-METER accounting evidence, UNCONFINED write evidence, auth, exact paths, quota tiers (marked UNVERIFIED), provenance grades | any model-name, availability, version, path, or auth question |
-| `scripts/probe-models.sh` | deterministic availability probe (floor — NOT semantic): version gate + tri-state AVAILABLE/INVALID_NAME/INCONCLUSIVE | A1 gate — before asserting availability |
+| `scripts/probe-models.ts` | deterministic availability probe (floor — NOT semantic): version gate + tri-state AVAILABLE/INVALID_NAME/INCONCLUSIVE | A1 gate — before asserting availability |
 | `tests/forge-verification-ledger.md` | forge provenance, probe log, calibration table, verification-fleet results | reforging this skill |

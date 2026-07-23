@@ -1,7 +1,9 @@
 # Output styles, statusline, headless mode & CI
 
 > The non-interactive surface of Claude Code: changing the system prompt's tone, the local
-> status bar, scripting `claude -p`, and wiring it into CI / GitHub. Parent: SKILL.md §0–§4.
+> status bar, and wiring it into CI / GitHub. Codex driving `claude -p` as a subprocess is owned
+> by the Codex-only `driving-claude` skill; this reference retains harness/CI facts. Parent:
+> SKILL.md §0–§4.
 
 ---
 
@@ -112,6 +114,10 @@ echo "[$MODEL] ${PCT}% context"
 ---
 
 ## §3. Headless mode — `claude -p`
+
+**Codex as the caller:** use the Codex-only `driving-claude` skill for its trusted-CWD,
+permission, probe, bounded-output, and cross-model relay gates. Do not copy its invocation recipe
+into a hook or `settings.json`; configure those surfaces through this parent skill first.
 
 `claude -p '<prompt>'` (alias `--print`) runs non-interactively; all CLI flags apply.
 

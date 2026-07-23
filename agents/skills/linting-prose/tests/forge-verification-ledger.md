@@ -6,7 +6,7 @@ future reforge; never overwrite.
 ## CURRENT STATE (read this first — everything below is append-only HISTORY; dead decisions live there)
 
 **Invariants (live):**
-- Floor is detect-only via `scripts/lint-floor.sh` (`--fix` refused); prh replacements are guidance text.
+- Floor is detect-only via `scripts/lint-floor.ts` (`--fix` refused); prh replacements are guidance text.
 - 4 JA profiles (base ですます / research である / external +C9 / strict codemix opt-in); profile choice is load-bearing.
 - Admissibility is READER-relative; internal register waives comprehension, never hygiene (verb calques, exact-equivalent loan nouns banned in any register).
 - Sourcing ladder ADOPT > CONFIGURE > AUTHOR — and ADOPT is reader-gated too (an established dictionary fails if its implied reader ≠ the declared reader).
@@ -166,8 +166,8 @@ declared-novel items are preserved — mapped into the six families in `patterns
 | Severity | Finding | Verification | Resolution |
 |---|---|---|---|
 | high | description 1636 chars > the 1536 truncation contract; ledger's "→ 1486" stale vs the file | python fold-count: 1636 (over by 100) | CAUSE: the 2026-07-04 reciprocal-pointer edit (structuring-documents cut) added ~150 chars AFTER the ledger row — the ledger was correct at forge time. Description re-cut (pointer compressed; "never re-implements a preset's regex" now body-only — it was a second home of the Enforcement corollary) |
-| high | prh detect-only was prose-only — `textlint --fix` substitutes, and the house replacements are GUIDANCE text, so --fix injects meta-instructions into the document | `--fix --stdin` smoke: `receipt:`/`R2607_016`/`PASS` → "Fixed 3 problems" | `scripts/lint-floor.sh` wrapper refuses `--fix` (exit 2); SKILL.md gate + machine-floor.md route the floor through it; wrapper added to the build-order verify line |
-| medium | build-order verify one-liner exits 1 on a CLEAN tree (`test -d X && echo` is false when X absent) | clean run: EXIT 1 | inverted to `test ! -d ../grounding-prose || echo STALE-DIR`; `test -x scripts/lint-floor.sh` check added |
+| high | prh detect-only was prose-only — `textlint --fix` substitutes, and the house replacements are GUIDANCE text, so --fix injects meta-instructions into the document | `--fix --stdin` smoke: `receipt:`/`R2607_016`/`PASS` → "Fixed 3 problems" | `scripts/lint-floor.ts` wrapper refuses `--fix` (exit 2); SKILL.md gate + machine-floor.md route the floor through it; wrapper added to the build-order verify line |
+| medium | build-order verify one-liner exits 1 on a CLEAN tree (`test -d X && echo` is false when X absent) | clean run: EXIT 1 | inverted to `test ! -d ../grounding-prose || echo STALE-DIR`; `test -f scripts/lint-floor.ts` check added |
 | medium | EN machine floor unpackaged — machine-floor.md describes Vale/proselint but no `.vale.ini`/vocab ship | `ls assets/`: JA-only (4 files) | OPEN — deliberately NOT shipping an untested config; packaging needs a Vale-packages survey + a proven-to-fire smoke first. Until then the EN floor section is guidance and EN prose gets the VIBE pass only |
 
 ## 2026-07-04 survey — novel-coinage detection (prior-art distilled, prototype-verified)
@@ -259,7 +259,7 @@ where the community config is WRONG, 3 layers it lacks entirely. All npm/run-ver
 | Community claim | Reality (verified) | Skill's answer |
 |---|---|---|
 | `en-ja-translator-find-english` = the code-mixing rule | **E404, does not exist** | working impl: prh catch-all `/[A-Za-z…]/` + `allowlist` filter (v4.0.0) in `textlintrc-strict.json` — proven flags validation/deliverable, allowlists fidelity/CNOT, excludes `code` spans |
-| MCP `--fix` loop = the modern workflow | `--fix` injects prh guidance text into the doc | `lint-floor.sh` refuses `--fix` (exit 2) |
+| MCP `--fix` loop = the modern workflow | `--fix` injects prh guidance text into the doc | `lint-floor.ts` refuses `--fix` (exit 2) |
 | one config for all writing | false-positives every である sentence | 3 register profiles |
 | L1/L2 machine layer is the goal | misses logic/coinage | VIBE (L3/L4/スリカエ/register/lifecycle) + kanji-coinage flagger |
 

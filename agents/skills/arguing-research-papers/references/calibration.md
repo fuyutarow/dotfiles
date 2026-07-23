@@ -175,7 +175,7 @@ source and returns the *locus* or "[VERIFY]", and an agent's felt confidence is 
 
 ## §7 — The certainty deny-list (the floor scan)
 
-`scripts/claim-check.sh` scans the VALUE of each filled slot (not the template labels) and reports:
+`scripts/claim-check.ts` scans the VALUE of each filled slot (not the template labels) and reports:
 - **unwarranted superlatives (WARN)**: `state-of-the-art`, `novel`, `significantly`, `outperforms`,
   `robustly`, `paradigm`, `paves the way`, `broad implications` — each *usually*, not always, wrong;
   the floor flags, you attach the inline warrant or downgrade (§1);

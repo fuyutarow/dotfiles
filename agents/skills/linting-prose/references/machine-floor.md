@@ -29,7 +29,7 @@ bunx textlint --format json path/to/doc.md   # structured findings for an agent 
 
 ## Register profiles — pick the config by the document's register (2026-07-04)
 
-The floor ships THREE JA configs; run all via `scripts/lint-floor.sh` (`LINT_PROSE_CONFIG=<path>`).
+The floor ships THREE JA configs; run all via `scripts/lint-floor.ts` (`LINT_PROSE_CONFIG=<path>`).
 The choice is not cosmetic: `preset-ja-technical-writing` sets `no-mix-dearu-desumasu` with
 `preferInBody = ですます` by DEFAULT, so the base config **false-positives EVERY である sentence** in
 a dearu-style doc (verified: a pure である体 record → 2 spurious errors; caught by a consuming repo,
@@ -109,7 +109,7 @@ as a SUGGESTION, not a blocker. It does not judge topic-sentence presence; that 
 
 Willpower is not a harness; the floor is only real when it is in the command you actually run.
 
-- Wire `scripts/lint-floor.sh` (never raw `textlint` — the wrapper refuses `--fix`) into the repo's
+- Wire `scripts/lint-floor.ts` (never raw `textlint` — the wrapper refuses `--fix`) into the repo's
   mise task / CI over rendered audience-facing files; exclude design docs, denylist ledgers, and
   orphan drafts (they legitimately contain the banned tokens). Pick the register profile per the
   SKILL.md gate table.
@@ -152,7 +152,7 @@ the implementation. Consequences for this skill:
   never run an autofix over identifiers.
 - The `prh` coinage set runs **detect-only** — it flags, the model applies the fix with the five-slot
   discipline (a human-legible replacement, not a blind swap).
-- **Mechanical enforcement (2026-07-04 review, F2):** run the floor via `scripts/lint-floor.sh`,
+- **Mechanical enforcement (2026-07-04 review, F2):** run the floor via `scripts/lint-floor.ts`,
   which REFUSES `--fix` (exit 2). textlint treats prh entries as fixable, and the house dicts'
   replacement strings are GUIDANCE TEXT — a raw `bunx textlint --fix` injects meta-instructions
   into the document (verified live: `receipt:`/`R2607_016`/`PASS` all "Fixed"). Prose cannot
@@ -252,7 +252,7 @@ allowlist + MCP --fix loop) is SUBSUMED and exceeded. Verified component by comp
 | `en-ja-translator-find-english` (their code-mixing rule) | **E404 — does not exist** (npm-verified). Replaced by the WORKING impl: `prh-codemix.yml` catch-all `/[A-Za-z…]/` + `textlint-filter-rule-allowlist` (real v4.0.0) in `textlintrc-strict.json` — proven: flags validation/deliverable, allowlists fidelity/CNOT, excludes code spans | **EXCEED** (working impl of their fake package) |
 | `textlint-filter-rule-allowlist` | wired (`textlintrc-strict.json`); `bun add -g textlint-filter-rule-allowlist` | subsumed |
 | `preset-ja-spacing` (real v3.0.2) | OPT-IN, not forced — 和欧間スペース is a per-repo orthography policy (space vs no-space); baking one in false-positives the other (the gairaigo lesson) | consciously per-repo |
-| MCP `--fix` auto-rewrite loop | `lint-floor.sh` **REFUSES `--fix`** — prh replacements are guidance text, `--fix` injects them into the doc (proven) | **EXCEED** (evidence-based safety they lack) |
+| MCP `--fix` auto-rewrite loop | `lint-floor.ts` **REFUSES `--fix`** — prh replacements are guidance text, `--fix` injects them into the doc (proven) | **EXCEED** (evidence-based safety they lack) |
 | — (they have none) | **register profiles**: base ですます / research である体 / external insider — their single config false-positives every である sentence | **EXCEED** |
 | — (they have none) | **VIBE layer**: L3 topic-sentence, L4 BLUF/スリカエ, register-export, lifecycle — no textlint config reaches these | **EXCEED** |
 | — (they have none) | **kanji-compound coinage** (機械床): `coinage-flag.py` (SudachiPy) — their config is latin-only | **EXCEED** |

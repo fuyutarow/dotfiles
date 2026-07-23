@@ -104,7 +104,7 @@ documents gained the reciprocal NOT-code pointer; Weirich attribution added.
 P0 frontmatter fails strict YAML (plain scalar with ": ") — **partially refuted** (Claude Code's
 lenient parser demonstrably loads the identical pattern — i&d fired in-session while strictly
 invalid), **but fix accepted**: the repo dual-deploys to Codex (strict PyYAML), the house floor
-script (`skill-check.sh`) demands `>-` with a 2026-07-02 incident note, and 16 house skills already
+script (`skill-check.ts`) demands `>-` with a 2026-07-02 incident note, and 16 house skills already
 use `>-`. → description converted to `>-` AND compressed ~2117→~1500 chars with the DECISIVE cut
 front-loaded; i&d converted too (same latent defect; reloaded live, verified). P1 ledger-pending →
 this entry completes it. P1 destructive git (`git checkout --` / `git checkout .`) taught in
@@ -116,6 +116,6 @@ EXPECTATIONS; characterization tests may PRECEDE the refactor as net-building. P
 on the deny-gate (3 copies, stale numbering) → architecture.md §6 declared SOLE owner; G3
 abbreviated + points; SoK marked snapshot; stale gate numbers fixed.
 
-**Floor-script + parse status at freeze**: `skill-check.sh` clean run and strict-YAML parse of all
+**Floor-script + parse status at freeze**: `skill-check.ts` clean run and strict-YAML parse of all
 three touched skills recorded in the shell log of the forge session (2026-07-05); description
 ~1500 chars (≤1500 warn threshold), `>-` folded.

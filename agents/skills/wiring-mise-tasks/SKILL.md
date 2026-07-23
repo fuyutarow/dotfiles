@@ -5,7 +5,7 @@ description: >-
   contract for every repo (setup/i, fmt/f, fmt:check, lint/l, test/t, up/u, check/c = all-gates
   aggregate; tokens resolve via `mise run` / the `m` alias) with per-language template bodies
   (Julia Runic/Pkg, Rust cargo, Python uv/ruff, TypeScript bun/biome) and a machine gate
-  (scripts/mise-contract.sh) proving the tokens resolve. MANDATORY — read before naming or adding
+  (scripts/mise-contract.ts) proving the tokens resolve. MANDATORY — read before naming or adding
   any mise task. Use when creating or editing a mise.toml, adding/naming/renaming tasks
   (<domain>:<action>, colon-only, X + X:check pairs), scaffolding a new repo's task runner,
   auditing task drift across repos, or when `mise run X` / `m up` dies with "no task found" —
@@ -29,7 +29,7 @@ description: >-
 > diff for byte-identity).
 > **Build order (atomic).** SKILL.md, the reference, 5 templates, the gate, and the ledger ship
 > in ONE commit. Verify:
-> `test -f references/recipes.md || echo MISSING recipes; for t in julia rust python typescript polyglot; do test -f templates/$t.mise.toml || echo MISSING $t; done; test -x scripts/mise-contract.sh || echo MISSING gate; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> `test -f references/recipes.md || echo MISSING recipes; for t in julia rust python typescript polyglot; do test -f templates/$t.mise.toml || echo MISSING $t; done; test -f scripts/mise-contract.ts || echo MISSING gate; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
 
 ## Language & stable tokens
 
@@ -43,7 +43,7 @@ Japanese), and corpus artifacts quoted as evidence (mise.toml header comments st
 
 > The verb contract is repo-invariant; only the bodies vary by language. Every muscle-memory
 > token resolves via `mise run <token>` in every repo — an unresolved token is drift, and drift
-> is caught by the gate (`scripts/mise-contract.sh`), never by memory. Grammar and contract are
+> is caught by the gate (`scripts/mise-contract.ts`), never by memory. Grammar and contract are
 > argued ONLY in this file; templates and repo mise.tomls are VIEWS — change the rule here and in
 > the gate, then propagate, never the reverse.
 
@@ -108,7 +108,7 @@ TeX: leaf tasks (`latex:*`) are owned by `compiling-latex`; the repo-level `chec
 - **Scaffold**: copy the nearest `templates/<lang>.mise.toml` (or `polyglot`), adapt bodies, keep
   verbs + aliases.
 - **Verify — after EVERY mise.toml edit**:
-  `sh ${CLAUDE_SKILL_DIR}/scripts/mise-contract.sh [repo-dir ...]`
+  `bun ${CLAUDE_SKILL_DIR}/scripts/mise-contract.ts [repo-dir ...]`
   Exit 0 = contract holds (WARNs allowed) · 1 = HARD violation · 2 = environment error. The gate
   is resolution-based by design — do NOT rewrite it as mise.toml regex parsing (rejected
   precedent; evidence in the ledger).
@@ -174,5 +174,5 @@ MUST NOT fire (route):
 |---|---|---|
 | `references/recipes.md` | per-cell provenance grades, the lint-tier / test-blocked / clippy-location / biome-config rulings, polyglot composition, known corpus deviations, dated tool versions | before deviating from a matrix cell; before an audit; any "why this body?" question |
 | `templates/*.mise.toml` | copy-out scaffolds (julia, rust, python, typescript, polyglot) — views of this contract | scaffolding a repo |
-| `scripts/mise-contract.sh` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
+| `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

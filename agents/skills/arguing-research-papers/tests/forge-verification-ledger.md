@@ -31,7 +31,7 @@ and the dated forge log with its adversarial-verification results.
   results & citations, never invent them; every agent return keys on a checkable locus; agent
   agreement is not evidence, refutation is. The claim + its calibration + the reconciliation are SOLO;
   red-team and fact-check fan out read-only.
-- **Floor script** `scripts/claim-check.sh` checks the CLAIM SPEC structurally (the G0 in-hand line +
+- **Floor script** `scripts/claim-check.ts` checks the CLAIM SPEC structurally (the G0 in-hand line +
   G1/G2/G3 slots filled — scope REQUIRED, wholly-bracket placeholders FAIL everywhere except the G2
   anchor — positioning not bare/template, deny-list scan; slot capture is bullet-label-anchored).
   It is NOT semantic — meaning is judged by the model against the gates. `[VERIFY]`/`[VALUE]`
@@ -70,13 +70,13 @@ fill) and the architecture were done SOLO.
   paper's whole rhetorical construction (intro funnel, abstract genre, positioning, review-survival),
   which "claims" undersells.
 - F1 operationality is carried by the **CLAIM SPEC** artifact + G1/G2/G3 gates + the
-  `claim-check.sh` floor (mirrors `forging-novel-theses`' Phase-4 template + `gate-check.sh`), so the
+  `claim-check.ts` floor (mirrors `forging-novel-theses`' Phase-4 template + `gate-check.ts`), so the
   skill is a decision-procedure-with-a-checkable-artifact, not a tip list.
 - Book/oral sources predominate → lineage line, not a version-pinned durability contract; the only
   dated snapshot is the venue-fact block (`genre-playbooks.md` §1), re-verified per reforge.
 
-**Verification at forge.** Floor: build-order one-liner + `forging-skills/scripts/skill-check.sh`
-(exit 0) + `claim-check.sh` fire-test (unfilled spec → 5 FAILs; bare-positioning spec → G3 FAIL +
+**Verification at forge.** Floor: build-order one-liner + `forging-skills/scripts/skill-check.ts`
+(exit 0) + `claim-check.ts` fire-test (unfilled spec → 5 FAILs; bare-positioning spec → G3 FAIL +
 fabrication WARN; well-formed spec → exit 0 — the gate is proven to fire red and pass green).
 Adversarial **7-lens fleet** (self-contradiction · one-home/architecture · sibling-cuts read against
 the SIBLINGS' actual text · bloat/operationality · trigger desk-check · comparative-judge · source-
@@ -100,7 +100,7 @@ Every finding verified against source (cited line reproduced, or the bug re-run)
 
 | Finding | Verdict | Resolution |
 |---|---|---|
-| **P1** `claim-check.sh` treats `[VERIFY]`/`[CITATION NEEDED]` as filled → placeholder-only spec passed `FAIL=0` | **ACCEPT** (reproduced) | `ph()` = `is_placeholder` OR wholly-`[…]`-bracket, applied to G1 / instability / scope / G3-prior / G3-objection; the **G2 anchor stays exempt** (its bracket IS the sanctioned anti-fabrication deferral, SKILL.md §G2). Re-tested: placeholder-only → `FAIL=5`, well-formed → PASS, `[VERIFY]` anchor → PASS |
+| **P1** `claim-check.ts` treats `[VERIFY]`/`[CITATION NEEDED]` as filled → placeholder-only spec passed `FAIL=0` | **ACCEPT** (reproduced) | `ph()` = `is_placeholder` OR wholly-`[…]`-bracket, applied to G1 / instability / scope / G3-prior / G3-objection; the **G2 anchor stays exempt** (its bracket IS the sanctioned anti-fabrication deferral, SKILL.md §G2). Re-tested: placeholder-only → `FAIL=5`, well-formed → PASS, `[VERIFY]` anchor → PASS |
 | **P1** scope-missing = WARN, but §G2 lists scope as a **required** artifact | **ACCEPT** | G2 scope missing/placeholder → **FAIL** (was WARN). Re-tested: no-scope spec → `FAIL=1` |
 | **P0** reviewer-defense §3 "Fatal-if-true → don't raise unprompted" reads as hide-and-ship | **ACCEPT** (sharpest) | Reworded: resolve OR **rescope** the claim; an unresolved-and-real fatal-if-true = **not ready / submission block**, never "ship silently" — bound to the record-completeness LAW. Kept the legitimate "don't volunteer a speculative, non-certain kill-shot" kernel |
 | **P1** no G0 materials audit (model can argue from a user summary) | **ACCEPT** | Added **G0 — materials audit** as build-step 0 + a CLAIM SPEC section: list results / priors / venue in hand; each missing item → placeholder, never a confident assertion. Scoped OUT of the fast-path |
@@ -109,14 +109,14 @@ Every finding verified against source (cited line reproduced, or the bug re-run)
 | **P2** ledger claims "7-lens fleet / 35 findings" but detail not in-dir | **PARTIAL** | The ledger DID carry counts + key-fixes + rejected/deferred (so not "no findings body"), but the **4 diagnostic asks + per-lens findings were NOT persisted** — a real auditability gap. Per this skill's OWN anti-fabrication rule I do **not** reconstruct them post-hoc (an invented verification record is exactly what the skill forbids). **Forward rule adopted**: persist the diagnostic asks + a per-lens one-line findings summary at forge time |
 | **P2** SOLO too strong | **MOSTLY REBUT** | The execution model already fans out red-team + fact-check and reserves SOLO for synthesis; added a one-clause clarifier that calibration **consumes** the fan-out (domain evidence feeds IN; only the final signature is SOLO) — no restructure needed |
 
-**Floor after fixes**: `claim-check.sh` shell-syntax OK + fire-test green (placeholder-only → `FAIL=5`;
-no-scope → `FAIL=1`; well-formed incl. anchor-deferral → PASS). `skill-check.sh` + build-order
+**Floor after fixes**: `claim-check.ts` shell-syntax OK + fire-test green (placeholder-only → `FAIL=5`;
+no-scope → `FAIL=1`; well-formed incl. anchor-deferral → PASS). `skill-check.ts` + build-order
 one-liner re-run clean post-edit.
 
 ## 2026-07-08 same-day revise round 2 — G0 floor-wiring + adversarial re-verify
 
 **Solo pre-pass** (drift the round-1 fixes themselves created): G0 wired into the floor
-(`claim-check.sh`: `In hand` line missing/placeholder → FAIL; header comment updated to G0–G3 + the
+(`claim-check.ts`: `In hand` line missing/placeholder → FAIL; header comment updated to G0–G3 + the
 anchor-only bracket exemption); SKILL.md floor-description sentence updated to match (G0 in the
 checked list, anchor-exemption named); gates-intro note added — G0 is the **input precondition**, not
 a fourth rhetoric gate (the "three gates" framing stays). Floor regression: G0-filled → PASS ·
@@ -181,7 +181,7 @@ description true.
 
 **Post-fix regression (all green):** fuzz p01–p12 all at expected outcomes (3 false PASSes now FAIL,
 4 false FAILs now PASS, baselines unchanged, p01 WARN-noise gone); raw template → FAIL rows incl. G0 +
-scope; `sh -n` clean; `skill-check.sh` clean; build-order one-liner empty.
+scope; `bun build --no-bundle scripts/claim-check.ts` clean; `skill-check.ts` clean; build-order one-liner empty.
 
 **Consciously narrowed (2):** fuzz-F8 multiline support — documented as a contract instead of parsing
 continuations (parser stays one-pass simple); consistency-F7 G0 sub-bullet decomposition — same
@@ -189,14 +189,14 @@ resolution (ONE-line contract stated at the spec intro), template unchanged.
 
 ## 2026-07-11 external review #2 (Codex) — adjudication & fix cycle
 
-**Codex verdict: do-not-ship** (2 blockers + 2 major + 1 minor, `scripts/claim-check.sh` blockers named
+**Codex verdict: do-not-ship** (2 blockers + 2 major + 1 minor, `scripts/claim-check.ts` blockers named
 explicitly). Every finding re-verified against the script/source before ruling, per this ledger's own
 adjudication discipline.
 
 | # | Severity | Verdict | Resolution |
 |---|---|---|---|
-| **1** | blocker | **ACCEPT** | `claim-check.sh` false-FAILed the canonical positioning form `Unlike ResNet, which requires labels, we remove them.` — fixed by **S1**; landed with 6 red/green fixtures (incl. gawk `--posix` + mawk portability) |
-| **2** | blocker | **ACCEPT** | `claim-check.sh` false-PASSed the bare deny-list dodge `Existing Methods fail; our approach wins.` — fixed by **S1**, same fixture suite, now correctly FAILs (exit 1) |
+| **1** | blocker | **ACCEPT** | `claim-check.ts` false-FAILed the canonical positioning form `Unlike ResNet, which requires labels, we remove them.` — fixed by **S1**; landed with 6 red/green fixtures (incl. gawk `--posix` + mawk portability) |
+| **2** | blocker | **ACCEPT** | `claim-check.ts` false-PASSed the bare deny-list dodge `Existing Methods fail; our approach wins.` — fixed by **S1**, same fixture suite, now correctly FAILs (exit 1) |
 | **3** | major | **ACCEPT** | zone-split over-rigid — recast by **S2** to the 4-invariant record-zone form (completeness / uncertainty / hypothesis timing / claim's reach — "austerity-of-persuasion, not austerity-of-navigation"), landed in `references/reconciliation.md` |
 | **4** | major | **ACCEPT** | linting-prose reciprocal cut, previously deferred debt — **LANDED** by **S3**: `linting-prose`'s "claim calibration" trigger narrowed to "sentence-level claim calibration"; its Not-for gained "argument/contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"; description trimmed ≈1674→≈1473 chars (see CURRENT STATE bullet above) |
 | **5** | minor | **ACCEPT** | C-C-C (L3) / 事実と意見 (L4) re-owning linting-prose territory — resolved by **S2**'s LP-execution pointers alongside the zone-split recast: this skill retains argument-level claim/positioning, linting-prose keeps sentence-level execution |
@@ -206,6 +206,6 @@ sound (Swales / Toulmin / C-C-C / Boutron / Bordage — and, shared with the dir
 Lakatos / Chamberlin / Platt / Goodhart / Kapoor-Narayanan, all with primary links).
 
 Fix execution was delegated to Sonnet-5 agents (S1–S3, disjoint file ownership: S1 →
-`scripts/claim-check.sh`; S2 → `references/reconciliation.md` + `tests/triggers.md` LP-execution
-pointers; S3 → `linting-prose/SKILL.md`) under Fable-5 direction, with floor (`claim-check.sh`)
+`scripts/claim-check.ts`; S2 → `references/reconciliation.md` + `tests/triggers.md` LP-execution
+pointers; S3 → `linting-prose/SKILL.md`) under Fable-5 direction, with floor (`claim-check.ts`)
 verification green after fixes.

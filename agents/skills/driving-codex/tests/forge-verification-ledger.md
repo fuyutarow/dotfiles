@@ -37,12 +37,12 @@
 
 ## Results — floor (run 2026-07-12)
 
-- `skill-check.sh driving-codex` (post-fix): **PASS** — no FAIL, no WARN (pre-fix run WARNed
+- `skill-check.ts driving-codex` (post-fix): **PASS** — no FAIL, no WARN (pre-fix run WARNed
   `description 1502 chars > 1500`; fixed by dropping a weak katakana doublet).
 - Strict YAML parse (`uv run --with pyyaml`): **PASS** — `name= driving-codex`, description is a
   single folded string, 1494 chars.
 - Build-order one-liner from the skill dir: **PASS** (`build-order OK`).
-- `scripts/probe-models.sh` seen GREEN and RED in one run (verbatim):
+- `scripts/probe-models.ts` seen GREEN and RED in one run (verbatim):
 
 ```
 RESULT: AVAILABLE gpt-5.6-luna (9,093 tokens)
@@ -111,9 +111,9 @@ final re-run).
 
 ## Post-fix verification (v2607.1.0 state)
 
-- `skill-check.sh`: PASS, 0 FAIL 0 WARN.
+- `skill-check.ts`: PASS, 0 FAIL 0 WARN.
 - Strict YAML parse: PASS.
-- `bash -n scripts/probe-models.sh`: PASS.
+- `bun build --no-bundle scripts/probe-models.ts`: PASS.
 - Deployed via `mise run link:skills`; symlink `~/.claude/skills/driving-codex` verified; the
   description subsequently appeared in a live session's skill listing (end-to-end smoke test).
 
@@ -156,8 +156,8 @@ its verdicts stand.
 | F5 | LAW ("400 proves THAT STRING is not served") vs C1 ("NO verdict") readable as contradictory | FIXED — C1 now says "a verdict about the STRING, not the model" |
 | F6 | ledger R1 fix-cell omitted the rewritten Gotchas 400-row, making the row count unverifiable | FIXED — R1 cell corrected |
 
-Post-fix floor (v2607.1.1 final): `skill-check.sh` PASS 0 FAIL 0 WARN; strict YAML parse PASS
-(description unchanged, 1494 chars); `bash -n probe-models.sh` PASS; description confirmed live
+Post-fix floor (v2607.1.1 final): `skill-check.ts` PASS 0 FAIL 0 WARN; strict YAML parse PASS
+(description unchanged, 1494 chars); `bun build --no-bundle probe-models.ts` PASS; description confirmed live
 in a session's skill listing (smoke test, 2026-07-12).
 
 ## Revision v2607.1.2 — user-directed: sonnet baseline arm + cost-by-measurement (2026-07-12)
@@ -193,8 +193,8 @@ swap removes no load-bearing keyword (q6 still fires on "codex spend"/"ccusage")
 pricing FACTS (its SKIP yields when codex/GPT is the working provider), `operating-the-harness`
 unaffected. Verdict: GREEN.
 
-Post-revision floor (v2607.1.2 final, run 2026-07-12): `skill-check.sh` PASS 0 FAIL 0 WARN;
-strict YAML parse PASS (description 1498 chars ≤ 1500); `bash -n probe-models.sh` PASS; the
+Post-revision floor (v2607.1.2 final, run 2026-07-12): `skill-check.ts` PASS 0 FAIL 0 WARN;
+strict YAML parse PASS (description 1498 chars ≤ 1500); `bun build --no-bundle probe-models.ts` PASS; the
 revised description confirmed live in a session's skill listing (smoke test).
 
 ## 2026-07-22 深夜: LONG-RUN 法の追加実測(2件成功)

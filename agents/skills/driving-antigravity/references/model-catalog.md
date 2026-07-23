@@ -1,7 +1,7 @@
 # Model catalog & fast-moving facts — verified 2026-07-14, re-probed 2026-07-23
 
 > Everything in this file rots. Each claim carries its provenance grade (§ bottom); on reforge,
-> re-run `scripts/probe-models.sh` and re-fetch official docs instead of trusting this snapshot.
+> re-run `bun scripts/probe-models.ts` and re-fetch official docs instead of trusting this snapshot.
 > The durable rules (NO-METER, UNCONFINED, CATALOG-BY-PROBE, VERSION-DRIFTS) live in SKILL.md —
 > this file holds only the perishable facts. Binary: agy v1.1.5 as of 2026-07-23 (was v1.1.2;
 > self-updated in place again — see VERSION-DRIFT below; do not trust `agy --version` from a stale

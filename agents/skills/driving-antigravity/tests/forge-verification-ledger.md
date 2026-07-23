@@ -11,7 +11,7 @@
 | agy audit fleet — 4 sonnet lenses (`agy-surface`, `agy-docs`, `agy-probes`, `agy-accounting`; all `model: claude-sonnet-5`), 138 tool calls, 323,882 tokens, run 2026-07-14 on this host (agy v1.1.2) | live SESSION — highest grade | author-confirmed; verbatim outputs quoted in the PROBE LOG below (durable copies: `references/model-catalog.md`); raw file: `wtyddisgk.output` |
 | gemini-cli harvest fleet — 2 sonnet lenses (host surface + official docs), run 2026-07-14 | live SESSION | used ONLY for the CONSIDERED-AND-DROPPED note below; raw file: `w5y33i8y0.output` |
 | Director Opus 4.8 — SOLO spec authorship: THE LAW, gates A1–A5, MUST-NOT-FIRE, routing cuts, FINAL description | signed spec, 2026-07-14 | author-confirmed — this ledger and its siblings were drafted FROM the spec, not the reverse |
-| Drafting — sonnet fleet (this file + SKILL.md + references/model-catalog.md + scripts/probe-models.sh), same session | live SESSION | mechanical transcription of the spec + PROBE LOG; no new claims introduced |
+| Drafting — sonnet fleet (this file + SKILL.md + references/model-catalog.md + scripts/probe-models.ts), same session | live SESSION | mechanical transcription of the spec + PROBE LOG; no new claims introduced |
 | Cross-vendor verify — Terra (`gpt-5.6-terra` via codex) + sonnet refuters | VERIFY PHASE | **not yet run at draft time** — see the placeholder section at the bottom |
 | Workflow/agent() mechanics, `{model:'sonnet'}` hook policy | repo CLAUDE.md + user-global CLAUDE.md | author-confirmed (read this forge) |
 
@@ -210,7 +210,7 @@ in **v2607.1.1**; every load-bearing finding resolved and re-verified:
 | **A3 false containment** — "safe from any cwd" / worktree-as-containment, but agy writes under `$HOME` regardless (Terra BLOCKER + contradiction) | A3 rewritten: cwd is NOT a security boundary; TEXT-RETURN is default-safe (no secrets in env); untrusted/FILE-MUTATING needs a container/disposable identity — a worktree is explicitly NOT sufficient |
 | **Version floor too low** — LAW pinned ≥1.1.1 but A1's free-fast-fail needs 1.1.2 (Terra + contradiction) | Floor raised to **≥ 1.1.2** in THE LAW, A1, recipe, gotchas, and the probe script (with the 1.1.1-vs-1.1.2 split explained) |
 | **Durability-contract self-violation** — body hardcoded exact display strings (architecture + agy-dogfood) | Contract reworded to scope prose; all in-body examples now use PLACEHOLDERS (`<exact string from agy models>`) |
-| **probe-models.sh false-AVAILABLE** — any rc=0 passed; all nonzero → UNAVAILABLE (Terra) | Rewritten TRI-STATE: AVAILABLE only rc=0 + exact `OK`; INVALID_NAME for the client-side error; INCONCLUSIVE otherwise; version gate + `agy models` failure propagation. Re-verified live: real→AVAILABLE, bogus→INVALID_NAME |
+| **probe-models.ts false-AVAILABLE** — any rc=0 passed; all nonzero → UNAVAILABLE (Terra) | Rewritten TRI-STATE: AVAILABLE only rc=0 + exact `OK`; INVALID_NAME for the client-side error; INCONCLUSIVE otherwise; version gate + `agy models` failure propagation. Re-verified live: real→AVAILABLE, bogus→INVALID_NAME |
 | **A5 promised a worked example that didn't exist** (contradiction) | Claim removed; A5 now states call-count is a circuit-breaker not a budget |
 | **"cheapest cross-model panel"** undercut by NO-METER (contradiction + Terra) | Reworded to "one sub, N vendors" (no spend claim) |
 | **Build-order command always exits 0** (architecture) | Rewritten `&&`-chained → prints `OK`/`INCOMPLETE` |
@@ -219,6 +219,6 @@ in **v2607.1.1**; every load-bearing finding resolved and re-verified:
 | **Enrichment overclaims** — #36 load-307 anecdote, ccusage#732 misattribution, "official" July statement, #45/#36 date (enrichment fact-check) | All softened/reattributed in model-catalog.md; #45/#36/#76 dates split and re-graded; #76 + the two deprecation dates upgraded to EDITOR-VERIFIED |
 
 **Post-fix re-verification (2026-07-14):** description 1,495 chars (≤1500); build-order → `OK`;
-`bash -n` clean; probe tri-state validated live; `forging-skills/scripts/skill-check.sh` → EXIT 0.
+`bun build --no-bundle scripts/probe-models.ts` clean; probe tri-state validated live; `forging-skills/scripts/skill-check.ts` → EXIT 0.
 Residual accepted-as-is (minor/nit, non-blocking): UNCONFINED is n=1 (hedged in-text); parallel
 safety proven only at N=2 (hedged); `</dev/null` mechanism note (added). Ship-ready.

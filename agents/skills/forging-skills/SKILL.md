@@ -31,7 +31,7 @@ description: >-
 > skill-creator defaults + the platform.claude.com / agentskills.io docs (Fable 5, 2026-07).
 > **Build order (atomic).** This SKILL.md, its **5 reference targets**, and the floor script ship
 > in ONE commit — no index pointer may dangle. Verify:
-> `for f in distilling architecture triggering execution-models verifying; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/skill-check.sh || echo MISSING skill-check.sh; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> `for f in distilling architecture triggering execution-models verifying; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/skill-check.ts || echo MISSING skill-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
 
 ## Language & stable tokens
 
@@ -155,4 +155,4 @@ encodes two thresholds — its seam comments name the owning homes).
 | `references/architecture.md` | Progressive disclosure as a design act, ONE-HOME-per-concept + SOLE-owner declarations (§2), atomic build order (§3), durability contracts + version headers (§4), floor scripts vs semantic gates (§5), language architecture (§6), anti-patterns | step 3; adding or splitting a file; any fact that could live in two places |
 | `references/triggering.md` | The triggering LAW, naming discipline, the house 8-part description anatomy (what+when, Japanese doublets, cuts-in-description, Workflow-native clause, language directive), winning the match vs incumbents (§4), fire/no-fire test sets — gate F3 (§5), the defaults' trigger-eval machinery (§6), anti-patterns | step 4; any description edit; a trigger collision or misfire |
 | `references/execution-models.md` | Typing the target's EVIDENCE → its epistemics delta (Step A), the seven components every workflow-native model carries (Step B), treatment tier — where the model lives (Step C), lens conversion + the worker side, anti-patterns | step 5; writing any Workflow-native clause; deciding solo-vs-fleet for a target skill |
-| `references/verifying.md` | The two objects to verify (§0), the 鍛錬 meta-workflow audit→spec→forge→verify→fix (§1), the verification fleet — one lens per failure class (§2), forward-testing anti-leak + baseline (§3), live eval machinery pointers (§4), the mechanical floor `scripts/skill-check.sh` (§5), ship & maintain — `mise run link:skills`, staleness triggers, reforge-vs-create (§6), scale calibration (§7) | steps 0, 6–7; before any commit; "is this skill stale?" |
+| `references/verifying.md` | The two objects to verify (§0), the 鍛錬 meta-workflow audit→spec→forge→verify→fix (§1), the verification fleet — one lens per failure class (§2), forward-testing anti-leak + baseline (§3), live eval machinery pointers (§4), the mechanical floor `scripts/skill-check.ts` (§5), ship & maintain — `mise run link:skills`, staleness triggers, reforge-vs-create (§6), scale calibration (§7) | steps 0, 6–7; before any commit; "is this skill stale?" |

@@ -40,7 +40,7 @@ references:
 > Full critique + intellectual lineage → `references/lineage.md` (don't recite it; execute the phases).
 >
 > **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
-> `for f in generation-engine control-loop boundaries lineage source-map case-ledger; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/gate-check.sh || echo MISSING gate-check.sh`
+> `for f in generation-engine control-loop boundaries lineage source-map case-ledger; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/gate-check.ts || echo MISSING gate-check.ts`
 > (must print nothing).
 
 ## 運用契約 (When invoked) — 毎回この順で回す
@@ -56,7 +56,7 @@ references:
    引けなければ **「要検証／推定」と明示**。捏造は artifact を空洞化する。
 4. **Phase 3 制御ループ**で G3（kill-experiment + 閾値つき kill-signal）と 3b/3c/3d を埋める。**どれかのゲート／
    副ゲートが落ちたら thesis を磨かず、どのゲートが落ちたかを名指し**し弱点として晒す。
-5. **Phase 4 template** を埋め、`scripts/gate-check.sh <出力.md>` で floor-check。FAIL 欄は「未回答」扱い。
+5. **Phase 4 template** を埋め、`bun scripts/gate-check.ts <出力.md>` で floor-check。FAIL 欄は「未回答」扱い。
 6. **次の『最も安い 1 手』を 1 つ**出す（律速＝生成 or 生存 のどちらかを名指し、それを崩す最安の一撃）。
 
 ## CORE — read every time (precedence-setting)
@@ -104,7 +104,7 @@ Phase 1  GENERATE  1a 分解 → 箱B(G1)  ×  1b 転移(G2) → 1c 再結合 �
 Phase 2  PROJECT   2a 未来外挿 → beachhead   2b ナラティブ (説得 / 知覚変容 を明示)
 Phase 3  CONTROL   3a 反証(G3) · 3b why-now · 3c 資本適合 · 3d 撤退  ── 全体を包む反復ループ
                      ↑ 実装で現実接触 → 新観測 → Phase 1 へ
-Phase 4  OUTPUT    template を埋め、scripts/gate-check.sh で検査。空欄は「未回答」と明記し弱点と述べる
+Phase 4  OUTPUT    template を埋め、scripts/gate-check.ts で検査。空欄は「未回答」と明記し弱点と述べる
 ```
 
 ## Phase 1 — 生成エンジン (訓練可能な核) → `references/generation-engine.md`
@@ -183,7 +183,7 @@ owner — Phase 3 はその *venture 特化版*。一般則が要るときはそ
 - 律速はどちらか、次の 1 手: [...]
 ```
 
-▶ **機械検査**：埋めたら `scripts/gate-check.sh <出力.md>` を実行。G1 (箱B≥1)・G2 (新予測あり)・G3 (kill-signal
+▶ **機械検査**：埋めたら `bun scripts/gate-check.ts <出力.md>` を実行。G1 (箱B≥1)・G2 (新予測あり)・G3 (kill-signal
 に閾値)・3d (撤退に閾値) の *構造* が揃うかを見る **floor check**（意味は検証しない。語彙だけ纏った空欄・作文を
 弾く最低限の関門）。FAIL が出た欄は「未回答」扱いで、Phase 3 通過条件に照らす。
 
@@ -223,4 +223,4 @@ in-skill anti-patterns (箱B 未達・表層転移・反証不能・後付け検
 | `references/lineage.md` | 着想系書籍の 2 欠陥の詳論・名指しソースの役割・6 機能への収束・**隣接理論との差分 (Lean/TRIZ/Effectuation/Design Fiction/Gentner/DDP)** | 「なぜこの構造か / なぜ既存理論で代替不能か」を説明するとき (実行には不要) |
 | `references/source-map.md` | 原典『天才思考』10 章題 → 6 機能 → 本スキルの Phase/ゲート/除外 への写像 (章題は一次資料で検証済) | 原典のどの思考法がどこへ変換されたかを示すとき |
 | `references/case-ledger.md` | 成功 4 + 失敗 6 例。各失敗を「最初に落ちるゲート」に 1 対 1 で紐付け、ゲート集合が MECE な判別器であることを実証 | thesis を実例と突き合わせる / 判別器として使う |
-| `scripts/gate-check.sh` | 埋めた出力を G1/G2/G3/3d の構造有無で floor-check する validator | Phase 4 出力を機械検査する |
+| `scripts/gate-check.ts` | 埋めた出力を G1/G2/G3/3d の構造有無で floor-check する validator | Phase 4 出力を機械検査する |

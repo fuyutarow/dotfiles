@@ -1,6 +1,6 @@
 # Model catalog & fast-moving facts — verified 2026-07-15
 
-> Everything in this file rots; re-run `scripts/probe-models.sh` and re-fetch docs.x.ai on
+> Everything in this file rots; re-run `bun scripts/probe-models.ts` and re-fetch docs.x.ai on
 > reforge. The durable rules (CATALOG-BY-PROBE, EXFIL-RISK, METERED, PLAN-IS-NOT-READONLY) live
 > in SKILL.md — this file holds only the perishable facts, each carrying a provenance grade.
 

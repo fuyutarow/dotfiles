@@ -66,7 +66,7 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
   extension — the key is absent from the official allowed set, so `quick_validate.py` flags it as
   an error. Treat that one failure as expected on those two skills, or omit the key entirely
   (this skill omits it). The canonical dangling-pointer checks are the build-order one-liner
-  above plus `scripts/skill-check.sh` — never the frontmatter list.
+  above plus `scripts/skill-check.ts` — never the frontmatter list.
 
 ## 4. Durability contracts — quarantine what rots
 
@@ -85,7 +85,7 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
 
 - Anything greppable gets a `scripts/` floor check that runs **FIRST**, before any semantic audit,
   and declares "THIS IS NOT A SEMANTIC CHECK" in its own header — stating what it cannot catch
-  (precedents: forging-novel-theses `gate-check.sh`; this skill's `scripts/skill-check.sh`). The
+  (precedents: forging-novel-theses `gate-check.ts`; this skill's `scripts/skill-check.ts`). The
   script owns the floor, judgment owns the ceiling, and the skill states the boundary between them.
 - **Never spawn an agent to run a regex** — script-over-agent is precedence
   (`linting-prose`); agents add noise, not coverage.

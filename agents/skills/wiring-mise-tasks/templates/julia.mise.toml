@@ -1,6 +1,6 @@
 # <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
 # wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
-# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
 [tasks.setup]
 alias = "i"
@@ -56,4 +56,4 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"

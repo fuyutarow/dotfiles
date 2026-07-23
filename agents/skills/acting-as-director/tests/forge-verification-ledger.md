@@ -55,7 +55,7 @@ Reforge: 2026-07-22. 旧名 `pacing-research-production` からの鍛え直し�
 
 ## 床検査
 
-skill-check.sh: PASS(name=dir 一致、YAML 厳密解析 OK、説明文 492 字)。
+skill-check.ts: PASS(name=dir 一致、YAML 厳密解析 OK、説明文 492 字)。
 発火の卓上試験: 既存 10 問+新 5 問すべて期待どおり(卓上試験の記録は F3 節)。既知の
 共発火: 「定理・文書を起草・査読させて」は `proving-theorems` と競合し得る(委任の運転=
 ここ、数学の中身=あちら)。

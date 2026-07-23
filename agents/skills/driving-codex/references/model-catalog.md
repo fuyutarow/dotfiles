@@ -1,7 +1,7 @@
 # Model catalog & fast-moving facts — verified 2026-07-12
 
 > Everything in this file rots. Each claim carries its provenance grade (§ bottom); on reforge,
-> re-run `scripts/probe-models.sh` and re-fetch official docs instead of trusting this snapshot.
+> re-run `bun scripts/probe-models.ts` and re-fetch official docs instead of trusting this snapshot.
 > The durable rules (CATALOG-BY-PROBE, LEAST-PRIVILEGE, RELAY-VERBATIM) live in SKILL.md — this
 > file holds only the perishable facts.
 

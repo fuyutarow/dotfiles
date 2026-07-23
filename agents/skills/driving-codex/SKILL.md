@@ -36,7 +36,7 @@ description: >-
 > exemptions, both dated bait re-verified on reforge (recorded in the ledger): the description's
 > trigger tokens, and the F3 table's quoted example asks (realistic queries need real names).
 > **Build order (atomic)**: `test -f references/model-catalog.md || echo MISSING catalog;
-> test -x scripts/probe-models.sh || echo MISSING probe;
+> test -f scripts/probe-models.ts || echo MISSING probe;
 > test -f tests/forge-verification-ledger.md || echo MISSING ledger`
 > Durable operating guidance from a frontier model (Fable 5, 2026-07) to whatever model executes
 > this later — encodes failures observed in production. If a constraint here feels unnecessary,
@@ -67,7 +67,7 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 
 | Gate | Rule | Artifact |
 |---|---|---|
-| **C1 PROBE** | Before any claim that a model is / is not available: resolve the EXACT model ID (`references/model-catalog.md`, else official docs), run the probe, cite its RESULT line. ASYMMETRY — AVAILABLE is proof; UNAVAILABLE-400 is ambiguous (a short/typo'd name of a real model 400s byte-identically to a nonexistent or unrolled one; probe-verified). A negative probe on an unverified ID is a verdict about the STRING, not the model — no availability verdict | output of `bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh <exact-id>...` + where the ID came from |
+| **C1 PROBE** | Before any claim that a model is / is not available: resolve the EXACT model ID (`references/model-catalog.md`, else official docs), run the probe, cite its RESULT line. ASYMMETRY — AVAILABLE is proof; UNAVAILABLE-400 is ambiguous (a short/typo'd name of a real model 400s byte-identically to a nonexistent or unrolled one; probe-verified). A negative probe on an unverified ID is a verdict about the STRING, not the model — no availability verdict | output of `bun ${CLAUDE_SKILL_DIR}/scripts/probe-models.ts <exact-id>...` + where the ID came from |
 | **C2 FLAGS** | Every embedded call passes `-m`, `-c 'model_reasoning_effort=...'`, and `--sandbox` explicitly — a bare `codex exec` silently inherits `~/.codex/config.toml` defaults (model, effort) and the directory's trust level (sandbox) | the flag triplet greppable in the call |
 | **C3 RELAY** | A worker that ran codex relays VERBATIM: exit code, the `tokens used` line, and the last agent message — "codex said PASS" without the observables is zero evidence | the verbatim triple in the worker's return |
 | **C4 SELECT** | Availability is not rank: before promoting a model to a standing role (default auditor, standard reviewer), run one measured head-to-head on the actual task — INCLUDING the house baseline arm (a sonnet worker) — and cite it | the comparison (verdicts + tokens + wall time, quota drain via ccusage both sides) in the promotion decision |
@@ -76,7 +76,7 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 
 Step 0, before any call (C1): resolve the EXACT model ID from `references/model-catalog.md`
 (or official docs when the catalog is stale). For availability checks, run
-`bash ${CLAUDE_SKILL_DIR}/scripts/probe-models.sh <exact-id>...` — never hand-roll a probe:
+`bun ${CLAUDE_SKILL_DIR}/scripts/probe-models.ts <exact-id>...` — never hand-roll a probe:
 the script owns the safe exit-code capture and the 400-ambiguity note.
 
 ```bash
@@ -219,6 +219,7 @@ MUST NOT fire (route):
 | 「subagent を全部 sonnet に固定する hook を書いて」 | `operating-the-harness` + update-config |
 | "OpenAI API function calling の書き方" | no codex CLI involved — model-native (prompting-llms names an `openai-docs` owner; nonexistent as of 2026-07-12) |
 | "which Claude model should I use, and pricing?" | `claude-api` |
+| the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
 | 「プロンプトを改善して」 | `prompting-llms` |
 | the `grok`/Grok Build subprocess (xAI, EXFIL-RISK) or the `agy`/Antigravity subprocess | `driving-grok` / `driving-antigravity` — decide by which binary you invoke |
 | "what is Codex?" | trivial — no skill |
@@ -232,6 +233,7 @@ wiring FIRST; this skill supplies the codex invocation line.
 |---|---|
 | `driving-antigravity` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (per-call metering + a real `--sandbox read-only`, single-vendor GPT) → here; `agy`/Antigravity (NO-METER, UNCONFINED, MULTI-VENDOR Gemini/Claude/GPT-OSS) → `driving-antigravity`. Both embed a headless CLI as a worker; pick by which binary. |
 | `driving-grok` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT) → here; `grok -p` (xAI Grok Build — metered + sandboxed like codex, but carries an EXFIL-RISK data-leak law) → `driving-grok`. |
+| `driving-claude` | CARDINALITY/PURPOSE — which BINARY: `codex exec` (OpenAI GPT) → here; `claude -p` driven by Codex (Claude Code) → Codex-only `driving-claude`. |
 | `operating-the-harness` | PURPOSE — which binary is being configured: `claude` (hooks, settings, Workflow tool semantics, subagent policy) → there; the `codex` subprocess → here. Reciprocal pointer deferred — recorded in the ledger. |
 | `prompting-llms` | PURPOSE — prompt WORDING → there; codex CLI mechanics → here. Its OpenAI cut names `openai-docs` (nonexistent, 2026-07-12); until that exists, OpenAI prompt craft is model-native, never this skill's excuse to fire. |
 | `claude-api` | Anthropic API / Claude model facts → there; its own SKIP clause already routes OpenAI-named work away from itself. |
@@ -242,5 +244,5 @@ wiring FIRST; this skill supplies the codex invocation line.
 | File | Covers | Read when |
 |---|---|---|
 | `references/model-catalog.md` | DATED snapshot: probe-verified account catalog, CLI version floor, cache-refresh behavior, config defaults, per-call token overhead, error strings, cost model + cross-vendor baseline bench (C4 worked example), provenance grades | any model-name, availability, cost, or 使い分け question |
-| `scripts/probe-models.sh` | deterministic availability probe (floor — NOT semantic) | C1 gate — before asserting availability |
+| `scripts/probe-models.ts` | deterministic availability probe (floor — NOT semantic) | C1 gate — before asserting availability |
 | `tests/forge-verification-ledger.md` | forge provenance, calibration table, verification results | reforging this skill |

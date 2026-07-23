@@ -15,7 +15,7 @@ the dated forge log with its adversarial-verification results.
   virtue is converted to a checkable mechanism, and enforcement concentrates on the **capability-scaling**
   failures (self-deception, Goodhart) the human-in-the-loop cannot catch (the auditor's evidence is
   produced by the audited). Full argument: `references/sources.md` §inversion (SOLE home).
-- **Four gates → the RESEARCH SPEC + `scripts/research-check.sh` floor** (F1 operationality; mirrors
+- **Four gates → the RESEARCH SPEC + `scripts/research-check.ts` floor** (F1 operationality; mirrors
   `forging-novel-theses` gate-check + `arguing-research-papers` claim-check). G2 (formulation) and G3
   (honesty) are the load-bearing gates.
 - **Two heuristics FLIP for the agent**: "let go" → also "STAY" (agent over-pivots); "broaden" →
@@ -66,8 +66,8 @@ virtue→mechanism LAW + per-tension moderators) and the architecture were done 
   inspect one fact) → the trio; the judgment ACROSS bets + the standing honesty policy → here. The survey
   pre-flagged every seam (MECE boundary flags per cluster).
 
-**Verification at forge.** Floor: build-order one-liner + `forging-skills/scripts/skill-check.sh`
-(exit 0) + `research-check.sh` fire-test (unfilled spec → 7 FAILs; well-formed spec → exit 0 — proven
+**Verification at forge.** Floor: build-order one-liner + `forging-skills/scripts/skill-check.ts`
+(exit 0) + `research-check.ts` fire-test (unfilled spec → 7 FAILs; well-formed spec → exit 0 — proven
 red/green). Adversarial **7-lens fleet** (self-contradiction · one-home/architecture · sibling-cuts read
 against the SIBLINGS' actual text · bloat/operationality · trigger desk-check · comparative-judge ·
 source-fidelity), 0 agent errors: the top-level verdicts confirmed the **core is sound** (THE LAW, the
@@ -96,12 +96,12 @@ red-on-empty / green-on-well-formed re-verified.
 
 ## 2026-07-11 external review #2 (Codex) — adjudication & fix cycle
 
-**Codex verdict: ship-with-fixes** (6 major + 2 minor, all in/around `scripts/research-check.sh` and
+**Codex verdict: ship-with-fixes** (6 major + 2 minor, all in/around `scripts/research-check.ts` and
 the SKILL.md gate table).
 
 | # | Severity | Verdict | Resolution |
 |---|---|---|---|
-| **1** | major | **ACCEPT** | floor WARN-vs-FAIL contradiction with "no artifact, gate un-passed" — fixed by **S4** (severity-map header added to `research-check.sh`, mirroring SKILL.md's `[floor: FAIL]`/`[floor: WARN]` gate-table annotation) + **S5** (†-marker hard/advisory legend added to SKILL.md so the gate table and the script agree) |
+| **1** | major | **ACCEPT** | floor WARN-vs-FAIL contradiction with "no artifact, gate un-passed" — fixed by **S4** (severity-map header added to `research-check.ts`, mirroring SKILL.md's `[floor: FAIL]`/`[floor: WARN]` gate-table annotation) + **S5** (†-marker hard/advisory legend added to SKILL.md so the gate table and the script agree) |
 | **2** | major | **ACCEPT** | `has_threshold` passing on bare timestamp digits (a pre-reg date alone read as a kill-threshold) — fixed by **S4**: `strip_timestamp()` removes `YYYY-MM[-DD]`/`YYYY/MM[/DD]` tokens from a COPY of the value before the threshold check runs |
 | **3** | major | **ACCEPT** | slot-presence ≠ mechanism-presence (a filled-but-hollow slot still reads as "done") — fixed by **S4**: 4 bounded token-minimum checks added on top of slot presence (firewall optimize/witness = FAIL; the other 3 = WARN) |
 | **4** | major | **ACCEPT** | dLearning/dt underspecified as a kill signal — fixed by **S5**: a learning ledger added to `references/steering.md` §1 |
@@ -126,7 +126,7 @@ the dropped `→ 0` threshold pattern (an explicit "kill when metric → 0" phra
 a threshold token by `has_threshold` — no comparator/percent/keyword token accompanies the digit).
 Both left for a future reforge.
 
-Fix execution was delegated to Sonnet-5 agents (S4 → `scripts/research-check.sh`; S5 → `SKILL.md` +
+Fix execution was delegated to Sonnet-5 agents (S4 → `scripts/research-check.ts`; S5 → `SKILL.md` +
 `references/steering.md` + `references/formulating.md` + `tests/triggers.md`; disjoint file ownership)
-under Fable-5 direction, with floor (`research-check.sh`) verification green after fixes: fixtures
+under Fable-5 direction, with floor (`research-check.ts`) verification green after fixes: fixtures
 green, no regressions (unfilled template FAIL=7 WARN=6).

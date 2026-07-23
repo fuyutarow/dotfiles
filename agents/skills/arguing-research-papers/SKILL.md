@@ -31,7 +31,7 @@ description: >-
 > paper-writing canon (Gopen-Swan through the Japanese 戸田山・木下・野矢・酒井 tradition). Full graded
 > provenance: `references/sources.md`; the survey fleet: `tests/forge-verification-ledger.md`.
 > **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
-> `for f in frameworks reconciliation calibration genre-playbooks reviewer-defense sources; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/claim-check.sh || echo MISSING claim-check.sh; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
+> `for f in frameworks reconciliation calibration genre-playbooks reviewer-defense sources; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/claim-check.ts || echo MISSING claim-check.ts; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
 > (must print nothing).
 
 ## Language & stable tokens
@@ -77,7 +77,7 @@ a gate is passed only when its **artifact exists in the filled CLAIM SPEC** (tem
 three gates judge the ARGUMENT; they are preceded by **G0 — materials audit** (build-step 0), which
 is not a rhetoric gate but the **input precondition**: it fixes WHAT evidence exists before G1–G3
 decide what to claim from it (its artifact — the in-hand line — is also floor-checked).
-感触では通れない — no artifact, gate un-passed. `scripts/claim-check.sh` is the *floor* that checks the
+感触では通れない — no artifact, gate un-passed. `scripts/claim-check.ts` is the *floor* that checks the
 load-bearing slots (the G0 in-hand line, governing claim, instability/cost, anchor, scope, positioning,
 objection) are present and non-placeholder — the ONLY slot where a `[…]` placeholder passes is the G2
 anchor (the sanctioned anti-fabrication deferral); it is NOT a semantic check, and it does not check
@@ -123,7 +123,7 @@ per slot, the value on the label line.
 - Novelty scope ("to our knowledge, the first to __ under __"): [...]
 ```
 
-Then: `scripts/claim-check.sh <spec.md>` (floor: presence + banned bare-positioning + placeholder
+Then: `bun scripts/claim-check.ts <spec.md>` (floor: presence + banned bare-positioning + placeholder
 discipline; it cannot judge whether the anchor really licenses the claim — you do).
 
 ## The build procedure — logic, not chronology

@@ -31,7 +31,7 @@ description: >-
 > reforge #5 (FIX-LOCALITY re-cut with `structuring-documents`: 目標規定文・重点先行(document scale)
 > moved OUT to SD; L4 flags structure only. History: `tests/forge-verification-ledger.md`).
 > **Build order** ATOMIC — verify:
-> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-research textlintrc-external textlintrc-strict prh-house prh-external prh-codemix; do test -f assets/$a.* || echo MISSING asset $a; done; for t in forge-verification-ledger.md triggers.md; do test -f tests/$t || echo MISSING $t; done; test -x scripts/lint-floor.sh || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test -f scripts/codemix-flag.py || echo MISSING codemix-flag; test ! -d ../grounding-prose || echo STALE-DIR`
+> `for f in patterns machine-floor; do test -f references/$f.md || echo MISSING $f; done; for a in textlintrc textlintrc-research textlintrc-external textlintrc-strict prh-house prh-external prh-codemix; do test -f assets/$a.* || echo MISSING asset $a; done; for t in forge-verification-ledger.md triggers.md; do test -f tests/$t || echo MISSING $t; done; test -f scripts/lint-floor.ts || echo MISSING lint-floor; test -f scripts/coinage-flag.py || echo MISSING coinage-flag; test -f scripts/codemix-flag.py || echo MISSING codemix-flag; test ! -d ../grounding-prose || echo STALE-DIR`
 
 ## The law
 
@@ -69,7 +69,7 @@ external page-equivalent — past the budget, restructure, never extend the tabl
 delete). An English token in Japanese prose is admissible only as a standard domain term or a pinned
 house identifier — never a verb calque (`citeする`) or an exact-equivalent noun (`deliverable`).
 
-**1 · FLOOR (HARD).** Run `scripts/lint-floor.sh` (refuses `--fix`; prh is detect-only). Pick the
+**1 · FLOOR (HARD).** Run `bun scripts/lint-floor.ts` (refuses `--fix`; prh is detect-only). Pick the
 config by register — the choice is load-bearing, the base config false-positives every である
 sentence:
 

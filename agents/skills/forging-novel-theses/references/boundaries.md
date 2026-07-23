@@ -131,7 +131,7 @@ solo / fan-out 境界だけを持つ。**No harness → 同じ地図を直列の
 | 3a deep-tech hard-instance | **FAN-OUT** | agent が数値反例を実際に構築・実行して理論主張を落としにかかる（control-loop.md の deep-tech の型）。 |
 | 3b 可能化変化の検証 | **FAN-OUT（両方向 refute）** | agent に refute を課す：「その変化は 5 年前にも在った」を示せ／「既に commoditize 済み (late)」を示せ。early / on-time / late の最終判定は SOLO。 |
 | 3c 資本適合 · 3d 撤退基準 | **委任不能** | runway は private data。3d は bettor 本人の pre-commitment — **agent が書いた閾値は誰も pre-commit しない**。 |
-| Phase 4 記入 → `gate-check.sh` | **SOLO → floor** | 記入は solo、script が構造 floor を機械検査。 |
+| Phase 4 記入 → `gate-check.ts` | **SOLO → floor** | 記入は solo、script が構造 floor を機械検査。 |
 | Phase 4 意味ゲート監査 | **BARRIER → FAN-OUT** | floor 通過を待って（justified barrier）、read-only の skeptic lens set（下）を並列に。監査は読むだけ — 修正は solo の別 pass。 |
 
 ### Skeptic lens set — case-ledger の失敗 6 行を runtime lens 化

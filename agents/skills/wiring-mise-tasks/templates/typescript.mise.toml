@@ -2,7 +2,7 @@
 # wiring-mise-tasks/SKILL.md。bun 管理プロジェクト前提 (package.json + bun.lock)。
 # biome は fmt と lint を別タスクに保ち (check 合流は不使用)、設定は committed
 # biome.json に置く — 両裁定とも wiring-mise-tasks/references/recipes.md §4。
-# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
 [tasks.setup]
 alias = "i"
@@ -42,4 +42,4 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"

@@ -41,7 +41,7 @@ paths: "**/*.rs"
 >   `grep -rn '\[dated:' agents/skills/writing-rust/` and re-verify anything older than ~2 quarters
 >   against crates.io / lib.rs: the §1 supersession table · every version in `references/selection.md`
 >   · edition-2024 baseline · the async-trait / AFIT boundary (async.md) · the allocator/hasher
->   defaults (performance.md). The mechanical floor is `forging-skills/scripts/skill-check.sh`
+>   defaults (performance.md). The mechanical floor is `forging-skills/scripts/skill-check.ts`
 >   (shared; this skill ships no scripts/).
 
 ## THE LAW

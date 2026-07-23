@@ -2,7 +2,7 @@
 # wiring-mise-tasks/SKILL.md。uv 管理プロジェクト前提 (pyproject.toml + uv.lock)。
 # pip install / uv pip install は禁止 (writing-python PG0)。ruff は uv run 経由で
 # project-pinned 実行 (裸の ruff / uvx ruff は pin からドリフトする)。
-# 検査: sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
 # CI では uv sync --locked (uv.lock 不変を主張) を直接呼ぶ — このタスクは手元用。
 [tasks.setup]
@@ -46,4 +46,4 @@ depends = ["fmt:check", "lint", "test"]
 
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
-run = "sh ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.sh"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"

@@ -8,7 +8,9 @@ description: >-
   PDF・バイナリは非対応→要変換, 「どこかに書いたはずだが言葉を思い出せない」想起検索, ccc, cocoindex, コードインデックス
   作成/更新, ccc search が古い・ヒットしない, 日本語クエリだけヒットしない, ccc の embedding
   モデル変更, multi-line/formatter-wrapped signature の構造検索 → ccc grep), or any
-  ccc/daemon/index operation. LAW: PROJECT-BY-CWD — every verb except ccc grep needs a
+  ccc/daemon/index operation. 監督の環では検収前の帰着照合・「新規性/不在/frontier」主張の前・
+  委任ブリーフ起草前のヒント語照合にも使う; 発火したら battery: 言い換え≥3本・JA/EN 混在
+  token・不在主張はクエリ台帳を分母として添付。LAW: PROJECT-BY-CWD — every verb except ccc grep needs a
   ccc init-ed cwd: verify registration FIRST (CC1); PULL-BASED — no file watcher;
   un-refreshed results are silently stale (CC2); ROUTE-BY-QUERY-SHAPE — semantic top-k is
   never exhaustive (CC3); LANGUAGE-WALL — the default embedding model's topical signal is
@@ -23,8 +25,9 @@ description: >-
 
 # Driving CocoIndex Code — semantic code search as a disciplined subprocess
 
-> **Version**: v2607.4.0 (2026-07-14 — PDF/binary non-support distilled as a boundary: silent-skip
-> Gotcha + FIRES convert-first routing, 3-agent+codex-verified; prior v2607.3.0 2026-07-13 =
+> **Version**: v2607.5.0 (2026-07-23 — director-loop known-reduction/novelty/brief anchors + query battery;
+> prior v2607.4.0 2026-07-14 = PDF/binary silent-skip Gotcha + FIRES convert-first routing;
+> prior v2607.3.0 2026-07-13 =
 > LANGUAGE-WALL model swap to granite-97m-multilingual-r2, markdown-corpus trial folded in)
 > **Scope**: operating `ccc` (cocoindex-code) — setup → project lifecycle → search/grep over
 > code AND markdown/notes corpora (NOT PDF/binary — §Gotchas) → daemon → MCP surface → embedding in Workflow scripts;

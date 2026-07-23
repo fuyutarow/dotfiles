@@ -136,6 +136,28 @@ doc section heading would use — a query that echoes a heading verbatim invites
 failure mode above. **Pagination**: `--limit`/`--offset` to look past a shallow top-N before
 concluding "not found" — the correct hit is often present, just outranked, not absent.
 
+### 4a. Director-loop battery — known-reduction checks, novelty/absence, delegation briefs
+
+At the three director-loop anchors — before accepting a claimed reduction, before a
+`new` / `novel` / `新規性` / `不在` / `frontier` claim, and before drafting a delegation
+brief from hint terms — one semantic query is not evidence. Run a battery:
+
+1. Confirm CC1 registration and CC2 freshness, then execute **at least three paraphrases**
+   that vary the mechanism, the expected/known reduction, and the domain vocabulary.
+2. Include both Japanese and English tokens in the battery when the corpus or brief mixes
+   them. The model check and all query-craft consequences of **LANGUAGE-WALL** live in
+   §4b.2; apply that rule here by citation rather than duplicating it.
+3. Record the exact denominator before judging:
+
+   | claim | exact query | JA/EN token mix | project/path scope | freshness evidence | hits / known reduction | verdict |
+   |---|---|---|---|---|---|---|
+
+4. A known-reduction check accepts or demotes the claim against the reduction found by the
+   battery. An absence claim attaches every executed query row as its denominator and says
+   “not found in this battery”; without the query ledger, the absence claim is invalid.
+   A delegation brief carries forward the matched canonical loci and the hint vocabulary,
+   not only the supervisor's remembered wording.
+
 ### 4b. Markdown / prose corpora — where the bias flips, until the language wall
 
 A pure-markdown corpus (notes vault, docs tree, knowledge base) is a first-class

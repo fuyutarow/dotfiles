@@ -115,3 +115,17 @@ fire/no-fire: FIRES に「検収の試験をどう設計するか」「完成宣
 宣言は異種監査人〈既定: sol〉の通過まで出荷しない)と対象語彙が違うだけの同一規則だった
 (査読指摘)。実体は P6 側にのみ残し、生成者≠査読者≠検収者行の当該箇所は P6 へのポインタへ
 縮退・artifact 列の判定条件も P6 側のみに一本化(SKILL.md 85行目付近)。
+
+## 2026-07-23: P0 GROUNDING 三時点化 reforge (v2607.2.0)
+
+Reforge record: P0 を計画言明前・新規性/不在主張の検収前・既知/未知/成熟度成果物の起草前へ拡張し、意味検索クエリ台帳を不在主張の分母にした。
+
+F3 desk-check(name + description のみで判定):
+
+| Ask | 期待 | desk-check |
+|---|---|---|
+| 「監督として、このプローブを frontier 初の帰着と検収する前に、既知帰着がないか意味検索 battery で照合して」 | FIRE(`driving-cocoindex` と co-fire) | FIRE — 「監督」「検収」が本 skill、意味検索 battery が sibling を錨づける |
+| 「委任体制で既知/未知と成熟度を述べる成果物を起草する。先に正史と既存裁定を照合して」 | FIRE | FIRE — 「委任体制」「起草」が description に直結 |
+| 「新しい研究計画の目標台帳を作る前に、監督として既存の計画を確認して」 | FIRE | FIRE — 「研究」「計画」「監督」の中核 ask |
+| 「この関数の最初の呼び出し箇所を全部列挙して」 | NO-FIRE(`rg` / `serena`) | NO-FIRE — 「最初」は新規性主張でなく exact-symbol enumeration |
+| 「既知の定理を初学者向けに一文で説明して」 | NO-FIRE(domain skill / plain answer) | NO-FIRE — 監督・委任・検収の運転を求めていない |

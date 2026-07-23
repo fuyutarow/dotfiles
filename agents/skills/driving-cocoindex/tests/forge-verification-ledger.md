@@ -226,3 +226,17 @@ prevent.
 route PDF asks correctly). F2 — no new sibling; extends existing one-homes. F3 — FIRES set
 extended; this entry is the adversarial-provenance artifact. Durability contract honored: no
 version number asserted in the SKILL.md body (dated facts live here).
+
+## Reforge v2607.5.0 (2026-07-23) — director-loop trigger anchors
+
+Reforge record: description に帰着照合・新規性/不在/frontier 主張・委任ブリーフの三錨を加え、operations §4a に三言い換え以上の query battery と不在主張の分母台帳を置いた。
+
+F3 desk-check(name + description のみで判定):
+
+| Ask | 期待 | desk-check |
+|---|---|---|
+| 「このプローブを検収する前に、既知の帰着がないか照合して」 | FIRE | FIRE — 「検収前の帰着照合」が description の新錨と一致 |
+| 「『この機構は frontier で先行例が不在』と主張する前に意味検索して」 | FIRE | FIRE — `frontier` / `不在` 主張前の新錨と一致 |
+| 「委任ブリーフを起草する前に、ヒント語を JA/EN 混在の言い換え三本で照合して」 | FIRE | FIRE — 委任ブリーフ・ヒント語照合・battery の全錨と一致 |
+| 「この関数の初回呼び出しを漏れなく全部列挙して」 | NO-FIRE(`rg` / `serena`) | NO-FIRE — 「初」は新規性でなく exact-symbol exhaustiveness; CC3 cut が優先 |
+| 「既知/未知の二節を読みやすく並べ替えて」 | NO-FIRE(`structuring-documents`) | NO-FIRE — 検索・照合・不在主張・委任ブリーフのいずれも求めていない |

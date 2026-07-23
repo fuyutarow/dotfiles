@@ -39,7 +39,7 @@ run = "rumdl fmt"
 dir = "{{config_root}}"
 description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
 run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
 [ -z "$files" ] && { echo "no shell files"; exit 0; }
 printf '%s\n' "$files" | xargs shfmt -w -ln bash -i 2 -ci -sr -bn -s
 '''
@@ -48,7 +48,7 @@ printf '%s\n' "$files" | xargs shfmt -w -ln bash -i 2 -ci -sr -bn -s
 dir = "{{config_root}}"
 description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
 run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
 [ -z "$files" ] && { echo "no shell files"; exit 0; }
 printf '%s\n' "$files" | xargs shfmt -d -ln bash -i 2 -ci -sr -bn -s
 '''
@@ -91,7 +91,7 @@ run = "rumdl check"
 dir = "{{config_root}}"
 description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
 run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit)"
+files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
 [ -z "$files" ] && { echo "no shell files"; exit 0; }
 printf '%s\n' "$files" | xargs shellcheck -x
 '''
@@ -157,6 +157,42 @@ dir = "{{config_root}}"
 description = "Prose lint (linting-prose machine floor): bunx textlint with the house config. Pass paths: `mise run lint:prose -- report.md docs/`. External register → textlintrc-external.json."
 run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json"
 
+# ── git hooks ────────────────────────────────────────────────────────────────────────────────
+# 規律: .githooks/* は mise task を呼ぶだけの薄い殻にする。中身は必ずここに置く(一つの家)。
+# フックは手で走らせにくく試験もしづらいが、task なら単体で走らせられ `mise tasks` に載る。
+# 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
+[tasks."hook:pre-commit"]
+description = "git pre-commit body: run `fmt` and re-stage the formatted files that were ALREADY staged (formatting fallout in unrelated working-tree files stays unstaged). Called by .githooks/pre-commit; safe to run by hand."
+run = '''
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+echo "$staged" | grep -qE '\.(md|sh|ts)$' || exit 0   # fmt が触る拡張子だけ
+mise run f > /dev/null 2>&1 || {
+  echo "pre-commit: mise run f failed — fix the formatter, or bypass once with 'git commit --no-verify'" >&2
+  exit 1
+}
+for f in $staged; do
+  [ -f "$f" ] && git add "$f"
+done
+exit 0
+'''
+
+[tasks."hook:post-commit"]
+description = "git post-commit body: warm the cocoindex index incrementally (`ccc index`) so search never pays the update latency. No-op when ccc is absent, when the repo has no .cocoindex_code/, or when the daemon is already [indexing]. Called detached by .githooks/post-commit."
+run = '''
+command -v ccc > /dev/null 2>&1 || exit 0
+[ -d "$(git rev-parse --show-toplevel)/.cocoindex_code" ] || exit 0   # 索引していない repo では黙って抜ける
+ccc daemon status 2> /dev/null | grep -q "\\[indexing\\]" && exit 0    # 走行中なら間引く
+ccc index > /dev/null 2>&1 || true
+exit 0
+'''
+
+[tasks."hook:post-merge"]
+description = "git post-merge body: after a pull/merge, relink dotfiles (link-dots.sh, SAFE mode) then relink skills, so newly-pulled config appears with no manual step. Idempotent. Called by .githooks/post-merge."
+run = '''
+bash "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.sh" || true
+exec mise run link:skills
+'''
+
 [tasks."cache:clean"]
 description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
 run = '''
@@ -203,6 +239,86 @@ echo "✅ cache:clean done. Project build artifacts (node_modules/target/…) �
 [tasks."cache:projects"]
 description = "Clean project build artifacts (node_modules/target/build…) via kondo — interactive, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override."
 run = 'kondo --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+
+# --- the 断捨離 pass, split by WHO MAY DECIDE ------------------------------------------------
+#   cache:clean   no judgment needed (regenerable package caches)   → any agent, run blind
+#   cache:audit   evidence only, deletes NOTHING                    → any agent, run blind
+#   (rip)         accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
+#   cache:purge   empty the graveyard — THE irreversible step       → human only
+# The gate sits on the ONE irreversible action, not on the delete. That is what makes the rest
+# delegatable: an agent working from cache:audit physically cannot lose data.
+[tasks."cache:audit"]
+description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune."
+run = '''
+stale_days="${STALE_DAYS:-180}"
+now=$(date +%s)
+
+_mtime() { stat -c %Y "$1" 2> /dev/null || stat -f %m "$1" 2> /dev/null; }   # GNU then BSD
+_when() { # → "2026-02-25 (148d)"
+  m=$(_mtime "$1") || return 0
+  printf '%s (%dd)' "$(date -d "@$m" +%F 2> /dev/null || date -r "$m" +%F)" "$(((now - m) / 86400))"
+}
+
+echo "== 1. ~/ の隠しディレクトリ: 最終更新が ${stale_days} 日以上前 =="
+for d in "$HOME"/.[!.]*/; do
+  d="${d%/}"; m=$(_mtime "$d") || continue
+  [ $(((now - m) / 86400)) -ge "$stale_days" ] || continue
+  printf '  %-8s %-28s %s\n' "$(du -sh "$d" 2> /dev/null | cut -f1)" "~/${d##*/}" "$(_when "$d")"
+done
+echo "  (サイズは候補のみ計測。年齢は手掛かりであって証拠ではない — 親の mtime は中身の"
+echo "   更新を反映しないので ~/.local や ~/.rustup のような現役も並ぶ。§2〜§4 で裏を取れ)"
+
+echo
+echo "== 2. rustup toolchain: 既定と、プロジェクトによる固定の有無 =="
+if command -v rustup > /dev/null 2>&1; then
+  rustup toolchain list | sed 's/^/  /'
+  echo "  -- rust-toolchain で固定しているプロジェクト --"
+  if command -v fd > /dev/null 2>&1; then
+    fd -H -t f "^rust-toolchain(\\.toml)?$" "${AUDIT_PROJECTS:-$HOME/Workspace}" 2> /dev/null |
+      while read -r f; do printf '  %s → %s\n' "$f" "$(grep -h channel "$f" 2> /dev/null | tr -d ' ')"; done
+    echo "  (この一覧が空なら、既定以外の toolchain を固定しているものは無い)"
+  else
+    echo "  fd 不在のため未検索"
+  fi
+fi
+
+echo
+echo "== 3. vscode-server: 現行版以外は再接続で取り直される =="
+s="$HOME/.vscode-server/cli/servers"
+[ -d "$s" ] && for v in "$s"/Stable-*; do
+  [ -e "$v" ] || continue
+  printf '  %-8s %-46s %s\n' "$(du -sh "$v" 2> /dev/null | cut -f1)" "${v##*/}" "$(_when "$v")"
+done
+
+echo
+echo "== 4. ~/.cache 内訳(降順) =="
+du -sh "$HOME"/.cache/* 2> /dev/null | sort -rh | head -12 | sed "s|$HOME|~|" | sed 's/^/  /'
+
+echo
+echo "== 5. graveyard(rip 済み・まだ空きは増えていない) =="
+for g in "${GRAVEYARD:-/tmp/graveyard-$USER}" "/tmp/graveyard-$USER"; do
+  [ -d "$g" ] && { printf '  %s  %s\n' "$(du -sh "$g" 2> /dev/null | cut -f1)" "$g"; break; }
+done
+echo
+echo "df: $(df -h "$HOME" | awk 'NR==2{print $4" free / "$2}')"
+echo "→ 判断が要らない分は cache:clean / 受け入れた候補は rip / 空きが増えるのは cache:purge だけ"
+'''
+
+[tasks."cache:purge"]
+description = "IRREVERSIBLE: empty rip's graveyard. This is the ONLY step that actually frees disk — rip is a same-filesystem rename, so ripped data still occupies space until purged. Prints the contents and requires typing 'yes'. Human-only gate; never run this from an agent."
+run = '''
+g="${GRAVEYARD:-/tmp/graveyard-$USER}"
+[ -d "$g" ] || { echo "graveyard 無し: $g"; exit 0; }
+echo "== $g の中身 =="
+du -sh "$g"/* 2> /dev/null | sort -rh | head -20
+echo
+echo "合計 $(du -sh "$g" 2> /dev/null | cut -f1) — これを完全に削除します。復元はできません。"
+printf "続けるなら yes と入力: "
+read -r ans
+[ "$ans" = "yes" ] || { echo "中止しました。"; exit 1; }
+find "$g" -mindepth 1 -maxdepth 1 -exec /bin/rm -rf -- {} +   # 絶対パスで shell の rm 無効化を回避
+echo "✅ purge 完了。 $(df -h "$HOME" | awk 'NR==2{print $4" free"}')"
+'''
 
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"

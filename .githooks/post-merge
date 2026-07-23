@@ -1,13 +1,8 @@
 #!/bin/sh
-# post-merge: after `git pull`/merge, relink everything so newly-pulled config
-# and skills appear without a manual step. Two parts, both idempotent & non-blocking
-# (git ignores this hook's exit, so a failure never aborts the pull):
-#   1. link-dots.sh (SAFE is the default) : general dotfile symlinks (zsh/git/
-#      statusline/cocoindex/topgrade/...). Safe mode never clobbers a real file nor
-#      re-prompts sudo / re-rm's karabiner — newly-added link entries get created,
-#      existing ones left as-is. (Force is opt-in: `mise run link-dots`.)
-#   2. mise run link:skills : per-skill / commands relink (Claude Code).
-DOTFILES="${DOTFILES:-$HOME/dotfiles}"
-command -v mise >/dev/null 2>&1 || { echo "post-merge: mise not on PATH; run 'mise run link-dots && mise run link:skills' manually"; exit 0; }
-bash "$DOTFILES/scripts/link-dots.sh" || true
-exec mise run link:skills
+# 薄い殻。中身は mise.toml の `hook:post-merge`(link-dots + link:skills の再配線)。
+# git はこのフックの終了コードを無視するので、失敗しても pull は成立したまま。
+command -v mise > /dev/null 2>&1 || {
+  echo "post-merge: mise not on PATH; run 'mise run hook:post-merge' manually" >&2
+  exit 0
+}
+exec mise run hook:post-merge

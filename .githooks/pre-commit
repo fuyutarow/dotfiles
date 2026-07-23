@@ -1,25 +1,10 @@
 #!/bin/sh
-# pre-commit: run the repo formatter (`mise run f` = fmt:md + fmt:sh + fmt:ts) and
-# re-stage the formatted files, so a commit can never carry formatting drift.
-# Mirrors firedancer's pre-commit (2026-07-22, user request); adapted to this repo:
-#   - trigger extensions are md/sh/ts (what fmt actually touches; .rumdl.toml and the
-#     task bodies already exclude agents/skills/** and machine-owned files),
-#   - missing mise degrades to a warning instead of blocking the commit (post-merge's
-#     bootstrap-friendly convention: a fresh machine must still be able to commit).
-# Re-stage safety: only files that were ALREADY staged get re-added — formatting
-# fallout in unrelated working-tree files stays unstaged.
-set -e
-staged=$(git diff --cached --name-only --diff-filter=ACM)
-echo "$staged" | grep -qE '\.(md|sh|ts)$' || exit 0
+# 薄い殻。中身は mise.toml の `hook:pre-commit` にある — フックにロジックを書かない。
+# 理由: フックは手で走らせにくく試験もしづらい。task なら `mise run hook:pre-commit` で
+# 単体で走らせられ、`mise tasks` に載って発見でき、他の repo と同じ形に揃う。
+# mise 不在は警告に落として通す(新しい機械でもコミットはできるべき)。
 command -v mise > /dev/null 2>&1 || {
   echo "pre-commit: mise not on PATH; skipping format (run 'mise run f' manually)" >&2
   exit 0
 }
-mise run f > /dev/null 2>&1 || {
-  echo "pre-commit: mise run f failed — fix the formatter, or bypass once with 'git commit --no-verify'" >&2
-  exit 1
-}
-for f in $staged; do
-  [ -f "$f" ] && git add "$f"
-done
-exit 0
+exec mise run hook:pre-commit

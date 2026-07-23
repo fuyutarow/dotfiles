@@ -5,3 +5,9 @@
 
 [credential]
     helper = /mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe
+
+# settings.json の model キーは /model が書く実行時状態 — repo には載せない
+# (worktree には残る。jq 不在でも git が止まらないよう required は付けない)
+[filter "claude-settings"]
+    clean = jq --indent 2 'del(.model)'
+    smudge = cat

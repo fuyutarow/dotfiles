@@ -1,35 +1,39 @@
-# Model catalog & fast-moving facts — verified 2026-07-14
+# Model catalog & fast-moving facts — verified 2026-07-14, re-probed 2026-07-23
 
 > Everything in this file rots. Each claim carries its provenance grade (§ bottom); on reforge,
 > re-run `scripts/probe-models.sh` and re-fetch official docs instead of trusting this snapshot.
 > The durable rules (NO-METER, UNCONFINED, CATALOG-BY-PROBE, VERSION-DRIFTS) live in SKILL.md —
-> this file holds only the perishable facts. Binary: agy v1.1.2 (self-updated in place — see
-> VERSION-DRIFT below; do not trust `agy --version` from a stale memory).
+> this file holds only the perishable facts. Binary: agy v1.1.5 as of 2026-07-23 (was v1.1.2;
+> self-updated in place again — see VERSION-DRIFT below; do not trust `agy --version` from a stale
+> memory).
 
-## Roster — probe-verified on THIS account, 2026-07-14
+## Roster — re-probed on THIS account, 2026-07-23 (agy v1.1.5)
 
-`agy models` (free, local, no quota) lists the EXACT `--model` display strings — spaces, parens,
-and capitalization are all literal; there is NO dash-case slug grammar (`gemini-3.1-pro` etc. all
-fail RC=1). An unresolvable `--model` is a free client-side fast-fail: RC=1, ~4s, prints the full
-valid-name list — v1.1.2 hard-fails this way (older versions silently downgraded to the default
-model instead). Candidate-probing costs NO quota until you land on the right string.
+`agy models` (free, local, no quota) lists the EXACT `--model` strings. **As of v1.1.5 these are
+dash-case slugs** — `gemini-3.6-flash-medium`, `claude-sonnet-4-6`, `gpt-oss-120b-medium`. This
+INVERTS the pre-1.1.5 grammar: v1.1.2's `agy models` emitted parenthesized display strings
+(`Gemini 3.5 Flash (Medium)`) and rejected slugs (`gemini-3.1-pro` → RC=1). The 1.1.5 changelog is
+explicit — *"Added stable, user-facing model slugs … accepted by `--model`, so you can pin a
+specific model reliably across sessions."* Copy whatever `agy models` prints on the LIVE binary
+verbatim; never carry a form across a version bump. An unresolvable `--model` is still a free
+client-side fast-fail (RC=1, prints the valid list); candidate-probing costs NO quota.
 
-| Display string (verbatim) | Probe status |
+| `--model` slug (verbatim, agy v1.1.5) | Probe status 2026-07-23 |
 |---|---|
-| `Gemini 3.5 Flash (Medium)` | PROBE-VERIFIED AVAILABLE (RC=0, `OK`) |
-| `Gemini 3.5 Flash (High)` / `(Low)` | listed by `agy models`; not individually probed |
-| `Gemini 3.1 Pro (Low)` | PROBE-VERIFIED AVAILABLE (RC=0, 9s, `OK`) |
-| `Gemini 3.1 Pro (High)` | listed by `agy models`; not individually probed |
-| `Claude Sonnet 4.6 (Thinking)` | PROBE-VERIFIED AVAILABLE (RC=0, 6s, `OK`) |
-| `Claude Opus 4.6 (Thinking)` | LISTED-BUT-UNPROBED — skipped to conserve quota; presumed reachable by grammar symmetry, unverified |
-| `GPT-OSS 120B (Medium)` | PROBE-VERIFIED AVAILABLE (RC=0, 7s, `OK`) |
+| `gemini-3.6-flash-medium` | PROBE-VERIFIED AVAILABLE (RC=0, `OK`) — NEW family this snapshot |
+| `gemini-3.6-flash-high` / `-low` | listed by `agy models`; not individually probed |
+| `gemini-3.5-flash-high` / `-medium` / `-low` | listed by `agy models`; not individually re-probed 2026-07-23 |
+| `gemini-3.1-pro-high` / `-low` | listed by `agy models`; not individually re-probed 2026-07-23 |
+| `claude-sonnet-4-6` | listed by `agy models`; not individually re-probed 2026-07-23 |
+| `claude-opus-4-6-thinking` | listed by `agy models`; not individually probed |
+| `gpt-oss-120b-medium` | listed by `agy models`; not individually re-probed 2026-07-23 |
 
-Probe evidence (verbatim): `timeout 30 agy --model "flash-medium" -p ...` → RC=1, `Error: invalid
---model "flash-medium": model flash-medium is not recognized as a known model or custom model in
-settings` + the full display-name list, in 4s — local validation, no network/model call. The alias
-list some third-party plugins publish (`flash-low`, `sonnet`, `opus`, `gpt-oss`, ...) belongs to a
-community Claude Code plugin wrapper (`simplybychris/antigravity-plugin-cc`), NOT agy's own native
-`--model` grammar — do not reuse those aliases.
+Full 2026-07-23 roster (11 slugs, verbatim): `gemini-3.6-flash-{high,medium,low}`,
+`gemini-3.5-flash-{high,medium,low}`, `gemini-3.1-pro-{high,low}`, `claude-sonnet-4-6`,
+`claude-opus-4-6-thinking`, `gpt-oss-120b-medium`. v1.1.5 also added `--effort` (and `/effort`) to
+pick a model's reasoning-effort variant at launch — orthogonal to `--model`. The parenthesized
+display strings and the old 2026-07-14 per-model probe times (Sonnet 4.6 6s, GPT-OSS 7s, 3.1 Pro
+9s) were taken on v1.1.2 and are retired; only `gemini-3.6-flash-medium` was re-probed on v1.1.5.
 
 Output is clean: probe 5 (`Gemini 3.1 Pro (Low)`, redirected to files) — `cat -A out.txt` showed
 `OK$` only (no control sequences); `err.txt` = 0 bytes, `out.txt` = 3 bytes. stdin is IGNORED in
@@ -96,7 +100,24 @@ ago, skipping update` — an autonomous updater ran ~5 minutes before the probe 
 physically replaced the brew-managed binary path. `brew upgrade`/`brew bundle` will NOT detect or
 revert this (the cask has `auto_updates: true`, so brew treats it as self-managed and skips it).
 
-`agy changelog` is a rich, fully local, offline version history (1.0.0 → 1.1.2) — treat it as the
+**Update 2026-07-23 (v1.1.5, self-updated again from v1.1.2).** `agy changelog` now runs to 1.1.5.
+Two headless-relevant shifts, both quoted from the changelog (VENDOR PROSE — the containment one is
+NOT yet re-probed):
+- **1.1.5 added stable `--model` slugs** (verbatim: *"Added stable, user-facing model slugs … accepted
+  by `--model`"*). This is why the roster above is now dash-case, inverting the v1.1.2 grammar snapshot.
+  Also added `--effort`/`/effort` (reasoning-effort variants) and made headless honor `settings.json`.
+- **CONTAINMENT is now CONTESTED — re-probe before trusting UNCONFINED either way.** 1.1.3: *"headless
+  (-p) … now soft-denies [confirm-required] tools and prints a stderr notice naming the allow-rule
+  needed"* + *"Fixed outside-of-workspace file writes being incorrectly auto-approved in always-proceed
+  mode."* 1.1.5: *"Fixed headless (-p / --print) runs so they now honor persisted settings.json
+  policies, including permissions, file access, sandbox mode, auto-execution, and artifact review."*
+  If accurate, the UNCONFINED LAW (SKILL.md THE LAW / A3) is materially softened on ≥1.1.3 — default
+  `-p` may no longer blanket-auto-approve, and `settings.json` may now be a real boundary. This is NOT
+  probe-confirmed: the 2026-07-14 write-outside-cwd evidence was taken on v1.1.2. Run a fresh
+  containment probe on v1.1.5 (does `-p` still write under `$HOME` past the cwd? does a `settings.json`
+  deny/sandbox actually bind headless?) before relying on EITHER the old law or the new claim.
+
+`agy changelog` is a rich, fully local, offline version history (1.0.0 → 1.1.5) — treat it as the
 authoritative local history, not brew's version string. Headless-relevant entries: **1.0.5** added
 `--model` and the `models` subcommand; **1.0.6** fixed `--sandbox` propagation in print mode;
 **1.0.9** fixed a headless `-c`/`-p` resumption bug (was dumping the full transcript instead of
@@ -144,7 +165,10 @@ the user's actual plan tier before any load-bearing budget decision.
 
 | Claim | Grade |
 |---|---|
-| roster probe table (4/5 families), free RC=1 fast-fail, output cleanliness, stdin-ignored, concurrency-clean | probe-verified — direct `agy -p` calls this session, 2026-07-14 |
+| 2026-07-23 re-probe: agy v1.1.5, 11-slug roster, `gemini-3.6-flash-medium` AVAILABLE (RC=0) | probe-verified — direct `agy --version` + `agy models` + `agy -p` this session, 2026-07-23 |
+| slug grammar added in 1.1.5 (inverts the v1.1.2 "no slug grammar" claim) | vendor-prose corroborating a probe — `agy changelog` 2026-07-23 + the live roster now being slugs |
+| 1.1.3/1.1.5 headless containment claims (settings.json honored, soft-deny, no outside-cwd auto-approve) | vendor-prose, UNVERIFIED — `agy changelog` 2026-07-23; flagged CONTESTED, needs a fresh containment probe before trusting |
+| roster probe table (4/5 families), free RC=1 fast-fail, output cleanliness, stdin-ignored, concurrency-clean | probe-verified — direct `agy -p` calls, 2026-07-14 (parenthesized names, v1.1.2 — grammar since superseded) |
 | NO-METER filesystem/log sweep, ccusage 21-subcommand list + disjoint `gemini` path + zero-totals run | author-confirmed — direct filesystem/process inspection + live `ccusage` run, 2026-07-14 |
 | UNCONFINED direct write-outside-cwd probe | probe-verified — direct `agy -p` call + `cli.log` cross-check, 2026-07-14 |
 | GitHub issues #45 / #36 (no plan-mode; sandbox bypass) | third-party — `gh` view; both OPEN — #45 last comment 2026-06-19, #36 last comment 2026-07-14; the #36 load-307 figure is an unverified promo-comment anecdote (reattributed in-text) |

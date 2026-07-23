@@ -61,6 +61,11 @@ Stable tokens even inside Japanese prose: **NO-METER**, **UNCONFINED**, **CATALO
 >   elsewhere — n=1, treat as a lower bound on risk, not a full map). There is no proven cheap
 >   `--sandbox read-only` equivalent. Containment is the CALLER's job (see A3), and a git worktree
 >   is NOT sufficient for untrusted input.
+>   **[CONTESTED as of v1.1.5, 2026-07-23]** the `agy changelog` claims headless `-p` now honors
+>   `settings.json` permissions/sandbox/file-access and soft-denies confirm-required tools (fixes in
+>   1.1.3 + 1.1.5) — if true this materially softens UNCONFINED. The write-outside-cwd evidence
+>   predates it (v1.1.2). Treat the LAW as still binding, but re-probe the live binary before relying
+>   on either it or the new claim (catalog → VERSION-DRIFT 2026-07-23).
 > Availability is CATALOG-BY-PROBE; both the roster AND the binary version DRIFT (agy self-updates
 > out-of-band from Homebrew — the live binary rewrote itself mid-audit). **Pin a floor: require
 > `agy --version` ≥ 1.1.2** (1.1.1 fixed a swallowed server error — commonly quota /
@@ -99,9 +104,10 @@ timeout 300 agy \
 rc=$?   # read on the NEXT line — never $? after a pipe
 ```
 
-- `--model`: the EXACT `agy models` display string, shell-quoted (spaces / parens / capitalization
-  are all literal). NO slug grammar exists (`gemini-3.1-pro` etc. all fail). Invalid → free RC=1 +
-  the valid list (on ≥ 1.1.2).
+- `--model`: the EXACT string `agy models` prints on the LIVE binary, shell-quoted. Its FORM drifts
+  by version (catalog owns the snapshot): parenthesized display strings on v1.1.2 (`Gemini 3.5 Flash
+  (Medium)`), stable dash-case slugs as of v1.1.5 (`gemini-3.6-flash-medium`) — never carry a form
+  across a version bump. Invalid → free RC=1 + the valid list (on ≥ 1.1.2).
 - **stdin is IGNORED in `-p` mode** (v1.1.1+ deliberately stopped reading it) — put ALL context in
   `$PROMPT`; piping `echo ctx | agy -p ...` silently drops ctx. Keep `</dev/null`: agy still checks
   stdin for TTY/EOF status, so the redirect prevents a status-check HANG (antigravity-cli#76) — a
@@ -121,7 +127,7 @@ rc=$?   # read on the NEXT line — never $? after a pipe
 | Symptom | Cause | Fix |
 |---|---|---|
 | no usage/cost anywhere; `agy models --json` → `flags provided but not defined: -json` (RC=1) | agy has NO structured-output/metering mode | accept stdout as the answer; usage is UNAVAILABLE (NO-METER) — do not invent one |
-| model silently wrong, or RC=1 + a printed model list | `--model` string is not an EXACT `agy models` display name (silent downgrade below 1.1.2) | require ≥ 1.1.2; copy the display string verbatim incl. spaces/parens/case |
+| model silently wrong, or RC=1 + a printed model list | `--model` string is not an EXACT `agy models` string (silent downgrade below 1.1.2) | require ≥ 1.1.2; copy the LIVE `agy models` string verbatim — its form drifts by version (dash-case slugs as of v1.1.5, parenthesized names on v1.1.2) |
 | model answers as if it never saw your piped context | stdin is dropped in `-p` mode | put the context INSIDE the `-p` argument |
 | agy wrote a file you did not expect, incl. outside cwd (under `$HOME`) | default `-p` auto-approves tools; cwd is NOT a write boundary | A3: TEXT-RETURN prompt for audits; container/disposable identity for untrusted or FILE-MUTATING work |
 | `agy --version` today ≠ yesterday; brew cask version ≠ live binary | agy self-updates out-of-band from Homebrew | `agy --version` + `agy changelog` before any load-bearing version fact |

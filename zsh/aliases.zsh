@@ -16,6 +16,44 @@ IS_MAC=false
 [[ "$(uname -r)" == *microsoft* ]] && IS_WSL=true
 [[ "$OSTYPE" == darwin* ]]         && IS_MAC=true
 
+# --- shadow dangling completion symlinks (must run BEFORE any compinit) ------
+# Docker Desktop's WSL integration installs /usr/share/zsh/vendor-completions/_docker as a
+# symlink into /mnt/wsl/docker-desktop/…; when Docker Desktop is stopped or uninstalled that
+# mount is gone, the link dangles, and every full compinit prints
+#   compinit:527: no such file or directory: /usr/share/zsh/vendor-completions/_docker
+# The dir is root-owned, so a user shell cannot delete the link. We SHADOW it instead:
+# compinit keeps the FIRST file of a given name in fpath order and skips later ones, so an
+# equally-named stub in a user-owned dir at the front of fpath silences the dangling one.
+# Self-healing in both directions — when the real target comes back the stub is pruned and
+# the vendor completion loads again. Generic: any dangling `_*` symlink in fpath is covered.
+# This lives here (not zshrc) because sheldon sources this file first, before the compinit in
+# the eza block below AND before zshrc's — whichever runs first must already see the stub.
+shadow_dangling_completions() {
+  local dir file name
+  local stubs=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/stub-completions
+  local -a broken
+  for dir in $fpath; do
+    for file in $dir/_*(N@); do            # (@) = symlinks only: nothing else can dangle
+      [[ -e $file ]] || broken+=("${file:t}")
+    done
+  done
+  [[ -d $stubs ]] || (( $#broken )) || return 0
+  # Builtin rm/mkdir from zsh/files — unaffected by this repo's disabled `rm` (see CLAUDE.md);
+  # they only ever touch $stubs, a cache dir generated entirely by this function.
+  zmodload -F zsh/files b:zf_rm b:zf_mkdir 2>/dev/null || return 0
+  zf_mkdir -p -- $stubs 2>/dev/null || return 0
+  for file in $stubs/_*(N); do             # prune stubs whose real completion came back
+    (( ${broken[(I)${file:t}]} )) || zf_rm -f -- $file
+  done
+  (( $#broken )) || return 0
+  for name in $broken; do
+    [[ -f $stubs/$name ]] || print -rl -- "#compdef ${name#_}" '_default "$@"' > $stubs/$name
+  done
+  fpath=($stubs $fpath)
+}
+shadow_dangling_completions
+unfunction shadow_dangling_completions
+
 # Define command recommendations with their alternatives and installation info
 typeset -A COMMAND_RECOMMENDATIONS=(
   ["grep"]="rg:brew install ripgrep:cargo install ripgrep"
@@ -276,7 +314,7 @@ cr() {
 
 alias di='diff -u'
 
-alias d='docker'
+alias d='hunk'          # review-first diff viewer for agent-authored changesets (was: docker)
 alias dc='docker-compose'
 
 alias dl='yt-dlp'
@@ -483,6 +521,11 @@ alias sa='. $HOME/.aliases'
 # alias sa='source activate'
 alias sb='. $HOME/.bashrc'
 alias sz='. $HOME/.zshrc'
+# sz re-reads ONLY .zshrc (interactive rc); relogin reproduces a full login by replacing
+# this process with a fresh login shell — re-runs .zprofile THEN .zshrc clean, so
+# direnv/fnm/sheldon hooks are re-eval'd once (not stacked) and PATH is rebuilt from scratch.
+alias relogin='exec zsh -l'
+alias rl='exec zsh -l'
 alias st='tmux source-file $HOME/.tmux.conf'
 
 alias sae='vi $HOME/.aliases'
@@ -646,6 +689,50 @@ alias mvf='command mv'   # 強制上書き (両OS共通)
 
 # rip for safer file removal
 command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
+
+# grep nudge: a NUDGE, not a block (unlike rm() above) — real grep always runs,
+# unchanged args, unchanged exit status. Prints ONE suggestion line to stderr
+# first, context-aware on whether $PWD is inside a cocoindex-code (ccc) project.
+#
+# Registry note (verified 2026-07-22): ~/.cocoindex_code/ holds daemon state
+# (daemon.pid/.log/.sock) + global_settings.yml (embedding MODEL config) —
+# there is no central file listing registered project roots, so a cached
+# roots-list lookup isn't possible. Instead each registered project carries
+# its OWN marker at its root: <root>/.cocoindex_code/settings.yml — the same
+# convention as .git (confirmed against ~/Workspace/{qoed,firedancer,beateater},
+# ~/DPP/min-sys-dpp-mvp, ~/ARTS/qinfogeo). Detection walks up from $PWD for
+# that marker (bounded at "/"; pure zsh `[[ -f ]]` stat checks only — no ccc
+# invocation, no python, no file *content* read) and caches the per-$PWD
+# verdict in $_GREP_NUDGE_CCC_CACHE so repeated calls from the same directory
+# are an O(1) hash lookup instead of re-walking the tree each time.
+#
+# Kept self-contained on purpose (no separate helper function): the cp/mv
+# guard above notes Claude Code's shell-snapshot mechanism strips any
+# single-underscore-prefixed FUNCTION, which would break a wrapper that
+# depends on one. Only a plain global array is used here, not a helper fn.
+typeset -gA _GREP_NUDGE_CCC_CACHE
+grep() {
+  local verdict="${_GREP_NUDGE_CCC_CACHE[$PWD]:-}"
+  if [[ -z "$verdict" ]]; then
+    verdict=0
+    local dir="$PWD"
+    while [[ -n "$dir" ]]; do
+      if [[ -f "$dir/.cocoindex_code/settings.yml" ]]; then
+        verdict=1
+        break
+      fi
+      [[ "$dir" == "/" ]] && break
+      dir="${dir:h}"
+    done
+    _GREP_NUDGE_CCC_CACHE[$PWD]=$verdict
+  fi
+  if [[ "$verdict" == 1 ]]; then
+    print -u2 '💡 grep: this dir is ccc-indexed — try `ccc search "<query>"` (semantic) or `rg` (fast text) instead.'
+  else
+    print -u2 '💡 grep: try `rg` instead (fast text search).'
+  fi
+  command grep "$@"
+}
 
 # ============================================
 # Additional Recommended Tools (not replacements)

@@ -32,3 +32,6 @@ Thumbs.db
 
 # Karabiner automatic backups
 karabiner/automatic_backups/
+# CocoIndex Code (ccc) — DBs ignored, settings.yml committed (qoed と同型)
+/.cocoindex_code/*
+!/.cocoindex_code/settings.yml

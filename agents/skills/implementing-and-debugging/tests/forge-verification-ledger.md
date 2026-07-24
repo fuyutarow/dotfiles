@@ -16,3 +16,10 @@ here, so no reciprocal pointer edit was needed there.
 
 **Grafted onto**: DEBUG gate, immediately after the existing "Verify the fix reproduces-then-passes"
 bullet — same family (test-before-done), extended rather than given a new section.
+
+## 2026-07-24: PROSE-DEBT waiver (dated) + driving-cocoindex co-fire 行
+
+touch: Routing 表に driving-cocoindex の co-fire 行(ccc 登録 repo での新規実装は battery FIRST —
+重複実装経路の閉鎖。本 skill は実装タスクで確実に発火する現職なので、この行が「実装の瞬間」に
+読まれる機構になる)。床の実測: 長文18・版見出し7行・長セル1(+新行のセルは400字未満)— 既存
+負債で増分なし。waiver 記載、staleness 行により reforge queue 入り。

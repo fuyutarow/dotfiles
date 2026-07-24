@@ -240,3 +240,13 @@ F3 desk-check(name + description のみで判定):
 | 「委任ブリーフを起草する前に、ヒント語を JA/EN 混在の言い換え三本で照合して」 | FIRE | FIRE — 委任ブリーフ・ヒント語照合・battery の全錨と一致 |
 | 「この関数の初回呼び出しを漏れなく全部列挙して」 | NO-FIRE(`rg` / `serena`) | NO-FIRE — 「初」は新規性でなく exact-symbol exhaustiveness; CC3 cut が優先 |
 | 「既知/未知の二節を読みやすく並べ替えて」 | NO-FIRE(`structuring-documents`) | NO-FIRE — 検索・照合・不在主張・委任ブリーフのいずれも求めていない |
+
+## 2026-07-24: PROSE-DEBT waiver (dated) + 重複実装経路の照準是正
+
+touch: FIRES 表に「機能重複/二重実装」経路の行を追加(grep 0件 ≠ 不在、battery FIRST)。
+床の実測(この touch 後): 長文24・版見出し20行・長セル1 — 全て既存負債で本編集の増分なし。
+waiver を記載する — staleness 行(2+ classes)により reforge queue 入り(driving-* family と同型、
+蒸留腕の順位で writing-julia 等の後段)。
+description は 1486/1500 字で満杯のため事故語彙(機能重複・二重実装)の追加は不可 — この照準は
+(a) global CLAUDE.md の常駐行、(b) implementing-and-debugging の co-fire 行(実装時に必ず読まれる
+現職)、(c) PostToolUse[Grep] zero-hit hook の3機構で補償する裁定(2026-07-24)。

@@ -199,6 +199,7 @@ FIRES:
 | 「markdown のメモ/ノート群も意味検索できる？『どこかに書いたはず』を概念で探したい」 | markdown corpora are in-scope — PROJECT-REGISTER the vault; 日本語ノートなら LANGUAGE-WALL gate first (§Markdown) |
 | 「日本語で ccc search してもまともな結果が出ない」 | LANGUAGE-WALL gotcha — code-switch first aid for JA/EN-mixed notes; pure-JA needs the model swap, not query massaging |
 | 「PDF/論文(ドキュメント)を ccc で意味検索したい」 | ccc は PDF 非対応 — 生 PDF は無言スキップ(§Gotchas)。境界を示し PDF→Markdown 変換 → 変換後 `.md` を PROJECT-REGISTER へ誘導するのがこのスキルの責務(cocoindex フレームワークの docling PDF→MD example は別層・スコープ外) |
+| 「機能重複してた/二重実装を作ってしまった/既存実装があるはずでは」— ccc 登録 repo での新規実装の着手前・grep 0件からの不在結論の前 | the duplicate-implementation pathway (2026-07-24 measured): literal grep 0 hits ≠ absence — battery ≥3 paraphrases FIRST. implementing-and-debugging carries the reciprocal co-fire row; the zero-grep hook nudges at the exact moment |
 
 MUST NOT fire (route):
 

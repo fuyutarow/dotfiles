@@ -103,6 +103,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 | `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. Forward bets (spike/MVP/will-it-scale) and **future-durability** (陳腐化しない設計) → there. Executing a defined change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
 | `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
+| `driving-cocoindex` | **Co-fire, FIRST, in any ccc-registered repo** (`.cocoindex_code/settings.yml` present): before writing NEW functionality, run the semantic battery (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway (measured 2026-07-24). Literal-token greps stay correct (their CC3). |
 
 ## Fire / no-fire
 

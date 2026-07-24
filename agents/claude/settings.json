@@ -62,6 +62,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh nudge-ccc-on-zero-grep.ts"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {

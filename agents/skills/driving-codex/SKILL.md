@@ -103,6 +103,7 @@ timeout 600 codex exec \
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| rc=124 after the FULL timeout, exec log holds ONLY "Reading additional input from stdin..." | the `</dev/null` in the LONG-RUN recipe was dropped — codex exec also reads stdin, and a background shell's stdin never EOFs, so it hangs the whole budget. Two independent operator drops observed (2026-07-23 terra re-review, 2026-07-24 sol r2) — the clause is load-bearing, not decoration | relaunch with `</dev/null`; check the exec log for this exact line BEFORE blaming the model or the prompt |
 | exit 1, "Not inside a trusted directory…" | cwd/`-C` target is not a trusted git dir | add `--skip-git-repo-check`, or `-C` into a trusted repo |
 | "Reading additional input from stdin…" — stray text appended to the prompt, hang risk on an open pipe | non-TTY stdin is read as extra prompt input | always `</dev/null` in scripts (observed both ways: message present without the redirect, absent with it) |
 | exit 1 + a 400 `invalid_request_error` naming the model | ambiguous: wrong/short ID of a REAL model, or genuinely not in this account's catalog — the error cannot tell them apart | C1: verify the exact ID against the catalog, re-probe; only then conclude |

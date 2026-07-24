@@ -14,7 +14,7 @@ description: >-
 
 # acting-as-director — 監督(指示役)が委任体制を速く運転するための行動指針
 
-> **Version**: v2607.5.0 (2026-07-24 — 健全化の窓の蒸留: 実測値の体制の併記の義務+全数宣言の3層検査(P6)・worker停止の再開の定型(委任契約)。堆積の門は12のまま——全て既存の門への統合。v2607.4.0=2026-07-23 進捗ストールのポストモーテム蒸留: 監査の欠け2級分類(P4)・終了条項と理論の消費者条項(委任契約)・覆せる既定(LAW(2))・達成級の語の土俵の名指し(P6))
+> **Version**: v2607.6.0 (2026-07-24 — 配役の一次錨の蒸留: 公式の並列subagent適性と枠消費の verbatim 引用を配役表へ(「Fable=Director/Sonnet=Executor」は公式推奨でなく third-party 格と裁定)+LAW(2)に全力実務の宣言(唯一の例外)。新規 P-gate・委任契約項目ゼロ(数え上げ12不変)。sol 査読2巡の記録は台帳。v2607.5.0=健全化の窓の蒸留: 実測値の体制の併記の義務+全数宣言の3層検査(P6)・worker停止の再開の定型(委任契約)。v2607.4.0=2026-07-23 進捗ストールのポストモーテム蒸留: 監査の欠け2級分類(P4)・終了条項と理論の消費者条項(委任契約)・覆せる既定(LAW(2))・達成級の語の土俵の名指し(P6))
 
 > 改名の記録: 旧名 `pacing-research-production`(2026-07-22 鍛え直しで改名 — 拍子は性質で
 > あって活動ではない。主題は監督の行動指針)。
@@ -55,8 +55,14 @@ description: >-
 >   発注者へは「覆せる既定(暫定・追認待ち)」の札つきで報告する。発注者の裁定の待ち行列へ
 >   積んでよいのは不可逆な変更と統治の変更だけ(2026-07-23実測: 裁定4件を積んで発注者を
 >   ボトルネック化し「進捗ストール」の指摘——うち2件は既定で進められる種類だった)
-> artifact: 監督の応答内の各 tool 呼び出しが上の三級のどれかに宣言済みで、どれにも
-> 入らない行為が存在しないこと。宣言できない行為はそれ自体が違反。検収の記録には各試験の
+> - **全力実務の宣言(唯一の例外)** = 発注者が「監督自身が実務を執れ」と対象を名指しで
+>   明示した単発タスクに限る(タスクの名指しだけでは起動しない — 監督が自ら「超難」と
+>   裁定して起動することはできない)。turn 冒頭に「全力実務(宣言): 対象・理由・費用の
+>   見込み」の札を出し、成功・失敗・中断を問わず当該単発の終了時に監督へ復帰する。札の
+>   無い実務は従来どおり違反 —— これは運転形態ではなく例外である(根拠: 配役の根拠の
+>   費用の非対称。既定は常に監督)
+> artifact: 監督の応答内の各 tool 呼び出しが上の三級のどれか(または全力実務の札の下)に
+> 宣言済みで、どれにも入らない行為が存在しないこと。宣言できない行為はそれ自体が違反。検収の記録には各試験の
 > 「主張が偽でも出得るか」への回答が明記されていること ── 無回答、または「出得る」の
 > 試験を根拠に採択した記録は違反。
 
@@ -69,6 +75,27 @@ description: >-
 | 異種検証 | codex(GPT)・agy(Gemini ほか多社) | 独立の監査・第二意見。監査の指示書は盲検 ── 実務側の結論・推論を渡さず、問題文と成果物だけを渡す(先入観の防止)。担当間の不一致は最初に引く糸(P6 と同文)。grok(xAI)は情報流出の前科(2026-07)があるため既定では外す ── 秘密を含まぬ repo に限り明示指示で使う |
 
 呼び出しの機構は `driving-codex` / `driving-antigravity` / `driving-grok`(pointer; 再論しない)。
+
+配役の根拠(2026-07-24 蒸留; 一次資料は verbatim・日付つき。合意は根拠に数えない):
+
+- **適性(公式)**: "Claude Fable 5 is significantly more dependable at dispatching and
+  sustaining parallel subagents, and reliably manages ongoing communication with long-running
+  subagents and peer agents." 加えて "Claude Fable 5 dispatches parallel subagents more
+  readily than prior models. Use subagents frequently, provide explicit guidance about when
+  delegation is appropriate, and prefer asynchronous communication between orchestrator and
+  subagents over blocking until each subagent returns."
+  (platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5)。
+  監督業はこの名指しの強みの直射。後段の引用が錨するのは P2 の非同期・非 blocking 原則
+  まで — C2 の具体則(10分超は腕から外し主 loop の Bash へ)は家の実測に基づく。
+- **費用(公式)**: "Fable 5 draws from your plan's regular weekly usage limits and uses them
+  faster than other Claude models."(support.claude.com 記事 15424964「Claude Fable 5 on
+  your plan」)。監督運用は Fable の支出を設計・指示書・裁定・検収の判断点に絞る費用装置
+  でもある — 実務へ広げるほど継続運用の余力を縮める(「持続しない」は 2026-07 の週間枠
+  運用の実測に基づく家の裁定であり、引用の含意ではない)。
+- **「Fable=Director / Sonnet=Executor」の対は公式推奨ではない**(公式は委任先の tier を
+  名指ししない — cheaper-model 委任の一般論と opus/haiku の例示のみ、2026-07-24 走査)。
+  third-party の定石として観測されるだけで、載荷根拠は上の一次錨2件と出自の節の家の実測。
+  Sonnet への束縛は家の裁定であり、hook が機械で強制する。
 
 ## 監督の一巡(P1〜P10・標準 pipeline を吸収)
 
@@ -157,7 +184,8 @@ FIRES: 「研究を進めて」「どんどん進めて/さっさとやれ(制�
 「監督としてどう振る舞うべきか」「委任体制をどう運転するか」
 「誰に任せるか決めて/モデルの配役を決めて」
 「中間生成物を毎回作り直している/束ねのキャッシュが効いていない」
-「検収の試験をどう設計するか」「完成宣言が監査に落ち続ける」。
+「検収の試験をどう設計するか」「完成宣言が監査に落ち続ける」
+「Fable に全部やらせていい？/監督自身が直接全力でやれ(全力実務)」「委任体制でのモデルの役割分担・Fable を作業者にすると枠が溶ける」。
 
 MUST NOT fire(route):
 

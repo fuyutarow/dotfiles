@@ -166,3 +166,40 @@ F3 desk-check(name + description のみで判定):
 | C2 | 本走級の計算(10分超の実走)を腕の文脈内で走らせない。長い走行は監督が背面のBashで発射し(トークンを消費しない)、判定は成果物に対して新しい短い腕か監督が行う | 委任の形の選択(長走行の分離) |
 | C3 | 全ての指示書に「判断の閉鎖」の節を義務化——定数の分類・witnessや評価の選び方・受け入れの解釈を監督が事前に列挙する。未列挙の判断に遭遇した腕は決めずに停止して裁定を求める | 委任の形の選択(判断の閉鎖) |
 | C4 | 全ての腕に硬い時間予算と中間報告の義務、監視待ちの空転の禁止(「Monitorの通知を待たず自分で出力を確認して前進せよ」)を指示書に焼き込む | 委任の形の選択(時間予算の硬化) |
+
+## 2026-07-24: v2607.6.0 配役の一次錨の蒸留(Director vs Expert Worker)
+
+出自: 発注者が持ち込んだ AI 生成の合意要約(untrusted 格)——「Fable は Director 一択」論。
+蒸留の前に一次照合の腕(sonnet、raw HTML 照合)で主張を格付けした:
+
+| 主張 | 判定 | 一次資料 |
+|---|---|---|
+| 公式ガイドが並列 subagent 発射・長走行の非同期管理を Fable の強みと明記 | CONFIRMED(byte 一致) | platform.claude.com …/prompting-claude-fable-5 |
+| 「Opus より速く枠を消費」 | 文言 REFUTED——公式は "faster than other Claude models"(Opus 比較は不在、grep 済み) | support.claude.com 15424964 "Claude Fable 5 on your plan" |
+| 「Fable=Director / Sonnet=Executor」が公式推奨 | NOT-FOUND——公式は tier を名指ししない(一般論の cheaper-model と opus/haiku 例示のみ)。third-party 論評のみ | 4 URL 走査 |
+
+採択(新 gate ゼロ・堆積の門 12 不変):
+- 配役表に「配役の根拠」ブロック——verbatim 引用2件を載荷、Sonnet 束縛は家の裁定
+  (hook 強制)として公式主張から分離。P2/C2 の外部錨を明記。
+- LAW(2) に「全力実務の宣言(唯一の例外)」——発注者の名指し+札+復帰で閉じる宣言制の例外。
+  artifact 行を「三級(または全力実務の札の下)」に更新。
+- FIRES に2アンカー追補(「Fable に全部やらせていい？」「Fable を作業者にすると枠が溶ける」)。
+
+F3 desk-check(name + description のみで判定):
+| Ask | 期待 | 判定 |
+|---|---|---|
+| 「Fable に全部やらせていい？ Director とどっちが得？」 | FIRE | FIRE——モデルの配役は description の中核アンカー |
+| 「この超難問だけは全力で直接解いて(全力実務)」 | FIRE | FIRE——例外の宣言と費用開示を要求する側で発火 |
+| 「claude-fable-5 の API 価格は？」 | NO-FIRE(claude-api) | NO-FIRE——委任体制の運転を求めない事実照会 |
+
+sol(codex, gpt-5.6-sol, effort=high, read-only)の敵対査読、2巡+機械閉鎖:
+
+- 第1巡: FAIL——凍結4件(非同期引用の省略が verbatim を名乗る/C2 への錨の過大適用/
+  「持続しない」の断定拡大/全力実務の起動・復帰境界の未閉鎖)+衛生2件。全件修復経路つき。
+  6件全て採択し修理。
+- 第2巡(再発射——初回は運転者が LONG-RUN レシピの `</dev/null` を脱落させ rc=124。
+  driving-codex の Gotchas に症状行を追加済み): FAIL だが残件1件に収束——第2引用が
+  指定ブロックの先頭文を欠く。修復経路どおり先頭文を追加。
+- 閉鎖: 残件の性質が決定論的な文字列照合のため第3巡は立てず(P4 往復経済)、監督が機械照合で
+  閉鎖——blockquote 剥離+空白正規化の下で全3引用が skill 本文と一次照合記録の両方に逐語一致
+  (修正前は同照合が FAIL——偽なら落ちる性質を実地確認)。全面改鋳(次工程)で新たな監査が掛かる。

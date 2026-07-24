@@ -217,12 +217,135 @@ describe("skill-check floor", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  test("the floor's own two dirs from the CHARACTERIZE brief: clean, exit 0", () => {
-    const { out, code } = runCheck(
-      join(REPO_ROOT, "agents/skills/writing-bun-scripts"),
-      join(REPO_ROOT, "agents/skills/wiring-mise-tasks"),
+  test("the floor's own two dirs from the CHARACTERIZE brief: exit 0 (prose-debt WARNs now surface real corpus debt)", () => {
+    const wbs = join(REPO_ROOT, "agents/skills/writing-bun-scripts");
+    const wmt = join(REPO_ROOT, "agents/skills/wiring-mise-tasks");
+    const { out, code } = runCheck(wbs, wmt);
+    expect(out).toBe(
+      `WARN ${wbs}: 10 prose sentences >120 chars (technical-communication debt)\n` +
+        `WARN ${wbs}: version header 11 lines >3 — history belongs in the ledger\n` +
+        `WARN ${wbs}: 4 table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)\n` +
+        `WARN ${wmt}: 11 prose sentences >120 chars (technical-communication debt)\n` +
+        `WARN ${wmt}: version header 9 lines >3 — history belongs in the ledger\n`,
     );
+    expect(code).toBe(0);
+  });
+});
+
+// --- PROSE-DEBT floor (new WARN-tier checks; measurement before enforcement) ---
+// Fixtures below stay minimal and isolated per check so a fixture built to exercise one
+// check does not accidentally trip another (each assertion checks for absence of the
+// other checks' WARN substrings where relevant).
+describe("skill-check prose-debt floor", () => {
+  const LONG = "A".repeat(130); // 130 chars, unambiguously >120 as a standalone "sentence"
+
+  test("3 long prose sentences: WARN fires with the count", () => {
+    const dir = makeSkillDir(
+      "prose-debt-three",
+      validSkillMd("prose-debt-three") +
+        `\n${LONG}.\n\n${LONG}.\n\n${LONG}.\n`,
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).toBe(
+      `WARN ${dir}: 3 prose sentences >120 chars (technical-communication debt)\n`,
+    );
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("2 long prose sentences: below the N>=3 threshold, no WARN", () => {
+    const dir = makeSkillDir(
+      "prose-debt-two",
+      validSkillMd("prose-debt-two") + `\n${LONG}.\n\n${LONG}.\n`,
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).not.toContain("prose sentences");
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("5-line version header: WARN with line count", () => {
+    const dir = makeSkillDir(
+      "version-header-five",
+      validSkillMd("version-header-five") +
+        "\n> **Version**: v1.0.0 (2026-07-24)\n" +
+        "> line two\n" +
+        "> line three\n" +
+        "> line four\n" +
+        "> line five\n",
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).toBe(
+      `WARN ${dir}: version header 5 lines >3 — history belongs in the ledger\n`,
+    );
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("3-line version header stays at/under the threshold: no WARN", () => {
+    const dir = makeSkillDir(
+      "version-header-three",
+      validSkillMd("version-header-three") +
+        "\n> **Version**: v1.0.0 (2026-07-24)\n" +
+        "> line two\n" +
+        "> line three\n",
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).not.toContain("version header");
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a 450-char table cell: WARN with the count", () => {
+    const cell = "B".repeat(450);
+    const dir = makeSkillDir(
+      "rule-cell-narrative",
+      validSkillMd("rule-cell-narrative") +
+        `\n| Col A | Col B |\n|---|---|\n| short | ${cell} |\n`,
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).toBe(
+      `WARN ${dir}: 1 table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)\n`,
+    );
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("long lines inside a code fence and inside table rows do not count toward prose-sentence-length", () => {
+    const fenceLine = "F".repeat(130);
+    const cellLine = "G".repeat(130);
+    const dir = makeSkillDir(
+      "fence-table-excluded",
+      validSkillMd("fence-table-excluded") +
+        "\nIntro paragraph.\n\n" +
+        "```text\n" +
+        `${fenceLine}\n${fenceLine}\n${fenceLine}\n` +
+        "```\n\n" +
+        `| Col |\n|---|\n| ${cellLine} |\n| ${cellLine} |\n| ${cellLine} |\n`,
+    );
+    const { out, code } = runCheck(dir);
+    expect(out).not.toContain("prose sentences");
+    expect(out).not.toContain("table cells >400");
+    expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("regression: missing SKILL.md still FAILs after the prose-debt floor was added", () => {
+    const dir = makeSkillDir("prose-debt-regression-missing");
+    const { out, code } = runCheck(dir);
+    expect(out).toBe(`FAIL ${dir}: SKILL.md missing\n`);
+    expect(code).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("regression: a clean minimal skill still exits 0 after the prose-debt floor was added", () => {
+    const dir = makeSkillDir(
+      "prose-debt-regression-clean",
+      validSkillMd("prose-debt-regression-clean"),
+    );
+    const { out, code } = runCheck(dir);
     expect(out).toBe("");
     expect(code).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

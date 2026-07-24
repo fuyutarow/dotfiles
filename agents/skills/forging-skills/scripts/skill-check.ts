@@ -52,6 +52,108 @@ function listedReferences(lines: string[]): string[] {
   return refs;
 }
 
+// --- PROSE-DEBT floor (WARN-tier only; measurement before enforcement) ---
+// Applied to the SKILL.md BODY only. Code-fence interiors, table rows (lines starting
+// with `|`), and bare-URL lines are excluded from prose scanning; blockquote markers
+// (`> `) are stripped so blockquoted prose still counts. These three checks never FAIL —
+// they measure technical-communication debt for later, deliberate enforcement.
+
+const SENTENCE_TERMINATORS = /[。.！？]/;
+const TABLE_SEPARATOR_ROW = /^\|[\s:|-]+\|?$/;
+const VERSION_HEADER_START = /^>\s*\*\*Version\*\*/;
+const URL_ONLY_LINE = /^[<(]?https?:\/\/\S+[)>.,;:]?$/;
+
+function isFenceMarker(line: string): boolean {
+  return line.trim().startsWith("```");
+}
+
+function stripBlockquoteMarker(line: string): string {
+  return line.replace(/^\s*(?:>\s?)+/, "");
+}
+
+// Prose sentence length — paragraph-joins consecutive prose lines (broken by blank
+// lines, table rows, and code fences) then splits on 。/./！/？, counting segments
+// whose trimmed length exceeds 120 chars.
+function countLongProseSentences(bodyLines: string[]): number {
+  let inFence = false;
+  let paragraph: string[] = [];
+  let longCount = 0;
+
+  const flush = (): void => {
+    if (paragraph.length === 0) return;
+    const text = paragraph.join(" ");
+    paragraph = [];
+    for (const segment of text.split(SENTENCE_TERMINATORS)) {
+      const trimmed = segment.trim();
+      if (trimmed !== "" && [...trimmed].length > 120) longCount += 1;
+    }
+  };
+
+  for (const raw of bodyLines) {
+    if (isFenceMarker(raw)) {
+      inFence = !inFence;
+      flush();
+      continue;
+    }
+    if (inFence) continue;
+    const trimmed = raw.trim();
+    if (trimmed === "" || trimmed.startsWith("|")) {
+      flush();
+      continue;
+    }
+    const stripped = stripBlockquoteMarker(raw).trim();
+    if (stripped === "" || URL_ONLY_LINE.test(stripped)) {
+      flush();
+      continue;
+    }
+    paragraph.push(stripped);
+  }
+  flush();
+  return longCount;
+}
+
+// Version header length — the contiguous block starting at a `> **Version**` line plus
+// its continuation lines starting with `>`.
+function versionHeaderBlockLengths(bodyLines: string[]): number[] {
+  const blocks: number[] = [];
+  let index = 0;
+  while (index < bodyLines.length) {
+    if (VERSION_HEADER_START.test(bodyLines[index]?.trim() ?? "")) {
+      let end = index + 1;
+      while (end < bodyLines.length && bodyLines[end]?.trim().startsWith(">"))
+        end += 1;
+      blocks.push(end - index);
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+  return blocks;
+}
+
+// Rule-cell narrative — table cells (text between `|` delimiters, separator rows
+// excluded) longer than 400 chars.
+function countLongTableCells(bodyLines: string[]): number {
+  let inFence = false;
+  let longCells = 0;
+  for (const raw of bodyLines) {
+    if (isFenceMarker(raw)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith("|") || TABLE_SEPARATOR_ROW.test(trimmed)) continue;
+    let cells = trimmed.split("|");
+    if (trimmed.startsWith("|")) cells = cells.slice(1);
+    if (trimmed.endsWith("|")) cells = cells.slice(0, -1);
+    for (const cell of cells) {
+      if ([...cell.trim()].length > 400) longCells += 1;
+    }
+  }
+  return longCells;
+}
+
 async function checkDirectory(input: string): Promise<void> {
   const directory = input.replace(/\/$/, "");
   const skillPath = join(directory, "SKILL.md");
@@ -132,6 +234,33 @@ async function checkDirectory(input: string): Promise<void> {
     metadata.bodyStart === 0 ? 0 : lines.length - metadata.bodyStart;
   if (bodyLines > 500)
     warn(directory, `SKILL.md body ${bodyLines} lines > 500`);
+
+  const bodyContentLines = lines.slice(metadata.bodyStart);
+
+  const longSentences = countLongProseSentences(bodyContentLines);
+  if (longSentences >= 3) {
+    warn(
+      directory,
+      `${longSentences} prose sentences >120 chars (technical-communication debt)`,
+    );
+  }
+
+  for (const blockLength of versionHeaderBlockLengths(bodyContentLines)) {
+    if (blockLength > 3) {
+      warn(
+        directory,
+        `version header ${blockLength} lines >3 — history belongs in the ledger`,
+      );
+    }
+  }
+
+  const longTableCells = countLongTableCells(bodyContentLines);
+  if (longTableCells > 0) {
+    warn(
+      directory,
+      `${longTableCells} table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)`,
+    );
+  }
 }
 
 async function main(): Promise<void> {

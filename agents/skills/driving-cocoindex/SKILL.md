@@ -25,10 +25,11 @@ description: >-
 
 # Driving CocoIndex Code — semantic code search as a disciplined subprocess
 
-> **Version**: v2607.5.0 (2026-07-23 — director-loop known-reduction/novelty/brief anchors + query battery;
-> prior v2607.4.0 2026-07-14 = PDF/binary silent-skip Gotcha + FIRES convert-first routing;
-> prior v2607.3.0 2026-07-13 =
-> LANGUAGE-WALL model swap to granite-97m-multilingual-r2, markdown-corpus trial folded in)
+> **Version**: v2607.5.1 (2026-07-24 — lineage clarity: the ACTIVE house model is
+> `granite-311m-multilingual-r2` since 2026-07-17 (catalog §Active model); the 97m name below
+> is v2607.3.0 HISTORY, not the current model. Prior: v2607.5.0 2026-07-23 = director-loop
+> anchors + query battery; v2607.4.0 = PDF silent-skip; v2607.3.0 2026-07-13 = first
+> LANGUAGE-WALL swap, to granite-97m-multilingual-r2)
 > **Scope**: operating `ccc` (cocoindex-code) — setup → project lifecycle → search/grep over
 > code AND markdown/notes corpora (NOT PDF/binary — §Gotchas) → daemon → MCP surface → embedding in Workflow scripts;
 > host-agnostic, with a note on this repo's dotfiles-declarative global-settings wiring.

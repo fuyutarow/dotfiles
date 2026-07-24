@@ -41,3 +41,21 @@ are graded like any distilled source's, at capture time.
 | The defaults' quoted text (anti-leak rule, near-miss-negative rule, trigger surfaces) | author-confirmed | Quoted verbatim from the `$PLUGIN` / `$CODEX` sources, 2026-07 dissection |
 | The 8-skill session patterns (gates carrying the LAW, owner-filter chains, seam clauses, description races) | observed-in-production | 2026-07 reforging of the house collection; captured while the transcripts existed |
 | F1–F3 gates, the pipeline, typed-cut vocabulary, the treatment tiers | skill-supplied / constructed | Engineered by the forger, found in no source — never presented in a source's voice |
+
+## 2026-07-24: CONFIRMED — SKILL.md 散文の責任空白(発注者検出、ポストモーテム)
+
+発見: routing 表の linting-prose 行が「do NOT run prose-lint gates on a SKILL.md」と免除し、
+linting-prose 側の cut は「SKILL.md の文言監査は forging-skills」と逆送 — 双方が相手を指し、
+散文の床を誰も所有しない F2 型の空白。既存 gate は内容(F1)・構造(skill-check)・門数
+(堆積の門)のみを測り、散文の負債(規則セル内の実測物語・版見出しの括弧連鎖・長文)を
+測らない。結果: acting-as-director が3日6版の append-only 蒸留で全 gate green のまま
+テクニカルコミュニケーションとして破綻(発注者検出 2026-07-24)。前提の誤り: skill の読者は
+model だけではない — 監査し信頼する人間が第二の読者であり、model にとっても物語混入は
+prominence を壊す(この skill 自身の calibration 論に矛盾)。
+
+是正プログラム(機構、徳目でない):
+1. skill-check.ts に散文床 WARN 3種(文長・版見出し行数・表セル長)— 実装腕発射済み、
+   corpus 負債の baseline 取得込み。
+2. acting-as-director の sol 全面改鋳(保全原則つき)を新しい床の pilot とする — 走行中。
+3. 本 skill の reforge(免除行の破棄・散文床の明文化・堆積の門に散文負債の軸を追加)は
+   pilot 着地後の一巡で行う — append-only patch はこの skill 自身の §6 が禁じるため。

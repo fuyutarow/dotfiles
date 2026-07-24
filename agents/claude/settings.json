@@ -53,6 +53,14 @@
             "command": "sh ~/.claude/hooks/run.sh detect-prose-correo.ts"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
+          }
+        ]
       }
     ]
   },

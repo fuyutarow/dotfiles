@@ -128,7 +128,7 @@ map + flagger contract: `references/patterns.md`.
 FIRES: 文章校正・推敲 of a report/abstract/README/proposal · "LLMっぽい/AI臭い" · ルー語/ジャーゴン
 complaints · reviewing an agent's own review prose · BEFORE drafting external-facing prose · choosing
 the textlint profile for a document. MUST NOT fire: deck/section order (→ designing-presentations) ·
-MECE/scatter/restructuring (→ structuring-documents) · SKILL.md prose (→ forging-skills) · hook/CI
+MECE/scatter/restructuring (→ structuring-documents) · SKILL.md prose (→ forging-skills — dual-reader, its skill-check owns the floor) · hook/CI
 wiring (→ operating-the-harness) · paper-corpus synthesis (→ systematizing-knowledge) · a one-line
 typo fix. Full desk-check set: `tests/triggers.md` — re-run it after ANY description edit.
 

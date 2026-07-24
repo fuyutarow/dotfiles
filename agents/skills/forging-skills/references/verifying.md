@@ -99,8 +99,10 @@ routing table; this is the synced working copy — re-sync on reforge, do not di
 ## §5 The mechanical floor — scripts/skill-check.ts
 
 Run this skill's `bun scripts/skill-check.ts <skill-dir>` over the target BEFORE any semantic
-lens; run it over the whole collection whenever a description or cut changed. It is a floor,
-not a bar: it catches structure, never meaning. And prove any NEWLY added check fires —
+lens; run it over the whole collection whenever a description or cut changed. Structural checks
+FAIL; prose-debt checks WARN (measurement — their enforcement moment is the forge exit; the
+rule's SOLE home is the dual-reader bar, `architecture.md` §5, surfaced through F1). Meaning
+stays with the semantic lenses. And prove any NEWLY added check fires —
 inject a known-bad string, watch it FAIL, revert. A gate never seen failing is decoration.
 
 ## §6 Ship & maintain
@@ -120,6 +122,7 @@ link landed.
 | A new sibling changed the cut topology | re-run the sibling-cut lens across the whole family |
 | Official docs moved | re-fetch on EVERY reforge; never trust the previous harvest |
 | Harness capabilities changed | e.g. workflows arriving made 8 skills stale at once (2026-07) |
+| Prose-debt WARNs grew since the last reforge | the 堆積-analogue for prose: 2+ debt classes firing, or ≥20 long sentences, queues the skill (added 2026-07-24; corpus baseline in the ledger) |
 
 **Reforge = re-AUDIT first, never append-only patching** — a patch that skips the audit
 inherits every stale assumption it was meant to fix. An update is the same meta-workflow

@@ -37,6 +37,10 @@ Three tests; a candidate rule survives only if it passes all that apply.
    skill's own delta (the agent-specific operationalization) as skill-supplied, never attributed
    to the source. Marketing subsumed tools as novelty is laundering in both directions.
 
+FORM-vs-CONTENT carve-out (2026-07-24): the three tests judge CONTENT lines. FORM rules — the
+dual-reader prose bar — are enforced by the floor script at forge exit (`architecture.md` §5),
+never distilled as content rules; a readability rule is not "cut" for changing no tool call.
+
 ## 3. PROVENANCE GRADING — the source-grade table
 
 Canonical instance: raising-resolution §C.6 — declared the SOLE grade table for that entire skill.

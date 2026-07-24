@@ -300,3 +300,11 @@ patterns.md headings/C-map/glossary) — the old label collided with the sibling
 structuring-documents' routing row + its new F3 ledger; (3) patterns.md flagger contract fixed —
 it mis-routed document-structure findings to designing-presentations (deck-era residue); now:
 L3/L4 findings are OWN, slide/figure → designing-presentations, reorganization → structuring-documents.
+
+## 2026-07-24: PROSE-DEBT waiver (dated)
+
+本日、forging-skills の dual-reader bar 設置に伴う相互 seam の1行編集(本文 MUST-NOT-FIRE の
+SKILL.md prose 行に根拠を追記)で本 skill が touch された。床の実測: 長文22・版見出し9行・
+長セル1。これらは全て既存の負債であり本編集で増えていない。bar の「touch it, clear it」に
+従い waiver を記載する — 本 skill は staleness 行(2+ classes)により reforge queue 入り
+(蒸留腕の順位で writing-julia 等の後段)。

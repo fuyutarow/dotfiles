@@ -59,3 +59,57 @@ prominence を壊す(この skill 自身の calibration 論に矛盾)。
 2. acting-as-director の sol 全面改鋳(保全原則つき)を新しい床の pilot とする — 走行中。
 3. 本 skill の reforge(免除行の破棄・散文床の明文化・堆積の門に散文負債の軸を追加)は
    pilot 着地後の一巡で行う — append-only patch はこの skill 自身の §6 が禁じるため。
+
+## 2026-07-24: v2607.2.0 reforge — 散文免除の破棄と dual-reader bar の設置(是正プログラム第3段の執行)
+
+AUDIT 2腕(棚卸し腕: 免除の全出現 file:line・堆積 gate の不在の発見/蒸留腕: pilot からの
+候補規則13本・負債全数計測・適用範囲の反証4件)→ SPEC/FORGE/検収は監督 solo。
+
+採択と設置:
+- THE LAW に「二人の読者」条項。description と routing の免除2行を破棄し、dual-reader bar
+  の宣言に置換(SOLE home = architecture.md §5)。F1 に「触った skill は WARN 0 か日付つき
+  waiver で forge を出る」、F3 に「床の実測値を台帳に記録」。
+- verifying.md §5 の「structure, never meaning」の stale 記述を実装(WARN 3種)と整合。
+  §6 staleness に散文負債の行(= 本 skill 初の堆積 analogue — 棚卸し腕の発見どおり、
+  「堆積の門」は本 skill 内では未定義語だった — orchestrating-agents には数値上限12の実在の門としてある。未定義だったのは forging-skills 自身の中でのこと)。
+- distilling.md §2 に FORM-vs-CONTENT carve-out(散文床規則は command test の対象外 —
+  蒸留せず床で執行)。triggering.md §7 に「Mutual-deferral void」型を新設(既存表は
+  double-fire 型しか名指していなかった)。execution-models.md の Header formula に
+  ≤3行制約の cross-ref。linting-prose の相互 seam は本文 L131 に根拠つきで着地
+  (description 側は 1500 字予算のため素の矢印を維持 — 予算超過 1519 を実測して差し戻し)。
+- bar の適用範囲は蒸留腕の反証4件どおり限定を明文化: references の論証散文・≥3者 seam・
+  index 行・非堆積 EN 本文には全面 atomization を掛けない。
+
+自己適用(touch it, clear it):
+- 版見出し: 10行 → 2行+隣接 code fence(WARN 消滅を実測)。scope/lineage の原文は本節末尾に
+  逐語退避: 「**Scope**: the CRAFT of creating and reforging Agent Skills — existence,
+  distillation, architecture, trigger surface, execution model, verification. Host-agnostic
+  core; every Claude-Code-specific number and mechanism is POINTED at operating-the-harness,
+  never restated here.」「**Lineage**: forged from the 2026-07 reforging of 8 house skills +
+  dissection of both skill-creator defaults + the platform.claude.com / agentskills.io docs
+  (Fable 5, 2026-07).」
+- WAIVER(dated 2026-07-24): 残余の散文 WARN {長文11・長セル2(既存の defaults 行ほか)} は
+  EN 論証本文であり非堆積 — bar 自身の適用範囲判定により全面 atomization の対象外。
+  reforge queue は蒸留腕の順位(writing-julia → structuring-documents →
+  arguing-research-papers → directing-research → driving-* family)の後段に置く。
+- 誠実性の訂正(蒸留腕の指摘): orchestrating-agents 台帳の「改鋳前: 版見出し8行」は 700f55d
+  に対して再現しない(当該 header は1行の連鎖で、床は連続行数を数える)。正しい改鋳前実測は
+  {長文9・長セル4・版見出し WARN なし}。教訓を bar に反映済み — before 数値は台帳の散文で
+  なく床の再実行から導く(蒸留腕の候補規則13)。
+
+検証: skill-check テスト25 green(回帰なし)・自己床は WARN {長文11・長セル2}+上記 waiver で
+forge 出口条件を満たす・保全性の read-only 検証レンズは発射済み(判定は本節へ追記)。
+
+### 検証レンズの判定と閉鎖(2026-07-24)
+
+read-only レンズ(自己矛盾・void 閉鎖・one-home・機械照合・SPEC 忠実性): BLOCKER 2・MAJOR 2・
+MINOR 3・no_change 4。全件採択して修理:
+- BLOCKER: 証明行のトリガ語(散文/読みにくい)が body のみ→ description に日本語 doublet を
+  設置(自 skill の triggering 教義への違反だった)。linting-prose を触りながら waiver 無し→
+  同 skill の台帳に dated prose-debt waiver を記載し、bar 本文を「ANY commit that edits a
+  skill's SKILL.md」に硬化(seam 編集の抜け穴を明示的に閉鎖)。
+- MAJOR: description の判断層の帰属曖昧→「floor AND judgment bar owned HERE」に修正。
+  one-home の引用鎖→ F1 セルと verifying §5 に §5 への cite を追加(SOLE home へ閉鎖)。
+- MINOR: LAW に FORM carve-out の cross-ref、waiver の2機構を PROSE-DEBT waiver / F3
+  solo-tier waiver に命名分離、堆積の門の訂正の過剰一般化をスコープ修正。
+機械閉鎖: 修理後の床・テスト・description 長は下記コミット前の実測どおり全 green。

@@ -56,7 +56,8 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
 
 - SKILL.md, every reference it indexes, and every script it invokes ship in **ONE commit**. A
   pointer that resolves tomorrow is a lie today.
-- The SKILL.md header embeds a **literal shell verify one-liner** — every house skill has one.
+- The SKILL.md header carries a **literal shell verify one-liner** — every house skill has one,
+  in a code fence adjacent to (not inside) the version blockquote (§5 dual-reader bar).
   Shape (adapt names):
   `for f in a b c; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/check.sh || echo MISSING check.sh`
 - Add **negative checks** for deliberately retired/consolidated files — raising-resolution's
@@ -92,6 +93,23 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
 - **Prove the gate fires** (absorbed from `linting-prose`): inject a known-bad
   input, watch the script FAIL, revert. Once at build, again after any script edit. A gate never
   seen red is decoration, and a green from it is theater.
+
+**The dual-reader prose bar** (SOLE home; added 2026-07-24 after the two-sided void — ledger).
+A skill has two readers: the executor model and the human auditor. The mechanical floor is
+`scripts/skill-check.ts`'s prose-debt WARNs (>120-char prose sentences ×3+, version header >3
+lines, table cells >400 chars — WARN tier, measurement; enforcement moment = forge exit, F1).
+
+- SCOPE (measured, pilot 2026-07-24 — over-generalizing is the anti-pattern): full atomization
+  (one clause per rule row + artifact + dated 出自 pointer; narratives exiled to the ledger)
+  is INDICATED for SKILL.md gate/LAW/rule tables showing accretion pathology (append-only
+  version chains, narrative-in-cell). It is NOT applied to: references' argued prose;
+  ≥3-way shared-object seam cells; index/Covers rows; mature EN bodies without accretion.
+- The header verify one-liner lives in a code fence BELOW the version blockquote (a `>` block
+  stays ≤3 lines; §3's mandate is satisfied by adjacency, not embedding).
+- "Touch it, clear it": ANY commit that edits a skill's SKILL.md leaves that skill at
+  prose-debt WARNs 0, or writes a dated PROSE-DEBT waiver + queue position in its ledger
+  (a 2-line waiver is cheap; the loophole of "it was only a seam edit" is not). Distinct
+  from F3's solo-tier waiver. Corpus-wide sweeps are NOT mandated.
 
 ## 6. Language architecture
 

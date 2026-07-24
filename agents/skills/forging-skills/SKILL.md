@@ -13,8 +13,10 @@ description: >-
   pointer. MANDATORY — read BEFORE creating or substantively revising any skill.
   operating-the-harness owns the harness contract: skill NOT LISTED / truncated → it ALONE;
   listed but never fires → co-fire, its diagnostics FIRST, then description craft here.
-  SKILL.md prose is model-facing — wording audits of it live here, not
-  linting-prose. Cut: novel thesis → forging-novel-theses; multi-paper
+  SKILL.md prose has TWO readers (executor + auditor): floor (skill-check prose-debt
+  WARNs) AND judgment bar owned HERE — 「SKILL.md の散文が読みにくい」 fires here;
+  linting-prose = human-facing prose only.
+  Cut: novel thesis → forging-novel-theses; multi-paper
   synthesis → systematizing-knowledge. Workflow-native: design and cuts stay solo; harvest,
   drafting, and verification fleets fan out. English skill; respond in the user's language
   (default Japanese).
@@ -22,16 +24,14 @@ description: >-
 
 # Forging skills — the craft of making operating manuals that outlive their maker
 
-> **Version**: v2607.1.0 (2026-07-02)
-> **Scope**: the CRAFT of creating and reforging Agent Skills — existence, distillation,
-> architecture, trigger surface, execution model, verification. Host-agnostic core; every
-> Claude-Code-specific number and mechanism (frontmatter fields, caps, budgets, loading stages)
-> is POINTED at `operating-the-harness`, never restated here.
-> **Lineage**: forged from the 2026-07 reforging of 8 house skills + dissection of both
-> skill-creator defaults + the platform.claude.com / agentskills.io docs (Fable 5, 2026-07).
-> **Build order (atomic).** This SKILL.md, its **5 reference targets**, and the floor script ship
-> in ONE commit — no index pointer may dangle. Verify:
-> `for f in distilling architecture triggering execution-models verifying; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/skill-check.ts || echo MISSING skill-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> **Version**: v2607.2.0 (2026-07-24) — the dual-reader prose bar; scope/lineage moved to the ledger.
+> History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
+
+Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:
+
+```bash
+for f in distilling architecture triggering execution-models verifying; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/skill-check.ts || echo MISSING skill-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger
+```
 
 ## Language & stable tokens
 
@@ -45,8 +45,11 @@ translatable words: **LAW**, **gate** (F1/F2/F3), **fire / no-fire**, **鍛錬 /
 ## THE LAW
 
 > A skill is a durable operating manual from the model that forged it to every model that
-> executes it later — not documentation, not a book summary. 形式 is the floor; the bar is that
-> EVERY RETAINED LINE CHANGES WHAT THE EXECUTOR DOES. A skill that cannot be wrong — no
+> executes it later — not documentation, not a book summary. And it has TWO READERS: the
+> executor model, and the human auditor who must be able to trust it. 形式 is the floor; the
+> bar is that EVERY RETAINED LINE CHANGES WHAT THE EXECUTOR DOES — stated so both readers can
+> check it. FORM itself is floor-enforced, never line-retained (the dual-reader prose bar,
+> `references/architecture.md` §5; carve-out at `references/distilling.md` §2). A skill that cannot be wrong — no
 > artifact, no check, no deny-list anywhere — is prose wearing a skill costume. And the
 > description is the skill's API: match is lexical and budgeted, so triggering is engineered,
 > never assumed.
@@ -59,9 +62,9 @@ grep-able artifact; no artifact → gate un-passed, 感触では通れない.
 
 | Gate | Inverts (the error) | ARTIFACT — must exist in the forged skill |
 |---|---|---|
-| **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor-vs-semantic split → `references/architecture.md` §5) |
+| **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor split → `references/architecture.md` §5). EXIT: prose-debt WARNs 0, or a dated PROSE-DEBT waiver in the ledger (§5; ≠ F3 solo-tier waiver) |
 | **F2 PLACEMENT** | collection collision / description races — two skills match the same ask and neither yields | Routing/owner table + a TYPED cut (DECISIVE / CARDINALITY / PURPOSE) phrased as a runtime-answerable question per overlapping sibling + reciprocal pointers landed, or explicitly deferred with the owner named (`references/architecture.md`, `references/triggering.md`) |
-| **F3 SELF-VERIFICATION** | ship-and-hope — the skill that teaches verification ships unverified | Atomic build-order verify command + a fire/no-fire trigger set (≥5 fire / ≥5 near-miss no-fire) + an adversarial-verification findings ledger — waivable ONLY at the solo tier, waiver written (`references/verifying.md`) |
+| **F3 SELF-VERIFICATION** | ship-and-hope — the skill that teaches verification ships unverified | Atomic build-order verify command + a fire/no-fire trigger set (≥5 fire / ≥5 near-miss no-fire) + an adversarial-verification findings ledger recording the skill-check run incl. prose-debt counts — waivable ONLY at the solo tier, waiver written (`references/verifying.md`) |
 
 ## The pipeline
 
@@ -110,6 +113,7 @@ FIRES:
 | "create a skill for X" / 「スキル作って」 | creation is the core territory |
 | "reforge this skill" / 「鍛え直して」 | reforge = the same pipeline over an existing skill |
 | "this SKILL.md is low quality — raise it" | the bar (F1) is owned here |
+| 「この SKILL.md、散文が読みにくい/監査して」 | the dual-reader prose bar + floor are owned HERE, not linting-prose (the 2026-07-24 void's proof row) |
 | "these two skills collide / both keep triggering" | sibling cuts (F2) are owned here |
 | "write a trigger test set for this skill" | the F3 artifact is owned here |
 | "tune this skill's description" | trigger-surface engineering is owned here |
@@ -136,7 +140,7 @@ MUST NOT fire (with route):
 | the two defaults — `.system:skill-creator`, `anthropic-skills:skill-creator` | SUPERSEDED as defaults: step lists with no LAW, no gates, no MUST-NOT-FIRE, no verification of the skill itself. Their format/packaging/eval MACHINERY stays live and is invoked by pointer, never rebuilt — trigger-eval + description-optimization loop via `references/triggering.md` §6; validators, grader/comparator/analyzer, viewer, packaging via `references/verifying.md` §4. PURPOSE cut: need their MACHINERY (evals/packaging/scaffold) → invoke by pointer under this pipeline; need GUIDANCE → here. Reciprocal edit impossible (marketplace-managed, read-only) — deferral recorded here. `$PLUGIN` = `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator`; `$CODEX` = `~/.codex/skills/.system/skill-creator` (defined ONCE here; references point). |
 | `forging-novel-theses` | PURPOSE cut — name-adjacent, zero overlap: a thesis is a BET about the world; a skill is an OPERATING MANUAL for executors. 鍛錬 of an idea → there; 鍛錬 of a manual → here. |
 | `systematizing-knowledge` | Co-fire, sequential never racing: a paper-corpus source runs as an SoK FIRST (ledger, GRADE, reconciliation), THEN the SoK's position distills into a skill here. Never skill-ify a raw corpus. |
-| `linting-prose` | PURPOSE cut — audience: skills are MODEL-facing prose; do NOT run prose-lint gates on a SKILL.md. Human-facing deliverables → there. |
+| `linting-prose` | PURPOSE cut — human-facing prose deliverables → there. SKILL.md prose is DUAL-READER (executor + auditor): floor (skill-check prose-debt WARNs) and judgment bar owned HERE (`references/architecture.md` §5). Counter-precedent: the 2026-07-24 mutual-deferral void (ledger). Seam: agrees in substance with linting-prose's cut; do not byte-diff. |
 | `raising-resolution` | owner-filter chain: its yield list routes skill craft here and harness contract to `operating-the-harness` (reciprocal edit landed 2026-07-02); inspect-before-assert runs as a silent sub-step inside every forge. |
 
 **Co-fire clause (`operating-the-harness`).** On every skill authoring/edit, CO-FIRE: read that

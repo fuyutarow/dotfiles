@@ -53,7 +53,8 @@ the seven components. All eight house instances carry all or most of these:
 | g | **Lineage line** | "durable operating guidance from a frontier model (Fable 5, YYYY-MM) to whatever model executes this skill later — encodes failures observed in production." EXCEPTION: a durability contract banning model names WINS — write "a frontier model (YYYY-MM)" and say why the name lives outside the file; alternatively the target's source-grade table carries the provenance instead (grade the section "skill-supplied") |
 
 **Header formula** (carried by six house files): components f + g ship as ONE header block,
-together with the immunization sentence — "*if a constraint here feels unnecessary, that feeling
+placed so the `> **Version**` blockquote itself stays ≤3 lines (the prose floor counts
+contiguous header lines — `architecture.md` §5), together with the immunization sentence — "*if a constraint here feels unnecessary, that feeling
 is the failure mode — follow the map*". Include it verbatim: it is what stops a later capable
 model from trading the constraints away, because its detectors key on observables, not feelings.
 

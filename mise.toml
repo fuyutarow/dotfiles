@@ -422,6 +422,30 @@ for name in $(jq -r '.mcpServers | keys[]' "$MCP_JSON"); do
   echo "registered: $name (${url:-$cmd $args})"
 done
 echo "applied $MCP_JSON -> Claude(user) + Codex"
+
+# DRIFT REPORT (added 2026-07-25). The loop above only visits names PRESENT in .mcp.json,
+# so deleting an entry here never uninstalls it — measured: cocoindex-code stayed live and
+# connected long after it was removed from this file, and a session kept trying to use it.
+# Every other declarative home in this repo prunes (link-dots.sh, link:skills); this one did
+# not. Reporting is the default because the live set has drifted far past this file, and a
+# blind prune would uninstall servers nobody declared here. Opt in with MCP_PRUNE=1.
+declared=$(jq -r '.mcpServers | keys[]' "$MCP_JSON" | sort)
+live=$(claude mcp list 2>/dev/null | sed -n 's/^\([a-zA-Z0-9_-]*\): .*/\1/p' | sort)
+undeclared=$(comm -13 <(echo "$declared") <(echo "$live") || true)
+if [ -n "${undeclared:-}" ]; then
+  echo "--- DRIFT: registered but NOT declared in .mcp.json ---"
+  echo "$undeclared" | sed 's/^/  /'
+  if [ "${MCP_PRUNE:-0}" = "1" ]; then
+    for name in $undeclared; do
+      claude mcp remove -s user "$name" 2>/dev/null || true
+      command -v codex >/dev/null 2>&1 && codex mcp remove "$name" 2>/dev/null || true
+      echo "  pruned: $name"
+    done
+  else
+    echo "  (declare them in .mcp.json, or re-run with MCP_PRUNE=1 to uninstall them)"
+    echo "  NOTE: .mcp.json is documented as the single source of truth; this list is the gap."
+  fi
+fi
 echo "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model."
 '''
 

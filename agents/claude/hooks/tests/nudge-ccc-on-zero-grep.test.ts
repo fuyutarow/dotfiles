@@ -251,3 +251,59 @@ describe("Bash search coverage", () => {
     expect(r.stdout.trim()).toBe("");
   });
 });
+
+// T2 (2026-07-25) — the half a zero-hit trigger cannot see: grep FOUND something, so
+// nothing looked wrong, and the real implementation sat under a different name.
+describe("T2 search-run trigger", () => {
+  const HOOK = "nudge-ccc-on-zero-grep.ts";
+  const hit = { stdout: "src/a.ts:1:found\n", stderr: "" };
+  const bash = (command: string, session: string, project: string) => ({
+    session_id: session,
+    cwd: project,
+    tool_name: "Bash",
+    tool_input: { command },
+    tool_response: hit,
+  });
+
+  test("8 hitting searches with no ccc -> nudge naming the stride count", () => {
+    const project = registerProject();
+    let last = { stdout: "", code: 0 };
+    for (let i = 1; i <= 8; i++) {
+      last = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2", project));
+      if (i < 8) expect(last.stdout.trim()).toBe("");
+    }
+    expect(last.stdout).toContain("8 literal searches");
+    expect(last.stdout).toContain("ccc search");
+  });
+
+  test("running ccc silences T2 permanently for that session x project", () => {
+    const project = registerProject();
+    runHook(HOOK, bash("ccc search 'concept' --limit 8", "s-t2b", project));
+    for (let i = 1; i <= 12; i++) {
+      const r = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2b", project));
+      expect(r.stdout.trim()).toBe("");
+    }
+  });
+
+  test("merely MENTIONING ccc in a heredoc does not count as running it", () => {
+    const project = registerProject();
+    let last = { stdout: "", code: 0 };
+    // A commit message that talks about ccc must not silence the nudge.
+    runHook(
+      HOOK,
+      bash("git commit -m 'use ccc search next time'", "s-t2c", project),
+    );
+    for (let i = 1; i <= 8; i++) {
+      last = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2c", project));
+    }
+    expect(last.stdout).toContain("literal searches");
+  });
+
+  test("outside a ccc project T2 never fires", () => {
+    const dir = tempDir("ccc-none-t2-");
+    for (let i = 1; i <= 12; i++) {
+      const r = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2d", dir));
+      expect(r.stdout.trim()).toBe("");
+    }
+  });
+});

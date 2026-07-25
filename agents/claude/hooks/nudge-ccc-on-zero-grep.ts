@@ -7,12 +7,24 @@
 // this hook never fired, because the matcher was `Grep` alone. Covering only the Grep TOOL leaves
 // the actual pathway wide open: `Bash(grep ...)` bypasses the whole gate.
 //
-// Fires ONLY when ALL of:
-//   1. The call returned zero matches (see isZeroHitGrep / isZeroHitBashSearch below).
-//   2. The search ran inside a ccc-registered project — walk up from the search path
-//      looking for `.cocoindex_code/settings.yml`, stopping at $HOME or the fs root.
-//   3. This exact (session_id, project) pair hasn't already fired — a sentinel file
-//      under the OS tmp dir enforces "at most once per session per project".
+// TWO triggers, because zero-hit alone misses the dangerous half (measured 2026-07-25):
+//
+//   T1 ZERO-HIT   — the search returned nothing. Classic "0 hits → 不在" pathway.
+//   T2 SEARCH-RUN — N searches have run in this ccc project this session with ZERO `ccc`
+//                   invocations. This is the case a zero-hit trigger CANNOT see: grep FOUND
+//                   something, the executor was satisfied and stopped, and the thing it was
+//                   really looking for sits under a different name. Session census, measured
+//                   in this repo: 215 Bash calls, 85 carrying a search verb, 3 running ccc.
+//                   Nothing in that spread was ever surfaced, because none of it was 0-hit.
+//
+// Both require the search to run inside a ccc-registered project — walk up from the search
+// path looking for `.cocoindex_code/settings.yml`, stopping at $HOME or the fs root.
+//
+// Re-firing: T1 fires once per (session, project). T2 fires every SEARCH_STRIDE searches
+// while the ccc count is still zero, so a long session that never reaches for semantic
+// search keeps being told — that is the "徹底的に" the operator asked for. A `ccc` call
+// resets nothing and silences T2 permanently for that (session, project): the point is to
+// get semantic search USED, not to nag someone already using it.
 //
 // Detection is grounded against the installed Claude Code CLI's actual Grep tool
 // implementation (PostToolUse `tool_response` is the tool's raw `{data}` payload, not
@@ -32,7 +44,13 @@
 //   1. NEVER BLOCK — only ever emits additionalContext JSON and exits 0.
 //   2. ONCE ONLY   — per (session_id, project) sentinel; never re-fires for the pair.
 
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -191,20 +209,72 @@ function sentinelPath(sessionId: string, project: string): string {
   return join(tmpdir(), "nudge-ccc-on-zero-grep", `${key}.sentinel`);
 }
 
+// --- T2 bookkeeping: per (session, project) census, one tiny JSON beside the sentinel ---
+const SEARCH_STRIDE = 8; // re-nudge every N searches while ccc is still unused
+
+type Census = { searches: number; ccc: number; lastNudge: number };
+
+const censusPath = (s: string, p: string): string =>
+  `${sentinelPath(s, p)}.census`;
+
+function readCensus(p: string): Census {
+  try {
+    const c = JSON.parse(readFileSync(p, "utf8"));
+    return {
+      searches: Number(c.searches) || 0,
+      ccc: Number(c.ccc) || 0,
+      lastNudge: Number(c.lastNudge) || 0,
+    };
+  } catch {
+    return { searches: 0, ccc: 0, lastNudge: 0 };
+  }
+}
+
+function writeCensus(p: string, c: Census): void {
+  try {
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, JSON.stringify(c));
+  } catch {
+    /* bookkeeping is best-effort — never break the tool call over it */
+  }
+}
+
+// Did this command actually RUN ccc, as opposed to merely mentioning it in prose, a
+// heredoc, or a test fixture? Command position only.
+const CCC_RUN = /(^|[|;&(]|&&|\|\|)\s*ccc\s+(search|grep|index|status|init)\b/;
+
+function emit(context: string): void {
+  console.log(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: context,
+      },
+    }),
+  );
+}
+
 function main(): number {
   const payload = readStdinJson();
   const tool = payload?.tool_name;
 
+  const command =
+    typeof payload?.tool_input?.command === "string"
+      ? (payload.tool_input.command as string)
+      : "";
+  const ranCcc = tool === "Bash" && CCC_RUN.test(command);
+  let isSearch = false;
+  let zeroHit = false;
+
   if (tool === "Grep") {
-    if (!isZeroHitGrep(payload?.tool_response)) return 0;
+    isSearch = true;
+    zeroHit = isZeroHitGrep(payload?.tool_response);
   } else if (tool === "Bash") {
-    const command = payload?.tool_input?.command;
-    if (!isBashSearch(command)) return 0;
-    if (!isZeroHitBashSearch(command as string, payload?.tool_response))
-      return 0;
-  } else {
-    return 0;
+    isSearch = isBashSearch(command);
+    if (isSearch)
+      zeroHit = isZeroHitBashSearch(command, payload?.tool_response);
   }
+  if (!isSearch && !ranCcc) return 0;
 
   const sessionId = payload?.session_id;
   if (typeof sessionId !== "string" || sessionId === "") return 0;
@@ -212,21 +282,45 @@ function main(): number {
   const project = findCcRegisteredProject(resolveStartPath(payload));
   if (!project) return 0;
 
+  const cpath = censusPath(sessionId, project);
+  const census = readCensus(cpath);
+  if (ranCcc) census.ccc += 1;
+  if (isSearch) census.searches += 1;
+
+  // A ccc call means semantic search is already in play — record it and stay quiet.
+  if (ranCcc) {
+    writeCensus(cpath, census);
+    return 0;
+  }
+
+  // T1 — zero hits. Once per (session, project); this is the sharpest single moment.
   const sentinel = sentinelPath(sessionId, project);
-  if (existsSync(sentinel)) return 0;
+  if (zeroHit && !existsSync(sentinel)) {
+    mkdirSync(dirname(sentinel), { recursive: true });
+    writeFileSync(sentinel, "");
+    census.lastNudge = census.searches;
+    writeCensus(cpath, census);
+    emit(`${MESSAGE_PREFIX}${project}${MESSAGE_SUFFIX}`);
+    return 0;
+  }
 
-  mkdirSync(dirname(sentinel), { recursive: true });
-  writeFileSync(sentinel, "");
+  // T2 — searching hard, never reaching for semantic search. The half a zero-hit
+  // trigger cannot see: grep FOUND something, so nothing looked wrong.
+  if (census.ccc === 0 && census.searches - census.lastNudge >= SEARCH_STRIDE) {
+    census.lastNudge = census.searches;
+    writeCensus(cpath, census);
+    emit(
+      `${census.searches} literal searches in this ccc-indexed project this session, 0 semantic ` +
+        `ones. Literal grep is correct for a token you already know (CC3) — but a hit does NOT ` +
+        `mean you found the right thing: the implementation you are looking for may exist under ` +
+        `a different name, and a successful grep is exactly when that stays invisible. Before ` +
+        `concluding 不在, citing evidence for an audit, or writing anything NEW: cd ${project} && ` +
+        `ccc search '<paraphrase>' --limit 8 --refresh, ≥3 paraphrases (JA/EN).`,
+    );
+    return 0;
+  }
 
-  const additionalContext = `${MESSAGE_PREFIX}${project}${MESSAGE_SUFFIX}`;
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PostToolUse",
-        additionalContext,
-      },
-    }),
-  );
+  writeCensus(cpath, census);
   return 0;
 }
 

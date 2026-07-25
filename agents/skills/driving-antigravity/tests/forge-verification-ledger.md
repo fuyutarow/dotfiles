@@ -222,3 +222,29 @@ in **v2607.1.1**; every load-bearing finding resolved and re-verified:
 `bun build --no-bundle scripts/probe-models.ts` clean; probe tri-state validated live; `forging-skills/scripts/skill-check.ts` → EXIT 0.
 Residual accepted-as-is (minor/nit, non-blocking): UNCONFINED is n=1 (hedged in-text); parallel
 safety proven only at N=2 (hedged); `</dev/null` mechanism note (added). Ship-ready.
+
+## §現行の推奨腕の新設 — 2026-07-25
+
+**発端**: 発注者が実走のパネルを提示。Google 腕に `gemini-3.1-pro-high`、Anthropic 腕に
+`claude-opus-4-6-thinking` が採用されていた。どちらも本 catalog に「載っている」だけで、
+選択の根拠はどこにも無い。発注者の指摘「agy pro って相当古いのモデルでしょ」は正しい。
+
+**一次照合(監督が自分で fetch、2026-07-25)**: ai.google.dev/gemini-api/docs/models —
+Gemini 3.6 Flash は **Stable**、逐語 "Our latest model that balances speed with intelligence to
+deliver strong performance in agentic and multimodal tasks."。Gemini 3.1 Pro は **Preview**。
+本 catalog にある Gemini は 3.6 / 3.5 / 3.1 の三世代で、パネルは最古かつ Preview の腕を引いた。
+
+**保留した主張**: 「Flash 3.6 が Pro 3.1 より高性能」という**直接比較の声明**は、当該モデル
+一覧ページには無い(ベンチマーク数値も無い)。世代と Stable/Preview の別だけで選択の是非は
+決まるため、比較声明の有無は判定に不要と裁定した。blog/deepmind 側の確認は別腕が走行中。
+
+**根因**: catalog は在庫表であり、選択を束縛しない。実行側は名前で順位を推論する
+(`pro` > `flash`、`opus` > 他)。**世代を跨ぐと tier 名は能力の順序ではない**。同日、
+sol ultra・grok・opus46 でも同型の穴が観測されており、対症(配役表への追記)ではなく
+catalog 側に「どれを選ぶか」を置くのが根治である。本節がその実装。
+
+**同時に明文化した禁止**: agy 経由の Anthropic 模型を「異系統の腕」にしない。ベンダと訓練
+系統を家の模型と共有するため、異種検証が買っている独立性が成立しない。Opus 4.6 は
+Anthropic の legacy 表にもある。
+
+**残務**: 同じ欄を driving-codex と driving-grok にも置く(監査が走行中)。

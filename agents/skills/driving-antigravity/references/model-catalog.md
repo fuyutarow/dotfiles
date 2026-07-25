@@ -7,6 +7,31 @@
 > self-updated in place again — see VERSION-DRIFT below; do not trust `agy --version` from a stale
 > memory).
 
+## 現行の推奨腕 — WHICH slug to pick (2026-07-25)
+
+This section exists because the roster below is an INVENTORY, and an inventory does not bind a
+choice. Measured failure, 2026-07-25: a cross-vendor design panel picked `gemini-3.1-pro-high` as
+its Google arm — the OLDEST generation in this file — and `claude-opus-4-6-thinking` as an
+"Anthropic different-lineage" arm. Both were picked by NAME HEURISTIC (`pro` outranks `flash`,
+`opus` outranks the rest), not by anything recorded here. Listing a slug is not recommending it.
+
+| Job | Pick | Why |
+|---|---|---|
+| Google arm of a cross-vendor panel | `gemini-3.6-flash-<effort>` | Newest generation here, and the only 3.6 slug PROBE-VERIFIED on this binary. Google lists Gemini 3.6 Flash as **Stable** and its own positioning names agentic tasks: *"Our latest model that balances speed with intelligence to deliver strong performance in agentic and multimodal tasks."* (ai.google.dev/gemini-api/docs/models, fetched 2026-07-25) |
+| anything else | re-probe first | CATALOG-BY-PROBE — a slug that is merely listed is a candidate, not an arm |
+
+**Do NOT pick as a panel arm:**
+
+| Slug | Why not |
+|---|---|
+| `gemini-3.1-pro-*` | Two generations behind the 3.6 line here. Google lists Gemini 3.1 Pro as **Preview**, not Stable (same source/date). A tier name (`pro`) is not a capability ordering ACROSS generations |
+| `claude-opus-4-6-thinking`, `claude-sonnet-4-6` | Anthropic models reached through agy are NOT a different lineage from the house model — they share vendor and training lineage, which is precisely the independence that heterogeneous verification is buying. Opus 4.6 is additionally on Anthropic's published **legacy** list (2026-07-25). Never the "different-lineage" arm |
+| any slug whose row says "not individually probed" | probe it, then use it |
+
+Staleness: this section rots with the roster. Re-derive it on any reforge — re-run `agy models`,
+re-probe the top candidate, and re-fetch the vendor's current model page before trusting the
+Stable/Preview labels above.
+
 ## Roster — re-probed on THIS account, 2026-07-23 (agy v1.1.5)
 
 `agy models` (free, local, no quota) lists the EXACT `--model` strings. **As of v1.1.5 these are

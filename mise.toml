@@ -357,6 +357,10 @@ TPM_DIR="$HOME/.tmux/plugins/tpm"
 description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
+[tasks."check:models"]
+description = "Model-release SSOT floor (agents/models/releases.toml): staleness, retirements, dead refs"
+run = 'bun ~/dotfiles/agents/models/check-releases.ts'
+
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = '''
@@ -463,7 +467,22 @@ mkdir -p ~/.claude/skills
 if [ -d "$DOTFILES/agents/skills" ]; then
   for skill in "$DOTFILES"/agents/skills/*/; do
     [ -d "$skill" ] || continue
-    link_path "${skill%/}" ~/.claude/skills/"$(basename "$skill")"
+    name="$(basename "$skill")"
+    # `driving-claude` is deliberately Codex-only: it teaches Codex to drive this
+    # CLI, so exposing it as a Claude Code skill would be self-referential and
+    # creates a needless trigger collision. Codex receives the whole source tree
+    # through ~/.agents/skills below.
+    if [ "$name" = "driving-claude" ]; then
+      dst="$HOME/.claude/skills/$name"
+      if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$DOTFILES/agents/skills/$name" ]; then
+        unlink "$dst"
+        echo "excluded (Codex-only): $dst"
+      else
+        echo "excluded (Codex-only): $dst"
+      fi
+      continue
+    fi
+    link_path "${skill%/}" ~/.claude/skills/"$name"
   done
   # Prune renamed/deleted skills: this loop only ADDS, so a rename (transcribe-media →
   # transcribing-media) leaves the old link dangling and Claude keeps listing a skill that is

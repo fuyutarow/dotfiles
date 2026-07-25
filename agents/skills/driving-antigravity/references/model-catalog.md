@@ -28,27 +28,19 @@ its Google arm — the OLDEST generation in this file — and `claude-opus-4-6-t
 | `claude-opus-4-6-thinking`, `claude-sonnet-4-6` | Anthropic models reached through agy are NOT a different lineage from the house model — they share vendor and training lineage, which is precisely the independence that heterogeneous verification is buying. Opus 4.6 is additionally on Anthropic's published **legacy** list (2026-07-25). Never the "different-lineage" arm |
 | any slug whose row says "not individually probed" | probe it, then use it |
 
-### Release dates — the only ordering that survives a tier name (fetched 2026-07-25)
+### Release dates — NOT here. `agents/models/releases.toml` is the SOLE home.
 
-Version numbers and tier names both failed as orderings on 2026-07-25 (`pro` outranking `flash`
-ACROSS generations; `opus` outranking everything). Dates do not fail that way. Every row below is
-vendor-stated and was re-verified by an independent adversarial pass — zero refuted, zero corrected.
+Dates are the one ordering that survives a tier name, and the ONLY view that exposes the failure
+is a cross-vendor sort — which no per-vendor catalog can produce. So the dates live in one file
+for all vendors, with a floor (`mise run check:models`) that FAILs on staleness, on approaching
+retirements, and on guidance prose still naming a retired/legacy slug.
 
-| slug family (agy exposes these) | vendor-stated release | lifecycle (vendor's own word) |
-|---|---|---|
-| `gemini-3.6-flash-*` | **2026-07-21** | Stable / GA |
-| `gemini-3.5-flash-*` | 2026-05-19 | Stable / GA |
-| `gemini-3.1-pro-*` | **2026-02-19** | **Preview — never went GA** |
-| `claude-sonnet-4-6` | 2026-02-17 | superseded by the Sonnet 5 line (2026-06-30) |
-| `claude-opus-4-6-thinking` | **2026-02-05** | Anthropic **legacy** list |
+Restating a date here would recreate exactly the defect this file was caught in: four inventories,
+each individually plausible, none comparable. Look the date up; do not copy it down.
 
-Sources: `ai.google.dev/gemini-api/docs/{changelog,deprecations,models}` for the Gemini rows,
-`platform.claude.com` models overview + per-model pages for the Claude rows. Google's deprecations
-table states each model's release date, so it is the sharpest single source for the Gemini rows.
-
-Read the table as: the two slugs the 2026-07-25 panel actually picked were **five months old**, and
-one of them had never reached GA — both visible at a glance from this column alone, with no
-judgement about tiers required. That is the whole point of carrying dates.
+For the record of what that sort showed on 2026-07-25: the two slugs a panel actually picked
+(`gemini-3.1-pro-*`, `claude-opus-4-6-thinking`) were five months old, and one had never reached
+GA — visible from the date column alone, with no judgement about tiers required.
 
 Benchmark evidence for preferring the 3.6 Flash line over `gemini-3.1-pro-*` on agentic/coding work
 (Gemini 3.6 Flash model card, deepmind.google, fetched 2026-07-25): SWE-Bench Pro 58.7 vs 54.2,

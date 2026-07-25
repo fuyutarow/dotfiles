@@ -1,0 +1,284 @@
+# SSOT — model release dates, statuses, and retirements.
+#
+# WHY THIS FILE EXISTS (measured 2026-07-25): a cross-vendor design panel picked
+# `gemini-3.1-pro-high` (5 months old, never GA) and `claude-opus-4-6-thinking`
+# (5 months old, legacy) as its arms, because every driving-* catalog is an INVENTORY
+# of what a CLI can reach and none of them recorded WHEN a model shipped. Tier names
+# (`pro` > `flash`, `opus` > everything) and version numbers both fail as orderings
+# across generations. A date does not fail that way — and the failure is only visible
+# when all vendors sit in ONE sorted list, which no per-vendor catalog can show.
+#
+# THIS FILE IS THE ONLY HOME for release dates. driving-* catalogs must POINT here,
+# never restate a date. `check-releases.ts` is the floor that keeps it honest:
+#   mise run check:models
+#
+# Editing rules:
+#   - `released`: what the VENDOR states. Never inferred from a version number, a
+#     changelog file mtime, or memory. Unknown stays "unknown" — an empty cell is
+#     information, a guessed one is a defect.
+#   - `verified`: the date a human/agent last confirmed this row against `source`.
+#     The floor FAILs when the newest `verified` in the file goes stale.
+#   - `status`: the vendor's own word (stable / preview / legacy / deprecated / retired).
+#   - `retires`: set whenever the vendor announced a shutdown/retirement date.
+
+[meta]
+# Bump this whenever any row is re-confirmed against its source.
+last_full_sweep = "2026-07-25"
+# The floor FAILs if today - last_full_sweep exceeds this.
+max_age_days = 45
+# Rows whose retirement lands within this window FAIL the floor.
+retirement_warning_days = 30
+
+# --- Anthropic ---------------------------------------------------------------
+[[model]]
+slug = "claude-opus-5"
+vendor = "anthropic"
+released = "2026-07-24"
+status = "stable"
+role = "監督"
+source = "https://platform.claude.com/docs/en/about-claude/models/whats-new-opus-5"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-sonnet-5"
+vendor = "anthropic"
+released = "2026-06-30"
+status = "stable"
+role = "実務"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-fable-5"
+vendor = "anthropic"
+released = "2026-06-09"
+status = "stable"
+role = "実務(上位・harness 内)"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-mythos-5"
+vendor = "anthropic"
+released = "2026-06-09"
+status = "limited"          # Project Glasswing, invitation only — not GA
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-opus-4-8"
+vendor = "anthropic"
+released = "2026-05-28"
+status = "legacy"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-opus-4-7"
+vendor = "anthropic"
+released = "2026-04-16"
+status = "legacy"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-sonnet-4-6"
+vendor = "anthropic"
+released = "2026-02-17"
+status = "legacy"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-opus-4-6"
+vendor = "anthropic"
+released = "2026-02-05"
+status = "legacy"
+# Reached through agy as `claude-opus-4-6-thinking`. Was picked as a panel arm on
+# 2026-07-25 — five months stale, and same-vendor, so not a heterogeneous arm at all.
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-haiku-4-5"
+vendor = "anthropic"
+released = "2025-10-15"
+status = "stable"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+[[model]]
+slug = "claude-opus-4-1"
+vendor = "anthropic"
+released = "2025-08-05"
+status = "deprecated"
+retires = "2026-08-05"
+source = "https://platform.claude.com/docs/en/about-claude/models/overview"
+verified = "2026-07-25"
+
+# --- Google ------------------------------------------------------------------
+[[model]]
+slug = "gemini-3.6-flash"
+vendor = "google"
+released = "2026-07-21"
+status = "stable"
+role = "異種検証(Google 腕)"
+source = "https://ai.google.dev/gemini-api/docs/deprecations"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gemini-3.5-flash-lite"
+vendor = "google"
+released = "2026-07-21"
+status = "stable"
+source = "https://ai.google.dev/gemini-api/docs/deprecations"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gemini-3.5-flash"
+vendor = "google"
+released = "2026-05-19"
+status = "stable"
+source = "https://ai.google.dev/gemini-api/docs/deprecations"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gemini-3.1-flash-lite"
+vendor = "google"
+released = "2026-05-07"
+status = "stable"
+retires = "2027-05-07"      # shutdown announced at GA; replacement gemini-3.5-flash-lite
+source = "https://ai.google.dev/gemini-api/docs/deprecations"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gemini-3.1-pro-preview"
+vendor = "google"
+released = "2026-02-19"
+status = "preview"          # never reached GA; there is no non-preview gemini-3.1-pro id
+# Reached through agy as `gemini-3.1-pro-high` / `-low`. Picked as the Google panel arm
+# on 2026-07-25 — two generations behind, and preview-only.
+source = "https://ai.google.dev/gemini-api/docs/models"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gemini-2.5-flash"
+vendor = "google"
+released = "2025-06-17"
+status = "deprecated"
+retires = "2026-10-16"
+source = "https://ai.google.dev/gemini-api/docs/deprecations"
+verified = "2026-07-25"
+
+# --- OpenAI ------------------------------------------------------------------
+[[model]]
+slug = "gpt-5.6-sol"
+vendor = "openai"
+released = "2026-07-09"
+status = "stable"
+role = "異種検証(既定)・実務(上位・harness 外, ultra)"
+source = "https://github.com/openai/codex/releases"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gpt-5.6-terra"
+vendor = "openai"
+released = "2026-07-09"
+status = "stable"
+role = "sol が実務に回った仕事の監査人"
+source = "https://github.com/openai/codex/releases"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gpt-5.6-luna"
+vendor = "openai"
+released = "2026-07-09"
+status = "stable"
+source = "https://github.com/openai/codex/releases"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gpt-5.5"
+vendor = "openai"
+released = "2026-04-24"
+status = "stable"
+source = "https://platform.openai.com/docs/models"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gpt-5.4-mini"
+vendor = "openai"
+released = "2026-03-17"
+status = "stable"
+source = "https://platform.openai.com/docs/models"
+verified = "2026-07-25"
+
+[[model]]
+slug = "gpt-5.4"
+vendor = "openai"
+released = "2026-03-05"
+status = "stable"
+source = "https://platform.openai.com/docs/models"
+verified = "2026-07-25"
+
+# --- xAI ---------------------------------------------------------------------
+[[model]]
+slug = "grok-4.5"
+vendor = "xai"
+released = "2026-07-16"
+status = "stable"
+role = "外界の観測(未実測・C4 待ち)"
+source = "https://x.ai/news"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-4.3"
+vendor = "xai"
+released = "unknown"        # no vendor page states a date; deliberately NOT guessed
+status = "unknown"
+source = "https://docs.x.ai"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-4.1"
+vendor = "xai"
+released = "2025-11-17"
+status = "unknown"
+source = "https://docs.x.ai"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-4-1-fast-reasoning"
+vendor = "xai"
+released = "2025-11-19"
+status = "retired"
+retires = "2026-05-15"
+source = "https://docs.x.ai"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-4-fast-reasoning"
+vendor = "xai"
+released = "2025-09-19"
+status = "retired"
+retires = "2026-05-15"
+source = "https://docs.x.ai"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-code-fast-1"
+vendor = "xai"
+released = "2025-08-28"
+status = "retired"
+retires = "2026-05-15"
+source = "https://docs.x.ai"
+verified = "2026-07-25"
+
+[[model]]
+slug = "grok-4-0709"
+vendor = "xai"
+released = "2025-07-09"
+status = "retired"
+retires = "2026-05-15"
+source = "https://docs.x.ai"
+verified = "2026-07-25"

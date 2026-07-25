@@ -204,3 +204,45 @@ revised description confirmed live in a session's skill listing (smoke test).
   (2) 水平思考の相談(680 行)。累計成功 3/3——wrapper 埋め込みの 2/7 と対照的。
 - 追加の教訓: timeout パラメタ(Bash tool)は run_in_background でも効くため、
   sol 級には 600000ms を渡さず shell の timeout 1800 だけで包む方が安全。
+
+## v2607.3.0 (2026-07-25) — the effort ladder, verified instead of inferred
+
+**発端**: 発注者の指摘 —「codex ultra の発注だってできるようにさせないと、契約しているのに勿体無い」。
+それまで本 skill は effort について `low`/`medium`/`xhigh` しか観測しておらず、`high` は
+"assumed by symmetry [unverified]" のまま、`max`/`ultra` は存在すら記録していなかった。
+
+**照合の分母**(4本の独立な経路、うち2本は私自身の一次実測):
+
+| # | 経路 | 得られたもの |
+|---|---|---|
+| 1 | installed binary (0.144.4) の文字列表を `strings` で走査 | variant 列 `MinimalLowMediumXHighMaxUltra`、および wire 列 `minimallowmediumxhighmaxultra` を複数箇所で確認 |
+| 2 | 同バイナリの API doc 文字列 | `@deprecated Ignored. Use Ultra reasoning effort for proactive multi-agent behavior.` — ultra が multi-agent の switch である逐語の根拠 |
+| 3 | `codex features list` | `multi_agent` = stable/true、`multi_agent_v2` = stable/false、`enable_fanout` = removed |
+| 4 | upstream ソース(sonnet 腕 + 敵対検証腕、read-only) | `codex-rs/protocol/src/openai_models.rs` の enum と `FromStr`、`models-manager/models.json` の levels 表、`core/src/session/multi_agents.rs` の Proactive 分岐、TUI の使用量警告、0.144.0/0.145.0 の release notes |
+
+**破棄した試験(P6: 主張が偽でも出得るか)**: `codex exec --strict-config -c 'model_reasoning_effort="X"' --help`
+の rc で enum の妥当性を判別しようとしたが、負の対照 `bogus-not-a-level` も rc=0 で通った。
+`--help` は config 値を検証しない。**観測が主張の真偽と無関係**のため試験ごと破棄し、
+バイナリ走査に切り替えた。この失敗は記録として残す — 負の対照を置かなければ誤って採択していた。
+
+**採らなかった主張**: 「ultra は4エージェントを並列に走らせる」。複数の三次ブログが具体数を
+述べるが一次の裏づけが無く、upstream 自身の test fixture は 8 threads / 7 subagents で、
+しかも**設定値であって定数ではない**。SKILL.md には「数を引用するな」を規則として焼いた。
+
+**PROSE-DEBT waiver (2026-07-25)**: 本コミット後も床は3件の WARN を残す —
+prose 23文 >120字・版見出しブロック 18行・巨大 table cell 1件。いずれも**本コミット以前からの
+既存債務**であり、床の再走で before/after を実測した: prose は 23 → 23(私の追加分は
+一度 26 まで増えたので3文を刈って戻した = 純増ゼロ)、版見出しは 19 → 18(履歴を本台帳へ移送して改善)、
+table cell は 1 → 1(未着手)。全面清算は本 skill の鍛え直し案件であり、reforge queue へ送る。
+根拠: `references/architecture.md` §5 の dual-reader bar(「触ったら清算、さもなくば日付つき waiver」)。
+
+**版の履歴**(SKILL.md の版見出しから移送、2026-07-25):
+
+| 版 | 日付 | 変えたもの |
+|---|---|---|
+| v2607.1.0 | 2026-07-12 | 初鍛。probe による catalog、LEAST-PRIVILEGE、RELAY-VERBATIM |
+| v2607.1.1 | 2026-07-12 | 第二 session の実走 trace で鍛え直し(bare-`sol` probe の誤読、pipe 越しの `$?`) |
+| v2607.1.2 | 2026-07-12 | C4 に sonnet baseline 腕と実測によるコスト比較を追加(発注者の指示) |
+| v2607.1.3 | 2026-07-15 | driving-grok 鍛造に伴う相互 cut(Routing + MUST-NOT-FIRE) |
+| v2607.2.0 | 2026-07-21 | LONG-RUN 法。wrapper 埋め込みは 120s Bash 既定 + StructuredOutput 期限で死ぬ(生存 2/7)。effort=high は main-loop 背面へ |
+| v2607.3.0 | 2026-07-25 | effort 梯子の確定と ULTRA の発注法(本節) |

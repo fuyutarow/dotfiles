@@ -10,8 +10,9 @@ description: >-
   cross-vendor verification), probing which GPT models an account can run when the model picker or
   cache disagrees, choosing --sandbox / --skip-git-repo-check / model_reasoning_effort flags,
   parsing --json usage or --output-last-message, codex spend / モデル使い分け・コスト比較
-  (ccusage), or unsticking a hanging or failing codex exec. Triggers: codex, codex exec, Codex CLI, OpenAI CLI, gpt-5.6,
-  sol / terra / luna, unknown model, models_cache, codex を workflow に組み込む, codex で監査,
+  (ccusage), or unsticking a hanging or failing codex exec. Triggers: codex exec, Codex CLI, gpt-5.6,
+  sol/terra/luna, ultra/max effort, codex に並列サブエージェント,
+  models_cache, codex を workflow に組み込む, codex で監査,
   GPT にもレビューさせて, 異種モデル検証, モデルが一覧に出ない. LAW: the local
   model cache is a delivery snapshot, not the catalog — availability is a probe exit code, never
   memory or the picker; least-privilege sandbox always (danger-full-access only in isolated
@@ -22,10 +23,9 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2607.2.0 (2026-07-21 — .2.0: +LONG-RUN law from 7 measured calls: wrapper-embedded codex is killed by the 120s Bash-tool default + the wrapper StructuredOutput deadline (2/7 survived); effort=high sol-class runs go main-loop background (1/1, 30-min theory review). Gotcha row added.)
-> (prior: v2607.1.3, 2026-07-15 — .3: +reciprocal cuts to driving-grok (Routing + MUST-NOT-FIRE)
-> when the xAI-grok sibling was forged; 2026-07-12 — .1: reforged on a second session's production trace;
-> .2: C4 gains the sonnet baseline arm + cost-by-measurement, user-directed)
+> **Version**: v2607.3.0 (2026-07-25) — the effort ladder stops being inferred. Its top tier changes
+> the RUN SHAPE, not the depth; ULTRA ordering section added.
+> Prior versions and what each changed: `tests/forge-verification-ledger.md` §version history.
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
 > subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
 > spend accounting. The `claude` harness itself (hooks, settings, Workflow tool semantics) is
@@ -130,6 +130,34 @@ timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" 
 Panel pattern with sol: pre-launch sol in the main loop as background BEFORE starting the Workflow panel;
 run the panel's other arms normally; merge sol's `-o` file into the synthesizer (or a follow-up turn) when
 the notification lands. The panel never blocks on sol; sol never gets cut by a wrapper's lifecycle.
+
+### ULTRA — ordering codex's own subagent fan-out (2026-07-25)
+
+The top of the ladder is a different KIND of setting, not a taller rung. `ultra` flips codex into
+proactive multi-agent mode: codex spawns and directs its own subagents. The tier below it is the
+deepest SINGLE-agent setting. Only some models carry either. Name the wrong model and you silently
+get the ordinary ladder — the catalog owns which models carry what.
+
+| Rule | Artifact |
+|---|---|
+| Order it by name in the flag. Upstream blocks the step shortcuts from crossing into this tier | `model_reasoning_effort="ultra"` literal in the call |
+| Ultra runs are LONG-RUN by definition: main-loop background Bash, never a wrapper agent | the call in the main Bash history, `</dev/null` present |
+| Declare the fan-out before launching: what codex is expected to split into, and the token cost you accept | a one-line declaration in the turn that launches it |
+| Do not quote a subagent COUNT — it is configuration, not a constant | any count claim cites `/debug-config` output from THIS run |
+
+Ultra is for work that justifies a fleet on the vendor's side. Repo-wide audit, broad migration,
+multi-hypothesis investigation. A single focused question does not need it. One tier down buys
+the same depth in one agent, at a fraction of the spend.
+
+```bash
+# main loop, run_in_background: true — codex fans out on ITS side; we spend one Bash slot
+timeout 3600 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
+  -m gpt-5.6-sol -c 'model_reasoning_effort="ultra"' -o "$SCRATCH/out.txt" \
+  "$(cat "$BRIEF_FILE")" </dev/null
+```
+
+Levels, which models carry them, the deprecation note behind the switch, the vendor's own cost
+warning → `references/model-catalog.md`, SOLE owner of the perishable facts.
 
 ## Output contracts — pick one of three
 

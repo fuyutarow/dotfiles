@@ -111,3 +111,71 @@ describe("fail direction", () => {
     expect(r.stdout.trim()).toBe("");
   });
 });
+
+describe("Fable escalation clause (2026-07-25)", () => {
+  const decl =
+    "ESCALATION(fable): terra 移行の全面監査 | sonnet 3周が同じ穴を見落とした | 概算 300k tok";
+
+  test("fable WITHOUT a declaration -> deny, and the reason carries the fix", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", { prompt: "audit this", model: "fable" }),
+    );
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("ESCALATION(fable):");
+  });
+
+  test("fable WITH a declaration -> silent pass", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", { prompt: `${decl}\n\naudit this`, model: "fable" }),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("full model id claude-fable-5 takes the same path", () => {
+    const r = runHook(
+      HOOK,
+      pre("Task", { prompt: `${decl}\nwork`, model: "claude-fable-5" }),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("bare marker with empty fields is not a declaration -> deny", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", { prompt: "ESCALATION(fable): | | \nwork", model: "fable" }),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("fewer than three fields -> deny", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", {
+        prompt: "ESCALATION(fable): audit | because\nwork",
+        model: "fable",
+      }),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("the clause does NOT extend to opus — still denied even when declared", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", { prompt: `${decl}\nwork`, model: "opus" }),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("Workflow fan-out has no escalation clause — a declared fable agent() still denies", () => {
+    const script = `phase('x')\nawait agent('${decl}', {model: 'fable'})`;
+    const r = runHook(HOOK, pre("Workflow", { script }));
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("SINGLE Agent call");
+  });
+});

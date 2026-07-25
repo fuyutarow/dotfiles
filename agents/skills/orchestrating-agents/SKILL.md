@@ -18,8 +18,8 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2607.7.0 (2026-07-24) — 全面改鋳(sol 起草・保全原則つき)+改名。
-> 改名: acting-as-director → orchestrating-agents。履歴・実測・改名の記録は tests/forge-verification-ledger.md。
+> **Version**: v2607.8.0 (2026-07-25) — 配役の担い手を更新(監督=Opus 5・上位実務=Fable 5 の宣言制)。
+> 役は不変、担い手セルのみ日付つきで移した。履歴・実測・改名の記録は tests/forge-verification-ledger.md。
 
 ## 目的と適用範囲
 
@@ -94,9 +94,13 @@ description: >-
 
 | 役 | 担い手・束縛 | 持ち場 | 出自 |
 |---|---|---|---|
-| 監督 | 前線の模型。Fable/Opus。dated:2026-07 | 設計・指示書・裁定・検収。実務ゼロ。 | 2026-07-24、台帳 §配役の一次錨 |
-| 実務 | Sonnet。Agent/Workflow 内で使う。 | 起草・計算・編集・試験・調査を担う。 | 2026-07-24、台帳 §配役の一次錨 |
+| 監督 | Opus 5。dated:2026-07-25 | 設計・指示書・裁定・検収。実務ゼロ。 | 2026-07-25、台帳 §配役の更新 |
+| 実務 | Sonnet 5。Agent/Workflow 内で使う。 | 起草・計算・編集・試験・調査を担う。 | 2026-07-24、台帳 §配役の一次錨 |
 |  | hook が全 agent の Sonnet 指定を強制する。 | 束縛は家の裁定である。 | 2026-07-24、台帳 §配役の一次錨 |
+| 実務(上位) | Fable 5。dated:2026-07-25 | Sonnet が届かない単発の実務を担う。 | 2026-07-25、台帳 §配役の更新 |
+|  | 起動は宣言制とする。 | prompt に ESCALATION(fable) の三欄がある。 | 2026-07-25、台帳 §配役の更新 |
+|  | 単発の Agent 呼び出しに限る。 | Workflow の agent() は全て Sonnet である。 | 2026-07-25、台帳 §配役の更新 |
+|  | 秘密を含む repo へ向けない。 | 30日保持の対象模型である。 | 2026-07-25、台帳 §配役の更新 |
 | 異種検証 | codex の GPT と agy の Gemini ほか。 | 独立監査と第二意見を担う。 | 2026-07-22、台帳 §採択 |
 |  | 監査の指示書は盲検とする。 | 問題文と成果物だけを渡す。 | 2026-07-22、台帳 §採択 |
 |  | 実務側の結論と推論を渡さない。 | 監査入力に結論の説明がない。 | 2026-07-22、台帳 §採択 |
@@ -139,11 +143,41 @@ faster than other Claude models."
 
 `Fable=Director / Sonnet=Executor` は公式推奨ではない。
 
-公式資料は、委任先の tier を名指ししていない。
-
 Sonnet への束縛は家の裁定である。
 
 出自: 2026-07-24、台帳 §配役の一次錨。
+
+### 配役の更新(2026-07-25)
+
+2026-07-24 の時点では「公式資料は tier の順序を名指ししていない」と記録していた。
+これは同日以降に覆った。次の逐語が一次錨である。
+
+```text
+"If you're unsure which model to use, start with Claude Opus 5 for complex
+agentic coding and enterprise work. For workloads that need the highest
+available capability, use Claude Fable 5."
+```
+
+引用4は、監督の担い手を Opus 5 へ移す根拠である。
+
+```text
+| When you need...                  | Consider starting with... |
+| The highest available capability  | Claude Fable 5            |
+| Complex agentic coding and        | Claude Opus 5             |
+| enterprise work                   |                           |
+```
+
+引用5は、Fable を既定から外し、単発の上位実務へ降ろす根拠である。
+
+引用4・5は模型選択の順序であって、委任先 tier の名指しではない。
+
+家の配役はこの順序に整合させたが、Sonnet への束縛と宣言制は依然として家の裁定である。
+
+費用の非対称は保存されている。Fable は Opus 5 の二倍である。
+
+Fable は 30 日保持の対象模型であり、秘密を含む repo へは向けない。
+
+出自: 2026-07-25、台帳 §配役の更新。
 
 ## 監督の一巡
 

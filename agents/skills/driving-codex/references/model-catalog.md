@@ -37,8 +37,51 @@
   flagless `codex exec` runs THAT, at whatever sandbox the directory's trust level implies
   (a flagless run header showed `sandbox: danger-full-access` in a trusted workspace
   [user transcript, 2026-07-12]).
-- `model_reasoning_effort` values seen working: `low` (probes), `medium` (config default),
-  `xhigh` (run header in a user transcript, 2026-07-12); `high` assumed by symmetry [unverified].
+- `model_reasoning_effort` — the FULL ladder, no longer inferred (verified 2026-07-25 two ways:
+  the installed 0.144.4 binary's variant table reads `MinimalLowMediumXHighMaxUltra`, and the
+  upstream enum in `codex-rs/protocol/src/openai_models.rs` reads
+  `None, Minimal, Low, Medium(default), High, XHigh, Max, Ultra` with `FromStr` accepting each
+  wire string) [author-confirmed + official-primary]:
+
+  | value | what it buys | note |
+  |---|---|---|
+  | `minimal` `low` `medium` `high` | the ordinary ladder | `medium` is the config default |
+  | `xhigh` | deepest SINGLE-agent reasoning | this account's `~/.codex/config.toml` default |
+  | `max` | "Maximum reasoning depth for the hardest problems" | still one agent |
+  | `ultra` | "Maximum reasoning with automatic task delegation" | **spawns subagents** — see ULTRA below |
+
+- **`max` and `ultra` exist only on `gpt-5.6-sol` and `gpt-5.6-terra`.** The upstream catalog
+  (`codex-rs/models-manager/models.json`) advertises `levels: [low, medium, high, xhigh, max, ultra]`
+  for exactly those two, both `multi_agent_version: v2`, `min_client_version: 0.144.0`. `luna` and
+  the 5.5/5.4 family do NOT carry them [official-primary, 2026-07-25].
+- The published config-reference page still lists only `minimal|low|medium|high|xhigh` — the docs
+  lag the enum. Do not read that page's silence as absence [secondary, 2026-07-25].
+
+## ULTRA — the multi-agent switch, not just a taller ladder (2026-07-25)
+
+`ultra` is not "xhigh but more". In `codex-rs/core/src/session/multi_agents.rs`, selecting Ultra is
+the one condition that flips a turn's multi-agent policy to **Proactive** — codex delegates to
+subagents on its own, with no explicit request. Upstream deprecated the old explicit toggle in its
+favour; the binary still carries the note verbatim: `@deprecated Ignored. Use Ultra reasoning effort
+for proactive multi-agent behavior.` [author-confirmed from the 0.144.4 binary + official-primary].
+
+Cost consequence, in upstream's own words — the TUI raises a dedicated warning:
+`⚠ Ultra reasoning may proactively use multiple agents. This session is configured for 8 concurrent
+threads with up to 7 subagents which can increase usage quickly.` Upstream also refuses to let the
+Alt+`,`/Alt+`.` effort shortcuts cross into Max or Ultra: "Raising never silently crosses into Max
+or Ultra; those efforts require the explicit advanced-reasoning picker." Treat that as the vendor
+telling you this tier is opt-in-by-name only [official-primary].
+
+Unknowns, deliberately not filled: no official token/cost multiplier for ultra, and no official
+default for `features.multi_agent_v2.max_concurrent_threads` was found. Third-party blogs asserting
+"ultra runs exactly four agents in parallel" are **unverified** — the number in upstream's own test
+fixture is 8 threads / 7 subagents, and it is configuration, not a constant. Do not quote a count.
+
+- CLI floor for `ultra`: **0.144.0**. Installed here: **0.144.4** (author-confirmed 2026-07-25) —
+  meets it. Latest released upstream is 0.145.0 (2026-07-21), which stabilized multi-agent v2 with
+  configurable sub-agent models, reasoning levels, and concurrency [official-primary].
+- Inspect the spawned threads with `/subagents` (aliased `/agent`); `/debug-config` dumps the
+  resolved config [official-primary].
 - `models_cache.json` refreshes on use: mtime observed updating per run (author-confirmed);
   a prior session reported the cache lacking the 5.6 family entirely before any successful 5.6
   run [user-relayed]. Either way the load-bearing rule holds: the cache is authoritative in

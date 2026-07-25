@@ -1,7 +1,4 @@
 {
-  "env": {
-    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5"
-  },
   "permissions": {
     "defaultMode": "auto"
   },

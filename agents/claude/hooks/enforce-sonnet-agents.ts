@@ -2,11 +2,31 @@
 // PreToolUse gate — every spawned agent is pinned to Sonnet (no exceptions).
 // matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
-// Policy (user directive 2026-07-11):
+// Policy (user directive 2026-07-11; escalation clause added 2026-07-25):
 //   - Agent/Task: model omitted        -> allow + inject model:'sonnet' via updatedInput
 //                 (an explicit call param beats an agent definition's pinned frontmatter model)
+//                 model 'fable'        -> allow ONLY with a declared escalation in the prompt:
+//                   ESCALATION(fable): <target> | <why sonnet is insufficient> | <cost estimate>
+//                   Three non-empty fields required. The declaration lands in the transcript, so
+//                   the escalation is auditable after the fact — that is the whole point of it.
 //                 model not sonnet     -> deny (the reason doubles as the fix instruction)
 //                 subagent_type 'fork' -> pass (forks inherit the parent model by design)
+//
+// Why the escalation clause exists: Anthropic's own model guidance (2026-07) makes Opus the
+// default and reserves the Fable tier for the highest-capability workloads. The house roster
+// mirrors that — Opus directs, Sonnet works, Fable is the named single escalation. Fan-out is
+// where cost explodes, so Workflow stays Sonnet-only: an escalation is always ONE named unit.
+//
+// This hook is the SINGLE home of the policy. `CLAUDE_CODE_SUBAGENT_MODEL` was removed from
+// settings.json on 2026-07-25 because it outranks the per-invocation model parameter (docs:
+// code.claude.com/docs/en/sub-agents, resolution order), so leaving it set would silently
+// override any escalation while this hook reported it allowed.
+//
+// GOTCHA (measured 2026-07-25): settings.json `env` is read ONCE at session start. Deleting the
+// key does not disarm it mid-session — a declared escalation passes this hook and still spawns
+// Sonnet, and the subagent truthfully reports itself as Sonnet. Verified by `env | grep`: the
+// var was absent from disk and still present in the running process. The escalation tier is
+// live only from the NEXT session start. Symptom-index this before blaming the hook.
 //   - Workflow:   every agent() call in the script must carry a LITERAL model:'sonnet',
 //                 else deny. Unverifiable (named workflow / child workflow() / unreadable
 //                 scriptPath) -> ask, deferring to the user.
@@ -22,6 +42,21 @@ import { readFileSync } from "node:fs";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /sonnet/i;
+const FABLE = /fable/i;
+
+// ESCALATION(fable): <target> | <why sonnet is insufficient> | <cost estimate>
+// All three fields must be non-empty; a bare marker is not a declaration.
+function hasEscalationDeclaration(prompt: unknown): boolean {
+  if (typeof prompt !== "string") return false;
+  for (const line of prompt.split("\n")) {
+    const m = /ESCALATION\s*\(\s*fable\s*\)\s*:(.*)$/i.exec(line);
+    if (m === null) continue;
+    const fields = m[1].split("|").map((f) => f.trim());
+    if (fields.length >= 3 && fields.slice(0, 3).every((f) => f !== ""))
+      return true;
+  }
+  return false;
+}
 
 // Blank string/template/comment interiors, preserving length and newlines, so that
 // (a) brackets inside them cannot break the call-span scan and (b) prompt text cannot
@@ -112,7 +147,9 @@ function checkWorkflowScript(src: string): void {
       "deny",
       `sonnet-agent policy: agent() call(s) missing model:'sonnet' at line(s) ` +
         `${[...new Set(bad)].join(", ")}. Every agent() in a Workflow script MUST pass ` +
-        `{model:'sonnet'} literally (all subagents run on Sonnet — no exceptions). ` +
+        `{model:'sonnet'} literally — fan-out is Sonnet-only, with no escalation clause, ` +
+        `because a fleet is exactly where an escalation stops being one named unit. ` +
+        `Need the Fable tier? Issue it as a SINGLE Agent call with a declared ESCALATION. ` +
         `Fix the script and re-invoke.`,
     );
   }
@@ -127,10 +164,21 @@ function main(): void {
     if (ti.subagent_type === "fork") return; // forks inherit the parent model by design
     const model = ti.model;
     if (model && !SONNET.test(model)) {
+      if (FABLE.test(model)) {
+        if (hasEscalationDeclaration(ti.prompt)) return; // declared escalation — allowed
+        decidePre(
+          "deny",
+          `sonnet-agent policy: model '${model}' is the escalation tier and needs a declared ` +
+            `escalation. Put this line in the prompt, then re-issue: ` +
+            `"ESCALATION(fable): <target> | <why sonnet is insufficient> | <cost estimate>" ` +
+            `(three non-empty fields). Undeclared heavy work goes to Sonnet.`,
+        );
+      }
       decidePre(
         "deny",
-        `sonnet-agent policy: model '${model}' is not allowed — every subagent runs on ` +
-          `Sonnet. Re-issue this call with model:'sonnet' or omit model.`,
+        `sonnet-agent policy: model '${model}' is not allowed — subagents run on Sonnet, and ` +
+          `the only escalation tier is Fable (declared, see the hook header). ` +
+          `Re-issue this call with model:'sonnet' or omit model.`,
       );
     }
     if (!model) {

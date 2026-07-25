@@ -290,3 +290,68 @@ terra(盲検・旧新+対応表)の判定: FAIL——移設先の欠番12行・�
 の description 解剖学が全 skill に義務づける部品、F3 の「履歴は台帳だけ」は本改鋳の任務
 そのもの(散文債務の再発防止)。監査ブリーフの既知差分宣言が狭すぎた(改名+版のみ)のは
 監督の不備として記録。閉鎖後の床: skill-check 完全 clean。
+
+## §配役の更新 — v2607.8.0 (2026-07-25)
+
+**発端**: 発注者の指示 —「Opus5 を基本的には director にして、Fable5 でさえ expert worker に
+降格するべきじゃないの?」。前版(2026-07-24)は「公式資料は委任先の tier を名指ししていない」と
+記録しており、その前提が覆ったかを検める必要があった。
+
+**照合の分母**: 監督自身が WebFetch で一次資料を2ページ取得し、逐語を確認した(要約腕の
+報告は採らない — 過去に省略記号入りの引用を逐語と偽った事故がある)。
+
+| 軸 | 出典 | 得た逐語 |
+|---|---|---|
+| 選択順序 | platform.claude.com `/docs/en/about-claude/models/overview` §Choosing a model | "If you're unsure which model to use, start with Claude Opus 5 for complex agentic coding and enterprise work. For workloads that need the highest available capability, use Claude Fable 5." |
+| tier の分割 | 同 `/choosing-a-model` §Model selection matrix | 行「The highest available capability → Claude Fable 5」/「Complex agentic coding and enterprise work → Claude Opus 5」 |
+| 費用 | 同 overview 比較表 | Fable 5 = $10/$50・Opus 5 = $5/$25・Sonnet 5 = $3/$15(2026-08-31 まで導入価格 $2/$10) |
+| 保持義務 | 別腕の調査(official-primary、敵対検証で CONFIRMED) | Fable/Mythos は Covered Model で 30 日保持、ZDR では利用不可 |
+
+背面の survey は 8 腕(4 面 × 調査+敵対検証)。REFUTED はゼロ。三次ブログ由来の数値主張
+(「ultra は4エージェント」等)は unverified として採らなかった。
+
+**是正**: 前版の「公式資料は委任先の tier を名指ししていない」は 2026-07-25 に覆った。
+ただし公式が名指しするのは**模型選択の順序**であって委任先 tier ではない。SKILL.md には
+その区別を明記し、Sonnet 束縛と宣言制は家の裁定のままだと保存した(過剰な一般化の防止)。
+
+**配役の移動**(役は不変・担い手セルのみ):
+
+| 役 | 旧担い手 | 新担い手 |
+|---|---|---|
+| 監督 | 前線の模型(Fable/Opus) | Opus 5 |
+| 実務 | Sonnet | Sonnet 5 |
+| 実務(上位) | — (存在しなかった) | Fable 5、宣言制、単発の Agent 呼び出しに限る |
+
+**機構の同時改修**(散文だけでは再発するため):
+
+1. `enforce-sonnet-agents.ts` — 非 sonnet を一律 deny する分岐に昇格条項を追加。`fable` は
+   prompt に `ESCALATION(fable): <対象> | <sonnet で届かない理由> | <費用の見込み>` の三欄が
+   揃うときだけ通す。Workflow の fan-out には条項を設けない(艦隊は「名指しの単発」ではない)。
+   試験6本追加、hook 全体で 54 pass / 0 fail。
+2. `settings.json` の `env.CLAUDE_CODE_SUBAGENT_MODEL` を削除。公式の解決順序
+   (code.claude.com `/docs/en/sub-agents`)では env が per-invocation の model より**上位**であり、
+   置いたままなら hook が許可した昇格を env が黙って踏み潰す。これで政策の家は hook 一つになった。
+3. user-global `CLAUDE.md` の「no exceptions」行を宣言制の文言へ差し替え、配役を覆せる既定として記載。
+
+**裁定の級**: 覆せる既定(可逆・開示つき)。統治の変更にあたるため発注者の追認待ち。
+戻し方は env キーの復活と hook の昇格条項の削除の二手のみ。
+
+### 昇格経路の実機検証(2026-07-25)
+
+単体試験(6本)は hook の分岐しか証明しない。実機の経路は harness を通さないと分からないので、
+主 loop から Agent を2回発射して両経路を実測した。
+
+| 経路 | 発射 | 観測 | 判定 |
+|---|---|---|---|
+| 宣言なしの `model:'fable'` | `Reply with exactly: OK` | deny。理由文に修復手順(三欄の書式)が載った | PASS |
+| 宣言ありの `model:'fable'` | 同上+`ESCALATION(fable):` 三欄 | hook は通過。ただし**起動したのは Sonnet 5** | 経路は開通、発火は次 session から |
+
+二例目は自己申告(「私は claude-sonnet-5 である」)だけでは根拠にならないため、機械で裁定した:
+`env | grep` で `CLAUDE_CODE_SUBAGENT_MODEL=claude-sonnet-5` が**走行中のプロセスに残存**する一方、
+`jq` で読んだディスク上の settings.json には `env` キーが**存在しない**ことを同時に確認した。
+原因は settings.json の `env` が session 開始時に一度だけ読まれる仕様であり、削除は当該 session を
+遡及しない。公式の解決順序(env > per-invocation)がそのまま観測された形であり、
+**この env が per-invocation を踏み潰すという今回の設計前提そのものの実証**でもある。
+
+したがって現時点の正しい報告は「昇格経路は配線済み・deny 側は実機で発火・allow 側は次 session
+から有効」であって、「昇格が動く」ではない。次 session の最初の宣言つき発射で allow 側を確定させる。

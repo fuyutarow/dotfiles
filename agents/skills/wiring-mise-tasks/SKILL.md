@@ -103,6 +103,21 @@ deviating from a cell; the matrix here is the working summary.
 TeX: leaf tasks (`latex:*`) are owned by `compiling-latex`; the repo-level `check` aggregates
 `latex:check`. That skill's template instantiates THIS grammar for TeX.
 
+## Two rules the task graph cannot be sound without (2026-07-25, measured)
+
+| Rule | Artifact | Origin |
+|---|---|---|
+| **RUNTIME-DECLARED** — every runtime a task body invokes (`bun`/`node`/`uv`/`julia`/`cargo`/`deno`) is declared and pinned in `[tools]`. | `mise-contract.ts` prints `OK tools: <x> declared`; an invoked-but-undeclared runtime FAILs. | Census 2026-07-25, 3 repos: two had no `[tools]` section at all, the third declared one runtime of four. Every one of them invoked runtimes from task bodies regardless. |
+| **BODY-IS-DECLARATION** — a task body is a launcher, not a program. Over 10 non-blank lines, or any branching/parsing logic, moves to a script file. | `mise-contract.ts` FAILs on an over-length body. | `cc:install-mcp` was a 52-line shell body that silently pruned nothing for weeks; the bug was invisible because a body embedded in TOML **cannot be imported or tested**. `link:skills` is 79 lines. |
+
+The first rule exists because the two halves are not separable: a body that says `bun x` is only
+correct if `[tools]` says `bun`. Pinning was previously routed out of this skill as model-native
+trivia, and the result was a task graph resting on whatever each machine happened to have.
+
+The second is `writing-bun-scripts`' NO-NEW-BASH at the mise boundary. That skill owns the rule
+(bash only as a thin shim); this owns where the boundary falls in `mise.toml`. Once a runtime is
+declared under the first rule, moving a body to `scripts/*.ts` costs nothing — mise provisions it.
+
 ## Templates and the gate
 
 - **Scaffold**: copy the nearest `templates/<lang>.mise.toml` (or `polyglot`), adapt bodies, keep
@@ -156,7 +171,7 @@ MUST NOT fire (route):
 | 「latexmk がエラーで落ちる」 | `compiling-latex` — TeX build internals |
 | 「clippy の warning 直して」 | `writing-rust` / `implementing-and-debugging` — the code, not the graph |
 | 「hook で `mise run check` を強制したい」 | `operating-the-harness` — enforcement machinery (this skill only names the task) |
-| 「mise で node 20 に固定したい」 | model-native — `[tools]` runtime pinning, not the task graph |
+| 「mise で node 20 に固定したい」 — a pin with NO task invoking it | model-native. But a runtime any task body INVOKES is this skill's business: see RUNTIME-DECLARED below (2026-07-25 reversal — this row previously routed all of `[tools]` away, and the census found 3/3 repos invoking undeclared runtimes) |
 | 「この justfile にタスク足して」(他家リポ) | no skill — house repos have no justfile; other projects' justfiles are their own convention |
 
 ## Routing — sibling cuts (typed)

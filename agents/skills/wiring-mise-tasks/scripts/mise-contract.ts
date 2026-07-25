@@ -120,6 +120,105 @@ function dependencyName(value: unknown): string | undefined {
   return typeof value === "string" ? value.split(" ")[0] : undefined;
 }
 
+// --- C-A RUNTIME-DECLARED / C-B BODY-IS-DECLARATION (added 2026-07-25) -----------------
+// Both come from one measured failure. `[tools]` pinning had been routed OUT of this skill
+// as "model-native"; the consequence, censused across three repos on 2026-07-25, was that
+// EVERY one of them invoked a runtime from a task body while declaring none of it — dotfiles
+// and beateater had no [tools] section at all, qoed declared julia only. `mise run` then
+// depends on whatever the machine happens to have, which is the exact opposite of what mise
+// is for. The task graph's soundness is NOT separable from the runtime declaration: a body
+// that says `bun x` is only correct if [tools] says bun.
+//
+// C-B is the same lesson one level down. cc:install-mcp was a ~40-line shell body that
+// looped over jq output; it silently failed to prune anything, and no test existed because
+// no test CAN exist for a body embedded in TOML. Bodies declare; logic lives in a script
+// file where it can be imported and tested (writing-bun-scripts NO-NEW-BASH owns the rule,
+// this is its mise boundary).
+
+const BODY_MAX_LINES = 10;
+
+// Runtime binaries whose presence a task body assumes. Key = binary in command position,
+// value = the [tools] key that would declare it.
+const RUNTIMES: Array<[RegExp, string]> = [
+  [/(^|[|;&(]|&&|\|\|)\s*bunx?\b/m, "bun"],
+  [/(^|[|;&(]|&&|\|\|)\s*deno\b/m, "deno"],
+  [/(^|[|;&(]|&&|\|\|)\s*(node|npx)\b/m, "node"],
+  [/(^|[|;&(]|&&|\|\|)\s*(uv|uvx)\b/m, "uv"],
+  [/(^|[|;&(]|&&|\|\|)\s*julia\b/m, "julia"],
+  [/(^|[|;&(]|&&|\|\|)\s*cargo\b/m, "rust"],
+];
+
+// Raw-text parse on purpose: we need the BODY of every task, and `mise tasks ls` reports
+// names, not sources. Handles `run = '''…'''`, `run = "…"`, and `run = ['…', '…']`.
+function taskBodies(source: string): Array<{ name: string; body: string }> {
+  const out: Array<{ name: string; body: string }> = [];
+  const re =
+    /\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.\-]+))\]([\s\S]*?)(?=\n\[|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    const name = m[1] ?? m[2] ?? "?";
+    const section = m[3] ?? "";
+    const triple = /run\s*=\s*'''([\s\S]*?)'''|run\s*=\s*"""([\s\S]*?)"""/.exec(section);
+    if (triple) {
+      out.push({ name, body: triple[1] ?? triple[2] ?? "" });
+      continue;
+    }
+    const single = /run\s*=\s*(?:'([^']*)'|"([^"]*)")/.exec(section);
+    if (single) out.push({ name, body: single[1] ?? single[2] ?? "" });
+  }
+  return out;
+}
+
+function declaredTools(source: string): Set<string> {
+  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/.exec(source);
+  const out = new Set<string>();
+  if (!m) return out;
+  for (const line of m[1].split("\n")) {
+    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.\-]+))\s*=/.exec(line);
+    if (k) out.add((k[1] ?? k[2] ?? "").toLowerCase());
+  }
+  return out;
+}
+
+// Returns [failures, warnings] and prints its own lines, matching this script's style.
+function checkBodies(source: string): [number, number] {
+  let failures = 0;
+  let warnings = 0;
+  const bodies = taskBodies(source);
+  const tools = declaredTools(source);
+
+  const needed = new Map<string, string[]>();
+  for (const { name, body } of bodies) {
+    for (const [re, tool] of RUNTIMES) {
+      if (!re.test(body)) continue;
+      if (!needed.has(tool)) needed.set(tool, []);
+      needed.get(tool)!.push(name);
+    }
+    const lines = body.split("\n").filter((l) => l.trim() !== "").length;
+    if (lines > BODY_MAX_LINES) {
+      process.stdout.write(
+        `FAIL  body: task '${name}' has ${lines} lines (max ${BODY_MAX_LINES}) — ` +
+          `a TOML-embedded body cannot be imported or tested; move the logic to a ` +
+          `script file and leave a one-line launcher\n`,
+      );
+      failures += 1;
+    }
+  }
+
+  for (const [tool, users] of needed) {
+    if (tools.has(tool)) {
+      process.stdout.write(`OK    tools: ${tool} declared (used by ${users.length} task(s))\n`);
+    } else {
+      process.stdout.write(
+        `FAIL  tools: task(s) ${users.join(" ")} invoke '${tool}' but [tools] does not ` +
+          `declare it — mise run then depends on whatever the machine happens to have\n`,
+      );
+      failures += 1;
+    }
+  }
+  return [failures, warnings];
+}
+
 async function check(
   rootInput: string,
 ): Promise<{ failures: number; environmentFailure: boolean }> {
@@ -190,6 +289,14 @@ async function check(
       warnings += 1;
     }
   }
+  if (existsSync(tomlPath)) {
+    const [bodyFailures, bodyWarnings] = checkBodies(
+      await readFile(tomlPath, "utf8"),
+    );
+    failures += bodyFailures;
+    warnings += bodyWarnings;
+  }
+
   const hyphens = local
     .map((task) => task.name)
     .filter((name) => name.includes("-"));

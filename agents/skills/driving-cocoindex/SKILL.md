@@ -128,7 +128,20 @@ end-to-end-verified fix that also left EN search better, → §4b.3; rg covers l
 on unswapped hosts); (3) heading-echo and exact-token queries still belong to rg — in BOTH
 languages (controls → catalog).
 
-## MCP surface — one tool, and when to prefer the CLI
+## MCP surface — UNREGISTERED globally since 2026-07-25; use the CLI
+
+> **Decision (覆せる既定 2026-07-25・追認待ち)**: `cocoindex-code` is out of the house `.mcp.json`.
+> Not a version story — the registered command IS `ccc mcp`, the same binary.
+> The mismatch is structural. ccc is PROJECT-BY-CWD; MCP freezes that selector at server spawn.
+> A globally-registered server therefore points at its spawn cwd and is wrong for every other repo.
+> Measured: two consecutive failures, then the CLI answered and surfaced two 正本 nobody had pulled.
+> The deciding harm is epistemic. A search tool that is LISTED BUT DEAD makes the executor believe
+> it searched. It then falls back to grep and concludes absence. That is the very pathway this skill
+> closes, reproduced upstream of every guard. Second harm: MCP defaults `refresh_index:true`, the CLI does
+> not refresh (CC2). Two homes for one verb with DIFFERENT DEFAULTS is worse than two homes.
+> Per-project wiring inside a repo you stay in remains legitimate (§below).
+> The category error was registering a cwd-bound tool globally.
+> Reverse by re-adding the entry and running `mise run cc:install-mcp`.
 
 MCP exposes exactly ONE tool, `search` (full input/output schema → `references/catalog.md`);
 its project binding is cwd-derived with zero override flags — an un-init-ed cwd produces the

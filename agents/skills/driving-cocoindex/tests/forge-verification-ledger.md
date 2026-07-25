@@ -250,3 +250,31 @@ waiver を記載する — staleness 行(2+ classes)により reforge queue 入�
 description は 1486/1500 字で満杯のため事故語彙(機能重複・二重実装)の追加は不可 — この照準は
 (a) global CLAUDE.md の常駐行、(b) implementing-and-debugging の co-fire 行(実装時に必ず読まれる
 現職)、(c) PostToolUse[Grep] zero-hit hook の3機構で補償する裁定(2026-07-24)。
+
+## §MCP の登録解除 — 2026-07-25(覆せる既定・追認待ち)
+
+**発端**: 発注者「cocoindex について MCP やめさせたいのだがどう思う? MCP が daemon 版不一致で
+二度とも失敗したので ccc CLI へ切り替えた。結果、私が引いていなかった正本が二つ出た」。
+
+**現物の確認**: `.mcp.json` の登録は `{"command":"ccc","args":["mcp"]}` — **CLI と同一バイナリ**。
+したがって「MCP 実装が CLI に遅れている」という説明は成立しない。真の非互換は本 skill が
+既に記録していた: MCP の project 束縛は **spawn 時の cwd で凍結**される一方、ccc は
+PROJECT-BY-CWD。global 登録のサーバは起動 cwd 以外の全 repo に対して誤ったプロジェクトを向く。
+複数 repo を往復する運用では版を上げても直らない。
+
+**採択の決め手(人間工学ではなく認識論)**: 「登録されているが死んでいる」検索道具は、実行側に
+「意味検索は試した」と信じさせる。そこから grep へ落ち、不在と結論する。これは本 skill が
+閉じるべき重複実装の経路そのものであり、しかも我々が同日構築した4層の guard より**上流**で
+再生産される。実測の裏づけ: CLI へ切り替えた結果、発注者が引いていなかった正本が2件出た
+(答えが変わった = 判定に影響する差)。
+
+**第二の害**: MCP は `refresh_index` 既定 true、CLI は既定で refresh しない(CC2 が明記する
+asymmetry)。同じ動詞に家が二つあるだけでなく、**既定が食い違う**。単なる二重化より悪い。
+
+**裁定の範囲**: 「MCP が悪い」ではない。**cwd 束縛の道具を global MCP に登録したのが
+category error** である。単一 repo に留まる作業での per-project 配線は依然として正当であり、
+SKILL.md の当該節を残した。
+
+**戻し方**: `.mcp.json` に entry を再追加し `mise run cc:install-mcp`。
+
+**床**: skill-check の prose 債務は 24 → 24(私の追記分は一度 29 まで増やして刈り戻した。純増ゼロ)。

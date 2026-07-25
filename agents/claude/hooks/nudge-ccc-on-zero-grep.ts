@@ -210,7 +210,14 @@ function sentinelPath(sessionId: string, project: string): string {
 }
 
 // --- T2 bookkeeping: per (session, project) census, one tiny JSON beside the sentinel ---
-const SEARCH_STRIDE = 8; // re-nudge every N searches while ccc is still unused
+// Re-nudge every N searches while ccc is still unused. The FIRST nudge comes early because
+// most searching happens in short-lived subagents, not in the main loop: hooks do reach
+// subagents (measured 2026-07-25 — each arm gets its own session_id, so each starts from a
+// fresh census), and an arm that lives for ~10-30 tool calls would die before a stride of 8
+// ever fired. One observed arm ran 7 searches, 0 ccc, and was never told anything.
+// After the first nudge the stride widens, so a long main-loop session is not spammed.
+const FIRST_NUDGE_AT = 3;
+const SEARCH_STRIDE = 8;
 
 type Census = { searches: number; ccc: number; lastNudge: number };
 
@@ -306,7 +313,8 @@ function main(): number {
 
   // T2 — searching hard, never reaching for semantic search. The half a zero-hit
   // trigger cannot see: grep FOUND something, so nothing looked wrong.
-  if (census.ccc === 0 && census.searches - census.lastNudge >= SEARCH_STRIDE) {
+  const due = census.lastNudge === 0 ? FIRST_NUDGE_AT : SEARCH_STRIDE;
+  if (census.ccc === 0 && census.searches - census.lastNudge >= due) {
     census.lastNudge = census.searches;
     writeCensus(cpath, census);
     emit(

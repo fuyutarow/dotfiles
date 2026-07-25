@@ -265,15 +265,30 @@ describe("T2 search-run trigger", () => {
     tool_response: hit,
   });
 
-  test("8 hitting searches with no ccc -> nudge naming the stride count", () => {
+  // FIRST_NUDGE_AT=3: most searching happens in short-lived subagents that would die
+  // before a stride of 8 ever fired (measured — one arm ran 7 searches, 0 ccc, silent).
+  test("3 hitting searches with no ccc -> first nudge naming the count", () => {
     const project = registerProject();
     let last = { stdout: "", code: 0 };
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 3; i++) {
       last = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2", project));
-      if (i < 8) expect(last.stdout.trim()).toBe("");
+      if (i < 3) expect(last.stdout.trim()).toBe("");
     }
-    expect(last.stdout).toContain("8 literal searches");
+    expect(last.stdout).toContain("3 literal searches");
     expect(last.stdout).toContain("ccc search");
+  });
+
+  test("after the first nudge the stride widens to 8 (a long session is not spammed)", () => {
+    const project = registerProject();
+    for (let i = 1; i <= 3; i++)
+      runHook(HOOK, bash(`rg -n "a${i}" src/`, "s-t2-stride", project));
+    let last = { stdout: "", code: 0 };
+    for (let i = 1; i <= 7; i++) {
+      last = runHook(HOOK, bash(`rg -n "b${i}" src/`, "s-t2-stride", project));
+      expect(last.stdout.trim()).toBe("");
+    }
+    last = runHook(HOOK, bash('rg -n "b8" src/', "s-t2-stride", project));
+    expect(last.stdout).toContain("11 literal searches");
   });
 
   test("running ccc silences T2 permanently for that session x project", () => {
@@ -293,7 +308,8 @@ describe("T2 search-run trigger", () => {
       HOOK,
       bash("git commit -m 'use ccc search next time'", "s-t2c", project),
     );
-    for (let i = 1; i <= 8; i++) {
+    // FIRST_NUDGE_AT = 3, so the nudge lands on the third search, not on the last call.
+    for (let i = 1; i <= 3; i++) {
       last = runHook(HOOK, bash(`rg -n "tok${i}" src/`, "s-t2c", project));
     }
     expect(last.stdout).toContain("literal searches");

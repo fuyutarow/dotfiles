@@ -50,7 +50,10 @@ describe("mise-contract floor", () => {
     expect(code).toBe(1);
     for (const line of ["link:skills", "cc:install-mcp", "cache:clean"])
       expect(out).toContain(`body: task '${line}'`);
-    expect(out).toContain("invoke 'bun' but [tools] does not declare it");
+    // bun became declared on 2026-07-25; uv/rust remain deliberately undeclared
+    // (declaring them would shadow existing toolchains — a separate decision).
+    expect(out).toContain("OK    tools: bun declared");
+    expect(out).toContain("invoke 'uv' but [tools] does not declare it");
     expect(out).toContain("OK    fmt\n");
     expect(out).toContain("OK    check\n");
   });

@@ -49,7 +49,7 @@ describe("nudge-ccc-on-zero-grep", () => {
     const ctx: string = parsed.hookSpecificOutput.additionalContext;
     expect(ctx).toContain(project);
     expect(ctx).toContain("ccc search");
-    expect(ctx).toContain("Grep 0 hits ≠ 不在");
+    expect(ctx).toContain("0 hits ≠ 不在");
     expect(ctx).toContain("CC3");
   });
 
@@ -105,5 +105,149 @@ describe("nudge-ccc-on-zero-grep", () => {
     expect(r2.stdout.trim()).not.toBe("");
     const parsed2 = JSON.parse(r2.stdout);
     expect(parsed2.hookSpecificOutput.additionalContext).toContain(project);
+  });
+});
+
+// Bash-borne searches (2026-07-25) — the pathway the Grep-only matcher missed entirely.
+// The two commands below are transcribed from the firedancer audit transcript that
+// exposed the hole; both reached "not present" and neither fired the old hook.
+describe("Bash search coverage", () => {
+  const HOOK = "nudge-ccc-on-zero-grep.ts";
+
+  // A fresh temp project per call keeps the once-per-(session,project) sentinel from
+  // making these tests order- or run-dependent.
+  const bash = (
+    command: string,
+    resp: unknown,
+    session: string,
+    project = registerProject(),
+  ) => ({
+    session_id: session,
+    cwd: project,
+    tool_name: "Bash",
+    tool_input: { command },
+    tool_response: resp,
+  });
+
+  test("observed case A: compound echo+grep whose only output is the banner", () => {
+    const cmd =
+      'echo "=== grep for RDT-related scaffolds ===" && grep -n "GB119\\|RDT\\|r_max" docs/ledger.md | head -80';
+    const r = runHook(
+      HOOK,
+      bash(
+        cmd,
+        { stdout: "=== grep for RDT-related scaffolds ===\n", stderr: "" },
+        "s-bash-a",
+      ),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("ccc search");
+  });
+
+  test("observed case B: ugrep prints 'No matches found'", () => {
+    const r = runHook(
+      HOOK,
+      bash(
+        'grep -n "GB118" docs/ledger.md',
+        { stdout: "No matches found\n", stderr: "" },
+        "s-bash-b",
+      ),
+    );
+    expect(r.stdout).toContain("ccc search");
+  });
+
+  test("find with -iname and no output fires", () => {
+    const r = runHook(
+      HOOK,
+      bash('find . -iname "*gb119*"', { stdout: "", stderr: "" }, "s-bash-c"),
+    );
+    expect(r.stdout).toContain("ccc search");
+  });
+
+  test("a search WITH hits stays silent", () => {
+    const r = runHook(
+      HOOK,
+      bash(
+        'rg -n "pattern" src/',
+        { stdout: "src/a.ts:12:pattern\n", stderr: "" },
+        "s-bash-d",
+      ),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("a non-search Bash command stays silent even with empty output", () => {
+    const r = runHook(
+      HOOK,
+      bash("mkdir -p /tmp/x", { stdout: "", stderr: "" }, "s-bash-e"),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("a bare `find dir` listing is not a search", () => {
+    const r = runHook(
+      HOOK,
+      bash("find build", { stdout: "", stderr: "" }, "s-bash-f"),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("an errored command is not evidence of absence", () => {
+    const r = runHook(
+      HOOK,
+      bash(
+        'grep -n "x" missing.md',
+        { stdout: "", stderr: "grep: missing.md: No such file" },
+        "s-bash-g",
+      ),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("`--include=*.grep` in a non-search command does not trip the verb regex", () => {
+    const r = runHook(
+      HOOK,
+      bash("ls --include=*.grep", { stdout: "", stderr: "" }, "s-bash-h"),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("fires at most once per session x project", () => {
+    const project = registerProject();
+    const first = runHook(
+      HOOK,
+      bash(
+        'grep -n "zzz" a.md',
+        { stdout: "", stderr: "" },
+        "s-bash-once",
+        project,
+      ),
+    );
+    expect(first.stdout).toContain("ccc search");
+    const second = runHook(
+      HOOK,
+      bash(
+        'rg -n "yyy" b.md',
+        { stdout: "", stderr: "" },
+        "s-bash-once",
+        project,
+      ),
+    );
+    expect(second.stdout.trim()).toBe("");
+  });
+
+  test("output that merely CONTAINS 'No matches found' is a hit, not a miss", () => {
+    const r = runHook(
+      HOOK,
+      bash(
+        'rg -N "No matches found" test.log',
+        {
+          stdout: "test.log:12:assert ugrep prints 'No matches found'\n",
+          stderr: "",
+        },
+        "s-bash-substr",
+      ),
+    );
+    expect(r.stdout.trim()).toBe("");
   });
 });

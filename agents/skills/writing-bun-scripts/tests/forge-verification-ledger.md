@@ -132,3 +132,37 @@ needs sudachipy via uvx; codemix keeps pair coherence, G3 deny-gate unfillable).
 | Behavior hat (2nd commit) | auth-probe: 8 error paths now exit 1 (+ pinning test); auth-probe/mise-contract spawns gained timeouts; pins landed: wrangler@4.113.0 ×3, degit@3.6.1 ×2 |
 | textlint pin REVERTED — discovery | pin-breaks-plugins corollary (bun-facts §5): rules resolve from the bun GLOBAL install; pinned bunx switches to an isolated dir → "No rules found"; characterization test caught the hat-2 change. DEFERRED with owner: linting-prose floor graduation (package.json pinning textlint+rules) |
 | Completion criterion (G5, narrowed openly) | floor FAIL=0 WARN=0 EXCEPT lint-floor W7 ×1 (the declared graduation deferral); zero .sh under scripts/; every inventory file carries REFACTORED / KEEP / declared-exception |
+
+## Reforge 2026-07-28 — subprocess detection facts (field-driven)
+
+Trigger: a house script (`qoed/scripts/check_p1_oracle.ts`, a mise `test:banded` body moved out
+of TOML under wiring-mise-tasks' BODY-IS-DECLARATION) was written against BG2 from memory rather
+than from facts §3. Two defects shipped and were caught by running it, not by review.
+
+| Defect | Symptom in the field | Was the skill at fault? | Landed |
+|---|---|---|---|
+| stdout drained to completion, THEN stderr | a 120s child never returned; the 600s `timeout:` fired and read as "the child is slow" | NO — facts §3 already carried the `Promise.all` drain pattern. The author did not read it. But the rule lived ONLY in the reference while BG2 named only "bound relayed output" | drain rule promoted into the BG2 row; floor **W10** (drains both pipes + no `Promise.all`) |
+| branched on `proc.killed` to detect the timeout | every run, including a clean exit-0 run that had already produced correct output, reported "killed at 600s" | YES — facts §3 enumerated `killed` in a bare API list with no semantics; the name invites exactly this | measured table added to facts §3; floor **W9** |
+
+Measured on bun 1.3.14 `[dated:2026-07]`, three spawns, one command each: clean exit →
+`exited=0 killed=true signalCode=null`; `AbortSignal.timeout` fired → `exited=137 killed=true
+signalCode=SIGKILL sig.aborted=true reason=TimeoutError`; external `kill("SIGTERM")` →
+`exited=143 signalCode=SIGTERM`. Also probed: `typeof ($\`echo x\`).timeout === "undefined"` —
+`Bun.$` cannot bound a hangable child at all, so the decision table's "can hang → spawn" row is
+a capability boundary, not a style preference. That line is now in facts §3.
+
+**Near-miss worth recording.** The first draft of this reforge asserted `signalCode !== null` as
+THE timeout detector — which would have silently overridden the 2026-07-23 VERIFY row where the
+fleet refuted exactly that ("any signal death reads as timeout") and re-aligned the corpus to
+`AbortSignal.timeout`. The ledger caught it: reading the prior ruling before editing is what kept
+the two from contradicting. The probe's third row (external SIGTERM, `aborted=false`) is the
+empirical form of that refutation and is now recorded so the next author does not re-litigate it.
+
+Proof-of-fire (F3): a bad fixture (sequential drain + `.killed` branch) raises W9+W10; the good
+fixture and the fixed real script raise neither; the floor's own source raises neither after the
+`KILLED` self-scan guard (same split-token pattern as `BUNX` — the first cut of W9 tripped the
+floor on itself and turned the suite red, 9 pass/1 fail, which is how the gap was found).
+Post-fix: `bun test` 10 pass / 0 fail.
+
+Not fixed here (pre-existing, unchanged by this reforge): skill-check reports 10 prose sentences
+>120 chars, an 11-line version header, and 4 table cells >400 chars.

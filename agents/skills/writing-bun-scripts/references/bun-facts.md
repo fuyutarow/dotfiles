@@ -56,9 +56,43 @@ Sharp edges (each is a rule):
   — "Set `timeout` to terminate a subprocess after a duration in milliseconds"; default kill
   signal on timeout is SIGTERM; `killSignal` also applies to aborts.
 - `proc.kill()` / `proc.killed` / `proc.exited` (Promise) / `proc.exitCode` / `proc.signalCode`.
+- **`proc.killed` is NOT a kill/timeout detector — it is `true` after a CLEAN exit too.**
+  Measured on bun 1.3.14 `[dated:2026-07]` (probe: three spawns, one command each):
+
+  | case | `exited` | `killed` | `exitCode` | `signalCode` |
+  |---|---|---|---|---|
+  | `sh -c "echo hello; sleep 0.1"`, timeout 10s | 0 | **true** | 0 | null |
+  | `sh -c "echo x; exit 3"`, timeout 10s | 3 | **true** | 3 | null |
+  | `sh -c "sleep 5"`, timeout 1s | 137 | true | **null** | **SIGKILL** |
+
+  Branching on `killed` fires on every run and reports a successful run as a timeout — observed
+  in the wild: a 130-second run that had already produced correct output was reported as
+  "killed at 600s". Floor check W9 owns this.
+- **`signalCode` says "died by A signal", never "timed out".** Same probe, extended `[dated:2026-07]`:
+
+  | case | `exited` | `signalCode` | `sig.aborted` | `sig.reason.name` |
+  |---|---|---|---|---|
+  | clean exit | 0 | null | false | — |
+  | `AbortSignal.timeout` fired | 137 | SIGKILL | **true** | **TimeoutError** |
+  | external `proc.kill("SIGTERM")` | 143 | SIGTERM | false | — |
+
+  Rows 2 and 3 are indistinguishable by `signalCode` alone — which is why the 2026-07-23 fleet
+  refuted `signalCode !== null` as a timeout detector and the house form is
+  `signal: AbortSignal.timeout(ms)` + reading `sig.aborted` (see the VERIFY findings row).
+  Use `signalCode` only to report WHICH signal, after `aborted` has answered WHETHER it timed out.
+- **`Bun.$` has no timeout.** Probed `[dated:2026-07]`: `typeof ($\`echo x\`).timeout === "undefined"`.
+  So the decision table's "can hang → `Bun.spawn`" row is not a style preference — `$` cannot
+  bound a hangable child at all, and the REFACTOR row ("spawn ceremony for short bounded
+  commands → `$`") applies only where hanging is not a risk.
 - `Bun.spawnSync({ cmd, maxBuffer })` — kills the child once output exceeds `maxBuffer` bytes.
-- Drain pattern stays: `await Promise.all([new Response(proc.stdout).text(), …, proc.exited])`,
-  then bound what you relay (house caps: 16k/32k chars — `[corpus]` run-claude.ts).
+- **Drain the two pipes CONCURRENTLY**: `await Promise.all([new Response(proc.stdout).text(),
+  new Response(proc.stderr).text(), proc.exited])`, then bound what you relay (house caps:
+  16k/32k chars — `[corpus]` run-claude.ts). Awaiting stdout to completion and THEN stderr
+  **deadlocks** as soon as the child fills the pipe nobody is reading — the child blocks on
+  `write`, the parent blocks on `read`, and the only thing that ends it is your own `timeout:`.
+  The symptom therefore misreads as "the child is slow", not "I wrote the drain wrong".
+  Any child that writes to both streams (Julia, cargo, most compilers) reaches this.
+  Floor check W10 owns this.
 
 ## §4 Auto-install & the cwd trap (the CWD-HOSTILE ground truth)
 

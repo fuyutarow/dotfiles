@@ -18,6 +18,8 @@
 //                                 `// bounded: <reason>` beside it
 //   W6  setTimeout + kill       — hand-rolled timeout; native Bun.spawn timeout: exists
 //   W7  unpinned bunx           — bunx staleness is real; pin pkg@x.y.z
+//   W9  .killed as detector     — true after a clean exit; use AbortSignal.timeout + aborted
+//   W10 sequential pipe drain   — stdout-then-stderr deadlocks; drain via Promise.all
 
 let failures = 0;
 let warnings = 0;
@@ -32,8 +34,9 @@ function warn(file: string, message: string): void {
   warnings += 1;
 }
 
-// Split token so this file's own source does not trip its bunx scan (self-scan guard).
+// Split tokens so this file's own source does not trip its own scans (self-scan guard).
 const BUNX = "bun" + "x";
+const KILLED = "kill" + "ed";
 const BUNX_PATTERN = new RegExp(`\\b${BUNX}\\b`);
 
 const IMPORT_SPECIFIER =
@@ -146,6 +149,22 @@ async function checkFile(file: string): Promise<void> {
   // W7 — bunx without any visible version pin
   if (BUNX_PATTERN.test(code) && !/@\d/.test(code)) {
     warn(file, `${BUNX} call with no visible @x.y.z pin — ${BUNX} staleness is real (facts §5)`);
+  }
+
+  // W9 — the kill flag read as a kill/timeout detector. It is true after a CLEAN exit too, so
+  // a branch on it fires on every run and misreports success as a timeout (facts §3, measured).
+  // Token split so this file's own source does not trip the scan (self-scan guard, as BUNX).
+  if (new RegExp(`\\.${KILLED}\\b`).test(code)) {
+    warn(file, `\`.${KILLED}\` present — it is true after a clean exit; bound with AbortSignal.timeout and read \`sig.aborted\` (facts §3)`);
+  }
+
+  // W10 — sequential drain of a child's two pipes. Awaiting stdout to completion and THEN
+  // stderr deadlocks the moment the child fills the pipe nobody is reading; the symptom is
+  // your own timeout firing, which reads as "the child is slow" (facts §3).
+  const drainsStdout = /new Response\(\s*[\w.]*\.stdout\s*\)/.test(code);
+  const drainsStderr = /new Response\(\s*[\w.]*\.stderr\s*\)/.test(code);
+  if (drainsStdout && drainsStderr && !/Promise\.all/.test(code)) {
+    warn(file, "drains .stdout and .stderr but no Promise.all — sequential drain deadlocks on a full pipe (facts §3)");
   }
 }
 

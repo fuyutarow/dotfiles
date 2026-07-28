@@ -8,7 +8,7 @@ description: >-
   PDF・バイナリは非対応→要変換, 「どこかに書いたはずだが言葉を思い出せない」想起検索, ccc, cocoindex, コードインデックス
   作成/更新, ccc search が古い・ヒットしない, 日本語クエリだけヒットしない, ccc の embedding
   モデル変更, multi-line/formatter-wrapped signature の構造検索 → ccc grep), or any
-  ccc/daemon/index operation. 監督の環では検収前の帰着照合・「新規性/不在/frontier」主張の前・
+  ccc operation. 監督の環では検収前の帰着照合・「新規性/不在/frontier」主張の前・
   委任ブリーフ起草前のヒント語照合にも使う; 発火したら battery: 言い換え≥3本・JA/EN 混在
   token・不在主張はクエリ台帳を分母として添付。LAW: PROJECT-BY-CWD — every verb except ccc grep needs a
   ccc init-ed cwd: verify registration FIRST (CC1); PULL-BASED — no file watcher;
@@ -16,7 +16,7 @@ description: >-
   never exhaustive (CC3); LANGUAGE-WALL — the default embedding model's topical signal is
   EN-only: 純和文の意味検索はモデル交換が前提, JA/EN 混在ノートは英語トークンで code-switch
   検索. Cuts: literal string/regex or every-call-site → Grep/rg (but multi-line STRUCTURAL
-  patterns → ccc grep here); known-symbol defs/refs/rename → serena;
+  patterns → ccc grep here); known-symbol semantic defs/refs/rename → driving-serena;
   open-ended repo tour → Explore agent; install/upgrade the binary → running-python-tools;
   MCP-server-dead diagnostics → operating-the-harness FIRST (co-fire). Workflow-native:
   searches fan out under the CC4 relay; routing + freshness stay SOLO. English skill;
@@ -181,8 +181,8 @@ const cccSearch = (project, query) => agent(
 - Fan out one worker per QUERY-SHAPE-homogeneous batch — mixing "find every call site"
   queries with "how does X work" queries in one fan-out defeats CC3 routing, since each
   shape wants a different tool.
-- Recommended composition: ccc LOCATES the semantically relevant region by concept → serena
-  NAVIGATES/EDITS the exact symbol once found. Not a collision — a pipeline.
+- Recommended composition: ccc LOCATES the semantically relevant region by concept →
+  `driving-serena` NAVIGATES/EDITS the exact symbol once found. Not a collision — a pipeline.
 
 ## Execution model
 
@@ -220,7 +220,7 @@ MUST NOT fire (route):
 |---|---|
 | "grep for every TODO comment" | `Grep` — literal string, zero setup |
 | 「ノートのあの見出し、どこだっけ」(フレーズをほぼ覚えている) / 「'deploy' を含むノートを全部列挙」(全文検索) | `Grep`/rg — literal recall & exhaustive listing on markdown; top-k adds nothing a grep doesn't |
-| "rename this function safely, show me its callers" | `serena` — exact symbol, not concept |
+| "rename this function safely, resolve its callers semantically" | `driving-serena` — exact symbol relation, not concept or exhaustive lexical occurrence |
 | 「このリポジトリを俯瞰したい、どこから読めばいい？」 | `Explore` agent — open-ended tour, no search term |
 | "install/upgrade the ccc binary" | `running-python-tools` — uv-tool territory, before this skill's scope starts |
 | "what is cocoindex / cocoindex-code?" | trivial — plain answer, no skill |
@@ -238,7 +238,7 @@ CO-FIRE, ORDERED SECOND (fires, but not first):
 |---|---|
 | `running-python-tools` | INSTALL-vs-DRIVE — getting `ccc` onto PATH, pinning, upgrading (`uv tool install/upgrade cocoindex-code`) → there; everything you do once it's there → here. |
 | `operating-the-harness` | MCP-LIFECYCLE-FIRST — is the `cocoindex-code` MCP server even starting (`.mcp.json`, trust prompt, `claude mcp list`, restart)? → there, co-fire, FIRST; what `ccc` itself does (search/daemon/project semantics), reached via MCP or direct Bash → here. |
-| `serena` (MCP toolset, not a Skill) | SYMBOL-vs-CONCEPT, decisive — know the exact identifier and want its definition/callers/a safe rename/an outline? → serena. Know only the CONCEPT, not the literal string? → here. Recommended pipeline: ccc LOCATES by concept → serena NAVIGATES/EDITS the symbol. |
+| `driving-serena` | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → Grep; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS. |
 | `Grep` / `Explore` (non-skill) | QUERY-SHAPE ladder — literal string/regex/every-call-site → Grep; open-ended "tour this repo" with no search term → Explore; a CONCEPT query against an INDEXED project → here (CC1 first). |
 | `raising-resolution` | Silent sub-step, LOWEST precedence: inspect the actual ccc state (`ccc status`, `ccc daemon status`, `cat ~/.cocoindex_code/global_settings.yml`, `claude mcp list`) before asserting a version/uptime/registration/MCP-liveness fact — never recall one from training; cocoindex-code is plausibly absent from training data entirely. |
 | `writing-python` | Contributing to `cocoindex-code`'s OWN Python source (upstream) → there; operating the already-built binary → here. No collision in normal driving usage. |

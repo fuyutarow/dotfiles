@@ -1,17 +1,17 @@
 ---
 name: running-python-tools
 description: >-
-  Run ALL Python-based tooling through uv — `uvx <tool>` for CLI tools (ruff, black, pytest,
-  jupyter, http, yt-dlp, marker, …) and `uv run --with <pkg>` for scripts/snippets needing
-  libraries (pypdf, pdfplumber, numpy, pandas, matplotlib, requests, …). Read this BEFORE running
+  Run ALL Python-based tooling through uv — `uvx <tool>` for CLI tools (ruff, pytest, jupyter, …)
+  and `uv run --with <pkg>` for scripts/snippets needing libraries (pypdf, numpy, pandas, …).
+  Read this BEFORE running
   any Python command. Trigger whenever you would otherwise type `pip install`, `pip3`,
   `python3 -m pip`, `pipx`, `conda`, a bare `python3 script.py` that imports third-party packages,
   or invoke a Python tool by name. Replaces system/global pip installs with isolated, cached,
   reproducible uv runs — no environment pollution. Cut: this skill = invoking a tool/one-off
   snippet NOW; writing/reviewing Python that will LIVE in a repo (project, module, kept script —
-  pyproject.toml, dependency selection, typing/lint discipline) → writing-python. A tool with
-  its own driving-* skill (ccc → driving-cocoindex; codex → driving-codex) is DRIVEN there once
-  installed — install/pin/upgrade of the binary stays here. maturin/PyO3 as a Rust
+  pyproject.toml, dependency selection, typing/lint discipline) → writing-python. A tool with a
+  driving-* skill is DRIVEN there (ccc/codex/serena); uv isolation, install, pin, upgrade, and
+  trivial version/help stay here. maturin/PyO3 as a Rust
   binding-architecture decision → writing-rust; running the maturin command itself stays here.
 ---
 

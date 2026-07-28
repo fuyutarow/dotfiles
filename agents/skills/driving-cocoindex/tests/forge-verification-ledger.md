@@ -278,3 +278,10 @@ SKILL.md の当該節を残した。
 **戻し方**: `.mcp.json` に entry を再追加し `mise run cc:install-mcp`。
 
 **床**: skill-check の prose 債務は 24 → 24(私の追記分は一度 29 まで増やして刈り戻した。純増ゼロ)。
+
+## 2026-07-27: `driving-serena` reciprocal seam
+
+`serena` を「MCP toolset, not a Skill」としていた現行 routing を、新設
+`driving-serena` への SYMBOL-vs-CONCEPT seam に更新した。既存 PROSE-DEBT waiver の queue
+位置は不変。`skill-check.ts` の再計測は長文24・版見出し20・長セル1で、既存 floor から
+負債の純増なし。

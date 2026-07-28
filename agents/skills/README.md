@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**24 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**37 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Authored
@@ -37,6 +37,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.
 - [`driving-grok`](driving-grok/) — Drive xAI's Grok Build CLI (`grok`) as a headless worker: metered + real sandbox, but an EXFIL-RISK data-minimize law, catalog by probe.
 - [`driving-cocoindex`](driving-cocoindex/) — Drive `ccc` semantic code/notes search: project-by-cwd, pull-based freshness, route by query shape.
+- [`driving-serena`](driving-serena/) — Drive Serena MCP with live-contract, project/language capability, memory-freshness, and FD/process resource gates.
 - [`orchestrating-agents`](orchestrating-agents/) — 委任体制を運転する監督の規律: 宣言制・委任契約・検収の試験・pacing の12門(旧 acting-as-director)。
 
 ### Coding & proofs

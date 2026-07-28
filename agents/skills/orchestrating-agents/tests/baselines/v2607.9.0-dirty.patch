@@ -1,0 +1,12 @@
+diff --git a/agents/skills/orchestrating-agents/SKILL.md b/agents/skills/orchestrating-agents/SKILL.md
+index d4a4a69..b77c603 100644
+--- a/agents/skills/orchestrating-agents/SKILL.md
++++ b/agents/skills/orchestrating-agents/SKILL.md
+@@ -347,6 +347,7 @@ terra は同一ベンダ同一世代のため独立性は部分的である。
+ | P9 CONFOUND-TABLE | 一変数を動かす前に交絡の表を書く。 | 実行体の冒頭に交絡の表がある。 | 2026-07-22、台帳 §第2次ポストモーテム |
+ |  | 同時に動く量を全て表へ載せる。 | 変数と連動量の対応がある。 | 2026-07-22、台帳 §第2次ポストモーテム |
+ |  | 交絡を打ち消す正規化の腕を先に設計する。 | 正規化の設計が実験より先にある。 | 2026-07-22、台帳 §第2次ポストモーテム |
++|  | 機構が効果を生んだと主張する実験には、その機構を外した対照を同一の条件で置く。 | 比較表に機構なしの行がある。 | 2026-07-26、台帳 §PoCの無効化 |
+ 
+ ### 出荷
+ 

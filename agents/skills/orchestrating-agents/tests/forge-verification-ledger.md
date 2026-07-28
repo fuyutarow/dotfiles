@@ -570,3 +570,319 @@ FIRST_NUDGE_AT=3 を導入し、初回だけ早く、以後は stride 8 に戻�
 
 **堆積の門**: 本追記で body が 507 行に達し、既存節の圧縮で 500 未満へ戻した。門は本日
 複数回鳴っている。次は追記ではなく鍛え直しであり、これ以上の追記は債務の先送りである。
+
+## §PoCの無効化(2026-07-26)
+
+**事象**: 「勾配法によらない信用割当は学習を生むか」を測る PoC が、組み込んだ敵対的検査3本のうち
+2本で無効化された。**設計の誤り3件はいずれも監督に帰属する。**
+
+1. **標的が相関免疫でなかった**。指示書は「定理 I2-A により単一成分では到達できない」と書いたが、
+   源を代数的に解くと x_t = m_t XOR m_{t-1}(m は独立な Bernoulli(0.9))で、入力が偏っており
+   相関免疫の条件を満たさない。実測で直前1記号だけでエントロピーが 0.6798→0.5890 へ落ちる。
+   I2-A の反例は別の機械(3ビットの W 行列 + reset の雑音、30近傍で I(Y;Z)=0 を有理数演算で厳密証明)
+   であり、保証が最初から接続していなかった。
+2. **機構なしの対照が無かった(決定打)**。同一データ・同一の KT 機構で、分裂も融合もしない
+   固定深さの表が d=6 で 0.48032、d=7 で 0.48029。適応機械は 0.48304 で**負けている**。
+   信用・門・受理の機構全体が何も追加していなかった。
+3. **融合が構造的に発火し得ない設計**。merge_gain = −split_gain のため直近の分裂を同一時点で
+   融合評価すると必ず負。かつチェックポイントが単調増加のみで分布の漂流が無い。
+   受理0件、腕Sと腕SMがバイト同一。GB119 と同型。
+
+**攻撃できなかった箇所**: 浮動小数点0件(判断へ戻る経路がコード上に存在しない)、受理の門は選択的
+(候補2件に対し受理0件を計装で確認)、中核の自己検定4件が独立再実行で通過。**機構は健全で、
+無価値だったのは実験の設計である。**
+
+**是正(門は増やさない。P9 へ1行)**:
+
+> 機構が効果を生んだと主張する実験には、その機構を外した対照を同一の条件で置く。
+> artifact: 比較表に機構なしの行がある。
+
+**本日3度目の同型**(GB118 の購入0件の対照の不在への査読の指摘、GB119 の空虚な通過、本件)。
+2件目の指摘を受けた直後に3件目を作った。門の数は編集前後とも12。
+
+**出自**: notes/postmortem/PoCの無効化-2026-07-26.md(firedancer)。
+
+## 2026-07-27 — v2607.10.0 cognitive-heterogeneity reforge
+
+### Source
+
+本鍛え直しのdurable baselineは
+`tests/baselines/v2607.9.0-dirty.patch`。forge開始時のHEADは
+`c27f011e85ce9e36e09fccd349f9c1b573b6092b`、HEAD側の旧`SKILL.md` blobは
+`d4a4a6969d965d7ec49c531e77666e92808c3901`、既存dirtyを含むbaseline blobは
+`b77c60390dd5fb09dcaf525469023a1648015fdd`、dirty baseline本文のSHA256は
+`a5e835ec09ab05df65f49df950ee852b1a345282416f759dc5182f53ff58900c`。
+`/tmp/orchestrating-reforge.TCgtBC/orchestrating-agents` は監査中の作業copyに過ぎず、
+durable baselineの正本ではない。
+
+| Source | 取得・検査の形 | この鍛え直しで使う範囲 |
+|---|---|---|
+| durable dirty baseline | 上記HEAD blobからdirty baseline blobへのpatch、本文SHA256 | forge前から存在したP9一行を改鋳差分と混同せず、forward testの比較面を再構成する |
+| live-session semantic bloat audit | 現行 `SKILL.md` と ledger の read-only 監査 | 詳細規則がruntime coreへ堆積し、同じ概念の発火点が分散しているという観測 |
+| live-session self-contradiction audit | frontmatter、LAW、配役、委任形、統合規則の read-only 交差監査 | 監督の担い手、実務禁止の範囲、control plane、merge/synthesis/acceptance の意味が同居して衝突するという観測 |
+| PoTRE: Test-Time Reasoning Inspired by Cognitive Heterogeneity | TMLR paper の一次資料: https://arxiv.org/abs/2607.20268 | 研究内の設定での異質な推論topology、候補統合、同質反復との比較、leave-one-out |
+| ccc meaning-search battery | 下記三queryの意味検索と正史索引の read-only 照合 | 既存の直接home、近接sibling、撤回対象の有無 |
+| harness docs | `operating-the-harness/references/commands-and-skills.md` の read-only 照合 | disclosure、skill body/referenceの読み込み契約 |
+| craft refs | `forging-skills/references/{architecture,distilling,execution-models,verifying}.md` の read-only 照合 | one home、source grade、calibration inversion、execution model、検証床 |
+
+### Source grades
+
+| Claim/source | Grade | 許される使い方 |
+|---|---|---|
+| 現在のrepoの形と、このsessionで観測したsemantic bloat・自己矛盾 | **live session — highest** | 現物を指す観測として、構造の改鋳理由に使う |
+| PoTREの精度・異質性・leave-one-outに関する主張 | **author-confirmed paper** | 論文が調べた模型・課題・計算条件の範囲だけで述べる。普遍則へ昇格しない |
+| normalized candidate packet、証拠によるsynthesis、腕のpruningをこのskillへ移す規則 | **skill-supplied / constructed** | agent向けの運転規則として明記する。論文著者の提案や実測結果として帰属させない |
+
+constructed規則は engineered, not measured。本skill自身のpilotを通るまでは、有効性の達成主張に
+使わない。
+
+### Calibration inversion
+
+| | Paper's target | This skill's agent consumer |
+|---|---|---|
+| dominant error | 同じ推論topologyの反復に計算を足し、誤りまで相関させる | 固定役を毎回起動し、低費用の仕事まで儀式化する overfiring |
+| corrective bias | 異なる失敗様式を持つ推論topologyへ探索を分散する | **DEFAULT single executor**。pilotが限界利益を示す腕だけを足す |
+| prominent guard | homogeneous repetitionをdiversifyする | **MUST NOT fixed four**。四役常設や役名だけのpersona分割を禁止する |
+
+論文の「異質にせよ」を、そのまま「常に多腕にせよ」へ写すとagent consumerでは逆向きの失敗を
+作る。このinversionをruntimeの既定とdeny-listへ置く。
+
+### Adopted
+
+1. **failure-mode/topology diversification**: 腕を人物名でなく、Direct、
+   Plan–Execute–Verify、Adversarial Refinement、Breadth Searchなどの探索topologyと、
+   狙う失敗様式で区別する。必要なtopologyだけを選ぶ。
+2. **normalized candidate packet**: 各腕の返却を
+   `topology / failure_mode_attacked / candidate / evidence_or_tests / assumptions /
+   known_weakness / cost` へ正規化し、長いtranscriptを統合入力にしない。
+3. **evidence-based synthesis**: 票数でなく、検査可能な証拠、反例、制約適合、独立oracleで
+   候補を裁定する。
+4. **pilot + leave-one-out**: 常設前に小さいpilotを行い、独自正解、候補包含、synthesis回収、
+   費用、腕を外したときの最終差で限界貢献を測る。貢献せず判断を濁らせる腕は外す。
+
+### Rejected
+
+| Rejected | 理由 |
+|---|---|
+| 四つの役を常に全て走らせる | 論文自身のleave-one-outとcalibration inversionに反し、固定役のceremonyを作る |
+| persona名またはmodel identityを独立性と数える | 独立性は探索topologyと失敗様式の差であり、名前や担い手の違いだけでは誤り相関を切れない |
+| majority voteを既定の統合にする | 検証済みの少数候補を、相関した多数の誤答が潰し得る |
+| universal token efficiency | 研究内でも比較相手と条件に依存する。全ての予算・課題で安いとは主張できない |
+| synthesis interferenceを著者が証明した原因として書く | 情報量、候補品質、誤り相関が同時に変わる。干渉は妥当な仮説だが、因果として分離実証されていない |
+
+### Architecture decisions
+
+| Decision | One home / seam |
+|---|---|
+| runtime bodyをmodel-freeにする | 時点依存の担い手、能力、provider policyはdated `references/model-roster.md`だけが所有する |
+| 発注・分解・長走行・役割分離を分離する | `references/delegation-contracts.md`が詳細のSOLE home |
+| 資源・比較・交絡・再利用を分離する | `references/measurement-and-resources.md`がP7〜P10のSOLE home |
+| 認知的異質性・candidate packet・synthesis・pruningを分離する | `references/reasoning-portfolios.md`が詳細のSOLE home |
+| 統合という語を三分する | deterministic merge → script、judgmental synthesis → reasoning portfolio、acceptance → 監督 |
+| 新しい行為級 `運転` を置く | launch / interrupt / resume / status / 資源割当というcontrol planeを、deliverable実務から分ける |
+| LAWの絶対表現のscopeを固定する | 「監督は実務をしない」は監督役を宣言した期間のdeliverable実務に限る。通常のsingle-executor仕事への普遍的禁止にしない |
+| 12-gate countを退役させる | 数え上げは詳細規則の堆積を隠した。runtime coreは少数の発火点、詳細はSOLE references、堆積防止はone-homeとF1で検査する |
+
+既存 `§PoCの無効化` のP9規則はdirty historyとして一字も変えず保持する。runtimeの規則は
+`references/measurement-and-resources.md` のP9「機構なし・同一条件対照」へのpointerで接続し、
+ledgerの事象とruntime manualを二重の arguing home にしない。
+
+### P0 search denominator
+
+実行したmeaning-search queryは次の三つ。文字列はverbatimで記録する。
+
+```text
+heterogeneous reasoning topology candidate synthesis error correlation
+task adaptive agent portfolio pruning marginal contribution leave one out
+dated model roster capability binding provider policy
+```
+
+| Query | Hit / no-hit |
+|---|---|
+| `heterogeneous reasoning topology candidate synthesis error correlation` | orchestrating bodyには直接のruntime homeなし。ledgerと一般的なportfolio siblingに近接記述はあるが、candidate packetの契約はない |
+| `task adaptive agent portfolio pruning marginal contribution leave one out` | orchestrating bodyには直接のruntime homeなし。leave-one-outで腕を削る運転規則は未設置 |
+| `dated model roster capability binding provider policy` | `driving-antigravity` / `driving-codex` のmodel-catalog precedentと、`forging-skills` architectureのdurability contractがhit |
+
+最低照会軸の分母:
+
+| Axis | Result |
+|---|---|
+| solver / implementation | cognitive-heterogeneityを直接実装するruntime homeはno-hit |
+| representation | delegationの返り値schemaはhit。ただしcandidate packetはno-hit |
+| universal layer | `forging-skills`のdurability contractとone-home architectureがhit |
+| withdrawal ledger | prior fixed-four adoptionはno-hit。退役させる既存の四役常設規則はない |
+
+### Verification
+
+**Verdict: SCOPE-LIMITED PASS**。skill reforge / ship の構造・意味・発火・論文忠実性は合格。
+portfolioが実タスクで精度またはtoken効率を改善したという達成主張はしない。
+
+| Command / audit | Result | Scope |
+|---|---|---|
+| `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/orchestrating-agents` | **PASS** | target skillのfrontmatter、reference、構造floor |
+| `git diff --check -- agents/skills/orchestrating-agents` | **PASS** | target差分のwhitespace / patch整合 |
+| Ruby `YAML.safe_load` とdescription長検査 | **PASS — 853 / 1024 chars** | frontmatterの安全なparseと発火面の長さ |
+| atomic reference gate | **PASS** | 正常directoryはexit 0。空fixtureは全5件のmissingを列挙してexit 1 |
+| durable baselineの `git apply --check --cached`、blob / SHA照合 | **PASS** | old blob `b77c60390dd5fb09dcaf525469023a1648015fdd`、本文SHA256 `a5e835ec09ab05df65f49df950ee852b1a345282416f759dc5182f53ff58900c` が一致 |
+| ledger先頭603行のSHA256 | **PASS — `cadd4b77bf3033c9fb951e3975c05aef1a841350538cae535424e015a98bced7`** | 既存historyのbyte保全 |
+| collection sweep | **SCOPE-LIMITED PASS** | targetはclean。repo全体の非0は既存・範囲外の `turnstile-spin` orphan reference 6件だけで、今回の回帰ではない |
+| architecture / content semantic audits | **PASS** | major 6件とminor findingsを修正後、再監査clean |
+| PoTRE fidelity audit | **PASS** | fixed-four、普遍的な効率改善、未分離の因果を論文へ過剰帰属していない |
+| trigger desk-check | **PASS — 10 / 10** | fire / no-fireとsibling cut |
+| old-vs-new forward test | **cases 1–5: NEW** | case 4はfailure-routing後、case 5はledger closure + live-link後の再試験でPASS |
+| `mise run link:skills` とlive resolve | **PASS** | Codex rootとClaudeの `orchestrating-agents` symlinkが `/home/fuyu/dotfiles/agents/skills/orchestrating-agents` へ解決し、live descriptionも確認 |
+| runtime core縮約 | **516 → 310 lines（39.9%減）** | runtime body。詳細規則は四つのSOLE referenceへ移管 |
+| forge前dirty history | **PASS** | P9の「機構なし・同一条件」一文と `§PoCの無効化` を保持 |
+| portfolioのruntime pilot / leave-one-out | **DEFERRED — activation-time gate** | task distributionと閾値が未固定。portfolio常設を決める時点で `references/reasoning-portfolios.md` §7 のpilotを必須とする |
+
+Allowed claim:
+
+> v2607.10.0 は構造・発火・出典忠実性・出荷配線について検収済み。実タスクでの精度・token改善は未実証であり、portfolio起動時のpilotに委ねる。
+
+## 2026-07-28: P0/P3の発火点拡張とP6吸収(蒸留、追記ではない)
+
+### 出自
+
+firedancerで実測した7例。定理の引用0本、T38の引用0件、親目標6日FAILで後継0件、
+裁定文書が4日前の記録を再導出、GB31の実測が10日間本線へ渡らず、GB96の是正が4日で失効、
+系譜の正本が14世代空白。
+
+### 判定の分岐
+
+2本の独立な判定が割れた(2件の欠落 対 6件の欠落)。監督が一次資料で裁定した結果、
+争点は新しい門の要否ではなく**既存P0の発火点の狭さ**だと判明した。P0のartifactは既に
+「最低軸は実装・既存資産、別表現、普遍層、撤回台帳」を要求しており、理論の未引用も、
+FAILした親目標の未継承も、規則としては既に射程内だった。しかしP0の発火条件は
+「述べる前に」であり発言の前だけを縛る。**登録(建造を建てると決める書き込み)には
+届いていなかった。**
+
+### 裁定
+
+新しい門は置かない。発火点を拡張し、重複行を吸収する。
+
+### 編集(3件)
+
+1. **P0の発火点を拡張。** 「述べる前に」→「述べる前と、新しい建造を登録する前に」。
+   artifactへ「登録では、その分母を登録の文書に書く」を追加。
+2. **P3の射程を拡張し、P6の2行分の義務を先取り。** 「報告」→「報告・設計・登録の
+   いずれでも」。「体制のない値を設計根拠にしない」を追加。
+3. **P6の重複2行を削除。** 「実測値を設計へ引用するときは、測定条件と適用範囲を値に
+   併記する」「体制のない経験値を設計根拠へ昇格させない」——編集2でP3へ吸収済みであり、
+   同じ義務を二箇所に置かない。
+
+### 検証
+
+番号つきの門は編集前後とも10、P5は不在のまま(既にP2へ吸収済み)。行数は
+310 → 306(-4行、編集3の2文とその前後の空行の畳みによる)。`references/`への
+参照4件は全て実在を確認した。
+
+## 2026-07-28: §effort の役への束縛(蒸留、追記ではない)
+
+### 発端
+
+発注者の問い —「sonnet 5 と opus5 どのように使い分けるべきだと考えられている? 特に grok に
+この辺りを伺うように。effort の議論も極めて重要です」。配役表は担い手を役へ束縛していたが、
+effort の列を持っていなかった。
+
+### 照合の分母
+
+外界の観測は grok を一腕(投げ捨てdir + `--sandbox read-only`、問いのみ送付、$0.87 /
+567k tokens)。一次資料は監督自身が 5 ページ取得して逐語確認した(要約腕の報告は採らない)。
+
+| 軸 | 出典 | 逐語 |
+|---|---|---|
+| 梃子の優劣 | platform `choosing-a-model` | "Tuning effort is often a better lever than switching models." |
+| 較正 | code.claude.com `model-config` §Choose an effort level | "The effort scale is calibrated per model, so the same level name does not represent the same underlying value across models." |
+| 優先順序 | 同 §Set the effort level | "The environment variable takes precedence over all other methods, then your configured level, then the model default. Frontmatter effort applies when that skill or subagent is active, overriding the session level but not the environment variable." |
+| ultracode の実体 | 同 §Adjust effort level | "Ultracode is a Claude Code setting rather than a model effort level: it sends `xhigh` to the model" |
+| 持ち越しの罠 | 同 | "Opus 5 has no such hold: a level you previously set carries over." |
+| 継承の非対称 | code.claude.com `agent-teams` | "Teammates inherit the lead's effort level." / "Teammates don't inherit the lead's `/model` selection by default." |
+| Opus 5 の低 effort | platform `effort` §Opus 5 / `whats-new-opus-5` | "use `low` and `medium` liberally as your primary control for token cost and response time wherever your evals show quality holds" / 査読は "staying accurate at lower effort levels" |
+| Sonnet 5 の低 effort | platform `prompting-claude-sonnet-5` | "`low`: Reserve for short, scoped tasks and latency-sensitive workloads that are not intelligence-sensitive" / "on moderately complex tasks running at `low` effort there is some risk of under-thinking" |
+| subagent 用途 | platform `effort` 級表 | `low` の典型用途に "such as subagents" |
+
+自前の実測 2 件。(a) `env` で `CLAUDE_EFFORT=xhigh` を観測。`settings.json` は
+`effortLevel: "low"` と `ultracode: true` を同時に持つ ——**設定は効いていない**。
+(b) `agents/claude/agents/` は不在であり、subagent 定義の家が無い。
+
+### grok の扱い(外界の観測として)
+
+公式の逐語引用は、監督が重ねられた範囲で**全て一致**した。独立に検めた 2 件
+(`opusplan` の記述、teammate の effort 継承)は CONFIRMED。三者測定(Stet n=24、
+SWE-Bench Pro、Terminal-Bench、Vals.ai)は**未検証**であり、かつ相手が Opus 4.8 で
+Opus 5 ではない。grok は `Opus 5 @ low` と `Sonnet 5 @ xhigh` について
+「測定は見つからない」と明示的に返した ——**この升目は世界に存在しない**。
+
+### 裁定
+
+新しい門は置かない。既存の SOLE home 宣言を effort まで広げ、腐らない不変だけを core に置く。
+番号つきの門は編集前後とも 10(P0〜P4・P6〜P10)で不変。
+
+値は folklore で埋めない。全部を documented default に置き、**下げる向きだけ**に門を置く。
+向きを非対称にした根拠は徳目でなく損の非対称である —— 上げすぎの損はトークンのみ、
+下げすぎの損は腕の失敗・巡の再走・監督の裁定まで含む(2026-07-27 の mise 移送で
+第1巡が 3/3 FAIL した実測が同型)。
+
+### 編集(4件)
+
+1. **`SKILL.md` Language。** stable token に `LOW-EFFORT(<段>)` を追加。
+2. **`SKILL.md` Durable role topology。** SOLE home の列挙へ「effort の束縛」を追加し、
+   不変を 3 文で置いた ——「役に属し session に属さない」「単一の全域値を置かない」
+   「既定は documented default、下げる dispatch だけが `LOW-EFFORT()` 宣言を要する」。
+   artifact は effort の出所と宣言行。
+3. **`references/model-roster.md` §effort の束縛。** 発射面 × 役 × home × 現在の束縛の表。
+   `Agent tool` の行は**未配線**と明記(引数が存在せず subagent 定義も不在)。
+   測定の空白も明記。header の照合日を軸ごとに分離した。
+4. **`operating-the-harness/references/workflow-and-context.md`。** 機構の腐りを修理:
+   alias 解決(`opus`→Opus 5、v2.1.219+)、既定の規則(Opus 4.7 を除き `high`)、
+   ultracode 行、較正の一文、優先順序と frontmatter の梃子、Opus 5 の持ち越しの罠、
+   実効値の確認法(`CLAUDE_EFFORT` / statusline `effort.level`)。
+
+### 機構化(同日中に実行、覆せる既定)
+
+1. **`settings.json` の `effortLevel` を削除。** 値の変更ではなく鍵ごとの削除である。
+   実測で死んでおり(ultracode が `xhigh` を送る)、かつ `~/.claude/settings.json` は
+   この repo への symlink なので、この鍵は `/effort` の永続化先そのものだった ——
+   つまり Opus 5 の持ち越しの罠が通る経路でもある。削除で監督は documented default に座る。
+   戻し方は鍵の再追加一手。
+2. **hook に `LOW-EFFORT()` 条項を追加し、hook を改名した。**
+   `enforce-sonnet-agents.ts` → **`enforce-dispatch-contract.ts`**、政策ラベルも
+   `sonnet-agent policy:` → `dispatch-contract:`。発注者の指摘「名前がおかしいのでは」は
+   正当だった —— この hook は二軸(担い手と effort)を強制するのに、名前は片方しか名乗って
+   いなかった。旧名は 2026-07-25 の節に歴史として残る。
+   条項は Workflow の `agent()` 限定で、literal な `effort:'low'` が同一 span 内に
+   `LOW-EFFORT(<段>): <理由>` を持たなければ deny する。Agent tool 側は引数が存在しないため
+   不変。既存の span 走査を再利用し、第二の parser を書いていない。
+
+**開示済みの限界**(隠さず記録する。いずれも fail-open 方向であり、設計どおり):
+
+- literal でない `effort`(変数・計算式)は通る。この門は obfuscation ではなく不注意を狙う。
+- 大小文字を区別するため `effort:'Low'` は通る。ただし Workflow tool の schema が
+  小文字の enum なので、この経路で安く走ることはできない。
+- 宣言 marker を code と同じ行に置くと、理由欄が後続の code を巻き込んで非空と判定され得る。
+  `hasEscalationDeclaration` から継承した行単位一致の性質であり、未試験の隅である。
+
+**検収**(監督が凍結してから成果物を見た):
+
+試験は成果物を見る前に凍結し、負の対照を先に取った —— 変更前の hook に対して
+T1/T5/T6 が落ち、T2/T3/T4/T7 が通ることを確認してから発射した。**T5 が要点である**:
+`script.includes("LOW-EFFORT(")` で済ませた誤実装は T1〜T4 を全て通し、T5 だけ落とす。
+T5 が無ければこの試験は偽の主張の上でも PASS した。改名の後も同じ7本を再走させ、
+判定が不変であることを確かめた(試験は文言でなく判定だけを見るので改名の oracle になる)。
+
+- 凍結した検収 7/7 PASS(改名の前後とも)
+- hook 全体 95 pass / 1 skip / 0 fail —— 監督が独立に走らせた数。腕の自己申告と一致した
+- `mise run fmt:ts:check` clean
+
+腕は二つの隅を自己申告した(大小文字・同一行 marker)。黙って埋めなかったので上に記録できた。
+
+### 未解決(発注者の裁定待ち)
+
+1. **subagent 定義の家。** `Agent tool` の穴を塞ぐ唯一の恒久手段。新しい topic 階層と
+   linking を伴うため別件として切った。
+2. **教義の衝突(effort とは別問題)。** `prompting-claude-opus-5` は
+   "do not use subagents to verify or double-check your own work" と
+   "The same applies to legacy harness scaffolding that adds separate verification steps" を
+   書く。監督の読みは「狙いは同一文脈の自己検証であり、別担い手による委任成果物の盲検は
+   同ページが writer-verifier pattern として肯定している」だが、ultracode の既定姿勢と
+   "keep spawn counts low" の衝突は本物であり、発注者の裁定を要する。

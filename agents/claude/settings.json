@@ -69,6 +69,15 @@
             "command": "sh ~/.claude/hooks/run.sh nudge-ccc-on-zero-grep.ts"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-unanchored-registration.ts"
+          }
+        ]
       }
     ]
   },

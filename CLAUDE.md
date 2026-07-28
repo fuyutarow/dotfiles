@@ -55,16 +55,18 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (
    plugins, prompts, completions, or anything that can print/hang there.
 6. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 7. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
-   ALL skills use one consistent shape — the official-recommended **gerund** form
+   skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
-   `operating-the-harness`). Hard rules: lowercase/numbers/hyphens only, ≤64 chars, and the name
-   **must not contain the reserved words `claude`/`anthropic`** (why `operating-the-harness`, not
-   `claude-code`). Keep tool names and trigger keywords in `description:` (3rd person, "what + when")
-   — that field, with the name, is what the model matches on. Don't mix naming shapes across the
-   collection (inconsistency is the documented anti-pattern). Ref: docs.claude.com Agent Skills →
-   best-practices. The full CRAFT of creating/reforging skills (gates, pipeline, trigger test
-   sets, verification fleet) is the `forging-skills` skill — read it before any skill work.
+   `operating-the-harness`). Hard rules: lowercase/numbers/hyphens only and ≤64 chars. Shared
+   skills must not contain the reserved words `claude`/`anthropic`; **`driving-claude` is the one
+   Codex-only exception**. `mise run link:skills` must link it to Codex through `~/.agents/skills`
+   while explicitly excluding it from `~/.claude/skills`. Keep tool names and trigger keywords in
+   `description:` (3rd person, "what + when") — that field, with the name, is what the model
+   matches on. Don't mix naming shapes across the collection (inconsistency is the documented
+   anti-pattern). Ref: docs.claude.com Agent Skills → best-practices. The full CRAFT of
+   creating/reforging skills (gates, pipeline, trigger test sets, verification fleet) is the
+   `forging-skills` skill — read it before any skill work.
 
 ## Setup / Tasks
 

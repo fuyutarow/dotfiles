@@ -40,7 +40,7 @@ and execs the named `.ts` with stdin passed through. Heavy detection lives in th
 
 | hook (event) | job | fail direction |
 |---|---|---|
-| `enforce-sonnet-agents.ts` (PreToolUse `Agent\|Task\|Workflow`) | pin every spawned agent to Sonnet: inject `model:'sonnet'` when omitted, deny non-sonnet, ask on unverifiable (named workflow / child `workflow()`) | **CLOSED** — any error ⇒ deny; `run.sh --fail-closed` denies even when bun is missing |
+| `enforce-dispatch-contract.ts` (PreToolUse `Agent\|Task\|Workflow`) | what a dispatch must declare, on two axes. **Bearer**: inject `model:'sonnet'` when omitted, deny non-sonnet, allow `fable` only with a declared `ESCALATION(fable)`, ask on unverifiable (named workflow / child `workflow()`). **Effort**: deny a Workflow `agent()` carrying a literal `effort:'low'` unless the same call span declares `LOW-EFFORT(<stage>): <reason>` | **CLOSED** — any error ⇒ deny; `run.sh --fail-closed` denies even when bun is missing |
 | `detect-leaked-toolcall.ts` (Stop) | alert (never block) on a tool call emitted as plain text; log + bell + desktop notify | OPEN |
 | `detect-audit-theater.ts` (Stop) | exit 2 when a prose-audit turn uses self-justifying / unbounded gate language | OPEN |
 | `detect-prose-correo.ts` (Stop) | exit 2 on correo findings — calque / codemix density / coinage | OPEN (no correo ⇒ silent skip) |

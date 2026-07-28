@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { decisionOf, runHook } from "./helpers.ts";
 
-const HOOK = "enforce-sonnet-agents.ts";
+const HOOK = "enforce-dispatch-contract.ts";
 const pre = (tool_name: string, tool_input: unknown) => ({
   tool_name,
   tool_input,
@@ -96,6 +96,127 @@ describe("Workflow", () => {
       pre("Workflow", { scriptPath: "/nonexistent/wf.js" }),
     );
     expect(decisionOf(r.stdout).permissionDecision).toBe("ask");
+  });
+});
+
+describe("Workflow low-effort declaration (2026-07-28)", () => {
+  const wf = (script: string) => pre("Workflow", { script });
+  const lowDecl = "LOW-EFFORT(triage): mechanical count, not reasoning-heavy";
+
+  test("effort:'low' with no declaration -> deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('x', {model: 'sonnet', effort: 'low'})`),
+    );
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("LOW-EFFORT(");
+  });
+
+  test("effort:'low' WITH a well-formed declaration in the same call -> silent pass", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent('x', {model: 'sonnet', effort: 'low',\n  // ${lowDecl}\n})`,
+      ),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("LOW-EFFORT() with an empty stage -> deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent('x', {model: 'sonnet', effort: 'low',\n  // LOW-EFFORT(): mechanical count\n})`,
+      ),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("LOW-EFFORT(<stage>) with an empty reason -> deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent('x', {model: 'sonnet', effort: 'low',\n  // LOW-EFFORT(triage):\n})`,
+      ),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("two agent() calls, only one declares -> the undeclared one is named by line", () => {
+    const script =
+      `await agent('a', {model: 'sonnet', effort: 'low',\n  // ${lowDecl}\n})\n` +
+      `await agent('b', {model: 'sonnet', effort: 'low'})`;
+    const r = runHook(HOOK, wf(script));
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("line(s) 4");
+  });
+
+  test("effort:'medium' -> silent pass, no declaration needed", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('x', {model: 'sonnet', effort: 'medium'})`),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("effort:'high' -> silent pass, no declaration needed", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('x', {model: 'sonnet', effort: 'high'})`),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("effort absent -> silent pass, no declaration needed", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {model: 'sonnet'})`));
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("a LOW-EFFORT(...) sitting OUTSIDE any agent() span does not excuse an undeclared call", () => {
+    const script = `// ${lowDecl}\nawait agent('x', {model: 'sonnet', effort: 'low'})`;
+    const r = runHook(HOOK, wf(script));
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test('double-quoted "low" with no declaration -> deny, same as single-quoted', () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent("x", {model: "sonnet", effort: "low"})`),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test('double-quoted "low" WITH a declaration -> silent pass', () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent("x", {model: "sonnet", effort: "low",\n  // ${lowDecl}\n})`,
+      ),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("a computed/non-literal effort value fails OPEN by design -> silent pass", () => {
+    const r = runHook(
+      HOOK,
+      wf(`const lvl = 'low'\nawait agent('x', {model: 'sonnet', effort: lvl})`),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("existing model check still fires unchanged alongside the effort gate", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {schema: S, effort: 'low'})`));
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("missing model:'sonnet'");
   });
 });
 

@@ -57,22 +57,48 @@ auto-upgraded to 1M, `opusplan` gets the upgrade in plan mode too. Use **`opuspl
 `opusplan` stays on Sonnet in plan mode instead of switching.
 
 Set the model via `/model <alias>` (saves as default, v2.1.153+), `claude --model <alias>`,
-`ANTHROPIC_MODEL`, or the `model` settings field. `opus`→Opus 4.8, `sonnet`→Sonnet 4.6 on the
-Anthropic API. Resumed sessions (`--continue`/`--resume`) keep their saved model.
+`ANTHROPIC_MODEL`, or the `model` settings field. Aliases track the provider's *recommended*
+version and MOVE: on the Anthropic API `opus`→**Opus 5** (v2.1.219+; it was Opus 4.8 from
+v2.1.154), `sonnet`→**Sonnet 5**. Pin with a full name (`claude-opus-5`) or
+`ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL`. Resumed sessions
+(`--continue`/`--resume`) keep their saved model.
 
-### Reasoning: `ultrathink` (one-off) vs `/effort` (session)
+### Reasoning: `ultrathink` (one-off) vs `/effort` (session) vs `ultracode`
 
 | Lever | Scope | Values |
 |---|---|---|
 | `ultrathink` (any word in prompt) | this turn only — adds an in-context instruction; **API effort unchanged** | on/off |
 | `/effort <level>` | session (persists, except `max`) | `low` / `medium` / `high` / `xhigh` / `max` |
+| `ultracode` | session ONLY — a Claude Code setting, **not** a model effort level | sends `xhigh` **and** has Claude orchestrate dynamic workflows |
 
 - **The old `think` / `think hard` / `think harder` / `think more` ladder is DEAD** — those phrases
   pass through as ordinary prompt text and are NOT recognized as keywords. Only `ultrathink` is.
-- `/effort` opens a slider with no arg, takes a level directly, or `auto` resets to model default.
-  Also settable via `--effort`, `CLAUDE_CODE_EFFORT_LEVEL`, the `effortLevel` setting (`low`–`xhigh`
-  only; `max` is session-only), and the model picker's left/right arrows. Default effort is `high`
-  on Opus 4.8 / Sonnet 4.6; `max` is session-only and uncapped (prone to overthinking — test first).
+- **Default effort is `high` on every model that supports effort, except Opus 4.7 (`xhigh`).**
+  Opus 4.6 / Sonnet 4.6 lack `xhigh`; an unsupported level falls back to the highest supported
+  level at or below it (`xhigh` runs as `high` on Opus 4.6). Enterprise orgs can cap levels per
+  model per role — above the cap, `--effort`/`/effort` runs AT the cap (silently under `json`,
+  `stream-json`, and background agents).
+- **The same level name is NOT the same amount across models** — the scale is calibrated per
+  model. One global level applied to a mixed roster is not a coherent policy.
+- **Precedence: `CLAUDE_CODE_EFFORT_LEVEL` > your configured level > the model default.**
+  Skill/subagent frontmatter `effort:` overrides the SESSION level while that skill or subagent
+  runs, but never the env var. That frontmatter field is the ONLY per-role effort lever: the
+  Agent tool has no `effort` parameter, and agent-team teammates INHERIT the lead's effort
+  (while NOT inheriting its model).
+- Set it via `/effort` (no arg = slider, `auto` = model default), `--effort`,
+  `CLAUDE_CODE_EFFORT_LEVEL`, the `effortLevel` setting (`low`–`xhigh` only), or the model
+  picker's arrows. `max` is session-only unless set through the env var, and is prone to
+  overthinking — test first.
+- **`ultracode` gotcha**: neither `effortLevel` nor `CLAUDE_CODE_EFFORT_LEVEL` accepts
+  `ultracode` (use `/effort ultracode`, `--effort ultracode`, or `"ultracode": true` in
+  settings). With ultracode on, requests run at `xhigh` — so a persisted `effortLevel: "low"`
+  alongside it is silently dead config. Conversely, setting `CLAUDE_CODE_EFFORT_LEVEL` to
+  anything other than `xhigh` runs at that level and turns ultracode's workflow orchestration
+  OFF. Verify the live value rather than reading the setting: hooks receive `CLAUDE_EFFORT`, and
+  the statusline JSON carries `effort.level`.
+- **Opus 5 carry-over trap**: Fable 5 / Opus 4.8 / Opus 4.7 apply their own default on first run
+  and HOLD it across sessions until you choose explicitly. **Opus 5 has no such hold** — a level
+  you last set for another model carries straight over.
 
 ---
 

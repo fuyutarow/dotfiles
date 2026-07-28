@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-sonnet-agents.ts"
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"
           }
         ]
       }
@@ -89,7 +89,6 @@
     "frontend-design@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true
   },
-  "effortLevel": "low",
   "ultracode": true,
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,

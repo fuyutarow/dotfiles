@@ -6,6 +6,12 @@
   omit `model` or pass `'sonnet'`; `'fable'` is allowed on a SINGLE call that carries
   `ESCALATION(fable): <target> | <why sonnet is insufficient> | <cost estimate>` in the
   prompt. Every other model is denied. Named workflows and child `workflow()` calls prompt.
+- **Effort belongs to the role, not the session.** Leave `effort` off an `agent()` call to
+  inherit the default. The same hook denies a Workflow `agent()` that passes a literal
+  `effort: 'low'` unless that same call declares `LOW-EFFORT(<stage>): <why this stage is not
+  intelligence-sensitive>`. Raising effort needs no declaration — only lowering does, because
+  Anthropic documents Sonnet 5's `low` as reserved for work that is *not* intelligence-sensitive,
+  and almost everything we fan out is.
 - **Roster (覆せる既定 2026-07-25・追認待ち).** Opus 5 directs, Sonnet 5 works, Fable 5 is the
   declared escalation for work Sonnet cannot reach. This follows Anthropic's own guidance:
   default to Opus, reserve the Fable tier for the highest-capability workloads. Fable also

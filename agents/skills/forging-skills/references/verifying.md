@@ -6,8 +6,8 @@
 > skill-creators' eval machinery, and ship/reforge. What each verified property MEANS (the
 > LAW, one-home, sibling cuts, trigger design) lives in its home file — this file only
 > proves it. Harness mechanics (agent tools, workflows, budgets) → the `operating-the-harness`
-> skill; the generic agent contract and consensus-is-not-evidence argument → the
-> `systematizing-knowledge` skill (orchestration reference) — pointed at, not restated.
+> skill; the generic agent contract and consensus-is-not-evidence argument →
+> `orchestrating-agents` — pointed at, not restated.
 
 ## §0 The stance — a skill has TWO objects to verify
 
@@ -52,7 +52,7 @@ verifiers resolve doubt by reporting.
 ## §2 The verification fleet — one lens per failure class
 
 Diversify the LENS, not the count: identical prompts return correlated errors — one
-observation, not N (argument owned by `systematizing-knowledge`). Each lens names what it attacks:
+observation, not N (argument owned by `orchestrating-agents`). Each lens names what it attacks:
 
 | Lens | Attacks |
 |---|---|

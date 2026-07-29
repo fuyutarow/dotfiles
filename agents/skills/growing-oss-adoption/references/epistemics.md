@@ -153,14 +153,14 @@ if a constraint here feels unnecessary, that feeling is the failure mode.
 The channel sweep IS this skill's inspection duty, internalized — every "is it discoverable /
 adopted" claim rests on a channel actually inspected, whoever executes the sweep.
 
-**The agent contract** — five elements per spawn, mirroring the systematizing-knowledge
-orchestration reference: (1) exact inputs — repo URL, registry names, file paths, never "look into
+**Agent-contract deltas.** First load `orchestrating-agents` and use its complete delegation
+contract. Then add: (1) exact channel inputs — repo URL, registry names, file paths, never "look into
 the project"; (2) the bar — the named reference file of THIS skill the agent reads itself
 (`regimes.md` for regime checks, `playbook.md` Phase 3 for README audits), never a paraphrase;
 (3) structured return: `{channel, fact, number, source_url_or_command_output, verdict}`;
 (4) read-only declaration for every audit/verify agent — read-only with respect to the project/repo
 under audit; scratch-workspace execution (benchmark re-run, clean-room trial install) is in-bounds;
-(5) the final message is data, not a report.
+(5) a domain return whose final message is data, not a report.
 
 | Anti-pattern (orchestration-scoped) | Fix |
 |---|---|

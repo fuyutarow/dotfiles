@@ -166,7 +166,8 @@ Fable 5, 2026-07: if a constraint here feels unnecessary, that feeling is the fa
 | LEAP | **never delegable** | staking a kept output is the orchestrator's commitment (`leap.md`) |
 | STEP 4 output | **SOLO** | one voice, the user's language |
 
-**The probe contract** — five elements per spawned probe (mirrors the systematizing-knowledge agent contract):
+**Probe-contract deltas.** First load `orchestrating-agents` and use its complete delegation
+contract. Then add these five probe-specific fields:
 
 1. **Exact probe spec** — the artifact to build + the command to run, verbatim. "Test whether X works"
    is not a spec; "build the stub at <path>, run <command>, report the output" is.

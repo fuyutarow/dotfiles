@@ -194,8 +194,8 @@ const cccSearch = (project, query) => agent(
 | adjudicating conflicting hits across workers | SOLO | the verdict braids evidence from more than one search |
 
 Evidence type: **CITATION-RELAY** — a hit is an observable (file:line, Read-verifiable); a
-relayed conclusion without its locus is zero. Generic agent contract by pointer: the
-`systematizing-knowledge` orchestration reference. No harness → same map, serial Bash calls.
+relayed conclusion without its locus is zero. Generic agent contract by pointer:
+`orchestrating-agents`. No harness → same map, serial Bash calls.
 
 ## MUST-NOT-FIRE — and the fire/no-fire set (F3)
 

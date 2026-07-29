@@ -362,10 +362,9 @@ declaration; (5) "your final message is the return value".
   are THIS skill's own. Slide/figure findings belong to `designing-presentations`; a finding whose
   fix is a REORGANIZATION (section moves, MECE partition, dedup) is handed to `structuring-documents`.
 
-**Worker-side duty.** When THIS skill runs as the spawned auditor inside another workflow (the
-`systematizing-knowledge` orchestration map fans out a read-only prose audit at its write stage), the
-bounded-report discipline IS its contract: read-only, five-slot findings, an explicit residual-risk
-clause, no verdict language.
+**Worker-side duty.** When THIS skill runs as a spawned auditor, first use the full brief owned by
+`orchestrating-agents`. Add this bounded-report delta: read-only prose findings, an explicit
+residual-risk clause, and no verdict language. The host domain decides whether the audit fans out.
 
 **No harness — same order, serially:** floor script → per-section flagging → terminology sweep →
 claim calibration → coherent-block rewrite → bounded report.

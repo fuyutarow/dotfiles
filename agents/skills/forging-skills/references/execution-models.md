@@ -2,10 +2,9 @@
 
 > **Scope**: 鍛錬 pipeline step 5 — design the TARGET skill's workflow-native layer. This file
 > teaches the DESIGN method only. Running THIS skill's own verification fleet → `verifying.md`.
-> The generic agent-contract machinery (the 5-element contract, generic schemas, epistemic core,
-> re-run discipline) is owned by the `systematizing-knowledge` skill's orchestration reference —
-> point at it, restate none of it. Harness mechanics (subagent/workflow tools, `context: fork`,
-> budgets) → the `operating-the-harness` skill.
+> Generic briefing, role separation, dispatch, acceptance, and consensus epistemics are owned by
+> `orchestrating-agents` — point at its delegation contract, restate none of it. Harness mechanics
+> (subagent/workflow tools, `context: fork`, budgets) → `operating-the-harness`.
 
 Every execution model answers ONE design question, and the third clause is where the observed
 production failures live:
@@ -45,7 +44,7 @@ the seven components. All eight house instances carry all or most of these:
 | # | Component | Spec |
 |---|---|---|
 | a | **Stage map** | every pipeline step → SOLO / FAN-OUT / PIPELINE / BARRIER / HUMAN / NOT-DELEGABLE, **with a Why column** (a mode without a why is un-reviewable). The SOLO rows are the target's judgment spine — the steps where the whole picture must sit in one context; HUMAN appears where a verdict is constitutionally the user's (proving-theorems: faithfulness sign-off). Pipeline is the default between stages; a BARRIER only where cross-item context is genuine (dedup, portfolio-level consistency) — barrier-by-habit wastes wall-clock equal to the fastest-to-slowest agent spread |
-| b | **Agent contract** | BY POINTER: the 5-element contract (exact inputs · bar-as-READ-reference · output schema · read-only declaration · final-message-is-the-return-value) is owned by the `systematizing-knowledge` orchestration reference. Locally write ONLY the target's mini-schemas — the JSON its agents actually return — and say "mirrors the owner"; re-argue none of it |
+| b | **Agent contract** | BY POINTER: load `orchestrating-agents` and use its complete delegation contract. Locally write ONLY the target's domain deltas and mini-schemas — the JSON its agents actually return; re-argue none of the generic brief |
 | c | **Agent epistemics** | generic core BY POINTER (consensus ≠ evidence · verify by refutation · name the SLOTS, never the expected content) **+ the Step-A archetype DELTA written out**. The delta is the only part that earns prose; core-only epistemics = un-typed evidence |
 | d | **Trust boundary** | what crosses agent→orchestrator and in what FORM. Default: locus-or-quarantine; an agent's PASS is an opinion, not a signal — every accepted return keys on a checkable observable, never on the agent's felt confidence. KERNEL-TRUST is the sole exception and must declare itself aloud as a divergence |
 | e | **Scale calibration** | a fleet-size table matched to the artifact, with the MODAL invocation's row stated FIRST — and for most skills that row is "solo, zero agents" (spawn overhead exceeds the work) |
@@ -65,7 +64,7 @@ constraining epistemics already live.** Walk down; take the FIRST tier that fits
 
 | Tier | Take when | House precedent |
 |---|---|---|
-| **1 Full dedicated reference** | the modal invocation IS a fleet, or the file owns generic machinery other skills point at | systematizing-knowledge (its orchestration reference) |
+| **1 Full dedicated reference** | the modal invocation IS a fleet, or the file owns generic machinery other skills point at | `orchestrating-agents` for the generic machinery; a domain skill may still need a large stage-map reference |
 | **2 Large section of the workflow-owning reference** | fan-out is central but inseparable from an existing workflow home | proving-theorems (the blueprint DAG is the fan-out map) |
 | **3 Compact section beside the epistemics owner** | modal case is SOLO; only a narrow slice is delegable — the model lives next to the epistemics that constrain it | acting-on-hypotheses · forging-novel-theses · growing-oss-adoption · linting-prose · raising-resolution |
 | **4 Fully inline in SKILL.md** (deliberate outlier) | nearly everything is SOLO by construction and no reference exists to house the small delegable layer — a separate file would be an index pointer to nothing | designing-presentations |
@@ -106,4 +105,4 @@ schema — and both sides name each other.
 | **Sharded judgment** | the argument / the design / the commit decision split across agents | judgment steps are SOLO on the stage map; agents fetch evidence and refute — the orchestrator argues |
 | **Un-typed evidence** | the epistemics section is a generic consensus-≠-evidence paragraph that would fit any skill | Step A first: pick the nearest archetype, write the DELTA |
 | **Missing degradation** | the model speaks only the harness's language; no serial path | the mandatory degradation sentence (component f) |
-| **Consensus-as-verification** | "N agents agree / all lenses PASS" offered as certainty anywhere | lens diversity + refutation prompting; correlated agreement = ONE observation (owner: the `systematizing-knowledge` orchestration reference); under CONSENSUS-ANTI-SIGNAL it is negative evidence |
+| **Consensus-as-verification** | "N agents agree / all lenses PASS" offered as certainty anywhere | lens diversity + refutation prompting; correlated agreement = ONE observation (owner: `orchestrating-agents`); under CONSENSUS-ANTI-SIGNAL it is negative evidence |

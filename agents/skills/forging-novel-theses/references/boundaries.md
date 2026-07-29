@@ -109,9 +109,8 @@ not the citations.
 > 掃除で翻訳しないこと。）
 
 **Stance — forger は bettor の代理人。** agents は fact-checker と assassin であって共著者ではない。thesis の
-生成・全ゲート判定・全 pre-commitment は solo で行い、orchestrator が署名する。agent contract の一般形
-(exact inputs / bar / schema / read-only / return-value) は systematizing-knowledge の orchestration reference が
-owner、harness の力学 (workflow / subagent / hooks) は operating-the-harness が owner — ここはこの skill 固有の
+生成・全ゲート判定・全 pre-commitment は solo で行い、orchestrator が署名する。agent contract の一般形は
+`orchestrating-agents`、harness の力学 (workflow / subagent / hooks) は operating-the-harness が owner — ここはこの skill 固有の
 solo / fan-out 境界だけを持つ。**No harness → 同じ地図を直列の self-audit pass として回す**（fan-out 行は
 「別の集中したパスで自分に課す」と読み替える）。
 

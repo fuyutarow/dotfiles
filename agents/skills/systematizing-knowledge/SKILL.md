@@ -1,227 +1,149 @@
 ---
 name: systematizing-knowledge
 description: >-
-  Build a top-tier Systematization of Knowledge (SoK / 体系化) — evidence synthesis, contradiction
-  reconciliation, taxonomy construction, and theoretical unification across a paper corpus — for a
-  top-tier-science / AI4S researcher. Use whenever the task is to turn many papers into ONE
-  defensible position. Trigger on: systematization of knowledge, SoK, survey, literature review /
-  文献レビュー, taxonomy / 分類, comparison matrix, meta-analysis / メタアナリシス, evidence synthesis /
-  エビデンス統合, vote counting / 票数集計, conflicting results / 矛盾する結果, reconcile /
-  moderator / 調整変数, boundary condition / 境界条件, effect size / 効果量, heterogeneity / I-squared,
-  GRADE / エビデンスの確実性, PRISMA / Kitchenham / Nickerson taxonomy, claim
-  provenance / ledger / 来歴, theoretical unification / 理論統合, scaling laws, emergence, data
-  leakage / REFORMS, gap analysis / research agenda, genre-fit, 解像度 / shallow survey / 稚拙 /
-  scaffold theater. MANDATORY — read BEFORE ANY multi-paper synthesis. An SoK is an ARGUMENT
-  anchored to a claim ledger, NOT per-paper summaries: "N papers say X" is forbidden, every
-  contradiction is resolved by its moderator, every claim carries GRADE + a flip regime, and every
-  section must teach a domain expert something non-obvious (scaffold theater = checklist-complete
-  but shallow — the top failure). Workflow-native: corpus sweep / per-paper extraction / per-claim
-  adversarial verification fan out; framing, reconciliation, and the argument stay solo. Output in
-  the user's language (Japanese); skill is English.
+  Systematizes a source corpus into a traceable answer about what is known, uncertain, disputed,
+  and missing. Use for Systematization of Knowledge (SoK), survey / literature review /
+  文献レビュー, systematic or scoping review / 系統的・スコーピングレビュー, evidence map,
+  meta-analysis, taxonomy / 分類, comparison matrix, conflicting studies, or field-level
+  state-of-evidence claims. Selects review mode, coverage, synthesis, and appraisal from the
+  question and claim type; applies PRISMA, GRADE, Nickerson, SWiM, and REFORMS only when fit while
+  preserving not-reported, N/A, not-comparable, and unresolved states. MANDATORY for multi-source
+  claims about what a field knows. Cuts: one artifact → raising-resolution; one manuscript's claim
+  → arguing-research-papers; future research bets → directing-research; settled-content architecture
+  → structuring-documents. Search and extraction may fan out; method choice, adjudication, and the
+  final position stay SOLO. English skill; respond in the user's language (default Japanese).
 ---
 
-# SoK — Evidence Synthesis, Reconciliation, Taxonomy & Unification
+# Systematizing knowledge — method-fit evidence synthesis
 
-> **Version**: v2607.2.0 (2026-07-02)
-> **Scope**: Turn a corpus of papers/notes into ONE defensible, traceable position for a
-> top-tier-science / AI4S researcher. Method-grounded (PRISMA 2020, Kitchenham SLR, Nickerson 2013,
-> GRADE, Cochrane, REFORMS / Kapoor-Narayanan). This file holds the precedence-setting CORE inline;
-> everything else lives in `references/` and loads on demand.
-> **Out of scope** (delegate, do not duplicate): MECE structure / editorial reorg / one-home /
-> single-source-of-truth / forward-ref DAG → `structuring-documents`; diagram/Mermaid choice →
-> `/AA`; ruthless review → `/linus`; doc versioning / staleness / ledger↔doc sync have no shipped
-> owner here — handle inline (no `grenza-doc-discipline` skill is installed).
-> **Corpus tooling**: the arxiv MCP (six tools: `search_papers`, `get_abstract`, `download_paper`,
-> `read_paper`, `citation_graph`, `semantic_search`) — see `references/workflow.md`.
-> **Build order (atomic).** This SKILL.md and its **9 reference targets** (genre, workflow, taxonomy,
-> ledger, synthesis, ai4s-gates, resolution, orchestration, writing) ship in ONE commit — no index pointer may dangle. Verify:
-> `for f in genre workflow taxonomy ledger synthesis ai4s-gates resolution orchestration writing; do test -f references/$f.md || echo MISSING $f; done`
+> **Version**: v2607.3.0 (2026-07-30)
+> Reforged around method selection, separate evidence units, traceability, and preserved uncertainty.
 
-## Language
+Run from this skill directory; success prints nothing:
 
-This skill is **English**. The **SoK document you generate defaults to the user's language
-(Japanese)** unless asked otherwise. Keep the *claim ledger, GRADE labels, and method names* (PRISMA,
-GRADE, moderator, I², REFORMS, `claim_id`) as stable English/standard tokens even inside a Japanese
-document — they are technical identifiers, not prose.
-
-## CORE — read before writing anything (precedence-setting)
-
-### What an SoK IS vs IS-NOT
-
-| An SoK IS | An SoK is NOT |
-|---|---|
-| An **argument** that converges on a defensible position about what the field knows | A timeline or a sequence of per-paper summaries ("Smith did… Jones did…") |
-| Anchored to a **claim ledger**: every claim → its source(s) → its evidence certainty | A bibliography with adjectives |
-| A **reconciliation engine**: contradictions are resolved by locating the moderator | A list that reports "some find X, others find not-X" and moves on |
-| **Regime-aware**: states where each claim holds AND where it reverses | A set of unconditional generalizations |
-| **Synthetic**: produces claims no single paper makes | An anthology of others' conclusions |
-| The **taxonomy + comparison matrix IS the contribution** | A flat list with no scheme a reader could place a new paper into |
-| **High-resolution**: load-bearing claims carry mechanism + magnitude + regime, anchored to the specific result (theorem/table/figure) | Qualitative placeholders ("substantially improves") with decorative paper-level citations |
-
-A correct one-paragraph summary of a noisy field beats an exhaustive annotated bibliography. The
-deliverable is the **position + its support**, not coverage for its own sake.
-
-### The non-negotiable invariants
-
-> Listed by topic, **not** firing order. By the pipeline, gates 7–8 fire FIRST (genre-fit at step 0,
-> AI4S admissibility at extraction); gate 9 fires TWICE (extraction, step 3; writing, step 10);
-> the rest fire during synthesis.
-
-1. **Provenance or it does not exist.** Every claim maps to source(s) by stable ID in the claim
-   ledger (`references/ledger.md`). A claim with no source is deleted or demoted to an
-   explicitly-labeled "author conjecture". The ledger is the Single Source of Truth; prose is a
-   *view* of it.
-2. **No vote-counting.** "N papers say X" is **not** evidence and is **banned** as a reason. Weigh by
-   quality, design, effect size, and independence — not headcount (`references/synthesis.md` Part A).
-3. **Never ignore a contradiction.** Every conflicting pair is reconciled by a named moderator
-   (setting / scale / metric / population / measure) or flagged as a *live, unresolved* conflict with
-   the discriminating experiment stated. Silent omission of a contradicting result is the cardinal
-   sin (`references/synthesis.md` Part B).
-4. **Grade every claim.** Each unified claim carries a GRADE-style certainty (High / Moderate / Low /
-   Very-low) with the reason for any down/upgrade (`references/synthesis.md` Part C).
-5. **State the flip condition, never stop at "unverified".** Every boundary statement names the
-   consequence and the regime where the conclusion reverses: "Under X, claim C reverses to ¬C." "未検証
-   / unverified" as a terminal verdict is forbidden (`references/synthesis.md` Part D).
-6. **Unify only after an explicit sameness test.** Two results merge only when a formal mapping shows
-   they are the same phenomenon in different notation; else they stay distinct with the discriminating
-   prediction recorded (`references/synthesis.md` Part E).
-7. **AI4S admissibility before adjudication.** In AI4S, no number enters the synthesis until it clears
-   the six admissibility gates A–F (leakage, contamination, scaling-bookkeeping, ablation, emergence,
-   compute-fairness); a number you cannot vouch for is **corpus contamination, not weak evidence** —
-   quarantined with the gate it failed + the consequence, never silently dropped
-   (`references/ai4s-gates.md`).
-8. **Genre-fit gate first.** Run the genre-fit gate before framing: SoK needs an **ESTABLISHED, major
-   area** with accumulated, partly-conflicting work. A nascent area → **position paper**; a narrow
-   single question → a **targeted SLR** (`references/genre.md`).
-9. **Resolution or it is scaffolding.** The formal machinery (RQ, ledger, GRADE, moderators,
-   taxonomy) is necessary but NOT sufficient. Every load-bearing claim states **mechanism +
-   magnitude + regime** with an anchor to the *specific result* (theorem/table/figure, not just a
-   bibkey); every section passes the **expert-surprise test** — name the one non-obvious thing a
-   domain expert learns, or deepen/cut the section. A checklist-complete SoK whose cells are
-   qualitative placeholders is **scaffold theater** — the empirically highest-frequency failure
-   mode: machinery must be *filled*, not *present* (`references/resolution.md`).
-
-### The build pipeline
-
-```mermaid
-flowchart TD
-    Z["0. Genre-fit gate: is this even an SoK?"] --> A["1. Frame: ONE research question (known vs not)"]
-    A --> B["2. Corpus: search + screen (PRISMA flow)"]
-    B --> C["3. Extract: claim ledger — every claim -> source + context vector"]
-    C --> G6["3b. AI4S admissibility gates A-F (quarantine failures)"]
-    G6 --> D["4. Relate: confirm / extend / contradict / condition matrix"]
-    D --> E["5. Reconcile: locate moderator for each contradiction"]
-    E --> F["6. Grade: GRADE certainty per unified claim"]
-    F --> U["7. Unify: sameness test on theory pairs"]
-    U --> H["8. Bound: verified regime + flip conditions"]
-    H --> GAP["9. Gap analysis: importance x tractability + blocking obstacle"]
-    GAP --> J["10. Write: argument in user's language; ledger is SOT"]
-    J -->|"gaps / new contradictions found"| C
+```bash
+for f in framing-and-corpus evidence-ledger taxonomy synthesis ai4s-gates delivery orchestration sources; do
+  test -f "references/$f.md" || echo "MISSING references/$f.md"
+done
+for f in scripts/check-ledger.ts tests/check-ledger.test.ts tests/triggers.md tests/forge-verification-ledger.md assets/claim-ledger.example.jsonl; do
+  test -f "$f" || echo "MISSING $f"
+done
+for stale in genre workflow ledger resolution writing; do
+  test -e "references/$stale.md" && echo "STALE references/$stale.md"
+done
 ```
 
-The loop edge is mandatory: writing exposes missing provenance and new contradictions; return to step
-3. **Steps 1–3b are extraction** — 3b is the AI4S admissibility filter that tags ledger rows (not a
-separate chapter). **Steps 4–8 are the synthesis** that distinguishes an SoK from a survey. **Steps
-9–10 are the deliverable** (gap analysis + write), both owned by `references/writing.md`. The
-**resolution gate (invariant 9) fires at step 3** (extract the specific result — number + regime +
-locus — never the abstract's gist) **and at step 10** (substance-audit table + expert-surprise test
-per section, `references/resolution.md`). Hand structure and narrative reorg to `structuring-documents`,
-diagrams to `/AA`, the adversarial pass to `/linus`.
+## Language and stable tokens
 
-### Execution model — orchestrate by default, argue solo
+Write the deliverable in the user's language. Keep these human-facing identifiers stable:
 
-Building an SoK is multi-agent work by nature: corpus search, per-paper extraction, gate-walking,
-claim verification, and section audits all **fan out**; framing, reconciliation, gap
-prioritization, and the written argument stay **solo** — an argument assembled from shards is not
-an argument. When the harness offers workflows/subagents, run the pipeline on the
-**solo/fan-out/barrier map** in `references/orchestration.md` (which also owns the agent contract,
-the trust boundary — *treat agent output like an abstract: locus or quarantine* — and scale
-calibration; **invariant 2 applies to agents too**: N agents agreeing is not evidence). No
-harness → same map, serial. Two non-delegables regardless of scale: the editor **signs every
-claim** (no unverified relay) and **never shards the moderator search**.
+```text
+review mode | coverage contract | claim ledger | source claim | synthesis claim
+not reported | not applicable | not comparable | unresolved | SOLO
+```
 
-## Reference index — load the file you need
+Machine-readable ledgers use the exact hyphenated enums in the ledger and AI4S references.
 
-| File | Covers | Read when |
+## THE LAW
+
+> Select the method from the decision question and evidence type before selecting artifacts.
+> Every load-bearing conclusion must be reconstructible through a coverage contract, evidence
+> records, and a claim ledger. Missing evidence stays missing. Never turn `not reported` into
+> demonstrated bias. Never turn failed support for C into support for not-C. Never turn unexplained
+> disagreement into an invented moderator.
+
+The skill has one non-negotiable output: a calibrated position. Its certainty never exceeds the
+evidence; its scope never exceeds the `coverage contract`. Taxonomies, PRISMA diagrams, GRADE
+labels, meta-analysis, and hero figures are conditional instruments. They are not badges of rigor.
+
+## Gates — each leaves an artifact
+
+Artifacts may be durable files or explicit tables in the response. Do not create files merely to
+satisfy the names below.
+
+| Gate | Decision | Required artifact |
 |---|---|---|
-| `references/genre.md` | What an SoK is / provenance (IEEE S&P / Oakland SoK track since 2010, seeded by the 2008 Claremont Workshop), the genre-fit gate (SoK vs position-paper vs SLR), the five rhetorical moves, IEEE-S&P/USENIX acceptance criteria, the venue economy | deciding whether SoK is the right genre; framing the contribution |
-| `references/workflow.md` | End-to-end build & scope: ONE RQ (known-vs-unknown), PICO/PIO, PRISMA 2020 flow, Kitchenham protocol, snowballing/saturation/bias-audit, threats-to-validity, the arxiv-MCP recipe, the iterate-loop, command/grenza handoffs | starting any SoK; building/screening/bias-auditing a corpus; running the loop |
-| `references/taxonomy.md` | The classification scheme + comparison matrix that IS the SoK: Nickerson 7-step loop, faceted vs hierarchical, the 5-quality gate, dimension-selection scoring, capability-matrix design, empty-cell gap mining, hold-out stress test | building or auditing the taxonomy / comparison table |
-| `references/ledger.md` | Claim normalization (atomic-claim grammar), the context vector, the claim-ledger schema + templates, provenance/traceability, REFORMS / model-info-sheet provenance fields | extracting claims; setting up the SOT ledger; auditing for orphan claims |
-| `references/synthesis.md` | The reconciliation engine, Parts A–E: vote-counting + effect size + heterogeneity (A), contradiction/moderator search (B), GRADE certainty (C), boundary/flip conditions (D), the sameness test for unification (E) | combining results; resolving any contradiction; grading; stating scope; unifying two theories/laws |
-| `references/ai4s-gates.md` | The AI4S admissibility audit: gates A–F (leakage, contamination, scaling bookkeeping, ablation isolation, emergence-as-artifact, distribution-shift/compute-fairness), 8-type leakage triage, the quarantine table | any ML-for-science corpus; before any empirical number enters the synthesis |
-| `references/resolution.md` | The CONTENT bar: resolution grammar (object/comparison/magnitude/regime/mechanism/anchor), the four resolution axes per section, the expert-surprise test, the substance-audit table, the vague-quantifier deny-list, resolution×GRADE orthogonality | extracting claims (numbers not gists); before delivery — auditing whether sections teach an expert anything; whenever a document is checklist-complete yet reads shallow |
-| `references/orchestration.md` | The EXECUTION model on a multi-agent harness: the solo/fan-out/barrier map per pipeline step, the 5-element agent contract + schemas, agent epistemics (vote-counting/refutation/fabricated-bibliography), the trust boundary for agent output, scale calibration, re-run discipline | running any SoK build or audit with workflows/subagents; deciding what to delegate vs argue solo; whenever agent findings are about to enter the deliverable |
-| `references/writing.md` | Gap analysis (importance × tractability / ITN; the gap template), the SoK narrative arc, the ONE systematization figure, comparison-table-as-hero, living-SoK versioning + SOT, when-to-STOP gates, the adversarial self-review | writing the deliverable; building the research agenda; deciding when done |
+| **K1 FIT** | What decision must this synthesis support, and which review mode fits it? | `review plan`: question, audience/decision, corpus origin, `coverage contract`, review mode, synthesis operator, appraisal approach, intended output |
+| **K2 TRACE** | Can every load-bearing conclusion be reconstructed without counting claim rows as papers? | separate corpus/evidence records plus a `claim ledger`; run `scripts/check-ledger.ts` for a durable JSONL ledger |
+| **K3 CALIBRATE** | Did each method run only where applicable, with unknown and non-comparable states preserved? | method-applicability table plus discrepancy/appraisal records; unsupported claims are not negated |
+| **K4 CHALLENGE** | What counterevidence or alternative interpretation could change the position? | counterevidence attack and adjudication log within the `coverage contract`; a novelty claim also gets an authorized mechanism-synonym kill search |
 
-> **File topology.** Reconciliation, grading, boundary, and unification are **consolidated into
-> `synthesis.md` (Parts A–E)** — they are tightly coupled and splitting them forced cross-file
-> ping-pong; the former standalone contradiction / grade / boundary / unification references are
-> retired by consolidation. Per-topic anti-pattern catalogs now live **distributed** across each
-> reference file's own anti-pattern table (the standalone anti-patterns reference is retired); the
-> quick-list below stays inline because it is precedence-setting.
+No artifact means the corresponding gate is not passed. A small bounded synthesis may use a
+compact inline table. A publication-grade systematic review needs durable records.
 
----
+## Adaptive pipeline
 
-## Master checklist — before delivering an SoK
+1. **Name the decision.** State who will use the answer and what would change because of it.
+2. **Choose the review mode and coverage contract.** Corpus origins license different claims.
+   Distinguish supplied, rapid, systematic, iterative theory-building, and venue-SoK work.
+3. **Freeze only what the mode requires.** Systematic work pre-specifies eligibility, sources,
+   screening, extraction, appraisal, and synthesis. Exploratory modes keep an amendment log.
+4. **Retrieve and screen evidence.** Keep records, reports, studies/artifacts, and results separate.
+5. **Extract source claims at their exact locus.** Preserve the original estimand, scope, design,
+   measurement, uncertainty, and missing fields.
+6. **Appraise by claim type.** Use a field-appropriate tool or an explicitly named local profile;
+   do not relabel an adaptation as official GRADE.
+7. **Select and run the synthesis operator.** Aggregate comparable effects or configure concepts.
+   For other questions, explain mechanisms or critically evaluate and contextualize a field.
+8. **Adjudicate discrepancies.** First test comparability. Then consider uncertainty, bias,
+   measurement, and scope. Pre-specified or theory-backed moderators may calibrate a headline.
+   Labeled post-hoc candidates stay exploratory. `unresolved` is a valid result.
+9. **Write a calibrated position.** Separate findings, interpretations, limitations, and research
+   priorities. Do not infer a priority from an empty cell alone.
+10. **Attack the position.** Verify load-bearing loci, search for counterevidence, and loop to the
+    earliest stage invalidated by a finding.
 
-Genre & framing (`references/genre.md`, `references/workflow.md`):
-- [ ] **Genre-fit gate passed** — established major area with conflicting accumulated work (else position paper / targeted SLR)
-- [ ] Exactly **one** research question, phrased as "what is known vs not known about X" — not a topic
-- [ ] Corpus search + screening recorded as a **PRISMA 2020 flow** (identified → screened → included, with exclusion counts/reasons); inclusion criteria stated *before* screening (Kitchenham protocol)
-- [ ] Synthesis **dimensions** derived by an explicit method (Nickerson 2013: conceptual-to-empirical or empirical-to-conceptual), not ad hoc columns
-- [ ] **Threats-to-validity** block names each residual bias's direction + the condition that flips the conclusion
+Load `references/framing-and-corpus.md` before steps 1–4 and
+`references/evidence-ledger.md` before step 5. Select later references by the index below.
 
-Taxonomy & matrix (`references/taxonomy.md`):
-- [ ] **Taxonomy passes the 5-quality gate** (concise/robust/comprehensive/extendible/explanatory); every axis discriminates; every value MECE within its axis; every matrix cell has a citation anchor; hold-out object classifies cleanly; empty cells labeled gap-or-impossible
+## Execution model
 
-Ledger & provenance (`references/ledger.md`):
-- [ ] **Every** claim in the prose resolves to ≥1 source by stable ID in the claim ledger; zero orphan claims
-- [ ] Each ledger row carries the **context vector** (setting, scale, metric, population, measure) — the raw material for moderator search
-- [ ] Author-original synthetic claims are **labeled as such** (not silently attributed to a source)
-- [ ] **Novelty-attack arms ran** (added 2026-07-22, firedancer postmortem): when the SoK underwrites a project's novelty claims, EVERY load-bearing claim got a dedicated kill-search (an arm tasked to find the paper that already proves or refutes it — search by mechanism synonyms across adjacent fields, not by the project's own vocabulary). A novelty-supporting SoK without attack arms is corpus bias: the 7/17 corpus missed the mechanism's direct 2017 prior art that one attack pass found immediately
+The evidence type is **CITATION-RELAY**. An agent may return a source observation only with a stable
+identifier and exact locator. Search, screening after frozen criteria, extraction, and independent
+verification may fan out. The editor keeps review-mode selection and protocol amendments SOLO.
+Synthesis-operator choice, discrepancy adjudication, and the final position also stay SOLO.
+Generic briefing, dispatch, and acceptance belong to `orchestrating-agents`. This skill owns only
+the evidence-synthesis stage map and schemas. No harness means the same stages run serially.
 
-AI4S admissibility (`references/ai4s-gates.md`):
-- [ ] **Every empirical number cleared gates A–F** or is in the **quarantine table** with the gate it failed + the consequence
+## MUST-NOT-FIRE and sibling routing
 
-Resolution & substance (`references/resolution.md`):
-- [ ] Every **load-bearing claim** instantiates the resolution grammar — object, comparison, **magnitude (number + units, or declared-qualitative + why)**, regime, mechanism, **anchor to the specific result** (theorem/table/figure, not just a bibkey)
-- [ ] Every section passes the **expert-surprise test** ("an expert learns: ___" — non-obvious, not textbook/title-restatement); the **substance-audit table** (§ × learns × magnitude+regime × anchor) is produced and has no empty cells
-- [ ] **Vague-quantifier deny-list grep run** (significantly/substantially/大幅に/効率的に/…): every hit in a load-bearing sentence replaced by number+regime or explicitly justified as qualitative
-
-Synthesis (`references/synthesis.md` Parts A–E):
-- [ ] **No vote-counting.** No claim is justified by "N papers say so"; weighting is by quality/design/effect-size/independence
-- [ ] Narrative vs meta-analytic synthesis chosen deliberately; **if commensurable**, report effect sizes + heterogeneity (I²/τ²); **if NOT commensurable**, declare narrative synthesis and state WHY pooling is invalid (incommensurable metrics) rather than forcing a meaningless I²
-- [ ] Correlated/non-independent sources (shared authors, data, benchmark) are **not** double-counted
-- [ ] Every source pair classified confirm/extend/contradict/condition; **every contradiction** has a located moderator OR is flagged live with the **discriminating experiment** named — none ignored; the reconciliation is falsifiable
-- [ ] Each unified claim has a **GRADE label** (High/Mod/Low/Very-low) + the downgrade/upgrade reason
-- [ ] Each claim states its **verified regime** AND the **flip condition** ("under X, reverses to ¬C"); **no claim ends at "未検証 / unverified"**
-- [ ] Two theories merged **only** after a formal sameness test (mapping/change-of-variables); genuinely-different ones kept distinct with the **discriminating prediction**; scaling-law claims checked for the **Kaplan-vs-Chinchilla** failure (bookkeeping, not physics — Part E gives the discriminator: same LR-schedule/token-count accounting + same compute-optimal-vs-fixed fitting; if not, the gap is bookkeeping)
-
-Gaps & delivery (`references/writing.md`):
-- [ ] **Open questions scored by importance × tractability**, each = why-it-matters + the blocking obstacle (not "future work")
-- [ ] Exactly **one** systematization figure / comparison-table-as-hero that carries the thesis standalone
-- [ ] Document is in the **user's language** (Japanese default); method/GRADE/ledger tokens kept as standard identifiers
-- [ ] Structure & narrative reorg → `structuring-documents`, diagrams → `/AA`, review → `/linus` (versioning/staleness handled inline per the scope header)
-
-## Anti-pattern quick list (precedence-setting only; full catalogs in each reference file's own table)
-
-| Anti-pattern | Fix |
+| Ask | Route |
 |---|---|
-| **Genre miscast** — SoK structure forced onto a nascent or narrow topic | Run the genre-fit gate; nascent → position paper, narrow → targeted SLR (`genre.md`) |
-| **Vote-counting** — "12 papers find X, so X" | Weigh by quality/design/effect-size/independence; report effect sizes + heterogeneity (`synthesis.md` A) |
-| **Contradiction-laundering** — drop or footnote the inconvenient result | Surface it; find the moderator or flag it live with a discriminating test (`synthesis.md` B) |
-| **Orphan claim** — assertion with no traceable source | Add the source ID to the ledger or delete/relabel as conjecture (`ledger.md`) |
-| **Naked "unverified"** — ends at "not yet tested" | State the consequence + the regime where the conclusion flips (`synthesis.md` D) |
-| **Leakage-laundering** — aggregating ML numbers without a leakage clearance | Run the 8-type leakage triage + REFORMS; quarantine failures with the gate (`ai4s-gates.md`) |
-| **Scaffold theater** — every formal gate green, yet cells are qualitative placeholders an expert learns nothing from | Fill the six resolution slots per load-bearing claim; run the substance-audit table + expert-surprise test (`resolution.md`) |
-| **Citation-as-decoration** — bibkey cited, but the specific result is unlocatable in one hop | ANCHOR to theorem/table/figure; the locus rule (`ledger.md`, `resolution.md`) |
-| **Sharded synthesis** — reconciliation/moderator search split across agents | Steps 5/9/10-draft are SOLO; agents fetch evidence, the editor argues (`orchestration.md`) |
-| **Unverified relay** — an agent's claim enters the deliverable unread | The editor signs every claim; locus or quarantine; bibliographic facts need primary confirmation (`orchestration.md`) |
+| Inspect or summarize one paper, file, dataset, or claim | `raising-resolution` — CARDINALITY: one artifact there; a corpus here |
+| Position and defend the governing claim of one manuscript | `arguing-research-papers` — PURPOSE: the manuscript's argument there; the field's evidence state here |
+| Choose, formulate, or kill future research directions | `directing-research` — PURPOSE: future bets there; what existing evidence says here |
+| Reorder or deduplicate a review whose evidence judgments are settled | `structuring-documents` — FIX-LOCALITY: document architecture there; evidence derivation here |
+| Find passages in an indexed local corpus without synthesizing them | `driving-cocoindex` — locate there; synthesize here |
+| Turn a raw paper corpus into a skill | Run this skill first, then `forging-skills`; never distill unreconciled papers |
+| Decide how to brief, dispatch, and accept work across agents | `orchestrating-agents`; co-fire only when a synthesis also needs a fleet |
+| Reforge this `SKILL.md` | `forging-skills`; the domain skill is the audit subject, not the craft owner |
 
-> **Legacy `/SOK` continuity.** The prior 34-line prompt's good bones map 1:1 onto the deeper
-> machinery: Research Question → `genre.md`/`workflow.md`; confirm/extend/contradict/condition →
-> `synthesis.md` B; unified claims "[条件]のとき[主張]が成立 (根拠: A,B,C)" → `ledger.md` (graded in
-> `synthesis.md` C); boundary conditions → `synthesis.md` D; theoretical integration → `synthesis.md`
-> E (sameness test); open questions → `writing.md` (gap analysis); prohibitions → the invariants + this
-> anti-pattern list.
+The complete fire/no-fire regression set is `tests/triggers.md`.
+
+## Reference index — load only the branch in use
+
+| File | Sole ownership | Read when |
+|---|---|---|
+| `references/framing-and-corpus.md` | review-mode and `coverage contract` selection; protocol, search, screening, corpus units, amendments, stopping | starting any synthesis; making a completeness claim |
+| `references/evidence-ledger.md` | evidence-unit model, source/result/synthesis claims, claim-ledger schema, provenance floor | extracting evidence; building or checking the ledger |
+| `references/synthesis.md` | synthesis-operator selection, comparability, quantitative/configurative/explanatory/critical synthesis, discrepancy adjudication, confidence language | combining source claims into conclusions |
+| `references/taxonomy.md` | optional taxonomy and comparison-matrix branch; Nickerson use and validation | only when classification answers the question or is the SoK contribution |
+| `references/ai4s-gates.md` | optional ML-based-science appraisal; applicability, leakage, benchmarks, scaling, emergence, compute, distribution shift | a scientific claim uses ML performance as evidence |
+| `references/delivery.md` | genre-shaped deliverables, gaps, visual artifacts, stop-writing and adversarial audit | drafting or updating the output |
+| `references/orchestration.md` | synthesis-specific stage map, worker schemas, trust boundary, duplicate work, scale | using subagents/workflows on a corpus |
+| `references/sources.md` | dated primary-method sources, applicability notes, and local adaptations | verifying a method claim; reforging this skill |
+| `scripts/check-ledger.ts` | non-semantic JSONL provenance/reference floor | after editing a durable claim ledger |
+| `assets/claim-ledger.example.jsonl` | copyable valid source-claim and synthesis-claim rows | starting a ledger |
+| `tests/forge-verification-ledger.md` | source grades, audit findings, red/green receipts, maintenance triggers | auditing or reforging this skill |
+
+## Exit conditions
+
+Deliver only when:
+
+- K1–K4 artifacts exist at the treatment tier the task warrants;
+- each load-bearing synthesis claim resolves through claims and/or exact-locator direct sources;
+- selected methods are applicable; and
+- counterevidence has been adjudicated.
+
+State the coverage boundary plainly. A transparent bounded answer is complete. A vague claim of
+completeness is not.

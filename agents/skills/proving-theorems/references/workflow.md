@@ -281,8 +281,9 @@ wait for all before proceeding.
 
 ### The agent contract
 
-An underspecified agent returns plausible prose; a contracted agent returns checkable work.
-Every spawned prover/gate agent carries five elements:
+An underspecified agent returns plausible prose; a contracted agent returns checkable work. First
+load `orchestrating-agents` and use its complete delegation contract. Every spawned prover or gate
+agent then adds five theorem-specific fields:
 
 1. **Exact inputs** — blueprint node id, the **locked statement text (or its hash)**, and the
    file paths to read or edit. "Prove the lemma" is not an input; "close node `X` in
@@ -301,8 +302,8 @@ Every spawned prover/gate agent carries five elements:
 
 ### Agent epistemics — the deltas this domain adds
 
-The generic rule (agents agreeing is not evidence — see the systematizing-knowledge
-orchestration reference) holds; proving adds four sharpenings:
+The generic rule (agents agreeing is not evidence — see `orchestrating-agents`) holds; proving adds
+four sharpenings:
 
 - **k agents agreeing a statement is faithful = k correlated same-family judges** — a
   collusion risk, not a gate. Diversify the gate **layer** (negation filter, round-trip,
@@ -378,4 +379,3 @@ Harness mechanics — workflow/agent tools, hooks, permissions — are owned by 
 *Fast-moving specifics (model names, IMO results, benchmark percentages, library counts,
 project timelines) live ONLY in the dated `state-of-the-art.md` snapshot — never hardcode them
 into this workflow. The loop above is meant to hold as those specifics turn over.*
-

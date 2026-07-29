@@ -157,9 +157,9 @@ agent is tempted to stop and report (composes with §5).
 ## §9 — The AI4S leakage self-audit (own-pipeline hygiene)
 
 Leakage is **silent-fatal**: the pipeline looks great and is wrong, and no aggregate metric reveals it.
-**The leakage TAXONOMY is owned by `systematizing-knowledge`** (`references/ai4s-gates.md` — the 8-type
-leakage triage + the admissibility gates); do not re-enumerate it. What is owned HERE is the **object
-cut + the standing policy**: run that triage on **YOUR OWN in-flight pipeline before trusting any
+**Published-corpus ML appraisal is owned by `systematizing-knowledge`** (`references/ai4s-gates.md`
+plus its primary leakage-taxonomy pointer); do not re-enumerate it. What is owned HERE is the **object
+cut + the standing policy**: run a leakage audit on **YOUR OWN in-flight pipeline before trusting any
 number** — grading OTHERS' published corpora for leakage is `systematizing-knowledge`, gating your own
 source is here — plus the **witness firewall** (`formulating.md` §2): a held-out set never used for
 optimization or selection. The distinctive own-pipeline hazard for an LLM-based system: **benchmark

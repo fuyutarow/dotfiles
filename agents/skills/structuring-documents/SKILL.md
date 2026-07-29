@@ -112,7 +112,7 @@ it. Guards, in order of precedence:
 |---|---|
 | `linting-prose` | **FIX-LOCALITY cut** — the runtime question is *how does the fix land?* **Rewrite words in place** (a word, a sentence, a paragraph's topic sentence) → `linting-prose`. **Move information across the document** (relocate a fact to its one home, dedupe, reorder sections, reference DAG, write/repair the 目標規定文, select content by 内容の精選) → HERE. Grounding split, one home per 木下 chapter: **第4〜8章** (paragraph・topic sentence・逆茂木・言い切り・事実と意見/スリカエ・一義/簡潔) = rewrite-in-place = `linting-prose`; **第2〜3章** (目標規定文・一文書一主題・内容の精選・重点先行 at document scale) = move = HERE, unified with this skill's Minto=MECE / DRY / DAG spine. The one shared concept — **重点先行** — is split by scale and stated identically on both sides: paragraph topic-sentence → `linting-prose`; document/section order & abstract → HERE. `linting-prose` may FLAG a buried document-scale conclusion and hand off HERE (one-directional). Both sides register-independent; model-facing docs included. |
 | `designing-presentations` | Medium cut. Slide/deck structure, talk section ORDER, and inserting diagrams/tables/ASCII/Mermaid for visual effect → there. Prose-document information architecture → here. (The Mermaid diagram-picker lives in `designing-presentations`.) |
-| `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, taxonomy, synthesis). A single document's internal structure → here. |
+| `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, method-fit synthesis, optional taxonomy). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |
 
 ## Fire / no-fire

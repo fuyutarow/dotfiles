@@ -26,7 +26,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 - [`raising-resolution`](raising-resolution/) — Inspect the actual code/data/source before asserting a fact — reach for it when tempted to guess.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit a forward bet under uncertainty via Map-Loop-Leap — to de-risk or size a bet.
 - [`forging-novel-theses`](forging-novel-theses/) — Invent and battle-test a brand-new venture/research thesis, then design the experiment that could kill it.
-- [`systematizing-knowledge`](systematizing-knowledge/) — Turn a corpus of papers into one defensible position: synthesis, taxonomy, contradiction reconciliation.
+- [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
 - [`directing-research`](directing-research/) — Steer a research programme: select problems worth solving, formulate them un-gameably, don't fool yourself, kill directions on rate of learning.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.

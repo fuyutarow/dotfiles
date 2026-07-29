@@ -223,8 +223,8 @@ const codexAudit = (target) => agent(
 
 Evidence type: **CITATION-RELAY** delta — workers CAN produce the evidence, but only the C3
 triple crosses the trust boundary (owner: the Gates table); a relayed verdict without its
-observable is quarantined. Generic agent contract by pointer: the `systematizing-knowledge`
-orchestration reference. No harness → same map, serial Bash calls.
+observable is quarantined. Generic agent contract by pointer: `orchestrating-agents`. No harness →
+same map, serial Bash calls.
 
 ## MUST-NOT-FIRE — and the fire/no-fire set (F3)
 

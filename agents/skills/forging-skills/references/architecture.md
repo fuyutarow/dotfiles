@@ -38,8 +38,8 @@ drift-prevention mechanism of the collection — apply it within the skill AND a
 - **Declare ownership in the section header**, using the word SOLE/owner, so a maintainer landing
   mid-file knows whether they may edit substance or only the pointer. Precedents:
   raising-resolution ("§C.6 is the SOLE home" of source-grading; "§C.7 (SOLE owner)"),
-  acting-on-hypotheses' verb-seam files, systematizing-knowledge's "SUBTRACTIVE — sole owner of
-  routing" table.
+  acting-on-hypotheses' verb-seam files, and systematizing-knowledge's SOLE-owner reference
+  headers.
 - **The "restated for completeness" trap.** A convenience mirror of another section's rule WILL
   drift — the next edit updates one copy. Only two legal states: make it a pointer, or sync it in
   the SAME edit and mark it a deliberate seam. There is no third state.

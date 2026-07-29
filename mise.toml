@@ -296,6 +296,10 @@ echo "✅ purge 完了。 $(df -h "$HOME" | awk 'NR==2{print $4" free"}')"
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
+[tasks.deps]
+description = "Restore the repo's pinned Bun dependencies from bun.lock (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
+run = "bun install --frozen-lockfile"
+
 [tasks."install:bun_packages"]
 run = '''
 bun i -g @anthropic/claude-code @openapi/doex @google/gemini-cli
@@ -307,6 +311,7 @@ run = '''
 brew install sheldon coreutils
 brew bundle --file=~/dotfiles/Brewfile
 mise run link:dots
+mise run deps
 mise run link:skills
 mise run tmux:plugins
 echo "---"
@@ -340,6 +345,7 @@ sudo apt install -y zsh
 brew install sheldon topgrade
 bash ~/dotfiles/scripts/link-dots.sh --force
 brew bundle --file=~/dotfiles/Brewfile
+mise run deps
 mise run tmux:plugins
 topgrade
 chsh -s $(which zsh)

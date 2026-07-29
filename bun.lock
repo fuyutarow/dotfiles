@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "dotfiles",
+      "dependencies": {
+        "type-flag": "4.5.0",
+      },
+    },
+  },
+  "packages": {
+    "type-flag": ["type-flag@4.5.0", "", {}, "sha512-1aLzxcL6u1O9XHieAJBBX9U4QzwzDTWN0ER9M7QQSvS24NBmGM+N8FcghlgHAzOvDlEEpOx4hEml9CVcDnflcw=="],
+  }
+}

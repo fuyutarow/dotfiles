@@ -11,8 +11,15 @@
 //   F1  node shebang            — bun honors `#!/usr/bin/env node` and would exec node
 //   W8  any other shebang       — BG1: shebang only on binary-substituted fixtures
 //   F2  CommonJS require        — scripts are ESM only (top-level await incompatible)
-//   F3  external import         — unpinned bare import FAIL (incl. backtick dynamic import);
-//                                 pinned inline import WARN (cwd trap); computed dynamic WARN
+//   F3  external import         — bare import FAIL unless an ancestor package.json+bun.lock
+//                                 (BG3 graduation, resolved on the file's REALPATH) declares it
+//                                 at an EXACT version; ALWAYS FAIL inside hooks/ (they run
+//                                 before any install); pinned inline import WARN (cwd trap);
+//                                 computed dynamic WARN
+//   F5  type-flag unguarded     — typeFlag() without an unknownFlags guard: unlike parseArgs
+//                                 strict, it accepts unknown flags silently and exits 0
+//   W11 type-flag Number        — a Number flag with no null check: bad input yields null, not
+//                                 a throw, so the failure is silent
 //   F4  child_process exec()    — string-shell; use Bun.$ or spawn array-form
 //   W5  unbounded spawn         — per-call: no timeout:/signal: in the call window and no
 //                                 `// bounded: <reason>` beside it
@@ -20,6 +27,9 @@
 //   W7  unpinned bunx           — bunx staleness is real; pin pkg@x.y.z
 //   W9  .killed as detector     — true after a clean exit; use AbortSignal.timeout + aborted
 //   W10 sequential pipe drain   — stdout-then-stderr deadlocks; drain via Promise.all
+
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 let failures = 0;
 let warnings = 0;
@@ -49,6 +59,75 @@ function classifySpecifier(spec: string): "builtin" | "relative" | "pinned" | "b
   if (spec.startsWith(".") || spec.startsWith("/")) return "relative";
   // pinned: name@range or @scope/name@range (an @ after the first character)
   return spec.slice(1).includes("@") ? "pinned" : "bare";
+}
+
+// --- BG3 graduation resolution -------------------------------------------------------------
+// A bare specifier is legal when a graduation project GOVERNS the file: the nearest ancestor
+// package.json (walking the file's REALPATH, because skills are symlinked into ~/.claude/skills
+// and Bun resolves through the link) that has a sibling bun.lock, declaring the dep at an EXACT
+// version. A range pin (^ ~ * x) is not a pin — PINNED-OR-ABSENT.
+type Graduation = { root: string; deps: Map<string, string> };
+const graduationCache = new Map<string, Graduation | null>();
+
+function findGraduation(fromFile: string): Graduation | null {
+  let directory = dirname(realpathSync(fromFile));
+  const seen: string[] = [];
+  for (;;) {
+    const cached = graduationCache.get(directory);
+    if (cached !== undefined) {
+      for (const d of seen) graduationCache.set(d, cached);
+      return cached;
+    }
+    seen.push(directory);
+    const manifest = join(directory, "package.json");
+    if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
+      let deps = new Map<string, string>();
+      try {
+        const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+        deps = new Map(
+          Object.entries({ ...parsed.dependencies, ...parsed.devDependencies }),
+        );
+      } catch {
+        deps = new Map();
+      }
+      const found: Graduation = { root: directory, deps };
+      for (const d of seen) graduationCache.set(d, found);
+      return found;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  for (const d of seen) graduationCache.set(d, null);
+  return null;
+}
+
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+// A graduation project licenses bare imports only for code that STAYS inside it. Two classes
+// leave and must remain zero-dep, because where they run there is no lockfile and no install:
+//   1. hooks/ — run on every harness event, before any `mise run deps` on this machine;
+//   2. any tree marked with a `.zero-dep` file — skills that are mirrored, persisted, or
+//      degit-copied into other people's repos, and `templates/` shipped into deliverables.
+// The marker is the escape hatch for (2) because "does this get distributed?" is not something
+// a floor can infer from a path.
+function zeroDepReason(file: string): string | null {
+  const path = realpathSync(file).replaceAll("\\", "/");
+  if (/(^|\/)(hooks|templates)\//.test(path)) {
+    return "it lives under hooks/ or templates/ — that code runs where no install has happened";
+  }
+  let directory = dirname(path);
+  for (;;) {
+    if (existsSync(join(directory, ".zero-dep"))) {
+      return `${directory}/.zero-dep marks this tree as distributed — it runs outside this repo's lockfile`;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
 }
 
 // Line-based comment stripping: drops // lines and /* ... */ block interiors (heuristic —
@@ -108,13 +187,64 @@ async function checkFile(file: string): Promise<void> {
     if (spec === undefined) continue;
     const kind = classifySpecifier(spec);
     if (kind === "bare") {
-      fail(file, `unpinned external dependency '${spec}' — BG3 ladder: builtin, pinned ${BUNX}, or graduate`);
+      const zeroDep = zeroDepReason(file);
+      const graduation = zeroDep === null ? findGraduation(file) : null;
+      const declared = graduation?.deps.get(spec);
+      if (zeroDep !== null) {
+        fail(
+          file,
+          `external dependency '${spec}' in a zero-dep tree — ${zeroDep} (BG3), graduation project or not`,
+        );
+      } else if (declared === undefined) {
+        fail(
+          file,
+          `unpinned external dependency '${spec}' — BG3 ladder: builtin, pinned ${BUNX}, or graduate (no governing package.json+bun.lock declares it)`,
+        );
+      } else if (!EXACT_VERSION.test(declared)) {
+        fail(
+          file,
+          `'${spec}' is declared as '${declared}' in ${graduation?.root}/package.json — a range is not a pin (PINNED-OR-ABSENT); use an exact version`,
+        );
+      }
     } else if (kind === "pinned") {
       warn(file, `pinned inline dependency '${spec}' — throws under any ancestor node_modules (facts §4); known-clean-cwd one-offs only`);
     }
   }
   if (COMPUTED_DYNAMIC_IMPORT.test(code)) {
     warn(file, "dynamic import with a computed specifier — floor cannot classify it; BG3 by hand");
+  }
+
+  // F5 / W11 — type-flag's two silent failures. It is not a drop-in for parseArgs `strict: true`:
+  // an unknown flag lands in `unknownFlags` and the process still exits 0, and a malformed
+  // Number lands as `null` rather than throwing. Both were measured, 2026-07-28.
+  if (/\btypeFlag\s*\(/.test(code)) {
+    if (!/\bunknownFlags\b/.test(code)) {
+      fail(
+        file,
+        "typeFlag() without an unknownFlags guard — unknown flags are accepted silently and the process exits 0 (parseArgs strict threw); reject them explicitly",
+      );
+    }
+    // F6 — a camelCase schema key silently becomes a SECOND accepted CLI spelling: declaring
+    // `dryRun` makes both `--dry-run` and `--dryRun` valid, widening the contract compared with
+    // parseArgs, which accepted only what was declared. Declaring the key in kebab removes the
+    // alias entirely (measured 2026-07-28), and the unknownFlags guard then rejects it.
+    // Heuristic: object keys immediately followed by `{ type:` anywhere in the file.
+    for (const match of code.matchAll(/^\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*\{\s*type:/gm)) {
+      const key = match[1] ?? "";
+      if (/[a-z][A-Z]/.test(key)) {
+        fail(
+          file,
+          `type-flag schema key '${key}' is camelCase — it also registers '--${key}' as a valid flag, widening the CLI contract; declare it as the kebab spelling ('${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}') instead`,
+        );
+      }
+    }
+
+    if (/type:\s*Number\b/.test(code) && !/===\s*null|!==\s*null|\?\?|Number\.isFinite/.test(code)) {
+      warn(
+        file,
+        "type-flag Number flag with no null/finite check — malformed input coerces to null, not a throw; validate before use",
+      );
+    }
   }
 
   // F4 — string-shell exec

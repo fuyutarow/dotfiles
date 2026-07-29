@@ -166,3 +166,66 @@ Post-fix: `bun test` 10 pass / 0 fail.
 
 Not fixed here (pre-existing, unchanged by this reforge): skill-check reports 10 prose sentences
 >120 chars, an 11-line version header, and 4 table cells >400 chars.
+
+## 2026-07-28 — BG1/BG3 re-cut: parseArgs → type-flag, and the graduation that makes it legal
+
+**Trigger.** Owner directive: migrate the repo's bun scripts to `type-flag` wholesale. An initial
+recommendation against it was overruled and the migration executed as asked.
+
+**What the corpus KEEP row got wrong.** "zero npm imports … it is CWD-HOSTILE physics, not taste"
+was right about the physics and wrong about the remedy. Measured 2026-07-28 (bun 1.3.14):
+
+| Probe | Result |
+|---|---|
+| inline pinned `import … from "type-flag@4.5.0"`, no ancestor `node_modules` | resolves |
+| same, with an ancestor `node_modules` present | **`error: Cannot find package`, exit 1** — and it fails on the SCRIPT's location, not cwd (reproduced from `/` with an absolute path) |
+| bare `import … from "type-flag"` under a repo-root package.json + bun.lock | resolves |
+| same, invoked through the `~/.claude/skills/<skill>` SYMLINK, from an unrelated cwd | **resolves** — Bun follows the link to the realpath, so the repo-root `node_modules` serves linked skills |
+| warm startup, 5 runs, parseArgs vs type-flag | 0.150 s vs 0.139 s — no material difference |
+| registry metadata | type-flag 4.5.0, MIT, `dependencies: {}`, unpackedSize 45,419 B (the widely-quoted "1.4 kB" is a minified bundle figure, not the install footprint) |
+
+So abstinence was never the only answer; **graduation** was. Repo root now carries
+`package.json` + `bun.lock` pinning `type-flag` at an exact `4.5.0`, `node_modules/` is gitignored,
+and `mise run deps` (`bun install --frozen-lockfile`) restores it — wired into `mac:init` and
+`wsl:init`.
+
+**Three semantic gaps type-flag opens, all measured, all now floor-enforced.** It is NOT a drop-in
+for `parseArgs({strict: true})`:
+
+| Gap | Measured behaviour | Floor check added |
+|---|---|---|
+| unknown flags | collected into `unknownFlags`, process exits 0, and the flag's VALUE leaks into positionals | **F5** — FAIL any `typeFlag(` in a file that never mentions `unknownFlags` |
+| malformed `type: Number` | yields `null`/`NaN` silently, never throws | **W11** — WARN a `type: Number` with no null/finite check |
+| camelCase schema keys | a `dryRun` key ALSO registers `--dryRun` as valid, widening the CLI contract; declaring the key in kebab removes the alias entirely | **F6** — FAIL a camelCase schema key, naming the kebab spelling to use |
+
+F6 is the one that matters most and was nearly missed: the migration fleet reported it as an
+unavoidable divergence and one agent hand-rolled a per-file reject-list. The root fix — spell the
+schema key exactly as the CLI flag — deleted that workaround and closed the class in all five files.
+
+**Scope: 5 of 10 parseArgs files migrated.** Excluded, for the same measured reason in two forms:
+
+- `agents/claude/hooks/*` — run on every harness event, before any `mise run deps` on a given machine.
+- `agents/skills/turnstile-spin/*` — `persist-skill.ts` degit-copies the skill into *other people's*
+  repositories, where no lockfile exists. Also an upstream Cloudflare mirror.
+
+Mechanised: `hooks/` and `templates/` are path-detected, and any tree may opt out with a
+`.zero-dep` marker file (dropped in `turnstile-spin/`). A bare import in such a tree FAILs even
+under a graduation project — "does this get distributed?" is not inferable from a path.
+
+**Verification.** Corpus floor A/B over all 77 `.ts`: **FAIL=10 WARN=31 before and after**, byte-identical
+— the new checks add no false positives and the migration adds no regressions (the 10 pre-existing FAILs are
+turnstile-spin's `templates/` and this floor's own test-fixture string literals). Full suite: **192 pass,
+1 skip, 0 fail** across 12 files. Each new check proved to fire red on injected input before being trusted
+(F5, W11, F6, the hook rule, the `.zero-dep` rule). CLI contract A/B per script: every kebab spelling
+behaves as before, every camelCase spelling now exits non-zero with that script's own pre-existing
+error convention.
+
+**Known divergence, disclosed not hidden.** Where an invocation contains BOTH an unknown flag and a
+stray positional, the ported scripts report the unknown flag first; `parseArgs` reported whichever
+came first in argv order. Both exit non-zero either way. Closing it exactly would mean re-implementing
+argv-order tracking on top of type-flag's parser.
+
+**PROSE-DEBT waiver (dated 2026-07-28).** This SKILL.md is left at WARN 10 long sentences / 11-line
+version header / 4 long table cells. Measured A/B against `HEAD`: the counts are **identical before and
+after** this edit — the debt is pre-existing, this change added none. Clearing it is a full reforge of
+the body, queued behind the corpus REFACTOR work order rather than smuggled into a LAW change.

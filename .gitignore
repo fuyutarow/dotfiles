@@ -35,3 +35,7 @@ karabiner/automatic_backups/
 # CocoIndex Code (ccc) — DBs ignored, settings.yml committed (qoed と同型)
 /.cocoindex_code/*
 !/.cocoindex_code/settings.yml
+
+# Bun graduation project (writing-bun-scripts BG3) — package.json + bun.lock are COMMITTED
+# (they carry the pin); the installed tree is not. `mise run deps` restores it.
+node_modules/

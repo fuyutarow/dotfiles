@@ -20,7 +20,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
 
 // ---- pure/testable helpers -------------------------------------------------------------
 
@@ -229,20 +229,39 @@ export function resolveHome(homeArg: string | undefined): string {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      "dry-run": { type: "boolean", default: false },
-      home: { type: "string" },
+  // type-flag (unlike node:util parseArgs with strict:true) does not throw on unknown flags or
+  // stray positionals — both would otherwise be accepted silently and the process would exit 0.
+  // Both are rejected below by throwing, which reaches the SAME main().catch handler as every
+  // other startup failure here, preserving the original contract exactly: "FATAL: <message>" on
+  // stderr + exit 1. Schema keys are camelCase; type-flag accepts the kebab-case CLI spelling
+  // (dryRun <- --dry-run), verified against bun 1.3.14, 2026-07-28.
+  const parsed = typeFlag(
+    {
+      "dry-run": { type: Boolean, default: false },
+      home: { type: String },
     },
-    strict: true,
-  });
+    Bun.argv.slice(2),
+  );
+
+  const unknown = Object.keys(parsed.unknownFlags);
+  if (unknown.length > 0) {
+    // mirrors node:util parseArgs' "Unknown option '--x'" (message text is an approximation,
+    // not byte-identical — see this migration's contract_changes)
+    throw new Error(`Unknown option '--${unknown[0]}'`);
+  }
+  if (parsed._.length > 0) {
+    // mirrors node:util parseArgs' "Unexpected argument 'x'..." (strict:true + implicit
+    // allowPositionals:false rejected any positional in the original)
+    throw new Error(
+      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    );
+  }
 
   // original never validates $HOME — an unset/empty $HOME is passed straight through to
   // `df -h "$HOME"` and the cargo-path joins, degrading gracefully rather than aborting; no
   // hard-fail here would have an analogue in the shell (see resolveHome's doc comment).
-  const home = resolveHome(values.home);
-  const dryRun = values["dry-run"] === true;
+  const home = resolveHome(parsed.flags.home);
+  const dryRun = parsed.flags["dry-run"] === true;
 
   console.log(`before: ${freeSpace(home)}`);
 

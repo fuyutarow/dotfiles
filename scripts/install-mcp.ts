@@ -48,7 +48,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
 
 type ServerEntry = {
   type?: unknown;
@@ -203,20 +203,41 @@ function runOrAbort(bin: string, args: string[]): void {
 }
 
 function main(): void {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      "dry-run": { type: "boolean", default: false },
-      dotfiles: { type: "string" },
-      home: { type: "string" },
-      "claude-bin": { type: "string" },
-      "codex-bin": { type: "string" },
-      "uv-bin": { type: "string" },
-      "ccc-bin": { type: "string" },
+  const parsed = typeFlag(
+    {
+      "dry-run": { type: Boolean, default: false },
+      dotfiles: { type: String },
+      home: { type: String },
+      "claude-bin": { type: String },
+      "codex-bin": { type: String },
+      "uv-bin": { type: String },
+      "ccc-bin": { type: String },
     },
-    strict: true,
-  });
+    Bun.argv.slice(2),
+  );
 
+  // type-flag is NOT a drop-in for `parseArgs({ strict: true })`: unknown flags land silently in
+  // `unknownFlags` (process would otherwise exit 0) and parsing never throws on a stray
+  // positional either. The original `parseArgs` threw synchronously on the FIRST unrecognized
+  // option or positional argument it hit, in argv order, e.g. `FATAL: Unknown option '--foo'` /
+  // `FATAL: Unexpected argument 'foo'. This command does not take positional arguments`, both
+  // exit 1 via the top-level catch-all below. Both are reproduced here as thrown Errors carrying
+  // the same message text, so they fall into that same catch-all and exit 1 exactly as before —
+  // EXCEPT when a single invocation contains BOTH an unknown flag and a stray positional: the
+  // original picked whichever came first in argv, this always reports the unknown flag first
+  // (disclosed divergence; this script takes zero positional operands, so real invocations never
+  // hit this joint edge case).
+  const unknownFlagNames = Object.keys(parsed.unknownFlags);
+  if (unknownFlagNames.length > 0) {
+    throw new Error(`Unknown option '--${unknownFlagNames[0]}'`);
+  }
+  if (parsed._.length > 0) {
+    throw new Error(
+      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    );
+  }
+
+  const values = parsed.flags;
   const dryRun = values["dry-run"] === true;
   // `${DOTFILES:-$HOME/dotfiles}` (bash `:-`) applies ONLY to DOTFILES — the nested $HOME is a
   // bare, unguarded expansion with no empty-check of its own. So DOTFILES needs the

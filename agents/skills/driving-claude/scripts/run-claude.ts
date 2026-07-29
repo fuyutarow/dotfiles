@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
 
 const permissionModes = new Set([
   "acceptEdits",
@@ -173,14 +173,22 @@ function requiredValue(value: string | undefined, option: string): string {
   return value;
 }
 
-function positiveNumber(value: string, label: string): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0)
+// type-flag's `type: Number` never throws on malformed input: it hands back a non-finite
+// number (NaN/Infinity — surfaces as `null` through JSON.stringify, which is how this was
+// first measured) instead of raising, unlike the old hand-rolled `Number(value)` + throw.
+// Every Number flag is routed through this null-or-not-positive check before use (W11).
+function positiveNumber(value: number | null | undefined, label: string): number {
+  if (
+    value === null ||
+    value === undefined ||
+    !Number.isFinite(value) ||
+    value <= 0
+  )
     throw new Error(`${label} must be a positive number`);
-  return parsed;
+  return value;
 }
 
-function positiveInteger(value: string, label: string): number {
+function positiveInteger(value: number | null | undefined, label: string): number {
   const parsed = positiveNumber(value, label);
   if (!Number.isInteger(parsed)) throw new Error(`${label} must be an integer`);
   return parsed;
@@ -193,41 +201,52 @@ function directory(path: string): string {
 }
 
 async function configFromCli(): Promise<RunConfig> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      target: { type: "string" },
-      "prompt-file": { type: "string" },
-      model: { type: "string" },
-      "permission-mode": { type: "string" },
-      "max-turns": { type: "string" },
-      "timeout-ms": { type: "string" },
-      "max-budget-usd": { type: "string" },
-      "allowed-tools": { type: "string" },
-      "json-schema-file": { type: "string" },
-      "claude-bin": { type: "string" },
-      "safe-mode": { type: "boolean" },
-      bare: { type: "boolean" },
+  // Schema keys are camelCase; type-flag accepts the kebab-case spelling on the command
+  // line (e.g. `promptFile` here is set by `--prompt-file`) — the CLI spelling is unchanged.
+  const parsed = typeFlag(
+    {
+      target: { type: String },
+      "prompt-file": { type: String },
+      model: { type: String },
+      "permission-mode": { type: String, default: "plan" },
+      "max-turns": { type: Number, default: 12 },
+      "timeout-ms": { type: Number, default: 300_000 },
+      "max-budget-usd": { type: Number },
+      "allowed-tools": { type: String },
+      "json-schema-file": { type: String },
+      "claude-bin": { type: String, default: "claude" },
+      "safe-mode": { type: Boolean, default: false },
+      bare: { type: Boolean, default: false },
     },
-    strict: true,
-    allowPositionals: false,
-  });
+    Bun.argv.slice(2),
+  );
+
+  // type-flag does not throw on unknown flags the way `parseArgs({strict: true})` did — they
+  // land in `unknownFlags` and parsing succeeds. Reject them explicitly to keep the same
+  // fail-fast contract (message shape mirrors node's own "Unknown option" wording).
+  const unknownFlags = Object.keys(parsed.unknownFlags);
+  if (unknownFlags.length > 0) {
+    throw new Error(`Unknown option '--${unknownFlags[0]}'`);
+  }
+  // This CLI takes no positional arguments (the old parser ran with `allowPositionals: false`);
+  // type-flag has no such switch, so reject any leftover positional by hand.
+  if (parsed._.length > 0) {
+    throw new Error(
+      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    );
+  }
+
+  const values = parsed.flags;
   const target = directory(requiredValue(values.target, "--target"));
   const promptFile = requiredValue(values["prompt-file"], "--prompt-file");
   if (!existsSync(promptFile))
     throw new Error(`prompt file does not exist: ${promptFile}`);
   const model = requiredValue(values.model, "--model");
-  const permissionMode = values["permission-mode"] ?? "plan";
+  const permissionMode = values["permission-mode"];
   if (!permissionModes.has(permissionMode))
     throw new Error(`unsupported permission mode: ${permissionMode}`);
-  const maxTurns =
-    values["max-turns"] === undefined
-      ? 12
-      : positiveInteger(values["max-turns"], "--max-turns");
-  const timeoutMs =
-    values["timeout-ms"] === undefined
-      ? 300_000
-      : positiveInteger(values["timeout-ms"], "--timeout-ms");
+  const maxTurns = positiveInteger(values["max-turns"], "--max-turns");
+  const timeoutMs = positiveInteger(values["timeout-ms"], "--timeout-ms");
   const maxBudgetUsd =
     values["max-budget-usd"] === undefined
       ? undefined
@@ -237,11 +256,11 @@ async function configFromCli(): Promise<RunConfig> {
     jsonSchemaFile === undefined
       ? undefined
       : await Bun.file(jsonSchemaFile).text();
-  const claudeBin = values["claude-bin"] ?? "claude";
+  const claudeBin = values["claude-bin"];
   if (Bun.which(claudeBin) === null)
     throw new Error(`claude binary is not runnable: ${claudeBin}`);
-  const bare = values.bare ?? false;
-  const safeMode = values["safe-mode"] ?? false;
+  const bare = values.bare;
+  const safeMode = values["safe-mode"];
   if (bare && safeMode)
     throw new Error("--bare and --safe-mode are mutually exclusive");
 

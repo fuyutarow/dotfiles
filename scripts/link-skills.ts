@@ -40,8 +40,14 @@
 // between the mutation and its `echo`, so the message prints unconditionally even when the
 // mutation itself failed (preserved here, not "fixed" — see two-hats/behavior-preservation);
 // PRUNE (b) alone uses `rm -f "$old" && echo ...`, so ITS message is gated on success.
-// Exit: always 0, matching the original — no FATAL line is ever printed (the original prints
-// none either).
+// Exit: always 0 for every filesystem-mutation path, matching the original — no FATAL line is
+// ever printed for those (the original prints none either). ONE exception, added by the
+// node:util parseArgs -> type-flag migration (2026-07-28): type-flag does not throw on an
+// unrecognized flag the way `parseArgs({strict: true})` did, so an explicit guard now rejects
+// unknown flags with a stderr message and exit 2 BEFORE any linking/pruning runs — see the
+// unknownFlags check in main(). This is a deliberate, DOCUMENTED behavior change (not a
+// preservation), because the alternative (a silently-defaulted `--dry-run` typo running the
+// prune pass for real) is the one failure mode this script cannot tolerate.
 
 import {
   existsSync,
@@ -55,7 +61,10 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
+
+const USAGE =
+  "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -163,20 +172,33 @@ function linkPath(src: string, dst: string, dryRun: boolean): void {
 }
 
 function main(): void {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      "dry-run": { type: "boolean", default: false },
-      dotfiles: { type: "string" },
-      home: { type: "string" },
+  const parsed = typeFlag(
+    {
+      "dry-run": { type: Boolean, default: false },
+      dotfiles: { type: String },
+      home: { type: String },
     },
-    strict: true,
-  });
+    Bun.argv.slice(2),
+  );
 
-  const dryRun = values["dry-run"] === true;
-  const home = values.home ?? process.env.HOME ?? homedir();
+  // type-flag (unlike `parseArgs({strict: true})`) does NOT throw on an unrecognized flag: it
+  // exits 0 and the flag lands in `unknownFlags` with its value never reaching the flags this
+  // script actually reads. That gap is dangerous HERE specifically: a typo'd `--dry-run` (e.g.
+  // `--dryrun`) would silently leave `dryRun` at its `false` default and this script would
+  // PRUNE/relink for real. Guard explicitly and refuse to run rather than risk that.
+  const unknown = Object.keys(parsed.unknownFlags);
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `unknown flag(s): ${unknown.map((f) => `--${f}`).join(", ")}\n${USAGE}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+
+  const dryRun = parsed.flags["dry-run"] === true;
+  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
   const dotfiles =
-    values.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
+    parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
 
   // Activate the post-merge hook so future `git pull`s auto-relink skills. Idempotent,
   // best-effort: the original swallows failure via `2>/dev/null || true` and never prints
@@ -334,4 +356,7 @@ try {
 } catch {
   // swallowed — see comment above.
 }
-process.exit(0);
+// `?? 0` preserves the original's unconditional exit 0 for every path main() has always taken;
+// the ONE new path (the unknown-flag guard above) sets `process.exitCode = 2` and returns before
+// doing any filesystem work, and this is the only line that can make that code observable.
+process.exit(process.exitCode ?? 0);

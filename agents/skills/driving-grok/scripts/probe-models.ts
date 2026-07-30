@@ -1,6 +1,16 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 type CommandResult = Readonly<{
   exitCode: number;
@@ -53,12 +63,19 @@ function jsonRecord(value: string): Record<string, unknown> | undefined {
 }
 
 async function main(): Promise<void> {
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const models = parsed._;
+
   const grok = Bun.which(process.env.GROK ?? "grok");
   if (grok === null)
     throw new Error(
       `${process.env.GROK ?? "grok"} not on PATH — environment problem, not a model result`,
     );
-  const models = Bun.argv.slice(2);
   if (models.length === 0) {
     const version = await run([grok, "--version"], undefined, 30_000);
     const roster = await run([grok, "models"], undefined, 60_000);

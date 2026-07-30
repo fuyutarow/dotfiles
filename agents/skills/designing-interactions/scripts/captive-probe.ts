@@ -25,6 +25,15 @@
  */
 import { typeFlag } from "type-flag";
 
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown flag(s): --${flag}`);
+  }
+}
+
 type Finding = { level: "FAIL" | "WARN"; code: string; detail: string };
 
 const USAGE =
@@ -104,7 +113,12 @@ function inspect(
   }
 
   // F6 ERROR-ON-STDOUT — diagnostics on the payload channel. Weak, but real.
-  if (exitCode !== null && exitCode !== 0 && stdout.trim() !== "" && stderr.trim() === "") {
+  if (
+    exitCode !== null &&
+    exitCode !== 0 &&
+    stdout.trim() !== "" &&
+    stderr.trim() === ""
+  ) {
     findings.push({
       level: "WARN",
       code: "ERROR-ON-STDOUT",
@@ -128,7 +142,8 @@ async function main(): Promise<void> {
   // own name begins with `-` needs an explicit `-- --` and is rejected with a usage message
   // otherwise. Measured against bun 1.3.14 / type-flag 4.5.0, 2026-07-28.
   const raw = Bun.argv.slice(2);
-  const argv = raw.length > 0 && !raw[0]?.startsWith("-") ? ["--", ...raw] : raw;
+  const argv =
+    raw.length > 0 && !raw[0]?.startsWith("-") ? ["--", ...raw] : raw;
 
   const parsed = typeFlag(
     {
@@ -137,6 +152,7 @@ async function main(): Promise<void> {
       json: { type: Boolean, default: false },
     },
     argv,
+    { ignore: rejectUnknownFlag },
   );
 
   // type-flag accepts unknown flags silently and exits 0 where parseArgs `strict` threw. An
@@ -163,7 +179,9 @@ async function main(): Promise<void> {
   // A malformed Number coerces to null rather than throwing, so the check is not optional.
   const timeout = parsed.flags.timeout;
   if (timeout === null || !Number.isFinite(timeout) || timeout <= 0) {
-    process.stderr.write(`--timeout must be a positive integer (got ${timeout})\n${USAGE}`);
+    process.stderr.write(
+      `--timeout must be a positive integer (got ${timeout})\n${USAGE}`,
+    );
     process.exitCode = 2;
     return;
   }
@@ -211,10 +229,14 @@ async function main(): Promise<void> {
   );
 
   if (parsed.flags.json) {
-    process.stdout.write(`${JSON.stringify({ status: findings.some((f) => f.level === "FAIL") ? "fail" : findings.length > 0 ? "warn" : "ok", command, exit_code: exitCode, timed_out: timedOut, findings })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ status: findings.some((f) => f.level === "FAIL") ? "fail" : findings.length > 0 ? "warn" : "ok", command, exit_code: exitCode, timed_out: timedOut, findings })}\n`,
+    );
   } else {
     for (const finding of findings) {
-      process.stdout.write(`${finding.level} ${finding.code}: ${finding.detail}\n`);
+      process.stdout.write(
+        `${finding.level} ${finding.code}: ${finding.detail}\n`,
+      );
     }
     if (findings.length === 0) {
       process.stdout.write(
@@ -223,11 +245,18 @@ async function main(): Promise<void> {
     }
   }
 
-  process.exitCode = findings.some((finding) => finding.level === "FAIL") ? 1 : 0;
+  process.exitCode = findings.some((finding) => finding.level === "FAIL")
+    ? 1
+    : 0;
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.startsWith("unknown flag(s):")) {
+    process.stderr.write(`${message}\n${USAGE}`);
+    process.exit(2);
+  }
+  process.stderr.write(`FATAL: ${message}\n`);
   process.exit(2);
 });
 

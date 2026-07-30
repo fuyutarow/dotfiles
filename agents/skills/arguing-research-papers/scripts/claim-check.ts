@@ -1,5 +1,16 @@
 /** Structural floor check for a filled arguing-research-papers CLAIM SPEC. */
 
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
+
 type SlotName = "g0" | "g1c" | "g1k" | "g2a" | "g2s" | "g3p" | "g3o";
 
 function trim(value: string): string {
@@ -65,7 +76,13 @@ function report(message: string): void {
 }
 
 async function readInput(): Promise<string> {
-  const [input, ...extra] = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const [input, ...extra] = parsed._;
   if (extra.length > 0)
     throw new Error("usage: bun claim-check.ts [spec.md|-]");
   if (input === undefined || input === "-")

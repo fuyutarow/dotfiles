@@ -46,6 +46,15 @@ async function runProbe(
 }
 
 describe("probe-models.ts — no-args mode (version + roster)", () => {
+  test("rejects --__proto__ before resolving or launching Grok", async () => {
+    const run = await runProbe(["--__proto__"], {
+      GROK: "grok-does-not-exist-xyz",
+    });
+    expect(run.stderr).toContain("unknown option '--__proto__'");
+    expect(run.stdout).toBe("");
+    expect(run.exitCode).toBe(2);
+  });
+
   // receipts: probe-models.ts:60-69 (no-args branch), :61 (--version, 30_000ms),
   // :62 (models, 60_000ms), :64-66 (fixed roster banner line), :68 (exit rule).
   test("(a) prints version output, the fixed banner, then roster output; exit 0 when both succeed", async () => {
@@ -91,7 +100,7 @@ describe("probe-models.ts — args mode (per-model probe)", () => {
     expect(run.exitCode).toBe(0);
   });
 
-  test("AVAILABLE with no usage field renders usage.total_tokens as \"?\"", async () => {
+  test('AVAILABLE with no usage field renders usage.total_tokens as "?"', async () => {
     const run = await runProbe(["no-usage-model"], { GROK: FIXTURE });
 
     expect(run.stdout).toBe(
@@ -123,7 +132,7 @@ describe("probe-models.ts — args mode (per-model probe)", () => {
     expect(run.exitCode).toBe(1);
   });
 
-  test("(d2) INCONCLUSIVE: rc=0, valid JSON object, but .text is not exactly \"OK\"", async () => {
+  test('(d2) INCONCLUSIVE: rc=0, valid JSON object, but .text is not exactly "OK"', async () => {
     const run = await runProbe(["wrong-text-model"], { GROK: FIXTURE });
 
     expect(run.stdout).toBe(
@@ -212,7 +221,7 @@ describe("probe-models.ts — GROK-not-found FATAL path", () => {
     expect(run.exitCode).toBe(2);
   });
 
-  test("GROK unset falls back to the literal label \"grok\" in the FATAL message (grok's one PATH dir excised so the real binary on this host is unreachable, everything else — incl. the mise bun shim — left intact)", async () => {
+  test('GROK unset falls back to the literal label "grok" in the FATAL message (grok\'s one PATH dir excised so the real binary on this host is unreachable, everything else — incl. the mise bun shim — left intact)', async () => {
     // Surgical PATH filter: drop ONLY the directory that resolves the real
     // `grok` on this host (verified above via a PATH scan), keep every other
     // entry so the mise-shimmed `bun` we spawn with can still bootstrap itself.

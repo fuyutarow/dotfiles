@@ -79,9 +79,9 @@ alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 
 ## The daily loop — invocation recipes (LOW freedom)
 
-On house hosts, `bun ~/.claude/hooks/repo-search.ts --help` is the guaranteed executable
-contract and the only raw-search entrypoint in an operational ccc project; `repo-search` is a
-convenience symlink. Routes: `concept` / `battery` → ccc search;
+On house hosts, `bun ~/.claude/hooks/repo-search.ts --help` is the guaranteed compatibility
+entrypoint; its single implementation lives at `cocoindex/repo-search.ts`, and `repo-search`
+links there directly. Routes: `concept` / `battery` → ccc search;
 `literal` / `exhaustive` / `files` → rg; `structural` → ccc grep; `symbol` → Serena. The
 user-global PreToolUse gate blocks direct Grep/rg/grep/find/fd/tree, direct ccc search/grep, and
 obvious inline-runtime search reimplementations only when ccc and project registration are both present. If the

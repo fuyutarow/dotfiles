@@ -345,4 +345,12 @@ describe("check-ledger", () => {
     expect(tooMany.exitCode).toBe(2);
     expect(tooMany.stderr).toContain("Usage:");
   });
+
+  test("rejects --__proto__ before treating it as a ledger path", () => {
+    const result = run("--__proto__");
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("unknown option '--__proto__'");
+    expect(result.stdout).toBe("");
+  });
 });

@@ -1,5 +1,9 @@
 import { existsSync } from "node:fs";
 
+export class UsageError extends Error {
+  override readonly name = "UsageError";
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -20,8 +24,40 @@ export function requiredValue(
   option: string,
 ): string {
   if (value === undefined || value === "")
-    throw new Error(`${option} required`);
+    throw new UsageError(`${option} required`);
   return value;
+}
+
+export function nonEmptyString(value: string | undefined): string {
+  if (value === undefined || value === "") {
+    throw new UsageError("option value required");
+  }
+  return value;
+}
+
+export function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new UsageError(`unknown option '--${flag}'`);
+  }
+}
+
+export function rejectUnexpectedArguments(
+  unknownFlags: Record<string, (string | boolean)[]>,
+  positionals: readonly string[],
+): void {
+  if (Object.getPrototypeOf(unknownFlags) !== Object.prototype) {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+  const unknownFlag = Object.keys(unknownFlags)[0];
+  if (unknownFlag !== undefined) {
+    throw new UsageError(`unknown option '--${unknownFlag}'`);
+  }
+  if (positionals.length > 0) {
+    throw new UsageError(`unexpected positional argument '${positionals[0]}'`);
+  }
 }
 
 export function output(value: unknown): void {
@@ -78,7 +114,9 @@ export async function command(
   // behavior-hat commit. `< ${new Blob([stdin ?? ""])}` always supplies an explicit stdin
   // source (empty when `stdin` is undefined) so the child never inherits our own real stdin
   // and blocks on it — this reproduces the old `stdin: "ignore"` immediate-EOF guarantee.
-  let shell = Bun.$`${commandLine} < ${new Blob([stdin ?? ""])}`.quiet().nothrow();
+  let shell = Bun.$`${commandLine} < ${new Blob([stdin ?? ""])}`
+    .quiet()
+    .nothrow();
   if (cwd !== undefined) shell = shell.cwd(cwd);
   const { exitCode, stdout, stderr } = await shell;
   return { exitCode, output: `${stdout}${stderr}` };

@@ -130,6 +130,15 @@ describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)
     expect(run.exitCode).toBe(2);
   });
 
+  test("rejects --__proto__ before resolving or launching Codex", async () => {
+    const run = await runProbe(["--__proto__"], {
+      CODEX_BIN: "codex-does-not-exist-xyz-a1b2c3",
+    });
+    expect(run.stderr).toContain("unknown option '--__proto__'");
+    expect(run.stdout).toBe("");
+    expect(run.exitCode).toBe(2);
+  });
+
   test("mixed run: one available + one rejected model still exits 1 overall, in argv order", async () => {
     const run = await withProbeDir((dir) =>
       runProbe(["gpt-good", "gpt-bad"], {

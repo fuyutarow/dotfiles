@@ -1,8 +1,10 @@
 import {
   chmodSync,
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -10,9 +12,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
-import { tempDir } from "./helpers.ts";
 
 const ROUTER = join(import.meta.dir, "..", "repo-search.ts");
+const COMPATIBILITY_PATH = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "agents",
+  "claude",
+  "hooks",
+  "repo-search.ts",
+);
+
+function tempDir(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
+}
 
 function registerProject(): string {
   const dir = tempDir("repo-search-project-");
@@ -76,9 +90,10 @@ function run(
 }
 
 describe("repo-search route contract", () => {
-  test("router is colocated with the live hook directory", () => {
+  test("cocoindex owns the executable router and the old hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);
+    expect(realpathSync(COMPATIBILITY_PATH)).toBe(realpathSync(ROUTER));
   });
 
   test("concept routes to ccc search with freshness", () => {
@@ -263,5 +278,224 @@ describe("repo-search route contract", () => {
 
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("FATAL:");
+  });
+
+  test("the __proto__ unknown-flag edge cannot bypass rejection", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--__proto__",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unknown option '--__proto__'");
+    expect(result.log).toBe("");
+  });
+
+  test("root help declares the complete route surface", () => {
+    const result = run(registerProject(), ["--help"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("usage:");
+    expect(result.stdout).toContain("concept");
+    expect(result.stdout).toContain("battery");
+    expect(result.stdout).toContain("structural");
+    expect(result.log).toBe("");
+  });
+
+  test("route-qualified help remains non-executing", () => {
+    const result = run(registerProject(), ["literal", "--help"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("--query");
+    expect(result.stdout).toContain("--glob");
+    expect(result.stdout).toContain("--timeout-ms");
+    expect(result.log).toBe("");
+  });
+
+  test("help does not bypass unknown-flag rejection", () => {
+    const result = run(registerProject(), ["literal", "--help", "--wat"]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unknown option '--wat'");
+    expect(result.log).toBe("");
+  });
+
+  test("help does not bypass excess-positional rejection", () => {
+    const result = run(registerProject(), ["literal", "extra", "--help"]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unexpected positional arguments: extra");
+    expect(result.log).toBe("");
+  });
+
+  for (const [args, message] of [
+    [
+      ["literal", "--query", "   ", "--help"],
+      "requires exactly one non-empty --query",
+    ],
+    [
+      ["literal", "-q", "first", "-q", "second", "--help"],
+      "requires exactly one non-empty --query",
+    ],
+    [
+      ["battery", "-q", "first", "-q", "second", "--help"],
+      "requires at least 3 non-empty --query values",
+    ],
+    [
+      ["concept", "-q", "needle", "-p", "src", "-p", "tests", "--help"],
+      "accepts at most one --path glob",
+    ],
+    [
+      [
+        "literal",
+        "--query",
+        "needle",
+        "--count",
+        "--files-with-matches",
+        "--help",
+      ],
+      "mutually exclusive",
+    ],
+  ] as const) {
+    test("help does not bypass route semantic validation", () => {
+      const result = run(registerProject(), [...args]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(message);
+      expect(result.log).toBe("");
+    });
+  }
+
+  test("a flag belonging to another route is rejected", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--limit",
+      "3",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("literal does not accept --limit");
+    expect(result.log).toBe("");
+  });
+
+  test("files rejects search-result modifiers that would change rg mode", () => {
+    const result = run(registerProject(), [
+      "files",
+      "--path",
+      "cocoindex",
+      "--count",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("files does not accept --count");
+    expect(result.log).toBe("");
+  });
+
+  for (const args of [
+    ["files", "--path", "cocoindex", "--count=false"],
+    ["concept", "--query", "needle", "--hidden=false", "--help"],
+    ["--help", "--count=false"],
+  ]) {
+    test("an explicitly false flag still counts as present for route validation", () => {
+      const result = run(registerProject(), args);
+
+      expect(result.code).toBe(2);
+      expect(result.log).toBe("");
+    });
+  }
+
+  test("files still permits inventory-relevant hidden-file traversal", () => {
+    const result = run(registerProject(), [
+      "files",
+      "--path",
+      "cocoindex",
+      "--hidden",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("rg --files --color never --hidden cocoindex");
+  });
+
+  test("short aliases collect repeatable queries, paths, and globs", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "-q",
+      "needle",
+      "-p",
+      "src",
+      "-p",
+      "tests",
+      "-g",
+      "*.ts",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--glob *.ts");
+    expect(result.log).toContain("-- needle src tests");
+  });
+
+  for (const [route, flag, value] of [
+    ["concept", "--limit", "0"],
+    ["literal", "--timeout-ms", "NaN"],
+    ["literal", "--context", "-1"],
+  ]) {
+    test(`${flag} rejects a non-positive or malformed integer`, () => {
+      const result = run(registerProject(), [
+        route,
+        "--query",
+        "needle",
+        flag,
+        value,
+      ]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(`${flag} must be a positive integer`);
+      expect(result.log).toBe("");
+    });
+  }
+
+  for (const [route, args, flag] of [
+    ["literal", ["--query", "--help"], "--query"],
+    ["literal", ["--query", "needle", "--path"], "--path"],
+    ["files", ["--glob"], "--glob"],
+  ] as const) {
+    test(`${flag} rejects a missing value before help or execution`, () => {
+      const result = run(registerProject(), [route, ...args]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(`${flag} requires a value`);
+      expect(result.log).toBe("");
+    });
+  }
+
+  test("unexpected positionals are usage errors", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "extra",
+      "--query",
+      "needle",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unexpected positional arguments: extra");
+    expect(result.log).toBe("");
+  });
+
+  test("camelCase spellings do not widen kebab-case flags", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--timeoutMs",
+      "30",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unknown option '--timeoutMs'");
+    expect(result.log).toBe("");
   });
 });

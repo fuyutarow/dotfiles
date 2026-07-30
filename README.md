@@ -64,7 +64,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
-├── cocoindex/   # cocoindex-code MCP settings (declarative — no interactive init)
+├── cocoindex/   # cocoindex-code settings + the typed repo-search query router
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)

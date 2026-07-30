@@ -439,28 +439,21 @@ describe("cache-clean.ts CLI", () => {
     }
   });
 
-  // MAJOR regression guard: an empty --home must still produce ABSOLUTE cargo paths (leading
-  // "/"), mirroring the shell's literal `"$HOME"/.cargo/...` concatenation. path.join(home, ...)
-  // would instead silently DROP the leading separator for an empty `home`, turning the path
-  // CWD-relative -- dangerous since it's handed straight to `rip`.
-  test("empty --home still yields absolute /.cargo/... paths for the cargo step (dry-run only)", () => {
-    const stubDir = mkdtempSync(
-      join(tmpdir(), "cache-clean-stubs-cargo-emptyhome-"),
-    );
-    try {
-      makeStub(stubDir, "cargo", 0);
-      makeStub(stubDir, "rip", 0);
-      const { out, code } = runScript(["--dry-run", "--home", ""], {
-        pathDirs: [stubDir],
-      });
-      expect(code).toBe(0);
-      expect(out).toContain(
-        "[dry-run] would run: rip /.cargo/registry/src /.cargo/registry/cache /.cargo/git/checkouts",
-      );
-      // the regression this guards against: a relative (non-"/"-prefixed) cargo path
-      expect(out).not.toContain("would run: rip .cargo/");
-    } finally {
-      rmSync(stubDir, { recursive: true, force: true });
+  test("rejects --__proto__ before running any cleanup step", () => {
+    const { out, err, code } = runScript(["--__proto__"], {
+      pathDirs: [stubAll],
+    });
+    expect(code).toBe(2);
+    expect(err).toContain("Unknown option '--__proto__'");
+    expect(out).not.toContain("before:");
+  });
+
+  test("rejects an empty String flag before running any cleanup step", () => {
+    for (const args of [["--home"], ["--home", ""]]) {
+      const { out, err, code } = runScript(args, { pathDirs: [stubAll] });
+      expect(code).toBe(2);
+      expect(err).toContain("--home requires a value");
+      expect(out).not.toContain("before:");
     }
   });
 });

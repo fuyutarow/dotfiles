@@ -1,5 +1,16 @@
 /** FLOOR probe: account/model availability only, never semantic selection. */
 
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
+
 type CommandResult = Readonly<{
   exitCode: number;
   output: string;
@@ -45,7 +56,13 @@ function firstMatches(
 }
 
 async function main(): Promise<void> {
-  const models = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const models = parsed._;
   if (models.length === 0)
     throw new Error("usage: bun probe-models.ts <model> [...]");
   const codex = Bun.which(process.env.CODEX_BIN ?? "codex");

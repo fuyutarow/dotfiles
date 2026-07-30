@@ -10,9 +10,41 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { command, diagnostic, output } from "../scripts/lib.ts";
+import {
+  command,
+  diagnostic,
+  nonEmptyString,
+  output,
+  rejectUnexpectedArguments,
+  rejectUnknownFlag,
+} from "../scripts/lib.ts";
 
 const BUN_BIN = process.execPath;
+
+describe("argv guards", () => {
+  test("rejectUnknownFlag throws before an unknown name reaches unknownFlags", () => {
+    expect(() => rejectUnknownFlag("unknown-flag", "__proto__")).toThrow(
+      "unknown option '--__proto__'",
+    );
+    expect(() => rejectUnknownFlag("known-flag", "path")).not.toThrow();
+    expect(() => rejectUnknownFlag("argument", "value")).not.toThrow();
+  });
+
+  test("rejectUnexpectedArguments detects a prototype-mutated unknownFlags table", () => {
+    const poisoned: Record<string, (string | boolean)[]> = {};
+    Object.setPrototypeOf(poisoned, ["__proto__"]);
+    expect(Object.keys(poisoned)).toEqual([]);
+    expect(() => rejectUnexpectedArguments(poisoned, [])).toThrow(
+      "unknown option '--__proto__'",
+    );
+  });
+
+  test("nonEmptyString rejects both missing and empty option values", () => {
+    expect(() => nonEmptyString(undefined)).toThrow("option value required");
+    expect(() => nonEmptyString("")).toThrow("option value required");
+    expect(nonEmptyString("value")).toBe("value");
+  });
+});
 
 describe("command()", () => {
   test("captures stdout and reports exit code 0 on success", async () => {

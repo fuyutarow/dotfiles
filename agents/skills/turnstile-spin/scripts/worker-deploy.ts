@@ -1,7 +1,16 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { command, diagnostic, output, requiredEnv } from "./lib.ts";
+import { typeFlag } from "type-flag";
+import {
+  command,
+  diagnostic,
+  nonEmptyString,
+  output,
+  rejectUnknownFlag,
+  rejectUnexpectedArguments,
+  requiredEnv,
+  UsageError,
+} from "./lib.ts";
 
 function randomSuffix(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(3)), (value) =>
@@ -31,15 +40,20 @@ async function deploy(
     directory,
   ]);
   if (extract.exitCode !== 0) return extract;
-  return command(["bunx", "wrangler@4.113.0", "deploy", "--name", name], directory);
+  return command(
+    ["bunx", "wrangler@4.113.0", "deploy", "--name", name],
+    directory,
+  );
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: { name: { type: "string" }, "deploy-dir": { type: "string" } },
-    strict: true,
-  });
+  const parsed = typeFlag(
+    { name: nonEmptyString, "deploy-dir": nonEmptyString },
+    Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
+  );
+  rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
+  const values = parsed.flags;
   let name = values.name ?? process.env.WORKER_NAME ?? "turnstile-siteverify";
   const directory = resolve(
     values["deploy-dir"] ?? "/tmp/turnstile-siteverify-deploy",
@@ -108,6 +122,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof UsageError) {
+    diagnostic(`worker-deploy: ${error.message}`);
+    process.exit(2);
+  }
   diagnostic(
     `worker-deploy: ${error instanceof Error ? error.message : String(error)}`,
   );

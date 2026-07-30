@@ -1,15 +1,24 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { parseArgs } from "node:util";
-import { command, diagnostic, output, requiredValue } from "./lib.ts";
+import { typeFlag } from "type-flag";
+import {
+  command,
+  diagnostic,
+  nonEmptyString,
+  output,
+  rejectUnknownFlag,
+  rejectUnexpectedArguments,
+  requiredValue,
+  UsageError,
+} from "./lib.ts";
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: { path: { type: "string" } },
-    strict: true,
+  const parsed = typeFlag({ path: nonEmptyString }, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
   });
+  rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
+  const values = parsed.flags;
   const destination = resolve(requiredValue(values.path, "--path"));
   const target = dirname(destination);
   await mkdir(target, { recursive: true });
@@ -47,6 +56,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof UsageError) {
+    diagnostic(`persist-skill: ${error.message}`);
+    process.exit(2);
+  }
   diagnostic(
     `persist-skill: ${error instanceof Error ? error.message : String(error)}`,
   );

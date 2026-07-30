@@ -90,8 +90,8 @@ depends = ["fmt:sh:check", "fmt:ts:check"]
 
 [tasks.lint]
 alias = "l"
-description = "Lint the repo: Markdown (rumdl) + bash (shellcheck) + zsh (zsh -n) + skills index"
-depends = ["lint:md", "lint:sh", "lint:zsh", "lint:skills-index"]
+description = "Lint the repo: Markdown + shell/zsh + Bun script contract + skills index"
+depends = ["lint:md", "lint:sh", "lint:zsh", "lint:bun", "lint:skills-index"]
 
 [tasks."lint:md"]
 dir = "{{config_root}}"
@@ -136,15 +136,37 @@ done
 exit $rc
 '''
 
+[tasks."lint:bun"]
+dir = "{{config_root}}"
+description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
+run = '''
+git ls-files -z -- \
+  ':(glob)scripts/*.ts' ':(glob)cocoindex/*.ts' \
+  ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' \
+  ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
+  ':(exclude)agents/claude/hooks/repo-search.ts' |
+  xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
+'''
+
 [tasks.test]
 alias = "t"
-description = "Test the repo: Claude Code hooks (bun test). Umbrella over test:*"
-depends = ["test:hooks"]
+description = "Test the repo: hooks, repo-search, and Bun script floor"
+depends = ["test:hooks", "test:cocoindex", "test:scripts"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
 description = "Claude Code hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
 run = "bun test agents/claude/hooks"
+
+[tasks."test:cocoindex"]
+dir = "{{config_root}}"
+description = "CocoIndex repo-search route and CLI contract tests"
+run = "bun test cocoindex/tests"
+
+[tasks."test:scripts"]
+dir = "{{config_root}}"
+description = "House Bun-script floor tests, including proof-of-fire fixtures"
+run = "bun test agents/skills/writing-bun-scripts/tests"
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
 # lint.depends: dotfiles has no reports/memos to scan (they live in research repos).

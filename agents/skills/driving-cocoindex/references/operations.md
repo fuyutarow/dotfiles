@@ -133,8 +133,9 @@ that a bare `rg redirect` buries under a wall of unrelated `redirect_*` identifi
 
 House invocation is `repo-search <route>`: `concept` / `battery` select `ccc search`,
 `literal` / `exhaustive` / `files` select rg, and `structural` selects `ccc grep`. The canonical
-entrypoint is colocated with the live hook at `bun ~/.claude/hooks/repo-search.ts`; the PATH
-command is only a convenience link. A missing canonical file is a configuration fault, not
+compatibility entrypoint remains `bun ~/.claude/hooks/repo-search.ts`, a relative symlink to the
+single implementation at `cocoindex/repo-search.ts`; the PATH command links to that implementation
+directly. A missing canonical file is a configuration fault, not
 permission to call ccc search/grep directly or emulate search with Python, Node, or shell loops.
 Exit-zero ccc output without a `--- Result` block is reported as NO_MATCH, never PASS. This file remains the arguing home for
 why each backend fits; the router owns deterministic dispatch, timeout, and result classification.

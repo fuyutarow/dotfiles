@@ -38,6 +38,15 @@ function runProbe(
 }
 
 describe("probe-models.ts CURRENT-behavior bracket", () => {
+  test("rejects --__proto__ before resolving or launching Antigravity", () => {
+    const { stdout, stderr, code } = runProbe(["--__proto__"], {
+      AGY_BIN: "agy-does-not-exist-xyz",
+    });
+    expect(stderr).toContain("unknown option '--__proto__'");
+    expect(stdout).toBe("");
+    expect(code).toBe(2);
+  });
+
   test("(a) no models: prints version + roster header verbatim, exits 0 on rc=0 roster", () => {
     const { stdout, stderr, code } = runProbe([], {
       FAKE_AGY_VERSION: "1.1.5",

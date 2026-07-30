@@ -83,6 +83,33 @@ function baseArgs(dotfiles: string, extra: string[] = []): string[] {
   ];
 }
 
+describe("install-mcp: argv contract", () => {
+  test("rejects --__proto__ before running any command", () => {
+    const { out, code } = run(["--__proto__"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("Unknown option '--__proto__'");
+    expect(out).not.toContain("applied ");
+  });
+
+  test("rejects every String flag with no value", () => {
+    for (const flag of [
+      "--dotfiles",
+      "--home",
+      "--claude-bin",
+      "--codex-bin",
+      "--uv-bin",
+      "--ccc-bin",
+    ]) {
+      const { out, code } = run([flag]);
+
+      expect(code).toBe(2);
+      expect(out).toContain(`${flag} requires a value`);
+      expect(out).not.toContain("applied ");
+    }
+  });
+});
+
 describe("install-mcp: pure helpers", () => {
   test("jqOr falls back on null/false/undefined, not on other falsy-ish JS values", () => {
     expect(jqOr(undefined, "stdio")).toBe("stdio");

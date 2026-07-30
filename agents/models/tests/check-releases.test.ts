@@ -80,4 +80,29 @@ describe("check-releases floor", () => {
     expect(r.code).toBe(0);
     expect(r.out).not.toContain("WARN");
   });
+
+  test("rejects an unknown flag", () => {
+    const r = run(["--wat"]);
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("unknown option '--wat'");
+  });
+
+  test("rejects --__proto__ before checking the release corpus", () => {
+    const r = run(["--__proto__"]);
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("unknown option '--__proto__'");
+    expect(r.out).not.toContain("checked ");
+  });
+
+  test("rejects a stray positional", () => {
+    const r = run(["stray"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("unexpected positional argument 'stray'");
+  });
+
+  test("rejects --today with no value", () => {
+    const r = run(["--today"]);
+    expect(r.code).toBe(2);
+    expect(r.out).toContain("--today requires a value");
+  });
 });

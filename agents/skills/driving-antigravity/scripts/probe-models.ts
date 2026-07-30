@@ -1,5 +1,16 @@
 /** FLOOR probe: a model string is available only when agy returns exactly OK. */
 
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
+
 type CommandResult = Readonly<{
   exitCode: number;
   output: string;
@@ -46,6 +57,14 @@ function atLeast(actual: string, floor: string): boolean {
 }
 
 async function main(): Promise<void> {
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const models = parsed._;
+
   const agy = Bun.which(process.env.AGY_BIN ?? "agy");
   if (agy === null)
     throw new Error(
@@ -59,7 +78,6 @@ async function main(): Promise<void> {
     );
   }
 
-  const models = Bun.argv.slice(2);
   if (models.length === 0) {
     process.stdout.write(`agy version: ${foundVersion ?? "unknown"}\n`);
     process.stdout.write(

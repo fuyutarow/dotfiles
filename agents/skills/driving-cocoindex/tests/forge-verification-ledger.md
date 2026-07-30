@@ -295,9 +295,9 @@ ccc-enabled registered project and routes through the executable `repo-search --
 concept/battery→ccc search, literal/exhaustive/files→rg, structural→ccc grep, symbol→Serena.
 
 **One-home placement.** Backend fitness remains argued in `references/operations.md`; deterministic
-dispatch/timeout lives in `agents/claude/hooks/repo-search.ts`; enforcement lives in the user-global
-PreToolUse hook. SKILL.md contains only the route pointer and CC3 artifact. No script was duplicated
-inside this skill.
+dispatch/timeout now lives in `cocoindex/repo-search.ts`, with the former hook path retained as a
+relative compatibility symlink. Enforcement lives in the user-global PreToolUse hook. SKILL.md
+contains only the route pointer and CC3 artifact. No script was duplicated inside this skill.
 
 **Red→green.** Before implementation, the two new test files reported 19 failures. After the
 router and hook landed: 19 pass / 68 assertions. The full hook suite then passed 120 tests with one

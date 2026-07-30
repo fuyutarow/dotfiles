@@ -1,20 +1,26 @@
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
 import {
   apiError,
   apiSuccess,
   cloudflare,
   diagnostic,
   isRecord,
+  nonEmptyString,
   output,
+  rejectUnknownFlag,
+  rejectUnexpectedArguments,
   requiredValue,
+  UsageError,
 } from "./lib.ts";
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: { "account-id": { type: "string" }, sitekey: { type: "string" } },
-    strict: true,
-  });
+  const parsed = typeFlag(
+    { "account-id": nonEmptyString, sitekey: nonEmptyString },
+    Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
+  );
+  rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
+  const values = parsed.flags;
   const accountId = requiredValue(values["account-id"], "--account-id");
   const sitekey = requiredValue(values.sitekey, "--sitekey");
   const { response, body } = await cloudflare(
@@ -58,6 +64,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (error instanceof UsageError) {
+    diagnostic(`fetch-secret: ${error.message}`);
+    process.exit(2);
+  }
   diagnostic(
     `fetch-secret: ${error instanceof Error ? error.message : String(error)}`,
   );

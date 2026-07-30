@@ -22,7 +22,26 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { typeFlag } from "type-flag";
 import releases from "./releases.toml";
+
+class UsageError extends Error {}
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new UsageError(`unknown option '--${flag}'`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new UsageError(`${flag} requires a value`);
+    return value;
+  };
+}
 
 type Model = {
   slug: string;
@@ -52,7 +71,8 @@ const HISTORY_FILE = /(forge-verification-ledger|survey-sok|releases\.toml)/;
 
 let failures = 0;
 let warnings = 0;
-const quiet = Bun.argv.includes("--quiet");
+let quiet = false;
+let requestedToday: string | undefined;
 
 function fail(msg: string): void {
   failures++;
@@ -70,9 +90,7 @@ function parseDay(s: string): number | null {
 }
 
 function todayStamp(): string {
-  const i = Bun.argv.indexOf("--today");
-  if (i !== -1 && Bun.argv[i + 1]) return Bun.argv[i + 1];
-  return new Date().toISOString().slice(0, 10);
+  return requestedToday ?? new Date().toISOString().slice(0, 10);
 }
 
 function daysBetween(fromMs: number, toMs: number): number {
@@ -115,6 +133,19 @@ function guidanceFiles(): Array<[string, string]> {
 }
 
 function main(): void {
+  const parsed = typeFlag(
+    { today: nonEmptyString("--today"), quiet: Boolean },
+    Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
+  );
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  if (parsed._.length > 0)
+    throw new Error(`unexpected positional argument '${parsed._[0]}'`);
+  quiet = parsed.flags.quiet === true;
+  requestedToday = parsed.flags.today;
+
   const meta = (releases as { meta: Meta }).meta;
   const models = (releases as { model: Model[] }).model ?? [];
   const today = todayStamp();
@@ -226,6 +257,10 @@ function main(): void {
 try {
   main();
 } catch (e) {
+  if (e instanceof UsageError) {
+    fail(`check-releases crashed: ${e.message}`);
+    process.exit(2);
+  }
   fail(`check-releases crashed: ${e instanceof Error ? e.message : String(e)}`);
 }
 process.exit(failures === 0 ? 0 : 1);

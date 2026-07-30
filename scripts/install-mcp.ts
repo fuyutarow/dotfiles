@@ -50,6 +50,24 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { typeFlag } from "type-flag";
 
+class UsageError extends Error {}
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new UsageError(`Unknown option '--${flag}'`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new UsageError(`${flag} requires a value`);
+    return value;
+  };
+}
+
 type ServerEntry = {
   type?: unknown;
   url?: unknown;
@@ -206,14 +224,15 @@ function main(): void {
   const parsed = typeFlag(
     {
       "dry-run": { type: Boolean, default: false },
-      dotfiles: { type: String },
-      home: { type: String },
-      "claude-bin": { type: String },
-      "codex-bin": { type: String },
-      "uv-bin": { type: String },
-      "ccc-bin": { type: String },
+      dotfiles: { type: nonEmptyString("--dotfiles") },
+      home: { type: nonEmptyString("--home") },
+      "claude-bin": { type: nonEmptyString("--claude-bin") },
+      "codex-bin": { type: nonEmptyString("--codex-bin") },
+      "uv-bin": { type: nonEmptyString("--uv-bin") },
+      "ccc-bin": { type: nonEmptyString("--ccc-bin") },
     },
     Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
   );
 
   // type-flag is NOT a drop-in for `parseArgs({ strict: true })`: unknown flags land silently in
@@ -229,7 +248,7 @@ function main(): void {
   // hit this joint edge case).
   const unknownFlagNames = Object.keys(parsed.unknownFlags);
   if (unknownFlagNames.length > 0) {
-    throw new Error(`Unknown option '--${unknownFlagNames[0]}'`);
+    throw new UsageError(`Unknown option '--${unknownFlagNames[0]}'`);
   }
   if (parsed._.length > 0) {
     throw new Error(
@@ -418,6 +437,10 @@ if (import.meta.main) {
       // command's own diagnostic already went to (inherited) stderr above — and the shell exits
       // with THAT command's real status, not a synthesized message and not a hardcoded 1.
       process.exit(error.exitCode);
+    }
+    if (error instanceof UsageError) {
+      process.stderr.write(`FATAL: ${error.message}\n`);
+      process.exit(2);
     }
     // No shell analogue: this is outside the modeled `set -eu` subprocess path entirely (e.g. a
     // bug in this port's own flag parsing) — surface it loudly rather than swallow it silently.

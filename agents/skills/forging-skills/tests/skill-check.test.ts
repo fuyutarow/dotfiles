@@ -11,9 +11,15 @@ const CHECK = new URL("../scripts/skill-check.ts", import.meta.url).pathname;
 // tests/ -> forging-skills/ -> skills/ -> agents/ -> repo root
 const REPO_ROOT = new URL("../../../../", import.meta.url).pathname;
 
-function runCheck(...dirs: string[]): { out: string; err: string; code: number } {
+function runCheck(...dirs: string[]): {
+  out: string;
+  err: string;
+  code: number;
+} {
   // bounded: one-shot floor run over tiny fixtures; maxBuffer caps runaway output
-  const proc = Bun.spawnSync(["bun", CHECK, ...dirs], { maxBuffer: 1024 * 1024 });
+  const proc = Bun.spawnSync(["bun", CHECK, ...dirs], {
+    maxBuffer: 1024 * 1024,
+  });
   return {
     out: proc.stdout.toString(),
     err: proc.stderr.toString(),
@@ -41,6 +47,13 @@ function validSkillMd(name: string, extra = ""): string {
 }
 
 describe("skill-check floor", () => {
+  test("rejects --__proto__ before treating it as a skill directory", () => {
+    const { out, err, code } = runCheck("--__proto__");
+    expect(out).toBe("");
+    expect(err).toContain("unknown option '--__proto__'");
+    expect(code).toBe(2);
+  });
+
   test("missing SKILL.md: FAIL + exit 1", () => {
     const dir = makeSkillDir("missing-skill-md");
     const { out, err, code } = runCheck(dir);
@@ -169,7 +182,10 @@ describe("skill-check floor", () => {
   test("references/*.md present on disk but never mentioned in body: FAIL", () => {
     const dir = makeSkillDir("orphan-ref", validSkillMd("orphan-ref"));
     mkdirSync(join(dir, "references"), { recursive: true });
-    writeFileSync(join(dir, "references", "orphan.md"), "Orphan reference content.\n");
+    writeFileSync(
+      join(dir, "references", "orphan.md"),
+      "Orphan reference content.\n",
+    );
     const { out, code } = runCheck(dir);
     expect(out).toBe(
       `FAIL ${dir}: references/orphan.md exists but is never mentioned in SKILL.md\n`,
@@ -179,7 +195,10 @@ describe("skill-check floor", () => {
   });
 
   test("SKILL.md body > 500 lines: WARN (exit 0)", () => {
-    const bodyLines = Array.from({ length: 501 }, (_, i) => `Line ${i + 1} of body.`).join("\n");
+    const bodyLines = Array.from(
+      { length: 501 },
+      (_, i) => `Line ${i + 1} of body.`,
+    ).join("\n");
     const dir = makeSkillDir(
       "long-body",
       `---\nname: long-body\ndescription: >-\n  A short valid description.\n---\n\n${bodyLines}\n`,
@@ -201,8 +220,14 @@ describe("skill-check floor", () => {
   });
 
   test("no arguments: falls back to process.cwd()", () => {
-    const dir = makeSkillDir("cwd-default-skill", validSkillMd("cwd-default-skill"));
-    const proc = Bun.spawnSync(["bun", CHECK], { cwd: dir, maxBuffer: 1024 * 1024 });
+    const dir = makeSkillDir(
+      "cwd-default-skill",
+      validSkillMd("cwd-default-skill"),
+    );
+    const proc = Bun.spawnSync(["bun", CHECK], {
+      cwd: dir,
+      maxBuffer: 1024 * 1024,
+    });
     expect(proc.stdout.toString()).toBe("");
     expect(proc.stderr.toString()).toBe("");
     expect(proc.exitCode).toBe(0);
@@ -225,7 +250,7 @@ describe("skill-check floor", () => {
       `WARN ${wbs}: 10 prose sentences >120 chars (technical-communication debt)\n` +
         `WARN ${wbs}: version header 11 lines >3 — history belongs in the ledger\n` +
         `WARN ${wbs}: 4 table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)\n` +
-        `WARN ${wmt}: 11 prose sentences >120 chars (technical-communication debt)\n` +
+        `WARN ${wmt}: 13 prose sentences >120 chars (technical-communication debt)\n` +
         `WARN ${wmt}: version header 9 lines >3 — history belongs in the ledger\n`,
     );
     expect(code).toBe(0);
@@ -242,8 +267,7 @@ describe("skill-check prose-debt floor", () => {
   test("3 long prose sentences: WARN fires with the count", () => {
     const dir = makeSkillDir(
       "prose-debt-three",
-      validSkillMd("prose-debt-three") +
-        `\n${LONG}.\n\n${LONG}.\n\n${LONG}.\n`,
+      validSkillMd("prose-debt-three") + `\n${LONG}.\n\n${LONG}.\n\n${LONG}.\n`,
     );
     const { out, code } = runCheck(dir);
     expect(out).toBe(

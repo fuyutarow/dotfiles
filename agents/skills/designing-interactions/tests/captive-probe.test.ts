@@ -16,7 +16,9 @@ type Envelope = {
   findings: { level: string; code: string; detail: string }[];
 };
 
-async function probe(args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+async function probe(
+  args: string[],
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const child = Bun.spawn({
     cmd: ["bun", PROBE, ...args],
     stdin: "ignore",
@@ -32,9 +34,14 @@ async function probe(args: string[]): Promise<{ exitCode: number; stdout: string
   return { exitCode: child.exitCode ?? -1, stdout, stderr };
 }
 
-async function codes(args: string[]): Promise<{ exitCode: number; envelope: Envelope }> {
+async function codes(
+  args: string[],
+): Promise<{ exitCode: number; envelope: Envelope }> {
   const result = await probe(["--json", ...args]);
-  return { exitCode: result.exitCode, envelope: JSON.parse(result.stdout) as Envelope };
+  return {
+    exitCode: result.exitCode,
+    envelope: JSON.parse(result.stdout) as Envelope,
+  };
 }
 
 // Fixtures are spawned as real executables (shebang + exec bit), not via `bun <path>` — that is
@@ -43,7 +50,11 @@ const fixture = (name: string): string[] => ["--", join(FIXTURES, name)];
 
 describe("captive-probe findings", () => {
   test("FAIL HANG on a process that never exits", async () => {
-    const { exitCode, envelope } = await codes(["--timeout", "1500", ...fixture("hangs.ts")]);
+    const { exitCode, envelope } = await codes([
+      "--timeout",
+      "1500",
+      ...fixture("hangs.ts"),
+    ]);
     expect(envelope.findings.map((f) => f.code)).toContain("HANG");
     expect(envelope.timed_out).toBe(true);
     expect(envelope.exit_code).toBeNull();
@@ -52,7 +63,9 @@ describe("captive-probe findings", () => {
 
   test("FAIL PROMPT-WITHOUT-TTY on a question with no stdin", async () => {
     const { exitCode, envelope } = await codes(fixture("prompts.ts"));
-    expect(envelope.findings.map((f) => f.code)).toContain("PROMPT-WITHOUT-TTY");
+    expect(envelope.findings.map((f) => f.code)).toContain(
+      "PROMPT-WITHOUT-TTY",
+    );
     expect(envelope.timed_out).toBe(false);
     expect(exitCode).toBe(1);
   });
@@ -67,16 +80,26 @@ describe("captive-probe findings", () => {
   });
 
   test("FAIL SILENT-FAILURE only when the caller declares the invocation should fail", async () => {
-    const declared = await codes(["--expect-fail", ...fixture("quiet-failure.ts")]);
-    expect(declared.envelope.findings.map((f) => f.code)).toContain("SILENT-FAILURE");
+    const declared = await codes([
+      "--expect-fail",
+      ...fixture("quiet-failure.ts"),
+    ]);
+    expect(declared.envelope.findings.map((f) => f.code)).toContain(
+      "SILENT-FAILURE",
+    );
     expect(declared.exitCode).toBe(1);
 
     const undeclared = await codes(fixture("quiet-failure.ts"));
-    expect(undeclared.envelope.findings.map((f) => f.code)).not.toContain("SILENT-FAILURE");
+    expect(undeclared.envelope.findings.map((f) => f.code)).not.toContain(
+      "SILENT-FAILURE",
+    );
   });
 
   test("WARN ERROR-ON-STDOUT when a non-zero exit reports only on the payload channel", async () => {
-    const { envelope } = await codes([...fixture("quiet-failure.ts"), "--really-fail"]);
+    const { envelope } = await codes([
+      ...fixture("quiet-failure.ts"),
+      "--really-fail",
+    ]);
     expect(envelope.findings.map((f) => f.code)).toContain("ERROR-ON-STDOUT");
     expect(envelope.exit_code).toBe(3);
   });
@@ -121,6 +144,13 @@ describe("captive-probe contract", () => {
     const result = await probe(["--bogus", "1", "--", "true"]);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("unknown flag(s): --bogus");
+  });
+
+  test("rejects --__proto__ before launching the probed command", async () => {
+    const result = await probe(["--__proto__", "--", "true"]);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("unknown flag(s): --__proto__");
+    expect(result.stdout).toBe("");
   });
 
   test("exits 2 on an unparsable timeout", async () => {

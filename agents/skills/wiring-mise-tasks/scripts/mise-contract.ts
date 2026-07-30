@@ -1,6 +1,16 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 const hard = ["fmt", "f", "fmt:check", "lint", "test", "up", "check"];
 const soft = ["setup", "i", "l", "t", "u", "c"];
@@ -158,7 +168,9 @@ function taskBodies(source: string): Array<{ name: string; body: string }> {
   while ((m = re.exec(source)) !== null) {
     const name = m[1] ?? m[2] ?? "?";
     const section = m[3] ?? "";
-    const triple = /run\s*=\s*'''([\s\S]*?)'''|run\s*=\s*"""([\s\S]*?)"""/.exec(section);
+    const triple = /run\s*=\s*'''([\s\S]*?)'''|run\s*=\s*"""([\s\S]*?)"""/.exec(
+      section,
+    );
     if (triple) {
       out.push({ name, body: triple[1] ?? triple[2] ?? "" });
       continue;
@@ -207,7 +219,9 @@ function checkBodies(source: string): [number, number] {
 
   for (const [tool, users] of needed) {
     if (tools.has(tool)) {
-      process.stdout.write(`OK    tools: ${tool} declared (used by ${users.length} task(s))\n`);
+      process.stdout.write(
+        `OK    tools: ${tool} declared (used by ${users.length} task(s))\n`,
+      );
     } else {
       process.stdout.write(
         `FAIL  tools: task(s) ${users.join(" ")} invoke '${tool}' but [tools] does not ` +
@@ -332,15 +346,20 @@ async function check(
 }
 
 async function main(): Promise<void> {
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+
   if (Bun.which("mise") === null) {
     process.stdout.write("ENV mise not installed\n");
     process.exit(2);
   }
   let failures = 0;
   let environmentFailure = false;
-  for (const root of Bun.argv.slice(2).length === 0
-    ? ["."]
-    : Bun.argv.slice(2)) {
+  for (const root of parsed._.length === 0 ? ["."] : parsed._) {
     const result = await check(root);
     failures += result.failures;
     environmentFailure ||= result.environmentFailure;

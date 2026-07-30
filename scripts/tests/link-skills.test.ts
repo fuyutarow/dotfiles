@@ -62,6 +62,31 @@ function cleanup(...dirs: string[]): void {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 }
 
+describe("link-skills: argv contract", () => {
+  test("rejects --__proto__ before performing any link work", () => {
+    const { out, code } = run(["--__proto__"]);
+    expect(code).toBe(2);
+    expect(out).toContain("unknown flag(s): --__proto__");
+    expect(out).not.toContain("linked:");
+  });
+
+  test("rejects every String flag with no value", () => {
+    for (const flag of ["--dotfiles", "--home"]) {
+      const { out, code } = run([flag]);
+      expect(code).toBe(2);
+      expect(out).toContain(`${flag} requires a value`);
+      expect(out).not.toContain("linked:");
+    }
+  });
+
+  test("rejects a stray positional before performing any link work", () => {
+    const { out, code } = run(["stray"]);
+    expect(code).toBe(2);
+    expect(out).toContain("unexpected positional argument: stray");
+    expect(out).not.toContain("linked:");
+  });
+});
+
 describe("link-skills: fresh run", () => {
   test("links commands, per-skill dirs, AGENTS.md, whole-tree Codex/Gemini targets", () => {
     const dotfiles = makeDotfiles(["alpha-skill", "beta-skill"]);

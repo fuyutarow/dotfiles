@@ -66,6 +66,24 @@ import { typeFlag } from "type-flag";
 const USAGE =
   "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
 
+class UsageError extends Error {}
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new UsageError(`unknown flag(s): --${flag}`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new UsageError(`${flag} requires a value`);
+    return value;
+  };
+}
+
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
@@ -175,10 +193,11 @@ function main(): void {
   const parsed = typeFlag(
     {
       "dry-run": { type: Boolean, default: false },
-      dotfiles: { type: String },
-      home: { type: String },
+      dotfiles: { type: nonEmptyString("--dotfiles") },
+      home: { type: nonEmptyString("--home") },
     },
     Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
   );
 
   // type-flag (unlike `parseArgs({strict: true})`) does NOT throw on an unrecognized flag: it
@@ -190,6 +209,13 @@ function main(): void {
   if (unknown.length > 0) {
     process.stderr.write(
       `unknown flag(s): ${unknown.map((f) => `--${f}`).join(", ")}\n${USAGE}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  if (parsed._.length > 0) {
+    process.stderr.write(
+      `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
     );
     process.exitCode = 2;
     return;
@@ -353,8 +379,12 @@ function main(): void {
 // command run, so its exit status — always 0 — is the task's exit status).
 try {
   main();
-} catch {
-  // swallowed — see comment above.
+} catch (error) {
+  if (error instanceof UsageError) {
+    process.stderr.write(`${error.message}\n${USAGE}`);
+    process.exitCode = 2;
+  }
+  // Every non-usage failure is swallowed — see comment above.
 }
 // `?? 0` preserves the original's unconditional exit 0 for every path main() has always taken;
 // the ONE new path (the unknown-flag guard above) sets `process.exitCode = 2` and returns before

@@ -3,7 +3,7 @@
 // refusal text, exit codes, and passthrough semantics as the bracket for the
 // upcoming refactor.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -60,6 +60,27 @@ describe("lint-floor --fix refusal", () => {
 });
 
 describe("lint-floor passthrough (no --fix)", () => {
+  test("magic-looking unknown flags are forwarded byte-for-byte, not lost in unknownFlags", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lint-floor-bunx-"));
+    const fakeBunx = join(dir, "bunx");
+    writeFileSync(
+      fakeBunx,
+      "#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(Bun.argv.slice(2)));\n",
+    );
+    chmodSync(fakeBunx, 0o755);
+    try {
+      const { out, err, code } = run(["--__proto__", "target.md"], {
+        PATH: `${dir}:${process.env.PATH ?? ""}`,
+      });
+      const relayed = JSON.parse(out) as string[];
+      expect(relayed.slice(-2)).toEqual(["--__proto__", "target.md"]);
+      expect(err).toBe("");
+      expect(code).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("exit code passes through cleanly: --version", () => {
     const { code } = run(["--version"]);
     expect(code).toBe(0);
@@ -84,10 +105,15 @@ describe("lint-floor passthrough (no --fix)", () => {
     const dir = mkdtempSync(join(tmpdir(), "lint-floor-cwd-"));
     const target = join(dir, "probe.md");
     writeFileSync(target, "This is a test sentence for lint floor probing.\n");
-    const proc = Bun.spawnSync(["bun", FLOOR, target], { cwd: dir, maxBuffer: 4 * 1024 * 1024 });
+    const proc = Bun.spawnSync(["bun", FLOOR, target], {
+      cwd: dir,
+      maxBuffer: 4 * 1024 * 1024,
+    });
     // With the real default config resolved, textlint runs the house rules
     // (not "no rules found") regardless of which directory invoked it from.
-    expect(proc.stdout.toString() + proc.stderr.toString()).not.toContain("No rules found");
+    expect(proc.stdout.toString() + proc.stderr.toString()).not.toContain(
+      "No rules found",
+    );
     rmSync(dir, { recursive: true, force: true });
   });
 });

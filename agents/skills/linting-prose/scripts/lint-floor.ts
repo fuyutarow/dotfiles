@@ -1,8 +1,31 @@
 import { dirname, resolve } from "node:path";
+import { typeFlag } from "type-flag";
 
+// argv-forwarding: textlint
 const args = Bun.argv.slice(2);
+const parsed = typeFlag(
+  {
+    fix: { type: [Boolean], default: () => [] },
+    "fix-dry-run": { type: [Boolean], default: () => [] },
+  },
+  [...args],
+  { ignore: (type) => type === "unknown-flag" },
+);
+// This CLI deliberately forwards downstream textlint flags. They are ignored into the
+// untouched `args` relay rather than accepted as this wrapper's own flags.
 if (
-  args.some((argument) => argument === "--fix" || argument === "--fix-dry-run")
+  Object.getPrototypeOf(parsed.unknownFlags) !== Object.prototype ||
+  Object.keys(parsed.unknownFlags).length > 0
+) {
+  throw new Error("type-flag forwarding invariant violated");
+}
+const bannedAfterSeparator = parsed._["--"].some(
+  (argument) => argument === "--fix" || argument === "--fix-dry-run",
+);
+if (
+  parsed.flags.fix.length > 0 ||
+  parsed.flags["fix-dry-run"].length > 0 ||
+  bannedAfterSeparator
 ) {
   process.stderr.write(
     "REFUSED: --fix is banned on the prose floor (detect-only; prh replacements are guidance, not text).\n",

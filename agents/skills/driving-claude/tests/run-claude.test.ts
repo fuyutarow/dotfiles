@@ -6,6 +6,20 @@ import { probeModels } from "../scripts/probe-models.ts";
 import { isRecord, runClaude, toRelay } from "../scripts/run-claude.ts";
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
+const runnerScript = resolve(import.meta.dir, "../scripts/run-claude.ts");
+const probeScript = resolve(import.meta.dir, "../scripts/probe-models.ts");
+
+function runCli(
+  script: string,
+  args: string[],
+): { exitCode: number; stderr: string; stdout: string } {
+  const result = Bun.spawnSync(["bun", script, ...args]);
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr.toString(),
+    stdout: result.stdout.toString(),
+  };
+}
 
 async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   const target = await mkdtemp(join(tmpdir(), "driving-claude-test-"));
@@ -79,5 +93,43 @@ describe("driving-claude runner", () => {
 
     expect(relay.result).toBe("OK");
     expect(relay.structured_output).toBeUndefined();
+  });
+});
+
+describe("driving-claude argv boundary", () => {
+  test("run-claude rejects --__proto__", () => {
+    const result = runCli(runnerScript, ["--__proto__"]);
+    expect(result.exitCode).toBe(2);
+    expect(JSON.parse(result.stdout).error).toContain(
+      "Unknown option '--__proto__'",
+    );
+    expect(result.stderr).toBe("");
+  });
+
+  test("run-claude rejects every String flag with no value", () => {
+    for (const flag of [
+      "--target",
+      "--prompt-file",
+      "--model",
+      "--permission-mode",
+      "--allowed-tools",
+      "--json-schema-file",
+      "--claude-bin",
+    ]) {
+      const args = [flag];
+      const result = runCli(runnerScript, args);
+      expect(result.exitCode).toBe(2);
+      const envelope = JSON.parse(result.stdout);
+      expect(envelope.exit_code).toBe(2);
+      expect(envelope.error).toContain(`${flag} requires a value`);
+      expect(result.stderr).toBe("");
+    }
+  });
+
+  test("probe-models rejects --__proto__ before resolving Claude", () => {
+    const result = runCli(probeScript, ["--__proto__"]);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("unknown option '--__proto__'");
+    expect(result.stdout).toBe("");
   });
 });

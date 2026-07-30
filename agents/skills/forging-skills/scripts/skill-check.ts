@@ -1,6 +1,16 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 let failures = 0;
 
@@ -264,7 +274,13 @@ async function checkDirectory(input: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const directories = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const directories = parsed._;
   for (const directory of directories.length === 0
     ? [process.cwd()]
     : directories)

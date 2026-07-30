@@ -1,4 +1,14 @@
 import { existsSync } from "node:fs";
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 type Gate = Readonly<{
   id: string;
@@ -40,7 +50,15 @@ function threshold(value: string): boolean {
 }
 
 async function input(): Promise<string> {
-  const path = Bun.argv[2];
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const [path, ...extra] = parsed._;
+  if (extra.length > 0)
+    throw new Error("usage: bun gate-check.ts [thesis.md|-]");
   if (path === undefined || path === "-")
     return new Response(Bun.stdin.stream()).text();
   if (!existsSync(path)) throw new Error(`gate-check: file not found: ${path}`);

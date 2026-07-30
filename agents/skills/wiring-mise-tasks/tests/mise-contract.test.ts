@@ -4,7 +4,13 @@
 // fixture spawns the REAL `mise` binary (no fake) — the contract under test is
 // this repo's `mise tasks ls --json` integration, not a mock of it.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,12 +31,20 @@ function resolveRealBun(): string {
 const CONTRACT = new URL("../scripts/mise-contract.ts", import.meta.url)
   .pathname;
 // tests/ -> forging-skills/ -> skills/ -> agents/ -> repo root
-const REPO_ROOT = new URL("../../../../", import.meta.url).pathname.replace(/\/$/, "");
+const REPO_ROOT = new URL("../../../../", import.meta.url).pathname.replace(
+  /\/$/,
+  "",
+);
 
 function run(...args: string[]): { out: string; code: number } {
   // bounded: mise reads only the fixture's own mise.toml, no network, one-shot
-  const proc = Bun.spawnSync(["bun", CONTRACT, ...args], { maxBuffer: 1024 * 1024 });
-  return { out: proc.stdout.toString() + proc.stderr.toString(), code: proc.exitCode ?? -1 };
+  const proc = Bun.spawnSync(["bun", CONTRACT, ...args], {
+    maxBuffer: 1024 * 1024,
+  });
+  return {
+    out: proc.stdout.toString() + proc.stderr.toString(),
+    code: proc.exitCode ?? -1,
+  };
 }
 
 function makeRoot(miseToml: string): string {
@@ -40,44 +54,26 @@ function makeRoot(miseToml: string): string {
 }
 
 describe("mise-contract floor", () => {
-  // 2026-07-25: the verb contract still holds exactly as before — asserted below. What
-  // changed is that RUNTIME-DECLARED and BODY-IS-DECLARATION now also run, and this repo
-  // FAILs both (bun/uv/rust invoked but undeclared; link:skills 79 lines, cc:install-mcp 52,
-  // cache:clean 33). That debt is real and dated; the assertion records it rather than
-  // hiding it by weakening the check.
-  test("this repo's mise.toml: verb contract intact; the new body/tools rules FAIL (dated debt)", () => {
+  test("rejects --__proto__ before resolving or launching mise", () => {
+    const { out, code } = run("--__proto__");
+    expect(out).toContain("unknown option '--__proto__'");
+    expect(code).toBe(2);
+  });
+
+  test("this repo's mise.toml satisfies verbs, runtime declaration, and body size", () => {
     const { out, code } = run(REPO_ROOT);
-    expect(code).toBe(1);
-    for (const line of ["link:skills", "cc:install-mcp", "cache:clean"])
-      expect(out).toContain(`body: task '${line}'`);
-    // bun became declared on 2026-07-25; uv/rust remain deliberately undeclared
-    // (declaring them would shadow existing toolchains — a separate decision).
+    expect(code).toBe(0);
+    expect(out).not.toContain("FAIL");
+    expect(out).not.toContain("invoke 'uv' but [tools] does not declare it");
     expect(out).toContain("OK    tools: bun declared");
-    expect(out).toContain("invoke 'uv' but [tools] does not declare it");
     expect(out).toContain("OK    fmt\n");
     expect(out).toContain("OK    check\n");
   });
 
-  test.skip("PRE-2026-07-25 baseline: clean verb-contract output (restore once the debt above is paid)", () => {
+  test("current clean aggregate remains at zero hard findings", () => {
     const { out, code } = run(REPO_ROOT);
-    expect(out).toBe(
-      "OK    fmt\n" +
-        "OK    f\n" +
-        "OK    fmt:check\n" +
-        "OK    lint\n" +
-        "OK    test\n" +
-        "OK    up\n" +
-        "OK    check\n" +
-        "WAIVE setup\n" +
-        "WAIVE i\n" +
-        "OK    l\n" +
-        "OK    t\n" +
-        "OK    u\n" +
-        "OK    c\n" +
-        "WARN  grammar: hyphen in task name (colon-only rule): " +
-        "cc:install-mcp hook:post-commit hook:post-merge hook:pre-commit " +
-        "lint:skills-index wsl:fix-gitexe\n" +
-        `—     mise-contract: 0 hard, 1 warn (${REPO_ROOT})\n`,
+    expect(out).toContain(
+      `—     mise-contract: 0 hard, 1 warn (${REPO_ROOT})\n`,
     );
     expect(code).toBe(0);
   });
@@ -108,7 +104,9 @@ describe("mise-contract floor", () => {
   test("mise.toml has no [tasks] at all: FAIL 'no local mise tasks', exit 1", () => {
     const dir = makeRoot("[tools]\n");
     const { out, code } = run(dir);
-    expect(out).toBe(`FAIL  ${dir}: no local mise tasks (contract not adopted)\n`);
+    expect(out).toBe(
+      `FAIL  ${dir}: no local mise tasks (contract not adopted)\n`,
+    );
     expect(code).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -151,7 +149,9 @@ describe("mise-contract floor", () => {
     expect(out).toContain(
       "WARN  waiver for 'bogus-token' has no ' -- <reason>' — inert (reason is required)\n",
     );
-    expect(out).toContain("FAIL  f — unresolved: mise run f would die with 'no task f found'\n");
+    expect(out).toContain(
+      "FAIL  f — unresolved: mise run f would die with 'no task f found'\n",
+    );
     expect(code).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });
@@ -216,7 +216,10 @@ describe("mise-contract floor", () => {
 
   test("no arguments: defaults to root '.'", () => {
     const dir = makeRoot('[tasks.hello]\nrun = "echo hi"\n');
-    const proc = Bun.spawnSync(["bun", CONTRACT], { cwd: dir, maxBuffer: 1024 * 1024 });
+    const proc = Bun.spawnSync(["bun", CONTRACT], {
+      cwd: dir,
+      maxBuffer: 1024 * 1024,
+    });
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(out).toContain("FAIL  fmt — unresolved");
     expect(out).toContain(`—     mise-contract: 7 hard, 6 warn (${dir})\n`);

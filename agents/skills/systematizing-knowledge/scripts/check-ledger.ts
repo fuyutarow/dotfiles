@@ -4,6 +4,16 @@
  */
 
 import { existsSync } from "node:fs";
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 const claimTypes = new Set([
   "definition",
@@ -380,7 +390,14 @@ const checkFile = async (path: string): Promise<FileResult> => {
 };
 
 const main = async (): Promise<void> => {
-  const paths = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined) {
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  }
+  const paths = parsed._;
   const path = paths[0];
   if (paths.length !== 1 || path === undefined) {
     process.stderr.write("Usage: bun check-ledger.ts <claims.jsonl>\n");

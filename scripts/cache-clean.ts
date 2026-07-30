@@ -22,6 +22,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { typeFlag } from "type-flag";
 
+class UsageError extends Error {}
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new UsageError(`Unknown option '--${flag}'`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new UsageError(`${flag} requires a value`);
+    return value;
+  };
+}
+
 // ---- pure/testable helpers -------------------------------------------------------------
 
 /** `df -h <home> | awk 'NR==2{print $4" free"}'` — read-only, safe against any existing path. */
@@ -238,16 +256,17 @@ async function main(): Promise<void> {
   const parsed = typeFlag(
     {
       "dry-run": { type: Boolean, default: false },
-      home: { type: String },
+      home: { type: nonEmptyString("--home") },
     },
     Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
   );
 
   const unknown = Object.keys(parsed.unknownFlags);
   if (unknown.length > 0) {
     // mirrors node:util parseArgs' "Unknown option '--x'" (message text is an approximation,
     // not byte-identical — see this migration's contract_changes)
-    throw new Error(`Unknown option '--${unknown[0]}'`);
+    throw new UsageError(`Unknown option '--${unknown[0]}'`);
   }
   if (parsed._.length > 0) {
     // mirrors node:util parseArgs' "Unexpected argument 'x'..." (strict:true + implicit
@@ -327,6 +346,6 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   main().catch((err) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    process.exit(err instanceof UsageError ? 2 : 1);
   });
 }

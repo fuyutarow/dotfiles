@@ -1,6 +1,22 @@
 import { existsSync, statSync } from "node:fs";
 import { typeFlag } from "type-flag";
 
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`Unknown option '--${flag}'`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new Error(`${flag} requires a value`);
+    return value;
+  };
+}
+
 const permissionModes = new Set([
   "acceptEdits",
   "auto",
@@ -177,7 +193,10 @@ function requiredValue(value: string | undefined, option: string): string {
 // number (NaN/Infinity — surfaces as `null` through JSON.stringify, which is how this was
 // first measured) instead of raising, unlike the old hand-rolled `Number(value)` + throw.
 // Every Number flag is routed through this null-or-not-positive check before use (W11).
-function positiveNumber(value: number | null | undefined, label: string): number {
+function positiveNumber(
+  value: number | null | undefined,
+  label: string,
+): number {
   if (
     value === null ||
     value === undefined ||
@@ -188,7 +207,10 @@ function positiveNumber(value: number | null | undefined, label: string): number
   return value;
 }
 
-function positiveInteger(value: number | null | undefined, label: string): number {
+function positiveInteger(
+  value: number | null | undefined,
+  label: string,
+): number {
   const parsed = positiveNumber(value, label);
   if (!Number.isInteger(parsed)) throw new Error(`${label} must be an integer`);
   return parsed;
@@ -205,20 +227,27 @@ async function configFromCli(): Promise<RunConfig> {
   // line (e.g. `promptFile` here is set by `--prompt-file`) — the CLI spelling is unchanged.
   const parsed = typeFlag(
     {
-      target: { type: String },
-      "prompt-file": { type: String },
-      model: { type: String },
-      "permission-mode": { type: String, default: "plan" },
+      target: { type: nonEmptyString("--target") },
+      "prompt-file": { type: nonEmptyString("--prompt-file") },
+      model: { type: nonEmptyString("--model") },
+      "permission-mode": {
+        type: nonEmptyString("--permission-mode"),
+        default: "plan",
+      },
       "max-turns": { type: Number, default: 12 },
       "timeout-ms": { type: Number, default: 300_000 },
       "max-budget-usd": { type: Number },
-      "allowed-tools": { type: String },
-      "json-schema-file": { type: String },
-      "claude-bin": { type: String, default: "claude" },
+      "allowed-tools": { type: nonEmptyString("--allowed-tools") },
+      "json-schema-file": { type: nonEmptyString("--json-schema-file") },
+      "claude-bin": {
+        type: nonEmptyString("--claude-bin"),
+        default: "claude",
+      },
       "safe-mode": { type: Boolean, default: false },
       bare: { type: Boolean, default: false },
     },
     Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
   );
 
   // type-flag does not throw on unknown flags the way `parseArgs({strict: true})` did — they

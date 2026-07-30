@@ -1,10 +1,14 @@
-import { parseArgs } from "node:util";
+import { typeFlag } from "type-flag";
 import {
   cloudflare,
   diagnostic,
   isRecord,
+  nonEmptyString,
   output,
+  rejectUnknownFlag,
+  rejectUnexpectedArguments,
   requiredValue,
+  UsageError,
 } from "./lib.ts";
 
 function fail(check: string, detail: string): never {
@@ -19,16 +23,18 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
-    args: Bun.argv.slice(2),
-    options: {
-      "worker-url": { type: "string" },
-      "account-id": { type: "string" },
-      sitekey: { type: "string" },
-      "expected-domains": { type: "string" },
+  const parsed = typeFlag(
+    {
+      "worker-url": nonEmptyString,
+      "account-id": nonEmptyString,
+      sitekey: nonEmptyString,
+      "expected-domains": nonEmptyString,
     },
-    strict: true,
-  });
+    Bun.argv.slice(2),
+    { ignore: rejectUnknownFlag },
+  );
+  rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
+  const values = parsed.flags;
   const workerUrl = requiredValue(values["worker-url"], "--worker-url").replace(
     /\/$/,
     "",
@@ -85,6 +91,10 @@ async function main(): Promise<void> {
   output({ status: "ok" });
 }
 
-main().catch((error) =>
-  fail("health", error instanceof Error ? error.message : String(error)),
-);
+main().catch((error) => {
+  if (error instanceof UsageError) {
+    diagnostic(`validate: ${error.message}`);
+    process.exit(2);
+  }
+  fail("health", error instanceof Error ? error.message : String(error));
+});

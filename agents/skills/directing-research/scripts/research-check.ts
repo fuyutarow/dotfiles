@@ -1,5 +1,16 @@
 /** Structural floor check for a filled directing-research RESEARCH SPEC. */
 
+import { typeFlag } from "type-flag";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
+
 type SlotName =
   | "g1s"
   | "g1l"
@@ -62,7 +73,13 @@ function atLeastItems(value: string, minimum: 2 | 3): boolean {
 }
 
 async function readInput(): Promise<string> {
-  const [input, ...extra] = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const [input, ...extra] = parsed._;
   if (extra.length > 0)
     throw new Error("usage: bun research-check.ts [spec.md|-]");
   if (input === undefined || input === "-")

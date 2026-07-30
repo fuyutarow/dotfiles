@@ -1,7 +1,17 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { typeFlag } from "type-flag";
 import { isRecord, runClaude, type RunConfig } from "./run-claude.ts";
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 type ProbeKind = "AVAILABLE" | "INCONCLUSIVE" | "FATAL";
 
@@ -97,7 +107,13 @@ function usage(): never {
 }
 
 async function main(): Promise<void> {
-  const models = Bun.argv.slice(2);
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined)
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  const models = parsed._;
   if (models.length === 0) usage();
   const maxBudgetUsd = Number(
     process.env.CLAUDE_PROBE_MAX_BUDGET_USD ?? "0.20",

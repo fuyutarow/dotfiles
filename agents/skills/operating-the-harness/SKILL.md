@@ -1,27 +1,27 @@
 ---
 name: operating-the-harness
 description: >-
-  Operate Claude Code itself well — keep CLAUDE.md lean as a context budget and engineer the harness
-  (hooks, permissions, a runnable verification loop) so Claude checks its own work instead of you.
-  Use whenever setting up or auditing a CLAUDE.md / AGENTS.md / .claude/ directory, writing or
-  debugging hooks, settings.json permissions, MCP servers (.mcp.json), slash commands or Skills
-  (SKILL.md), subagents (.claude/agents), or designing a plan-mode / verification / parallel
-  (worktree, headless) workflow. Also fires on skill-mechanics symptoms: skill not listed, not
-  triggering, スキルが発火しない, listing budget, /doctor. Cut: skill CONTENT craft — distillation, sibling
-  cuts, fire/no-fire trigger sets, description wording → forging-skills (co-fires on skill
-  authoring; this skill owns the harness contract). MANDATORY — read this before editing any
-  .claude/ config, memory, or hook file. Two precedence-setting rules live inline: (1) CLAUDE.md is
-  a context budget — target under 200 lines, lazy-load the rest via path-scoped .claude/rules/*.md
-  or Skills, never config-as-prose; (2) give Claude a machine-readable check and put hard
-  enforcement in hooks/settings.json, not in prose. Trigger on CLAUDE.md, AGENTS.md, .claude/rules,
-  settings.json, /memory, /init, /compact, /permissions, /hooks, /doctor, plan mode, hooks,
-  PreToolUse, PostToolUse, bypassPermissions, sandbox, subagent, .claude/agents, worktree, SKILL.md,
-  slash command, $ARGUMENTS, MCP, .mcp.json, headless, claude -p, verification loop.
+  Operate Claude Code itself well — keep CLAUDE.md lean as a context budget, put enforcement in the
+  harness (hooks, permissions, a runnable check) so Claude checks its own work instead of you, and
+  register every rule at the NARROWEST scope that covers it. Use whenever setting up or auditing a
+  .claude/ directory, writing or debugging hooks, permissions, MCP servers, commands, Skills,
+  subagents, or a plan-mode / verification / parallel workflow. Also: skill not listed / not
+  triggering / スキルが発火しない / listing budget. Cut: skill CONTENT craft — distillation, sibling
+  cuts, trigger sets, wording → forging-skills (co-fires; this skill owns the harness contract).
+  MANDATORY — read before editing any .claude/ config, memory, or hook file. Three precedence rules
+  live inline: (1) CLAUDE.md is a context budget — under 200 lines, lazy-load via path-scoped
+  .claude/rules/*.md or Skills, never config-as-prose; (2) give Claude a machine-readable check and
+  put hard enforcement in hooks/settings.json, not prose; (3) a rule naming ONE repo belongs in that
+  repo's .claude/, never in ~/.claude/ behind a cwd check. Trigger on CLAUDE.md, AGENTS.md,
+  .claude/rules, settings.json, ~/.claude, user vs project scope, CLAUDE_PROJECT_DIR, /memory,
+  /init, /compact, /permissions, /hooks, /doctor, plan mode, hooks, PreToolUse, PostToolUse,
+  bypassPermissions, sandbox, subagent, .claude/agents, worktree, SKILL.md, slash command,
+  $ARGUMENTS, MCP, .mcp.json, headless, claude -p, verification loop.
 ---
 
 # Claude Code — Operating Discipline & Harness Engineering
 
-> **Version**: v2606.1.0 (2026-06-18) — verified against `code.claude.com/docs`.
+> **Version**: v2607.1.0 (2026-07-29) — P3 (scope) + this skill's first floor & ledger.
 > **Scope**: how to *operate and configure Claude Code itself* well — CLAUDE.md/memory
 > discipline, the verification loop, hooks, permissions/settings, MCP, Skills/commands,
 > subagents/parallelism, plan-mode & context workflow. Host-agnostic.
@@ -35,6 +35,14 @@ description: >-
 > だけ" → `shanraisshan/claude-code-best-practice` → `code.claude.com/docs` +
 > `anthropic.com/engineering`). Version-pinned facts (e.g. "v2.1.83+") were current in 2026-06;
 > re-verify against the docs if a feature seems to have moved.
+
+```bash
+for f in memory hooks settings-permissions-mcp commands-and-skills subagents-and-parallelism \
+  workflow-and-context headless-and-ci methodologies; do
+  test -f references/$f.md || echo MISSING references/$f.md; done
+test -f scripts/scope-check.ts || echo MISSING scope-check.ts
+test -f tests/forge-verification-ledger.md || echo MISSING ledger
+```
 
 The whole field of "Claude Code tips" collapses to **two principles**. Everything else is a
 recipe. **Read §0–§3 inline first** — they set precedence — then open the one reference that
@@ -54,6 +62,13 @@ hooks, the verify loop — makes things actually happen. The most-repeated rule 
 **Claude stops when work *looks* done; without a check it can run, *you* become the verification
 loop.** Hand it a machine-readable pass/fail and demand evidence, not assertion.
 
+**P3 — Every rule has TWO coordinates: which *mechanism*, and which *scope*.** The reflex below
+answers only the first. Register a rule at the **narrowest level that covers what it names**.
+A rule naming one repo belongs in that repo's `.claude/`. Putting it in `~/.claude/` behind a
+`cwd.startsWith(...)` check is **not scoping** — it is a global rule with an early return. It still
+spawns on every event in every project. Its failures still reach unrelated sessions. And a
+machine-absolute path still lands in a config you share across machines.
+
 > A fast implementation of the wrong thing is still wrong; **unverified work is unfinished.**
 > Anthropic's own "effective harnesses" research found a plain loop (progress file + git history +
 > one feature at a time + self-verify) beats elaborate multi-agent pipelines — the discipline the
@@ -69,6 +84,20 @@ loop.** Hand it a machine-readable pass/fail and demand evidence, not assertion.
 | Something that **must happen every time** (format, log, guard) | **a hook** | deterministic; CLAUDE.md *cannot* enforce |
 | A hard allow/deny of a tool or path | **`settings.json` permissions** | enforced regardless of the model |
 | Proof that it worked | **a check Claude runs** (tests/build/lint/screenshot) | closes the loop so Claude iterates alone |
+
+### …then the scope — the second coordinate (P3)
+
+| The rule names… | Register it in | It then runs in |
+|---|---|---|
+| **one repo** — its paths, its canon, its policy | that repo's `.claude/settings.json`; hooks under `${CLAUDE_PROJECT_DIR}/.claude/hooks/` | that repo only |
+| how **you** work in every repo | `~/.claude/settings.json` | every session on the machine |
+| a secret, or a path only **this machine** has | `.claude/settings.local.json` (gitignored) | you, uncommitted |
+| org policy nobody may override | managed settings (MDM) | everyone, unoverridably |
+
+**Never hardcode an absolute project path in a user-scope file.** On another machine it is a path
+that does not exist. In another repo it is a process spawned to return 0. `scripts/scope-check.ts`
+is the deterministic floor here — run it before shipping any `~/.claude` change. Full precedence
+table: `references/settings-permissions-mcp.md`.
 
 ### Match tool weight to task size (default to vanilla)
 
@@ -213,6 +242,11 @@ the source, gate only the residue that is deterministically always-wrong.
   **`auto` mode** (classifier-gated) instead; lock the flag out org-wide via
   `permissions.disableBypassPermissionsMode: "disable"`.
 - **Config-as-prose** — asking in CLAUDE.md for what `settings.json`/hooks should *enforce*.
+- **Project policy at user scope** (P3) — a hook or permission that names ONE repo, registered in
+  `~/.claude/settings.json` and gated by a `cwd` check. The gate hides nothing. The process still
+  spawns on every matching event in every project; a bug in it reaches unrelated sessions; the
+  absolute path is dead weight elsewhere. Move it to that repo's `.claude/`, where the cwd check
+  then **deletes itself** — the rule is only loaded where it applies.
 - **Bloated CLAUDE.md** — over ~200 lines reduces adherence; never include inferable-from-code
   content or self-evident advice.
 - **`@path` imports "to save context"** — they expand at launch; use rules/Skills to defer.
@@ -252,3 +286,11 @@ When setting up or auditing a project's Claude Code config, in order:
 7. **`CLAUDE.md`, `.claude/settings.json`, `.claude/rules/`, `.claude/commands/`, `.claude/skills/`,
    `.claude/agents/` checked into git**; `.claude/settings.local.json` and `.claude/worktrees/`
    gitignored?
+
+Then audit the OTHER scope — the one a project-shaped checklist cannot see (P3):
+
+8. **`~/.claude/` carries nothing that names a single repo?** Run `bun scripts/scope-check.ts`; it
+   greps user-scope hooks and settings for absolute project paths. Every hit belongs in that repo's
+   `.claude/`. Then budget the survivors: each user-scope hook costs a process on **every** matching
+   event in **every** project. A hook with no owner and no retirement condition is a permanent
+   tax — retire it or move it down.

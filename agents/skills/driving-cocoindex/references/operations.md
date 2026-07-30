@@ -131,6 +131,14 @@ that a bare `rg redirect` buries under a wall of unrelated `redirect_*` identifi
    in the wrong tool). Route enumeration/refactoring-safety tasks to `ccc grep` or `rg`, never
    `ccc search`.
 
+House invocation is `repo-search <route>`: `concept` / `battery` select `ccc search`,
+`literal` / `exhaustive` / `files` select rg, and `structural` selects `ccc grep`. The canonical
+entrypoint is colocated with the live hook at `bun ~/.claude/hooks/repo-search.ts`; the PATH
+command is only a convenience link. A missing canonical file is a configuration fault, not
+permission to call ccc search/grep directly or emulate search with Python, Node, or shell loops.
+Exit-zero ccc output without a `--- Result` block is reported as NO_MATCH, never PASS. This file remains the arguing home for
+why each backend fits; the router owns deterministic dispatch, timeout, and result classification.
+
 **Query phrasing that helps**: describe the *mechanism* the code performs, not the topic word a
 doc section heading would use — a query that echoes a heading verbatim invites the doc-bias
 failure mode above. **Pagination**: `--limit`/`--offset` to look past a shallow top-N before
@@ -189,9 +197,10 @@ cosine matrices → `catalog.md` §Markdown-corpus trial) actually measured:
    - **No EN↔JA bridging** in either direction.
    - Exact-token misses are NOT wall evidence: an EN control token unique to one file was
      missed just as completely as the JA one — that is CC3's general top-k limitation;
-     route exact-token lookups to `rg` in any language.
+     route exact-token lookups to `repo-search literal` in any language.
    A pure-Japanese notes vault gets no dependable semantic search from the default model —
-   route literal lookups to `rg` and gate any semantic promise on the model swap below.
+   route literal lookups to `repo-search literal` and gate any semantic promise on the model
+   swap below.
 3. **The fix, chosen and END-TO-END VERIFIED.** The measured recommendation is
    `ibm-granite/granite-embedding-311m-multilingual-r2` (dim 768) — chosen 2026-07-17 by a
    JA-notes + code A/B pilot in which it beat the prior granite-97m-r2 on BOTH halves, notes

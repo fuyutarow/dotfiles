@@ -285,3 +285,63 @@ SKILL.md の当該節を残した。
 `driving-serena` への SYMBOL-vs-CONCEPT seam に更新した。既存 PROSE-DEBT waiver の queue
 位置は不変。`skill-check.ts` の再計測は長文24・版見出し20・長セル1で、既存 floor から
 負債の純増なし。
+
+## 2026-07-30: declared QUERY-SHAPE router + raw-search gate
+
+**Observed failure and decision.** The existing PostToolUse nudge let raw Grep/rg run first and
+could be silenced by any one ccc invocation. It optimized “ccc was called once,” not whether the
+query shape selected the right engine. The replacement bans the unclassified surface in a
+ccc-enabled registered project and routes through the executable `repo-search --help` contract:
+concept/battery→ccc search, literal/exhaustive/files→rg, structural→ccc grep, symbol→Serena.
+
+**One-home placement.** Backend fitness remains argued in `references/operations.md`; deterministic
+dispatch/timeout lives in `agents/claude/hooks/repo-search.ts`; enforcement lives in the user-global
+PreToolUse hook. SKILL.md contains only the route pointer and CC3 artifact. No script was duplicated
+inside this skill.
+
+**Red→green.** Before implementation, the two new test files reported 19 failures. After the
+router and hook landed: 19 pass / 68 assertions. The full hook suite then passed 120 tests with one
+pre-existing optional skip. Fixtures prove rg remains available through declared lexical routes,
+unregistered/ccc-absent projects retain direct fallback, ccc concept search never silently
+degrades to rg, and a hung ccc child returns 124.
+
+**Hostile deployment regression, same day.** Because `settings.json` was already a live symlink
+while the new PATH link had not been run, a worker saw the deny gate before it saw `repo-search`.
+It then explicitly proposed replacing grep with Python and performed repository traversal there.
+That is not user error: the first design split enforcement and its required entrypoint across two
+deployment moments, and its message failed to make “stop, never bypass” a hard rule.
+
+The fix colocates the router with the already-linked hook directory, makes that file the canonical
+entrypoint, checks its presence before every denial, names bypass as forbidden, and catches the
+observed os.walk/pathlib plus Node/Bun inline traversal family. Direct ccc search/grep is denied
+too, because otherwise timeout and empty-result classification remain bypassable. A PATH symlink
+remains convenience only. Separate red tests also prove an exit-zero ccc call with no `--- Result` block becomes
+NO_MATCH rather than PASS, and that the tracked router remains executable. This is a high-signal
+policy guard, not a claim that a shell hook can prove the intent of arbitrary programs. Expanded
+targeted suite: 25 pass / 118 assertions; full hook suite: 126 pass / one pre-existing optional
+skip / 310 assertions.
+
+**Live ccc probe.** Registration and refresh succeeded: 724 files, 0 changed, 0 errors. Three
+semantic queries then produced no output while other daemon projects reported `[indexing]`.
+Only this run's client PIDs were terminated. The concurrent indexing is recorded as context, not
+asserted as the cause; the verified product requirement is a bounded child, now tested.
+
+**F3 description desk-check (name + 1008-character description only).**
+
+| Ask | Verdict |
+|---|---|
+| 「識別子不明だけど認可を実装している場所を意味検索して」 | FIRE |
+| “ccc search is stale and misses recent edits” | FIRE |
+| 「日本語のノートをcccで概念検索したい」 | FIRE |
+| “make this PDF searchable through ccc” | FIRE |
+| 「cccのembeddingモデルを変えたい」 | FIRE |
+| “list every TODO occurrence” | NO-FIRE → `repo-search literal` |
+| “rename this known symbol and update callers” | NO-FIRE → `driving-serena` |
+| 「このrepoを俯瞰して読む順番を教えて」 | NO-FIRE → Explore |
+| “install or upgrade cocoindex-code” | NO-FIRE → `running-python-tools` |
+| 「見つけたノートを統合してレビューを書いて」 | NO-FIRE → `systematizing-knowledge` |
+
+**PROSE-DEBT waiver.** The description is now below the API cap and the version block is clean.
+The remaining floor is 22 long prose sentences and one long table cell, down from the prior
+24/20/1 waiver. Both are pre-existing argued-content debt; this focused mechanism change did not
+attempt the queued full prose reforge.

@@ -23,3 +23,17 @@ touch: Routing 表に driving-cocoindex の co-fire 行(ccc 登録 repo での�
 重複実装経路の閉鎖。本 skill は実装タスクで確実に発火する現職なので、この行が「実装の瞬間」に
 読まれる機構になる)。床の実測: 長文18・版見出し7行・長セル1(+新行のセルは400字未満)— 既存
 負債で増分なし。waiver 記載、staleness 行により reforge queue 入り。
+
+## 2026-07-30: reciprocal QUERY-SHAPE seam
+
+The existing `driving-cocoindex` co-fire row now invokes `repo-search battery` before new
+functionality and names `repo-search literal` as the valid exact-token route. This mirrors the
+owner's CC3 change without arguing backend selection here. Floor counts remain the waived
+18 long prose sentences / 7-line version block / one long table cell; this seam edit added no new
+warning class and remains queued with the prior waiver.
+
+The frontmatter description was compressed to 866 characters to restore the API limit while
+retaining implementation/debug/performance triggers and sibling cuts. Desk check from name +
+description: feature implementation, persistent bug, performance optimization, root-cause
+analysis, and pre-redesign intent reconstruction FIRE; typo-only edit, behavior-preserving
+refactor, present-fact inspection, future experiment, and post-hoc diff review route elsewhere.

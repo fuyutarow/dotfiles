@@ -16,10 +16,14 @@
   declared escalation for work Sonnet cannot reach. This follows Anthropic's own guidance:
   default to Opus, reserve the Fable tier for the highest-capability workloads. Fable also
   forces 30-day data retention (Covered Model) — never point it at a secret-bearing repo.
-- **ccc-registered repos: semantic search BEFORE new implementations and absence claims.**
-  (覆せる既定 2026-07-24・追認待ち) In a repo with `.cocoindex_code/settings.yml`, do not
-  conclude "not implemented / doesn't exist" from grep alone, and do not start implementing
-  new functionality without a ccc battery first: `ccc search` with ≥3 paraphrases (JA/EN),
-  `--refresh` when files changed. Grep stays correct for literal tokens (driving-cocoindex
-  CC3); the invalid move is grep-only ABSENCE. Duplicate implementations are the measured
-  failure mode this rule closes.
+- **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-search`.**
+  (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
+  a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious
+  inline-runtime search reimplementations. Use `repo-search concept` for unknown-name meaning,
+  `battery` (≥3 JA/EN paraphrases) before absence/new implementation claims, `literal` for exact text,
+  `exhaustive` for regex enumeration, `files` for path inventory, and `structural` for ccc
+  by-example grep; known symbols go to Serena. The guaranteed entrypoint is
+  `bun ~/.claude/hooks/repo-search.ts`; the PATH command is only a convenience symlink. If the
+  guaranteed file is missing, STOP and repair the harness — never bypass the gate with Python,
+  Node, shell loops, or another search implementation. Empty ccc output is NO_MATCH, never PASS.
+  The router deliberately uses rg for lexical routes; the ban is unclassified search.

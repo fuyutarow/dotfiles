@@ -1,50 +1,43 @@
 ---
 name: driving-cocoindex
 description: >-
-  Drives cocoindex-code (ccc) — daemon-backed SEMANTIC search over code AND markdown/notes
-  corpora — from setup to daily driving. Use when a search names a CONCEPT rather than a
-  literal string (「どこで実装されてる？識別子不明」, "find the code that handles X", 意味検索 /
-  セマンティック検索 / コード検索, markdown・ノート・メモ・ナレッジベースの意味検索;
-  PDF・バイナリは非対応→要変換, 「どこかに書いたはずだが言葉を思い出せない」想起検索, ccc, cocoindex, コードインデックス
-  作成/更新, ccc search が古い・ヒットしない, 日本語クエリだけヒットしない, ccc の embedding
-  モデル変更, multi-line/formatter-wrapped signature の構造検索 → ccc grep), or any
-  ccc operation. 監督の環では検収前の帰着照合・「新規性/不在/frontier」主張の前・
-  委任ブリーフ起草前のヒント語照合にも使う; 発火したら battery: 言い換え≥3本・JA/EN 混在
-  token・不在主張はクエリ台帳を分母として添付。LAW: PROJECT-BY-CWD — every verb except ccc grep needs a
-  ccc init-ed cwd: verify registration FIRST (CC1); PULL-BASED — no file watcher;
-  un-refreshed results are silently stale (CC2); ROUTE-BY-QUERY-SHAPE — semantic top-k is
-  never exhaustive (CC3); LANGUAGE-WALL — the default embedding model's topical signal is
-  EN-only: 純和文の意味検索はモデル交換が前提, JA/EN 混在ノートは英語トークンで code-switch
-  検索. Cuts: literal string/regex or every-call-site → Grep/rg (but multi-line STRUCTURAL
-  patterns → ccc grep here); known-symbol semantic defs/refs/rename → driving-serena;
-  open-ended repo tour → Explore agent; install/upgrade the binary → running-python-tools;
-  MCP-server-dead diagnostics → operating-the-harness FIRST (co-fire). Workflow-native:
-  searches fan out under the CC4 relay; routing + freshness stay SOLO. English skill;
-  respond in the user's language (default Japanese).
+  Drives cocoindex-code (ccc) for semantic search over code and Markdown: project
+  registration, index freshness, ccc search/grep, daemon failures, embedding models,
+  multilingual misses, and PDF/binary conversion. Use for any ccc/cocoindex operation or
+  unknown-identifier concept search (意味検索, コード検索, 「どこで実装」, ノートを概念で探す);
+  absence/novelty and pre-implementation duplicate checks require a ≥3-query JA/EN battery.
+  LAW: PROJECT-BY-CWD, PULL-BASED, ROUTE-BY-QUERY-SHAPE, LANGUAGE-WALL. House route:
+  concept/battery→ccc search; literal/exhaustive/files→rg; structural→ccc grep;
+  symbol→driving-serena. Raw Grep is hook-denied only in operational ccc repos. Cuts:
+  open-ended tour→Explore; install/upgrade→running-python-tools; dead MCP server
+  diagnostics→operating-the-harness FIRST. Search fan-out may parallelize; routing and
+  freshness stay SOLO. Missing router→STOP/repair, never emulate search with Python/Node;
+  empty ccc output→NO_MATCH, not PASS. English skill; respond in the user's language
+  (default Japanese).
 ---
 
 # Driving CocoIndex Code — semantic code search as a disciplined subprocess
 
-> **Version**: v2607.5.1 (2026-07-24 — lineage clarity: the ACTIVE house model is
-> `granite-311m-multilingual-r2` since 2026-07-17 (catalog §Active model); the 97m name below
-> is v2607.3.0 HISTORY, not the current model. Prior: v2607.5.0 2026-07-23 = director-loop
-> anchors + query battery; v2607.4.0 = PDF silent-skip; v2607.3.0 2026-07-13 = first
-> LANGUAGE-WALL swap, to granite-97m-multilingual-r2)
-> **Scope**: operating `ccc` (cocoindex-code) — setup → project lifecycle → search/grep over
-> code AND markdown/notes corpora (NOT PDF/binary — §Gotchas) → daemon → MCP surface → embedding in Workflow scripts;
-> host-agnostic, with a note on this repo's dotfiles-declarative global-settings wiring.
-> **Out of scope**: authoring `cocoindex` (the framework) pipelines yourself — that's plain
-> data-engineering, no skill needed; contributing to `cocoindex-code`'s own Python source →
-> `writing-python`.
-> **Durability contract**: this body asserts NO version numbers, latencies, DB sizes, star
-> counts, or model scores as FACTS — every fast-moving number lives in `references/catalog.md`
-> under its dated header, and one asserted as fact in this body is a bug. Two declared
-> exemptions, both dated bait re-verified on reforge: the description's trigger tokens, and
-> the F3 table's quoted example asks (realistic queries need real names).
-> **Build order (atomic)**: `for f in catalog operations; do test -f references/$f.md || echo MISSING $f; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
-> Durable operating guidance from a frontier model (Fable 5, 2026-07) to whatever model
-> executes this later — encodes failures observed in a live trial. If a constraint here
-> feels unnecessary, that feeling is the failure mode — follow the map.
+> **Version**: v2607.6.1 (2026-07-30 — atomic router entrypoint + no-bypass/empty-result guards).
+> **Active model**: `granite-311m-multilingual-r2`; dated model history lives in `references/catalog.md`.
+
+**Scope.** Operate `ccc`: project lifecycle, semantic and structural search over code/Markdown,
+daemon state, MCP, and embeddings. PDF/binary input requires conversion (§Gotchas).
+
+**Out of scope.** Authoring CocoIndex framework pipelines; contributing to cocoindex-code's Python
+source routes to `writing-python`.
+
+**Durability.** Version numbers, latencies, sizes, and model scores live only in the dated
+`references/catalog.md`. The description's trigger tokens and quoted F3 asks are the declared
+exceptions.
+
+```bash
+for f in catalog operations; do test -f references/$f.md || echo MISSING $f; done
+test -f tests/forge-verification-ledger.md || echo MISSING ledger
+```
+
+Durable guidance from a frontier model to later executors; every retained constraint encodes an
+observed failure mode.
 
 ## Language
 
@@ -52,7 +45,7 @@ Stable tokens even inside Japanese prose: **PROJECT-BY-CWD**, **PROJECT-REGISTER
 repo: init + first index) vs **RE-INDEX** (refreshing an already-registered one) — 'index'
 alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 **LANGUAGE-WALL** (the default embedding model discriminates topics in English only),
-**RELAY**, **fire / no-fire**.
+**RELAY**, **repo-search**, **fire / no-fire**.
 
 ## THE LAW
 
@@ -64,7 +57,8 @@ alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 > edited, `ccc status` shows NO timestamp, and nothing warns; freshness is an action
 > (`ccc index` / `--refresh`), never an assumption. (c) **ROUTE-BY-QUERY-SHAPE**: embedding
 > top-k is not exhaustive and carries a measured doc-over-code bias — exact identifiers,
-> call-site enumeration, and structural patterns belong to rg / serena / `ccc grep`; semantic
+> call-site enumeration, and structural patterns belong to `repo-search`'s rg / Serena /
+> `ccc grep` routes; semantic
 > search earns queries whose vocabulary does NOT match the corpus (code OR prose — markdown
 > corpora are in-scope, §Markdown). (d) **LANGUAGE-WALL**: the default embedding model's
 > topical signal is English-only in practice — pure-JA queries and notes get topic-blind
@@ -78,12 +72,22 @@ alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 
 | Gate | Rule | Artifact |
 |---|---|---|
-| **CC1 REGISTERED** | Before any semantic-search claim, cite live registration evidence (`ccc status` in the target, or the daemon's project list). Unregistered target → the first move is PROJECT-REGISTER (`ccc init && ccc index`; cost table → `references/catalog.md`) or an explicit fallback to Grep/Explore — never a blind `ccc search` | the probe output |
+| **CC1 REGISTERED** | Before any semantic-search claim, cite live registration evidence (`ccc status` in the target, or the daemon's project list). Unregistered target → the first move is PROJECT-REGISTER (`ccc init && ccc index`; cost table → `references/catalog.md`) or an explicit lexical/Explore fallback — never a blind `ccc search` | the probe output |
 | **CC2 FRESH** | Any load-bearing search AFTER edits carries refresh evidence — an `ccc index` run (CLI default does NOT refresh) or `--refresh` / MCP `refresh_index:true` (MCP DEFAULT refreshes; CLI does not — asymmetry stated) | the refresh line adjacent to the hits |
-| **CC3 ROUTE** | Name the query shape before choosing the tool (the QUERY-SHAPE ladder — §Routing, `Grep`/`Explore` row). Wrong shape (e.g. semantic top-k for "every call site of X") is a gate violation even if results look plausible — the live trial measured both missed call sites AND false positives on exactly that shape (numbers → `references/catalog.md`) | the named shape |
+| **CC3 ROUTE** | Name the query shape before choosing the engine (the QUERY-SHAPE ladder — §Routing). On house hosts, invoke `repo-search`; its route is the declaration. Wrong shape (e.g. semantic top-k for "every call site of X") is a gate violation even if results look plausible — the live trial measured both missed call sites AND false positives on exactly that shape (numbers → `references/catalog.md`) | the `repo-search` route + exact query |
 | **CC4 RELAY** | A worker that searched relays VERBATIM {query, tool, hits as file:line + snippet, registration+freshness evidence}; "found it" without locus is quarantined | the relay tuple |
 
 ## The daily loop — invocation recipes (LOW freedom)
+
+On house hosts, `bun ~/.claude/hooks/repo-search.ts --help` is the guaranteed executable
+contract and the only raw-search entrypoint in an operational ccc project; `repo-search` is a
+convenience symlink. Routes: `concept` / `battery` → ccc search;
+`literal` / `exhaustive` / `files` → rg; `structural` → ccc grep; `symbol` → Serena. The
+user-global PreToolUse gate blocks direct Grep/rg/grep/find/fd/tree, direct ccc search/grep, and
+obvious inline-runtime search reimplementations only when ccc and project registration are both present. If the
+canonical router is missing, STOP and repair the harness; never replace search with Python, Node,
+or shell loops. Exit-zero ccc output without result blocks is NO_MATCH, not PASS. Ccc-absent or
+unregistered environments retain lexical fallback.
 
 ```bash
 # PROJECT-REGISTER — once per repo
@@ -124,9 +128,9 @@ top-k as a candidate set (`--limit 10`, then read), never stop at #1 (ranks/band
 argued in §4b: (1) notes churn faster than code — PULL-BASED staleness bites harder,
 `--refresh` every load-bearing lookup; (2) the LANGUAGE-WALL and its code-switch first aid —
 a pure-Japanese vault needs a multilingual model BEFORE any promise (the swap is an
-end-to-end-verified fix that also left EN search better, → §4b.3; rg covers literal lookups
-on unswapped hosts); (3) heading-echo and exact-token queries still belong to rg — in BOTH
-languages (controls → catalog).
+end-to-end-verified fix that also left EN search better, → §4b.3; the router's rg route covers
+literal lookups on unswapped hosts); (3) heading-echo and exact-token queries still belong to
+`repo-search literal` / `exhaustive` — in BOTH languages (controls → catalog).
 
 ## MCP surface — UNREGISTERED globally since 2026-07-25; use the CLI
 
@@ -212,14 +216,14 @@ FIRES:
 | 「markdown のメモ/ノート群も意味検索できる？『どこかに書いたはず』を概念で探したい」 | markdown corpora are in-scope — PROJECT-REGISTER the vault; 日本語ノートなら LANGUAGE-WALL gate first (§Markdown) |
 | 「日本語で ccc search してもまともな結果が出ない」 | LANGUAGE-WALL gotcha — code-switch first aid for JA/EN-mixed notes; pure-JA needs the model swap, not query massaging |
 | 「PDF/論文(ドキュメント)を ccc で意味検索したい」 | ccc は PDF 非対応 — 生 PDF は無言スキップ(§Gotchas)。境界を示し PDF→Markdown 変換 → 変換後 `.md` を PROJECT-REGISTER へ誘導するのがこのスキルの責務(cocoindex フレームワークの docling PDF→MD example は別層・スコープ外) |
-| 「機能重複してた/二重実装を作ってしまった/既存実装があるはずでは」— ccc 登録 repo での新規実装の着手前・grep 0件からの不在結論の前 | the duplicate-implementation pathway (2026-07-24 measured): literal grep 0 hits ≠ absence — battery ≥3 paraphrases FIRST. implementing-and-debugging carries the reciprocal co-fire row; the zero-grep hook nudges at the exact moment |
+| 「機能重複してた/二重実装を作ってしまった/既存実装があるはずでは」— ccc 登録 repo での新規実装の着手前・grep 0件からの不在結論の前 | the duplicate-implementation pathway: literal grep 0 hits ≠ absence — `repo-search battery` with ≥3 paraphrases FIRST. implementing-and-debugging carries the reciprocal co-fire row; the PreToolUse gate rejects unclassified raw search before it runs |
 
 MUST NOT fire (route):
 
 | Ask | Route |
 |---|---|
-| "grep for every TODO comment" | `Grep` — literal string, zero setup |
-| 「ノートのあの見出し、どこだっけ」(フレーズをほぼ覚えている) / 「'deploy' を含むノートを全部列挙」(全文検索) | `Grep`/rg — literal recall & exhaustive listing on markdown; top-k adds nothing a grep doesn't |
+| "grep for every TODO comment" | `repo-search literal --query TODO` — declared literal route, rg engine |
+| 「ノートのあの見出し、どこだっけ」(フレーズをほぼ覚えている) / 「'deploy' を含むノートを全部列挙」(全文検索) | `repo-search literal` / `exhaustive` — literal recall and exhaustive markdown listing use the rg engine; top-k adds nothing |
 | "rename this function safely, resolve its callers semantically" | `driving-serena` — exact symbol relation, not concept or exhaustive lexical occurrence |
 | 「このリポジトリを俯瞰したい、どこから読めばいい？」 | `Explore` agent — open-ended tour, no search term |
 | "install/upgrade the ccc binary" | `running-python-tools` — uv-tool territory, before this skill's scope starts |
@@ -238,8 +242,8 @@ CO-FIRE, ORDERED SECOND (fires, but not first):
 |---|---|
 | `running-python-tools` | INSTALL-vs-DRIVE — getting `ccc` onto PATH, pinning, upgrading (`uv tool install/upgrade cocoindex-code`) → there; everything you do once it's there → here. |
 | `operating-the-harness` | MCP-LIFECYCLE-FIRST — is the `cocoindex-code` MCP server even starting (`.mcp.json`, trust prompt, `claude mcp list`, restart)? → there, co-fire, FIRST; what `ccc` itself does (search/daemon/project semantics), reached via MCP or direct Bash → here. |
-| `driving-serena` | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → Grep; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS. |
-| `Grep` / `Explore` (non-skill) | QUERY-SHAPE ladder — literal string/regex/every-call-site → Grep; open-ended "tour this repo" with no search term → Explore; a CONCEPT query against an INDEXED project → here (CC1 first). |
+| `driving-serena` | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → `repo-search exhaustive`; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS. |
+| `repo-search` / `Explore` (non-skill) | QUERY-SHAPE ladder — literal string/regex/every-call-site → its literal/exhaustive rg routes; structural pattern → its ccc-grep route; open-ended "tour this repo" with no search term → Explore; a CONCEPT query against an INDEXED project → its concept/battery ccc route (CC1 first). Raw Grep is not a sibling: the user-global hook denies the unclassified surface. |
 | `raising-resolution` | Silent sub-step, LOWEST precedence: inspect the actual ccc state (`ccc status`, `ccc daemon status`, `cat ~/.cocoindex_code/global_settings.yml`, `claude mcp list`) before asserting a version/uptime/registration/MCP-liveness fact — never recall one from training; cocoindex-code is plausibly absent from training data entirely. |
 | `writing-python` | Contributing to `cocoindex-code`'s OWN Python source (upstream) → there; operating the already-built binary → here. No collision in normal driving usage. |
 | `systematizing-knowledge` / `structuring-documents` | SEARCH-vs-SYNTHESIS, decisive — 「ノートから探す/想起する」 (LOCATE passages in a corpus) → here; 「メモをまとめる/統合する/再構成する」 (SYNTHESIZE or reorganize what's found) → those skills. Shared 「メモ/ノート」 vocabulary, disjoint verbs; ccc can still serve as their locate step (pipeline, like serena). |

@@ -76,6 +76,7 @@ done
 unset _stale
 link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
+link agents/claude/hooks/repo-search.ts "$HOME/.local/bin/repo-search"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"

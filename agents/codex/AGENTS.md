@@ -26,3 +26,14 @@ Codex custom prompts are invoked as `/prompts:<name>` in the CLI/IDE, but some C
 ## Verification
 
 Prefer the narrowest relevant verification command before broader gates. Report the command and result when work changes code, claims, or agent configuration.
+
+## Search Routing
+
+In a repository where `ccc` is installed and `.cocoindex_code/settings.yml` exists, do not issue
+raw `rg`, `grep`, `find`, `fd`, `tree`, `ccc search`, or `ccc grep` calls. Declare the query shape
+through `repo-search`: `concept` for unknown-name meaning, `battery` for absence/new-implementation
+checks, `literal` for exact text, `exhaustive` for regex enumeration, `files` for path inventory,
+and `structural` for by-example code patterns. Known-symbol definitions/references belong to
+Serena. Do not reimplement repository search with Python, Node, shell loops, or another tool when
+the route is blocked; repair the entrypoint instead. Empty ccc output is NO_MATCH, never PASS.
+The router may select rg; the prohibited operation is unclassified search, not lexical search.

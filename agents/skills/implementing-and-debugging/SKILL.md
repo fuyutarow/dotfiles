@@ -1,23 +1,16 @@
 ---
 name: implementing-and-debugging
 description: >-
-  Discipline for the ACT of writing or fixing non-trivial code that CHANGES observable behavior —
-  the guards that stop flailing once you start changing things. Reconstruct the ORIGINAL code's
-  design intent before any rewrite; scope the edit surface (which files, how many) before touching;
-  ground each changed file against a reference implementation; fix the 病因 (root cause) not the
-  症状 (symptom) — no band-aid / 一時しのぎ / 場当たり patch; fear the change that makes it WORSE
-  (regression); declare your unknowns; for a hard bug present a divide-and-conquer plan, not
-  guesses. Use when implementing a feature, debugging, or optimizing performance (高速化 / make it
-  faster — latency/allocation are observables, so perf work lives here) — especially when a fix
-  keeps missing, you're guessing at causes, or about to redesign code you haven't fully understood. Triggers — 実装, 機能追加, デバッグ, バグ修正, パフォーマンス最適化 /
-  高速化, 思い付きdebug, 場当たり(なバグ修正), 一時しのぎ, 根本原因, 症状 vs 病因, 意図を理解せず,
-  なぜなぜ, "this fix isn't working", "keep guessing". DECISIVE cut (Beck's two hats) —
-  behavior-PRESERVING structural change (refactor / リファクタ / clean up / 責務分界 /
-  extract-move-rename for structure, no behavior change) is refactoring-code, NOT here; the two
-  co-fire in sequence for preparatory refactoring (reshape there, then change behavior here).
-  Upstream fact-inspection is raising-resolution; forward bets/durability are acting-on-hypotheses;
-  post-hoc diff review is /code-review. English skill; respond in the user's language (default
-  Japanese).
+  Governs non-trivial code changes that alter observable behavior. Use for implementation /
+  機能追加, debugging / デバッグ・バグ修正, performance optimization / 高速化, root-cause
+  analysis, fixes that keep missing, or redesign attempted before the original intent is
+  understood. Reconstruct intent, scope the edit surface, ground each file against a reference,
+  fix 病因 not 症状, declare unknowns, fear regression, and verify red→green plus flag
+  combinations. DECISIVE cut: behavior-preserving refactor→refactoring-code; present-fact
+  inspection→raising-resolution; future bet→acting-on-hypotheses; post-hoc diff review→code
+  review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-search
+  battery` before new functionality; exact tokens use `repo-search literal`. Language skills
+  co-fire for idiom. English skill; respond in the user's language (default Japanese).
 ---
 
 # Implementing & debugging — the discipline of the act
@@ -103,7 +96,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 | `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. Forward bets (spike/MVP/will-it-scale) and **future-durability** (陳腐化しない設計) → there. Executing a defined change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
 | `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
-| `driving-cocoindex` | **Co-fire, FIRST, in any ccc-registered repo** (`.cocoindex_code/settings.yml` present): before writing NEW functionality, run the semantic battery (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway (measured 2026-07-24). Literal-token greps stay correct (their CC3). |
+| `driving-cocoindex` | **Co-fire, FIRST, in any operational ccc-registered repo**: before writing NEW functionality, run `repo-search battery` (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway. Literal-token search stays correct through `repo-search literal`; raw Grep is hook-denied because it omits the QUERY-SHAPE declaration (their CC3). |
 
 ## Fire / no-fire
 

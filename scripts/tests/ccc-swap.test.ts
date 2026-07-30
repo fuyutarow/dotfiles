@@ -176,6 +176,25 @@ describe("discoverProjects", () => {
     makeProject(deep);
     expect(discoverProjects(home)).toEqual([deep]);
   });
+
+  // Regression: `--exclude <path>` was routed into excludeDirNames, which only ever compares
+  // against a single directory ENTRY NAME — so passing a path pruned nothing and the plan
+  // still listed every project. Measured on the real host: 8 planned when 1 was asked for.
+  test("a path-shaped exclude prunes that subtree, a bare name still prunes by basename", () => {
+    const home = makeHome();
+    const keep = join(home, "ARTS", "keep-me");
+    const byPath = join(home, "Workspace", "prune-by-path");
+    const byName = join(home, "vendor", "prune-by-name");
+    for (const p of [keep, byPath, byName]) makeProject(p);
+
+    expect(discoverProjects(home)).toEqual([keep, byPath, byName].sort());
+
+    const found = discoverProjects(home, {
+      excludeDirNames: ["vendor"],
+      excludeAbsolutePaths: [join(home, "Workspace")],
+    });
+    expect(found).toEqual([keep]);
+  });
 });
 
 describe("computeIndexDimension / countIndexedRows", () => {

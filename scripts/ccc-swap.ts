@@ -523,6 +523,11 @@ interface Ctx {
   shadowDir: string;
   liveSettingsDir: string;
   excludeDirNames: string[];
+  // `--exclude` values that name a PATH rather than a directory basename. Split because the
+  // first cut routed every `--exclude` into excludeDirNames, which matches `entry.name` only —
+  // so `--exclude /home/fuyu/Workspace` silently pruned nothing and the plan still listed all
+  // 8 projects. A flag that quietly does nothing is worse than one that refuses.
+  excludePaths: string[];
   cccBin: string | null;
   timeoutMs: number;
 }
@@ -534,7 +539,7 @@ function projectDbPath(root: string): string {
 async function cmdDiscover(ctx: Ctx): Promise<number> {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
-    excludeAbsolutePaths: [ctx.shadowDir],
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
 
   if (projects.length === 0) {
@@ -590,7 +595,7 @@ async function cmdBuild(
 ): Promise<number> {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
-    excludeAbsolutePaths: [ctx.shadowDir],
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
   if (projects.length === 0) {
     process.stdout.write(
@@ -770,7 +775,7 @@ async function cmdBuild(
 async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
-    excludeAbsolutePaths: [ctx.shadowDir],
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
   if (projects.length === 0) {
     process.stdout.write(
@@ -938,7 +943,7 @@ async function cmdRollback(
 ): Promise<number> {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
-    excludeAbsolutePaths: [ctx.shadowDir],
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
   const perProject = projects.map((root) => ({
     root,
@@ -1076,7 +1081,7 @@ async function cmdGc(
 ): Promise<number> {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
-    excludeAbsolutePaths: [ctx.shadowDir],
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
   const perProject = projects.map((root) => ({
     root,
@@ -1192,9 +1197,11 @@ async function main(): Promise<void> {
     home,
     process.env.COCOINDEX_CODE_DIR,
   );
+  // A basename can never contain a separator, so `/` is an unambiguous discriminator.
+  const excludePaths = parsed.flags.exclude.filter((e) => e.includes("/"));
   const excludeDirNames = [
     ...DEFAULT_EXCLUDE_DIR_NAMES,
-    ...parsed.flags.exclude,
+    ...parsed.flags.exclude.filter((e) => !e.includes("/")),
   ];
   const cccBin = parsed.flags["ccc-bin"] ?? Bun.which("ccc");
 
@@ -1203,6 +1210,7 @@ async function main(): Promise<void> {
     shadowDir,
     liveSettingsDir,
     excludeDirNames,
+    excludePaths,
     cccBin,
     timeoutMs,
   };

@@ -345,3 +345,106 @@ asserted as the cause; the verified product requirement is a bounded child, now 
 The remaining floor is 22 long prose sentences and one long table cell, down from the prior
 24/20/1 waiver. Both are pre-existing argued-content debt; this focused mechanism change did not
 attempt the queued full prose reforge.
+
+## 2026-07-30 (continued): five findings from a same-day swap-and-revert outage
+
+**What happened.** A candidate embedding model was swapped into `global_settings.yml` globally
+and reverted the same day. The swap-and-revert cycle produced five independently-verified
+operational findings, each distilled into a rule change (SKILL.md CC5/CC6 gates + two new
+Language tokens; `operations.md` §6a–§6e, replacing the old undifferentiated §6). The full
+swap/trial narrative and its dated numbers stay owned by `references/catalog.md` (not
+duplicated here); this entry records the five MECHANISM findings and their evidence.
+
+1. **Swap-as-measurement-instrument.** The live model was changed in order to test whether a
+   candidate was better — that change IS what caused the outage. Verified this session: the
+   entire chunked corpus is queryable offline, read-only, no daemon, no sqlite-vec extension,
+   straight off `target_sqlite.db`'s own shadow tables. Ran the exact query now in
+   `operations.md` §6a against dotfiles' own `.cocoindex_code/target_sqlite.db` (`sqlite3`
+   CLI, installed cocoindex-code 0.2.39, `indexer.py`'s
+   `Vec0TableDef(auxiliary_columns=["file_path","content","start_line","end_line"],
+   partition_key_columns=["language"])`): `code_chunks_vec_auxiliary.value00..03` map to
+   file_path/content/start_line/end_line in declaration order; `language` lives in
+   `code_chunks_vec_chunks.partition00`, joined via `chunk_id`. `SELECT COUNT(*) FROM
+   code_chunks_vec_auxiliary` = 8,334, matching the brief's claim exactly. → SKILL.md CC6,
+   operations.md §6a.
+
+2. **Blue-green replaces reset-in-place.** `ccc reset --force && ccc index` destroys the old
+   index before the new one exists. Confirmed live: `.cocoindex_code/cocoindex.db/mdb/`
+   holds `data.mdb`+`lock.mdb` (LMDB, canonical filenames, `file`-confirmed) and
+   `target_sqlite.db` runs `journal_mode=delete` with no `-wal`/`-shm` sidecar — both stores
+   are self-contained and rename-safe. Source-confirmed the env-var chain: `COCOINDEX_CODE_DIR`
+   → `settings.user_settings_dir()` → `_daemon_paths.daemon_runtime_dir()` (its default
+   fallback); `COCOINDEX_CODE_DB_PATH_MAPPING` → `settings.resolve_db_dir()` only — project
+   discovery (`find_project_root`) still resolves against the real tree. Mechanized in
+   `~/dotfiles/scripts/ccc-swap.ts` (verbs `discover`/`build`/`cutover`/`rollback`/`gc`; landed
+   this session by a concurrent agent — read for accuracy, not edited). → operations.md §6c.
+
+3. **A dimension change needs `ccc daemon stop` FIRST.**
+   `project.py::Project.close()`'s docstring promises to release "file handles (LMDB, SQLite)"
+   but its body only calls `self._env.get_context(SQLITE_DB).close()` — the LMDB environment
+   backing `coco.Environment` is never explicitly closed. The exact error string is present
+   verbatim in the installed binary (`cocoindex/_internal/core.abi3.so`, confirmed via
+   `strings`): "environment already open in this program; close it to be able to open it again
+   with different options". The dimension is baked into the vec0 DDL — confirmed live on
+   dotfiles' own index (`.schema code_chunks_vec`): `CREATE VIRTUAL TABLE code_chunks_vec USING
+   vec0(... embedding float[768])`. The daemon builds its embedder once at startup
+   (`daemon.py::run_daemon`) with no in-place reload path; its only settings-change recovery is
+   a full stop+respawn on the client's next handshake after the settings mtime moves
+   (`client.py::_connect_and_handshake`/`_needs_restart`) — a hot-reload it is not, and its
+   timing relative to a scripted multi-project reset→index loop is not something to trust.
+   `operations.md` previously stated the reset-on-change rule without this prerequisite —
+   fixed (old §6 folded into §6b/§6d). Same-day observation: three projects were left with a
+   0-byte index this way (reported; the precise multi-project trigger sequence was not
+   independently reproduced this session — see "Not re-derived" below). → SKILL.md `reset` row
+   + FIRES row, operations.md §6b.
+
+4. **Registered projects must be enumerated, never recalled.** Verified this session: `fd -H
+   --full-path '\.cocoindex_code/settings\.yml$' ~` found exactly 5 real project registrations
+   — `dotfiles`, `Workspace/{firedancer,beateater,qoed}`, `DPP/min-sys-dpp-mvp` — the last
+   confirmed on-disk with a 32,526,336-byte (32 MB) `target_sqlite.db` dated 2026-07-17. Three
+   remembered search roots (`~/dotfiles`, `~/Workspace`, `/mnt/g`) would have silently skipped
+   it; `/mnt/g` itself holds zero registrations under this probe. `$HOME/.cocoindex_code` is
+   the GLOBAL settings/daemon-runtime home, not a project (no `settings.yml`, confirmed by
+   `ls` — only `global_settings.yml` + daemon runtime files) — the probe's `settings.yml`
+   requirement correctly excludes it. `ccc-swap.ts`'s own `discover` subcommand already
+   mechanizes this exact walk. → SKILL.md CC5, operations.md §6c.
+
+5. **A rotted smoke anchor fabricated a regression.** `qoed`'s recorded end-to-end smoke
+   (「境界条件の正規化」 → `\section{適用境界}` in
+   `papers/P2606_003-sok_randomized_metrology/main.tex`) died silently when commit `7d915ed`
+   ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める" — independently confirmed
+   via `git show 7d915ed` in `~/Workspace/qoed`: Tue Jul 28 14:56:24 2026 +0900, author
+   fuyutarow) added `papers/P2606_003-sok_randomized_metrology/**` to
+   `.cocoindex_code/settings.yml`'s generated `exclude_patterns` block (16 demoted directories,
+   index 1021→973 files per the commit message) as an authority-gate cleanup unrelated to any
+   embedding model. Confirmed live: the file is still on disk but the current index holds zero
+   chunks matching that path (`SELECT COUNT(*) FROM code_chunks_vec_auxiliary a JOIN
+   code_chunks_vec_rowids r ON r.rowid=a.rowid WHERE a.value00 LIKE 'papers/P2606_003%'` = 0,
+   run against qoed's live `target_sqlite.db`). Two days later the missing hit was read as a
+   candidate-model regression and triggered a same-day revert. → SKILL.md CC6, operations.md
+   §6e.
+
+**Verification method.** All five findings were independently re-derived against the
+INSTALLED `cocoindex-code` 0.2.39 (confirmed: `cocoindex_code-0.2.39.dist-info` alongside
+`cocoindex-1.0.18.dist-info` under the uv-tool site-packages tree) — none read from the stale
+0.1.10 `archive-v0` copy the brief warned about. No claim from the brief failed verification;
+none were dropped or softened beyond the "not re-derived" note below.
+
+**Not re-derived.** The exact sequence of daemon calls that produced the "environment already
+open" error on the day in question is not reconstructed here. `client.py`'s
+restart-on-settings-mismatch logic makes a single-project reset→index cycle unlikely to
+reproduce the error on its own (a freshly respawned daemon holds no stale handle for a project
+it has never touched); the likelier trigger is a multi-project loop where the daemon was
+already warm on some project before the edit, or a race between concurrent `ccc` invocations —
+neither was reproduced live this session, and this ledger does not assert which one occurred.
+The error STRING, the vec0 DDL, and the `Project.close()` LMDB-close gap are all
+source/binary-verified; the day-of trigger sequence and the "three projects" count are
+recorded as same-day operational observations from the brief, not re-derived.
+
+**Gate check.** F1 — every new gate/rule row cites a runnable command or a source-file/binary
+citation (the SQL query, the `fd` probe, the `strings` match, the DDL read, the git commit).
+F2 — no new sibling; CC5/CC6 extend the existing gate table, §6a–§6e extend the existing
+swap-procedure owner (`operations.md`), catalog.md stays untouched (concurrent draft, numbers
+only). F3 — this entry is the adversarial-provenance artifact; `skill-check.ts` floor
+before/after this touch: 22 prose sentences / 1 table cell (WARN, exit 0) — unchanged, net
+zero new prose-debt.

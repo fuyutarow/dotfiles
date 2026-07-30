@@ -11,10 +11,21 @@
 #   2026-07-17  granite-97m-multilingual-r2 → granite-311m-multilingual-r2  (dim 384 → 768)
 #     Why: house JA-notes+code A/B pilot — 311m-r2 beat 97m-r2 on both halves (notes and code),
 #     total nDCG@10 +70%; ruri-v3-70m won notes but lost code, unfit as ccc's single global model.
+#   2026-07-30  bekko-embedding-v1-a25m was swapped in and reverted the same day. The revert was
+#     NOT justified: it fired on a qoed smoke miss that a later audit showed was CONFOUNDED —
+#     the target `\section{適用境界}` sits in `papers/P2606_003-.../main.tex`, which qoed's own
+#     settings.yml had already excluded as a demoted document in commit 7d915ed (2026-07-28),
+#     two days BEFORE the test. The recorded "rank 1 @ 0.90" expectation no longer holds for the
+#     incumbent either. bekko's status is UNDECIDED — neither adopted nor validly rejected.
+#     Evidence and the corrected A/B: catalog.md.
 #
 # On any model change, run `ccc reset --force && ccc index` in EVERY registered project (the
-# daemon auto-restarts on the next call). granite-r2 defines an empty "query" prompt, so the
-# query_params below stays valid.
+# daemon auto-restarts on the next call). A DIMENSION change additionally needs `ccc daemon stop`
+# FIRST — otherwise `ccc index` fails with "environment already open in this program" while
+# `ccc reset` still succeeds, leaving an empty index (measured 2026-07-30).
+#
+# Registered projects are NOT only under ~/Workspace — /home/fuyu/DPP/min-sys-dpp-mvp is one.
+# Enumerate before swapping; a project missed during a swap keeps a stale-dimension index.
 
 embedding:
   provider: sentence-transformers

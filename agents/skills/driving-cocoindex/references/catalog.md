@@ -12,7 +12,7 @@
 
 | Package | Version | Cadence | Source |
 |---|---|---|---|
-| `cocoindex-code` (ccc) | **0.2.37** = latest on PyPI, matches installed | ~weekly now — 43 PyPI releases / 44 GitHub tags across a ~5mo life (first upload 2026-02-08, repo created 2026-02-01), initial burst (4/day, 2026-04-14) tapering to ~1/week; verify-fleet corrected an unpaginated first count | raw PyPI JSON `pypi.org/pypi/cocoindex-code/json` (`.releases \| keys \| length`) + `gh api --paginate repos/cocoindex-io/cocoindex-code/releases` |
+| `cocoindex-code` (ccc) | row measured at **0.2.37**; installed is **0.2.39** as of 2026-07-30 — verify with `ls ~/.local/share/uv/tools/cocoindex-code/lib/python*/site-packages/cocoindex_code-*.dist-info`, and read source ONLY from that path: a stale 0.1.10 tree under `~/.cache/uv/archive-v0/` produced two false findings on 2026-07-30 | ~weekly now — 43 PyPI releases / 44 GitHub tags across a ~5mo life (first upload 2026-02-08, repo created 2026-02-01), initial burst (4/day, 2026-04-14) tapering to ~1/week; verify-fleet corrected an unpaginated first count | raw PyPI JSON `pypi.org/pypi/cocoindex-code/json` (`.releases \| keys \| length`) + `gh api --paginate repos/cocoindex-io/cocoindex-code/releases` |
 | `cocoindex` (framework, upstream) | **1.0.16** | v1.0.9→1.0.16 in 24 days (2026-06-12→07-06), ~3–4 days/release | PyPI JSON + `gh api .../releases` |
 
 Both `requires-python >=3.11`. Relationship: same org (`cocoindex-io`), same lead author
@@ -169,27 +169,32 @@ prompt config is not the cause; this is the model. granite restores JA discrimin
 raw-model pairwise level. The current house model is `granite-311m-multilingual-r2`; see
 §Active model for the JA-notes + code A/B pilot that chose it and the reindex-on-swap rule.
 
-## Embedding models — two DISJOINT sets, do not conflate
+## Embedding models — landscape by pointer, specs by probe
 
-**(a) ccc's own curated table** (`EMBEDDINGS.md`, snapshot dated 2026-06-15 in the doc itself):
-local tiers `lightonai/LateOn-Code` / `LateOn-Code-edge`, `Shuu12121/CodeSearch-ModernBERT-Crow-
-Plus`, `microsoft/harrier-oss-v1-270m`, `ibm-granite/granite-embedding-97m-multilingual-r2`;
-cloud picks `voyage-4-large`, Gemini `text-embedding-004`, OpenAI `text-embedding-3-small`.
-Installed default **Snowflake/snowflake-arctic-embed-xs** (22M params, dim 384, Apache-2.0,
-"Very Fast"/CPU-friendly) scores **0.67** on ccc's own code-score metric — the **lowest of six
-local tiers**, beaten even by the smaller 17M-param `LateOn-Code-edge` (0.82). Defensible as the
-lowest-friction, fully-CPU, no-big-download default — not defensible as "best small code
-embedder available"; the project's own docs steer power users elsewhere.
+Two hand-copied tables used to live here: a snapshot of ccc's own curated `EMBEDDINGS.md`
+(dated 2026-06-15 in the doc itself) and a "wider landscape" params/dims/notes table. Both rot
+the same way — model cards and leaderboards update continuously, this file does not — and the
+snapshot already had visibly stale entries by the time it was checked. Neither table survives a
+reforge; use the pointers and recipe below instead.
 
-**(b) wider landscape** (asked-about models, cross-checked 2026-07; NONE appear in ccc's own
-table (a) — a real gap, not an oversight to paper over):
+**Landscape** (externally maintained, read live — do not re-snapshot into this file):
+[MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard) for general/multilingual
+retrieval ranking across candidate embedding models; [JMTEB](https://huggingface.co/datasets/sbintuitions/JMTEB)
+for the Japanese-specific benchmark — directly relevant given this house's LANGUAGE-WALL
+constraint (SKILL.md).
 
-| Model | Params/Dim | Local/API | Code-specific | Note |
-|---|---|---|---|---|
-| `Snowflake/snowflake-arctic-embed-l` | 335M / 1024 | Local | No — general retrieval | MTEB NDCG@10≈55.98; bigger dim = bigger reindex cost for a non-code-specific gain |
-| `jinaai/jina-embeddings-v2-base-code` | 161M / 768 | Local (`trust_remote_code=True`) | Yes — GitHub-code + 150M+ code/docstring pairs, 30 langs | 8192-token via ALiBi; Oct-2023-era, Jina's own current lineup has moved to general v3/v4 |
-| `voyageai/voyage-code-3` | undisclosed | **API-only** | Yes, purpose-built | Matryoshka 2048/1024/512/256 + int8/binary; vendor claims beat OpenAI-v3-large/CodeSage by 13.8/16.8% (self-reported, CONSENSUS-tier) |
-| `nomic-ai/nomic-embed-code` | 7B (Qwen2.5-Coder base) / 3584 | Local-capable, GPU-class | Yes, CoRNStack hard-negative trained | Apache-2.0; 32,768-token context; self-reported CodeSearchNet wins (vendor-reported); heavy for a laptop CPU despite "local" |
+**Probe recipe** — before trusting any remembered spec for a candidate `<id>`, fetch it:
+
+```bash
+curl -sS https://huggingface.co/<id>/raw/main/config.json
+# → hidden_size, num_hidden_layers, max_position_embeddings
+curl -sS https://huggingface.co/<id>/raw/main/config_sentence_transformers.json
+# → prompts (query/document — present but empty, or absent), default_prompt_name
+```
+
+`config.json` is the params/dim/context-length ground truth. `config_sentence_transformers.json`
+shows whether the model needs asymmetric query-vs-document prompting — relevant before wiring
+`query_params`/`indexing_params` for it in `global_settings.yml` (procedure → `operations.md`).
 
 **Active model — `granite-embedding-311m-multilingual-r2` (dim 768), swapped 2026-07-17.**
 Chosen by a local A/B pilot on the house JA-notes + code corpus (278 chunks, 28 vocabulary-
@@ -209,13 +214,112 @@ NVIDIA Nemotron-3-Embed rejected upstream: 1B/8B decoder-embedders, GPU-required
 backend, no isolated JA evidence.
 
 Reindex under ccc's daemon: ~100 chunks/s — qoed 16,090 / 159s, beateater 12,551 / 161s,
-min-sys-dpp-mvp 3,649 / 32s. End-to-end smoke: the JA query 「境界条件の正規化」 returns
-`\section{適用境界}` at 0.90 in qoed.
+min-sys-dpp-mvp 3,649 / 32s.
+
+**End-to-end smoke anchor (qoed), current**: the JA query 「境界条件の正規化」 returns
+`docs/records/R2607_038-three_master_theorems_program.md:159-165` at rank 1 / **0.900** on the
+current (incumbent) index — verified live this session via `repo-search concept`. This replaces
+the prior anchor (`\section{適用境界}` in `papers/P2606_003-sok_randomized_metrology/main.tex`,
+last recorded at 0.90): that document was excluded from qoed's index by commit `7d915ed`
+("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める"), dated **2026-07-28** — two
+days before the exclusion's effect was misread as a 2026-07-30 model regression during the
+bekko trial (§ below). A smoke anchor's target document is a corpus-scoping dependency, not a
+fixed constant — re-verify the anchor still resolves under the CURRENT index before trusting any
+"smoke passed/failed" verdict measured against it (see the Known issues row on oracle rot).
 
 Lineage: 311m-r2 supersedes granite-97m-r2 (active 2026-07-13→07-17), which replaced the
 EN-only `snowflake-arctic-embed-xs` to fix the Japanese language-wall. Both granite tiers
 define an empty "query" prompt, so `query_params.prompt_name: query` stays valid. Swap
 procedure and the reset-on-change rule: `operations.md` (owner).
+
+### Tried and reverted on a confounded smoke — `hotchpotch/bekko-embedding-v1-a25m` (dim 384), 2026-07-30 — status: UNDECIDED
+
+Source: secon.dev 2026-07-29. MIT, 100+ languages, **24.93M active params** (123M total),
+Matryoshka 384→256/128/64, 190 MiB, sentence-transformers-native. Both `query` and `document`
+prompts are declared but EMPTY (probed via `config_sentence_transformers.json`, recipe above) —
+same as the incumbent, so prompt-vs-no-prompt was not a factor either way. **Context length is
+NOT an advantage over the incumbent**: probed `max_position_embeddings` is 8,192 for a25m vs
+**32,768 for `granite-embedding-311m-multilingual-r2`** (same recipe) — the incumbent's context
+window is 4x larger; an earlier draft of this entry implied 8,192 tokens was a selling point over
+the incumbent, which was backwards. Vendor benchmark is MMTEB Multilingual v2 only (a25m 57.5 on
+18 retrieval tasks) — no JMTEB and no code-retrieval evidence, which is why it was measured
+locally rather than adopted on the strength of an aggregate.
+
+Local A/B on a FRESH corpus (the 2026-07-17 pilot's 278 chunks / 28 queries did not survive, so
+the incumbent was re-measured in the same run — these numbers are **not comparable to the
+Active-model table above**, P8 FOOTING). 489 chunks (424 JA-notes sections + 65 code
+declarations) from this repo; gold is auto-generated, never hand-written (markdown heading → its
+body with the heading text deleted; a declaration's comment block → its code body with comments
+stripped), so vocabulary mismatch is structural. The notes half doubles as the distractor set for
+code queries, which reproduces the documented doc-over-code bias. nDCG@10, `all` = **macro** mean
+of the halves:
+
+| Model (dim) | notes | code | all | vs incumbent |
+|---|---|---|---|---|
+| `granite-311m-r2` (768) — incumbent | 0.382 | **0.854** | 0.618 | — |
+| `bekko-v1-a8m` (384) | 0.401 | 0.814 | 0.608 | notes +5%, code −4.7% |
+| **`bekko-v1-a25m`** (384) | **0.426** | 0.852 | **0.639** | **notes +11.5%, code −0.3%** |
+
+a25m won Japanese notes and was statistically indistinguishable on code (Δ −0.0024 on n=65, far
+below what 65 queries can resolve) — it did not repeat the ruri-v3 failure above (ruri lost 43%
+of code; a8m is dominated by a25m on both halves). Threshold was pre-registered before the run —
+adopt-candidate if code degrades ≤5%, reject at >10% — and a25m passed it. Three items were
+flagged as unmeasured before adoption: (1) confirmation on a second registered corpus (qoed /
+beateater are different material — LaTeX and prose, not this repo's JA-notes+code mix), (2) the
+code half's ceiling was suspiciously high (0.85 for both models — identifier leakage from
+comment into code may have been compressing the difference), (3) reindex throughput and
+Matryoshka truncation under ccc's daemon were untested. The pre-registered threshold and this
+table both said adopt-candidate; the swap went ahead the same day.
+
+**What happened next, and why it does NOT settle the question.**
+`ccc reset --force && ccc index` ran across registered projects, and the recorded qoed
+end-to-end smoke — 「境界条件の正規化」 → `\section{適用境界}` — was read as FAILED: the target
+string no longer appeared anywhere in the top 30 (incumbent, recorded earlier: rank 1 @ 0.90),
+and the top-10 score spread had collapsed to 0.519–0.480. bekko was reverted the same day on
+this basis. Evidence for the observation itself: `cocoindex/global_settings.yml`'s model-history
+comment (this repo, dated entries — the qoed numbers above are copied from it verbatim, not
+re-measured here).
+
+That basis was **CONFOUNDED and does not support any verdict about bekko.**
+`\section{適用境界}` lives in `papers/P2606_003-sok_randomized_metrology/main.tex:397` (this
+repo — confirmed via `repo-search literal`). qoed's own `.cocoindex_code/settings.yml` excludes
+`papers/P2606_003-sok_randomized_metrology/**` inside a generated "demoted document" block, an
+authority-gate cleanup that landed in commit `7d915ed` ("fix: 降格済み文書を意味検索の索引から外し、
+漏れを gate で止める"), dated **2026-07-28 14:56 JST — two days before the bekko swap**. The
+smoke's target document was already outside the index before any model changed. Confirmed
+independently, this session: with the index restored to the incumbent, the same query returns
+`docs/records/R2607_038-three_master_theorems_program.md:159-165` at rank 1 / **0.900** — not
+`\section{適用境界}`, which does not appear at all. The old expectation does not hold for the
+INCUMBENT either; it was a stale oracle (§Active model owns the replacement anchor), not a bekko
+regression.
+
+**Verdict: bekko-embedding-v1-a25m is neither adopted nor validly rejected — UNDECIDED.** The
+2026-07-30 revert was not justified by the evidence available at the time. The pre-registered
+489-chunk A/B (table above) is still the only same-corpus signal on record, and it said
+adopt-candidate. Re-opening this decision requires the three items already flagged as unmeasured
+(above), run against a smoke anchor that is actually indexable — not a repeat of the 2026-07-30
+swap on the strength of this table alone: a synthetic single-repo gold remains weak evidence for
+a second, differently-shaped corpus, which is the caveat this entry has carried throughout and
+which the confounded smoke never actually tested.
+
+An earlier run of the same harness reported a25m at code −10.8% and was WRONG — its code half
+was n=22 (file-level granularity, over-filtered), and its `all` column was a micro average over
+a 200/22 split, i.e. a restatement of the notes half. Both defects were found and fixed before
+any conclusion was recorded. Kept here because the corrected number is only trustworthy if the
+correction is visible.
+
+### Rejected on paper — `Shuu12121/CodeSearch-ModernBERT-Crow-Plus`
+
+Appears in ccc's own curated `EMBEDDINGS.md` table as a local tier (the table this file no
+longer copies — see above). Model card YAML frontmatter (`README.md`, probed 2026-07-30)
+declares `language: - en` and lists its training datasets as `code-search-net/code_search_net`
+plus the author's own `Shuu12121/{python,java,javascript,rust,ruby}-codesearch-filtered` sets —
+CodeSearchNet-family code corpora. Its "multilingual" claim (visible in the model's own tags:
+python, java, javascript, php, ruby, rust, go) means multiple PROGRAMMING languages, not
+multiple natural languages. Adopting it as ccc's global embedding model would recreate exactly
+the Japanese language wall that `granite-embedding-311m-multilingual-r2` was adopted 2026-07-17
+to fix (§Active model above) — rejected on this reading of the model card alone, no local A/B
+run.
 
 ## Known issues (provenance-graded)
 
@@ -229,6 +333,7 @@ procedure and the reset-on-change rule: `operations.md` (owner).
 | Voyage/Bedrock LiteLLM encoding-format breakage (fixed v0.2.31) | CONSENSUS only | summarized WebFetch of issues/releases, not reproduced |
 | Dart file-type gap / watchdog-based auto-reindex requested | CONSENSUS only | summarized WebFetch of issues page |
 | `ccc reset` (no `--all`) followed by unexpected auto-rebuild on next daemon poke | observed, **UNVERIFIED mechanism** | could not disambiguate background auto-rebuild vs. an implicit ensure-index side-effect of repeated status polls — do not rely on this behavior |
+| Smoke-anchor rot: a corpus-scoping change (excluding a document from `settings.yml`) silently invalidates a recorded end-to-end smoke anchor, which then misreads as a MODEL regression on the next unrelated swap that happens to use it | **HIGH** | reproduced this session: qoed commit `7d915ed` (2026-07-28) excluded the 2026-07-17 smoke anchor's target document from the index, 2 days before that anchor was used to gate the 2026-07-30 bekko swap and reverted it; the SAME anchor also fails against the CURRENT incumbent index (verified live), proving the anchor had rotted, not the model — rule: a smoke anchor is a corpus-scoping dependency, not a fixed constant; re-verify it resolves under the CURRENT index before trusting a pass/fail verdict measured against it, and record which file the anchor depends on so a future exclusion is traceable |
 
 ## Provenance hygiene
 

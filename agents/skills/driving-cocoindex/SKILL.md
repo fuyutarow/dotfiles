@@ -18,7 +18,8 @@ description: >-
 
 # Driving CocoIndex Code — semantic code search as a disciplined subprocess
 
-> **Version**: v2607.6.1 (2026-07-30 — atomic router entrypoint + no-bypass/empty-result guards).
+> **Version**: v2607.6.2 (2026-07-30 — CC5/CC6 gates: enumerate before a fleet swap, read the
+> live index before swapping the live model).
 > **Active model**: `granite-311m-multilingual-r2`; dated model history lives in `references/catalog.md`.
 
 **Scope.** Operate `ccc`: project lifecycle, semantic and structural search over code/Markdown,
@@ -45,7 +46,9 @@ Stable tokens even inside Japanese prose: **PROJECT-BY-CWD**, **PROJECT-REGISTER
 repo: init + first index) vs **RE-INDEX** (refreshing an already-registered one) — 'index'
 alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 **LANGUAGE-WALL** (the default embedding model discriminates topics in English only),
-**RELAY**, **repo-search**, **fire / no-fire**.
+**RELAY**, **repo-search**, **fire / no-fire**, **ENUMERATE** (a fleet-wide operation starts
+from a filesystem probe, never a remembered project list), **READ-NOT-SWAP** (a candidate
+model is judged against the live index, never by installing it as the live model).
 
 ## THE LAW
 
@@ -66,9 +69,10 @@ alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 > query onto them — measured craft fix); never promise a 日本語 semantic search without
 > checking the model first (single-corpus trial; evidence → `references/catalog.md`).
 > Precedence: registered before searched · refreshed before trusted · query-shape before
-> tool · language before promise · verbatim relay before verdict.
+> tool · language before promise · verbatim relay before verdict · enumerated before swapped ·
+> read before replaced.
 
-## Gates CC1–CC4
+## Gates CC1–CC6
 
 | Gate | Rule | Artifact |
 |---|---|---|
@@ -76,6 +80,8 @@ alone is ambiguous, never use it bare; **PULL-BASED**, **ROUTE-BY-QUERY-SHAPE**,
 | **CC2 FRESH** | Any load-bearing search AFTER edits carries refresh evidence — an `ccc index` run (CLI default does NOT refresh) or `--refresh` / MCP `refresh_index:true` (MCP DEFAULT refreshes; CLI does not — asymmetry stated) | the refresh line adjacent to the hits |
 | **CC3 ROUTE** | Name the query shape before choosing the engine (the QUERY-SHAPE ladder — §Routing). On house hosts, invoke `repo-search`; its route is the declaration. Wrong shape (e.g. semantic top-k for "every call site of X") is a gate violation even if results look plausible — the live trial measured both missed call sites AND false positives on exactly that shape (numbers → `references/catalog.md`) | the `repo-search` route + exact query |
 | **CC4 RELAY** | A worker that searched relays VERBATIM {query, tool, hits as file:line + snippet, registration+freshness evidence}; "found it" without locus is quarantined | the relay tuple |
+| **CC5 ENUMERATE** | A fleet-wide operation ("every registered project" — a global model swap, a fleet audit) starts from a filesystem probe, never a remembered list — a missed project keeps a stale index with no error | `fd -H --full-path '\.cocoindex_code/settings\.yml$' <root>` or `bun ~/dotfiles/scripts/ccc-swap.ts discover` output |
+| **CC6 READ-NOT-SWAP** | A candidate embedding model is judged by reading the live index's own SQLite store (`references/operations.md` §6a), never by installing it as the live model to find out; any stored smoke expectation is re-run against the CURRENT index before it judges a swap | the SQL hits, or the smoke re-run, same session (`references/operations.md` §6e) |
 
 ## The daily loop — invocation recipes (LOW freedom)
 
@@ -101,7 +107,7 @@ cd <repo> && ccc init && ccc index
 | grep | `ccc grep 'PATTERN' [PATH]` | the ONLY project-independent verb — works in an uninitialized cwd, BUT outside a project it scans EVERYTHING unfiltered (no include/exclude, no .gitignore): cd to the intended subtree or pass PATH; metavariables `\NAME`, `\(ARGS*\)`; return-type gotcha: typed signatures need `-> \RET:` or drop the trailing-colon expectation |
 | status | `ccc status` / `ccc daemon status` | probe verbs — read before you search or claim registration |
 | index | `ccc index` | RE-INDEX — the only way to clear staleness after an edit |
-| reset | `ccc reset` [`--all`] [`--force`] | DBs only by default; `--all` also drops `settings.yml`; prompts `Proceed? [y/N]` and ABORTS without `--force` — non-interactive shells (agents) must pass it. Model change → ALWAYS `ccc reset && ccc index`, even same-dimension — the same-dim mixing case is silently unguarded (mechanism → `references/operations.md`) |
+| reset | `ccc reset` [`--all`] [`--force`] | DBs only by default; `--all` also drops `settings.yml`; prompts `Proceed? [y/N]`, ABORTS without `--force` (agents must pass it). Model/dimension change → `ccc daemon stop` FIRST, then `ccc reset && ccc index` — skipping the stop can leave a 0-byte index (`references/operations.md` §6b/6d). A fleet-wide swap is blue-green via `~/dotfiles/scripts/ccc-swap.ts` (CC5/CC6), never a bare reset loop |
 
 ## Gotchas (2026-07)
 
@@ -117,7 +123,7 @@ cd <repo> && ccc init && ccc index
 | "offline" local embedding still shows HF Hub traffic in `daemon.log` | model LOAD still pings the Hub for cache-freshness/revision resolution even with cached weights | set `HF_HUB_OFFLINE=1` (and `TRANSFORMERS_OFFLINE=1`) for a true air-gap |
 | `ccc reset` followed by an unexpected auto-rebuild you never triggered | observed once; the daemon mechanism behind it is UNVERIFIED | don't rely on it — always run `ccc index` yourself after a reset |
 | `ccc index` killed/interrupted mid-build (Ctrl-C, timeout) — is the index broken? | the CLI is a thin client watching a daemon-side job; the daemon keeps indexing after the client dies (verified live, §operations 3) | poll `ccc daemon status` until `[indexing]`→`[idle]`, then `ccc status` — don't blindly re-run, don't trust a mid-build search |
-| Japanese (or any non-EN) query returns plausible-looking but topic-blind hits | LANGUAGE-WALL — an EN-only embedding model (ccc's SHIPPED default arctic-xs is one; this host swapped it out 2026-07-13); measured at ccc AND raw-model level incl. a symmetric-encode control, so not a ccc bug (evidence → `references/catalog.md`) | check the ACTUAL model first (`cat ~/.cocoindex_code/global_settings.yml`). EN-only model + JA/EN-mixed notes: code-switch the query onto the note's EN tokens (measured first aid). Pure-JA corpora: multilingual model swap — the house runs `granite-311m-multilingual-r2` (measured best on a JA-notes+code A/B, catalog) — but the model is GLOBAL (no per-project override): `ccc reset --force && ccc index` in EVERY registered project, no error will warn (§operations 4b/6) |
+| Japanese (or any non-EN) query returns plausible-looking but topic-blind hits | LANGUAGE-WALL — an EN-only embedding model (ccc's SHIPPED default arctic-xs is one; this host swapped it out 2026-07-13); measured at ccc AND raw-model level incl. a symmetric-encode control, so not a ccc bug (evidence → `references/catalog.md`) | check the ACTUAL model first (`cat ~/.cocoindex_code/global_settings.yml`). EN-only model + JA/EN-mixed notes: code-switch the query onto the note's EN tokens (measured first aid). Pure-JA corpora: multilingual model swap — the house runs `granite-311m-multilingual-r2` (measured best on a JA-notes+code A/B, catalog) — but the model is GLOBAL (no per-project override): evaluate the candidate first (CC6), then swap blue-green via `~/dotfiles/scripts/ccc-swap.ts` over every ENUMERATED project (CC5) — never a bare reset-in-place loop, since a missed or raced project keeps a stale-dimension index with no error (§operations 4b/6) |
 
 ## Markdown / prose corpora — in-scope, behind the LANGUAGE-WALL
 
@@ -211,7 +217,7 @@ FIRES:
 | "set up semantic search for this repo" | PROJECT-REGISTER is exactly this skill's territory |
 | 「この repo で『境界条件の正規化』に相当するコード探して」 | concept query, identifier unknown — core case |
 | "ccc search returning stale/no results" | CC2 freshness gotcha |
-| 「ccc の embedding モデル変えたい」 | model-change procedure (`ccc reset && ccc index`, always); a bare 「embedding モデル選定」 with no ccc/code-index context is writing-python's ML-selection territory instead |
+| 「ccc の embedding モデル変えたい」 | model-change procedure — judge the candidate offline first (CC6), `ccc daemon stop` before a dimension change, blue-green (`~/dotfiles/scripts/ccc-swap.ts`) for a fleet-wide swap, never a live-model swap as the evaluation method; a bare 「embedding モデル選定」 with no ccc/code-index context is writing-python's ML-selection territory instead |
 | a multi-line/formatter-wrapped signature structural hunt | `ccc grep`'s AST-invariant matching is the answer, not naive regex |
 | 「markdown のメモ/ノート群も意味検索できる？『どこかに書いたはず』を概念で探したい」 | markdown corpora are in-scope — PROJECT-REGISTER the vault; 日本語ノートなら LANGUAGE-WALL gate first (§Markdown) |
 | 「日本語で ccc search してもまともな結果が出ない」 | LANGUAGE-WALL gotcha — code-switch first aid for JA/EN-mixed notes; pure-JA needs the model swap, not query massaging |

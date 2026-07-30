@@ -247,7 +247,108 @@ the return-type position.
 ## 6. Embedding model change procedure
 
 **Rule, unconditional**: on any embedding config change (`model`, `provider`, or `device`),
-always run `ccc reset && ccc index` — never assume an in-place swap is safe.
+always run `ccc reset && ccc index` — never assume an in-place swap is safe. Five further rules
+below, each distilled from a same-day operational failure (2026-07-30 forge ledger): judge a
+candidate WITHOUT touching the live model (§6a); stop the daemon before any dimension change
+(§6b); run a fleet-wide adoption as a blue-green build over an ENUMERATED project list, never a
+reset-in-place loop over a remembered one (§6c); same-dimension swaps stay silently unguarded
+regardless (§6d); and re-verify any smoke expectation before it judges a swap (§6e).
+
+### 6a. Evaluate a candidate WITHOUT swapping the live model
+
+The live model is not an experiment switch. Swapping it in to "see if it's better" IS the
+outage — every registered project loses semantic search for the whole rebuild (§6c) — and it
+is never necessary: the entire chunked corpus is readable offline, read-only, with no daemon
+and no sqlite-vec extension. cocoindex-code stores a vec0 virtual table's payload in ordinary
+SQLite shadow tables that any `sqlite3` or `bun:sqlite` client can query directly. Verified
+live this session against dotfiles' own `target_sqlite.db` (8,334 chunks, matching `ccc
+status`'s own count):
+
+```sql
+SELECT r.id, a.value00 AS file_path, a.value01 AS content, a.value02 AS start_line,
+       a.value03 AS end_line
+FROM code_chunks_vec_auxiliary a
+JOIN code_chunks_vec_rowids r ON r.rowid = a.rowid
+```
+
+`code_chunks_vec_auxiliary`'s `value00..value03` columns map, in DDL declaration order
+(`indexer.py`'s `Vec0TableDef(auxiliary_columns=["file_path", "content", "start_line",
+"end_line"])`), to those four fields; `language` is deliberately NOT in the auxiliary table —
+it lives in `code_chunks_vec_chunks.partition00` (`partition_key_columns=["language"]`),
+joinable via `code_chunks_vec_chunks c ON c.chunk_id = r.chunk_id` — confirmed live, its
+distinct values match `ccc status`'s per-language chunk breakdown. This reads chunks and
+compares a candidate's own from-scratch embedding of the same text against known content; it
+does not exercise ccc's actual KNN ranking (`query.py`'s `vec_distance_L2`), so a real A/B
+still needs a built index — build it out of band on a shadow copy, never the live one (§6c).
+
+### 6b. Dimension changes: stop the daemon FIRST
+
+`ccc reset` releases a project's SQLite handle (`Project.close()` calls
+`self._env.get_context(SQLITE_DB).close()`) but never explicitly closes the underlying LMDB
+environment (`cocoindex.db/mdb/{data,lock}.mdb`) backing `coco.Environment` — the method's own
+docstring promises to release "file handles (LMDB, SQLite)"; the body only touches SQLite
+(`project.py::Project.close`). If the SAME daemon process is then asked to open a NEW
+environment at that path under a different schema — a dimension change edits the vec0 DDL
+itself, confirmed live (`CREATE VIRTUAL TABLE code_chunks_vec USING vec0(... embedding
+float[768])`; the width is baked into the CREATE statement) — the underlying Rust LMDB binding
+refuses. The exact error is present verbatim in the installed binary
+(`cocoindex/_internal/core.abi3.so`, confirmed via `strings`): "environment already open in
+this program; close it to be able to open it again with different options". `ccc reset`
+succeeds regardless (its file deletion does not depend on that handle), so the failure only
+surfaces on the following `ccc index`, leaving a 0-byte `target_sqlite.db` with no further
+diagnostic — measured today across three projects. The daemon builds its embedder exactly once
+at startup (`daemon.py::run_daemon`) and has no in-place reload path; its only settings-change
+recovery is a full stop+respawn on the client's NEXT handshake after `global_settings.yml`'s
+mtime moves (`client.py::_connect_and_handshake` / `_needs_restart`), and that respawn's timing
+relative to a scripted reset→index loop across many projects is not something to depend on.
+Running `ccc daemon stop` before editing `global_settings.yml` for a dimension change removes
+the ambiguity outright — a freshly spawned daemon process cannot hold a stale LMDB handle for
+anything.
+
+### 6c. Fleet-wide swap: blue-green, and enumerate — never recall
+
+`ccc reset --force && ccc index`, run in place across every project, destroys the OLD index
+before the NEW one exists: search is dead project-wide for the whole rebuild, and a rejected
+candidate costs a SECOND full rebuild just to roll back. The two stores under `.cocoindex_code/`
+(§2) are each self-contained and path-relocatable — `cocoindex.db/mdb/{data,lock}.mdb` (LMDB)
+and `target_sqlite.db` (SQLite, `journal_mode=delete`, no `-wal`/`-shm` sidecar file, confirmed
+live) — so a POSIX directory `rename()` is a safe, near-instant cutover. `COCOINDEX_CODE_DIR`
+overrides `user_settings_dir()` (`settings.py`), which `_daemon_paths.daemon_runtime_dir()`
+falls back to by default, so pointing it at a shadow directory gives a shadow build its OWN
+daemon (own socket/pid/log) — the live daemon is never touched mid-build.
+`COCOINDEX_CODE_DB_PATH_MAPPING` (`source=target[,source=target...]`, parsed by
+`settings._parse_path_mapping`) redirects only `resolve_db_dir()` — where DB FILES land —
+while `find_project_root` / `load_project_settings` keep resolving against the REAL project
+tree, so a shadow build still discovers and reads each project's real `settings.yml`. This is
+mechanized in `~/dotfiles/scripts/ccc-swap.ts` (verbs: `discover`, `build --model <hf-id>`,
+`cutover`, `rollback [--generation <ts>]`, `gc`) — drive that script rather than hand-rolling
+the env-var plumbing above.
+
+`discover` is also the fix for the companion failure: a fleet-wide operation enumerates
+registered projects by filesystem probe, never a remembered list of "the usual places".
+**The probe MUST pass `--no-ignore`.** `.cocoindex_code/` is gitignored in most repos, so a
+default `fd` walk silently skips them — measured 2026-07-30, same host, same instant:
+
+```bash
+fd -H            --full-path '\.cocoindex_code/settings\.yml$' ~   # 5  — WRONG
+fd -H --no-ignore --full-path '\.cocoindex_code/settings\.yml$' ~   # 8  — correct
+```
+
+The three the default walk hid were `ARTS/qinfogeo`, `Workspace/correo`, and a qoed worktree.
+This is not a footnote: the first draft of THIS rule shipped the 5-hit command and reported 5 as
+the fleet size — the enumeration rule under-enumerated, and the miss it hid was the worst case
+on the host. `ARTS/qinfogeo` was found stuck at **dim 384 with 87,560 chunks, last indexed
+2026-04-10** — it slept through the 2026-07-17 move to dim 768 and had been answering from a
+stale-dimension index for three and a half months. A second earlier miss, `DPP/min-sys-dpp-mvp`
+(32,526,336-byte index), came from searching 3 remembered roots instead of `$HOME`.
+
+No command warns that a registered project was left behind; it just keeps serving a
+stale-dimension index with zero error, which is why `ccc-swap discover` reports each project's
+DDL dimension and flags the odd one out. `$HOME/.cocoindex_code` is NOT itself a project (no
+`settings.yml`, only `global_settings.yml` plus daemon runtime files) — requiring `settings.yml`
+specifically, not just the directory name, already excludes it.
+
+### 6d. Same-dimension swaps are silently unguarded; choosing a model
 
 - **Dimension change** is a documented requirement (the project's own README states switching
   models requires re-indexing, since vector dimensions differ) — the sqlite-vec `vec0` table has
@@ -266,6 +367,26 @@ always run `ccc reset && ccc index` — never assume an in-place swap is safe.
   recommendation). A **separate, disjoint** wider-landscape set (general embedding models not
   in the project's own curated table) is also cataloged there — the two sets do not overlap and
   should not be conflated when recommending an upgrade.
+
+### 6e. A smoke anchor rots — re-verify before it judges anything
+
+A recorded end-to-end smoke (a query plus its expected top hit) is a claim about the CURRENT
+index, not a fixed constant, and nothing marks it stale when the corpus changes under it.
+Confirmed this session: qoed's smoke (「境界条件の正規化」 → `\section{適用境界}`) died when
+commit `7d915ed` ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める", 2026-07-28
+14:56 JST, confirmed via `git show`) added the smoke's target document to `settings.yml`'s
+`exclude_patterns` as part of an unrelated authority-gate cleanup — the file stayed on disk but
+the live index dropped to zero chunks from that path (confirmed:
+`SELECT COUNT(*) FROM code_chunks_vec_auxiliary a JOIN code_chunks_vec_rowids r ON r.rowid =
+a.rowid WHERE a.value00 LIKE 'papers/P2606_003%'` → 0). Two days later a candidate-model trial
+used the same dead smoke to gate its own decision: the expected hit was absent, read as a MODEL
+regression, and the candidate was reverted same-day (full trial detail → `catalog.md`) — but the
+smoke was already failing against the INCUMBENT model too, re-verified live this session. Rule:
+before a stored smoke expectation is allowed to gate a swap decision, re-run it against the
+CURRENT incumbent index in the SAME session — a smoke that fails against its own incumbent is a
+rotted oracle, not evidence about a candidate. Record which file a smoke depends on so a future
+corpus-scoping change (an `exclude_patterns` edit, a demoted-document sweep) is traceable back
+to it.
 
 ## 7. MCP wiring per-project
 

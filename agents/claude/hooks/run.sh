@@ -1,6 +1,9 @@
 #!/bin/sh
-# Hook runner — the ONLY shell left in the hook chain. Locates bun (hooks can run with
-# a narrow PATH) and execs the given .ts hook, stdin passed through untouched.
+# shim: hook-entry
+# Hook runner — the ONLY shell run.sh-dispatched hook needs; SessionStart's
+# herdr-agent-state.sh (vendored, see its own header) is invoked directly and bypasses
+# this file. Locates bun (hooks can run with a narrow PATH) and execs the given .ts hook,
+# stdin passed through untouched.
 #
 #   run.sh [--fail-closed] <hook>.ts
 #

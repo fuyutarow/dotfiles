@@ -31,7 +31,36 @@ extras:["full"]}`, no version bound) — a future `uv tool upgrade cocoindex-cod
 to whatever PyPI publishes next; `uv tool upgrade --help` has no `--dry-run` (confirmed: exit 2
 on the flag). Consider pinning if drift risk matters more than staying current.
 
-## MCP `search` tool — schema verbatim + a version trap
+## MCP `search` tool — RETIRED on this host 2026-07-31; kept as a do-not-resurrect record
+
+**The ccc MCP server is no longer registered anywhere on this machine.** Two registrations
+existed and both are gone: `~/.claude.json` → project `/home/fuyu/ARTS/qinfogeo` (local scope,
+spawned via `uvx --prerelease=explicit --with 'cocoindex>=1.0.0a16' cocoindex-code@latest`) and
+`/home/fuyu/Workspace/qoed/.mcp.json` (project scope, committed, spawned via `ccc mcp`). Three
+orphaned server processes — 3d09h old, parents long dead — were reaped with them.
+
+Why it went, measured rather than assumed: it exposed **zero tools** to a live session; the
+34-client-log record below shows **35/35 connection attempts failing**; and the qinfogeo entry
+pulled `cocoindex-code@latest` through `uvx`, i.e. a THIRD floating copy alongside the installed
+0.2.39 — the same version-confusion that produced two false findings on 2026-07-30.
+
+The decisive argument is not the failures, it is duplication of a **guarded** capability by an
+**unguarded** one. `~/.claude/hooks/enforce-search-route.ts` denies raw search (including bare
+`ccc search`) inside a registered project and forces the caller through `cocoindex/repo-search.ts`,
+which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
+gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of
+those gates and never passed through the hook, whose matcher is `Grep|Bash`. Verified after
+removal: `repo-search concept` in qoed still returns its anchor at rank 1 / 0.900 — the router
+never went through MCP.
+
+Restore (if a future need is argued): qinfogeo `claude mcp add cocoindex-code -- uvx
+--prerelease=explicit --with 'cocoindex>=1.0.0a16' cocoindex-code@latest`; qoed re-add
+`"cocoindex-code": {"command": "ccc", "args": ["mcp"]}` to its `.mcp.json`. Do NOT restore
+without also deciding how the router's gates apply to the MCP surface — otherwise the unguarded
+door is simply reopened.
+
+The schema below is retained ONLY so a future reader can recognise the surface, not as a
+recommendation to use it.
 
 `initialize` response (only reachable from an ALREADY-initialized project — CC1 in SKILL.md):
 `serverInfo: {"name":"cocoindex-code","version":"1.28.0"}`. **This "1.28.0" is NOT the ccc

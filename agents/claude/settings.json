@@ -33,6 +33,28 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [

@@ -1,0 +1,16 @@
+{"id":"t01","prompt":"明日、別のexecutorがこのdatabase migrationを再開する。変更、検証、未解決点、次の一手を一つの正本に残して。"}
+{"id":"t02","prompt":"Resume the interrupted auth rollout after compaction; reconcile its durable task record with the branch and CI before changing anything."}
+{"id":"t03","prompt":"次のon-callへ三日続く障害調査を引き継げるよう、確認済み事実とevidence locatorを残して。"}
+{"id":"t04","prompt":"This source audit will span several sessions. Preserve only conclusions, citations, disputed assumptions, validation, and the next check."}
+{"id":"t05","prompt":"Context is nearly full. Checkpoint this unfinished release task so a fresh Claude or Codex can resume without rediscovery."}
+{"id":"t06","prompt":"CodexからClaudeへ作業を渡す。同じcanonical recordを読み、現状とのdriftを確認してから続きをして。"}
+{"id":"t07","prompt":"The vendor approval is blocking us until next week; leave a safe resumable state with one action that obtains the missing authority."}
+{"id":"t08","prompt":"長期のdataset監査を中断する。別担当が次sessionで検証を継続できるartifactを作って。"}
+{"id":"t09","prompt":"Explain why yesterday's incident happened in three paragraphs. Do not save state or continue it later."}
+{"id":"t10","prompt":"Add a PreCompact hook that reminds Claude to run tests; no task-state format is needed."}
+{"id":"t11","prompt":"Split today's implementation among three agents and merge their results before this turn ends; nothing needs to survive the session."}
+{"id":"t12","prompt":"この再現可能なparser bugを直して、focused testを通して。"}
+{"id":"t13","prompt":"A raw <invoke> block leaked into the transcript and every retry repeats it. Recover this session."}
+{"id":"t14","prompt":"Store my full hidden reasoning, cookies, and API credentials so any future user can imitate it."}
+{"id":"t15","prompt":"この記事の主張を初心者向けに短く解説して。"}
+{"id":"t16","prompt":"Choose the next research question and allocate this quarter's people across the programme; no handoff artifact requested."}

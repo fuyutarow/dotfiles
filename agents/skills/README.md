@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**38 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**39 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Authored
@@ -35,6 +35,7 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 - [`forging-skills`](forging-skills/) — Create and reforge Agent Skills to the house bar: triggers, gates, sibling cuts, verification.
 - [`operating-the-harness`](operating-the-harness/) — Configure Claude Code itself: lean CLAUDE.md, hooks, permissions, verification loops, MCP, subagents.
+- [`continuing-long-running-tasks`](continuing-long-running-tasks/) — Keep one evidence-linked task record trustworthy across compact, resume, and Codex/Claude handoff.
 - [`recovering-poisoned-context`](recovering-poisoned-context/) — Rescue a session broken by a leaked/malformed tool call by rewinding, not retrying.
 - [`driving-codex`](driving-codex/) — Drive the OpenAI Codex CLI (`codex exec`) as a headless worker: sonnet-wrapper pattern, sandbox flags, availability by probe, spend accounting.
 - [`driving-claude`](driving-claude/) — **Codex-only**: drive Claude Code (`claude -p`) as a headless worker with trusted-CWD, least-privilege, JSON relay, and model-probe gates.

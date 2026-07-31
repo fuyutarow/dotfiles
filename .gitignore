@@ -1,4 +1,5 @@
 .serena/
+/.agent-state/
 agents/commands/.system/
 
 # Local overrides

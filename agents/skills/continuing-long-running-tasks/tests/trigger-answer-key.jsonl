@@ -1,0 +1,16 @@
+{"id":"t01","class":"fire","route":"continuing-long-running-tasks","reason":"explicit cross-executor durable handoff"}
+{"id":"t02","class":"fire","route":"continuing-long-running-tasks","reason":"post-compact resume and reconciliation"}
+{"id":"t03","class":"fire","route":"continuing-long-running-tasks","reason":"multi-day on-call handoff"}
+{"id":"t04","class":"fire","route":"continuing-long-running-tasks","reason":"explicit multi-session evidence state"}
+{"id":"t05","class":"fire","route":"continuing-long-running-tasks","reason":"imminent compaction of unfinished work"}
+{"id":"t06","class":"fire","route":"continuing-long-running-tasks","reason":"cross-product executor handoff"}
+{"id":"t07","class":"fire","route":"continuing-long-running-tasks","reason":"blocked long task with future authority action"}
+{"id":"t08","class":"fire","route":"continuing-long-running-tasks","reason":"interrupted audit must resume next session"}
+{"id":"t09","class":"no-fire","route":"plain diagnosis","reason":"one-shot incident explanation with explicit no persistence"}
+{"id":"t10","class":"no-fire","route":"operating-the-harness","reason":"hook configuration only"}
+{"id":"t11","class":"no-fire","route":"orchestrating-agents","reason":"same-turn dispatch without durable state"}
+{"id":"t12","class":"no-fire","route":"implementing-and-debugging","reason":"ordinary bounded bug fix"}
+{"id":"t13","class":"no-fire","route":"recovering-poisoned-context","reason":"poison must be removed before any checkpoint"}
+{"id":"t14","class":"no-fire","route":"refuse","reason":"forbidden private reasoning and credentials"}
+{"id":"t15","class":"no-fire","route":"plain answer","reason":"one-shot explanation"}
+{"id":"t16","class":"no-fire","route":"directing-research","reason":"research programme judgment without persistence"}

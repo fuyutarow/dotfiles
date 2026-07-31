@@ -102,12 +102,21 @@ path-scoped rules and lazy subdir loads. For system-prompt-level text use
 | File | Survives `/compact`? |
 |---|---|
 | **Project-root CLAUDE.md** | Yes — re-read from disk and re-injected |
+| **Unscoped rules** | Yes — re-injected from disk |
+| **Auto memory** | Yes — re-injected from disk |
+| **Invoked Skill bodies** | Yes, capped at 5,000 tokens per Skill and 25,000 total; oldest drop first |
+| **Path-scoped rules** | No — reload only when a matching file is read |
 | **Nested (subdir) CLAUDE.md** | **No** — reloads only on next read of a file there |
 | **Conversation-only instruction** | No — lost; move it into CLAUDE.md to persist |
 
 Add a **`# Compact instructions`** heading to CLAUDE.md to steer what compaction preserves (e.g.
 "preserve modified files + the test commands"). If a rule vanished post-compact, it was either
 conversation-only or in a not-yet-reloaded nested file.
+
+Re-injection is context transport, not durable task-state authority. For a long task, use
+`continuing-long-running-tasks`; its record stores evidence locators and must be reconciled after
+compact. Put the LAW and gates near the start of a Skill because compaction truncates oversized
+Skill bodies from the end.
 
 ## Auto memory — Claude's own notes (v2.1.59+, on by default)
 

@@ -127,6 +127,11 @@ Bash (`rm`, `mv`, `cp`), external edits, or other concurrent sessions. **Not a g
 treat checkpoints as "local undo," git as permanent history. To branch off and try an alternative
 while preserving the original session, use `claude --continue --fork-session` instead of summarize.
 
+This rewind checkpoint is also **not** a cross-session task-state record. When a fresh Codex/Claude
+executor must resume after compact or handoff, route the semantic state to
+`continuing-long-running-tasks` and its reconciled `TASK-CONTINUATION.md`; this harness owns only the
+transport hooks and context lifecycle.
+
 ---
 
 ## Context hygiene — the fundamental constraint
@@ -145,6 +150,8 @@ more mistakes). Manage it aggressively.
 
 - **Tune compaction survival in CLAUDE.md:** e.g. *"When compacting, always preserve the full list
   of modified files and any test commands."*
+- **Long-task state lives outside the summary:** bind one `TASK-CONTINUATION.md` through
+  `continuing-long-running-tasks`; after compact, reconcile it with git/files/tests before acting.
 - **After 2 failed corrections on the same issue, `/clear` and rewrite a sharper prompt** with what
   you learned — a clean session beats a long degraded one (SKILL.md §4 anti-patterns).
 - **Unscoped "investigate" reads hundreds of files** → scope it, or delegate to a subagent so the

@@ -11,7 +11,9 @@ description: >-
   Triggers: malformed tool call, leaked tool call, court/count invoke, tool call as text,
   self-poisoning, 自家中毒, 壊れた tool call, repeated tool errors, /rewind vs retry,
   reload-skills didn't help. Encodes the correct reflex (rewind, NOT retry) and the
-  P1/P2/P3 prevention boundary (why a harness/hook cannot prevent contamination).
+  P1/P2/P3 prevention boundary (why a harness/hook cannot prevent contamination). After
+  rewind/clear removes poison, co-fire continuing-long-running-tasks only if the clean task still
+  needs durable resumption; never checkpoint the poisoned turn.
 ---
 
 # Recovering a poisoned context (leaked / malformed tool call)
@@ -30,6 +32,10 @@ Esc Esc  (or /rewind)  →  巻き戻し先 = 最初に court/<invoke> が漏れ
    ↓ 再発が多い
 /model  →  Opus 4.x 以外（例 Sonnet）へ一時退避。震源は decoder 回帰なので発生率が下がる
 ```
+
+After the poisoned material is removed, a genuinely long task may resume through
+`continuing-long-running-tasks`. Reconcile only clean files/tests/external evidence and never copy
+the poisoned transcript, malformed call, or reconstructed reasoning into its record.
 
 **Do NOT** (all make it worse — they keep the few-shot poison in context):
 `/reload-skills`, `/reload-plugins`, "retry carefully", re-sending the same call, or

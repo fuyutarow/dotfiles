@@ -9,6 +9,28 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.codex/hooks/run-continuity.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.codex/hooks/run-continuity.sh",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [

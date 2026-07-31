@@ -11,6 +11,8 @@ description: >-
   review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-search
   battery` before new functionality; exact tokens use `repo-search literal`. Language skills
   co-fire for idiom. English skill; respond in the user's language (default Japanese).
+  When implementation must survive a compaction, session, or executor handoff, co-fire
+  continuing-long-running-tasks for the portable state record; this Skill still owns correctness.
 ---
 
 # Implementing & debugging — the discipline of the act
@@ -97,6 +99,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
 | `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
 | `driving-cocoindex` | **Co-fire, FIRST, in any operational ccc-registered repo**: before writing NEW functionality, run `repo-search battery` (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway. Literal-token search stays correct through `repo-search literal`; raw Grep is hook-denied because it omits the QUERY-SHAPE declaration (their CC3). |
+| `continuing-long-running-tasks` | Co-fire only when this implementation must persist across a compact/session/executor boundary. This Skill owns behavior and verification; continuation owns one evidence-linked resumable state record. |
 
 ## Fire / no-fire
 

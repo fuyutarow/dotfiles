@@ -158,6 +158,13 @@ keep env across Bash calls, append exports to `$CLAUDE_ENV_FILE` (exported on `S
     "hooks": [ { "type": "command", "command": "direnv export bash > \"$CLAUDE_ENV_FILE\"" } ] } ] } }
 ```
 
+For durable task continuation, do not echo a transcript, compact summary, or record body from a
+hook: that promotes untrusted/data text into instruction context and can leak secrets. The installed
+`task-continuity.ts` adapter injects only a session-scoped `ACTIVE` locator. Record semantics,
+validation, and post-compact reconciliation belong solely to `continuing-long-running-tasks`.
+Invalid opted-in state blocks **manual** compact; automatic compact stays fail-open so a full context
+window can still recover.
+
 ### Desktop notify (Notification event)
 
 | OS | `command` |

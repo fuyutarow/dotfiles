@@ -162,6 +162,10 @@ ownership voidなら`forging-skills`へ渡す。
 verification、acceptanceを載せる**dispatch overlay**である。topologyはmapへ後から載せるcontrol
 planeであり、domain機能やsemantic mapを代理しない。
 
+長期タスクのcross-session stateは`continuing-long-running-tasks`が所有する。両者がco-fireする
+場合、このoverlayは`continuation_record_locus`だけを運び、recordのsemantic stateを複製・編集
+しない。continuity側もagent、dependency、veto、acceptanceを決めない。
+
 | Stage | Mode | Why | Artifact |
 |---|---|---|---|
 | scope / map intake / interface / portfolio / brief | `SOLO` | 発射前にdomain-signed mapのlocus/digest、外部界面、hard constraints、安全、予算、phase-exit、maturity release conditionを一つの仕様にする。owner不在のplain taskだけtask-local provisional mapを許す。 | domain-function-map pointer + dispatch overlay + launch freeze。 |

@@ -22,8 +22,22 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+// Bare specifier, not pinned inline: this tree is NOT zero-dep. It is symlinked (never
+// mirrored/copied) into ~/.claude/skills by `mise run link:skills`, so the repo-root graduation
+// project (package.json + bun.lock) governs it — Bun resolves through the symlink to this
+// file's realpath and finds that root from any cwd (BG3).
+import { typeFlag } from "type-flag";
 
 const HOME = homedir();
+
+function rejectUnknownFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
 
 // An absolute path literal under the user's home directory. `~/…` and `$HOME/…` forms are
 // deliberately NOT matched: they are portable and are the spelling P3 asks for.
@@ -89,7 +103,17 @@ async function scan(file: string, allowed: string[]): Promise<Finding[]> {
 }
 
 async function main(): Promise<number> {
-  const root = resolve(Bun.argv[2] ?? join(HOME, ".claude"));
+  const parsed = typeFlag({}, Bun.argv.slice(2), {
+    ignore: rejectUnknownFlag,
+  });
+  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
+  if (unknownFlag !== undefined) {
+    throw new Error(`unknown option '--${unknownFlag}'`);
+  }
+  if (parsed._.length > 1) {
+    throw new Error(`unexpected argument '${parsed._[1]}'`);
+  }
+  const root = resolve(parsed._[0] ?? join(HOME, ".claude"));
   if (!(await exists(root))) {
     process.stderr.write(`FATAL: user-scope root not found: ${root}\n`);
     return 2;

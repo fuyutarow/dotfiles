@@ -1,5 +1,13 @@
 # Personal Codex Guidance
 
+## Dispatch roles
+
+Sol is the root planner and acceptance authority; it never spawns as a worker. Call every
+`spawn_agent` with Terra. The local `Agent` / `spawn_agent` hook contract is mechanically
+guarded by `~/.codex/hooks.json`; the Desktop `collaboration.spawn_agent` path still needs a
+fresh-session live probe, so do not claim that Desktop path is enforced yet. This is advisory
+context, not the guard itself.
+
 ## Claude-Aware Repositories
 
 Many of this user's repositories keep their richest project intelligence in Claude Code files. When a repository contains `CLAUDE.md`, `.claude/`, or `.claude/skills`, do not treat the absence of detailed Codex-specific guidance as absence of project policy.

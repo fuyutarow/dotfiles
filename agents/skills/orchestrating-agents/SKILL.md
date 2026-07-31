@@ -1,27 +1,22 @@
 ---
 name: orchestrating-agents
 description: >-
-  委任・並列化・独立検収を要する決まった研究・実装・文書制作を、監督が control plane
-  として進める運転規律を定める。
+  決まった研究・実装・文書制作を、委任・並列化・独立検収で進めるcontrol-plane規律。
   「研究を進めて」「どんどん進めて」「起草と査読を委任」「複数のサブエージェントで水平思考」
-  「誰に任せるか」「仕事が遅い」「生産性を上げたい」「ポストモーテムを反映」
-  「検収試験を設計」「完成宣言が監査に落ちる」「中間生成物を再利用したい」
-  「監督自身が単発を全力実務」で用いる。
-  LAW は、許可済み・可逆・隔離済みの生産を検証待ちで止めず、検証を公表門にすること、
-  supervisor を設計・brief・dispatch・運転・裁定・検収・対話の control plane に限定すること、
-  ensemble では人数でなく failure mode と reasoning topology を異質化すること。
-  PURPOSE cut: 一件の即答・単純な決定的処理→plain answer/既存script、
-  個別 CLI の呼び方→driving-*、文献体系化→systematizing-knowledge、
-  何を研究するか→directing-research、散文規則→linting-prose、分野の事実→project skill、
-  skill の craft→forging-skills。本skill自身のreforge→本skillをdomain owner、
-  forging-skillsをcraft ownerとしてco-fire。Workflow-native: scope/interface/portfolio/brief、
-  synthesis、acceptance は solo。独立な生産・候補生成・盲検検証は capacity-aware に fan-out し、
-  normalization を barrier として通す。Japanese skill; responds in the user's language.
+  「誰に任せる」「仕事が遅い」「創造と批判」「生成と評価」「早すぎる批判」「検収試験を設計」
+  「完成宣言が監査に落ちる」「中間生成物を再利用」で使う。Domain-signed function mapを受け、
+  agent、visibility、dependency、veto、verification、acceptanceのdispatch overlayだけを所有する。
+  Cuts: creative-research judgment → directing-research; thesis genesis → forging-novel-theses;
+  premise/tacit exposure → surfacing-blind-spots; expensive/irreversible one-bet test →
+  acting-on-hypotheses; cheap reversible probe → domain/plain executor; paper claim →
+  arguing-research-papers; corpus → systematizing-knowledge; skill craft → forging-skills. 内容や成熟判定を
+  所有しない。Scope/brief/synthesis/acceptanceはsolo、独立生成と盲検検証はcapacity-aware fan-out。
+  Japanese skill; responds in the user's language.
 ---
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2607.11.0 (2026-07-28) — effort を役へ束縛(門は増やさず SOLE home を拡張)。
+> **Version**: v2607.14.1 (2026-07-31) — supervisor bearerをcontrol planeへ完全に限定。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -78,7 +73,7 @@ artifact が無い規則は、実行済みとして数えない。
 | LAW | 規則 | Artifact |
 |---|---|---|
 | 公表門 | 許可済み・可逆・隔離済みの生産は、検証の完了待ちで止めない。同じ巡に並べるのは verification design、oracle、brief の準備までとし、成果物依存の blind audit は凍結後に行う。検証は公表と acceptance を止める。 | 同じ巡の production と verification-design dispatch、scope 三条件、audit入力の凍結digest。 |
-| Control plane | supervisor は設計、brief、dispatch、interrupt/status、裁定、検収、対話を持つ。成果物の実装、起草、探索、計測は executor へ渡す。 | 全 tool 行為の級。deliverable の author と supervisor が分離した provenance。 |
+| Control plane | supervisor は設計、brief、dispatch、interrupt/status、裁定、acceptance、対話を持つ。supervisor bearerはexecutor、deliverable author、independent verifier、subagentにならない。成果物の実装、起草、探索、計測、独立検証はdelegated bearerへ渡す。 | 全 tool 行為の級。supervisorとauthor / verifierが分離し、authorとverifierも異なるbearerであるprovenance。 |
 | 認知的異質性 | ensemble は agent 数でなく、狙う failure mode と reasoning topology を異質化する。固定人格の複製を多様性と数えない。 | 各腕の `topology / failure_mode_attacked` を持つ portfolio manifest。 |
 
 未許可、不可逆、隔離不能な変更は第一の LAW の scope 外である。
@@ -94,10 +89,9 @@ supervisor が tool を使う前に行為級を宣言する。
 | 級 | 許されること | 禁止 | Artifact |
 |---|---|---|---|
 | 検分 | 裁定を養う読み取り専用の現物確認を一〜二操作行う。 | 編集、生成、計測、広い探索。 | `検分: <養う裁定>` の札と read-only log。 |
-| 委任 | 自己完結した brief を作り、完成定義と検収試験を凍結する。 | 成果物を代作すること。 | brief、owner、期限、完成定義、試験。 |
+| 委任 | 自己完結した brief を作る。非生成仕事は完成定義と検収試験を発射前に凍結する。生成仕事はstage mapの二段freezeを使う。 | 成果物を代作すること。 | brief、owner、期限、仕事型に応じたfreeze、試験。 |
 | 運転 | 事前指定jobを launch、poll、interrupt し、差分statusを報告する。 | job の仕様変更、成果物の生成・修復。 | job id、操作、状態差分、次の判定時点。 |
-| 検収 | 凍結した試験だけを実行し、採否と観測を記録する。 | 新規実装、起草、試験に合わせた修復。 | `検収: <claim>` の札、独立oracle、PASS/FAIL。 |
-| 全力実務 | user が supervisor 自身と単発対象を明示したときだけ、その一件を実務として行う。 | 難しさを理由に自発起動すること、次の仕事へ持ち越すこと。 | turn 冒頭の対象・理由・費用、終了時の supervisor 復帰。 |
+| 検収 | delegated verifierの凍結した試験結果だけを受け、採否と観測を記録する。 | 試験の実行、新規実装、起草、試験に合わせた修復。 | `検収: <claim>` の札、独立oracle、verdict、PASS/FAIL。 |
 
 運転中は、完了待ちだけの空のstatusを作らない。
 
@@ -121,7 +115,7 @@ artifact は、decision log の可逆性、戻し方、裁定者である。
 
 ## Durable role topology
 
-現在の担い手、model 名、effort の束縛、quota、保持、probe 状態は
+現在の担い手、model 名、availability と probe 状態は
 `references/model-roster.md` が SOLE home である。
 
 dispatch 前に同 reference を読み、利用不能な担い手を黙って代替しない。
@@ -137,21 +131,45 @@ artifact は、dispatch ごとの effort の出所と、下げた場合の宣言
 
 | Durable role | 所有する仕事 | 境界 | Artifact |
 |---|---|---|---|
-| supervisor | scope、interface、brief、運転、裁定、acceptance、対話。 | deliverable の作者にならない。 | signed spec、dispatch graph、acceptance record。 |
+| supervisor | scope、interface、brief、運転、裁定、acceptance、対話。 | executor、deliverable author、independent verifier、subagentにならない。 | signed spec、dispatch graph、acceptance record。 |
 | executor | 起草、実装、探索、計測、自己試験。 | 自分の成果物を独立検収しない。 | deliverable、provenance、self-test。 |
-| high-capability executor | 通常executorが届かない、境界済みの単発実務。 | 常設のsupervisorや無限定の艦隊にしない。 | escalation brief、単発の終了記録。 |
 | independent verifier | 成果物を盲検で照合し、反証または独立再計算を行う。 | 生成、修復、作者の自己評価への依存をしない。 | blind brief、oracle、verdict。 |
 | outside observer | 世評、受容、直近の外界信号を所在つきで観測する。 | 技術的真偽の根拠や独立検証者にしない。 | 観測日、範囲、source locus。 |
 
 ## Workflow-native stage map
 
+以下で生成仕事とは、novelty-sensitiveまたはcandidate-generatingな仕事を指す。
+
+domain skillがmaturity gateを明記していなくても、生成仕事はdomain ownerによる
+formulation / evaluability artifactとdigestを必須にする。
+
+### Function-first composition
+
+配役、並列数、modelを決める前に、domain/craft ownerが署名した次の分解を受け取る。
+
+```text
+<input state> --<function verb>--> <owned artifact> --<sole domain owner>--> <next state>
+```
+
+機能名をagent role名で代用しない。このskillはdomain/craft function mapを再定義しない。
+`domain_function_map_locus`とdigestを照合し、同じ成果物に二つのownerが付いていたらdispatchせず、
+domain/craft ownerへtyped cutの修復を返す。既存domain ownerが無い一回限りのplain taskだけは、
+supervisorがtask-localなprovisional mapを作れる。固有のinput/output/stopを持つ再利用可能な
+ownership voidなら`forging-skills`へ渡す。
+
+このskillのartifactは、署名済みmapへの
+`domain_function_map_locus + digest`と、その各行へagent、visibility、dependency、veto、
+verification、acceptanceを載せる**dispatch overlay**である。topologyはmapへ後から載せるcontrol
+planeであり、domain機能やsemantic mapを代理しない。
+
 | Stage | Mode | Why | Artifact |
 |---|---|---|---|
-| scope / interface / portfolio / brief | `SOLO` | 境界と採否を一つの整合した仕様にする。 | supervisor-signed spec。 |
-| verification design / oracle / audit brief | productionと同じ巡に準備可 | 成果物を見ずに反証lensと判定条件を凍結する。 | lens、oracle、criteria、資源を持つaudit brief。 |
-| production / candidate generation | `FAN-OUT` where independent | 待ち時間を減らし、異なるfailure modeを覆う。 | dependency とownerが分離したdispatch graph。 |
-| normalization | `PIPELINE` + `BARRIER` | 全候補を同じ比較面へ写す。 | schema-valid candidate packets。 |
-| synthesis / adjudication | conditional `SOLO` | portfolio時だけ、一つの明示した証拠規則で候補を比較する。 | synthesis record と候補ごとの採否理由、またはskip理由。 |
+| scope / map intake / interface / portfolio / brief | `SOLO` | 発射前にdomain-signed mapのlocus/digest、外部界面、hard constraints、安全、予算、phase-exit、maturity release conditionを一つの仕様にする。owner不在のplain taskだけtask-local provisional mapを許す。 | domain-function-map pointer + dispatch overlay + launch freeze。 |
+| verification design / oracle / audit brief | productionと同じ巡に準備可 | 成果物を見ずにheld-out lensとoracleを準備する。既知のhard constraintsとstage-exit criteriaは生成側へ開示できる。 | 生成側からsealedなlens、oracle、expected verdictと、開示した制約の一覧。 |
+| production / candidate generation | `FAN-OUT` where independent | solver腕は実候補、修正版、別候補、または実成果物を返す。成熟前のgenerative challengeは別候補か修正版へ変換する。clearing condition / discriminating probeだけならmaturity支援artifactへ分け、solver候補に数えない。いずれもreject / prune / PASS / FAILの権限を持たない。 | dependencyとownerが分離したdispatch graph、非空の実候補・成果物、または候補外と明記したmaturity支援artifact。 |
+| maturity release | 生成仕事だけのdomain `BARRIER` | 全ての生成仕事で、domain ownerがformulation / evaluabilityを確定する。verified fact、hard constraint、安全、権限、決定的矛盾はこの前でも停止できる。 | `domain_gate_locus`、`artifact_digest`、release record。 |
+| normalization | `PIPELINE` + `BARRIER` | release済みの実候補・成果物だけを同じ比較面へ写す。maturity支援artifactを候補へ混ぜない。 | schema-valid candidate packetsと、除外した支援artifactのlog。 |
+| synthesis / verdict-bearing evaluation | conditional `SOLO` | portfolio時だけ候補を比較する。生成仕事ではmaturity release後、final acceptance criteriaの第二freeze後にだけreject / prune / verdictを許す。 | frozen criteria、synthesis recordと候補ごとの採否理由、またはskip理由。 |
 | blind verification | capacity-aware `FAN-OUT` | synthesis後の成果物、またはsolo成果物を凍結してから異なる反証lensを当てる。 | frozen digestとblind inputを持つaudit manifest。 |
 | acceptance | `SOLO` | userへの公表責任を一つのcontrol planeへ閉じる。 | frozen criteria、独立検収、acceptance record。 |
 
@@ -159,9 +177,15 @@ harness が無い場合も stage map は変えず、同じ腕を順番に実行�
 
 artifact は、serial 化した順序と、独立入力が腕の間で共有されていない記録である。
 
-候補到着後に supervisor が normalization barrier を所有し、script がschema検査とdedupを行う。
-portfolioが無ければ synthesis はskipできる。synthesis後またはsolo成果物の凍結後にblind auditを
-発射し、独立verdictの到着後に acceptance barrier を置く。
+生成仕事のfreezeは二段である。第一freezeは発射前のinterface、hard constraints、安全、予算、
+phase-exit、maturity release conditionである。第二freezeはdomain ownerがformulation /
+evaluability artifactとdigestを出した後、verdict-bearing evaluationまたはblind auditの前の
+final acceptance criteriaである。auditやverdictを見てcriteriaを変えない。
+
+非生成・決定的な仕事は従来どおりlaunch specでcriteriaを凍結でき、maturity ceremonyを追加しない。
+候補到着後にsupervisorがnormalization barrierを所有し、scriptがschema検査とdedupを行う。
+portfolioが無ければsynthesisはskipできる。synthesis後またはsolo成果物の凍結後にblind auditを
+発射し、独立verdictの到着後にacceptance barrierを置く。
 
 ## Evidence boundary
 
@@ -179,7 +203,8 @@ artifact は、各載荷claimから relay または check への逆向きpointer
 
 独立 verifier へ渡すのは、問題、成果物、凍結した判定条件だけにする。
 
-生成側の意図、期待する判定、自己評価は blind input に入れない。
+held-out audit lens、oracle、expected verdictはgeneratorからsealedにする。既知のhard constraintsと
+stage-exit criteriaは開示できる。生成側の意図、期待する判定、自己評価はblind inputに入れない。
 
 不一致は多数決せず、最初に引く糸として一次資料、機械oracle、独立再計算へ戻す。
 
@@ -199,7 +224,7 @@ P5はP2へ吸収済みであり、この番号を別のgateへ再利用しない
 |---|---|---|
 | P0 GROUNDING | 水準、新規性、不在、能力、成熟度を述べる前と、新しい建造を登録する前に、意味検索と正本索引を照合する。grepだけで閉じない。 | query分母、正本名、`file:line` hit / 軸ごとのno-hit。最低軸は実装・既存資産、別表現、普遍層、撤回台帳。登録では、その分母を登録の文書に書く。 |
 | P1 PROBE-FIRST | change/build で、変更が許可済み・可逆・隔離済みの場合だけ、同じturnに最小probeをexecutorへ委任する。answer/explain/review/diagnoseではmutationしない。 | scope三条件、dispatch id、具体出力。確認済み知見をbuildへ出す場合は対応する実装dispatch。 |
-| P2 CONCURRENT-VERIFY | 独立でcapacityが競合しない production と verification design / oracle / brief 準備を並べる。成果物依存のblind auditは、synthesis後またはsolo成果物の凍結後にだけ発射する。待機中は前面を進め、変化のないstatusを送らない。 | dependency/resource/accountを持つdispatch表、productionとverification準備の重なり、frozen digest→audit startの順序、status差分。 |
+| P2 CONCURRENT-VERIFY | 独立でcapacityが競合しないproductionとverification準備を並べる。生成仕事はstage mapの二段freezeを守り、成熟前のchallengeにvetoを与えず、maturity release後だけverdict-bearing evaluationへ渡す。blind auditは最終物の凍結後だけ発射する。 | dependency/resource/accountを持つdispatch表、launch freeze→maturity release→criteria freeze→verdict / auditの順序、frozen digest、status差分。 |
 | P3 PRE-SEND FLOOR | 目安十行超の報告は先にfileへ保存し、利用可能な文章検査を通す。報告・設計・登録のいずれでも、数値にはsourceと測定体制を添え、条件差を明記する。体制のない値を設計根拠にしない。 | report path、検査command/resultまたは不存在確認、数値→source/conditions表。 |
 | P4 ROUND-TRIP ECONOMY | briefを自己完結させ、全指摘に修復経路を求める。同型指摘が二巡続けば成果物でなく仕様へ戻す。 | `references/delegation-contracts.md` が SOLE home。brief id、round log、spec差分。 |
 | P6 VERIFY-NOT-TRUST | 載荷claimは自前計算、一次資料、独立再計算のいずれかで確定する。達成級の語もclaimであり、独立audit前は前進の報告とする。 | claim→evidence表、blind audit、scope付きverdict。不一致claimは裁定まで公表停止。 |
@@ -274,7 +299,8 @@ artifact は、独立入力digest、packet schemaの検査、除外した腕と�
 | `synthesis` | 指定した一役 | 正規化済みcandidate packetsを証拠で比較する。多数決だけで決めない。 | packetごとのevidence、弱点、選択理由。 |
 | `acceptance` | supervisor | 凍結した完成定義と独立検収から最終採否を出す。 | criteria、verdict、scope、未解決claim。 |
 
-生成者と独立検収者を同じ担い手にしない。
+生成者と独立検収者を同じbearerにしない。authorが一方のdelegated bearerならverifierは他方の
+delegated bearerにする。必要なbearerが利用不能なら黙って代替せず、supervisorの裁定へ戻す。
 
 synthesis が新しいcandidateを生成した場合、そのcandidateを独立検証へ戻してから
 acceptance する。
@@ -293,13 +319,19 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | 「研究を進めて」「どんどん進めて」。制作の文脈。 | `FIRE` | 仕事の運転はここ。何を選ぶかは別owner。 | 行為級、dispatch graph、次のgate。 |
 | 「起草と査読を委任」「定理や文書を起草・査読」。 | `FIRE / CO-FIRE` | 運転はここ。数学の中身は `proving-theorems`。 | role分離とco-fire記録。 |
 | 「複数の模型で水平思考」「誰に任せる」「配役を決める」。 | `FIRE` | topologyと順序はここ。現在の担い手はmodel roster。 | portfolioまたはrole-selection record。 |
+| 「創造と批判をどう配る」「生成と評価を分ける」「早すぎる批判が候補を潰す」。 | `FIRE` | domain ownerが成熟/凍結条件を定義した後のvisibility、challenge release、veto authority、multi-agent topologyはここ。内容と成熟判定はdomain owner。 | domain freeze pointer、権限表、visibility record。 |
 | 「仕事が遅い」「生産性を上げる」「ポストモーテムを反映」。 | `FIRE` | pacingと委任契約はここ。 | 観測した失敗→変更したrule/artifact。 |
 | 「検収試験を設計」「完成宣言が監査に落ちる」。 | `FIRE` | P6とacceptance境界はここ。 | falsifying test、blind audit、verdict。 |
 | 「中間生成物を再利用」「cacheを作り直している」。 | `FIRE` | 発火はここ、詳細はmeasurement reference。 | P10 manifest pointer。 |
-| 「監督自身がこの単発を全力で実務せよ」。 | `FIRE` | 全力実務の明示例外はここ。 | user原文、対象、費用、復帰記録。 |
 | 個別 CLI のflag、slug、呼び出し構文。 | `NO-FIRE` | `driving-*` が一回の呼び出しを所有する。 | routing先だけ。委任体制を起動しない。 |
 | 文献群の台帳、確度、矛盾調停、体系化。 | `NO-FIRE` | `systematizing-knowledge` が内容を所有する。 | routing先。並べ方を問う場合だけco-fire。 |
-| 次に何を研究するか、賭け、撤退判断。 | `NO-FIRE` | `directing-research` が選定を所有する。 | 選定後のjobだけをここへ返す。 |
+| 創造的研究全体、問題構成・選定・定式化、候補admission、>=2独立方向の配分・再開・撤退。 | `NO-FIRE` | `directing-research` がlifecycleとportfolio判断を所有する。 | domain stage列とacceptance criteriaを先に受け取る。 |
+| 既存plan/frameの暗黙前提、無視した例外、人間の暗黙知を、解決案を出す前に掘る。 | `NO-FIRE` | `surfacing-blind-spots` がEXPOSEとBlind-spot packetを所有する。 | function mapでは同skillのpacketを次段のdomain ownerへ渡す。 |
+| 選ばれた問題frameから新しいthesis候補を類推・構造移送・再結合で生む。 | `NO-FIRE` | `forging-novel-theses` がGENESISだけを所有する。 | packet/routesを受け、blindnessとfreeze時機だけをここで決める。 |
+| 高価/不可逆な既知の一つの賭けをper-test threshold、kill experimentで試す。 | `NO-FIRE` | `acting-on-hypotheses` がgated ONE treeの実行規律を所有する。 | probeの役割分離が必要な場合だけco-fire。 |
+| 安価・決定的・可逆でdownstream exposureのない一回のprobeを走らせる。 | `NO-FIRE` | domain/plain executorが実行し、domain ownerへ`EXECUTOR RESULT`を返す。 | topologyを起動しない。 |
+| 完成した研究結果からpaperのgoverning claim、positioning、rebuttalを作る。 | `NO-FIRE` | `arguing-research-papers` がargumentを所有する。 | author/reviewer/verifierのtopologyだけをここで決める。 |
+| DMN、incubation、mind-wandering、人間の感情や休息の効用。 | `NO-FIRE` | 人間の認知主張をagentのsleep / waitへ翻訳しない。内容調査はdomain research。 | sleep / waitを創造性の代理にしたdispatchが存在しない。 |
 | 文章規則、語彙、散文の品質。 | `NO-FIRE` | `linting-prose` が内容を所有する。 | P3では検査結果だけを消費する。 |
 | 対象分野の事実、理論的位置づけ、scope判断。 | `NO-FIRE` | 対応するproject skillが正本。 | domain verdictへのpointer。 |
 | skillの新設、description、cuts、eval、鍛え直し。 | `NO-FIRE / CO-FIRE` | `forging-skills` がcraftを所有する。明示対象なら上の優先規則。 | craft ownerとdomain ownerの記録。 |
@@ -309,7 +341,7 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/model-roster.md` | 現在の担い手、model、quota、保持、probe、fallback、staleness。 | 配役、昇格、外部送信、担い手の利用不能時。 |
+| `references/model-roster.md` | 現在の担い手、model、availability、probe、staleness。 | 配役、担い手の利用不能時。 |
 | `references/delegation-contracts.md` | brief schema、C1〜C4、長走行、P4、生成・査読・照合・検収の分離。 | 委任前、長いjob、反復指摘、救済。 |
 | `references/measurement-and-resources.md` | P7〜P10、measurement packet、土俵、交絡、機構なし対照、再利用。 | 計算、比較、因果主張、cacheの保存・失効。 |
 | `references/reasoning-portfolios.md` | topology、failure mode、candidate packet、normalization、synthesis、pruning。 | 複数の有力経路があり、異質な候補を比較するとき。 |

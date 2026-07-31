@@ -155,8 +155,8 @@ depends = ["test:hooks", "test:cocoindex", "test:scripts"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
-description = "Claude Code hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
-run = "bun test agents/claude/hooks"
+description = "Claude Code and Codex hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
+run = "bun test agents/claude/hooks agents/codex/hooks"
 
 [tasks."test:cocoindex"]
 dir = "{{config_root}}"

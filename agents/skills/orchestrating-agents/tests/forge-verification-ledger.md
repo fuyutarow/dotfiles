@@ -1,4 +1,103 @@
-# acting-as-director — forge verification ledger (F3 artifact)
+# orchestrating-agents — forge verification ledger (F3 artifact)
+
+## Active distillation — v2607.12.0 (2026-07-30)
+
+### Coverage contract
+
+問いは「創造的研究そのものを教えること」ではなく、候補生成、challenge、選択、独立検収を
+agent workflowでどう配役し、未成熟な候補を権威つき評価で早期淘汰しないかである。
+2026-07-30時点で、持込会話、creativity / problem finding / real-world scienceの一次研究、
+LLM scientific-idea generation、multi-agent diversityの査読論文と対抗preprintを照合した。
+完全なsystematic review、効果量の再統合、人間の認知効果からagentへの外挿は行わない。
+
+### Source grades
+
+| Source / claim | Grade | 許される使い方 |
+|---|---|---|
+| 持込Gemini会話でのuserの訂正・要求 | `MIXED_TACIT / live correction` | user intentと「生成と批判を同じ権限で混ぜると論点が潰れる」という運転上の失敗観測に使う。一般心理法則にしない |
+| Geminiが提示した4段階、`golden issue`、引用、DMN説明 | `untrusted AI synthesis` | 仮説候補だけ。出典確認なしに規則・引用・数値へ昇格しない |
+| Nemeth et al. (2004), task-level debate | `primary human group study` | no-criticismの普遍化への反証。idea-level debateが条件次第で発散を助けるため、blanket delayを採らない。人格攻撃やagent vetoの有効性は示さない。[DOI](https://doi.org/10.1002/ejsp.210) |
+| Rietzschel, Nijstad & Stroebe (2010), idea selection | `primary human study` | 選択がoriginalityよりfeasibility / desirabilityへ偏り得るというselection bottleneckの根拠。agentへの直接効果量ではない。[DOI](https://doi.org/10.1348/000712609X414204) |
+| Dunbar (1995), real-world laboratories | `observational primary study` | lab meetingで不一致やunexpected resultがalternative hypothesisを生む観測。遠距離類推の普遍的優位は支持しない。[source](https://www.researchgate.net/publication/243774176_How_scientists_really_reason_Scientific_reasoning_in_real-world_laboratories) |
+| Dow et al. (2010), parallel prototyping | `small primary human design study` | 初期の並列prototypeがserialな評価・修正より探索を保つ場合の補助根拠。研究一般へ外挿しない。[DOI](https://doi.org/10.1145/1879831.1879836) |
+| Goodman et al. (2004), feedback specificity | `primary human learning study` | 詳細feedbackが探索・transferを弱め得る条件の補助根拠。agent criticの直接実験ではない。[DOI](https://doi.org/10.1037/0021-9010.89.2.248) |
+| Si et al. (ICLR 2025), 100+ NLP researchers | `peer-reviewed LLM primary study` | 各topicの4,000 seed generationsが重複除去後に約200案へ縮み、LLM evaluationにも限界があるため、生成数・自己評価を独立候補・acceptanceに数えない。NLP idea proposalの範囲。[official PDF](https://proceedings.iclr.cc/paper_files/paper/2025/file/ea94957d81b1c1caf87ef5319fa6b467-Paper-Conference.pdf) |
+| Chen et al. (Findings ACL 2026), diversity collapse | `peer-reviewed LLM primary study` | dense communication / authority couplingがopen-ended generationの多様性を潰し得るため、blind independent inputとauthority / vetoの分離を検査する。調べたtask・model・topologyの範囲。[DOI](https://doi.org/10.18653/v1/2026.findings-acl.13) |
+| Microsoft, “Multi-agent AI systems outperform human teams in creativity” | `2026 preprint / counterevidence` | 一部の構造化multi-agentが単腕・human teamを上回る設定があるため、「multi-agentは常にcollapse」も却下する。未査読・特定taskの範囲。[arXiv:2605.17885](https://arxiv.org/abs/2605.17885) |
+| PoTRE (TMLR 2026) | `author-confirmed paper` | 異質topology、candidate normalization、leave-one-outの設計材料。普遍的な本数・効率・因果へ昇格しない。下のdated evidenceが正本 |
+| 二段freeze、非veto challenge、decision rights、repair-path cut | `skill-supplied / constructed` | engineered, not measured。agent運転のacceptance casesで検査し、出典著者の提案として帰属しない |
+
+### Calibration inversion
+
+人間向けsourceは「批判を遅らせよ」と「task-level disagreementを使え」の両方向を含み、
+blanket ruleを許さない。agent consumerの優勢な失敗は、authority-coupled criticが未成熟な候補を
+verdictで淘汰することと、capacityがあるだけで固定personaを増やすことである。したがって
+challengeは成熟前にも許すが、別候補・修正版へ変換し、vetoを持たせない。clearing condition /
+discriminating probeだけならmaturity支援artifactへ分け、solver候補に数えない。verified fact、
+hard constraint、安全、権限、決定的矛盾は停止できる。
+
+### Adopted / rejected
+
+| 判定 | 内容 |
+|---|---|
+| ADOPT | `generative challenge`と`verdict-bearing evaluation`を権限で分ける。前者は生成物を返し、後者だけがreject / prune / PASS / FAILを持つ |
+| ADOPT | 生成仕事だけ二段freezeにする。launch前にinterface・hard constraints・安全・予算・phase exit・maturity releaseを凍結し、domain artifact / digest後かつverdict / blind audit前にfinal acceptance criteriaを凍結する |
+| ADOPT | candidate packetは実候補・実成果物を必須にする。生成仕事は`domain_gate_locus / artifact_digest`を必須にし、seed、critique-only、clearing-condition-only、probe-only packetをsynthesisへ入れない |
+| ADOPT | C3を「全判断を閉じる」からdecision rightsへ変える。境界内・可逆な選択はexecutorが継続し、decision logで返す |
+| ADOPT | P4のrepair pathを「反例/locus + clearing conditionまたはearliest reopened gate」とする。reviewerがpatchを実装した版では独立性を失う |
+| REJECT | 「批判は常に簡単・有害」「全批判を評価段階まで遅らせる」「創造性は問題選定で80%決まる」 |
+| REJECT | DMN、incubation、mind-wandering、人間のaffectをagentのsleep / wait規則へ翻訳する |
+| REJECT | 遠距離類推の普遍的優位、固定creator / critic persona、固定腕数、model / vendor / prompt toneをtopology diversityと数える |
+| REJECT | `golden issue`、Feynman / Asimov / Drucker等のquote authorityを運転規則の根拠にする |
+
+### PoTRE dated evidence moved from the runtime reference
+
+一次資料: Kankariya & Arık, “PoTRE: Test-Time Reasoning inspired by Cognitive Heterogeneity,”
+TMLR, July 2026, [arXiv:2607.20268v1](https://arxiv.org/pdf/2607.20268)。
+
+| 観測 | locus | 許される読み |
+|---|---|---|
+| Self-Consistency `N=16`を9設定中8設定で上回り、1設定では下回る | [Table 1, p.10](https://arxiv.org/pdf/2607.20268#page=10) | 複合構成が勝つ設定はあるが、構成要素の寄与も普遍優位も示さない |
+| HLE no-searchで4-CoT `38.88% @ 119K`、PoTRE `39.80% @ 260K tokens/task` | [Table 26, p.66](https://arxiv.org/pdf/2607.20268#page=66) | universal token efficiencyへの反例 |
+| HLE open-bookでSpectrum `51.28% @ 390K`、PoTRE `53.48% @ 340K` | [Table 25, p.65](https://arxiv.org/pdf/2607.20268#page=65) | 異質配分が精度・tokenの両方で勝つ設定もある |
+| HLEでDirect除外 `40.60%`、full `39.80%` | [Figure 4, p.67](https://arxiv.org/pdf/2607.20268#page=67) | 全topology常設を却下し、leave-one-outを要求する |
+| ARC-AGI-2でPlanning除外 `39.20% > 38.33%`、token約`7M → 1M` | [Figure 5, pp.67–69](https://arxiv.org/pdf/2607.20268#page=67) | 腕の限界価値はtask distributionに束縛する |
+| 四候補が全て不一致のbucketでoracle `20.7%`、synthesis `5.8%` | [Table 8, p.16](https://arxiv.org/pdf/2607.20268#page=16) | candidate coverageとrealized finalを分けて測る |
+
+著者の“synthesis interference”はauthor inferenceであり、leave-one-outは候補内容、context、
+token、相互作用を同時に変える。原因として断定せず、`realized final / synthesis yield`で観測する。
+topologyごとの失敗様式は`author-confirmed + skill-supplied`、DEFAULT単腕、packet、identity-blind
+normalization、pruning条件は`skill-supplied / constructed`である。
+
+### Acceptance desk checks
+
+| Case | Expected |
+|---|---|
+| 「創造的な研究テーマを選んで」 | `NO-FIRE` → `directing-research` |
+| 「類推と再結合で新しいthesisを作って」 | `NO-FIRE` → `forging-novel-theses` |
+| 「この高価/不可逆な一つの仮説をkill experimentで試して」 | `NO-FIRE` → `acting-on-hypotheses` |
+| 「この決定的・安価・可逆なprobeを今走らせて」 | `NO-FIRE` → domain/plain executor |
+| solverが批評だけをpacketとして返す | normalization `FAIL` |
+| Adversarial refinementが修正版candidateを返す | packet `PASS` |
+| 成熟前のtask-level challengeが別候補を返す | 継続可。ただしveto / verdictなし |
+| challengeがclearing condition / discriminating probeだけを返す | maturity支援logへ置く。solver候補、normalization到着数、synthesis入力には数えない |
+| 成熟前にverified deterministic contradictionを発見する | 停止可 |
+| 生成仕事の二段freeze | launch→domain artifact / digest→final criteria freeze→verdict / blind audit |
+| held-out lens / oracle / expected verdict | generatorからsealed。hard constraints / stage-exitは開示可 |
+| 非生成の小実装 | maturity ceremonyを追加せずfast path |
+| domain skillがmaturityを明記しない生成仕事 | domain artifact / digestが無ければnormalization、synthesis、verdictへ進めない |
+| 三つのdistinct failure modesをcapacity内で覆う必要がある | 固定二本で始めず、三つを覆う最小topology集合を選ぶ |
+| generator / critic、persona、model、vendor、prompt toneだけを二腕と数える | `FAIL` — topology差ではない |
+| domain skillが`SOLO` generationを指定する | domain precedence、portfolioなし |
+| synthesis後の最終物 | blind audit必須条件に該当すれば従来どおりauthorと分離 |
+| reviewerがrepair pathとしてpatchを代作する | `FAIL`。反例/locus + clearing conditionまたはreopened gateを返す |
+| reviewerが修復を実装した版を同じreviewerが独立検収する | `FAIL` — 別verifierを起動 |
+
+## RETIRED history — provenance only
+
+以下は旧版を生んだ観測と変更のchronologyであり、active runtime rulesではない。上の
+`Active distillation`と親`SKILL.md`、各SOLE-home referenceが現行規則を持つ。下の旧処方と
+現行規則が衝突する場合は現行規則を適用し、旧処方をruntimeへ復活させない。
 
 Reforge: 2026-07-22. 旧名 `pacing-research-production` からの鍛え直し。編集者 = 監督(前線の
 模型)。起草 = Sonnet。敵対監査 = 異種二社(codex: gpt-5.6-terra / agy: gemini-3.1-pro-high、
@@ -16,9 +115,11 @@ Reforge: 2026-07-22. 旧名 `pacing-research-production` からの鍛え直し�
 2. 検分・委任・検収は機械的に分類できるか
 3. 委任する監督に固有の失敗様式で、見落としているものは何か
 
-## 一致所見(二社が独立に同一の欠陥を指摘 — 確定として扱う)
+## 旧・二社一致観測（RETIRED: consensus ≠ evidence）
 
-検分・委任・検収は**事後の推定では機械分類できない**。同じコマンド(例: 試験の実行)が
+二社の一致は確定の根拠ではなく、当時の修正候補を優先した観測にすぎない。観測内容は、
+検分・委任・検収は**事後の推定では機械分類できない**というものだった。同じコマンド
+(例: 試験の実行)が
 文脈により検分にも検収にも実務にもなる。→ 採択1(宣言制)で解消: 行為の時点で監督が級を
 宣言し、級ごとに許可・禁止を定義。宣言できない行為は違反。
 
@@ -72,6 +173,25 @@ skill-check.ts: PASS(name=dir 一致、YAML 厳密解析 OK、説明文 492 字)
 - 取り込み: 「委任の形の選択」の節を新設(形の対応表・界面の仕様は監督の設計物・
   救済の規則)。堆積の門の勘定は不変(門でなく本文の節として追加)。
 - 出典: リポジトリ側 notes/postmortem-委任の一枚岩-2026-07-22.md。
+
+## 2026-07-30: 創造的研究との collection-level cut
+
+`orchestrating-agents` は創造的研究のdomain ownerではない。研究familyのMECE reforgeにより、
+先に次のdomain sequenceを固定し、その周囲のwho/when/visibility/veto/acceptanceだけを本skillが
+所有することをdescriptionとrouting表に相互化した。
+
+```text
+directing-research
+  -> forging-novel-theses
+  -> directing-research
+  -> acting-on-hypotheses
+  -> directing-research / arguing-research-papers
+```
+
+撤退語はcardinalityだけで分けない。ONE treeでも高価/不可逆なdownstream exposureがある
+per-test threshold / commit / killだけを`acting-on-hypotheses`へ渡し、安価・決定的・可逆なprobeは
+domain/plain executorへ渡す。複数独立方向の配分・再開・撤退は`directing-research`。本skillは
+どのverdictも出さず、必要な盲検・役割分離・検収契約だけを設計する。
 
 ## 2026-07-22(追記): 救済の規則の実地での不備と締め直し
 
@@ -164,7 +284,7 @@ F3 desk-check(name + description のみで判定):
 |---|---|---|
 | C1 | 300行超または20分超の新規実装の発注は、監督が界面の仕様と骨格を書き、200行以下の部品へ分解して並列の腕に渡す。統合はscriptか監督。指示書に分解の表が無い発注は違反 | 委任の形の選択(分解の強制) |
 | C2 | 本走級の計算(10分超の実走)を腕の文脈内で走らせない。長い走行は監督が背面のBashで発射し(トークンを消費しない)、判定は成果物に対して新しい短い腕か監督が行う | 委任の形の選択(長走行の分離) |
-| C3 | 全ての指示書に「判断の閉鎖」の節を義務化——定数の分類・witnessや評価の選び方・受け入れの解釈を監督が事前に列挙する。未列挙の判断に遭遇した腕は決めずに停止して裁定を求める | 委任の形の選択(判断の閉鎖) |
+| C3 | **RETIRED v2607.12.0**。旧来の全判断の事前列挙は過剰拘束として廃止。現行は`references/delegation-contracts.md` §C3のdecision rightsで、境界内・可逆な選択をexecutorへ委譲する | 現行C3へのprovenance pointer |
 | C4 | 全ての腕に硬い時間予算と中間報告の義務、監視待ちの空転の禁止(「Monitorの通知を待たず自分で出力を確認して前進せよ」)を指示書に焼き込む | 委任の形の選択(時間予算の硬化) |
 
 ## 2026-07-24: v2607.6.0 配役の一次錨の蒸留(Director vs Expert Worker)
@@ -264,7 +384,7 @@ sol を起草者とする全面改鋳を実施。拘束: 保全原則(12門・LA
 
 > **Version**: v2607.6.0 (2026-07-24 — 配役の一次錨の蒸留: 公式の並列subagent適性と枠消費の verbatim 引用を配役表へ(「Fable=Director/Sonnet=Executor」は公式推奨でなく third-party 格と裁定)+LAW(2)に全力実務の宣言(唯一の例外)。新規 P-gate・委任契約項目ゼロ(数え上げ12不変)。sol 査読2巡の記録は台帳。v2607.5.0=健全化の窓の蒸留: 実測値の体制の併記の義務+全数宣言の3層検査(P6)・worker停止の再開の定型(委任契約)。v2607.4.0=2026-07-23 進捗ストールのポストモーテム蒸留: 監査の欠け2級分類(P4)・終了条項と理論の消費者条項(委任契約)・覆せる既定(LAW(2))・達成級の語の土俵の名指し(P6))
 >   ボトルネック化し「進捗ストール」の指摘——うち2件は既定で進められる種類だった)
-| P4 ROUND-TRIP ECONOMY | 査読担当への指示に「全指摘に修復経路を明示せよ」を必ず含める。二巡目以降の起草指示書には、前巡で繰り返された指摘の型を事前に焼き込む。**同じ型の指摘が 2 巡続いたら往復をやめ、指示書(仕様)へ差し戻す**。異種監査への指示書には**監査ブリーフの型**を使う: {対象 HEAD の固定・主張の番号つき列挙(各主張に証拠の所在)・開示済み限界の明示(FAIL の理由に数えない事項の事前裁定)・「新たな欠けの検査」の依頼は**欠けの2級分類を義務化して**行う(『凍結した問いを脅かす欠け』=発射を止める/『台帳の衛生』=開示つきで発射後の修理を許す——止める権限は前者のみ。無限定の欠け探しの依頼は禁止)・全指摘への修復経路の要求・判定語彙の指定(PASS / FAIL / SCOPE-LIMITED PASS+許される文言の逐語)}(2026-07-23実測: GB110の5巡で毎回、修復可能な指摘を最小往復で引き出した型。同日GB113で無限定の欠け探しが監査6巡を招き、4巡目以降は判定の答えを変えない台帳の衛生に往復を浪費——発注者が進捗ストールを検出) | 指示書内の該当文言/3 巡目の同型指摘が存在しないこと/異種監査への指示書に監査ブリーフの6要素+欠けの2級分類の指定が明記されていること |
+| P4 ROUND-TRIP ECONOMY | **RETIRED runtime copy**。2026-07-23の監査往復観測のprovenanceだけを残す。現行のrepair path、二巡での仕様差し戻し、監査briefは`references/delegation-contracts.md` §4–§5がSOLE home | 現行P4へのpointer |
 | 指示書の自己完結 | 起草担当へ自己完結の指示書を渡す。指示書には目標・根拠資料・数値や事実の錨・**完成の定義(何が出来たら完了か)と検収の試験(検収者が実行する判定手続き)**・「証明や確認ができない箇所はごまかさず明記せよ」を含める。**成果物に載る数値を生む実行体には、独立の自己検定を2つ以上内蔵させる**(別法の再計算・極限や次元の検査・既測との突き合わせ。2026-07-22 実測: 目視と注釈を生き延びた係数の誤りを異種の監査だけが発見、同夜の自己検定は4件の誤りを機械で捕獲)。**規模の大きい新規実装は一枚岩で渡さず、共通の土台を固定して並列の腕に分解する。時間予算(超えたら中間の報告か中断)も指示書に書く**(2026-07-22 実測: 分解を怠った実装委任1件だけが44分無音、他の委任は全て速く着地)。独立な起草は並列に発射する(独立 = 互いの出力・結論を渡さない)。**長い走行を発射する腕の指示書には終了条項を必ず含める: 発射後は切り離しの確認と PID の報告をもって退出、子守り(完了までのポーリング常駐)の禁止**(2026-07-23実測: 終了条項なしの腕が走行の子守りで1h13m・38万トークンを消費)。**理論・相談の発注書には「消費する建造の名前と着地予定」の欄を必須とする——2つの建造以内に実験が消費できない理論は発注しない**(2026-07-23実測: 消費者の遠い理論発注が並走し、決定的経路の実装が痩せて発注者が進捗ストールを検出)。**workerが通知待ちや無進捗で停止したら、SendMessageの定型(「出力を自分でpoll/tailし、プロセスの終了はBashのループで待ち、最終報告まで完走。停止は報告の提出時のみ」)で即座に再開する——散文の禁止では再発する(2026-07-23〜24実測: 指示書に明記しても4例再発。恒久の是正はハーネス側の機構であり、蒸留でなく鍛錬の課題として記録)** | 指示書内にこれらの要素(終了条項・消費者の欄を含む)が明記されている/停止の再開はSendMessageの記録 |
 
 ### grok の配役制限(移設)
@@ -886,3 +1006,58 @@ T5 が無ければこの試験は偽の主張の上でも PASS した。改名�
    書く。監督の読みは「狙いは同一文脈の自己検証であり、別担い手による委任成果物の盲検は
    同ページが writer-verifier pattern として肯定している」だが、ultracode の既定姿勢と
    "keep spawn counts low" の衝突は本物であり、発注者の裁定を要する。
+
+## 2026-07-30: 配役より先にfunction mapを固定(v2607.13.0)
+
+### 発端
+
+創造的研究skill群を既存skill名から整理した結果、暗黙前提の露出がどのownerにも属さず、
+問題構成と仮説生成へ部分的に埋め込まれていた。roleやagent数を先に決めても、この機能空白は
+解消しない。
+
+### 裁定
+
+control planeの最初の単位をagent roleから
+`input state --function verb--> owned artifact --sole domain owner--> next state`
+へ変更した。配役とtopologyは、その順序付きfunction mapへ後から載せる。
+
+同じartifactに二ownerが付けばtyped cutを修復する。ownerが無い場合は、一回限りのtaskと、
+固有のinput/output/stopを持つ再利用可能なownership voidを分け、後者だけを
+`forging-skills`へ渡す。今回の`EXPOSE → Blind-spot packet`が後者であり、
+`surfacing-blind-spots`を新設した。
+
+### 変更
+
+1. Workflow-native stage mapの前にFunction-first compositionを追加。
+2. launch freezeへstate transition、sole artifact owner、handoffを持つfunction mapを追加。
+3. `surfacing-blind-spots`とのtyped cutとfire/no-fire行を追加。
+
+MECEの対象は機能責務と成果物ownershipである。未知内容の完全列挙は主張せず、
+Blind-spot packetは`OPEN` residualを保持する。
+
+## 2026-07-30: semantic map ownership correction (v2607.14.0)
+
+前節の「supervisor-signed function map」はdomain/craft ownerとcontrol planeの二重所有を作った。
+現在の裁定は次である。
+
+- domain/craft ownerがsemantic function mapを署名する。
+- 本skillは`domain_function_map_locus + digest`を照合し、dispatch overlayだけを所有する。
+- overlayはagent、visibility、dependency、veto、verification、acceptanceを加えるが、domain
+  semanticsを上書きしない。
+- owner不在の一回限りのplain taskだけtask-local provisional mapを許す。再利用可能なownership
+  voidは`forging-skills`へ返す。
+
+`skill-check.ts`はexit 0、長文WARNは3件。これは共有界面を一箇所で定義する既存の
+technical-communication debtとしてこの日付でwaiveし、typed cutやartifact collisionはwaiveしない。
+
+## 2026-07-31: supervisor / delegated-bearer policy distillation (v2607.14.1)
+
+発注者の凍結指示を現行policyとして採択した。supervisor / planning / control-plane bearerは
+executor、deliverable author、independent verifier、subagentにはならない。delegated bearerだけで
+productionとverificationを行い、authorとverifierをcross-bearerにする。同一bearerの兼任、利用不能時の
+黙示fallback、能力例外を退役した。
+
+model名・日付付きavailabilityは`references/model-roster.md`へ蒸留し、`SKILL.md`には不変の役割禁止と
+pointerだけを残した。本台帳の旧model role、quota、retentionに関する記録はprovenanceとして保存するが、
+current-policy-inapplicable / retiredであり、現行dispatchの根拠ではない。PROSE-DEBT waiver (2026-07-31):
+既存の3 WARNは前節の共有interface debtを継承し、次のreforge queueで解消する。

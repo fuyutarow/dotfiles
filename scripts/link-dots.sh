@@ -82,6 +82,10 @@ link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 
+# --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
+link agents/codex/hooks.json "$HOME/.codex/hooks.json"
+link agents/codex/hooks "$HOME/.codex/hooks"
+
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
 link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
 

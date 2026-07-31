@@ -22,6 +22,11 @@ describe("Agent / Task", () => {
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
+  test("a model name that merely contains sonnet -> deny", () => {
+    const r = runHook(HOOK, pre("Task", { prompt: "x", model: "sonnetty" }));
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
   test("sonnet model -> silent pass", () => {
     const r = runHook(
       HOOK,
@@ -31,13 +36,31 @@ describe("Agent / Task", () => {
     expect(r.stdout.trim()).toBe("");
   });
 
-  test("fork inherits the parent model -> silent pass even with model set", () => {
+  test("fork -> deny", () => {
     const r = runHook(
       HOOK,
       pre("Agent", { subagent_type: "fork", model: "opus" }),
     );
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("omitted Task model preserves every other argument while injecting sonnet", () => {
+    const input = { prompt: "x", description: "audit", nested: { keep: true } };
+    const r = runHook(HOOK, pre("Task", input));
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("allow");
+    expect(d.updatedInput).toEqual({ ...input, model: "sonnet" });
+  });
+
+  test("fable -> deny even with an escalation declaration", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", {
+        prompt: "ESCALATION(fable): target | reason | cost",
+        model: "fable",
+      }),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 });
 
@@ -64,6 +87,35 @@ describe("Workflow", () => {
     expect(d.permissionDecisionReason).toContain("line(s) 2");
   });
 
+  test.each([
+    ["dynamic", "const model = 'sonnet'\nawait agent('x', {model})"],
+    ["non-Sonnet", "await agent('x', {model: 'opus'})"],
+    ["duplicate", "await agent('x', {model: 'sonnet', model: 'fable'})"],
+  ])("agent() with %s model property -> deny", (_case, script) => {
+    const r = runHook(HOOK, wf(script));
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test.each([
+    ["nested model only", "await agent('x', {schema: {model: 'sonnet'}})"],
+    [
+      "spread after a literal model",
+      "await agent('x', {model: 'sonnet', ...overrides})",
+    ],
+    [
+      "spread before a literal model",
+      "await agent('x', {...defaults, model: 'sonnet'})",
+    ],
+    [
+      "computed key after a literal model",
+      "await agent('x', {model: 'sonnet', [modelKey]: 'fable'})",
+    ],
+    ["computed model key", "await agent('x', {['model']: 'sonnet'})"],
+  ])("agent() with %s -> deny", (_case, script) => {
+    const r = runHook(HOOK, wf(script));
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
   test("model:'sonnet' inside a prompt STRING cannot fake a pass", () => {
     const r = runHook(
       HOOK,
@@ -80,22 +132,40 @@ describe("Workflow", () => {
     expect(r.stdout.trim()).toBe("");
   });
 
-  test("child workflow() call -> ask", () => {
+  test("an aliased agent capability -> deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `const dispatch = agent\nawait dispatch("do something", {model: "opus"})`,
+      ),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("a computed global agent capability -> deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await globalThis["agent"]("do something", {model: "opus"})`),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("child workflow() call -> deny", () => {
     const r = runHook(HOOK, wf(`await workflow('child', {})`));
-    expect(decisionOf(r.stdout).permissionDecision).toBe("ask");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("named workflow (no script) -> ask", () => {
+  test("named workflow (no script) -> deny", () => {
     const r = runHook(HOOK, pre("Workflow", { name: "review-changes" }));
-    expect(decisionOf(r.stdout).permissionDecision).toBe("ask");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("unreadable scriptPath -> ask", () => {
+  test("unreadable scriptPath -> deny", () => {
     const r = runHook(
       HOOK,
       pre("Workflow", { scriptPath: "/nonexistent/wf.js" }),
     );
-    expect(decisionOf(r.stdout).permissionDecision).toBe("ask");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 });
 
@@ -226,6 +296,11 @@ describe("fail direction", () => {
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
+  test("malformed Agent input -> FAIL CLOSED (deny)", () => {
+    const r = runHook(HOOK, pre("Agent", null));
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
   test("unrelated tool -> silent pass", () => {
     const r = runHook(HOOK, pre("Bash", { command: "ls" }));
     expect(r.code).toBe(0);
@@ -233,39 +308,37 @@ describe("fail direction", () => {
   });
 });
 
-describe("Fable escalation clause (2026-07-25)", () => {
+describe("explicit model policy", () => {
   const decl =
     "ESCALATION(fable): terra 移行の全面監査 | sonnet 3周が同じ穴を見落とした | 概算 300k tok";
 
-  test("fable WITHOUT a declaration -> deny, and the reason carries the fix", () => {
+  test("fable -> deny", () => {
     const r = runHook(
       HOOK,
       pre("Agent", { prompt: "audit this", model: "fable" }),
     );
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("ESCALATION(fable):");
+    expect(d.permissionDecisionReason).toContain("Sonnet");
   });
 
-  test("fable WITH a declaration -> silent pass", () => {
+  test("fable with a declaration -> deny", () => {
     const r = runHook(
       HOOK,
       pre("Agent", { prompt: `${decl}\n\naudit this`, model: "fable" }),
     );
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("full model id claude-fable-5 takes the same path", () => {
+  test("full model id claude-fable-5 -> deny", () => {
     const r = runHook(
       HOOK,
       pre("Task", { prompt: `${decl}\nwork`, model: "claude-fable-5" }),
     );
-    expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("");
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("bare marker with empty fields is not a declaration -> deny", () => {
+  test("bare escalation marker cannot bypass the denial", () => {
     const r = runHook(
       HOOK,
       pre("Agent", { prompt: "ESCALATION(fable): | | \nwork", model: "fable" }),
@@ -273,7 +346,7 @@ describe("Fable escalation clause (2026-07-25)", () => {
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("fewer than three fields -> deny", () => {
+  test("partial escalation marker cannot bypass the denial", () => {
     const r = runHook(
       HOOK,
       pre("Agent", {
@@ -284,7 +357,7 @@ describe("Fable escalation clause (2026-07-25)", () => {
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("the clause does NOT extend to opus — still denied even when declared", () => {
+  test("opus remains denied", () => {
     const r = runHook(
       HOOK,
       pre("Agent", { prompt: `${decl}\nwork`, model: "opus" }),
@@ -292,11 +365,11 @@ describe("Fable escalation clause (2026-07-25)", () => {
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
-  test("Workflow fan-out has no escalation clause — a declared fable agent() still denies", () => {
+  test("Workflow fable agent() denies", () => {
     const script = `phase('x')\nawait agent('${decl}', {model: 'fable'})`;
     const r = runHook(HOOK, pre("Workflow", { script }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("SINGLE Agent call");
+    expect(d.permissionDecisionReason).toContain("model:'sonnet'");
   });
 });

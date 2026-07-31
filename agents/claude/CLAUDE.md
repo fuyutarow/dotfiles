@@ -1,21 +1,18 @@
 # User-global policy
 
-- **Spawned agents run on Sonnet; the one escalation is declared.** In Workflow scripts, pass
-  `{model: 'sonnet'}` literally on EVERY `agent()` call (a PreToolUse hook denies the
-  Workflow otherwise) — fan-out is Sonnet-only, no escalation clause. For Agent-tool calls,
-  omit `model` or pass `'sonnet'`; `'fable'` is allowed on a SINGLE call that carries
-  `ESCALATION(fable): <target> | <why sonnet is insufficient> | <cost estimate>` in the
-  prompt. Every other model is denied. Named workflows and child `workflow()` calls prompt.
+- **Opus supervises; Sonnet executes.** The dispatch hook injects `model:'sonnet'` for an
+  Agent/Task call with no model and denies every other explicit model, including Fable and
+  forks. In a Workflow script, EVERY `agent()` call must contain exactly one top-level direct
+  literal `model:'sonnet'`; aliases/indirection, nested models, spreads,
+  computed keys, child workflows, named workflows, and unreadable scripts are denied.
+  This is an enforcement rule, not a request: there is no bypass. The role binding is maintained
+  in `orchestrating-agents/references/model-roster.md`.
 - **Effort belongs to the role, not the session.** Leave `effort` off an `agent()` call to
   inherit the default. The same hook denies a Workflow `agent()` that passes a literal
   `effort: 'low'` unless that same call declares `LOW-EFFORT(<stage>): <why this stage is not
   intelligence-sensitive>`. Raising effort needs no declaration — only lowering does, because
   Anthropic documents Sonnet 5's `low` as reserved for work that is *not* intelligence-sensitive,
   and almost everything we fan out is.
-- **Roster (覆せる既定 2026-07-25・追認待ち).** Opus 5 directs, Sonnet 5 works, Fable 5 is the
-  declared escalation for work Sonnet cannot reach. This follows Anthropic's own guidance:
-  default to Opus, reserve the Fable tier for the highest-capability workloads. Fable also
-  forces 30-day data retention (Covered Model) — never point it at a secret-bearing repo.
 - **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-search`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious

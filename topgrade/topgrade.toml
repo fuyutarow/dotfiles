@@ -11,3 +11,21 @@ disable = ["flutter", "tlmgr", "gcloud"]
 # Keep a flaky step running but don't let its failure mark the whole run FAILED.
 # (Uncomment to silence the recurring "Claude Code: FAILED" without skipping it.)
 # ignore_failures = ["claude_code"]
+
+# Custom steps — ONLY for tools topgrade cannot reach on its own. Measured 2026-07-31 before
+# adding anything here, because most of the AI CLIs are already covered and duplicating them
+# would just run each updater twice:
+#   claude  -> native `claude_code` + `claude_code_plugins` steps, confirmed running
+#   grok    -> installed as a brew CASK (`grok-build`), so `brew_cask` upgrades it
+#   agy     -> a symlink to a Windows WinGet .exe; no Linux binary exists, so nothing in a
+#              WSL topgrade run can update it (it belongs to `winget` on the Windows side)
+#   codex   -> HAS a native step, but that step SKIPS this install. topgrade resolves the
+#              binary's realpath and requires it to sit under ~/.local/bin; the standalone
+#              installer puts ~/.local/bin/codex as a SYMLINK into
+#              ~/.codex/packages/standalone/current/bin/, so the check fails and the step
+#              reports "codex is not installed under ~/.local/bin" in the same run whose debug
+#              line reads `Detected "/home/fuyu/.local/bin/codex"`. Hence this entry.
+# Guarded with `command -v` because this file is shared with macOS: an absent tool must skip,
+# not fail the run. The guard preserves the updater's own exit code when it IS present.
+[commands]
+"Codex CLI (standalone)" = "if command -v codex > /dev/null 2>&1; then codex update; else echo 'codex absent — skipped'; fi"

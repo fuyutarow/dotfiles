@@ -1,6 +1,6 @@
 # Boundaries — ROUTING & external positioning (no phase technique lives here)
 
-> Scope: where this skill sits relative to its sibling raising-resolution, the other repo skills, and
+> Scope: where this skill sits relative to raising-resolution, surfacing-blind-spots, the other repo skills, and
 > external frameworks. This file owns the inter-skill cut, co-fire arbitration for braided tasks, the
 > inline-resolution fallback, and the external-lineage differentiation. It contains NO phase technique
 > (that is `map.md` / `loop.md` / `leap.md`) and NO in-skill misuse diagnostics (that is `anti-patterns.md`).
@@ -42,10 +42,12 @@ sequentially, they do not race**:
 1. **raising-resolution (present half):** Read the hot path, run the profiler, grep the ORM calls,
    measure current latency, name the real bottleneck — all FIXED facts, cite each. (This is its §3 N+1
    exemplar exactly.) Output: "current p99 = 180ms, bottleneck = the per-row SELECT at `repo.ts:88`."
-2. **acting-on-hypotheses (forward half):** the residual gap — "does it hold at 10× load?" — is NOT a
-   fixed fact; it is a bet on an outcome that does not exist yet. Map the node ("the batched query holds
-   at 10× load", 確信度×影響度), Loop the cheapest discriminating test (a spike at projected load with a
-   pre-committed pass/fail threshold), then Leap (commit / stage).
+2. **Gate the forward half by downstream exposure:** the residual gap — "does it hold at 10× load?" —
+   is NOT a fixed fact. If the load run and the decision riding on it are bounded/reversible within one
+   ordinary session, a domain/plain executor runs it and returns the raw result + provenance to
+   `directing-research`. If an untested node guards an expensive migration or hard-to-reverse
+   commitment, **acting-on-hypotheses** fires: Map the node ("the batched query holds at 10× load",
+   確信度×影響度), Loop the cheapest discriminating test with a pre-committed threshold, then Leap.
 
 Doing step 2 BEFORE step 1 is the error: you would Loop a bet whose present constraints you never cited
 (a felt-Loop on an un-inspected node). Doing step 1 and stopping is the *other* error: you cited the
@@ -65,20 +67,39 @@ When STEP 0's cut routes to "present-understanding gap" but raising-resolution i
 
 This fallback is bounded and citation-gated precisely so it does not silently become a Loop. The moment
 you are running a test to earn a confidence-delta on an undecided outcome (not citing a fixed fact), you
-have left the fallback and entered Loop — which is correct only if the cut said "future-bet".
+have left the fallback. It enters Loop only when expensive-or-hard-to-reverse work rides on the
+load-bearing result; otherwise use the cheap executor return below.
+
+### The cheap-executor return — no ceremonial one-tree bet
+
+When a future-facing probe is deterministic/known-method, bounded, and reversible inside one ordinary
+session **and no expensive/irreversible work rides on its result**, route it to the domain owner or plain
+executor. The executor returns:
+
+`EXECUTOR RESULT: <raw observation> — provenance=<command/source/locus>`
+
+That artifact returns to `directing-research`, which owns stage diagnosis and any reopen/reallocation.
+Do not invent a Map, pass/fail table, confidence write, or Leap. A cheap discard-intent test that protects
+a later expensive/irreversible commitment is different: AOH legitimately designs/adjudicates that Loop;
+the domain executor may perform only its contracted B→M work (`loop.md` §8).
 
 ## §4 — Repo neighbors (no overlap; differentiated by OBJECT + OWNERSHIP)
 
 | skill | its object | relation |
 |---|---|---|
 | **raising-resolution** | a fixed present fact | complement along time; interlocks at the Map seam (§1–§3); reciprocal pointer in its §4 |
+| **surfacing-blind-spots** | hidden premises and human tacit constraints in one existing plan/frame/tree | **VERB**: an explicit EXPOSE ask goes there even after tree selection; HERE resumes only to STRUCTURE already-explicit nodes, TEST, or COMMIT. Human answers marked `UNELICITED` cannot become Map nodes as facts; incoming `OPEN` stays a provenance/reopen-trigger-bearing pass-through |
+| **directing-research** | creative-research stage diagnosis; problem construction/selection/formulation; standing integrity; portfolio across ≥2 independent bets | **CARDINALITY/PURPOSE**: ONE selected tree enters HERE only when an untested load-bearing result guards expensive/irreversible work; its per-test threshold/outcome/commit/kill stay HERE. Cheap bounded probes return there as `EXECUTOR RESULT`; program-level decisions and OPEN classification stay there |
+| **forging-novel-theses** | candidate genesis for a selected problem/frame | **DECISIVE**: no thesis yet → there; thesis exists and needs action → HERE only when an untested load-bearing result guards expensive/irreversible downstream exposure, otherwise the domain/plain executor |
 | **systematizing-knowledge / sok** | MANY papers → ONE defensible position (claim ledger) | acting-on-hypotheses borrows only its grep-able-ARTIFACT discipline as a structural mirror; it does not synthesize a corpus. The bare token "survey" is sok's. |
-| **growing-oss-adoption** | making a specific OSS spread (distribution > love) | acting-on-hypotheses is domain-NEUTRAL and upstream; an OSS bet would Map/Loop/Leap but defer adoption tactics to growing-oss-adoption |
+| **arguing-research-papers** | one finished evidence-backed manuscript claim | test an expensive/irreversible future bet HERE; run a cheap reversible probe with the domain/plain executor; argue completed evidence there |
+| **orchestrating-agents** | role topology, evidence visibility, veto timing, verification, acceptance | the one-tree decision artifacts stay HERE; multi-agent control may co-fire around probes |
+| **growing-oss-adoption** | making a specific OSS spread (distribution > love) | an OSS bet enters HERE only at the expensive/irreversible hard gate; cheap trials use the domain/plain executor, while adoption tactics stay with growing-oss-adoption |
 | **operating-the-harness** | `.claude`/config & harness engineering | orthogonal; a harness change still uses the GATE but defers config technique |
 
 **Precedence.** Domain-neutral and UPSTREAM of execution; defers to any domain owner (writing-julia /
-proving-theorems / growing-oss-adoption / operating-the-harness) for HOW. Owns only the WHETHER / WHAT-
-to-bet decision under uncertainty.
+proving-theorems / growing-oss-adoption / operating-the-harness) for HOW. Owns only the selected
+expensive/irreversible one-tree bet's threshold, adjudication, and commitment — not routine execution.
 
 ## §5 — External frameworks: LINEAGE, not loaded skills (cannot co-fire — keep SHORT)
 

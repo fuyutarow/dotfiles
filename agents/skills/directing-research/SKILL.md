@@ -1,273 +1,242 @@
 ---
 name: directing-research
 description: >-
-  Conduct research effectively as an AI4S agent — the JUDGMENT / 観察眼 layer ABOVE the moves: SELECT
-  important problems (not merely tractable ones), FORMULATE them so the answer is decisive and un-gameable,
-  DON'T FOOL YOURSELF, and STEER the portfolio (allocate across bets; kill a direction on its aggregate
-  RATE OF LEARNING — dLearning/dt, not the optimizer's LR). LAW: an agent has no fear/ego/surprise and
-  superhuman cheap search, so every VIRTUE must become a MECHANISM ("be honest" → pre-register + separate
-  generator/auditor + disclose the denominator; "have courage" → score consequence before tractability;
-  fluency = crowdedness alarm). Use for 研究テーマ選択 / 問題選択 / 定式化 / 研究プログラム / 研究の舵取り /
-  どの方向に賭けるか / いつ撤退するか / portfolio allocation / Goodhart・proxy gaming 回避 /
-  leakage・HARKing・p-hacking の自己監査 / research taste / vision. Cuts (typed, runtime):
-  test/commit/kill/pivot ONE hypothesis tree / direction → acting-on-hypotheses; GENERATE a novel thesis →
-  forging-novel-theses; INSPECT a present fact/pipeline → raising-resolution; FIX the code →
-  implementing-and-debugging; grade OTHERS' corpus → systematizing-knowledge; write the paper / talk →
-  arguing-research-papers / designing-presentations. This owns the judgment ACROSS ≥2 bets + the standing
-  honesty policy, NOT the single tree. Workflow-native: selection, formulation, and steering verdicts stay
-  SOLO; generator≠auditor and leakage red-team FAN OUT read-only. English skill; respond in the user's
-  language (default Japanese).
+  Directs CREATIVE RESEARCH as a non-linear lifecycle. Entrypoint for 創造的な研究, research taste,
+  研究テーマを見つける・選ぶ, 問いを立てる, research programme, 複数方向への配分, and 研究の舵取り.
+  Owns STAGE DIAGNOSIS, problem-frame construction/selection/formulation, thesis-batch admission,
+  standing integrity policy, and portfolio steering across multiple bets. LAW: exposed premises,
+  problem frames, candidate theses, and discriminating results CO-EVOLVE; generation freezes before
+  evaluation, and results may reopen the problem. Cuts: one artifact's hidden premises →
+  surfacing-blind-spots; corpus → systematizing-knowledge; present anomaly → raising-resolution;
+  selected-frame thesis genesis → forging-novel-theses; one expensive/irreversible selected tree →
+  acting-on-hypotheses; finished evidence → arguing-research-papers; agent topology/authority →
+  orchestrating-agents. Leads the domain sequence; promises no creativity guarantee. English skill;
+  answer in the user's language.
 ---
 
-# Directing research — pick important problems, pose them un-gameably, don't fool yourself, steer by learning-rate
+# Directing creative research
 
-> **Version**: v2607.1.0 (2026-07-09)
-> **Scope**: the JUDGMENT / 観察眼 layer of conducting research — problem SELECTION, FORMULATION
-> (定式化), self-HONESTY, and program STEERING — for an AI4S research agent (a model helping a
-> top-tier-science / ML researcher, and increasingly running experiments itself). It sits ABOVE the
-> discrete research moves and owns none of them: it decides WHICH problem, HOW posed, whether the
-> result is TRUSTWORTHY, and whether the DIRECTION lives — not the single bet, the invention, the
-> inspection, the code, the corpus, or the paper.
-> **Lineage**: distilled from a 15-agent adversarially-reconciled SoK survey (2026-07) of the
-> research-judgment canon (Hamming, Alon, Medawar, Pólya, Simon, Feynman, Platt, Chamberlin, Galef,
-> Ioannidis, Gelman, Kerr, Kapoor-Narayanan, Lakatos, Kuhn, Stokes, Popper, Dyson, Taleb, Sutton,
-> Tetlock, Klein, Olah-Carter). Full graded provenance: `references/sources.md`; the survey fleet:
-> `tests/forge-verification-ledger.md`.
-> **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
-> `for f in selecting formulating not-fooling-yourself steering reconciliation sources; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/research-check.ts || echo MISSING research-check.ts; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
-> (must print nothing).
+> **Version**: v2607.4.0 (2026-07-30)
 
-## Language & stable tokens
+> **Scope**: the collection entrypoint and program-level judgment layer for creative research. It serves
+> human researchers and research agents. It owns the lifecycle transitions and the research-problem /
+> portfolio decisions; sibling skills own the moves performed at each transition.
 
-This skill is **English**; respond to the user in their language (default Japanese). Keep these tokens
-stable even inside Japanese prose — identifiers, not translatable words: **LAW**, **gate (G1/G2/G3/G4)**,
-**fire/no-fire**, **solo/fan-out**, **virtue→mechanism**, **the cheap victory**, **held-out witness**,
-**denominator**, **generator≠auditor**, **the fresh lever**, **learning-rate (dLearning/dt)**,
-**progressive/degenerating**, **観察眼**, **定式化**, **Goodhart**, **HARKing**, **scaffold theater**.
+> **Evidence boundary**: this is an evidence-informed operating synthesis, not a scientifically proven
+> universal algorithm. The primary-source ledger and its limitations are in `references/sources.md`.
 
-## THE LAW — replace virtue with mechanism
+## THE LAW — research is a coupled search, not a creativity recipe
 
-> Research is **judgment under deep uncertainty about the payoff**: effectiveness is to pick
-> **important** problems (not merely tractable ones), **pose** them so every answer settles something
-> and the metric cannot be gamed, **keep yourself from being fooled**, and **steer** the portfolio by
-> its rate of learning. The canon that teaches this was written to correct a **human's** failures —
-> which are **emotional / motivational** (avoid hard problems out of fear or ego; fool yourself through
-> wishful thinking). So it prescribes **virtues**: *have courage, be honest, be curious, let go.*
->
-> **The consumer is an agent** with **no fear, no ego, no phenomenology of surprise**, and **superhuman,
-> nearly-free search.** Its failures are therefore **structural / statistical**, not motivational:
-> likelihood-maximization → it picks the problem it can already write a method for (**tractability
-> substitution**); RLHF agreeableness → it confirms the hypothesis it was handed (**sycophancy as
-> confirmation bias**); no inner "surprise" signal → it narrates a post-hoc story as if predicted
-> (**HARKing**); cheap search → it runs 100 configs and reports the best (**machine-scale multiple
-> comparisons**); superhuman optimization → it drives any proxy to its degenerate shortcut (**Goodhart**).
->
-> **Therefore a virtue exhortation does almost nothing** — it targets an inner disposition the agent
-> does not possess. **Every virtue must be replaced by a MECHANISM that does not rely on one:**
-> *"be honest"* → pre-register the prediction to a timestamped record + separate generator from auditor
-> + disclose the denominator; *"have courage"* → score consequence BEFORE tractability + treat your own
-> fluency as a crowdedness alarm; *"don't fool yourself"* → impose the predicted/postdicted boundary as
-> an **external artifact**, because you have no inner one.
->
-> **Where the danger concentrates**: the **self-deception and Goodhart failures DOMINATE** the risk,
-> because they scale **ADVERSELY with capability** (a stronger agent games proxies better, rationalizes
-> more convincingly, produces more plausible hollow rigor, searches more seeds) — and they are the
-> failures the human-in-the-loop **cannot catch, because the agent generates the very artifacts the
-> human uses to check it** (the auditor's evidence is produced by the audited). So **G2 (formulation)
-> and G3 (honesty) carry the heaviest adversarial scrutiny** — a G1/G4 error the human who still sets
-> direction can partly catch, but a G2/G3 error slips past. **All four gates' artifacts remain required**
-> (the floor checks all four); what concentrates on G2/G3 is *scrutiny*, not *enforcement*.
+> Creative research does not proceed once through `problem -> idea -> evaluation`. It maintains a
+> coupled search over **exposed premises, problem frames, candidate theses, and discriminating
+> observations**. Excavate the dominant frame before treating it as the search space; construct more
+> than one problem frame; generate a batch without scoring it mid-stream; select on separate axes; test
+> one selected tree; then let controls, failures, and surprises update the thesis **and the problem
+> frame**. A result that cannot change either is not research steering.
 
-## The four gates — each demands a grep-able artifact in the RESEARCH SPEC
+Consequences:
 
-同型 with the house discipline (systematizing-knowledge's ledger, forging-novel-theses' G1/G2/G3): a
-gate is passed only when its **artifact exists in the filled RESEARCH SPEC** (template below).
-感触では通れない — gate-passing is judged against ALL artifacts; `scripts/research-check.ts` is the
-*floor* that HARD-blocks the seven **†-marked load-bearing** artifacts below and WARNs on the rest —
-it is NOT a semantic check (whether the mechanism actually binds is judged here). **Each gate is a virtue turned into a mechanism.**
+1. **A received frame is not the search space.** Surface its hidden premises and open-set residual
+   before constructing alternatives. This does not claim to enumerate unknown unknowns.
+2. **A problem is constructed, not merely received.** An anomaly, stakeholder need, benchmark, or theory
+   is raw material. State what relation or uncertainty makes it a research problem.
+3. **Generation and evaluation are different verbs.** Generate, freeze, and deduplicate a batch before
+   ranking it. Early criticism may narrow the search to the evaluator's existing taste.
+4. **Novelty is not value.** Consequence, discriminability, feasibility, novelty, and bounded loss remain
+   separate axes. Never collapse them into `impact × solvability × originality`.
+5. **Execution is an admission test.** Proposal prose is not the endpoint. Controls, artifacts, and
+   comparison with baselines may reverse the proposal-stage judgment.
+6. **Unexpected results can reopen the frame.** They are not automatically discoveries; controls,
+   alternatives, and follow-up must make them interpretable.
 
-| # | Gate (the mechanism) | Replaces the virtue | Inverts the agent failure | ARTIFACT (must exist) |
-|---|---|---|---|---|
-| **G1** | **Select by consequence, not fluency** | "have courage / work on important problems" | tractability substitution; over-solubility; median-taste | a **consequence-ranked slate**† (≥3 candidates, each: what becomes POSSIBLE / gets FALSIFIED — written BEFORE any method sketch) + the **fresh lever** (why attackable NOW) + a **fluency check** (effortless method = crowdedness alarm → downgrade) |
-| **G2** | **Formulate un-gameable** | "pose the problem well" | Goodhart / spec-gaming; premature formalization; solving the wrong problem (Type III) | the **cheap victory**† (one way to score well WITHOUT solving it — then close it or reject the metric) + the **optimize/trust firewall**† (a held-out **witness** you never optimize or select on; witness↔metric divergence = Goodhart stop) + **what the formalization throws away** |
-| **G3** | **Don't fool yourself (structural)** | "be honest / don't fool yourself" | HARKing; sycophancy→confirmation; machine-scale multiple comparisons; scaffold theater; self-leakage | a **timestamped pre-registration**† (prediction + kill-threshold, BEFORE running) + the **denominator**† (N configs/seeds tried; the distribution, never the argmax) + **generator≠auditor**† (an independent read-only pass whose SOLE job is leakage/contamination/artifact) + the **negation** (strongest case AGAINST, stated first) |
-| **G4** | **Steer by learning-rate** | "persist / let go" | sink-compute-on-dead-direction OR premature-pivot/thrashing; no portfolio; collapse-to-one-hypothesis | a **portfolio** (≥2 uncorrelated but capped bets; risk tiers) + the **learning-rate kill/persist**† ("kill when dLearning/dt→0 AND the block is structural; persist while novel surprises continue" — never on the local metric, elapsed time, or sunk cost) + **≥3 live competing hypotheses** (default; states an exhaustive-binary/nested-in-one-tree exception instead of padding the count) until a discriminating test |
+## One-home ownership contract
 
-*Floor enforcement*: † = hard-FAILs at `scripts/research-check.ts` (script exits 1 without it); the
-rest floor-WARN only — present or not, their MEANING is judged here, not blocked at the floor.
+Read this table before acting. A braided ask may use several skills **in this order**; that is a
+transition, not joint ownership.
 
-## The RESEARCH SPEC — fill this to direct a research effort (and to audit one in flight)
+| Input state / decision | Sole owner | Required handoff artifact |
+|---|---|---|
+| The relevant literature or field position is unclear | `systematizing-knowledge` | bounded evidence position + uncertainties |
+| One present dataset, source, code path, benchmark, or anomaly is unclear | `raising-resolution` | cited observation / anomaly packet |
+| One existing plan/frame has hidden premises, tacit constraints, or unasked decisions | `surfacing-blind-spots` | blind-spot packet; no invented human answer |
+| The current lifecycle stage is unclear; problems must be constructed, selected, formulated, or compared; a program must be steered | **HERE** | stage card + RESEARCH JUDGMENT SPEC |
+| A problem/frame is selected but no thesis candidates exist | `forging-novel-theses` | frozen candidate-thesis packets |
+| One selected tree contains an expensive, irreversible, load-bearing forward bet | `acting-on-hypotheses` | Map / Loop / Leap artifacts |
+| One selected tree has a cheap, deterministic, reversible probe | domain/plain executor | observed result with locus; return it here for update |
+| Evidence is finished and one manuscript claim must be argued | `arguing-research-papers` | CLAIM SPEC |
+| Roles, delegation, visibility, veto timing, verification, or acceptance must be designed | `orchestrating-agents` | orchestration contract; domain artifacts stay with their owner |
 
-Fill it; run the floor; then act. An unfillable slot is a finding, not a formatting gap — name which
-gate it fails. **The spec IS the mechanism**: the LAW says an agent has no inner honesty signal, so the
-signal must live in this external artifact.
+**Cardinality + cost cut**: comparison, allocation, or reopening across **at least two independent
+bets** is here. ONE tree goes to `acting-on-hypotheses` only when its hard gate fires for an expensive,
+irreversible, load-bearing forward bet. If the decisive probe is cheaper to run than to map and plainly
+reversible, use the domain/plain executor and return the observed result here. A single experiment's
+pass/fail threshold is never duplicated here.
+
+## Stage diagnosis — always emit this first
+
+Name exactly one current stage and its evidence. If several stages are needed, name the earliest
+unsatisfied dependency and route sequentially.
+
+| Stage | Diagnostic | Next owner |
+|---|---|---|
+| `corpus-unclear` | the field state or novelty baseline is not bounded | `systematizing-knowledge` |
+| `anomaly-unverified` | a present observation may be noise, leakage, or artifact | `raising-resolution` |
+| `assumptions-unexposed` | one dominant frame exists but its premises/tacit constraints have not been excavated | `surfacing-blind-spots` |
+| `problem-underconstructed` | the topic is broad, has no inherited frame, or has only one framing | **HERE** |
+| `thesis-missing` | a selected problem exists but no distinct explanatory/prescriptive claim exists | `forging-novel-theses` |
+| `candidate-selection` | a frozen candidate batch exists and must be admitted/ranked | **HERE** |
+| `one-bet-untested` | one selected thesis needs discriminating action; cost/reversibility gate not yet applied | **HERE**, then `acting-on-hypotheses` or domain/plain executor |
+| `program-steering` | results must reallocate or reopen at least two directions | **HERE** |
+| `finished-claim` | the evidence is complete enough to argue in writing | `arguing-research-papers` |
+
+## The creative-research loop
+
+1. **GROUND** — obtain only the missing evidence state or present observation through the owning skill.
+2. **EXPOSE OR BOOTSTRAP** — if a plan/frame exists, send that artifact to
+   `surfacing-blind-spots`. If none exists, use grounded evidence from step 1 to state exactly one
+   **PROVISIONAL-CONTROL** frame for construction—not an alternative slate and not an artifact invented
+   merely to make another skill fire—then expose that artifact. Receive typed assumptions, a
+   human-tacit probe record or `UNELICITED`, a two-level depth trace, an open-set residual, and a
+   strategic stop reason. Do not simulate the human's answer.
+3. **CONSTRUCT** — attempt a grounded control, a frame that breaks a load-bearing premise, and an
+   orthogonal frame that changes another assumption type. Route names alone do not make frames distinct;
+   their premise, decisive relation, or discriminator must differ. After one concrete construction
+   attempt, a role may end as `COVERAGE GAP` only with the attempted transformation, a fixed
+   fact/constraint, and why fabricating that frame would be illegitimate.
+4. **PROBE BEFORE NARROWING when needed** — if frame choice depends on what theses each frame makes
+   expressible, select two or three frames **for an equal bounded probe**, call
+   `forging-novel-theses` once per frame, and compare only after every probe returns. Each call still
+   receives one selected-for-probe frame.
+5. **FORMULATE** — for each surviving frame, state the decisive relation, the cheap victory, a held-out
+   witness, and what the formalization discards.
+6. **GENERATE** — hand one selected problem/frame to `forging-novel-theses`; receive candidate packets.
+   Do not ask it to test, fund, or kill them.
+7. **FREEZE + DEDUP** — stop generation, preserve the denominator, and merge semantic duplicates before
+   any comparative score. If the survivors all share the same challenged premise, transformation
+   target, or discriminator—or collapse below the declared floor—send exactly one coverage-gap
+   regeneration request to `forging-novel-theses`. With multiple agents, blind initial generation is an
+   orchestration choice.
+8. **SELECT** — judge consequence, discriminability, feasibility, novelty delta, and bounded loss
+   separately. Record the loser reasons. Evaluator preference is evidence about the evaluator, not
+   ground truth about idea quality.
+9. **ACT ON ONE TREE** — apply the cost/reversibility hard gate. Send an expensive, irreversible,
+   load-bearing thesis to `acting-on-hypotheses`; its outcome table and threshold are the sole home of
+   per-test precommitment. Run an obvious cheap reversible probe through the domain/plain executor.
+10. **UPDATE / REOPEN** — use the execution artifact, controls, and surprises to update the hypothesis
+   tree, the problem frame, or the portfolio. A controlled surprise that no longer fits the selected
+   frame returns to step 2; a frame-stable mechanism gap returns to step 6.
+
+Operational detail and evidence crosswalk: `references/creative-research-loop.md`.
+
+### Incubation is optional and human-only
+
+For a **human** who has prepared the problem and reached an impasse, a bounded low-demand break can be
+tried. Effects vary by task and study; it is neither mandatory nor a substitute for construction and
+testing. Do not translate this into an agent instruction to sleep, idle, simulate a default-mode
+network, or wait for inspiration. Agents instead diversify explicit generation routes and preserve
+provenance.
+
+## The gates — grep-able artifacts, not advice
+
+| Gate | Decision owned here | Artifact |
+|---|---|---|
+| **D0 DIAGNOSE** | locate the earliest unsatisfied stage | **Stage diagnosis** with evidence and next owner |
+| **D1 EXPOSE** | decide whether the received or provisional control is safe to construct from | returned **Blind-spot packet** + **Exploration allocation** pointing to its local `Search budget` |
+| **D2 CONSTRUCT** | ensure the slate crosses premise boundaries, not labels, without inventing illegitimate frames | **Problem-frame slate** = CONTROL + attempted PREMISE-BREAK + attempted ORTHOGONAL; a role may be `COVERAGE GAP` only with an impossibility witness |
+| **D3 ADMIT** | select without scalar-score laundering or Goodhart | **Selection axes** kept separate + **The cheap victory** + **Optimize/trust firewall** + **Diversity-collapse rule** |
+| **D4 GOVERN** | protect integrity across many runs | **Prediction-registry policy** + **Denominator policy** + **Independent-audit requirement**; actor assignment stays with `orchestrating-agents` |
+| **D5 STEER** | allocate/reopen at program altitude | **Portfolio update** + **Reopen rule** |
+
+`scripts/research-check.ts` is only a structural floor. It cannot decide whether a frame is important,
+a witness is uncontaminated, or an auditor is truly independent.
+
+## RESEARCH JUDGMENT SPEC
 
 ```markdown
-# Research judgment spec: [direction / question]
+# RESEARCH JUDGMENT SPEC: [programme / question]
 
-## G1 — select by consequence (not fluency)
-- Consequence-ranked slate† (≥3 candidates; per candidate: what becomes POSSIBLE / gets FALSIFIED if solved — BEFORE any method): [...]
-- Fresh lever / why-now (the new tool/data/angle making this attackable NOW; no lever → shelve with a trigger): [...]
-- Fluency check (did a full method appear effortlessly? effortless ⇒ crowdedness alarm, downgrade importance): [...]
-
-## G2 — formulate un-gameable
-- The cheap victory† (one concrete way to score well WITHOUT solving the problem → then close it in the metric, or reject the metric): [...]
-- Optimize/trust firewall† (metric you OPTIMIZE  ||  held-out WITNESS you never optimize/select on; witness↔metric divergence = Goodhart stop): [...]
-- What the formalization throws away (if the hard part is discarded → wrong frame / Type III error): [...]
-
-## G3 — don't fool yourself (structural)
-- Pre-registration† (TIMESTAMP + the prediction + the kill-threshold, written BEFORE running): [...]
-- Denominator† (N configs/seeds/analyses tried; report the DISTRIBUTION, never the argmax): [...]
-- generator≠auditor† (the independent red-team pass — leakage / contamination / artifactual explanation): [...]
-- Negation (the strongest case AGAINST the hypothesis, stated first): [...]
-
-## G4 — steer by learning-rate
-- Portfolio (≥2 uncorrelated, capped bets; a safe core + a high-variance probe; avoid the fragile middle): [...]
-- Learning-rate kill/persist† (kill when dLearning/dt→0 AND block structural; persist on novel surprises; NOT on metric/time/sunk-cost): [...]
-- Live hypotheses (≥3 by default — UNLESS the space is stated exhaustive-binary or nested-in-one-tree; name the EXCLUDED alternative classes, held until a discriminating test): [...]
+- Stage diagnosis: [one stage token + evidence + next owner]
+- Blind-spot packet: [locus + load-bearing assumptions + open-set residual + stop reason]
+- Exploration allocation: [Blind-spot packet locus / SBS Search budget + cross-frame probe cap or NONE]
+- Problem-frame slate: [CONTROL/slot/premise/discriminator; attempted PREMISE-BREAK/...; attempted ORTHOGONAL/...; honest COVERAGE GAP + impossibility witness where required]
+- Selection axes: [consequence=...; discriminability=...; feasibility=...; novelty=...; bounded loss=...]
+- The cheap victory: [how the apparent objective can be met without resolving the research problem]
+- Optimize/trust firewall: [optimized metric=...; held-out witness never selected on=...]
+- Diversity-collapse rule: [dedup trigger + one targeted coverage-gap regeneration + final stop]
+- Prediction-registry policy: [registry or ledger locus + rule requiring registration BEFORE access/run]
+- Denominator policy: [what counts as every generated candidate, run, seed, analysis, and exclusion]
+- Independent-audit requirement: [required separation + frozen evidence surface + acceptance condition + actor assignment=orchestrating-agents]
+- Portfolio update: [at least 2 independent bets and allocation, or explicit ONE-tree handoff]
+- Reopen rule: [which unexpected controlled result reopens the problem frame or diagnosed stage]
 ```
 
-Then: `bun scripts/research-check.ts <spec.md>` (floor: slot presence + timestamp/threshold/denominator
-tokens + the ≥3-hypothesis check + the firewall/witness slot-presence check; it cannot judge whether the
-witness is truly un-gameable or the lever truly fresh — you do). † marks the seven artifacts the floor hard-FAILs on; unmarked slots floor-WARN and are judged here.
+Run: `bun scripts/research-check.ts <spec.md>`.
 
-## The procedure — mechanism before motion
+## Selection and steering rules
 
-1. **SELECT** — before writing any method, produce the consequence-ranked slate; importance-gate behind
-   a fresh lever; treat your own fluency as a crowdedness alarm. → `references/selecting.md`.
-2. **FORMULATE** — name the cheap victory and firewall the metric from a held-out witness; state what
-   the frame discards; do not freeze the metric before a minimum exploration budget. → `references/formulating.md`.
-3. **PRE-COMMIT HONESTY** — write the timestamped prediction + kill-threshold and the denominator plan
-   BEFORE running; assign the negation as the job. → `references/not-fooling-yourself.md`.
-4. **RUN, then VERIFY with a separate auditor** — the agent that produced a result may NOT certify it;
-   an independent read-only pass hunts leakage/contamination/the argmax; debugging effort is symmetric
-   across expected and unexpected results. → `references/not-fooling-yourself.md`.
-5. **STEER** — allocate a barbell portfolio; hold ≥3 live hypotheses; kill/persist on the learning-rate,
-   not the metric; premortem before committing a program. → `references/steering.md`.
-6. **Resolve tensions by moderator, and by the agent's default bias** — every research fight
-   (important-vs-soluble, curiosity-vs-strategy, bold-vs-incremental, persist-vs-pivot, fast-vs-rigorous,
-   optimize-vs-Goodhart …) has a regime that decides it AND a pole the model over-indexes on; apply the
-   moderator, then correct toward the pole the agent is NOT on. → `references/reconciliation.md`.
+- **Consequence before tractability**: first state what becomes possible or falsified. Then ask whether a
+  fresh tool, datum, access path, or conceptual lever makes the problem attackable now.
+- **No novelty monoculture**: keep a conventional grounding and a bounded atypical probe. Distance of an
+  analogy is not a quality signal; a transferred relation must yield a new testable prediction.
+- **No premise monoculture**: a control and a premise-breaking frame must coexist long enough to compare.
+  A list of different route names that shares one ontology, causal direction, proxy, and regime is one
+  frame family.
+- **No pretend elicitation**: when the researcher's tacit context is load-bearing, use the answer returned
+  by `surfacing-blind-spots` or record `UNELICITED`; an agent-authored “expert intuition” is counterfeit.
+- **No feasibility monoculture**: feasibility-heavy selection can discard original candidates. Preserve
+  the separate-axis record and compare proposal-stage judgment with execution-stage evidence.
+- **No all-in inference**: evidence that risky work sometimes has high upside does not justify putting
+  all resources into it. State the safe core, bounded probe, and loss cap.
+- **Direction-level kill**: retire only the tested family's supported closure. Flat learning caused by
+  an access or measurement block is not evidence that the scientific space is empty.
 
-## The reconciliations (Aufhebung) — moderator + the agent's default bias
+Problem construction and selection details: `references/selecting.md`. Metric and witness design:
+`references/formulating.md`. Standing integrity: `references/not-fooling-yourself.md`. Portfolio update:
+`references/steering.md`.
 
-Precedence-setting; each argued in full in `references/reconciliation.md`. Apply the moderator, then
-push toward the pole the agent under-weights (its default bias is in brackets).
-
-- **Important vs. soluble** → the **fresh lever**: take the important problem the moment a new
-  tool/data/angle opens it; else shelve it with a trigger (don't martyr on it). *[agent over-indexes
-  SOLUBILITY — leaderboard-tractable; importance-gate behind a lever].*
-- **Curiosity vs. strategy** → curiosity **generates** the candidate set, impact **ranks** within it —
-  never let strategy seed the set. *[agent over-indexes LEGIBILITY; inject a novelty term].*
-- **Formulate-early vs. explore-open** → freeze the metric only when the **formulation stops drifting**;
-  the cost of a wrong frame sets the timing. *[agent over-indexes PREMATURE formalization; enforce an
-  exploration budget].*
-- **Bold vs. incremental** → portfolio weight set by **anomaly pressure**: random residuals → keep
-  puzzle-solving; *systematic* residuals → challenge the frame. *[agent over-indexes INCREMENTAL].*
-- **Persist vs. pivot (direction)** → the **derivative of learning**: persist iff dLearning/dt > 0;
-  pivot on flat-and-structural; ignore sunk cost AND "it's hard". *[agent over-indexes PREMATURE PIVOT /
-  thrashing, then flips to sunk-cost].*
-- **Fast vs. rigorous** → split by **generative vs. evaluative**: fast, cheap generation; slow,
-  non-negotiable rigor at every evaluative gate — **never fast validation**. *[agent over-indexes
-  FAST+FLUENT — the central integrity risk].*
-- **Optimize vs. Goodhart** → optimize only inside the **validated regime** with a **held-out witness**
-  you never train on; witness↔metric divergence is the stop signal. *[agent over-indexes METRIC
-  OPTIMIZATION — the single most dangerous default].*
-- **Scale vs. domain structure** → inject only a **theorem, not a hunch** (an exactly-true cheap
-  invariant); let scale learn the rest. *[agent over-engineers principled-looking scaffolding that gets
-  Goodharted].*
-- **Negative results vs. exhaustion** → a kill retires the **tested family** (the generative closure of
-  what was actually run), never the space: state the family's boundary inside this skill's own **G4
-  learning-rate kill/persist verdict**, keep untested
-  survivors at the head of the queue, and hand any advisor panel the kill-ledger AND the survivor-ledger
-  at equal weight — concordant advice fed only kills is same-premise induction, not independent
-  confirmation. Power-limited kills (small n) additionally carry their false-negative rate. *[agent
-  over-generalizes a family's kills into "the space is empty", then proposes pivoting out of the domain;
-  added 2026-07-22 from a counseling post-mortem, argued in `references/reconciliation.md` §4].*
-
-## Calibration inversion — the two flips
-
-The full argument (why virtue→mechanism, and why G2/G3 dominate) is **THE LAW** above; its
-provenance-graded grounding is `references/sources.md` §inversion. Two human heuristics additionally
-**flip** for the agent: "learn to let go" → also **"learn to STAY"** (the agent over-pivots, having no
-program identity); "broaden your taste" → **"de-center"** (the agent's taste is too CENTRAL — the
-training median — not too narrow). **Carry both poles and diagnose which way THIS agent is erring** — the
-*common* (not guaranteed) direction is the inverted pole. But a flip is a hypothesis about the agent's
-bias, never an override of the evidence: a persist/kill verdict is decided by the learning-rate (G4), a
-selection by consequence (G1) — not by a standing thumb.
-
-## MUST-NOT-FIRE — and the fire/no-fire set
-
-Ceremony on a discrete action, or on a trivial ask, is this skill failing its own LAW. Full desk-check:
-`tests/triggers.md` — re-run after ANY description edit.
-
-**FIRES:** "which of these problems is worth my time / a year?" · 「この研究テーマ、重要? それとも busy なだけ?」·
-"is my benchmark gameable / am I Goodharting this metric?" · "am I fooling myself here — could this be
-leakage?" · "should I keep pushing this direction or pivot?" · "how do I formulate this scientific
-question as an ML task without the metric drifting?" · 「研究プログラムの舵取り」/ "how should I allocate
-compute across these bets?" · 「全部の変種が死んだ — この方向ごと棄てていい?」· a messy "I got 94% but something feels too good."
-
-**MUST NOT fire (with route):**
+## MUST-NOT-FIRE
 
 | Ask | Route |
 |---|---|
-| "test whether THIS approach works / set a kill condition on THIS experiment / spike it" | `acting-on-hypotheses` (a single forward bet) |
-| "invent a novel thesis / is this idea novel as a bet" | `forging-novel-theses` (generate the idea) |
-| "inspect this dataset/pipeline / what's actually in it / find the leaky feature" | `raising-resolution` (inspect a present fact) |
-| "fix the leaky preprocessing code / debug the training loop" | `implementing-and-debugging` |
-| "synthesize these 40 papers / is THEIR result trustworthy (grade a corpus)" | `systematizing-knowledge` |
-| "argue the paper's claim / write the intro / make the slides" | `arguing-research-papers` / `designing-presentations` |
-| a one-line factual or code question | just answer it — no ceremony |
+| “What do these 60 papers establish?” | `systematizing-knowledge` |
+| “Is this residual real or a pipeline artifact?” | `raising-resolution` |
+| “Interrogate this existing plan for hidden premises; do not propose solutions yet.” | `surfacing-blind-spots` |
+| “Given this problem, invent several novel theses.” | `forging-novel-theses` |
+| “Here is one expensive or irreversible thesis; precommit its cheapest discriminating kill experiment.” | `acting-on-hypotheses` |
+| “This deterministic check takes 30 seconds and is reversible; run it.” | domain/plain executor, then return the result here |
+| “Turn these completed results into one defensible paper claim.” | `arguing-research-papers` |
+| “Who should generate, criticize, verify, and accept, and when?” | `orchestrating-agents` |
+| “Give me daily habits for feeling imaginative, unrelated to a research decision.” | outside this family; answer directly or use an appropriate human-practice source |
 
-## Routing — sibling cuts (typed, runtime-answerable)
+**Broad asks fire HERE**: “どうすれば創造的な研究ができる?”, “help me plan and run this research
+programme”, and asks braided across problem finding, ideation, experiments, and steering. Diagnose first;
+then route the moves instead of reenacting them here.
 
-| Sibling | Cut |
+## Orchestration seam
+
+Research content and agent control are orthogonal:
+
+- **HERE / siblings** decide the problem frames, candidate schema, admission criteria, test meaning, and
+  research verdict.
+- `orchestrating-agents` decides who sees what, when critique begins, what can run in parallel, who may
+  veto, and how acceptance is recorded.
+
+For a multi-agent run, freeze the domain sequence first: `directing-research ->
+surfacing-blind-spots -> directing-research -> forging-novel-theses -> directing-research ->
+[acting-on-hypotheses | domain/plain executor] -> directing-research`. Then let
+`orchestrating-agents` assign roles around that sequence. More agents are not evidence of more ideas or
+better research.
+
+## Reference index
+
+| File | Load when |
 |---|---|
-| `acting-on-hypotheses` | **CARDINALITY-OF-INDEPENDENT-BETS — the sharpest cut.** ONE hypothesis tree — a single direction with its sub-nodes, **however many experiments it spans** — is that skill's Map/Loop/Leap: size it, commit it, kill it, run its cheapest disconfirming test → **there** (its Scope explicitly names "research direction", so "one direction" alone does NOT come here). This skill fires only on (a) **≥2 UNCORRELATED directions** — the portfolio: which problem earns effort, allocation across bets, killing a whole line on its *aggregated* learning-rate; (b) the **standing self-honesty policy** (pre-register / denominator / generator≠auditor as a program discipline over MANY runs); or (c) **selection & formulation** (which problem, posed how). Seam test: **ONE hypothesis tree → there; ≥2 uncorrelated directions, the standing honesty policy, or problem-choice/formulation → here.** Co-fire in sequence: here selects, formulates, and sets the honesty policy → there runs each individual tree. **Runtime decision order when cardinality is undecidable before Mapping**: (1) selection / formulation / the standing honesty policy → here, ALWAYS; (2) a single experiment's pre-registration threshold, pass/fail, outcome table, commit/kill → `acting-on-hypotheses` (its R2/R3), ALWAYS; (3) if it is ONE direction or correlation is UNKNOWN, run `acting-on-hypotheses`'s Map FIRST, then return here ONLY for portfolio allocation across the ≥2 independent directions the Map reveals (Map confirms only one → stay there). **Pre-registration seam**: the PER-EXPERIMENT threshold artifact is AOH R2; the STANDING timestamped pre-reg + denominator + generator≠auditor policy ACROSS runs is here. |
-| `forging-novel-theses` | **PURPOSE** — GENERATE / invent a novel thesis (decompose, structure-transfer, recombine, why-now) → there; the JUDGMENT of which problem to select, whether the frame is right, whether a direction stays in the portfolio → here. (Adjacent on "the tool-gap is the project" — inventing the tool is there; choosing to → here.) |
-| `raising-resolution` | **VERB** — physically INSPECT a present, knowable artifact (the data's actual contents, a leaky feature, a codebase) → there; the JUDGMENT to DISTRUST the number and MANDATE the audit, and the 定式化 of what the eval must measure → here. |
-| `implementing-and-debugging` | **PURPOSE** — FIX the code / build the pipeline / locate-and-repair the bug → there; the ADMISSION GATE deciding a number is invalid and the direction may need killing → here. |
-| `systematizing-knowledge` | **OBJECT** — appraise / reconcile / synthesize OTHERS' published evidence into a position (claim-fit appraisal, discrepancy adjudication, leakage checks when applicable) → there; gate YOUR-OWN-pipeline numbers before they become claims → here. Both may fire; own-pipeline hygiene is here. |
-| `arguing-research-papers` / `designing-presentations` | **PHASE** — write up the finished claim / give the talk → there; the research-conduct judgment BEFORE the write-up (problem choice, honest number, portfolio) → here. |
-
-## Execution model — verdicts SOLO; the auditor must not be the audited
-
-Operating guidance from a frontier model (Fable 5 / Opus, 2026-07) to whatever model runs this later:
-directing a research effort is **judgment** — selection, formulation, the kill/persist call, the taste
-that ranks directions — and judgment sits in ONE context. But the LAW's honesty mechanism is itself a
-**fan-out that is structurally required**, not optional parallelism.
-
-**Evidence archetype = SELF-AUDIT-IS-STRUCTURALLY-IMPOSSIBLE-FOR-THE-GENERATOR.** The agent that
-produced a result cannot certify it, because leakage, contamination, HARKing, and the argmax are
-invisible to the mind that created them (it has no inner "too good" tripwire). So the generator/auditor
-separation is not a convenience — it is the only way the honesty artifact means anything.
-
-| Stage | Mode | Why |
-|---|---|---|
-| Select · formulate · the kill/persist verdict · taste-ranking · the portfolio allocation | **SOLO — never shard** | judgment must sit in one context; a taste assembled from shards is not taste |
-| **The G3 auditor** — an independent read-only pass whose SOLE mandate is to find leakage / contamination / the artifactual explanation / the undisclosed denominator | **FAN-OUT, read-only — STRUCTURALLY REQUIRED** | the generator cannot audit itself; the auditor must NOT be the audited, and is refutation-prompted (the lens set: `references/not-fooling-yourself.md` §3) |
-| Fact / number / leakage verification of a specific artifact | **FAN-OUT, read-only** | fetch/inspect the real thing; return a checkable locus, never a felt "looks fine" |
-| Committing the direction / the pivot / the written pre-registration | **SOLO** | one director signs; the mechanisms are the check, not an agent's opinion |
-
-Scale: a single direction → SOLO judgment + a **mandatory** self-audit pass (never skip it — the audit
-is the LAW). A large program / many parallel experiments → SOLO steering + fan-out auditors per result +
-fact-check. **True independence matters**: a leak invisible to the generator is equally invisible to the
-*same model* re-reading its own work, so for a **load-bearing number** the auditor should be a genuinely
-different context — a separate agent, a different model, or a fresh re-run split — not the generator
-wearing a skeptic hat. **No harness → same map, serial**: the auditor becomes a separate,
-adversarially-framed self-review pass with a clean context (re-read as a hostile stranger) — weaker than
-true independence, so escalate to an actually-different auditor when the number decides the direction.
-Consensus among auditors is not evidence — diversify the lens, not the count; an auditor that agrees is
-not a signal, one that finds the leak is. *If a constraint here feels unnecessary, that feeling is the failure
-mode — follow the map.*
-
-## Reference index — load the file you need
-
-| File | Covers | Read when |
-|---|---|---|
-| `references/selecting.md` | G1: taste & problem-worth — Hamming (important-problems test, tools-limited≠intractable), ITN + Wilson (neglectedness / go where the crowd isn't), Alon/Medawar (feasibility×interest, art of the soluble), Pasteur's Quadrant, Simon (satisficing), the Cajal self-diagnosis one-liner + the fluency-as-crowdedness flag | choosing what to work on; ranking directions; step 1 |
-| `references/formulating.md` | G2: 定式化 — Pólya + Simon (representation), AI4S task/metric design, **the cheap-victory + optimize/trust firewall (Goodhart)**, design-thinking framing / Type III error, Popper (empirical content, severity), elegance-vs-fidelity gate, minimal model | posing the problem; choosing a metric/benchmark; whenever a metric is about to be optimized; step 2 |
-| `references/not-fooling-yourself.md` | G3 (the crown jewel): Feynman (leaning-over-backwards, Millikan asymmetric-stopping), Platt/Chamberlin (multiple live hypotheses), Galef (scout self-tests), metascience (Ioannidis, Gelman forking-paths, Kerr HARKing, pre-registration), AI4S rigor (leakage/REFORMS, denominator, generator≠auditor), Karpathy (become one with the data) + every virtue→mechanism translation | before trusting any result; designing an eval; the self-audit; steps 3–4 |
-| `references/steering.md` | G4: Lakatos (progressive/degenerating = the direction-level kill), Kuhn (anomaly-as-asset), Taleb (barbell portfolio), March (explore/exploit), Dyson (birds/frogs), Klein (premortem), Olah-Carter (research debt), Tetlock (outside view / Fermi-ize), the open-door / exploration budget (§8) + the learning-rate kill/persist rule | allocating across bets; deciding to persist or pivot a whole direction; step 5 |
-| `references/reconciliation.md` | the Aufhebung: each research tension argued with its moderator + the AI4S-agent default-bias pole; the master virtue→mechanism inversion pointer | any tension between two pieces of research advice; step 6 |
-| `references/sources.md` | the SOLE provenance ledger (author-confirmed / paraphrase / third-party / constructed / needs-verification), §inversion (the provenance-graded grounding of THE LAW + the two flips), lineage, reflexive self-grading | grading a claim to a source; "is this attribution safe?"; reforge |
+| `references/creative-research-loop.md` | running or explaining the full creative-research lifecycle |
+| `references/selecting.md` | constructing, comparing, and selecting problem frames |
+| `references/formulating.md` | closing cheap victories and separating optimized metric from trusted witness |
+| `references/not-fooling-yourself.md` | defining the standing registry, denominator, and independent-audit policy |
+| `references/steering.md` | updating a portfolio across at least two independent directions |
+| `references/reconciliation.md` | resolving scoped tensions without universal slogans |
+| `references/sources.md` | checking provenance, limitations, rejected universal claims, or research gaps |
+| `tests/triggers.md` | changing any description or sibling boundary |
+| `tests/forge-verification-ledger.md` | auditing this reforge and its unresolved evidence limits |

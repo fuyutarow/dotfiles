@@ -1,118 +1,214 @@
-# generation-engine — 分解と転移の drill
+# Generation engine — coordinate search with reusable recipes
 
-Phase 1 の詳細手法。分解 (1a) と転移 (1b) は 1 つの機構の両半分であり、この順で往復する。片方だけでは
-新規性は出ない。**このファイルの中核出力は Phase 1 の G1 (箱B のリスト) と G2 (関係写像 + 新予測)** — SKILL.md
-の CORE ゲートを満たす artifact をここで作る。
+This file owns candidate construction mechanics. The coordinate field types and enum values live in
+`SKILL.md`; candidate ranking and testing live elsewhere.
 
-## 目次
-- 1a-1 原価テアダウン
-- 1a-2 公理列挙（制約 vs 慣習の二分）
-- 1a-3 フェルミ分解
-- 1b-1 構造写像（structure-mapping）の実行
-- 1b-2 表層類似の棄却
-- 1c 再結合の作法
-- 深掘りが必要な着想での使い方
+## Shared preparation
 
----
+Copy the input frame verbatim. Extract:
 
-## 1a-1 原価テアダウン
+- source-located observations, accounts, constraints, analogies, and negative space;
+- entities / units;
+- relations;
+- assumed constraints;
+- observed regularities and residuals;
+- current representation;
+- nearest known accounts.
 
-完成品を、それを構成する物理的素材の *市場価格* まで割り、「素材原価」と「完成品価格」の乖離を数値で出す。
-乖離が大きいほど、その差分は物理ではなく慣習・構造・情報の非対称で説明されている。そこが再設計の余地。
+Do not “improve” this extraction. It is the before-state used by every transformation trace.
 
-**作法**：
-1. 完成品の主要構成素材を列挙する（重量・体積ベース）。
-2. 各素材の商品市場価格を引く。
-3. 素材原価合計 ÷ 完成品価格 を出す。
-4. 差分を「何が説明しているか」で分類する（製造・慣習・独占・情報・ブランド）。
-5. 「慣習」で説明される部分が、覆す対象の第一候補。
+For a `TACIT` seed, accept only the `surfacing-blind-spots` handoff defined in `SKILL.md`. Carry the
+packet locus, probe ID, and `HUMAN:<owner>@<attestation-locus>` in the seed field. A plausible story
+about what a practitioner “probably knows” is synthetic model output, not tacit evidence.
 
-**worked example（ロケット）**：ロケットを構成する素材（アルミ・チタン・銅・炭素繊維）を商品価格で積むと、
-完成品価格のごく一部にしかならない。差分の大半は「使い捨て」という慣習で説明されていた。→ 覆す対象は素材でも
-推進理論でもなく「1 回で捨てる」という運用慣習。これが再利用ロケットの起点。
+## Allocate functional search coordinates first
 
-**deep-tech での注意**：素材原価が支配的な領域（一部の半導体・素材産業）では、乖離ではなく「歩留まり × 設備
-償却」が完成品価格を説明する。その場合はテアダウンの対象を素材価格ではなく「歩留まりを決めている物理 vs 慣習」
-に置き換える。歩留まりを「経験則で受け入れている損失」と「物理下限」に二分できれば、それが 1a-2 の公理列挙に
-直結する。
+Build candidate slots before writing claims:
 
----
+```markdown
+| Candidate | Seed provenance | Target | Operation | Premise challenged | Intended discriminator |
+|---|---|---|---|---|---|
+| C1 | [...] | [...] | [...] | NONE — grounded control | [...] |
+| C2 | [...] | [...] | [...] | [specific anti-default premise] | [...] |
+```
 
-## 1a-2 公理列挙（制約 vs 慣習の二分）
+Treat each row as a cell to execute. The row is not a score and does not imply that all combinations are
+legitimate. Reject a cell when its operation cannot act on its target, its seed lacks provenance, or its
+premise change violates a fixed fact without changing the question. Name an open-set value with `OTHER`
+rather than coercing it into a near label.
 
-対象の「できない理由」を全て列挙し、各々を 2 つの箱に入れる：
+The grounded control transforms the frame without challenging a premise; it prevents a batch from
+confusing contrarianism with novelty. The anti-default changes a specific load-bearing premise; it
+prevents the control from becoming the entire search neighborhood.
 
-- **箱A（物理・数学で必ず真）**：熱力学第二法則、光速、情報理論の下限、幾何、保存則。覆せない。
-- **箱B（業界慣習でのみ真）**：「標準はこうだから」「みんなこうしているから」「前任者がそうしたから」
-  「その ISA が事実上の標準だから」。覆せる。
+## Recipes are operators, not bins
 
-**このスキルの中核出力は箱B のリストである（G1）。** 箱B が空なら分解は失敗している。
+The following six RECIPES are reusable ways to execute a coordinate cell. They overlap: constraint
+inversion can also be representation change, while structural transfer can also couple two accounts.
+Never count recipe labels as coverage.
 
-**作法**：各「できない理由」に「これは物理か、それとも合意か？」を機械的に問う。合意なら、その合意が成立した
-歴史的経緯を 1 行で書く。経緯が「技術的必然」でなく「経路依存」なら、それは覆す対象。
+## Recipe A — constraint inversion
 
-**worked example（決済）**：「国際送金は数日かかり手数料が高い」— これは物理か？ No。銀行間決済網の構造と
-コルレス慣行という経路依存で説明される。→ 覆す対象を特定できる。PayPal / Wise 型の起点。
+For each constraint, classify it:
 
-**反物語の注意**：箱B に見えて実は箱A、という誤判定が最も高くつく。「非線形素子があるのに自動微分できる
-わけない」型の反論は、それが箱A（数学的不能）なのか箱B（実装慣習）なのかを分けて反証する。社会的証明の不在で
-箱A 扱いされている主張は、箱B であることを構成的に（witness を出して）示す。
+| Class | Examples | Allowed move |
+|---|---|---|
+| physical / mathematical | conservation law, identifiability limit | cannot hand-wave away; change the question or derive a bound |
+| measurement / access | sensor resolution, missing regime | propose an observation or representation that changes access |
+| institutional / conventional | standard workflow, benchmark convention | invert only with provenance and a mechanism |
+| unknown | unsupported “cannot” | mark `UNVERIFIED`; do not classify by confidence |
 
----
+Trace:
 
-## 1a-3 フェルミ分解
+```text
+claimed constraint -> class + provenance -> permissible inversion -> changed relation -> prediction
+```
 
-数量（市場規模・コスト・性能・時間）を、独立した積・和の因子に割る。各因子を独立に検証・攻撃する。目的は
-正確な推定ではなく、**どの因子が支配的か** と **どの因子が慣習で固定されているか** の特定。
+Reject a candidate that treats an inconvenient physical limit as a convention.
 
-**作法**：目標量 = 因子1 × 因子2 × … に分解 → 各因子の桁を独立に見積もる → 最大の因子と、最も「動かせるのに
-動かしていない」因子を出す。
+## Recipe B — result generalization
 
-支配因子が箱A（物理）なら、その領域は攻めどころが薄い。支配因子が箱B（慣習）なら、そこが thesis の核。
+Start from a controlled result or systematic residual:
 
----
+```text
+observation in regime A
+-> proposed relation explaining it
+-> boundary conditions
+-> prediction in regime B
+```
 
-## 1b-1 構造写像（structure-mapping）の実行
+Maintain artifact alternatives. An anomaly does not contain its explanation. If the observation itself
+is not verified, route it to `raising-resolution` and mark the candidate dependent on that result.
 
-Dedre Gentner の構造写像理論。類推が機能するのは *表層* の類似ではなく *関係構造* の写像による。転移すべきは
-「モノ」ではなく「A の B に対する関係」。
+## Recipe C — competing-account synthesis
 
-**作法**：
-1. 対象問題の関係構造を抽象化する（「X が Y を制約し、Z がそれを緩和する」の形）。
-2. 全く別の分野で、同じ関係構造を持つ系を探す。
-3. その別分野で Z（緩和策）に相当するものを、対象へ写像する。
-4. 写像が関係を保存しているか検証する（表層ではなく関係で対応しているか）。
+Given accounts A and B:
 
-**worked example（Darwin）**：Malthus『人口論』の関係構造 =「資源が有限 → 個体が過剰 → 競争 → 淘汰」。Darwin
-はこの *関係構造* を生物の変異に写像した（人口経済 → 生物進化）。表層（人口統計 vs 生物）は無関係。転移したのは
-関係。
+1. name where they disagree;
+2. preserve the mechanisms that explain different observations;
+3. propose a combined or higher-level relation;
+4. derive an observation distinguishing the synthesis from A and B.
 
-**worked example（Gutenberg）**：ワイン圧搾機の「均一な圧力を面に加える」関係と、コイン打刻の「型で文字を転写
-する」関係を、印刷という一つの機構に再結合した。分野横断の *機構* の転移。
+`A + B is holistic` is not a synthesis. The new account must risk a different prediction.
 
----
+## Recipe D — structural transfer
 
-## 1b-2 表層類似の棄却
+Use relation mapping:
 
-転移の最頻の失敗は、関係ではなく表層で対応させること。これは比喩であって新結合ではない。
+```markdown
+- Source-domain entities:
+- Source relation:
+- Target-domain entities:
+- Target relation before transfer:
+- Mapping:
+- Relation preserved:
+- New target prediction:
+```
 
-**判定（G2）**：転移した写像から、対象について *新しく検証可能な予測* が出るか。出るなら関係写像（生成的）。
-「似ている」で終わり予測を産まないなら表層類似（装飾）。棄却する。
+Comparing multiple source examples may help abstract a schema; distance alone does not. Prefer the
+closest source that supplies the needed relation. Reject object-name substitution, metaphor, and
+transfers that predict nothing new.
 
----
+## Recipe E — representation change
 
-## 1c 再結合の作法
+Transform one representational choice:
 
-プリミティブ（1a）× 転移構造（1b）の直積から組み合わせを列挙し、各々を「箱B のどの慣習を覆すか」で評価する。
-慣習を 1 つも覆さない組み合わせは me-too。最も安い反証実験（Phase 3a）を設計できる組み合わせを優先する — 検証
-可能性が高いものから。
+- object -> relation;
+- static state -> transition or trajectory;
+- individual -> interaction or population;
+- average -> distribution or tail;
+- forward model -> inverse problem;
+- point estimate -> identifiable set;
+- one scale -> multi-scale coupling.
 
-出力は単一解ではなく候補集合。Phase 2 で投射し、Phase 3 で反証にかけて絞る。
+Trace both visibility and cost:
 
----
+```text
+old representation hides X
+-> new representation exposes relation Y
+-> prediction Z becomes expressible
+-> information or assumptions discarded
+```
 
-## 深掘りが必要な着想での使い方
+Changing notation without changing an expressible relation is not a thesis.
 
-分解と転移を 1 往復で終えない。1c の候補を種にして、各候補をもう一度 1a にかける（候補の中の「まだ慣習で固定
-されている因子」を探す）。2〜3 往復で、表層の novelty ではなく構造の novelty に到達する。着想系書籍の「10 個を
-並べる」やり方は、この往復（生成の反復修正）を持たないため静的になる。
+## Recipe F — atypical recombination
+
+Anchor the candidate in a conventional component that is known to function. Add one bounded atypical
+component and state the mechanism connecting them.
+
+```text
+grounded base + atypical component -> interaction mechanism -> new prediction
+```
+
+Avoid novelty stacks in which every component is unverified. Bibliometric association between atypical
+combinations and impact does not show that atypicality causes truth or value.
+
+## Batch discipline
+
+Before drafting:
+
+```markdown
+- Requested count:
+- Coordinate allocation:
+- Grounded control ID:
+- Anti-default ID, or precise EXEMPT:
+- Stop condition:
+```
+
+During generation:
+
+- keep each candidate independent until its packet exists;
+- do not rank candidates live;
+- preserve failed transformations in the denominator;
+- derive the matrix key from premise, target, operation, and discriminator;
+- ignore recipe labels when checking coverage;
+- stop when the declared count/limit is reached.
+
+Run `gate-check.ts` over the complete file. The script auto-detects multiple `## Candidate ...` sections,
+checks each packet, emits the derived matrix, and rejects mechanically collapsed batches. This is a
+pre-dedup floor; it cannot detect semantic paraphrases.
+
+After return, `directing-research` owns freezing and semantic deduplication. It returns a coverage-gap
+packet only when the unique batch has collapsed:
+
+```markdown
+## Coverage-gap packet
+- Requested count:
+- Unique count after semantic dedup:
+- Shared coordinate: [PREMISE | TARGET | DISCRIMINATOR, with value]
+- Occupied legitimate cells:
+- Target unoccupied legitimate cell: [premise × target × operation × discriminator, or NONE + reason]
+```
+
+Accept at most one packet for the same batch. When a target cell is named, generate exactly one new
+candidate in that cell while retaining all packet fields. When the target is `NONE`, the cell proves
+illegitimate during construction, or the new packet still fails the gap condition, return:
+
+```markdown
+COVERAGE GAP: [missing coordinate/cell] — [why no legitimate candidate was produced]
+```
+
+Do not create a second regeneration round. Do not rank, select, design a test, or change the fixed frame
+to make the gap disappear.
+
+## Prediction and discriminator test
+
+A candidate's “new testable prediction” passes the generation floor only if:
+
+1. it is not already entailed by the input frame;
+2. it follows from the stated transformation;
+3. a possible observation could differ from the nearest prior or competing account;
+4. it is scoped enough for a discriminating action; `directing-research` later routes that action
+   to `acting-on-hypotheses` only at the expensive/irreversible hard gate, otherwise to the
+   domain/plain executor.
+
+The “new discriminator” then states the contrast explicitly:
+
+```text
+under condition X: this candidate predicts Y; the input/prior/account predicts Z
+```
+
+The two fields are related but not duplicates: the prediction states what follows; the discriminator
+states which alternative outcome makes that consequence informative. This does not prove feasibility or
+design the experiment.

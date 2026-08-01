@@ -15,13 +15,11 @@ action** is one you pre-commit to **THROW AWAY** (scope sized to the SIGNAL). Th
 **intent-at-design**, not a reversibility gradient. A staged/reversible Leap is **STILL Leap** — you keep
 and depend on stage 1.
 
-**The one exception, named honestly (the "try-it probe").** STEP 0's cheapness rule says: if the cheapest
-discriminating test costs MORE than just trying the obvious method and watching it fail, try it — "the
-trial IS the Loop". But a try-it trial you would KEEP if it succeeds is **keep-possible**, which collides
-with Loop's discard-only intent. Resolve it as a **Leap-with-a-built-in-kill-condition, not a Loop**:
-size the loss, write the kill condition (§3), and proceed. The Loop/Leap action partition is clean for
-*designed* tests; the try-it probe is the one keep-possible action, and it is filed under Leap discipline
-(bounded loss + kill condition), not smuggled into Loop. (`anti-patterns.md`: the try-it-probe entry.)
+There is no keep-possible exception. A deterministic, bounded, reversible try whose result has no
+expensive/irreversible downstream exposure is routed by STEP 0 to the domain/plain executor and returns
+to `directing-research`; calling it a Leap would be ceremony. If expensive/irreversible work does ride on
+the result, Loop may use a cheap **discard-intent** probe to protect the later decision, and only the
+subsequent kept commitment is Leap.
 
 ## §2 — EVALUATE → DECIDE → REALIZE
 
@@ -84,4 +82,4 @@ dodge the decision (`loop.md` §6 STOP), and do not claim Loop monopolizes all c
 | Picked the safe small bet by default | small-bet disease (君の仮説は…) | re-evaluate weighting 影響度; resist the default (§2 EVALUATE) |
 | Leapt a one-way door at mid 確信度 | reckless irreversible Leap | demand more Loop or stage it into two-way doors (§4) |
 | Over-tested a reversible bet | treated a two-way door as one-way | bounded loss + asymmetric upside = GO; stop looping (§4) |
-| Kept a "Loop" you'd actually keep on success | mis-filed try-it probe | file it as a Leap with a kill condition + loss cap (§1) |
+| Called a cheap reversible executor trial a Leap solely because you might keep it | gate bypass / commitment ceremony | route it out under STEP 0 and return the raw result + provenance to directing-research (§1) |

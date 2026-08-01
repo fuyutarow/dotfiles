@@ -21,13 +21,14 @@ Run this list on your own output before declaring a Map/Loop/Leap cycle done.
 | 7 | **Small-bet disease** | you defaulted to the safe small bet — 君の仮説は小さくまとまっているね | re-evaluate weighting **影響度** (確信度は後で上げられる, 影響度は上げづらい); resist the default. (`leap.md` §2) |
 | 8 | **Felt-Loop on an unrunnable node** | you re-ran a "loop" with no access to the real signal, hoping it turns | the node is not falsifiable here: switch it to DIALOGUE/CO-CREATION-mode, or escalate that access/location is the blocker — 回らないなら、いる場所が悪いのかも. (`loop.md` §7) |
 
-## Four structural anti-patterns (the GATE + cross-phase modes the verb files cannot self-detect)
+## Five structural anti-patterns (the GATE + cross-phase modes the verb files cannot self-detect)
 
 | mode | observable TELL | recovery |
 |---|---|---|
-| **Be-bold theater (over-firing)** — the PRIMARY liability | you ran the three-phase ceremony on routine / deterministic / known-method work | STEP 0 GATE: fire ONLY when a load-bearing belief is untested AND the work is expensive (>~1 reversible session) OR hard to reverse. Otherwise just do it. |
+| **Be-bold theater (over-firing)** — the PRIMARY liability | you ran the three-phase ceremony on routine / deterministic / known-method work | STEP 0 GATE: fire ONLY when a load-bearing belief is untested AND expensive (>~1 reversible session) or hard-to-reverse work rides on it. Otherwise use the domain/plain executor and return the raw result + provenance to directing-research. |
 | **Relabeling present-understanding as a Loop** | you "Looped" something that was actually citing a fixed present fact (no confidence-delta on an undecided outcome) | that was a resolution gap: route to raising-resolution (or the inline fallback in `boundaries.md`). Do not call inspection a Loop. (the cut: `boundaries.md` §1) |
-| **Mis-filed try-it probe** | you called something a Loop but you would KEEP it if it succeeded (keep-possible, not discard) | file it as a **Leap with a built-in kill condition + loss cap**, not a Loop. The Loop/Leap action partition is clean for *designed* tests; the try-it probe is the one keep-possible action. (`leap.md` §1) |
+| **Cheap probe laundered into Leap** | a bounded reversible one-session trial was given a Map/Loop/Leap wrapper only because you might keep its output | route it to the domain/plain executor; return `EXECUTOR RESULT` to directing-research. AOH is for expensive/irreversible work riding on the result. (`boundaries.md` §3) |
+| **OPEN residual absorbed into the tree** | an incoming `OPEN` item became a premise/node/confidence, or lost its provenance/reopen trigger | restore the unchanged pass-through; if its trigger fired, emit `FRAME-BREAK primary=OPEN` and return to directing-research. (`map.md` §6 / `loop.md` §5) |
 | **Confidence laundered through a subagent** | at LEAP time, the load-bearing node's 確信度 traces back to an agent's report — no raw signal you adjudicated exists in context (a cross-phase leak Loop's own table can miss once the moment has passed) | revert the value; re-run the probe under the `loop.md` §8 contract (raw signal + locus, adjudicated by you) BEFORE staking. |
 
 ## The recap anti-pattern (what this skill must not become)

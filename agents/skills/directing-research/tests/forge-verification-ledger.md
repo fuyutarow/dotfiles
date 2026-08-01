@@ -15,30 +15,25 @@ the dated forge log with its adversarial-verification results.
   virtue is converted to a checkable mechanism, and enforcement concentrates on the **capability-scaling**
   failures (self-deception, Goodhart) the human-in-the-loop cannot catch (the auditor's evidence is
   produced by the audited). Full argument: `references/sources.md` §inversion (SOLE home).
-- **Four gates → the RESEARCH SPEC + `scripts/research-check.ts` floor** (F1 operationality; mirrors
+- **Four gates → the RESEARCH JUDGMENT SPEC + `scripts/research-check.ts` floor** (F1 operationality; mirrors
   `forging-novel-theses` gate-check + `arguing-research-papers` claim-check). G2 (formulation) and G3
   (honesty) are the load-bearing gates.
 - **Two heuristics FLIP for the agent**: "let go" → also "STAY" (agent over-pivots); "broaden" →
   "de-center" (taste is too central/median). Carry both poles; default to the inverted pole.
-- **Sibling cuts** (SKILL.md Routing): the sharpest is **CARDINALITY/ALTITUDE vs `acting-on-hypotheses`**
-  (SINGLE bet there; across-bets + standing-honesty-policy here). Plus PURPOSE vs forging-novel-theses
+- **Sibling cuts** (SKILL.md Routing): the sharpest is **CARDINALITY + DOWNSTREAM EXPOSURE vs
+  `acting-on-hypotheses`** (expensive/irreversible SINGLE bet there; cheap reversible probe to the
+  domain/plain executor; across-bets + standing-honesty-policy here). Plus PURPOSE vs forging-novel-theses
   (generate), VERB vs raising-resolution (inspect), PURPOSE vs implementing-and-debugging (fix), OBJECT vs
   systematizing-knowledge (others' corpus vs own pipeline), PHASE vs arguing-research-papers /
   designing-presentations (write-up/talk).
-- **Execution model** — verdicts SOLO; the **generator≠auditor** separation is a STRUCTURALLY-REQUIRED
-  fan-out (the generator cannot audit itself), read-only, refutation-prompted, quarantine-on-locus.
+- **Execution model** — verdicts stay SOLO. The domain **Independent-audit requirement** fixes
+  separation/evidence/acceptance; `orchestrating-agents` instantiates any actor fan-out.
 
-**Open defects / deferred:**
-- **Reciprocal-cut debt (LIVE, mitigated — owner-named).** `acting-on-hypotheses` (≈1900 chars) is over
-  the ~1500 listing budget AND its description enumerates "research direction" as in-scope with no cut
-  ceding the ≥2-direction portfolio altitude here — so at stage-1 a portfolio/allocation ask is a live
-  race (reclassified from deferred-cosmetic to live per the trigger lens). Mitigated on this side by (1)
-  the re-cut to **CARDINALITY-OF-INDEPENDENT-BETS** (ONE hypothesis tree → a-o-h; ≥2 uncorrelated
-  directions / standing honesty policy / selection-formulation → here), (2) description tokens
-  (portfolio / allocation / ≥2 bets) + the learning-rate homonym disambiguation, (3) F4/F7 reworded to
-  the ≥2-directions signal. The genuine reciprocal cut still needs a-o-h's own trim-reforge (owner =
-  acting-on-hypotheses; body home `references/boundaries.md`). Re-run the trigger desk-check after any
-  sibling reforge.
+**Resolved defect (historical; do not treat as LIVE).** The earlier AOH boundary used cardinality alone
+and its description raced with portfolio asks. The current reciprocal cut is cardinality plus downstream
+exposure: multiple bets stay here; one expensive/irreversible load-bearing tree goes to
+`acting-on-hypotheses`; one deterministic, bounded, reversible probe goes to the domain/plain executor.
+The AOH description and `references/boundaries.md` now carry the reciprocal gate.
 
 **Retired decisions (do not resurrect):** none yet.
 
@@ -77,8 +72,9 @@ fixes: (1) resolved the floor↔LAW contradiction — "concentrate on G2/G3" rew
 *floor-enforcement* (all four gates' artifacts remain required); (2) the floor now checks the three
 previously-unchecked declared artifacts (fluency / throws-away / negation) and the virtue deny-scan is
 anchored to exhortation forms (no longer false-flags a "bold" probe); (3) **re-cut vs
-`acting-on-hypotheses` to CARDINALITY-OF-INDEPENDENT-BETS** (ONE hypothesis tree → there, ≥2 uncorrelated
-directions → here) — resolving the single-direction ambiguity; (4) single-homed the calibration inversion
+`acting-on-hypotheses` to CARDINALITY-OF-INDEPENDENT-BETS** (historical decision, superseded in
+v2607.4.0 by the downstream-exposure gate) — resolving the then-visible single-direction ambiguity;
+(4) single-homed the calibration inversion
 (SKILL.md THE LAW states it, sources.md §inversion grounds it — dropped the false SOLE-argument claim and
 the duplicated machinery); (5) pointed the REFORMS leakage taxonomy to `systematizing-knowledge` and
 reframed "become one with the data" as a mandate handing the inspection ACT to `raising-resolution`;
@@ -118,7 +114,7 @@ with the arguing-research-papers review, Swales / Toulmin / C-C-C / Boutron / Bo
 (`Optimize` capitalized not matched, `held out` with a space not matched) is **FIXED in this wave**
 (task 1 of this cycle: `has_optimize_token`/`has_witness_token` now match on a `tolower()` copy) —
 re-verified via stdin fixtures: `Optimize on seen MAE || Witness: held out families` → PASS;
-`we track validation MAE` → still FAIL; the full unfilled RESEARCH SPEC template → still FAIL=7
+`we track validation MAE` → still FAIL; the full unfilled RESEARCH JUDGMENT SPEC template → still FAIL=7
 WARN=6, exit 1; a fully-good spec → exit 0. Two residuals **accepted as known, documented residuals,
 not fixed this wave**: (a) `has_independence_token`'s WARN-level risk that "indifferent"
 substring-matches "different" (a false PASS on the independence check, WARN-level not FAIL-level); (b)
@@ -130,3 +126,138 @@ Fix execution was delegated to Sonnet-5 agents (S4 → `scripts/research-check.t
 `references/steering.md` + `references/formulating.md` + `tests/triggers.md`; disjoint file ownership)
 under Fable-5 direction, with floor (`research-check.ts`) verification green after fixes: fixtures
 green, no regressions (unfilled template FAIL=7 WARN=6).
+
+## 2026-07-30 creative-research / collection-MECE reforge
+
+**Trigger.** The broad ask “how can I do creative research?” exposed that the collection had no declared
+lifecycle lead. `directing-research`, `forging-novel-theses`, and `acting-on-hypotheses` all plausibly
+fired; thesis generation duplicated single-bet kill mechanics; problem construction had no explicit
+owner. The earlier sections of this ledger describe the superseded v2607.1 architecture and are retained
+as change history, not current LAW.
+
+**Evidence work.** A bounded primary-source review covered problem construction, dual-space search,
+real-lab discovery, analogy/schema transfer, problem-solution co-evolution, idea-selection bias,
+bibliometric recombination/risk, incubation, LLM ideation, execution, and multi-agent diversity. Full
+claim/scope/limitation ledger: `references/sources.md`.
+
+**Architecture decision (solo).**
+
+| Responsibility | Sole owner |
+|---|---|
+| broad creative-research stage diagnosis and lifecycle transitions | `directing-research` |
+| research-problem construction, selection, formulation, admission, standing integrity, >=2-bet portfolio | `directing-research` |
+| candidate-thesis genesis for a selected frame | `forging-novel-theses` |
+| expensive/irreversible selected tree's Map / threshold / outcome table / commit / pivot / kill | `acting-on-hypotheses` |
+| deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor |
+| corpus state / novelty evidence | `systematizing-knowledge` |
+| present artifact / anomaly inspection | `raising-resolution` |
+| finished manuscript claim | `arguing-research-papers` |
+| agent topology, visibility, veto timing, verification, acceptance | `orchestrating-agents` |
+
+No new skill was created: the broad territory had an incumbent and the missing work was repaired by
+reforging and reciprocal cuts.
+
+**Core change.** Replaced the linear four-gate recipe with a coupled loop:
+`GROUND -> CONSTRUCT -> FORMULATE -> GENERATE -> FREEZE/DEDUP -> SELECT -> TEST ONE -> UPDATE/REOPEN`.
+Human incubation is a conditional side branch after preparation/impasse; it has no agent analogue.
+
+**Removed overclaims.** The current LAW forbids universal claims that problem setting is “80%”, critique
+is easy, distant analogy is the main discovery cause, novelty equals value, incubation reliably creates
+insight, more agents monotonically increase diversity, or a scalar product ranks research problems.
+
+**Mechanical contract.** `scripts/research-check.ts` now checks ten program artifacts. It explicitly:
+
+- rejects a scalar product in place of separate selection axes;
+- requires a registry/ledger locus plus a before/prior rule;
+- does not require or parse a per-test kill threshold;
+- accepts either >=2 program bets or an explicit one-tree handoff;
+- requires an unexpected result to be able to reopen a problem frame or stage;
+- closes the old `indifferent` -> `different` auditor false-positive with word-bounded independence
+  tokens.
+
+`tests/research-check.test.ts` fixes red/green behavior, including the regression that a timestamped
+per-test threshold alone cannot pass the program registry policy. `tests/triggers.md` holds the
+cross-skill 15-ask name+description desk-check and reciprocal-cut checklist.
+
+## 2026-07-30 functional decomposition reforge (v2607.3.0)
+
+**Why the prior decision was superseded.** The preceding wave assigned missing behaviors directly to
+incumbent skill names. A blind forward test then showed the collection could produce multiple frames and
+theses, but had no owner for eliciting human tacit knowledge, no open-set residual, and no recovery when
+semantic dedup collapsed nominally different routes. The prior statement “No new skill was created” remains
+historical; it is not the current architecture.
+
+**Design unit.** The collection is decomposed by **function × state transition × owned artifact**, not by
+topic label:
+
+| Function | Input state → output state | Sole artifact owner |
+|---|---|---|
+| PRESENT-GROUND | uncited present claim → citable observation | `raising-resolution` |
+| CORPUS-GROUND | unsystematized corpus → evidence state | `systematizing-knowledge` |
+| EXPOSE | implicit plan/frame → explicit premise surface | `surfacing-blind-spots` (`Blind-spot packet`) |
+| FRAME / STEER | exposed premises/evidence → selected problem/program state | `directing-research` (`RESEARCH JUDGMENT SPEC`) |
+| FORGE | selected frame → structurally indexed thesis batch | `forging-novel-theses` (candidate packets + coverage matrix) |
+| TEST / COMMIT | one expensive/irreversible selected tree → evidence-backed commit/pivot/kill | `acting-on-hypotheses` |
+| RUN CHEAP PROBE | one deterministic/reversible tree → observed result with locus | domain/plain executor |
+| ARGUE | completed evidence → defensible paper claim | `arguing-research-papers` |
+
+`orchestrating-agents` remains an orthogonal control plane for roles, visibility, veto, and acceptance.
+It composes these functions but owns none of their domain artifacts.
+
+**Why `surfacing-blind-spots` is a new skill rather than another paragraph here.** It has a distinct
+input (one existing plan/frame/decision), verb (EXPOSE, not choose or solve), output (`Blind-spot packet`),
+stop condition (bounded breadth/depth after marginal discovery stops changing the decision), and reusable
+handoffs outside research. No incumbent owned that complete state transition. The taxonomy covers declared
+assumption slots but carries `OPEN` as a mandatory residual: functional MECE does not license the false claim
+that unknown unknowns can be enumerated exhaustively.
+
+**Evidence and limits.** `/dig` supplied the depth-interview pattern but explicitly optimizes depth rather
+than breadth; the Serverworks report is one subjective, order-confounded use case and says the recovered
+content may be human `Unknown Known` tacit knowledge. Ward (1994) and Smith, Ward & Schumacher (1993)
+support default-category inheritance and example fixation; Reiter-Palmon & Murugavel (2018) support team
+problem-construction process effects but report only marginal originality evidence; Doshi & Hauser (2024)
+show individual generative-AI gains can coexist with lower collective diversity. These justify mechanisms
+and cautions, not a claim that the new decomposition guarantees creativity.
+
+**Validator repair.** `research-check.ts` now checks 13 structural mechanisms, including a Blind-spot
+packet, breadth/depth exploration budget, functional frame roles (`CONTROL`, `PREMISE-BREAK`,
+`ORTHOGONAL`) with explicit assumption slots and discriminators, and one bounded coverage-gap recovery
+after diversity collapse. The previous shallow fixture—three synonymous “robustness” frames—now fails.
+Focused regression result: `bun test agents/skills/directing-research/tests/research-check.test.ts`
+→ 10 pass, 0 fail.
+
+## 2026-07-30 collection-level F2 closure (v2607.4.0)
+
+The independent function-map audit initially returned FAIL-to-freeze. This revision closes its
+collection-level seams without claiming creative success:
+
+1. **zero-frame bootstrap** — a broad topic with no inherited frame now yields exactly one
+   evidence-located `PROVISIONAL-CONTROL`, which is then exposed by `surfacing-blind-spots`;
+2. **honest frame coverage** — CONTROL, PREMISE-BREAK, and ORTHOGONAL are attempted roles, and an
+   impossible role becomes `COVERAGE GAP` only with an attempted transformation, fixed
+   fact/constraint, and illegitimacy witness;
+3. **artifact ownership** — SBS owns its local `Search budget`; DR owns only an
+   `Exploration allocation` pointer plus optional cross-frame probe cap;
+4. **audit ownership** — DR owns the domain separation invariant, frozen evidence surface, hostile
+   lens, and acceptance condition; `orchestrating-agents` alone instantiates actors, visibility,
+   veto, authority, and acceptance records;
+5. **one-tree action gate** — expensive/irreversible load-bearing bets route to
+   `acting-on-hypotheses`; deterministic, bounded, reversible probes route to the domain/plain
+   executor and return an observed result;
+6. **OPEN continuity** — the one-tree handoff preserves an `OPEN-SET RESIDUAL (PASS-THROUGH)` with
+   provenance and an observable reopen trigger.
+
+The validator now rejects a copied SBS breadth/depth budget, an ungated cheap AOH handoff, actor names
+without a domain audit requirement, and a vague frame-gap escape hatch. It accepts an explicit
+impossibility witness.
+
+Verification:
+
+- `bun test agents/skills/directing-research/tests/research-check.test.ts`
+  → 13 pass, 0 fail, 50 assertions;
+- shared Bun script floor across DR/FNT/SBS → `FAIL=0 WARN=0`;
+- Codex `quick_validate.py` → `Skill is valid!`.
+
+**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` reports 22 long prose sentences. The increase is
+from explicit cross-skill transition seams and adversarial clearing conditions; no validator or typed
+cut failure is waived. Queue position: first item in the next prose-only DR pass.

@@ -3,8 +3,17 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**39 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**40 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
+
+## Collection design invariant
+
+MECE is a property of the **whole collection**, not a reason to maximize the number of skills. Decompose
+work first as **function × state transition × artifact**; only then assign each artifact one owner.
+Neighboring descriptions carry reciprocal typed cuts, and a broad entrypoint composes stage owners
+without reimplementing them. Create a new skill only for a demonstrated ownership void. MECE applies
+to declared responsibilities and artifacts; open-world content keeps an explicit `OPEN` residual rather
+than pretending unknown unknowns are exhaustively enumerable.
 
 ## Authored
 
@@ -24,12 +33,50 @@ the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 ### Research & thinking
 
 - [`raising-resolution`](raising-resolution/) — Inspect the actual code/data/source before asserting a fact — reach for it when tempted to guess.
-- [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit a forward bet under uncertainty via Map-Loop-Leap — to de-risk or size a bet.
-- [`forging-novel-theses`](forging-novel-theses/) — Invent and battle-test a brand-new venture/research thesis, then design the experiment that could kill it.
+- [`surfacing-blind-spots`](surfacing-blind-spots/) — Expose hidden premises and human tacit constraints in an existing plan/frame; emit a bounded blind-spot packet, not solutions.
+- [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
+- [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
-- [`directing-research`](directing-research/) — Steer a research programme: select problems worth solving, formulate them un-gameably, don't fool yourself, kill directions on rate of learning.
+- [`directing-research`](directing-research/) — Entrypoint for creative research: diagnose the stage, construct/select/formulate problems, admit candidate batches, and steer a portfolio.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
+
+Research routing spine:
+
+```text
+corpus ─ systematizing-knowledge ────────────────┐
+present artifact ─ raising-resolution ───────────┤
+existing plan/frame ─ surfacing-blind-spots ─────┤
+                                                 ▼
+directing-research: construct/select/formulate/steer
+                                                 │
+                                                 ▼
+forging-novel-theses: generate candidate packets
+                                                 │
+                                                 ▼
+directing-research: freeze/deduplicate/admit
+                                                 │
+                                                 ▼
+[acting-on-hypotheses if expensive/irreversible; domain executor if cheap/reversible]: act on ONE tree
+                                                 │
+                            ┌────────────────────┴───────────────────┐
+                            ▼                                        ▼
+directing-research: update/reopen portfolio         arguing-research-papers: finished claim
+```
+
+| Function | State transition | Owned artifact | Skill |
+|---|---|---|---|
+| PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
+| CORPUS-GROUND | unsystematized corpus → evidence state | claim/evidence ledger | `systematizing-knowledge` |
+| EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
+| FRAME / STEER | exposed premises/evidence → selected problem/program state | RESEARCH JUDGMENT SPEC | `directing-research` |
+| FORGE | selected frame → thesis batch | Candidate packets + coverage matrix | `forging-novel-theses` |
+| TEST / COMMIT | one expensive/irreversible selected tree → confidence/commit decision | Map / Loop table / Leap decision | `acting-on-hypotheses` |
+| RUN CHEAP PROBE | one deterministic/reversible selected tree → observed result | result with locus | domain/plain executor |
+| ARGUE | completed evidence → defensible paper claim | CLAIM SPEC | `arguing-research-papers` |
+
+`orchestrating-agents` is orthogonal: it owns who/when/visibility/veto/acceptance around this spine, not
+the research judgments themselves.
 
 ### Agent harness
 

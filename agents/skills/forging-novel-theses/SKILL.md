@@ -1,226 +1,254 @@
 ---
 name: forging-novel-theses
 description: >-
-  Construct a NOVEL venture / research / product thesis that does NOT yet exist — via a trainable
-  GENERATION engine (first-principles decomposition → cross-domain structure-transfer → recombination) —
-  AND harden it through the CONTROL LOOP that idea-books (『天才思考』-type "10 の思考法") omit: falsification
-  design · why-now timing · capital fit · pre-committed kill criteria. Law: 着想の発生は易しい、生き延び
-  させる制御が難しくそこが実利の中心 — a thesis with no designed kill-experiment is 信仰, not 戦略. Fire when
-  you must INVENT and harden the idea itself, not merely test a bet you already hold. Trigger on:
-  事業アイデア / 新規事業, thesis を固めたい, novelty / この着想は弱くないか, 第一原理で分解,
-  アナロジー / 構造転移 / structure-mapping / 新結合, 箱A vs 箱B (物理 vs 慣習), 原価テアダウン, フェルミ分解,
-  SF プロトタイピング, ナラティブ / マスタープラン, 反証設計, why now / タイミング,
-  資本適合 / time-to-truth / runway, beachhead / wedge, 撤退基準 / kill criteria, ピッチで語る thesis の中身,
-  イノベーションの型, 後付けでない検証. DECISIVE CUT vs acting-on-hypotheses: that skill TESTS & COMMITS a bet
-  you ALREADY hold (Map/Loop/Leap, no invention); THIS fires only when you must GENERATE the novel thesis —
-  nothing to invent, or a bare 反証 / kill / pivot / MVP ask on an idea in hand → acting-on-hypotheses.
-  Deck / talk DELIVERY → designing-presentations; distributing an EXISTING tool → growing-oss-adoption;
-  inspecting a PRESENT fact → raising-resolution. Workflow-native: forge solo — agents verify facts and
-  refute gates only; agent consensus is an ANTI-signal. English skill; respond in the user's language
-  (default Japanese).
-references:
-  - generation-engine
-  - control-loop
-  - boundaries
-  - lineage
-  - source-map
-  - case-ledger
+  Generate a BATCH of distinct, testable thesis CANDIDATES for a SELECTED problem/frame with no adequate
+  thesis. Use for novel research hypothesis / 新規仮説 / 新しい研究アイデア / blind-spot candidate generation /
+  premise breaking / negative-space seed / constraint inversion / structure transfer. Owns GENESIS
+  only: typed search coordinates, transformation trace, and one collapse
+  recovery. Problem choice and semantic dedup/ranking → directing-research; corpus/novelty evidence →
+  systematizing-knowledge; tacit elicitation → surfacing-blind-spots; present facts → raising-resolution;
+  expensive/irreversible test/commit/kill → acting-on-hypotheses; cheap reversible probe → domain/plain
+  executor; agent topology → orchestrating-agents. Every
+  output is exactly `Status: CANDIDATE`. No why-now, capital, portfolio, or paper verdict. Workflow-native:
+  coordinate allocation and final packets stay SOLO; generators may fan out after the domain packet is
+  fixed. English skill; answer in the user's language.
 ---
 
-# Forging novel theses — generate the idea, then design what kills it
+# Forging novel thesis candidates
 
-> **Fire when**: you must *invent* a novel venture / research / product thesis (not just evaluate one you
-> hold) AND it is meant to be *bet on* (so survival planning is load-bearing). **Deliverable**: a filled
-> Phase-4 template that passes the three gates. **Language**: this skill is English; the deliverable
-> defaults to the user's language (Japanese). Keep stable tokens even in Japanese: 箱A/箱B, 制約を装った慣習,
-> 構造写像, 新結合, beachhead/wedge, 反証設計, why now, time-to-truth vs runway, 撤退基準, 合意非依存.
->
-> **Why this shape (1 line)**: idea-books mix trainable *procedure* with untrainable *気質* and omit the
-> *control loop*; this skill 工程化 only the procedure, gates 気質 at Phase 0, and makes the loop first-class.
-> Full critique + intellectual lineage → `references/lineage.md` (don't recite it; execute the phases).
->
-> **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
-> `for f in generation-engine control-loop boundaries lineage source-map case-ledger; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/gate-check.ts || echo MISSING gate-check.ts`
-> (must print nothing).
+> **Version**: v2607.4.0 (2026-07-30) — attested tacit provenance + typed collapse recovery.
+> **Scope**: candidate construction only. Input is a selected problem/frame; output is one or more
+> candidate packets. Selection, testing, commitment, and program steering are intentionally elsewhere.
 
-## 運用契約 (When invoked) — 毎回この順で回す
-
-> ゲート定義は下の CORE 三ゲート表、Phase 詳細は各節、機械検査は Phase 4。判別の実例は `references/case-ledger.md`。
-
-1. **発火判定** — GENESIS（novel な thesis を *発明*）要る? ＋ SURVIVAL（*賭ける* ので生存計画が load-bearing）
-   要る? **両方 No なら別スキルへ**（賭けの検証だけ→acting-on-hypotheses / DELIVERY→designing-presentations /
-   現在事実の inspect→raising-resolution）。
-2. **Phase 0 は記録して続行**（停止しない）→ **Phase 1–2 で生成**し、G1（箱B ≥ 1 名指し）・G2（写像から新予測）の
-   artifact を必ず出す。
-3. **現在事実**（価格・可能化する変化・コスト曲線・市場規模）は一次情報を引く（grep/read/fetch/measure）か、
-   引けなければ **「要検証／推定」と明示**。捏造は artifact を空洞化する。
-4. **Phase 3 制御ループ**で G3（kill-experiment + 閾値つき kill-signal）と 3b/3c/3d を埋める。**どれかのゲート／
-   副ゲートが落ちたら thesis を磨かず、どのゲートが落ちたかを名指し**し弱点として晒す。
-5. **Phase 4 template** を埋め、`bun scripts/gate-check.ts <出力.md>` で floor-check。FAIL 欄は「未回答」扱い。
-6. **次の『最も安い 1 手』を 1 つ**出す（律速＝生成 or 生存 のどちらかを名指し、それを崩す最安の一撃）。
-
-## CORE — read every time (precedence-setting)
-
-### THE LAW
-
-> **着想の発生 (Phase 1–2) は易しい部分。それを不確実性下で生き延びさせる制御ループ (Phase 3) が難しく、
-> そこが実利の中心。** 生成だけを回して制御を欠いた出力は、批判した着想系書籍そのもの。反証・why-now・資本・
-> 撤退の **1 つでも未回答なら生存計画は不完全** — その欄を弱点として明示し、埋めるまでピッチ／実装に進むな。
-
-### The three gates — each demands a grep-able artifact (no artifact → gate un-passed)
-
-同型: systematizing-knowledge の ledger 規律・acting-on-hypotheses の R1/R2/R3。**感触では通れない。**
-
-| # | Gate | 反転する誤り | ARTIFACT (存在必須) |
-|---|---|---|---|
-| **G1** | 分解は「箱B = 制約を装った慣習」を **最低 1 つ名指し**して初めて成立。箱B が空なら、分解ではなく *記述しただけ* = me-too。(Phase 1a) | 記述を分解と誤認 | **覆す対象の慣習リスト (≥1)**、各々に「なぜ物理でなく経路依存か」の 1 行由来 |
-| **G2** | 転移は *関係構造* の写像でなければ比喩 = 装飾。写像から **新しく検証可能な予測**が出ないなら表層類似、棄却。(Phase 1b) | 比喩を新結合と誤認 | **源分野 → 対象の関係マッピング** ＋ そこから出る新予測 1 つ |
-| **G3** | thesis を「最も安く殺せる実験」を実装フル投資の *前* に書けなければ、反証不能 = 信仰であって戦略ではない。(Phase 3a) | 確信を支持する証拠集めを検証と誤認 | 着手前に書いた **kill-experiment + kill-signal (閾値つき)** |
-
-**確信を支持する証拠を増やすな、確信を殺す最安の一撃を探せ。** これが G3 の姿勢であり、Phase 0 の合意非依存
-(群衆からの独立) の対抗軸 = 自己反証。独立 + 自己反証 = 良い認識論。自己反証なき独立は、ただの奇人。
-
-### 現在事実の規律 (raising-resolution の citation gate を継承)
-
-価格・可能化する変化・コスト曲線・市場規模など *現在の事実* を主張するときは、一次情報を引く
-(grep / read / web-fetch / measure) か、引けないなら **「未検証／推定」と明示**せよ。もっともらしい数字の捏造は
-G1–G3 の artifact を空洞化する（＝この skill の最悪の失敗＝語彙だけ纏った検証不能な作文）。
-
-### Phase 0 — 気質ゲート (anti-freeze: 判定して記録、停止しない)
-
-skill はこれを install できない — 判定して**記録**するだけ。**書けなくても停止して問い詰めない**（それは
-acting-on-hypotheses R1 が禁じる freeze）。
-
-- **合意非依存 (Thiel の問い)**：多くの人が誤っていて自分だけが正しい、重要で具体的な真実は何か。1 文で書けるか。
-  書けなければ「未回答」と記録し、暫定の逆張り仮説を 1 つ置いて生成を続け、Phase 4 で弱点として晒す。
-- **内発性**：誰も称賛しなくても追うか。外的報酬が主成分なら「要注意」と記録（逆風で折れる）。
-- ユーザーへの質問は、それが **安く かつ 生成を実際にブロックする 1 問**に限る。
-
-## The stack — 最短手順 (Phase 0 gates → 1–2 generate → 3 wraps as a loop → 4 output)
-
-```
-Phase 0  GATE      合意非依存(1文) + 内発性     ── 判定して記録（停止しない）
-Phase 1  GENERATE  1a 分解 → 箱B(G1)  ×  1b 転移(G2) → 1c 再結合 → thesis 候補集合
-Phase 2  PROJECT   2a 未来外挿 → beachhead   2b ナラティブ (説得 / 知覚変容 を明示)
-Phase 3  CONTROL   3a 反証(G3) · 3b why-now · 3c 資本適合 · 3d 撤退  ── 全体を包む反復ループ
-                     ↑ 実装で現実接触 → 新観測 → Phase 1 へ
-Phase 4  OUTPUT    template を埋め、scripts/gate-check.ts で検査。空欄は「未回答」と明記し弱点と述べる
+```bash
+for f in generation-engine boundaries lineage case-ledger; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/gate-check.ts || echo MISSING gate-check.ts; test -f tests/gate-check.test.ts || echo MISSING tests
 ```
 
-## Phase 1 — 生成エンジン (訓練可能な核) → `references/generation-engine.md`
+## Language and stable tokens
 
-**分解と転移は独立した工程ではなく、1 つの機構の両半分。** 分解だけなら空虚な問題文、転移だけなら表層の比喩。
+Keep **CANDIDATE**, **RECIPES**, **search coordinates**, **grounded control**, **anti-default**,
+**coverage-gap packet**, and **COVERAGE GAP** unchanged even in Japanese output.
 
-- **1a. 分解** — 原始要素まで割る。3 手法併用：**原価テアダウン** (素材原価 vs 完成品価格の乖離)、**公理列挙**
-  (制約を 箱A=物理/数学 と 箱B=業界慣習 に二分)、**フェルミ分解** (数量を独立因子に割り支配因子を特定)。
-  *出力*：プリミティブ + **「制約を装った慣習」のリスト**。← **G1**：空なら分解未達 — 別角度で 1a を再実行
-  (ユーザーに聞く前に)。
-- **1b. 構造転移** — 問題の *関係構造* に、同じ関係構造を持つ別分野を探し緩和策を写像 (Gentner の
-  structure-mapping)。表層でなく関係の写像。← **G2**：新しい検証可能な予測を産まないなら表層類似 = 棄却。
-- **1c. 再結合** — プリミティブ × 転移構造から候補を列挙し「箱B のどの慣習を覆すか」で評価 (Schumpeter の新結合)。
-  慣習を覆さない組合せは me-too。**最も安い反証実験 (3a) を設計できる候補を優先。** 深掘りは候補を種に 1a へ
-  2〜3 往復（表層の novelty でなく構造の novelty へ）。
+## THE LAW — transform the frame, expose the transformation
 
-## Phase 2 — 投射 (存在しない状態の構築) → `references/generation-engine.md` 末尾
+> Unusual wording or a different recipe label does not make a candidate novel.
+> Expose the seed source, target, operation, premise, and new discriminator.
+> Every output remains a **CANDIDATE** until external evidence earns another status.
 
-- **2a. 未来外挿 (SF プロトタイピング, B.D. Johnson)** — 技術を選ぶ → 10 年後の世界 → 何が可能になるか → 逆算して
-  近未来の **wedge (beachhead)** を特定 → 検証点を置く。予測でなく外挿による発明 (invent forward)。
-- **2b. ナラティブ (テスラ・マスタープラン型)** — なぜ存在するか → 何が変わるか → 到達の順序。機能は「未来状態を
-  伝達可能にする」(動員)。英雄の旅の型は任意。**通過条件**：「既に世界観を共有する人にしか刺さらない」なら
-  *説得*、枠を差し替えるなら *知覚変容* — どちらか明示 (両者は同じ機能の深度違い、混同すると焦点を失う)。
-  ▶ ここは thesis の **中身 (未来状態)** まで。deck / 順序 / Q&A の DELIVERY は designing-presentations へ。
+This skill never claims:
 
-## Phase 3 — 制御ループ (欠落層・実利の中心) → `references/control-loop.md`
+- that distant analogies are better than local ones;
+- that more candidates imply more quality;
+- that novelty implies truth, importance, or feasibility;
+- that a generated kill experiment validates the candidate;
+- that an agent's self-rating establishes novelty.
 
-**着想系の書籍が丸ごと欠く層。ここが最大の価値。** 4 つの副ゲートを **全て** 通す。falsify-and-commit の *一般*
-機構 (cheapest disconfirming test / kill condition / reversibility) は **acting-on-hypotheses (Loop/Leap)** が
-owner — Phase 3 はその *venture 特化版*。一般則が要るときはそちらへ。
+## Entry gate
 
-- **3a. 反証設計** — 「最も安く殺せる実験」を実装前に書く。← **G3**。deep-tech では理論主張 (KKT / f-invariant 等)
-  は裏付けを積むより、数値の hard instance を 1 つ作って落とす方が安く殺せる。
-- **3b. why-now** — 実現を可能にする *具体的で名指しできる変化* は今日あるか (規制 / コスト曲線の交差 / 技術成熟 /
-  需要転換 / 標準確定 / 供給制約解消)。5 年前に無く 5 年後に陳腐化しないか。**early / on-time / late** で置く
-  (early は資本を焼く、late は差別化が消える)。Bill Gross 約 200 社分析の最大説明因子 = タイミング。
-  ※可能化する変化は**現在事実の規律**（上）に従い、一次情報で裏を取るか「未検証」と明示。
-- **3c. 資本適合** — 核心仮説の **time-to-truth** が資本の **runway** に収まるか。収まらねば (i) 検証を早める /
-  (ii) runway を延ばす / (iii) beachhead を短い time-to-truth に差し替え。資本源の horizon と thesis の horizon を
-  一致させる。
-- **3d. 撤退・pivot 基準** — 「この道は死んだ」信号を感情が高ぶる前 (着手時) に **閾値つき**で紙に固定
-  (pre-committed kill-criteria)。良い撤退 = 仮説が偽と判明 (学習が残る)、悪い撤退 = 資本枯渇 (学習ゼロ)。
+Fire only when all are true:
 
-**通過条件 (Phase 3)**：4 つを **全て** 通して初めて生存計画が立つ。**1 つでも未回答なら生存計画は不完全** —
-その欄を弱点として明示し、埋めるか埋まらない理由を述べるまでピッチ／実装に進むな (control-loop.md と同条件)。
+1. a selected problem/frame exists;
+2. its known observations and exclusions are stated;
+3. no adequate thesis is already in hand;
+4. the requested output is candidate generation, not selection or testing.
 
-## Phase 4 — 出力契約
+If the problem itself is still being found, compared, or formulated, route to `directing-research`.
+If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED` and route the evidence work
+to `systematizing-knowledge`; do not invent a prior.
 
-以下を埋める。埋まらない欄は「未回答」と明記し、それが弱点だと述べる（隠さない）。
+## Input brief
 
 ```markdown
-# Thesis: [1 文]
-
-## Phase 0 ゲート
-- 合意非依存の真実 (1 文): [...]
-- 内発性: [pass / 要注意 — 理由]
-
-## Phase 1 生成
-- プリミティブ: [...]
-- 制約を装った慣習 (覆す対象): [...]   ← 空なら分解未達 (G1)
-- 転移した構造 (源分野 → 写像 + 出る新予測): [...]   ← 予測が無ければ表層類似 (G2)
-- 再結合 thesis 候補: [...]
-
-## Phase 2 投射
-- 10 年後の世界と近未来 wedge: [...]
-- ナラティブ: [...]（説得 / 知覚変容 のどちらか明示）
-
-## Phase 3 制御ループ
-- 3a 最も安い反証実験 + kill-signal: [...]   ← 空なら反証不能 = 信仰 (G3)
-- 3b why now（可能化する具体的変化 / early・on-time・late）: [...]
-- 3c 資本適合（time-to-truth vs runway、埋め方）: [...]
-- 3d 撤退基準（事前定義の kill signal、閾値つき）: [...]
-
-## 総合判定
-- 生成の強度 / 生存計画の強度: [...]
-- 律速はどちらか、次の 1 手: [...]
+- Selected problem/frame:
+- Observations it must explain:
+- Competing accounts already known:
+- Excluded cheap victories:
+- Known prior position:
+- What may be transformed:
+- Blind-spot packet handoff, if any:
+- Requested candidate count:
 ```
 
-▶ **機械検査**：埋めたら `bun scripts/gate-check.ts <出力.md>` を実行。G1 (箱B≥1)・G2 (新予測あり)・G3 (kill-signal
-に閾値)・3d (撤退に閾値) の *構造* が揃うかを見る **floor check**（意味は検証しない。語彙だけ纏った空欄・作文を
-弾く最低限の関門）。FAIL が出た欄は「未回答」扱いで、Phase 3 通過条件に照らす。
+An absent field is a visible uncertainty. It is not permission to silently redefine the problem.
 
-## ループとしての運用
+## Search coordinates — the functional partition
 
-Phase 3 は 1 回の判定でなく反復ループ：(1) 3a で殺しにかかる → (2) 生き残れば 3b、early/late なら wedge を差し替え
-Phase 1 へ → (3) 3c、合わねば beachhead を差し替え Phase 2 へ → (4) 3d で撤退基準を固定 → (5) 実装で現実接触 →
-新観測 → (1)。**発生は易しい。生き延びさせる制御ループが難しく、そこが実利の中心。**
+Record these field **types independently**. They are orthogonal bookkeeping axes, not a claim that
+their values are statistically independent.
 
-## Execution model — forge solo, delegate only facts and refutation → `references/boundaries.md` 実行モデル節
+- **Seed provenance** — where the material came from:
+  `TOKEN — specific seed/source`, where `TOKEN` is
+  `OBSERVATION | ACCOUNT | CONSTRAINT | ANALOGY | TACIT | NEGATIVE-SPACE | OTHER`.
+- **Transformation target** — what part of the frame changes:
+  `OBJECT | RELATION | REPRESENTATION | REGIME | EVIDENCE | CONSTRAINT | OTHER — named kind`.
+- **Operation** — what transformation is applied:
+  `INVERT | REMOVE | SUBSTITUTE | TRANSFER | DECOMPOSE | COUPLE | GENERALIZE | BOUND | OTHER — named kind`.
+- **Premise challenged** — one specific premise, or exactly `NONE — grounded control`.
+- **New discriminator** — a concrete contrast against the input, nearest prior, or competing account.
 
-生成・ゲート判定・資本適合・撤退コミットは**常に solo** — forger は bettor の代理人、agents は fact-checker と
-assassin であって共著者ではない。fan out するのは**現在事実の検証・graveyard sweep・deep-tech の hard instance・
-Phase 4 の read-only per-gate skeptics** のみ（solo/fan-out/barrier の地図・agent 証拠規律・skeptic lens set は
-`references/boundaries.md` の実行モデル節）。**Agent 合意は、合意非依存を要求する thesis にとって ANTI-signal** —
-agent が返す現在事実は locus か「未検証」か。No harness → 同じ地図を直列の self-audit で回す。
+`OTHER` without a name fails. The open set prevents the taxonomy from turning current labels into a
+closed theory of discovery.
 
-## 失敗時の復旧・境界 → `references/boundaries.md`
+### Human-tacit seam
 
-in-skill anti-patterns (箱B 未達・表層転移・反証不能・後付け検証・タイミング欠落・金尽き撤退・10 個羅列・気質を
-工程化) の TELL と復旧、sibling 全 owner との routing 表、除外した組織運用層 (Wasserman / Grove / Bezos) は
-`boundaries.md`。要点だけ：
+Use `TACIT` only when a `Blind-spot packet` hands off to `forging-novel-theses`.
 
-- **DECISIVE CUT vs acting-on-hypotheses** — そちらは *既にある賭け* を検証・コミット (発明はしない)。本スキルが
-  fire するのは novel な thesis を *生成* せねばならないとき。生成は HERE → 一般的な検証・コミットは THERE
-  (Phase 3 はあちらの Loop/Leap を借りる)。
-- **designing-presentations** — 本スキルは thesis の *中身*、deck / talk の DELIVERY はそちら。
-- **growing-oss-adoption / raising-resolution** — 既存ツールの *普及* / *現在事実* の inspect はそちら。
+- The fact must come from a `Tacit-knowledge probes` row.
+- Require `Provenance: HUMAN:<owner>@<attestation-locus>` and an `Answer` other than
+  `UNELICITED`.
+- Encode it as
+  `TACIT — Blind-spot packet <locus>, Probe P<ID>, HUMAN:<owner>@<attestation-locus>`.
+- Never complete `UNELICITED` or role-play a practitioner.
+- `Assumption ledger: INFERENCE` and `Open-set residual` are exploration targets, not tacit facts.
 
-## Reference index — load the file you need
+## Generation RECIPES — useful, not MECE
 
-| File / dir | Covers | Read/run when |
-|---|---|---|
-| `references/generation-engine.md` | 分解 3 drill (テアダウン・公理列挙 箱A/箱B・フェルミ)・構造写像・表層類似棄却・再結合・2〜3 往復 | Phase 1–2 を実際に回す / 箱B が出せない |
-| `references/control-loop.md` | 3a–3d checklist・deep-tech の型・early/on-time/late・time-to-truth vs runway・kill-criteria・反復 | Phase 3 を実際に回す |
-| `references/boundaries.md` | routing 表・DECISIVE CUT 詳細・co-fire・in-skill anti-patterns・除外運用層・multi-agent 実行の solo/fan-out 境界 | 発火可否を迷う / 別スキルへ回す / 自分の出力を監査 |
-| `references/lineage.md` | 着想系書籍の 2 欠陥の詳論・名指しソースの役割・6 機能への収束・**隣接理論との差分 (Lean/TRIZ/Effectuation/Design Fiction/Gentner/DDP)** | 「なぜこの構造か / なぜ既存理論で代替不能か」を説明するとき (実行には不要) |
-| `references/source-map.md` | 原典『天才思考』10 章題 → 6 機能 → 本スキルの Phase/ゲート/除外 への写像 (章題は一次資料で検証済) | 原典のどの思考法がどこへ変換されたかを示すとき |
-| `references/case-ledger.md` | 成功 4 + 失敗 6 例。各失敗を「最初に落ちるゲート」に 1 対 1 で紐付け、ゲート集合が MECE な判別器であることを実証 | thesis を実例と突き合わせる / 判別器として使う |
-| `scripts/gate-check.ts` | 埋めた出力を G1/G2/G3/3d の構造有無で floor-check する validator | Phase 4 出力を機械検査する |
+The six existing routes are useful **RECIPES** for constructing transformations. They are not MECE.
+Two recipe labels are not diversity proof. Allocate search-coordinate cells before selecting a recipe.
+Reusing one recipe is valid when cells differ. Relabeling one cell changes nothing.
+
+The RECIPES are constraint inversion, result generalization, competing-account synthesis,
+structural transfer, representation change, and atypical recombination. Their mechanics and rejection
+tests live in `references/generation-engine.md`.
+
+### Structural transfer is not decoration
+
+A transfer survives only if:
+
+1. the source and target relations are named;
+2. the mapping preserves the relevant relation;
+3. the mapping yields a target prediction not already present in the input frame.
+
+Similarity, metaphor, and topical distance alone do not pass.
+
+## Candidate packet — the only output contract
+
+Emit one packet per candidate:
+
+```markdown
+## Candidate [ID]
+
+- Input problem/frame: [...]
+- Generation recipe (optional): [...]
+- Seed provenance: [TOKEN — specific seed/source and locator]
+- Transformation target: [OBJECT | RELATION | REPRESENTATION | REGIME | EVIDENCE | CONSTRAINT | OTHER — named kind]
+- Operation: [INVERT | REMOVE | SUBSTITUTE | TRANSFER | DECOMPOSE | COUPLE | GENERALIZE | BOUND | OTHER — named kind]
+- Premise challenged: [specific premise, or exactly NONE — grounded control]
+- Transformation trace: [old frame/relation -> operation -> transformed relation]
+- Thesis claim: [one testable explanatory or prescriptive sentence]
+- New testable prediction: [what follows that was not already in the input]
+- New discriminator: [candidate outcome versus input/prior/competing-account outcome]
+- Nearest prior / novelty delta: [prior + exact delta, or UNVERIFIED + search needed]
+- Frame update flag: [NO, or YES + how this changes the problem frame]
+- Status: CANDIDATE
+```
+
+Run `bun scripts/gate-check.ts <candidate.md>` for the mechanical floor.
+It validates every candidate in a detected batch and derives the coverage matrix.
+PASS cannot establish novelty, value, feasibility, or truth.
+
+## Batch contract and collapse recovery
+
+For every multi-candidate batch, prepend:
+
+```markdown
+## Batch contract
+- Requested candidate count: [integer]
+- Grounded control candidate: [ID whose premise is exactly NONE — grounded control]
+- Premise-breaking anti-default candidate: [ID]
+- Anti-default EXEMPT: [omit, or EXEMPT — precise reason]
+- Collapse recovery: ONE targeted regeneration in an unoccupied legitimate cell; then COVERAGE GAP
+```
+
+Require a grounded control and a premise-breaking anti-default. A precise, justified `EXEMPT` may
+replace the anti-default.
+
+The matrix key is `premise × target × operation × discriminator`. Candidate fields are its sole data
+home. `gate-check.ts` derives the matrix. Recipe labels do not enter the key.
+
+`directing-research` owns semantic deduplication. It sends a coverage-gap packet when either condition
+holds:
+
+- every unique candidate shares one premise, target, or discriminator;
+- unique count is below `min(3, requested count)`.
+
+The packet names occupied cells and one legitimate unoccupied cell. Regenerate **exactly once** in that
+cell. If the attempt fails, emit `COVERAGE GAP` with the missing coordinate and reason. Never rank or
+test during recovery.
+
+## Procedure
+
+1. **Restate the frame without improving it.** Preserve the input before transformation.
+2. **Build the seed pool.** Label every seed's provenance. Enforce the human-tacit seam before admitting
+   any `TACIT` seed.
+3. **Allocate coordinate cells before drafting.** Include the grounded control and anti-default; choose
+   premise, target, operation, and intended discriminator independently of recipe labels.
+4. **Apply useful recipes.** Preserve the transformation trace while it is still visible.
+5. **Derive the prediction and discriminator.** If the claim creates no new contrast, reject it as a
+   paraphrase or decorative analogy.
+6. **Name the nearest prior.** State the exact delta; when evidence is missing, use `UNVERIFIED`.
+7. **Flag frame changes.** A candidate may reveal that the problem's object or relation should change.
+   Do not silently mutate the input; set the flag so `directing-research` can decide.
+8. **Run the batch floor.** Reject coordinate collapse before return; never substitute recipe-counting.
+9. **Return packets without ranking.** `directing-research` freezes and semantically deduplicates them.
+10. **Honor at most one coverage-gap packet.** Regenerate once in its unoccupied cell or emit
+   `COVERAGE GAP`; do not loop.
+
+## Quality floor inside generation
+
+Reject a candidate before return if any is true:
+
+- it restates the input problem as a solution-shaped sentence;
+- the transformation trace contains only adjectives (“more adaptive”, “AI-powered”, “holistic”);
+- the new prediction was already entailed by the input;
+- the discriminator says only “better”, “different”, or “improved” without contrasting outcomes;
+- the analogy maps objects but not relations;
+- the candidate merges two accounts without preserving a discriminator;
+- `TACIT` was inferred, simulated, or copied from an `UNELICITED` probe;
+- a claimed prior or fact has no locator and is not marked `UNVERIFIED`;
+- the status claims `VALIDATED`, `SUPPORTED`, or `READY`.
+
+These are **generation-completeness** failures, not comparative selection.
+
+## One-home boundaries
+
+| Ask / state | Route |
+|---|---|
+| “Which research problem should I choose?” | `directing-research` |
+| “What does this literature establish, and is the idea actually novel?” | `systematizing-knowledge` |
+| “What are we not seeing, and what does the practitioner know but not write down?” | `surfacing-blind-spots` |
+| “Is this residual real or an artifact?” | `raising-resolution` |
+| “Generate distinct thesis candidates for this selected frame.” | **HERE** |
+| “Which candidate is important/feasible enough to admit?” | `directing-research` |
+| “Design a precommitted falsifying experiment for this expensive/irreversible chosen thesis.” | `acting-on-hypotheses` |
+| “Run this deterministic, bounded, reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
+| “Should we commit, pivot, or withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `directing-research` for a portfolio |
+| “Who should generate, critique, and accept, and when?” | `orchestrating-agents` |
+| “Write the paper claim from completed evidence.” | `arguing-research-papers` |
+
+## Execution model — genesis stays signed in one context
+
+Coordinate allocation, tacit-seed admission, collapse adjudication, and final packet signing stay SOLO.
+The domain packet and coordinate cells are fixed here. If multiple generators are useful,
+`orchestrating-agents` owns:
+
+- blind initial generation versus visible collaboration;
+- subgroup topology and evidence visibility;
+- how generators remain blind until `directing-research` declares its domain batch frozen, and when
+  critique becomes visible after that transition;
+- who may deduplicate or veto;
+- independent acceptance.
+
+Do not use agent count as evidence of diversity. Preserve recipe, denominator, and duplicate records.
+No harness → execute the same cells as serial focused passes.
+
+## Reference index
+
+| File | Load when |
+|---|---|
+| `references/generation-engine.md` | executing or debugging the generation routes |
+| `references/boundaries.md` | a sibling could plausibly own the ask |
+| `references/lineage.md` | checking evidence, provenance, and the limits of analogy/recombination claims |
+| `references/case-ledger.md` | calibrating complete versus fake candidate packets |
+| `tests/triggers.md` | changing this description or a sibling cut |
+| `tests/forge-verification-ledger.md` | auditing the genesis-only reforge |

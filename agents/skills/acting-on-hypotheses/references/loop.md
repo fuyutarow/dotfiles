@@ -2,11 +2,12 @@
 
 > Scope: the ONLY phase that runs a test and WRITES a confidence value onto an EXISTING node.
 > Loop is cheap, discard-intent, epistemic action — you act to LEARN, not to keep. It owns
-> **学びの最大化** (maximize confidence-delta-per-cost on the load-bearing node).
+> **学びの最大化** (maximize confidence-delta-per-cost on the load-bearing node) and carries any
+> incoming Open-set residual unchanged while checking its observable reopen trigger.
 
 | comes from | this file produces | goes to |
 |---|---|---|
-| the load-bearing node Map flagged (`map.md`) — a single named, 確信度×影響度-tagged target | a written confidence value on that node + the discrimination table + the STOP/escalate decision | back to `map.md` if a missing node surfaced, or on to `leap.md` once fatal risk is retired |
+| the load-bearing node Map flagged (`map.md`) — a single named, 確信度×影響度-tagged target + any Open-set residual/provenance/reopen trigger | a written confidence value on that node + the discrimination table + the STOP/escalate decision + unchanged residual, unless its trigger fires | back to `map.md` if an in-tree node surfaced; `directing-research` on FRAME-BREAK/OPEN; or `leap.md` once fatal risk is retired |
 
 **Verb seam (do not cross it).** Loop's verb is TEST & WRITE-VALUES. Loop **never** adds, removes,
 or repositions nodes — that is Map's verb (STRUCTURE & POSITION). If a test reveals a node that
@@ -99,16 +100,33 @@ the cycle. Scale-discipline: スケールしないことをしよう — the man
 
 When the signal arrives:
 
-1. **WRITE the value.** Update the node's 確信度 (0–100%, a gradation — never 0/1). Record what the
-   evidence was and which direction it moved the number.
-2. **If a missing node surfaced** — the test revealed a belief you had not mapped — **FLAG it and
-   hand a cheap in-place Map pass the restructure**, emitting the seam artifact:
-   `NEW NODE flagged by Loop iteration N: <node>` (`map.md` §6). Loop never *adds* the node itself
-   (verb seam) — but a single iteration legitimately runs **Loop (test) → Map (node-add)**; what stays
-   separable is the ARTIFACT, not the wall-clock moment. The deck folds map-修正 into ループ; this skill
-   re-partitions the edit to Map for MECE (`map.md` §6 honesty note). A surprising result that demands a
-   structural change can also **demote a planned Leap** back to more Loop; route that through Map.
-3. **Otherwise, loop or stop** — apply §6.
+1. **PRESERVE and CHECK the incoming Open-set residual first.** Copy every
+   `OPEN-SET RESIDUAL (PASS-THROUGH)` line unchanged, including `provenance` and `reopen-when`. Compare
+   the raw signal with each observable trigger. If one fires, do not convert the residual into a node
+   or write a tree-local confidence from that signal. Emit the raw signal plus the `FRAME-BREAK`
+   artifact below with `primary=OPEN`, and return to `directing-research`.
+2. **WRITE the value.** When no Open-set trigger fired, update the node's 確信度 (0–100%, a gradation
+   — never 0/1). Record what the evidence was and which direction it moved the number.
+3. **If a missing node surfaced** — classify it before editing structure (`map.md` §6):
+   - if Map's cut says it preserves
+     `OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION` and does not consume `OPEN`, **FLAG it
+     and hand a cheap in-place Map pass the restructure**, emitting
+     `NEW NODE flagged by Loop iteration N: <node>`;
+   - otherwise emit exactly one primary from
+     `OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION / OPEN`, using `map.md` §6's tie-break:
+
+     `FRAME-BREAK flagged by Loop iteration N: <discovery> — primary=<slot>; cross-tags=<slots|NONE>; provenance=<locus>; reopen-trigger=<observed trigger|NONE>`
+
+     `VALUE` and `ACTION` are frame breaks. `OPEN` remains outside the tree until
+     `directing-research` classifies it. Return the artifact there; do not hide a program-level
+     reframe inside a local Map edit.
+
+   Loop never *adds* either node itself (verb seam). A single iteration may legitimately run
+   **Loop (test) → Map (node-add)**; the artifact, not the wall-clock moment, is separable. The deck folds
+   map-修正 into ループ; this skill re-partitions the edit to Map for MECE (`map.md` §6 honesty note).
+   A structural surprise can also demote a planned Leap.
+4. **Otherwise, loop or stop** — apply §6. Carry the incoming Open-set residual unchanged in either
+   output.
 
 ## §6 — STOP: decision-sufficiency, not certainty
 
@@ -206,6 +224,7 @@ contract. Then add these five probe-specific fields:
 | Threshold set/interpreted AFTER the result | post-hoc rationalization | pre-commit the metric next time (§3); treat this result as untrusted |
 | Confidence moved on a 👍 / "great idea" | vanity metric, no sacrifice | re-test for 結果的行動 — money/time/reputation (§3) |
 | Loop added/removed a node | crossed Map's verb seam | flag the node, hand a cheap Map pass (§5) |
+| Open-set residual became a node/confidence value or lost its provenance/reopen trigger | Loop silently claimed closure over an external unknown | restore the unchanged pass-through; if its trigger fired, emit `primary=OPEN` and return to directing-research (§5) |
 | Still testing a decision-sufficient node | over-learning / paralysis | STOP, force the Leap (§6) |
 | Re-running an unrunnable loop, hoping | felt-Loop, no real signal accessible | name the missing signal + rule out a cheaper proxy; only then switch to DIALOGUE/CO-CREATION or escalate location (§7) |
 | 確信度 moved on an agent's PASS / summary, no raw signal in context | delegated verdict as earned confidence | demand the raw output + locus; re-adjudicate against the pre-committed threshold yourself (§8) |

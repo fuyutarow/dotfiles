@@ -1,85 +1,69 @@
-# Fire / no-fire desk-check — directing-research (F3 artifact)
+# Research-family name + description desk-check
 
-Re-run after ANY description edit. **Protocol**: read ONLY `name:` + `description:` of this skill AND
-every plausibly-matching sibling, answer fire / no-fire / co-fire. A wrong answer is a description bug.
-The sharpest boundary is `acting-on-hypotheses` (SINGLE bet) vs here (the judgment ACROSS bets + the
-standing honesty policy).
+Read **only** the `name` and `description` of:
 
-## FIRES (≥5 — realistic-messy, ≥1 Japanese, ≥1 with no headline keyword)
+- `directing-research` (`D`)
+- `surfacing-blind-spots` (`B`)
+- `forging-novel-theses` (`F`)
+- `acting-on-hypotheses` (`A`)
+- `raising-resolution` (`R`)
+- `systematizing-knowledge` (`S`)
+- `orchestrating-agents` (`O`)
+- `arguing-research-papers` (`P`)
 
-| # | Ask | Why HERE |
-|---|---|---|
-| F1 | "I have three directions for the next 6 months — which is actually IMPORTANT vs just doable?" | selection by consequence across candidates = G1 |
-| F2 | 「このベンチマークで94%出たけど何か怪しい。metric を game してない?」 (JP) | Goodhart / cheap-victory / the witness firewall = G2 |
-| F3 | "should I DISTRUST this number and MANDATE a leakage audit before I trust it?" | the standing self-honesty policy / mandate the audit = G3 (the inspection ACT itself → raising-resolution; see C2) |
-| F4 | "across my directions, is this whole LINE dead by its aggregate learning-rate, or keep one probe running?" | direction-level (aggregate) kill vs a single bet's pivot = G4 |
-| F5 | "how do I formulate 'does this method help discovery' as an ML task without the metric drifting?" | 定式化 / un-gameable metric = G2 |
-| F6 | "I got a suspiciously clean SOTA number and I'm about to write it up" (**no headline keyword**) | the denominator + generator≠auditor mechanisms = G3 |
-| F7 | "how should I allocate compute across these 5 bets?" | portfolio / barbell allocation = G4 |
-| F8 | 「研究テーマの選び方 / 重要な問題の見分け方 / 観察眼」 (JP) | research taste / selection = G1 |
-| F9 | 「全部の変種が死んだ — この方向ごと棄てていい?」 (JP) | family-scoped kill (the tested family's generative closure) vs abandoning the whole direction/domain = G4 (Negative-results-vs-exhaustion, `reconciliation.md` §4) |
+A broad request must have one lead. A braided request may co-fire only with an explicit order. A decision
+artifact may have one owner.
 
-## MUST NOT FIRE (≥5 — near-miss negatives, each names who fires instead)
+## Regression matrix
 
-| # | Ask | Route (who fires) |
-|---|---|---|
-| N1 | "test/commit/kill/pivot THIS one direction (however many experiments) / set a kill condition on THIS bet / spike it" | **acting-on-hypotheses** — ONE hypothesis tree (the sharpest cut; a single direction, even across many experiments, is its Map — NOT here) |
-| N2 | "invent a novel research thesis worth betting a PhD on / is this idea novel as a bet" | **forging-novel-theses** — generate the idea |
-| N3 | "inspect this dataset — what's actually in it / find the leaky feature in this pipeline" | **raising-resolution** — inspect a present, knowable fact |
-| N4 | "fix the leaky preprocessing code / debug the training loop" | **implementing-and-debugging** — fix the code |
-| N5 | "synthesize these 40 papers into what the field knows" | **systematizing-knowledge** — a CORPUS → one position |
-| N5b | "is Smith et al.'s single reported result trustworthy?" | **raising-resolution** — a SINGLE external artifact (not a corpus, not your own pipeline) |
-| N6 | "write the paper's contribution claim / make the defense slides" | **arguing-research-papers** / **designing-presentations** |
-| N7 | "what learning-rate should I use for Adam?" | just answer — a factual hyperparameter question (the optimizer's learning-rate, not dLearning/dt), no ceremony |
+| # | Realistic ask | Lead / ordered route | Boundary being tested |
+|---|---|---|---|
+| 1 | 「どうすれば創造的な研究ができる？ テーマ、アイデア、実験、撤退まで」 | `D -> B -> D -> F -> D -> [A or domain executor] -> D` | broad lifecycle has one lead; expose, then apply the action gate |
+| 2 | “Which of these three research themes deserves the next six months?” | `D` | problem selection / >=2 bets |
+| 3 | 「材料探索を速くする、では雑すぎる。決定的な研究問題に作り直して」 | `D` | formulation, not present inspection |
+| 4 | “Given this fixed problem, invent a novel thesis from first principles.” | `F` | genesis only |
+| 5 | “This systematic residual may imply a new direction.” | `R -> D -> F` | verify present -> frame -> generate |
+| 6 | “Transfer this relation from distributed optimization and derive a prediction.” | `F` | structural transfer |
+| 7 | “Ten ideas exist; freeze/deduplicate and select by separate axes.” | `D` | batch admission |
+| 8 | “One expensive catalyst thesis exists; precommit its cheapest kill experiment.” | `A` | expensive/irreversible one-tree hard gate fires |
+| 9 | “Allocate GPU across three independent directions.” | `D` | portfolio cardinality |
+| 10 | “Synthesize 60 creativity papers, then identify future research gaps.” | `S -> D` | corpus state -> future selection |
+| 11 | “Use multiple agents; decide who generates, criticizes, verifies, and accepts.” | domain sequence `D/F/[A or executor]` fixed first; `O` leads topology | content vs control plane |
+| 12 | “Reviewer says the finished paper is not novel; narrow the claim or reopen research?” | `P -> D`; then `F -> [A or executor]` only if reopened | finished claim vs new thesis |
+| 13 | “Inspect the benchmark script for leakage and cheap victories.” | `R`; `D` only if reformulation follows | present fact vs normative formulation |
+| 14 | “Eight agents build a SoK and then choose research investments.” | `S` schema -> `O` dispatch -> `S` adjudication -> `D` | corpus method vs orchestration vs selection |
+| 15 | 「人間研究者として、問いをつくり、行き詰まったら寝かせ、実験で更新する創造的研究プロセス」 | `D`; incubation is an optional human branch | human researcher is in scope |
+| 16 | 「この研究計画の盲点と暗黙前提を掘って。まだ解決策や仮説は出さないで」 | `B` | expose only; no frame selection or thesis genesis |
+| 17 | “Interview me for unpublished failures, workarounds, and exceptions before reframing this project.” | `B -> D` | human tacit elicitation then program judgment |
+| 18 | 「選んだ問題フレームから、水平思考で構造的に異なる仮説を出して」 | `F` | selected frame exists; genesis owns lateral transformations |
 
-## CO-FIRE (braided — state the order; the executable form of the description's cuts)
+## Negative boundaries
 
-| # | Ask | Fires (in order) |
-|---|---|---|
-| C1 | "help me plan and run this research project" (broad) | **directing-research LEADS** (select + formulate + set the honesty policy + portfolio) → **acting-on-hypotheses** (run each individual bet) → **implementing-and-debugging** (build) → **arguing-research-papers** (write up). The judgment is the spine; the moves serve it. |
-| C2 | "is my experiment fooling me AND is there a leak in the code?" | **directing-research** (distrust the number + MANDATE the audit — the standing G3 policy) → **raising-resolution** (inspect the pipeline for the specific leak) → **implementing-and-debugging** (fix it). Mandate here → inspect & fix there. |
-| C3 | "which problem should I pick, and is it novel enough to bet on?" | **directing-research** (select by consequence + fresh lever — G1) + **forging-novel-theses** (generate & harden the novel thesis). Select here → invent there. |
-| C4 | "should I commit to running THIS experiment?" | **acting-on-hypotheses LEADS** (it is ONE bet — size/commit/kill). directing-research co-fires ONLY if the ask is really about the whole DIRECTION/portfolio, not this one run. |
-| C5 | "grade whether my own pipeline's number is real, then decide if the direction is dead" | **directing-research** (the own-number admission gate + the direction-level kill) — cut vs **systematizing-knowledge** (which grades OTHERS' numbers): own-pipeline hygiene is HERE. |
-| C6 | "I found an unexpected correlation — can I reframe the paper's hypothesis around it?" | **directing-research** (the HARKing self-audit — was this predicted or postdicted? G3) → **arguing-research-papers** (how to frame the contribution honestly, IF it survives). The honesty gate here decides *whether* it may be reframed; the write-up is there. |
-| C7 | "my model jumped to 99% out of nowhere and I'm excited — should I trust this surprising win?" (**no keyword**) | **directing-research** SOLO — the G3 self-deception mechanisms (denominator, generator≠auditor, symmetric stopping): a surprising favorable result is exactly where the asymmetric-stopping bias fires. |
+| Ask | Must not lead |
+|---|---|
+| daily imagination/self-care habits unrelated to a research decision | none of this family |
+| one present artifact/source/code fact | not `D/F/A`; route `R` |
+| hidden premises or human tacit constraints in one existing plan/frame, before solutions | not `D/F/A/R`; route `B` |
+| one corpus position | not `D/F/A`; route `S` |
+| one expensive/irreversible selected tree's threshold, outcome table, commit, pivot, kill | not `D/F`; route `A` |
+| one cheap deterministic reversible probe | not `A`; route domain/plain executor, then return result to `D` |
+| agent roles, blindness, visibility, veto, acceptance | not domain skills; route `O` |
+| finished manuscript claim | not `D/F/A`; route `P` |
 
-## Notes on the closest cut
+## Reciprocal-cut checklist
 
-The make-or-break seam is `acting-on-hypotheses`. Its Scope explicitly includes "research direction", and
-its Map/Loop/Leap runs a **whole hypothesis tree** — a single direction with sub-nodes, **however many
-experiments it spans**. So the cut is **CARDINALITY-OF-INDEPENDENT-BETS**, not experiment-vs-program:
-- **ONE hypothesis tree** (one direction, even across many experiments) → `acting-on-hypotheses`.
-- This skill fires only on (a) **≥2 UNCORRELATED directions** — the portfolio (which problem earns effort,
-  allocation across bets, killing a whole line on its *aggregate* learning-rate); (b) the **standing**
-  honesty policy over **many** runs (pre-register / denominator / generator≠auditor as program discipline,
-  not one bet's kill condition); or (c) **selection & formulation** (which problem, posed how).
+- `D <-> B`: lifecycle/frame judgment versus premise/tacit-constraint exposure.
+- `D <-> F`: problem selection/formulation/admission versus thesis genesis.
+- `D <-> A`: selection/standing policy/>=2 bets versus one expensive/irreversible load-bearing tree.
+- `D <-> R`: normative future problem versus inspectable present artifact.
+- `D <-> S`: future research decision versus corpus evidence state.
+- `D <-> P`: research program before a finished claim versus manuscript argument.
+- `D/F/A/P <-> O`: domain meaning versus agent topology/authority.
+- `F <-> S`: candidate generation versus novelty/corpus evidence.
+- `F <-> R`: future candidate versus present observation.
+- `F <-> P`: untested candidate versus finished claim.
 
-Seam test: **ONE hypothesis tree → there; ≥2 uncorrelated directions, the standing honesty policy, or
-problem-choice/formulation → here.** They co-fire in sequence (C1). The two share the word "kill": a single
-tree's kill condition = acting-on-hypotheses; the *aggregate*-learning-rate kill across ≥2 directions = here.
-
-**Runtime decision order (cardinality may be UNDECIDABLE before Mapping).** "≥2 UNCORRELATED directions"
-can be unknown at ask-time, so a naive cardinality check races — apply this order instead of guessing:
-1. Selection / formulation / the standing honesty policy → **directing-research**, ALWAYS (true even
-   inside a single tree — these judgments never move).
-2. A single experiment's pre-registration threshold, pass/fail, outcome table, commit/kill →
-   **acting-on-hypotheses** (its R2/R3), ALWAYS.
-3. When it is ONE direction, or correlation across directions is UNKNOWN → run
-   **acting-on-hypotheses**'s Map FIRST; return to **directing-research** ONLY for portfolio allocation
-   across the ≥2 independent directions the Map reveals (Map confirms only one → stay in
-   acting-on-hypotheses).
-
-**The pre-registration seam** (do not double-book this artifact): the PER-EXPERIMENT threshold —
-prediction + kill-threshold for THIS run — is acting-on-hypotheses R2; the STANDING, timestamped
-pre-registration + denominator + generator≠auditor policy held ACROSS runs is here.
-
-**Unreciprocated-cut debt (LIVE, mitigated — owner named).** `acting-on-hypotheses`'s description
-(≈1900 chars) is well over the ~1500 listing budget AND enumerates "research direction" as in-scope with
-no cut ceding the ≥2-direction portfolio altitude here — so at stage-1 (descriptions alone) a
-portfolio/allocation ask (F4, F7) is a **live race**, not a deferred-cosmetic one. Mitigations on MY side:
-(1) the description now carries "portfolio / allocation across bets / ≥2 bets" and disambiguates the
-learning-rate homonym; (2) the cardinality seam test above; (3) F4/F7 reworded to make the ≥2-directions
-signal explicit. The genuine reciprocal cut still requires a-o-h's own trim-reforge (owner =
-acting-on-hypotheses; body home `references/boundaries.md`). Recorded in `forge-verification-ledger.md`;
-re-run this desk-check after any sibling reforge.
+Any cut present on only one side is a collection-level failure.
+- `B <-> R`: implicit premise/tacit constraint versus fixed present fact with a citable locus.
+- `B <-> F`: expose assumptions without solutions versus generate candidate theses after a selected frame.
+- `B <-> A`: pre-test premise excavation versus one gated expensive/irreversible tree's forward test/commit.

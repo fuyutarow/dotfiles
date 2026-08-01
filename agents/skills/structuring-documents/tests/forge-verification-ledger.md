@@ -66,3 +66,12 @@ F-L4). Commands /koreo and /umada reduced to thin skill-firing aliases (craft di
 
 Verification: 5-lens adversarial fleet (cut-refuter / one-home / cross-consistency / trigger
 desk-check / 木下-fidelity) — results appended on completion.
+
+## 2026-08-01 — reciprocal routing pointer / scoped prose-debt waiver
+
+- Artifact: `SKILL.md` routing row to `governing-research-documentation` establishes the one-document
+  IA versus cross-document lifecycle cut.
+- PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly description 1648
+  chars >1500, 17 prose sentences >120 chars, version header 10 lines >3, and 1 table cell >400
+  chars. This reciprocal-pointer edit does not clear or accept that debt; a dedicated reforge owns
+  retirement of this waiver.

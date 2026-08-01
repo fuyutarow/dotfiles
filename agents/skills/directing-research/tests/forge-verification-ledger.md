@@ -261,3 +261,11 @@ Verification:
 **PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` reports 22 long prose sentences. The increase is
 from explicit cross-skill transition seams and adversarial clearing conditions; no validator or typed
 cut failure is waived. Queue position: first item in the next prose-only DR pass.
+
+## 2026-08-01 — reciprocal routing pointer / scoped prose-debt waiver
+
+- Artifact: `SKILL.md` ownership and MUST-NOT-FIRE rows route cross-document research lifecycle
+  governance to `governing-research-documentation` while retaining research-program judgment here.
+- PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly 22 prose sentences
+  >120 chars. This reciprocal-pointer edit does not clear or accept that debt; a dedicated reforge
+  owns retirement of this waiver.

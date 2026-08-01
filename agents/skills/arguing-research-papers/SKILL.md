@@ -250,6 +250,7 @@ it's not novel enough."
 | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | `acting-on-hypotheses` |
 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | "decide author/reviewer/verifier roles and acceptance timing" | `orchestrating-agents` |
+| "govern admission, authority, review, retirement, or deletion across research documents" | `governing-research-documentation` |
 | "compile the LaTeX / fix the bib" | `compiling-latex` |
 | a one-line typo / grammar fix | just fix it — no ceremony |
 
@@ -267,6 +268,7 @@ it's not novel enough."
 | `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets for a selected frame → there; write and defend finished evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `directing-research` reopen returns to candidate generation. |
 | `acting-on-hypotheses` | **PHASE + HARD GATE** — test/commit/kill one expensive/irreversible selected forward tree → there; run a cheap deterministic reversible probe through the domain/plain executor; argue completed evidence → HERE. |
 | `orchestrating-agents` | **PURPOSE** — claim and argument meaning → HERE; author/reviewer/verifier topology, evidence visibility, veto timing, and acceptance → there. Co-fire only after the claim contract is fixed. |
+| `governing-research-documentation` | **CARDINALITY + LIFECYCLE** — one finished manuscript claim and its reviewer-proof argument → HERE; admission, authority, evidence lineage, review, retirement, and deletion across the research-document portfolio → there. |
 | `compiling-latex` / `writing-technical-japanese` | build/tooling (LaTeX) → `compiling-latex`. Japanese prose mechanics → `writing-technical-japanese`, which itself yields to `structuring-documents`/`linting-prose` when present. Neither owns the argument/claim — that is HERE. |
 
 ## Execution model — the claim is SOLO; red-team and fact-checking fan out

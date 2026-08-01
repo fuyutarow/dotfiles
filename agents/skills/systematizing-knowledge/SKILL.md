@@ -120,6 +120,7 @@ the evidence-synthesis stage map and schemas. No harness means the same stages r
 | Test, commit, pivot, or kill one expensive/irreversible selected future hypothesis tree | `acting-on-hypotheses` — hard-gated tree there; corpus state here |
 | Run one deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | Reorder or deduplicate a review whose evidence judgments are settled | `structuring-documents` — FIX-LOCALITY: document architecture there; evidence derivation here |
+| Govern admission, authority, evidence lineage, review, retirement, or deletion across research documents | `governing-research-documentation` — portfolio lifecycle there; corpus position and claim ledger here |
 | Find passages in an indexed local corpus without synthesizing them | `driving-cocoindex` — locate there; synthesize here |
 | Turn a raw paper corpus into a skill | Run this skill first, then `forging-skills`; never distill unreconciled papers |
 | Decide how to brief, dispatch, and accept work across agents | `orchestrating-agents`; co-fire only when a synthesis also needs a fleet |

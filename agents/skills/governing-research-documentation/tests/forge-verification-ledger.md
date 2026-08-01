@@ -1,0 +1,113 @@
+# Governing research documentation — forge verification ledger (2026-08-01)
+
+## Existence decision
+
+A repository-wide battery searched existing Skills for research-document admission, authority,
+lifecycle, review contracts, canonical/evidence/generated roles, and retirement. The nearest owners
+were intentionally narrower:
+
+- `structuring-documents`: information architecture inside one document;
+- `linting-prose`: reader-facing words, sentences, paragraphs, and prose lifecycle surfaces;
+- `systematizing-knowledge`: the known/uncertain/disputed position of a source corpus;
+- `arguing-research-papers`: one finished manuscript claim and absent-reviewer argument;
+- `directing-research`: research-stage, problem, thesis, and portfolio judgment;
+- `continuing-long-running-tasks`: one transient `TASK-CONTINUATION.md` with a writer transaction.
+
+No owner covered all four missing dimensions: cross-document **admission + authority + lifecycle +
+review contract**. The local failure corpus reproduced the gap in six positive and five negative
+fixtures. **Decision: create one new sibling**, not expand a single-document or transient-state Skill.
+
+## Function and artifact map
+
+```text
+documentation request + current R&D corpus
+  -- create | update | derive | freeze | retire | delete -->
+DOC ADMISSION + one governed artifact transition
+  --> one active authority per question
+  --> evidence preserved; generated views disposable; review decision answerable
+```
+
+| Function | One home |
+|---|---|
+| LAW, admission gates, sibling cuts, execution model | `SKILL.md` |
+| detailed action/retirement correction rules | `references/admission-and-lifecycle.md` |
+| exact OKF v0.2/local `rd_` profile | `references/okf-rd-profile.md` |
+| exact review-request contract | `references/review-contract.md` |
+| repo-local command/hook/CI boundary | `references/harness-integration.md` |
+| external lineage and claim grades | `references/sources.md` |
+| deterministic floor | `scripts/research-docs-check.ts` |
+| copyable concept starting points | `assets/templates/` |
+| trigger and local failure regressions | `tests/triggers.md`, `tests/local-failure-corpus.md` |
+| receipts and semantic ceiling | this ledger |
+
+There is no Skill-local README or changelog. History stays here; the public Skill remains an
+operating manual.
+
+## Source and calibration boundary
+
+`references/sources.md` is the external source ledger. The normative upstream claim is limited to
+OKF field/conformance meaning. The `rd_` role taxonomy, admission gate, append-only policy, review
+contract, and deletion rules are constructed local policy.
+
+| Base source/tool suggests | Agent consumer is likely to overclaim | Corrective profile bias |
+|---|---|---|
+| Markdown + YAML is portable | therefore the documents are high quality | label base OKF separately from the stricter profile |
+| an LLM can maintain a wiki | generated synthesis is a source of truth | raw/evidence are protected; generated views cannot feed durable concepts |
+| more context helps future agents | every session deserves a new status report | admission may choose freeze/update/derive; new authority is exceptional |
+| review prose helps feedback | a second long summary is a review contract | request one decision with evidence-bound, testable questions |
+
+## Mechanical regression contract
+
+The focused test suite must prove at least:
+
+1. `type`-only passes OKF mode and fails the local profile;
+2. valid draft/open-review and stable/accepted-review lifecycles pass;
+3. duplicate active authorities fail;
+4. stable canonical provenance, current human verification, and accepted review are enforced;
+5. raw SHA-256, typed locator resolution, raw/evidence append-only history, and durable deletion
+   rules fire;
+6. per-question review evidence and acceptance conditions are structurally required;
+7. generated views are draft, expiring, source-aligned, and non-authoritative;
+8. broken internal links, index orphans, generated back-edges, and typed supersession cycles fail;
+9. ordinary concept-link cycles and new evidence additions remain legal;
+10. bad CLI input is fatal exit 2, distinct from content findings exit 1.
+
+## Semantic ceiling
+
+A passing checker does **not** establish that a document deserves existence, two authority keys are
+semantically distinct, a source entails a claim, a raw capture is truthful, a human identity is
+authentic, or a review question is scientifically useful. One test deliberately proves that vague
+but structurally non-empty review text can pass. Those judgments remain with the admission owner,
+domain Skill, and named human reviewer.
+
+## Verification receipts
+
+Terminal forge run on 2026-08-01:
+
+- `bun test agents/skills/governing-research-documentation/tests/research-docs-check.test.ts`:
+  46 pass, 0 fail, 60 assertions.
+- Biome on the checker and focused test: two files checked, no fixes required.
+- `script-check.ts` on the production checker: `FAIL=0 WARN=0`.
+- `skill-check.ts agents/skills/governing-research-documentation`: exit 0 with no warning or
+  failure; no prose-debt waiver is open for this Skill.
+- system `quick_validate.py` through `uv run --with pyyaml --no-project`: `Skill is valid!`.
+- `rumdl check --no-exclude agents/skills/governing-research-documentation`: 13 files clean.
+- `mise run lint:skills-index`: complete. `bun install --frozen-lockfile`: no change.
+- `mise run check`: pass. Component receipts include 140 hook tests passing with one intentional
+  skip, 39 repo-search tests, and 27 Bun-script-floor tests. Its 14 Bun warnings are pre-existing,
+  unrelated files and are not waived here.
+- Three independent final audits checked forge boundaries, commit scope, and validator bypasses.
+  Re-audit passed after fixes for closed-review history, CI merge-base use, raw symlink escape,
+  reference-link parsing, Git `T` type changes, `file:` URI escape, and typed locator resolution.
+
+One test-harness defect was found during verification: `objectContaining(new Set(...))` accepts a
+wrong Set member in Bun 1.3.14. Every affected assertion now converts the Set to an array and uses
+`arrayContaining`; the 46-test receipt is after that correction.
+
+## Reciprocal-cut status
+
+Completed in all six closest siblings. `systematizing-knowledge` and
+`continuing-long-running-tasks` remain clean. `structuring-documents`, `linting-prose`,
+`arguing-research-papers`, and `directing-research` retain the exact pre-existing warning counts in
+their own dated, artifact-named ledgers. This forge did not claim that unrelated prose debt was
+cleared.

@@ -65,6 +65,7 @@ transition, not joint ownership.
 | One selected tree has a cheap, deterministic, reversible probe | domain/plain executor | observed result with locus; return it here for update |
 | Evidence is finished and one manuscript claim must be argued | `arguing-research-papers` | CLAIM SPEC |
 | Roles, delegation, visibility, veto timing, verification, or acceptance must be designed | `orchestrating-agents` | orchestration contract; domain artifacts stay with their owner |
+| Research documents need portfolio-wide admission, authority, evidence lineage, review, retirement, or deletion | `governing-research-documentation` | governed document lifecycle artifact |
 
 **Cardinality + cost cut**: comparison, allocation, or reopening across **at least two independent
 bets** is here. ONE tree goes to `acting-on-hypotheses` only when its hard gate fires for an expensive,
@@ -206,6 +207,7 @@ Problem construction and selection details: `references/selecting.md`. Metric an
 | “This deterministic check takes 30 seconds and is reversible; run it.” | domain/plain executor, then return the result here |
 | “Turn these completed results into one defensible paper claim.” | `arguing-research-papers` |
 | “Who should generate, criticize, verify, and accept, and when?” | `orchestrating-agents` |
+| “Which research documents should exist, be authoritative, be reviewed, or be retired?” | `governing-research-documentation` |
 | “Give me daily habits for feeling imaginative, unrelated to a research decision.” | outside this family; answer directly or use an appropriate human-practice source |
 
 **Broad asks fire HERE**: “どうすれば創造的な研究ができる?”, “help me plan and run this research

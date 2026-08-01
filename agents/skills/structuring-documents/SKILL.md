@@ -114,6 +114,7 @@ it. Guards, in order of precedence:
 | `designing-presentations` | Medium cut. Slide/deck structure, talk section ORDER, and inserting diagrams/tables/ASCII/Mermaid for visual effect → there. Prose-document information architecture → here. (The Mermaid diagram-picker lives in `designing-presentations`.) |
 | `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, method-fit synthesis, optional taxonomy). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |
+| `governing-research-documentation` | CARDINALITY + LIFECYCLE cut. One document's information architecture → HERE. Admission, authority, evidence lineage, review, retirement, and deletion across a research-document portfolio → there. |
 
 ## Fire / no-fire
 

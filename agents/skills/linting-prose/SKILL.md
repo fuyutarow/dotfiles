@@ -132,6 +132,10 @@ MECE/scatter/restructuring (→ structuring-documents) · SKILL.md prose (→ fo
 wiring (→ operating-the-harness) · paper-corpus synthesis (→ systematizing-knowledge) · a one-line
 typo fix. Full desk-check set: `tests/triggers.md` — re-run it after ANY description edit.
 
+**Portfolio cut.** Wording and reader-facing lifecycle surfaces within one artifact remain HERE.
+Portfolio lifecycle has another owner. Use `governing-research-documentation` for cross-document
+admission and authority. It also owns evidence lineage, review, retirement, and deletion.
+
 ## References
 
 | file | sole owner of | open when |

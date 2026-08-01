@@ -163,6 +163,8 @@ re-inject a trusted locator, never transcript text or the record body.
 - Feature/debug correctness → `implementing-and-debugging`; co-fire here only when durable resume is
   needed. Store evidence locators, never duplicate the implementation analysis.
 - Research stage/portfolio judgment → `directing-research`; point to its artifacts.
+- Research-document admission, authority, evidence lineage, review, retirement, or deletion across
+  artifacts → `governing-research-documentation`; persist its cited state only when C1 fires.
 - Agent roles, dependencies, vetoes, and acceptance → `orchestrating-agents`. Pass only the record
   locus into its dispatch overlay. Multiple agents alone do not trigger this Skill.
 - Compact hook, memory, or settings work → `operating-the-harness`; this skill owns record semantics.

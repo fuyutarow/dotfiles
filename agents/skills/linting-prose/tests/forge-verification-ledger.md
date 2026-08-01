@@ -308,3 +308,11 @@ SKILL.md prose 行に根拠を追記)で本 skill が touch された。床の�
 長セル1。これらは全て既存の負債であり本編集で増えていない。bar の「touch it, clear it」に
 従い waiver を記載する — 本 skill は staleness 行(2+ classes)により reforge queue 入り
 (蒸留腕の順位で writing-julia 等の後段)。
+
+## 2026-08-01 — reciprocal routing pointer / scoped prose-debt waiver
+
+- Artifact: `SKILL.md` Portfolio cut routes cross-document research lifecycle governance to
+  `governing-research-documentation` while preserving this Skill's single-artifact prose ownership.
+- PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly 22 prose sentences
+  >120 chars, version header 9 lines >3, and 1 table cell >400 chars. This reciprocal-pointer edit
+  does not clear or accept that debt; a dedicated reforge owns retirement of this waiver.

@@ -218,3 +218,11 @@ paper's argument, method, or validity enters this skill's reviewer red-team.
 **PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 44 long prose sentences, a 15-line
 version block, and four long table cells. Queue position: after the shared functional-map freeze,
 before the next feature reforge; move history here first, then split prose and narrative cells.
+
+## 2026-08-01 — reciprocal routing pointer / scoped prose-debt waiver
+
+- Artifact: `SKILL.md` MUST-NOT-FIRE and Routing rows route portfolio lifecycle governance to
+  `governing-research-documentation` while retaining one-manuscript argument ownership here.
+- PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly 44 prose sentences
+  >120 chars, version header 15 lines >3, and 4 table cells >400 chars. This reciprocal-pointer edit
+  does not clear or accept that debt; a dedicated reforge owns retirement of this waiver.

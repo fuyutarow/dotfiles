@@ -6,7 +6,11 @@
 # Steps to skip on every run.
 # gcloud: installed via mise, so `gcloud components update` is blocked by the SDK (managed-by-
 # package-manager) and marks the run FAILED — mise itself updates it. Skip it. (2026-07-05)
-disable = ["flutter", "tlmgr", "gcloud"]
+# snap: prompts for the sudo password on every run, and buys nothing here. `snap list` on this
+# host holds only core20 / core26 / snapd (snap's own runtime) plus flutter — and the flutter
+# step is already disabled above, so the sudo prompt exists to refresh snapd's own plumbing.
+# Refresh it by hand with `sudo snap refresh` if it ever matters. (2026-08-01)
+disable = ["flutter", "tlmgr", "gcloud", "snap"]
 
 # Keep a flaky step running but don't let its failure mark the whole run FAILED.
 # (Uncomment to silence the recurring "Claude Code: FAILED" without skipping it.)

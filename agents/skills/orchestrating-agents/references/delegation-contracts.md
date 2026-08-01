@@ -22,26 +22,32 @@ No harness → same map, serial。並列の腕を、互いに出力を見ない�
 
 | 順序 | 監督の裁定 | artifact/test |
 |---|---|---|
-| 1 | 仕事を小規模・大規模・長走行・読解/検証のどれかに型づける。 | 発注記録に形と選択理由がある。形の選択表に当て直す test で一致する。 |
-| 2 | 入出力の界面、所有範囲、依存、判断の閉鎖、合否を凍結する。仕様を書けない仕事は発射しない。 | 指示書の必須欄が全て埋まり、未列挙判断の停止条件がある。 |
-| 3 | 必要な工程だけを起動する。nontrivial成果物がある、載荷claimがある、または決定的machine oracleがない場合にindependent verifierを起動し、その場合だけauthorと分ける。 | verifierの起動理由、起動時のauthorとの分離、同じ観測が複数役へ重複計上されていないprovenance表。 |
-| 4 | 依存仕事を pipeline、独立仕事を capacity-aware parallel にする。 | DAG と資源/勘定列がある。資源の判定は `measurement-and-resources.md` の `P7` を test に使う。 |
-| 5 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。 | schema検査、証拠の照合、起動時のverdict、supervisorの採否と根拠がある。 |
+| 1 | domain/craft ownerが署名した `input state → function verb → owned artifact → sole domain owner → next state` のmapをlocus/digestで受け取る。owner不在の一回限りのplain taskだけtask-local provisional mapを作る。 | `domain_function_map_locus`とdigestがあり、同じartifactに二ownerがいない。再利用可能なownership voidは`forging-skills`へ返す。 |
+| 2 | 各機能を小規模・大規模・長走行・読解/検証のどれかに型づける。 | 発注記録に形と選択理由がある。形の選択表に当て直す test で一致する。 |
+| 3 | 入出力の界面、所有範囲、依存、decision rightsを凍結する。非生成仕事は合否も発射前に凍結する。生成仕事はlaunch項目だけを第一freezeに置き、domain artifact / digest後にfinal acceptance criteriaを第二freezeする。仕様を書けない仕事は発射しない。 | 指示書の必須欄が全て埋まり、仕事型に対応するfreeze時点と、境界外または不可逆な判断の停止条件がある。 |
+| 4 | 必要な工程だけを起動する。nontrivial成果物がある、載荷claimがある、または決定的machine oracleがない場合にindependent verifierを起動し、その場合だけauthorと分ける。 | verifierの起動理由、起動時のauthorとの分離、同じ観測が複数役へ重複計上されていないprovenance表。 |
+| 5 | 依存仕事を pipeline、独立仕事を capacity-aware parallel にする。 | DAG と資源/勘定列がある。資源の判定は `measurement-and-resources.md` の `P7` を test に使う。 |
+| 6 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。 | schema検査、証拠の照合、起動時のverdict、supervisorの採否と根拠がある。 |
 
 ## 2. 自己完結する指示書
 
 指示書は、外部の口頭補足なしで着手・停止・納品できなければ無効とする。次の欄を全て必須にする。
+ただし、生成 / 評価の条件欄はnovelty-sensitiveまたはcandidate-generatingな生成仕事だけに置く。
+domain skillがmaturity gateを明記していなくても、この生成仕事にはdomain ownerによる
+formulation / evaluability artifactとdigestを要求する。
 
 | 必須欄 | 書く内容 | artifact/test |
 |---|---|---|
+| **機能遷移** | `domain_function_map_locus` / digestと、この発注が消費する署名済み行。OAが加えるのはagent、visibility、dependency、veto、verification、acceptanceのdispatch overlayだけ。 | mapの一行と一致し、隣接発注とのhandoff schemaが接続する。domain semanticsをoverlayが上書きしない。 |
 | **目的** | 解く問い、利用者、成果物が変える裁定。 | 一文の目的と、その成果物を消費する仕事が名指しされている。 |
 | **入力と根拠** | 読む正本、入力版、事実・数値の錨、対象 HEAD または同等の不変識別子。 | 各入力に locus と版があり、実在を read-only test で確認できる。 |
 | **境界** | 読み書き可能なファイル、禁止範囲、外部送信、依存、担当外。 | 許可対象が列挙され、所有の重複がない。 |
 | **出力 schema** | 成果物、返却状態、主張、証拠、限界の機械可読な形。 | schema validation が通る。最終メッセージだけでも同じ情報を回収できる。 |
-| **完成の定義** | 何が存在し、どの指標・しきい値・性質を満たせば完了か。 | 各条件が成果物の locus または runnable test に結線されている。 |
-| **独立検収** | 主張が偽なら落ちる oracle、再計算、照合手順。 | 「主張が偽でもこの観測は出得るか」の答えが NO。YES なら test を無効とする。 |
+| **完成の定義** | 非生成仕事は最終完成条件を発射前に凍結する。生成仕事はlaunch時のphase-exitとmaturity release condition、domain artifact / digest後のfinal acceptance criteriaを分ける。 | 各条件が成果物の locus または runnable test に結線され、生成仕事では二つのfreeze時点が記録されている。 |
+| **独立検収** | 主張が偽なら落ちる oracle、再計算、照合手順を成果物を見る前に設計し、lens / oracle / expected verdictを生成側からsealedにする。既知のhard constraintsとstage-exit criteriaは開示できる。 | 「主張が偽でもこの観測は出得るか」の答えが NO。YES なら test を無効とする。sealと開示範囲が記録されている。 |
 | **時間予算** | 硬い期限、中間報告点、中断条件、部分納品の保存先。 | 発射時刻・期限・中間条件があり、超過時の処理を再現できる。 |
-| **判断の閉鎖** | 腕が選べる値・方法・解釈と、選べない事項。 | `C3` の三分類と停止命令がある。 |
+| **decision rights** | supervisorが凍結する外部界面・不可逆判断・acceptance、executorへ委譲する境界内の可逆な方法・仮説・表現、停止する境界外・不可逆判断。 | `C3` の三分類、decision log、停止命令がある。 |
+| **生成 / 評価の条件欄** | 生成仕事では必ず、launch freeze、domain maturity owner / release condition、第二freezeの時点、generative challengeの非veto、verdict-bearing evaluationの開始条件を書く。 | launch→domain artifact / digest→final criteria freeze→verdict / blind auditの順序がある。release artifact / digestが無いpacketをnormalization、synthesis、verdictへ渡さない。非生成仕事では欄を省略できる。 |
 | **P10 再利用** | 流用する中間物、入力指紋、失効条件、再構築理由。 | `measurement-and-resources.md` の `P10` test が通る。 |
 | **未確認の明示** | 証明・確認できない箇所を、ごまかさず列挙する命令。 | `unverified` が空配列を含めて存在し、空なら検査手段が示されている。 |
 
@@ -100,6 +106,7 @@ limitations: []
 ### C1 — 分解の強制
 
 単一の成果物が、300行超・20分超・見込み10万トークン超のいずれかなら分解する。
+これはfunction mapの後に行う**component分解**であり、機能責務をagent数へ置き換えない。
 監督は界面、共通土台、骨格、結合規則を先に固定する。部品は原則200行以下とし、所有範囲を
 重ねず並列の腕へ渡す。
 
@@ -137,16 +144,17 @@ control plane から背面へ発射する。
 artifact/test は、逐次保存された複数chunk、PID/log、部分停止からの再開可能性を確認する
 故障注入または中断再開testである。
 
-### C3 — 判断の閉鎖
+### C3 — decision rights
 
-全指示書に `判断の閉鎖` 節を置き、監督が次を列挙する。
+全指示書に `decision rights` 節を置き、監督が次の境界を列挙する。
 
-1. 定数を、凍結値・許容範囲内で選べる値・測定で決める値に分類する。
-2. witness、評価方法、候補の選択肢と優先順位を閉じる。
-3. PASS / FAIL / 部分納品をどう解釈し、何を受理しないかを閉じる。
+1. supervisorが凍結する外部界面、不可逆な判断、acceptance。
+2. executorへ委譲する、境界内で可逆な方法、仮説、表現、測定による選択。
+3. 境界外または不可逆な判断に遭遇したときの停止と裁定要求。
 
-未列挙の判断に遭遇した腕は決めずに停止し、未決事項、選択肢、各影響を返して裁定を求める。
-artifact は `判断の閉鎖` 節、test は成果物中の全自由選択が同節のいずれかへ写ること。
+未列挙でも境界内かつ可逆な判断はexecutorが進め、選択、根拠、戻し方をdecision logで返す。
+境界外または不可逆なら停止し、未決事項、選択肢、各影響を返す。artifactは
+`decision rights`節とdecision log、testは全自由選択が委譲境界内か、停止記録へ写ること。
 
 ### C4 — 時間予算の硬化
 
@@ -169,12 +177,17 @@ trivial / deterministicは本skillを `NO-FIRE` とし、既存scriptまたはdi
 | 工程 | 起動条件 | 入力 | 禁止 | artifact/test |
 |---|---|---|---|---|
 | author | deliverableを生産するとき | 問題、正本、指示書 | 別のauthor候補を読むこと。 | 成果物と自己試験。 |
-| reviewer | 論理・実装・制約の別lensが必要なとき | 問題、凍結成果物 | authorの意図説明・自己評価を読むこと、修復すること。 | 指摘ごとの locus、影響、修復経路。 |
+| reviewer | 論理・実装・制約の別lensが必要なとき | 問題、凍結成果物 | authorの意図説明・自己評価を読むこと、修復patchを代作すること。 | 指摘ごとの反例またはlocus、影響、clearing conditionまたはearliest reopened gate。 |
 | reconciler | 正史・既存資産との照合を独立観測として要するとき | 問題、凍結成果物、正史索引 | 照合範囲を無断で広げること、生成・修復すること。 | read-onlyの照合表。 |
 | independent verifier | nontrivial成果物、載荷claim、または決定的machine oracleがない仕事 | 凍結した完成定義、凍結成果物 | 新規実装・起草、作者の自己試験を独立oracleとして扱うこと。 | 独立再計算、環境検査、verdictと観測。 |
 
 reviewerまたはreconcilerの出力を独立観測として数えるなら、authorから分離する。同じ観測を
 review、reconciliation、verificationの複数役へ数えない。複数labelを一つの独立性に水増ししない。
+
+このファイルが`repair path`のSOLE homeである。repair pathはreviewerがpatchを代作することではない。
+各指摘へ反例または欠陥locusと、欠陥が解消したと判定できるclearing condition、または
+最初に再開すべきgateを返す。reviewerが修復を実装した版ではauthorへ移り、その版の
+independent verifierにはなれない。別のverifierを起動する。
 
 blind auditは、portfolioならsynthesis後の成果物、portfolioなしならsolo成果物を凍結してから
 発射する。渡すのは問題、凍結成果物、凍結した判定条件だけで、実務側の推論、自己評価、期待する
@@ -183,16 +196,17 @@ blind auditは、portfolioならsynthesis後の成果物、portfolioなしなら
 
 ## 5. P4 ROUND-TRIP ECONOMY
 
-査読指示には「全指摘に修復経路を明示せよ」を含める。二巡目の指示書には前巡で反復した
-指摘の型を仕様として焼き込む。同じ型が二巡続いたら、三巡目の査読を発射せず、成果物ではなく
-界面・完成定義・判断の閉鎖へ差し戻す。
+査読指示には「全指摘に反例またはlocusと、clearing conditionまたはearliest reopened gateを
+明示せよ。patchを代作するな」を含める。二巡目の指示書には前巡で反復した指摘の型を仕様として
+焼き込む。同じ型が二巡続いたら、三巡目の査読を発射せず、成果物ではなく界面・完成定義・
+decision rightsへ差し戻す。
 
 監査落ちは次巡の前に一つのfailure classへ分類し、最初に壊れたgateへ一意に戻す。
 
 | Failure class | Earliest reopened gate | Owner / action | New test |
 |---|---|---|---|
 | `deliverable defect` | production | executorへ欠陥locusと反例を付けて再発注する。 | 欠陥を再現してから落ちなくなる回帰test。 |
-| `spec-interface defect` | C1〜C3 / 完成定義 | supervisorがinterface、判断の閉鎖、完成定義を再凍結する。 | 新仕様から各自由選択・出力・合否への全写像。 |
+| `spec-interface defect` | C1〜C3 / 完成定義 | supervisorがinterface、decision rights、完成定義を再凍結する。 | 新仕様から各自由選択・出力・合否への全写像。 |
 | `evidence-grounding defect` | P0 / P3 / P6の最初に欠けたgate | supervisorはgate再開とbriefだけを持ち、executor / verifierがsourceまたはmachine evidenceを再取得する。 | claim→evidence pointerと独立照合。 |
 | `resource / footing / confound / reuse defect` | P7 / P8 / P9 / P10の最初に欠けたgate | supervisorが資源割当と再開briefを持ち、executorが再計測・対照・再構築を行い、verifierが凍結後に独立再計算・照合する。 | 該当gateの対応packetがschema、digest、oracle testを通る。 |
 | `oracle false-positive` | verification design | oracleを無効化し、同じ誤観測を出さない別法へ差し替える。 | 既知の偽claimを落とすnegative control。 |
@@ -208,11 +222,12 @@ artifactは `failure class → earliest reopened gate → owner → new test` �
 4. 新たな欠けの二級分類:
    - 凍結した問いを脅かす欠け — 出荷を止める。
    - ledger の衛生 — 開示して出荷後に修理できる。
-5. 全指摘への修復経路。
+5. 全指摘への反例またはlocusと、clearing conditionまたはearliest reopened gate。patchの代作は禁止。
 6. 判定語彙: `PASS / FAIL / SCOPE-LIMITED PASS`。最後は許される文言を逐語で返す。
 
-無限定の欠け探しを依頼しない。artifact/test は、監査ブリーフの六要素、各指摘の修復経路、
-三巡目の同型指摘が存在しないこと、停止理由が凍結した問いへ結線されていること。
+無限定の欠け探しを依頼しない。artifact/testは、監査ブリーフの六要素、各指摘のclearing
+conditionまたはearliest reopened gate、三巡目の同型指摘が存在しないこと、停止理由が凍結した
+問いへ結線されていること。reviewerがpatchを実装した版を同じreviewerが検収していないこと。
 
 ## 6. 結合・裁定・救済
 

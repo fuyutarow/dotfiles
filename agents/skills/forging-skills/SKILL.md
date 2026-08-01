@@ -1,30 +1,22 @@
 ---
 name: forging-skills
 description: >-
-  Forges and reforges Agent Skills to the house bar — a skill is a durable operating manual
-  (LAW + gates + grep-able artifacts + MUST-NOT-FIRE + sibling cuts), not documentation. Owns
-  the CRAFT: existence, distilling books/surveys/sessions into rules that change tool calls,
-  one-home architecture, trigger engineering with fire/no-fire test sets, MECE sibling cuts,
-  adversarial verification of the skill itself. Use when creating a skill, skill creator asks,
-  updating/improving/auditing a SKILL.md, reforging/鍛え直す/鍛錬, スキル作成, スキル作って,
-  スキルを作って, スキル改善, description tuning, trigger collisions, skill evals / benchmark /
-  optimize a skill description (評価セット, スキルのベンチマーク), work under agents/skills/.
-  SUPERSEDES the generic skill-creator defaults — their packaging/eval machinery invoked by
-  pointer. MANDATORY — read BEFORE creating or substantively revising any skill.
-  operating-the-harness owns the harness contract: skill NOT LISTED / truncated → it ALONE;
-  listed but never fires → co-fire, its diagnostics FIRST, then description craft here.
-  SKILL.md prose has TWO readers (executor + auditor): floor (skill-check prose-debt
-  WARNs) AND judgment bar owned HERE — 「SKILL.md の散文が読みにくい」 fires here;
-  linting-prose = human-facing prose only.
-  Cut: novel thesis → forging-novel-theses; multi-paper
-  synthesis → systematizing-knowledge. Workflow-native: design and cuts stay solo; harvest,
-  drafting, and verification fleets fan out. English skill; respond in the user's language
-  (default Japanese).
+  Forges and reforges Agent Skills to the house bar: durable operating manuals with LAW, gates,
+  grep-able artifacts, MUST-NOT-FIRE, sibling cuts, and adversarial verification. Owns the CRAFT:
+  function-first existence, source distillation into tool-changing rules, one-home architecture,
+  description/trigger engineering, MECE responsibility cuts, fire/no-fire tests, and the skill's own
+  verification. Use for creating, updating, or auditing SKILL.md; skill creator; reforging,
+  鍛え直す, 鍛錬, スキル作成, スキル作って, スキルを作って, スキル改善, description tuning, trigger
+  collisions, skill evals, 評価セット, or work under agents/skills/. MANDATORY before substantive skill
+  revision; generic skill-creator supplies packaging by pointer. Harness listing/firing
+  diagnostics belong to operating-the-harness; human-facing prose belongs to linting-prose. Novel thesis
+  → forging-novel-theses; corpus synthesis → systematizing-knowledge. Design/cuts stay solo; bounded
+  evidence harvest and verification may fan out. English skill; respond in the user's language.
 ---
 
 # Forging skills — the craft of making operating manuals that outlive their maker
 
-> **Version**: v2607.2.0 (2026-07-24) — the dual-reader prose bar; scope/lineage moved to the ledger.
+> **Version**: v2607.4.0 (2026-07-30) — craft-signed semantic map; orchestration adds only dispatch.
 > History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
 
 Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:
@@ -38,7 +30,7 @@ for f in distilling architecture triggering execution-models verifying; do test 
 This skill is **English**; respond to the user in their language (default Japanese). Keep the
 house tokens stable even inside Japanese prose — they are technical identifiers, not
 translatable words: **LAW**, **gate** (F1/F2/F3), **fire / no-fire**, **鍛錬 / reforge**,
-**solo / fan-out / barrier**, **DECISIVE / CARDINALITY / PURPOSE cut**, **one home**,
+**solo / fan-out / barrier**, **DECISIVE / CARDINALITY / PURPOSE cut**, **function map**, **one home**,
 **scaffold theater**. Every skill you forge defines and pins ITS tokens the same way
 (`references/triggering.md`, `references/architecture.md` §6).
 
@@ -63,14 +55,18 @@ grep-able artifact; no artifact → gate un-passed, 感触では通れない.
 | Gate | Inverts (the error) | ARTIFACT — must exist in the forged skill |
 |---|---|---|
 | **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor split → `references/architecture.md` §5). EXIT: prose-debt WARNs 0, or a dated PROSE-DEBT waiver in the ledger (§5; ≠ F3 solo-tier waiver) |
-| **F2 PLACEMENT** | collection collision / description races — two skills match the same ask and neither yields | Routing/owner table + a TYPED cut (DECISIVE / CARDINALITY / PURPOSE) phrased as a runtime-answerable question per overlapping sibling + reciprocal pointers landed, or explicitly deferred with the owner named (`references/architecture.md`, `references/triggering.md`) |
+| **F2 PLACEMENT** | collection collision / description races — two skills match the same ask and neither yields | A **function map** (`input state → verb → artifact → next state`) + one artifact owner + a TYPED cut per overlapping sibling + reciprocal pointers, or an owner-named deferral (`references/architecture.md`, `references/triggering.md`) |
 | **F3 SELF-VERIFICATION** | ship-and-hope — the skill that teaches verification ships unverified | Atomic build-order verify command + a fire/no-fire trigger set (≥5 fire / ≥5 near-miss no-fire) + an adversarial-verification findings ledger recording the skill-check run incl. prose-debt counts — waivable ONLY at the solo tier, waiver written (`references/verifying.md`) |
 
 ## The pipeline
 
-0. **EXISTENCE GATE** — should this be a skill at all? Run `operating-the-harness`'s decision
-   reflex (CLAUDE.md line / rule / hook / settings / skill). If an existing skill owns the
-   territory, EXTEND it (reforge) — a near-duplicate sibling is a routing bug.
+0. **FUNCTION + EXISTENCE GATE** — decompose the requested behavior as
+   `input state → function verb → owned artifact → next state`, then run
+   `operating-the-harness`'s decision reflex (CLAUDE.md line / rule / hook / settings / skill).
+   If an existing skill owns that transition or artifact, EXTEND it. Forge a sibling only for a
+   reusable ownership void with a distinct stop condition.
+   The target's craft owner signs this semantic map. `orchestrating-agents` may consume its locus/digest
+   and add a dispatch overlay, but never co-owns or rewrites the map.
    → `references/verifying.md` §6 for reforge-vs-create.
 1. **SOURCE & DISTILL** — type the source; keep only lines that change what the executor does.
    → `references/distilling.md`

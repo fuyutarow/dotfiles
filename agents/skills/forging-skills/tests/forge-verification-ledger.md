@@ -113,3 +113,39 @@ MINOR 3・no_change 4。全件採択して修理:
 - MINOR: LAW に FORM carve-out の cross-ref、waiver の2機構を PROSE-DEBT waiver / F3
   solo-tier waiver に命名分離、堆積の門の訂正の過剰一般化をスコープ修正。
 機械閉鎖: 修理後の床・テスト・description 長は下記コミット前の実測どおり全 green。
+
+## 2026-07-30: v2607.3.0 function-first existence gate
+
+**発端。** 創造的研究familyの再編で、既存skill名へbehaviorを割り当ててから境界を考える順序が、
+人間の暗黙知を露出する機能空白を隠した。topicとroute名は違っても、input/outputが同じなら
+新skillではない。逆にtopicが近くても、固有のstate transitionとartifactを持つownership voidは
+incumbentへ埋め込まない。
+
+**変更。**
+
+1. F2の前提artifactを
+   `input state → function verb → owned artifact → next state` のfunction mapへ変更した。
+2. pipeline step 0をFUNCTION + EXISTENCE GATEへ変更した。
+3. `architecture.md` §2で、MECEの対象をdeclared responsibilities/artifactsと定義した。
+   Open-world contentには明示的residualを残し、taxonomyを埋めるための偽の網羅を禁じた。
+4. `verifying.md`のreforge-vs-createを、distinct input/output/stop + typed cutが全て書ける場合だけ
+   new siblingを認める規則へ硬化した。
+
+この規則により、今回の`ONE existing artifact --EXPOSE--> Blind-spot packet`は再利用可能な
+ownership voidとして`surfacing-blind-spots`へ分離された。一方、frame構成、thesis生成、
+one-tree testingは各incumbentのartifact ownershipに残った。
+
+**PROSE-DEBT waiver (2026-07-30)。** `skill-check.ts`実測は長文12・長セル2。
+前回waiverから長文が1件増えたが、追加箇所はF2の三者以上を結ぶfunction-map seamであり、
+`architecture.md` §5が全面atomizationの適用外とするshared-object seamである。既存長文11・
+長セル2のqueue位置は2026-07-24節を継承する。descriptionは1500字以下へ戻した。
+
+## 2026-07-30: function-map signer correction (v2607.4.0)
+
+F2のsemantic function mapは対象skillのcraft ownerが署名する。
+`orchestrating-agents`はそのlocus/digestを消費してdispatch overlayを加えるだけであり、
+mapを共同所有または再定義しない。これによりskill craftとcontrol planeのartifact collisionを
+閉じた。
+
+Codex `quick_validate.py`は`Skill is valid!`。`skill-check.ts`はexit 0で長文12・長セル2のため、
+直前のdated waiverと同じqueue位置を継承する。descriptionはCodex上限1024文字以内へ蒸留済み。

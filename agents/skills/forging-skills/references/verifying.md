@@ -128,10 +128,12 @@ link landed.
 inherits every stale assumption it was meant to fix. An update is the same meta-workflow
 (§1) at smaller scale: re-run the affected phases on the delta, not the world.
 
-**Reforge vs create** (pipeline step 0). EXTEND the incumbent when an existing skill owns the
-territory — a near-duplicate sibling is a routing bug. Forge a NEW sibling only when you can
-write a typed cut (DECISIVE / CARDINALITY / PURPOSE) that neither blurs nor races the incumbent's
-boundary. If you cannot write the cut, it is the same skill — and you are reforging it.
+**Reforge vs create** (pipeline step 0). First write the candidate transition:
+`input state → function verb → owned artifact → next state`, plus its stop condition. EXTEND the
+incumbent when it owns that transition or artifact; a near-duplicate sibling is a routing bug.
+Forge a NEW sibling only for a reusable ownership void and only when a typed cut
+(DECISIVE / CARDINALITY / PURPOSE) neither blurs nor races the incumbent's boundary. If the input,
+output, stop, and cut cannot all be stated distinctly, it is the same skill — reforge it.
 
 ## §7 Scale calibration — size the fleet to the skill
 

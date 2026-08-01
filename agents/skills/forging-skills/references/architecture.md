@@ -30,10 +30,21 @@ DESERVES each stage:
 - Inversion test, run both ways: a reference the model would read on EVERY invocation is core —
   inline it; a SKILL.md section read on only SOME invocations is argued — exile it.
 
-## 2. ONE HOME PER CONCEPT — the load-bearing invariant
+## 2. FUNCTION MAP + ONE HOME — the load-bearing invariant
 
 Every rule has exactly ONE arguing home; every other occurrence is a one-line pointer. This is THE
 drift-prevention mechanism of the collection — apply it within the skill AND across siblings.
+
+Before choosing a skill boundary, write:
+
+```text
+<input state> --<function verb>--> <owned artifact> --> <next state>
+```
+
+The map is MECE over **declared responsibilities and artifacts**, not over open-world content.
+Every artifact has one owner. Every transition has a stop and a handoff. Keep an explicit residual
+when the subject matter cannot be exhaustively enumerated; never manufacture closure to fill a
+taxonomy. Recipe labels, topics, and agent roles are not functions.
 
 - **Declare ownership in the section header**, using the word SOLE/owner, so a maintainer landing
   mid-file knows whether they may edit substance or only the pointer. Precedents:
@@ -128,6 +139,8 @@ lines, table cells >400 chars — WARN tier, measurement; enforcement moment = f
 
 | Anti-pattern | Tell | Fix |
 |---|---|---|
+| **Skill-name-first design** | behavior is assigned to the nearest existing name before its input/output transition is stated | write the function map first; then reforge an owner or prove a reusable ownership void |
+| **Control-plane map takeover** | orchestration silently rewrites the target skill's semantic function map | craft owner signs the map; `orchestrating-agents` consumes locus/digest and owns only the dispatch overlay |
 | **Two arguing homes** | the same rule argued (not pointed) in two files — drift guaranteed | ONE owner with a SOLE declaration; demote the twin to a pointer; deliberate seams get the do-not-diff note (§2) |
 | **Dangling reference** | index or `references:` names a file that does not exist | atomic build order + verify one-liner (§3) |
 | **Kitchen-sink SKILL.md** | everything inline; every invocation pays for every rule | body = precedence-setting core only; exile argued content to `references/` (§1) |

@@ -7,7 +7,8 @@ description: >-
   understood. Reconstruct intent, scope the edit surface, ground each file against a reference,
   fix 病因 not 症状, declare unknowns, fear regression, and verify red→green plus flag
   combinations. DECISIVE cut: behavior-preserving refactor→refactoring-code; present-fact
-  inspection→raising-resolution; future bet→acting-on-hypotheses; post-hoc diff review→code
+  inspection→raising-resolution; expensive/irreversible future bet→acting-on-hypotheses; cheap
+  reversible probe→domain/plain executor; post-hoc diff review→code
   review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-search
   battery` before new functionality; exact tokens use `repo-search literal`. Language skills
   co-fire for idiom. English skill; respond in the user's language (default Japanese).
@@ -22,8 +23,9 @@ description: >-
 > froze one flag's function only in combination).
 > (prior: v2607.1.0, 2026-07-04 — distilled from the house `/impl` + `/debug` prompts.)
 > **Scope**: the guards that govern WRITING or FIXING code once understanding is in hand.
-> Understanding a present fact is upstream (`raising-resolution`, a silent sub-step here);
-> a forward bet on the world is `acting-on-hypotheses`. This skill owns the act between them.
+> Understanding a present fact is upstream (`raising-resolution`, a silent sub-step here). An
+> expensive/irreversible forward bet is `acting-on-hypotheses`; a cheap deterministic reversible probe
+> uses the domain/plain executor. This skill owns the defined implementation act between them.
 
 ## THE LAW
 
@@ -61,8 +63,9 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
   you're modeling it on (an existing pattern in this repo, a known-good sibling). Consistency
   comes from imitation, not invention.
 - **Coherent, non-throwaway design.** The plan must be internally consistent and coherent with
-  the stated requirements — not a shape you'll have to rip out next week. (Whether the design
-  will age well against an *uncertain future* is a bet → `acting-on-hypotheses`.)
+  the stated requirements — not a shape you'll have to rip out next week. Whether the design will age
+  well is an AOH bet only when expensive/irreversible downstream exposure rides on the answer; otherwise
+  run the bounded reversible probe through the domain/plain executor.
 - **Declare unknowns.** Surface the opaque regions now, as output — don't paper over them.
 
 ## The DEBUG gate — when a fix is flailing
@@ -95,7 +98,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 |---|---|
 | `refactoring-code` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **No** (structure only — refactor, clean up, extract/move/rename for structure, 責務分界/局所化, break deps to add tests, Strangler/Branch-by-Abstraction) → there. **Yes** (add/change a feature, fix a bug) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor there (hat 1, own commit) → behavior change here (hat 2). One diff doing both violates the two hats — split it. |
 | `raising-resolution` | DECISIVE cut: "am I about to *speculate instead of inspect a present fact*?" → there (upstream, content-agnostic, produces no artifact). "Am I about to *write/change code* and need to do it without flailing?" → here. It runs as a silent sub-step inside every gate above. |
-| `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. Forward bets (spike/MVP/will-it-scale) and **future-durability** (陳腐化しない設計) → there. Executing a defined change correctly → here. |
+| `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. An expensive/irreversible spike, MVP, will-it-scale, or future-durability bet → AOH. A deterministic, bounded, reversible probe with no costly downstream exposure → domain/plain executor. Executing the admitted change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
 | `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
 | `driving-cocoindex` | **Co-fire, FIRST, in any operational ccc-registered repo**: before writing NEW functionality, run `repo-search battery` (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway. Literal-token search stays correct through `repo-search literal`; raw Grep is hook-denied because it omits the QUERY-SHAPE declaration (their CC3). |
@@ -112,5 +115,6 @@ understand, "なぜ動かないのか分からない", 場当たり的な*バグ
 MUST NOT fire: a typo / rename / one-line obvious edit · a purely mechanical change · a
 **behavior-preserving refactor / cleanup** (structure only, no behavior change) (→ `refactoring-code`,
 Beck's two hats) · a request to *inspect a fact* with no change pending (→ `raising-resolution`) ·
-deciding whether to *bet on* an approach (→ `acting-on-hypotheses`) · reviewing an already-written
+deciding an expensive/irreversible *bet on* an approach (→ `acting-on-hypotheses`) · running a cheap
+reversible probe (→ domain/plain executor) · reviewing an already-written
 diff (→ `/code-review`).

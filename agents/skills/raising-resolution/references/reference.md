@@ -9,7 +9,7 @@ Four single-homed concerns, each concept appearing exactly once:
 1. **§A — the four lenses**, deep treatment + the OWNER RULES that impose MECE on shared concepts.
 2. **§B — 課題 vs 解決策**, the two-object distinction, order, depth-asymmetry, problem-quality, バーニングニーズ.
 3. **§C — limits / epistemics**, the stop condition, the six failure modes, calibration, repackaging
-   honesty, the acting-on-hypotheses boundary + sequencing rule, the SOLE source-grade table, and the
+   honesty, the forward-bet/exposure boundaries + sequencing rules, the SOLE source-grade table, and the
    §C.8 agent-boundary harness note.
 4. **§D — the acquisition MECHANISM** (the HOW layer): the action-ladder rationale, the 内化⇄外化 kata
    table, the Why-so? / 症状-vs-病因 protocol with per-node 広さ execution, the root-state rule, n=1, 語彙,
@@ -262,9 +262,10 @@ Run this BEFORE deepening, so depth is not spent on a problem nobody has.
 - **Operational (a)/(b) criteria — THIRD-PARTY, labeled as such, a heuristic not an author quote:** (a)
   someone already spends time / money / effort on it; or (b) leaving it unsolved blocks the goal / business
   continuity / compliance. Useful as a checklist; do NOT attribute it to 馬田.
-- **Scope note:** problem-SELECTION (which problem to pick) is UPSTREAM and not this skill's job; this skill
-  owns problem-COMPREHENSION but runs this gate so depth is not wasted on the wrong problem. If the gate fails,
-  broaden (広さ) or re-select before deepening.
+- **Scope note:** problem-SELECTION (which problem to pick) belongs to `directing-research`; this skill
+  owns only the observation about urgency, present behavior, or constraint. It returns that evidence
+  without a `select/reject` verdict. If the observation changes the candidate problem set, hand it to
+  `directing-research` for construction or re-selection.
 
 ### B.6 Research mapping
 
@@ -392,15 +393,16 @@ on this table. Hold the skill's own claims to the standard the load-bearing rule
 The reflexive corollary: the same gate the skill imposes on the agent applies to the skill — where a claim is
 single-sourced or needs-verification, label it (here) and do not launder it into the author's voice.
 
-### C.7 The acting-on-hypotheses boundary + the SEQUENCING handoff rule (SOLE owner)
+### C.7 The forward-bet and exposure boundaries + SEQUENCING handoffs (SOLE owner)
 
 raising-resolution and `acting-on-hypotheses` are complements cut by **PURPOSE / OBJECT**. SKILL.md
 cross-references this; the cut is OWNED here, not duplicated.
 
 - **raising-resolution = 現状理解の明晰さ:** sharpen YOUR OWN grasp of a PRESENT, KNOWABLE-BUT-BLURRY reality
   (this code/data/API/source/problem) by acquiring PRIMARY INFORMATION to reduce ignorance of a fixed present.
-- **acting-on-hypotheses = 不確実な未来への前進:** bet and ACT on an UNCERTAIN FUTURE that cannot be known by
-  inspecting what already exists.
+- **acting-on-hypotheses = 高価/不可逆な不確実な未来への前進:** map and precommit when an uncertain future
+  bet carries expensive/irreversible downstream exposure. A deterministic, bounded, reversible probe
+  without that exposure uses the domain/plain executor.
 
 **DECISIVE CUT (canonical phrasing OWNED here; agrees in SUBSTANCE with acting-on-hypotheses STEP 0 — same
 smart-person test, same YES/NO routing skeleton. NOT byte-identical: the sibling's STEP 0 phrases the NO
@@ -409,8 +411,9 @@ because each file names the other. Do NOT diff the two cut texts for word-for-wo
 QUESTION clause changes, re-diff this seam):**
 
 > *"Could a smart person, given enough primary info about what ALREADY EXISTS, know the answer?"*
-> **YES** → present-understanding gap → **raising-resolution**. **NO** → future-bet gap →
-> **acting-on-hypotheses.**
+> **YES** → present-understanding gap → **raising-resolution**. **NO** → future-bet gap → apply the
+> downstream-exposure gate: expensive/irreversible → **acting-on-hypotheses**; otherwise →
+> domain/plain executor.
 
 The bare CUT is genuinely BIDIRECTIONAL: the sibling names raising-resolution at its STEP 0 and in its
 `boundaries.md` (present/forward split), and expects a reciprocal pointer here — this §C.7 is that pointer.
@@ -422,13 +425,27 @@ scale"): **raising-resolution runs FIRST and EXHAUSTS the present-understanding 
 cite every blocking present fact) before the residual future-bet is handed off.
 
 **HANDOFF TRIGGER:** every blocking claim about what ALREADY EXISTS has its citation, and what remains can
-only be known by a forward TEST → hand to acting-on-hypotheses STEP 0, which routes the residual as a
-future-bet.
+only be known by a forward TEST → hand to `acting-on-hypotheses` STEP 0. Its hard gate retains
+expensive/irreversible downstream exposure; otherwise the domain/plain executor runs the residual and
+returns `EXECUTOR RESULT`.
 
 They share the word "hypothesis" but operate on DIFFERENT OBJECTS (here: a guess to be VERIFIED against the
 present by inspection; there: a node to be FALSIFIED by a forward test, then COMMITTED) and INTERLEAVE at the
 seam but never overlap. **No content overlap:** raising-resolution EXCLUDES the book's 第8章 未来の解像度
 precisely because future-forecasting belongs to the sibling.
+
+**EXPOSURE CUT vs `surfacing-blind-spots`.**
+
+- **raising-resolution** starts from one blocking factual claim and ends at a citable observation.
+- **surfacing-blind-spots** starts from an existing plan/frame/decision and ends at an explicit premise
+  surface, including `OPEN` residual and unanswered human tacit probes. Its output is not evidence and it
+  must not fabricate a human answer.
+
+The decisive question is: *“Am I trying to verify a named fact, or discover which premise the decision
+artifact has left implicit?”* Named fact → inspect HERE. Implicit premise/tacit constraint → expose THERE.
+When a Blind-spot packet marks one row as needing a fixed factual check, sequence
+`surfacing-blind-spots → raising-resolution → directing-research`; return the cited observation to the
+same row rather than letting this skill choose the frame.
 
 ### C.8 The citation gate across an agent boundary (skill-supplied harness note)
 
@@ -458,8 +475,9 @@ subagents/workflows the gate's SEMANTICS do not change; only WHO runs a rung may
 - **Anti-patterns (3):** relay-as-citation (asserting on an agent's conclusion, observable unread);
   consensus-as-citation ("3 agents agree"); the sharded Why-so tree (interlock lost at shard boundaries).
 - **Degradation.** No harness → nothing changes; the action ladder (§D.1) is already the solo form.
-- **Seams:** many-source sweeps → `systematizing-knowledge` (the cardinality cut, §B.6); forward-test
-  probes → `acting-on-hypotheses` (§C.7); spawn/hook/workflow mechanics → `operating-the-harness`.
+- **Seams:** many-source sweeps → `systematizing-knowledge` (the cardinality cut, §B.6);
+  expensive/irreversible forward-test probes → `acting-on-hypotheses`, cheap reversible probes →
+  domain/plain executor (§C.7); spawn/hook/workflow mechanics → `operating-the-harness`.
 
 ---
 

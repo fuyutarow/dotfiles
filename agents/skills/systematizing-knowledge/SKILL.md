@@ -1,17 +1,18 @@
 ---
 name: systematizing-knowledge
 description: >-
-  Systematizes a source corpus into a traceable answer about what is known, uncertain, disputed,
-  and missing. Use for Systematization of Knowledge (SoK), survey / literature review /
-  文献レビュー, systematic or scoping review / 系統的・スコーピングレビュー, evidence map,
-  meta-analysis, taxonomy / 分類, comparison matrix, conflicting studies, or field-level
-  state-of-evidence claims. Selects review mode, coverage, synthesis, and appraisal from the
-  question and claim type; applies PRISMA, GRADE, Nickerson, SWiM, and REFORMS only when fit while
-  preserving not-reported, N/A, not-comparable, and unresolved states. MANDATORY for multi-source
-  claims about what a field knows. Cuts: one artifact → raising-resolution; one manuscript's claim
-  → arguing-research-papers; future research bets → directing-research; settled-content architecture
-  → structuring-documents. Search and extraction may fan out; method choice, adjudication, and the
-  final position stay SOLO. English skill; respond in the user's language (default Japanese).
+  Systematizes a source CORPUS into a known/uncertain/disputed/missing position. Use for SoK,
+  survey / literature review / 文献レビュー, systematic/scoping review, evidence map,
+  conflicting studies, or field-level evidence claims. Selects method by decision/claim; preserves
+  not-reported, N/A, not-comparable, and unresolved. MANDATORY for multi-source field-knowledge
+  claims. Cuts: one fact extract → raising-resolution; neutral one-paper summary → direct answer with
+  its citation gate silent; one-paper argument/method/validity appraisal →
+  arguing-research-papers; premise-only excavation → surfacing-blind-spots; program judgment →
+  directing-research; thesis genesis → forging-novel-theses; expensive/irreversible one-tree →
+  acting-on-hypotheses; cheap reversible probe → domain/plain executor; settled IA →
+  structuring-documents; agent dispatch →
+  orchestrating-agents. Search/extraction may fan out; adjudication and final
+  position stay SOLO. English skill; answer in the user's language.
 ---
 
 # Systematizing knowledge — method-fit evidence synthesis
@@ -109,9 +110,15 @@ the evidence-synthesis stage map and schemas. No harness means the same stages r
 
 | Ask | Route |
 |---|---|
-| Inspect or summarize one paper, file, dataset, or claim | `raising-resolution` — CARDINALITY: one artifact there; a corpus here |
+| Verify or extract one bounded factual claim from one paper, file, or dataset | `raising-resolution` — one citable observation there; a corpus position here |
+| Neutrally summarize one paper | answer directly, applying `raising-resolution`'s citation gate silently; no specialist skill owns this |
+| Critically appraise one paper's argument, method, or validity | `arguing-research-papers` reviewer red-team — one paper's review there; corpus synthesis here |
+| Expose only implicit premises, ignored exceptions, or human tacit constraints in an existing synthesis plan | `surfacing-blind-spots` — premise surface there; evidence-state synthesis here |
 | Position and defend the governing claim of one manuscript | `arguing-research-papers` — PURPOSE: the manuscript's argument there; the field's evidence state here |
-| Choose, formulate, or kill future research directions | `directing-research` — PURPOSE: future bets there; what existing evidence says here |
+| Construct/select/formulate research problems or rank/allocate across >=2 future directions | `directing-research` — future program judgment there; corpus evidence state here |
+| Generate thesis candidates beyond the bounded corpus position | `forging-novel-theses` — genesis there; nearest-prior evidence here |
+| Test, commit, pivot, or kill one expensive/irreversible selected future hypothesis tree | `acting-on-hypotheses` — hard-gated tree there; corpus state here |
+| Run one deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | Reorder or deduplicate a review whose evidence judgments are settled | `structuring-documents` — FIX-LOCALITY: document architecture there; evidence derivation here |
 | Find passages in an indexed local corpus without synthesizing them | `driving-cocoindex` — locate there; synthesize here |
 | Turn a raw paper corpus into a skill | Run this skill first, then `forging-skills`; never distill unreconciled papers |

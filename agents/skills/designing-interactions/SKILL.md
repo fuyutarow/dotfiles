@@ -1,23 +1,16 @@
 ---
 name: designing-interactions
 description: >-
-  Designs and audits INTERACTION surfaces — what an act MEANS, what hidden state it depends on,
-  whether it can be undone, and whether any actor other than a human-at-this-device can drive it.
-  Medium-agnostic: GUI, touch, CLI/TUI, voice, physical controls, API and agent-facing tools. Use
-  for UI/UX design or review, 画面設計, 操作フロー, インタラクション設計, モード / modeless /
-  mode error / モードレス, モーダルダイアログ, 確認ダイアログ vs undo, 取り消し / 可逆性,
-  ウィザード, 対話プロンプト / captive UI / 拘束的UI, affordance / signifier / アフォーダンス,
-  usability / ユーザビリティ, 認知負荷, "simple vs easy", 複雑さ, Tesler / Raskin / Norman /
-  Nielsen / Cooper / Hickey / Gancarz. LAW — an interface's cost is the hidden state a person must
-  hold to predict what their next act does; it cannot be deleted, only MOVED, so name who absorbs
-  it. NOT mode-elimination dogma: the primary sources refute it; the gates are conjunctive tests.
-  Cuts — palette/type/layout/motion and microcopy → frontend-design; chart and dashboard encoding
-  → dataviz; a measured CWV/a11y trace → web-perf; writing the code once the design is decided →
-  implementing-and-debugging; behavior-preserving restructure → refactoring-code; wording of an
-  already-correct state → linting-prose; a talk or deck → designing-presentations; whether a tool
-  SPREADS → growing-oss-adoption. Workflow-native: the four gate VERDICTS stay SOLO; inventory
-  sweeps and adversarial probes fan out read-only. English skill; respond in the user's language
-  (default Japanese).
+  Designs and audits INTERACTION surfaces: what an act means, hidden state, undo/recovery, and
+  whether nonlocal actors can drive it. Covers GUI, touch, CLI/TUI, voice, physical controls, APIs,
+  and agent tools. Use for UI/UX review, 画面設計, 操作フロー, modes, モーダル, confirmation vs
+  undo, 可逆性, wizard/captive UI, affordance, usability, 認知負荷, or simple-vs-easy. LAW:
+  interaction cost is the hidden state needed to predict an act; complexity can only move, so name
+  who absorbs it. Cuts: visual styling → frontend-design; charts → dataviz; measured web trace →
+  web-perf; behavior edits → implementing-and-debugging; structural cleanup → refactoring-code;
+  wording → linting-prose; adoption → growing-oss-adoption. Real-user attention uses a domain test;
+  AOH fires only for expensive/irreversible downstream exposure. Verdicts stay SOLO; inventories
+  and adversarial probes may fan out read-only. English skill; answer in the user's language.
 ---
 
 # Designing interactions — what an act means, and who pays to know it
@@ -251,7 +244,9 @@ artifact. A relayed conclusion without its locus is zero evidence.
 
 **The delta.** An agent asserting *where a user's attention sits*, or that a cue *is discoverable*,
 is counterfeiting the signal. N agents agreeing a mode is obvious is one correlated guess, not one
-user finding it. Attention claims are forward bets for `acting-on-hypotheses`, never findings here.
+user finding it. Run a cheap, bounded, reversible attention probe through the domain/user-research
+executor. Use `acting-on-hypotheses` only when expensive or irreversible downstream exposure rides on
+that result; never call either branch a finding before a real user supplies the signal.
 
 **No harness → same map, serial.** Fan-out rows become separate focused passes.
 

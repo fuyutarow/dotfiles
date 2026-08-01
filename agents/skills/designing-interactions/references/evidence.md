@@ -98,8 +98,9 @@ states, tasks and actions are observables on the artifact, so agents can enumera
 relayed conclusion without its locus is worth nothing. But **where a user's attention sits, and
 whether a cue is discoverable, are not observables an agent can produce.** An agent asserting them
 is counterfeiting the signal — N agents agreeing a mode is obvious is one correlated guess, not one
-user finding it. Route attention claims to `acting-on-hypotheses` as forward bets with a cheap test,
-never accept them as findings here.
+user finding it. Run a cheap, bounded, reversible attention test through the domain/user-research
+executor. Route to `acting-on-hypotheses` only when expensive or irreversible downstream exposure rides
+on the result; never accept an agent assertion as a finding here.
 
 ## 4. Known retrieval gaps — the reforge queue
 

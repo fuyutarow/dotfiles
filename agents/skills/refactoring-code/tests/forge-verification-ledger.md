@@ -119,3 +119,13 @@ abbreviated + points; SoK marked snapshot; stale gate numbers fixed.
 **Floor-script + parse status at freeze**: `skill-check.ts` clean run and strict-YAML parse of all
 three touched skills recorded in the shell log of the forge session (2026-07-05); description
 ~1500 chars (≤1500 warn threshold), `>-` folded.
+
+## 2026-07-30 — rebuild-bet seam
+
+Behavior-preserving structure stays HERE. A cheap reversible probe uses the domain executor; only an
+expensive or irreversible rebuild bet can enter `acting-on-hypotheses`. The description now meets the
+Codex 1024-character limit.
+
+**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 26 long prose sentences, a 7-line
+version block, and two long table cells. Queue position: before the next feature reforge; move version
+history here first, then atomize prose without blurring the behavior-preservation cut.

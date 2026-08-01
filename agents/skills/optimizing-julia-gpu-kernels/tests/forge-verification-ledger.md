@@ -103,3 +103,12 @@ reforge-of-N; a small procedural addition runs editor-solo). No live GPU re-run 
 against this session's `objectid`-fingerprint wording — it is stated as a rule, not
 demonstrated against a running `fd_evaluate`-shaped repro in this repo. Flagged here as the
 honest gap rather than claimed as re-verified.
+
+## 2026-07-30 — hypothesis-action seam
+
+Cheap benchmarks now stay with GK2/domain execution; only costly downstream exposure can invoke
+`acting-on-hypotheses`. The description was distilled below the Codex limit.
+
+**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 24 long prose sentences, a 36-line
+version block, and three long table cells. Queue position: before the next feature reforge; move
+version history here first, then split prose without weakening GPU safety gates.

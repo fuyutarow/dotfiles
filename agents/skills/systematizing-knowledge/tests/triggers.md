@@ -20,9 +20,15 @@ Do not use body knowledge to rescue an ambiguous description.
 
 | # | Ask | Route |
 |---|---|---|
-| N1 | “Explain this one paper and check Table 3.” | `raising-resolution` — one artifact |
+| N1a | “Extract the sample size and confidence interval reported in Table 3 of this one paper.” | `raising-resolution` — one bounded factual extract |
+| N1b | “Give me a neutral summary of this one paper.” | direct answer; apply `raising-resolution`'s citation gate silently, but no specialist skill fires |
+| N1c | “Critically appraise whether this one paper's identification strategy supports its causal claim.” | `arguing-research-papers` reviewer red-team — argument/method/validity appraisal |
+| N1d | “Surface the hidden assumptions in this review plan; do not synthesize or resolve them yet.” | `surfacing-blind-spots` — premise-only excavation |
 | N2 | “Help defend the central claim of my manuscript against reviewers.” | `arguing-research-papers` — one manuscript’s argument |
 | N3 | 「次の半年で賭ける研究テーマを3案から選びたい」 | `directing-research` — future research bets |
+| N3b | “The corpus position is fixed; generate three thesis candidates beyond it.” | `forging-novel-theses` — candidate genesis |
+| N3c | “Here is one expensive/irreversible selected thesis; set its test threshold and kill condition.” | `acting-on-hypotheses` — hard-gated future tree |
+| N3d | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | N4 | “Reorder this completed review and remove duplicate sections; the evidence judgments are settled.” | `structuring-documents` — document architecture |
 | N5 | “Find every mention of data leakage in my indexed notes.” | `driving-cocoindex` — retrieval, not synthesis |
 | N6 | “Debug the split leakage in my own training pipeline.” | `raising-resolution`, then `implementing-and-debugging` if a fix is requested |
@@ -40,11 +46,16 @@ Do not use body knowledge to rescue an ambiguous description.
 
 ## Sharp cuts
 
-- **Cardinality:** one external artifact goes to `raising-resolution`; multiple sources supporting
-  a knowledge-state claim come here.
-- **Object:** a manuscript’s argument goes to `arguing-research-papers`; the field’s evidence state
-  comes here.
+- **Function before cardinality:** a bounded factual extract from one artifact goes to
+  `raising-resolution`; a neutral one-paper summary is a direct answer using its citation gate
+  silently; critical appraisal of one paper's argument/method/validity goes to
+  `arguing-research-papers`; multiple sources supporting a knowledge-state claim come here.
+- **Premise-only exposure:** hidden premises or tacit constraints in an existing synthesis plan go
+  to `surfacing-blind-spots`; appraisal and corpus adjudication stay with their owners.
 - **Time direction:** what existing evidence licenses comes here; which future bet deserves effort
-  goes to `directing-research`.
+  goes to the stage owner: problem construction/selection or >=2 directions →
+  `directing-research`; thesis-candidate genesis → `forging-novel-theses`; an expensive/irreversible
+  selected tree's test/commit/kill → `acting-on-hypotheses`; a cheap deterministic reversible probe →
+  domain/plain executor, then `EXECUTOR RESULT` returns to `directing-research`.
 - **Fix locality:** settled prose architecture goes to `structuring-documents`; unsettled evidence
   derivation stays here.

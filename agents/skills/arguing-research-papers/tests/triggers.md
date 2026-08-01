@@ -17,6 +17,7 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | F6 | "reviewers keep saying our paper is 'clear but not exciting' and we don't know why" (**no headline keyword** — describes the situation) | the McEnerney value-reset / instability (§5); "clear and useless" is the named failure |
 | F7 | "is 'our method significantly outperforms' overclaiming if I only ran one benchmark?" | the two-pass calibration + warrant-or-downgrade = G2 |
 | F8 | "write a Limitations section that won't get us desk-rejected" | limitations-as-ethos, objection triage = `reviewer-defense.md` §4 |
+| F9 | "Critically appraise whether this one paper's identification strategy and robustness checks support its causal claim." | single-paper argument/method/validity appraisal = reviewer red-team |
 
 ## MUST NOT FIRE (≥5 — near-miss negatives, each names who fires instead)
 
@@ -26,7 +27,14 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | N2 | "this paragraph reads AI-ish; fix the wording of these two sentences" | **linting-prose** — rewrite-in-place; sentence mechanics |
 | N3 | "make my conference-talk slides more convincing for the 15-min slot" | **designing-presentations** — a live talk for a present room |
 | N4 | "survey the 40 papers on diffusion sampling and tell me what the field knows" | **systematizing-knowledge** — synthesize OTHERS' corpus into a position |
-| N5 | "help me come up with a novel research idea worth betting a PhD on" | **forging-novel-theses** — generate the idea/bet (not write it up) |
+| N4a | "Extract the sample size and confidence interval from Table 3 of this one paper." | **raising-resolution** — bounded factual extract, no argument appraisal |
+| N4b | "Give me a neutral summary of this one paper." | direct answer; use **raising-resolution**'s citation gate silently, but no specialist skill fires |
+| N4c | "Surface the hidden premises in this manuscript; do not judge whether they hold." | **surfacing-blind-spots** — premise-only excavation |
+| N5 | "given this selected problem, generate novel thesis candidates" | **forging-novel-theses** — candidate genesis, not write-up |
+| N5b | "this result means we may need to reopen the research problem/program" | **directing-research** — program-stage reopen decision |
+| N5c | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | **acting-on-hypotheses** — hard-gated forward tree |
+| N5c2 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to **directing-research** |
+| N5d | "decide author/reviewer/verifier roles and acceptance timing" | **orchestrating-agents** — control plane |
 | N6 | "the bibliography isn't rendering / fix my LaTeX build" | **compiling-latex** — build/tooling |
 | N7 | "fix this typo in my abstract" | just fix it — no ceremony (trivial) |
 | N8 | 「この日本語の技術文書、てにをはと文体（である体）を直して」 (JP) | **linting-prose** / **writing-technical-japanese** — prose mechanics, not the argument |
@@ -40,8 +48,10 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | C2 | "my abstract overclaims AND the prose is clunky" | **arguing-research-papers** (is the CLAIM calibrated to the evidence — argument level, G2) + **linting-prose** (the sentence wording). Order: calibrate the claim HERE → word it THERE. |
 | C3 | "I need to write the paper and also give the talk on it" | **arguing-research-papers** (the written paper) + **designing-presentations** (the live talk) — parallel, independent; the medium cut separates them. |
 | C4 | "position this against prior work AND make the related-work section well-organized" | **arguing-research-papers** (which named prior work, which gap — G3) + **structuring-documents** (the section's IA). Decide the positioning HERE → organize THERE. |
-| C5 | "I have an UN-hardened idea — help me shape it into a paper" | **forging-novel-theses** (only if the thesis still needs *generating/hardening*) → **arguing-research-papers**. NB: a FINISHED result → arguing-research-papers SOLO; the surface word "forge / write up" is **not** forging-novel-theses' GENERATE trigger. |
+| C5 | "the research problem is selected but the thesis is missing; later write the completed result" | **forging-novel-theses** generates `CANDIDATE` packets → **directing-research** admits one → [**acting-on-hypotheses** if hard-gated / domain executor if cheap-reversible] earns evidence → **arguing-research-papers** argues the finished claim. A FINISHED result begins HERE, not at genesis. |
+| C5b | "reviewer says not novel; should we narrow the claim or reopen the research?" | **arguing-research-papers** diagnoses the finished claim → **directing-research** decides whether to reopen → **forging-novel-theses** only if a selected frame again lacks a thesis. |
 | C6 | "write my related-work section covering the 30 papers in this area" | **cut vs systematizing-knowledge**: positioning MY claim against them (the gap, the delta, the nearest competitor) → arguing-research-papers; a standalone synthesis of what the FIELD knows (survey/SoK) → systematizing-knowledge. If the ask is purely "summarize 30 papers", SoK leads; if it's "situate MY contribution", arguing leads. |
+| C7 | "Surface the hidden premises in this paper, then assess which ones invalidate its claim." | **surfacing-blind-spots** exposes premises without verdict → **arguing-research-papers** reviewer red-team evaluates warrants, method, and validity |
 
 ## Notes on the closest cut
 
@@ -57,17 +67,9 @@ linting-prose. The **decisive signal** that routes it HERE is "**if I only ran o
 that is an *evidence-sufficiency* question (does the evidence license the claim's scope = G2), which is
 argument-level, not word-choice. Route on the evidence question, not the quoted phrase.
 
-**Unreciprocated-cut debt — `linting-prose` LANDED, `structuring-documents` still deferred (owner
-named).** The cuts above were one-directional — they lived in this skill's description while the
-siblings didn't point back. `linting-prose`'s reciprocal is now **landed**: its "claim calibration"
-trigger token is narrowed to "sentence-level claim calibration" and its Not-for list now names
-"argument/contribution-level claim=evidence & 新規性 positioning (→ arguing-research-papers)"; its
-description was simultaneously trimmed from ≈1674 to ≈1473 chars, back under the ~1500 listing
-budget (verified via `forging-skills/scripts/skill-check.ts`, exit 0, no WARN). `structuring-documents`
-routes un-earned-claim calibration only to linting-prose and still does not name this skill — its
-description (≈1649 chars) is **still over the ~1500 listing budget**, so its reciprocal cut remains
-**deferred to its own trim-reforge** (owner = structuring-documents); `forging-novel-theses` also
-still never names arguing for finished-paper novelty (unchanged, no owner action taken). On MY side
-the cut is as sharp as possible (the F7 decisive-signal note above resolves the sharpest race
-unilaterally). Debt recorded in `forge-verification-ledger.md`; re-run this desk-check after any
-sibling reforge.
+**Reciprocal-cut status.** `forging-novel-theses`, `directing-research`,
+`acting-on-hypotheses`, and `orchestrating-agents` now name the phase/purpose seams above. The previously
+recorded `forging-novel-theses` debt is closed by the 2026-07-30 genesis-only reforge.
+`linting-prose`'s reciprocal claim-calibration cut is also landed. The older
+`structuring-documents` reciprocal-description debt remains outside this research-family reforge; do
+not use it to blur the finished-claim versus candidate-genesis boundaries fixed here.

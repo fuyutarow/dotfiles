@@ -1,22 +1,17 @@
 ---
 name: refactoring-code
 description: >-
-  Behavior-preserving structural change as a discipline. DECISIVE cut vs implementing-and-debugging
-  (Beck's two hats) — does OBSERVABLE behavior change? YES (feature / bugfix / performance work;
-  latency, allocation, logs are observables) → implementing-and-debugging. NO (structure only) →
-  here. Co-fire in sequence for preparatory refactoring (reshape here, then change behavior there).
-  Pursues 責務分界 (one home per responsibility) and 局所化 (change stays local); HARSHLY refuses
-  場当たり churn via the two-line deny-gate (cite the smell's occurrences + the property improved,
-  or do NOT edit); name your oracle before touching (green tests / engine precondition /
-  characterization test first); small reversible Edits, never whole-file rewrites; prefer
-  LSP/ast-grep/codemod. Use when — refactor / リファクタ / リファクタリング, behavior-preserving
-  cleanup / 掃除, code smell, extract / inline / move, cross-file rename-for-structure, God class,
-  duplication / DRY vs YAGNI / wrong abstraction, coupling / cohesion / connascence / 責務分界 /
-  局所化 / separation of concerns, characterization test / legacy code / seam, Strangler Fig /
-  Branch by Abstraction / Parallel Change / Mikado, rewrite vs refactor / 書き直し, 振る舞い保存,
-  preparatory refactoring, two hats, 場当たりリファクタ. Post-hoc diff review → /code-review;
-  document/prose restructuring → structuring-documents; hooks/CI wiring → operating-the-harness.
-  English skill; respond in the user's language (default Japanese).
+  Governs behavior-preserving structural change. DECISIVE Beck two-hats cut: observable behavior
+  changes (feature, bugfix, performance, logs) → implementing-and-debugging; structure only → HERE.
+  Co-fire sequentially for preparatory refactoring. Pursues 責務分界 and 局所化; refuses 場当たり
+  churn unless the smell and improved property are named. Name the oracle first: green tests, engine
+  precondition, or characterization test. Prefer small reversible edits and
+  LSP/ast-grep/codemod over whole-file rewrites. Use for refactor/リファクタリング, cleanup, code
+  smell, extract/inline/move, structural rename, duplication, wrong abstraction,
+  coupling/cohesion, legacy seams, Strangler Fig, Branch by Abstraction, Parallel Change, Mikado,
+  rewrite-vs-refactor, 振る舞い保存, or two hats. Expensive/irreversible rebuild bets → AOH; cheap
+  probes → domain/plain executor. Document IA → structuring-documents; hooks/CI →
+  operating-the-harness. English skill; answer in the user's language.
 ---
 
 # Refactoring — behavior-preserving structural change, on purpose
@@ -154,7 +149,7 @@ claim says 全面 is a G5 violation — either narrow the claim or finish the in
 | `/code-review`, `/simplify` (built-in) | **TIME cut**: they review/clean an already-written DIFF post-hoc. This governs BEFORE/DURING the change. Complementary — `/code-review` after a refactor can catch a smuggled behavior change (a G1 violation). `/simplify` applies quality cleanups to a diff; this owns the discipline of doing them safely. |
 | `implementing-and-debugging` (again, on `raising-resolution`) | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
 | `writing-typescript`, `writing-julia`, `writing-python`, `writing-rust`, `writing-bun-scripts`, `linting-sui-move` | **Co-fire**: they own language idiom & language-specific safe transforms; this owns language-agnostic behavior-preservation + architecture. Follow the language skill for idiom, this for the two hats / oracle / deny-gate. |
-| `acting-on-hypotheses` | A rewrite-vs-refactor call is *mostly* here (the moderator — reachability by behavior-preserving steps — is **inspectable**). Only a genuine forward bet with uncertain payoff ("should we bet on rebuilding X") → there. |
+| `acting-on-hypotheses` | A rewrite-vs-refactor call is *mostly* here (reachability by behavior-preserving steps is inspectable). Only an expensive/irreversible uncertain-payoff rebuild bet → AOH; a cheap deterministic reversible probe → domain/plain executor. |
 
 ## Fire / no-fire
 

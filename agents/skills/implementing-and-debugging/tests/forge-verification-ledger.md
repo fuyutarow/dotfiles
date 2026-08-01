@@ -37,3 +37,12 @@ retaining implementation/debug/performance triggers and sibling cuts. Desk check
 description: feature implementation, persistent bug, performance optimization, root-cause
 analysis, and pre-redesign intent reconstruction FIRE; typo-only edit, behavior-preserving
 refactor, present-fact inspection, future experiment, and post-hoc diff review route elsewhere.
+
+## 2026-07-30 — hypothesis-action seam refresh
+
+Routine implementation and cheap reversible probes stay HERE; `acting-on-hypotheses` is reserved for
+an untested load-bearing result guarding expensive or irreversible downstream exposure.
+
+**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 19 long prose sentences, an
+8-line version block, and one long table cell. Queue position: after the shared functional-map
+freeze, before the next feature reforge; move history to this ledger before sentence atomization.

@@ -148,7 +148,7 @@ if a constraint here feels unnecessary, that feeling is the failure mode.
 | Plan/README audit | **FAN-OUT, one SURVEY LENS per agent** | survivorship · regime-mismatch · era-boundedness — the lenses that forged this skill, reused at runtime |
 | Two-gate verdict (§0 DISCOVERY vs ADOPTION) | **BARRIER on the sweep, then SOLO** | which gate failed is a judgment over the whole channel picture, not any shard of it |
 | Prescription / positioning / drafting | **SOLO** | one voice; the slot-claim sentence is one judgment |
-| Adoption outcome / wedge commitment | **NOT DELEGABLE** | a forward bet reality has not priced — hand it to the acting-on-hypotheses skill |
+| Adoption outcome / wedge commitment | **NOT DELEGABLE** | an expensive/irreversible forward bet reality has not priced goes to acting-on-hypotheses; a cheap reversible trial goes to the domain executor |
 
 The channel sweep IS this skill's inspection duty, internalized — every "is it discoverable /
 adopted" claim rests on a channel actually inspected, whoever executes the sweep.
@@ -166,7 +166,7 @@ under audit; scratch-workspace execution (benchmark re-run, clean-room trial ins
 |---|---|
 | **SYNTHETIC SURVIVORSHIP** — fanning out "will this spread?" opinion agents and vote-counting | N concurring agents = ONE correlated launch story (§1 applied to agents); agents report present-state facts and refutations only — the diffusion judgment is solo |
 | **UNPROVENANCED CHANNEL STATS** — agent-asserted stars/downloads/spike medians entering advice unsourced | anti-pattern 7 (`decisions.md`) at machine speed: fetchable source or quarantine |
-| **DELIBERATED ADOPTION** — reading an agent consensus pass as validation of the wedge/launch bet | reality has not voted; route the commitment to the acting-on-hypotheses skill — agents may CHEAPEN the test (run the trial), never replace the signal |
+| **DELIBERATED ADOPTION** — reading an agent consensus pass as validation of the wedge/launch bet | reality has not voted; expensive/irreversible commitment goes to acting-on-hypotheses, while a cheap reversible trial uses the domain executor — agents never replace the external signal |
 | **CORPUS CREEP** — a diagnosis mutating into a re-survey of the adoption literature | that is the systematizing-knowledge pipeline, not a fan-out of this one |
 
 | Task shape | Fleet |

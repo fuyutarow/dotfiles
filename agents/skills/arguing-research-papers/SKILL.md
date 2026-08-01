@@ -1,22 +1,18 @@
 ---
 name: arguing-research-papers
 description: >-
-  Argue a WRITTEN research paper as ONE claim to a skeptical, absent peer-review audience — decide
-  what to claim, calibrate its strength to the evidence you hold, position it against SPECIFIC prior
-  work, and harden it to survive review. Owns the CLAIM and its defense (主張の仕方): contribution
-  framing, novelty & positioning (Swales CARS), the intro funnel, abstract/title as genre, Toulmin
-  warrant/qualifier/rebuttal, hedging-vs-boosting calibration, the anti-fabrication rule (never invent
-  a cite/number/baseline), reviewer red-team, rebuttal. Use when writing/revising a paper's ARGUMENT /
-  contribution / positioning, or when a reviewer says "not novel" / "overclaimed" / "clear but not
-  exciting" — 論文の主張の仕方 / 貢献 / 新規性 / 位置づけ / 査読 / リバッタル / 事実と意見 / 絞る / so-what /
-  面白くない / 新規性・有用性・信頼性. NOT a typo/format/word-count fix (trivial → linting-prose). Cuts
-  (typed, runtime): organize/MECE/section-order info you've DECIDED to include → structuring-documents;
-  sentence-level wording & over/under-claim → linting-prose (argument/evidence-level claim=evidence
-  stays HERE); a LIVE talk/slides → designing-presentations; synthesize OTHERS' many papers →
-  systematizing-knowledge; GENERATE the novel idea/bet → forging-novel-theses. Co-fires (argue HERE;
-  organize/word/present THERE). Workflow-native: the claim, calibration, and reconciliation stay SOLO;
-  red-team and citation/number verification fan out read-only. English skill; respond in the user's
-  language (default Japanese).
+  Argue ONE FINISHED written research claim to an absent reviewer, or critically appraise
+  ONE paper's argument, method, and validity. Owns claim calibration, contribution/novelty
+  positioning, warrants, qualifiers, anti-fabrication, reviewer red-team,
+  and rebuttal. Use for paper argument / contribution / “not novel” / overclaim / reviewer 2 /
+  peer-review critique / 論文の主張 / 貢献 / 新規性 / 査読 / リバッタル. Cuts:
+  fact extract → raising-resolution; neutral one-paper summary → direct answer with its citation gate
+  silent; corpus state → systematizing-knowledge; premise-only excavation →
+  surfacing-blind-spots; section order/MECE → structuring-documents; wording → linting-prose; live
+  talk → designing-presentations; program reopen → directing-research; thesis genesis →
+  forging-novel-theses; expensive/irreversible one-tree → acting-on-hypotheses; cheap reversible probe
+  → domain/plain executor; agent topology → orchestrating-agents. Claim/calibration stay SOLO.
+  English skill; answer in the user's language.
 ---
 
 # Arguing research papers — one claim, calibrated to evidence, hardened for review
@@ -30,6 +26,9 @@ description: >-
 > **Lineage**: distilled from a 15-agent adversarially-reconciled SoK survey (2026-07) of the
 > paper-writing canon (Gopen-Swan through the Japanese 戸田山・木下・野矢・酒井 tradition). Full graded
 > provenance: `references/sources.md`; the survey fleet: `tests/forge-verification-ledger.md`.
+> The same argument-level machinery may face inward (authoring a manuscript) or outward (critically
+> appraising one paper as a reviewer). Neutral summary and bounded factual extraction are not
+> argument appraisal.
 > **Build order (ATOMIC — ship in ONE commit; no pointer may dangle).** Verify from the skill dir:
 > `for f in frameworks reconciliation calibration genre-playbooks reviewer-defense sources; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/claim-check.ts || echo MISSING claim-check.ts; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
 > (must print nothing).
@@ -99,7 +98,7 @@ at the spec layer.** Slot labels are the floor's grep-anchors: keep them verbati
 per slot, the value on the label line.
 
 ```markdown
-# Claim spec: [paper working title]
+# CLAIM SPEC: [paper working title]
 
 ## G0 — materials audit (fill FIRST; a missing item becomes a placeholder below, never a confident assertion)
 - In hand: results/figures/theorems (by locus) · nearest prior (retrievable, read) · target venue + reward: [...]
@@ -243,7 +242,14 @@ it's not novel enough."
 | "polish the wording / this reads AI-ish / fix this sentence's over-claim" | `linting-prose` (rewrite-in-place; sentence-level calibration) |
 | "make my conference *talk* / slides / pitch better" | `designing-presentations` (live room) |
 | "synthesize these 40 papers into a survey / SoK" | `systematizing-knowledge` (others' corpus → position) |
-| "help me come up with the research idea / is this thesis novel as a bet" | `forging-novel-theses` (generate the idea) |
+| "extract/check one reported fact from this paper" | `raising-resolution` (bounded factual observation) |
+| "give me a neutral summary of this one paper" | direct answer using `raising-resolution`'s citation gate silently |
+| "surface hidden premises only; do not assess whether they hold" | `surfacing-blind-spots` (premise exposure, not reviewer judgment) |
+| "help me come up with thesis candidates for this selected problem" | `forging-novel-theses` (generate candidates only) |
+| "the completed result forces us to reopen the problem or research direction" | `directing-research` (decide whether and where the program reopens) |
+| "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | `acting-on-hypotheses` |
+| "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
+| "decide author/reviewer/verifier roles and acceptance timing" | `orchestrating-agents` |
 | "compile the LaTeX / fix the bib" | `compiling-latex` |
 | a one-line typo / grammar fix | just fix it — no ceremony |
 
@@ -254,8 +260,13 @@ it's not novel enough."
 | `structuring-documents` | **PURPOSE** — *what to claim & how to defend it* (the epistemic/rhetorical layer: contribution, calibration, positioning, review-survival) → HERE; *how to organize the information you've decided to include* (MECE, single-source, backward-DAG, section order as IA) → there. **Shared-object seam** (state it, don't blur it): the paper's **governing claim IS its 目標規定文** (and, for a talk, its governing sentence — `designing-presentations`) — ONE sentence, decided by three different questions. HERE owns whether it is the RIGHT, calibrated, novel claim (epistemic content); `structuring-documents` owns that the doc asserts exactly that one thing and every fact homes to it (structure); `designing-presentations` owns it as a live-talk thesis. Co-fire in sequence: argue the claim HERE → organize the sections THERE. |
 | `linting-prose` | **SCALE/LOCALITY** — claim calibration at the **argument/contribution** level (is the paper's thesis supported by the study; is the contribution overstated relative to what was shown) → HERE; calibration at the **sentence** (does this sentence over/under-claim; hedge-word choice; スリカエ; tool-first titles; stress/topic position; zombie nouns) → there. Co-fire: construct the calibrated claim HERE → word it THERE. |
 | `designing-presentations` | **MEDIUM/AUDIENCE** — a **written** paper for an **absent, skeptical peer-review** readership + the permanent record → HERE; a **live spoken talk / slides** for a **present, modeled room** → there. The generic persuasion-ordering machinery (Minto pyramid, SCQA/BLUF, vertical-logic, governing-*sentence*, "so what?" test, objection-*inventory*) is **owned by designing-presentations** — reuse it by pointer; HERE adds only what the written/peer-reviewed/permanent medium demands (calibration-to-evidence, literature positioning, the fabrication ban, the zone-split, genre conventions, review-survival). Co-fire when you both write AND present the work. |
-| `systematizing-knowledge` | **DIRECTION/CARDINALITY** — argue **your own** novel claim in **ONE** paper → HERE; synthesize **others'** many papers into a position (survey/SoK) → there. (SoK is also the *engine that built this skill*; and a paper's related-work may draw on an SoK as a sub-step.) |
-| `forging-novel-theses` | **PURPOSE** — **generate & harden** the novel idea/bet (before it exists) → there; **write up & defend** finished research as a paper for review → HERE. Co-fire: forge the thesis THERE → argue it in the paper HERE. |
+| `raising-resolution` | **OUTPUT/PURPOSE** — verify or extract one bounded factual claim from one paper → there; judge whether the paper's argument, method, or evidence warrants its claim → reviewer red-team HERE. A neutral one-paper summary is a direct answer with its citation gate silent. |
+| `surfacing-blind-spots` | **PURPOSE** — expose implicit premises or human tacit constraints without deciding whether they hold → there; assess a premise/warrant against evidence and state the calibrated objection → HERE. If both are requested: expose there, then red-team here. |
+| `systematizing-knowledge` | **FUNCTION/CARDINALITY** — critically appraise ONE paper's argument/method/validity → HERE; synthesize MANY sources into a field position → there. (SoK is also the *engine that built this skill*; a paper's related-work may draw on an SoK as a sub-step.) |
+| `directing-research` | **PHASE/PURPOSE** — stage diagnosis, research-problem/program decisions, and a deliberate reopen before a finished claim → there; argue the admitted finished evidence as one manuscript claim → HERE. HARKing is not repaired by silently reopening history: label postdiction there, then calibrate the written claim HERE. |
+| `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets for a selected frame → there; write and defend finished evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `directing-research` reopen returns to candidate generation. |
+| `acting-on-hypotheses` | **PHASE + HARD GATE** — test/commit/kill one expensive/irreversible selected forward tree → there; run a cheap deterministic reversible probe through the domain/plain executor; argue completed evidence → HERE. |
+| `orchestrating-agents` | **PURPOSE** — claim and argument meaning → HERE; author/reviewer/verifier topology, evidence visibility, veto timing, and acceptance → there. Co-fire only after the claim contract is fixed. |
 | `compiling-latex` / `writing-technical-japanese` | build/tooling (LaTeX) → `compiling-latex`. Japanese prose mechanics → `writing-technical-japanese`, which itself yields to `structuring-documents`/`linting-prose` when present. Neither owns the argument/claim — that is HERE. |
 
 ## Execution model — the claim is SOLO; red-team and fact-checking fan out

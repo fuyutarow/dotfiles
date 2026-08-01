@@ -209,3 +209,12 @@ Fix execution was delegated to Sonnet-5 agents (S1–S3, disjoint file ownership
 `scripts/claim-check.ts`; S2 → `references/reconciliation.md` + `tests/triggers.md` LP-execution
 pointers; S3 → `linting-prose/SKILL.md`) under Fable-5 direction, with floor (`claim-check.ts`)
 verification green after fixes.
+
+## 2026-07-30 — single-paper ownership seam
+
+Bounded extraction remains with `raising-resolution`; neutral summary stays direct; appraisal of one
+paper's argument, method, or validity enters this skill's reviewer red-team.
+
+**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 44 long prose sentences, a 15-line
+version block, and four long table cells. Queue position: after the shared functional-map freeze,
+before the next feature reforge; move history here first, then split prose and narrative cells.

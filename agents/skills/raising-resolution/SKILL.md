@@ -1,7 +1,18 @@
 ---
 name: raising-resolution
 description: >-
-  Raise the RESOLUTION (解像度) of THIS code/data/API/source/problem BEFORE you assert or act — INSPECT, don't guess — from 馬田隆明『解像度を上げる』. CITATION GATE: before a factual claim, ask — can you cite a line Read, a command run, or a source fetched for THIS claim? NO → stop and inspect; YES → assert and act. LOWEST precedence; yields to any owner: corpus synthesis → systematizing-knowledge/sok; OSS adoption → growing-oss-adoption; .claude/CLAUDE.md/hooks config → operating-the-harness; skill creation/authoring/auditing → forging-skills; Julia/Lean → writing-julia/proving-theorems; ccc/cocoindex state facts → driving-cocoindex; a future-bet (MVP/prototype/spike/賭け/kill-condition/will-it-scale) → acting-on-hypotheses. Owner applies → does NOT fire (silent sub-step); else FIRES only when about to SPECULATE INSTEAD OF inspect a fact about THIS artifact that nothing grounds yet, BLOCKING a next action, inspecting non-trivial — not a "read before asserting" baseline. DECISIVE CUT vs acting-on-hypotheses: a smart person could know it from what ALREADY EXISTS → here; needs a forward TEST reality hasn't decided → there. CARDINALITY CUT vs systematizing-knowledge: single artifact → here; a CORPUS of papers → there. Trigger: probably/likely/usually/typically/I think/should be/in my experience/たぶん/おそらく/一般的に/はず; 推測するな/ちゃんと調べて/inspect/guessing/speculating/一次情報/primary information/解像度/resolution/解像度を上げる; 深さ・広さ・構造・時間, 症状 vs 病因, なぜなぜ/Why so, 課題 vs 解決策. Agent relay is NOT a citation (§C.8). English skill; reply in user's language, Japanese default.
+  Raise the RESOLUTION (解像度) of ONE present code/data/API/source/problem artifact before a factual
+  claim: INSPECT, do not guess. CITATION GATE: no cited line, command output, measurement, or primary
+  source for THIS blocking claim → inspect by the cheapest rung; one citation → stop and hand off the
+  observation. Otherwise inspection is a silent baseline. Single-paper cuts: bounded fact/extract →
+  here; neutral summary → direct answer with this gate silently; argument/method/validity appraisal →
+  arguing-research-papers. Corpus → systematizing-knowledge. Expensive/irreversible future bet →
+  acting-on-hypotheses; cheap reversible probe → domain/plain executor. Program judgment →
+  directing-research; thesis genesis → forging-novel-theses; implicit
+  premises or human tacit constraints in an existing plan/frame → surfacing-blind-spots. Never owns a
+  research-selection verdict. Trigger on inspect / verify / 推測するな / 一次情報 / 解像度 / たぶん.
+  Agent relay without a locus is not a citation. English skill; answer in
+  the user's language.
 ---
 
 # Raising resolution — inspect THIS thing before you assert, don't guess harder
@@ -12,15 +23,22 @@ description: >-
 > **Scope**: sharpening YOUR OWN understanding of THIS code / data / API / library / source / problem
 > before you commit a claim, plan, or fix. Content-agnostic, upstream, LOWEST-precedence.
 > **Out of scope**: producing domain artifacts (defer to the owners in §4); the book's 第8章
-> 未来の解像度 (future-forecasting) is deliberately EXCLUDED — it belongs to acting-on-hypotheses (bet
-> timing) / forging-novel-theses (a thesis's why-now / future-state extrapolation, e.g. SF プロトタイピング).
+> 未来の解像度 (future-forecasting) is deliberately EXCLUDED — an expensive/irreversible selected
+> future bet belongs to `acting-on-hypotheses`, while a cheap deterministic reversible probe uses the
+> domain/plain executor; research-problem selection, why-now, and program steering belong to
+> `directing-research`; missing thesis candidates belong to `forging-novel-theses`.
+> Hidden premises and human tacit constraints in an existing decision artifact belong to
+> `surfacing-blind-spots`; this skill receives only the rows that require factual inspection.
+> A neutral one-paper summary needs no specialist skill: answer directly and apply this citation gate
+> silently. A critical appraisal of the paper's argument, method, or validity belongs to
+> `arguing-research-papers`' reviewer red-team.
 >
-> **Build order (ATOMIC — ship in ONE commit).** This skill is `SKILL.md` + one reference. Self-check
+> **Build order (ATOMIC — ship in ONE commit).** This skill is `SKILL.md` + one reference + its ledger. Self-check
 > (run from the skill dir): `test -f references/reference.md || echo MISSING reference.md` (must print
 > nothing) AND `test -f references/action-loop.md && echo STALE-FILE || echo OK` (must print `OK` — there
 > is deliberately NO `action-loop.md`; the acquisition mechanism lives in `references/reference.md §D`).
-> Every pointer below that touches the HOW-layer resolves to `references/reference.md §D`; do not reintroduce a
-> separate action-loop file.
+> Also require `test -f tests/forge-verification-ledger.md || echo MISSING ledger`. Every HOW-layer
+> pointer resolves to `references/reference.md §D`; do not reintroduce a separate action-loop file.
 
 ## §0. The load-bearing rule — the CITATION GATE (precedence over everything below)
 
@@ -139,33 +157,37 @@ blocker is purely your own un-grounded understanding. The bare token "survey" is
 
 | If the task is… | Route to | Cut |
 |---|---|---|
-| a CORPUS of papers/sources synthesized into a position | **systematizing-knowledge / sok** | CARDINALITY: single local artifact → here; corpus → there |
+| verify or extract one bounded factual claim from one paper/source | **HERE, only if the trigger-time gate fires** | OUTPUT: citable observation, then stop |
+| neutrally summarize one paper | **direct answer** | PURPOSE: apply this citation gate silently; no specialist skill owns a neutral single-paper summary |
+| critically appraise one paper's argument, method, or validity | **arguing-research-papers** | PURPOSE: reviewer red-team there; factual extraction here only as its silent evidence step |
+| synthesize a CORPUS of papers/sources into a position | **systematizing-knowledge / sok** | CARDINALITY: one bounded observation → here; corpus position → there |
+| implicit premises, ignored exceptions, or human tacit constraints in an existing plan/frame | **surfacing-blind-spots** | PURPOSE: EXPOSE into a Blind-spot packet there; inspect a fixed factual row HERE only after it is surfaced |
 | OSS-adoption diagnosis | **growing-oss-adoption** | owner |
 | `.claude` / CLAUDE.md / hooks config or harness mechanics | **operating-the-harness** | owner (closes the meta-loop) |
 | skill creation / SKILL.md authoring/auditing (craft) | **forging-skills** | owner |
 | Julia / Lean execution | **writing-julia / proving-theorems** | owner |
-| reading a PERSON's personality from their language/behavior (profile / dossier / traits / HEXACO) | **profiling-personality** | owner — domain instrument for one artifact class (a person); its G2/G3 gates are the personality-specific form of inspect-before-assert |
-| a future-bet (MVP / prototype / spike / 賭け / kill-condition / will-it-scale) | **acting-on-hypotheses** | DECISIVE (see below) |
+| an expensive/irreversible future bet or one with costly downstream exposure | **acting-on-hypotheses** | DECISIVE hard gate (see below) |
+| a deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor | run it and return `EXECUTOR RESULT` to the domain owner |
 
 **See also — acting-on-hypotheses (the forward-bet sibling).** Cut by PURPOSE/OBJECT; the SOLE owner of the
 boundary is `references/reference.md §C.7` (cross-referenced, not duplicated, here). raising-resolution = **現状理解の明晰さ**:
 sharpen YOUR OWN grasp of a PRESENT, KNOWABLE-BUT-BLURRY reality by acquiring PRIMARY INFORMATION.
-acting-on-hypotheses = **不確実な未来への前進**: bet and ACT on an UNCERTAIN FUTURE that cannot be known by
-inspecting what already exists. **DECISIVE CUT** (agrees in substance with acting-on-hypotheses STEP 0 — same
-smart-person test, same YES/NO routing; the QUESTION clause is identical, the routing destination flips because
-each file names the other, so do NOT diff for byte-identity — canonical phrasing owned by `references/reference.md §C.7`):
+acting-on-hypotheses = **高価/不可逆な不確実な未来への前進**: map and precommit when costly downstream
+exposure rides on the result. A cheap deterministic reversible residual goes to the domain/plain executor.
+**DECISIVE CUT** is owned by `references/reference.md §C.7`:
 *"Could a smart person, given enough primary info about what ALREADY EXISTS, know the answer? YES →
-present-understanding gap → raising-resolution. NO → future-bet gap → acting-on-hypotheses."*
+present-understanding gap → raising-resolution. NO → apply the downstream-exposure gate."*
 **SEQUENCING (self-imposed by THIS skill, one-directional)** — when a single task contains BOTH gaps (e.g.
 *"should we adopt this library"* = present "what does it do" + future "will it scale"), raising-resolution runs
 FIRST and EXHAUSTS the present-understanding gap (inspect what exists) before handing the residual future-bet off.
-**HANDOFF TRIGGER:** every blocking claim about what ALREADY EXISTS has its citation, and what remains can only
-be known by a forward test → hand to acting-on-hypotheses STEP 0. They share the word "hypothesis" but operate
-on DIFFERENT OBJECTS (here: guess-to-be-VERIFIED-against-the-present-by-inspection; there: node-to-be-FALSIFIED-by-forward-test
-then COMMITTED) and INTERLEAVE at the seam but never overlap. Pattern: **Diagnose & ground HERE → execute THERE.**
+**HANDOFF TRIGGER:** every blocking claim about what ALREADY EXISTS has its citation, and what remains can
+only be known by a forward test → apply `acting-on-hypotheses` STEP 0. Its hard gate retains
+expensive/irreversible downstream exposure; otherwise the domain/plain executor runs the residual. Pattern:
+**Diagnose & ground HERE → gate, then execute THERE.**
 
 ## Reference index
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/reference.md` | **§A** the four lenses (Unit / boundary / citable HIGH cell + the SOLE home of all owner rules: bottleneck, causality tripartite, MECE分解, プロセス/流れ, 関係性, システム思考; per-node 広さ interlock; lenses-are-revisable-hypotheses) · **§B** 課題 vs 解決策 (order, depth-asymmetry / 解決策×深さ thin by design, 良い課題の3条件, バーニングニーズ gate, research mapping) · **§C** limits/epistemics (stop-at-十分 rationale, six failure modes, over/under-firing calibration, 既視感 honesty, source-grade table, the acting-on-hypotheses boundary + SEQUENCING handoff, the §C.8 agent-boundary harness note) · **§D** the ACQUISITION MECHANISM (action-ladder rationale, 内化⇄外化 kata-by-function table, Why-so / 症状-vs-病因 protocol with per-node 広さ EXECUTION, root-state rule, n=1, 語彙, the worked 起業家 ladder; SOLE owner of "the loop must close on an action") | you need to justify a guardrail, confirm book fidelity, deepen a lens beyond the §1 table, or actually go acquire primary information |
+| `references/reference.md` | **§A** the four lenses (Unit / boundary / citable HIGH cell + the SOLE home of all owner rules: bottleneck, causality tripartite, MECE分解, プロセス/流れ, 関係性, システム思考; per-node 広さ interlock; lenses-are-revisable-hypotheses) · **§B** 課題 vs 解決策 (order, depth-asymmetry / 解決策×深さ thin by design, 良い課題の3条件, バーニングニーズ gate, research mapping) · **§C** limits/epistemics (stop-at-十分 rationale, six failure modes, over/under-firing calibration, 既視感 honesty, source-grade table, forward-bet/exposure boundaries + SEQUENCING handoffs, the §C.8 agent-boundary harness note) · **§D** the ACQUISITION MECHANISM (action-ladder rationale, 内化⇄外化 kata-by-function table, Why-so / 症状-vs-病因 protocol with per-node 広さ EXECUTION, root-state rule, n=1, 語彙, the worked 起業家 ladder; SOLE owner of "the loop must close on an action") | you need to justify a guardrail, confirm book fidelity, deepen a lens beyond the §1 table, or actually go acquire primary information |
+| `tests/forge-verification-ledger.md` | reforge evidence, warning counts, and debt queue | auditing this skill itself |

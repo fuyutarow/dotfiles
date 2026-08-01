@@ -1,25 +1,17 @@
 ---
 name: optimizing-julia-gpu-kernels
 description: >-
-  Write and optimize fast CUDA.jl GPU kernels in Julia — and know when NOT to write one
-  (GK0 deny-gate: vendor dispatch cuBLAS/cuFFT/cuDNN, broadcast fusion, and mapreduce
-  beat hand kernels — cite the rejected alternative first).
-  MANDATORY — read BEFORE writing or editing ANY @cuda / KernelAbstractions kernel or
-  optimizing CuArray code. Trigger on: CUDA.jl, @cuda, GPU カーネル, カーネル高速化 /
-  GPU 最適化, CuArray が遅い, launch config, threads/blocks, occupancy, coalescing,
-  shared memory / 共有メモリ, bank conflict, warp / shuffle / divergence, atomics,
-  InvalidIRError, dynamic function invocation, scalar indexing / allowscalar,
-  KernelAbstractions / @kernel, CUDA.@profile, nsys / ncu / Nsight, roofline,
-  memory-bound / compute-bound, Float32 vs Float64 on GPU, tensor cores / WMMA,
-  rrule for a GPU kernel / 微分可能カーネル, differentiable scan / SSM / Mamba selective scan. Device law:
-  type instability = COMPILE ERROR; isbits args, no GC allocation, return nothing; no
-  perf claim without CUDA.@sync measurement + a CPU-reference oracle; training-path
-  kernels need an rrule or Zygote breaks silently. Cuts: host-side type stability /
-  package architecture → writing-julia (co-fire; its JG2 precedes GK1); CUDA C++ without
-  Julia → plain answer; driver / nvidia-smi setup → environment work; non-trivial edits →
-  implementing-and-debugging first. Baseline CUDA.jl v6.2.1 [dated:2026-07].
-  Workflow-native: verdicts SOLO; measurement sweeps fan out read-only. English skill;
-  respond in the user's language (default Japanese).
+  Writes and optimizes CUDA.jl GPU kernels, including when NOT to write one: GK0 compares vendor
+  cuBLAS/cuFFT/cuDNN, fused broadcast, and mapreduce first. MANDATORY before editing @cuda,
+  KernelAbstractions @kernel, or hot CuArray code. Use for GPU カーネル/最適化, launch geometry,
+  occupancy, coalescing, shared memory, bank conflicts, divergence/shuffle, atomics,
+  InvalidIRError, scalar indexing, profiling, roofline, tensor cores, GPU rrule, differentiable
+  scan, or SSM/Mamba. Device LAW: type instability is a compile error; use isbits args, no GC
+  allocation, return nothing, and make no performance claim without CUDA.@sync measurement plus a
+  CPU-reference oracle. Training kernels need an rrule. Cuts: host Julia architecture →
+  writing-julia; CUDA C++ → plain answer; behavior edits → implementing-and-debugging first. Cheap
+  benchmarks use GK2/domain executor; AOH only for costly downstream exposure. English skill;
+  answer in the user's language.
 ---
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
@@ -90,7 +82,7 @@ description: >-
 | `implementing-and-debugging` | Co-fire with ORDER, same as writing-julia's row: change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom) governs any non-trivial kernel feature/bugfix FIRST; this skill owns what a correct fast kernel looks like inside that frame. |
 | `refactoring-code` | Co-fire on behavior-preserving kernel restructuring: its two-hats/oracle discipline governs; this skill supplies the GPU oracle components (GK3 CPU-reference test + `CUDA.@sync` benchmark as the green bracket). |
 | `raising-resolution` | Silent sub-step: inspect before asserting — `CUDA.functional()`, `CUDA.versioninfo()`, `Pkg.status`, an actual profile. Never claim "memory-bound" or "the kernel is the bottleneck" from reading source alone (GK2 is this discipline made mandatory). |
-| `acting-on-hypotheses` | PURPOSE cut: "will a custom kernel beat cuBLAS HERE?" when the answer needs a probe reality hasn't decided → frame it as that skill's cheapest-refuting-test; this skill supplies the measurement harness (GK2) the probe must use. |
+| `acting-on-hypotheses` | PURPOSE + HARD-GATE cut: benchmark “will a custom kernel beat cuBLAS HERE?” through this skill's GK2/domain executor when it is cheap and reversible. Use AOH only when expensive/irreversible downstream work rides on the result; GK2 remains its measurement harness. |
 | `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Workflow-native fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE

@@ -1,23 +1,17 @@
 ---
 name: growing-oss-adoption
 description: >-
-  Field guide for building developer-facing open-source that actually spreads and is adopted
-  by the developer community — the durable, adversarially-verified mechanisms behind tools like
-  ripgrep, eza, fnm, fzf, Vite, SolidJS, esbuild/Bun, uv/Ruff, Tailwind, Prettier, Starship,
-  lazygit, and Rust, NOT generic startup/marketing advice. Use whenever an author is naming,
-  positioning, launching, documenting, distributing, monetizing, governing, or sustaining an
-  OSS project, or deciding whether/how to release one — and when diagnosing why a tool is or
-  is not being adopted. Trigger on: OSS / open source / 公開 / 普及 / 広める, developer tool,
-  CLI tool, library / SDK, framework, language, MCP server, "blazing fast", drop-in replacement,
-  Show HN / launch / ローンチ / 告知, README / landing page, benchmark / ベンチマーク, naming /
-  positioning / タグライン, single static binary, package manager (Homebrew/cargo/npm/pip),
-  framework default / embedding, marketplace (VS Code/Chrome), community / contributor / governance,
-  license (MIT/Apache/AGPL/BSL/SSPL) / relicensing, COSS / open-core / monetization, maintainer
-  burnout / bus factor, adoption / diffusion / crossing the chasm, 矜持 / 指導書 for OSS.
-  Cut: the tool's Rust code & crate selection → writing-rust; here owns the adoption surface.
-  Workflow-native: on a multi-agent harness, channel inspection and hostile verification fan out
-  to subagents while regime, fork, and diagnosis verdicts stay solo. This skill is English;
-  respond to the user in their language.
+  Builds developer-facing open source that spreads; owns the adoption surface, not generic startup
+  marketing. Use when naming, positioning, launching, documenting, distributing, monetizing,
+  governing, sustaining, releasing, or diagnosing adoption of an OSS project. Triggers include OSS
+  / open source / 公開 / 普及, developer or CLI tool, library/SDK/framework/language/MCP server,
+  drop-in replacement, Show HN, launch/ローンチ, README/landing page, benchmark, naming/tagline,
+  static binary, package managers, framework defaults, marketplaces, community/governance,
+  licenses/relicensing, open-core, maintainer burnout, diffusion, and crossing the chasm. Cut:
+  implementation and crate choice → language/domain skills; HERE owns adoption mechanisms. Cheap,
+  reversible adoption trials use the domain executor; AOH fires only when an untested result guards
+  expensive/irreversible exposure. Evidence gathering may fan out, but regime, fork, and diagnosis
+  verdicts stay solo. English skill; answer in the user's language.
 ---
 
 # Growing OSS adoption — why developer tools spread, and how to build one that does
@@ -166,3 +160,4 @@ inversion, the true size of the invisible graveyard): → `references/epistemics
 | `references/decisions.md` | All 14 decision rules + all 20 anti-patterns | At a fork (drop-in vs category, speed-or-not, license, governance) or auditing for failure modes |
 | `references/case-studies.md` | 14 exemplars (ripgrep, eza, fnm, fzf, Vite, SolidJS, esbuild/SWC/Bun, Rust, Tailwind, Prettier, uv/Ruff, Starship, lazygit) as "what to steal" lists | Wanting concrete, copyable moves from a project like yours |
 | `references/epistemics.md` | Survivorship bias, the platform-era conditioning, the LLM-era shift, and the 14 open questions | Reasoning about durability, the future of discovery, or a research agenda on diffusion — or before delegating any diagnosis/verification to subagents |
+| `tests/forge-verification-ledger.md` | reforge evidence, warning counts, and debt queue | Auditing this skill itself |

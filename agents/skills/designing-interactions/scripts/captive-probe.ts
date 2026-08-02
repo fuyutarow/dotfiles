@@ -41,7 +41,9 @@ const DETAIL_CAP = 80;
 // A prompt this process can never answer, because it gave the child no stdin and no terminal.
 const PROMPT =
   /\[y\/n\]|\(y\/n\)|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|press any key|press enter|continue\?|are you sure|overwrite\?|^\s*\?\s+\S/im;
-const ANSI_ESCAPE = /\[[0-9;]*[A-Za-z]/;
+const ANSI_ESCAPE = new RegExp(
+  `${String.fromCharCode(0x1b)}\\[[0-9;]*[A-Za-z]`,
+);
 
 function inspect(
   stdout: string,
@@ -150,7 +152,7 @@ async function main(): Promise<void> {
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
     },
-		undefined,
+    undefined,
     argv,
   );
 

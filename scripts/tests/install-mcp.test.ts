@@ -151,7 +151,7 @@ describe("install-mcp: pure helpers", () => {
     cleanup(dir);
   });
 
-  test("buildPlan: display is a raw `${cmd} ${args}` concatenation, not the exec token list", () => {
+  test("buildPlan: display is a raw template-literal concatenation, not the exec token list", () => {
     const plan = buildPlan("context7", {
       type: "stdio",
       command: "bunx",

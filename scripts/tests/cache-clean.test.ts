@@ -318,7 +318,7 @@ describe("cache-clean.ts CLI", () => {
     const lines = out.trimEnd().split("\n");
 
     expect(lines[0]).toMatch(/^before: /);
-    expect(lines[lines.length - 2]).toMatch(/^after:  /);
+    expect(lines[lines.length - 2]).toMatch(/^after: {2}/);
     expect(lines[lines.length - 1]).toBe(
       "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
     );
@@ -336,8 +336,14 @@ describe("cache-clean.ts CLI", () => {
       idx(`rip ${join(fixtureHome, ".cargo", "registry", "src")}`),
     ];
     for (const i of order) expect(i).toBeGreaterThanOrEqual(0);
-    for (let i = 1; i < order.length; i++)
-      expect(order[i]).toBeGreaterThan(order[i - 1]!);
+    for (let i = 1; i < order.length; i++) {
+      const current = order[i];
+      const previous = order[i - 1];
+      if (current === undefined || previous === undefined) {
+        throw new Error("fixture order unexpectedly has a missing index");
+      }
+      expect(current).toBeGreaterThan(previous);
+    }
 
     // uv has no stub on this fixture PATH -> silently absent, exactly like every other missing tool
     expect(lines.some((l) => l.includes("uv cache"))).toBe(false);
@@ -351,7 +357,7 @@ describe("cache-clean.ts CLI", () => {
     const lines = out.trimEnd().split("\n");
     expect(lines).toHaveLength(3);
     expect(lines[0]).toMatch(/^before: /);
-    expect(lines[1]).toMatch(/^after:  /);
+    expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
       "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
     );
@@ -367,7 +373,7 @@ describe("cache-clean.ts CLI", () => {
     expect(err).not.toContain("FATAL");
     const lines = out.trimEnd().split("\n");
     expect(lines[0]).toMatch(/^before: /);
-    expect(lines[1]).toMatch(/^after:  /);
+    expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
       "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
     );

@@ -20,7 +20,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   realpathSync,
   statSync,
   writeFileSync,
@@ -413,7 +412,7 @@ describe("CLI: cutover refuses on missing/empty shadow", () => {
     makeProject(join(home, "proj-a"));
     const { out, code } = runScript(["cutover", "--home", home, "--yes"]);
     expect(code).toBe(2); // FATAL: no shadow global_settings.yml at all yet
-    expect(out + "").toBeDefined();
+    expect(`${out}`).toBeDefined();
   });
 
   test("refuses (exit 1) when the shadow index exists but is empty", () => {
@@ -596,7 +595,11 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     const gens = listPrevGenerations(projectRoot);
     expect(gens.length).toBe(1);
     // the parked prev generation IS the original live content, byte for byte
-    expect(sha256(join(gens[0]!.path, "target_sqlite.db"))).toBe(
+    const [firstGeneration] = gens;
+    if (firstGeneration === undefined) {
+      throw new Error("expected exactly one parked generation");
+    }
+    expect(sha256(join(firstGeneration.path, "target_sqlite.db"))).toBe(
       preBuildLiveHash,
     );
 
@@ -629,8 +632,12 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     const genAfterRollback = listPrevGenerations(projectRoot);
     expect(genAfterRollback.length).toBe(1);
     // and it is NOT the same generation any more — it is the just-parked post-cutover state
+    const [parkedPostCutoverGeneration] = genAfterRollback;
+    if (parkedPostCutoverGeneration === undefined) {
+      throw new Error("expected exactly one post-cutover generation");
+    }
     expect(
-      sha256(join(genAfterRollback[0]!.path, "target_sqlite.db")),
+      sha256(join(parkedPostCutoverGeneration.path, "target_sqlite.db")),
     ).not.toBe(preBuildLiveHash);
 
     // gc dry run (keep=0, so the one remaining generation IS a deletion candidate): must delete

@@ -267,7 +267,7 @@ describe("skill-check prose-debt floor", () => {
   test("3 long prose sentences: WARN fires with the count", () => {
     const dir = makeSkillDir(
       "prose-debt-three",
-      validSkillMd("prose-debt-three") + `\n${LONG}.\n\n${LONG}.\n\n${LONG}.\n`,
+      `${validSkillMd("prose-debt-three")}\n${LONG}.\n\n${LONG}.\n\n${LONG}.\n`,
     );
     const { out, code } = runCheck(dir);
     expect(out).toBe(
@@ -280,7 +280,7 @@ describe("skill-check prose-debt floor", () => {
   test("2 long prose sentences: below the N>=3 threshold, no WARN", () => {
     const dir = makeSkillDir(
       "prose-debt-two",
-      validSkillMd("prose-debt-two") + `\n${LONG}.\n\n${LONG}.\n`,
+      `${validSkillMd("prose-debt-two")}\n${LONG}.\n\n${LONG}.\n`,
     );
     const { out, code } = runCheck(dir);
     expect(out).not.toContain("prose sentences");

@@ -113,17 +113,29 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
   let i = 0;
   let j = 0;
   while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
+    const left = a[i];
+    const right = b[j];
+    if (left === undefined) {
+      i++;
+      continue;
+    }
+    if (right === undefined) {
+      j++;
+      continue;
+    }
+    if (left === right) {
       i++;
       j++;
-    } else if (a[i]! < b[j]!) {
+    } else if (left < right) {
       i++;
     } else {
-      out.push(b[j]!);
+      out.push(right);
       j++;
     }
   }
-  while (j < b.length) out.push(b[j++]!);
+  for (const right of b.slice(j)) {
+    out.push(right);
+  }
   return out;
 }
 

@@ -38,7 +38,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 // An absolute path literal under the user's home directory. `~/…` and `$HOME/…` forms are
 // deliberately NOT matched: they are portable and are the spelling P3 asks for.
-const HOME_ABS = new RegExp(`(?:/Users|/home)/[^/\\s"']+/[^\\s"'\`)\\]}]+`, "g");
+const HOME_ABS = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"'`)\]}]+/g;
 
 type Finding = { file: string; line: number; path: string };
 
@@ -78,7 +78,8 @@ async function collect(root: string): Promise<string[]> {
   if (await exists(hooks)) {
     for (const entry of await readdir(hooks, { withFileTypes: true })) {
       if (entry.isDirectory()) continue;
-      if (/\.(ts|js|sh|mjs)$/.test(entry.name)) files.push(join(hooks, entry.name));
+      if (/\.(ts|js|sh|mjs)$/.test(entry.name))
+        files.push(join(hooks, entry.name));
     }
   }
   return files;
@@ -92,7 +93,10 @@ async function scan(file: string, allowed: string[]): Promise<Finding[]> {
     // hooks named the repo in a header comment AND in code. Deliberate — no comment carve-out.
     for (const hit of line.match(HOME_ABS) ?? []) {
       if (!hit.startsWith(`${HOME}/`)) continue;
-      if (allowed.some((prefix) => hit === prefix || hit.startsWith(`${prefix}/`))) continue;
+      if (
+        allowed.some((prefix) => hit === prefix || hit.startsWith(`${prefix}/`))
+      )
+        continue;
       findings.push({ file, line: index + 1, path: hit });
     }
   });
@@ -122,11 +126,15 @@ async function main(): Promise<number> {
   const allowed = await allowedPrefixes(root);
   const files = await collect(root);
   if (files.length === 0) {
-    process.stdout.write(`RESULT: no user-scope settings or hooks under ${root}\n`);
+    process.stdout.write(
+      `RESULT: no user-scope settings or hooks under ${root}\n`,
+    );
     return 0;
   }
 
-  const findings = (await Promise.all(files.map((f) => scan(f, allowed)))).flat();
+  const findings = (
+    await Promise.all(files.map((f) => scan(f, allowed)))
+  ).flat();
   if (findings.length === 0) {
     process.stdout.write(
       `P3 PASS: ${files.length} user-scope file(s), no out-of-scope absolute path\n`,
@@ -149,6 +157,8 @@ async function main(): Promise<number> {
 main()
   .then((code) => process.exit(code))
   .catch((error: unknown) => {
-    process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exit(2);
   });

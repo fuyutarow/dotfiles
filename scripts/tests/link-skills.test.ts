@@ -142,8 +142,12 @@ describe("link-skills: fresh run", () => {
     const positions = ["alpha", "mid", "zeta"].map((n) =>
       out.indexOf(`skills/${n} ->`),
     );
-    expect(positions[0]).toBeLessThan(positions[1]!);
-    expect(positions[1]).toBeLessThan(positions[2]!);
+    const [alpha, mid, zeta] = positions;
+    if (alpha === undefined || mid === undefined || zeta === undefined) {
+      throw new Error("expected all three fixture skills in the output");
+    }
+    expect(alpha).toBeLessThan(mid);
+    expect(mid).toBeLessThan(zeta);
     cleanup(dotfiles, home);
   });
 
@@ -246,7 +250,7 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
 
     const { out } = run(["--dotfiles", dotfiles, "--home", home]);
     expect(out).not.toContain(
-      "pruned (renamed/deleted): " + `${home}/.claude/skills/kept-skill`,
+      `pruned (renamed/deleted): ${home}/.claude/skills/kept-skill`,
     );
     cleanup(dotfiles, home);
   });

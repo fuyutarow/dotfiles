@@ -59,7 +59,9 @@ export function freeSpace(home: string, spawn = Bun.spawnSync): string {
   const rawLines = out.split("\n");
   if (rawLines[rawLines.length - 1] === "") rawLines.pop(); // drop trailing-newline artifact
   if (rawLines.length < 2) return ""; // awk's NR==2 never fires -> no output at all
-  const fields = rawLines[1]!.trim().split(/\s+/).filter(Boolean);
+  const filesystemLine = rawLines[1];
+  if (filesystemLine === undefined) return "";
+  const fields = filesystemLine.trim().split(/\s+/).filter(Boolean);
   const avail = fields[3] ?? "";
   return `${avail} free`;
 }

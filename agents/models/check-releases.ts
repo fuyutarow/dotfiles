@@ -106,7 +106,7 @@ function guidanceFiles(): Array<[string, string]> {
     }
     for (const name of entries) {
       const p = join(dir, name);
-      let st;
+      let st: ReturnType<typeof statSync>;
       try {
         st = statSync(p);
       } catch {

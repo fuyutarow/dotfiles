@@ -41,7 +41,7 @@ function isBracketPlaceholder(value: string): boolean {
     .replaceAll("】", "]");
   const remaining = normalized
     .replaceAll(/\[[^\]]*\]/g, "")
-    .replaceAll(/[\[\]()\/ \t·・、,;:-]/g, "");
+    .replaceAll(/[()[\]\u002F \t·・、,;:-]/g, "");
   return normalized.startsWith("[") && remaining === "";
 }
 

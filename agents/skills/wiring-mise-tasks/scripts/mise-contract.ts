@@ -159,12 +159,10 @@ const RUNTIMES: Array<[RegExp, string]> = [
 // names, not sources. Handles `run = '''…'''`, `run = "…"`, and `run = ['…', '…']`.
 function taskBodies(source: string): Array<{ name: string; body: string }> {
   const out: Array<{ name: string; body: string }> = [];
-  const re =
-    /\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.\-]+))\]([\s\S]*?)(?=\n\[|$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
-    const name = m[1] ?? m[2] ?? "?";
-    const section = m[3] ?? "";
+  const re = /\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]([\s\S]*?)(?=\n\[|$)/g;
+  for (const match of source.matchAll(re)) {
+    const name = match[1] ?? match[2] ?? "?";
+    const section = match[3] ?? "";
     const triple = /run\s*=\s*'''([\s\S]*?)'''|run\s*=\s*"""([\s\S]*?)"""/.exec(
       section,
     );
@@ -183,7 +181,7 @@ function declaredTools(source: string): Set<string> {
   const out = new Set<string>();
   if (!m) return out;
   for (const line of m[1].split("\n")) {
-    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.\-]+))\s*=/.exec(line);
+    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=/.exec(line);
     if (k) out.add((k[1] ?? k[2] ?? "").toLowerCase());
   }
   return out;
@@ -192,7 +190,7 @@ function declaredTools(source: string): Set<string> {
 // Returns [failures, warnings] and prints its own lines, matching this script's style.
 function checkBodies(source: string): [number, number] {
   let failures = 0;
-  let warnings = 0;
+  const warnings = 0;
   const bodies = taskBodies(source);
   const tools = declaredTools(source);
 
@@ -200,8 +198,9 @@ function checkBodies(source: string): [number, number] {
   for (const { name, body } of bodies) {
     for (const [re, tool] of RUNTIMES) {
       if (!re.test(body)) continue;
-      if (!needed.has(tool)) needed.set(tool, []);
-      needed.get(tool)!.push(name);
+      const users = needed.get(tool);
+      if (users === undefined) needed.set(tool, [name]);
+      else users.push(name);
     }
     const lines = body.split("\n").filter((l) => l.trim() !== "").length;
     if (lines > BODY_MAX_LINES) {

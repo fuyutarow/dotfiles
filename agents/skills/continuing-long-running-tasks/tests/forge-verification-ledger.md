@@ -86,3 +86,16 @@ Ownership void was checked with a four-query JA/EN `repo-search battery`. Neares
 Static workspace path attacks and normal same-account concurrency are in scope. A malicious process
 running concurrently as the same Unix UID is outside the isolation claim because it can replace the
 installed hooks/configuration themselves; use an OS sandbox or distinct account for that threat.
+
+## 2026-08-02 — durable topology co-fire repair (v2608.1.1)
+
+Fresh stage-1 probe found that C and O named reciprocal ownership but did not expose one executable
+order before body load. Clearing phrase in both descriptions and bodies:
+`continuity record -> orchestration overlay -> writer checkpoint`. After the domain map, C
+initializes/reconciles the locus, O overlays roles/visibility/veto/acceptance carrying only that locus,
+and C's sole writer checkpoints the accepted overlay locator. The Ordered co-fire trigger fixture
+proves the sequence; topology-only without persistence remains O-only.
+
+Receipts: description 959 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
+exit 0 (`FAIL=0 WARN=0`); `continuation.test.ts` 24 pass / 0 fail / 102 expectations; durable-order and
+topology-only desk-check 2/2 PASS.

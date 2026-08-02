@@ -242,12 +242,19 @@ Return here with:
 - Scope actually tested:
 ```
 
+This is the ordinary low-ceremony return path for one result. When the episode is completed, failed,
+stopped, or aborted and the ask is retrospective, route the frozen `RUN INTENT` and terminal
+`RUN RECEIPT` to `research-process-postmortem.md`. That mode returns a `RETROSPECTIVE JUDGMENT` and an
+updated `RESEARCH JUDGMENT SPEC`; it does not replace this result update.
+
 Choose one update:
 
 - **tree update** — remain in `acting-on-hypotheses`;
 - **thesis regeneration** — return to `forging-novel-theses`;
 - **problem reconstruction** — return to T1, then T2;
 - **portfolio update** — compare/reallocate at least two independent directions here;
+- **research-process postmortem** — audit process separately from outcome, then persist, pause, retire,
+  or reopen the earliest invalidated stage;
 - **finished claim** — hand to `arguing-research-papers`.
 
 A null or failed test retires only the tested claim family. A surprising result earns a frame change

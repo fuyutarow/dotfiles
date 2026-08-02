@@ -1,22 +1,22 @@
 ---
 name: orchestrating-agents
 description: >-
-  決まった研究・実装・文書制作を、委任・並列化・独立検収で進めるcontrol-plane規律。
-  「研究を進めて」「どんどん進めて」「起草と査読を委任」「複数のサブエージェントで水平思考」
-  「誰に任せる」「仕事が遅い」「創造と批判」「生成と評価」「早すぎる批判」「検収試験を設計」
-  「完成宣言が監査に落ちる」「中間生成物を再利用」で使う。Domain-signed function mapを受け、
-  agent、visibility、dependency、veto、verification、acceptanceのdispatch overlayだけを所有する。
-  Cuts: creative-research judgment → directing-research; thesis genesis → forging-novel-theses;
-  premise/tacit exposure → surfacing-blind-spots; expensive/irreversible one-bet test →
-  acting-on-hypotheses; cheap reversible probe → domain/plain executor; paper claim →
-  arguing-research-papers; corpus → systematizing-knowledge; skill craft → forging-skills. 内容や成熟判定を
-  所有しない。Scope/brief/synthesis/acceptanceはsolo、独立生成と盲検検証はcapacity-aware fan-out。
-  Japanese skill; responds in the user's language.
+  署名済みtask/function mapへ委任・並列化・独立検収を載せるcontrol plane。明示的dispatch、配役、
+  visibility、dependency、veto、verification、acceptanceで使う。裸の「研究を進めて」では発火せず、
+  directing-researchのstage診断と署名後にoverlayする。Postmortemはdispatch/pacing/delegation/
+  visibility/acceptance/control-plane failureだけ; generic software incident/postmortem →
+  implementing-and-debugging。Durable co-fire: continuity record → orchestration overlay → writer
+  checkpoint; continuing-long-running-tasksがrecord/writer semanticsを持ち、ここはlocusだけを運ぶ。
+  Cuts: research meaning→directing-research; document lifecycle→governing-research-documentation;
+  present fact→raising-resolution; thesis→forging-novel-theses; premise→surfacing-blind-spots; costly
+  one-bet→acting-on-hypotheses; cheap probe→plain executor。Domain content/skill craftは各owner。
+  Scope/brief/synthesis/acceptanceはsolo、独立生成/盲検検証はfan-out。Japanese skill; responds in
+  the user's language.
 ---
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2607.14.1 (2026-07-31) — supervisor bearerをcontrol planeへ完全に限定。
+> **Version**: v2607.14.2 (2026-08-02) — durable co-fire order and incident cut.
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -41,6 +41,12 @@ fi
 この skill は、決まった仕事を速く、独立に検証できる形で運転する。
 
 何を選ぶか、分野の結論、個別 tool の構文は sibling の正本へ委ねる。
+
+創造的研究では、`directing-research`がstageを診断し、問題、候補、test、portfolioの
+domain function mapを署名する。本skillはその後のdispatch overlayだけを所有する。
+
+署名済みmapが無い場合、本skill単独で研究の意味や順序を作らない。
+明示的なdispatch/control-plane依頼だけは、既存mapの所在確認から開始できる。
 
 監督は成果物の作者ではなく、仕事の境界、証拠の境界、採否の境界を所有する。
 
@@ -157,14 +163,19 @@ domain/craft ownerへtyped cutの修復を返す。既存domain ownerが無い�
 supervisorがtask-localなprovisional mapを作れる。固有のinput/output/stopを持つ再利用可能な
 ownership voidなら`forging-skills`へ渡す。
 
-このskillのartifactは、署名済みmapへの
-`domain_function_map_locus + digest`と、その各行へagent、visibility、dependency、veto、
-verification、acceptanceを載せる**dispatch overlay**である。topologyはmapへ後から載せるcontrol
-planeであり、domain機能やsemantic mapを代理しない。
+このskillのartifactは、署名済みmapへの`domain_function_map_locus + digest`である。
+各行へagent、visibility、dependency、veto、verification、acceptanceを載せる。
+これを**dispatch overlay**と呼ぶ。topologyは後から載せるcontrol planeである。
+domain機能やsemantic mapを代理しない。
 
 長期タスクのcross-session stateは`continuing-long-running-tasks`が所有する。両者がco-fireする
 場合、このoverlayは`continuation_record_locus`だけを運び、recordのsemantic stateを複製・編集
 しない。continuity側もagent、dependency、veto、acceptanceを決めない。
+
+Stable order: `continuity record -> orchestration overlay -> writer checkpoint`. Domain mapの後、
+`continuing-long-running-tasks`がrecord locusをinitialize/reconcileし、本skillがそのlocusだけを
+運ぶroles/visibility/veto/acceptance overlayを作る。受理されたoverlay locatorはCのsole writerが
+checkpointする。どちらも相手のsemantic artifactを編集しない。
 
 | Stage | Mode | Why | Artifact |
 |---|---|---|---|
@@ -181,10 +192,11 @@ harness が無い場合も stage map は変えず、同じ腕を順番に実行�
 
 artifact は、serial 化した順序と、独立入力が腕の間で共有されていない記録である。
 
-生成仕事のfreezeは二段である。第一freezeは発射前のinterface、hard constraints、安全、予算、
-phase-exit、maturity release conditionである。第二freezeはdomain ownerがformulation /
-evaluability artifactとdigestを出した後、verdict-bearing evaluationまたはblind auditの前の
-final acceptance criteriaである。auditやverdictを見てcriteriaを変えない。
+生成仕事のfreezeは二段である。
+第一freezeは発射前のinterface、hard constraints、安全、予算、phase-exit、maturity release conditionである。
+第二freezeはdomain ownerがformulation / evaluability artifactとdigestを出した後に行う。
+verdict-bearing evaluationまたはblind auditの前に、final acceptance criteriaを凍結する。
+auditやverdictを見てcriteriaを変えない。
 
 非生成・決定的な仕事は従来どおりlaunch specでcriteriaを凍結でき、maturity ceremonyを追加しない。
 候補到着後にsupervisorがnormalization barrierを所有し、scriptがschema検査とdedupを行う。
@@ -285,9 +297,9 @@ P7〜P10 の詳細をこの core へ複製しない。
 | 小さい実装・計測 | 一人のexecutor。時間予算とself-testを固定する。 | brief、ETA、self-test、deliverable。 |
 | 大きい単一成果物 | C1でinterfaceと土台を固定し、部品へ分解する。 | `references/delegation-contracts.md` C1の分解表。 |
 
-reasoning portfolio の topology、candidate packet、normalization、leave-one-out pruning の
-詳細手続き、schema、thresholdは `references/reasoning-portfolios.md` が SOLE home である。
-coreはprecedence要約とpointerを持てる。
+reasoning portfolioの詳細は`references/reasoning-portfolios.md`がSOLE homeである。
+対象はtopology、candidate packet、normalization、leave-one-out pruning、schema、thresholdである。
+coreはprecedence要約とpointerだけを持つ。
 
 各腕は別の腕の候補を見ずに packet を作る。
 
@@ -320,16 +332,22 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 
 | Ask / signal | 判定 | PURPOSE cut と owner | Artifact |
 |---|---|---|---|
-| 「研究を進めて」「どんどん進めて」。制作の文脈。 | `FIRE` | 仕事の運転はここ。何を選ぶかは別owner。 | 行為級、dispatch graph、次のgate。 |
+| generic software incident/postmortemで原因、修復、再発防止を問う。 | `NO-FIRE` | `implementing-and-debugging`が挙動とroot causeを所有する。dispatch/pacing等のcontrol-plane failureが明示された場合だけ別行で本skillがco-fireする。 | implementation diagnosis/fixへのpointer。 |
+| 創造的研究の裸の「研究を進めて」「どんどん進めて」。署名済みmapもdispatch指定も無い。 | `NO-FIRE` | `directing-research`がstageを診断し、研究の問題・候補・test・portfolioを定式化する。 | domain function mapの署名を先に受ける。 |
+| 署名済みmapがある。またはdispatch/control-planeを明示している。 | `FIRE / CO-FIRE` | mapの意味はdomain owner。本skillはagent、visibility、dependency、veto、verification、acceptanceだけを載せる。 | map locus/digestとdispatch overlay。 |
 | 「起草と査読を委任」「定理や文書を起草・査読」。 | `FIRE / CO-FIRE` | 運転はここ。数学の中身は `proving-theorems`。 | role分離とco-fire記録。 |
 | 「複数の模型で水平思考」「誰に任せる」「配役を決める」。 | `FIRE` | topologyと順序はここ。現在の担い手はmodel roster。 | portfolioまたはrole-selection record。 |
 | 「創造と批判をどう配る」「生成と評価を分ける」「早すぎる批判が候補を潰す」。 | `FIRE` | domain ownerが成熟/凍結条件を定義した後のvisibility、challenge release、veto authority、multi-agent topologyはここ。内容と成熟判定はdomain owner。 | domain freeze pointer、権限表、visibility record。 |
-| 「仕事が遅い」「生産性を上げる」「ポストモーテムを反映」。 | `FIRE` | pacingと委任契約はここ。 | 観測した失敗→変更したrule/artifact。 |
+| dispatch、pacing、delegation、visibility、acceptance、control-planeの失敗を振り返る。 | `FIRE` | 委任体制と運転規則のpostmortemだけを所有する。 | 観測した失敗→変更したrule/artifact。 |
+| 研究frame、候補、test、portfolioの意味や研究processを振り返る。 | `NO-FIRE` | `directing-research`がresearch-process retrospectiveを所有する。 | domain retrospectiveへのpointer。 |
 | 「検収試験を設計」「完成宣言が監査に落ちる」。 | `FIRE` | P6とacceptance境界はここ。 | falsifying test、blind audit、verdict。 |
 | 「中間生成物を再利用」「cacheを作り直している」。 | `FIRE` | 発火はここ、詳細はmeasurement reference。 | P10 manifest pointer。 |
 | 個別 CLI のflag、slug、呼び出し構文。 | `NO-FIRE` | `driving-*` が一回の呼び出しを所有する。 | routing先だけ。委任体制を起動しない。 |
 | 文献群の台帳、確度、矛盾調停、体系化。 | `NO-FIRE` | `systematizing-knowledge` が内容を所有する。 | routing先。並べ方を問う場合だけco-fire。 |
 | 創造的研究全体、問題構成・選定・定式化、候補admission、>=2独立方向の配分・再開・撤退。 | `NO-FIRE` | `directing-research` がlifecycleとportfolio判断を所有する。 | domain stage列とacceptance criteriaを先に受け取る。 |
+| compact、session、executorを越えて残るtask stateやresume/handoff record。 | `NO-FIRE / CO-FIRE` | `continuing-long-running-tasks`がdurable stateを所有する。本skillはtopology、役割、vetoだけを載せる。 | continuation locusとdispatch overlay。意味状態を複製しない。 |
+| research documentのcreate/update/derive/freeze/retire/delete、authority、admission。 | `NO-FIRE` | `governing-research-documentation`が文書portfolio lifecycleを所有する。 | lifecycle verdictへのpointer。 |
+| 既存code/data/API/source/problem artifactのfactual present-state rowを検分する。 | `NO-FIRE` | `raising-resolution`がcitation gate、cheapest rung、stop-at-oneを所有する。 | cited observationだけをoverlayへ渡す。 |
 | 既存plan/frameの暗黙前提、無視した例外、人間の暗黙知を、解決案を出す前に掘る。 | `NO-FIRE` | `surfacing-blind-spots` がEXPOSEとBlind-spot packetを所有する。 | function mapでは同skillのpacketを次段のdomain ownerへ渡す。 |
 | 選ばれた問題frameから新しいthesis候補を類推・構造移送・再結合で生む。 | `NO-FIRE` | `forging-novel-theses` がGENESISだけを所有する。 | packet/routesを受け、blindnessとfreeze時機だけをここで決める。 |
 | 高価/不可逆な既知の一つの賭けをper-test threshold、kill experimentで試す。 | `NO-FIRE` | `acting-on-hypotheses` がgated ONE treeの実行規律を所有する。 | probeの役割分離が必要な場合だけco-fire。 |

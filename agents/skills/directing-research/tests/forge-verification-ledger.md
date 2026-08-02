@@ -327,3 +327,129 @@ agents/skills/directing-research/scripts/research-check.ts` reported `FAIL=0 WAR
 with no structural failure. A prose-only pass must reduce them without weakening the transition or
 freeze contracts. This waiver covers no validator, trigger, or evidence-boundary failure. Do not claim
 this ledger row proves cross-domain creative success.
+
+## 2026-08-02 — research-process postmortem extension
+
+**Existence decision.** This is an `EXTEND`, not a new Skill and not a split, merge, rename, or
+retirement. The incumbent already owns D4 standing integrity, T6 result-to-update, stage diagnosis,
+and reopen/portfolio judgment. The missing surface was a named retrospective transition with
+prospective evidence and an explicit semantic artifact.
+
+**Function map.** A completed, failed, stopped, or aborted research episode, frozen `RUN INTENT`
+artifacts, terminal `RUN RECEIPT` artifacts, and the current frame are compared against registered
+expectations, controls, missingness, alternatives, and process integrity. The output is one
+`RESEARCH PROCESS POSTMORTEM`: a `RETROSPECTIVE JUDGMENT` plus an updated
+`RESEARCH JUDGMENT SPEC`. It chooses `persist`, `pause`, bounded `retire`, or the earliest honest
+research-stage `reopen`.
+
+**One-home decision.** `directing-research` owns semantic lens verdicts and the research transition.
+`governing-research-documentation` owns durable admission, authority, review, retention, and deletion.
+`orchestrating-agents` owns bearers, visibility, veto, acceptance, and dispatch/pacing/delegation
+postmortems. `continuing-long-running-tasks` transports artifact loci across sessions without copying
+research evidence. A repository checker owns structural fields, hashes, enums, joins, terminal
+coverage, and known privacy patterns; it cannot certify creativity or semantic validity.
+
+**Calibration.** Process and outcome are separate axes. The semantic lenses use only `EVIDENCED`,
+`VIOLATED`, `NOT-EVIDENCED`, and `NOT-APPLICABLE`; no scalar creativity score is admitted. Missing
+prospective or terminal history yields `PARTIAL` or `UNAUDITABLE`. No precommitment may be reconstructed
+after outcome access, and no raw reasoning, transcript, prompt/control text, secret, or credential may
+enter the artifacts.
+
+**Source and limit.** This is a house contract distilled from the signed task transition and the
+incumbent's existing integrity/update seams. It is not external evidence that this process causes
+creativity or that a structural PASS proves causal validity, surprise importance, independence, or
+coverage beyond the declared denominator.
+
+**Component verification receipt.** The Codex default
+`quick_validate.py agents/skills/directing-research` returned `Skill is valid!`. House
+`skill-check.ts agents/skills/directing-research` returned exit 0 with `FAIL=0 WARN=0`, clearing the
+superseded 30-WARN waiver without weakening its gates. The existing director suite returned 32 pass,
+0 fail, and 133 assertions. The classified trigger query returned all nine new rows; manual
+name+description arbitration confirmed `D`, `O`, `G`, `C`, incident-owner, and ordered `D -> O` routes.
+Scoped tracked `git diff --check` passed. The untracked reference returned the expected no-index diff
+status 1 with no whitespace finding. An initial component probe reported the separately owned
+`scripts/research-run-check.ts` as missing. After that component landed, the final atomic-build probe
+printed nothing and passed. File digests are reported in the executor handoff because embedding this
+ledger's own digest here would be self-referential.
+
+## 2026-08-02 — research-run tooling integration receipt (v2608.2.1)
+
+The semantic docs now name every landed component explicitly: three assets, the
+`scripts/research-run-check.ts` entry, five `scripts/research-run/*.ts` modules, three research-run
+test/helper files, and `tests/family-routing.test.ts`. The atomic-build list contains exact paths;
+it does not depend on an unchecked wildcard.
+
+The C1 draft was rejected as a 912-line checker plus a 454-line test monolith. The accepted
+decomposition is 114 lines for the entry; 183, 174, 228, 117, and 180 lines for the five modules;
+and 245, 114, 207, and 88 lines for the test/helper/routing files. Every component is below 300 lines.
+
+The retrospective judgment has two distinct axes. `TRANSITION` chooses the semantic research-state
+update; `EPISODE_DISPOSITION` chooses `PERSIST`, `PAUSE`, `RETIRE`, or `REOPEN` for the programme.
+The artifact must argue that pair's compatibility from evidence and current state. The checker only
+verifies field presence and enum membership; it intentionally does not certify semantic compatibility.
+
+Verification receipts:
+
+- research-run checks plus family routing -> 29 pass, 0 fail, 71 assertions across three files;
+- every D Bun test -> 61 pass, 0 fail, 204 assertions across five files;
+- `script-check.ts` over all ten landed TypeScript components -> `FAIL=0 WARN=0`;
+- Biome over the same ten files -> `Checked 10 files`; no fixes applied;
+- Codex `quick_validate.py` -> `Skill is valid!`;
+- house `skill-check.ts` -> silent, `FAIL=0 WARN=0`;
+- exact atomic-build existence check and scoped `git diff --check` -> exit 0.
+
+Structural limits remain explicit. The checker caps a packet at 256 KiB and a run at 1024 packets,
+refuses symlink inputs, and checks required fields, enums, hashes, joins, duplicate IDs, terminal
+coverage, denominator integrity, and known privacy patterns. It cannot judge creativity, causality,
+surprise importance, true independence, coverage outside the declared denominator, or compatibility
+between the two judgment axes. Earlier receipts remain intact as history.
+
+## 2026-08-02 — R2/fresh lexical trigger repair
+
+Classification: description and regression repair. The function map and artifact contracts are unchanged.
+
+- The stage-1 description shrank from 1018 to 959 Unicode characters.
+- Japanese research-problem resolution, concretization, and formulation now route to `D`.
+- `R` may contribute only a silent cited factual row to that route.
+- A generic software incident/postmortem now routes to `implementing-and-debugging`.
+- The trigger matrix records both the Japanese positive and the software-incident near miss.
+
+`family-routing.test.ts` is a deterministic lexical description contract. It covers all ten family
+descriptions under a 960-character budget and exercises 20 prompt classes. It checks agreed text,
+polarity, and order only. It is not a selector, model-inference test, or live-routing proof.
+
+Verification after the repair:
+
+- the family contract passed 21 tests and 50 assertions;
+- every directing-research Bun test passed: 81 tests and 254 assertions;
+- Codex `quick_validate.py` returned `Skill is valid!`;
+- house `skill-check.ts` was silent: `FAIL=0 WARN=0`.
+
+## 2026-08-03 — final adversarial and bearer-verification receipt
+
+An independent Terra checker audit initially returned `FAIL` despite green happy-path tests. It found
+an incomplete `UNAUDITABLE` equation; document-wide privacy/causality regex false positives; duplicate
+process-lens acceptance; sub-millisecond timestamp inversions; repeated singular `--judgment` flags;
+escaped-pipe rejection; a vacuous family-routing contract; and a check/open race. The author repaired
+those defects. The final directing-research run, after explicit two-space Biome formatting, passed
+81 tests and 254 assertions. Biome checked all ten new TypeScript components without fixes;
+`script-check.ts` reported `FAIL=0 WARN=0` across the same ten components. Every production module and
+test/helper file remains below 300 lines (largest: 297 lines).
+
+The staged repository gate then exposed one additional BG1 boundary defect: the new Cleye CLI turned an
+ordinary unknown flag into domain exit 2, while the house contract requires framework exit 1. The red
+corpus fixture reported expected 1 / received 2. Restricting the local `ignoreArgv` guard to
+`--__proto__` restored Cleye ownership of ordinary unknowns. The focused Cleye corpus passed 32/32,
+and the local adversarial suite passed 12/12 with the corrected exit contract.
+
+A fresh independent Terra trigger probe judged 20/20 prompt routes coherent, but its verdict is only
+`SCOPE-LIMITED PASS`: no live Codex or Claude product selector was executed. Accordingly,
+`family-routing.test.ts` remains what it names itself—a deterministic lexical description contract,
+not live routing proof.
+
+The exact Claude `sonnet` availability probe succeeded. Two detailed verifier calls then timed out
+without output; a shorter call returned a zero-token timeout; and a safe-mode retry hung until it was
+terminated. None produced a usable audit verdict. Cross-bearer verification is therefore
+`UNAVAILABLE` for this reforge and is not counted as independent acceptance. Repository-wide gates,
+link deployment, and the final commit are intentionally not claimed by this receipt; they remain the
+shipping authority's terminal work.

@@ -226,3 +226,24 @@ bun test agents/skills/systematizing-knowledge/tests/check-donor-set.test.ts
 The suite also rejects a negative boundary sentence followed by a positive target claim, duplicate
 donor evidence disguised as two rows, surface-only selection, and CLI misuse. These receipts prove
 only the declared mechanical boundary; they do not validate a common schema or target fit.
+
+## 2026-08-02 — corpus-position / document-authority reciprocal seam — KEEP
+
+Decision: `KEEP`; no merge, split, rename, or retirement.
+This skill uniquely signs a calibrated corpus position or target-agnostic `DONOR SET`.
+`governing-research-documentation` instead owns durable admission, authority, lineage, review, and lifecycle.
+
+The old body already routed portfolio governance, but the stage-1 description did not expose that cut.
+The 943-character description now states the cut and the braided order: sign the corpus position HERE,
+then let `governing-research-documentation` decide `DOC ADMISSION` and authority.
+
+Trigger receipts:
+
+- F9: evidence position only → this skill alone.
+- N9: fixed evidence plus freeze/retire/authority only → `governing-research-documentation` alone.
+- C7: corpus synthesis plus canonical authority → this skill first, governance second.
+
+Verification receipts: `quick_validate.py` returned `Skill is valid!`; `skill-check.ts` exited 0 with
+`FAIL=0 WARN=0`; the combined SoK/governance suites passed `76 pass / 0 fail / 157 assertions`.
+The stage-only mechanical receipt was `description=943 F=9 N=15 C=7`.
+Scoped `git diff --check` passed; `mise run lint:skills-index` reported a complete index.

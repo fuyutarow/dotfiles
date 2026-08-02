@@ -18,26 +18,31 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | F7 | "is 'our method significantly outperforms' overclaiming if I only ran one benchmark?" | the two-pass calibration + warrant-or-downgrade = G2 |
 | F8 | "write a Limitations section that won't get us desk-rejected" | limitations-as-ethos, objection triage = `reviewer-defense.md` §4 |
 | F9 | "Critically appraise whether this one paper's identification strategy and robustness checks support its causal claim." | single-paper argument/method/validity appraisal = reviewer red-team |
+| F10 | "Our Introduction has results but no defensible central claim; rebuild the intro around one." | literal `Introduction` alias + finished-claim argument = G1/G3 |
+| F11 | "Draft the related work / related-work argument that distinguishes our finished result from Patel et al." | literal aliases + named-gap positioning = G3 |
+| F12 | "Turn these reviewer findings and verified results into a review response." | literal `review response` alias + evidence-bounded rebuttal |
 
 ## MUST NOT FIRE (≥5 — near-miss negatives, each names who fires instead)
 
 | # | Ask | Route (who fires) |
 |---|---|---|
-| N1 | "reorganize my paper — methods and results are scattered across three sections and it repeats itself" | **structuring-documents** — organize info you've decided to include (MECE/DRY/section order); no claim decision |
-| N2 | "this paragraph reads AI-ish; fix the wording of these two sentences" | **linting-prose** — rewrite-in-place; sentence mechanics |
+| N1 | "Reorganize this document: facts are duplicated and the section order is confusing; do not change its claim." | **structuring-documents** — generic IA/MECE/DRY cleanup; no argument judgment |
+| N2 | "Clean up this prose: remove AI-ish phrasing and fix these two sentences without changing meaning." | **linting-prose** — generic rewrite-in-place; no argument judgment |
 | N3 | "make my conference-talk slides more convincing for the 15-min slot" | **designing-presentations** — a live talk for a present room |
 | N4 | "survey the 40 papers on diffusion sampling and tell me what the field knows" | **systematizing-knowledge** — synthesize OTHERS' corpus into a position |
+| N4d | "Turn these 40 papers into a related-work evidence map; there is no manuscript claim to position yet." | **systematizing-knowledge** — corpus synthesis despite the section-shaped label; no CLAIM/ARGUMENT work exists |
 | N4a | "Extract the sample size and confidence interval from Table 3 of this one paper." | **raising-resolution** — bounded factual extract, no argument appraisal |
 | N4b | "Give me a neutral summary of this one paper." | direct answer; use **raising-resolution**'s citation gate silently, but no specialist skill fires |
 | N4c | "Surface the hidden premises in this manuscript; do not judge whether they hold." | **surfacing-blind-spots** — premise-only excavation |
 | N5 | "given this selected problem, generate novel thesis candidates" | **forging-novel-theses** — candidate genesis, not write-up |
 | N5a | "The source field succeeded; construct a correspondence to our target or say exactly where it breaks." | **forging-novel-theses** — transfer mapping / `MAPPING-BREAK`, not a finished target warrant |
 | N5b | "this result means we may need to reopen the research problem/program" | **directing-research** — program-stage reopen decision |
+| N5b2 | "We do not yet have a finished claim; formulate and select the research question we should pursue." | **directing-research** — unfinished problem-frame construction/selection precedes any paper argument |
 | N5c | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | **acting-on-hypotheses** — hard-gated forward tree |
 | N5c2 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to **directing-research** |
 | N5d | "decide author/reviewer/verifier roles and acceptance timing" | **orchestrating-agents** — control plane |
 | N6 | "the bibliography isn't rendering / fix my LaTeX build" | **compiling-latex** — build/tooling |
-| N7 | "fix this typo in my abstract" | just fix it — no ceremony (trivial) |
+| N7 | "Fix this typo and Markdown spacing in my abstract; do not change the claim." | direct/plain edit — typo/format-only with meaning fixed |
 | N8 | 「この日本語の技術文書、てにをはと文体（である体）を直して」 (JP) | **linting-prose** / **writing-technical-japanese** — prose mechanics, not the argument |
 | N9 | "trim/proofread my abstract down to the 150-word limit" | **linting-prose** — wording/length trim; the *argument* is not in question (trivial/format, not a claim decision) |
 
@@ -51,9 +56,12 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | C4 | "position this against prior work AND make the related-work section well-organized" | **arguing-research-papers** (which named prior work, which gap — G3) + **structuring-documents** (the section's IA). Decide the positioning HERE → organize THERE. |
 | C5 | "the research problem is selected but the thesis is missing; later write the completed result" | **forging-novel-theses** generates `CANDIDATE` packets → **directing-research** admits one → [**acting-on-hypotheses** if hard-gated / domain executor if cheap-reversible] earns evidence → **arguing-research-papers** argues the finished claim. A FINISHED result begins HERE, not at genesis. |
 | C5b | "reviewer says not novel; should we narrow the claim or reopen the research?" | **arguing-research-papers** diagnoses the finished claim → **directing-research** decides whether to reopen → **forging-novel-theses** only if a selected frame again lacks a thesis. |
-| C6 | "write my related-work section covering the 30 papers in this area" | **cut vs systematizing-knowledge**: positioning MY claim against them (the gap, the delta, the nearest competitor) → arguing-research-papers; a standalone synthesis of what the FIELD knows (survey/SoK) → systematizing-knowledge. If the ask is purely "summarize 30 papers", SoK leads; if it's "situate MY contribution", arguing leads. |
+| C6 | "Synthesize these 30 papers, then write the related-work argument positioning our finished result." | **systematizing-knowledge** signs the corpus position → **arguing-research-papers** signs the named-gap CLAIM/ARGUMENT → architecture/prose only if requested |
 | C7 | "Surface the hidden premises in this paper, then assess which ones invalidate its claim." | **surfacing-blind-spots** exposes premises without verdict → **arguing-research-papers** reviewer red-team evaluates warrants, method, and validity |
 | C8 | "A donor mechanism inspired our target study; test it, then write the finished result." | `forging-novel-theses` maps/breaks → `acting-on-hypotheses` earns target-side signal when hard-gated → HERE argues only the completed target evidence |
+| C9 | "Decide what our abstract and Introduction/intro should claim, organize both, then polish the prose." | **arguing-research-papers** signs the claim → **structuring-documents** organizes the genre surfaces → **linting-prose** polishes sentences |
+| C10 | "Write our Limitations and related work/related-work: decide the concession and named gap, fix section flow, then clean the wording." | **arguing-research-papers** signs limitation and positioning → **structuring-documents** fixes architecture → **linting-prose** polishes last |
+| C11 | "Draft the rebuttal/review response: decide the defensible answer, organize it point-by-point, then polish it." | **arguing-research-papers** signs the evidence-bounded response → **structuring-documents** organizes it → **linting-prose** polishes last |
 
 ## Notes on the closest cut
 

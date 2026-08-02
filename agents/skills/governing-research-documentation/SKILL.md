@@ -1,21 +1,21 @@
 ---
 name: governing-research-documentation
 description: >-
-  Governs a RESEARCH REPOSITORY'S document portfolio: choose create, update, derive, freeze, retire,
-  or delete; keep one active authority per question; preserve raw evidence and negative results;
-  expire generated views; and require review decision, questions, evidence, and acceptance criteria.
-  Use for R&D documentation norms, duplicate or stale docs, canonical-vs-derived conflict,
-  retention/removal, reviewable technical communication, OKF adoption, or LLM-wiki governance.
-  Owns cross-document admission, authority, lifecycle, and review contracts. MUST NOT fire for
-  one-document structure (structuring-documents), prose polish (linting-prose), corpus synthesis
-  (systematizing-knowledge), finished-paper argument (arguing-research-papers), research direction
-  (directing-research), transient task state (continuing-long-running-tasks), or wiki/search
-  installation alone. English skill; respond in the user's language (default Japanese).
+  Governs a RESEARCH REPOSITORY document portfolio: create, update, derive, freeze, retire, or delete;
+  keep one authority per question; preserve raw/negative evidence; expire generated views; require
+  evidence-bound review and acceptance criteria. Use for R&D doc norms, stale/duplicate authorities,
+  retention, OKF profiles, or LLM-wiki governance. Owns DOC ADMISSION, authority, lineage, lifecycle,
+  and review contracts. For durable RUN INTENT/RECEIPT/RETROSPECTIVE JUDGMENT, directing-research owns
+  semantic verdict/programme move; HERE admits loci and retains negative terminals. Corpus synthesis →
+  systematizing-knowledge first. Orchestrating-agents owns actors/visibility/acceptance; HERE lifecycle.
+  Cuts: one-doc IA→structuring-documents; prose→linting-prose; paper claim→arguing-research-papers;
+  transient task→continuing-long-running-tasks; install-only→setup owner. English skill; respond in the
+  user's language (default Japanese).
 ---
 
 # Governing research documentation
 
-> **Version**: v2608.1.1 (2026-08-02) — transfer-artifact lifecycle and repository-surface residual.
+> **Version**: v2608.1.2 (2026-08-02) — compact semantic/durability stage-1 cut.
 
 **Atomic build.** Ship the authority contract, profile, templates, floor, regressions, trigger matrix,
 and forge ledger in one change. Run from this Skill directory; success prints nothing:
@@ -149,6 +149,17 @@ and retirement transition:
 Use the existing four profile roles; do not mint a generic “transfer” document class. A generated
 view may render these records but may not become their source of authority.
 
+### D3b · Govern research-run artifacts without owning their meaning
+
+`RUN INTENT`, `RUN RECEIPT`, and `RETROSPECTIVE JUDGMENT` remain `directing-research` artifacts.
+Do not restate their schema. If any becomes durable, run `DOC ADMISSION` for its role, locus, lineage,
+review, retention, and retirement. Never change its semantic lens verdict or programme transition.
+
+Preserve failed, stopped, aborted, excluded, and other negative terminal evidence in the denominator.
+Do not retire or delete it merely because a later run succeeded.
+Exceptional privacy, security, or legal deletion follows `references/admission-and-lifecycle.md`.
+Use the authorized purge path, dependent-claim correction, and a safe tombstone when allowed.
+
 ### D4 · Make feedback executable
 
 Do not ask “thoughts?” or create a second manual summary. Create a small `review_request` that points
@@ -180,6 +191,9 @@ adjudicator. The validator is a deterministic serial gate, never an LLM reviewer
 owners judge semantic truth and whether a new document deserves existence. They also judge whether
 `accept_if` is scientifically adequate.
 
+When checks need a fleet, ask `orchestrating-agents` to choose actors, visibility, and acceptance.
+That skill never decides `DOC ADMISSION` or lifecycle meaning. This skill consumes its check receipts.
+
 ## MUST-NOT-FIRE and sibling cuts
 
 | Request | Owner |
@@ -188,7 +202,8 @@ owners judge semantic truth and whether a new document deserves existence. They 
 | Wording, register, paragraph logic, or reader comprehension | `linting-prose` |
 | Known/uncertain/disputed position across a source corpus | `systematizing-knowledge` |
 | Finished paper's claim, novelty, method, or reviewer argument | `arguing-research-papers` |
-| Research-stage, thesis, or portfolio decision | `directing-research` |
+| Research-stage, thesis, portfolio, or research-process semantic judgment | `directing-research`; co-fire HERE only when its artifact must become durable |
+| Actors, visibility, dependencies, vetoes, or acceptance topology | `orchestrating-agents`; HERE retains admission/lifecycle meaning |
 | One task's resumable transient state | `continuing-long-running-tasks` |
 | Wiki/search product installation without a governance problem | product/setup owner |
 | Cross-document admission, authority, lifecycle, or review contract | **HERE** |

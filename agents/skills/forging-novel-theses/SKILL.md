@@ -1,19 +1,21 @@
 ---
 name: forging-novel-theses
 description: >-
-  Generates a BATCH of testable thesis CANDIDATES for a SELECTED problem/frame with no adequate thesis.
-  Use for 新規仮説 / 新しい研究アイデア, premise breaking, negative-space seeds, or structural transfer.
-  Owns GENESIS: search coordinates, transformation trace, and selected-target `DONOR SET`
-  correspondence. Transfer emits `Status: CANDIDATE` with target evidence `UNTESTED`, or
-  `Status: MAPPING-BREAK`; donor success is never target evidence. Problem choice/dedup →
-  directing-research; corpus/donor discovery → systematizing-knowledge; tacit elicitation →
-  surfacing-blind-spots; facts → raising-resolution; testing → acting-on-hypotheses; topology →
-  orchestrating-agents. Allocation and final packets stay SOLO. English skill; answer in the user's language.
+  Generates a BATCH of testable thesis CANDIDATES only when a problem/frame is selected, no adequate
+  thesis exists, and a provenance-bearing seed or frozen target-agnostic DONOR SET is supplied. Use for
+  新規仮説 / 新しい研究アイデア, premise breaking, grounded control, structural transfer, or one-shot
+  coverage-gap recovery after a frozen/deduplicated batch collapses. Owns GENESIS and selected-target
+  mapping: a transfer returns Status: CANDIDATE with target evidence UNTESTED, or MAPPING-BREAK.
+  Recovery regenerates once in the supplied missing cell; if diversity cannot be restored, it returns
+  explicit COVERAGE GAP. Never ranks, tests, admits, adopts, or discovers donors. Donor discovery →
+  systematizing-knowledge; problem formulation, freeze/dedup, and admission → directing-research; an
+  expensive selected tree → acting-on-hypotheses. Allocation and final packets stay SOLO. English skill;
+  answer in the user's language (default Japanese).
 ---
 
 # Forging novel thesis candidates
 
-> **Version**: v2608.1.0 (2026-08-02) — donor-set correspondence and explicit mapping-break.
+> **Version**: v2608.2.0 (2026-08-02) — honest stage-1 genesis and collapse-recovery surface.
 > **Scope**: candidate construction only. Input is a selected problem/frame; output is one or more
 > candidate packets. Selection, testing, commitment, and program steering are intentionally elsewhere.
 
@@ -28,25 +30,33 @@ done
 
 ## Language and stable tokens
 
-Keep **CANDIDATE**, **MAPPING-BREAK**, **DONOR SET**, **RECIPES**, **search coordinates**,
-**grounded control**, **anti-default**, **coverage-gap packet**, and **COVERAGE GAP** unchanged even
-in Japanese output.
+Keep these stable tokens unchanged, including in Japanese output:
+
+- `CANDIDATE`, `MAPPING-BREAK`, `DONOR SET`, `RECIPES`, and `search coordinates`
+
+- `grounded control`, `anti-default`, `coverage-gap packet`, and `COVERAGE GAP`
 
 ## THE LAW — transform the frame, expose the transformation
 
 > Unusual wording or a different recipe label does not make a candidate novel.
 > Expose the seed source, target, operation, premise, and new discriminator. For `TRANSFER`, expose
 > the donor-set locus/digest, correspondence, non-correspondence, boundary, and precision loss.
-> A successful source is not target evidence: a transfer ends as **CANDIDATE** with target-side
-> evidence `UNTESTED`, or as **MAPPING-BREAK** when the invariant cannot be preserved.
+> A successful source is not target evidence.
+> A valid transfer ends as **CANDIDATE** with target-side evidence `UNTESTED`.
+> Emit **MAPPING-BREAK** when the invariant cannot be preserved.
 
 This skill never claims:
 
 - that distant analogies are better than local ones;
+
 - that more candidates imply more quality;
+
 - that novelty implies truth, importance, or feasibility;
+
 - that a generated kill experiment validates the candidate;
+
 - that an agent's self-rating establishes novelty;
+
 - that source-domain success establishes target-side support, feasibility, or truth.
 
 ## Entry gate
@@ -56,11 +66,12 @@ Fire only when all are true:
 1. a selected problem/frame exists;
 2. its known observations and exclusions are stated;
 3. no adequate thesis is already in hand;
-4. the requested output is candidate generation, not selection or testing.
+4. a provenance-bearing seed is available, or `TRANSFER` has a frozen target-agnostic `DONOR SET`;
+5. the requested output is candidate generation, not selection or testing.
 
 If the problem itself is still being found, compared, or formulated, route to `directing-research`.
-If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED` and route the evidence work
-to `systematizing-knowledge`; do not invent a prior.
+If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED`.
+Route that evidence work to `systematizing-knowledge`; do not invent a prior.
 
 ## Input brief
 
@@ -80,18 +91,16 @@ An absent field is a visible uncertainty. It is not permission to silently redef
 
 ## Search coordinates — the functional partition
 
-Record these field **types independently**. They are orthogonal bookkeeping axes, not a claim that
-their values are statistically independent.
+Record these field **types independently**. They are bookkeeping axes.
+Do not claim their values are statistically independent.
 
-- **Seed provenance** — where the material came from:
-  `TOKEN — specific seed/source`, where `TOKEN` is
-  `OBSERVATION | ACCOUNT | CONSTRAINT | ANALOGY | TACIT | NEGATIVE-SPACE | OTHER`.
-- **Transformation target** — what part of the frame changes:
-  `OBJECT | RELATION | REPRESENTATION | REGIME | EVIDENCE | CONSTRAINT | OTHER — named kind`.
-- **Operation** — what transformation is applied:
-  `INVERT | REMOVE | SUBSTITUTE | TRANSFER | DECOMPOSE | COUPLE | GENERALIZE | BOUND | OTHER — named kind`.
-- **Premise challenged** — one specific premise, or exactly `NONE — grounded control`.
-- **New discriminator** — a concrete contrast against the input, nearest prior, or competing account.
+| Field | Required record |
+|---|---|
+| **Seed provenance** | `TOKEN — specific seed/source`, where `TOKEN` is `OBSERVATION | ACCOUNT | CONSTRAINT | ANALOGY | TACIT | NEGATIVE-SPACE | OTHER` |
+| **Transformation target** | `OBJECT | RELATION | REPRESENTATION | REGIME | EVIDENCE | CONSTRAINT | OTHER — named kind` |
+| **Operation** | `INVERT | REMOVE | SUBSTITUTE | TRANSFER | DECOMPOSE | COUPLE | GENERALIZE | BOUND | OTHER — named kind` |
+| **Premise challenged** | one specific premise, or exactly `NONE — grounded control` |
+| **New discriminator** | a concrete contrast against the input, nearest prior, or competing account |
 
 `OTHER` without a name fails. The open set prevents the taxonomy from turning current labels into a
 closed theory of discovery.
@@ -114,18 +123,18 @@ The six existing routes are useful **RECIPES** for constructing transformations.
 Two recipe labels are not diversity proof. Allocate search-coordinate cells before selecting a recipe.
 Reusing one recipe is valid when cells differ. Relabeling one cell changes nothing.
 
-The RECIPES are constraint inversion, result generalization, competing-account synthesis,
-structural transfer, representation change, and atypical recombination. Their mechanics and rejection
-tests live in `references/generation-engine.md`.
+The RECIPES include constraint inversion, result generalization, and competing-account synthesis.
+They also include structural transfer, representation change, and atypical recombination.
+Their mechanics and rejection tests live in `references/generation-engine.md`.
 
 ### Structural transfer is not decoration
 
 A transfer starts only from a frozen `DONOR SET` from `systematizing-knowledge` and a selected target
-frame. Compare the named donor records, then map roles rather than surface nouns. The attempt must
-name: source relation/locator, target relation before transfer, at least two correspondence pairs,
-the preserved relation, concrete non-correspondence, break condition, precision loss, and a target-side
-counterexample. Similarity, metaphor, topical distance, source success, or a shared tool name never
-passes this gate.
+frame. Compare the named donor records, then map roles rather than surface nouns.
+The attempt must name the source relation/locator and the target relation before transfer.
+It must also name at least two correspondence pairs and the preserved relation.
+Finally, name concrete non-correspondence, break condition, precision loss, and a target counterexample.
+Similarity, metaphor, topical distance, source success, or a shared tool name never passes this gate.
 
 When every admissible mapping breaks, preserve the failure as `MAPPING-BREAK`; do not force it into a
 candidate. A candidate has `Target-side evidence: UNTESTED` until target evidence exists elsewhere.
@@ -201,10 +210,11 @@ Run `bun scripts/gate-check.ts <candidate.md>` for ordinary packets. Every `TRAN
 bun scripts/gate-check.ts --donor-set path/to/donor-set.md path/to/transfer-bundle.md
 ```
 
-The declared `Donor set` field must resolve to the same frozen artifact as `--donor-set` and carry its
-SHA-256. Each declared `Donor ID` must occur there, and `Source relation / locator` must retain that
-record's exact source locator. Do not validate a transfer packet against a replacement donor set or
-substitute an unrelated source behind a valid donor ID.
+The declared `Donor set` must resolve to the same frozen artifact as `--donor-set` and carry its SHA-256.
+Every declared `Donor ID` must occur in that artifact.
+The `Source relation / locator` must retain the record's exact source locator.
+Validate only against the declared frozen donor set.
+Never substitute a different source behind a valid donor ID.
 
 It validates every candidate in a detected batch and derives the coverage matrix.
 PASS cannot establish novelty, value, feasibility, target fit, or truth.
@@ -241,40 +251,59 @@ test during recovery.
 ## Procedure
 
 1. **Restate the frame without improving it.** Preserve the input before transformation.
+
 2. **Build the seed pool.** Label every seed's provenance. Enforce the human-tacit seam before admitting
    any `TACIT` seed.
-3. **Allocate coordinate cells before drafting.** Include the grounded control and anti-default; choose
-   premise, target, operation, and intended discriminator independently of recipe labels.
-4. **Apply useful recipes.** For `TRANSFER`, read the frozen `DONOR SET`, compare donors, and write
-   correspondence/non-correspondence before drafting a claim. Preserve the transformation trace while
-   it is still visible.
-5. **Derive the prediction and discriminator.** A transfer candidate keeps target-side evidence
-   exactly `UNTESTED`; if its relation cannot survive the target, emit `MAPPING-BREAK`. If a candidate
-   creates no new contrast, reject it as a paraphrase or decorative analogy.
-6. **Name the nearest prior.** State the exact delta; when evidence is missing, use `UNVERIFIED`.
-7. **Flag frame changes.** A candidate may reveal that the problem's object or relation should change.
-   Do not silently mutate the input; set the flag so `directing-research` can decide.
-8. **Run the batch floor.** Reject coordinate collapse before return; never substitute recipe-counting.
+
+3. **Allocate coordinate cells before drafting.** Include the grounded control and anti-default.
+   Choose premise, target, operation, and intended discriminator independently of recipe labels.
+
+4. **Apply useful recipes.** For `TRANSFER`, read the frozen `DONOR SET` and compare donors.
+   Write correspondence and non-correspondence before drafting a claim. Preserve the visible trace.
+
+5. **Derive the prediction and discriminator.** Keep transfer evidence exactly `UNTESTED`.
+   Emit `MAPPING-BREAK` if the relation cannot survive the target. Reject candidates with no new contrast.
+
+6. **Name the nearest prior.** State the exact delta. Use `UNVERIFIED` when evidence is missing.
+
+7. **Flag frame changes.** A candidate may expose a needed change to the problem's object or relation.
+   Do not mutate the input. Let `directing-research` decide from the flag.
+
+8. **Run the batch floor.** Reject coordinate collapse before return. Never substitute recipe-counting.
+
 9. **Return packets without ranking.** `directing-research` freezes and semantically deduplicates them.
+
 10. **Honor at most one coverage-gap packet.** Regenerate once in its unoccupied cell or emit
-   `COVERAGE GAP`; do not loop.
+    `COVERAGE GAP`. Do not loop.
 
 ## Quality floor inside generation
 
 Reject a candidate before return if any is true:
 
 - it restates the input problem as a solution-shaped sentence;
-- the transformation trace contains only adjectives (“more adaptive”, “AI-powered”, “holistic”);
+
+- the transformation trace contains only adjectives such as “adaptive”, “AI-powered”, or “holistic”;
+
 - the new prediction was already entailed by the input;
+
 - the discriminator says only “better”, “different”, or “improved” without contrasting outcomes;
+
 - the analogy maps objects but not relations;
-- a `TRANSFER` field uses donor success as target-side evidence or omits its non-correspondence,
-  boundary, precision loss, or target counterexample;
-- a failed correspondence is hidden, rewritten as a candidate, or treated as proof that no other
-  source relation can work;
+
+- a `TRANSFER` field uses donor success as target-side evidence;
+
+- a `TRANSFER` omits non-correspondence, boundary, precision loss, or target counterexample;
+
+- a failed correspondence is hidden or rewritten as a candidate;
+
+- a local mapping failure is claimed to rule out every other source relation;
+
 - the candidate merges two accounts without preserving a discriminator;
+
 - `TACIT` was inferred, simulated, or copied from an `UNELICITED` probe;
+
 - a claimed prior or fact has no locator and is not marked `UNVERIFIED`;
+
 - the status claims `VALIDATED`, `SUPPORTED`, or `READY`.
 
 These are **generation-completeness** failures, not comparative selection.
@@ -305,10 +334,15 @@ The domain packet and coordinate cells are fixed here. If multiple generators ar
 `orchestrating-agents` owns:
 
 - blind initial generation versus visible collaboration;
+
 - subgroup topology and evidence visibility;
-- how generators remain blind until `directing-research` declares its domain batch frozen, and when
-  critique becomes visible after that transition;
+
+- generator blindness until `directing-research` declares its domain batch frozen;
+
+- critique visibility after that transition;
+
 - who may deduplicate or veto;
+
 - independent acceptance.
 
 Do not use agent count as evidence of diversity. Preserve recipe, denominator, and duplicate records.

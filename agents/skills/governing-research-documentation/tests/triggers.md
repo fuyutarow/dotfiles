@@ -17,6 +17,8 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | “Which research docs should be deleted, which deprecated, and which maintained?” | typed delete/retire/maintain adjudication |
 | 「OKFではあるのに文書品質が低い、というポストモーテムを実装可能な規範へ変えて」 | base-standard/profile distinction plus harness floor |
 | “Keep our DONOR SET, transfer bundle, TARGET RESULT, mapping breaks, and route disposition reviewable without inventing a fifth document role.” | lifecycle/authority boundary for existing transfer artifacts |
+| “Only decide whether to create, update, freeze, retire, or delete these records and which one remains authoritative.” | explicit document admission, lifecycle, and authority; semantic content is already fixed |
+| “The RUN INTENT, failed RUN RECEIPT, and signed RETROSPECTIVE JUDGMENT are semantically fixed; admit durable loci, retention, review, and retirement without changing their verdicts.” | durable research-run DOC ADMISSION plus negative-terminal preservation; semantics remain upstream |
 
 ## MUST NOT FIRE
 
@@ -33,6 +35,8 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「このREADMEにAPIの使い方を一節追加して」 | ordinary single-document authoring/domain owner |
 | “Configure a Stop hook to run an already-defined documentation check.” | `operating-the-harness` |
 | “Build a generic repository write tool for agents.” | reject the generic surface; only a future constrained apply design may be considered after repeated evidence |
+| “Audit why this failed research episode changed our interpretation and decide whether the programme should reopen.” | `directing-research`; no durable-document request yet |
+| “Choose agents, evidence visibility, vetoes, and acceptance timing for this documentation audit.” | `orchestrating-agents`; topology only, no lifecycle judgment |
 
 ## Ordered co-fire
 
@@ -44,6 +48,9 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | restructure a newly admitted canonical | HERE admits or chooses update → `structuring-documents` moves information → `linting-prose` rewrites in place → HERE checks lifecycle |
 | preserve task state and permanent research state | `continuing-long-running-tasks` owns one transient task record; HERE separately owns permanent R&D artifacts; neither substitutes for the other |
 | turn corpus observations into a transfer-governed route | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps/breaks → `directing-research` disposes → HERE governs authority, lineage, review, and retirement only |
+| synthesize a corpus and designate its result as canonical authority | `systematizing-knowledge` signs the calibrated position → HERE runs DOC ADMISSION and decides authority/lifecycle |
+| audit a completed/failed/stopped/aborted research episode and retain its artifacts | `directing-research` signs RUN semantics and programme transition → HERE admits durable RUN INTENT/RECEIPT/RETROSPECTIVE JUDGMENT loci and preserves negative terminal evidence |
+| inventory a large document portfolio with several agents, then retire duplicates | HERE fixes the lifecycle question → `orchestrating-agents` owns actors/visibility/acceptance → HERE adjudicates DOC ADMISSION and retirement |
 
 ## Regression predicate
 

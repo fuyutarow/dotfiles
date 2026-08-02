@@ -1061,3 +1061,47 @@ model名・日付付きavailabilityは`references/model-roster.md`へ蒸留し�
 pointerだけを残した。本台帳の旧model role、quota、retentionに関する記録はprovenanceとして保存するが、
 current-policy-inapplicable / retiredであり、現行dispatchの根拠ではない。PROSE-DEBT waiver (2026-07-31):
 既存の3 WARNは前節の共有interface debtを継承し、次のreforge queueで解消する。
+
+## 2026-08-02: stage-1 research/control-plane collision repair — KEEP
+
+凍結入力は`97ec05e84f77068144ecbaca793cf6b3a9a22a12`。名前と責務は`KEEP`とし、split、merge、
+rename、retireは行わない。固有のoperatorは、署名済みfunction mapへagent、visibility、dependency、
+veto、verification、acceptanceを載せるdispatch overlayである。
+
+### Exact collisions and clearing conditions
+
+| Collision ask | 旧衝突 | Clearing condition |
+|---|---|---|
+| 裸の「研究を進めて」「どんどん進めて」 | descriptionとfire表が本skillを直接発火させ、`directing-research`のstage診断・研究定式化と競合した。 | 本skillは単独`NO-FIRE`。`directing-research`がdomain function mapを署名した後、または明示的dispatch/control-plane依頼でだけoverlayを開始する。 |
+| 「研究の進め方を振り返って」 | 無限定のpostmortem行が研究frame、候補、test、portfolioの意味まで取り込めた。 | 本skillはdispatch/pacing/delegation/visibility/acceptance/control-plane failureだけ。research-process retrospectiveは`directing-research`。 |
+| 「compact後も再開できる状態を残して」 | topologyとdurable stateの境界が本文にだけあり、trigger表に相互cutが無かった。 | durable cross-session/compact/resume locusは`continuing-long-running-tasks`。本skillは役割、依存、veto、acceptanceだけをoverlayする。 |
+| 「この研究文書を残す・凍結・廃棄する」 | 文書lifecycleをdispatch対象と誤読できた。 | admission、authority、create/update/derive/freeze/retire/deleteは`governing-research-documentation`。本skillはその裁定を複製しない。 |
+| 「既存artifactの事実を一行だけ確認して」 | P0/P6を理由にfactual inspection自体を所有できた。 | citation gate、cheapest rung、stop-at-oneは`raising-resolution`。本skillはcited observationを運ぶだけ。 |
+
+### Verification and debt closure
+
+- description: 949 Unicode characters; 1024以下。
+- `skill-check.ts agents/skills/orchestrating-agents agents/skills/raising-resolution`: exit 0、
+  `FAIL=0`、`WARN=0`。本skillの旧3 prose WARNをwaiverなしで解消した。
+- Codex `quick_validate.py agents/skills/orchestrating-agents`: `Skill is valid!`。
+- relevant sibling regression: directing-research、surfacing-blind-spots、continuationの4 test filesで
+  `75 pass / 0 fail`。
+
+将来このskillが研究の問題・候補・test・portfolioの意味を作る、durable recordを編集する、
+document lifecycleを裁定する、またはcitation rungを再定義するなら、この`KEEP`判定を再開する。
+
+## 2026-08-02: durable co-fire / generic-incident repair (v2607.14.2)
+
+Fresh near miss: “Why did this software incident happen; fix it and prevent recurrence.” The old
+description named postmortem without an explicit generic-incident cut. Clearing: generic software
+incident/postmortem routes to `implementing-and-debugging`; this skill retains only dispatch, pacing,
+delegation, visibility, acceptance, and control-plane retrospective.
+
+The durable braided order is now literal in both descriptions and bodies:
+`continuity record -> orchestration overlay -> writer checkpoint`. C owns record/writer semantics;
+this skill carries only its locus in the roles/visibility/veto/acceptance overlay. Neither edits the
+other's semantic artifact.
+
+Receipts: description 876 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
+exit 0 (`FAIL=0 WARN=0`); generic incident, control-plane retrospective, and durable-order desk-check
+3/3 PASS.

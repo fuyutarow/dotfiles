@@ -1,5 +1,89 @@
 # Thesis-genesis reforge verification ledger — 2026-07-30
 
+## Stage-1 trigger and prose reforge — v2608.2.0 (2026-08-02)
+
+### KEEP decision and function map
+
+KEEP the name and genesis-only function. The incumbent already owns candidate construction,
+candidate packet schemas, selected-target correspondence, `MAPPING-BREAK`, and the packet checker.
+A generic horizontal-transfer sibling would duplicate those artifacts and blur the stop condition.
+Merging genesis into `directing-research` or `systematizing-knowledge` would erase the existing cuts.
+
+```text
+selected frame + no adequate thesis + provenance-bearing seed
+  --construct thesis candidates--> CANDIDATE batch
+selected frame + frozen target-agnostic DONOR SET
+  --map source relations to the selected target--> CANDIDATE/UNTESTED | MAPPING-BREAK
+frozen/deduplicated batch + one coverage-gap packet
+  --regenerate once in the supplied missing cell--> recovered packet | COVERAGE GAP
+all terminal genesis outputs
+  --> directing-research freeze/dedup/admission
+```
+
+`systematizing-knowledge` remains the donor-discovery owner. `directing-research` remains the
+problem-formulation, freeze/dedup, and admission owner. `acting-on-hypotheses` remains the owner of
+an expensive selected tree's test and commitment rule. This skill never ranks, tests, admits, or
+adopts its output.
+
+### Exact stage-1 mismatch repaired
+
+The prior description exposed the selected-frame/no-adequate-thesis entry and transfer result, but
+omitted four load-bearing facts: a provenance-bearing seed or frozen donor set, the grounded control,
+the post-freeze one-shot recovery with explicit `COVERAGE GAP`, and the rank/test/admit/adopt refusal.
+Its routes named problem choice and donor discovery but did not expose the complete ordered handoff
+back to freeze/dedup/admission.
+
+The prior trigger regression also required body-only search-coordinate, tacit-seam, and orchestration
+semantics. Those predicates could not be proved from the description that the model sees at stage 1.
+Several positive fixtures omitted entry facts that the repaired description now requires. The new
+fixtures state those facts, include collapse recovery, and retain near misses for missing frame, seed,
+target, or genesis need.
+
+The replacement description is 932 characters. Its regression predicate now names only text that is
+actually present in that description. Packet fields and deeper execution rules remain body-level.
+
+### Prose-debt disposition and history
+
+Before this reforge:
+
+```text
+bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/forging-novel-theses
+WARN agents/skills/forging-novel-theses: 16 prose sentences >120 chars (technical-communication debt)
+```
+
+After atomizing the same rules and moving enum-shaped material into a table:
+
+```text
+bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/forging-novel-theses
+<silent: FAIL=0 WARN=0>
+prose_sentences_over_120=0
+```
+
+There is no active prose-debt waiver. The historical 16-WARN waiver and earlier 10-WARN receipt remain
+below; they are evidence of the prior states, not current exemptions. One older pointer called the
+then-active receipt “15-WARN”; the command receipt was 16. This note corrects the mismatch without
+deleting or rewriting the historical receipt.
+
+### Verification receipts
+
+- Codex `quick_validate.py` -> `Skill is valid!`.
+- `skill-check.ts` -> silent, `FAIL=0 WARN=0`.
+- `bun test agents/skills/forging-novel-theses/tests/gate-check.test.ts` ->
+  `31 pass, 0 fail, 110 expect() calls`.
+- Atomic build-order existence check -> exit 0, no missing artifact.
+- Description measurement -> `description_chars=932`; all signed stage-1 predicates present.
+- Trigger desk-check against current sibling descriptions -> 8 FIRES, 16 MUST-NOT-FIRE, and 11
+  ordered routes pass. The checked routes include donor discovery -> mapping/genesis -> admission,
+  problem formulation -> genesis, one collapse recovery only, and direct routing of an expensive
+  selected tree to `acting-on-hypotheses`.
+- Scoped `git diff --check` -> exit 0.
+- Frozen base remained `97ec05e84f77068144ecbaca793cf6b3a9a22a12`.
+
+The trigger desk-check is lexical human arbitration, not a live installed-skill invocation. The packet
+tests and structural checker cannot establish novelty, semantic diversity, correspondence quality,
+target fit, value, or truth. No historical receipt was erased, no sibling was edited, and no commit
+was created by this author task.
+
 ## Transfer-route reforge — v2608.1.0 (2026-08-02)
 
 ### Ownership and stop condition

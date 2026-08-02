@@ -10,6 +10,8 @@ Read **only** the `name` and `description` of:
 - `systematizing-knowledge` (`S`)
 - `orchestrating-agents` (`O`)
 - `arguing-research-papers` (`P`)
+- `governing-research-documentation` (`G`)
+- `continuing-long-running-tasks` (`C`)
 
 A broad request must have one lead. A braided request may co-fire only with an explicit order. A decision
 artifact may have one owner.
@@ -38,6 +40,16 @@ artifact may have one owner.
 | 18 | 「選んだ問題フレームから、水平思考で構造的に異なる仮説を出して」 | `F` | selected frame exists; genesis owns lateral transformations |
 | 19 | “Find comparable donor relations from other fields, but do not map them to my target yet.” | `S` | target-agnostic donor discovery owns the `DONOR SET` |
 | 20 | “A donor set and selected frame exist. Map the relations, preserve failed correspondences, then decide whether to test or reopen.” | `D -> F -> D` | D admits/disposes; F maps or emits `MAPPING-BREAK`; no source-side adoption |
+| 21 | “Audit this completed research episode against its frozen intent and receipts. Did our process justify the frame update?” | `D` | semantic research-process postmortem, not dispatch review |
+| 22 | 「失敗して停止した研究 run も含め、事前意図・対照・欠測・代替仮説から振り返って」 | `D` | failed/stopped receipts remain in the denominator |
+| 23 | “This old project has no prospective intent and only partial public artifacts. Perform the most honest retrospective possible.” | `D` | historical absence yields `PARTIAL` or `UNAUDITABLE`, never reconstructed precommitment |
+| 24 | “Postmortem this generic production outage and fix the software incident process.” | `implementing-and-debugging` | generic software incident/postmortem is neither research-stage judgment nor control-plane review |
+| 25 | 「agent の発注が遅く、査読役も見えていた。dispatch/pacing のポストモーテムをして」 | `O` | control-plane postmortem owns bearer, visibility, pacing, and acceptance |
+| 26 | “Delete stale generated research views and retire duplicate canonical documents.” | `G` | document admission/lifecycle, not semantic research verdict |
+| 27 | “Keep this research task resumable across compact and hand it to another executor.” | `C` | durable task-state transport, not research evidence or judgment |
+| 28 | “Formulate this broad topic into several discriminating research problems.” | `D` | ordinary problem formulation; no postmortem ceremony |
+| 29 | 「この研究を進めて。必要なら複数 agent に委任して」 | `D` domain map, then `O` overlay | bare research progress has D lead; O fires only after domain-signed function map |
+| 30 | 「この研究課題の解像度を上げ、具体化して研究問題として定式化して」 | `D` | Japanese research-problem formulation belongs to `D`; `R` may supply only a silent cited factual row |
 
 ## Negative boundaries
 
@@ -53,6 +65,10 @@ artifact may have one owner.
 | one cheap deterministic reversible probe | not `A`; route domain/plain executor, then return result to `D` |
 | agent roles, blindness, visibility, veto, acceptance | not domain skills; route `O` |
 | finished manuscript claim | not `D/F/A`; route `P` |
+| generic software incident postmortem | not `D/O`; route `implementing-and-debugging` |
+| dispatch, pacing, delegation, or acceptance postmortem | not `D`; route `O` |
+| durable document admission, authority, review, retention, or deletion | not `D`; route `G` |
+| compact, resume, or executor handoff transport | not `D`; route `C` |
 
 ## Reciprocal-cut checklist
 
@@ -63,6 +79,9 @@ artifact may have one owner.
 - `D <-> R`: normative future problem versus inspectable present artifact.
 - `D <-> P`: research program before a finished claim versus manuscript argument.
 - `D/F/A/P <-> O`: domain meaning versus agent topology/authority.
+- `D <-> O` postmortem seam: research semantics and transition versus dispatch/pacing/delegation.
+- `D <-> G`: semantic retrospective verdict versus durable document lifecycle.
+- `D <-> C`: semantic research state versus cross-session transport of artifact loci.
 - `F <-> S`: candidate generation versus novelty/corpus evidence.
 - `F <-> R`: future candidate versus present observation.
 - `F <-> P`: untested candidate versus finished claim.

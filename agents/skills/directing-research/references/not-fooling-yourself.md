@@ -4,6 +4,8 @@
 > visible across many runs. The pass/fail threshold and outcome table for one hard-gated
 > expensive/irreversible experiment belong only to `acting-on-hypotheses`; a cheap deterministic
 > reversible probe uses the domain/plain executor.
+> Semantic review of a completed, failed, stopped, or aborted episode belongs to
+> `research-process-postmortem.md`.
 
 ## 1. Prediction registry
 
@@ -24,6 +26,10 @@ by the one-bet owner has a dated home and cannot be silently rewritten after see
 Exploratory findings are legitimate. They become candidates for a later registered test; they do not
 retroactively become predictions.
 
+For a postmortem-capable episode, instantiate the prospective record from `assets/RUN-INTENT.md`.
+Do not duplicate its schema in this standing policy. The postmortem reference owns semantic use of the
+frozen intent; `scripts/research-run-check.ts` owns only the structural floor.
+
 ## 2. Denominator policy
 
 Predeclare what the denominator includes:
@@ -36,6 +42,9 @@ Predeclare what the denominator includes:
 
 Report distributions and exclusions, not only the winning candidate or maximum result. The denominator
 must follow the artifact into selection, testing, and publication.
+
+Close every postmortem-capable run in the declared denominator with `assets/RUN-RECEIPT.md`. Terminal
+coverage includes failed, stopped, aborted, and excluded states. Missing receipts stay visible.
 
 ## 3. Independent-audit requirement
 
@@ -90,6 +99,10 @@ Every run record distinguishes:
 
 This separation permits problem-frame updates without laundering hindsight.
 
+When an episode ends and a retrospective judgment is requested, join the prospective intent and
+terminal receipt through `research-process-postmortem.md`. Historical absence becomes `PARTIAL` or
+`UNAUDITABLE`; never infer a precommitment from the observed outcome.
+
 ## 6. Hand-offs
 
 - Need to inspect a suspected present leak or anomaly -> `raising-resolution`.
@@ -100,3 +113,5 @@ This separation permits problem-frame updates without laundering hindsight.
   `directing-research`.
 - Need to synthesize an external source corpus -> `systematizing-knowledge`.
 - Need to argue completed evidence in a paper -> `arguing-research-papers`.
+- Need to judge the semantic integrity of a completed, failed, stopped, or aborted research episode
+  -> `research-process-postmortem.md`.

@@ -16,6 +16,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | F6 | “I have papers, standards, and benchmark reports with incompatible metrics; tell me who actually agrees and how confident we should be.” | multi-source synthesis without a headline keyword |
 | F7 | “Does the security literature support the belief that memory-safe rewrites eliminate this attack class, or are there scoped counterexamples?” | venue-style SoK belief test and threat-model comparison |
 | F8 | 「この固定した研究フレームに使える外部の関係を、対象への対応付けはせず複数分野から探して DONOR SET にして」 | target-agnostic source-side relation discovery and comparison |
+| F9 | “Only establish the calibrated evidence position across this corpus; do not create or designate a canonical document.” | evidence synthesis terminates here; no document-authority decision is requested |
 
 ## MUST NOT FIRE
 
@@ -35,6 +36,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | N6 | “Debug the split leakage in my own training pipeline.” | `raising-resolution`, then `implementing-and-debugging` if a fix is requested |
 | N7 | “Create a reusable skill from this already-reconciled operating manual.” | `forging-skills` — skill craft |
 | N8 | “Map these donor roles onto my selected target and derive the target prediction.” | `forging-novel-theses` — target correspondence and thesis genesis; this skill stops at `DONOR SET` |
+| N9 | “Freeze the current research note, retire its predecessor, and designate the surviving authority; the evidence position is already fixed.” | `governing-research-documentation` — document authority/lifecycle only |
 
 ## CO-FIRE — order matters
 
@@ -46,6 +48,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | C4 | “Reforge systematizing-knowledge because its rules are crude.” | `forging-skills` owns the reforge → `systematizing-knowledge` is the domain artifact under audit; use `operating-the-harness` when executable checks are added |
 | C5 | “Turn a raw paper corpus into a durable synthesis skill.” | `systematizing-knowledge` reconciles the corpus first → `forging-skills` distills the settled operating knowledge |
 | C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research` later disposes attempts |
+| C7 | “Synthesize this corpus into a calibrated position, then make the accepted result our canonical authority.” | `systematizing-knowledge` signs the corpus position first → `governing-research-documentation` decides DOC ADMISSION, authority, review, and lifecycle |
 
 ## Sharp cuts
 

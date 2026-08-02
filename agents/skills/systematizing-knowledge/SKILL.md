@@ -7,7 +7,9 @@ description: >-
   correspondence/prediction/thesis → forging-novel-theses. Cuts: one fact → raising-resolution;
   one-paper appraisal → arguing-research-papers; premise audit → surfacing-blind-spots; program
   judgment → directing-research; expensive selected tree → acting-on-hypotheses; settled IA →
-  structuring-documents; agent dispatch → orchestrating-agents. Search/extraction may fan out;
+  structuring-documents; agent dispatch → orchestrating-agents; document authority/lifecycle →
+  governing-research-documentation. If both are requested, this skill signs the corpus position first;
+  governing-research-documentation then decides admission and authority. Search/extraction may fan out;
   adjudication and terminal artifact stay SOLO. English skill; answer in the user's language.
 ---
 
@@ -113,6 +115,8 @@ verification may fan out. The editor keeps review-mode selection and protocol am
 Synthesis-operator choice, discrepancy adjudication, and the final position also stay SOLO.
 Generic briefing, dispatch, and acceptance belong to `orchestrating-agents`. This skill owns only
 the evidence-synthesis stage map and schemas. No harness means the same stages run serially.
+If the position must become durable or canonical, finish and sign it here first.
+Then `governing-research-documentation` decides `DOC ADMISSION`, authority, and lifecycle.
 
 ## MUST-NOT-FIRE and sibling routing
 
@@ -130,7 +134,7 @@ the evidence-synthesis stage map and schemas. No harness means the same stages r
 | Test, commit, pivot, or kill one expensive/irreversible selected future hypothesis tree | `acting-on-hypotheses` — hard-gated tree there; corpus state here |
 | Run one deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | Reorder or deduplicate a review whose evidence judgments are settled | `structuring-documents` — FIX-LOCALITY: document architecture there; evidence derivation here |
-| Govern admission, authority, evidence lineage, review, retirement, or deletion across research documents | `governing-research-documentation` — portfolio lifecycle there; corpus position and claim ledger here |
+| Govern admission, authority, evidence lineage, review, retirement, or deletion across research documents | `governing-research-documentation` — corpus position is signed HERE first; portfolio authority/lifecycle follows there |
 | Find passages in an indexed local corpus without synthesizing them | `driving-cocoindex` — locate there; synthesize here |
 | Turn a raw paper corpus into a skill | Run this skill first, then `forging-skills`; never distill unreconciled papers |
 | Decide how to brief, dispatch, and accept work across agents | `orchestrating-agents`; co-fire only when a synthesis also needs a fleet |

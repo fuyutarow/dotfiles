@@ -235,3 +235,67 @@ it cannot anchor a finished target claim. Missing target evidence stays an expli
 routes to mapping/break generation or a target-side test. This is a constructed calibration rule, not a
 claim that the paper-writing source corpus validates the transfer schema. No claim-check script or test
 fixture changed.
+
+## 2026-08-02 — stage-1 genre and claim-first reforge (v2608.0.0) — KEEP
+
+Frozen input: `97ec05e84f77068144ecbaca793cf6b3a9a22a12`.
+Decision: `KEEP`; no split, merge, rename, or retirement.
+
+The unique transition remains:
+`finished claim or one-paper appraisal → sign/judge CLAIM SPEC argument → defended written claim`.
+The stop is an evidence-calibrated claim with G0–G3 artifacts, or an explicit not-ready finding.
+Whole research lifecycle, document architecture, and sentence polish remain outside this skill.
+
+### Stage-1 defect and repair
+
+The old description named the broad paper-writing territory but omitted several literal genre aliases.
+It also left the claim-first order mainly in the loaded body and trigger notes.
+At stage 1, “write my introduction” or “clean up related work” could therefore race generic document
+architecture and prose skills without exposing which judgment happens first.
+
+The new 928-character description exposes all six alias groups:
+
+| Alias receipt | Positive fixture | Ordered co-fire receipt |
+|---|---|---|
+| `abstract` | F3 | C9: argument → architecture → sentence polish |
+| `introduction/intro` | F2, F10 | C9: argument → architecture → sentence polish |
+| `Limitations` | F8 | C10: concession → architecture → sentence polish |
+| `related work/related-work` | F11 | C10: positioning → architecture → sentence polish |
+| `rebuttal/review response` | F4, F12 | C11: defensible response → architecture → sentence polish |
+
+Near-miss receipts remain explicit. N1 routes generic document structure to `structuring-documents`.
+N2 routes generic prose cleanup to `linting-prose`. N5b2 routes an unfinished research question to
+`directing-research`. N4 routes a corpus position to `systematizing-knowledge`.
+
+The finished-claim reopen rule is unchanged. A novelty objection starts here as claim diagnosis.
+Only an explicit `directing-research` reopen may return the work to candidate generation (C5b).
+
+### Prose-debt closure
+
+Before: 44 prose sentences over 120 characters, one 15-line version block, and four table cells over
+400 characters. After: zero long-sentence WARNs, a two-line version block, and zero long table cells.
+No waiver remains. Historical scope and lineage stay in this ledger and `references/sources.md`.
+
+### Verification receipts
+
+- `quick_validate.py agents/skills/arguing-research-papers`: `Skill is valid!`.
+- `skill-check.ts agents/skills/arguing-research-papers`: exit 0, `FAIL=0`, `WARN=0`, no output.
+- Atomic pointer check from the skill directory: exit 0, no output.
+- Description length: 928 Unicode characters.
+- Trigger desk-check floor: `PASS aliases=6 F=12 N=18 C=12 claim-first=present`.
+- Filled CLAIM SPEC through `claim-check.ts -`: `FAIL=0 WARN=0`.
+- Placeholder-only red probe: exit 1, `FAIL=6 WARN=0`; the G2 anchor-only deferral remains allowed.
+- Scoped `git diff --check`: exit 0, no output.
+- `mise run lint:skills-index`: `✅ skills index complete`.
+
+## 2026-08-02 — claim-qualified alias repair (v2608.0.1)
+
+Fresh stage-1 probe found that bare section aliases could outmatch their purpose: typo/format-only
+abstract work and corpus-only related-work synthesis both contained positive alias tokens. Clearing:
+aliases now require CLAIM/ARGUMENT work; meaning-fixed typo/format work routes direct/plain, and corpus
+synthesis routes to `systematizing-knowledge`. Trigger receipts: N4d, N7, and ordered C6. Claim-first
+argument → architecture → wording order and one-paper appraisal remain unchanged.
+
+Receipts: description 932 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
+exit 0 (`FAIL=0 WARN=0`); filled CLAIM SPEC smoke `FAIL=0 WARN=0`; fresh N4d/N7/C6 stage-1 desk-check
+3/3 PASS.

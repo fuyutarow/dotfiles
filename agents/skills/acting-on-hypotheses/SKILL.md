@@ -2,35 +2,48 @@
 name: acting-on-hypotheses
 description: >-
   Acts on ONE SELECTED hypothesis tree when an untested load-bearing bet carries expensive or
-  hard-to-reverse work. Maps beliefs, runs the cheapest discriminating test with a prewritten
-  threshold and outcome table, then Commit / Pivot / Kill. Use for 仮説検証, 仮説行動,
-  Map-Loop-Leap, de-risk, or should-we-commit. Transfer requires target-side evidence; donor success
-  is not evidence. Returns a
-  `TARGET RESULT` to directing-research; never emits or reclassifies `MAPPING-BREAK`. Cuts: problem
-  construction, admission, or multiple bets → directing-research; thesis genesis or mapping →
-  forging-novel-theses; tacit premises → surfacing-blind-spots; present fact → raising-resolution;
-  corpus → systematizing-knowledge; finished claim → arguing-research-papers. A deterministic,
-  bounded, reversible probe without expensive downstream exposure uses the domain/plain executor.
-  Sole owner of the selected tree's threshold, outcome table, and commit/pivot/kill. English skill;
-  answer in the user's language.
+  hard-to-reverse/irreversible work. Maps beliefs; runs the cheapest discriminating test with a
+  prewritten threshold and outcome table; then Commit / Pivot / Kill. Use for 仮説検証, 仮説行動,
+  Map-Loop-Leap, de-risk, or should-we-commit. Transfer needs target-side evidence; donor success is not
+  evidence. Returns a TARGET RESULT to directing-research; never emits or reclassifies MAPPING-BREAK.
+  Cuts: problem construction/admission/multiple bets→directing-research; thesis
+  genesis/mapping→forging-novel-theses; tacit premises→surfacing-blind-spots; present
+  fact→raising-resolution; corpus→systematizing-knowledge; finished claim→arguing-research-papers. A
+  cheap deterministic reversible probe without expensive downstream exposure→domain/plain executor.
+  Sole owner of the selected tree threshold, outcome table, and commit/pivot/kill. English; answer in
+  user language.
 ---
 
 # 仮説行動 — Map · Loop · Leap (act under irreducible uncertainty)
 
-> **Scope**: A domain-neutral decision discipline (refactor, research direction, architecture choice,
-> product bet — not startups only). Distilled from 馬田隆明『仮説行動』; the book is *lineage*, not
-> *content to recite*. This file holds the precedence-setting CORE inline; phase technique and
-> inter-skill routing live in `references/` and load on demand.
-> **Build order (atomic).** This SKILL.md, its **5 reference targets** (map, loop, leap, boundaries,
-> anti-patterns), `tests/triggers.md`, and `tests/forge-verification-ledger.md` ship together. Verify:
-> `for f in map loop leap boundaries anti-patterns; do test -f references/$f.md || echo MISSING $f; done; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING "tests/$t.md"; done`
+> **Scope**: A domain-neutral decision discipline.
+> It covers refactor, research direction, architecture choice, and product bets; it is not startups only.
+> Distilled from 馬田隆明『仮説行動』; the book is *lineage*, not *content to recite*.
+> This file holds the precedence-setting CORE inline.
+> Phase technique and inter-skill routing live in `references/` and load on demand.
+
+**Build order (atomic).** Ship this SKILL.md with its five reference targets, `tests/triggers.md`,
+and `tests/forge-verification-ledger.md`. Verify:
+
+```bash
+for f in map loop leap boundaries anti-patterns; do
+  test -f "references/$f.md" || echo "MISSING references/$f.md"
+done
+for t in triggers forge-verification-ledger; do
+  test -f "tests/$t.md" || echo "MISSING tests/$t.md"
+done
+```
 
 ## Language
 
-This skill is **English**. The deliverable you produce **defaults to the user's language (Japanese)**.
-Keep the key terms as stable tokens even inside Japanese prose: 仮説行動, マップ・ループ・リープ,
-確信度×影響度, 学びの最大化, Map / Loop / Leap, the load-bearing node, win/kill/loss,
-**TARGET RESULT**, and **MAPPING-BREAK**.
+This skill is **English**. The deliverable defaults to the user's language, normally Japanese.
+Keep these stable tokens unchanged, including inside Japanese prose:
+
+- 仮説行動, マップ・ループ・リープ, 確信度×影響度, and 学びの最大化
+
+- Map / Loop / Leap, the load-bearing node, and win/kill/loss
+
+- **TARGET RESULT** and **MAPPING-BREAK**
 
 ## CORE — read every time (precedence-setting)
 
@@ -42,12 +55,14 @@ stated as law **only here**.
 
 ### THE LAW
 
-> Under open-ended / uncertain / ambitious tasks you may **NOT** (a) freeze / over-ask / collect-more
-> until "certain", nor (b) build a big-bang on unvalidated assumptions; you **MUST** Map → Loop → Leap,
-> and you reach Leap only after Loop has retired the **fatal risks on the load-bearing node**.
+> On open-ended, uncertain, or ambitious tasks, do **NOT** freeze, over-ask, or collect more until "certain".
+> Do **NOT** build a big-bang on unvalidated assumptions.
+> You **MUST** Map → Loop → Leap.
+> Reach Leap only after Loop retires the **fatal risks on the load-bearing node**.
 
-Its authority is carried by three checkable sub-rules. **Each MUST emit a grep-able artifact** (mirrors
-systematizing-knowledge's ledger-token discipline) — no artifact, rule not satisfied.
+Its authority is carried by three checkable sub-rules.
+**Each MUST emit a grep-able artifact**, mirroring `systematizing-knowledge`'s ledger-token discipline.
+No artifact means the rule is not satisfied.
 
 | # | Rule | What it inverts | ARTIFACT (must exist) |
 |---|---|---|---|
@@ -57,29 +72,63 @@ systematizing-knowledge's ledger-token discipline) — no artifact, rule not sat
 
 ### STEP 0 — THE GATE (hard over-firing guard; this is the precedence top gate)
 
-**Over-firing is the primary liability** — three-phase ceremony as "be-bold theater". Fire this skill
-**only** when **a load-bearing belief is untested AND the work riding on it is expensive (>~1 reversible
-session to build) OR hard to reverse.** Then run the cut and the cheapness rule:
+**Over-firing is the primary liability**: three-phase ceremony becomes "be-bold theater".
+Fire this skill only when both conditions hold:
 
-- **The cut (vs raising-resolution).** Ask: *"Could a smart person, given enough primary info about
-  what ALREADY EXISTS, know the answer?"*
-  - **YES** → present-understanding gap → **raising-resolution** (if loaded; else a bounded inline
-    resolution pass — see `references/boundaries.md` fallback — and do **not** relabel it a Loop).
+1. a load-bearing belief is untested;
+
+2. its dependent work is expensive, meaning more than about one reversible session, or hard to reverse.
+
+Then run the cut and the cheapness rule:
+
+- **The cut (vs raising-resolution).** Ask:
+  *"Could a smart person, given enough primary information about what ALREADY EXISTS, know the answer?"*
+
+  - **YES** → present-understanding gap → **raising-resolution**.
+    If it is unavailable, use the bounded inline fallback in `references/boundaries.md`.
+    Do **not** relabel that resolution pass as a Loop.
+
   - **NO** → future-bet gap → continue.
-  - Deterministic / known-method task → **just do it** (no ceremony).
-- **The exposure cut.** Regardless of whether a tree has already been selected, route to
-  **surfacing-blind-spots** when the requested verb is to expose hidden premises, ignored anomalies,
-  unpublished failures, workarounds, or human tacit constraints. Return here only after those premises
-  are explicit and the next verb is STRUCTURE / TEST / COMMIT. Do not call premise excavation a Map.
-- **Cheap executor cut.** If no expensive-or-hard-to-reverse work rides on the result and the obvious
-  probe is deterministic, known-method, bounded, and reversible inside one ordinary session, this skill
-  does **not** fire. Send the probe to the domain owner or plain executor; it returns the raw result +
-  provenance to `directing-research` for stage diagnosis. Do not manufacture a Map, threshold, or Leap.
-  Conversely, a cheap discard-intent test that protects a later expensive/irreversible decision is a
-  genuine Loop here: downstream exposure, not test price, is the tie-break.
-- **Under-firing guard (subordinate to the gate).** When a load-bearing belief is untested AND the work
-  is expensive-or-irreversible, fire **even if you feel confident** — felt confidence is not earned
-  confidence (R2). "Felt confidence" can never justify ceremony on *routine* work; the gate wins.
+
+  - Deterministic / known-method task → **just do it** without ceremony.
+
+- **The exposure cut.** Apply it even after a tree has been selected.
+  Route to **surfacing-blind-spots** when the requested verb is to expose any of these:
+
+  - hidden premises;
+
+  - ignored anomalies;
+
+  - unpublished failures;
+
+  - workarounds;
+
+  - human tacit constraints.
+
+  Return here only after those premises are explicit and the next verb is STRUCTURE / TEST / COMMIT.
+  Do not call premise excavation a Map.
+
+- **Cheap executor cut.** This skill does **not** fire when both conditions hold.
+  No expensive-or-hard-to-reverse work rides on the result.
+  The obvious probe also fits all four properties below:
+
+  - deterministic;
+
+  - known-method;
+
+  - bounded;
+
+  - reversible inside one ordinary session.
+
+  Send that probe to the domain owner or plain executor.
+  It returns the raw result and provenance to `directing-research` for stage diagnosis.
+  Do not manufacture a Map, threshold, or Leap.
+  A cheap discard-intent test may still protect a later expensive or irreversible decision.
+  That is a genuine Loop here: downstream exposure, not test price, is the tie-break.
+
+- **Under-firing guard (subordinate to the gate).** Fire when both gate conditions hold,
+  **even if you feel confident**. Felt confidence is not earned confidence under R2.
+  It cannot justify ceremony on routine work; the gate wins.
 
 ### The three phases — verb-based seams (closes the Map/Loop overlap)
 
@@ -89,97 +138,170 @@ session to build) OR hard to reverse.** Then run the cut and the cheapness rule:
 | **LOOP** | **TEST & WRITE-VALUES** | the **only** phase that runs a test and **writes a confidence value** onto an EXISTING node; owns 学びの最大化 | never adds/removes nodes — if a test reveals a missing node, **FLAG** it and hand a cheap in-place Map pass the restructure |
 | **LEAP** | **COMMIT & REALIZE** | the **only** phase that stakes a kept output and produces the outcome itself (仮説を正解にする); owns reversibility sizing (one-way vs two-way door); changes confidence only as a POST-COMMIT byproduct of reality | never runs a discard-intent probe (that is Loop's verb); never launders a cheap executor probe into a ceremonial commitment |
 
-**Disambiguation — the object "hypothesis" has EXACTLY ONE role per phase** (exhaustive across the
-three): **POSITIONED** (Map: a node placed in the tree + tagged) → **FALSIFIED** (Loop: a target a test
-tries to kill) → **COMMITTED-AND-REALIZED** (Leap: the chosen bet you make true). *Tell:* placing /
-structuring it? **Map.** Trying to kill it with a test? **Loop.** Staking on it to make it real? **Leap.**
+**Disambiguation — "hypothesis" has EXACTLY ONE role per phase.** These roles exhaust the three phases:
 
-**Disambiguation — the object "action" (Loop vs Leap), cut CATEGORICALLY by INTENT-AT-DESIGN** (not a
-reversibility gradient): a **LOOP action** is one you pre-commit to **THROW AWAY** / not depend on
-(scope sized to the **signal** — spike, throwaway MVP, concierge probe, one real run/user). A **LEAP
-action** is one you pre-commit to **KEEP and BUILD ON** (scope sized to the outcome). A staged/reversible
-Leap is **STILL Leap**, because you keep and depend on stage 1. *Tie-break tell:* "Did I pre-commit to
-**discard** this (Loop) or to **keep-and-depend-on** it (Leap)?" There is no keep-possible exception:
-a trial whose result has no expensive/irreversible downstream exposure was already routed out by
-STEP 0; it does not become a Leap merely to preserve the phase taxonomy.
+- **POSITIONED** — Map places and tags a node in the tree.
 
-**Ordering is a dependency, not a waterfall.** Map → Loop → Leap; **Loop feeds back into Map** (a
-surprising result triggers a Map restructure and can demote a planned Leap). A single iteration may
-legitimately run **Loop (test) → Map (node-add)** — the verbs co-occur in one cycle; what stays separable
-is the **ARTIFACT** (Loop emits `NEW NODE flagged by Loop iteration N`, Map places it — `references/map.md` §6), not
-the wall-clock moment. The stagnation check recurs whenever Loop runs. Never skip Map → Leap without Loop
-retiring the fatal risks on the load-bearing node.
+- **FALSIFIED** — Loop targets a node with a test that tries to kill it.
+
+- **COMMITTED-AND-REALIZED** — Leap makes the chosen bet true.
+
+Use the verb as the tell:
+
+- placing or structuring it → **Map**;
+
+- trying to kill it with a test → **Loop**;
+
+- staking on it to make it real → **Leap**.
+
+**Disambiguation — cut "action" CATEGORICALLY by INTENT-AT-DESIGN, not by reversibility.**
+
+- A **LOOP action** is pre-committed to **THROW AWAY** and not depend on.
+  Size it to the **signal**: a spike, throwaway MVP, concierge probe, or one real run/user.
+
+- A **LEAP action** is pre-committed to **KEEP and BUILD ON**.
+  Size it to the outcome.
+
+A staged or reversible Leap is **STILL Leap**, because you keep and depend on stage 1.
+Use this tie-break: "Did I pre-commit to discard this, or to keep and depend on it?"
+There is no keep-possible exception.
+A trial without expensive or irreversible downstream exposure was already routed out by STEP 0.
+It does not become a Leap merely to preserve the phase taxonomy.
+
+**Ordering is a dependency, not a waterfall.** Use Map → Loop → Leap.
+Loop feeds back into Map when a surprising result requires restructuring or demotes a planned Leap.
+A single iteration may legitimately run **Loop (test) → Map (node-add)**.
+The verbs can co-occur in one cycle, but their **ARTIFACTS** stay separate.
+Loop emits `NEW NODE flagged by Loop iteration N`; Map places it under `references/map.md` §6.
+The stagnation check recurs whenever Loop runs.
+Never skip Map → Leap before Loop retires the fatal risks on the load-bearing node.
 
 ## Procedure (STEP 0–4 + recurring check)
 
-> Structure = GATE + 3 verb-phases + recurring stagnation check; not exhaustive (MECE-by-verb holds
-> over the 3 phases only). Reversibility sizing is folded into LEAP's COMMIT verb, not its own step.
+> Structure = GATE + 3 verb-phases + recurring stagnation check.
+> Only the three phases are MECE by verb; the whole structure is not exhaustive.
+> Reversibility sizing belongs inside LEAP's COMMIT verb, not in a separate step.
 
 - **STEP 0 — GATE** *(owned here, above).* Apply the firing threshold, the cut, the cheapness rule.
   Route to raising-resolution / just-do-it / continue.
 
 - **STEP 1 — MAP** *(draw, don't perfect — TIME-BOX is a first-class rule).* Write the overarching
-  hypothesis as one falsifiable **言い切り**. Decompose into sub-hypotheses (build: value / feasibility /
-  approach / integration / cost; research: claim / method / data / baseline). Tag each node
-  **確信度(0–100%)×影響度**. Do it **ざっくり, then STOP** — set an explicit time-box and move; endless
-  Mapping is a banned failure mode. Two scans: (a) low-確信度 nodes = what to test; (b) win/lose nodes =
-  decisive. **Load-bearing node = max(uncertain × decisive).** If you cannot even NAME the nodes because
-  the present is blurry → resolution gap, route per STEP 0. *Output:* the map + the single named node
-  Loop attacks + any incoming `OPEN-SET RESIDUAL` copied unchanged with its provenance and observable
-  reopen trigger. OPEN is never a node or a fact. (Technique → `references/map.md`.)
+  hypothesis as one falsifiable **言い切り**. Decompose it into sub-hypotheses:
+
+  - build: value / feasibility / approach / integration / cost;
+
+  - research: claim / method / data / baseline.
+
+  Tag each node **確信度(0–100%)×影響度**.
+  Work **ざっくり, then STOP**: set an explicit time-box and move.
+  Endless Mapping is a banned failure mode.
+  Run two scans: low-確信度 nodes show what to test; win/lose nodes show what is decisive.
+  **Load-bearing node = max(uncertain × decisive).**
+  If the present is too blurry to NAME the nodes, treat it as a resolution gap and route per STEP 0.
+  Output the map and the single named node that Loop attacks.
+  Copy any incoming `OPEN-SET RESIDUAL` unchanged with its provenance and observable reopen trigger.
+  OPEN is never a node or a fact. Technique lives in `references/map.md`.
 
 - **STEP 2 — LOOP** *(cheapest FALSIFYING test).* Plan in reverse **L→M→B**, execute **B→M→L**. Apply
-  R3's outcome→next-action table FIRST (kill vanity tests). Pre-commit the pass/fail threshold; prefer
-  an objective behavioral signal (a passing test, real attention/payment/time, a reproduced number) over
-  self-reported enthusiasm. Build the minimum that yields the signal (sell-before-build / concierge /
-  single spike). WRITE the confidence value onto the node; if a missing node surfaced, FLAG it and run a
-  cheap in-place Map pass only when it still fits the selected tree. A frame-breaking discovery emits
-  `FRAME-BREAK` with exactly one primary slot from
-  `OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION / OPEN` and returns to
-  `directing-research`; `VALUE` and `ACTION` are frame breaks, while `OPEN` remains an external residual
-  until that sibling classifies it (Loop never edits structure). **STOP when fatal risks on the load-bearing node
-  are retired — NOT at 100% confidence** (it never comes). On a multi-agent harness, only the probe's
-  **Build→Measure** may run as a subagent under the probe contract (`references/loop.md` §8); the
-  discrimination table, the pass/fail adjudication, the confidence write, and the Leap never leave your
-  context — an agent's opinion is never a signal. (Technique + 学びの最大化 → `references/loop.md`.)
+  R3's outcome→next-action table FIRST to kill vanity tests.
+  Pre-commit the pass/fail threshold.
+  Prefer an objective behavioral signal over self-reported enthusiasm.
+  Valid examples include a passing test, real attention/payment/time, or a reproduced number.
+  Build the minimum that yields the signal: sell-before-build, concierge, or a single spike.
+  WRITE the confidence value onto the node.
+  If a missing node surfaced, FLAG it.
+  Run a cheap in-place Map pass only when that node still fits the selected tree.
+  A frame-breaking discovery emits `FRAME-BREAK` and returns to `directing-research`.
+  Give it exactly one primary slot:
 
-  **Transfer guard.** Copy the candidate ID, frozen transfer-bundle path/digest, donor-set locus, and
-  correspondence locators from a selected transfer candidate. Begin with `target-side evidence:
-  UNTESTED`. Test a target-side observable
-  consequence of the preserved relation. Donor success, fluent analogy, and agent endorsement may motivate
-  a test. They cannot move target confidence or satisfy its threshold. Return the outcome as a
-  `TARGET RESULT` to `directing-research`; Loop never emits or reclassifies `MAPPING-BREAK`. If the
-  observation calls the correspondence itself into question, request a new assessment from
-  `forging-novel-theses`. Only that skill may emit a `MAPPING-BREAK`; `directing-research` then updates
-  the disposition. The exact result contract is in `references/loop.md` §3. If the result becomes a
-  durable reviewed repository artifact, `governing-research-documentation` governs only its locus,
-  lineage, review, and retirement; it never changes the threshold or mapping meaning.
+  ```text
+  OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION / OPEN
+  ```
 
-- **RECURRING — STAGNATION CHECK** *(runs whenever Loop is active — it has a home, not orphaned).* Is
-  the hypothesis written and shared? Is the node-under-test named? Are you tuning on results, or
-  perfectionism-stalling? **Two first-class exits:** (i) if the load-bearing node is **not falsifiable by
-  any test you can actually run here** (no access to the real signal / it is a co-creation question),
-  switch that node from FALSIFY-mode to **DIALOGUE/CO-CREATION-mode** or escalate that access is the
-  blocker — do not felt-Loop an unrunnable node; (ii) **「回らないなら、いる場所が悪いのかも」** — if the loop
-  structurally cannot turn, escalate the environment, don't churn.
+  `VALUE` and `ACTION` are frame breaks.
+  `OPEN` remains an external residual until `directing-research` classifies it.
+  Loop never edits structure.
+  **STOP when fatal risks on the load-bearing node are retired, NOT at 100% confidence.**
+  Complete confidence never comes.
+  On a multi-agent harness, only the probe's **Build→Measure** may run as a subagent.
+  It must use the probe contract in `references/loop.md` §8.
+  Keep the discrimination table, pass/fail adjudication, confidence write, and Leap in your context.
+  An agent's opinion is never a signal. Technique and 学びの最大化 live in `references/loop.md`.
+
+  **Transfer guard.** Copy the candidate ID and frozen transfer-bundle path/digest.
+  Also copy the donor-set locus and correspondence locators from the selected transfer candidate.
+  Begin with `target-side evidence: UNTESTED`.
+  Test a target-side observable consequence of the preserved relation.
+  Donor success, fluent analogy, and agent endorsement may motivate a test.
+  They cannot move target confidence or satisfy its threshold.
+  Return the outcome as a `TARGET RESULT` to `directing-research`.
+  Loop never emits or reclassifies `MAPPING-BREAK`.
+  If the observation questions the correspondence, request a new assessment from `forging-novel-theses`.
+  Only that skill may emit a `MAPPING-BREAK`; `directing-research` then updates the disposition.
+  The exact result contract is in `references/loop.md` §3.
+  If the result becomes a durable reviewed repository artifact, govern it with
+  `governing-research-documentation`. That skill owns only its locus, lineage, review, and retirement.
+  It never changes the threshold or mapping meaning.
+
+- **RECURRING — STAGNATION CHECK** *(runs whenever Loop is active; it has a home, not orphaned).*
+  Ask three questions:
+
+  - Is the hypothesis written and shared?
+
+  - Is the node-under-test named?
+
+  - Are you tuning on results, or perfectionism-stalling?
+
+  Use two first-class exits:
+
+  1. The load-bearing node is **not falsifiable by any test you can actually run here**.
+     This includes lacking access to the real signal or facing a co-creation question.
+     Switch the node from FALSIFY-mode to **DIALOGUE/CO-CREATION-mode**.
+     Otherwise, escalate that access is the blocker.
+     Do not felt-Loop an unrunnable node.
+
+  2. **「回らないなら、いる場所が悪いのかも」**.
+     If the loop structurally cannot turn, escalate the environment; do not churn.
 
 - **STEP 3 — LEAP** *(evaluate → decide → realize → size reversibility — all ONE verb: COMMIT & REALIZE).*
-  EVALUATE on **確信度(now earned)×影響度**; do not default to the safe small bet
-  (**君の仮説は小さくまとまっている** — small-bet disease). Before committing WRITE the load-bearing triple:
-  **win condition, kill/withdrawal condition, a survivable loss cap** (set BEFORE acting so sunk cost
-  cannot rewrite them). DECIDE: state the chosen approach and why; commit. **SIZE REVERSIBILITY** (no
-  longer a separate step — it is part of the COMMIT verb): a **two-way door** (reversible / bounded loss)
-  → leap boldly even at mid confidence (asymmetric upside); a **one-way door** (irreversible / unbounded)
-  → demand more Loop or restructure into staged/reversible commits. **大きく考え、小さく踏み出せ.** REALIZE:
-  the behavior-changing rule is **honor the kill condition over sunk cost**; when reality diverges, adjust
-  execution / pivot toward the goal before declaring the hypothesis dead (you can make a hypothesis true by
-  execution). (Technique + the WIN/KILL/LOSS template + door-type checklist → `references/leap.md`.)
+  EVALUATE on **確信度(now earned)×影響度**.
+  Do not default to the safe small bet: **君の仮説は小さくまとまっている** is small-bet disease.
+  Before committing, WRITE the load-bearing triple:
 
-- **STEP 4 — OUTPUT in the USER'S LANGUAGE (Japanese):** the hypothesis map (nodes + 確信度×影響度),
-  each Loop's outcome→next-action and what moved, the Leap decision with win/kill/loss conditions, and
-  the current load-bearing open node. Also carry the incoming `OPEN-SET RESIDUAL` unchanged, including
-  provenance + reopen trigger; if it fired, output the raw signal and `FRAME-BREAK` handoff instead of
-  absorbing it into the tree.
+  - win condition;
+
+  - kill/withdrawal condition;
+
+  - survivable loss cap.
+
+  Set all three BEFORE acting so sunk cost cannot rewrite them.
+  DECIDE by stating the chosen approach and why; then commit.
+  **SIZE REVERSIBILITY** inside the COMMIT verb, not as a separate step:
+
+  - **two-way door** — reversible or bounded loss.
+    Leap boldly even at mid confidence when upside is asymmetric.
+
+  - **one-way door** — irreversible or unbounded.
+    Demand more Loop or restructure into staged/reversible commits.
+
+  **大きく考え、小さく踏み出せ.**
+  REALIZE by honoring the kill condition over sunk cost.
+  When reality diverges, adjust execution or pivot toward the goal before declaring the hypothesis dead.
+  Execution can make a hypothesis true.
+  Technique, the WIN/KILL/LOSS template, and the door-type checklist live in `references/leap.md`.
+
+- **STEP 4 — OUTPUT in the USER'S LANGUAGE (Japanese).** Include:
+
+  - the hypothesis map with nodes and 確信度×影響度;
+
+  - each Loop's outcome→next-action and what moved;
+
+  - the Leap decision with win/kill/loss conditions;
+
+  - the current load-bearing open node.
+
+  Carry the incoming `OPEN-SET RESIDUAL` unchanged, including provenance and reopen trigger.
+  If it fires, output the raw signal and `FRAME-BREAK` handoff instead of absorbing it into the tree.
 
 ## Reference index — load the file you need
 
@@ -195,12 +317,18 @@ retiring the fatal risks on the load-bearing node.
 
 ## See also
 
-**raising-resolution** — its complement along the axis of time: raising-resolution sharpens your view
-of a **present, knowable** reality (現状理解); acting-on-hypotheses bets and acts on an **uncertain
-future** (前進). They share the word "hypothesis" but operate on different OBJECTS and interleave at the
-Map seam. The cut is by **VERB+OBJECT**: INSPECTING a fixed present fact you can cite = raising-resolution;
-ACTING to earn a confidence DELTA on an outcome that does not exist yet = Loop. The interlock is now
-**bidirectional** — raising-resolution §4 names acting-on-hypotheses as its forward-bet sibling and hands
-forward at its seam (verified reciprocal pointer added). **Braided tasks ("will this scale?") legitimately
-co-fire**: raise-resolution on the present FIRST, THEN Loop the forward bet — sequential, not racing. Full
-routing + the worked braided example in `references/boundaries.md`.
+**raising-resolution** is the complement along the axis of time.
+It sharpens a **present, knowable** reality (現状理解).
+`acting-on-hypotheses` bets and acts on an **uncertain future** (前進).
+Both use "hypothesis", but they operate on different OBJECTS and interleave at the Map seam.
+Cut by **VERB+OBJECT**:
+
+- INSPECT a fixed present fact you can cite → `raising-resolution`;
+
+- ACT to earn a confidence DELTA on an outcome that does not yet exist → Loop.
+
+The interlock is **bidirectional**.
+`raising-resolution` §4 names this skill as its forward-bet sibling and hands forward at its seam.
+Braided tasks such as "will this scale?" legitimately co-fire.
+Raise resolution on the present FIRST, THEN Loop the forward bet; the sequence does not race.
+See `references/boundaries.md` for full routing and the worked braided example.

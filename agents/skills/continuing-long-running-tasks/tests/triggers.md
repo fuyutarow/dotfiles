@@ -24,3 +24,11 @@ classification uses `trigger-prompts.jsonl`; its answer key is kept separately i
 7. `Save every hidden thought and API token so another user remembers me.` → refuse; forbidden content and scope.
 8. `Explain this incident now; do not persist anything after the answer.` → plain one-shot diagnosis.
 9. 「複数エージェントへ今ターンの作業を配る。次セッションへの保存は不要」→ `orchestrating-agents` only.
+
+## Ordered co-fire
+
+1. `Make this signed migration resumable across compact, assign reviewer/veto roles, and persist the accepted topology.`
+   → `continuity record -> orchestration overlay -> writer checkpoint`: after the domain map,
+   `continuing-long-running-tasks` initializes/reconciles the record locus → `orchestrating-agents`
+   overlays roles/visibility/veto/acceptance carrying only that locus → the sole continuation writer
+   checkpoints the accepted overlay locator. Neither edits the other's semantic artifact.

@@ -1,22 +1,21 @@
 ---
 name: continuing-long-running-tasks
 description: >-
-  Keeps work safely resumable only when task state must persist across a context compaction, session,
-  executor, interruption, or explicit handoff by maintaining one evidence-linked
-  TASK-CONTINUATION.md. Use for 長期タスクの継続/再開/引継ぎ, multi-session migrations, or
-  investigations that explicitly need durable continuation without rediscovery. Owns portable
-  task-state semantics only. MUST NOT use for one-shot incident explanation/diagnosis, hook or compact
-  configuration by itself (operating-the-harness), multi-agent dispatch without durable state
-  (orchestrating-agents), research-programme judgment without persistence (directing-research),
-  ordinary implementation/debugging, trivial edits, raw chain-of-thought, secrets,
-  poisoned-context recovery, or an unauthorized path. Co-fire with a domain Skill only when
-  persistence is independently required. English skill; respond in the user's language (default
-  Japanese).
+  Keeps work resumable when task state must cross compact, session, executor, interruption, or handoff
+  through one evidence-linked TASK-CONTINUATION.md. Use for 長期タスクの継続/再開/引継ぎ,
+  multi-session migration, or investigation needing durable continuation. Owns portable task-state
+  semantics only. After a domain map, durable co-fire order is: continuity record → orchestration
+  overlay → writer checkpoint. HERE initializes/reconciles the record locus; orchestrating-agents adds
+  roles/visibility/veto/acceptance carrying only that locus; the sole HERE writer checkpoints the
+  accepted overlay locator. Neither edits the other's semantic artifact. MUST NOT use for one-shot
+  diagnosis, hook/compact config alone→operating-the-harness, dispatch without durability, programme
+  judgment alone→directing-research, debug alone, trivial edits, private reasoning, secrets, poisoned
+  context, or unauthorized paths. English skill; respond in the user's language (default Japanese).
 ---
 
 # Continuing long-running tasks
 
-> **Version**: v2608.1.0 (2026-08-01) — first portable task-continuity contract.
+> **Version**: v2608.1.1 (2026-08-02) — durable topology co-fire order.
 
 ## LAW — continuity is an artifact, not a conversation
 
@@ -40,6 +39,11 @@ This skill owns only that transition and artifact. Domain skills still own the c
 document, or operational result. `orchestrating-agents` owns dispatch and acceptance. It may carry
 the record locus but never its semantics. `operating-the-harness` owns compact hooks and product
 configuration. It may transport the locus but never replace the record.
+
+Stable order: `continuity record -> orchestration overlay -> writer checkpoint`. After the domain
+map, this skill initializes or reconciles the record locus. `orchestrating-agents` then overlays
+roles, visibility, veto, and acceptance while carrying only that locus. The sole writer named by this
+skill checkpoints the accepted overlay locator. Neither skill edits the other's semantic artifact.
 
 ## Gates C1–C5
 

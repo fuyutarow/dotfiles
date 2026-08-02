@@ -125,3 +125,49 @@ would need to emit a frozen READ BUNDLE, and generic `repo-write` is prohibited.
 would require a domain-signed input, base digest, allowlist, and acceptance commands. No tool, profile
 role, checker, or hook changed. These are constructed house controls, not claims of OKF or LLM-wiki
 effectiveness.
+
+## 2026-08-02 — research-run durability and orchestration seams — KEEP
+
+Decision: `KEEP`; no merge with evidence synthesis, research direction, or orchestration.
+This skill uniquely owns `DOC ADMISSION` and durable document authority/lifecycle meaning.
+
+`RUN INTENT`, `RUN RECEIPT`, and `RETROSPECTIVE JUDGMENT` remain semantic artifacts of
+`directing-research`. This skill does not restate their schema or alter a semantic lens verdict or
+programme transition. If any artifact becomes durable, it receives a separate `DOC ADMISSION` decision
+for role, locus, lineage, review, retention, and retirement.
+
+Failed, stopped, aborted, excluded, and other negative terminal evidence remains in the denominator.
+A later success does not authorize erasure. Exceptional privacy/security/legal deletion follows the
+existing authorized purge, dependent-claim correction, and safe-tombstone rule in
+`references/admission-and-lifecycle.md`.
+
+The orchestration seam is also explicit. This skill may request fan-out inventory or evidence checks.
+`orchestrating-agents` owns actors, visibility, dependencies, vetoes, and acceptance topology.
+This skill consumes receipts and retains admission/lifecycle judgment.
+
+Trigger receipts:
+
+- document create/update/freeze/retire/delete/authority only → this skill alone;
+- research-process semantic audit only → `directing-research` alone;
+- dispatch topology only → `orchestrating-agents` alone;
+- corpus position plus canonical authority → `systematizing-knowledge`, then this skill;
+- durable research postmortem → `directing-research`, then this skill for durability only;
+- multi-agent inventory plus retirement → this skill frames lifecycle, orchestration fans out, this
+  skill adjudicates.
+
+Verification receipts: description length 998; trigger desk-check inventory `F=12 N=13 C=9`;
+both `quick_validate.py` runs returned `Skill is valid!`; `skill-check.ts` exited 0 with
+`FAIL=0 WARN=0`; the combined relevant Bun suites passed `76 pass / 0 fail / 157 assertions`.
+Scoped `git diff --check` passed; `mise run lint:skills-index` reported a complete index.
+
+## 2026-08-02 — compact durability trigger repair (v2608.1.2)
+
+Fresh stage-1 probe required the 998-character description to retain all seams under a 960-character
+house budget. The compact surface keeps S→G ordering, D semantic verdict→G durable admission, O actor
+topology versus G lifecycle, and negative-terminal retention. The new durable-RUN FIRE row starts only
+after RUN semantics are fixed; the ordered row keeps `directing-research` before DOC ADMISSION. No OKF,
+checker, or lifecycle claim was strengthened.
+
+Receipts: description 937 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
+exit 0 (`FAIL=0 WARN=0`); `research-docs-check.test.ts` 46 pass / 0 fail / 60 expectations; durable
+RUN-only and D→G ordered desk-check 2/2 PASS.

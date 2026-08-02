@@ -41,13 +41,10 @@
 // mutation itself failed (preserved here, not "fixed" — see two-hats/behavior-preservation);
 // PRUNE (b) alone uses `rm -f "$old" && echo ...`, so ITS message is gated on success.
 // Exit: always 0 for every filesystem-mutation path, matching the original — no FATAL line is
-// ever printed for those (the original prints none either). ONE exception, added by the
-// node:util parseArgs -> type-flag migration (2026-07-28): type-flag does not throw on an
-// unrecognized flag the way `parseArgs({strict: true})` did, so an explicit guard now rejects
-// unknown flags with a stderr message and exit 2 BEFORE any linking/pruning runs — see the
-// unknownFlags check in main(). This is a deliberate, DOCUMENTED behavior change (not a
-// preservation), because the alternative (a silently-defaulted `--dry-run` typo running the
-// prune pass for real) is the one failure mode this script cannot tolerate.
+// ever printed for those (the original prints none either). Usage failures happen before that
+// path: Cleye strictFlags rejects ordinary unknown flags with its native exit 1, while the local
+// compatibility guard rejects its missed `--__proto__` edge with exit 2. Neither path performs
+// linking/pruning, so a typo'd `--dry-run` can never silently run a real mutation pass.
 
 import {
   existsSync,
@@ -61,18 +58,20 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 const USAGE =
   "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
 
 class UsageError extends Error {}
 
-function rejectUnknownFlag(
+// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before
+// assignment. Every ordinary unknown remains Cleye strictFlags' responsibility.
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new UsageError(`unknown flag(s): --${flag}`);
   }
 }
@@ -190,29 +189,28 @@ function linkPath(src: string, dst: string, dryRun: boolean): void {
 }
 
 function main(): void {
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      "dry-run": { type: Boolean, default: false },
-      dotfiles: { type: nonEmptyString("--dotfiles") },
-      home: { type: nonEmptyString("--home") },
+      name: "link-skills.ts",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: {
+        description:
+          "Link shared agent skills and commands into local AI tool homes.",
+      },
+      flags: {
+        dryRun: { type: Boolean, default: false },
+        dotfiles: { type: nonEmptyString("--dotfiles") },
+        home: { type: nonEmptyString("--home") },
+      },
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
 
-  // type-flag (unlike `parseArgs({strict: true})`) does NOT throw on an unrecognized flag: it
-  // exits 0 and the flag lands in `unknownFlags` with its value never reaching the flags this
-  // script actually reads. That gap is dangerous HERE specifically: a typo'd `--dry-run` (e.g.
-  // `--dryrun`) would silently leave `dryRun` at its `false` default and this script would
-  // PRUNE/relink for real. Guard explicitly and refuse to run rather than risk that.
-  const unknown = Object.keys(parsed.unknownFlags);
-  if (unknown.length > 0) {
-    process.stderr.write(
-      `unknown flag(s): ${unknown.map((f) => `--${f}`).join(", ")}\n${USAGE}`,
-    );
-    process.exitCode = 2;
-    return;
-  }
+  // The [] schema leaves unexpected operands in argv._; never let one fall through to a real
+  // prune/relink pass.
   if (parsed._.length > 0) {
     process.stderr.write(
       `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
@@ -221,7 +219,7 @@ function main(): void {
     return;
   }
 
-  const dryRun = parsed.flags["dry-run"] === true;
+  const dryRun = parsed.flags.dryRun === true;
   const home = parsed.flags.home ?? process.env.HOME ?? homedir();
   const dotfiles =
     parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
@@ -386,7 +384,7 @@ try {
   }
   // Every non-usage failure is swallowed — see comment above.
 }
-// `?? 0` preserves the original's unconditional exit 0 for every path main() has always taken;
-// the ONE new path (the unknown-flag guard above) sets `process.exitCode = 2` and returns before
-// doing any filesystem work, and this is the only line that can make that code observable.
+// `?? 0` preserves the original's unconditional exit 0 for valid mutation paths. Locally caught
+// usage errors (including `--__proto__`) set exit 2 before this line; Cleye ordinary-unknown
+// strictness exits 1 inside the framework, before any filesystem work.
 process.exit(process.exitCode ?? 0);

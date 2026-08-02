@@ -43,20 +43,22 @@
 //        the modeled `set -eu`), THAT command's own real exit code — never collapsed to a
 //        hardcoded 1 — and nothing extra is printed (the original prints no message of its own on
 //        abort beyond what the failing command already wrote to its own, inherited, stderr).
-//        1 only for a genuinely unexpected internal error with no shell analogue (FATAL on
-//        stderr in that case only, e.g. a bug in this port's own flag parsing).
+//        1 for Cleye's native ordinary-unknown-flag refusal, or for a genuinely unexpected
+//        internal error with no shell analogue (FATAL on stderr only for the latter).
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 class UsageError extends Error {}
 
-function rejectUnknownFlag(
+// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name at the
+// pre-assignment boundary. Every ordinary unknown remains Cleye strictFlags' responsibility.
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new UsageError(`Unknown option '--${flag}'`);
   }
 }
@@ -221,35 +223,32 @@ function runOrAbort(bin: string, args: string[]): void {
 }
 
 function main(): void {
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      "dry-run": { type: Boolean, default: false },
-      dotfiles: { type: nonEmptyString("--dotfiles") },
-      home: { type: nonEmptyString("--home") },
-      "claude-bin": { type: nonEmptyString("--claude-bin") },
-      "codex-bin": { type: nonEmptyString("--codex-bin") },
-      "uv-bin": { type: nonEmptyString("--uv-bin") },
-      "ccc-bin": { type: nonEmptyString("--ccc-bin") },
+      name: "install-mcp.ts",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: {
+        description:
+          "Install the declarative MCP configuration into Claude Code and Codex.",
+      },
+      flags: {
+        dryRun: { type: Boolean, default: false },
+        dotfiles: { type: nonEmptyString("--dotfiles") },
+        home: { type: nonEmptyString("--home") },
+        claudeBin: { type: nonEmptyString("--claude-bin") },
+        codexBin: { type: nonEmptyString("--codex-bin") },
+        uvBin: { type: nonEmptyString("--uv-bin") },
+        cccBin: { type: nonEmptyString("--ccc-bin") },
+      },
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
 
-  // type-flag is NOT a drop-in for `parseArgs({ strict: true })`: unknown flags land silently in
-  // `unknownFlags` (process would otherwise exit 0) and parsing never throws on a stray
-  // positional either. The original `parseArgs` threw synchronously on the FIRST unrecognized
-  // option or positional argument it hit, in argv order, e.g. `FATAL: Unknown option '--foo'` /
-  // `FATAL: Unexpected argument 'foo'. This command does not take positional arguments`, both
-  // exit 1 via the top-level catch-all below. Both are reproduced here as thrown Errors carrying
-  // the same message text, so they fall into that same catch-all and exit 1 exactly as before —
-  // EXCEPT when a single invocation contains BOTH an unknown flag and a stray positional: the
-  // original picked whichever came first in argv, this always reports the unknown flag first
-  // (disclosed divergence; this script takes zero positional operands, so real invocations never
-  // hit this joint edge case).
-  const unknownFlagNames = Object.keys(parsed.unknownFlags);
-  if (unknownFlagNames.length > 0) {
-    throw new UsageError(`Unknown option '--${unknownFlagNames[0]}'`);
-  }
+  // Cleye owns generated help/strict ordinary flags. The explicit [] positional schema does not
+  // consume arguments, so reject any excess operand before side effects begin.
   if (parsed._.length > 0) {
     throw new Error(
       `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
@@ -257,7 +256,7 @@ function main(): void {
   }
 
   const values = parsed.flags;
-  const dryRun = values["dry-run"] === true;
+  const dryRun = values.dryRun === true;
   // `${DOTFILES:-$HOME/dotfiles}` (bash `:-`) applies ONLY to DOTFILES — the nested $HOME is a
   // bare, unguarded expansion with no empty-check of its own. So DOTFILES needs the
   // empty-normalizes-to-undefined trick (JS `??` is null/undefined only, unlike bash `:-`) to
@@ -269,10 +268,10 @@ function main(): void {
   const home = values.home ?? envHome ?? homedir();
   const envDotfiles = process.env.DOTFILES || undefined;
   const dotfiles = values.dotfiles ?? envDotfiles ?? `${home}/dotfiles`;
-  const claudeBin = values["claude-bin"] ?? "claude";
-  const codexBin = values["codex-bin"] ?? "codex";
-  const uvBin = values["uv-bin"] ?? "uv";
-  const cccBin = values["ccc-bin"] ?? "ccc";
+  const claudeBin = values.claudeBin ?? "claude";
+  const codexBin = values.codexBin ?? "codex";
+  const uvBin = values.uvBin ?? "uv";
+  const cccBin = values.cccBin ?? "ccc";
   const prune = process.env.MCP_PRUNE === "1";
   const mcpJsonPath = `${dotfiles}/.mcp.json`;
 

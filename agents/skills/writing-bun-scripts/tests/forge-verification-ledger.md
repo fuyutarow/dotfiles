@@ -368,3 +368,64 @@ Every string-valued flag now uses a throwing non-empty parser. `script-check.ts`
 
 The untracked `scripts/ccc-swap.ts` and its untracked tests are explicitly outside this tracked
 corpus and were not overwritten.
+
+## 2026-08-02 — owner-authorized Cleye-first contract redesign supersedes the denial
+
+**Decision.** The 2026-07-30 record remains historical evidence of the then-required
+type-flag-only exit contract; it is not deleted or rewritten. The owner has now authorized a
+different contract: ordinary Bun CLI boundaries are Cleye `cli` at exact `cleye@2.6.0`, with
+framework help and positional schemas first-class. The old conclusion is therefore superseded,
+not falsified.
+
+**Security boundary.** Cleye 2.6.0 delegates parsing to type-flag before its `strictFlags` check.
+Every ordinary `cli` and `command` must declare `ignoreArgv: rejectPrototypeFlag`; that local
+guard throws for unknown `__proto__` before the ordinary unknown-flags object can receive the
+prototype setter. `constructor` and `prototype` are not added to that guard because they create
+ordinary own keys rather than invoking the special setter; `strictFlags: true` rejects them by
+the normal unknown-flag path. Commands inherit strictFlags but not ignoreArgv, so the floor counts
+both declarations per boundary.
+
+**Positional and forwarding contract.** Every Cleye boundary names `parameters:` including `[]`.
+Spread parameters make excess deliberate; non-spread schemas visibly reject `parsed._.length`.
+The sole direct type-flag exception remains the pre-existing exact marker
+`// argv-forwarding: textlint` (general form: `// argv-forwarding: <consumer>`). It parses a copy
+and relays the original argv, preserving order and `--`; the floor requires the marker, a real
+type-flag call, and its `unknownFlags` invariant, while review owns confirmation of the relay's
+behavioral semantics.
+
+**Red → green receipts.** `bun test agents/skills/writing-bun-scripts/tests/script-check.test.ts`
+passed 39 tests: Cleye acceptance/default, raw and unguarded parser rejection, unmarked
+type-flag rejection, the marked forwarding exception, strict/prototype and command guards,
+parameters/excess intent, positional mapping, and parser names inside comments/strings/templates.
+Exact Cleye bindings are import-owned: unrelated local/imported `cli` helpers do not count as
+boundaries or license raw argv, while aliased Cleye boundary imports fail explicitly.
+The floor's own CLI is now Cleye with `<file...>` and its self-scan passed.
+`bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/writing-bun-scripts`
+exited clean with the pre-existing prose-debt warnings: 12 sentences over 120 characters, an
+11-line version header, and 4 table cells over 400 characters. This contract redesign did not
+claim those warnings were eliminated.
+
+## 2026-08-02 — closeout audit: interpolation bypass closed and corpus exits pinned
+
+**P1 found by independent audit.** The first Cleye-first scanner blanked an entire template
+literal, including executable `${...}` bodies. Three red fixtures — a raw `Bun.argv` read, an
+unguarded `cli()` call, and an unmarked `typeFlag()` call — each returned `FAIL=0 WARN=0` when
+placed inside an interpolation. The scanner now blanks only template text, recursively scans
+interpolation bodies, balances nested braces, and handles nested templates, strings, comments,
+and regular expressions inside the expression. A benign parser-shaped string inside `${...}`
+remains a near-miss PASS. The same lexer now keeps the bunx floor from treating a detector regex
+as a real subprocess call. `script-check.test.ts`: **41 pass / 0 fail / 98 assertions**;
+self-scan: `FAIL=0 WARN=0`.
+
+**Exit contract reconciled.** The owner-authorized Cleye redesign intentionally supersedes the
+old code-only distinction between usage and findings. Cleye-owned help exits 0; ordinary unknown
+flags and missing required parameters use Cleye's stderr + exit 1; the local pre-assignment
+`--__proto__` guard and caught fatal paths exit 2. Once parsing succeeds, domain verdict tools
+retain 0 clean / 1 findings / 2 FATAL. The Skill now states that distinction instead of retaining
+the contradictory earlier prose.
+
+**Corpus fixture.** `cleye-corpus.test.ts` requires its declared inventory to equal every
+production `from "cleye"` import, then pins help, ordinary unknown, and named `__proto__`
+rejection for all 30 entrypoints, including command-local guards in `repo-search literal` and
+`ccc-swap discover`: **31 pass / 0 fail / 181 assertions**. Combined with the floor suite:
+**72 pass / 0 fail / 279 assertions**.

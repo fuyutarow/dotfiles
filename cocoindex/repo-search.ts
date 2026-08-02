@@ -9,12 +9,13 @@
 //   structural      -> ccc grep
 //   symbol          -> exit 2 with a Serena route
 //
-// Exit: 0 success, 1 no rg matches, 2 usage/environment failure, 124 child timeout.
+// Exit: 0 success, 1 no rg matches or Cleye ordinary-unknown refusal, 2 other
+// usage/environment failure, 124 child timeout.
 // Children receive argv directly; no query or path is evaluated by a shell.
 
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli, command } from "cleye";
 
 const ROUTES = [
   "concept",
@@ -27,22 +28,6 @@ const ROUTES = [
 ] as const;
 
 type Route = (typeof ROUTES)[number];
-
-const usage = `usage:
-  repo-search concept    --query <concept> [--path <glob>] [--limit <n>]
-  repo-search battery    --query <q1> --query <q2> --query <q3> [...] [--path <glob>]
-  repo-search literal    --query <text> [--path <path> ...] [--glob <glob> ...]
-  repo-search exhaustive --query <regex> [--path <path> ...] [--glob <glob> ...]
-  repo-search files      [--path <path> ...] [--glob <glob> ...] [--hidden]
-  repo-search structural --query <pattern> [--path <glob>]
-  repo-search symbol     --query <identifier>
-
-Common: --timeout-ms <positive integer>
-rg search routes: --ignore-case --hidden --context <n> --files-with-matches --count`;
-
-function isRoute(value: string | undefined): value is Route {
-  return ROUTES.some((route) => route === value);
-}
 
 function positiveInteger(name: string): (value: string) => number {
   return (value) => {
@@ -63,11 +48,14 @@ function nonEmptyString(name: string): (value: string) => string {
   };
 }
 
-function rejectUnknownFlag(
+// Cleye 2.6.0's strictFlags misses --__proto__; reject only that prototype-sensitive name before
+// assignment. Commands do not inherit ignoreArgv, so every command below installs this guard;
+// ordinary unknowns remain Cleye strictFlags' responsibility.
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -154,23 +142,23 @@ function cccResultCount(stdout: string): number {
 
 function rgFlags(values: {
   glob?: string[];
-  "ignore-case"?: boolean;
+  ignoreCase?: boolean;
   hidden?: boolean;
   context?: number;
-  "files-with-matches"?: boolean;
+  filesWithMatches?: boolean;
   count?: boolean;
 }): string[] {
-  if (values["files-with-matches"] && values.count) {
+  if (values.filesWithMatches && values.count) {
     throw new Error("--files-with-matches and --count are mutually exclusive");
   }
 
   const flags: string[] = ["--color", "never"];
-  if (values["ignore-case"]) flags.push("--ignore-case");
+  if (values.ignoreCase) flags.push("--ignore-case");
   if (values.hidden) flags.push("--hidden");
   if (values.context !== undefined) {
     flags.push("--context", String(values.context));
   }
-  if (values["files-with-matches"]) flags.push("--files-with-matches");
+  if (values.filesWithMatches) flags.push("--files-with-matches");
   if (values.count) flags.push("--count");
   for (const glob of values.glob ?? []) flags.push("--glob", glob);
   return flags;
@@ -251,139 +239,58 @@ async function runRg(
   return exitCode;
 }
 
-async function main(): Promise<number> {
-  const parsed = typeFlag(
-    {
-      query: {
-        type: [nonEmptyString("query")],
-        alias: "q",
-        default: () => [],
-      },
-      path: {
-        type: [nonEmptyString("path")],
-        alias: "p",
-        default: () => [],
-      },
-      glob: {
-        type: [nonEmptyString("glob")],
-        alias: "g",
-        default: () => [],
-      },
-      limit: positiveInteger("limit"),
-      "timeout-ms": positiveInteger("timeout-ms"),
-      "ignore-case": Boolean,
-      hidden: Boolean,
-      context: positiveInteger("context"),
-      "files-with-matches": Boolean,
-      count: Boolean,
-      help: { type: Boolean, alias: "h" },
-    },
-    Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
-  );
+type SearchFlags = {
+  query?: string[];
+  path?: string[];
+  glob?: string[];
+  limit?: number;
+  timeoutMs?: number;
+  ignoreCase?: boolean;
+  hidden?: boolean;
+  context?: number;
+  filesWithMatches?: boolean;
+  count?: boolean;
+};
 
-  if (Object.getPrototypeOf(parsed.unknownFlags) !== Object.prototype) {
-    throw new Error("unknown option '--__proto__'");
-  }
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined) {
-    throw new Error(`unknown option '--${unknownFlag}'`);
-  }
-
-  const [rawRoute, ...unexpectedPositionals] = parsed._;
-  if (rawRoute === undefined) {
-    const hasSearchFlags =
-      parsed.flags.query.length > 0 ||
-      parsed.flags.path.length > 0 ||
-      parsed.flags.glob.length > 0 ||
-      parsed.flags.limit !== undefined ||
-      parsed.flags["timeout-ms"] !== undefined ||
-      parsed.flags["ignore-case"] !== undefined ||
-      parsed.flags.hidden !== undefined ||
-      parsed.flags.context !== undefined ||
-      parsed.flags["files-with-matches"] !== undefined ||
-      parsed.flags.count !== undefined;
-    if (parsed.flags.help && !hasSearchFlags) {
-      process.stdout.write(`${usage}\n`);
-      return 0;
-    }
-    throw new Error("missing route");
-  }
-  if (!isRoute(rawRoute)) {
-    throw new Error(`unknown route '${rawRoute}'`);
-  }
-  if (unexpectedPositionals.length > 0) {
-    throw new Error(
-      `unexpected positional arguments: ${unexpectedPositionals.join(" ")}`,
-    );
-  }
-
-  const rejectFlag = (present: boolean, flag: string): void => {
-    if (present) throw new Error(`${rawRoute} does not accept --${flag}`);
+function queryFlag() {
+  return {
+    query: { type: [nonEmptyString("query")], alias: "q", default: () => [] },
   };
-  const isRgSearch = rawRoute === "literal" || rawRoute === "exhaustive";
-  const isLexical = isRgSearch || rawRoute === "files";
-  rejectFlag(parsed.flags.glob.length > 0 && !isLexical, "glob");
-  rejectFlag(parsed.flags.hidden !== undefined && !isLexical, "hidden");
-  rejectFlag(
-    parsed.flags["ignore-case"] !== undefined && !isRgSearch,
-    "ignore-case",
-  );
-  rejectFlag(parsed.flags.context !== undefined && !isRgSearch, "context");
-  rejectFlag(
-    parsed.flags["files-with-matches"] !== undefined && !isRgSearch,
-    "files-with-matches",
-  );
-  rejectFlag(parsed.flags.count !== undefined && !isRgSearch, "count");
-  rejectFlag(
-    parsed.flags.limit !== undefined &&
-      rawRoute !== "concept" &&
-      rawRoute !== "battery",
-    "limit",
-  );
-  rejectFlag(parsed.flags.path.length > 0 && rawRoute === "symbol", "path");
-  rejectFlag(parsed.flags.query.length > 0 && rawRoute === "files", "query");
+}
 
-  const queries = parsed.flags.query;
-  const paths = parsed.flags.path;
-  if (
-    rawRoute === "concept" ||
-    rawRoute === "literal" ||
-    rawRoute === "exhaustive" ||
-    rawRoute === "structural" ||
-    rawRoute === "symbol"
-  ) {
-    if (!parsed.flags.help || queries.length > 0) {
-      exactlyOneQuery(rawRoute, queries);
-    }
-  } else if (
-    rawRoute === "battery" &&
-    (!parsed.flags.help || queries.length > 0) &&
-    (queries.length < 3 || queries.some((query) => query.trim() === ""))
-  ) {
-    throw new Error("battery requires at least 3 non-empty --query values");
-  }
-  if (
-    (rawRoute === "concept" ||
-      rawRoute === "battery" ||
-      rawRoute === "structural") &&
-    paths.length > 1
-  ) {
-    throw new Error(`${rawRoute} accepts at most one --path glob`);
-  }
-  if (isRgSearch) {
-    rgFlags(parsed.flags);
-  }
+function pathFlag() {
+  return {
+    path: { type: [nonEmptyString("path")], alias: "p", default: () => [] },
+  };
+}
 
-  if (parsed.flags.help) {
-    process.stdout.write(`${usage}\n`);
-    return 0;
-  }
+function globFlag() {
+  return {
+    glob: { type: [nonEmptyString("glob")], alias: "g", default: () => [] },
+  };
+}
 
-  const timeoutMs = parsed.flags["timeout-ms"] ?? 120_000;
+function timeoutFlag() {
+  return { timeoutMs: positiveInteger("timeout-ms") };
+}
+
+function rgSearchFlags() {
+  return {
+    ignoreCase: Boolean,
+    hidden: Boolean,
+    context: positiveInteger("context"),
+    filesWithMatches: Boolean,
+    count: Boolean,
+  };
+}
+
+async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
+  const queries = values.query ?? [];
+  const paths = values.path ?? [];
+  const timeoutMs = values.timeoutMs ?? 120_000;
   switch (rawRoute) {
     case "symbol": {
-      const symbol = exactlyOneQuery(rawRoute, parsed.flags.query);
+      const symbol = exactlyOneQuery(rawRoute, queries);
       process.stderr.write(
         `FATAL: route=symbol belongs to Serena, not shell search; ` +
           `use Serena definitions/references for '${symbol}'\n`,
@@ -392,8 +299,6 @@ async function main(): Promise<number> {
     }
     case "concept":
     case "battery": {
-      const queries = parsed.flags.query;
-      const paths = parsed.flags.path;
       if (rawRoute === "concept") {
         exactlyOneQuery(rawRoute, queries);
       } else if (
@@ -409,13 +314,12 @@ async function main(): Promise<number> {
         rawRoute,
         queries,
         paths[0],
-        parsed.flags.limit ?? 8,
+        values.limit ?? 8,
         timeoutMs,
       );
     }
     case "structural": {
-      const query = exactlyOneQuery(rawRoute, parsed.flags.query);
-      const paths = parsed.flags.path;
+      const query = exactlyOneQuery(rawRoute, queries);
       if (paths.length > 1) {
         throw new Error("structural accepts at most one --path glob");
       }
@@ -435,40 +339,98 @@ async function main(): Promise<number> {
       return 0;
     }
     case "files": {
-      const paths = parsed.flags.path;
       return runRg(
         rawRoute,
         undefined,
         paths.length > 0 ? paths : ["."],
-        parsed.flags,
+        values,
         timeoutMs,
       );
     }
     case "literal":
     case "exhaustive": {
-      const query = exactlyOneQuery(rawRoute, parsed.flags.query);
-      const paths = parsed.flags.path;
+      const query = exactlyOneQuery(rawRoute, queries);
       return runRg(
         rawRoute,
         query,
         paths.length > 0 ? paths : ["."],
-        parsed.flags,
+        values,
         timeoutMs,
       );
     }
   }
 }
 
-if (import.meta.main) {
-  main()
-    .then((exitCode) => {
+function routeCommand(route: Route) {
+  const flags =
+    route === "concept" || route === "battery"
+      ? {
+          ...queryFlag(),
+          ...pathFlag(),
+          limit: positiveInteger("limit"),
+          ...timeoutFlag(),
+        }
+      : route === "literal" || route === "exhaustive"
+        ? {
+            ...queryFlag(),
+            ...pathFlag(),
+            ...globFlag(),
+            ...timeoutFlag(),
+            ...rgSearchFlags(),
+          }
+        : route === "files"
+          ? { ...pathFlag(), ...globFlag(), ...timeoutFlag(), hidden: Boolean }
+          : route === "structural"
+            ? { ...queryFlag(), ...pathFlag(), ...timeoutFlag() }
+            : { ...queryFlag(), ...timeoutFlag() };
+  return command(
+    {
+      name: route,
+      parameters: [],
+      flags,
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: { description: `Run the ${route} repository-search route.` },
+    },
+    async (parsed) => {
+      if (parsed._.length > 0) {
+        throw new Error(
+          `unexpected positional arguments: ${parsed._.join(" ")}`,
+        );
+      }
+      const exitCode = await runRoute(route, parsed.flags);
       process.exitCode = exitCode;
-    })
-    .catch((error) => {
-      process.stderr.write(
-        `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
-          "Run 'repo-search --help' for usage.\n",
-      );
-      process.exitCode = 2;
-    });
+    },
+  );
+}
+
+async function main(): Promise<void> {
+  await cli(
+    {
+      name: "repo-search",
+      parameters: ["[route]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: {
+        description:
+          "Declare a repository-search shape and route it to ccc, rg, or Serena.",
+      },
+      commands: ROUTES.map(routeCommand),
+    },
+    (parsed) => {
+      if (parsed._.route === undefined) throw new Error("missing route");
+      throw new Error(`unknown route '${parsed._.route}'`);
+    },
+    Bun.argv.slice(2),
+  );
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    process.stderr.write(
+      `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
+        "Run 'repo-search --help' for usage.\n",
+    );
+    process.exitCode = 2;
+  });
 }

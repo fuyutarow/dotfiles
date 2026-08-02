@@ -5,7 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
 	bindContinuationSlot,
 	continuationProjectRoot,
@@ -15,12 +15,10 @@ import {
 
 class UsageError extends Error {}
 
-function rejectUnknownFlag(
-	type: "known-flag" | "unknown-flag" | "argument",
-	flag: string,
-): void {
-	if (type === "unknown-flag")
+function rejectPrototypeFlag(type: string, flag: string): void {
+	if (type === "unknown-flag" && flag === "__proto__") {
 		throw new UsageError(`unknown option '--${flag}'`);
+	}
 }
 
 function nonEmptyPath(value: string): string {
@@ -39,20 +37,17 @@ function inside(root: string, candidate: string): boolean {
 }
 
 function main(): void {
-	const parsed = typeFlag(
+	const parsed = cli(
 		{
-			path: { type: nonEmptyPath },
-			"bind-slot": { type: nonEmptyPath },
+			name: "continuation-check.ts",
+			parameters: [],
+			flags: { path: nonEmptyPath, bindSlot: nonEmptyPath },
+			strictFlags: true,
+			ignoreArgv: rejectPrototypeFlag,
 		},
+		undefined,
 		Bun.argv.slice(2),
-		{ ignore: rejectUnknownFlag },
 	);
-	const unknown = Object.keys(parsed.unknownFlags);
-	if (unknown.length > 0) {
-		throw new UsageError(
-			`unknown option(s): ${unknown.map((flag) => `--${flag}`).join(", ")}`,
-		);
-	}
 	if (parsed._.length > 0) {
 		throw new UsageError(`unexpected positional argument: ${parsed._[0]}`);
 	}
@@ -61,7 +56,7 @@ function main(): void {
 		throw new UsageError("required option: --path <TASK-CONTINUATION.md>");
 
 	const absolutePath = resolve(path);
-	const bindSlot = parsed.flags["bind-slot"];
+	const bindSlot = parsed.flags.bindSlot;
 	const cwdRoot = continuationProjectRoot(process.cwd());
 	const recordRoot = continuationProjectRoot(dirname(absolutePath));
 	const inferredRoot =

@@ -448,6 +448,15 @@ describe("cache-clean.ts CLI", () => {
     expect(out).not.toContain("before:");
   });
 
+  test("lets Cleye strictFlags reject an ordinary unknown before cleanup", () => {
+    const { out, err, code } = runScript(["--wat"], {
+      pathDirs: [stubAll],
+    });
+    expect(code).toBe(1);
+    expect(err).toContain("Error: Unknown flag: --wat.");
+    expect(out).not.toContain("before:");
+  });
+
   test("rejects an empty String flag before running any cleanup step", () => {
     for (const args of [["--home"], ["--home", ""]]) {
       const { out, err, code } = runScript(args, { pathDirs: [stubAll] });

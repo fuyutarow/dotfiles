@@ -16,20 +16,11 @@ import {
   nonEmptyString,
   output,
   rejectUnexpectedArguments,
-  rejectUnknownFlag,
 } from "../scripts/lib.ts";
 
 const BUN_BIN = process.execPath;
 
 describe("argv guards", () => {
-  test("rejectUnknownFlag throws before an unknown name reaches unknownFlags", () => {
-    expect(() => rejectUnknownFlag("unknown-flag", "__proto__")).toThrow(
-      "unknown option '--__proto__'",
-    );
-    expect(() => rejectUnknownFlag("known-flag", "path")).not.toThrow();
-    expect(() => rejectUnknownFlag("argument", "value")).not.toThrow();
-  });
-
   test("rejectUnexpectedArguments detects a prototype-mutated unknownFlags table", () => {
     const poisoned: Record<string, (string | boolean)[]> = {};
     Object.setPrototypeOf(poisoned, ["__proto__"]);

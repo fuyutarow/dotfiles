@@ -84,6 +84,14 @@ function baseArgs(dotfiles: string, extra: string[] = []): string[] {
 }
 
 describe("install-mcp: argv contract", () => {
+  test("lets Cleye strictFlags reject an ordinary unknown before running any command", () => {
+    const { out, code } = run(["--wat"]);
+
+    expect(code).toBe(1);
+    expect(out).toContain("Error: Unknown flag: --wat.");
+    expect(out).not.toContain("applied ");
+  });
+
   test("rejects --__proto__ before running any command", () => {
     const { out, code } = run(["--__proto__"]);
 

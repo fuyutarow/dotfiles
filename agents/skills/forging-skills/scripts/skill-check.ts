@@ -1,13 +1,10 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -274,12 +271,16 @@ async function checkDirectory(input: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined)
-    throw new Error(`unknown option '--${unknownFlag}'`);
+  const parsed = cli(
+    {
+      name: "skill-check.ts",
+      parameters: ["[directories...]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
   const directories = parsed._;
   for (const directory of directories.length === 0
     ? [process.cwd()]

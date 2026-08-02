@@ -18,10 +18,10 @@
 //                                 at an EXACT version; ALWAYS FAIL inside hooks/ (they run
 //                                 before any install); pinned inline import WARN (cwd trap);
 //                                 computed dynamic WARN
-//   F5  typed parser unguarded  — typeFlag() without pre-assignment unknown rejection plus
-//                                 the post-parse unknownFlags invariant
-//   F8  untyped argv parsing    — parseArgs(), or Bun/process argv read without the approved
-//                                 type-flag boundary; extra argv reads are rejected
+//   F5  Cleye boundary unguarded — every cli()/command() has strictFlags plus a local
+//                                 ignoreArgv prototype guard before type-flag mutation
+//   F8  legacy/raw argv parsing — parseArgs(), raw argv without cli(), or direct typeFlag()
+//                                 unless the exact argv-forwarding marker declares an exception
 //   W11 typed-parser Number     — a Number flag with no null check: bad input yields null, not
 //                                 a throw, so the failure is silent
 //   F13 raw String flag parser  — missing flag values become ""; use a throwing parser
@@ -37,7 +37,7 @@
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 let failures = 0;
 let warnings = 0;
@@ -206,12 +206,142 @@ function codeLines(source: string): string {
 }
 
 // F8 needs executable tokens, not examples embedded in diagnostics or tests. This is deliberately
-// a lexical floor rather than a TS parser: quoted strings are blanked after comment stripping.
+// a lexical floor rather than a TS parser: strings, template text, comments, and regex literals are
+// blanked while executable identifiers remain. Template ${...} bodies stay executable and recurse
+// through nested templates. The slash heuristic is intentionally conservative; a false positive is
+// a floor finding to review, never an automatic source rewrite.
 function executableCode(source: string): string {
-  return codeLines(source)
-    .replace(/`(?:\\.|[^`\\])*`/gs, "``")
-    .replace(/"(?:\\.|[^"\\])*"/g, '""')
-    .replace(/'(?:\\.|[^'\\])*'/g, "''");
+  const output = Array.from(source, (character) =>
+    character === "\n" ? "\n" : " ",
+  );
+  const reveal = (index: number): void => {
+    output[index] = source[index] ?? " ";
+  };
+  const previousExecutable = (before: number): string => {
+    for (let index = before - 1; index >= 0; index -= 1) {
+      const character = output[index] ?? "";
+      if (!/\s/.test(character)) return character;
+    }
+    return "";
+  };
+  const regexStart = (index: number): boolean => {
+    const previous = previousExecutable(index);
+    return previous === "" || /[=([{,:;!?&|^~<>+*%]/.test(previous);
+  };
+  const skipQuoted = (start: number, quote: '"' | "'"): number => {
+    let index = start + 1;
+    while (index < source.length) {
+      const character = source[index] ?? "";
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      index += 1;
+      if (character === quote) break;
+    }
+    return index;
+  };
+  const skipRegex = (start: number): number => {
+    let index = start + 1;
+    let inClass = false;
+    while (index < source.length) {
+      const character = source[index] ?? "";
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === "[") inClass = true;
+      if (character === "]") inClass = false;
+      index += 1;
+      if (character === "/" && !inClass) {
+        while (/[A-Za-z]/.test(source[index] ?? "")) index += 1;
+        break;
+      }
+    }
+    return index;
+  };
+
+  let scanTemplate: (start: number) => number;
+  const scanCode = (start: number, stopAtClosingBrace: boolean): number => {
+    let braceDepth = 0;
+    let index = start;
+    while (index < source.length) {
+      const character = source[index] ?? "";
+      const next = source[index + 1] ?? "";
+      if (stopAtClosingBrace && character === "}" && braceDepth === 0) {
+        return index;
+      }
+      if (character === "/" && next === "/") {
+        index += 2;
+        while (index < source.length && (source[index] ?? "") !== "\n") {
+          index += 1;
+        }
+        continue;
+      }
+      if (character === "/" && next === "*") {
+        index += 2;
+        while (index < source.length) {
+          if (
+            (source[index] ?? "") === "*" &&
+            (source[index + 1] ?? "") === "/"
+          ) {
+            index += 2;
+            break;
+          }
+          index += 1;
+        }
+        continue;
+      }
+      if (character === "/" && regexStart(index)) {
+        index = skipRegex(index);
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        index = skipQuoted(index, character);
+        continue;
+      }
+      if (character === "`") {
+        index = scanTemplate(index);
+        continue;
+      }
+
+      reveal(index);
+      if (stopAtClosingBrace && character === "{") braceDepth += 1;
+      if (stopAtClosingBrace && character === "}") braceDepth -= 1;
+      index += 1;
+    }
+    return index;
+  };
+
+  scanTemplate = (start: number): number => {
+    let index = start + 1;
+    while (index < source.length) {
+      const character = source[index] ?? "";
+      const next = source[index + 1] ?? "";
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === "`") return index + 1;
+      if (character === "$" && next === "{") {
+        reveal(index);
+        reveal(index + 1);
+        const closingBrace = scanCode(index + 2, true);
+        if ((source[closingBrace] ?? "") === "}") {
+          reveal(closingBrace);
+          index = closingBrace + 1;
+        } else {
+          index = closingBrace;
+        }
+        continue;
+      }
+      index += 1;
+    }
+    return index;
+  };
+
+  scanCode(0, false);
+  return output.join("");
 }
 
 async function checkFile(file: string): Promise<void> {
@@ -294,73 +424,134 @@ async function checkFile(file: string): Promise<void> {
     );
   }
 
-  // F8 — every kept Bun CLI crosses the type-flag boundary. `parseArgs`, Cleye, and direct
-  // argv reads were previously invisible to this floor. Counting reads closes the common
-  // evasion where one legitimate typeFlag() call is followed by a second hand-parsed read.
+  // F8 / F5 — ordinary Bun CLI boundaries use Cleye. Its strictFlags check happens after
+  // type-flag has assigned unknowns, so the local ignoreArgv guard rejects __proto__ first.
+  // Cleye command options inherit strictFlags but NOT ignoreArgv, hence each command is a
+  // separately guarded boundary. Direct typeFlag is reserved for the marked raw-forwarding
+  // exception, whose relay's token/order/`--` behavior remains a reviewer responsibility.
   const parseArgsCall = new RegExp(`\\b${"parse" + "Args"}\\s*\\(`);
   const argvReads = executable.match(/\b(?:Bun|process)\.argv\b/g)?.length ?? 0;
   const typeFlagCalls = executable.match(/\btypeFlag\s*\(/g)?.length ?? 0;
-  const usesTypeFlag = typeFlagCalls > 0;
-  const importsCleye = /\bfrom\s+["']cleye["']/.test(code);
+  const cleyeImportSpecifiers = [
+    ...code.matchAll(/\bimport\s*{([^}]*)}\s*from\s+["']cleye["']/gs),
+  ].flatMap((match) =>
+    (match[1] ?? "")
+      .split(",")
+      .map((specifier) => specifier.trim())
+      .filter((specifier) => specifier.length > 0),
+  );
+  // Alias policy: only exact `{ cli, command }` bindings are house Cleye boundaries.
+  // Aliases fail explicitly; coincidentally named local/domain helpers are never counted.
+  const importsCleyeCli = cleyeImportSpecifiers.includes("cli");
+  const importsCleyeCommand = cleyeImportSpecifiers.includes("command");
+  const aliasedCleyeBoundary = cleyeImportSpecifiers.find((specifier) =>
+    /^(?:cli|command)\s+as\s+/.test(specifier),
+  );
+  const cliCalls = importsCleyeCli
+    ? (executable.match(/\bcli\s*\(/g)?.length ?? 0)
+    : 0;
+  const commandCalls = importsCleyeCommand
+    ? (executable.match(/\bcommand\s*\(/g)?.length ?? 0)
+    : 0;
+  const cleyeBoundaries = cliCalls + commandCalls;
+  const forwarding =
+    /^\s*\/\/\s*argv-forwarding:\s*[A-Za-z0-9_.:/-]+\s*$/m.test(source);
   if (parseArgsCall.test(executable)) {
     fail(
       file,
-      "node:util parseArgs is forbidden — kept Bun CLIs use typeFlag() (BG1)",
+      "node:util parseArgs is forbidden — ordinary Bun CLIs use Cleye cli() (BG1)",
     );
   }
-  if (importsCleye) {
+  if (aliasedCleyeBoundary !== undefined) {
+    const binding =
+      aliasedCleyeBoundary.split(/\s+/)[0] ?? aliasedCleyeBoundary;
     fail(
       file,
-      "Cleye is outside the house argv boundary — kept Bun CLIs use typeFlag() without exception (BG1)",
+      `import Cleye ${binding} with its exact \`${binding}\` binding — aliases are outside the lexical floor contract (BG1)`,
     );
   }
-  if (argvReads > 0 && typeFlagCalls === 0) {
+  if (typeFlagCalls > 0 && !forwarding) {
     fail(
       file,
-      "Bun.argv/process.argv read without the typeFlag() boundary (BG1)",
-    );
-  } else if (argvReads > typeFlagCalls) {
-    fail(
-      file,
-      `more argv reads than typeFlag() calls (${argvReads}/${typeFlagCalls}) — parse positionals from the same result; do not reopen argv (BG1)`,
+      "direct type-flag needs an exact argv-forwarding marker — ordinary Bun CLIs use Cleye (BG1)",
     );
   }
-
-  // F5 — reject unknown names inside type-flag's `ignore` callback, before its ordinary
-  // object-backed unknownFlags table is mutated. A post-parse Object.keys() guard alone can
-  // miss the magic `__proto__` name. Forwarding wrappers are the one explicit exception:
-  // their marker says which downstream tool owns unknown argv, and their ignore callback
-  // must keep those tokens out of the table. In both modes unknownFlags remains a checked
-  // post-parse invariant.
-  if (usesTypeFlag) {
-    const forwarding = /\/\/\s*argv-forwarding:\s*[A-Za-z0-9_.:/-]+\s*$/m.test(
-      source,
+  if (forwarding && typeFlagCalls === 0) {
+    fail(
+      file,
+      "argv-forwarding marker has no direct type-flag use — exceptions must parse the wrapper boundary (BG1)",
     );
-    if (forwarding) {
-      const ignoreCallbacks =
-        executable.match(/\bignore\s*:\s*(?!undefined\b)/g)?.length ?? 0;
-      if (ignoreCallbacks < typeFlagCalls) {
-        fail(
-          file,
-          `argv-forwarding wrapper has ${typeFlagCalls} typeFlag() call(s) but only ${ignoreCallbacks} ignore callback(s) — explicitly preserve downstream unknown flags before table assignment (BG1)`,
-        );
-      }
-    } else {
-      const earlyRejectors =
-        executable.match(/\bignore\s*:\s*rejectUnknownFlag\b/g)?.length ?? 0;
-      if (earlyRejectors < typeFlagCalls) {
-        fail(
-          file,
-          `typeFlag() without an early \`ignore: rejectUnknownFlag\` interceptor (${earlyRejectors}/${typeFlagCalls}) — Object.keys(unknownFlags) alone misses '--__proto__' (BG1)`,
-        );
-      }
+  }
+  if (forwarding && cleyeBoundaries > 0) {
+    fail(
+      file,
+      "argv-forwarding exception mixes direct type-flag with Cleye — choose one boundary (BG1)",
+    );
+  }
+  if (forwarding) {
+    const ignoreCallbacks =
+      executable.match(/\bignore\s*:\s*(?!undefined\b)/g)?.length ?? 0;
+    if (ignoreCallbacks < typeFlagCalls) {
+      fail(
+        file,
+        `argv-forwarding wrapper has ${typeFlagCalls} typeFlag() call(s) but only ${ignoreCallbacks} ignore callback(s) — preserve downstream argv before parser assignment (BG1)`,
+      );
     }
     if (!/\bunknownFlags\b/.test(code)) {
       fail(
         file,
-        "typeFlag() without a post-parse unknownFlags invariant — retain the defensive guard after early rejection (BG1)",
+        "argv-forwarding type-flag use lacks an unknownFlags invariant — retain the defensive wrapper check (BG1)",
       );
     }
+  }
+  if (argvReads > 0 && cleyeBoundaries === 0 && !forwarding) {
+    fail(file, "Bun.argv/process.argv read without a Cleye boundary (BG1)");
+  } else if (!forwarding && argvReads > cliCalls) {
+    fail(
+      file,
+      `more argv reads than Cleye calls (${argvReads}/${cliCalls}) — parse positionals through the same schema; do not reopen argv (BG1)`,
+    );
+  }
+  if (cleyeBoundaries > 0) {
+    const strictFlags =
+      executable.match(/\bstrictFlags\s*:\s*true\b/g)?.length ?? 0;
+    if (strictFlags < cleyeBoundaries) {
+      fail(
+        file,
+        `Cleye has ${cleyeBoundaries} cli()/command() boundary(s) but only ${strictFlags} strictFlags: true declaration(s) — ordinary unknown flags must fail (BG1)`,
+      );
+    }
+    const prototypeGuards =
+      executable.match(/\bignoreArgv\s*:\s*rejectPrototypeFlag\b/g)?.length ??
+      0;
+    if (prototypeGuards < cleyeBoundaries) {
+      fail(
+        file,
+        `Cleye has ${cleyeBoundaries} boundary(s) but only ${prototypeGuards} ignoreArgv: rejectPrototypeFlag declaration(s) — strictFlags alone misses '--__proto__' before type-flag mutation (BG1)`,
+      );
+    }
+    const parameterSchemas = executable.match(/\bparameters\s*:/g)?.length ?? 0;
+    if (parameterSchemas < cleyeBoundaries) {
+      fail(
+        file,
+        `Cleye has ${cleyeBoundaries} boundary(s) but only ${parameterSchemas} parameters: declaration(s) — spell parameters: [] for flag-only CLIs so excess positionals are intentional (BG1)`,
+      );
+    }
+    const hasSpreadParameters = /\bparameters\s*:\s*\[[^\]]*\.\.\./s.test(code);
+    const explicitExcessRefusal =
+      /\b_\s*\.\s*length\b/.test(executable) ||
+      /\brejectUnexpectedArguments\s*\(\s*[\w.]+\.unknownFlags\s*,\s*[\w.]+\._\s*\)/.test(
+        executable,
+      );
+    if (!hasSpreadParameters && !explicitExcessRefusal) {
+      fail(
+        file,
+        "non-spread Cleye parameters need a parsed._.length or rejectUnexpectedArguments(parsed.unknownFlags, parsed._) excess refusal — Cleye otherwise leaves extras in the array (BG1)",
+      );
+    }
+  }
+
+  if (typeFlagCalls > 0) {
     // F6 — a camelCase schema key silently becomes a SECOND accepted CLI spelling: declaring
     // `dryRun` makes both `--dry-run` and `--dryRun` valid, widening the contract compared with
     // parseArgs, which accepted only what was declared. Declaring the key in kebab removes the
@@ -372,9 +563,13 @@ async function checkFile(file: string): Promise<void> {
     for (const match of code.matchAll(schemaKey)) {
       const key = match[1] ?? "";
       if (/[a-z][A-Z]/.test(key)) {
+        const kebabKey = key.replace(
+          /[A-Z]/g,
+          (character) => `-${character.toLowerCase()}`,
+        );
         fail(
           file,
-          `typed-parser schema key '${key}' is camelCase — it also registers '--${key}' as a valid flag, widening the CLI contract; declare it as the kebab spelling ('${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}') instead`,
+          `typed-parser schema key '${key}' is camelCase — it also registers '--${key}' as a valid flag, widening the CLI contract; declare it as the kebab spelling ('${kebabKey}') instead`,
         );
       }
     }
@@ -449,7 +644,7 @@ async function checkFile(file: string): Promise<void> {
   }
 
   // W7 — bunx without any visible version pin
-  if (BUNX_PATTERN.test(code) && !/@\d/.test(code)) {
+  if (BUNX_PATTERN.test(executable) && !/@\d/.test(executable)) {
     warn(
       file,
       `${BUNX} call with no visible @x.y.z pin — ${BUNX} staleness is real (facts §5)`,
@@ -479,32 +674,36 @@ async function checkFile(file: string): Promise<void> {
   }
 }
 
-function rejectUnknownFlag(
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
-    throw new Error(`unknown option '--${flag}'`);
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new Error("refusing prototype-mutating option '--__proto__'");
   }
 }
 
 async function main(): Promise<void> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined) {
-    throw new Error(`unknown option '--${unknownFlag}'`);
-  }
-  const files = parsed._;
-  if (files.length === 0) {
-    throw new Error("usage: bun script-check.ts <file.ts|file.sh ...>");
-  }
-  for (const file of files) await checkFile(file);
-  process.stdout.write(
-    `floor: FAIL=${failures} WARN=${warnings} (files=${files.length}) — structure only; BG1-BG4 judgment is not covered\n`,
+  await cli(
+    {
+      name: "script-check",
+      parameters: ["<file...>"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: {
+        description:
+          "Check house Bun script structure. Pass one or more .ts or .sh files.",
+      },
+    },
+    async ({ _: { file: files } }) => {
+      for (const file of files) await checkFile(file);
+      process.stdout.write(
+        `floor: FAIL=${failures} WARN=${warnings} (files=${files.length}) — structure only; BG1-BG4 judgment is not covered\n`,
+      );
+      process.exitCode = failures === 0 ? 0 : 1;
+    },
+    Bun.argv.slice(2),
   );
-  process.exitCode = failures === 0 ? 0 : 1;
 }
 
 main().catch((error) => {

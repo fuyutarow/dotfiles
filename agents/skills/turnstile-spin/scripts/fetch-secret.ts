@@ -1,4 +1,4 @@
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
   apiError,
   apiSuccess,
@@ -7,21 +7,32 @@ import {
   isRecord,
   nonEmptyString,
   output,
-  rejectUnknownFlag,
   rejectUnexpectedArguments,
   requiredValue,
   UsageError,
 } from "./lib.ts";
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+}
+
 async function main(): Promise<void> {
-  const parsed = typeFlag(
-    { "account-id": nonEmptyString, sitekey: nonEmptyString },
+  const parsed = cli(
+    {
+      name: "fetch-secret.ts",
+      parameters: [],
+      flags: { accountId: nonEmptyString, sitekey: nonEmptyString },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
   rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
   const values = parsed.flags;
-  const accountId = requiredValue(values["account-id"], "--account-id");
+  const accountId = requiredValue(values.accountId, "--account-id");
   const sitekey = requiredValue(values.sitekey, "--sitekey");
   const { response, body } = await cloudflare(
     `/accounts/${accountId}/challenges/widgets/${sitekey}`,

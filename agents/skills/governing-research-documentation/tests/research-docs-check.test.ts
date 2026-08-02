@@ -1057,7 +1057,7 @@ describe("CLI contract", () => {
 			],
 			{ maxBuffer: 1024 * 1024 },
 		);
-		expect(unknown.exitCode).toBe(2);
+		expect(unknown.exitCode).toBe(1);
 		expect(invalidBase.exitCode).toBe(2);
 	});
 });

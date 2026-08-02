@@ -1,15 +1,20 @@
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
   cloudflare,
   diagnostic,
   isRecord,
   nonEmptyString,
   output,
-  rejectUnknownFlag,
   rejectUnexpectedArguments,
   requiredValue,
   UsageError,
 } from "./lib.ts";
+
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+}
 
 function fail(check: string, detail: string): never {
   diagnostic(`validate: ${detail}`);
@@ -23,26 +28,32 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 }
 
 async function main(): Promise<void> {
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      "worker-url": nonEmptyString,
-      "account-id": nonEmptyString,
-      sitekey: nonEmptyString,
-      "expected-domains": nonEmptyString,
+      name: "validate.ts",
+      parameters: [],
+      flags: {
+        workerUrl: nonEmptyString,
+        accountId: nonEmptyString,
+        sitekey: nonEmptyString,
+        expectedDomains: nonEmptyString,
+      },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
   rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
   const values = parsed.flags;
-  const workerUrl = requiredValue(values["worker-url"], "--worker-url").replace(
+  const workerUrl = requiredValue(values.workerUrl, "--worker-url").replace(
     /\/$/,
     "",
   );
-  const accountId = requiredValue(values["account-id"], "--account-id");
+  const accountId = requiredValue(values.accountId, "--account-id");
   const sitekey = requiredValue(values.sitekey, "--sitekey");
   const expectedDomains = requiredValue(
-    values["expected-domains"],
+    values.expectedDomains,
     "--expected-domains",
   )
     .split(",")

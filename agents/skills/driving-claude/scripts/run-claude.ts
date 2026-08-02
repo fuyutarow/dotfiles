@@ -1,11 +1,8 @@
 import { existsSync, statSync } from "node:fs";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`Unknown option '--${flag}'`);
   }
 }
@@ -189,7 +186,7 @@ function requiredValue(value: string | undefined, option: string): string {
   return value;
 }
 
-// type-flag's `type: Number` never throws on malformed input: it hands back a non-finite
+// Cleye's Number flag parser never throws on malformed input: it hands back a non-finite
 // number (NaN/Infinity — surfaces as `null` through JSON.stringify, which is how this was
 // first measured) instead of raising, unlike the old hand-rolled `Number(value)` + throw.
 // Every Number flag is routed through this null-or-not-positive check before use (W11).
@@ -223,42 +220,33 @@ function directory(path: string): string {
 }
 
 async function configFromCli(): Promise<RunConfig> {
-  // Schema keys are camelCase; type-flag accepts the kebab-case spelling on the command
+  // Schema keys are camelCase; Cleye accepts the kebab-case spelling on the command
   // line (e.g. `promptFile` here is set by `--prompt-file`) — the CLI spelling is unchanged.
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      target: { type: nonEmptyString("--target") },
-      "prompt-file": { type: nonEmptyString("--prompt-file") },
-      model: { type: nonEmptyString("--model") },
-      "permission-mode": {
-        type: nonEmptyString("--permission-mode"),
-        default: "plan",
+      name: "run-claude.ts",
+      parameters: [],
+      flags: {
+        target: nonEmptyString("--target"),
+        promptFile: nonEmptyString("--prompt-file"),
+        model: nonEmptyString("--model"),
+        permissionMode: nonEmptyString("--permission-mode"),
+        maxTurns: Number,
+        timeoutMs: Number,
+        maxBudgetUsd: Number,
+        allowedTools: nonEmptyString("--allowed-tools"),
+        jsonSchemaFile: nonEmptyString("--json-schema-file"),
+        claudeBin: nonEmptyString("--claude-bin"),
+        safeMode: Boolean,
+        bare: Boolean,
       },
-      "max-turns": { type: Number, default: 12 },
-      "timeout-ms": { type: Number, default: 300_000 },
-      "max-budget-usd": { type: Number },
-      "allowed-tools": { type: nonEmptyString("--allowed-tools") },
-      "json-schema-file": { type: nonEmptyString("--json-schema-file") },
-      "claude-bin": {
-        type: nonEmptyString("--claude-bin"),
-        default: "claude",
-      },
-      "safe-mode": { type: Boolean, default: false },
-      bare: { type: Boolean, default: false },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
 
-  // type-flag does not throw on unknown flags the way `parseArgs({strict: true})` did — they
-  // land in `unknownFlags` and parsing succeeds. Reject them explicitly to keep the same
-  // fail-fast contract (message shape mirrors node's own "Unknown option" wording).
-  const unknownFlags = Object.keys(parsed.unknownFlags);
-  if (unknownFlags.length > 0) {
-    throw new Error(`Unknown option '--${unknownFlags[0]}'`);
-  }
-  // This CLI takes no positional arguments (the old parser ran with `allowPositionals: false`);
-  // type-flag has no such switch, so reject any leftover positional by hand.
   if (parsed._.length > 0) {
     throw new Error(
       `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
@@ -267,29 +255,29 @@ async function configFromCli(): Promise<RunConfig> {
 
   const values = parsed.flags;
   const target = directory(requiredValue(values.target, "--target"));
-  const promptFile = requiredValue(values["prompt-file"], "--prompt-file");
+  const promptFile = requiredValue(values.promptFile, "--prompt-file");
   if (!existsSync(promptFile))
     throw new Error(`prompt file does not exist: ${promptFile}`);
   const model = requiredValue(values.model, "--model");
-  const permissionMode = values["permission-mode"];
+  const permissionMode = values.permissionMode ?? "plan";
   if (!permissionModes.has(permissionMode))
     throw new Error(`unsupported permission mode: ${permissionMode}`);
-  const maxTurns = positiveInteger(values["max-turns"], "--max-turns");
-  const timeoutMs = positiveInteger(values["timeout-ms"], "--timeout-ms");
+  const maxTurns = positiveInteger(values.maxTurns ?? 12, "--max-turns");
+  const timeoutMs = positiveInteger(values.timeoutMs ?? 300_000, "--timeout-ms");
   const maxBudgetUsd =
-    values["max-budget-usd"] === undefined
+    values.maxBudgetUsd === undefined
       ? undefined
-      : positiveNumber(values["max-budget-usd"], "--max-budget-usd");
-  const jsonSchemaFile = values["json-schema-file"];
+      : positiveNumber(values.maxBudgetUsd, "--max-budget-usd");
+  const jsonSchemaFile = values.jsonSchemaFile;
   const jsonSchema =
     jsonSchemaFile === undefined
       ? undefined
       : await Bun.file(jsonSchemaFile).text();
-  const claudeBin = values["claude-bin"];
+  const claudeBin = values.claudeBin ?? "claude";
   if (Bun.which(claudeBin) === null)
     throw new Error(`claude binary is not runnable: ${claudeBin}`);
-  const bare = values.bare;
-  const safeMode = values["safe-mode"];
+  const bare = values.bare ?? false;
+  const safeMode = values.safeMode ?? false;
   if (bare && safeMode)
     throw new Error("--bare and --safe-mode are mutually exclusive");
 
@@ -303,7 +291,7 @@ async function configFromCli(): Promise<RunConfig> {
     maxBudgetUsd,
     safeMode,
     bare,
-    allowedTools: values["allowed-tools"],
+    allowedTools: values.allowedTools,
     jsonSchema,
     claudeBin,
   };

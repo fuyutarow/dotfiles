@@ -333,17 +333,17 @@ describe("check-ledger", () => {
     expect(result.stderr).not.toContain("Maximum call stack");
   });
 
-  test("uses exit 2 for usage and environment failures", () => {
+  test("uses Cleye's required-parameter failure and exit 2 for other input failures", () => {
     const usage = run();
     const missing = run("/path/that/does/not/exist.jsonl");
     const tooMany = run(example, example);
 
-    expect(usage.exitCode).toBe(2);
-    expect(usage.stderr).toContain("Usage:");
+    expect(usage.exitCode).toBe(1);
+    expect(usage.stderr).toContain('Missing required parameter "claimsJsonl"');
     expect(missing.exitCode).toBe(2);
     expect(missing.stderr).toContain("file not found");
     expect(tooMany.exitCode).toBe(2);
-    expect(tooMany.stderr).toContain("Usage:");
+    expect(tooMany.stderr).toContain("accepts exactly one claims JSONL path");
   });
 
   test("rejects --__proto__ before treating it as a ledger path", () => {

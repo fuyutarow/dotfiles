@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 // Consumer: agent/human verdict lines for a Blind-spot packet.
 // Structural floor only: this cannot validate creativity, completeness, importance, or truth.
 
-function rejectUnknownFlag(
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -711,14 +711,18 @@ function checkBoundary(text: string): Verdict {
 }
 
 async function input(): Promise<string> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined)
-    throw new Error(`unknown option '--${unknownFlag}'`);
-  const [path, ...extra] = parsed._;
-  if (extra.length > 0)
+  const parsed = cli(
+    {
+      name: "blind-spot-check.ts",
+      parameters: ["[path]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+  const path = parsed._.path;
+  if (parsed._.length > 1)
     throw new Error("usage: bun blind-spot-check.ts [packet.md|-]");
   if (path === undefined || path === "-")
     return new Response(Bun.stdin.stream()).text();

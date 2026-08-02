@@ -1,12 +1,12 @@
 /** Structural floor check for a filled arguing-research-papers CLAIM SPEC. */
 
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -76,14 +76,18 @@ function report(message: string): void {
 }
 
 async function readInput(): Promise<string> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined)
-    throw new Error(`unknown option '--${unknownFlag}'`);
-  const [input, ...extra] = parsed._;
-  if (extra.length > 0)
+  const parsed = cli(
+    {
+      name: "claim-check.ts",
+      parameters: ["[input]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+  const input = parsed._.input;
+  if (parsed._.length > 1)
     throw new Error("usage: bun claim-check.ts [spec.md|-]");
   if (input === undefined || input === "-")
     return new Response(Bun.stdin.stream()).text();

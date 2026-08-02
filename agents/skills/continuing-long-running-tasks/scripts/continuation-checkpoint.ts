@@ -17,7 +17,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
 	continuationProjectRoot,
 	continuationWorkspaceRootFromSlot,
@@ -45,11 +45,8 @@ class TransactionError extends Error {
 	}
 }
 
-function rejectUnknownFlag(
-	type: "known-flag" | "unknown-flag" | "argument",
-	flag: string,
-): void {
-	if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+	if (type === "unknown-flag" && flag === "__proto__") {
 		throw new TransactionError("TCR39", `unknown option '--${flag}'`, 2);
 	}
 }
@@ -388,26 +385,24 @@ function applyCheckpoint(args: {
 }
 
 function main(): void {
-	const parsed = typeFlag(
+	const parsed = cli(
 		{
-			"base-revision": { type: positiveInteger },
-			"base-sha256": { type: sha256Value },
-			"handoff-slot": { type: nonEmpty },
-			path: { type: nonEmpty },
-			proposal: { type: nonEmpty },
-			"writer-slot": { type: nonEmpty },
+			name: "continuation-checkpoint.ts",
+			parameters: ["<action>"],
+			flags: {
+				baseRevision: positiveInteger,
+				baseSha256: sha256Value,
+				handoffSlot: nonEmpty,
+				path: nonEmpty,
+				proposal: nonEmpty,
+				writerSlot: nonEmpty,
+			},
+			strictFlags: true,
+			ignoreArgv: rejectPrototypeFlag,
 		},
+		undefined,
 		Bun.argv.slice(2),
-		{ ignore: rejectUnknownFlag },
 	);
-	const unknown = Object.keys(parsed.unknownFlags);
-	if (unknown.length > 0) {
-		throw new TransactionError(
-			"TCR39",
-			`unknown option(s): ${unknown.map((flag) => `--${flag}`).join(", ")}`,
-			2,
-		);
-	}
 	if (parsed._.length !== 1) {
 		throw new TransactionError(
 			"TCR39",
@@ -415,14 +410,14 @@ function main(): void {
 			2,
 		);
 	}
-	const action = parsed._[0];
+	const action = parsed._.action;
 	const path = parsed.flags.path;
 	if (path === undefined) {
 		throw new TransactionError("TCR39", "required option: --path", 2);
 	}
 
 	if (action === "snapshot") {
-		const root = workspaceRoot(path, parsed.flags["writer-slot"]);
+		const root = workspaceRoot(path, parsed.flags.writerSlot);
 		const current = snapshot(path, root);
 		const proposal =
 			parsed.flags.proposal === undefined
@@ -444,10 +439,10 @@ function main(): void {
 	if (action !== "apply") {
 		throw new TransactionError("TCR39", `unknown action: ${action}`, 2);
 	}
-	const baseRevision = parsed.flags["base-revision"];
-	const baseSha256 = parsed.flags["base-sha256"];
+	const baseRevision = parsed.flags.baseRevision;
+	const baseSha256 = parsed.flags.baseSha256;
 	const proposal = parsed.flags.proposal;
-	const writerSlot = parsed.flags["writer-slot"];
+	const writerSlot = parsed.flags.writerSlot;
 	if (
 		baseRevision === undefined ||
 		baseSha256 === undefined ||
@@ -463,7 +458,7 @@ function main(): void {
 	applyCheckpoint({
 		baseRevision,
 		baseSha256,
-		handoffSlot: parsed.flags["handoff-slot"],
+		handoffSlot: parsed.flags.handoffSlot,
 		path,
 		proposal,
 		writerSlot,

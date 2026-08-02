@@ -1,16 +1,21 @@
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
   command,
   diagnostic,
   nonEmptyString,
   output,
-  rejectUnknownFlag,
   rejectUnexpectedArguments,
   requiredEnv,
   UsageError,
 } from "./lib.ts";
+
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+}
 
 function randomSuffix(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(3)), (value) =>
@@ -47,16 +52,22 @@ async function deploy(
 }
 
 async function main(): Promise<void> {
-  const parsed = typeFlag(
-    { name: nonEmptyString, "deploy-dir": nonEmptyString },
+  const parsed = cli(
+    {
+      name: "worker-deploy.ts",
+      parameters: [],
+      flags: { name: nonEmptyString, deployDir: nonEmptyString },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
   rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
   const values = parsed.flags;
   let name = values.name ?? process.env.WORKER_NAME ?? "turnstile-siteverify";
   const directory = resolve(
-    values["deploy-dir"] ?? "/tmp/turnstile-siteverify-deploy",
+    values.deployDir ?? "/tmp/turnstile-siteverify-deploy",
   );
   const secret = requiredEnv("WIDGET_SECRET");
   requiredEnv("CLOUDFLARE_API_TOKEN");

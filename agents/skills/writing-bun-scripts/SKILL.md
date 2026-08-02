@@ -2,8 +2,9 @@
 name: writing-bun-scripts
 description: >-
   Writes and refactors local automation scripts in Bun TypeScript — the house default past a
-  thin POSIX shim (bootstrap / hook-entry). Single files run `bun <path>` with argv parsed
-  only by type-flag, exit 0/1/2, JSON envelope or verdict lines, Bun.$ for
+  thin POSIX shim (bootstrap / hook-entry). Ordinary CLIs run `bun <path>` with Cleye `cli`,
+  framework help and positional schemas, strict/prototype-safe flags, JSON envelope or verdict
+  lines, Bun.$ for
   shell-outs, Bun.spawn with NATIVE timeout for hangable CLIs, bun test + fixtures,
   BUN-NATIVE-FIRST over hand-rolled plumbing. Owns the dependency ladder (builtins →
   repo-root graduation project → pinned `bunx pkg@x.y.z`), bunx-over-npx, and the bash→TS
@@ -23,7 +24,7 @@ description: >-
 
 # Writing Bun scripts — local automation in Bun TypeScript
 
-> **Version**: v2607.3.0 (2026-07-30) — pre-assignment unknown rejection + repo-wide floor.
+> **Version**: v2608.1.1 (2026-08-02) — Cleye corpus boundary and interpolation-safe floor.
 > Bun runtime facts remain pinned in `references/bun-facts.md`.
 > **Scope**: local automation scripts on this host — dotfiles scripts, skill `scripts/`, Claude
 > hooks, repo helpers. NORMATIVE, not descriptive: the 2026-07 bash→TS migration corpus (18
@@ -39,7 +40,8 @@ description: >-
 
 English skill; respond in the user's language (default Japanese). Stable tokens, fixed even
 inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **verdict lines**,
-**graduation**, **CWD-HOSTILE**, **BUN-NATIVE-FIRST**, **KEEP / REFACTOR**, **floor**.
+**graduation**, **CWD-HOSTILE**, **CLEYE-FIRST**, **BUN-NATIVE-FIRST**, **KEEP / REFACTOR**,
+**floor**.
 
 ## THE LAW
 
@@ -49,7 +51,10 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 > (**NO-NEW-BASH**). Scripts are zero-config single files run `bun <path>` from ANY cwd: an
 > ancestor `node_modules` silently flips Bun's module resolution, so third-party imports are
 > absent by default and paths resolve from `import.meta.dir`, never from cwd unless cwd IS the
-> input (**CWD-HOSTILE**). Where Bun ships the primitive — `$`, `spawn` with native timeout,
+> input (**CWD-HOSTILE**). Ordinary argv boundaries use Cleye `cli`: framework help and
+> `parameters` are the contract, not behavior to reproduce manually. Direct `typeFlag` is only a
+> marked raw argv forwarding/embedding exception whose downstream relay preserves token order and
+> `--` (**CLEYE-FIRST**). Where Bun ships the primitive — `$`, `spawn` with native timeout,
 > `file`, `which`, `Glob`, `sleep`, `bun:sqlite`, `password` — hand-rolling it is the smell
 > (**BUN-NATIVE-FIRST**). Third-party code enters only pinned: `bunx pkg@x.y.z`, or graduation
 > to package.json + bun.lock (**PINNED-OR-ABSENT**). And bun **TRANSPILES, never type-checks**:
@@ -60,7 +65,7 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 | Gate | Rule | Artifact |
 |---|---|---|
 | **BG0 RUNTIME** (deny-gate, fires on entry) | A new local script is `.ts` on bun. DENY: new bash beyond the four shim classes (any new `.sh` carries a `# shim: <bootstrap\|hook-entry\|exec-wrapper\|vendored>` comment); node/ts-node/npx as a runtime; deno. `vendored` = shell an external tool overwrites (e.g. `herdr-agent-state.sh`) — marker-EXEMPT, detected from its own vendor header, not a marker the overwrite would erase. Migration never touches the bootstrap layer (`scripts/link-dots.sh`, `wsl:init` path) — it runs before brew/bun exist and stays POSIX. | file extension + shim comment in any surviving `.sh` (vendored: header content, not a written marker) |
-| **BG1 CONTRACT** | Invoked `bun <path>`; **no shebang** (shebang + exec bit ONLY when the file is substituted as a binary — the fixture pattern). Every argv read passes through `type-flag` (bare specifier; exact pin in repo-root package.json + bun.lock), without exception. `node:util` `parseArgs`, Cleye, and direct `Bun.argv` / `process.argv` parsing are forbidden. Schema keys are spelled **exactly as the CLI flag**; camelCase silently registers a SECOND spelling. Every strict CLI passes a throwing `rejectUnknownFlag` as `{ ignore: rejectUnknownFlag }`: this rejects an unknown name BEFORE type-flag assigns it into its ordinary-object `unknownFlags` table; a later `Object.keys(unknownFlags)` check alone is insufficient because `--__proto__` can mutate the prototype without creating an own key. Retain that post-parse check as an invariant. Do not put raw `String` or `[String]` in a schema: a present flag with no value becomes `""`; use a throwing non-empty parser. Validate every numeric domain with a throwing parser or null/finite guard. Positionals → the same result's `parsed._`; everything after `--` → `parsed._["--"]`; named commands are manually routed from that one result and help is rendered only AFTER unknown/positional/value guards. A forwarding wrapper is the sole typed exception to rejection, not to parsing: mark it `// argv-forwarding: <downstream>`, use type-flag `ignore`/leftover argv so downstream flags and `--help` retain byte/order semantics, and assert `unknownFlags` stayed empty. A zero-dep tree that needs argv parsing must graduate first; zero-dep is never permission to select another parser. Entry = `main().catch(…)` → `FATAL: …` on stderr, exit 2; `import.meta.main` guard only when also imported. ONE declared consumer per script — machine → single-line JSON envelope; agent/human → verdict lines. stderr carries diagnostics; exit 0 clean / 1 findings / 2 environment-FATAL; `process.stdout.write`, not `console.log`. | floor PASS + the consumer named in the script header comment |
+| **BG1 CONTRACT** | Invoked `bun <path>`; **no shebang** (shebang + exec bit ONLY when the file is substituted as a binary — the fixture pattern). Every ordinary argv entry uses bare-imported Cleye `cli` (exact `cleye@2.6.0` in repo-root package.json + bun.lock); `node:util` `parseArgs` and hand parsing of `Bun.argv` / `process.argv` are forbidden. Every `cli` **and** `command` declares `strictFlags: true`, `ignoreArgv: rejectPrototypeFlag`, and `parameters:` (spell `parameters: []` for flag-only). Cleye commands inherit `strictFlags` but not `ignoreArgv`. `rejectPrototypeFlag` rejects unknown `__proto__` before type-flag mutates its unknown-object; `constructor` and `prototype` are ordinary own keys, so strictFlags rejects them in the normal unknown path. Cleye camelCase flag keys intentionally render/accept kebab-case flags. Use `<rest...>` / `[rest...]` only when excess positionals are accepted deliberately; otherwise reject `parsed._.length` or call `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)`. Cleye-owned help exits 0; ordinary unknown flags and missing required parameters exit 1 on stderr; the local prototype guard and caught usage/environment failures exit 2. Direct `typeFlag` is permitted only for `// argv-forwarding: <consumer>` on its own line: use a real parser call, retain its `unknownFlags` invariant, parse a copy, and relay the original raw argv byte/order/`--` unchanged; reviewers verify that last semantic property. Its wrapper-owned keys stay explicit kebab spelling. A zero-dep tree that needs argv parsing must graduate first; zero-dep is never permission to select another parser. Entry = `main().catch(…)` → `FATAL: …` on stderr, exit 2; `import.meta.main` guard only when also imported. ONE declared consumer per script — machine → single-line JSON envelope; agent/human → verdict lines. After parsing, domain verdicts use exit 0 clean / 1 findings / 2 FATAL; Cleye's framework exit 1 is distinguished by its stderr diagnostic, not by code alone. Use `process.stdout.write`, not `console.log`. | floor PASS + a boundary fixture proving strict/prototype/help/positional behavior |
 | **BG2 SUBPROCESS** | Simple shell-out → `Bun.$` (escaped interpolation, cross-platform; sharp edges in facts §2 — spread `process.env` in `.env()`, branch on `exitCode` after `.nothrow()`, no `$` in polling loops). Can hang, needs streaming or kill → `Bun.spawn` with NATIVE `timeout:` / `killSignal:` / `signal:` — a hand-rolled `setTimeout`+`kill()` is REFACTOR (facts §3). **Drain `stdout` and `stderr` in ONE `Promise.all`** with `proc.exited` — sequential drain deadlocks on the pipe you are not reading, and the only symptom is your own timeout, which misreads as a slow child. **Bound a hangable child with `signal: AbortSignal.timeout(ms)` and read the timeout off the SIGNAL** (`sig.aborted`) — `proc.killed` is true after a clean exit, and `proc.signalCode` cannot separate your timeout from an external kill. All three measured, facts §3. Always bound relayed output (slice caps); gate on `Bun.which` before real work. Hooks context: sync `main`, `spawnSync`, zero npm imports ever. | `timeout:` present, or a `// bounded:` comment naming why not; floor W9/W10 clean (no `.killed` branch, no sequential drain) |
 | **BG3 DEPENDENCIES** | The ladder: node:/bun: builtins → Bun global → **the repo-root graduation project** (package.json + bun.lock, restored by `mise run deps`; bare import, EXACT version, resolved on the file's realpath so symlinked skills work from any cwd) → `bunx pkg@x.y.z` (PINNED — unpinned bunx in any hook/CI path is drift; staleness is real, facts §5) → GRADUATION to a package.json + bun.lock project (trigger: ≥2 files sharing deps, a dep you must pin, or type/editor pressure). Inline `pkg@ver` imports are legal ONLY in throwaway one-offs run from a known-clean cwd — an ancestor `node_modules` makes them THROW (facts §4). Hooks: no imports beyond node:/bun:, ever — auto-install at hook time is the hazard. | floor unpinned-import FAIL; graduation = the package.json itself |
 | **BG4 VERIFICATION** | Behavior worth keeping → `bun test` in a sibling `tests/`, fixture-binary pattern (a real spawned executable exercising timeout/error paths — not a mock); prove any new gate/floor check FIRES (inject bad input, watch FAIL, revert); types: editor LSP + `bunx typescript@<pin> tsc --noEmit` at graduation — never claim "typed" from a green run (TRANSPILE-ONLY). | test run output / red→green record in the change |
@@ -73,10 +78,10 @@ inside Japanese prose: **LAW**, **gate** (BG0–BG4), **shim**, **envelope**, **
 | A few shell commands | `Bun.$` — `` await $`cmd`.text() ``; `{ raw: … }` for globs; sequence with separate awaits |
 | Call a CLI that can hang (LLM CLIs, network) | `Bun.spawn({ cmd: […], timeout, killSignal })` + bounded relay |
 | Read / write a file | `Bun.file(p).text()/.json()` / `Bun.write` (node:fs stays for `existsSync`/`readdir`/`rm`) |
-| Parse flags in one command | `typeFlag(schema, Bun.argv.slice(2), { ignore: rejectUnknownFlag })`; then assert the `unknownFlags` invariant |
-| Own ≥2 named commands + generated command help | parse once with `typeFlag`; route `parsed._[0]`; reject unknown/excess/value errors before rendering manual help |
-| Forward arbitrary downstream argv | mark `// argv-forwarding: <downstream>`; use `typeFlag` with `ignore`/leftover argv; preserve downstream `--help` |
-| Parse positionals | the same typed parser result's `parsed._`; never read argv separately |
+| Parse flags / positionals in an ordinary command | `cli({ name, flags, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })`; Cleye owns help and positional mapping |
+| Own named commands + generated command help | `cli({ commands: [command({ name, parameters, strictFlags: true, ignoreArgv: rejectPrototypeFlag })], … })`; every command repeats the prototype guard |
+| Accept excess positionals | declare a deliberate `<rest...>` / `[rest...]` schema; otherwise reject `parsed._.length` or use `rejectUnexpectedArguments(parsed.unknownFlags, parsed._)` |
+| Forward arbitrary downstream argv | exact `// argv-forwarding: <downstream>` marker; parse a copy with `typeFlag`, then relay the original argv unchanged including `--` |
 | Run a JS/TS CLI tool once | `bunx pkg@x.y.z` — never npx, never `npm i -g` |
 | Python payload (lib or tool) | STOP → `running-python-tools` (uvx / `uv run --with`) |
 | Import a library | BG3 graduation check FIRST |
@@ -92,7 +97,10 @@ The 2026-07 migration corpus is graded here; receipts and the full drift evidenc
 | Corpus pattern | Verdict | Target |
 |---|---|---|
 | exit 0/1/2 + `main().catch` → FATAL stderr, exit 2 | KEEP | — |
-| `parseArgs strict` for flags / raw `Bun.argv` positionals | REFACTOR | one type-flag boundary; floor F8 rejects both legacy forms and any second argv read |
+| `parseArgs`, raw `Bun.argv`, or unmarked direct `typeFlag` | REFACTOR | ordinary boundary → Cleye `cli`; direct type-flag only with the exact forwarding marker |
+| manual help / positional routing | REFACTOR | Cleye help and `parameters`; excess is a spread schema, `parsed._.length`, or the established `rejectUnexpectedArguments` refusal |
+| Cleye `strictFlags` without local ignoreArgv | REFACTOR (security) | `ignoreArgv: rejectPrototypeFlag` on every cli/command prevents `--__proto__` mutation before strictFlags runs |
+| exact-kebab schema rule | REFACTOR | Cleye camelCase keys render as kebab-case flags; exact spelling remains only on forwarding-wrapper type-flag keys |
 | envelope vs verdict-lines split by consumer | KEEP | declare the consumer per script (BG1) |
 | zero npm imports across the corpus | **SUPERSEDED 2026-07-28** — the physics is real but it is solved by graduation, not by abstinence: measured, an inline pinned import throws under an ancestor node_modules while a lockfile-backed bare import resolves through symlinks from any cwd | repo-root package.json + bun.lock; DISTRIBUTED code (hooks/, templates/, `.zero-dep` trees) stays zero-dep |
 | fixture-binary tests (driving-claude family) | KEEP | extend to the other script families |

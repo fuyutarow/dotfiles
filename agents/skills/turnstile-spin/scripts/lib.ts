@@ -35,15 +35,6 @@ export function nonEmptyString(value: string | undefined): string {
   return value;
 }
 
-export function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
-    throw new UsageError(`unknown option '--${flag}'`);
-  }
-}
-
 export function rejectUnexpectedArguments(
   unknownFlags: Record<string, (string | boolean)[]>,
   positionals: readonly string[],

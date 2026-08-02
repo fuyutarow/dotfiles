@@ -12,7 +12,7 @@ import {
 	resolve,
 	sep,
 } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import { parseDocument } from "yaml";
 
 type Layer =
@@ -2276,11 +2276,8 @@ export async function inspectResearchDocs(
 	return { concepts: concepts.length, findings, mode, root };
 }
 
-function rejectUnknownFlag(
-	type: "argument" | "known-flag" | "unknown-flag",
-	flag: string,
-): void {
-	if (type === "unknown-flag")
+function rejectPrototypeFlag(type: string, flag: string): void {
+	if (type === "unknown-flag" && flag === "__proto__")
 		throw new UsageError(`unknown option '--${flag}'`);
 }
 
@@ -2299,23 +2296,23 @@ function modeValue(value: string | undefined): Mode {
 }
 
 async function main(): Promise<void> {
-	const parsed = typeFlag(
+	const parsed = cli(
 		{
-			base: { type: nonEmptyString },
-			mode: { type: modeValue },
-			"raw-root": { type: nonEmptyString },
-			root: { type: nonEmptyString },
-			today: { type: nonEmptyString },
+			name: "research-docs-check.ts",
+			parameters: [],
+			flags: {
+				base: nonEmptyString,
+				mode: modeValue,
+				rawRoot: nonEmptyString,
+				root: nonEmptyString,
+				today: nonEmptyString,
+			},
+			strictFlags: true,
+			ignoreArgv: rejectPrototypeFlag,
 		},
+		undefined,
 		Bun.argv.slice(2),
-		{ ignore: rejectUnknownFlag },
 	);
-	const unknown = Object.keys(parsed.unknownFlags);
-	if (unknown.length > 0) {
-		throw new UsageError(
-			`unknown option(s): ${unknown.map((flag) => `--${flag}`).join(", ")}`,
-		);
-	}
 	if (parsed._.length > 0) {
 		throw new UsageError(`unexpected positional argument: ${parsed._[0]}`);
 	}
@@ -2326,7 +2323,7 @@ async function main(): Promise<void> {
 	const inspection = await inspectResearchDocs(root, {
 		base: parsed.flags.base,
 		mode: parsed.flags.mode ?? "profile",
-		rawRoot: parsed.flags["raw-root"],
+		rawRoot: parsed.flags.rawRoot,
 		today: parsed.flags.today,
 	});
 	if (inspection.findings.length === 0) {

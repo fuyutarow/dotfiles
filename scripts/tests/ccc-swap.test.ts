@@ -318,7 +318,7 @@ describe("listPrevGenerations", () => {
 // ---- CLI-level ----------------------------------------------------------------------------
 
 describe("CLI: flag handling", () => {
-  test("unknown flag exits non-zero (2, environment-FATAL) and never runs the command", () => {
+  test("Cleye rejects an ordinary command flag with native exit 1 and no execution", () => {
     const home = makeHome();
     const { code, err, out } = runScript([
       "discover",
@@ -326,8 +326,21 @@ describe("CLI: flag handling", () => {
       home,
       "--bogus-flag",
     ]);
+    expect(code).toBe(1);
+    expect(err).toContain("Error: Unknown flag: --bogus-flag.");
+    expect(out).toBe("");
+  });
+
+  test("command parser rejects --__proto__ before discover can inspect a home", () => {
+    const home = makeHome();
+    const { code, err, out } = runScript([
+      "discover",
+      "--home",
+      home,
+      "--__proto__",
+    ]);
     expect(code).toBe(2);
-    expect(err).toContain("FATAL");
+    expect(err).toContain("Unknown option '--__proto__'");
     expect(out).toBe("");
   });
 

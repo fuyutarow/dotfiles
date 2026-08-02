@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Floor for the model-release SSOT (`releases.toml`).
 //
 // The SSOT solves "dates live in four inventories and nobody can sort across them".
@@ -22,17 +21,14 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import releases from "./releases.toml";
 
 class UsageError extends Error {}
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
-    throw new UsageError(`unknown option '--${flag}'`);
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
   }
 }
 
@@ -133,14 +129,17 @@ function guidanceFiles(): Array<[string, string]> {
 }
 
 function main(): void {
-  const parsed = typeFlag(
-    { today: nonEmptyString("--today"), quiet: Boolean },
+  const parsed = cli(
+    {
+      name: "check-releases.ts",
+      parameters: [],
+      flags: { today: nonEmptyString("--today"), quiet: Boolean },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined)
-    throw new Error(`unknown option '--${unknownFlag}'`);
   if (parsed._.length > 0)
     throw new Error(`unexpected positional argument '${parsed._[0]}'`);
   quiet = parsed.flags.quiet === true;

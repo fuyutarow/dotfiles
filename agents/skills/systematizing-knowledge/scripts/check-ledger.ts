@@ -4,13 +4,13 @@
  */
 
 import { existsSync } from "node:fs";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -390,21 +390,20 @@ const checkFile = async (path: string): Promise<FileResult> => {
 };
 
 const main = async (): Promise<void> => {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined) {
-    throw new Error(`unknown option '--${unknownFlag}'`);
+  const parsed = cli(
+    {
+      name: "check-ledger.ts",
+      parameters: ["<claimsJsonl>"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+  if (parsed._.length !== 1) {
+    throw new Error("check-ledger.ts accepts exactly one claims JSONL path");
   }
-  const paths = parsed._;
-  const path = paths[0];
-  if (paths.length !== 1 || path === undefined) {
-    process.stderr.write("Usage: bun check-ledger.ts <claims.jsonl>\n");
-    process.exitCode = 2;
-    return;
-  }
-
+  const path = parsed._.claimsJsonl;
   if (!existsSync(path)) {
     throw new Error(`file not found: ${path}`);
   }

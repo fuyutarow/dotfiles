@@ -11,24 +11,26 @@
 //
 // Usage: bun scripts/cache-clean.ts [--dry-run] [--home <path>]
 //   --home defaults to $HOME — pass a fixture dir to test without touching the real one.
-// Exit: always 0. The original shell body has no `set -e` — every guard (`command -v x &&
-// ...`) and every mutating command's failure (`... || true`) is local, so the task always
-// reaches its final echo. This port mirrors that exactly: no operation here — including a
-// missing/empty HOME, or a failed tempdir setup — may abort the rest of the pass or change
-// the exit code away from 0.
+// Exit: every valid cleanup invocation reaches 0. The original shell body has no `set -e` —
+// every guard (`command -v x && ...`) and every mutating command's failure (`... || true`) is
+// local, so no cleanup operation — including a missing/empty HOME or failed tempdir setup — may
+// abort the pass. Parser refusal happens before cleanup: Cleye ordinary unknowns exit 1; local
+// usage errors (including `--__proto__` and missing flag values) exit 2.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 class UsageError extends Error {}
 
-function rejectUnknownFlag(
+// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before
+// assignment. Every ordinary unknown remains Cleye strictFlags' responsibility.
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new UsageError(`Unknown option '--${flag}'`);
   }
 }
@@ -247,30 +249,26 @@ export function resolveHome(homeArg: string | undefined): string {
 }
 
 async function main(): Promise<void> {
-  // type-flag (unlike node:util parseArgs with strict:true) does not throw on unknown flags or
-  // stray positionals — both would otherwise be accepted silently and the process would exit 0.
-  // Both are rejected below by throwing, which reaches the SAME main().catch handler as every
-  // other startup failure here, preserving the original contract exactly: "FATAL: <message>" on
-  // stderr + exit 1. Schema keys are camelCase; type-flag accepts the kebab-case CLI spelling
-  // (dryRun <- --dry-run), verified against bun 1.3.14, 2026-07-28.
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      "dry-run": { type: Boolean, default: false },
-      home: { type: nonEmptyString("--home") },
+      name: "cache-clean.ts",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: { description: "Clear regenerable global package-manager caches." },
+      flags: {
+        dryRun: { type: Boolean, default: false },
+        home: { type: nonEmptyString("--home") },
+      },
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
 
-  const unknown = Object.keys(parsed.unknownFlags);
-  if (unknown.length > 0) {
-    // mirrors node:util parseArgs' "Unknown option '--x'" (message text is an approximation,
-    // not byte-identical — see this migration's contract_changes)
-    throw new UsageError(`Unknown option '--${unknown[0]}'`);
-  }
+  // The explicit [] schema leaves excess operands visible for the pre-existing fatal contract.
   if (parsed._.length > 0) {
-    // mirrors node:util parseArgs' "Unexpected argument 'x'..." (strict:true + implicit
-    // allowPositionals:false rejected any positional in the original)
+    // Preserve the flag-only contract: the explicit empty positional schema leaves any operand
+    // visible here for refusal before cleanup begins.
     throw new Error(
       `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
     );
@@ -280,7 +278,7 @@ async function main(): Promise<void> {
   // `df -h "$HOME"` and the cargo-path joins, degrading gracefully rather than aborting; no
   // hard-fail here would have an analogue in the shell (see resolveHome's doc comment).
   const home = resolveHome(parsed.flags.home);
-  const dryRun = parsed.flags["dry-run"] === true;
+  const dryRun = parsed.flags.dryRun === true;
 
   console.log(`before: ${freeSpace(home)}`);
 

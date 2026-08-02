@@ -1,12 +1,9 @@
 /** FLOOR probe: a model string is available only when agy returns exactly OK. */
 
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -57,12 +54,16 @@ function atLeast(actual: string, floor: string): boolean {
 }
 
 async function main(): Promise<void> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined)
-    throw new Error(`unknown option '--${unknownFlag}'`);
+  const parsed = cli(
+    {
+      name: "probe-models.ts",
+      parameters: ["[models...]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
   const models = parsed._;
 
   const agy = Bun.which(process.env.AGY_BIN ?? "agy");

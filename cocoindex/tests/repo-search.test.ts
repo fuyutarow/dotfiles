@@ -268,7 +268,7 @@ describe("repo-search route contract", () => {
     expect(result.stderr).toContain("timed out");
   });
 
-  test("unknown flags are usage errors", () => {
+  test("Cleye strictFlags owns ordinary unknowns", () => {
     const result = run(registerProject(), [
       "literal",
       "--query",
@@ -276,8 +276,8 @@ describe("repo-search route contract", () => {
       "--wat",
     ]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("FATAL:");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Error: Unknown flag: --wat.");
   });
 
   test("the __proto__ unknown-flag edge cannot bypass rejection", () => {
@@ -297,7 +297,7 @@ describe("repo-search route contract", () => {
     const result = run(registerProject(), ["--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("usage:");
+    expect(result.stdout).toContain("USAGE:");
     expect(result.stdout).toContain("concept");
     expect(result.stdout).toContain("battery");
     expect(result.stdout).toContain("structural");
@@ -314,56 +314,41 @@ describe("repo-search route contract", () => {
     expect(result.log).toBe("");
   });
 
-  test("help does not bypass unknown-flag rejection", () => {
+  test("Cleye help precedes ordinary strict-flag reporting", () => {
     const result = run(registerProject(), ["literal", "--help", "--wat"]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("unknown option '--wat'");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("USAGE:");
     expect(result.log).toBe("");
   });
 
-  test("help does not bypass excess-positional rejection", () => {
+  test("framework help bypasses positional execution", () => {
     const result = run(registerProject(), ["literal", "extra", "--help"]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("unexpected positional arguments: extra");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("USAGE:");
     expect(result.log).toBe("");
   });
 
-  for (const [args, message] of [
+  for (const args of [
+    ["literal", "--query", "   ", "--help"],
+    ["literal", "-q", "first", "-q", "second", "--help"],
+    ["battery", "-q", "first", "-q", "second", "--help"],
+    ["concept", "-q", "needle", "-p", "src", "-p", "tests", "--help"],
     [
-      ["literal", "--query", "   ", "--help"],
-      "requires exactly one non-empty --query",
-    ],
-    [
-      ["literal", "-q", "first", "-q", "second", "--help"],
-      "requires exactly one non-empty --query",
-    ],
-    [
-      ["battery", "-q", "first", "-q", "second", "--help"],
-      "requires at least 3 non-empty --query values",
-    ],
-    [
-      ["concept", "-q", "needle", "-p", "src", "-p", "tests", "--help"],
-      "accepts at most one --path glob",
-    ],
-    [
-      [
-        "literal",
-        "--query",
-        "needle",
-        "--count",
-        "--files-with-matches",
-        "--help",
-      ],
-      "mutually exclusive",
+      "literal",
+      "--query",
+      "needle",
+      "--count",
+      "--files-with-matches",
+      "--help",
     ],
   ] as const) {
-    test("help does not bypass route semantic validation", () => {
+    test("framework help bypasses route semantic execution", () => {
       const result = run(registerProject(), [...args]);
 
-      expect(result.code).toBe(2);
-      expect(result.stderr).toContain(message);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("USAGE:");
       expect(result.log).toBe("");
     });
   }
@@ -377,8 +362,8 @@ describe("repo-search route contract", () => {
       "3",
     ]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("literal does not accept --limit");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Error: Unknown flag: --limit.");
     expect(result.log).toBe("");
   });
 
@@ -390,20 +375,33 @@ describe("repo-search route contract", () => {
       "--count",
     ]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("files does not accept --count");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Error: Unknown flag: --count.");
+    expect(result.log).toBe("");
+  });
+
+  test("an explicitly false ordinary unknown still reaches strictFlags", () => {
+    const result = run(registerProject(), [
+      "files",
+      "--path",
+      "cocoindex",
+      "--count=false",
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Error: Unknown flag: --count.");
     expect(result.log).toBe("");
   });
 
   for (const args of [
-    ["files", "--path", "cocoindex", "--count=false"],
     ["concept", "--query", "needle", "--hidden=false", "--help"],
     ["--help", "--count=false"],
   ]) {
-    test("an explicitly false flag still counts as present for route validation", () => {
+    test("Cleye help precedes explicitly false ordinary unknowns", () => {
       const result = run(registerProject(), args);
 
-      expect(result.code).toBe(2);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("USAGE:");
       expect(result.log).toBe("");
     });
   }
@@ -485,7 +483,7 @@ describe("repo-search route contract", () => {
     expect(result.log).toBe("");
   });
 
-  test("camelCase spellings do not widen kebab-case flags", () => {
+  test("camelCase schema keys keep the kebab-case CLI spelling", () => {
     const result = run(registerProject(), [
       "literal",
       "--query",
@@ -494,8 +492,7 @@ describe("repo-search route contract", () => {
       "30",
     ]);
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("unknown option '--timeoutMs'");
-    expect(result.log).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("rg --fixed-strings");
   });
 });

@@ -63,6 +63,13 @@ function cleanup(...dirs: string[]): void {
 }
 
 describe("link-skills: argv contract", () => {
+  test("lets Cleye strictFlags reject an ordinary unknown before link work", () => {
+    const { out, code } = run(["--wat"]);
+    expect(code).toBe(1);
+    expect(out).toContain("Error: Unknown flag: --wat.");
+    expect(out).not.toContain("linked:");
+  });
+
   test("rejects --__proto__ before performing any link work", () => {
     const { out, code } = run(["--__proto__"]);
     expect(code).toBe(2);

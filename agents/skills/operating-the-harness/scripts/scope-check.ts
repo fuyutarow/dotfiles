@@ -26,15 +26,12 @@ import { join, resolve } from "node:path";
 // mirrored/copied) into ~/.claude/skills by `mise run link:skills`, so the repo-root graduation
 // project (package.json + bun.lock) governs it — Bun resolves through the symlink to this
 // file's realpath and finds that root from any cwd (BG3).
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
 const HOME = homedir();
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown option '--${flag}'`);
   }
 }
@@ -103,13 +100,16 @@ async function scan(file: string, allowed: string[]): Promise<Finding[]> {
 }
 
 async function main(): Promise<number> {
-  const parsed = typeFlag({}, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
-  const unknownFlag = Object.keys(parsed.unknownFlags)[0];
-  if (unknownFlag !== undefined) {
-    throw new Error(`unknown option '--${unknownFlag}'`);
-  }
+  const parsed = cli(
+    {
+      name: "scope-check.ts",
+      parameters: ["[user-scope-root]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
   if (parsed._.length > 1) {
     throw new Error(`unexpected argument '${parsed._[1]}'`);
   }

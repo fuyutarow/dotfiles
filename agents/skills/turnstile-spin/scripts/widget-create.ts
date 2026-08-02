@@ -1,4 +1,4 @@
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
   apiError,
   apiSuccess,
@@ -7,26 +7,37 @@ import {
   isRecord,
   nonEmptyString,
   output,
-  rejectUnknownFlag,
   rejectUnexpectedArguments,
   requiredValue,
   UsageError,
 } from "./lib.ts";
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+}
+
 async function main(): Promise<void> {
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      "account-id": nonEmptyString,
-      name: nonEmptyString,
-      domains: nonEmptyString,
-      mode: nonEmptyString,
+      name: "widget-create.ts",
+      parameters: [],
+      flags: {
+        accountId: nonEmptyString,
+        name: nonEmptyString,
+        domains: nonEmptyString,
+        mode: nonEmptyString,
+      },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
     },
+    undefined,
     Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
   );
   rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
   const values = parsed.flags;
-  const accountId = requiredValue(values["account-id"], "--account-id");
+  const accountId = requiredValue(values.accountId, "--account-id");
   const name = requiredValue(values.name, "--name");
   const domains = requiredValue(values.domains, "--domains")
     .split(",")

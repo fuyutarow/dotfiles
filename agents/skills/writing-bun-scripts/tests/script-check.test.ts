@@ -7,16 +7,23 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cli } from "cleye";
+import { typeFlag } from "type-flag";
 
 const FLOOR = new URL("../scripts/script-check.ts", import.meta.url).pathname;
 
 function runFloor(
   content: string,
   filename = "fixture.ts",
+  dependencies?: Record<string, string>,
 ): { out: string; code: number } {
   const dir = mkdtempSync(join(tmpdir(), "floor-"));
   const file = join(dir, filename);
   writeFileSync(file, content);
+  if (dependencies !== undefined) {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies }));
+    writeFileSync(join(dir, "bun.lock"), "{}\n");
+  }
   // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
   const proc = Bun.spawnSync(["bun", FLOOR, file], { maxBuffer: 1024 * 1024 });
   rmSync(dir, { recursive: true, force: true });
@@ -24,6 +31,14 @@ function runFloor(
     out: proc.stdout.toString() + proc.stderr.toString(),
     code: proc.exitCode ?? -1,
   };
+}
+
+function templateExpression(expression: string): string {
+  return `\`\${${expression}}\``;
+}
+
+function interpolatedFixture(expression: string): string {
+  return `const hidden = ${templateExpression(expression)};`;
 }
 
 describe("script-check floor", () => {
@@ -53,9 +68,18 @@ describe("script-check floor", () => {
 
   test("computed dynamic import warns for hand review", () => {
     const { out, code } = runFloor(
-      "const name = pick();\nconst m = await import(`pkg-${name}`);\n",
+      `const name = pick();\nconst m = await import(\`pkg-\${name}\`);\n`,
     );
     expect(out).toContain("computed specifier");
+    expect(code).toBe(0);
+  });
+
+  test("a regex literal that names bunx is not mistaken for a subprocess call", () => {
+    const { out, code } = runFloor(
+      String.raw`const runtime = /(^|\\s)bunx?\\b/; process.stdout.write(String(runtime));`,
+    );
+    expect(out).not.toContain("bunx call with no visible");
+    expect(out).toContain("FAIL=0 WARN=0");
     expect(code).toBe(0);
   });
 
@@ -131,9 +155,35 @@ describe("script-check floor", () => {
     expect(proc.stdout.toString()).toContain("FAIL=0 WARN=0");
     expect(proc.exitCode).toBe(0);
   });
+
+  test("the floor exposes Cleye help and a deliberate spread positional schema", () => {
+    // bounded: the local CLI's framework-owned help path exits immediately
+    const proc = Bun.spawnSync(["bun", FLOOR, "--help"], {
+      maxBuffer: 1024 * 1024,
+    });
+    const output = proc.stdout.toString();
+    expect(output).toContain("script-check [flags...] <file...>");
+    expect(output).toContain("Show help");
+    expect(proc.exitCode).toBe(0);
+  });
+
+  test("the floor rejects ordinary unknown flags and __proto__ before mutation", () => {
+    // bounded: both one-shot argument-error paths return before the floor walks a file
+    const unknown = Bun.spawnSync(["bun", FLOOR, "--unknown", FLOOR], {
+      maxBuffer: 1024 * 1024,
+    });
+    expect(unknown.stderr.toString()).toContain("Unknown flag: --unknown");
+    expect(unknown.exitCode).toBe(1);
+
+    const prototype = Bun.spawnSync(["bun", FLOOR, "--__proto__", FLOOR], {
+      maxBuffer: 1024 * 1024,
+    });
+    expect(prototype.stderr.toString()).toContain("prototype-mutating option");
+    expect(prototype.exitCode).toBe(2);
+  });
 });
 
-describe("script-check floor — typed argv boundary (F8, BG1)", () => {
+describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
   test("node:util parseArgs FAILs even when strict", () => {
     const { out, code } = runFloor(`
       import { parseArgs } from "node:util";
@@ -143,141 +193,361 @@ describe("script-check floor — typed argv boundary (F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("raw Bun.argv parsing without an approved typed parser FAILs", () => {
+  test("raw Bun.argv parsing without Cleye FAILs", () => {
     const { out, code } = runFloor(`
       const files = Bun.argv.slice(2);
       process.stdout.write(files.join("\\n"));
     `);
-    expect(out).toContain("without the typeFlag() boundary");
+    expect(out).toContain("without a Cleye boundary");
     expect(code).toBe(1);
   });
 
-  test("raw process.argv parsing without an approved typed parser FAILs", () => {
+  test("raw process.argv parsing without Cleye FAILs", () => {
     const { out, code } = runFloor(`
       const files = process.argv.slice(2);
       process.stdout.write(files.join("\\n"));
     `);
-    expect(out).toContain("without the typeFlag() boundary");
+    expect(out).toContain("without a Cleye boundary");
     expect(code).toBe(1);
   });
 
-  test("typeFlag with an early unknown interceptor and parsed positionals PASSes", () => {
+  test("an unrelated local cli helper with no argv PASSes", () => {
     const { out, code } = runFloor(`
-      function rejectUnknownFlag(
-        type: "known-flag" | "unknown-flag" | "argument",
-        flag: string,
-      ): void {
-        if (type === "unknown-flag") throw new Error("unknown option");
+      function cli(message: string): void {
+        process.stdout.write(message);
       }
-      const parsed = typeFlag({}, Bun.argv.slice(2), { ignore: rejectUnknownFlag });
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("unknown");
-      process.stdout.write(parsed._.join("\\n"));
+      cli("domain operation");
     `);
     expect(out).toContain("FAIL=0");
     expect(code).toBe(0);
   });
 
-  test("typeFlag without the early unknown interceptor FAILs", () => {
+  test("an unrelated imported cli helper with no argv PASSes", () => {
     const { out, code } = runFloor(`
-      const parsed = typeFlag({}, Bun.argv.slice(2));
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("unknown");
+      import { cli } from "./domain.ts";
+      cli("domain operation");
+    `);
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("an unrelated cli helper does not license raw Bun.argv", () => {
+    const { out, code } = runFloor(`
+      import { cli } from "./domain.ts";
+      cli(Bun.argv.slice(2));
+    `);
+    expect(out).toContain("without a Cleye boundary");
+    expect(code).toBe(1);
+  });
+
+  test("an aliased Cleye cli import FAILs the exact-binding policy", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli as cleyeCli } from "cleye";
+      cleyeCli({ name: "fixture", parameters: ["<file...>"], strictFlags: true });
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("import Cleye cli with its exact `cli` binding");
+    expect(code).toBe(1);
+  });
+
+  test("ordinary Cleye cli with strict/prototype guard and deliberate spread PASSes", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      function rejectPrototypeFlag(
+        type: "known-flag" | "unknown-flag" | "argument",
+        flag: string,
+      ): void {
+        if (type === "unknown-flag" && flag === "__proto__") throw new Error("prototype");
+      }
+      const parsed = cli({
+        name: "fixture",
+        parameters: ["<file...>"],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+      }, undefined, Bun.argv.slice(2));
+      process.stdout.write(parsed._.file.join("\\n"));
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("Cleye boundary without strictFlags FAILs", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      function rejectPrototypeFlag() {}
+      cli({ name: "fixture", parameters: ["<file...>"], ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("strictFlags: true");
+    expect(code).toBe(1);
+  });
+
+  test("Cleye boundary without the prototype guard FAILs", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      cli({ name: "fixture", parameters: ["<file...>"], strictFlags: true }, undefined, Bun.argv.slice(2));
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("ignoreArgv: rejectPrototypeFlag");
+    expect(code).toBe(1);
+  });
+
+  test("Cleye requires an explicit parameters schema", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      function rejectPrototypeFlag() {}
+      cli({ name: "fixture", strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("parameters: declaration");
+    expect(code).toBe(1);
+  });
+
+  test("flag-only Cleye CLI makes excess-positional refusal visible", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      function rejectPrototypeFlag() {}
+      const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+      if (parsed._.length > 0) throw new Error("unexpected positional");
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("the established rejectUnexpectedArguments excess refusal PASSes", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      function rejectPrototypeFlag() {}
+      function rejectUnexpectedArguments(unknownFlags: object, positionals: readonly string[]) {
+        if (Object.keys(unknownFlags).length > 0 || positionals.length > 0) throw new Error("unexpected");
+      }
+      const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+      rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("Cleye commands each require strict/prototype guard and a schema", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli, command } from "cleye";
+      function rejectPrototypeFlag() {}
+      const run = command({
+        name: "run",
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+      });
+      const parsed = cli({
+        name: "fixture",
+        commands: [run],
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+      }, undefined, Bun.argv.slice(2));
+      if (parsed._.length > 0) throw new Error("unexpected positional");
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("an unguarded Cleye command FAILs even when its parent is guarded", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli, command } from "cleye";
+      function rejectPrototypeFlag() {}
+      const run = command({ name: "run", parameters: [], strictFlags: true });
+      const parsed = cli({ name: "fixture", commands: [run], parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+      if (parsed._.length > 0) throw new Error("unexpected positional");
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("ignoreArgv: rejectPrototypeFlag");
+    expect(code).toBe(1);
+  });
+
+  test("an unrelated command helper is not counted as a Cleye command boundary", () => {
+    const { out, code } = runFloor(
+      `
+      import { cli } from "cleye";
+      import { command } from "./lib.ts";
+      function rejectPrototypeFlag() {}
+      const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
+      command("persist", parsed);
+      if (parsed._.length > 0) throw new Error("unexpected positional");
+    `,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("unmarked direct type-flag FAILs", () => {
+    const { out, code } = runFloor(`
+      const args = Bun.argv.slice(2);
+      const parsed = typeFlag({}, args, { ignore: () => true });
       process.stdout.write(parsed._.join("\\n"));
     `);
     expect(out).toContain(
-      "without an early `ignore: rejectUnknownFlag` interceptor",
+      "direct type-flag needs an exact argv-forwarding marker",
     );
     expect(code).toBe(1);
   });
 
-  test("an imported Cleye boundary FAILs: house argv parsing is exceptionless type-flag", () => {
+  test("the exact forwarding marker permits a real type-flag boundary", () => {
     const { out, code } = runFloor(`
-      import { cli } from "cleye";
-      const parsed = cli({}, undefined, Bun.argv.slice(2));
-      process.stdout.write(parsed._.join("\\n"));
-    `);
-    expect(out).toContain("Cleye is outside the house argv boundary");
-    expect(code).toBe(1);
-  });
-
-  test("a second raw argv read is not licensed by one typeFlag call", () => {
-    const { out, code } = runFloor(`
-      function rejectUnknownFlag(
-        type: "known-flag" | "unknown-flag" | "argument",
-        flag: string,
-      ): void {
-        if (type === "unknown-flag") throw new Error(flag);
-      }
-      const parsed = typeFlag({}, Bun.argv.slice(2), { ignore: rejectUnknownFlag });
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("unknown");
-      const bypass = process.argv.slice(2);
-      process.stdout.write(parsed._.concat(bypass).join("\\n"));
-    `);
-    expect(out).toContain("more argv reads than typeFlag() calls");
-    expect(code).toBe(1);
-  });
-
-  test("raw String flag parsers FAIL because a present value may be empty", () => {
-    const { out, code } = runFloor(`
-      function rejectUnknownFlag(
-        type: "known-flag" | "unknown-flag" | "argument",
-        flag: string,
-      ): void {
-        if (type === "unknown-flag") throw new Error(flag);
-      }
-      const parsed = typeFlag({ name: String }, Bun.argv.slice(2), {
-        ignore: rejectUnknownFlag,
-      });
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("unknown");
-      process.stdout.write(parsed.flags.name ?? "");
-    `);
-    expect(out).toContain("raw String flag parser");
-    expect(code).toBe(1);
-  });
-
-  test("a throwing non-empty string parser PASSes", () => {
-    const { out, code } = runFloor(`
-      function rejectUnknownFlag(
-        type: "known-flag" | "unknown-flag" | "argument",
-        flag: string,
-      ): void {
-        if (type === "unknown-flag") throw new Error(flag);
-      }
-      function nonEmptyString(value: string | undefined): string {
-        if (value === undefined || value.length === 0) throw new Error("missing");
-        return value;
-      }
-      const parsed = typeFlag({ name: nonEmptyString }, Bun.argv.slice(2), {
-        ignore: rejectUnknownFlag,
-      });
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("unknown");
-      process.stdout.write(parsed.flags.name ?? "");
-    `);
-    expect(out).toContain("FAIL=0");
-    expect(code).toBe(0);
-  });
-
-  test("an explicit forwarding wrapper may preserve downstream unknown flags", () => {
-    const { out, code } = runFloor(`
-      // argv-forwarding: downstream-tool
+      // argv-forwarding: textlint
       const args = Bun.argv.slice(2);
       const parsed = typeFlag({}, [...args], {
-        ignore: (type) => type === "unknown-flag",
+        ignore: (type) => type === "unknown-flag" || type === "argument",
       });
       if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("invariant");
-      process.stdout.write(parsed._.join("\\n"));
+      process.stdout.write(args.join("\\n"));
     `);
     expect(out).toContain("FAIL=0");
     expect(code).toBe(0);
   });
 
-  test("argv and parseArgs examples inside comments and strings do not fire", () => {
+  test("comments, strings, and templates that mention parser APIs do not fire", () => {
     const { out, code } = runFloor(`
-      // Bun.argv.slice(2); parseArgs({ strict: true });
-      const example = "process.argv.slice(2); parseArgs({ strict: true })";
+      // Bun.argv.slice(2); parseArgs({ strict: true }); cli({}); typeFlag({});
+      const example = "process.argv.slice(2); parseArgs({ strict: true }); cli({}); typeFlag({})";
+      const template = \`Bun.argv.slice(2); cli({}); typeFlag({})\`;
       process.stdout.write(example);
     `);
     expect(out).toContain("FAIL=0");
     expect(code).toBe(0);
+  });
+
+  test("template interpolation cannot hide raw argv or parser boundaries", () => {
+    const rawArgv = runFloor(
+      interpolatedFixture("({ value: Bun.argv.slice(2) }).value"),
+    );
+    expect(rawArgv.out).toContain("without a Cleye boundary");
+    expect(rawArgv.code).toBe(1);
+
+    const unguardedCleye = runFloor(
+      `import { cli } from "cleye"; ${interpolatedFixture(
+        'cli({ name: "fixture" }, undefined, Bun.argv.slice(2))',
+      )}`,
+      "fixture.ts",
+      { cleye: "2.6.0" },
+    );
+    expect(unguardedCleye.out).toContain("strictFlags: true");
+    expect(unguardedCleye.code).toBe(1);
+
+    const directTypeFlag = runFloor(
+      interpolatedFixture("typeFlag({}, Bun.argv.slice(2))"),
+    );
+    expect(directTypeFlag.out).toContain(
+      "direct type-flag needs an exact argv-forwarding marker",
+    );
+    expect(directTypeFlag.code).toBe(1);
+
+    const nestedTemplate = runFloor(
+      interpolatedFixture(templateExpression("Bun.argv.slice(2)")),
+    );
+    expect(nestedTemplate.out).toContain("without a Cleye boundary");
+    expect(nestedTemplate.code).toBe(1);
+
+    const benignExpression = runFloor(
+      `${interpolatedFixture(
+        JSON.stringify("Bun.argv.slice(2); cli({}); typeFlag({})"),
+      )} process.stdout.write(hidden);`,
+    );
+    expect(benignExpression.out).toContain("FAIL=0");
+    expect(benignExpression.code).toBe(0);
+  });
+
+  test("Cleye maps declared positional schemas and the local guard rejects __proto__ before mutation", () => {
+    function rejectPrototypeFlag(
+      type: "known-flag" | "unknown-flag" | "argument",
+      flag: string,
+    ): void {
+      if (type === "unknown-flag" && flag === "__proto__") {
+        throw new Error("prototype");
+      }
+    }
+    const parsed = cli(
+      {
+        name: "fixture",
+        parameters: ["<file...>"],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        help: false,
+      },
+      undefined,
+      ["first.ts", "second.ts"],
+    );
+    expect(parsed._.file).toEqual(["first.ts", "second.ts"]);
+
+    const prototypeArgv = ["--__proto__"];
+    expect(() =>
+      cli(
+        {
+          name: "fixture",
+          parameters: [],
+          strictFlags: true,
+          ignoreArgv: rejectPrototypeFlag,
+          help: false,
+        },
+        undefined,
+        prototypeArgv,
+      ),
+    ).toThrow("prototype");
+    expect(prototypeArgv).toEqual(["--__proto__"]);
+  });
+
+  test("the forwarding recipe leaves downstream token order and -- untouched", () => {
+    const downstreamArgv = [
+      "--textlint-rule",
+      "value",
+      "--",
+      "file.md",
+      "--literal",
+    ];
+    const parseCopy = [...downstreamArgv];
+    const parsed = typeFlag({}, parseCopy, {
+      ignore: (type) => type === "unknown-flag" || type === "argument",
+    });
+    expect(Object.keys(parsed.unknownFlags)).toEqual([]);
+    expect(downstreamArgv).toEqual([
+      "--textlint-rule",
+      "value",
+      "--",
+      "file.md",
+      "--literal",
+    ]);
   });
 });
 

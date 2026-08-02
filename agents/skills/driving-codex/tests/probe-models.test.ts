@@ -116,18 +116,16 @@ describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)
     expect(run.exitCode).toBe(2);
   });
 
-  test("no model argument: exact FATAL usage line on stderr, empty stdout, exit 2 (checked before the codex-on-PATH check)", async () => {
-    // CODEX_BIN deliberately left bogus too: the usage guard (source line 51-52)
-    // fires before Bun.which is ever called (source line 53), so this must
-    // still be the usage FATAL, not the "codex not on PATH" one.
+  test("no model argument: Cleye usage error precedes the codex-on-PATH check", async () => {
+    // CODEX_BIN deliberately left bogus too: Cleye's required positional guard fires
+    // before Bun.which is ever called, so this must not be the PATH FATAL.
     const run = await runProbe([], {
       CODEX_BIN: "codex-does-not-exist-xyz-a1b2c3",
     });
-    expect(run.stderr).toBe(
-      "FATAL: usage: bun probe-models.ts <model> [...]\n",
-    );
-    expect(run.stdout).toBe("");
-    expect(run.exitCode).toBe(2);
+    expect(run.stderr).toBe('Error: Missing required parameter "models"\n\n');
+    expect(run.stdout).toContain("USAGE:");
+    expect(run.stdout).toContain("probe-models.ts [flags...] <models...>");
+    expect(run.exitCode).toBe(1);
   });
 
   test("rejects --__proto__ before resolving or launching Codex", async () => {

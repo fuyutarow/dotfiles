@@ -50,9 +50,10 @@
 // RESULT:/REFUSE:/BUILD:/CUTOVER:/ROLLBACK:/GC:), not a machine envelope.
 //
 // Exit: 0 clean (dry run with nothing to flag, or a mutating run that fully succeeded) /
-// 1 findings (discover mismatch, a build/cutover/rollback partial failure, or a cutover
-// refusal) / 2 environment-FATAL (bad flags, ccc binary missing, malformed global_settings.yml,
-// a live index that changed during build — that last one should never happen and is a bug).
+// 1 findings (discover mismatch, a build/cutover/rollback partial failure, or a cutover refusal)
+// and Cleye's native ordinary-unknown-flag refusal / 2 environment-FATAL (prototype-sensitive or
+// invalid flag input, ccc missing, malformed global_settings.yml, or a live index changed during
+// build — that last one should never happen and is a bug).
 
 import { existsSync, readdirSync, statSync } from "node:fs";
 import {
@@ -66,7 +67,7 @@ import {
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
-import { typeFlag } from "type-flag";
+import { cli, command } from "cleye";
 
 // ---------------------------------------------------------------------------------------------
 // Constants
@@ -78,11 +79,13 @@ const GLOBAL_SETTINGS_FILE = "global_settings.yml";
 const TARGET_SQLITE_DB = "target_sqlite.db";
 const PREV_DIR_RE = /^\.cocoindex_code\.prev-(\d+)$/;
 
-function rejectUnknownFlag(
+// Cleye 2.6.0's strictFlags misses --__proto__; this prototype-only pre-assignment guard must
+// be installed on both the root CLI and every command boundary. Ordinary unknowns stay native.
+function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag") {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`Unknown option '--${flag}'`);
   }
 }
@@ -1169,62 +1172,55 @@ async function cmdGc(
 const VERBS = ["discover", "build", "cutover", "rollback", "gc"] as const;
 type Verb = (typeof VERBS)[number];
 
-async function main(): Promise<void> {
-  const parsed = typeFlag(
-    {
-      "shadow-dir": { type: nonEmptyString("--shadow-dir") },
-      home: { type: nonEmptyString("--home") },
-      model: { type: nonEmptyString("--model") },
-      force: { type: Boolean, default: false },
-      yes: { type: Boolean, default: false },
-      keep: { type: Number, default: DEFAULT_KEEP },
-      generation: { type: nonEmptyString("--generation") },
-      "ccc-bin": { type: nonEmptyString("--ccc-bin") },
-      "timeout-ms": { type: Number, default: DEFAULT_TIMEOUT_MS },
-      exclude: { type: [nonEmptyString("--exclude")], default: () => [] },
-    },
-    Bun.argv.slice(2),
-    { ignore: rejectUnknownFlag },
-  );
+const SWAP_FLAGS = {
+  shadowDir: { type: nonEmptyString("--shadow-dir") },
+  home: { type: nonEmptyString("--home") },
+  model: { type: nonEmptyString("--model") },
+  force: { type: Boolean, default: false },
+  yes: { type: Boolean, default: false },
+  keep: { type: Number, default: DEFAULT_KEEP },
+  generation: { type: nonEmptyString("--generation") },
+  cccBin: { type: nonEmptyString("--ccc-bin") },
+  timeoutMs: { type: Number, default: DEFAULT_TIMEOUT_MS },
+  exclude: { type: [nonEmptyString("--exclude")], default: () => [] },
+};
 
-  // Retained as a defensive invariant even with the early `ignore` interceptor above: a
-  // post-parse Object.keys() check alone would miss a magic '--__proto__' name, but combined
-  // with the early rejection it stays correct belt-and-braces (BG1).
-  const unknown = Object.keys(parsed.unknownFlags);
-  if (unknown.length > 0) {
-    throw new Error(`Unknown option '--${unknown[0]}'`);
-  }
+type SwapFlags = {
+  shadowDir?: string;
+  home?: string;
+  model?: string;
+  force: boolean;
+  yes: boolean;
+  keep: number;
+  generation?: string;
+  cccBin?: string;
+  timeoutMs: number;
+  exclude: string[];
+};
 
-  const verb = parsed._[0];
-  if (verb === undefined || !(VERBS as readonly string[]).includes(verb)) {
-    throw new Error(`usage: bun ccc-swap.ts <${VERBS.join("|")}> [flags]`);
-  }
-  if (parsed._.length > 1) {
-    throw new Error(`Unexpected argument '${parsed._[1]}'`);
-  }
-
-  const keep = parsed.flags.keep;
+async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
+  const keep = flags.keep;
   if (keep === null || !Number.isFinite(keep) || keep < 0) {
     throw new Error("--keep must be a non-negative number");
   }
-  const timeoutMs = parsed.flags["timeout-ms"];
+  const timeoutMs = flags.timeoutMs;
   if (timeoutMs === null || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("--timeout-ms must be a positive number");
   }
 
-  const home = resolveHome(parsed.flags.home);
-  const shadowDir = resolveShadowDir(home, parsed.flags["shadow-dir"]);
+  const home = resolveHome(flags.home);
+  const shadowDir = resolveShadowDir(home, flags.shadowDir);
   const liveSettingsDir = resolveLiveSettingsDir(
     home,
     process.env.COCOINDEX_CODE_DIR,
   );
   // A basename can never contain a separator, so `/` is an unambiguous discriminator.
-  const excludePaths = parsed.flags.exclude.filter((e) => e.includes("/"));
+  const excludePaths = flags.exclude.filter((e) => e.includes("/"));
   const excludeDirNames = [
     ...DEFAULT_EXCLUDE_DIR_NAMES,
-    ...parsed.flags.exclude.filter((e) => !e.includes("/")),
+    ...flags.exclude.filter((e) => !e.includes("/")),
   ];
-  const cccBin = parsed.flags["ccc-bin"] ?? Bun.which("ccc");
+  const cccBin = flags.cccBin ?? Bun.which("ccc");
 
   const ctx: Ctx = {
     home,
@@ -1235,36 +1231,69 @@ async function main(): Promise<void> {
     cccBin,
     timeoutMs,
   };
-  const verbTyped = verb as Verb;
-
-  let exitCode: number;
-  switch (verbTyped) {
+  switch (verb) {
     case "discover":
-      exitCode = await cmdDiscover(ctx);
-      break;
+      return cmdDiscover(ctx);
     case "build":
-      if (!parsed.flags.model)
-        throw new Error("build requires --model <hf-id>");
-      exitCode = await cmdBuild(ctx, {
-        model: parsed.flags.model,
-        force: parsed.flags.force,
-        yes: parsed.flags.yes,
+      if (!flags.model) throw new Error("build requires --model <hf-id>");
+      return cmdBuild(ctx, {
+        model: flags.model,
+        force: flags.force,
+        yes: flags.yes,
       });
-      break;
     case "cutover":
-      exitCode = await cmdCutover(ctx, { yes: parsed.flags.yes });
-      break;
+      return cmdCutover(ctx, { yes: flags.yes });
     case "rollback":
-      exitCode = await cmdRollback(ctx, {
-        yes: parsed.flags.yes,
-        generation: parsed.flags.generation,
+      return cmdRollback(ctx, {
+        yes: flags.yes,
+        generation: flags.generation,
       });
-      break;
     case "gc":
-      exitCode = await cmdGc(ctx, { yes: parsed.flags.yes, keep });
-      break;
+      return cmdGc(ctx, { yes: flags.yes, keep });
   }
-  process.exitCode = exitCode;
+}
+
+async function main(): Promise<void> {
+  await cli(
+    {
+      name: "ccc-swap.ts",
+      parameters: ["[verb]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: {
+        description:
+          "Build and cut over ccc embedding indexes without taking live search down.",
+      },
+      commands: VERBS.map((verb) =>
+        command(
+          {
+            name: verb,
+            parameters: [],
+            flags: SWAP_FLAGS,
+            strictFlags: true,
+            ignoreArgv: rejectPrototypeFlag,
+            help: { description: `${verb} the ccc shadow-index lifecycle.` },
+          },
+          async (parsed) => {
+            if (parsed._.length > 0) {
+              throw new Error(`Unexpected argument '${parsed._[0]}'`);
+            }
+            process.exitCode = await runVerb(verb, parsed.flags);
+          },
+        ),
+      ),
+    },
+    (parsed) => {
+      if (
+        parsed._.verb === undefined ||
+        !(VERBS as readonly string[]).includes(parsed._.verb)
+      ) {
+        throw new Error(`usage: bun ccc-swap.ts <${VERBS.join("|")}> [flags]`);
+      }
+      throw new Error(`Unexpected argument '${parsed._[1]}'`);
+    },
+    Bun.argv.slice(2),
+  );
 }
 
 if (import.meta.main) {

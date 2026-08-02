@@ -81,6 +81,33 @@ describe("lint-floor passthrough (no --fix)", () => {
     }
   });
 
+  test("preserves a downstream -- separator and token order", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lint-floor-bunx-"));
+    const fakeBunx = join(dir, "bunx");
+    writeFileSync(
+      fakeBunx,
+      "#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(Bun.argv.slice(2)));\n",
+    );
+    chmodSync(fakeBunx, 0o755);
+    try {
+      const { out, err, code } = run(
+        ["--version", "--", "--downstream-only", "target.md"],
+        { PATH: `${dir}:${process.env.PATH ?? ""}` },
+      );
+      const relayed = JSON.parse(out) as string[];
+      expect(relayed.slice(-4)).toEqual([
+        "--version",
+        "--",
+        "--downstream-only",
+        "target.md",
+      ]);
+      expect(err).toBe("");
+      expect(code).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("exit code passes through cleanly: --version", () => {
     const { code } = run(["--version"]);
     expect(code).toBe(0);

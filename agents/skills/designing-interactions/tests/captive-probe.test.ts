@@ -140,10 +140,10 @@ describe("captive-probe contract", () => {
     expect(later.exitCode).toBe(0);
   });
 
-  test("rejects an unknown flag instead of silently accepting it (type-flag is not strict)", async () => {
+  test("rejects an unknown flag through Cleye strict flags", async () => {
     const result = await probe(["--bogus", "1", "--", "true"]);
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("unknown flag(s): --bogus");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Unknown flag: --bogus");
   });
 
   test("rejects --__proto__ before launching the probed command", async () => {

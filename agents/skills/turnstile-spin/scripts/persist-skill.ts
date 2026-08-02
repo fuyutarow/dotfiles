@@ -1,22 +1,35 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 import {
   command,
   diagnostic,
   nonEmptyString,
   output,
-  rejectUnknownFlag,
   rejectUnexpectedArguments,
   requiredValue,
   UsageError,
 } from "./lib.ts";
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError("unknown option '--__proto__'");
+  }
+}
+
 async function main(): Promise<void> {
-  const parsed = typeFlag({ path: nonEmptyString }, Bun.argv.slice(2), {
-    ignore: rejectUnknownFlag,
-  });
+  const parsed = cli(
+    {
+      name: "persist-skill.ts",
+      parameters: [],
+      flags: { path: nonEmptyString },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
   rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
   const values = parsed.flags;
   const destination = resolve(requiredValue(values.path, "--path"));

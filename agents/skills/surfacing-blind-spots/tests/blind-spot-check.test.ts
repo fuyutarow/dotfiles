@@ -372,11 +372,11 @@ describe("blind-spot-check", () => {
     expect(result.stdout).toContain("solution/selection/commit verdict");
   });
 
-  test("uses exit 2 for an unknown option", () => {
+  test("uses Cleye's unknown-option exit", () => {
     const result = run(["--unexpected"]);
 
-    expect(result.exitCode).toBe(2);
-    expect(result.stderr).toContain("unknown option '--unexpected'");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Unknown flag: --unexpected");
     expect(result.stdout).toBe("");
   });
 

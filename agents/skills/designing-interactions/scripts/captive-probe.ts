@@ -16,20 +16,17 @@
  * promptable value has a flag, whether --json is stable across releases, whether exit codes
  * distinguish failure classes. Those stay with the U3 delegation table.
  *
- * Seams: Bun script craft — type-flag (pinned in the repo lockfile, BG3 graduation), no shebang,
+ * Seams: Bun script craft — Cleye (pinned in the repo lockfile, BG3 graduation), no shebang,
  * main().catch, exit 0/1/2, AbortSignal timeout read off the SIGNAL, one Promise.all drain,
  * bounded relay — is owned by the writing-bun-scripts skill (BG1/BG2/BG3). The rules being probed
  * are owned by references/delegability.md §4. Change either there, not here.
  *
  * Exit: 0 clean · 1 findings · 2 environment-FATAL.
  */
-import { typeFlag } from "type-flag";
+import { cli } from "cleye";
 
-function rejectUnknownFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag") {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
     throw new Error(`unknown flag(s): --${flag}`);
   }
 }
@@ -131,8 +128,8 @@ function inspect(
 }
 
 async function main(): Promise<void> {
-  // type-flag stops parsing at `--` and exposes the remainder separately as `_["--"]`, so the
-  // probed command's own flags reach it untouched and never register as unknown.
+  // Cleye stops parsing at `--` and maps the remainder to the spread positional, so the probed
+  // command's own flags reach it untouched and never register as unknown.
   //
   // One runtime quirk has to be absorbed first: bun 1.3.14 CONSUMES a `--` that sits directly
   // after the script path, but leaves it alone anywhere later. So `probe.ts -- cmd` arrives as
@@ -140,34 +137,24 @@ async function main(): Promise<void> {
   // no positionals of its own, so a first token that is not a flag can only be the start of the
   // probed command — re-insert the separator the caller actually typed. A probed command whose
   // own name begins with `-` needs an explicit `-- --` and is rejected with a usage message
-  // otherwise. Measured against bun 1.3.14 / type-flag 4.5.0, 2026-07-28.
+  // otherwise. Measured against bun 1.3.14 / Cleye 2.6.0, 2026-08-02.
   const raw = Bun.argv.slice(2);
   const argv =
     raw.length > 0 && !raw[0]?.startsWith("-") ? ["--", ...raw] : raw;
 
-  const parsed = typeFlag(
+  const parsed = cli(
     {
-      timeout: { type: Number, default: 10_000 },
-      "expect-fail": { type: Boolean, default: false },
-      json: { type: Boolean, default: false },
+      name: "captive-probe.ts",
+      parameters: ["[command...]"],
+      flags: { timeout: Number, expectFail: Boolean, json: Boolean },
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
     },
+		undefined,
     argv,
-    { ignore: rejectUnknownFlag },
   );
 
-  // type-flag accepts unknown flags silently and exits 0 where parseArgs `strict` threw. An
-  // unrecognised flag is a caller error, and a probe that ignores it would report on the wrong
-  // invocation.
-  const unknown = Object.keys(parsed.unknownFlags);
-  if (unknown.length > 0) {
-    process.stderr.write(
-      `unknown flag(s): ${unknown.map((flag) => (flag.length === 1 ? `-${flag}` : `--${flag}`)).join(", ")}\n${USAGE}`,
-    );
-    process.exitCode = 2;
-    return;
-  }
-
-  const command = parsed._["--"];
+  const command = parsed._.command;
   if (command.length === 0) {
     process.stderr.write(
       `${parsed._.length > 0 ? "the probed command must follow `--`, so its own flags reach it untouched\n" : ""}${USAGE}`,
@@ -177,7 +164,7 @@ async function main(): Promise<void> {
   }
 
   // A malformed Number coerces to null rather than throwing, so the check is not optional.
-  const timeout = parsed.flags.timeout;
+  const timeout = parsed.flags.timeout ?? 10_000;
   if (timeout === null || !Number.isFinite(timeout) || timeout <= 0) {
     process.stderr.write(
       `--timeout must be a positive integer (got ${timeout})\n${USAGE}`,
@@ -225,10 +212,10 @@ async function main(): Promise<void> {
     exitCode,
     timedOut,
     timeout,
-    parsed.flags["expect-fail"],
+    parsed.flags.expectFail ?? false,
   );
 
-  if (parsed.flags.json) {
+  if (parsed.flags.json ?? false) {
     process.stdout.write(
       `${JSON.stringify({ status: findings.some((f) => f.level === "FAIL") ? "fail" : findings.length > 0 ? "warn" : "ok", command, exit_code: exitCode, timed_out: timedOut, findings })}\n`,
     );
@@ -252,10 +239,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.startsWith("unknown flag(s):")) {
-    process.stderr.write(`${message}\n${USAGE}`);
-    process.exit(2);
-  }
   process.stderr.write(`FATAL: ${message}\n`);
   process.exit(2);
 });

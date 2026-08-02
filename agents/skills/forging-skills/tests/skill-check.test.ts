@@ -247,7 +247,7 @@ describe("skill-check floor", () => {
     const wmt = join(REPO_ROOT, "agents/skills/wiring-mise-tasks");
     const { out, code } = runCheck(wbs, wmt);
     expect(out).toBe(
-      `WARN ${wbs}: 10 prose sentences >120 chars (technical-communication debt)\n` +
+      `WARN ${wbs}: 12 prose sentences >120 chars (technical-communication debt)\n` +
         `WARN ${wbs}: version header 11 lines >3 — history belongs in the ledger\n` +
         `WARN ${wbs}: 4 table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)\n` +
         `WARN ${wmt}: 13 prose sentences >120 chars (technical-communication debt)\n` +

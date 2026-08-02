@@ -83,8 +83,8 @@ describe("check-releases floor", () => {
 
   test("rejects an unknown flag", () => {
     const r = run(["--wat"]);
-    expect(r.code).toBe(2);
-    expect(r.out).toContain("unknown option '--wat'");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("Error: Unknown flag: --wat.");
   });
 
   test("rejects --__proto__ before checking the release corpus", () => {

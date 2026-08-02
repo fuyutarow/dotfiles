@@ -16,6 +16,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「レビュー用の293行の要約は必要なのか、生成物として期限付きにすべきか判定して」 | derive/freeze decision and generated-view expiry |
 | “Which research docs should be deleted, which deprecated, and which maintained?” | typed delete/retire/maintain adjudication |
 | 「OKFではあるのに文書品質が低い、というポストモーテムを実装可能な規範へ変えて」 | base-standard/profile distinction plus harness floor |
+| “Keep our DONOR SET, transfer bundle, TARGET RESULT, mapping breaks, and route disposition reviewable without inventing a fifth document role.” | lifecycle/authority boundary for existing transfer artifacts |
 
 ## MUST NOT FIRE
 
@@ -31,6 +32,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | “Install OpenWiki and generate its default code wiki.” | product/setup owner; co-fire here only if admission/authority policy is also requested |
 | 「このREADMEにAPIの使い方を一節追加して」 | ordinary single-document authoring/domain owner |
 | “Configure a Stop hook to run an already-defined documentation check.” | `operating-the-harness` |
+| “Build a generic repository write tool for agents.” | reject the generic surface; only a future constrained apply design may be considered after repeated evidence |
 
 ## Ordered co-fire
 
@@ -41,6 +43,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | create a reviewable paper claim and govern surrounding artifacts | `arguing-research-papers` owns manuscript claim → HERE owns review request, evidence links, and generated packet expiry |
 | restructure a newly admitted canonical | HERE admits or chooses update → `structuring-documents` moves information → `linting-prose` rewrites in place → HERE checks lifecycle |
 | preserve task state and permanent research state | `continuing-long-running-tasks` owns one transient task record; HERE separately owns permanent R&D artifacts; neither substitutes for the other |
+| turn corpus observations into a transfer-governed route | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps/breaks → `directing-research` disposes → HERE governs authority, lineage, review, and retirement only |
 
 ## Regression predicate
 
@@ -56,4 +59,5 @@ The description must retain:
 - the final language directive.
 
 It must not imply that OKF conformance, a wiki tool, or the deterministic checker proves document
-quality or scientific truth.
+quality or scientific truth. It must not present `repo-search` as a frozen read, implement a generic
+`repo-write`, or imply that a transfer artifact's lineage determines its target truth.

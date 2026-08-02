@@ -64,6 +64,13 @@ Backward chaining was used only to adjudicate scoped disagreements such as incub
 | C18 | Reiter-Palmon & Murugavel (2018), [full text](https://doi.org/10.3389/fpsyg.2018.02098), methods/results | In `65` student teams, instructed problem construction preceded lower conflict/higher satisfaction; the originality contrast was only marginal (`p=.078`) and quality did not differ. | Student-team task; small control condition; supports active problem construction only weakly for originality. |
 | C19 | Raz et al. (2024), [DOI](https://doi.org/10.1016/j.tsc.2024.101598), abstract | Question creativity/complexity was positively related to open-ended problem-solving measures, not closed-ended performance. | Association does not establish that a `/dig`-style interview causes better research or reveals unknown unknowns. |
 | C20 | Doshi & Hauser (2024), [full text](https://pmc.ncbi.nlm.nih.gov/articles/PMC11244532/), abstract/methods | In a preregistered online short-story experiment (`N=293` writers), access to LLM ideas improved evaluated individual outputs, especially for lower-DAT writers, while AI-assisted stories were more similar to one another. | Eight-sentence fiction, opt-in idea access, non-interactive LLM; collective similarity is not scientific-thesis quality. |
+| C21 | Gentner (1983), [DOI](https://doi.org/10.1207/s15516709cog0702_3), pp. 155–170 | Structure-mapping theory distinguishes relational systems from object attributes; connected relational structure is central to an analogy account. | Cognitive theory, not a test of this Skill's fields or a causal study of scientific discovery. |
+| C22 | Gick & Holyoak (1983), [DOI](https://doi.org/10.1016/0010-0285(83)90002-6), abstract/general discussion | Comparing more than one analog could support schema abstraction and transfer; a single analog did not reliably yield transfer. | Story/radiation task; not a transfer intervention in research practice. |
+| C23 | Gentner, Loewenstein & Thompson (2003), [DOI](https://doi.org/10.1037/0022-0663.95.2.393), pp. 399–402 | In bounded negotiation-learning experiments, comparison improved transfer relative to the reported no-comparison condition. | Classroom/laboratory negotiation context; no estimate for scientific research or an LLM workflow. |
+| C24 | Hargadon & Sutton (1997), [DOI](https://doi.org/10.2307/2393655), pp. 716–749 | An ethnographic account describes a product-development firm's use of prior ideas across domains as a technology-brokering practice. | One firm's retrospective/observational account; not evidence that greater distance or brokerage causes useful target claims. |
+| C25 | Star & Griesemer (1989), [DOI](https://doi.org/10.1177/030631289019003001), abstract/p. 387 | Boundary objects can coordinate work across social worlds while retaining different local meanings. | Historical case analysis; does not show that a wiki or a shared document resolves disagreement. |
+| C26 | Carlile (2002), [DOI](https://doi.org/10.1287/orsc.13.4.442.2953), and Bechky (2003), [DOI](https://doi.org/10.1287/orsc.14.3.312.15162), abstracts | Knowledge boundaries can require syntax, semantic translation, and pragmatic transformation; artifacts and practice mediate but do not erase those differences. | Organizational field studies; no direct test of LLM documentation or this Skill's artifact contract. |
+| C27 | Dunbar & Schunn (1990), [record](https://escholarship.org/uc/item/57c1f8xx), and Schunn & Dunbar (1996), [DOI](https://doi.org/10.3758/BF03213292) | Priming and analogy can be alternative routes in experimental scientific-discovery tasks. | Narrow experimental paradigms; a later idea or a reported origin does not establish the causal provenance of a target claim. |
 
 ## Design inputs — not empirical proof
 
@@ -121,6 +128,11 @@ The following is a synthesis across sources, not a direct finding of one paper:
 13. Evaluate execution artifacts, not proposal prose alone (C10, C13, C14).
 14. Treat human incubation as optional after preparation/impasse; it has no established agent analogue
     (C11, C12 and the meta-analysis).
+15. Keep a transfer route in three owned moves: target-agnostic donor discovery, source-to-target mapping
+    or `MAPPING-BREAK`, then target-side disposition. Comparison and relational structure motivate the
+    first two moves (C05, C21–C23); boundary studies caution that translation remains situated (C24–C27).
+    The `DONOR SET`, digest, and target-evidence requirements are house controls, not measured effects of
+    these papers.
 
 ## Rejected universal claims
 
@@ -140,12 +152,18 @@ The following is a synthesis across sources, not a direct finding of one paper:
 | “High-risk research should receive all resources.” | Not supported by observational risk/impact evidence. |
 | “A checklist or `/dig` reliably discovers Unknown Unknowns.” | Unsupported. Typed scans and interviews can surface candidates/Unknown Knowns; reality remains open-set. |
 | “Different generation-route labels prove diverse ideas.” | Rejected as a design inference; overlapping recipes can preserve the same premise, relation, and discriminator. |
+| “A successful donor-domain mechanism validates the target claim.” | Rejected; source-side success can motivate a test, while adoption/retirement needs target-side evidence. |
+| “The farther the analogy, broker, or combination, the better the research idea.” | Unsupported; the cited evidence does not establish a monotone distance effect. |
+| “A wiki, jargon removal, or shared vocabulary itself solves a knowledge boundary.” | Rejected; boundary studies describe continuing translation and practice differences, not a truth-engine intervention. |
+| “A later insight proves it came from the named analogy.” | Rejected; reported provenance and felt origin are not causal proof. |
 
 ## Known gaps
 
 - Few longitudinal studies follow practicing scientists from problem construction through execution and
   long-term outcome.
 - Causal tests of analogy/recombination interventions in real scientific discovery are scarce.
+- No controlled study located here validates the exact `DONOR SET` → transfer-bundle →
+  `TRANSFER DISPOSITION` contract, a generic `repo-read` bundle, or constrained repository application.
 - Review score, citation, and prize outcomes are imperfect proxies for truth, reproducibility, and social
   value.
 - The long-term, stage-specific role of human incubation remains unresolved.

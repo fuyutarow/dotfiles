@@ -111,3 +111,17 @@ Completed in all six closest siblings. `systematizing-knowledge` and
 `arguing-research-papers`, and `directing-research` retain the exact pre-existing warning counts in
 their own dated, artifact-named ledgers. This forge did not claim that unrelated prose debt was
 cleared.
+
+## 2026-08-02 — transfer-artifact lifecycle and repository-surface residual
+
+This reforge keeps transfer semantics out of the portfolio owner. `DONOR SET`, transfer bundle,
+`MAPPING-BREAK`, `TARGET RESULT`, and `TRANSFER DISPOSITION` retain their domain owners; governance
+records only their authority/locus, digest lineage, review interface, supersession, and retirement.
+In particular, `derive` may render an existing bounded SoK position but never make a new corpus
+conclusion.
+
+The harness reference now records an OPEN residual: `repo-search` is discovery, a future `repo-read`
+would need to emit a frozen READ BUNDLE, and generic `repo-write` is prohibited. A future apply surface
+would require a domain-signed input, base digest, allowlist, and acceptance commands. No tool, profile
+role, checker, or hook changed. These are constructed house controls, not claims of OKF or LLM-wiki
+effectiveness.

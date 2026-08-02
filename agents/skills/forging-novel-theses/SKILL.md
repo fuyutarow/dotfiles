@@ -1,39 +1,44 @@
 ---
 name: forging-novel-theses
 description: >-
-  Generate a BATCH of distinct, testable thesis CANDIDATES for a SELECTED problem/frame with no adequate
-  thesis. Use for novel research hypothesis / 新規仮説 / 新しい研究アイデア / blind-spot candidate generation /
-  premise breaking / negative-space seed / constraint inversion / structure transfer. Owns GENESIS
-  only: typed search coordinates, transformation trace, and one collapse
-  recovery. Problem choice and semantic dedup/ranking → directing-research; corpus/novelty evidence →
-  systematizing-knowledge; tacit elicitation → surfacing-blind-spots; present facts → raising-resolution;
-  expensive/irreversible test/commit/kill → acting-on-hypotheses; cheap reversible probe → domain/plain
-  executor; agent topology → orchestrating-agents. Every
-  output is exactly `Status: CANDIDATE`. No why-now, capital, portfolio, or paper verdict. Workflow-native:
-  coordinate allocation and final packets stay SOLO; generators may fan out after the domain packet is
-  fixed. English skill; answer in the user's language.
+  Generates a BATCH of testable thesis CANDIDATES for a SELECTED problem/frame with no adequate thesis.
+  Use for 新規仮説 / 新しい研究アイデア, premise breaking, negative-space seeds, or structural transfer.
+  Owns GENESIS: search coordinates, transformation trace, and selected-target `DONOR SET`
+  correspondence. Transfer emits `Status: CANDIDATE` with target evidence `UNTESTED`, or
+  `Status: MAPPING-BREAK`; donor success is never target evidence. Problem choice/dedup →
+  directing-research; corpus/donor discovery → systematizing-knowledge; tacit elicitation →
+  surfacing-blind-spots; facts → raising-resolution; testing → acting-on-hypotheses; topology →
+  orchestrating-agents. Allocation and final packets stay SOLO. English skill; answer in the user's language.
 ---
 
 # Forging novel thesis candidates
 
-> **Version**: v2607.4.0 (2026-07-30) — attested tacit provenance + typed collapse recovery.
+> **Version**: v2608.1.0 (2026-08-02) — donor-set correspondence and explicit mapping-break.
 > **Scope**: candidate construction only. Input is a selected problem/frame; output is one or more
 > candidate packets. Selection, testing, commitment, and program steering are intentionally elsewhere.
 
 ```bash
-for f in generation-engine boundaries lineage case-ledger; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/gate-check.ts || echo MISSING gate-check.ts; test -f tests/gate-check.test.ts || echo MISSING tests
+for f in \
+  references/generation-engine.md references/boundaries.md references/lineage.md \
+  references/case-ledger.md scripts/gate-check.ts tests/gate-check.test.ts \
+  tests/triggers.md tests/forge-verification-ledger.md; do
+  test -f "$f" || echo "MISSING $f"
+done
 ```
 
 ## Language and stable tokens
 
-Keep **CANDIDATE**, **RECIPES**, **search coordinates**, **grounded control**, **anti-default**,
-**coverage-gap packet**, and **COVERAGE GAP** unchanged even in Japanese output.
+Keep **CANDIDATE**, **MAPPING-BREAK**, **DONOR SET**, **RECIPES**, **search coordinates**,
+**grounded control**, **anti-default**, **coverage-gap packet**, and **COVERAGE GAP** unchanged even
+in Japanese output.
 
 ## THE LAW — transform the frame, expose the transformation
 
 > Unusual wording or a different recipe label does not make a candidate novel.
-> Expose the seed source, target, operation, premise, and new discriminator.
-> Every output remains a **CANDIDATE** until external evidence earns another status.
+> Expose the seed source, target, operation, premise, and new discriminator. For `TRANSFER`, expose
+> the donor-set locus/digest, correspondence, non-correspondence, boundary, and precision loss.
+> A successful source is not target evidence: a transfer ends as **CANDIDATE** with target-side
+> evidence `UNTESTED`, or as **MAPPING-BREAK** when the invariant cannot be preserved.
 
 This skill never claims:
 
@@ -41,7 +46,8 @@ This skill never claims:
 - that more candidates imply more quality;
 - that novelty implies truth, importance, or feasibility;
 - that a generated kill experiment validates the candidate;
-- that an agent's self-rating establishes novelty.
+- that an agent's self-rating establishes novelty;
+- that source-domain success establishes target-side support, feasibility, or truth.
 
 ## Entry gate
 
@@ -66,6 +72,7 @@ to `systematizing-knowledge`; do not invent a prior.
 - Known prior position:
 - What may be transformed:
 - Blind-spot packet handoff, if any:
+- Donor-set handoff (`path=...; sha256=...` + selected donor IDs), if `TRANSFER` is requested:
 - Requested candidate count:
 ```
 
@@ -113,15 +120,17 @@ tests live in `references/generation-engine.md`.
 
 ### Structural transfer is not decoration
 
-A transfer survives only if:
+A transfer starts only from a frozen `DONOR SET` from `systematizing-knowledge` and a selected target
+frame. Compare the named donor records, then map roles rather than surface nouns. The attempt must
+name: source relation/locator, target relation before transfer, at least two correspondence pairs,
+the preserved relation, concrete non-correspondence, break condition, precision loss, and a target-side
+counterexample. Similarity, metaphor, topical distance, source success, or a shared tool name never
+passes this gate.
 
-1. the source and target relations are named;
-2. the mapping preserves the relevant relation;
-3. the mapping yields a target prediction not already present in the input frame.
+When every admissible mapping breaks, preserve the failure as `MAPPING-BREAK`; do not force it into a
+candidate. A candidate has `Target-side evidence: UNTESTED` until target evidence exists elsewhere.
 
-Similarity, metaphor, and topical distance alone do not pass.
-
-## Candidate packet — the only output contract
+## Candidate packet contract
 
 Emit one packet per candidate:
 
@@ -143,9 +152,62 @@ Emit one packet per candidate:
 - Status: CANDIDATE
 ```
 
-Run `bun scripts/gate-check.ts <candidate.md>` for the mechanical floor.
+For `Operation: TRANSFER`, add these fields to the same candidate packet:
+
+```markdown
+- Transfer attempt ID: [stable ID]
+- Donor set: [path=<frozen donor-set path>; sha256=<lowercase 64-hex digest>]
+- Donor IDs: [comma-separated IDs present in the supplied donor set]
+- Source comparison: [explicit comparison, or SINGLE-DONOR LIMIT — hypothesis seed only; no abstract schema established; no target transport established]
+- Source relation / locator: [relation + exact source locus]
+- Target relation before transfer: [pre-transfer target relation]
+- Correspondence map: [source role -> target role; source role -> target role]
+- Preserved relation: [bounded relation retained]
+- Non-correspondence: [concrete unmapped property or constraint]
+- Transfer boundary: [condition under which this mapping breaks]
+- Precision loss: [what becomes weaker, approximate, or unidentifiable]
+- Target-side evidence: UNTESTED
+- Target-side counterexample: [target observation that would defeat this candidate]
+```
+
+If this relation-level attempt cannot preserve its invariant, emit this packet instead:
+
+```markdown
+## MAPPING-BREAK [ID]
+
+- Transfer attempt ID: [stable ID]
+- Input problem/frame: [...]
+- Donor set: [path=<frozen donor-set path>; sha256=<lowercase 64-hex digest>]
+- Donor IDs: [...]
+- Source comparison: [...]
+- Source relation / locator: [...]
+- Target relation before transfer: [...]
+- Attempted correspondence: [source role -> target role; source role -> target role]
+- Non-correspondence axis: [OBJECT | RELATION | REPRESENTATION | REGIME | EVIDENCE | CONSTRAINT | OTHER — concrete mismatch]
+- Failed invariant: [relation that cannot be preserved]
+- Transfer boundary: [condition that breaks it]
+- Evidence / locator: [source relation plus target mismatch locus]
+- Handoff: directing-research — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here
+- Status: MAPPING-BREAK
+```
+
+`MAPPING-BREAK` contains no thesis claim, prediction, discriminator, selection, or test verdict. It is
+a negative result in the transfer route, not a weak candidate.
+
+Run `bun scripts/gate-check.ts <candidate.md>` for ordinary packets. Every `TRANSFER` candidate or
+`MAPPING-BREAK` must instead run:
+
+```bash
+bun scripts/gate-check.ts --donor-set path/to/donor-set.md path/to/transfer-bundle.md
+```
+
+The declared `Donor set` field must resolve to the same frozen artifact as `--donor-set` and carry its
+SHA-256. Each declared `Donor ID` must occur there, and `Source relation / locator` must retain that
+record's exact source locator. Do not validate a transfer packet against a replacement donor set or
+substitute an unrelated source behind a valid donor ID.
+
 It validates every candidate in a detected batch and derives the coverage matrix.
-PASS cannot establish novelty, value, feasibility, or truth.
+PASS cannot establish novelty, value, feasibility, target fit, or truth.
 
 ## Batch contract and collapse recovery
 
@@ -183,9 +245,12 @@ test during recovery.
    any `TACIT` seed.
 3. **Allocate coordinate cells before drafting.** Include the grounded control and anti-default; choose
    premise, target, operation, and intended discriminator independently of recipe labels.
-4. **Apply useful recipes.** Preserve the transformation trace while it is still visible.
-5. **Derive the prediction and discriminator.** If the claim creates no new contrast, reject it as a
-   paraphrase or decorative analogy.
+4. **Apply useful recipes.** For `TRANSFER`, read the frozen `DONOR SET`, compare donors, and write
+   correspondence/non-correspondence before drafting a claim. Preserve the transformation trace while
+   it is still visible.
+5. **Derive the prediction and discriminator.** A transfer candidate keeps target-side evidence
+   exactly `UNTESTED`; if its relation cannot survive the target, emit `MAPPING-BREAK`. If a candidate
+   creates no new contrast, reject it as a paraphrase or decorative analogy.
 6. **Name the nearest prior.** State the exact delta; when evidence is missing, use `UNVERIFIED`.
 7. **Flag frame changes.** A candidate may reveal that the problem's object or relation should change.
    Do not silently mutate the input; set the flag so `directing-research` can decide.
@@ -203,6 +268,10 @@ Reject a candidate before return if any is true:
 - the new prediction was already entailed by the input;
 - the discriminator says only “better”, “different”, or “improved” without contrasting outcomes;
 - the analogy maps objects but not relations;
+- a `TRANSFER` field uses donor success as target-side evidence or omits its non-correspondence,
+  boundary, precision loss, or target counterexample;
+- a failed correspondence is hidden, rewritten as a candidate, or treated as proof that no other
+  source relation can work;
 - the candidate merges two accounts without preserving a discriminator;
 - `TACIT` was inferred, simulated, or copied from an `UNELICITED` probe;
 - a claimed prior or fact has no locator and is not marked `UNVERIFIED`;
@@ -216,6 +285,9 @@ These are **generation-completeness** failures, not comparative selection.
 |---|---|
 | “Which research problem should I choose?” | `directing-research` |
 | “What does this literature establish, and is the idea actually novel?” | `systematizing-knowledge` |
+| “Find source-side relations across fields, without choosing target correspondences.” | `systematizing-knowledge` — it returns a frozen target-agnostic `DONOR SET` |
+| “Admit, test, adopt, retire, or otherwise decide a transfer attempt.” | `directing-research` — it owns `TRANSFER DISPOSITION`; target evidence arrives through its downstream routes |
+| “Persist, review, supersede, or retire this frozen packet or transfer bundle.” | `governing-research-documentation` — govern durable locus, lineage, review, and lifecycle only; mapping and `MAPPING-BREAK` meaning stay HERE |
 | “What are we not seeing, and what does the practitioner know but not write down?” | `surfacing-blind-spots` |
 | “Is this residual real or an artifact?” | `raising-resolution` |
 | “Generate distinct thesis candidates for this selected frame.” | **HERE** |
@@ -250,5 +322,7 @@ No harness → execute the same cells as serial focused passes.
 | `references/boundaries.md` | a sibling could plausibly own the ask |
 | `references/lineage.md` | checking evidence, provenance, and the limits of analogy/recombination claims |
 | `references/case-ledger.md` | calibrating complete versus fake candidate packets |
+| `scripts/gate-check.ts` | mechanically checking ordinary packets and frozen donor-bound transfer bundles |
+| `tests/gate-check.test.ts` | changing packet grammar, frozen dependency checks, or exit semantics |
 | `tests/triggers.md` | changing this description or a sibling cut |
 | `tests/forge-verification-ledger.md` | auditing the genesis-only reforge |

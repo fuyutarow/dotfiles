@@ -15,6 +15,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | F5 | 「この領域の系統的レビューを更新して、どの結論が新しい研究で変わったか追跡して」 | living-review evidence and claim-graph update |
 | F6 | “I have papers, standards, and benchmark reports with incompatible metrics; tell me who actually agrees and how confident we should be.” | multi-source synthesis without a headline keyword |
 | F7 | “Does the security literature support the belief that memory-safe rewrites eliminate this attack class, or are there scoped counterexamples?” | venue-style SoK belief test and threat-model comparison |
+| F8 | 「この固定した研究フレームに使える外部の関係を、対象への対応付けはせず複数分野から探して DONOR SET にして」 | target-agnostic source-side relation discovery and comparison |
 
 ## MUST NOT FIRE
 
@@ -33,6 +34,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | N5 | “Find every mention of data leakage in my indexed notes.” | `driving-cocoindex` — retrieval, not synthesis |
 | N6 | “Debug the split leakage in my own training pipeline.” | `raising-resolution`, then `implementing-and-debugging` if a fix is requested |
 | N7 | “Create a reusable skill from this already-reconciled operating manual.” | `forging-skills` — skill craft |
+| N8 | “Map these donor roles onto my selected target and derive the target prediction.” | `forging-novel-theses` — target correspondence and thesis genesis; this skill stops at `DONOR SET` |
 
 ## CO-FIRE — order matters
 
@@ -43,6 +45,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | C3 | “Map the evidence gaps, then decide which research direction deserves funding.” | `systematizing-knowledge` identifies evidence-specific gaps without ranking them → `directing-research` makes the forward-looking bet |
 | C4 | “Reforge systematizing-knowledge because its rules are crude.” | `forging-skills` owns the reforge → `systematizing-knowledge` is the domain artifact under audit; use `operating-the-harness` when executable checks are added |
 | C5 | “Turn a raw paper corpus into a durable synthesis skill.” | `systematizing-knowledge` reconciles the corpus first → `forging-skills` distills the settled operating knowledge |
+| C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research` later disposes attempts |
 
 ## Sharp cuts
 
@@ -59,3 +62,6 @@ Do not use body knowledge to rescue an ambiguous description.
   domain/plain executor, then `EXECUTOR RESULT` returns to `directing-research`.
 - **Fix locality:** settled prose architecture goes to `structuring-documents`; unsettled evidence
   derivation stays here.
+- **Transfer stop:** this skill may search and compare source-side relations, but never names a
+  source-to-target mapping, target prediction, thesis, or target-side support. A single donor remains
+  an explicit hypothesis seed, not an abstract schema.

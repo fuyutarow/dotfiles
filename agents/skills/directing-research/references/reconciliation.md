@@ -11,6 +11,8 @@ moderator for this case.
 | exploration vs formulation | Are problem frames still changing under new observations? | continue bounded construction or freeze the formulation |
 | generation vs criticism | Is the declared candidate batch frozen? | before freeze: generate; after freeze: evaluate |
 | conventional vs atypical combination | Does the transfer preserve a relation and yield a new prediction while retaining grounding? | admit a bounded atypical probe; reject distance-as-decoration |
+| donor relation vs target claim | Is the source relation bounded independently, has `forging-novel-theses` recorded the correspondence or `MAPPING-BREAK`, and does the target have evidence? | route discovery to `systematizing-knowledge`, mapping to `forging-novel-theses`, then sign a denominator-complete `TRANSFER DISPOSITION`; donor success is not target evidence |
+| transfer persistence vs honest reopening | Did every correspondence attempt break, or does a candidate retain a target-side discriminator? | preserve breaks and `REOPEN` when all maps fail; test a candidate only through a registered target-side contrast |
 | novelty vs feasibility | Which axis is weak, and is it a hard exclusion or a portfolio trade? | preserve both values; do not collapse them |
 | fast vs rigorous | Is the artifact exploratory/reversible or about to be believed/built upon? | rough generation may be fast; admission and evidence checks may not |
 | persist vs pivot | Is a discriminating observation still reachable, and is information changing? | persist, pause with trigger, or retire the tested family |

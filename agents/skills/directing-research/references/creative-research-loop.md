@@ -95,11 +95,30 @@ illegitimate. The gap is an honest output, not permission to stop at “could no
 | consequence | What uncertainty blocks an important downstream decision? | affected decision / stakeholder |
 | constraint inversion | Which claimed constraint is physical, informational, institutional, or merely inherited? | source for the constraint |
 | missing comparison | What baseline, population, regime, or counterfactual is absent? | existing comparison set |
-| structural transfer | Which relation from another domain maps here and yields a new prediction? | source relation + target mapping |
+| structural transfer | Is a source relation worth a bounded transfer route for this program? | frozen, target-agnostic `DONOR SET`; `forging-novel-theses` owns any target map |
 
 Routes are recipes, not a partition. Frames are not distinct merely because their route labels differ.
 A candidate frame is distinct only if its held/broken premise, decisive relation, discriminator, or
 consequence differs.
+
+#### Structural-transfer route — admit, map, then dispose
+
+This skill may decide that a structural-transfer route is worth bounded program attention. It does not
+search for the donor relation or construct the source-to-target correspondence.
+
+1. If source relations are not bounded, route to `systematizing-knowledge` for a target-agnostic
+   `DONOR SET`: distinct donor evidence, source relation/locator, scope, preconditions, observable
+   consequence, and boundary. A single donor remains a hypothesis seed, not a general schema.
+2. Hand the selected target frame and frozen `DONOR SET` to `forging-novel-theses`. It owns comparison,
+   correspondence, non-correspondence, transfer boundary, and precision loss, and returns a frozen
+   transfer bundle containing either `CANDIDATE` or `MAPPING-BREAK` for every attempted map.
+3. Receive that bundle by path and SHA-256. This skill owns only the subsequent program decision; it
+   must account for every attempt and preserve every break. It never repairs a map to make admission
+   easier.
+
+The route is an editorial contract, not an external finding that a particular donor distance, broker,
+or documentation form causes discovery. The empirical sources support limited claims about relational
+comparison, transfer, and translation across boundaries; see `sources.md` C21–C27.
 
 #### Optional cross-frame micro-probe
 
@@ -152,6 +171,28 @@ Coverage-gap packet:
 
 `directing-research` detects collapse because it owns freeze/dedup/admission.
 `forging-novel-theses` owns the one targeted regeneration because it owns genesis.
+
+#### Transfer disposition within admission
+
+For a frozen transfer bundle, add `TRANSFER DISPOSITION` to the RESEARCH JUDGMENT SPEC. Name the bundle
+path and SHA-256; pass that same resolved path through `--transfer-bundle`; use its complete attempt ID
+set as the denominator; give every candidate one of
+`TEST`, `REOPEN`, `ADOPT`, or `RETIRE`; and preserve every `MAPPING-BREAK` ID.
+
+- `TEST` requires the candidate's target-side prediction and discriminator plus an `UNTESTED` prediction
+  registry and target-side handoff.
+- `ADOPT` requires a frozen `TARGET RESULT` path/SHA passed through `--target-result`. The result must
+  bind the same frozen transfer bundle and candidate, retain a non-vacuous numeric threshold fixed
+  before target observation, use a target-only locus whose source identity is not a donor source,
+  agree arithmetically with `PASS`, and carry `Mapping assessment request: NONE`. A donor ID/result or
+  unresolved request to reassess the correspondence blocks adoption.
+- `RETIRE` requires the same frozen result and names the tested mapping family or transfer boundary;
+  retirement remains a program decision and does not rewrite the recorded `PASS` or `FAIL`.
+- If every attempt is a `MAPPING-BREAK`, use no candidate disposition and write `REOPEN`; retain the
+  breaks as evidence about the failed correspondence rather than inventing a replacement candidate.
+
+This is a director's disposition, not a validation of the mapping itself. The exact fields, digest, and
+target-evidence gate are house controls; they are not claimed as causal effects of the cited studies.
 
 Use separate axes:
 
@@ -266,6 +307,8 @@ Do not turn any of these into LAW:
 - “problem setting is 80% of creative research”;
 - “creation is hard but criticism is easy”;
 - “distant analogy is the main cause of discovery”;
+- “a donor-domain success validates the target claim”;
+- “a wiki, shared vocabulary, or co-location by itself resolves a knowledge boundary”;
 - “an anomaly contains its discovery automatically”;
 - “incubation or the default-mode network reliably produces insight”;
 - “novelty equals value”;

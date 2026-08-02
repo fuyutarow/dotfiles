@@ -63,6 +63,12 @@ tokens stable even inside Japanese prose — they are identifiers, not translata
 >    uncertainty, hypothesis timing, or the claim's reach** — austerity-of-persuasion, not
 >    austerity-of-navigation.
 >
+> A donor-domain success, analogy, or correspondence may explain why a target claim was investigated.
+>
+> It never warrants a **finished target claim**. That claim needs a target-side anchor and limitation.
+> An untested mapping returns to `forging-novel-theses`. An expensive target test returns to
+> `acting-on-hypotheses`.
+>
 > Above all — the model-specific cardinal sin: **NEVER invent a citation, baseline, dataset, or
 > number to make the argument land.** A fabricated support is not weak writing; shipped, it is
 > misconduct. When a support is not grounded to a real, retrievable source, write an explicit
@@ -265,7 +271,7 @@ it's not novel enough."
 | `surfacing-blind-spots` | **PURPOSE** — expose implicit premises or human tacit constraints without deciding whether they hold → there; assess a premise/warrant against evidence and state the calibrated objection → HERE. If both are requested: expose there, then red-team here. |
 | `systematizing-knowledge` | **FUNCTION/CARDINALITY** — critically appraise ONE paper's argument/method/validity → HERE; synthesize MANY sources into a field position → there. (SoK is also the *engine that built this skill*; a paper's related-work may draw on an SoK as a sub-step.) |
 | `directing-research` | **PHASE/PURPOSE** — stage diagnosis, research-problem/program decisions, and a deliberate reopen before a finished claim → there; argue the admitted finished evidence as one manuscript claim → HERE. HARKing is not repaired by silently reopening history: label postdiction there, then calibrate the written claim HERE. |
-| `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets for a selected frame → there; write and defend finished evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `directing-research` reopen returns to candidate generation. |
+| `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets or source→target mapping / `MAPPING-BREAK` for a selected frame → there; write and defend finished **target-side** evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `directing-research` reopen returns to candidate generation. |
 | `acting-on-hypotheses` | **PHASE + HARD GATE** — test/commit/kill one expensive/irreversible selected forward tree → there; run a cheap deterministic reversible probe through the domain/plain executor; argue completed evidence → HERE. |
 | `orchestrating-agents` | **PURPOSE** — claim and argument meaning → HERE; author/reviewer/verifier topology, evidence visibility, veto timing, and acceptance → there. Co-fire only after the claim contract is fixed. |
 | `governing-research-documentation` | **CARDINALITY + LIFECYCLE** — one finished manuscript claim and its reviewer-proof argument → HERE; admission, authority, evidence lineage, review, retirement, and deletion across the research-document portfolio → there. |

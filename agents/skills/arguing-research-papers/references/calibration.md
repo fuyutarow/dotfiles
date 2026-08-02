@@ -47,6 +47,16 @@ register to all three. Map to 事実と意見 (`genre-playbooks.md`, Japanese): 
 judgment-marker; the *opinion/inference* sentence is marked as such ("we interpret this as …",
 "〜と考えられる") — and never the reverse (a 意見 written as a 事実 is the スリカエ a reviewer catches).
 
+### Transfer lineage is motivation, not a target warrant
+
+Keep three things distinct: the donor observation, source→target mapping, and target result. Only the
+target result can occupy the finished target claim's evidence anchor. A donor result or analogy may
+appear as scoped motivation/related work. It cannot satisfy the target warrant, scope qualifier,
+novelty claim, or causal result. If mapping is untested, write a target-anchor placeholder. Route to
+`forging-novel-theses` for mapping / `MAPPING-BREAK`, or `acting-on-hypotheses` for a selected expensive
+target test. This is a house calibration rule. It does not claim that paper-writing sources establish
+the transfer artifact schema.
+
 ## §2 — Hyland's stance model: pick the RIGHT hedge/booster
 
 Four interactional resources project certainty and voice; calibrate each to the target discipline's

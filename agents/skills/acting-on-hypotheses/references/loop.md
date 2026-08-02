@@ -62,6 +62,46 @@ as the WIN: a test that kills a wrong belief cheaply is the best possible outcom
 
 ## §3 — Metric pre-commitment + vanity-metric avoidance
 
+### Transfer-candidate guard — a donor result is not the target signal
+
+Record the candidate ID, frozen transfer-bundle path/SHA-256, and donor-set/correspondence locators in
+the probe. They preserve lineage; they do not supply the signal. Set `target-side evidence: UNTESTED`
+until Loop obtains an observable target-side consequence of the claimed preserved relation. A successful
+donor, surface similarity, or agent explanation cannot pass the threshold or move target confidence.
+
+For every target-side transfer probe, return this execution artifact to `directing-research`:
+
+```markdown
+## TARGET RESULT
+
+- Candidate ID: [selected transfer candidate ID]
+- Transfer bundle: [path=<frozen transfer-bundle path>; sha256=<lowercase 64-hex digest>]
+- Target-side observation: [raw target consequence; no donor ID, donor result, or source-success restatement]
+- Prewritten threshold: [non-vacuous numeric boundary fixed before the probe]
+- Observation locus: [reproducible target-side artifact, command output, dataset row, or measurement locus; never another anchor in a donor source]
+- Threshold result: [PASS | FAIL — threshold applied after observing the result; numeric result must agree with the declared boundary]
+- Mapping assessment request: [NONE, or forging-novel-theses — why this observation calls the correspondence itself into question]
+- Handoff: directing-research — update TRANSFER DISPOSITION; preserve all existing MAPPING-BREAK IDs
+```
+
+Freeze the returned section as one artifact before `ADOPT` or `RETIRE`. `directing-research` consumes
+the same bytes through `--target-result`, checks path/SHA-256, binds the result to the exact frozen
+transfer bundle, and revalidates the candidate ID, observation, prewritten threshold, observation
+locus, and threshold result. `ADOPT` requires a `PASS` and no unresolved mapping-assessment request;
+a label, donor ID, alternate anchor in a donor source, or donor result is not a substitute.
+
+`TARGET RESULT` records target-side evidence and Loop's threshold adjudication. It is not a mutation of
+the candidate packet, a target-truth verdict, or a mapping verdict. A negative target result can defeat a
+candidate prediction while its correspondence remains a live, bounded hypothesis. Do not relabel that
+negative result as `MAPPING-BREAK`.
+
+If the observation instead suggests that a required source-to-target correspondence cannot hold, request
+a fresh mapping assessment from `forging-novel-theses` and hand it this `TARGET RESULT` plus the frozen
+candidate/donor locators. **Only `forging-novel-theses` may emit `MAPPING-BREAK`.**
+`directing-research` alone updates the `TRANSFER DISPOSITION` after either a target result or a newly
+emitted break. This is a house execution rule, not an empirical claim that the named artifact fields are
+sufficient.
+
 Decide the measurement BEFORE you build, and pin all four:
 
 1. **The signal** — what you will observe.
@@ -228,5 +268,7 @@ contract. Then add these five probe-specific fields:
 | Still testing a decision-sufficient node | over-learning / paralysis | STOP, force the Leap (§6) |
 | Re-running an unrunnable loop, hoping | felt-Loop, no real signal accessible | name the missing signal + rule out a cheaper proxy; only then switch to DIALOGUE/CO-CREATION or escalate location (§7) |
 | 確信度 moved on an agent's PASS / summary, no raw signal in context | delegated verdict as earned confidence | demand the raw output + locus; re-adjudicate against the pre-committed threshold yourself (§8) |
+| Transfer node moved on a donor's result, similarity story, or analogy | source success was laundered into target evidence | restore `target-side evidence: UNTESTED`; test a target-side observable consequence and return a `TARGET RESULT` to `directing-research` (§3) |
+| Loop labels a negative target result as `MAPPING-BREAK` | target-prediction failure was silently reclassified as correspondence failure | retain the `TARGET RESULT`; if correspondence itself is in doubt, request a new assessment from `forging-novel-theses`. Only that skill may emit a break; `directing-research` updates disposition (§3) |
 | N agents deliberated or role-played the user; agreement scored as a confidence-delta | simulated sacrifice / agent-consensus Loop — zero 学び (nothing was sacrificed) | get the real signal, or route to §7's named-missing-signal / DIALOGUE/CO-CREATION exit (§8) |
 | Agent set/adjusted the pass/fail after seeing results, or probes fanned out over non-fatal nodes | agent-side threshold drift / fan-out theater | threshold pre-committed BEFORE spawn (§3); one probe per fatal-risk node, multiple nodes only on a genuine `map.md` §5 tie (§8) |

@@ -1,5 +1,40 @@
 # systematizing-knowledge — forge verification ledger
 
+## Transfer-source reforge — v2608.1.0 (2026-08-02)
+
+### Ownership decision
+
+No new horizontal-transfer skill was created. `systematizing-knowledge` owns one terminal,
+target-agnostic source artifact:
+
+```text
+transfer search question -> compare source relations -> DONOR SET -> forging-novel-theses
+```
+
+It stops before any target correspondence, prediction, thesis, test verdict, or target-side support.
+`forging-novel-theses` owns selected-target correspondence and returns either `CANDIDATE` or
+`MAPPING-BREAK`; `directing-research` later admits and disposes the whole attempt denominator.
+
+### New evidence and calibration
+
+| Grade | Source | Retained operational consequence | Explicit non-claim |
+|---|---|---|---|
+| P2 primary theory | Gentner (1983) | record roles and relations rather than selecting decorative object similarity | it does not prove a target mapping or the house schema |
+| P2 primary experiments | Gick & Holyoak (1983); Gentner, Loewenstein & Thompson (2003) | compare distinct donor evidence units before naming a common source-side relation | bounded laboratory/negotiation transfer is not a real-science or wiki-workflow effect |
+| P2 organization studies | Star & Griesemer (1989); Carlile (2002); Bechky (2003) | retain provenance, local meaning, and failure/boundary fields | no claim that jargon removal, shared vocabulary, a wiki, or contact resolves translation |
+| LOCAL | `DONOR SET`, `SINGLE-DONOR LIMIT`, checker, and frozen digest handoff | make source-side scope and stop conditions inspectable | these are not externally validated creativity or transfer interventions |
+
+### Verification receipts
+
+`bun test tests/check-donor-set.test.ts` is the mechanical floor for: exact table shape, located and
+distinct donor evidence units, multi-donor comparison, single-donor non-generalization, and rejection
+of target mapping/support leakage. The checker deliberately cannot establish relation correctness,
+source independence in a scientific sense, common-schema quality, or target fit.
+
+The trigger desk-check gained F8/N8/C6. Re-run it against only names and descriptions after a
+description or sibling-cut change. A regression exists if this skill emits a target mapping,
+prediction, thesis, or a source-success-to-target-support claim.
+
 Reforge: v2607.3.0, 2026-07-30. Editor: Codex root. Domain owner:
 `systematizing-knowledge`; craft owner: `forging-skills`; generic delegation owner:
 `orchestrating-agents`.
@@ -162,3 +197,32 @@ Reforge again when:
 - the checker rejects a legitimate extension or begins making semantic judgments;
 - a sibling moves a generic contract without reciprocal pointer repair; or
 - a fresh-context comparison shows the old behavior surviving under new wording.
+
+## Transfer checker hardening — v2608.1.2 (2026-08-02)
+
+Independent harness audit found that the initial locator predicate accepted a bare DOI or page,
+that the ownership-stop check saw only dedicated field headings, and that a later notes section
+could lend fields or a donor table to the canonical artifact. The mechanical floor now isolates one
+`# DONOR SET` and its exact named sections. It accepts a donor locator only as `file:line` or DOI/URL
+plus page, section, table, figure, or fragment anchor. It validates each donor ID as a stable token
+and rejects target correspondence fields plus explicit positive target mapping, support, prediction,
+or thesis claims found in `Known` or donor-record prose. It preserves the required negative boundary
+sentences in `Missing` and `Handoff`; the checker is still not a semantic target-fit or source-truth
+oracle.
+
+Red fixtures cover bare page, bare DOI, malformed or duplicate donor IDs, positive target
+mapping/support in `Known`, prediction in a table cell, forbidden correspondence fields, and required
+content hidden in a later `Notes` section. Heading-depth regressions prove that H3–H6 notes nested
+inside `Comparison` cannot lend a required field. A green fixture preserves explicit “no target
+mapping / support / prediction / thesis” boundary text in `Missing` and `Handoff`.
+
+Final receipt:
+
+```text
+bun test agents/skills/systematizing-knowledge/tests/check-donor-set.test.ts
+14 pass, 0 fail, 50 assertions
+```
+
+The suite also rejects a negative boundary sentence followed by a positive target claim, duplicate
+donor evidence disguised as two rows, surface-only selection, and CLI misuse. These receipts prove
+only the declared mechanical boundary; they do not validate a common schema or target fit.

@@ -138,3 +138,12 @@ Verification:
 
 These tests falsify known forms of packet theater. They still do not establish surprise, importance,
 human authenticity, content completeness, or improved research creativity.
+
+## 2026-08-02 — existing-transfer audit boundary
+
+An existing transfer candidate or `MAPPING-BREAK` may now be swept through OBJECT, RELATION, REGIME,
+and OBSERVATION to expose omitted roles, assumed invariants, missing boundaries, and absent target-side
+signals. The packet neither constructs nor repairs a map, and it cannot declare target truth or design
+a test. Those operations remain with `forging-novel-theses` and `acting-on-hypotheses`. The profile is
+constructed house guidance; no cited creativity or `/dig` source is represented as evidence that the
+four-slot transfer audit is exhaustive or effective. No checker or test script changed.

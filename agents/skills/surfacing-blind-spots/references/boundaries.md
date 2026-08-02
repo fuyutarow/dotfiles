@@ -42,6 +42,23 @@ new thesis generation routes to `forging-novel-theses`.
 4. Preserve `UNELICITED`; a downstream skill may ask the human, but may not fill the slot.
 5. Preserve **OPEN — NON-EXHAUSTIVE**. A downstream route does not retroactively close the set.
 
+## Existing transfer-artifact audit
+
+When the object under review is a transfer candidate or `MAPPING-BREAK`, this skill audits only what
+that artifact already claims. Its four load-bearing inspection lenses are:
+
+| Slot | Audit question | Handoff field |
+|---|---|---|
+| **OBJECT** | Which donor/target role, unit, or boundary was silently omitted? | affected assumption row + artifact locator |
+| **RELATION** | Which claimed preserved relation or correspondence is merely assumed? | affected invariant/correspondence premise |
+| **REGIME** | Which precondition, scale, precision-loss, or failure regime is absent? | boundary row + provenance |
+| **OBSERVATION** | What target-side signal is missing, disputed, or still `UNTESTED`? | target-evidence row + locator or `UNELICITED`/`NONE` |
+
+Do not create a correspondence map, select a donor, repair a `MAPPING-BREAK`, or decide whether the
+target claim holds. Hand the premise packet to `forging-novel-theses` for mapping/break work or to
+`acting-on-hypotheses` for a selected hard-gated target test. This is a house audit profile, not a
+claim that the four slots are exhaustive or empirically sufficient.
+
 ## Near-miss examples
 
 | Ask | Owner | Why not here |

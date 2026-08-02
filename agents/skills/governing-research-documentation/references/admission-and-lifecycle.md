@@ -22,7 +22,7 @@ Any missing answer means `freeze`; do not manufacture fields from inference.
 |---|---|---|
 | No durable reader decision; answer is momentary | `freeze` | Answer inline; create no file. |
 | Existing artifact already owns the purpose | `update` | Edit that authority and re-review changed claims. |
-| New reader/register, same underlying facts | `derive` | Generate from declared sources; add expiry; never copy authority. |
+| New reader/register, same underlying facts or an already bounded SoK position | `derive` | Generate from declared sources; add expiry; never copy authority or create a new corpus conclusion. |
 | New research question with evidence and reviewer | `create` | Add draft canonical plus an open review request. |
 | Raw run, dataset, trace, or negative result arrived | `create` | Add raw artifact and immutable evidence record; do not add interpretation automatically. |
 | A stable successor replaces an authority | `retire` | Deprecate predecessor atomically and point successor to it. |
@@ -65,3 +65,23 @@ succeeds.
 Do not silently turn a generated view into a canonical concept. Admission requires a new draft
 canonical path or an update to the existing authority, an open review request, evidence-only
 sources, and a later accepted review.
+
+## Transfer-artifact lifecycle
+
+The local profile deliberately keeps four roles. `DONOR SET`, transfer bundle, `MAPPING-BREAK`,
+`TARGET RESULT`, and `TRANSFER DISPOSITION` name domain-level artifacts; they do not justify a fifth role or a generic
+permanent report. Govern their lineage without re-performing their domain operation:
+
+1. A `DONOR SET` retains its corpus boundary, source locators, and digest. It is not a target mapping.
+2. A transfer bundle links each candidate or `MAPPING-BREAK` to that frozen donor set. A later view must
+   preserve the IDs and digest rather than silently re-summarizing them.
+3. A `MAPPING-BREAK` is negative/limiting decision history. Retire it only with an explicit successor
+   or a stated retirement reason; never discard it merely because another transfer became attractive.
+4. A `TARGET RESULT` preserves its frozen transfer-bundle binding, candidate ID, target observation,
+   prewritten threshold, exact locus, threshold result, and digest. Governance may not revise the
+   threshold or declare a mapping break.
+5. A `TRANSFER DISPOSITION` records the decision and target-side evidence it consumed. It does not make
+   the decision scientifically correct, prove target truth, or replace its semantic owner.
+
+These are constructed governance rules. They prescribe reviewability and lifecycle, not an empirically
+validated documentation effect.

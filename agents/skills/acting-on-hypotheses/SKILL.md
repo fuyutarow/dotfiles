@@ -1,16 +1,18 @@
 ---
 name: acting-on-hypotheses
 description: >-
-  Acts on ONE SELECTED forward hypothesis tree when an untested load-bearing bet carries expensive or
-  hard-to-reverse work. Maps beliefs, runs the cheapest discriminating test with a prewritten threshold
-  and outcome table, then Commit / Pivot / Kill with WIN/KILL/LOSS. Use for 仮説検証, 仮説行動,
-  Map-Loop-Leap, spike, prototype, MVP, de-risk, will-it-scale, should-we-commit, or one selected
-  approach. Cuts: problem construction/admission or multiple bets → directing-research; thesis genesis
-  → forging-novel-theses; hidden/tacit premises → surfacing-blind-spots; blurry present fact →
-  raising-resolution; corpus → systematizing-knowledge; finished claim → arguing-research-papers. A
-  deterministic, bounded, reversible probe with no expensive downstream exposure uses the domain/plain
-  executor and returns to directing-research. Sole owner of the gated tree's threshold, outcome table,
-  and commit/pivot/kill. English skill; answer in the user's language.
+  Acts on ONE SELECTED hypothesis tree when an untested load-bearing bet carries expensive or
+  hard-to-reverse work. Maps beliefs, runs the cheapest discriminating test with a prewritten
+  threshold and outcome table, then Commit / Pivot / Kill. Use for 仮説検証, 仮説行動,
+  Map-Loop-Leap, de-risk, or should-we-commit. Transfer requires target-side evidence; donor success
+  is not evidence. Returns a
+  `TARGET RESULT` to directing-research; never emits or reclassifies `MAPPING-BREAK`. Cuts: problem
+  construction, admission, or multiple bets → directing-research; thesis genesis or mapping →
+  forging-novel-theses; tacit premises → surfacing-blind-spots; present fact → raising-resolution;
+  corpus → systematizing-knowledge; finished claim → arguing-research-papers. A deterministic,
+  bounded, reversible probe without expensive downstream exposure uses the domain/plain executor.
+  Sole owner of the selected tree's threshold, outcome table, and commit/pivot/kill. English skill;
+  answer in the user's language.
 ---
 
 # 仮説行動 — Map · Loop · Leap (act under irreducible uncertainty)
@@ -20,14 +22,15 @@ description: >-
 > *content to recite*. This file holds the precedence-setting CORE inline; phase technique and
 > inter-skill routing live in `references/` and load on demand.
 > **Build order (atomic).** This SKILL.md, its **5 reference targets** (map, loop, leap, boundaries,
-> anti-patterns), and `tests/forge-verification-ledger.md` ship together. Verify:
-> `for f in map loop leap boundaries anti-patterns; do test -f references/$f.md || echo MISSING $f; done; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> anti-patterns), `tests/triggers.md`, and `tests/forge-verification-ledger.md` ship together. Verify:
+> `for f in map loop leap boundaries anti-patterns; do test -f references/$f.md || echo MISSING $f; done; for t in triggers forge-verification-ledger; do test -f tests/$t.md || echo MISSING "tests/$t.md"; done`
 
 ## Language
 
 This skill is **English**. The deliverable you produce **defaults to the user's language (Japanese)**.
 Keep the key terms as stable tokens even inside Japanese prose: 仮説行動, マップ・ループ・リープ,
-確信度×影響度, 学びの最大化, Map / Loop / Leap, the load-bearing node, win/kill/loss.
+確信度×影響度, 学びの最大化, Map / Loop / Leap, the load-bearing node, win/kill/loss,
+**TARGET RESULT**, and **MAPPING-BREAK**.
 
 ## CORE — read every time (precedence-setting)
 
@@ -140,6 +143,18 @@ retiring the fatal risks on the load-bearing node.
   discrimination table, the pass/fail adjudication, the confidence write, and the Leap never leave your
   context — an agent's opinion is never a signal. (Technique + 学びの最大化 → `references/loop.md`.)
 
+  **Transfer guard.** Copy the candidate ID, frozen transfer-bundle path/digest, donor-set locus, and
+  correspondence locators from a selected transfer candidate. Begin with `target-side evidence:
+  UNTESTED`. Test a target-side observable
+  consequence of the preserved relation. Donor success, fluent analogy, and agent endorsement may motivate
+  a test. They cannot move target confidence or satisfy its threshold. Return the outcome as a
+  `TARGET RESULT` to `directing-research`; Loop never emits or reclassifies `MAPPING-BREAK`. If the
+  observation calls the correspondence itself into question, request a new assessment from
+  `forging-novel-theses`. Only that skill may emit a `MAPPING-BREAK`; `directing-research` then updates
+  the disposition. The exact result contract is in `references/loop.md` §3. If the result becomes a
+  durable reviewed repository artifact, `governing-research-documentation` governs only its locus,
+  lineage, review, and retirement; it never changes the threshold or mapping meaning.
+
 - **RECURRING — STAGNATION CHECK** *(runs whenever Loop is active — it has a home, not orphaned).* Is
   the hypothesis written and shared? Is the node-under-test named? Are you tuning on results, or
   perfectionism-stalling? **Two first-class exits:** (i) if the load-bearing node is **not falsifiable by
@@ -175,6 +190,7 @@ retiring the fatal risks on the load-bearing node.
 | `references/leap.md` | evaluate→decide→realize; the written WIN/KILL/LOSS triple; door-type (one-way vs two-way) + keep-vs-discard intent; reversibility sizing; 大きく考え小さく踏み出せ; provenance bridge-tags | committing a bet |
 | `references/boundaries.md` | the inter-skill cut as a PURPOSE test; co-fire arbitration + ordering for braided tasks (worked example); cheap-executor return; self-contained inline-resolution fallback; repo-neighbor differentiation; lineage vs 仮説思考 / lean+OODA / effectuation / SoK | routing away / placing this skill |
 | `references/anti-patterns.md` | in-skill misuse diagnostics with observable TELL + recovery: freeze, big-bang, endless-Loop, endless-Map, vanity test, reckless irreversible Leap, small-bet disease, felt-Loop on an unrunnable node | auditing your own output |
+| `tests/triggers.md` | fire / no-fire / ordered co-fire desk-check, including the target-side transfer guard | after any description or boundary edit |
 | `tests/forge-verification-ledger.md` | reforge evidence, warning counts, and debt queue | auditing this skill itself |
 
 ## See also

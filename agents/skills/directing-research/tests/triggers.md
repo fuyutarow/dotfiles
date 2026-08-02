@@ -36,6 +36,8 @@ artifact may have one owner.
 | 16 | 「この研究計画の盲点と暗黙前提を掘って。まだ解決策や仮説は出さないで」 | `B` | expose only; no frame selection or thesis genesis |
 | 17 | “Interview me for unpublished failures, workarounds, and exceptions before reframing this project.” | `B -> D` | human tacit elicitation then program judgment |
 | 18 | 「選んだ問題フレームから、水平思考で構造的に異なる仮説を出して」 | `F` | selected frame exists; genesis owns lateral transformations |
+| 19 | “Find comparable donor relations from other fields, but do not map them to my target yet.” | `S` | target-agnostic donor discovery owns the `DONOR SET` |
+| 20 | “A donor set and selected frame exist. Map the relations, preserve failed correspondences, then decide whether to test or reopen.” | `D -> F -> D` | D admits/disposes; F maps or emits `MAPPING-BREAK`; no source-side adoption |
 
 ## Negative boundaries
 
@@ -45,6 +47,8 @@ artifact may have one owner.
 | one present artifact/source/code fact | not `D/F/A`; route `R` |
 | hidden premises or human tacit constraints in one existing plan/frame, before solutions | not `D/F/A/R`; route `B` |
 | one corpus position | not `D/F/A`; route `S` |
+| donor discovery without a selected target mapping | not `D/F`; route `S` |
+| source-to-target correspondence or a failed correspondence for one selected frame | not `D/S`; route `F` |
 | one expensive/irreversible selected tree's threshold, outcome table, commit, pivot, kill | not `D/F`; route `A` |
 | one cheap deterministic reversible probe | not `A`; route domain/plain executor, then return result to `D` |
 | agent roles, blindness, visibility, veto, acceptance | not domain skills; route `O` |
@@ -53,10 +57,10 @@ artifact may have one owner.
 ## Reciprocal-cut checklist
 
 - `D <-> B`: lifecycle/frame judgment versus premise/tacit-constraint exposure.
-- `D <-> F`: problem selection/formulation/admission versus thesis genesis.
+- `D <-> S`: program/corpus decision versus evidence state; `S` owns target-agnostic donor discovery and `DONOR SET`.
+- `D <-> F`: problem selection/formulation/admission and transfer disposition versus thesis genesis and source-to-target mapping / `MAPPING-BREAK`.
 - `D <-> A`: selection/standing policy/>=2 bets versus one expensive/irreversible load-bearing tree.
 - `D <-> R`: normative future problem versus inspectable present artifact.
-- `D <-> S`: future research decision versus corpus evidence state.
 - `D <-> P`: research program before a finished claim versus manuscript argument.
 - `D/F/A/P <-> O`: domain meaning versus agent topology/authority.
 - `F <-> S`: candidate generation versus novelty/corpus evidence.

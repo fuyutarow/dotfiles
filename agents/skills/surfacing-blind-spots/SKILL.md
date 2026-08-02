@@ -72,6 +72,16 @@ instead of inventing one.
 Do not use **OPEN** as a shortcut for weak typing. Use it only when assigning another primary home
 would claim more structure than the evidence supports.
 
+### Transfer-artifact audit profile
+
+For an existing transfer candidate or `MAPPING-BREAK`, sweep the recorded artifact without creating a
+new map. **OBJECT** asks which donor/target roles or units were omitted. **RELATION** asks which claimed
+invariant/correspondence is assumed. **REGIME** asks which precondition, scale, or precision-loss
+boundary was omitted. **OBSERVATION** asks what target-side signal is present, missing, or `UNTESTED`.
+The remaining slots retain their ordinary meaning. This packet may expose correspondence premises. It
+must never propose or repair a correspondence, declare target truth, or design a test. Mapping belongs
+to `forging-novel-theses`; target-side test/commit belongs to `acting-on-hypotheses`.
+
 ## Keep four axes separate
 
 Record these as separate ledger columns. Never sum, multiply, rank, or collapse them into a

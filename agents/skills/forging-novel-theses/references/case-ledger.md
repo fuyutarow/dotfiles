@@ -27,6 +27,72 @@ Why it passes the **mechanical** floor: provenance, target, operation, control p
 trace, claim, prediction, and discriminator are visible. It may still be unimportant, infeasible,
 non-novel, or false.
 
+## Transfer PASS-shaped packet
+
+This is synthetic schema coverage only. Every source/target proposition and locator below is an
+illustrative fixture, not research evidence. It does not show that the target relation holds.
+
+```markdown
+## Candidate T1
+
+- Input problem/frame: Endpoint assays miss transient interactions.
+- Seed provenance: ANALOGY — donor-set D1/D2 relation comparison
+- Transformation target: RELATION
+- Operation: TRANSFER
+- Premise challenged: Endpoint assays need not be sufficient for detecting transient relations.
+- Transformation trace: endpoint-only observation -> TRANSFER relation-preserving trace comparison -> time-indexed detection relation
+- Thesis claim: A time-indexed relation model can expose transient interactions that endpoint-only assays systematically miss.
+- New testable prediction: Under matched samples, time-indexed observation identifies a reproducible transient class absent from endpoint-only analysis.
+- New discriminator: Under matched samples, the transfer candidate predicts transient-class recovery whereas endpoint-only analysis predicts no recoverable class.
+- Nearest prior / novelty delta: UNVERIFIED — requires corpus comparison.
+- Frame update flag: NO
+- Transfer attempt ID: transient-trace-1
+- Donor set: path=research/donor-set.md; sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+- Donor IDs: D1, D2
+- Source comparison: D1 and D2 share a temporal relation while their objects and observation instruments differ.
+- Source relation / locator: retaining ordered intermediate states permits reconstruction; fixture/donor-set.md:18 and fixture/donor-set.md:19
+- Target relation before transfer: Endpoint observation aggregates states and loses their ordering relation.
+- Correspondence map: source state -> assay interaction state; source transition -> time-indexed assay change
+- Preserved relation: Ordered transitions make otherwise conflated transient states distinguishable under matched observations.
+- Non-correspondence: Source interventions are controllable whereas assay sampling is sparse and destructive.
+- Transfer boundary: Mapping breaks when sampling cadence cannot resolve the relevant transition interval.
+- Precision loss: The mapped target cannot identify causal intervention direction from an observed sequence alone.
+- Target-side evidence: UNTESTED
+- Target-side counterexample: Matched time-indexed observations recover no reproducible transient class despite cadence sufficient for the proposed interval.
+- Status: CANDIDATE
+```
+
+Run it only with its referenced, frozen donor artifact:
+
+```bash
+bun scripts/gate-check.ts --donor-set research/donor-set.md path/to/transfer-bundle.md
+```
+
+The sample digest is intentionally synthetic; it must match the supplied donor file in real use.
+
+## MAPPING-BREAK-shaped packet
+
+```markdown
+## MAPPING-BREAK B1
+
+- Transfer attempt ID: endpoint-control-break-1
+- Input problem/frame: Endpoint assays miss transient interactions.
+- Donor set: path=research/donor-set.md; sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+- Donor IDs: D1, D2
+- Source comparison: D1 and D2 relate ordered intermediate records to recoverability; exact replay and statistical smoothing differ.
+- Source relation / locator: retaining ordered intermediate records permits reconstruction; fixture/donor-set.md:18 and fixture/donor-set.md:19
+- Target relation before transfer: Endpoint assays produce destructive, non-repeatable samples from distinct units.
+- Attempted correspondence: source intervention -> assay perturbation; source trajectory -> measured interaction sequence
+- Non-correspondence axis: REGIME — target units cannot be repeatedly observed after perturbation.
+- Failed invariant: Intervention-linked trajectories cannot be preserved when each observation destroys the sampled unit.
+- Transfer boundary: The correspondence fails whenever repeated observation requires a new, non-identical unit.
+- Evidence / locator: target mismatch fixture/target-frame.md:42; source relation fixture/donor-set.md:18
+- Handoff: directing-research — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here.
+- Status: MAPPING-BREAK
+```
+
+It is a useful retained failure, not evidence against every possible donor or target relation.
+
 ## Failure cases
 
 | Failure | Bad field | Earliest repair |
@@ -35,6 +101,9 @@ non-novel, or false.
 | paraphrase | `Transformation trace: use a more innovative and holistic approach` | name the before-state, operation, and changed relation |
 | generic prediction | `New testable prediction: Research results will improve.` | state a scoped observable that follows from the transformation |
 | decorative analogy | `Generation recipe: cells are like cities` | map a source relation and derive a target prediction |
+| donor laundering | `Target-side evidence: the donor worked` | keep target evidence exactly `UNTESTED`; name a target-side counterexample |
+| unbound donor record | `Donor set: some prior examples` | declare `path=<same --donor-set path>; sha256=<digest>` and use IDs that exist in that frozen file |
+| forced transfer | a correspondence fails but the packet still contains a thesis claim | emit `MAPPING-BREAK`; it has no candidate claim or prediction |
 | closed-set coercion | `Operation: OTHER` | name the open-set value, e.g. `OTHER — TEMPORAL-INTERLEAVE` |
 | fake anti-default | `Premise challenged: conventional wisdom` | name the concrete load-bearing premise |
 | fake discriminator | `New discriminator: results will be different` | contrast the candidate outcome with the prior/account outcome |

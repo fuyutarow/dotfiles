@@ -93,21 +93,41 @@ Given accounts A and B:
 
 ## Recipe D — structural transfer
 
-Use relation mapping:
+Use a frozen `DONOR SET` from `systematizing-knowledge`, not a remembered source anecdote. Its path,
+SHA-256, and selected IDs are inputs. Compare the donor records before selecting a relation; two
+surface-similar source labels are not two relation-level donors.
+
+Write the correspondence before writing a thesis:
 
 ```markdown
-- Source-domain entities:
-- Source relation:
-- Target-domain entities:
+- Donor set: path=<same path passed to --donor-set>; sha256=<digest>
+- Donor IDs: D1, D2
+- Source comparison:
+- Source relation / locator:
 - Target relation before transfer:
-- Mapping:
-- Relation preserved:
-- New target prediction:
+- Correspondence map: source role -> target role; source role -> target role
+- Preserved relation:
+- Non-correspondence:
+- Transfer boundary:
+- Precision loss:
+- Target-side evidence: UNTESTED
+- Target-side counterexample:
 ```
 
-Comparing multiple source examples may help abstract a schema; distance alone does not. Prefer the
-closest source that supplies the needed relation. Reject object-name substitution, metaphor, and
-transfers that predict nothing new.
+Run the transfer packet with the exact frozen source artifact:
+
+```bash
+bun scripts/gate-check.ts --donor-set path/to/donor-set.md path/to/transfer-bundle.md
+```
+
+The packet's `Donor set` declaration must be `path=<same path>; sha256=<digest>`; the checker verifies
+the digest and that every selected donor ID is actually present. Do not switch donor files after
+drafting or use a donor's source-domain result as target support.
+
+Comparing multiple source examples may help abstract a source-side schema; distance alone does not.
+For a single donor, carry its `SINGLE-DONOR LIMIT` exactly. If no admissible correspondence preserves
+the relation, emit `MAPPING-BREAK` with the failed invariant and evidence locus; do not invent a
+candidate. Reject object-name substitution, metaphor, and transfers that predict nothing new.
 
 ## Recipe E — representation change
 
@@ -166,8 +186,9 @@ During generation:
 - stop when the declared count/limit is reached.
 
 Run `gate-check.ts` over the complete file. The script auto-detects multiple `## Candidate ...` sections,
-checks each packet, emits the derived matrix, and rejects mechanically collapsed batches. This is a
-pre-dedup floor; it cannot detect semantic paraphrases.
+checks each packet, emits the derived matrix, and rejects mechanically collapsed batches. If any
+section is `TRANSFER` or `MAPPING-BREAK`, pass the frozen donor artifact through `--donor-set`.
+This is a pre-dedup floor; it cannot detect semantic paraphrases, relation correctness, or target fit.
 
 After return, `directing-research` owns freezing and semantic deduplication. It returns a coverage-gap
 packet only when the unique batch has collapsed:

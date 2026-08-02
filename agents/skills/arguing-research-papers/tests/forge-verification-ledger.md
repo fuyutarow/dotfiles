@@ -226,3 +226,12 @@ before the next feature reforge; move history here first, then split prose and n
 - PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly 44 prose sentences
   >120 chars, version header 15 lines >3, and 4 table cells >400 chars. This reciprocal-pointer edit
   does not clear or accept that debt; a dedicated reforge owns retirement of this waiver.
+
+## 2026-08-02 — transfer-warrant boundary
+
+The claim-evidence gate now distinguishes donor lineage from target warrant. An analogy, source-domain
+success, or correspondence can motivate a target investigation and may appear as scoped related work;
+it cannot anchor a finished target claim. Missing target evidence stays an explicit placeholder and
+routes to mapping/break generation or a target-side test. This is a constructed calibration rule, not a
+claim that the paper-writing source corpus validates the transfer schema. No claim-check script or test
+fixture changed.

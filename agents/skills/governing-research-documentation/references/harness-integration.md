@@ -71,3 +71,22 @@ keys, human identity, completeness of raw capture, or usefulness of a review. Th
 review gates performed by accountable people with the skill's aid. Keep raw-material hashing, access
 control, retention law, and secret scanning in their owning repository controls; an OKF checker is not a
 data-governance system.
+
+## Residual: discovery is not an authority-preserving read, and write must stay constrained
+
+`repo-search` is a discovery surface: it locates candidate files and text. It does not freeze which
+authority was read, what coverage was achieved, or which bytes later reasoning consumed. Do not relabel
+that discovery as a repository truth API.
+
+If repeated, evidenced omissions show that discovery plus ordinary file reads lose authority, coverage,
+or provenance, a future **read-only** `repo-read` may produce a frozen `READ BUNDLE`: declared question,
+authority paths, exact locators, content digests, coverage boundary, and conflicts. It would consume
+search internally but would neither synthesize a conclusion nor authorize adoption. This is an OPEN
+residual, not a tool to implement in this forge.
+
+Do not create a generic `repo-write`. A broad write surface would bypass admission and make a fluent
+model's interpretation look authorized. If a repeated, measured need remains after the read boundary is
+proven, consider only a constrained `repo-apply`: it must consume a domain-signed artifact, verify a base
+digest, restrict writes to an explicit allowlist, and run named acceptance commands. `operating-the-harness`
+owns mechanism choice; this Skill owns the admission/lineage constraints. These are house controls, not
+claims established by OKF or by any LLM-wiki literature.

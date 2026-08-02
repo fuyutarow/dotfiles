@@ -33,6 +33,15 @@
 | [IEEE Security & Privacy 2027 call](https://sp2027.ieee-security.org/cfpapers.html) | official | one venue's SoK contribution test: evaluate/systematize/contextualize through a viewpoint, belief test, or convincing taxonomy | date- and venue-specific; it demonstrates that taxonomy is one contribution route, not a universal SoK requirement |
 | [Nickerson, Varshney, and Muntermann](https://doi.org/10.1057/ejis.2012.26) ([open repository copy](https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/93439/file/93439.pdf)) | primary | iterative conceptual-to-empirical / empirical-to-conceptual taxonomy development with ending conditions | use only when classification serves the question; label changed ending conditions or validation as an adaptation |
 
+## Cross-domain relation comparison and translation
+
+| Source | Class | What it supports here | Applicability boundary |
+|---|---|---|---|
+| [Gentner (1983), *Structure-Mapping*](https://doi.org/10.1207/s15516709cog0702_3) | primary theory | distinguish relational/systematic structure from object attributes when recording a source-side relation | a theory of analogy, not validation of a `DONOR SET`, a discovery method, or target fit |
+| [Gick & Holyoak (1983), *Schema induction and analogical transfer*](https://doi.org/10.1016/0010-0285(83)90002-6) | primary experiment | comparison of examples can support schema induction in bounded problem-solving tasks | laboratory transfer does not show that one source generalizes, that target correspondence is valid, or that a scientific thesis follows |
+| [Gentner, Loewenstein & Thompson (2003)](https://doi.org/10.1037/0022-0663.95.2.393) | primary experiment | explicit comparison can improve learning/transfer in the studied negotiation setting | bounded educational/negotiation task; do not convert its effect into a claim about research-repository workflows or real scientific discovery |
+| [Star & Griesemer (1989)](https://doi.org/10.1177/030631289019003001), [Carlile (2002)](https://doi.org/10.1287/orsc.13.4.442.2953), and [Bechky (2003)](https://doi.org/10.1287/orsc.14.3.312.15162) | primary field/organization studies | preserve local meanings, provenance, and translation/break conditions at boundaries | they do not establish that shared vocabulary, a wiki, or any one artifact resolves boundary work |
+
 ## ML-based-science appraisal
 
 | Source | Class | What it supports here | Applicability boundary |
@@ -51,11 +60,15 @@ The following are deliberately constructed for this skill:
 - the plain assessment states `supported`, `supported-with-limitations`, `uncertain`,
   `not-comparable`, and `unsupported`;
 - `CITATION-RELAY`, SOLO/FAN-OUT stage assignments, and workload heuristics;
+- `DONOR SET`, its exact fields, `SINGLE-DONOR LIMIT`, target-agnostic stop, and
+  `check-donor-set.ts`.
 - the optional AI4S status vocabulary `not-applicable`, `low-concern`, `some-concern`,
   `high-risk`, and `not-reported`.
 
 These conventions make work inspectable. They have not been psychometrically validated, do not
 create numeric evidence grades, and must not be cited as PRISMA, GRADE, SWiM, Nickerson, or REFORMS.
+The transfer artifact is likewise a house schema, not an empirically validated mechanism for
+cross-domain discovery, wiki-mediated translation, or target-side support.
 
 ## Maintenance triggers
 

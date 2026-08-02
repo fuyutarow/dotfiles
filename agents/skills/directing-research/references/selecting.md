@@ -49,10 +49,18 @@ Recipes may include:
 - blocked consequential decision;
 - constraint inversion;
 - missing baseline / counterfactual / regime;
-- structure transferred from another domain.
+- an admitted structural-transfer route, whose donor relation is first bounded by
+  `systematizing-knowledge` and whose correspondence is then built by `forging-novel-theses`.
 
 Do not count paraphrases or recipe labels as candidates. Two frames are distinct only if their
 held/broken premise, decisive relation, discriminator, or consequence differs.
+
+`directing-research` may admit or decline the route because it owns program allocation. It must not
+write the source-to-target map: `systematizing-knowledge` owns donor discovery without a target mapping,
+and `forging-novel-theses` owns the mapping or a `MAPPING-BREAK`. On return, preserve every frozen attempt
+in a path-and-SHA-256-bound `TRANSFER DISPOSITION`. A source result may justify testing but cannot support
+target adoption or retirement; those require a frozen `TARGET RESULT` whose candidate ID, observation,
+prewritten threshold, exact locus, and threshold result are checked against the transfer bundle.
 
 ## 3. Consequence before method fluency
 

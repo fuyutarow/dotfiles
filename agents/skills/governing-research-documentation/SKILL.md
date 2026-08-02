@@ -15,7 +15,22 @@ description: >-
 
 # Governing research documentation
 
-> **Version**: v2608.1.0 (2026-08-01) — initial admission, authority, lifecycle, and review contract.
+> **Version**: v2608.1.1 (2026-08-02) — transfer-artifact lifecycle and repository-surface residual.
+
+**Atomic build.** Ship the authority contract, profile, templates, floor, regressions, trigger matrix,
+and forge ledger in one change. Run from this Skill directory; success prints nothing:
+
+```bash
+for f in SKILL.md agents/openai.yaml \
+  references/admission-and-lifecycle.md references/harness-integration.md \
+  references/okf-rd-profile.md references/review-contract.md references/sources.md \
+  assets/templates/canonical.template.md assets/templates/evidence.template.md \
+  assets/templates/generated-view.template.md assets/templates/review-request.template.md \
+  scripts/research-docs-check.ts tests/research-docs-check.test.ts \
+  tests/local-failure-corpus.md tests/triggers.md tests/forge-verification-ledger.md; do
+  test -f "$f" || echo "MISSING $f"
+done
+```
 
 ## LAW — a document must earn its continued existence
 
@@ -80,8 +95,9 @@ Choose exactly one action:
 - `create` — no existing artifact owns the purpose, and its durable review/lifecycle value exceeds
   its maintenance cost.
 - `update` — the purpose already has an authority. Change that file; do not fork its facts.
-- `derive` — an audience needs a temporary brief, index, graph, or synthesis view. Record its
-  sources and expiry; it never becomes evidence or authority.
+- `derive` — an audience needs a temporary brief, index, graph, or rendering of an **already bounded**
+  SoK position. Record its sources and expiry; it never becomes evidence or authority. A new corpus
+  conclusion is not derivation: route it to `systematizing-knowledge` before any view is rendered.
 - `freeze` — admission evidence, review intent, or authority is missing. Preserve the request and
   make no durable file yet.
 - `retire` — keep identity and history, mark the concept deprecated, and name one successor or a
@@ -111,6 +127,27 @@ After admission, route research meaning to the domain Skill. Send one document's
 architecture to `structuring-documents` and prose-in-place to `linting-prose`. Send corpus
 synthesis to `systematizing-knowledge` and manuscript claims to `arguing-research-papers`. This
 Skill returns after those edits to check authority, provenance, reviewability, and lifecycle.
+
+### D3a · Govern transfer artifacts without owning their meaning
+
+`DONOR SET`, transfer bundle, `MAPPING-BREAK`, `TARGET RESULT`, and `TRANSFER DISPOSITION` remain
+domain artifacts. They are not new `rd_role` values. Semantic ownership stays with
+`systematizing-knowledge`, `forging-novel-theses`, `acting-on-hypotheses`, and
+`directing-research`.
+
+This Skill may decide only their durable locus, authority key, source/digest lineage, review request,
+and retirement transition:
+
+| Artifact | Governance action | Never do here |
+|---|---|---|
+| `DONOR SET` | retain its corpus scope, source locators, and frozen digest as lineage for later mapping | select a target or infer a target claim |
+| transfer bundle | link candidate IDs and donor-set digest to the governed decision record | construct a correspondence map or suppress failed candidates |
+| `MAPPING-BREAK` | preserve it as negative/limiting decision history; supersede only by a later, separately reviewed artifact | delete it because a preferred transfer passed elsewhere |
+| `TARGET RESULT` | retain its frozen transfer-bundle binding, candidate ID, target observation, prewritten threshold, exact locus, digest, and review/retirement event | rewrite the threshold after observation or turn the result into a mapping verdict |
+| `TRANSFER DISPOSITION` | record the decision, consumed target-side evidence, owner, and retire/reopen event | decide adoption, target truth, or test outcome |
+
+Use the existing four profile roles; do not mint a generic “transfer” document class. A generated
+view may render these records but may not become their source of authority.
 
 ### D4 · Make feedback executable
 

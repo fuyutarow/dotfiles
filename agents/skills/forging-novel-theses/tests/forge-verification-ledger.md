@@ -1,5 +1,73 @@
 # Thesis-genesis reforge verification ledger — 2026-07-30
 
+## Transfer-route reforge — v2608.1.0 (2026-08-02)
+
+### Ownership and stop condition
+
+The collection retains its existing owners rather than creating a generic horizontal-transfer skill:
+
+```text
+systematizing-knowledge: target-agnostic donor relation search -> DONOR SET
+forging-novel-theses: selected target + frozen DONOR SET -> CANDIDATE | MAPPING-BREAK
+directing-research: preserve and decide the TRANSFER DISPOSITION denominator
+```
+
+This skill cannot select donors, create a target-independent transfer search, decide adoption or
+retirement, or promote source success to target evidence. `MAPPING-BREAK` is a required preserved
+output when no admissible correspondence preserves the invariant; it is not an invitation to fabricate
+a candidate.
+
+### Artifact and mechanical floor
+
+For every transfer attempt, the packet declares:
+
+```text
+Donor set: path=<frozen donor-set path>; sha256=<lowercase digest>
+Donor IDs: <IDs present in that artifact>
+```
+
+Run `bun scripts/gate-check.ts --donor-set <same-path> <packet>`. The mechanical floor checks the
+declared path/digest and donor-ID membership, relation-level correspondence, non-correspondence,
+boundary, precision loss, target-side evidence exactly `UNTESTED`, and a target-side counterexample.
+It cannot establish source correctness, semantic mapping quality, target fit, novelty, feasibility,
+or truth.
+
+### Evidence calibration
+
+| Grade | Inputs | Retained rule | Non-claim |
+|---|---|---|---|
+| P2 | Gentner (1983); Gick & Holyoak (1983); Gentner et al. (2003) | compare source relations and make correspondence explicit | their bounded theory/tasks do not validate this packet, research discovery, or a target conclusion |
+| P2 | Holyoak & Koh (1987) | separate retrieval cues from structural use | surface resemblance or retrieval does not establish a usable target relation |
+| P2 | Hargadon & Sutton (1997); Dunbar/Schunn | retain source scope and avoid provenance myths | neither supports a monotonic distance/contact effect or felt analogy as causal evidence |
+| LOCAL | `DONOR SET` digest handoff, `MAPPING-BREAK`, field schema | make the attempt auditable and retain failures | not validated interventions for creativity, documentation, or wiki-mediated transfer |
+
+### Regression receipts
+
+The transfer fixtures in `tests/gate-check.test.ts` cover a complete transfer candidate, a complete
+`MAPPING-BREAK`, invalid upstream `DONOR SET`, digest/path mismatch, unknown or duplicate donor ID,
+duplicate attempt ID, donor-success laundering, exact frozen source-locator retention, section-local
+duplicate/missing fields through heading depths 2–6, single-donor/cardinality mismatch, missing dependency or upstream checker,
+realpath-equivalent symlink, transfer fields leaked into a non-transfer candidate, and candidate
+fields leaked into a break. Trigger rows add selected-target mapping as a FIRE, source-only donor
+search as NO-FIRE, and an ordered SoK -> genesis -> disposition route.
+
+```text
+bun test agents/skills/forging-novel-theses/tests/gate-check.test.ts
+31 pass, 0 fail, 110 assertions
+```
+
+The receipt establishes parser and handoff invariants only; it does not establish correspondence
+quality, target fit, novelty, value, or truth.
+
+The final governance re-audit added the reciprocal persistence seam: transient packets remain HERE,
+while durable locus, review, supersession, and retirement route to `governing-research-documentation`
+without transferring mapping or `MAPPING-BREAK` semantics.
+
+**PROSE-DEBT waiver (2026-08-02).** `skill-check.ts` reports 16 long-sentence WARNs after this
+transfer-contract reforge. The sentences carry field-level contract and ownership limits; the next
+prose-only pass must reduce them without moving schema or cut semantics into an unowned file. This
+waiver covers no validator, trigger, or evidence-boundary failure.
+
 ## Trigger
 
 The broad request “how can I do creative research?” exposed a collection-level race. The prior version
@@ -71,9 +139,10 @@ changes the machinery:
 - Codex `quick_validate.py` → `Skill is valid!`.
 - Build-order existence check → exit 0 with no missing artifact.
 
-**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` reports 10 long-sentence WARNs after the safe
-splits in this reforge. Queue position: first item in the next `forging-novel-theses` prose-only pass.
-The waiver does not cover validator, trigger, or boundary failures.
+**HISTORICAL PROSE-DEBT receipt (2026-07-30; superseded).** `skill-check.ts` reported 10
+long-sentence WARNs after the safe splits in that reforge. The active waiver is the 15-WARN receipt
+in the 2026-08-02 transfer-route section above. Neither receipt covers validator, trigger, or
+boundary failures.
 
 The supervisor's post-forge negative controls added the bare-seed, counterfeit-`TACIT`, and
 underfilled-singleton batch fixtures. The regression tests were red because those invalid fixtures

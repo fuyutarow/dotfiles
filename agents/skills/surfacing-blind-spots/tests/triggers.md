@@ -14,6 +14,7 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 | “The rollout keeps surprising us even though the checklist is green. Map what the checklist silently treats as true.” | messy operational context; existing artifact and hidden premises |
 | “I have a decision frame and three pages of context. Identify which missing human knowledge is load-bearing, then stop.” | tacit provenance and strategic stop are the output |
 | “Before testing this already-selected hypothesis tree, expose only its hidden premises and human tacit constraints.” | EXPOSE remains here even after tree selection; later action follows the AOH hard gate |
+| “Audit this existing transfer candidate for omitted donor/target roles, assumed relations, regimes, and missing target observations; do not repair the map.” | bounded premise-only audit of an existing transfer artifact |
 
 ## MUST NOT FIRE
 
@@ -22,6 +23,7 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 | “Help me find and choose a creative PhD research problem.” | `directing-research` |
 | 「この領域を三つの別問題として再構成して、どれを研究するか決めて」 | `directing-research` |
 | “Generate five structurally different theses for this selected frame.” | `forging-novel-theses` |
+| “Construct a source-to-target correspondence from these donor mechanisms.” | `forging-novel-theses` — transfer mapping, not premise-only audit |
 | “Does the trace at logs/run-14.json actually support the claimed race condition?” | `raising-resolution` |
 | “For this expensive/irreversible bet, design the cheapest falsifying experiment and prewrite the kill threshold.” | `acting-on-hypotheses` |
 | “Run this deterministic 30-second reversible check.” | domain/plain executor; return result to domain owner |
@@ -39,6 +41,7 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 | selected frame needs tacit seeds before thesis generation | HERE elicits real-human probes → `forging-novel-theses` consumes only HUMAN-provenanced answers named by `Handoff` |
 | hidden premise depends on a present claim | HERE identifies assumption + locator → `raising-resolution` inspects it → HERE integrates provenance if needed |
 | one expensive/irreversible forward bet needs premise audit and a kill test | HERE returns load-bearing premises → `acting-on-hypotheses` owns test/threshold/commit |
+| an existing transfer candidate needs a premise audit before mapping repair or target test | HERE audits OBJECT/RELATION/REGIME/OBSERVATION assumptions → `forging-novel-theses` maps/breaks or `acting-on-hypotheses` tests a selected target bet |
 | evidence inspection needs several workers | HERE fixes the domain packet → `orchestrating-agents` owns topology → workers return locators → HERE integrates |
 | six agents must independently excavate one plan's blind spots | HERE fixes artifact/decision/schema → `orchestrating-agents` owns topology/blindness → HERE integrates one packet |
 

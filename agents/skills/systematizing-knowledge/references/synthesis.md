@@ -115,6 +115,15 @@ common effect:
 A theme is not stronger because many papers use similar words. Repetition can come from shared
 lineage or citation cascades. Trace conceptual independence and counterexamples.
 
+### Transfer-source boundary
+
+When the deliverable is a target-agnostic `DONOR SET`, this section may compare source-side roles,
+relations, preconditions, consequences, and failures to state a bounded common relational schema.
+It must not map a source role to a target role, assert target support, derive a target prediction, or
+state a thesis. Those operations have a selected target frame and belong to
+`forging-novel-theses`; see `transfer-sources.md`. A common source-side schema is not evidence that
+it survives a target context.
+
 Load `taxonomy.md` only when a classification scheme itself answers the review question.
 
 ## 5. Explanatory synthesis

@@ -31,6 +31,7 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | N4b | "Give me a neutral summary of this one paper." | direct answer; use **raising-resolution**'s citation gate silently, but no specialist skill fires |
 | N4c | "Surface the hidden premises in this manuscript; do not judge whether they hold." | **surfacing-blind-spots** — premise-only excavation |
 | N5 | "given this selected problem, generate novel thesis candidates" | **forging-novel-theses** — candidate genesis, not write-up |
+| N5a | "The source field succeeded; construct a correspondence to our target or say exactly where it breaks." | **forging-novel-theses** — transfer mapping / `MAPPING-BREAK`, not a finished target warrant |
 | N5b | "this result means we may need to reopen the research problem/program" | **directing-research** — program-stage reopen decision |
 | N5c | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | **acting-on-hypotheses** — hard-gated forward tree |
 | N5c2 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to **directing-research** |
@@ -52,6 +53,7 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | C5b | "reviewer says not novel; should we narrow the claim or reopen the research?" | **arguing-research-papers** diagnoses the finished claim → **directing-research** decides whether to reopen → **forging-novel-theses** only if a selected frame again lacks a thesis. |
 | C6 | "write my related-work section covering the 30 papers in this area" | **cut vs systematizing-knowledge**: positioning MY claim against them (the gap, the delta, the nearest competitor) → arguing-research-papers; a standalone synthesis of what the FIELD knows (survey/SoK) → systematizing-knowledge. If the ask is purely "summarize 30 papers", SoK leads; if it's "situate MY contribution", arguing leads. |
 | C7 | "Surface the hidden premises in this paper, then assess which ones invalidate its claim." | **surfacing-blind-spots** exposes premises without verdict → **arguing-research-papers** reviewer red-team evaluates warrants, method, and validity |
+| C8 | "A donor mechanism inspired our target study; test it, then write the finished result." | `forging-novel-theses` maps/breaks → `acting-on-hypotheses` earns target-side signal when hard-gated → HERE argues only the completed target evidence |
 
 ## Notes on the closest cut
 

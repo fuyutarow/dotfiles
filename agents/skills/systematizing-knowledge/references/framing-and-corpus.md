@@ -121,6 +121,14 @@ Known-item recovery is a diagnostic: a query missing known relevant items is def
 them does not prove complete recall. Semantic search over an already-downloaded corpus improves
 organization, not external recall.
 
+### Target-agnostic transfer-source search
+
+When the decision is to seek an external relation seed, phrase the search question without proposed
+source-to-target correspondences. Search relation, mechanism, precondition, observable consequence,
+and failure-boundary synonyms across adjacent fields; surface labels may retrieve candidates but do
+not select them. The target-independent coverage contract and stop condition are owned by
+`transfer-sources.md`; target mapping, prediction, and thesis generation are out of scope here.
+
 ### Counterevidence and novelty attacks
 
 For every headline conclusion, attack the strongest counterexample within the `coverage contract`.

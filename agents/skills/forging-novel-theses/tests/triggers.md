@@ -9,6 +9,7 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | “Given this selected materials problem, generate three structurally different theses.” | selected frame, thesis missing |
 | 「この系統的残差を説明する新規仮説候補を複数つくって」 | result-generalization candidates |
 | “Transfer the relation in event sourcing to this assay and derive a new prediction.” | structural transfer |
+| 「複数 source の DONOR SET を渡す。選択済み target frame に対応付け、保てなければ MAPPING-BREAK を残して」 | selected-target relation correspondence and an explicit transfer failure belong here |
 | “What changes if we model transitions rather than endpoint states?” | representation-change thesis |
 | “First-principles decompose this fixed problem and recombine it into candidate explanations.” | candidate genesis |
 | 「この固定した問いに grounded control と前提破壊 anti-default を含む候補バッチを作って」 | functional coordinate batch |
@@ -21,11 +22,13 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | “How should I do creative research end-to-end?” | `directing-research` leads |
 | “Which of these three topics deserves a PhD?” | `directing-research` |
 | “Is this idea actually absent from the literature?” | `systematizing-knowledge` |
+| “Find analogies across fields for this target, but do not map them yet.” | `systematizing-knowledge` — target-agnostic donor discovery and `DONOR SET` |
 | “Interview the operator to expose tacit knowledge and hidden assumptions.” | `surfacing-blind-spots` |
 | “Is the residual real?” | `raising-resolution` |
 | “Here is one expensive/irreversible thesis; precommit its cheapest kill experiment.” | `acting-on-hypotheses` |
 | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
 | “Should we fund/commit/withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `directing-research` for a portfolio |
+| “Store this frozen transfer bundle as the durable reviewed authority and define retirement.” | `governing-research-documentation` governs locus/lineage/lifecycle; it never revises the mapping or break semantics |
 | “Who should ideate blindly and who may veto?” | `orchestrating-agents` |
 | “Reframe this finished paper's contribution.” | `arguing-research-papers` |
 
@@ -36,6 +39,8 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | broad creative-research workflow | `directing-research` diagnosis -> HERE at `thesis-missing` -> `directing-research` admission -> [`acting-on-hypotheses` if hard-gated / domain executor if cheap-reversible] |
 | anomaly to new thesis | `raising-resolution` -> `directing-research` problem-frame decision -> HERE |
 | literature to candidates | `systematizing-knowledge` -> `directing-research` selects/frame -> HERE |
+| donor relations to transfer attempt | `systematizing-knowledge` freezes target-agnostic `DONOR SET` -> HERE invokes `gate-check.ts --donor-set <same-path>` and emits `CANDIDATE` or `MAPPING-BREAK` -> `directing-research` records `TRANSFER DISPOSITION` |
+| freeze a transfer result into repository history | HERE signs mapping/break semantics -> `governing-research-documentation` governs durable locus, review, supersession, and retirement without changing those semantics |
 | blind spots to candidates | `surfacing-blind-spots` -> HERE only when its handoff names this skill and contains sourced facts |
 | multi-agent candidate batch | HERE defines packets/coordinate cells -> `orchestrating-agents` defines topology -> HERE returns packets -> `directing-research` selects |
 | deduplicated batch collapsed | `directing-research` sends one coverage-gap packet -> HERE regenerates once or emits `COVERAGE GAP` |
@@ -50,7 +55,10 @@ The description must contain all of:
 - seed provenance / target / operation / premise / discriminator search coordinates;
 - grounded control, premise-breaking anti-default, and one-shot `COVERAGE GAP`;
 - `surfacing-blind-spots` as the sole human-tacit elicitation owner;
-- `Status: CANDIDATE`;
+- transfer rule: frozen `DONOR SET` -> relation-level correspondence -> `Status: CANDIDATE` with target evidence `UNTESTED`, or `Status: MAPPING-BREAK`;
 - reciprocal cuts to `directing-research`, `systematizing-knowledge`, `raising-resolution`,
   `acting-on-hypotheses`, `surfacing-blind-spots`, and `orchestrating-agents`;
 - explicit refusal of kill/withdrawal/why-now/capital/portfolio ownership.
+
+The stage-only desk-check must reject a description that lets this skill discover donors without a
+selected target frame, decides a transfer disposition, or treats source success as target evidence.

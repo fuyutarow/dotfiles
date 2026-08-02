@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves through the ~/.claude/skills symlinks to this realpath, so linked scripts resolve from any cwd. Hooks stay zero-dep: they run before any install.",
   "dependencies": {
+    "cleye": "2.6.0",
     "type-flag": "4.5.0",
     "yaml": "2.9.0"
   }

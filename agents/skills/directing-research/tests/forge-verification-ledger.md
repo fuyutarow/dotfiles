@@ -258,14 +258,72 @@ Verification:
 - shared Bun script floor across DR/FNT/SBS → `FAIL=0 WARN=0`;
 - Codex `quick_validate.py` → `Skill is valid!`.
 
-**PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` reports 22 long prose sentences. The increase is
-from explicit cross-skill transition seams and adversarial clearing conditions; no validator or typed
-cut failure is waived. Queue position: first item in the next prose-only DR pass.
+**HISTORICAL PROSE-DEBT receipt (2026-07-30; superseded).** `skill-check.ts` reported 22 long prose
+sentences after that reforge. The active waiver is the 30-WARN receipt in the 2026-08-02 transfer-route
+section below. Neither receipt covers a validator or typed-cut failure.
 
 ## 2026-08-01 — reciprocal routing pointer / scoped prose-debt waiver
 
 - Artifact: `SKILL.md` ownership and MUST-NOT-FIRE rows route cross-document research lifecycle
   governance to `governing-research-documentation` while retaining research-program judgment here.
-- PROSE-DEBT waiver (pre-existing; not cleared): `skill-check.ts` reported exactly 22 prose sentences
-  >120 chars. This reciprocal-pointer edit does not clear or accept that debt; a dedicated reforge
-  owns retirement of this waiver.
+- HISTORICAL receipt (2026-08-01; superseded): `skill-check.ts` reported exactly 22 prose sentences
+  >120 chars. The active 2026-08-02 waiver below replaces this count without erasing the history.
+
+## 2026-08-02 — transfer-route contract reforge (v2608.1.0)
+
+**Trigger.** A cross-domain-transfer and documentation-governance audit found a missing transition: the
+collection could mention analogy, but did not distinguish donor discovery, source-to-target mapping,
+and a target-side program verdict. That omission lets source-side success be silently treated as evidence
+for the target, and lets failed correspondences disappear from the denominator.
+
+**Function map (live).**
+
+| Input state | Sole verb / owner | Artifact / next state |
+|---|---|---|
+| source relations are not bounded, and no target map is authorized | `systematizing-knowledge` discovers and compares | target-agnostic `DONOR SET` |
+| selected target frame + frozen donor set | `forging-novel-theses` maps or refuses the correspondence | frozen transfer bundle containing `CANDIDATE` and/or `MAPPING-BREAK` attempts |
+| frozen bundle + programme context | `directing-research` admits, tests, reopens, adopts, or retires | SHA-256-bound `TRANSFER DISPOSITION`, complete denominator, preserved breaks |
+
+`directing-research` may allocate a bounded route but never constructs or repairs a source-to-target map.
+`systematizing-knowledge` stops before target mapping, prediction, thesis, or test verdict. A bundle with
+only breaks is an honest `REOPEN`, not a candidate-generation failure to conceal.
+
+**Evidence calibration.** Added C21–C27 for relational structure/comparison (Gentner; Gick & Holyoak;
+Gentner et al.), situated brokerage and boundary translation (Hargadon & Sutton; Star & Griesemer;
+Carlile; Bechky), and priming/analogy alternatives (Dunbar & Schunn). Each is bounded to its study or
+theoretical scope. None is cited as evidence that the house fields, a wiki, distance, a broker, or a
+documentation form causally improves discovery.
+
+**House gates.** An active disposition names the bundle path and SHA-256, has every attempt ID in its
+denominator, preserves all `MAPPING-BREAK` IDs, and records `TEST|REOPEN|ADOPT|RETIRE` for each candidate.
+`TEST` has an untested target prediction registry plus handoff. `ADOPT` and `RETIRE` require a frozen
+`TARGET RESULT` whose path/digest, frozen transfer-bundle binding, candidate ID, target observation,
+numeric prewritten threshold, non-donor observation locus, threshold result, mapping-assessment request,
+and break-preserving handoff are revalidated. `ADOPT` additionally requires `PASS`; retirement names
+the tested mapping family/boundary without rewriting its recorded outcome. Donor-side success never
+clears either gate.
+
+**OPEN residual.** A read-only repository evidence bundle may eventually deserve a constrained harness
+surface only after repeated authority/coverage/digest failures demonstrate that documents and the existing
+validators cannot carry it. A generic `repo-write` remains out of scope: any future application surface
+must consume a domain-signed artifact, exact base digest, allowlisted files, and acceptance command. This
+is a design threshold, not an implementation or a claim about external tools.
+
+**Verification.** `bun test agents/skills/directing-research/tests/research-check.test.ts
+agents/skills/directing-research/tests/transfer-chain.test.ts` passed 32 tests / 133 assertions. The suite
+exercises a complete lower-case/detail `Operation: transfer — ...` bundle; incomplete bundle rejection;
+omitted `MAPPING-BREAK`; all-break `REOPEN`; source-side-only `ADOPT` rejection; frozen `TARGET RESULT`
+validation before `ADOPT`; wrong candidate, cross-bundle ID rebinding, nested-heading field borrowing,
+donor ID/result laundering, exact-locator and same-source alternate-anchor reuse, vague/vacuous or
+arithmetically contradictory thresholds, `FAIL` adoption, unresolved mapping reassessment, destructive
+or negated break handoff, wrong digest, and fatal missing result; valid `RETIRE` after either `PASS` or
+`FAIL` without outcome rewriting, plus rejection of unbounded retirement; missing `--donor-set`; fatal missing donor and transfer-bundle dependencies;
+realpath-equivalent symlink acceptance; parser boundary alignment with the FNT validator; duplicate
+field/section rejection; and the full DONOR SET → FNT → director chain.
+`bun agents/skills/writing-bun-scripts/scripts/script-check.ts
+agents/skills/directing-research/scripts/research-check.ts` reported `FAIL=0 WARN=0`.
+`quick_validate.py` passed via `uv run --with pyyaml`; `git diff --check` and scoped Biome check passed.
+**PROSE-DEBT waiver (2026-08-02).** `skill-check.ts` reports 30 long-sentence technical-prose WARNs,
+with no structural failure. A prose-only pass must reduce them without weakening the transition or
+freeze contracts. This waiver covers no validator, trigger, or evidence-boundary failure. Do not claim
+this ledger row proves cross-domain creative success.

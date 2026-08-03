@@ -453,3 +453,52 @@ terminated. None produced a usable audit verdict. Cross-bearer verification is t
 `UNAVAILABLE` for this reforge and is not counted as independent acceptance. Repository-wide gates,
 link deployment, and the final commit are intentionally not claimed by this receipt; they remain the
 shipping authority's terminal work.
+
+## 2026-08-03 — v2 route-only compatibility shim (v2608.3.0)
+
+**Function-map decision.** `directing-research` now owns exactly one artifact: `ROUTING DECISION`.
+Legacy broad or ambiguous asks may enter the shim; programme/frame/portfolio meaning routes to
+`supervising-research-programmes`, exactly one granted section's search/learn loop routes to
+`directing-research-sections`, and a frozen bounded episode audit routes to
+`auditing-research-processes`. Specific asks invoke those owners directly. Documentation, continuity,
+and orchestration route to their existing owners. The shim authors no programme, section, candidate,
+admission, run, audit, retrospective, recommendation, metric value, or transition.
+
+**North Star boundary.** The new research family owns `valid SEARCH receipts/hour + receipt-linked
+LEARN commits/hour`. The shim does not calculate, report, interpret, target, or optimize either term.
+
+**Legacy compatibility.** Existing v1 assets, references, scripts, and regression tests were retained
+byte-compatible. The active body does not index them as current guidance. Because the house structural
+floor rejects unmentioned reference files, the body carries a quarantine manifest that names every
+retained v1 reference and marks it historical/readability-only. This is a negative inventory, not an
+active semantic index.
+
+**Verification receipt.** Commands ran serially:
+
+- house `skill-check.ts` initially reported eight orphan-reference FAILs and three prose-debt WARNs;
+  after the quarantine manifest and prose split, the final run was silent, exit 0, `FAIL=0 WARN=0`;
+- `family-routing.test.ts` initially exposed a concurrent 991-character
+  `acting-on-hypotheses` description against the inherited 960-character ceiling; the family ceiling
+  was aligned to the platform 1024-character cap without editing that sibling; final result: 9 pass,
+  0 fail, 39 assertions;
+- `research-check.test.ts`: 30 pass, 0 fail, 124 assertions;
+- `transfer-chain.test.ts`: 2 pass, 0 fail, 9 assertions;
+- `research-run-check.test.ts` plus `research-run-check-adversarial.test.ts`: 28 pass, 0 fail,
+  71 assertions;
+- `mise run link:skills`: exit 0; `/home/fuyu/.claude/skills/directing-research` resolves to the
+  repository skill, and `/home/fuyu/.agents/skills/directing-research` resolves through the linked
+  skills root to the same directory.
+
+**Stale live semantic-owner pointers outside this reforge's authorized write surface.** These were
+not cleared here: `surfacing-blind-spots/SKILL.md` lines 9 and 191; `raising-resolution/SKILL.md`
+lines 8, 29, and 183; `systematizing-knowledge/SKILL.md` lines 9, 130, and 135;
+`forging-novel-theses/SKILL.md` lines 11, 72, 199, 241, 270, 274, 315, 318, 323, 325, 326, and 340;
+`acting-on-hypotheses/SKILL.md` lines 8–9, 131, 221, 229, 244, and 247;
+`continuing-long-running-tasks/SKILL.md` lines 12 and 169;
+`governing-research-documentation/SKILL.md` lines 8, 143, 161, and 213;
+`orchestrating-agents/SKILL.md` lines 6, 10, 45–46, 338, 344, and 350;
+`arguing-research-papers/SKILL.md` lines 10, 259, 261, and 277–278; and `agents/skills/README.md`
+lines 42, 52, 58, 65, and 73. They still attribute stage diagnosis, programme/portfolio judgment,
+candidate admission/disposition, result return, or retrospective meaning to `directing-research`.
+Clearing requires routing those live claims to the applicable v2 sole owner while preserving
+historical ledgers and v1 compatibility material.

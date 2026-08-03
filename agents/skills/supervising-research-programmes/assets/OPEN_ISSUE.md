@@ -1,0 +1,18 @@
+# OPEN_ISSUE: [issue-id]
+
+- Schema / snapshot revision / fence: [open-issue/v3 | integer | token]
+- Programme snapshot: [locus + sha256]
+- Goal lineage: [GOAL_CONSTITUTION locus + sha256; OBJECTIVE_ID; SUCCESS_OBSERVABLE_ID]
+- Uncertainty and programme relevance: [...]
+- Scope / exclusions / duplicate boundary: [...]
+- Eligibility and bid deadline/expiry: [...]
+- Constraint and resource envelope: [...]
+- Required evidence interface: [allowed declassified fields only]
+- Success observable / one-observation kill or reopen condition: [...]
+- Comparator / horizon / scaling regime: [...]
+- Dependency/dominance state: [UPSTREAM_INVALIDATOR|EXISTENCE_TEST|RELEASED; dominated work; required receipt-linked release]
+- Admission criteria: [relevance; coverage; diversity; duplication; constraints; safety; resources; state]
+- Pull route: `directing-research-sections` submits `SECTION_BID`; no named assignment
+- Lease constraints: [allowed action classes=`PROOF|BUILD|EXPERIMENT|MEASUREMENT`; terminal target=`PROOF_RECEIPT|RUN_RECEIPT|KILL_RECEIPT|EXACT_BLOCKER`; no method/candidate/run instruction]
+- First-intent/WIP budget: [firstIntentDueAt rule; control=0..2; proposal=0..1]
+- Signer / publication timestamp: [...]

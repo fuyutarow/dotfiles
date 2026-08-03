@@ -1,92 +1,47 @@
-# Research-family name + description desk-check
+# Route-only compatibility-shim trigger desk-check
 
-Read **only** the `name` and `description` of:
+Read only the `name` and `description` of the research-family skills. `directing-research` (`D`) is
+a compatibility router, not a fourth semantic owner. Specific asks invoke their owner directly.
 
-- `directing-research` (`D`)
-- `surfacing-blind-spots` (`B`)
-- `forging-novel-theses` (`F`)
-- `acting-on-hypotheses` (`A`)
-- `raising-resolution` (`R`)
-- `systematizing-knowledge` (`S`)
-- `orchestrating-agents` (`O`)
-- `arguing-research-papers` (`P`)
-- `governing-research-documentation` (`G`)
-- `continuing-long-running-tasks` (`C`)
+## FIRE — legacy broad or ambiguous asks enter D only for a routing decision
 
-A broad request must have one lead. A braided request may co-fire only with an explicit order. A decision
-artifact may have one owner.
-
-## Regression matrix
-
-| # | Realistic ask | Lead / ordered route | Boundary being tested |
+| # | Realistic ask | Expected route | Why D fires |
 |---|---|---|---|
-| 1 | 「どうすれば創造的な研究ができる？ テーマ、アイデア、実験、撤退まで」 | `D -> B -> D -> F -> D -> [A or domain executor] -> D` | broad lifecycle has one lead; expose, then apply the action gate |
-| 2 | “Which of these three research themes deserves the next six months?” | `D` | problem selection / >=2 bets |
-| 3 | 「材料探索を速くする、では雑すぎる。決定的な研究問題に作り直して」 | `D` | formulation, not present inspection |
-| 4 | “Given this fixed problem, invent a novel thesis from first principles.” | `F` | genesis only |
-| 5 | “This systematic residual may imply a new direction.” | `R -> D -> F` | verify present -> frame -> generate |
-| 6 | “Transfer this relation from distributed optimization and derive a prediction.” | `F` | structural transfer |
-| 7 | “Ten ideas exist; freeze/deduplicate and select by separate axes.” | `D` | batch admission |
-| 8 | “One expensive catalyst thesis exists; precommit its cheapest kill experiment.” | `A` | expensive/irreversible one-tree hard gate fires |
-| 9 | “Allocate GPU across three independent directions.” | `D` | portfolio cardinality |
-| 10 | “Synthesize 60 creativity papers, then identify future research gaps.” | `S -> D` | corpus state -> future selection |
-| 11 | “Use multiple agents; decide who generates, criticizes, verifies, and accepts.” | domain sequence `D/F/[A or executor]` fixed first; `O` leads topology | content vs control plane |
-| 12 | “Reviewer says the finished paper is not novel; narrow the claim or reopen research?” | `P -> D`; then `F -> [A or executor]` only if reopened | finished claim vs new thesis |
-| 13 | “Inspect the benchmark script for leakage and cheap victories.” | `R`; `D` only if reformulation follows | present fact vs normative formulation |
-| 14 | “Eight agents build a SoK and then choose research investments.” | `S` schema -> `O` dispatch -> `S` adjudication -> `D` | corpus method vs orchestration vs selection |
-| 15 | 「人間研究者として、問いをつくり、行き詰まったら寝かせ、実験で更新する創造的研究プロセス」 | `D`; incubation is an optional human branch | human researcher is in scope |
-| 16 | 「この研究計画の盲点と暗黙前提を掘って。まだ解決策や仮説は出さないで」 | `B` | expose only; no frame selection or thesis genesis |
-| 17 | “Interview me for unpublished failures, workarounds, and exceptions before reframing this project.” | `B -> D` | human tacit elicitation then program judgment |
-| 18 | 「選んだ問題フレームから、水平思考で構造的に異なる仮説を出して」 | `F` | selected frame exists; genesis owns lateral transformations |
-| 19 | “Find comparable donor relations from other fields, but do not map them to my target yet.” | `S` | target-agnostic donor discovery owns the `DONOR SET` |
-| 20 | “A donor set and selected frame exist. Map the relations, preserve failed correspondences, then decide whether to test or reopen.” | `D -> F -> D` | D admits/disposes; F maps or emits `MAPPING-BREAK`; no source-side adoption |
-| 21 | “Audit this completed research episode against its frozen intent and receipts. Did our process justify the frame update?” | `D` | semantic research-process postmortem, not dispatch review |
-| 22 | 「失敗して停止した研究 run も含め、事前意図・対照・欠測・代替仮説から振り返って」 | `D` | failed/stopped receipts remain in the denominator |
-| 23 | “This old project has no prospective intent and only partial public artifacts. Perform the most honest retrospective possible.” | `D` | historical absence yields `PARTIAL` or `UNAUDITABLE`, never reconstructed precommitment |
-| 24 | “Postmortem this generic production outage and fix the software incident process.” | `implementing-and-debugging` | generic software incident/postmortem is neither research-stage judgment nor control-plane review |
-| 25 | 「agent の発注が遅く、査読役も見えていた。dispatch/pacing のポストモーテムをして」 | `O` | control-plane postmortem owns bearer, visibility, pacing, and acceptance |
-| 26 | “Delete stale generated research views and retire duplicate canonical documents.” | `G` | document admission/lifecycle, not semantic research verdict |
-| 27 | “Keep this research task resumable across compact and hand it to another executor.” | `C` | durable task-state transport, not research evidence or judgment |
-| 28 | “Formulate this broad topic into several discriminating research problems.” | `D` | ordinary problem formulation; no postmortem ceremony |
-| 29 | 「この研究を進めて。必要なら複数 agent に委任して」 | `D` domain map, then `O` overlay | bare research progress has D lead; O fires only after domain-signed function map |
-| 30 | 「この研究課題の解像度を上げ、具体化して研究問題として定式化して」 | `D` | Japanese research-problem formulation belongs to `D`; `R` may supply only a silent cited factual row |
+| 1 | 「研究を進めて。何から始めるかも、実験後の振り返りもまだ決めていない」 | `D -> supervising-research-programmes`; later owners only when their entry state exists | bare legacy invocation has no explicit state |
+| 2 | “Use the old directing-research workflow for this new project, but route it to the current system.” | `D -> supervising-research-programmes` | explicitly requests the retired entrypoint and a compatibility route |
+| 3 | 「創造的研究を、問いづくりから局所実験、終了後の監査までどう運転する？」 | `D -> supervising-research-programmes -> directing-research-sections -> auditing-research-processes` | mixed end-to-end ask needs owner ordering; each later gate remains conditional |
+| 4 | “I have a programme question, a live section request, and a completed episode to inspect; who owns what?” | `D` emits one three-owner `ROUTING DECISION`, then stops | mixed ownership classification is the shim's sole artifact |
+| 5 | 「旧 v1 の intent/receipt/judgment が残っている。読める状態を保ちつつ、今の担当に振り分けて」 | `D` preserves immutable v1 compatibility, then routes the new semantic question by state | explicit compatibility/readability request |
+| 6 | “Help plan and run this research effort; I don't know whether it is programme design, section work, or an audit yet.” | `D` classifies the earliest explicit state and routes once | genuinely ambiguous legacy broad ask |
 
-## Negative boundaries
+## NO-FIRE — specific asks bypass D
 
-| Ask | Must not lead |
-|---|---|
-| daily imagination/self-care habits unrelated to a research decision | none of this family |
-| one present artifact/source/code fact | not `D/F/A`; route `R` |
-| hidden premises or human tacit constraints in one existing plan/frame, before solutions | not `D/F/A/R`; route `B` |
-| one corpus position | not `D/F/A`; route `S` |
-| donor discovery without a selected target mapping | not `D/F`; route `S` |
-| source-to-target correspondence or a failed correspondence for one selected frame | not `D/S`; route `F` |
-| one expensive/irreversible selected tree's threshold, outcome table, commit, pivot, kill | not `D/F`; route `A` |
-| one cheap deterministic reversible probe | not `A`; route domain/plain executor, then return result to `D` |
-| agent roles, blindness, visibility, veto, acceptance | not domain skills; route `O` |
-| finished manuscript claim | not `D/F/A`; route `P` |
-| generic software incident postmortem | not `D/O`; route `implementing-and-debugging` |
-| dispatch, pacing, delegation, or acceptance postmortem | not `D`; route `O` |
-| durable document admission, authority, review, retention, or deletion | not `D`; route `G` |
-| compact, resume, or executor handoff transport | not `D`; route `C` |
+| # | Realistic ask | Direct owner | Boundary |
+|---|---|---|---|
+| 1 | “Reconstruct the programme problem landscape and decide which open issues deserve allocation.” | `supervising-research-programmes` | programme/frame/portfolio meaning |
+| 2 | 「現在の OPEN_ISSUE に bid して、この SECTION_MANDATE 内で次の run intent を登録して」 | `directing-research-sections` | one section's bid/intent loop |
+| 3 | “Audit this frozen failed episode against its intents, receipts, and denominator.” | `auditing-research-processes` | terminal bounded process audit |
+| 4 | “What do these sixty papers establish?” | `systematizing-knowledge` | corpus position |
+| 5 | “Is this residual real or a pipeline artifact?” | `raising-resolution` | one present factual row |
+| 6 | 「この既存計画の暗黙の前提を掘って。解決策はまだ出さないで」 | `surfacing-blind-spots` | premise exposure only |
+| 7 | “Generate a batch of thesis candidates for this selected frame.” | `forging-novel-theses` | candidate genesis, not admission |
+| 8 | “Precommit the cheapest discriminating test for this expensive irreversible selected bet.” | `acting-on-hypotheses` | one costly load-bearing tree |
+| 9 | “Turn these completed results into one defensible paper claim.” | `arguing-research-papers` | finished claim |
+| 10 | “Which research documents are authoritative, retained, or retired?” | `governing-research-documentation` | document lifecycle |
+| 11 | “Keep this task resumable across compact and executor handoff.” | `continuing-long-running-tasks` | continuity transport |
+| 12 | “Choose bearers, visibility, vetoes, and acceptance for this signed research map.” | `orchestrating-agents` | control-plane overlay |
+| 13 | “Postmortem this generic production outage and fix its root cause.” | `implementing-and-debugging` | software incident, not research audit |
 
-## Reciprocal-cut checklist
+## Co-fire and stop checks
 
-- `D <-> B`: lifecycle/frame judgment versus premise/tacit-constraint exposure.
-- `D <-> S`: program/corpus decision versus evidence state; `S` owns target-agnostic donor discovery and `DONOR SET`.
-- `D <-> F`: problem selection/formulation/admission and transfer disposition versus thesis genesis and source-to-target mapping / `MAPPING-BREAK`.
-- `D <-> A`: selection/standing policy/>=2 bets versus one expensive/irreversible load-bearing tree.
-- `D <-> R`: normative future problem versus inspectable present artifact.
-- `D <-> P`: research program before a finished claim versus manuscript argument.
-- `D/F/A/P <-> O`: domain meaning versus agent topology/authority.
-- `D <-> O` postmortem seam: research semantics and transition versus dispatch/pacing/delegation.
-- `D <-> G`: semantic retrospective verdict versus durable document lifecycle.
-- `D <-> C`: semantic research state versus cross-session transport of artifact loci.
-- `F <-> S`: candidate generation versus novelty/corpus evidence.
-- `F <-> R`: future candidate versus present observation.
-- `F <-> P`: untested candidate versus finished claim.
+- `D` may order owners for a mixed ask; it never co-authors their artifacts.
+- `supervising-research-programmes` stops before section method, candidate, protocol, intent, or run.
+- `directing-research-sections` stops before programme mutation and terminal process audit.
+- `auditing-research-processes` returns a non-enacting recommendation and never directs live work.
+- Documentation, continuity, and orchestration compose after their domain inputs exist; none receives
+  research-semantic ownership from `D`.
+- The operational North Star belongs to the new family: valid SEARCH receipts/hour plus
+  receipt-linked LEARN commits/hour. `D` neither calculates nor optimizes it.
 
-Any cut present on only one side is a collection-level failure.
-- `B <-> R`: implicit premise/tacit constraint versus fixed present fact with a citable locus.
-- `B <-> F`: expose assumptions without solutions versus generate candidate theses after a selected frame.
-- `B <-> A`: pre-test premise excavation versus one gated expensive/irreversible tree's forward test/commit.
+Any row that makes `D` write a programme, section, run, candidate, audit, retrospective, metric value,
+or transition is a collection-level failure.

@@ -1,0 +1,11 @@
+# PROGRAMME_DECISION: [decision-id]
+
+- Schema / snapshot revision / fence: [programme-decision/v2 | integer | token]
+- Decision type: [publish | revise | admit | decline | defer | pause | close | retire | reopen | authority-request]
+- Inputs: [allowlisted loci + sha256 only]
+- Considered criteria: [relevance; coverage; diversity; duplication; constraints; safety; resources; state]
+- Decision / scope / affected issue IDs: [...]
+- Reasons and unresolved uncertainty: [...]
+- Next authoritative artifact / wake event: [...]
+- Non-action statement: [no method, candidate, protocol, run, or live-section instruction]
+- Signer / timestamp: [...]

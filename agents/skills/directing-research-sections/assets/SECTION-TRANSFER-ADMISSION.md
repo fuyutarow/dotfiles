@@ -1,0 +1,26 @@
+# SECTION TRANSFER ADMISSION
+
+SCHEMA: research-section-transfer-admission/v1
+TRANSFER_ADMISSION_ID: <stable-id>
+RECIPIENT_SECTION_ID: <stable-id>
+RECIPIENT_DIRECTOR_INSTANCE_ID: <stable-id>
+RECIPIENT_DIRECTOR_ROLE_GRANT: <immutable-grant-id>
+SECTION_MANDATE_LOCUS: <locator>
+SECTION_MANDATE_SHA256: <lowercase-64-hex>
+MANDATE_REVISION: <integer>
+MANDATE_FENCE: <opaque-token>
+SECTION_CHARTER_LOCUS: <locator>
+SECTION_CHARTER_SHA256: <lowercase-64-hex>
+DELIVERY_LOCUS: <durable-locator>
+DELIVERY_SHA256: <lowercase-64-hex>
+TRANSFER_LOCUS: <durable-locator>
+TRANSFER_SHA256: <lowercase-64-hex>
+SUBSCRIPTION_LOCUS: <durable-locator>
+SUBSCRIPTION_SHA256: <lowercase-64-hex>
+IDEMPOTENCY_KEY: <TRANSFER_SHA256+RECIPIENT_SECTION_ID>
+DECISION: <ADOPT|REJECT|DEFER>
+BOUNDED_REASON_CLASS: <applicable|contraindicated|conflict|duplicate|out-of-scope|insufficient-evidence|defer-dependency>
+DECIDED_AT: <RFC3339>
+LOCAL_STATE_MUTATION: NO
+PROGRAMME_VISIBLE: NO
+AUTHORITY: ADMISSION_ONLY

@@ -187,6 +187,7 @@ describe("frozen transfer artifact chain", () => {
 
 		const donorResult = run(donorCheck, [paths.donorPath]);
 		const candidateResult = run(candidateCheck, [
+			"--legacy-v1",
 			"--donor-set",
 			paths.donorPath,
 			paths.transferPath,

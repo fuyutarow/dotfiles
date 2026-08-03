@@ -550,7 +550,14 @@ function validateFrozenTransferBundle(
 		);
 	}
 	const upstream = Bun.spawnSync({
-		cmd: ["bun", thesisGateCheckPath, "--donor-set", donorSetPath, "-"],
+		cmd: [
+			"bun",
+			thesisGateCheckPath,
+			"--legacy-v1",
+			"--donor-set",
+			donorSetPath,
+			"-",
+		],
 		stderr: "pipe",
 		stdin: new Blob([bytes]),
 		stdout: "pipe",

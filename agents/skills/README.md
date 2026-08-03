@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**41 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**45 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -39,7 +39,10 @@ than pretending unknown unknowns are exhaustively enumerable.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
-- [`directing-research`](directing-research/) — Entrypoint for creative research: diagnose the stage, construct/select/formulate problems, admit candidate batches, and steer a portfolio.
+- [`directing-research`](directing-research/) — Legacy route-only shim for broad or ambiguous creative-research invocations.
+- [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.
+- [`directing-research-sections`](directing-research-sections/) — Direct one granted live section: local admission, run intent, receipt-linked learning, and declassified signal.
+- [`auditing-research-processes`](auditing-research-processes/) — Audit one frozen bounded research episode and return a non-enacting recommendation.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
 
 Research routing spine:
@@ -49,20 +52,28 @@ corpus ─ systematizing-knowledge ───────────────
 present artifact ─ raising-resolution ───────────┤
 existing plan/frame ─ surfacing-blind-spots ─────┤
                                                  ▼
-directing-research: construct/select/formulate/steer
+supervising-research-programmes: frame / issue / mandate / portfolio
+                                                 │
+                                                 ▼
+directing-research-sections: charter one granted section
                                                  │
                                                  ▼
 forging-novel-theses: generate candidate packets
                                                  │
                                                  ▼
-directing-research: freeze/deduplicate/admit
+directing-research-sections: freeze / deduplicate / admit locally
                                                  │
                                                  ▼
 [acting-on-hypotheses if expensive/irreversible; domain executor if cheap/reversible]: act on ONE tree
                                                  │
                             ┌────────────────────┴───────────────────┐
                             ▼                                        ▼
-directing-research: update/reopen portfolio         arguing-research-papers: finished claim
+section receipt-linked learning → programme signal   arguing-research-papers: finished claim
+                            │
+                            ▼
+supervising-research-programmes: update/reopen portfolio
+
+frozen bounded episode → auditing-research-processes: audit + non-enacting recommendation
 ```
 
 | Function | State transition | Owned artifact | Skill |
@@ -70,10 +81,12 @@ directing-research: update/reopen portfolio         arguing-research-papers: fin
 | PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
 | CORPUS-GROUND | unsystematized corpus → evidence state | claim/evidence ledger | `systematizing-knowledge` |
 | EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
-| FRAME / STEER | exposed premises/evidence → selected problem/program state | RESEARCH JUDGMENT SPEC | `directing-research` |
+| FRAME / STEER | exposed premises/evidence → selected programme problem/state | `PROGRAMME_SNAPSHOT` / `OPEN_ISSUE` / `SECTION_MANDATE` / `PROGRAMME_DECISION` | `supervising-research-programmes` |
+| DIRECT SECTION | granted mandate → local admitted run/learning state | `SECTION_CHARTER` / `RUN_INTENT` / `SECTION_SIGNAL` | `directing-research-sections` |
 | FORGE | selected frame → thesis batch | Candidate packets + coverage matrix | `forging-novel-theses` |
 | TEST / COMMIT | one expensive/irreversible selected tree → confidence/commit decision | Map / Loop table / Leap decision | `acting-on-hypotheses` |
 | RUN CHEAP PROBE | one deterministic/reversible selected tree → observed result | result with locus | domain/plain executor |
+| AUDIT | frozen bounded episode → evidence-bounded process finding | `RESEARCH_PROCESS_AUDIT` / `AUDIT_RECOMMENDATION` | `auditing-research-processes` |
 | ARGUE | completed evidence → defensible paper claim | CLAIM SPEC | `arguing-research-papers` |
 
 `orchestrating-agents` is orthogonal: it owns who/when/visibility/veto/acceptance around this spine, not
@@ -96,6 +109,7 @@ the research judgments themselves.
 ### Coding & proofs
 
 - [`implementing-and-debugging`](implementing-and-debugging/) — Discipline for writing or fixing non-trivial code: understand intent, fix the root cause, avoid flailing.
+- [`practicing-tiger-style`](practicing-tiger-style/) — Risk-calibrated Tiger discipline for high-consequence code: bounds, invariants, and a checkable failure-mode ledger.
 - [`refactoring-code`](refactoring-code/) — Behavior-preserving structural change toward 責務分界/局所化; harshly refuses 場当たり churn; enforces the two hats and name-your-oracle.
 - [`writing-julia`](writing-julia/) — Write correct, fast Julia for research — reach for it before any Julia coding or numerics.
 - [`optimizing-julia-gpu-kernels`](optimizing-julia-gpu-kernels/) — Write and optimize CUDA.jl GPU kernels — or prove you shouldn't (vendor libs and fusion beat hand kernels).

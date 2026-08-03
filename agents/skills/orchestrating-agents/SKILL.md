@@ -2,7 +2,7 @@
 name: orchestrating-agents
 description: >-
   署名済みtask/function mapへ委任・並列化・独立検収を載せるcontrol plane。明示的dispatch、配役、
-  visibility、dependency、veto、verification、acceptanceで使う。裸の「研究を進めて」では発火せず、
+  visibility、dependency、veto、verification、acceptance、GPU/CPU/RAM/VRAM resource admissionで使う。裸の「研究を進めて」では発火せず、
   directing-researchのstage診断と署名後にoverlayする。Postmortemはdispatch/pacing/delegation/
   visibility/acceptance/control-plane failureだけ; generic software incident/postmortem →
   implementing-and-debugging。Durable co-fire: continuity record → orchestration overlay → writer
@@ -16,7 +16,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2607.14.2 (2026-08-02) — durable co-fire order and incident cut.
+> **Version**: v2608.1.1 (2026-08-03) — user-systemd kernel limits for admitted jobs.
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -71,6 +71,8 @@ artifact が無い規則は、実行済みとして数えない。
 | `acceptance` | 凍結した完成定義に対する監督の最終採否。 |
 | `candidate packet` | 候補、証拠、仮定、弱点、費用を揃えた正規化単位。 |
 | `LOW-EFFORT(<段>)` | 既定より低い effort で腕を発射するときに prompt へ置く grep 可能な宣言。 |
+| `RESOURCE-CLASS(NONCOMPUTE)` | 数値実験、benchmark、resident service、parallel test、nested fanoutを含まないdispatchの宣言。 |
+| `RESOURCE-ENVELOPE(<path>)` | 発射前に凍結したCPU/RAM/VRAM/process/walltime envelopeへの絶対path。 |
 
 ## LAW
 
@@ -244,7 +246,7 @@ P5はP2へ吸収済みであり、この番号を別のgateへ再利用しない
 | P3 PRE-SEND FLOOR | 目安十行超の報告は先にfileへ保存し、利用可能な文章検査を通す。報告・設計・登録のいずれでも、数値にはsourceと測定体制を添え、条件差を明記する。体制のない値を設計根拠にしない。 | report path、検査command/resultまたは不存在確認、数値→source/conditions表。 |
 | P4 ROUND-TRIP ECONOMY | briefを自己完結させ、全指摘に修復経路を求める。同型指摘が二巡続けば成果物でなく仕様へ戻す。 | `references/delegation-contracts.md` が SOLE home。brief id、round log、spec差分。 |
 | P6 VERIFY-NOT-TRUST | 載荷claimは自前計算、一次資料、独立再計算のいずれかで確定する。達成級の語もclaimであり、独立audit前は前進の報告とする。 | claim→evidence表、blind audit、scope付きverdict。不一致claimは裁定まで公表停止。 |
-| P7 DEVICE-BUDGET | 結論を左右する計算は最速の適合資源へ置き、最小pilotで費用を測ってから本走する。競合accountは直列化する。 | `references/measurement-and-resources.md` P7。resource/account付き発射表とpilot。 |
+| P7 DEVICE-BUDGET | pilotも含め、数値計算・parallel test・resident serviceは算術memory boundとaggregate資源envelopeのadmission後にだけ発射する。互換で空いたGPUがあればCPUを拒否し、auto parallelismを使わない。 | `references/measurement-and-resources.md` P7がSOLE home。dispatch marker、envelope、`agent-resource-run` verdict、高水位。 |
 | P8 FOOTING | 数値は比較軸が一致した土俵だけで差として読み、凍結基準の到達可能性を本走前に検算する。 | 同 reference P8。全軸差分表、到達可能性の式、独立再計算。 |
 | P9 CONFOUND-TABLE | 一変数の効果を問う前に交絡表を書く。機構の効果を主張するなら、機構を外した対照を同一条件で置く。 | 同 reference P9が SOLE home。交絡表、「機構なし」行、条件差が対象機構だけの照合。 |
 | P10 ARTIFACT-REUSE | 分単位以上の中間生成物は初回に保存し、指紋一致時だけ再利用する。更新・仕様変更・破損で失効させる。 | 同 reference P10。manifest、digest、input fingerprint、再構築理由。 |

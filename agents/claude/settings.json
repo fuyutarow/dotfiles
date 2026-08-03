@@ -224,11 +224,13 @@
     "frontend-design@claude-plugins-official": true,
     "rust-analyzer-lsp@claude-plugins-official": true
   },
+  "effortLevel": "xhigh",
   "ultracode": true,
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "enableWorkflows": true
 }

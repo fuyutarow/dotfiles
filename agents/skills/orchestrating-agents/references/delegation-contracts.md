@@ -26,7 +26,7 @@ No harness → same map, serial。並列の腕を、互いに出力を見ない�
 | 2 | 各機能を小規模・大規模・長走行・読解/検証のどれかに型づける。 | 発注記録に形と選択理由がある。形の選択表に当て直す test で一致する。 |
 | 3 | 入出力の界面、所有範囲、依存、decision rightsを凍結する。非生成仕事は合否も発射前に凍結する。生成仕事はlaunch項目だけを第一freezeに置き、domain artifact / digest後にfinal acceptance criteriaを第二freezeする。仕様を書けない仕事は発射しない。 | 指示書の必須欄が全て埋まり、仕事型に対応するfreeze時点と、境界外または不可逆な判断の停止条件がある。 |
 | 4 | 必要な工程だけを起動する。nontrivial成果物がある、載荷claimがある、または決定的machine oracleがない場合にindependent verifierを起動し、その場合だけauthorと分ける。 | verifierの起動理由、起動時のauthorとの分離、同じ観測が複数役へ重複計上されていないprovenance表。 |
-| 5 | 依存仕事を pipeline、独立仕事を capacity-aware parallel にする。 | DAG と資源/勘定列がある。資源の判定は `measurement-and-resources.md` の `P7` を test に使う。 |
+| 5 | 各dispatchへ資源classを一つだけ付け、pilotより前にadmissionする。依存仕事を pipeline、独立かつ予約が競合しない仕事だけcapacity-aware parallelにする。 | `RESOURCE-CLASS(NONCOMPUTE)` または絶対pathの `RESOURCE-ENVELOPE` がちょうど一つあり、後者は `measurement-and-resources.md` P7のrunner verdictを持つ。 |
 | 6 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。 | schema検査、証拠の照合、起動時のverdict、supervisorの採否と根拠がある。 |
 
 ## 2. 自己完結する指示書
@@ -46,6 +46,7 @@ formulation / evaluability artifactとdigestを要求する。
 | **完成の定義** | 非生成仕事は最終完成条件を発射前に凍結する。生成仕事はlaunch時のphase-exitとmaturity release condition、domain artifact / digest後のfinal acceptance criteriaを分ける。 | 各条件が成果物の locus または runnable test に結線され、生成仕事では二つのfreeze時点が記録されている。 |
 | **独立検収** | 主張が偽なら落ちる oracle、再計算、照合手順を成果物を見る前に設計し、lens / oracle / expected verdictを生成側からsealedにする。既知のhard constraintsとstage-exit criteriaは開示できる。 | 「主張が偽でもこの観測は出得るか」の答えが NO。YES なら test を無効とする。sealと開示範囲が記録されている。 |
 | **時間予算** | 硬い期限、中間報告点、中断条件、部分納品の保存先。 | 発射時刻・期限・中間条件があり、超過時の処理を再現できる。 |
+| **資源 admission** | `RESOURCE-CLASS(NONCOMPUTE): <理由>` または `RESOURCE-ENVELOPE(/absolute/path.json): agent-resource-run only` を一つだけ置く。数値実行、benchmark、resident service、parallel test、nested fanoutはNONCOMPUTEにしない。pilotもCPU/RAM/VRAM/process/scratch/walltimeと算術memory boundを先に凍結する。 | `measurement-and-resources.md` P7のschema/admission test、runnerの`ADMIT` verdict、発射後の高水位/cleanup。 |
 | **decision rights** | supervisorが凍結する外部界面・不可逆判断・acceptance、executorへ委譲する境界内の可逆な方法・仮説・表現、停止する境界外・不可逆判断。 | `C3` の三分類、decision log、停止命令がある。 |
 | **生成 / 評価の条件欄** | 生成仕事では必ず、launch freeze、domain maturity owner / release condition、第二freezeの時点、generative challengeの非veto、verdict-bearing evaluationの開始条件を書く。 | launch→domain artifact / digest→final criteria freeze→verdict / blind auditの順序がある。release artifact / digestが無いpacketをnormalization、synthesis、verdictへ渡さない。非生成仕事では欄を省略できる。 |
 | **P10 再利用** | 流用する中間物、入力指紋、失効条件、再構築理由。 | `measurement-and-resources.md` の `P10` test が通る。 |

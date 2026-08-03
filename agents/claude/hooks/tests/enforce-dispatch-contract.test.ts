@@ -2,10 +2,34 @@ import { describe, expect, test } from "bun:test";
 import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "enforce-dispatch-contract.ts";
-const pre = (tool_name: string, tool_input: unknown) => ({
+const RESOURCE_DECLARATION =
+  "RESOURCE-CLASS(NONCOMPUTE): hook fixture performs no numerical work";
+const withResource = (prompt: string) => `${RESOURCE_DECLARATION}\n${prompt}`;
+const rawPre = (tool_name: string, tool_input: unknown) => ({
   tool_name,
   tool_input,
 });
+const pre = (tool_name: string, tool_input: unknown) => {
+  if (
+    (tool_name === "Agent" || tool_name === "Task") &&
+    typeof tool_input === "object" &&
+    tool_input !== null &&
+    !Array.isArray(tool_input) &&
+    typeof (tool_input as { prompt?: unknown }).prompt === "string"
+  ) {
+    const input = tool_input as Record<string, unknown> & { prompt: string };
+    return rawPre(tool_name, { ...input, prompt: withResource(input.prompt) });
+  }
+  return rawPre(tool_name, tool_input);
+};
+const markWorkflowAgents = (script: string) =>
+  script.replace(
+    /\bagent\s*\(/g,
+    (call) => `${call}/* ${RESOURCE_DECLARATION} */ `,
+  );
+const wf = (script: string) =>
+  rawPre("Workflow", { script: markWorkflowAgents(script) });
+const rawWf = (script: string) => rawPre("Workflow", { script });
 
 describe("Agent / Task", () => {
   test("model omitted -> allow + inject sonnet via updatedInput", () => {
@@ -14,7 +38,7 @@ describe("Agent / Task", () => {
     expect(r.code).toBe(0);
     expect(d.permissionDecision).toBe("allow");
     expect(d.updatedInput.model).toBe("sonnet");
-    expect(d.updatedInput.prompt).toBe("x");
+    expect(d.updatedInput.prompt).toBe(withResource("x"));
   });
 
   test("non-sonnet model -> deny", () => {
@@ -49,7 +73,11 @@ describe("Agent / Task", () => {
     const r = runHook(HOOK, pre("Task", input));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("allow");
-    expect(d.updatedInput).toEqual({ ...input, model: "sonnet" });
+    expect(d.updatedInput).toEqual({
+      ...input,
+      prompt: withResource(input.prompt),
+      model: "sonnet",
+    });
   });
 
   test("fable -> deny even with an escalation declaration", () => {
@@ -62,11 +90,43 @@ describe("Agent / Task", () => {
     );
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
+
+  test("missing resource declaration -> deny", () => {
+    const r = runHook(
+      HOOK,
+      rawPre("Agent", { prompt: "inspect", model: "sonnet" }),
+    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      "RESOURCE-CLASS(NONCOMPUTE)",
+    );
+  });
+
+  test("one absolute resource envelope declaration -> silent pass", () => {
+    const r = runHook(
+      HOOK,
+      rawPre("Agent", {
+        prompt:
+          "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run only\nrun it",
+        model: "sonnet",
+      }),
+    );
+    expect(r.code).toBe(0);
+    expect(r.stdout.trim()).toBe("");
+  });
+
+  test("two resource declarations -> deny", () => {
+    const r = runHook(
+      HOOK,
+      rawPre("Task", {
+        prompt: `${RESOURCE_DECLARATION}\n${RESOURCE_DECLARATION}\ninspect`,
+        model: "sonnet",
+      }),
+    );
+    expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
 });
 
 describe("Workflow", () => {
-  const wf = (script: string) => pre("Workflow", { script });
-
   test("all agent() calls literal sonnet -> silent pass", () => {
     const r = runHook(
       HOOK,
@@ -163,14 +223,20 @@ describe("Workflow", () => {
   test("unreadable scriptPath -> deny", () => {
     const r = runHook(
       HOOK,
-      pre("Workflow", { scriptPath: "/nonexistent/wf.js" }),
+      rawPre("Workflow", { scriptPath: "/nonexistent/wf.js" }),
     );
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+  });
+
+  test("agent() without a same-call resource declaration -> deny", () => {
+    const r = runHook(HOOK, rawWf(`await agent('x', {model: 'sonnet'})`));
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      "resource declaration",
+    );
   });
 });
 
 describe("Workflow low-effort declaration (2026-07-28)", () => {
-  const wf = (script: string) => pre("Workflow", { script });
   const lowDecl = "LOW-EFFORT(triage): mechanical count, not reasoning-heavy";
 
   test("effort:'low' with no declaration -> deny", () => {
@@ -367,7 +433,7 @@ describe("explicit model policy", () => {
 
   test("Workflow fable agent() denies", () => {
     const script = `phase('x')\nawait agent('${decl}', {model: 'fable'})`;
-    const r = runHook(HOOK, pre("Workflow", { script }));
+    const r = runHook(HOOK, wf(script));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("model:'sonnet'");

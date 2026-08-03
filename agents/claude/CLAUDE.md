@@ -13,6 +13,12 @@
   intelligence-sensitive>`. Raising effort needs no declaration — only lowering does, because
   Anthropic documents Sonnet 5's `low` as reserved for work that is *not* intelligence-sensitive,
   and almost everything we fan out is.
+- **Every dispatch declares its resource class exactly once.** Use
+  `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,
+  benchmark, resident service, parallel test, or nested fanout. Otherwise use
+  `RESOURCE-ENVELOPE(/absolute/path.json): agent-resource-run only`; pilot is not exempt.
+  The hook denies missing, malformed, relative-path, or duplicate declarations. The schema and
+  GPU-first/CPU-exception rules live only in `orchestrating-agents` P7.
 - **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-search`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious

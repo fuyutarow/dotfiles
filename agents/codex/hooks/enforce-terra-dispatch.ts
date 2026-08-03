@@ -2,6 +2,10 @@
 // The allowlist is mechanical only; role rationale belongs in orchestrating-agents.
 
 import { readFileSync } from "node:fs";
+import {
+  RESOURCE_DECLARATION_HELP,
+  resourceDeclarationResult,
+} from "../../resource-control/lib/dispatch-declaration.ts";
 
 const TERRA = "gpt-5.6-terra";
 
@@ -47,6 +51,22 @@ function main(): void {
   }
 
   const input = payload.tool_input;
+  const dispatchText =
+    typeof input.message === "string"
+      ? input.message
+      : typeof input.prompt === "string"
+        ? input.prompt
+        : null;
+  if (dispatchText === null)
+    denyMalformed("Agent message/prompt must be a string");
+  const resource = resourceDeclarationResult(dispatchText);
+  if (!resource.ok) {
+    output(
+      "deny",
+      `dispatch-contract: ${resource.reason}. Require ${RESOURCE_DECLARATION_HELP}.`,
+    );
+    return;
+  }
   if (!("model" in input)) {
     output("allow", "dispatch-contract: injected model:'gpt-5.6-terra'", {
       ...input,

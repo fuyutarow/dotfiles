@@ -4,6 +4,10 @@
 // Policy:
 //   - Agent/Task: omitted model -> inject model:'sonnet'; only an explicit Sonnet passes.
 //                 Forks and every other model are denied.
+//   - Every dispatch declares exactly one resource class. NONCOMPUTE excludes numerical
+//                 experiments, benchmarks, resident services, parallel tests, and nested
+//                 fanout. Compute work points to an absolute admitted envelope and may run
+//                 commands only through agent-resource-run.
 //   - Workflow: every agent() call has exactly one literal model:'sonnet'. Named/child/
 //               unreadable workflows are denied because they cannot be inspected.
 //   - The role binding lives in orchestrating-agents/references/model-roster.md; this hook
@@ -24,6 +28,10 @@
 // itself is missing.
 
 import { readFileSync } from "node:fs";
+import {
+  RESOURCE_DECLARATION_HELP,
+  resourceDeclarationResult,
+} from "../../resource-control/lib/dispatch-declaration.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /(?:^|[-_])sonnet(?:$|[-_])/i;
@@ -202,6 +210,7 @@ function checkWorkflowScript(src: string): void {
 
   const bad: number[] = [];
   const badEffort: number[] = [];
+  const badResource: number[] = [];
   const re = /\bagent\s*\(/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(blanked)) !== null) {
@@ -218,8 +227,12 @@ function checkWorkflowScript(src: string): void {
       continue;
     }
     const span = blanked.slice(open, i);
+    const originalSpan = src.slice(open, i);
     if (!directWorkflowModel(src, blanked, open, i - 1))
       bad.push(src.slice(0, m.index).split("\n").length);
+    if (!resourceDeclarationResult(originalSpan).ok) {
+      badResource.push(src.slice(0, m.index).split("\n").length);
+    }
 
     // A literal effort:'low' on this call needs a same-span LOW-EFFORT(<stage>): <reason>
     // declaration (see orchestrating-agents/SKILL.md, "Durable role topology"). FAIL-OPEN
@@ -236,7 +249,7 @@ function checkWorkflowScript(src: string): void {
         break;
       }
     }
-    if (low && !hasLowEffortDeclaration(src.slice(open, i))) {
+    if (low && !hasLowEffortDeclaration(originalSpan)) {
       badEffort.push(src.slice(0, m.index).split("\n").length);
     }
   }
@@ -262,6 +275,15 @@ function checkWorkflowScript(src: string): void {
         `declaration and re-invoke.`,
     );
   }
+
+  if (badResource.length > 0) {
+    decidePre(
+      "deny",
+      `dispatch-contract: agent() call(s) lack exactly one valid same-call resource ` +
+        `declaration at line(s) ${[...new Set(badResource)].join(", ")}. Require ` +
+        `${RESOURCE_DECLARATION_HELP}.`,
+    );
+  }
 }
 
 function main(): void {
@@ -281,6 +303,22 @@ function main(): void {
         "deny",
         "dispatch-contract: fork is not allowed; dispatch an Agent or Task on Sonnet.",
       );
+    }
+    const prompt =
+      typeof ti.prompt === "string"
+        ? ti.prompt
+        : typeof ti.message === "string"
+          ? ti.message
+          : null;
+    if (prompt === null) {
+      decidePre(
+        "deny",
+        `dispatch-contract: Agent/Task has no inspectable prompt; require ${RESOURCE_DECLARATION_HELP}.`,
+      );
+    }
+    const resource = resourceDeclarationResult(prompt);
+    if (!resource.ok) {
+      decidePre("deny", `dispatch-contract: ${resource.reason}.`);
     }
     if (!("model" in ti)) {
       decidePre("allow", "dispatch-contract: injected model:'sonnet'", {

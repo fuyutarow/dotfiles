@@ -1105,3 +1105,70 @@ other's semantic artifact.
 Receipts: description 876 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
 exit 0 (`FAIL=0 WARN=0`); generic incident, control-plane retrospective, and durable-order desk-check
 3/3 PASS.
+
+## 2026-08-03: resource-admission incident reforge (v2608.1.0)
+
+Observed failure: a 12-core host had a 15-minute load of 23.02, 54/58 GiB RAM used, and 15/16 GiB
+swap used while an idle RTX 3060 retained ample VRAM. One proposed Golub–Kahan run had no rank cap;
+its retained left/right bases cost 16 MiB per rank and could exceed remaining RAM before the target
+mass was reached. Independently, user-global Serena stdio registration multiplied one LSP-owning
+server per client/session. These are capacity-admission and lifecycle failures, not new scientific
+acceptance criteria.
+
+Distillation stays inside P7 rather than adding a gate. `measurement-and-resources.md` is the sole
+home for the pre-pilot envelope, conditional GPU-first rule, aggregate reservations, analytic memory
+bound, system reserve, and monitor-enforcement limitation. `delegation-contracts.md` adds exactly one
+dispatch field/pointer; the core P7 row remains an entrypoint. Hard behavior is implemented in
+`agents/resource-control/agent-resource-run.ts` and the Claude/Codex dispatch hooks.
+
+Desk-check:
+
+| Ask | Expected | Result |
+|---|---|---|
+| 「サブエージェントでJulia探索を並列化。GPU/RAM上限を決めて」 | FIRE here + Julia/GPU domain skills | PASS: description now names resource admission and existing dispatch tokens remain |
+| 「GPUが空いているのにCPUで大規模Krylov pilotを回してよい？」 | FIRE P7, then Julia/GPU owner | PASS |
+| 「READMEを一文直して」 | NO-FIRE resource path | PASS: NONCOMPUTE marker only; no orchestration ceremony inferred |
+| 「単発のread-only source確認を一腕へ」 | FIRE only if explicitly dispatched; NONCOMPUTE | PASS |
+
+Focused evidence at authoring time: resource/Serena/hook Bun suite `80 pass / 0 fail`; both binary
+script floors `FAIL=0` with shebang-only WARNs justified by their PATH symlinks; targeted skill floor
+had no FAIL. The Linux runner is deliberately not called a cgroup hard-memory limit: RSS/process
+enforcement is sampled every 200 ms and fail-closed on unsupported platforms.
+
+## 2026-08-03: user-systemd hard-limit follow-up (v2608.1.1)
+
+The prior no-user-manager statement was falsified after the Desktop app-server restart:
+`systemctl --user show-environment` succeeded. A transient scope accepted `MemoryMax`,
+`MemorySwapMax=0`, `TasksMax`, and `OOMPolicy=kill`; allocating 256 MiB inside a 64 MiB scope
+returned exit 137 with `Result=oom-kill`, while host RAM and swap remained stable. A separate scope
+reported `CPUQuotaPerSecUSec=1s` for `CPUQuota=100%`.
+
+Negative evidence is retained: systemd accepted `AllowedCPUs=0`, but the scoped process still
+reported `Cpus_allowed_list: 0-11` and no effective cpuset. The runner therefore keeps disjoint
+`taskset` affinity and adds a cgroup CPU quota; it does not claim kernel cpuset isolation.
+
+P7 and the runner now map admitted CPU, host RAM, zero job swap, and a coarse thread-aware task
+ceiling into a user-systemd scope. The 200 ms monitor remains responsible for the exact process
+count and readable breach verdicts; VRAM and scratch remain reservations, not kernel limits. The
+runner probes the required properties before admission and fails closed instead of falling back to
+monitor-only execution. Focused verification after the change: resource/Serena suite `20 pass / 0
+fail`, including a deliberately delayed monitor whose 64 MiB cgroup kills a 256 MiB allocation
+first. Scope, reservation, port, and owned descendants were empty after explicit Serena shutdown.
+
+## 2026-08-03: cgroup descendant-cleanup closure
+
+The process-group monitor is intentionally exact but a child can create a new session and leave that
+PGID while remaining in the admitted cgroup. The controller already issued `systemctl stop` during
+finalization, but ignored its exit status and emitted `PASS` before cleanup completed. That made an
+unverifiable cgroup teardown look successful.
+
+The runner now checks whether the transient scope is already inactive/absent, otherwise stops it and
+rechecks the state. It releases the admission lease in either case, but fails closed instead of
+emitting `PASS` when scope cleanup cannot be verified. `PASS` is emitted only after finalization.
+
+Red-to-green receipts from `mise run test:resource-control`:
+
+- Red: `21 pass / 1 fail`; a forced cleanup-verification failure resolved successfully under the old
+  behavior.
+- Green: `22 pass / 0 fail`; the forced failure rejects, and a real `setsid` descendant is absent
+  after the controller returns while the reservation directory contains no lease.

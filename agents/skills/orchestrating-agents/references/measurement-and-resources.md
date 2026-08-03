@@ -34,20 +34,121 @@ schema validation とdigest再計算が共通の floor test である。意味�
 
 ## P7 DEVICE-BUDGET — 資源と費用
 
-| 規則 | artifact/test |
+### RESOURCE-ADMISSION BEFORE PILOT
+
+pilot、smoke、benchmark、test、本走、resident service のどれも「小さいから」を免除理由に
+しない。数値を生む subprocess、並列test、長走行、resident serviceを発射する前に、入力寸法から
+導いたmemory boundと一つの資源envelopeを凍結し、`agent-resource-run` の admission を通す。
+目的値や捕捉率に届かないことを理由に上限を実行中に上げない。上限で打ち切られた値は結果であり、
+OOMやswap stormは結果ではない。
+
+各Agent / Task / Workflow `agent()` dispatchは、prompt内に次のどちらかを**ちょうど一つ**持つ。
+
+```text
+RESOURCE-CLASS(NONCOMPUTE): <数値実験・benchmark・resident service・parallel test・nested fanoutを含まない理由>
+RESOURCE-ENVELOPE(/absolute/path/to/job.resource.json): agent-resource-run only
+```
+
+`NONCOMPUTE` は単なるread、設計、通常の局所編集、直列の軽い検査に限る。数値計算を「調査」と
+呼び替えたり、pilotを「計器」と呼んだりして使わない。envelopeを宣言した腕は、その計算を
+raw `julia` / `python` / test runnerで発射せず、指定pathを `agent-resource-run --manifest ... --`
+へ渡す。dispatch hookの実装は `agents/{claude,codex}/hooks/`、実行の正本は
+`agents/resource-control/agent-resource-run.ts` である。
+
+### 資源envelope schema
+
+次のJSONを全欄必須とする。`child_fanout` は現在 `0` だけを受理する。nested agentは親の見込みに
+埋め込まず、別dispatchと別envelopeで予約する。上限不明のvendor-side fanoutは、このhostでは
+admission不能である。
+
+```json
+{
+  "schema": 1,
+  "job_id": "stable-unique-id",
+  "run_class": "pilot",
+  "cpu_threads": 2,
+  "processes": 4,
+  "host_ram_peak_bytes": 2147483648,
+  "memory_bound": "2 retained bases × k × R × sizeof(T) + sparse matrix + 20% margin; k <= 120",
+  "device": {
+    "kind": "gpu",
+    "gpu_id": 0,
+    "vram_peak_bytes": 4294967296
+  },
+  "scratch_bytes": 1073741824,
+  "child_fanout": 0,
+  "walltime_seconds": 1800,
+  "cleanup": { "mode": "term-then-kill", "grace_seconds": 10 }
+}
+```
+
+`run_class` は `pilot | full | test | service`。CPUを選ぶ場合の `device` は次の形にする。
+
+```json
+{
+  "kind": "cpu",
+  "gpu_status": "compatible",
+  "gpu_vram_peak_bytes": 4294967296,
+  "rationale": "GPUに必要VRAMの空きがない場合だけCPUへfallbackする"
+}
+```
+
+`gpu_status` は `compatible | incompatible | not-beneficial`。`compatible` では必要VRAMを必須にし、
+空いていて必要headroomを持つGPUが一台でもあればCPU admissionを拒否する。`incompatible` は
+device実装が無いこと、`not-beneficial` は転送・起動費を含むpilotでCPUが速いことを、rationaleと
+measurement locusで示す。つまり **GPU-firstは「全算術をGPUへ移す」ではなく、最速の適合する
+vendor primitive / fused array operation / libraryを先に選ぶこと** である。手書きkernelの可否は
+`optimizing-julia-gpu-kernels` のGK0が所有する。
+
+### pilot前の算術上限
+
+`memory_bound` は「測ってみる」ではなく、入力寸法から最大値を式で出す。最低限、保持する長ベクトル
+または基底の本数、dtype、複製数、疎/密行列、workspace、process複製、20%以上の実装余白を含む。
+探索で次数・rank・batch・worker数を増やす場合、その変数へhard capを置く。capなしで「目標に届くまで
+増やす」は発射しない。pilotはこの算術上限より小さいことを確認した後にだけ費用・失敗様式・保存形式を
+測る。本走はpilotのwall time/RSS/VRAM/process高水位から外挿したETAとstop thresholdを持つ。
+
+### system reserve と機械的な停止
+
+Linux実装は、同じuserの実行器が作った予約をaggregateし、互いに重ならないCPU affinityを割り当てる。
+agent自身が次のsystem reserveを下げる欄はない。
+
+| 資源 | admission reserve / rule |
 |---|---|
-| 結論を左右する計算は、利用可能な最速の適合資源へ置く。 | 発射記録に資源、選定理由、見積り時間がある。より速い適合資源が遊休なら FAIL。 |
-| 遅い資源は、記録用または制約固有の計測だけに使う。 | 遅い資源を選ぶ理由が一行であり、結論経路にないことをDAGで確認する。 |
-| 新しい計測は最小規模で費用を実測する。 | pilotの入力規模、wall time、使用量、出力が本走より前にある。 |
-| 本走はpilotの実測後にだけ発射する。 | pilotから算出した本走見積りと中断閾値がある。見積りのない本走は発射しない。 |
-| 同じ資源または同じ外部勘定を要する重い走行は直列にする。 | 発射表にresource/account列があり、競合する重い走行の時間区間が重ならない。 |
+| CPU | allowed logical CPUのうち最低1個を予約外に残す。`-t auto`、`-n auto`、`n_jobs=-1`は禁止。 |
+| host RAM | `max(4 GiB, MemTotalの10%)`をsystem用に残し、live reservationを差し引く。 |
+| scratch | 1 GiBを残し、live reservationを差し引く。 |
+| NVIDIA GPU | 512 MiBを残す。利用率20%以下、必要VRAMあり、同GPUのlive reservationなしを「空き」とする。GPU予約は排他的。 |
 
-資源は装置だけでなく、外部サービスの勘定、同時実行枠、rate limit、共有メモリ、共有scratchを
-含む。capacity-aware parallelism は、独立な仕事で、かつ競合資源を占有しない場合だけ許す。
-発射表には `job / dependency / resource / account / pilot cost / ETA / stop threshold` を置く。
+実行器は `setsid` で新しいprocess groupを作り、user systemdの一時scopeへ
+`CPUQuota=cpu_threads×100% / MemoryMax=host_ram_peak_bytes / MemorySwapMax=0 /
+OOMPolicy=kill` を設定する。`TasksMax`はprocess数とCPU数からruntime thread余白を含む
+coarseなkernel上限を算出し、別の200 ms monitorが宣言したexact process数を検査する。
+`taskset` affinityと
+`JULIA_NUM_THREADS / OMP_NUM_THREADS / OPENBLAS_NUM_THREADS / MKL_NUM_THREADS /
+NUMEXPR_NUM_THREADS / RAYON_NUM_THREADS / POLARS_MAX_THREADS` をenvelopeのCPU数へ固定する。
+monitorはgroup全体のRSSも測り、宣言上限またはwalltimeを越えたらgroupへTERM、猶予後に
+KILLする。終了時はsystemd scopeもstopし、process groupを脱出した子孫を回収してから
+予約を解放する。同じ `job_id` の二重起動も拒否する。user systemd managerまたは
+必要なpropertyのprobeが失敗したらfail closedとし、monitor-onlyの直接実行へfallbackしない。
 
-pilotの目的は最終結論を出すことではなく、費用・失敗様式・保存形式を測ることにある。
-pilotと本走で条件が変わる場合は、外挿式と限界を measurement packet に残す。
+kernel hard limitはCPU、host memory、job swap、coarse task数に対するものである。VRAMとscratchは
+admission/reservationでありkernel capではない。`TasksMax`はthreadも数えるため、宣言した
+exact process capの検収はsampled monitorが担う。この強度の違いを隠さない。
+
+### 発射と検収
+
+```bash
+agent-resource-run --manifest /absolute/path/job.resource.json --check-only
+agent-resource-run --manifest /absolute/path/job.resource.json -- julia --project=. script.jl
+```
+
+発射表には
+`job / dependency / envelope locus / device / CPU set / RAM / VRAM / process cap /
+account / pilot cost / ETA / stop threshold` を置く。同じGPU、CPU set、host headroom、scratch、外部勘定を
+競合する走行は直列化する。`ADMIT / DENY / BREACH / PASS` verdictと、pilot/本走の高水位を
+measurement packetへ保存する。Linux floorでenforcementを用意できないplatformではfail closedとし、
+unboundedな直接実行へfallbackしない。
 
 ## P8 FOOTING — 同じ土俵
 

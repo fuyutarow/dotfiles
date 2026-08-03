@@ -145,19 +145,26 @@ git ls-files -z -- \
   ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
+  'agents/resource-control/agent-resource-run.ts' \
+  'agents/serena-control/serena-foreground.ts' \
   ':(exclude)agents/claude/hooks/repo-search.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
 
 [tasks.test]
 alias = "t"
-description = "Test the repo: hooks, repo-search, and Bun script floor"
-depends = ["test:hooks", "test:cocoindex", "test:scripts"]
+description = "Test the repo: hooks, resource control, repo-search, and Bun script floor"
+depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
 description = "Claude Code, Codex, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters)"
 run = "bun test agents/claude/hooks agents/codex/hooks agents/goal-kernel"
+
+[tasks."test:resource-control"]
+dir = "{{config_root}}"
+description = "Bounded resource admission and explicit Serena lifecycle tests"
+run = "bun test agents/resource-control agents/serena-control"
 
 [tasks."test:cocoindex"]
 dir = "{{config_root}}"

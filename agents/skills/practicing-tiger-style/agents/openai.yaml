@@ -1,0 +1,4 @@
+interface:
+  display_name: "Practicing Tiger Style"
+  short_description: "Risk-calibrated Tiger Style for code"
+  default_prompt: "Use $practicing-tiger-style to harden this code with risk-calibrated bounds, contracts, and negative cases."

@@ -12,6 +12,10 @@ exports, PDFs, measurements, and captures keep their original identity there. A 
 *about* raw material through `evidence` concepts; it never rewrites raw material into a convenient
 summary and calls that preservation.
 
+The bundle-root `rd-types.json` is local profile infrastructure, not an OKF concept. It maps each
+content `type` one-to-one to a compact filename code. Exact filename grammar, allocation, migration,
+and exceptions are owned by [naming.md](naming.md); base OKF mode does not require them.
+
 The four `rd_role` values are mutually exclusive:
 
 | `rd_role` | Job | May be authority? | Lifecycle |
@@ -32,14 +36,15 @@ fields. The profile uses that extension point; `rd_` fields below are local, not
 
 | Field | Layer | Profile rule |
 |---|---|---|
-| `type` | OKF standard | Required, non-empty. It states the content kind, not authority. |
+| `type` | OKF standard | Required, non-empty. It states the content kind, not authority; the local naming profile requires a registered compact code and preserves the admitted value with the ID. |
 | `title`, `description` | OKF standard | Optional in base OKF; required and non-empty in this profile for index/review discovery. |
 | `status` | OKF standard | Required explicitly even though base OKF has a default. One of `draft`, `stable`, `deprecated`. |
 | `sources` | OKF standard | Base OKF permits broader resources. This local profile is local-only: canonical, review, and generated sources resolve to governed bundle concepts; evidence resolves to one captured raw artifact. Capture any external primary source under `raw/` first, then cite that capture. Source IDs are stable and body citations must use them. |
 | `generated` | OKF standard | Required: producer `by` and ISO-8601 `at` say who or what last changed the concept. |
 | `verified` | OKF standard | A stable canonical answer requires at least one `human:<id>` attestation. Other roles may use it when human review actually occurred. |
 | `stale_after` | OKF standard | Required for active canonical, open review, and `generated_view`; stale active material fails the profile. |
-| `rd_role` | R&D profile extension | Required; exactly one of the four roles above. |
+| `rd_role` | R&D profile extension | Required; exactly one of the four roles above, and immutable for one admitted identity. A different role requires retirement/deletion followed by a new admission. |
+| `rd_document_id` | R&D profile extension | Required for every governed concept; stable and bundle-unique. It exactly matches the filename identity defined in [naming.md](naming.md). |
 | `rd_authority_key` | R&D profile extension | Required only for `canonical`; unique among active (`draft` or `stable`) canonicals in the bundle. It names the question, not a filename. |
 | `rd_owner` | R&D profile extension | Required for canonical and review requests. It must be exactly `human:<id>` or `process:<id>`; it identifies the accountable owner for retirement or review closure. |
 | `rd_retire_when` | R&D profile extension | Required for canonical and review requests; states the event that makes the artifact obsolete. |
@@ -69,30 +74,36 @@ The profile is an admission rule, not a prose style. Before creating a durable c
 the right action is **update** an existing canonical, **derive** a generated view, **record** evidence,
 **open** a review request, **deprecate** a canonical, or genuinely **create** a new authority key.
 
-1. One active (`draft` or `stable`) canonical owns one `rd_authority_key`; a competing draft is an
+1. Every governed concept has a registered content-type code, a valid `rd_document_id`, and a
+   matching filename. Admission precedes allocation; an update preserves ID and path.
+2. One active (`draft` or `stable`) canonical owns one `rd_authority_key`; a competing draft is an
    edit on a branch, not a second in-tree authority.
-2. A draft canonical has exactly one open review request. Its `candidate_sha256` must match the
+3. A draft canonical has exactly one open review request. Its `candidate_sha256` must match the
    candidate's current bytes. A closed request retains the digest of the historical bytes it reviewed.
    A stable canonical needs an accepted review whose `candidate_sha256` matches its current bytes,
    plus a real human verification at or after `generated.at`.
-3. Evidence records bind exactly one raw artifact, verify its SHA-256 and typed locator, and are
+4. Evidence records bind exactly one raw artifact, verify its SHA-256 and typed locator, and are
    additive. Correct an interpretation in a canonical or a new evidence record; preserve the
    original observation.
-4. A generated view is disposable. It must not receive `rd_authority_key`, be a cited source for a
+5. A generated view is disposable. It must not receive `rd_authority_key`, be a cited source for a
    canonical, or be promoted to stable instead of updating its canonical input.
-5. Every non-generated concept is listed by an `index.md`; a reviewer must be able to discover the
+6. Every non-generated concept is listed by an `index.md`; a reviewer must be able to discover the
    current authority without semantic search.
-6. All profile `sources` are local. Canonical, review, and generated sources resolve inside the
+7. All profile `sources` are local. Canonical, review, and generated sources resolve inside the
    bundle; evidence resolves inside `raw/`. Capture an external primary source under `raw/` before
    it enters this profile. This is a local tightening: base OKF may describe broader resources.
 
 ## What the checker can and cannot establish
 
 The paired checker can deterministically parse frontmatter, reject missing/profile-invalid fields,
-verify raw digests, detect duplicate active authority keys, resolve local references, detect expired
-views, and compare a Git base to reject raw/evidence rewrites. Those are **floor** properties.
+verify the type-code registry and filename/ID contract, detect duplicate live IDs and active authority
+keys, verify raw digests, resolve local references, detect expired views, and compare a Git base to
+reject raw/evidence rewrites, admitted ID/type/role/path changes, base-visible ID reuse, or
+reassignment of a mapping used by a base concept. It also requires new IDs to be the contiguous suffix
+above each base code/month maximum. Those are **floor** properties.
 
 It cannot decide whether a new document should exist, whether two differently named authority keys are
-really the same question, whether a source supports a claim, whether a human attestation was honest,
-whether raw input was faithfully captured, or whether the review question is worth asking. Those remain
-admission and review judgments. A passing check is never evidence that a research conclusion is true.
+really the same question, whether a registered content type is semantically apt, whether a source
+supports a claim, whether a human attestation was honest, whether raw input was faithfully captured,
+or whether the review question is worth asking. Those remain admission and review judgments. A passing
+check is never evidence that a research conclusion is true.

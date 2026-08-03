@@ -22,6 +22,10 @@
 | [Andrej Karpathy, LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) | author-confirmed, primary informal | Motivates compiled, linked Markdown knowledge. It is not a specification, security model, or proof that autonomous updates preserve truth. |
 | [LangChain OpenWiki README](https://github.com/langchain-ai/openwiki/blob/main/README.md#open-knowledge-format) | author-confirmed, primary project docs | Confirms that the current tool emits OKF v0.1. It may generate a wiki, but it is not this v0.2 profile validator. |
 | [LLM Wiki plugin failure modes](https://github.com/praneybehl/llm-wiki-plugin/blob/main/skills/llm-wiki/SKILL.md#failure-modes-to-guard-against) | author-confirmed, primary project docs | Names silent corruption, wiki-self-reference drift, and maintenance ratchet. It motivates raw re-checks and deterministic lint, not autonomous authority. |
+| [POSIX.1-2024 portable filename character set](https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap03.html) | author-confirmed, primary standard | Lists both `_` and `-` as portable filename characters but specifies no delimiter semantics. It does not prescribe this profile's hierarchy. |
+| [RFC 3986 URI generic syntax](https://www.rfc-editor.org/rfc/rfc3986.html) | author-confirmed, primary standard | Defines both `_` and `-` as unreserved URI characters. URI syntax does not determine a local research-filename grammar. |
+| [Google URL structure guidance](https://developers.google.com/search/docs/crawling-indexing/url-structure) | author-confirmed, primary vendor docs | Recommends hyphens for words in public URLs. This is deliberately not generalized into an SEO claim about repository-local filenames. |
+| [Google C++ file naming](https://google.github.io/styleguide/cppguide#File_Names) | author-confirmed, primary project style guide | Allows underscores or dashes and says to follow local convention, preferring underscore only when no pattern exists. It illustrates ecosystem dependence, not a universal separator rule. |
 
 ## Distillation boundary
 
@@ -29,3 +33,8 @@ The central rule — **decide admission before generating another durable docume
 the local incident shape: duplicated prose became an authority collision because it lacked role, lifecycle,
 and review contract. It is not attributed to OKF, a wiki tool, or an LLM vendor. The tool-changing result
 is the profile and checker: they expose fields and collisions that prose instructions alone leave optional.
+
+The document-ID and filename grammar is likewise constructed house policy. POSIX portability, URL style,
+or programming-language identifier customs do not prescribe its delimiter hierarchy. Its justification is
+local and operational: one machine-checked identity, one visible ID/title boundary, stable paths on update,
+and no silent number reuse. Exact rules live only in [naming.md](naming.md).

@@ -3,7 +3,7 @@
  * Contract: exit 0 clean, 1 deterministic findings, 2 invocation/environment fatal; never judge truth.
  */
 
-import { existsSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import {
 	basename,
 	dirname,
@@ -20,6 +20,7 @@ type Layer =
 	| "RD_ADMISSION"
 	| "RD_INTEGRITY"
 	| "RD_LIFECYCLE"
+	| "RD_NAMING"
 	| "RD_REFERENCE"
 	| "RD_SCHEMA";
 
@@ -90,6 +91,7 @@ type ReviewContract = {
 type Concept = {
 	absolutePath: string;
 	body: string;
+	documentId?: string;
 	generatedAt?: string;
 	meta: Record<string, unknown>;
 	path: string;
@@ -111,6 +113,27 @@ type ReservedDocument = {
 type LocalReference = {
 	absolutePath?: string;
 	kind: "bundle" | "external" | "outside" | "raw";
+};
+
+type RdDocumentIdentity = {
+	code: string;
+	id: string;
+	sequence: string;
+	yearMonth: string;
+};
+
+type RdDocumentFilename = RdDocumentIdentity & {
+	contentTitle: string;
+};
+
+type BaseDocumentIdentity = {
+	identity: RdDocumentIdentity;
+	path: string;
+};
+
+type RdTypeRegistryParse = {
+	findings: Array<{ code: string; message: string }>;
+	registry?: ReadonlyMap<string, string>;
 };
 
 class UsageError extends Error {}
@@ -148,6 +171,7 @@ const standardFields = new Set([
 ]);
 const profileFields = new Set([
 	"rd_authority_key",
+	"rd_document_id",
 	"rd_evidence",
 	"rd_expires_at",
 	"rd_generated_from",
@@ -161,10 +185,11 @@ const profileFields = new Set([
 const layerOrder: Record<Layer, number> = {
 	OKF: 0,
 	RD_SCHEMA: 1,
-	RD_REFERENCE: 2,
-	RD_INTEGRITY: 3,
-	RD_LIFECYCLE: 4,
-	RD_ADMISSION: 5,
+	RD_NAMING: 2,
+	RD_REFERENCE: 3,
+	RD_INTEGRITY: 4,
+	RD_LIFECYCLE: 5,
+	RD_ADMISSION: 6,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -218,6 +243,52 @@ const validAuthorityKey = (value: string): boolean =>
 	/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/.test(
 		value,
 	);
+
+const rdTypeCodePattern = /^[a-z]{2,8}$/;
+const rdDocumentIdPattern =
+	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))$/;
+const rdDocumentFilenamePattern =
+	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))-([a-z0-9]+(?:_[a-z0-9]+)*)\.md$/;
+
+const parseRdDocumentId = (value: string): RdDocumentIdentity | undefined => {
+	const match = rdDocumentIdPattern.exec(value);
+	if (
+		match?.[1] === undefined ||
+		match[2] === undefined ||
+		match[3] === undefined ||
+		match[0] !== value
+	) {
+		return undefined;
+	}
+	return {
+		code: match[1],
+		id: value,
+		sequence: match[3],
+		yearMonth: match[2],
+	};
+};
+
+const parseRdDocumentFilename = (
+	value: string,
+): RdDocumentFilename | undefined => {
+	const match = rdDocumentFilenamePattern.exec(value);
+	if (
+		match?.[1] === undefined ||
+		match[2] === undefined ||
+		match[3] === undefined ||
+		match[4] === undefined ||
+		match[0] !== value
+	) {
+		return undefined;
+	}
+	return {
+		code: match[1],
+		contentTitle: match[4],
+		id: `${match[1]}${match[2]}_${match[3]}`,
+		sequence: match[3],
+		yearMonth: match[2],
+	};
+};
 
 const parseEvidenceLocator = (value: string): EvidenceLocator | undefined => {
 	if (value === "whole") return { kind: "whole" };
@@ -757,15 +828,136 @@ const statusType = (value: string): Status | undefined => {
 
 const readAllMarkdown = async (root: string): Promise<string[]> => {
 	const paths: string[] = [];
-	const glob = new Bun.Glob("**/*.md");
+	const glob = new Bun.Glob("**/*");
 	for await (const path of glob.scan({
 		cwd: root,
 		dot: true,
 		onlyFiles: true,
 	})) {
-		paths.push(path);
+		if (path.endsWith(".md") || /\.md\p{White_Space}+$/u.test(path))
+			paths.push(path);
 	}
 	return paths.sort();
+};
+
+const parseRdTypeRegistryText = (source: string): RdTypeRegistryParse => {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(source);
+	} catch {
+		return {
+			findings: [
+				{ code: "RDN002", message: "rd-types.json must be valid JSON" },
+			],
+		};
+	}
+	const document = parseDocument(source, {
+		prettyErrors: true,
+		strict: true,
+		stringKeys: true,
+		uniqueKeys: true,
+		version: "1.2",
+	});
+	if (document.errors.length > 0) {
+		return {
+			findings: [
+				{
+					code: "RDN003",
+					message: "rd-types.json object keys must be unique",
+				},
+			],
+		};
+	}
+	if (
+		!isRecord(parsed) ||
+		parsed.schema !== "rd-document-types/v1" ||
+		!isRecord(parsed.type_codes) ||
+		Object.keys(parsed).sort().join(",") !== "schema,type_codes"
+	) {
+		return {
+			findings: [
+				{
+					code: "RDN003",
+					message:
+						'rd-types.json must contain only schema "rd-document-types/v1" and type_codes',
+				},
+			],
+		};
+	}
+
+	const entries = Object.entries(parsed.type_codes);
+	if (entries.length === 0) {
+		return {
+			findings: [
+				{
+					code: "RDN004",
+					message:
+						"type_codes must be a non-empty mapping to 2-8 lowercase ASCII letters",
+				},
+			],
+		};
+	}
+
+	const findings: Array<{ code: string; message: string }> = [];
+	const registry = new Map<string, string>();
+	const typeByCode = new Map<string, string>();
+	for (const [type, code] of entries) {
+		if (
+			type.trim() === "" ||
+			type.trim() !== type ||
+			!isNonemptyString(code) ||
+			!rdTypeCodePattern.test(code)
+		) {
+			findings.push({
+				code: "RDN004",
+				message: `invalid type-code entry ${JSON.stringify(type)}; codes use 2-8 lowercase ASCII letters`,
+			});
+			continue;
+		}
+		const priorType = typeByCode.get(code);
+		if (priorType !== undefined) {
+			findings.push({
+				code: "RDN005",
+				message: `type code ${code} is assigned to both ${priorType} and ${type}`,
+			});
+			continue;
+		}
+		registry.set(type, code);
+		typeByCode.set(code, type);
+	}
+	return findings.length === 0 ? { findings, registry } : { findings };
+};
+
+const readRdTypeRegistry = async (
+	root: string,
+	add: (layer: Layer, code: string, path: string, message: string) => void,
+): Promise<ReadonlyMap<string, string> | undefined> => {
+	const registryName = "rd-types.json";
+	const registryPath = resolve(root, registryName);
+	if (!existsSync(registryPath) || !statSync(registryPath).isFile()) {
+		add(
+			"RD_NAMING",
+			"RDN001",
+			registryName,
+			"profile requires a bundle-root rd-types.json type-code registry",
+		);
+		return undefined;
+	}
+	if (!lstatSync(registryPath).isFile()) {
+		add(
+			"RD_NAMING",
+			"RDN006",
+			registryName,
+			"rd-types.json must be a regular bundle-local file, not a symlink",
+		);
+		return undefined;
+	}
+
+	const parsed = parseRdTypeRegistryText(await Bun.file(registryPath).text());
+	for (const finding of parsed.findings) {
+		add("RD_NAMING", finding.code, registryName, finding.message);
+	}
+	return parsed.registry;
 };
 
 const sha256File = async (path: string): Promise<string> => {
@@ -848,6 +1040,177 @@ const baseDocument = async (
 	return parseMarkdown(result.stdout, () => undefined);
 };
 
+const gitBatchText = async (
+	repositoryRoot: string,
+	objects: string[],
+): Promise<string[]> => {
+	if (objects.length === 0) return [];
+	const signal = AbortSignal.timeout(30_000);
+	const child = Bun.spawn({
+		cmd: ["git", "cat-file", "--batch", "-Z"],
+		cwd: repositoryRoot,
+		stdin: new Blob([`${objects.join("\0")}\0`]),
+		stdout: "pipe",
+		stderr: "pipe",
+		signal,
+		killSignal: "SIGKILL",
+	});
+	const [stdoutBuffer, stderr, exitCode] = await Promise.all([
+		new Response(child.stdout).arrayBuffer(),
+		new Response(child.stderr).text(),
+		child.exited,
+	]);
+	if (signal.aborted) {
+		throw new UsageError(
+			"git cat-file timed out while reading the base bundle",
+		);
+	}
+	if (exitCode !== 0) {
+		throw new UsageError(
+			`git cat-file failed: ${stderr.trim().slice(0, 4_000) || `exit ${exitCode}`}`,
+		);
+	}
+
+	const bytes = new Uint8Array(stdoutBuffer);
+	const decoder = new TextDecoder();
+	const sources: string[] = [];
+	let offset = 0;
+	for (const object of objects) {
+		const headerEnd = bytes.indexOf(0, offset);
+		if (headerEnd < 0) {
+			throw new UsageError(`git cat-file returned no header for ${object}`);
+		}
+		const header = decoder.decode(bytes.subarray(offset, headerEnd));
+		const match = /^[0-9a-f]+ blob ([0-9]+)$/.exec(header);
+		if (match?.[1] === undefined) {
+			throw new UsageError(
+				`git cat-file returned an invalid blob header for ${object}: ${header}`,
+			);
+		}
+		const size = Number.parseInt(match[1], 10);
+		const contentStart = headerEnd + 1;
+		const contentEnd = contentStart + size;
+		if (contentEnd >= bytes.length || bytes[contentEnd] !== 0) {
+			throw new UsageError(`git cat-file truncated the blob for ${object}`);
+		}
+		sources.push(decoder.decode(bytes.subarray(contentStart, contentEnd)));
+		offset = contentEnd + 1;
+	}
+	if (offset !== bytes.length) {
+		throw new UsageError(
+			"git cat-file returned unexpected trailing batch data",
+		);
+	}
+	return sources;
+};
+
+const readBaseDocumentIdentities = async (
+	repositoryRoot: string,
+	base: string,
+	rootPath: string,
+): Promise<BaseDocumentIdentity[]> => {
+	const args = ["git", "ls-tree", "-r", "--name-only", "-z", base];
+	if (rootPath !== "") args.push("--", rootPath);
+	const tree = await gitOutput(repositoryRoot, args);
+	if (tree.exitCode !== 0) {
+		throw new UsageError(`git ls-tree failed: ${tree.stderr.trim() || base}`);
+	}
+
+	const paths = tree.stdout
+		.split("\0")
+		.filter(
+			(path) =>
+				path !== "" &&
+				(path.endsWith(".md") || /\.md\p{White_Space}+$/u.test(path)),
+		);
+	const sources = await gitBatchText(
+		repositoryRoot,
+		paths.map((path) => `${base}:${path}`),
+	);
+	const identities: BaseDocumentIdentity[] = [];
+	for (const [index, path] of paths.entries()) {
+		const document = parseMarkdown(sources[index] ?? "", () => undefined);
+		const value = document?.meta?.rd_document_id;
+		if (!isNonemptyString(value)) continue;
+		const identity = parseRdDocumentId(value);
+		if (identity !== undefined) identities.push({ identity, path });
+	}
+	return identities;
+};
+
+const checkDocumentSequenceAllocations = (
+	baseIdentities: BaseDocumentIdentity[],
+	concepts: Concept[],
+	rootPath: string,
+	add: (layer: Layer, code: string, path: string, message: string) => void,
+): void => {
+	const keyFor = (identity: RdDocumentIdentity): string =>
+		`${identity.code}\0${identity.yearMonth}`;
+	const baseIds = new Set(baseIdentities.map(({ identity }) => identity.id));
+	const basePaths = new Set(baseIdentities.map(({ path }) => path));
+	const baseMaximumByKey = new Map<string, number>();
+	for (const { identity } of baseIdentities) {
+		const key = keyFor(identity);
+		const sequence = Number.parseInt(identity.sequence, 10);
+		baseMaximumByKey.set(
+			key,
+			Math.max(baseMaximumByKey.get(key) ?? 0, sequence),
+		);
+	}
+
+	const additionsByKey = new Map<
+		string,
+		Array<{ concept: Concept; identity: RdDocumentIdentity }>
+	>();
+	for (const concept of concepts) {
+		const repositoryPath =
+			rootPath === "" ? concept.path : `${rootPath}/${concept.path}`;
+		if (
+			concept.documentId === undefined ||
+			baseIds.has(concept.documentId) ||
+			basePaths.has(repositoryPath)
+		)
+			continue;
+		const identity = parseRdDocumentId(concept.documentId);
+		if (identity === undefined) continue;
+		const key = keyFor(identity);
+		const additions = additionsByKey.get(key) ?? [];
+		additions.push({ concept, identity });
+		additionsByKey.set(key, additions);
+	}
+
+	for (const [key, additions] of additionsByKey) {
+		additions.sort((left, right) => {
+			const sequenceDifference =
+				Number.parseInt(left.identity.sequence, 10) -
+				Number.parseInt(right.identity.sequence, 10);
+			return (
+				sequenceDifference ||
+				left.concept.path.localeCompare(right.concept.path)
+			);
+		});
+		let expected = (baseMaximumByKey.get(key) ?? 0) + 1;
+		for (const { concept, identity } of additions) {
+			const actual = Number.parseInt(identity.sequence, 10);
+			if (actual !== expected) {
+				const expectedId =
+					expected <= 999
+						? `${identity.code}${identity.yearMonth}_${expected
+								.toString()
+								.padStart(3, "0")}`
+						: "no ID because sequence 999 is exhausted";
+				add(
+					"RD_INTEGRITY",
+					"RDI013",
+					concept.path,
+					`new rd_document_id ${identity.id} must extend the Git-base sequence without gaps; expected ${expectedId}`,
+				);
+			}
+			expected += 1;
+		}
+	}
+};
+
 const stableValue = (value: unknown): unknown => {
 	if (Array.isArray(value)) return value.map(stableValue);
 	if (!isRecord(value)) return value;
@@ -879,6 +1242,8 @@ const checkGitIntegrity = async (
 	root: string,
 	rawRoot: string,
 	base: string,
+	concepts: Concept[],
+	typeRegistry: ReadonlyMap<string, string> | undefined,
 	add: (layer: Layer, code: string, path: string, message: string) => void,
 ): Promise<void> => {
 	const repositoryRoot = await gitRoot(root);
@@ -901,6 +1266,35 @@ const checkGitIntegrity = async (
 	}
 	const rootPath = posixPath(relative(repositoryRoot, root));
 	const rawPath = posixPath(relative(repositoryRoot, rawRoot));
+	const baseDocumentIdentities = await readBaseDocumentIdentities(
+		repositoryRoot,
+		base,
+		rootPath,
+	);
+	checkDocumentSequenceAllocations(
+		baseDocumentIdentities,
+		concepts,
+		rootPath,
+		add,
+	);
+	const registryPath =
+		rootPath === "" ? "rd-types.json" : `${rootPath}/rd-types.json`;
+	const baseRegistrySource = await gitOutput(repositoryRoot, [
+		"git",
+		"show",
+		`${base}:${registryPath}`,
+	]);
+	const baseTypeRegistry =
+		baseRegistrySource.exitCode === 0
+			? parseRdTypeRegistryText(baseRegistrySource.stdout).registry
+			: undefined;
+	const currentPathsByDocumentId = new Map<string, string[]>();
+	for (const concept of concepts) {
+		if (concept.documentId === undefined) continue;
+		const paths = currentPathsByDocumentId.get(concept.documentId) ?? [];
+		paths.push(posixPath(relative(repositoryRoot, concept.absolutePath)));
+		currentPathsByDocumentId.set(concept.documentId, paths);
+	}
 	const diff = await gitOutput(repositoryRoot, [
 		"git",
 		"diff",
@@ -948,6 +1342,88 @@ const checkGitIntegrity = async (
 		const oldReview = isRecord(oldMeta?.rd_review)
 			? oldMeta.rd_review.state
 			: undefined;
+		const oldDocumentId = isNonemptyString(oldMeta?.rd_document_id)
+			? oldMeta.rd_document_id
+			: undefined;
+		if (oldDocumentId !== undefined) {
+			for (const currentPath of currentPathsByDocumentId.get(oldDocumentId) ??
+				[]) {
+				if (currentPath === oldPath) continue;
+				add(
+					"RD_INTEGRITY",
+					"RDI011",
+					oldPath,
+					`rd_document_id ${oldDocumentId} remains bound to its original path; ${currentPath} requires a new ID`,
+				);
+			}
+		}
+		if (
+			isNonemptyString(oldMeta?.type) &&
+			baseTypeRegistry !== undefined &&
+			typeRegistry !== undefined
+		) {
+			const baseCode = baseTypeRegistry.get(oldMeta.type);
+			if (
+				baseCode !== undefined &&
+				typeRegistry.get(oldMeta.type) !== baseCode
+			) {
+				add(
+					"RD_INTEGRITY",
+					"RDI012",
+					registryPath,
+					`type-code mapping ${oldMeta.type} -> ${baseCode} was used by ${oldPath} and cannot be reassigned`,
+				);
+			}
+		}
+		let currentDocument: ParsedMarkdown | undefined;
+		if (status === "M" && oldDocument !== undefined) {
+			const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
+			if (existsSync(currentPath)) {
+				currentDocument = parseMarkdown(
+					await Bun.file(currentPath).text(),
+					() => undefined,
+				);
+			}
+		}
+		if (
+			status === "M" &&
+			currentDocument !== undefined &&
+			isNonemptyString(oldMeta?.rd_document_id) &&
+			currentDocument?.meta?.rd_document_id !== oldMeta.rd_document_id
+		) {
+			add(
+				"RD_INTEGRITY",
+				"RDI007",
+				oldPath,
+				"admitted rd_document_id is immutable; update content without reissuing identity",
+			);
+		}
+		if (
+			status === "M" &&
+			currentDocument !== undefined &&
+			isNonemptyString(oldMeta?.type) &&
+			currentDocument?.meta?.type !== oldMeta.type
+		) {
+			add(
+				"RD_INTEGRITY",
+				"RDI008",
+				oldPath,
+				"admitted type is identity-bearing and immutable; retire or delete before a new admission",
+			);
+		}
+		if (
+			status === "M" &&
+			currentDocument !== undefined &&
+			oldRole !== undefined &&
+			currentDocument.meta?.rd_role !== oldRole
+		) {
+			add(
+				"RD_INTEGRITY",
+				"RDI009",
+				oldPath,
+				"rd_role is immutable for an admitted identity; retire or delete before a new admission",
+			);
+		}
 
 		if (oldRole === "evidence" && status !== "A") {
 			add(
@@ -996,39 +1472,32 @@ const checkGitIntegrity = async (
 		if (
 			status === "M" &&
 			oldRole === "canonical" &&
-			oldDocument !== undefined
+			oldDocument !== undefined &&
+			currentDocument?.meta !== undefined
 		) {
-			const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
-			if (existsSync(currentPath)) {
-				const currentDocument = parseMarkdown(
-					await Bun.file(currentPath).text(),
-					() => undefined,
-				);
+			if (
+				canonicalContentFingerprint(currentDocument) !==
+				canonicalContentFingerprint(oldDocument)
+			) {
+				const oldGenerated = isRecord(oldMeta?.generated)
+					? oldMeta.generated.at
+					: undefined;
+				const currentGenerated = isRecord(currentDocument.meta.generated)
+					? currentDocument.meta.generated.at
+					: undefined;
 				if (
-					currentDocument.meta !== undefined &&
-					canonicalContentFingerprint(currentDocument) !==
-						canonicalContentFingerprint(oldDocument)
+					!isNonemptyString(oldGenerated) ||
+					!validDateTime(oldGenerated) ||
+					!isNonemptyString(currentGenerated) ||
+					!validDateTime(currentGenerated) ||
+					Date.parse(currentGenerated) <= Date.parse(oldGenerated)
 				) {
-					const oldGenerated = isRecord(oldMeta?.generated)
-						? oldMeta.generated.at
-						: undefined;
-					const currentGenerated = isRecord(currentDocument.meta.generated)
-						? currentDocument.meta.generated.at
-						: undefined;
-					if (
-						!isNonemptyString(oldGenerated) ||
-						!validDateTime(oldGenerated) ||
-						!isNonemptyString(currentGenerated) ||
-						!validDateTime(currentGenerated) ||
-						Date.parse(currentGenerated) <= Date.parse(oldGenerated)
-					) {
-						add(
-							"RD_INTEGRITY",
-							"RDI006",
-							oldPath,
-							"canonical content changed without a strictly newer generated.at",
-						);
-					}
+					add(
+						"RD_INTEGRITY",
+						"RDI006",
+						oldPath,
+						"canonical content changed without a strictly newer generated.at",
+					);
 				}
 			}
 		}
@@ -1169,6 +1638,7 @@ export async function inspectResearchDocs(
 		);
 		return { concepts: concepts.length, findings, mode, root };
 	}
+	const typeRegistry = await readRdTypeRegistry(root, add);
 
 	if (!existsSync(rawRoot) || !statSync(rawRoot).isDirectory()) {
 		add(
@@ -1201,6 +1671,61 @@ export async function inspectResearchDocs(
 		const report = (code: string, message: string): void =>
 			add("RD_SCHEMA", code, concept.path, message);
 		const meta = concept.meta;
+		const parsedFilename = parseRdDocumentFilename(basename(concept.path));
+		if (parsedFilename === undefined) {
+			add(
+				"RD_NAMING",
+				"RDN012",
+				concept.path,
+				"concept filename must be {type_code}{YYYYMM}_{001..999}-{lower_snake_case}.md",
+			);
+		}
+		const parsedDocumentId = isNonemptyString(meta.rd_document_id)
+			? parseRdDocumentId(meta.rd_document_id)
+			: undefined;
+		if (parsedDocumentId === undefined) {
+			add(
+				"RD_NAMING",
+				"RDN011",
+				concept.path,
+				"rd_document_id must be {type_code}{YYYYMM}_{001..999}",
+			);
+		} else {
+			concept.documentId = parsedDocumentId.id;
+		}
+		if (
+			parsedFilename !== undefined &&
+			parsedDocumentId !== undefined &&
+			parsedFilename.id !== parsedDocumentId.id
+		) {
+			add(
+				"RD_NAMING",
+				"RDN013",
+				concept.path,
+				`filename ID ${parsedFilename.id} does not match rd_document_id ${parsedDocumentId.id}`,
+			);
+		}
+		if (typeRegistry !== undefined && isNonemptyString(meta.type)) {
+			const expectedCode = typeRegistry.get(meta.type);
+			if (expectedCode === undefined) {
+				add(
+					"RD_NAMING",
+					"RDN010",
+					concept.path,
+					`type ${meta.type} is not registered in rd-types.json`,
+				);
+			} else {
+				const usedCode = parsedFilename?.code ?? parsedDocumentId?.code;
+				if (usedCode !== undefined && usedCode !== expectedCode) {
+					add(
+						"RD_NAMING",
+						"RDN014",
+						concept.path,
+						`type ${meta.type} requires code ${expectedCode}; concept uses ${usedCode}`,
+					);
+				}
+			}
+		}
 		for (const key of Object.keys(meta)) {
 			if (key === "timestamp") {
 				report(
@@ -1275,6 +1800,24 @@ export async function inspectResearchDocs(
 				meta.rd_supersedes,
 				"rd_supersedes",
 				report,
+			);
+		}
+	}
+	const conceptsByDocumentId = new Map<string, Concept[]>();
+	for (const concept of concepts) {
+		if (concept.documentId === undefined) continue;
+		const entries = conceptsByDocumentId.get(concept.documentId) ?? [];
+		entries.push(concept);
+		conceptsByDocumentId.set(concept.documentId, entries);
+	}
+	for (const [documentId, entries] of conceptsByDocumentId) {
+		if (entries.length < 2) continue;
+		for (const concept of entries) {
+			add(
+				"RD_NAMING",
+				"RDN015",
+				concept.path,
+				`rd_document_id ${documentId} is used by ${entries.length} concepts`,
 			);
 		}
 	}
@@ -2263,7 +2806,14 @@ export async function inspectResearchDocs(
 	}
 
 	if (options.base !== undefined) {
-		await checkGitIntegrity(root, rawRoot, options.base, add);
+		await checkGitIntegrity(
+			root,
+			rawRoot,
+			options.base,
+			concepts,
+			typeRegistry,
+			add,
+		);
 	}
 
 	findings.sort(

@@ -13,6 +13,7 @@ not another project-status ledger and do not reproduce the source transcript.
 | SF-04 | External reviewability prompted a second 293-line “current state” document. | The review copy silently became a second authority with no decision, evidence cut, or expiry. | Create a small review request; optionally `derive` an expiring packet; update canonical after review. |
 | SF-05 | A Skill reference named a version/durability owner that did not exist. | Future authors could neither resolve nor safely replace the owner. | `update` the pointer or explicitly admit the missing owner; never leave an ownership void. |
 | SF-06 | Facts conflicted across several R&D documents. | Single-document restructuring could make one file tidy while leaving global authority divergent. | Freeze the authority decision, update one canonical, derive views, and retire competitors. |
+| SF-07 | A canonical title changed during an ordinary update, so an agent issued a new month/sequence and left the old file active. | One authority became two identities; links and review history split even though no new document passed admission. | `update` the existing ID/path; title changes never allocate or rename. |
 
 ## Should not fire
 
@@ -23,6 +24,7 @@ not another project-status ledger and do not reproduce the source transcript.
 | NF-03 | A multi-source literature claim needs provenance and reconciliation. | `systematizing-knowledge` |
 | NF-04 | A selected research frame has candidate theses that must be compared. | `directing-research` / `forging-novel-theses` |
 | NF-05 | A finished manuscript claim needs calibration and red-team review. | `arguing-research-papers` |
+| NF-06 | One ordinary README or source file needs a local rename with no R&D portfolio policy. | repository/domain owner |
 
 ## Acceptance use
 

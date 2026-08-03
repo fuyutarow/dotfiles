@@ -1,7 +1,8 @@
 # Admission and lifecycle adjudication
 
 Use this reference when the action is not obvious. The decision unit is a purpose/authority pair,
-not a filename.
+not a filename. A stable filename is allocated only after admission; it never supplies the reason
+to admit a document.
 
 ## The admission test
 
@@ -15,19 +16,21 @@ A new durable concept is admissible only when all answers are concrete:
 6. **Retirement** — what observable event deprecates or deletes it?
 
 Any missing answer means `freeze`; do not manufacture fields from inference.
+Only after all answers exist may a new `create` or `derive` allocate an ID under
+[naming.md](naming.md). `update`, correction, and retirement reuse the existing ID and path.
 
 ## Action matrix
 
 | Observed state | Action | Required transition |
 |---|---|---|
 | No durable reader decision; answer is momentary | `freeze` | Answer inline; create no file. |
-| Existing artifact already owns the purpose | `update` | Edit that authority and re-review changed claims. |
+| Existing artifact already owns the purpose | `update` | Edit that authority at its existing ID/path and re-review changed claims. |
 | New reader/register, same underlying facts or an already bounded SoK position | `derive` | Generate from declared sources; add expiry; never copy authority or create a new corpus conclusion. |
-| New research question with evidence and reviewer | `create` | Add draft canonical plus an open review request. |
-| Raw run, dataset, trace, or negative result arrived | `create` | Add raw artifact and immutable evidence record; do not add interpretation automatically. |
+| New research question with evidence and reviewer | `create` | Allocate new IDs after admission; add a draft canonical plus an open review request. |
+| Raw run, dataset, trace, or negative result arrived | `create` | Preserve the raw artifact, then allocate an ID for its immutable evidence record; do not add interpretation automatically. |
 | A stable successor replaces an authority | `retire` | Deprecate predecessor atomically and point successor to it. |
 | An authority is abandoned without successor | `retire` | Deprecate it and record a non-empty retirement reason. |
-| Generated view expired or can be reproduced | `delete` | Remove it and rebuild indexes/caches. |
+| Generated view expired or can be reproduced | `delete` | Remove it and rebuild indexes/caches; a later new derivation receives a new ID. |
 | Evidence or deprecated authority seems embarrassing/wrong | `freeze` | Preserve it; add correction evidence or successor. Never erase history silently. |
 | Secret, personal data, or legal deletion is required | `delete` | Stop the ordinary lifecycle. Route to the repository's security/legal owner for an authorized purge, dependent-claim cleanup, and safe tombstone when allowed. |
 
@@ -43,6 +46,7 @@ its exceptional purge and re-baseline process; an agent may not turn this row in
   provenance.
 - Review requests: state transitions and decision outcome; accepted/rejected records become history.
 - The reachable index and supersession graph.
+- Stable concept IDs/paths and the one-to-one type-code registry.
 - The profile/schema and validator itself, under higher review than ordinary content.
 
 ## What should be retired or deleted

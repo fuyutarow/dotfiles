@@ -62,15 +62,23 @@ a command ran; it cannot determine whether “create a new document” was the r
 ## Checker boundary
 
 The checker is expected to enforce only deterministic properties: YAML/frontmatter parsing, required
-standard and `rd_` fields, status/role combinations, duplicate active authority keys, local-reference
-resolution, raw SHA-256, index registration, generated-view expiry, and raw/evidence immutability
-relative to an explicit Git base. It returns 1 for findings and 2 for invocation/environment failures.
+standard and `rd_` fields, the bundle-local type-code registry, filename/ID grammar, live ID and active
+authority uniqueness, status/role combinations, local-reference resolution, raw SHA-256, index
+registration, generated-view expiry, and Git-base preservation of raw/evidence plus admitted
+ID/type/role/path. It also rejects base-visible ID reuse at another path and reassignment of a mapping
+used by a base concept. New IDs must extend each base code/month maximum contiguously, leaving prior
+gaps untouched. It returns 1 for findings and 2 for invocation/environment failures.
 
 It must not claim to validate scientific truth, source entailment, semantic duplication under different
-keys, human identity, completeness of raw capture, or usefulness of a review. These are admission and
-review gates performed by accountable people with the skill's aid. Keep raw-material hashing, access
-control, retention law, and secret scanning in their owning repository controls; an OKF checker is not a
-data-governance system.
+keys or IDs, whether a content type/title is apt, human identity, completeness of raw capture, or
+usefulness of a review. These are admission and review gates performed by accountable people with the
+skill's aid. Keep raw-material hashing, access control, retention law, and secret scanning in their owning
+repository controls; an OKF checker is not a data-governance system.
+
+An existing corpus needs an explicitly reviewed one-time migration before strict naming enforcement.
+Ordinary `--base` checking correctly rejects durable renames; do not add a permanent exemption or weaken
+the gate. Migrate references and IDs together, establish the migrated commit as the new baseline, then
+run the same local and CI commands above.
 
 ## Residual: discovery is not an authority-preserving read, and write must stay constrained
 

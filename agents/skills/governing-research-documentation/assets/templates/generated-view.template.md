@@ -10,13 +10,14 @@ stale_after: 2026-08-08
 rd_expires_at: 2026-08-08
 sources:
   - id: canonical
-    resource: ../canonicals/research-question.md
+    resource: ../canonicals/pos202608_001-research_question.md
   - id: evidence-route-comparison
-    resource: ../evidence/route-comparison.md
+    resource: ../evidence/evi202608_001-route_comparison.md
+rd_document_id: view202608_001
 rd_role: generated_view
 rd_generated_from:
-  - ../canonicals/research-question.md
-  - ../evidence/route-comparison.md
+  - ../canonicals/pos202608_001-research_question.md
+  - ../evidence/evi202608_001-route_comparison.md
 ---
 
 # Generated briefing: disposable title

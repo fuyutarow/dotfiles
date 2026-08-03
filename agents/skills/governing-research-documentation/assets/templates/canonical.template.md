@@ -9,7 +9,8 @@ generated:
 stale_after: 2026-09-01
 sources:
   - id: evidence-route-comparison
-    resource: ../evidence/route-comparison.md
+    resource: ../evidence/evi202608_001-route_comparison.md
+rd_document_id: pos202608_001
 rd_role: canonical
 rd_authority_key: research-question-slug
 rd_owner: human:owner-id

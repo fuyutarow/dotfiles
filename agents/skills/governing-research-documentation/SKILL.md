@@ -3,8 +3,8 @@ name: governing-research-documentation
 description: >-
   Governs a RESEARCH REPOSITORY document portfolio: create, update, derive, freeze, retire, or delete;
   keep one authority per question; preserve raw/negative evidence; expire generated views; require
-  evidence-bound review and acceptance criteria. Use for R&D doc norms, stale/duplicate authorities,
-  retention, OKF profiles, or LLM-wiki governance. Owns DOC ADMISSION, authority, lineage, lifecycle,
+  evidence-bound review and acceptance criteria. Use for R&D doc norms, R&D文書ID/命名規則,
+  stale/duplicate authorities, retention, OKF profiles, or LLM-wiki governance. Owns DOC ADMISSION, authority, lineage, lifecycle,
   and review contracts. For durable RUN INTENT/RECEIPT/RETROSPECTIVE JUDGMENT, directing-research owns
   semantic verdict/programme move; HERE admits loci and retains negative terminals. Corpus synthesis →
   systematizing-knowledge first. Orchestrating-agents owns actors/visibility/acceptance; HERE lifecycle.
@@ -15,7 +15,7 @@ description: >-
 
 # Governing research documentation
 
-> **Version**: v2608.1.2 (2026-08-02) — compact semantic/durability stage-1 cut.
+> **Version**: v2608.2.0 (2026-08-03) — stable document identity and naming floor.
 
 **Atomic build.** Ship the authority contract, profile, templates, floor, regressions, trigger matrix,
 and forge ledger in one change. Run from this Skill directory; success prints nothing:
@@ -23,9 +23,10 @@ and forge ledger in one change. Run from this Skill directory; success prints no
 ```bash
 for f in SKILL.md agents/openai.yaml \
   references/admission-and-lifecycle.md references/harness-integration.md \
-  references/okf-rd-profile.md references/review-contract.md references/sources.md \
+  references/naming.md references/okf-rd-profile.md references/review-contract.md references/sources.md \
   assets/templates/canonical.template.md assets/templates/evidence.template.md \
   assets/templates/generated-view.template.md assets/templates/review-request.template.md \
+  assets/templates/rd-types.template.json \
   scripts/research-docs-check.ts tests/research-docs-check.test.ts \
   tests/local-failure-corpus.md tests/triggers.md tests/forge-verification-ledger.md; do
   test -f "$f" || echo "MISSING $f"
@@ -72,6 +73,7 @@ REQUEST: <what prompted documentation work>
 READER / DECISION: <who will do what differently>
 QUESTIONS: <the bounded questions feedback must answer>
 EXISTING AUTHORITY: <authority key + path, or none after inspection>
+DOCUMENT ID / PATH: <existing stable ID + path, or allocate only after new admission>
 ACTION: create | update | derive | freeze | retire | delete
 ROLE: canonical | evidence | review_request | generated_view | none
 SOURCES: <evidence paths, or none with reason>
@@ -89,6 +91,10 @@ Locate the existing authority and its evidence. Inspect open reviews, generated 
 entries, and deprecated predecessors. Search by the research question and authority key, not only
 by the proposed filename. If no owner exists, say so; do not fill the ownership void with a second
 quasi-canonical report.
+
+Preserve the existing `rd_document_id` and path for `update`, `retire`, and correction. Allocate an
+ID only after a new `create` or `derive` passes admission. The filename never decides whether the
+document deserves to exist. Read `references/naming.md` before allocation or migration.
 
 Choose exactly one action:
 
@@ -119,7 +125,8 @@ Use an OKF v0.2 knowledge bundle with the raw source tree outside it. Every conc
 - `generated_view` is draft-only, expires within 30 days, and cannot feed durable concepts.
 
 Read `references/okf-rd-profile.md` before creating or changing the bundle schema. Read
-`references/sources.md` before changing profile claims or their external lineage.
+`references/naming.md` before assigning a document ID or path. Read `references/sources.md` before
+changing profile claims or their external lineage.
 
 ### D3 · Delegate content craft to the correct owner
 
@@ -132,11 +139,11 @@ Skill returns after those edits to check authority, provenance, reviewability, a
 
 `DONOR SET`, transfer bundle, `MAPPING-BREAK`, `TARGET RESULT`, and `TRANSFER DISPOSITION` remain
 domain artifacts. They are not new `rd_role` values. Semantic ownership stays with
-`systematizing-knowledge`, `forging-novel-theses`, `acting-on-hypotheses`, and
-`directing-research`.
+`systematizing-knowledge` and `forging-novel-theses`. It also stays with
+`acting-on-hypotheses` and `directing-research`.
 
-This Skill may decide only their durable locus, authority key, source/digest lineage, review request,
-and retirement transition:
+This Skill may decide only their durable locus, authority key, and source/digest lineage. It may
+also decide the review request and retirement transition:
 
 | Artifact | Governance action | Never do here |
 |---|---|---|
@@ -172,8 +179,9 @@ Read `references/review-contract.md` when advice, feedback, approval, or handoff
 
 Update the reachable bundle index. Deprecate displaced authorities in the same change. Run the
 profile validator, and use Git review for semantic changes. The deterministic floor checks format,
-typed references, and digests. It also checks append-only evidence, authority uniqueness, review
-shape, and expiry:
+typed references, digests, and registered type codes. It also checks stable document IDs and
+filename grammar, including base-relative sequence allocation. The floor checks append-only
+evidence, authority uniqueness, review shape, and expiry:
 
 ```bash
 bun ~/.agents/skills/governing-research-documentation/scripts/research-docs-check.ts \
@@ -206,6 +214,7 @@ That skill never decides `DOC ADMISSION` or lifecycle meaning. This skill consum
 | Actors, visibility, dependencies, vetoes, or acceptance topology | `orchestrating-agents`; HERE retains admission/lifecycle meaning |
 | One task's resumable transient state | `continuing-long-running-tasks` |
 | Wiki/search product installation without a governance problem | product/setup owner |
+| Naming or renaming one ordinary file with no R&D portfolio decision | repository/domain owner |
 | Cross-document admission, authority, lifecycle, or review contract | **HERE** |
 
 Trigger and near-miss fixtures live in `tests/triggers.md`. Forge evidence and reciprocal-cut

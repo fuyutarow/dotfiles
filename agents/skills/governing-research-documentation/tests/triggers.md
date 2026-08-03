@@ -16,6 +16,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「レビュー用の293行の要約は必要なのか、生成物として期限付きにすべきか判定して」 | derive/freeze decision and generated-view expiry |
 | “Which research docs should be deleted, which deprecated, and which maintained?” | typed delete/retire/maintain adjudication |
 | 「OKFではあるのに文書品質が低い、というポストモーテムを実装可能な規範へ変えて」 | base-standard/profile distinction plus harness floor |
+| 「R&D文書をtype+年月+連番-IDとsnake_caseタイトルへ統一し、更新では再発番もrenameもさせないで」 | stable document identity, admission-time allocation, and deterministic naming floor |
 | “Keep our DONOR SET, transfer bundle, TARGET RESULT, mapping breaks, and route disposition reviewable without inventing a fifth document role.” | lifecycle/authority boundary for existing transfer artifacts |
 | “Only decide whether to create, update, freeze, retire, or delete these records and which one remains authoritative.” | explicit document admission, lifecycle, and authority; semantic content is already fixed |
 | “The RUN INTENT, failed RUN RECEIPT, and signed RETROSPECTIVE JUDGMENT are semantically fixed; admit durable loci, retention, review, and retirement without changing their verdicts.” | durable research-run DOC ADMISSION plus negative-terminal preservation; semantics remain upstream |
@@ -33,6 +34,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「Obsidianを入れてMarkdownを閲覧できるようにして」 | product/setup work; no governance question yet |
 | “Install OpenWiki and generate its default code wiki.” | product/setup owner; co-fire here only if admission/authority policy is also requested |
 | 「このREADMEにAPIの使い方を一節追加して」 | ordinary single-document authoring/domain owner |
+| 「このREADME.mdだけをread_me.mdへrenameして」 | ordinary repository rename; no R&D portfolio admission or identity decision |
 | “Configure a Stop hook to run an already-defined documentation check.” | `operating-the-harness` |
 | “Build a generic repository write tool for agents.” | reject the generic surface; only a future constrained apply design may be considered after repeated evidence |
 | “Audit why this failed research episode changed our interpretation and decide whether the programme should reopen.” | `directing-research`; no durable-document request yet |
@@ -62,6 +64,7 @@ The description must retain:
 - immutable evidence/negative results and disposable generated views;
 - a review contract with decision, questions, evidence, and acceptance criteria;
 - an explicit OKF/profile distinction;
+- a profile-local stable ID/type-code naming contract without claiming a universal filename rule;
 - cuts to the six nearest content/state siblings and product installation;
 - the final language directive.
 

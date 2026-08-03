@@ -14,8 +14,9 @@ were intentionally narrower:
 - `continuing-long-running-tasks`: one transient `TASK-CONTINUATION.md` with a writer transaction.
 
 No owner covered all four missing dimensions: cross-document **admission + authority + lifecycle +
-review contract**. The local failure corpus reproduced the gap in six positive and five negative
-fixtures. **Decision: create one new sibling**, not expand a single-document or transient-state Skill.
+review contract**. The local failure corpus initially reproduced the gap in six positive and five
+negative fixtures; the current regression set has seven and six. **Decision: create one new
+sibling**, not expand a single-document or transient-state Skill.
 
 ## Function and artifact map
 
@@ -31,6 +32,7 @@ DOC ADMISSION + one governed artifact transition
 |---|---|
 | LAW, admission gates, sibling cuts, execution model | `SKILL.md` |
 | detailed action/retirement correction rules | `references/admission-and-lifecycle.md` |
+| stable document identity, filename grammar, registry, allocation, migration | `references/naming.md` |
 | exact OKF v0.2/local `rd_` profile | `references/okf-rd-profile.md` |
 | exact review-request contract | `references/review-contract.md` |
 | repo-local command/hook/CI boundary | `references/harness-integration.md` |
@@ -70,15 +72,18 @@ The focused test suite must prove at least:
 7. generated views are draft, expiring, source-aligned, and non-authoritative;
 8. broken internal links, index orphans, generated back-edges, and typed supersession cycles fail;
 9. ordinary concept-link cycles and new evidence additions remain legal;
-10. bad CLI input is fatal exit 2, distinct from content findings exit 1.
+10. type-code registry shape, snake_case-tail filename grammar, ID agreement/uniqueness, and
+    admitted ID/type/role/path plus used-mapping immutability are enforced only in profile mode;
+11. bad CLI input is fatal exit 2, distinct from content findings exit 1.
 
 ## Semantic ceiling
 
 A passing checker does **not** establish that a document deserves existence, two authority keys are
 semantically distinct, a source entails a claim, a raw capture is truthful, a human identity is
-authentic, or a review question is scientifically useful. One test deliberately proves that vague
-but structurally non-empty review text can pass. Those judgments remain with the admission owner,
-domain Skill, and named human reviewer.
+authentic, a registered content type/title is apt, a historical generated ID was never reused, or a
+review question is scientifically useful. One test deliberately proves that vague but structurally
+non-empty review text can pass. Those judgments remain with the admission owner, domain Skill, and
+named human reviewer.
 
 ## Verification receipts
 
@@ -171,3 +176,63 @@ checker, or lifecycle claim was strengthened.
 Receipts: description 937 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
 exit 0 (`FAIL=0 WARN=0`); `research-docs-check.test.ts` 46 pass / 0 fail / 60 expectations; durable
 RUN-only and D→G ordered desk-check 2/2 PASS.
+
+## 2026-08-03 — stable document identity and structured filename grammar (v2608.2.0)
+
+Decision: extend this Skill rather than create a naming sibling or generic repository tool. Naming is
+part of DOC ADMISSION because allocation, update, retirement, evidence history, and review links all
+depend on one stable identity. `references/naming.md` is the sole owner; the profile, templates,
+checker, triggers, and lifecycle references point to it.
+
+The admitted grammar is:
+
+```text
+{type_code}{YYYYMM}_{seq}-{content_title}.md
+```
+
+The left side is a structured document ID, not a prefix slug. The one hyphen is therefore the
+top-level ID/title boundary. Underscores remain inside the ID and its lower_snake_case title. This is
+a constructed R&D profile convention, not an OKF rule, URL rule, or universal filesystem custom.
+POSIX and RFC 3986 provide no delimiter hierarchy; Google URL guidance applies to public URL words,
+while Google's C++ guide explicitly defers to local filename convention.
+
+Allocation occurs only after a new `create` or `derive` passes DOC ADMISSION. Ordinary update,
+correction, and retirement preserve ID, admitted type/role, and path. Generated-view deletion permits
+a later derivation only under a new ID. A regular bundle-local `rd-types.json` keeps type codes
+one-to-one; a mapping used by a concept visible at the Git comparison base cannot be reassigned.
+Migration of an existing corpus is one reviewed re-baseline, never a permanent legacy exemption.
+
+The deterministic floor remains narrower than governance. It proves current grammar, registry shape,
+agreement, live uniqueness, base-visible ID/path binding, admitted ID/type/role preservation, and
+used-mapping preservation. It also requires the new IDs in each code/month to be the contiguous suffix
+above the Git-base maximum, so an existing gap stays legal but cannot be filled later. It does not prove
+semantic type/title aptness, admission quality, or reuse of an ID/mapping absent from the selected
+comparison snapshot.
+
+Adversarial verification found and closed: duplicate JSON keys; registry symlink escape; final-line
+terminator filenames; generated-view ID/role laundering; ID reuse at a new path; used-code
+reassignment after deleting the last view; a diagnostic-code collision; and late filling or skipping
+of a sequence relative to the Git base. The last finding came from an additional independent
+architecture/checker challenge after the initial re-audits; its red test failed before `RDI013` and
+passed after the allocation floor was added. A final checker audit then exposed duplicate `RDI007` /
+`RDI013` reporting for in-place reissue and one `git show` subprocess per base Markdown file. The
+checker now distinguishes base paths from new paths and performs the base-tree identity scan through
+one bounded `git cat-file --batch -Z` subprocess. Change-specific history and registry reads remain
+bounded by the changed-file set. The forge audit's missing receipt and source-calibration findings are
+closed by this section and the revised POSIX wording.
+
+Verification receipts:
+
+- red phase after naming regressions but before implementation: 34 pass, 27 fail;
+- late allocation-floor red phase: 73 pass, 1 fail, 99 expectations;
+- diagnostic-separation red phase: 73 pass, 2 fail, 103 expectations;
+- final focused checker suite: 76 pass, 0 fail, 105 expectations;
+- `skill-check.ts`: silent exit 0, `FAIL=0 WARN=0`; description 951 characters;
+- `script-check.ts`: `FAIL=0 WARN=0` on the production checker;
+- system `quick_validate.py`: `Skill is valid!`;
+- Biome format/lint: two scoped TypeScript files clean; `rumdl --no-exclude`: 14 files clean;
+- atomic-build inventory: silent pass; trigger desk-check inventory: `F=14 N=14 C=9`;
+- stale literal fixture search: no old route/question/brief filenames and no `kebab` contract;
+- `mise run lint:skills-index`, `git diff --check`, and both installed Skill symlink targets: pass;
+- `mise run check`: pass — 140 hook tests passed with 1 intentional skip, 39 repository-search
+  tests passed, and 73 script-floor tests passed; 11 unrelated pre-existing Bun warnings remain.

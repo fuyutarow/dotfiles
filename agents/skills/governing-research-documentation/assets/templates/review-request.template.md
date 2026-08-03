@@ -9,14 +9,15 @@ generated:
 stale_after: 2026-08-15
 sources:
   - id: candidate
-    resource: ../canonicals/research-question.md
+    resource: ../canonicals/pos202608_001-research_question.md
   - id: evidence-route-comparison
-    resource: ../evidence/route-comparison.md
+    resource: ../evidence/evi202608_001-route_comparison.md
+rd_document_id: rev202608_001
 rd_role: review_request
 rd_owner: human:requester-id
 rd_retire_when: "The named reviewer records an outcome or the candidate is superseded."
 rd_review:
-  candidate: ../canonicals/research-question.md
+  candidate: ../canonicals/pos202608_001-research_question.md
   candidate_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   reviewer: human:reviewer-id
   decision: "Accept, reject, or request a bounded revision to the candidate position."
@@ -25,7 +26,7 @@ rd_review:
     - id: evidence-boundary
       question: "Does the candidate separate evidence from hypothesis?"
       evidence:
-        - ../evidence/route-comparison.md
+        - ../evidence/evi202608_001-route_comparison.md
       accept_if: "Each material claim is attributed to evidence or marked unresolved."
 ---
 

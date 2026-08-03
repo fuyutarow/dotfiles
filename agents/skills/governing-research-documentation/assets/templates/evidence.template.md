@@ -9,6 +9,7 @@ generated:
 sources:
   - id: raw-run-2026-08-01
     resource: ../../raw/experiments/run-2026-08-01.json
+rd_document_id: evi202608_001
 rd_role: evidence
 rd_evidence:
   source_id: raw-run-2026-08-01

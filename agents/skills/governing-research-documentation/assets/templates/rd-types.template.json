@@ -1,0 +1,9 @@
+{
+  "schema": "rd-document-types/v1",
+  "type_codes": {
+    "research_briefing": "view",
+    "research_evidence": "evi",
+    "research_position": "pos",
+    "review_request": "rev"
+  }
+}

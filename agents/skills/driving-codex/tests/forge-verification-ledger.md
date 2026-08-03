@@ -246,3 +246,18 @@ table cell は 1 → 1(未着手)。全面清算は本 skill の鍛え直し案�
 | v2607.1.3 | 2026-07-15 | driving-grok 鍛造に伴う相互 cut(Routing + MUST-NOT-FIRE) |
 | v2607.2.0 | 2026-07-21 | LONG-RUN 法。wrapper 埋め込みは 120s Bash 既定 + StructuredOutput 期限で死ぬ(生存 2/7)。effort=high は main-loop 背面へ |
 | v2607.3.0 | 2026-07-25 | effort 梯子の確定と ULTRA の発注法(本節) |
+
+## v2608.1.0 — local compute admission (2026-08-03)
+
+Refuter finding accepted: the prior LONG-RUN and parallel recipes bounded tokens/walltime but not
+local processes, host RAM, or nested fanout. Long/parallel `codex exec` examples now run through one
+P7 envelope per subprocess. The Workflow example carries the hook-required NONCOMPUTE declaration
+because it is one bounded read-only call; parallel calls require separate envelopes and serialize on
+conflicting reservations/accounts.
+
+Local ULTRA is now denied: its vendor-side child cardinality is intentionally not a constant, while
+this host's enforceable envelope accepts `child_fanout: 0` only. An isolated runner with an aggregate
+enforced budget is the explicit escape; token-only declaration is insufficient. This is a resource
+policy change, not a new claim about model availability. Trigger surface is unchanged; the existing
+`ultra`/parallel-Codex tokens still fire. Targeted skill floor has no FAIL; existing prose/version/table
+WARN debt remains disclosed.

@@ -51,3 +51,17 @@ JG4 reproducibility.
 
 **Floor status at freeze**: `skill-check.ts` pass, strict-YAML parse OK, description ≤1500 chars
 (recorded in forge-session shell log, 2026-07-05).
+
+## 2026-08-03 resource seam (v2608.1.0)
+
+Incident input: a Julia Krylov pilot was safe at the current rank but had no rank ceiling; retained
+left/right bases grow linearly in host memory while reorthogonalization grows quadratically in work.
+The host was already at the RAM/swap edge while a compatible GPU was idle. This skill now routes every
+recordable/pilot/benchmark/parallel Julia run to sibling P7 before execution, removes agent/CI
+`-t auto`, and binds OhMyThreads to the admitted aggregate affinity instead of agent-level fanout.
+
+One-home decision: Julia syntax/threading stays here; envelope schema, GPU exception, reservations,
+and stop thresholds stay only in `orchestrating-agents/references/measurement-and-resources.md` P7.
+Trigger desk-check added the orchestrated rank-search co-fire row; existing Julia tokens still fire
+this skill and explicit GPU tokens still co-fire `optimizing-julia-gpu-kernels`. Targeted skill floor:
+no FAIL; the pre-existing description/prose/version/table warnings remain disclosed.

@@ -19,10 +19,13 @@ paths: "**/*.py"
 
 # Writing Python — modern environment, selection & coding discipline
 
-> **Version**: v2607.1.0 (2026-07-12) — spine (uv/ruff/pydantic) verified live against
->   PyPI/official docs `[dated:2026-07]`.
+> **Version**: v2608.1.0 (2026-08-03) — bounded recordable runs; auto process/test fanout retired.
 > **Scope**: environment/packaging discipline + library selection + typing/validation/quality
 >   gates for Python that **lives in a repo** (project, module, kept script); host-agnostic.
+> **Resource seam**: before a recordable numerical run, benchmark, parallel test, resident
+> service, or orchestrated Python subprocess, read
+> `../orchestrating-agents/references/measurement-and-resources.md` P7 and use
+> `agent-resource-run`. P7 is the sole owner of the envelope and GPU-first exception test.
 > **Out of scope**: invoking a Python-based CLI tool ad hoc (`uvx`, one-off `uv run`) →
 >   `running-python-tools`; teaching Python syntax to someone who doesn't know it; a deep
 >   per-library API reference (`references/selection.md` is a lookup, not a tutorial).
@@ -241,6 +244,7 @@ Research code (if applicable — `references/research.md`):
 - [ ] Randomness flows through an explicit `np.random.default_rng(seed)` (`NPY002`); torch runs seed + determinism flags + `CUBLAS_WORKSPACE_CONFIG` when reproducibility is claimed
 - [ ] Checkpoints/weights are safetensors; nothing unpickled across a trust boundary (`S301`)
 - [ ] torch/CUDA deps are routed via explicit `[[tool.uv.index]]` + `[tool.uv.sources]` — never a bare `pip install torch`
+- [ ] Recordable/pilot/benchmark/parallel runs have a P7 envelope and runner verdict; every `max_workers`, `n_jobs`, and pytest `-n` is the admitted integer, never an automatic/all-core value
 
 Final gate:
 - [ ] `uv run ruff check --fix && uv run ruff format` (project-pinned; `uvx` form only outside a project) was run before submitting

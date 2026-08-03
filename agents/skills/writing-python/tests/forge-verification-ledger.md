@@ -129,3 +129,15 @@ zero ties; live fact-recheck 12/12 PASS on substance (3 quotation-precision nits
 - SKILL.md §1a research rows stay — declared summary seam (D1-EXT above).
 - quick_validate flags `paths:` frontmatter — known divergence: Claude Code supports it
   (writing-rust/typescript precedent); the plugin validator tracks the platform-API allowlist.
+
+## 2026-08-03 resource seam (v2608.1.0)
+
+Refuter finding accepted: the prior parallelism ladder named `ProcessPoolExecutor`, joblib, and
+pytest-xdist `-n auto` without an aggregate CPU/RAM admission point. Multiple agents could each take
+the all-core default and replicate large arrays. The skill now requires explicit admitted integers
+for `max_workers`, `n_jobs`, and pytest `-n`; `n_jobs=-1`, executor defaults, and `-n auto` are not
+allowed in agent/CI recordable runs. Process copies belong in the analytic RAM bound before pilot.
+
+The schema and thresholds are pointers to orchestrating-agents P7, not duplicated Python policy.
+The trigger set adds the ProcessPoolExecutor/xdist exhaustion co-fire case. Targeted skill floor has
+no FAIL; existing prose/version/table WARN debt remains unchanged in class and is not claimed fixed.

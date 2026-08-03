@@ -16,7 +16,8 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2607.2.0 (2026-07-23 — +CAPTURE-PINS-ADDRESSES from the firedancer
+> **Version**: v2608.1.0 (2026-08-03 — pre-warmup CPU/RAM/VRAM admission and bounded streams;
+> prior v2607.2.0 added CAPTURE-PINS-ADDRESSES from the firedancer
 > fd_evaluate graph-cache postmortem, 検収4: a captured CUDA graph + scratch buffer was
 > cached keyed on the primary input's identity alone, while capture had pinned the addresses
 > of EVERY closed-over device array; a fresh per-cell state array reusing the cached graph
@@ -42,6 +43,10 @@ description: >-
 > **Out of scope**: driver/toolkit installation and `nvidia-smi` PATH plumbing (environment
 > work, not kernel craft); multi-GPU / distributed (deferred until real demand); CUDA C++
 > with no Julia in play.
+> **Resource seam**: before allocation, warmup, profile, or pilot, read sibling
+> `orchestrating-agents/references/measurement-and-resources.md` P7 and obtain an admitted
+> host-RAM/VRAM/process/walltime envelope through `agent-resource-run`. P7 owns capacity and
+> GPU-first placement; this skill owns what runs efficiently after admission.
 > **Provenance**: forged 2026-07-22 from a 10-surface fan-out harvest (102 rules surviving an
 > operationality filter) + a source-diffed CUDA.jl v5.11.3→v6.2.1 API verification + an
 > AD-interaction study, each verified against the installed source under
@@ -69,7 +74,7 @@ description: >-
 |---|---|---|
 | **GK0 SHOULD-THIS-KERNEL-EXIST** (deny-gate, §1) | Before ANY `@cuda`/`@kernel`: check the dispatch table (§1). GEMM/factorization/FFT/sparse/conv/reduction/elementwise → vendor lib or broadcast/`mapreduce`, NEVER hand-written | a **one-line comment above the kernel** naming the checked-and-rejected alternative (`# no vendor primitive: associative scan over custom op`) — no comment = violation |
 | **GK1 DEVICE LEGALITY** (writing-kernels.md) | isbits args (Adapt for structs), no GC allocation, `return nothing`, forced specialization of inner helpers, no boxed captures | kernel compiles; on failure read `InvalidIRError` **bottom-up** (last `Reason:` first); `@device_code_warntype interactive=true` clean on must-be-fast kernels |
-| **GK2 MEASUREMENT** (measuring.md) | No perf claim without `CUDA.@sync`-wrapped timing after one warm-up run; memory-bound vs compute-bound decided by profile, never eyeballed | `CUDA.@profile` / `CUDA.@bprofile` output cited; for kernel-level tuning an `ncu` roofline or achieved-bandwidth number |
+| **GK2 MEASUREMENT** (measuring.md) | After P7 admission, no perf claim without `CUDA.@sync`-wrapped timing after one warm-up run; memory-bound vs compute-bound decided by profile, never eyeballed | P7 runner verdict plus `CUDA.@profile` / `CUDA.@bprofile` output; for kernel-level tuning an `ncu` roofline or achieved-bandwidth number |
 | **GK3 CORRECTNESS ORACLE** (debugging.md) | Every kernel has a same-algorithm CPU reference compared over the WHOLE `Array(gpu)` result; races checked when threads share memory | the comparison test exists and runs in `Pkg.test()`; `compute-sanitizer` run when shared memory/atomics are involved; KA kernels use the `CPU()` backend as oracle; a cached/graph-capture path additionally passes debugging.md §11's state-separation test + carries a permanent in-body consistency assert |
 | **GK3-AD DIFFERENTIABILITY** (differentiating-kernels.md) | A kernel (or mutating CuArray op) on a training path needs an explicit `rrule` (or Enzyme route) + a gradient test — Zygote will NOT differentiate through it | `ChainRulesCore.rrule` defined; `test_rrule` (or FD check vs CPU) green |
 | **GK4 PRECISION** (host-performance.md §12) | Float32 default on GPU; no bare Float64 literal (`2.0`, `1/3`, `pi`) touching Float32 data; Int32 index literals in hot kernels | `grep -nE '[^f0-9]([0-9]+\.[0-9]+)[^f0-9]' kernel_src.jl` finds no unsuffixed literal in device code; promotions absent from `@device_code_warntype` |

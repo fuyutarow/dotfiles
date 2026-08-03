@@ -112,3 +112,16 @@ Cheap benchmarks now stay with GK2/domain execution; only costly downstream expo
 **PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 24 long prose sentences, a 36-line
 version block, and three long table cells. Queue position: before the next feature reforge; move
 version history here first, then split prose without weakening GPU safety gates.
+
+## 2026-08-03 pre-warmup resource seam (v2608.1.0)
+
+The host incident showed the inverse of the usual kernel-only optimization problem: main RAM/swap
+was exhausted while a compatible GPU was idle, and the dominant reorthogonalization was a bandwidth
+bound long-vector operation. P7 admission now precedes allocation, warmup, profiling, and GK2. This
+skill still decides vendor primitive/fusion/hand-kernel choices only after admission.
+
+Host-performance §9 now bounds task-per-stream concurrency by the one admitted GPU reservation and
+the aggregate live host/VRAM buffers; task-per-cell plus agent-level GPU fanout is forbidden. Trigger
+desk-check added the CPU-RAM/GPU-idle Krylov row; existing `CuArray`/GPU tokens fire this skill and P7
+co-fires without taking kernel-craft ownership. No live GPU kernel was run for this documentation-only
+seam; resource admission and hook tests were machine-run separately (`80 pass / 0 fail`).

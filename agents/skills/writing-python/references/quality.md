@@ -139,7 +139,7 @@ Canon plugins — one line each, and when to reach for it:
 | Plugin | Adds | Use when |
 |---|---|---|
 | `pytest-cov` | coverage reporting | you want a coverage number or gate — default-on |
-| `pytest-xdist` | parallel runs (`-n auto`) | the suite is slow enough to bottleneck the edit loop |
+| `pytest-xdist` | parallel runs (`-n N`) | the suite is slow enough to bottleneck the edit loop **and** P7 admitted the explicit worker/RAM envelope; never `-n auto` in agent/CI runs |
 | `hypothesis` | property-based testing | the input space is bigger than enumerable example cases |
 | `syrupy` | zero-dep snapshot testing | comparing large/structured output (serialized objects, rendered text) |
 | `pytest-asyncio` **or** anyio's pytest plugin | async test support | asyncio-only codebase → `pytest-asyncio`; asyncio+Trio, or already on anyio → its plugin. Neither deprecates the other — pick ONE per codebase, don't run both. |

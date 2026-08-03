@@ -23,13 +23,16 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2607.3.0 (2026-07-25) — the effort ladder stops being inferred. Its top tier changes
-> the RUN SHAPE, not the depth; ULTRA ordering section added.
+> **Version**: v2608.1.0 (2026-08-03) — long/parallel runs require resource envelopes; unknown local fanout is denied.
 > Prior versions and what each changed: `tests/forge-verification-ledger.md` §version history.
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
 > subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
 > spend accounting. The `claude` harness itself (hooks, settings, Workflow tool semantics) is
 > owned by `operating-the-harness`.
+> **Resource seam**: any long-running or parallel local `codex exec`, and any mode that can spawn
+> nested agents, first reads sibling `orchestrating-agents/references/measurement-and-resources.md`
+> P7. Each local subprocess gets its own admitted envelope and runs through
+> `agent-resource-run`; a quick single read-only call may declare `RESOURCE-CLASS(NONCOMPUTE)`.
 > **Durability contract**: this body asserts NO model IDs, token prices, CLI version numbers, or
 > exact error strings as FACTS — every fast-moving fact lives in `references/model-catalog.md`
 > under its dated header, and a model name asserted as fact in this body is a bug. Two declared
@@ -121,7 +124,8 @@ wrapper's StructuredOutput deadline). sol-class effort=high takes 10-30+ min —
 
 ```bash
 # from the MAIN loop, Bash run_in_background: true — NOT inside a Workflow agent()
-timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
+agent-resource-run --manifest "$RESOURCE_ENVELOPE" -- \
+  timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
   -m gpt-5.6-sol -c 'model_reasoning_effort="high"' -o "$SCRATCH/out.txt" \
   "$(cat "$BRIEF_FILE")" </dev/null
 # collect on task-notification; the answer is $SCRATCH/out.txt (C3: relay verbatim + tokens line)
@@ -144,17 +148,16 @@ get the ordinary ladder — the catalog owns which models carry what.
 | Ultra runs are LONG-RUN by definition: main-loop background Bash, never a wrapper agent | the call in the main Bash history, `</dev/null` present |
 | Declare the fan-out before launching: what codex is expected to split into, and the token cost you accept | a one-line declaration in the turn that launches it |
 | Do not quote a subagent COUNT — it is configuration, not a constant | any count claim cites `/debug-config` output from THIS run |
+| Local launch also needs P7 child/process/RAM admission | this host's envelope accepts `child_fanout: 0` only; an unknown vendor-side count is therefore DENIED locally |
 
 Ultra is for work that justifies a fleet on the vendor's side. Repo-wide audit, broad migration,
 multi-hypothesis investigation. A single focused question does not need it. One tier down buys
 the same depth in one agent, at a fraction of the spend.
 
-```bash
-# main loop, run_in_background: true — codex fans out on ITS side; we spend one Bash slot
-timeout 3600 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
-  -m gpt-5.6-sol -c 'model_reasoning_effort="ultra"' -o "$SCRATCH/out.txt" \
-  "$(cat "$BRIEF_FILE")" </dev/null
-```
+On the current local host, do not launch it: vendor-side child cardinality is not bounded and the
+P7 envelope cannot admit it. Use the deepest single-agent tier, or move the whole run into an
+isolated runner that can enforce a declared aggregate child/process/RAM budget. Token-only budget
+is not a compute admission artifact.
 
 Levels, which models carry them, the deprecation note behind the switch, the vendor's own cost
 warning → `references/model-catalog.md`, SOLE owner of the perishable facts.
@@ -189,7 +192,8 @@ result recorded in the ledger.
 
 ```js
 const codexAudit = (target) => agent(
-  `You drive the Codex CLI. Run exactly:
+  `RESOURCE-CLASS(NONCOMPUTE): one bounded read-only Codex audit; no local fanout
+   You drive the Codex CLI. Run exactly:
    timeout 600 codex exec --skip-git-repo-check --sandbox read-only -C <repo> \
      -m <model-from-catalog> -c 'model_reasoning_effort="high"' \
      'Audit ${target} for correctness. Verdict + evidence.' </dev/null
@@ -217,7 +221,7 @@ const codexAudit = (target) => agent(
 |---|---|---|
 | choose model / effort / sandbox / prompt | SOLO | judgment spine — cost, risk, and task must sit in one context |
 | a single codex call | SOLO (main-loop Bash) | spawn overhead exceeds the work |
-| parallel codex calls | FAN-OUT — one sonnet wrapper per call | calls are independent; workers relay observables |
+| parallel codex calls | capacity-aware FAN-OUT — one wrapper and one P7 envelope per call | independence alone is insufficient; conflicting CPU/RAM/process/account reservations serialize |
 | availability probe | SOLO script | never spawn an agent to run a script |
 | cross-model disagreement adjudication | SOLO | the verdict braids both sides' evidence |
 

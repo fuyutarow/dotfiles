@@ -22,13 +22,17 @@ description: >-
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2607.4.0 (2026-07-22) — JG5 EXPERIMENT PROVENANCE added from the firedancer postmortem: JG4 carried the DrWatson clause since v2607.3.0 yet 70 accreted scripts + lost provenance happened anyway — because the skill fired on WRITING code, not on RUNNING experiments, and the artifact was not mechanical. JG5 makes the run the trigger and the committed provenance the artifact.
+> **Version**: v2608.1.0 (2026-08-03) — recordable runs now require pre-pilot resource admission; auto parallelism retired.
 > (prior: v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
 > **Out of scope**: live REPL iteration tooling (Revise, TestItems, JETLS, Cthulhu) —
 > pointered from `references/setup.md` §8, not the focus here.
+> **Resource seam**: before any recordable experiment/benchmark, parallel test, or orchestrated
+> Julia subprocess, read `../orchestrating-agents/references/measurement-and-resources.md` P7 and
+> run through `agent-resource-run`. This applies even without a subagent. P7 alone owns the
+> envelope schema, GPU-first exception test, aggregate reservations, and limits.
 > **Staleness registry**: fast-moving facts are tagged `[dated:YYYY-MM]` in place (locality
 > beats physical isolation — the fact IS the decision input where it sits). Before trusting one,
 > `grep -rn '\[dated:' agents/skills/writing-julia/` and re-verify anything older than ~2 quarters:
@@ -408,6 +412,7 @@ Performance & verification — `references/performance.md` (for hot paths; reach
 - [ ] *If* an inner loop must be allocation-free and you've added AllocCheck for it: `@check_allocs` passes (§2.8) — don't carry AllocCheck without a guarded loop
 - [ ] **Aqua** (if authoring a package): `Aqua.test_all` clean — no type piracy / ambiguities / stale deps / compat gaps (architecture.md §10.6.1)
 - [ ] *If* the work is genuinely parallel: reductions use `OhMyThreads`, never `threadid()`-keyed buffers (toolchain.md §2.9.4) — serial code carries no threads dep
+- [ ] Recordable/pilot/benchmark/parallel runs have a P7 resource envelope and `agent-resource-run` verdict; no `-t auto`, unbounded process fanout, or runtime cap escalation
 
 Environment — `references/setup.md`:
 - [ ] If shipping a `.so`/AOT binary: route chosen per §3.5.1 — PackageCompiler `create_library` (stable, fat) vs `juliac --trim` (experimental; needs a dispatch-free `@ccallable` surface + type-stable deps) — never "Julia can't make a .so" and never trim-by-default

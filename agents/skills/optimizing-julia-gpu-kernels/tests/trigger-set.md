@@ -24,6 +24,7 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「`cumsum` より速い scan カーネル自作できる?」 | GK0 tension: cumsum IS a Blelloch kernel — deny-gate walk |
 | 「`sm_90` 向けにコンパイルしたい / `cap=` が deprecated と言われた」 | api-changes.md (`arch=sm"90"`) |
 | "CUDA Graph でキャッシュしてる評価パスが、2回目以降ずっと同じ値を返す" / "graph capture のキャッシュが古い結果を返す" | CAPTURE-PINS-ADDRESSES (SKILL.md §1) — cache key missed a closed-over device array; debugging.md §11 for the state-separation + permanent-assert fix |
+| 「CPU RAM が払底してGPUが空いている。CuArrayのKrylov基底へ移すべきか、VRAM上限込みで測って」 | GPU placement/performance fires here; `orchestrating-agents` P7 must admit RAM/VRAM before warmup, then GK0/GK2 decide the implementation |
 
 ### Co-fire (with ORDER)
 
@@ -65,3 +66,6 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
   matched by the existing description surface (`CUDA.jl`, `GPU カーネル`) — no description
   edit needed; description-token consistency re-checked against the new row per the
   precedent in finding #16.
+- 2026-08-03 v2608.1.0: added the CPU-RAM/GPU-idle placement row. Existing description tokens
+  (`CuArray`, GPU profiling/optimization) still fire; P7 is a co-fire owner, not a competing
+  kernel-craft skill. No description edit was needed.

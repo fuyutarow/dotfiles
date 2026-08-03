@@ -120,6 +120,11 @@ as separate `@async` tasks inside `@sync`, collecting into a `Vector{Any}` decla
 Call `synchronize()` before the block if the tasks consume GPU data produced earlier on the
 default stream — cross-stream visibility is not automatic.
 
+The number of tasks/streams is bounded by the admitted P7 envelope, including aggregate VRAM for
+every simultaneously live buffer and host RAM for pinned staging buffers. Do not create a
+task-per-cell or combine stream concurrency with agent-level GPU fanout. The resource runner gives
+one job exclusive use of its selected GPU; overlap is internal to that one reservation.
+
 ## §10 Unified memory: default is device memory
 
 Default to ordinary device memory (`CuArray(x)`) with `allowscalar(false)`. Reach for unified

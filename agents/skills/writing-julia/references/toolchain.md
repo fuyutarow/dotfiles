@@ -54,6 +54,10 @@ For data-parallel maps/reductions on one machine, `OhMyThreads.tmapreduce` / `@t
 modern replacement for hand-written `Threads.@threads` + manual accumulation. **Do not key
 buffers on `threadid()`** (unsafe under Julia 1.12's interactive/worker split — see setup.md);
 OhMyThreads handles chunking and reduction correctly.
+Its task count is not a second budget: for any recordable/orchestrated run, first admit the
+aggregate CPU/RAM envelope under sibling `orchestrating-agents` P7, then keep all tasks inside
+the runner's affinity and declared process/RSS ceilings. Never combine an auto-sized Julia pool
+with agent-level parallelism.
 ```julia
 using OhMyThreads
 total = tmapreduce(+, 1:N) do i

@@ -268,7 +268,11 @@ numba/Cython replacement yet.
 embarrassingly-parallel sklearn fit) → `dask` (scale existing pandas/NumPy past single-machine
 memory with minimal rewrite) vs `ray` (actors/distributed training-serving, stateful workloads —
 using ray to parallelize a plain groupby is over-engineering; using dask for distributed
-actor-based RL is under-fit).
+actor-based RL is under-fit). For every recordable/orchestrated run, sibling
+`orchestrating-agents` P7 precedes pool creation: pass the admitted integer as `max_workers=N` or
+`n_jobs=N`, keep BLAS/OpenMP threads inside the same CPU budget, and run through
+`agent-resource-run`. Never rely on executor defaults, `n_jobs=-1`, or a library's auto/all-core
+mode; process copies of large arrays belong in the analytic host-RAM bound before the pilot.
 
 **Verified 3.14 change**: on Unix platforms other than macOS, `multiprocessing`'s default start
 method is now **`forkserver`** — not `spawn`, and not the old `fork` default. Code relying on

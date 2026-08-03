@@ -237,7 +237,9 @@ conflict with trim; type-stable alternatives (TypedTables, StructArrays) work
 ## 3.6 Julia 1.12 runtime notes
 
 - **Threading default changed**: `julia` (no `-t`) starts with 1 worker + 1 interactive thread
-  (`-t1,1`). **Use `-t auto` for compute-bound work**, or `-tN,1` explicitly. **Do not key
+  (`-t1,1`). For agent/CI/recordable work, take explicit `N` from the admitted P7 envelope;
+  `agent-resource-run` exports `JULIA_NUM_THREADS=N` and CPU affinity. **Never use `-t auto` in
+  those runs.** For an unrecorded local interactive run only, use an explicit `-tN`. **Do not key
   buffers on `threadid()`** — the interactive/worker split makes this unsafe (use OhMyThreads,
   toolchain.md §2.9.4).
 - **Parallel precompilation is the default**: large dep trees compile in parallel.
@@ -263,12 +265,13 @@ For longer scripts, write to a `.jl` file:
 julia --project=. script.jl
 ```
 
-For parallel computation (compute-bound → populate the worker pool; do NOT key buffers on
-`threadid()` — toolchain.md §2.9.4 / §3.6):
+For parallel computation, create and admit the P7 envelope first. The runner supplies `N` and
+affinity; do not add an independent auto-sized pool. Do NOT key buffers on `threadid()`
+(toolchain.md §2.9.4 / §3.6):
 
 ```bash
-julia -t auto --project=. script.jl
-julia -tN,1  --project=. script.jl   # explicit worker count
+agent-resource-run --manifest /absolute/path/job.resource.json -- \
+  julia --project=. script.jl
 ```
 
 ## 6. Quick Reference: Julia Idioms

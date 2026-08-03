@@ -144,6 +144,7 @@ git ls-files -z -- \
   ':(glob)scripts/*.ts' ':(glob)cocoindex/*.ts' \
   ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
+  'agents/goal-kernel/cli.ts' \
   ':(exclude)agents/claude/hooks/repo-search.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
@@ -155,8 +156,8 @@ depends = ["test:hooks", "test:cocoindex", "test:scripts"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
-description = "Claude Code and Codex hook tests (bun test; each hook spawned end-to-end with synthetic payloads)"
-run = "bun test agents/claude/hooks agents/codex/hooks"
+description = "Claude Code, Codex, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters)"
+run = "bun test agents/claude/hooks agents/codex/hooks agents/goal-kernel"
 
 [tasks."test:cocoindex"]
 dir = "{{config_root}}"

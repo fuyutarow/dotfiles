@@ -9,7 +9,7 @@ description: >-
   roles/visibility/veto/acceptance carrying only that locus; the sole HERE writer checkpoints the
   accepted overlay locator. Neither edits the other's semantic artifact. MUST NOT use for one-shot
   diagnosis, hook/compact config alone→operating-the-harness, dispatch without durability, programme
-  judgment alone→directing-research, debug alone, trivial edits, private reasoning, secrets, poisoned
+  judgment alone→supervising-research-programmes, debug alone, trivial edits, private reasoning, secrets, poisoned
   context, or unauthorized paths. English skill; respond in the user's language (default Japanese).
 ---
 
@@ -166,7 +166,7 @@ re-inject a trusted locator, never transcript text or the record body.
 - One-shot incident explanation/diagnosis with no persistence request → no record.
 - Feature/debug correctness → `implementing-and-debugging`; co-fire here only when durable resume is
   needed. Store evidence locators, never duplicate the implementation analysis.
-- Research stage/portfolio judgment → `directing-research`; point to its artifacts.
+- Research stage/portfolio judgment → `supervising-research-programmes`; point to its artifacts.
 - Research-document admission, authority, evidence lineage, review, retirement, or deletion across
   artifacts → `governing-research-documentation`; persist its cited state only when C1 fires.
 - Agent roles, dependencies, vetoes, and acceptance → `orchestrating-agents`. Pass only the record

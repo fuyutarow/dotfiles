@@ -158,7 +158,11 @@ const validTransferCandidate = (path: string, digest: string): string =>
 		transferDetails: transferDetails(path, digest),
 	});
 
-const validMappingBreak = (path: string, digest: string): string => `
+const validMappingBreak = (
+	path: string,
+	digest: string,
+	handoffOwner = "directing-research-sections",
+): string => `
 ## MAPPING-BREAK T2
 
 - Transfer attempt ID: T2
@@ -173,7 +177,7 @@ const validMappingBreak = (path: string, digest: string): string => `
 - Failed invariant: recovery would require an invertible transition, but target aggregation is many-to-one
 - Transfer boundary: mapping breaks when all admissible target observations remain non-invertible under the supplied regime
 - Evidence / locator: target constraint at research/target-frame.md:27 and donor relation at D1:doi:10.example/a#p4
-- Handoff: directing-research — preserve T2 in the TRANSFER DISPOSITION denominator
+- Handoff: ${handoffOwner} — preserve T2 in the TRANSFER DISPOSITION denominator
 - Status: MAPPING-BREAK
 `;
 
@@ -530,6 +534,151 @@ Capital fit: One-quarter budget.
 
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("mapping-break packet: FAIL=0");
+	});
+
+	test("default mode accepts the current handoff and rejects the legacy v1 handoff", () => {
+		const donor = frozenDonorSet();
+		const current = run(
+			"--donor-set",
+			donor.path,
+			fixture(validMappingBreak(donor.path, donor.digest)),
+		);
+		const legacy = run(
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(donor.path, donor.digest, "directing-research"),
+			),
+		);
+		const caseVariant = run(
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(
+					donor.path,
+					donor.digest,
+					"DIRECTING-RESEARCH-SECTIONS",
+				),
+			),
+		);
+
+		expect(current.exitCode).toBe(0);
+		expect(legacy.exitCode).toBe(1);
+		expect(caseVariant.exitCode).toBe(1);
+		expect(legacy.stdout).toContain("exact directing-research-sections owner");
+	});
+
+	test("legacy v1 mode accepts only the exact legacy handoff", () => {
+		const donor = frozenDonorSet();
+		const legacy = run(
+			"--legacy-v1",
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(donor.path, donor.digest, "directing-research"),
+			),
+		);
+		const current = run(
+			"--legacy-v1",
+			"--donor-set",
+			donor.path,
+			fixture(validMappingBreak(donor.path, donor.digest)),
+		);
+		const caseVariant = run(
+			"--legacy-v1",
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(donor.path, donor.digest, "DIRECTING-RESEARCH"),
+			),
+		);
+		const adjacentToCandidate = run(
+			"--donor-set",
+			donor.path,
+			"--legacy-v1",
+			fixture(
+				validMappingBreak(donor.path, donor.digest, "directing-research"),
+			),
+		);
+
+		expect(legacy.exitCode).toBe(0);
+		expect(current.exitCode).toBe(1);
+		expect(caseVariant.exitCode).toBe(1);
+		expect(adjacentToCandidate.exitCode).toBe(0);
+		expect(adjacentToCandidate.stdout).toContain(
+			"mapping-break packet: FAIL=0",
+		);
+		expect(current.stdout).toContain("exact directing-research owner");
+	});
+
+	test("legacy v1 compatibility accepts only one exact bare flag token", () => {
+		const donor = frozenDonorSet();
+		const legacyFixture = fixture(
+			validMappingBreak(donor.path, donor.digest, "directing-research"),
+		);
+		const invalidArgumentSets = [
+			["--legacy-v1", "--legacy-v1"],
+			["--legacyV1"],
+			["--Legacy-v1"],
+			["--LEGACY-V1"],
+			["--no-legacy-v1"],
+			["--legacy.v1"],
+			["--prefix-legacy-v1"],
+			["--legacy-v1-suffix"],
+			["--legacy-v1="],
+			["--legacy-v1=false"],
+			["--legacy-v1=FALSE"],
+			["--legacy-v1=true"],
+			["--legacy-v1=TRUE"],
+			["--legacy-v1=1"],
+			["--legacy-v1=yes"],
+			["--legacy-v1=garbage"],
+			["--legacy-v1", "--legacy-v1=false"],
+		] as const;
+
+		for (const arguments_ of invalidArgumentSets) {
+			const result = run(
+				...arguments_,
+				"--donor-set",
+				donor.path,
+				legacyFixture,
+			);
+
+			expect(result.exitCode).toBe(2);
+			expect(result.stderr).toContain(
+				"legacy v1 compatibility requires exactly one bare --legacy-v1 token",
+			);
+		}
+	});
+
+	test("handoff owner matching rejects ambiguous substrings in both modes", () => {
+		const donor = frozenDonorSet();
+		const currentSubstring = run(
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(
+					donor.path,
+					donor.digest,
+					"prefix-directing-research-sections",
+				),
+			),
+		);
+		const legacySubstring = run(
+			"--legacy-v1",
+			"--donor-set",
+			donor.path,
+			fixture(
+				validMappingBreak(
+					donor.path,
+					donor.digest,
+					"directing-research-shadow",
+				),
+			),
+		);
+
+		expect(currentSubstring.exitCode).toBe(1);
+		expect(legacySubstring.exitCode).toBe(1);
 	});
 
 	test("rejects a vague MAPPING-BREAK and candidate leakage in the same attempt", () => {

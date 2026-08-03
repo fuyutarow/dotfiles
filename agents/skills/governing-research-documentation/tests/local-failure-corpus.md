@@ -22,7 +22,7 @@ not another project-status ledger and do not reproduce the source transcript.
 | NF-01 | Facts are duplicated only across sections of one report. | `structuring-documents` |
 | NF-02 | One task must survive compaction, executor change, or handoff. | `continuing-long-running-tasks` |
 | NF-03 | A multi-source literature claim needs provenance and reconciliation. | `systematizing-knowledge` |
-| NF-04 | A selected research frame has candidate theses that must be compared. | `directing-research` / `forging-novel-theses` |
+| NF-04 | A selected research frame has candidate theses that must be compared. | `directing-research-sections` / `forging-novel-theses` |
 | NF-05 | A finished manuscript claim needs calibration and red-team review. | `arguing-research-papers` |
 | NF-06 | One ordinary README or source file needs a local rename with no R&D portfolio policy. | repository/domain owner |
 

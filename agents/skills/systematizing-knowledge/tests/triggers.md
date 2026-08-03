@@ -27,10 +27,10 @@ Do not use body knowledge to rescue an ambiguous description.
 | N1c | “Critically appraise whether this one paper's identification strategy supports its causal claim.” | `arguing-research-papers` reviewer red-team — argument/method/validity appraisal |
 | N1d | “Surface the hidden assumptions in this review plan; do not synthesize or resolve them yet.” | `surfacing-blind-spots` — premise-only excavation |
 | N2 | “Help defend the central claim of my manuscript against reviewers.” | `arguing-research-papers` — one manuscript’s argument |
-| N3 | 「次の半年で賭ける研究テーマを3案から選びたい」 | `directing-research` — future research bets |
+| N3 | 「次の半年で賭ける研究テーマを3案から選びたい」 | `supervising-research-programmes` — future research bets |
 | N3b | “The corpus position is fixed; generate three thesis candidates beyond it.” | `forging-novel-theses` — candidate genesis |
 | N3c | “Here is one expensive/irreversible selected thesis; set its test threshold and kill condition.” | `acting-on-hypotheses` — hard-gated future tree |
-| N3d | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
+| N3d | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
 | N4 | “Reorder this completed review and remove duplicate sections; the evidence judgments are settled.” | `structuring-documents` — document architecture |
 | N5 | “Find every mention of data leakage in my indexed notes.” | `driving-cocoindex` — retrieval, not synthesis |
 | N6 | “Debug the split leakage in my own training pipeline.” | `raising-resolution`, then `implementing-and-debugging` if a fix is requested |
@@ -44,10 +44,10 @@ Do not use body knowledge to rescue an ambiguous description.
 |---|---|---|
 | C1 | “Use several agents to synthesize 300 papers into an SoK.” | `systematizing-knowledge` selects review mode, schemas, and SOLO judgments → `orchestrating-agents` runs generic briefing/dispatch/acceptance → this skill adjudicates and signs the position |
 | C2 | “Synthesize the field, then turn the result into our paper’s governing claim.” | `systematizing-knowledge` establishes the bounded evidence state → `arguing-research-papers` chooses and defends the manuscript claim |
-| C3 | “Map the evidence gaps, then decide which research direction deserves funding.” | `systematizing-knowledge` identifies evidence-specific gaps without ranking them → `directing-research` makes the forward-looking bet |
+| C3 | “Map the evidence gaps, then decide which research direction deserves funding.” | `systematizing-knowledge` identifies evidence-specific gaps without ranking them → `supervising-research-programmes` makes the forward-looking bet |
 | C4 | “Reforge systematizing-knowledge because its rules are crude.” | `forging-skills` owns the reforge → `systematizing-knowledge` is the domain artifact under audit; use `operating-the-harness` when executable checks are added |
 | C5 | “Turn a raw paper corpus into a durable synthesis skill.” | `systematizing-knowledge` reconciles the corpus first → `forging-skills` distills the settled operating knowledge |
-| C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research` later disposes attempts |
+| C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research-sections` later disposes attempts |
 | C7 | “Synthesize this corpus into a calibrated position, then make the accepted result our canonical authority.” | `systematizing-knowledge` signs the corpus position first → `governing-research-documentation` decides DOC ADMISSION, authority, review, and lifecycle |
 
 ## Sharp cuts
@@ -60,9 +60,9 @@ Do not use body knowledge to rescue an ambiguous description.
   to `surfacing-blind-spots`; appraisal and corpus adjudication stay with their owners.
 - **Time direction:** what existing evidence licenses comes here; which future bet deserves effort
   goes to the stage owner: problem construction/selection or >=2 directions →
-  `directing-research`; thesis-candidate genesis → `forging-novel-theses`; an expensive/irreversible
+  `supervising-research-programmes`; thesis-candidate genesis → `forging-novel-theses`; an expensive/irreversible
   selected tree's test/commit/kill → `acting-on-hypotheses`; a cheap deterministic reversible probe →
-  domain/plain executor, then `EXECUTOR RESULT` returns to `directing-research`.
+  domain/plain executor, then `EXECUTOR RESULT` returns to `directing-research-sections`.
 - **Fix locality:** settled prose architecture goes to `structuring-documents`; unsettled evidence
   derivation stays here.
 - **Transfer stop:** this skill may search and compare source-side relations, but never names a

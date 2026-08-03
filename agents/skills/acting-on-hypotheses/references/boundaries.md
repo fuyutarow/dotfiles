@@ -45,7 +45,7 @@ sequentially, they do not race**:
 2. **Gate the forward half by downstream exposure:** the residual gap — "does it hold at 10× load?" —
    is NOT a fixed fact. If the load run and the decision riding on it are bounded/reversible within one
    ordinary session, a domain/plain executor runs it and returns the raw result + provenance to
-   `directing-research`. If an untested node guards an expensive migration or hard-to-reverse
+   `directing-research-sections` under the current mandate and charter. If an untested node guards an expensive migration or hard-to-reverse
    commitment, **acting-on-hypotheses** fires: Map the node ("the batched query holds at 10× load",
    確信度×影響度), Loop the cheapest discriminating test with a pre-committed threshold, then Leap.
 
@@ -78,7 +78,8 @@ executor. The executor returns:
 
 `EXECUTOR RESULT: <raw observation> — provenance=<command/source/locus>`
 
-That artifact returns to `directing-research`, which owns stage diagnosis and any reopen/reallocation.
+That artifact returns to `directing-research-sections`, which owns its local handling under the current
+`SECTION_MANDATE` and `SECTION_CHARTER`.
 Do not invent a Map, pass/fail table, confidence write, or Leap. A cheap discard-intent test that protects
 a later expensive/irreversible commitment is different: AOH legitimately designs/adjudicates that Loop;
 the domain executor may perform only its contracted B→M work (`loop.md` §8).
@@ -89,8 +90,9 @@ the domain executor may perform only its contracted B→M work (`loop.md` §8).
 |---|---|---|
 | **raising-resolution** | a fixed present fact | complement along time; interlocks at the Map seam (§1–§3); reciprocal pointer in its §4 |
 | **surfacing-blind-spots** | hidden premises and human tacit constraints in one existing plan/frame/tree | **VERB**: an explicit EXPOSE ask goes there even after tree selection; HERE resumes only to STRUCTURE already-explicit nodes, TEST, or COMMIT. Human answers marked `UNELICITED` cannot become Map nodes as facts; incoming `OPEN` stays a provenance/reopen-trigger-bearing pass-through |
-| **directing-research** | creative-research stage diagnosis; problem construction/selection/formulation; standing integrity; portfolio across ≥2 independent bets | **CARDINALITY/PURPOSE**: ONE selected tree enters HERE only when an untested load-bearing result guards expensive/irreversible work; its per-test threshold/outcome/commit/kill stay HERE. Cheap bounded probes return there as `EXECUTOR RESULT`; program-level decisions and OPEN classification stay there |
-| **forging-novel-theses** | candidate genesis for a selected problem/frame, including source→target mapping and the SOLE `MAPPING-BREAK` emission | **DECISIVE**: no thesis or no correspondence map yet → there; a selected transfer candidate enters HERE only when an untested target-side load-bearing result guards expensive/irreversible downstream exposure. HERE returns `TARGET RESULT` to `directing-research`, never a mapping verdict. If the result calls correspondence into question, request a fresh assessment there; only that skill may emit `MAPPING-BREAK`. Donor success never substitutes for a target-side test; otherwise use the domain/plain executor. |
+| **directing-research-sections** | one current `SECTION_MANDATE` / `SECTION_CHARTER`, local admission, local evidence handling, and declassified return | **CARDINALITY/PURPOSE**: ONE selected tree enters HERE only under the current mandate and charter when an untested load-bearing result guards expensive/irreversible work; its per-test threshold/outcome/commit/kill stay HERE. Cheap bounded probes and AOH's `TARGET RESULT`, `FRAME-BREAK`, and triggered `OPEN` return there. It records local `MAPPING_TRANSFER_DISPOSITION`; a frame break exceeding the mandate may become a typed `SECTION_REOPEN_REQUEST`, never a programme enactment. |
+| **supervising-research-programmes** | programme problem landscape/construction/formulation, OPEN_ISSUE portfolio, multiple independent bets, and global ADOPT/RETIRE/REOPEN | **CARDINALITY/PURPOSE**: programme-level choice or enactment → there. It receives no raw result, `FRAME-BREAK`, `OPEN`, or method content from AOH. Only a declassified `SECTION_REOPEN_REQUEST` may ask it to reconsider a programme boundary; only its `PROGRAMME_DECISION` may enact reopening. |
+| **forging-novel-theses** | candidate genesis for a selected local problem/frame, including source→target mapping and the SOLE `MAPPING-BREAK` emission | **DECISIVE**: no thesis or no correspondence map yet → there; a selected transfer candidate enters HERE only when an untested target-side load-bearing result guards expensive/irreversible downstream exposure. HERE returns `TARGET RESULT` to `directing-research-sections`, never a mapping verdict. If the result calls correspondence into question, request a fresh assessment there; only that skill may emit `MAPPING-BREAK`, which the Section Director records in local `MAPPING_TRANSFER_DISPOSITION`. Donor success never substitutes for a target-side test; otherwise use the domain/plain executor. |
 | **systematizing-knowledge / sok** | MANY papers → ONE defensible position (claim ledger) | acting-on-hypotheses borrows only its grep-able-ARTIFACT discipline as a structural mirror; it does not synthesize a corpus. The bare token "survey" is sok's. |
 | **arguing-research-papers** | one finished evidence-backed manuscript claim | test an expensive/irreversible future bet HERE; run a cheap reversible probe with the domain/plain executor; argue completed evidence there |
 | **orchestrating-agents** | role topology, evidence visibility, veto timing, verification, acceptance | the one-tree decision artifacts stay HERE; multi-agent control may co-fire around probes |

@@ -36,6 +36,18 @@ schema validation とdigest再計算が共通の floor test である。意味�
 
 ### RESOURCE-ADMISSION BEFORE PILOT
 
+P7 is a feasibility gate, never a scientific-value gate. Before P7 may inspect an envelope, a
+research job must carry a current Section-owned admission locator/digest, Goal/mandate/charter and
+Grounding Packet digest/revision/fence, satisfied dependency locators, declared run scale, and—when the run is an
+escalated confirmation, full sweep, scale study, or port—the prior measurement-valid receipt plus
+Director release. Missing or stale scientific admission returns to `directing-research-sections`;
+P7 must not repair it by allocating a device.
+
+Free CPU, RAM, or GPU capacity never creates a candidate, authorizes an objective/axis change,
+releases dominated work, or upgrades a minimal run to a sweep. Low utilization is diagnostic only.
+Unused capacity is the correct outcome when no scientifically admissible job is ready. Likewise,
+`RESOURCE-CLASS(NONCOMPUTE)` and a passing resource envelope grant no SEARCH/LEARN credit.
+
 pilot、smoke、benchmark、test、本走、resident service のどれも「小さいから」を免除理由に
 しない。数値を生む subprocess、並列test、長走行、resident serviceを発射する前に、入力寸法から
 導いたmemory boundと一つの資源envelopeを凍結し、`agent-resource-run` の admission を通す。

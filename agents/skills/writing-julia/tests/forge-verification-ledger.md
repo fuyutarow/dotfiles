@@ -3,6 +3,12 @@
 Append on reforge; never overwrite. The fire/no-fire desk-check set is `tests/trigger-set.md` —
 re-run it after any description edit.
 
+## 2026-08-03: match-time Tiger seam
+
+Description now gives `practicing-tiger-style` the cross-language phase/risk/ledger choice and
+retains Julia mechanisms HERE. PyYAML count: 1558 (down from 1637); generic floor exit 0 with
+existing WARNs: description 1558, prose 52, version block 86, table cells 5.
+
 ## CURRENT STATE
 
 **LAW (live, since v2607.2.0):** method before speed, types before tuning, architecture before
@@ -65,3 +71,8 @@ and stop thresholds stay only in `orchestrating-agents/references/measurement-an
 Trigger desk-check added the orchestrated rank-search co-fire row; existing Julia tokens still fire
 this skill and explicit GPU tokens still co-fire `optimizing-julia-gpu-kernels`. Targeted skill floor:
 no FAIL; the pre-existing description/prose/version/table warnings remain disclosed.
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: description 1637 chars, 52 long prose sentences, 86-line version block, and 5 long table cells; exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: next Julia reforge; retire this waiver when the description and recorded classes meet the floor.

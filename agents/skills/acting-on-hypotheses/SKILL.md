@@ -1,17 +1,17 @@
 ---
 name: acting-on-hypotheses
 description: >-
-  Acts on ONE SELECTED hypothesis tree when an untested load-bearing bet carries expensive or
-  hard-to-reverse/irreversible work. Maps beliefs; runs the cheapest discriminating test with a
-  prewritten threshold and outcome table; then Commit / Pivot / Kill. Use for 仮説検証, 仮説行動,
-  Map-Loop-Leap, de-risk, or should-we-commit. Transfer needs target-side evidence; donor success is not
-  evidence. Returns a TARGET RESULT to directing-research; never emits or reclassifies MAPPING-BREAK.
-  Cuts: problem construction/admission/multiple bets→directing-research; thesis
-  genesis/mapping→forging-novel-theses; tacit premises→surfacing-blind-spots; present
-  fact→raising-resolution; corpus→systematizing-knowledge; finished claim→arguing-research-papers. A
-  cheap deterministic reversible probe without expensive downstream exposure→domain/plain executor.
-  Sole owner of the selected tree threshold, outcome table, and commit/pivot/kill. English; answer in
-  user language.
+  Acts on ONE SELECTED hypothesis tree for costly/hard-to-reverse work; maps; runs cheapest
+  discriminating test against prewritten threshold/outcome table; then Commit/Pivot/Kill. Use: 仮説検証,
+  仮説行動, Map-Loop-Leap, de-risk, should-we-commit. Owns tree, table, Commit/Pivot/Kill. Target evidence
+  only; never emits/reclassifies MAPPING-BREAK. Raw executor result/provenance, TARGET RESULT,
+  FRAME-BREAK, triggered OPEN→directing-research-sections under current
+  SECTION_MANDATE/SECTION_CHARTER. Programme landscape/formulation, OPEN_ISSUE portfolio, multiple bets,
+  global ADOPT/RETIRE/REOPEN→supervising-research-programmes. Candidate genesis/mapping→forging-novel-theses;
+  tacit premises→surfacing-blind-spots; present fact→raising-resolution; corpus→systematizing-knowledge;
+  finished claim→arguing-research-papers. Cheap deterministic reversible no-exposure probe→domain/plain
+  executor. Post-selection experiment integrity only→practicing-tiger-style. English; respond in user
+  language.
 ---
 
 # 仮説行動 — Map · Loop · Leap (act under irreducible uncertainty)
@@ -44,6 +44,13 @@ Keep these stable tokens unchanged, including inside Japanese prose:
 - Map / Loop / Leap, the load-bearing node, and win/kill/loss
 
 - **TARGET RESULT** and **MAPPING-BREAK**
+
+## Tiger experiment-integrity seam
+
+When a selected tree drives expensive or hard-to-reverse experiment work, keep the tree,
+prewritten threshold, outcome table, and Commit/Pivot/Kill HERE first. Then
+`practicing-tiger-style` may add experiment-integrity bounds and negative cases; it does not
+choose, revise, or accept the hypothesis outcome.
 
 ## CORE — read every time (precedence-setting)
 
@@ -121,7 +128,8 @@ Then run the cut and the cheapness rule:
   - reversible inside one ordinary session.
 
   Send that probe to the domain owner or plain executor.
-  It returns the raw result and provenance to `directing-research` for stage diagnosis.
+  It returns the raw result and provenance to `directing-research-sections`.
+  The return stays under the current `SECTION_MANDATE` and `SECTION_CHARTER`.
   Do not manufacture a Map, threshold, or Leap.
   A cheap discard-intent test may still protect a later expensive or irreversible decision.
   That is a genuine Loop here: downstream exposure, not test price, is the tie-break.
@@ -211,7 +219,8 @@ Never skip Map → Leap before Loop retires the fatal risks on the load-bearing 
   WRITE the confidence value onto the node.
   If a missing node surfaced, FLAG it.
   Run a cheap in-place Map pass only when that node still fits the selected tree.
-  A frame-breaking discovery emits `FRAME-BREAK` and returns to `directing-research`.
+  A frame-breaking discovery emits `FRAME-BREAK`.
+  Return it to `directing-research-sections` under the current mandate and charter.
   Give it exactly one primary slot:
 
   ```text
@@ -219,7 +228,8 @@ Never skip Map → Leap before Loop retires the fatal risks on the load-bearing 
   ```
 
   `VALUE` and `ACTION` are frame breaks.
-  `OPEN` remains an external residual until `directing-research` classifies it.
+  `OPEN` remains an external residual for the current section.
+  It is never absorbed into this tree.
   Loop never edits structure.
   **STOP when fatal risks on the load-bearing node are retired, NOT at 100% confidence.**
   Complete confidence never comes.
@@ -234,10 +244,13 @@ Never skip Map → Leap before Loop retires the fatal risks on the load-bearing 
   Test a target-side observable consequence of the preserved relation.
   Donor success, fluent analogy, and agent endorsement may motivate a test.
   They cannot move target confidence or satisfy its threshold.
-  Return the outcome as a `TARGET RESULT` to `directing-research`.
+  Return the outcome as a `TARGET RESULT` to `directing-research-sections`.
+  The return stays under the current `SECTION_MANDATE` and `SECTION_CHARTER`.
   Loop never emits or reclassifies `MAPPING-BREAK`.
   If the observation questions the correspondence, request a new assessment from `forging-novel-theses`.
-  Only that skill may emit a `MAPPING-BREAK`; `directing-research` then updates the disposition.
+  Only that skill may emit a `MAPPING-BREAK`.
+  `directing-research-sections` records the local `MAPPING_TRANSFER_DISPOSITION` under the current
+  mandate and charter.
   The exact result contract is in `references/loop.md` §3.
   If the result becomes a durable reviewed repository artifact, govern it with
   `governing-research-documentation`. That skill owns only its locus, lineage, review, and retirement.
@@ -301,7 +314,10 @@ Never skip Map → Leap before Loop retires the fatal risks on the load-bearing 
   - the current load-bearing open node.
 
   Carry the incoming `OPEN-SET RESIDUAL` unchanged, including provenance and reopen trigger.
-  If it fires, output the raw signal and `FRAME-BREAK` handoff instead of absorbing it into the tree.
+  If it fires, output the raw signal and `FRAME-BREAK` handoff to `directing-research-sections`.
+  Do not absorb it into the tree. When the local frame break exceeds the mandate, that Director may
+  declassify a typed `SECTION_REOPEN_REQUEST`. Only `supervising-research-programmes` may enact
+  programme reopening.
 
 ## Reference index — load the file you need
 

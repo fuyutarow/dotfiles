@@ -8,8 +8,9 @@ description: >-
   mapping: a transfer returns Status: CANDIDATE with target evidence UNTESTED, or MAPPING-BREAK.
   Recovery regenerates once in the supplied missing cell; if diversity cannot be restored, it returns
   explicit COVERAGE GAP. Never ranks, tests, admits, adopts, or discovers donors. Donor discovery →
-  systematizing-knowledge; problem formulation, freeze/dedup, and admission → directing-research; an
-  expensive selected tree → acting-on-hypotheses. Allocation and final packets stay SOLO. English skill;
+  systematizing-knowledge; problem formulation → supervising-research-programmes; local freeze/dedup
+  and admission → directing-research-sections; an expensive selected tree → acting-on-hypotheses.
+  Allocation and final packets stay SOLO. English skill;
   answer in the user's language (default Japanese).
 ---
 
@@ -69,7 +70,7 @@ Fire only when all are true:
 4. a provenance-bearing seed is available, or `TRANSFER` has a frozen target-agnostic `DONOR SET`;
 5. the requested output is candidate generation, not selection or testing.
 
-If the problem itself is still being found, compared, or formulated, route to `directing-research`.
+If the problem itself is still being found, compared, or formulated, route to `supervising-research-programmes`.
 If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED`.
 Route that evidence work to `systematizing-knowledge`; do not invent a prior.
 
@@ -196,7 +197,7 @@ If this relation-level attempt cannot preserve its invariant, emit this packet i
 - Failed invariant: [relation that cannot be preserved]
 - Transfer boundary: [condition that breaks it]
 - Evidence / locator: [source relation plus target mismatch locus]
-- Handoff: directing-research — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here
+- Handoff: directing-research-sections — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here
 - Status: MAPPING-BREAK
 ```
 
@@ -238,7 +239,7 @@ replace the anti-default.
 The matrix key is `premise × target × operation × discriminator`. Candidate fields are its sole data
 home. `gate-check.ts` derives the matrix. Recipe labels do not enter the key.
 
-`directing-research` owns semantic deduplication. It sends a coverage-gap packet when either condition
+`directing-research-sections` owns local semantic deduplication. It sends a coverage-gap packet when either condition
 holds:
 
 - every unique candidate shares one premise, target, or discriminator;
@@ -267,11 +268,11 @@ test during recovery.
 6. **Name the nearest prior.** State the exact delta. Use `UNVERIFIED` when evidence is missing.
 
 7. **Flag frame changes.** A candidate may expose a needed change to the problem's object or relation.
-   Do not mutate the input. Let `directing-research` decide from the flag.
+   Do not mutate the input. Let `supervising-research-programmes` decide from the flag.
 
 8. **Run the batch floor.** Reject coordinate collapse before return. Never substitute recipe-counting.
 
-9. **Return packets without ranking.** `directing-research` freezes and semantically deduplicates them.
+9. **Return packets without ranking.** `directing-research-sections` freezes and semantically deduplicates them.
 
 10. **Honor at most one coverage-gap packet.** Regenerate once in its unoccupied cell or emit
     `COVERAGE GAP`. Do not loop.
@@ -312,18 +313,19 @@ These are **generation-completeness** failures, not comparative selection.
 
 | Ask / state | Route |
 |---|---|
-| “Which research problem should I choose?” | `directing-research` |
+| “Which research problem should I choose?” | `supervising-research-programmes` |
 | “What does this literature establish, and is the idea actually novel?” | `systematizing-knowledge` |
 | “Find source-side relations across fields, without choosing target correspondences.” | `systematizing-knowledge` — it returns a frozen target-agnostic `DONOR SET` |
-| “Admit, test, adopt, retire, or otherwise decide a transfer attempt.” | `directing-research` — it owns `TRANSFER DISPOSITION`; target evidence arrives through its downstream routes |
+| “Admit, test, or otherwise decide one local transfer attempt in a granted section.” | `directing-research-sections` — it owns local `TRANSFER DISPOSITION`; target evidence arrives through its downstream routes |
+| “Adopt, retire, reopen, or allocate across the programme.” | `supervising-research-programmes` — global programme disposition only |
 | “Persist, review, supersede, or retire this frozen packet or transfer bundle.” | `governing-research-documentation` — govern durable locus, lineage, review, and lifecycle only; mapping and `MAPPING-BREAK` meaning stay HERE |
 | “What are we not seeing, and what does the practitioner know but not write down?” | `surfacing-blind-spots` |
 | “Is this residual real or an artifact?” | `raising-resolution` |
 | “Generate distinct thesis candidates for this selected frame.” | **HERE** |
-| “Which candidate is important/feasible enough to admit?” | `directing-research` |
+| “Which candidate is important/feasible enough to admit locally?” | `directing-research-sections` |
 | “Design a precommitted falsifying experiment for this expensive/irreversible chosen thesis.” | `acting-on-hypotheses` |
-| “Run this deterministic, bounded, reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
-| “Should we commit, pivot, or withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `directing-research` for a portfolio |
+| “Run this deterministic, bounded, reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
+| “Should we commit, pivot, or withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `supervising-research-programmes` for a portfolio |
 | “Who should generate, critique, and accept, and when?” | `orchestrating-agents` |
 | “Write the paper claim from completed evidence.” | `arguing-research-papers` |
 
@@ -337,7 +339,7 @@ The domain packet and coordinate cells are fixed here. If multiple generators ar
 
 - subgroup topology and evidence visibility;
 
-- generator blindness until `directing-research` declares its domain batch frozen;
+- generator blindness until `directing-research-sections` declares its local batch frozen;
 
 - critique visibility after that transition;
 

@@ -129,3 +129,8 @@ Codex 1024-character limit.
 **PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 26 long prose sentences, a 7-line
 version block, and two long table cells. Queue position: before the next feature reforge; move version
 history here first, then atomize prose without blurring the behavior-preservation cut.
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: 26 long prose sentences, 7-line version block, and 2 long table cells; exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: retain the existing reforge position; retire this waiver when the recorded classes reach 0.

@@ -13,4 +13,4 @@
 {"id":"t13","class":"no-fire","route":"recovering-poisoned-context","reason":"poison must be removed before any checkpoint"}
 {"id":"t14","class":"no-fire","route":"refuse","reason":"forbidden private reasoning and credentials"}
 {"id":"t15","class":"no-fire","route":"plain answer","reason":"one-shot explanation"}
-{"id":"t16","class":"no-fire","route":"directing-research","reason":"research programme judgment without persistence"}
+{"id":"t16","class":"no-fire","route":"supervising-research-programmes","reason":"research programme judgment without persistence"}

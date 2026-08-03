@@ -3,6 +3,12 @@
 Append on reforge; never overwrite. The fire/no-fire desk-check set is `tests/trigger-set.md` —
 re-run it after any description edit.
 
+## 2026-08-03: match-time Tiger seam
+
+Description now states that `practicing-tiger-style` owns cross-language phase/risk/ledger choice
+while this skill owns Rust mechanisms. PyYAML count: 1411 (down from 1489); generic floor exit 0
+with existing WARNs: prose 31, version block 21, table cells 2.
+
 ## CURRENT STATE
 
 **LAW (live, since v2607.1.0):** in Rust the ecosystem IS the language — effectiveness is decided
@@ -199,3 +205,8 @@ refactoring-code routing row to a pointer (the ★ callout is the sole fire/no-f
 self-introduced contradiction (R4) → editor-judgment residuals (R5). The final structural pass is
 `skill-check.ts`-clean + desk-read for coherence but **NOT fleet-re-verified** — a bounded waiver: a
 6th round would over-fit a single gate. Convergence declared 2026-07-08.
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: 31 long prose sentences, 21-line version block, and 2 long table cells; exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: next Rust reforge; retire this waiver when the recorded classes reach 0.

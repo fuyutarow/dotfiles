@@ -190,7 +190,7 @@ checks each packet, emits the derived matrix, and rejects mechanically collapsed
 section is `TRANSFER` or `MAPPING-BREAK`, pass the frozen donor artifact through `--donor-set`.
 This is a pre-dedup floor; it cannot detect semantic paraphrases, relation correctness, or target fit.
 
-After return, `directing-research` owns freezing and semantic deduplication. It returns a coverage-gap
+After return, `directing-research-sections` owns local freezing and semantic deduplication. It returns a coverage-gap
 packet only when the unique batch has collapsed:
 
 ```markdown
@@ -220,7 +220,7 @@ A candidate's “new testable prediction” passes the generation floor only if:
 1. it is not already entailed by the input frame;
 2. it follows from the stated transformation;
 3. a possible observation could differ from the nearest prior or competing account;
-4. it is scoped enough for a discriminating action; `directing-research` later routes that action
+4. it is scoped enough for a discriminating action; `directing-research-sections` later routes that action
    to `acting-on-hypotheses` only at the expensive/irreversible hard gate, otherwise to the
    domain/plain executor.
 

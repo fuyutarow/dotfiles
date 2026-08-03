@@ -9,7 +9,7 @@
 
 | Sibling | Typed cut | Handoff from this skill |
 |---|---|---|
-| `directing-research` | **PURPOSE** — construct, compare, select, or steer research frames/programs → there. Excavate hidden premises in one already-articulated frame or program artifact → here. | Send `Decision at stake`, affected `Assumption ledger` rows, `Discoveries`, and `Open-set residual` when frame damage is `FRAME` or program choice must reopen. |
+| `supervising-research-programmes` | **PURPOSE** — construct, compare, select, or steer research frames/programmes → there. Excavate hidden premises in one already-articulated frame or programme artifact → here. | Send `Decision at stake`, affected `Assumption ledger` rows, `Discoveries`, and `Open-set residual` when frame damage is `FRAME` or programme choice must reopen. |
 | `forging-novel-theses` | **PURPOSE** — generate structurally distinct thesis candidates for a selected frame → there. Expose what the selected frame presupposes without generating a candidate → here. | Enter generation only when `Handoff` names it. Human-tacit seeds come solely from answered probe rows whose provenance is `HUMAN:<owner>@<attestation-locus>`. |
 | `raising-resolution` | **DECISIVE by time/evidence** — inspect whether a present fact, claim, source, or artifact is true → there. Identify which hidden premise requires that inspection → here. | Send the assumption ID, exact present-tense claim, available locator, and missing evidence. Do not report an `INFERENCE` row as inspected fact. |
 | `acting-on-hypotheses` | **PURPOSE** — map and test one expensive/irreversible load-bearing forward bet, prewrite its threshold, or decide commit/pivot/kill → there. A cheap deterministic reversible probe with no downstream exposure uses the domain/plain executor. Surface premises before either operation → here. | Send `Decision at stake`, the load-bearing row, and the affected discriminator. Do not design the experiment or threshold here. |
@@ -30,7 +30,7 @@ interview pattern informs this skill. This skill deliberately removes three broa
 2. it does not write solutions or decisions back into the source plan;
 3. it does not own lateral generation.
 
-Premise excavation stays here. New research-frame construction routes to `directing-research`;
+Premise excavation stays here. New research-frame construction routes to `supervising-research-programmes`;
 new thesis generation routes to `forging-novel-theses`.
 
 ## Handoff rules
@@ -63,7 +63,7 @@ claim that the four slots are exhaustive or empirically sufficient.
 
 | Ask | Owner | Why not here |
 |---|---|---|
-| “Invent three alternative framings of this research area.” | `directing-research` | the output changes/constructs frames |
+| “Invent three alternative framings of this research area.” | `supervising-research-programmes` | the output changes/constructs frames |
 | “Use the hidden premise to propose a novel mechanism.” | `forging-novel-theses` | the output is a thesis candidate |
 | “Check whether the cited benchmark actually measured latency.” | `raising-resolution` | the task is present-fact inspection |
 | “Design a precommitted kill test for this expensive/irreversible bet.” | `acting-on-hypotheses` | the hard gate fires and the task commits to a threshold |

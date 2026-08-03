@@ -19,7 +19,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「R&D文書をtype+年月+連番-IDとsnake_caseタイトルへ統一し、更新では再発番もrenameもさせないで」 | stable document identity, admission-time allocation, and deterministic naming floor |
 | “Keep our DONOR SET, transfer bundle, TARGET RESULT, mapping breaks, and route disposition reviewable without inventing a fifth document role.” | lifecycle/authority boundary for existing transfer artifacts |
 | “Only decide whether to create, update, freeze, retire, or delete these records and which one remains authoritative.” | explicit document admission, lifecycle, and authority; semantic content is already fixed |
-| “The RUN INTENT, failed RUN RECEIPT, and signed RETROSPECTIVE JUDGMENT are semantically fixed; admit durable loci, retention, review, and retirement without changing their verdicts.” | durable research-run DOC ADMISSION plus negative-terminal preservation; semantics remain upstream |
+| “The RUN INTENT, failed RUN RECEIPT, and frozen RESEARCH_PROCESS_AUDIT are semantically fixed; admit durable loci, retention, review, and retirement without changing their verdicts.” | durable research-run DOC ADMISSION plus negative-terminal preservation; semantics remain upstream |
 
 ## MUST NOT FIRE
 
@@ -29,7 +29,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | “Polish this paragraph for an external reviewer and remove LLM-like wording.” | `linting-prose` |
 | 「この40本の論文をknown/uncertain/disputedに整理して」 | `systematizing-knowledge` |
 | “Review whether this finished paper overclaims its novelty and evidence.” | `arguing-research-papers` |
-| 「次に登る研究テーマを選び、研究プログラムを配分して」 | `directing-research` |
+| 「次に登る研究テーマを選び、研究プログラムを配分して」 | `supervising-research-programmes` |
 | “Keep this multi-session implementation task resumable after compact.” | `continuing-long-running-tasks` |
 | 「Obsidianを入れてMarkdownを閲覧できるようにして」 | product/setup work; no governance question yet |
 | “Install OpenWiki and generate its default code wiki.” | product/setup owner; co-fire here only if admission/authority policy is also requested |
@@ -37,7 +37,7 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | 「このREADME.mdだけをread_me.mdへrenameして」 | ordinary repository rename; no R&D portfolio admission or identity decision |
 | “Configure a Stop hook to run an already-defined documentation check.” | `operating-the-harness` |
 | “Build a generic repository write tool for agents.” | reject the generic surface; only a future constrained apply design may be considered after repeated evidence |
-| “Audit why this failed research episode changed our interpretation and decide whether the programme should reopen.” | `directing-research`; no durable-document request yet |
+| “Audit why this failed research episode changed our interpretation and decide whether the programme should reopen.” | `auditing-research-processes` audits the frozen episode → `supervising-research-programmes` independently decides whether to reopen; no durable-document request yet |
 | “Choose agents, evidence visibility, vetoes, and acceptance timing for this documentation audit.” | `orchestrating-agents`; topology only, no lifecycle judgment |
 
 ## Ordered co-fire
@@ -49,9 +49,9 @@ Read only Skill names and descriptions. Any unresolved race is a description def
 | create a reviewable paper claim and govern surrounding artifacts | `arguing-research-papers` owns manuscript claim → HERE owns review request, evidence links, and generated packet expiry |
 | restructure a newly admitted canonical | HERE admits or chooses update → `structuring-documents` moves information → `linting-prose` rewrites in place → HERE checks lifecycle |
 | preserve task state and permanent research state | `continuing-long-running-tasks` owns one transient task record; HERE separately owns permanent R&D artifacts; neither substitutes for the other |
-| turn corpus observations into a transfer-governed route | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps/breaks → `directing-research` disposes → HERE governs authority, lineage, review, and retirement only |
+| turn corpus observations into a transfer-governed route | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps/breaks → `directing-research-sections` disposes locally → HERE governs authority, lineage, review, and retirement only |
 | synthesize a corpus and designate its result as canonical authority | `systematizing-knowledge` signs the calibrated position → HERE runs DOC ADMISSION and decides authority/lifecycle |
-| audit a completed/failed/stopped/aborted research episode and retain its artifacts | `directing-research` signs RUN semantics and programme transition → HERE admits durable RUN INTENT/RECEIPT/RETROSPECTIVE JUDGMENT loci and preserves negative terminal evidence |
+| audit a completed/failed/stopped/aborted research episode and retain its artifacts | `auditing-research-processes` signs the frozen audit and recommendation → `supervising-research-programmes` independently decides any programme transition → HERE admits durable run/audit loci and preserves negative terminal evidence |
 | inventory a large document portfolio with several agents, then retire duplicates | HERE fixes the lifecycle question → `orchestrating-agents` owns actors/visibility/acceptance → HERE adjudicates DOC ADMISSION and retirement |
 
 ## Regression predicate

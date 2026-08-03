@@ -7,7 +7,7 @@ description: >-
   critique, 論文の主張, 貢献, 新規性, 査読, リバッタル. Claim-first: judge/calibrate HERE; then
   structuring-documents owns architecture and linting-prose owns wording. Typo/format-only with meaning
   fixed → direct/plain edit; corpus synthesis → systematizing-knowledge. Cuts: unfinished programme →
-  directing-research; fact extract → raising-resolution; premise exposure → surfacing-blind-spots;
+  supervising-research-programmes; fact extract → raising-resolution; premise exposure → surfacing-blind-spots;
   thesis genesis → forging-novel-theses; costly future test → acting-on-hypotheses; live talk →
   designing-presentations; topology → orchestrating-agents. Claim/calibration stay SOLO; red-team and
   fact-check may fan out. English skill; answer in the user's language.
@@ -256,9 +256,9 @@ The stage-1 rule is claim-first: argument here, architecture next, sentence poli
 | "give me a neutral summary of this one paper" | direct answer using `raising-resolution`'s citation gate silently |
 | "surface hidden premises only; do not assess whether they hold" | `surfacing-blind-spots` (premise exposure, not reviewer judgment) |
 | "help me come up with thesis candidates for this selected problem" | `forging-novel-theses` (generate candidates only) |
-| "the completed result forces us to reopen the problem or research direction" | `directing-research` (decide whether and where the program reopens) |
+| "the completed result forces us to reopen the problem or research direction" | `supervising-research-programmes` (decide whether and where the programme reopens) |
 | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | `acting-on-hypotheses` |
-| "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
+| "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
 | "decide author/reviewer/verifier roles and acceptance timing" | `orchestrating-agents` |
 | "govern admission, authority, review, retirement, or deletion across research documents" | `governing-research-documentation` |
 | "compile the LaTeX / fix the bib" | `compiling-latex` |
@@ -274,8 +274,9 @@ The stage-1 rule is claim-first: argument here, architecture next, sentence poli
 | `raising-resolution` | **OUTPUT/PURPOSE** — verify or extract one bounded factual claim from one paper → there; judge whether the paper's argument, method, or evidence warrants its claim → reviewer red-team HERE. A neutral one-paper summary is a direct answer with its citation gate silent. |
 | `surfacing-blind-spots` | **PURPOSE** — expose implicit premises or human tacit constraints without deciding whether they hold → there; assess a premise/warrant against evidence and state the calibrated objection → HERE. If both are requested: expose there, then red-team here. |
 | `systematizing-knowledge` | **FUNCTION/CARDINALITY** — critically appraise ONE paper's argument/method/validity → HERE; synthesize MANY sources into a field position → there. (SoK is also the *engine that built this skill*; a paper's related-work may draw on an SoK as a sub-step.) |
-| `directing-research` | **PHASE/PURPOSE** — stage diagnosis, research-problem/program decisions, and a deliberate reopen before a finished claim → there; argue the admitted finished evidence as one manuscript claim → HERE. HARKing is not repaired by silently reopening history: label postdiction there, then calibrate the written claim HERE. |
-| `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets or source→target mapping / `MAPPING-BREAK` for a selected frame → there; write and defend finished **target-side** evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `directing-research` reopen returns to candidate generation. |
+| `supervising-research-programmes` | **PHASE/PURPOSE** — research-problem/programme decisions and a deliberate global reopen before a finished claim → there; argue admitted finished evidence as one manuscript claim → HERE. HARKing is not repaired by silently reopening history: label postdiction there, then calibrate the written claim HERE. |
+| `directing-research-sections` | **STATE/PURPOSE** — one granted live section's candidate admission, local run, and executor-result join → there; argue its admitted finished evidence as one manuscript claim → HERE. |
+| `forging-novel-theses` | **PURPOSE/MATURITY** — generate `Status: CANDIDATE` thesis packets or source→target mapping / `MAPPING-BREAK` for a selected frame → there; write and defend finished **target-side** evidence as a paper → HERE. A reviewer novelty objection begins HERE; only an explicit `supervising-research-programmes` reopen returns to candidate generation. |
 | `acting-on-hypotheses` | **PHASE + HARD GATE** — test/commit/kill one expensive/irreversible selected forward tree → there; run a cheap deterministic reversible probe through the domain/plain executor; argue completed evidence → HERE. |
 | `orchestrating-agents` | **PURPOSE** — claim and argument meaning → HERE; author/reviewer/verifier topology, evidence visibility, veto timing, and acceptance → there. Co-fire only after the claim contract is fixed. |
 | `governing-research-documentation` | **CARDINALITY + LIFECYCLE** — one finished manuscript claim and its reviewer-proof argument → HERE; admission, authority, evidence lineage, review, retirement, and deletion across the research-document portfolio → there. |

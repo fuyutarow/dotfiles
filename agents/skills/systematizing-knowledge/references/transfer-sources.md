@@ -2,8 +2,8 @@
 
 > **SOLE owner** of bounded donor discovery, source-located relation extraction, cross-source
 > comparison, and the `DONOR SET` handoff. Target mapping, target prediction, and thesis genesis
-> belong to `forging-novel-theses`; route admission and later disposition belong to
-> `directing-research`.
+> belong to `forging-novel-theses`; local route admission and later disposition belong to
+> `directing-research-sections`.
 
 ## Entry and stop boundary
 
@@ -110,7 +110,7 @@ packet declares `Donor set: path=<same path>; sha256=<digest>` and is checked wi
 `gate-check.ts --donor-set <path-to-the-same-resolved-artifact> <packet>`, which verifies the digest,
 donor IDs, and each selected record's exact source locator against this artifact. It may return a
 relation-level transfer candidate or `MAPPING-BREAK`. It may not rewrite
-this source record to hide a failed mapping. `directing-research` later preserves every transfer
+this source record to hide a failed mapping. `directing-research-sections` later preserves every transfer
 attempt in its `TRANSFER DISPOSITION` denominator.
 
 If no source survives the source-side evidence and relation floor, return an honest bounded no-donor

@@ -262,10 +262,10 @@ Run this BEFORE deepening, so depth is not spent on a problem nobody has.
 - **Operational (a)/(b) criteria — THIRD-PARTY, labeled as such, a heuristic not an author quote:** (a)
   someone already spends time / money / effort on it; or (b) leaving it unsolved blocks the goal / business
   continuity / compliance. Useful as a checklist; do NOT attribute it to 馬田.
-- **Scope note:** problem-SELECTION (which problem to pick) belongs to `directing-research`; this skill
+- **Scope note:** problem-SELECTION (which problem to pick) belongs to `supervising-research-programmes`; this skill
   owns only the observation about urgency, present behavior, or constraint. It returns that evidence
   without a `select/reject` verdict. If the observation changes the candidate problem set, hand it to
-  `directing-research` for construction or re-selection.
+  `supervising-research-programmes` for construction or re-selection.
 
 ### B.6 Research mapping
 
@@ -444,7 +444,7 @@ precisely because future-forecasting belongs to the sibling.
 The decisive question is: *“Am I trying to verify a named fact, or discover which premise the decision
 artifact has left implicit?”* Named fact → inspect HERE. Implicit premise/tacit constraint → expose THERE.
 When a Blind-spot packet marks one row as needing a fixed factual check, sequence
-`surfacing-blind-spots → raising-resolution → directing-research`; return the cited observation to the
+`surfacing-blind-spots → raising-resolution → supervising-research-programmes`; return the cited observation to the
 same row rather than letting this skill choose the frame.
 
 ### C.8 The citation gate across an agent boundary (skill-supplied harness note)

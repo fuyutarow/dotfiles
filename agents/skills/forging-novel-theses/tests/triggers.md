@@ -19,19 +19,19 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 
 | Ask | Route |
 |---|---|
-| “How should I do creative research end-to-end?” | `directing-research` leads |
-| “Here are three observations, but I have not selected or formulated the research problem yet.” | `directing-research` formulates and selects the frame |
-| “This frame is selected, but there is no sourced seed or frozen donor set. Invent something anyway.” | `directing-research` completes the research brief; genesis does not launder an unsourced seed |
-| “The frame, seed, and adequate thesis are already fixed; which thesis should we admit?” | `directing-research` freezes, deduplicates, and decides admission |
+| “How should I do creative research end-to-end?” | `directing-research` emits only a routing decision; it owns no lifecycle stage |
+| “Here are three observations, but I have not selected or formulated the research problem yet.” | `supervising-research-programmes` formulates and selects the frame |
+| “This frame is selected, but there is no sourced seed or frozen donor set. Invent something anyway.” | `directing-research-sections` stops and requests admissible local input; genesis does not launder an unsourced seed |
+| “The frame, seed, and adequate thesis are already fixed; which thesis should we admit?” | `directing-research-sections` freezes, deduplicates, and decides local admission |
 | “Is this idea actually absent from the literature?” | `systematizing-knowledge` |
 | “Find analogies across fields for this target, but do not map them yet.” | `systematizing-knowledge` — target-agnostic donor discovery and `DONOR SET` |
-| “I have a frozen DONOR SET but no selected target. Tell me which target to choose.” | `directing-research` owns problem/frame choice; no selected-target mapping exists yet |
+| “I have a frozen DONOR SET but no selected target. Tell me which target to choose.” | `supervising-research-programmes` owns problem/frame choice; no selected-target mapping exists yet |
 | “Interview the operator to expose tacit knowledge and hidden assumptions.” | `surfacing-blind-spots` |
 | “Is the residual real?” | `raising-resolution` |
 | “Here is one expensive/irreversible thesis; precommit its cheapest kill experiment.” | `acting-on-hypotheses` |
-| “The first recovery still collapsed. Try three more missing cells until one works.” | stop with `COVERAGE GAP`; `directing-research` decides whether to reopen genesis |
-| “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
-| “Should we fund/commit/withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `directing-research` for a portfolio |
+| “The first recovery still collapsed. Try three more missing cells until one works.” | stop with `COVERAGE GAP`; `directing-research-sections` decides the local stop or sends a reopen request |
+| “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
+| “Should we fund/commit/withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `supervising-research-programmes` for a portfolio |
 | “Store this frozen transfer bundle as the durable reviewed authority and define retirement.” | `governing-research-documentation` governs locus/lineage/lifecycle; it never revises the mapping or break semantics |
 | “Who should ideate blindly and who may veto?” | `orchestrating-agents` |
 | “Reframe this finished paper's contribution.” | `arguing-research-papers` |
@@ -40,17 +40,17 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 
 | Braided ask | Order |
 |---|---|
-| broad creative-research workflow | `directing-research` diagnosis/formulation -> HERE only at selected-frame + no-adequate-thesis + supplied-seed -> `directing-research` freeze/dedup/admission |
-| anomaly to new thesis | `raising-resolution` -> `directing-research` problem-frame decision -> HERE |
-| literature to candidates | `systematizing-knowledge` -> `directing-research` selects/frame -> HERE -> `directing-research` freeze/dedup/admission |
-| donor discovery to transfer admission | `systematizing-knowledge` freezes target-agnostic `DONOR SET` -> HERE maps it to the selected target and emits `CANDIDATE` or `MAPPING-BREAK` -> `directing-research` freezes the denominator and decides admission |
-| problem formulation to genesis | `directing-research` formulates/selects the frame -> HERE only if no adequate thesis and a provenance-bearing seed exists -> `directing-research` freezes/deduplicates/admit-or-rejects |
+| broad creative-research workflow | `directing-research` emits only a routing decision -> `supervising-research-programmes` selects/publishes the frame -> `directing-research-sections` charters a granted section -> HERE only at selected-frame + no-adequate-thesis + supplied-seed -> section freeze/dedup/admission |
+| anomaly to new thesis | `raising-resolution` -> `supervising-research-programmes` problem-frame decision -> granted `directing-research-sections` section -> HERE |
+| literature to candidates | `systematizing-knowledge` -> `supervising-research-programmes` selects/frame -> `directing-research-sections` charters -> HERE -> section freeze/dedup/admission |
+| donor discovery to transfer admission | `systematizing-knowledge` freezes target-agnostic `DONOR SET` -> HERE maps it to the selected target and emits `CANDIDATE` or `MAPPING-BREAK` -> `directing-research-sections` freezes the denominator and decides local admission |
+| problem formulation to genesis | `supervising-research-programmes` formulates/selects the frame -> `directing-research-sections` charters -> HERE only if no adequate thesis and a provenance-bearing seed exists -> section freeze/dedup/admit-or-reject |
 | expensive selected tree | `acting-on-hypotheses` directly; HERE does not design the test or commitment rule |
 | freeze a transfer result into repository history | HERE signs mapping/break semantics -> `governing-research-documentation` governs durable locus, review, supersession, and retirement without changing those semantics |
 | blind spots to candidates | `surfacing-blind-spots` -> HERE only when its handoff names this skill and contains sourced facts |
-| multi-agent candidate batch | HERE defines packets/coordinate cells -> `orchestrating-agents` defines topology -> HERE returns packets -> `directing-research` selects |
-| frozen/deduplicated batch collapsed | `directing-research` sends one coverage-gap packet -> HERE regenerates exactly once -> HERE emits packets or explicit `COVERAGE GAP` -> `directing-research` decides whether to reopen |
-| finished claim must reopen | `arguing-research-papers` -> `directing-research` reopen decision -> HERE only if thesis becomes missing |
+| multi-agent candidate batch | HERE defines packets/coordinate cells -> `orchestrating-agents` defines topology -> HERE returns packets -> `directing-research-sections` selects locally |
+| frozen/deduplicated batch collapsed | `directing-research-sections` sends one coverage-gap packet -> HERE regenerates exactly once -> HERE emits packets or explicit `COVERAGE GAP` -> section stops or requests programme reopen |
+| finished claim must reopen | `arguing-research-papers` -> `supervising-research-programmes` reopen decision -> a new granted section -> HERE only if thesis becomes missing |
 
 ## Regression predicate
 
@@ -62,8 +62,9 @@ The description must expose all of these stage-1 predicates:
 - one-shot recovery only after frozen/deduplicated collapse, ending in explicit `COVERAGE GAP` on failure;
 - selected-target mapping that returns `CANDIDATE` with `UNTESTED` evidence, or `MAPPING-BREAK`;
 - explicit refusal to rank, test, admit, adopt, or discover donors;
-- donor discovery -> `systematizing-knowledge`, formulation/freeze/dedup/admission ->
-  `directing-research`, and expensive selected tree -> `acting-on-hypotheses`;
+- donor discovery -> `systematizing-knowledge`, formulation -> `supervising-research-programmes`,
+  local freeze/dedup/admission -> `directing-research-sections`, and expensive selected tree ->
+  `acting-on-hypotheses`;
 - allocation and final packets stay `SOLO`.
 
 Do not promote body-only packet fields, coordinate axes, tacit-seed checks, or orchestration details

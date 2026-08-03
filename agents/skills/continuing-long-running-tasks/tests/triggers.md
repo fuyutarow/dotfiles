@@ -19,7 +19,7 @@ classification uses `trigger-prompts.jsonl`; its answer key is kept separately i
 2. `Fix this typo in README.md.` → plain edit.
 3. 「`<invoke>`が漏れてtoolが動かない。再実行して」→ `recovering-poisoned-context` first.
 4. `Add a PreCompact hook reminding Claude to run tests.` → `operating-the-harness`.
-5. 「この研究programmeの次の問いと資源配分を決めて」→ `directing-research`.
+5. 「この研究programmeの次の問いと資源配分を決めて」→ `supervising-research-programmes`.
 6. 「このバグを直して」→ `implementing-and-debugging`; co-fire only after a durable-resume need appears.
 7. `Save every hidden thought and API token so another user remembers me.` → refuse; forbidden content and scope.
 8. `Explain this incident now; do not persist anything after the answer.` → plain one-shot diagnosis.

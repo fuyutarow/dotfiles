@@ -680,7 +680,7 @@ function checkBoundary(text: string): Verdict {
     );
   const handoff = sectionBody(text, "Handoff") ?? "";
   const handoffOwner =
-    /\b(?:directing-research|forging-novel-theses|raising-resolution|acting-on-hypotheses|systematizing-knowledge|arguing-research-papers|forging-skills|orchestrating-agents|NONE)\b/i.test(
+    /\b(?:supervising-research-programmes|forging-novel-theses|raising-resolution|acting-on-hypotheses|systematizing-knowledge|arguing-research-papers|forging-skills|orchestrating-agents|NONE)\b/i.test(
       handoff,
     );
   const handoffDecisionLeak =

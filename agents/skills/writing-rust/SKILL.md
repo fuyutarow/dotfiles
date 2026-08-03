@@ -2,12 +2,11 @@
 name: writing-rust
 description: >-
   Write correct, MODERN (2025/2026) Rust — crate SELECTION is the spine. Use whenever writing or
-  reviewing Rust, editing Cargo.toml / dependencies, or choosing a crate. Cuts (resolve at match
-  time): language-agnostic change/debug → implementing-and-debugging (co-fire FIRST on a
-  feature/bugfix); behavior-preserving restructure → refactoring-code (governs; this supplies the
-  clippy / cargo-check / tests oracle); Python tooling → running-python-tools (but PyO3 / maturin
-  bindings FROM Rust stay HERE); prose/README → linting-prose; Julia/TS → writing-julia /
-  writing-typescript. NOT for installing Rust-written CLI tools (ripgrep/eza) or concept
+  reviewing Rust, editing Cargo.toml / dependencies, or choosing a crate. Cuts: change/debug →
+  implementing-and-debugging; behavior-preserving restructure → refactoring-code; cross-language
+  phase/risk/ledger → practicing-tiger-style, Rust mechanisms → HERE; Python tooling →
+  running-python-tools (PyO3 / maturin bindings FROM Rust stay HERE); prose/README → linting-prose;
+  Julia/TS → writing-julia / writing-typescript. NOT for installing Rust-written CLI tools or concept
   explainers with no code. Trigger on: Rust, cargo, crate, Cargo.toml, どの crate, blazing fast / 高速化,
   依存選定, async / tokio, borrow checker / 所有権 / lifetime, clone / Arc<Mutex>, unsafe / SAFETY,
   anyhow / thiserror / eyre / miette, serde / rkyv, clap / argh / bpaf, rayon /
@@ -91,6 +90,7 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 |---|---|
 | `implementing-and-debugging` | **Co-fire on any non-trivial Rust feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, **root-cause vs symptom** — a `.clone()`/`unwrap()` band-aid is the symptom-fix it forbids, RG2 is the Rust form, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Rust looks like inside that frame (RG0–RG4). |
 | `refactoring-code` | **Co-fire on any behavior-preserving Rust restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Rust **oracle** (`cargo check` + `clippy` + `cargo nextest` green as the bracket) and the Rust-safe transforms (module/visibility moves, ownership refactors, `impl Trait` extraction). A Rust refactor that improves no named property is still 場当たり churn — its deny-gate applies unchanged. **The "oracle" role does NOT suspend RG0** — a rename/refactor here is still first-crate-entry; the fire/no-fire boundary is the ★ callout. |
+| `practicing-tiger-style` | **LANGUAGE cut**: “Is the unresolved question Rust-specific type, ownership, Result/panic, crate, unsafe, or tool choice rather than the cross-language risk ledger?” **Yes** → Rust mechanisms stay HERE; **No** → `practicing-tiger-style` owns the ledger. Co-fire when both remain material. |
 | `running-python-tools` | LANGUAGE cut: invoking a Python CLI/one-off → there. Calling Python FROM Rust or exposing Rust TO Python (**PyO3 / maturin / the FFI boundary**) → HERE — that is a Rust dependency-architecture decision (RG0 / selection.md), not Python tooling. |
 | `writing-python` | LANGUAGE cut on a shared PyO3/maturin project: the Rust crate + the FFI boundary shape → HERE; the Python side of the same project (pyproject.toml, dependency selection, typing/ruff/pytest discipline) → `writing-python`; running the `maturin` command itself → `running-python-tools`. |
 | `writing-julia` / `writing-typescript` | LANGUAGE cut: different language, disjoint — Julia numerics → writing-julia; `.ts/.tsx` idiom → writing-typescript; Rust → here. Same family shape (LAW + gates + selection spine). |

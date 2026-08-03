@@ -5,8 +5,8 @@ description: >-
   survey / literature review / 文献レビュー, evidence maps, conflicting studies, and field-level
   claims. Also compiles a target-agnostic `DONOR SET` from cross-domain source relations; target
   correspondence/prediction/thesis → forging-novel-theses. Cuts: one fact → raising-resolution;
-  one-paper appraisal → arguing-research-papers; premise audit → surfacing-blind-spots; program
-  judgment → directing-research; expensive selected tree → acting-on-hypotheses; settled IA →
+  one-paper appraisal → arguing-research-papers; premise audit → surfacing-blind-spots; programme
+  judgment → supervising-research-programmes; expensive selected tree → acting-on-hypotheses; settled IA →
   structuring-documents; agent dispatch → orchestrating-agents; document authority/lifecycle →
   governing-research-documentation. If both are requested, this skill signs the corpus position first;
   governing-research-documentation then decides admission and authority. Search/extraction may fan out;
@@ -127,12 +127,12 @@ Then `governing-research-documentation` decides `DOC ADMISSION`, authority, and 
 | Critically appraise one paper's argument, method, or validity | `arguing-research-papers` reviewer red-team — one paper's review there; corpus synthesis here |
 | Expose only implicit premises, ignored exceptions, or human tacit constraints in an existing synthesis plan | `surfacing-blind-spots` — premise surface there; evidence-state synthesis here |
 | Position and defend the governing claim of one manuscript | `arguing-research-papers` — PURPOSE: the manuscript's argument there; the field's evidence state here |
-| Construct/select/formulate research problems or rank/allocate across >=2 future directions | `directing-research` — future program judgment there; corpus evidence state here |
+| Construct/select/formulate research problems or rank/allocate across >=2 future directions | `supervising-research-programmes` — future programme judgment there; corpus evidence state here |
 | Generate thesis candidates beyond the bounded corpus position | `forging-novel-theses` — genesis there; nearest-prior evidence here |
 | Find relation-level source donors for a selected or selected-for-probe frame, without mapping them to the target | **HERE** — return a target-agnostic `DONOR SET`; then `forging-novel-theses` maps or records `MAPPING-BREAK` |
 | Map a `DONOR SET` to a selected target frame, derive a target prediction, or write a transfer thesis | `forging-novel-theses` — source discovery stops here; correspondence and candidate/break are there |
 | Test, commit, pivot, or kill one expensive/irreversible selected future hypothesis tree | `acting-on-hypotheses` — hard-gated tree there; corpus state here |
-| Run one deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor; return `EXECUTOR RESULT` to `directing-research` |
+| Run one deterministic, bounded, reversible probe with no expensive downstream exposure | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
 | Reorder or deduplicate a review whose evidence judgments are settled | `structuring-documents` — FIX-LOCALITY: document architecture there; evidence derivation here |
 | Govern admission, authority, evidence lineage, review, retirement, or deletion across research documents | `governing-research-documentation` — corpus position is signed HERE first; portfolio authority/lifecycle follows there |
 | Find passages in an indexed local corpus without synthesizing them | `driving-cocoindex` — locate there; synthesize here |

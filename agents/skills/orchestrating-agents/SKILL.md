@@ -3,11 +3,12 @@ name: orchestrating-agents
 description: >-
   署名済みtask/function mapへ委任・並列化・独立検収を載せるcontrol plane。明示的dispatch、配役、
   visibility、dependency、veto、verification、acceptance、GPU/CPU/RAM/VRAM resource admissionで使う。裸の「研究を進めて」では発火せず、
-  directing-researchのstage診断と署名後にoverlayする。Postmortemはdispatch/pacing/delegation/
-  visibility/acceptance/control-plane failureだけ; generic software incident/postmortem →
-  implementing-and-debugging。Durable co-fire: continuity record → orchestration overlay → writer
+  programme設計→supervising-research-programmes、grant済みsection→directing-research-sections、
+  凍結terminal audit→auditing-research-processesへrouteする。directing-researchはroute-only shim。
+  Postmortemはdispatch/pacing/delegation/visibility/acceptance/control-plane failureだけ;
+  software incident→implementing-and-debugging。Durable co-fire: continuity record → orchestration overlay → writer
   checkpoint; continuing-long-running-tasksがrecord/writer semanticsを持ち、ここはlocusだけを運ぶ。
-  Cuts: research meaning→directing-research; document lifecycle→governing-research-documentation;
+  Cuts: research meaning→上記domain owner; document lifecycle→governing-research-documentation;
   present fact→raising-resolution; thesis→forging-novel-theses; premise→surfacing-blind-spots; costly
   one-bet→acting-on-hypotheses; cheap probe→plain executor。Domain content/skill craftは各owner。
   Scope/brief/synthesis/acceptanceはsolo、独立生成/盲検検証はfan-out。Japanese skill; responds in
@@ -16,7 +17,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2608.1.1 (2026-08-03) — user-systemd kernel limits for admitted jobs.
+> **Version**: v2608.3.0 (2026-08-04) — cross-section learning-bus ownership seam.
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -42,8 +43,12 @@ fi
 
 何を選ぶか、分野の結論、個別 tool の構文は sibling の正本へ委ねる。
 
-創造的研究では、`directing-research`がstageを診断し、問題、候補、test、portfolioの
-domain function mapを署名する。本skillはその後のdispatch overlayだけを所有する。
+創造的研究では、programme構成とportfolio判断は`supervising-research-programmes`が署名する。
+grant済み一sectionのlocal workは`directing-research-sections`が署名する。
+凍結terminal episodeのprocess auditは`auditing-research-processes`が署名する。
+`directing-research`は意味を変更しないroute-only shimである。
+
+本skillは各domain artifactのlocus/digestを受けた後のdispatch overlayだけを所有する。
 
 署名済みmapが無い場合、本skill単独で研究の意味や順序を作らない。
 明示的なdispatch/control-plane依頼だけは、既存mapの所在確認から開始できる。
@@ -232,6 +237,38 @@ artifact は、disagreement log、裁定根拠、再開したclaim idである�
 
 技術的真偽へ転用しないことを acceptance record で確認する。
 
+## v2 research verification cut
+
+この節はv2 research packetに限り、本文中のgenericな独立検収表現に優先する。
+常設Verifierは置かず、claim typeとpromotion riskでtierを選ぶ。
+
+| Tier | Check | Hot-path effect |
+|---|---|---|
+| V0 | 全packet/state mutationをschema、digest、role/write/read set、join、revision、fence、visibility、replayで決定的に検査する。 | packetをatomic rejectできる。LLMを呼ばない。 |
+| V1 | localで可逆なcandidate、admission、cheap probe、reviewはDirector charter rule、V0、executor receiptで学習する。 | verifierなしでsectionを続ける。 |
+| V2 | programmeへpromotionするload-bearing empirical assertionに独立machine oracleが無い場合だけ、declassification後に独立reviewする。 | `PENDING_VERIFICATION`はpromotionだけを止め、search/learn queueを止めない。 |
+| V3 | broad RETIRE/CLOSE、公的達成claim、不可逆allocation、safety-critical transitionをdistinct bearerまたはauthorised humanが凍結criteriaでreviewする。 | enact/publiciseだけを止める。 |
+
+`auditing-research-processes`は凍結episodeのresearch-process integrity ownerであり、general verifierではない。
+Programme Supervisorを可逆なcandidate admission、build、executionのhot pathへ置かない。
+verifierをreceipt interpretation、learning、Director commitのhot pathへ置かない。
+artifactはtier、mode、必要ならdistinct verifier、
+verification artifact、timeout時の`PENDING_VERIFICATION`である。
+
+### Cross-section learning-bus cut
+
+Committed section learningの横伝播は`directing-research-sections`が意味を所有する。
+同skillが`SECTION_TRANSFER_PACKET`、`SECTION_SUBSCRIPTION`、recipient admission、
+`SECTION_TRANSFER_COMMIT`を定義し、source/recipient Directorの局所裁定を閉じる。
+
+brokerはagentでもsemantic ownerでもない。凍結したtopic/premise/interface idとdelta classを扱う。
+exact set membershipだけを決定的に照合し、delivery recordを作る。
+packetの解釈、採否、ack待ち、Supervisor/verifier/global joinを追加しない。
+本skillがco-fireできるのは、明示されたbroker topology、visibility、dependency、V0 enforcementを
+dispatch overlayへ載せる場合だけである。transfer artifactやsection stateを所有しない。
+
+artifactは、Section-owned function-map locus/digestと、必要な場合だけbroker dispatch overlayである。
+
 ## 監督の一巡
 
 gate は着手から公表までの順で適用する。
@@ -335,18 +372,21 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | Ask / signal | 判定 | PURPOSE cut と owner | Artifact |
 |---|---|---|---|
 | generic software incident/postmortemで原因、修復、再発防止を問う。 | `NO-FIRE` | `implementing-and-debugging`が挙動とroot causeを所有する。dispatch/pacing等のcontrol-plane failureが明示された場合だけ別行で本skillがco-fireする。 | implementation diagnosis/fixへのpointer。 |
-| 創造的研究の裸の「研究を進めて」「どんどん進めて」。署名済みmapもdispatch指定も無い。 | `NO-FIRE` | `directing-research`がstageを診断し、研究の問題・候補・test・portfolioを定式化する。 | domain function mapの署名を先に受ける。 |
+| 創造的研究の裸の「研究を進めて」「どんどん進めて」。署名済みmapもdispatch指定も無い。 | `NO-FIRE` | route-only `directing-research` shimがprogramme、section、terminal auditを分類し、意味変更なしで新ownerへ渡す。 | routing decisionだけ。 |
 | 署名済みmapがある。またはdispatch/control-planeを明示している。 | `FIRE / CO-FIRE` | mapの意味はdomain owner。本skillはagent、visibility、dependency、veto、verification、acceptanceだけを載せる。 | map locus/digestとdispatch overlay。 |
 | 「起草と査読を委任」「定理や文書を起草・査読」。 | `FIRE / CO-FIRE` | 運転はここ。数学の中身は `proving-theorems`。 | role分離とco-fire記録。 |
 | 「複数の模型で水平思考」「誰に任せる」「配役を決める」。 | `FIRE` | topologyと順序はここ。現在の担い手はmodel roster。 | portfolioまたはrole-selection record。 |
 | 「創造と批判をどう配る」「生成と評価を分ける」「早すぎる批判が候補を潰す」。 | `FIRE` | domain ownerが成熟/凍結条件を定義した後のvisibility、challenge release、veto authority、multi-agent topologyはここ。内容と成熟判定はdomain owner。 | domain freeze pointer、権限表、visibility record。 |
 | dispatch、pacing、delegation、visibility、acceptance、control-planeの失敗を振り返る。 | `FIRE` | 委任体制と運転規則のpostmortemだけを所有する。 | 観測した失敗→変更したrule/artifact。 |
-| 研究frame、候補、test、portfolioの意味や研究processを振り返る。 | `NO-FIRE` | `directing-research`がresearch-process retrospectiveを所有する。 | domain retrospectiveへのpointer。 |
+| 凍結したterminal research episodeのframe、candidate、test、portfolio processを監査する。 | `NO-FIRE` | `auditing-research-processes`がintegrity auditと非enacting recommendationを所有する。live programme/section reviewは各domain ownerへ戻す。 | frozen audit packetへのpointer。 |
 | 「検収試験を設計」「完成宣言が監査に落ちる」。 | `FIRE` | P6とacceptance境界はここ。 | falsifying test、blind audit、verdict。 |
 | 「中間生成物を再利用」「cacheを作り直している」。 | `FIRE` | 発火はここ、詳細はmeasurement reference。 | P10 manifest pointer。 |
+| codeまたは実験のresource boundを問う。 | `NO-FIRE / CO-FIRE` | “Is the resource question aggregate agent CPU/RAM/VRAM/GPU admission rather than the code or experiment’s own resource bound?” **Yes** → P7 alone owns dispatch resources. **No** → `practicing-tiger-style` owns the code/experiment ledger; co-fire only when both bounds matter. | P7 envelope/`agent-resource-run` verdict、またはTiger ledger pointer。 |
 | 個別 CLI のflag、slug、呼び出し構文。 | `NO-FIRE` | `driving-*` が一回の呼び出しを所有する。 | routing先だけ。委任体制を起動しない。 |
 | 文献群の台帳、確度、矛盾調停、体系化。 | `NO-FIRE` | `systematizing-knowledge` が内容を所有する。 | routing先。並べ方を問う場合だけco-fire。 |
-| 創造的研究全体、問題構成・選定・定式化、候補admission、>=2独立方向の配分・再開・撤退。 | `NO-FIRE` | `directing-research` がlifecycleとportfolio判断を所有する。 | domain stage列とacceptance criteriaを先に受け取る。 |
+| programme全体の問題構成、OPEN_ISSUE、>=2独立sectionのportfolio配分・再開・撤退。 | `NO-FIRE` | `supervising-research-programmes`がprogramme lifecycleとportfolio判断を所有する。 | programme artifactのlocus/digestを受け取る。 |
+| current OPEN_ISSUEへのbid、grant済み一sectionのcharter、local admission、intent、receipt-linked learning。 | `NO-FIRE` | `directing-research-sections`が一sectionのlocal lifecycleを所有する。 | section artifactのlocus/digestを受け取る。 |
+| committed section learningのpacket、subscription、recipient ADOPT/REJECT/DEFER、local transfer commit。 | `NO-FIRE / CO-FIRE` | `directing-research-sections`がtransfer semanticsと全section-owned artifactを所有する。本skillは明示されたexact-match brokerのtopology、visibility、dependency、V0 enforcementだけを載せる。 | Section function-map locus/digestと、必要な場合だけbroker dispatch overlay。 |
 | compact、session、executorを越えて残るtask stateやresume/handoff record。 | `NO-FIRE / CO-FIRE` | `continuing-long-running-tasks`がdurable stateを所有する。本skillはtopology、役割、vetoだけを載せる。 | continuation locusとdispatch overlay。意味状態を複製しない。 |
 | research documentのcreate/update/derive/freeze/retire/delete、authority、admission。 | `NO-FIRE` | `governing-research-documentation`が文書portfolio lifecycleを所有する。 | lifecycle verdictへのpointer。 |
 | 既存code/data/API/source/problem artifactのfactual present-state rowを検分する。 | `NO-FIRE` | `raising-resolution`がcitation gate、cheapest rung、stop-at-oneを所有する。 | cited observationだけをoverlayへ渡す。 |

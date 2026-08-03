@@ -36,10 +36,10 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | N4c | "Surface the hidden premises in this manuscript; do not judge whether they hold." | **surfacing-blind-spots** — premise-only excavation |
 | N5 | "given this selected problem, generate novel thesis candidates" | **forging-novel-theses** — candidate genesis, not write-up |
 | N5a | "The source field succeeded; construct a correspondence to our target or say exactly where it breaks." | **forging-novel-theses** — transfer mapping / `MAPPING-BREAK`, not a finished target warrant |
-| N5b | "this result means we may need to reopen the research problem/program" | **directing-research** — program-stage reopen decision |
-| N5b2 | "We do not yet have a finished claim; formulate and select the research question we should pursue." | **directing-research** — unfinished problem-frame construction/selection precedes any paper argument |
+| N5b | "this result means we may need to reopen the research problem/program" | **supervising-research-programmes** — programme-stage reopen decision |
+| N5b2 | "We do not yet have a finished claim; formulate and select the research question we should pursue." | **supervising-research-programmes** — unfinished problem-frame construction/selection precedes any paper argument |
 | N5c | "precommit a test/commit/kill table for this expensive/irreversible selected thesis" | **acting-on-hypotheses** — hard-gated forward tree |
-| N5c2 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to **directing-research** |
+| N5c2 | "run this deterministic 30-second reversible check" | domain/plain executor; return `EXECUTOR RESULT` to **directing-research-sections** |
 | N5d | "decide author/reviewer/verifier roles and acceptance timing" | **orchestrating-agents** — control plane |
 | N6 | "the bibliography isn't rendering / fix my LaTeX build" | **compiling-latex** — build/tooling |
 | N7 | "Fix this typo and Markdown spacing in my abstract; do not change the claim." | direct/plain edit — typo/format-only with meaning fixed |
@@ -54,8 +54,8 @@ which, in writing, before editing). A green desk-check after every edit is the r
 | C2 | "my abstract overclaims AND the prose is clunky" | **arguing-research-papers** (is the CLAIM calibrated to the evidence — argument level, G2) + **linting-prose** (the sentence wording). Order: calibrate the claim HERE → word it THERE. |
 | C3 | "I need to write the paper and also give the talk on it" | **arguing-research-papers** (the written paper) + **designing-presentations** (the live talk) — parallel, independent; the medium cut separates them. |
 | C4 | "position this against prior work AND make the related-work section well-organized" | **arguing-research-papers** (which named prior work, which gap — G3) + **structuring-documents** (the section's IA). Decide the positioning HERE → organize THERE. |
-| C5 | "the research problem is selected but the thesis is missing; later write the completed result" | **forging-novel-theses** generates `CANDIDATE` packets → **directing-research** admits one → [**acting-on-hypotheses** if hard-gated / domain executor if cheap-reversible] earns evidence → **arguing-research-papers** argues the finished claim. A FINISHED result begins HERE, not at genesis. |
-| C5b | "reviewer says not novel; should we narrow the claim or reopen the research?" | **arguing-research-papers** diagnoses the finished claim → **directing-research** decides whether to reopen → **forging-novel-theses** only if a selected frame again lacks a thesis. |
+| C5 | "the research problem is selected but the thesis is missing; later write the completed result" | **forging-novel-theses** generates `CANDIDATE` packets → **directing-research-sections** admits one locally → [**acting-on-hypotheses** if hard-gated / domain executor if cheap-reversible] earns evidence → **arguing-research-papers** argues the finished claim. A FINISHED result begins HERE, not at genesis. |
+| C5b | "reviewer says not novel; should we narrow the claim or reopen the research?" | **arguing-research-papers** diagnoses the finished claim → **supervising-research-programmes** decides whether to reopen → **forging-novel-theses** only if a newly selected frame again lacks a thesis. |
 | C6 | "Synthesize these 30 papers, then write the related-work argument positioning our finished result." | **systematizing-knowledge** signs the corpus position → **arguing-research-papers** signs the named-gap CLAIM/ARGUMENT → architecture/prose only if requested |
 | C7 | "Surface the hidden premises in this paper, then assess which ones invalidate its claim." | **surfacing-blind-spots** exposes premises without verdict → **arguing-research-papers** reviewer red-team evaluates warrants, method, and validity |
 | C8 | "A donor mechanism inspired our target study; test it, then write the finished result." | `forging-novel-theses` maps/breaks → `acting-on-hypotheses` earns target-side signal when hard-gated → HERE argues only the completed target evidence |
@@ -77,8 +77,9 @@ linting-prose. The **decisive signal** that routes it HERE is "**if I only ran o
 that is an *evidence-sufficiency* question (does the evidence license the claim's scope = G2), which is
 argument-level, not word-choice. Route on the evidence question, not the quoted phrase.
 
-**Reciprocal-cut status.** `forging-novel-theses`, `directing-research`,
-`acting-on-hypotheses`, and `orchestrating-agents` now name the phase/purpose seams above. The previously
+**Reciprocal-cut status.** `forging-novel-theses`, `supervising-research-programmes`,
+`directing-research-sections`, `acting-on-hypotheses`, and `orchestrating-agents` now name the
+phase/purpose seams above. The previously
 recorded `forging-novel-theses` debt is closed by the 2026-07-30 genesis-only reforge.
 `linting-prose`'s reciprocal claim-calibration cut is also landed. The older
 `structuring-documents` reciprocal-description debt remains outside this research-family reforge; do

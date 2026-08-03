@@ -19,17 +19,18 @@ Read only the name and description. Any unresolved race is a description or boun
 |---|---|
 | “Find relation-level donor mechanisms in adjacent fields, but do not map them to our target.” | `systematizing-knowledge` produces a DONOR SET |
 | “Construct the source-to-target correspondence or record why it breaks.” | `forging-novel-theses` produces a transfer candidate or `MAPPING-BREAK` |
-| “This target-side negative result proves the correspondence broke; emit MAPPING-BREAK.” | return `TARGET RESULT` to `directing-research`; `forging-novel-theses` alone performs any new mapping assessment and may emit `MAPPING-BREAK` |
+| “This target-side negative result proves the correspondence broke; emit MAPPING-BREAK.” | return `TARGET RESULT` to `directing-research-sections`; `forging-novel-theses` alone performs any new mapping assessment and may emit `MAPPING-BREAK`; the Section Director records local `MAPPING_TRANSFER_DISPOSITION` |
 | “The donor field succeeded, so write the finished target claim.” | `arguing-research-papers` only after target evidence; otherwise return to target-side test here |
 | “Expose hidden premises in this transfer packet, but do not design a test.” | `surfacing-blind-spots` |
-| “Run this deterministic 30-second target check with no costly downstream decision.” | domain/plain executor; return raw result to the domain owner |
-| “Choose among several research directions and decide whether transfer is worth pursuing.” | `directing-research` |
+| “Run this deterministic 30-second target check with no costly downstream decision.” | domain/plain executor; return raw result + provenance to `directing-research-sections` under the current mandate/charter |
+| “Choose among several research directions, construct the programme frame, or decide whether transfer is worth pursuing across multiple bets.” | `supervising-research-programmes` |
+| “This local frame break exceeds our SECTION_MANDATE; reopen the programme now.” | `directing-research-sections` may declassify `SECTION_REOPEN_REQUEST`; only `supervising-research-programmes` may enact reopening |
 
 ## Ordered co-fire
 
 | Braided ask | Order |
 |---|---|
-| cross-domain route from sources to an expensive target bet | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps or records `MAPPING-BREAK` → HERE tests target-side signal and returns `TARGET RESULT` → `directing-research` disposes the route; any correspondence challenge returns to `forging-novel-theses` for a new assessment |
+| cross-domain route from sources to an expensive target bet | `systematizing-knowledge` freezes DONOR SET → `forging-novel-theses` maps or records `MAPPING-BREAK` → HERE tests target-side signal and returns `TARGET RESULT` → `directing-research-sections` records local `MAPPING_TRANSFER_DISPOSITION`; any correspondence challenge returns to `forging-novel-theses` for a new assessment |
 | transfer candidate needs hidden-premise audit before its test | `surfacing-blind-spots` emits a premise packet → HERE owns the target-side test/threshold/commit |
 
 ## Regression predicate

@@ -20,8 +20,8 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 
 | Ask | Route |
 |---|---|
-| “Help me find and choose a creative PhD research problem.” | `directing-research` |
-| 「この領域を三つの別問題として再構成して、どれを研究するか決めて」 | `directing-research` |
+| “Help me find and choose a creative PhD research problem.” | `supervising-research-programmes` |
+| 「この領域を三つの別問題として再構成して、どれを研究するか決めて」 | `supervising-research-programmes` |
 | “Generate five structurally different theses for this selected frame.” | `forging-novel-theses` |
 | “Construct a source-to-target correspondence from these donor mechanisms.” | `forging-novel-theses` — transfer mapping, not premise-only audit |
 | “Does the trace at logs/run-14.json actually support the claimed race condition?” | `raising-resolution` |
@@ -37,7 +37,7 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 
 | Braided ask | Order |
 |---|---|
-| broad creative-research lifecycle with a blind-spot pass | `directing-research` fixes one artifact and decision → HERE returns packet → owner resumes |
+| broad creative-research lifecycle with a blind-spot pass | `directing-research` emits only a routing decision → `supervising-research-programmes` fixes the programme artifact and decision → HERE returns a packet → programme owner resumes |
 | selected frame needs tacit seeds before thesis generation | HERE elicits real-human probes → `forging-novel-theses` consumes only HUMAN-provenanced answers named by `Handoff` |
 | hidden premise depends on a present claim | HERE identifies assumption + locator → `raising-resolution` inspects it → HERE integrates provenance if needed |
 | one expensive/irreversible forward bet needs premise audit and a kill test | HERE returns load-bearing premises → `acting-on-hypotheses` owns test/threshold/commit |

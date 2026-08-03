@@ -6,16 +6,18 @@ description: >-
   symbolic algebra, differential equations, package architecture, TTFX, or .so/AOT. Trigger on
   scope/let/const, Val, column-major loops, immutable/mutable struct,
   type stability / 型安定, dynamic vs multiple dispatch, function barrier, DifferentiationInterface,
-  ADTypes, ForwardDiff, Enzyme, Zygote, JET, DispatchDoctor, AllocCheck, Aqua, ExplicitImports,
-  Chairmarks, StaticArrays, ComponentArrays, OhMyThreads, Optim/JuMP/Manopt,
+  ADTypes, ForwardDiff, Enzyme, Zygote, JET, Aqua, StaticArrays, ComponentArrays, OhMyThreads,
+  Optim/JuMP/Manopt,
   SymEngine/Symbolics/ModelingToolkit/SymPyPythonCall, DrWatson/Pluto/Documenter/Quarto,
   PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
-  weakdeps, type piracy, public API. MANDATORY — read BEFORE writing ANY Julia code, and BEFORE RUNNING any experiment/benchmark whose numbers may be recorded (実験を回す, ベンチ実行, 事前登録の実験, GB実験 — JG5 fires on the RUN, not only the code). §2.0 forbids
+  weakdeps, type piracy, public API. MANDATORY before Julia code or a recordable experiment/benchmark
+  (JG5 fires on the run). §2.0 forbids
   FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
   is not banned — the bug is type-unstable hot paths. Co-fires with ORDER: Julia feature/bugfix →
   implementing-and-debugging first (change-safety), this for idiom; Julia refactor →
   refactoring-code governs (two hats/oracle), this supplies JET/Aqua brackets + Julia-safe
-  transforms. Lean/formal proofs → proving-theorems; Python tooling → running-python-tools
+  transforms. Cross-language phase/risk/ledger → practicing-tiger-style; Julia mechanisms → HERE.
+  Lean/formal proofs → proving-theorems; Python tooling → running-python-tools
   (PythonCall/SymPyPythonCall from Julia stays here); GPU kernels / CuArray performance /
   CUDA.jl → optimizing-julia-gpu-kernels (host-side type & package discipline stays here).
 ---
@@ -134,6 +136,7 @@ description: >-
 |---|---|
 | `implementing-and-debugging` | **Co-fire on any non-trivial Julia feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Julia looks like inside that frame (JG0–JG4). Its reciprocal row: "language skills own correctness/perf idiom." |
 | `refactoring-code` | **Co-fire on any behavior-preserving Julia restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Julia-specific oracle components (JET / Aqua / `report_package` as the green bracket) and the Julia-safe transforms (JG3: include-order moves, subpackage extraction, weakdeps migration). A Julia refactor that improves no named property is still 場当たり churn — its G3 applies unchanged. |
+| `practicing-tiger-style` | **LANGUAGE cut**: “Is the unresolved question Julia/SciML method, type stability, numerical semantics, or Julia-specific measurement rather than the cross-language risk ledger?” **Yes** → Julia mechanisms stay HERE; **No** → `practicing-tiger-style` owns the ledger. Co-fire when both remain material. |
 | `proving-theorems` | PURPOSE cut: formalizing/machine-checking a THEOREM (Lean, proof assistants) → there, even when the math started life as Julia numerics. Numerical computation/experiment in Julia → here. "Port this Julia result to a formal proof" → there, this stays for the Julia side only. |
 | `optimizing-julia-gpu-kernels` | DECISIVE cut — **does the code run on (or manage) the device?** CUDA.jl / KernelAbstractions kernels, CuArray performance, launch config, GPU profiling, kernel-under-AD (rrule for a kernel) → there. Host-side type discipline, AD frontend choice, package architecture → HERE. Co-fire with ORDER on GPU-in-Julia work: JG2 type discipline is that skill's GK1 precondition — instability that is merely slow on CPU is a COMPILE ERROR inside a kernel. toolchain.md §2.9.5's Reactant-vs-CUDA.jl framing stays here; the moment a hand kernel or CuArray perf question appears → there. |
 | `running-python-tools` | LANGUAGE cut: invoking a Python CLI/one-off → there. Calling Python FROM Julia (SymPyPythonCall, PythonCall/juliacall boundary) → HERE — that is a Julia dependency-architecture decision (JG3/packages.md), not Python tooling. |

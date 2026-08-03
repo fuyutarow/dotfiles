@@ -73,6 +73,7 @@ type MappingBreakData = Readonly<{
 
 type Input = Readonly<{
 	donorSetPath?: string;
+	legacyV1: boolean;
 	text: string;
 }>;
 
@@ -88,13 +89,41 @@ type Gate = Readonly<{
 	warn?: (value: string) => string | undefined;
 }>;
 
+type ArgvType = "known-flag" | "unknown-flag" | "argument";
+
 function rejectPrototypeFlag(
-	type: "known-flag" | "unknown-flag" | "argument",
+	type: ArgvType,
 	flag: string,
+	_flagValue?: string,
 ): void {
 	if (type === "unknown-flag" && flag === "__proto__") {
 		throw new Error(`unknown option '--${flag}'`);
 	}
+}
+
+const legacyV1Flag = "legacy-v1";
+const legacyV1FlagError =
+	"legacy v1 compatibility requires exactly one bare --legacy-v1 token";
+
+function createGateCheckArgvGuard(): typeof rejectPrototypeFlag {
+	let legacyV1Seen = false;
+	return (type, flag, flagValue) => {
+		rejectPrototypeFlag(type, flag, flagValue);
+		if (type === "argument") return;
+		const normalized = `${flag}${flagValue ?? ""}`
+			.replace(/[^A-Za-z0-9]/g, "")
+			.toLowerCase();
+		if (!normalized.includes("legacyv1")) return;
+		if (
+			type !== "known-flag" ||
+			flag !== legacyV1Flag ||
+			flagValue !== undefined ||
+			legacyV1Seen
+		) {
+			throw new Error(legacyV1FlagError);
+		}
+		legacyV1Seen = true;
+	};
 }
 
 function fieldPattern(label: string): RegExp {
@@ -478,6 +507,24 @@ const transferCandidateGates = [
 	},
 ] satisfies readonly Gate[];
 
+function handoffOwner(value: string): string | undefined {
+	return value.match(/^([A-Za-z][A-Za-z0-9-]*)(?=\s|$|[—–:])/)?.[1];
+}
+
+function mappingBreakHandoffFailure(
+	value: string,
+	legacyV1: boolean,
+): string | undefined {
+	const expectedOwner = legacyV1
+		? "directing-research"
+		: "directing-research-sections";
+	return handoffOwner(value) === expectedOwner &&
+		/TRANSFER DISPOSITION|denominator|preserv/i.test(value) &&
+		!/\b(?:ADOPT|RETIRE|TEST|REOPEN)\b/.test(value)
+		? undefined
+		: `MAPPING-BREAK handoff must begin with the exact ${expectedOwner} owner, preserve the attempt, and not decide its disposition`;
+}
+
 const mappingBreakGates = [
 	{
 		id: "M1",
@@ -488,7 +535,11 @@ const mappingBreakGates = [
 	{ id: "M2", label: "Input problem/frame" },
 	{ id: "M3", label: "Donor set", validate: validateDonorSet },
 	{ id: "M4", label: "Donor IDs", validate: validateDonorIds },
-	{ id: "M5", label: "Source comparison", validate: validateSourceComparison },
+	{
+		id: "M5",
+		label: "Source comparison",
+		validate: validateSourceComparison,
+	},
 	{
 		id: "M6",
 		label: "Source relation / locator",
@@ -525,7 +576,11 @@ const mappingBreakGates = [
 				? undefined
 				: "Failed invariant must name what relation could not be preserved",
 	},
-	{ id: "M11", label: "Transfer boundary", validate: validateTransferBoundary },
+	{
+		id: "M11",
+		label: "Transfer boundary",
+		validate: validateTransferBoundary,
+	},
 	{
 		id: "M12",
 		label: "Evidence / locator",
@@ -537,12 +592,6 @@ const mappingBreakGates = [
 	{
 		id: "M13",
 		label: "Handoff",
-		validate: (value: string) =>
-			/directing-research/i.test(value) &&
-			/TRANSFER DISPOSITION|denominator|preserv/i.test(value) &&
-			!/\b(?:ADOPT|RETIRE|TEST|REOPEN)\b/.test(value)
-				? undefined
-				: "MAPPING-BREAK handoff must preserve the attempt for directing-research without deciding its disposition",
 	},
 	{
 		id: "M14",
@@ -789,6 +838,7 @@ function validateCandidate(
 function validateMappingBreak(
 	section: ArtifactSection,
 	report: Reporter,
+	legacyV1: boolean,
 ): MappingBreakData {
 	const lines = section.body.split("\n");
 	const values = new Map<string, string>();
@@ -814,7 +864,10 @@ function validateMappingBreak(
 			report(prefix, "FAIL", `${gate.label}: value is blank or a placeholder`);
 			continue;
 		}
-		const failure = gate.validate?.(value);
+		const failure =
+			gate.id === "M13"
+				? mappingBreakHandoffFailure(value, legacyV1)
+				: gate.validate?.(value);
 		if (failure !== undefined) {
 			report(prefix, "FAIL", failure);
 			continue;
@@ -1264,11 +1317,12 @@ function nonEmptyString(value: string | undefined): string {
 }
 
 async function input(): Promise<Input> {
+	const rejectPrototypeFlag = createGateCheckArgvGuard();
 	const parsed = cli(
 		{
 			name: "gate-check.ts",
 			parameters: ["[candidate]"],
-			flags: { donorSet: nonEmptyString },
+			flags: { donorSet: nonEmptyString, legacyV1: Boolean },
 			strictFlags: true,
 			ignoreArgv: rejectPrototypeFlag,
 		},
@@ -1280,21 +1334,24 @@ async function input(): Promise<Input> {
 	}
 	const path = parsed._.candidate;
 	const donorSetPath = parsed.flags.donorSet;
+	const legacyV1 = parsed.flags.legacyV1 ?? false;
 	if (path === undefined || path === "-") {
 		return {
+			legacyV1,
 			text: await new Response(Bun.stdin.stream()).text(),
 			...(donorSetPath === undefined ? {} : { donorSetPath }),
 		};
 	}
 	if (!existsSync(path)) throw new Error(`gate-check: file not found: ${path}`);
 	return {
+		legacyV1,
 		text: await Bun.file(path).text(),
 		...(donorSetPath === undefined ? {} : { donorSetPath }),
 	};
 }
 
 async function main(): Promise<void> {
-	const { donorSetPath, text } = await input();
+	const { donorSetPath, legacyV1, text } = await input();
 	const sections = artifactSections(text);
 	let failures = 0;
 	let warnings = 0;
@@ -1314,7 +1371,7 @@ async function main(): Promise<void> {
 		validateCandidate(section, report),
 	);
 	const mappingBreaks = mappingBreakSections.map((section) =>
-		validateMappingBreak(section, report),
+		validateMappingBreak(section, report, legacyV1),
 	);
 	await verifyFrozenDonorSet(sections, donorSetPath, report);
 

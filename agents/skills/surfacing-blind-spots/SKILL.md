@@ -6,7 +6,7 @@ description: >-
   premise excavation, 思考盲点, 盲点を洗い出す, 暗黙の前提, unknown unknowns, `/dig`-style deep
   questioning, 水平思考で前提を揺さぶる, or premise-only audit before a selected-tree test. Emits
   one Blind-spot packet; never solutions or thesis candidates. Cuts: frame/program judgment →
-  directing-research; thesis genesis → forging-novel-theses; present fact inspection →
+  supervising-research-programmes; thesis genesis → forging-novel-theses; present fact inspection →
   raising-resolution; expensive/irreversible bet → acting-on-hypotheses; cheap reversible probe →
   domain/plain executor; corpus synthesis → systematizing-knowledge; paper appraisal →
   arguing-research-papers; skill craft → forging-skills; agent topology → orchestrating-agents.
@@ -188,7 +188,7 @@ Reject the packet before return if it:
 
 | Runtime question | Route |
 |---|---|
-| Are we constructing, selecting, or steering a research frame or program? | `directing-research` |
+| Are we constructing, selecting, or steering a research frame or program? | `supervising-research-programmes` |
 | Are we generating structurally distinct thesis candidates for a selected frame? | `forging-novel-theses` |
 | Are we inspecting whether a present fact, claim, or artifact is actually true? | `raising-resolution` |
 | Are we testing one expensive/irreversible future bet or deciding commit, pivot, or kill? | `acting-on-hypotheses` |

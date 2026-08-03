@@ -87,7 +87,7 @@ The sample digest is intentionally synthetic; it must match the supplied donor f
 - Failed invariant: Intervention-linked trajectories cannot be preserved when each observation destroys the sampled unit.
 - Transfer boundary: The correspondence fails whenever repeated observation requires a new, non-identical unit.
 - Evidence / locator: target mismatch fixture/target-frame.md:42; source relation fixture/donor-set.md:18
-- Handoff: directing-research — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here.
+- Handoff: directing-research-sections — preserve this attempt in TRANSFER DISPOSITION denominator; no disposition here.
 - Status: MAPPING-BREAK
 ```
 
@@ -133,7 +133,7 @@ irrelevant if their functional coordinates differ.
 Three packets that all use `Transformation target: REPRESENTATION` and the same discriminator have not
 covered the search space merely because their recipe labels differ. `gate-check.ts` rejects this
 mechanical collapse. Semantic paraphrases that survive the floor remain the responsibility of
-`directing-research`; when its dedup result crosses the collapse rule, this skill gets one targeted
+`directing-research-sections`; when its dedup result crosses the collapse rule, this skill gets one targeted
 regeneration and then must say `COVERAGE GAP`.
 
 ## Human-tacit PASS / FAIL seam

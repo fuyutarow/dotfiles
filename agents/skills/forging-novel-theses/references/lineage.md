@@ -45,9 +45,9 @@ inspectable and recovery bounded, but no cited study validates them as a causal 
 - Chen et al. (ACL Findings 2026), [DOI](https://doi.org/10.18653/v1/2026.findings-acl.13): interacting
   agents can converge semantically; blind initial generation is an orchestration option, not a guarantee.
 
-The broader primary-source ledger is owned by `directing-research/references/sources.md`. The claims
-needed to operate this skill are summarized above so this skill does not depend on a cross-directory
-relative path at runtime.
+Historical programme-design sources are summarized above so this skill does not depend on a
+cross-directory relative path at runtime. Current programme semantics belong to
+`supervising-research-programmes`.
 
 ## Source-grade table
 
@@ -68,7 +68,7 @@ relative path at runtime.
 
 The following belonged to other owners and was removed:
 
-- problem worth, why-now, and portfolio judgment -> `directing-research`;
+- problem worth, why-now, and portfolio judgment -> `supervising-research-programmes`;
 - kill experiments, thresholds, withdrawal, and commitment for an expensive/irreversible selected tree
   -> `acting-on-hypotheses`; cheap deterministic reversible probes -> domain/plain executor;
 - capital fit and runway -> no universal research-generation owner;

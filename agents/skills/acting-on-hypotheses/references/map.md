@@ -76,12 +76,14 @@ Run the ownership cut before placing a reactive node:
 
 ### Incoming Open-set residual — pass through; never domesticate it
 
-For each item received from `directing-research`, preserve this interface verbatim in every Map output:
+For each item received from `directing-research-sections` under the current `SECTION_MANDATE` and
+`SECTION_CHARTER`, preserve this interface verbatim in every Map output:
 
 `OPEN-SET RESIDUAL (PASS-THROUGH): <residue> — provenance=<source/packet locus>; reopen-when=<observable trigger>`
 
 The provenance and reopen trigger are required interface fields. If either is missing, emit
-`HANDOFF DEFECT: OPEN residual lacks <field>` and return it to `directing-research`; do not guess. Map
+`HANDOFF DEFECT: OPEN residual lacks <field>` and return it to `directing-research-sections`; do not
+guess. Map
 must not give the item a confidence value, turn it into a premise, or classify it into the tree.
 
 ### The in-tree / frame-break cut — full vocabulary and deterministic tie-break
@@ -93,8 +95,8 @@ must not give the item a confidence value, turn it into a premise, or classify i
 - **FRAME-BREAKING discovery** — placing it would change any classified coordinate, replace the
   overarching thesis family, or consume an `OPEN` residual. Do **not** absorb it into Map. `VALUE`
   (whose success/harm/trade-off governs) and `ACTION` (intervention, order, fallback, or authority)
-  are frame breaks just as surely as object or regime changes. `OPEN` always remains external until
-  `directing-research` classifies it.
+  are frame breaks just as surely as object or regime changes. `OPEN` always remains external to the
+  selected tree.
 
 Emit exactly one primary slot using this vocabulary:
 `OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION / OPEN`.
@@ -108,8 +110,10 @@ more. Emit:
 
 `FRAME-BREAK flagged by Loop iteration N: <discovery> — primary=<slot>; cross-tags=<slots|NONE>; provenance=<locus>; reopen-trigger=<observed trigger|NONE>`
 
-Return the artifact to `directing-research`, which owns stage diagnosis and decides whether to reframe
-or send a new thesis-generation request to `forging-novel-theses`.
+Return the artifact to `directing-research-sections`, which handles it under the current mandate and
+charter and may request a new local thesis assessment from `forging-novel-theses`. If the frame break
+exceeds the mandate, the Section Director may declassify a typed `SECTION_REOPEN_REQUEST`; only
+`supervising-research-programmes` may enact programme reopening.
 
 Map is therefore structurally complete only **inside one selected tree**. It does not proactively search
 for unknown premises; that upstream exposure function belongs to `surfacing-blind-spots`.
@@ -147,6 +151,6 @@ that edit to Map for MECE; that is the skill's OWN tightening, not the book's st
 | Only a question, no 言い切り | upstream of Map | write it as a falsifiable claim, or route to raising-resolution (§1) |
 | Handed Loop a low-影響度 node | testing the wrong node | re-run the win/lose scan; pick max(uncertain×decisive) (§5) |
 | Node-add done silently inside a test | the Loop→Map seam is invisible | emit the `NEW NODE flagged by Loop iteration N` line (§6) |
-| Frame-breaking discovery squeezed into the selected tree | Map silently changed research altitude | emit `FRAME-BREAK` and return to directing-research (§6) |
-| Open-set residual copied without provenance/reopen trigger, or converted into a node | an open-world caveat became an unsupported in-tree fact | preserve the pass-through interface or return the handoff defect; only directing-research may classify it (§6) |
+| Frame-breaking discovery squeezed into the selected tree | Map silently changed the local mandate boundary | emit `FRAME-BREAK` and return to directing-research-sections (§6) |
+| Open-set residual copied without provenance/reopen trigger, or converted into a node | an open-world caveat became an unsupported in-tree fact | preserve the pass-through interface or return the handoff defect to directing-research-sections (§6) |
 | Every node at 確信度 100% / 0% | binary, not a gradation | re-tag 0–100%; a binary node has nothing for Loop to move (§3) |

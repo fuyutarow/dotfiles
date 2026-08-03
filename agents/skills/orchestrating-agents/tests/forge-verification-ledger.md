@@ -1172,3 +1172,51 @@ Red-to-green receipts from `mise run test:resource-control`:
   behavior.
 - Green: `22 pass / 0 fail`; the forced failure rejects, and a real `setsid` descendant is absent
   after the controller returns while the reservation directory contains no lease.
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: WARN 0; `skill-check.ts` exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: no prose-debt remediation is queued; retire this record if a future floor reports WARN.
+
+## 2026-08-03: research-control-plane v2 seam reconciliation
+
+- Frozen streaming source SHA-256:
+  `ab1492eb2da873b3a2ed7cfcb409acb298a3f8b072ff9326d9cd246265e7d4d2`.
+- Programme lifecycle routes to `supervising-research-programmes`; one granted section routes to
+  `directing-research-sections`; frozen terminal process audit routes to
+  `auditing-research-processes`. Transitional `directing-research` is route-only.
+- V0–V3 research packets override generic verifier prose: V1 reversible learning has no model
+  verifier; V2/V3 review is promotion-risk scoped and cannot hold SEARCH/LEARN queues.
+- The pre-existing `codeまたは実験のresource boundを問う。` row was preserved byte-for-byte.
+- `skill-check.ts agents/skills/orchestrating-agents` exited 0 with no output. No model verifier ran.
+
+## 2026-08-04: cross-section learning-bus ownership seam (v2608.3.0)
+
+- Frozen semantic amendment SHA-256:
+  `11e83b8630f3e519e2a4c82d35d3b0a59459196ac214eb6567d793e3df02dc49`.
+- `directing-research-sections` owns packet, subscription, recipient admission, and local transfer
+  commit semantics. The broker is deterministic exact-match infrastructure, not an agent, LLM,
+  semantic owner, verifier, Supervisor hop, or global join.
+- This skill may co-fire only to overlay explicitly requested broker topology, visibility,
+  dependency, and V0 enforcement on the Section-owned function-map locus/digest.
+- The pre-existing `codeまたは実験のresource boundを問う。` row remained byte-identical; the
+  scoped literal count is one and its text was not edited.
+- Programme, Section, orchestration, and terminal-audit structural/prose floors exited 0 with no
+  output. Canonical packet-body and cross-skill signal `cmp` checks passed.
+- No runtime implementation or model verifier ran; later V0 broker/checker fixtures remain a
+  separate slice.
+
+## 2026-08-04: scientific admission before resource admission
+
+Live failure source: the supplied bounded research episodes explicitly identified an upstream
+invalidator and authority-requiring axis changes, then launched downstream and unauthorized work
+in parallel. A later turn treated idle CPU/GPU/RAM as a reason to launch seven longer jobs, including
+four GPU jobs and full multi-seed sweeps. The latest episode then reported that the belief-claimed
+learner had never been trained once. Locators and SHA-256 digests are frozen in
+`agents/research-control/SEARCH-LEARN-THROUGHPUT-POSTMORTEM.md`.
+
+Distillation: P7 now refuses to act as a scientific admission gate. It consumes a current
+Section-owned admission with authority/grounding fence, satisfied dependencies, run scale, and any
+required receipt-linked scale release before checking resource feasibility. Free capacity and low
+utilization cannot create or escalate scientific work. This changes dispatch behavior without
+duplicating Section semantics: `directing-research-sections` remains their sole owner.

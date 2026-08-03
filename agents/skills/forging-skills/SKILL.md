@@ -138,6 +138,7 @@ MUST NOT fire (with route):
 | `systematizing-knowledge` | Co-fire, sequential never racing: a paper corpus runs as an SoK FIRST (coverage, claim ledger, applicable appraisal, reconciliation), THEN the bounded position distills into a skill here. Never skill-ify a raw corpus. |
 | `linting-prose` | PURPOSE cut — human-facing prose deliverables → there. SKILL.md prose is DUAL-READER (executor + auditor): floor (skill-check prose-debt WARNs) and judgment bar owned HERE (`references/architecture.md` §5). Counter-precedent: the 2026-07-24 mutual-deferral void (ledger). Seam: agrees in substance with linting-prose's cut; do not byte-diff. |
 | `raising-resolution` | owner-filter chain: its yield list routes skill craft here and harness contract to `operating-the-harness` (reciprocal edit landed 2026-07-02); inspect-before-assert runs as a silent sub-step inside every forge. |
+| `practicing-tiger-style` | PURPOSE cut: “Is the request to create, alter, audit, or trigger-test a SKILL.md rather than to apply a risk-calibrated code discipline?” **Yes** → this skill retains F1–F3 craft; **No** → `practicing-tiger-style` owns the risk-calibrated code ledger. |
 
 **Co-fire clause (`operating-the-harness`).** On every skill authoring/edit, CO-FIRE: read that
 skill's commands-and-skills reference FIRST for the mechanical contract (frontmatter fields,

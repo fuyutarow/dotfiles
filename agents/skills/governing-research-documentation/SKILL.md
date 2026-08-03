@@ -4,9 +4,10 @@ description: >-
   Governs a RESEARCH REPOSITORY document portfolio: create, update, derive, freeze, retire, or delete;
   keep one authority per question; preserve raw/negative evidence; expire generated views; require
   evidence-bound review and acceptance criteria. Use for R&D doc norms, R&D文書ID/命名規則,
-  stale/duplicate authorities, retention, OKF profiles, or LLM-wiki governance. Owns DOC ADMISSION, authority, lineage, lifecycle,
-  and review contracts. For durable RUN INTENT/RECEIPT/RETROSPECTIVE JUDGMENT, directing-research owns
-  semantic verdict/programme move; HERE admits loci and retains negative terminals. Corpus synthesis →
+  stale/duplicate authorities, retention, OKF profiles, or LLM-wiki governance. Owns DOC ADMISSION,
+  authority, lineage, lifecycle, and review. Durable RUN INTENT/RECEIPT meaning →
+  directing-research-sections; frozen bounded process audit → auditing-research-processes; programme
+  move → supervising-research-programmes; HERE admits loci and retains negative terminals. Corpus synthesis →
   systematizing-knowledge first. Orchestrating-agents owns actors/visibility/acceptance; HERE lifecycle.
   Cuts: one-doc IA→structuring-documents; prose→linting-prose; paper claim→arguing-research-papers;
   transient task→continuing-long-running-tasks; install-only→setup owner. English skill; respond in the
@@ -140,7 +141,7 @@ Skill returns after those edits to check authority, provenance, reviewability, a
 `DONOR SET`, transfer bundle, `MAPPING-BREAK`, `TARGET RESULT`, and `TRANSFER DISPOSITION` remain
 domain artifacts. They are not new `rd_role` values. Semantic ownership stays with
 `systematizing-knowledge` and `forging-novel-theses`. It also stays with
-`acting-on-hypotheses` and `directing-research`.
+`acting-on-hypotheses`, `directing-research-sections`, and `supervising-research-programmes`.
 
 This Skill may decide only their durable locus, authority key, and source/digest lineage. It may
 also decide the review request and retirement transition:
@@ -158,9 +159,12 @@ view may render these records but may not become their source of authority.
 
 ### D3b · Govern research-run artifacts without owning their meaning
 
-`RUN INTENT`, `RUN RECEIPT`, and `RETROSPECTIVE JUDGMENT` remain `directing-research` artifacts.
-Do not restate their schema. If any becomes durable, run `DOC ADMISSION` for its role, locus, lineage,
-review, retention, and retirement. Never change its semantic lens verdict or programme transition.
+`RUN INTENT` remains a `directing-research-sections` artifact, and `RUN RECEIPT` remains executor-owned
+immutable evidence. A frozen bounded process retrospective and `RESEARCH_PROCESS_AUDIT` meaning belong
+to `auditing-research-processes`. Do not restate their schemas. If any becomes durable, run
+`DOC ADMISSION` for its role, locus, lineage, review, retention, and retirement. Never change local
+run meaning, an audit finding, or a programme transition; the last belongs to
+`supervising-research-programmes`.
 
 Preserve failed, stopped, aborted, excluded, and other negative terminal evidence in the denominator.
 Do not retire or delete it merely because a later run succeeded.
@@ -210,7 +214,9 @@ That skill never decides `DOC ADMISSION` or lifecycle meaning. This skill consum
 | Wording, register, paragraph logic, or reader comprehension | `linting-prose` |
 | Known/uncertain/disputed position across a source corpus | `systematizing-knowledge` |
 | Finished paper's claim, novelty, method, or reviewer argument | `arguing-research-papers` |
-| Research-stage, thesis, portfolio, or research-process semantic judgment | `directing-research`; co-fire HERE only when its artifact must become durable |
+| Research problem/frame, portfolio, or programme transition | `supervising-research-programmes`; co-fire HERE only when its artifact must become durable |
+| One granted section's local candidate, run, or learning judgment | `directing-research-sections`; co-fire HERE only when its artifact must become durable |
+| One frozen bounded research-process retrospective | `auditing-research-processes`; co-fire HERE only when its artifact must become durable |
 | Actors, visibility, dependencies, vetoes, or acceptance topology | `orchestrating-agents`; HERE retains admission/lifecycle meaning |
 | One task's resumable transient state | `continuing-long-running-tasks` |
 | Wiki/search product installation without a governance problem | product/setup owner |

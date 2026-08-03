@@ -149,3 +149,8 @@ mapを共同所有または再定義しない。これによりskill craftとcon
 
 Codex `quick_validate.py`は`Skill is valid!`。`skill-check.ts`はexit 0で長文12・長セル2のため、
 直前のdated waiverと同じqueue位置を継承する。descriptionはCodex上限1024文字以内へ蒸留済み。
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: 12 long prose sentences and 2 long table cells; exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: retain the existing reforge position; retire this waiver when the recorded classes reach 0.

@@ -7,7 +7,7 @@
 
 | comes from | this file produces | goes to |
 |---|---|---|
-| the load-bearing node Map flagged (`map.md`) — a single named, 確信度×影響度-tagged target + any Open-set residual/provenance/reopen trigger | a written confidence value on that node + the discrimination table + the STOP/escalate decision + unchanged residual, unless its trigger fires | back to `map.md` if an in-tree node surfaced; `directing-research` on FRAME-BREAK/OPEN; or `leap.md` once fatal risk is retired |
+| the load-bearing node Map flagged (`map.md`) — a single named, 確信度×影響度-tagged target + any Open-set residual/provenance/reopen trigger | a written confidence value on that node + the discrimination table + the STOP/escalate decision + unchanged residual, unless its trigger fires | back to `map.md` if an in-tree node surfaced; `directing-research-sections` on FRAME-BREAK/OPEN; or `leap.md` once fatal risk is retired |
 
 **Verb seam (do not cross it).** Loop's verb is TEST & WRITE-VALUES. Loop **never** adds, removes,
 or repositions nodes — that is Map's verb (STRUCTURE & POSITION). If a test reveals a node that
@@ -69,7 +69,8 @@ the probe. They preserve lineage; they do not supply the signal. Set `target-sid
 until Loop obtains an observable target-side consequence of the claimed preserved relation. A successful
 donor, surface similarity, or agent explanation cannot pass the threshold or move target confidence.
 
-For every target-side transfer probe, return this execution artifact to `directing-research`:
+For every target-side transfer probe, return this execution artifact to
+`directing-research-sections` under the current `SECTION_MANDATE` and `SECTION_CHARTER`:
 
 ```markdown
 ## TARGET RESULT
@@ -81,14 +82,15 @@ For every target-side transfer probe, return this execution artifact to `directi
 - Observation locus: [reproducible target-side artifact, command output, dataset row, or measurement locus; never another anchor in a donor source]
 - Threshold result: [PASS | FAIL — threshold applied after observing the result; numeric result must agree with the declared boundary]
 - Mapping assessment request: [NONE, or forging-novel-theses — why this observation calls the correspondence itself into question]
-- Handoff: directing-research — update TRANSFER DISPOSITION; preserve all existing MAPPING-BREAK IDs
+- Handoff: directing-research-sections — record local MAPPING_TRANSFER_DISPOSITION; preserve all existing MAPPING-BREAK IDs
 ```
 
-Freeze the returned section as one artifact before `ADOPT` or `RETIRE`. `directing-research` consumes
-the same bytes through `--target-result`, checks path/SHA-256, binds the result to the exact frozen
-transfer bundle, and revalidates the candidate ID, observation, prewritten threshold, observation
-locus, and threshold result. `ADOPT` requires a `PASS` and no unresolved mapping-assessment request;
-a label, donor ID, alternate anchor in a donor source, or donor result is not a substitute.
+Freeze the returned section as one artifact before the Section Director records a local
+`MAPPING_TRANSFER_DISPOSITION`. The Director binds the result to the exact frozen transfer bundle and
+revalidates the candidate ID, observation, prewritten threshold, observation locus, and threshold
+result. A local `MAPPING_TRANSFER_DISPOSITION=ADMIT` requires a `PASS` and no unresolved
+mapping-assessment request; a label, donor ID, alternate anchor in a donor source, or donor result is
+not a substitute.
 
 `TARGET RESULT` records target-side evidence and Loop's threshold adjudication. It is not a mutation of
 the candidate packet, a target-truth verdict, or a mapping verdict. A negative target result can defeat a
@@ -98,9 +100,9 @@ negative result as `MAPPING-BREAK`.
 If the observation instead suggests that a required source-to-target correspondence cannot hold, request
 a fresh mapping assessment from `forging-novel-theses` and hand it this `TARGET RESULT` plus the frozen
 candidate/donor locators. **Only `forging-novel-theses` may emit `MAPPING-BREAK`.**
-`directing-research` alone updates the `TRANSFER DISPOSITION` after either a target result or a newly
-emitted break. This is a house execution rule, not an empirical claim that the named artifact fields are
-sufficient.
+`directing-research-sections` alone records the local `MAPPING_TRANSFER_DISPOSITION` after either a
+target result or a newly emitted break. This is a house execution rule, not an empirical claim that the
+named artifact fields are sufficient.
 
 Decide the measurement BEFORE you build, and pin all four:
 
@@ -144,7 +146,7 @@ When the signal arrives:
    `OPEN-SET RESIDUAL (PASS-THROUGH)` line unchanged, including `provenance` and `reopen-when`. Compare
    the raw signal with each observable trigger. If one fires, do not convert the residual into a node
    or write a tree-local confidence from that signal. Emit the raw signal plus the `FRAME-BREAK`
-   artifact below with `primary=OPEN`, and return to `directing-research`.
+   artifact below with `primary=OPEN`, and return to `directing-research-sections`.
 2. **WRITE the value.** When no Open-set trigger fired, update the node's 確信度 (0–100%, a gradation
    — never 0/1). Record what the evidence was and which direction it moved the number.
 3. **If a missing node surfaced** — classify it before editing structure (`map.md` §6):
@@ -157,9 +159,11 @@ When the signal arrives:
 
      `FRAME-BREAK flagged by Loop iteration N: <discovery> — primary=<slot>; cross-tags=<slots|NONE>; provenance=<locus>; reopen-trigger=<observed trigger|NONE>`
 
-     `VALUE` and `ACTION` are frame breaks. `OPEN` remains outside the tree until
-     `directing-research` classifies it. Return the artifact there; do not hide a program-level
-     reframe inside a local Map edit.
+     `VALUE` and `ACTION` are frame breaks. `OPEN` remains outside the tree.
+   `directing-research-sections` handles the returned artifact under the current mandate and charter. Return it
+   there; do not hide a programme-level reframe inside a local Map edit. If it exceeds the mandate,
+   that Director may declassify `SECTION_REOPEN_REQUEST`; only
+   `supervising-research-programmes` may enact reopening.
 
    Loop never *adds* either node itself (verb seam). A single iteration may legitimately run
    **Loop (test) → Map (node-add)**; the artifact, not the wall-clock moment, is separable. The deck folds
@@ -264,11 +268,11 @@ contract. Then add these five probe-specific fields:
 | Threshold set/interpreted AFTER the result | post-hoc rationalization | pre-commit the metric next time (§3); treat this result as untrusted |
 | Confidence moved on a 👍 / "great idea" | vanity metric, no sacrifice | re-test for 結果的行動 — money/time/reputation (§3) |
 | Loop added/removed a node | crossed Map's verb seam | flag the node, hand a cheap Map pass (§5) |
-| Open-set residual became a node/confidence value or lost its provenance/reopen trigger | Loop silently claimed closure over an external unknown | restore the unchanged pass-through; if its trigger fired, emit `primary=OPEN` and return to directing-research (§5) |
+| Open-set residual became a node/confidence value or lost its provenance/reopen trigger | Loop silently claimed closure over an external unknown | restore the unchanged pass-through; if its trigger fired, emit `primary=OPEN` and return to directing-research-sections (§5) |
 | Still testing a decision-sufficient node | over-learning / paralysis | STOP, force the Leap (§6) |
 | Re-running an unrunnable loop, hoping | felt-Loop, no real signal accessible | name the missing signal + rule out a cheaper proxy; only then switch to DIALOGUE/CO-CREATION or escalate location (§7) |
 | 確信度 moved on an agent's PASS / summary, no raw signal in context | delegated verdict as earned confidence | demand the raw output + locus; re-adjudicate against the pre-committed threshold yourself (§8) |
-| Transfer node moved on a donor's result, similarity story, or analogy | source success was laundered into target evidence | restore `target-side evidence: UNTESTED`; test a target-side observable consequence and return a `TARGET RESULT` to `directing-research` (§3) |
-| Loop labels a negative target result as `MAPPING-BREAK` | target-prediction failure was silently reclassified as correspondence failure | retain the `TARGET RESULT`; if correspondence itself is in doubt, request a new assessment from `forging-novel-theses`. Only that skill may emit a break; `directing-research` updates disposition (§3) |
+| Transfer node moved on a donor's result, similarity story, or analogy | source success was laundered into target evidence | restore `target-side evidence: UNTESTED`; test a target-side observable consequence and return a `TARGET RESULT` to directing-research-sections (§3) |
+| Loop labels a negative target result as `MAPPING-BREAK` | target-prediction failure was silently reclassified as correspondence failure | retain the `TARGET RESULT`; if correspondence itself is in doubt, request a new assessment from `forging-novel-theses`. Only that skill may emit a break; directing-research-sections records the local `MAPPING_TRANSFER_DISPOSITION` (§3) |
 | N agents deliberated or role-played the user; agreement scored as a confidence-delta | simulated sacrifice / agent-consensus Loop — zero 学び (nothing was sacrificed) | get the real signal, or route to §7's named-missing-signal / DIALOGUE/CO-CREATION exit (§8) |
 | Agent set/adjusted the pass/fail after seeing results, or probes fanned out over non-fatal nodes | agent-side threshold drift / fan-out theater | threshold pre-committed BEFORE spawn (§3); one probe per fatal-risk node, multiple nodes only on a genuine `map.md` §5 tie (§8) |

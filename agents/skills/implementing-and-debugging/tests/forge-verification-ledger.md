@@ -46,3 +46,15 @@ an untested load-bearing result guarding expensive or irreversible downstream ex
 **PROSE-DEBT waiver (2026-07-30).** `skill-check.ts` exits 0 with 19 long prose sentences, an
 8-line version block, and one long table cell. Queue position: after the shared functional-map
 freeze, before the next feature reforge; move history to this ledger before sentence atomization.
+
+## 2026-08-03: PROSE-DEBT waiver — practicing-tiger-style reciprocal cut
+Observed floor: 19 long prose sentences, 8-line version block, and 1 long table cell; exit 0.
+This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
+Queue: retain the existing reforge position; retire this waiver when the recorded classes reach 0.
+
+## 2026-08-03: phase-sensitive practicing-tiger-style cut repair
+
+The prior unconditional Tiger-first phrase conflated diagnosis with greenfield calibration. Bug,
+root-cause, and observable-change work now keeps intent/cause diagnosis HERE first; only a
+greenfield high-risk design or promotion without an unresolved cause may calibrate there first.
+The target's independent post-repair delta audit remains NOT-RUN.

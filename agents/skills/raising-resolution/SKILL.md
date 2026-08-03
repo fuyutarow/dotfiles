@@ -5,7 +5,7 @@ description: >-
   claim. Use when the agent would guess. CITATION GATE: zero cited line/output/measurement/primary source
   for THIS blocking claim→take the cheapest rung; one citation→stop and hand off the observation;
   otherwise remain a silent baseline. Standalone 解像度 fires only for factual present-state inspection
-  of an existing artifact. Cuts: research-problem/課題 解像度・具体化・定式化 → directing-research;
+  of an existing artifact. Cuts: research-problem/課題 解像度・具体化・定式化 → supervising-research-programmes;
   here supplies only a silent cited factual row. Agent topology→orchestrating-agents. One paper:
   fact/extract→here; neutral summary→direct; argument/method/validity→arguing-research-papers.
   Corpus→systematizing-knowledge; costly future bet→acting-on-hypotheses; cheap reversible
@@ -26,7 +26,7 @@ description: >-
 > **Out of scope.** Domain artifacts stay with their owners in §4.
 > Future forecasting is excluded. Costly future bets go to `acting-on-hypotheses`.
 > Cheap deterministic reversible probes use the domain/plain executor.
-> Research problem-frame construction, formulation, selection, why-now, and steering go to `directing-research`.
+> Research problem-frame construction, formulation, selection, why-now, and steering go to `supervising-research-programmes`.
 > Missing thesis candidates go to `forging-novel-theses`.
 > Hidden premises and tacit constraints go to `surfacing-blind-spots`.
 > This skill receives only fixed rows that need factual inspection.
@@ -180,7 +180,7 @@ The bare token “survey” is not a trigger here; it belongs to SoK.
 | neutrally summarize one paper | **direct answer** | PURPOSE: apply this citation gate silently; no specialist skill owns a neutral single-paper summary |
 | critically appraise one paper's argument, method, or validity | **arguing-research-papers** | PURPOSE: reviewer red-team there; factual extraction here only as its silent evidence step |
 | synthesize a CORPUS of papers/sources into a position | **systematizing-knowledge / sok** | CARDINALITY: one bounded observation → here; corpus position → there |
-| construct, formulate, or select a research problem frame; judge why-now or steer a program | **directing-research** | PURPOSE: research meaning and selection there; HERE may supply only a silent cited observation |
+| construct, formulate, or select a research problem frame; judge why-now or steer a programme | **supervising-research-programmes** | PURPOSE: research meaning and selection there; HERE may supply only a silent cited observation |
 | overlay agents, visibility, dependencies, vetoes, verification, or acceptance | **orchestrating-agents** | PURPOSE: control-plane topology there; HERE supplies cited present-state rows only |
 | implicit premises, ignored exceptions, or human tacit constraints in an existing plan/frame | **surfacing-blind-spots** | PURPOSE: EXPOSE into a Blind-spot packet there; inspect a fixed factual row HERE only after it is surfaced |
 | OSS-adoption diagnosis | **growing-oss-adoption** | owner |

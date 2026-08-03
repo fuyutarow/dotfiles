@@ -17,7 +17,8 @@ and depend on stage 1.
 
 There is no keep-possible exception. A deterministic, bounded, reversible try whose result has no
 expensive/irreversible downstream exposure is routed by STEP 0 to the domain/plain executor and returns
-to `directing-research`; calling it a Leap would be ceremony. If expensive/irreversible work does ride on
+to `directing-research-sections` under the current mandate and charter; calling it a Leap would be
+ceremony. If expensive/irreversible work does ride on
 the result, Loop may use a cheap **discard-intent** probe to protect the later decision, and only the
 subsequent kept commitment is Leap.
 
@@ -82,4 +83,4 @@ dodge the decision (`loop.md` §6 STOP), and do not claim Loop monopolizes all c
 | Picked the safe small bet by default | small-bet disease (君の仮説は…) | re-evaluate weighting 影響度; resist the default (§2 EVALUATE) |
 | Leapt a one-way door at mid 確信度 | reckless irreversible Leap | demand more Loop or stage it into two-way doors (§4) |
 | Over-tested a reversible bet | treated a two-way door as one-way | bounded loss + asymmetric upside = GO; stop looping (§4) |
-| Called a cheap reversible executor trial a Leap solely because you might keep it | gate bypass / commitment ceremony | route it out under STEP 0 and return the raw result + provenance to directing-research (§1) |
+| Called a cheap reversible executor trial a Leap solely because you might keep it | gate bypass / commitment ceremony | route it out under STEP 0 and return the raw result + provenance to directing-research-sections (§1) |

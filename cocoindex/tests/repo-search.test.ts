@@ -297,7 +297,7 @@ describe("repo-search route contract", () => {
     const result = run(registerProject(), ["--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
+    expect(result.stdout).toContain("Usage:");
     expect(result.stdout).toContain("concept");
     expect(result.stdout).toContain("battery");
     expect(result.stdout).toContain("structural");
@@ -318,7 +318,7 @@ describe("repo-search route contract", () => {
     const result = run(registerProject(), ["literal", "--help", "--wat"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
+    expect(result.stdout).toContain("Usage:");
     expect(result.log).toBe("");
   });
 
@@ -326,7 +326,7 @@ describe("repo-search route contract", () => {
     const result = run(registerProject(), ["literal", "extra", "--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
+    expect(result.stdout).toContain("Usage:");
     expect(result.log).toBe("");
   });
 
@@ -348,7 +348,7 @@ describe("repo-search route contract", () => {
       const result = run(registerProject(), [...args]);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("USAGE:");
+      expect(result.stdout).toContain("Usage:");
       expect(result.log).toBe("");
     });
   }
@@ -401,7 +401,7 @@ describe("repo-search route contract", () => {
       const result = run(registerProject(), args);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("USAGE:");
+      expect(result.stdout).toContain("Usage:");
       expect(result.log).toBe("");
     });
   }

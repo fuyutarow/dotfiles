@@ -9,7 +9,10 @@ type CorpusEntry = Readonly<{
 }>;
 
 const CORPUS = [
+  { path: "agents/goal-kernel/cli.ts" },
   { path: "agents/models/check-releases.ts" },
+  { path: "agents/resource-control/agent-resource-run.ts" },
+  { path: "agents/serena-control/serena-foreground.ts" },
   { path: "agents/skills/arguing-research-papers/scripts/claim-check.ts" },
   {
     path: "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts",

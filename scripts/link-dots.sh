@@ -78,6 +78,8 @@ unset _stale
 link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"
+link agents/resource-control/agent-resource-run.ts "$HOME/.local/bin/agent-resource-run"
+link agents/serena-control/serena-foreground.ts "$HOME/.local/bin/serena-foreground"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"

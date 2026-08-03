@@ -171,3 +171,43 @@ Hostile findings resolved:
 8. Removed the static CLI catalog; live instructions/help remain authoritative.
 9. Added no-fire cuts for direct memory CRUD, version/help/install, registration edits, generic FD
    trouble, and Serena's own Python source.
+
+## v2608.1.0 — global-stdio multiplication repair (2026-08-03)
+
+Fresh live evidence supersedes the old unresolved topology: Serena was registered as user-global
+stdio for both Codex and Claude, so each client/session owned a separate Serena and language-server
+tree. Six PPID=1 Julia LSP orphans and all revalidated obsolete Serena trees were gracefully stopped;
+RAM use fell from about 46 GiB to 15 GiB and swap from about 15 GiB to 4.6 GiB. Config inspection after
+removal showed no Serena entry in either current MCP listing. The running Codex app-server retained
+one startup-state Serena tree, reserved for final restart acceptance rather than killed mid-repair.
+
+The durable topology is now one pinned foreground streamable-HTTP service per explicit project,
+localhost only, backed by a P7 reservation and a project-stable duplicate job id. Implementation:
+`agents/serena-control/serena-foreground.ts`; global stdio and `--project-from-cwd` are not restored.
+This does not assert that Serena intrinsically leaks: the causal claim is process ownership
+multiplication plus incomplete teardown at the client boundary.
+
+Trigger desk-check remains stable: Serena/LSP process exhaustion fires SR5; generic OS pressure with
+no Serena owner still routes away; registration edits still route to operating-the-harness. Focused
+tests proved the pinned command and finite manifest plus resource/hook behavior (`80 pass / 0 fail`).
+Final fresh-app-server repeated-cycle acceptance remains a separate operational receipt.
+
+## v2608.1.1 — fresh-server and bounded-HTTP acceptance (2026-08-03)
+
+The old Desktop app-server PID 1238 was terminated only after an exact identity/child check and a
+continuation checkpoint. Fresh PID 857916 loaded the Serena-free MCP configuration. Repeated
+ordinary tool calls produced zero automatic Serena or Julia LanguageServer descendants, and host
+RAM settled at 9.8 GiB used instead of the incident's 46–54 GiB range.
+
+Two explicit foreground trials used the pinned commit and the dotfiles project. Each exposed one
+localhost streamable-HTTP endpoint, one Serena server, and one Bash LSP. A same-project second
+launcher on another port was denied with exit 69 by the stable job id. Ctrl-C shut down HTTP,
+Serena, and the LSP; afterward the endpoint, systemd scope, resource reservation, and owned
+descendants were all absent. The second trial's live scope reported `CPUQuota=100%`,
+`MemoryMax=2147483648`, `MemorySwapMax=0`, and `TasksMax=136`.
+
+The first trial exposed a live warning that `ide-assistant` had been renamed to `claude-code`.
+The launcher default and fixture now use `claude-code`; the repeated trial activated
+`SerenaAgentContext[name='claude-code']` without the old-context warning. Other warnings about
+stale paths in Serena's global project registry are separate cache hygiene and did not alter the
+target root or lifecycle acceptance.

@@ -46,6 +46,13 @@ A running server retains startup choices. After changing context, project select
 language servers, or tool exposure, require a new server PID. For stdio this normally follows a
 new client process. For HTTP, restart the operator-owned server; reconnecting alone is insufficient.
 
+Do not install Serena as a user-global stdio launcher when multiple clients, sessions, or subagents
+can connect: stdio assigns process ownership to each client and multiplies the Serena/LSP tree.
+The durable local topology is one explicit, pinned, project-scoped localhost HTTP server in the
+foreground. In this dotfiles system, `serena-foreground --project <absolute-root>` supplies that
+owner and routes it through P7 resource admission. Registration mutation remains
+`operating-the-harness` work; this section owns the Serena topology acceptance only.
+
 ## 2. Project and language capability
 
 Define the load-bearing language and target set first. Then build a **CAPABILITY RECEIPT** for
@@ -156,6 +163,22 @@ both the intended descendants and an expected-survivor manifest.
 Never kill all matching processes. Leave other tasks' clients, Serena servers, language servers,
 and daemons untouched.
 
+### Durable topology
+
+For a project that needs Serena repeatedly:
+
+1. Remove global/project auto-starting stdio entries through the harness owner.
+2. Start `serena-foreground --project <absolute-root>` from a foreground terminal. It pins the
+   Serena commit, binds `127.0.0.1`, uses streamable HTTP, and obtains a bounded P7 reservation.
+3. Register the printed HTTP endpoint only in the intended project/session. Do not use one global
+   endpoint for unrelated roots.
+4. Connect two clients in turn and prove the same server PID/LSP set survives without duplication.
+5. Press Ctrl-C and prove every owned descendant exits and the resource reservation disappears.
+
+The stable per-project job id prevents a second launcher for the same root while its controller is
+live. Different project roots may use different ports and reservations; they are not free fanout and
+must fit aggregate host headroom.
+
 Raising a live process's FD limit can confirm the diagnosis. Record that as
 `DIAGNOSIS_CONFIRMED`, never `DURABLE_REPAIR`; a restart can restore the old limit and duplicate
 children can keep growing. Durable repair requires a change at the owning harness/system source,
@@ -173,6 +196,7 @@ Transport-specific steady state:
 | HTTP shutdown | the operator-owned shutdown removes the intended descendants |
 | concurrent clients, same project | interleaved probes stay on one active root |
 | different projects | separate server instances/endpoints preserve their own roots |
+| explicit foreground owner | same-project second start is denied; Ctrl-C removes all owned descendants and its reservation |
 
 ## 5. Acceptance matrix
 
@@ -186,6 +210,6 @@ Transport-specific steady state:
 | memory | absolute root, complete claim inventory/canonical loci, checker options/stdout, and zero parsed findings |
 | refactor | uniquely resolved declaration/signature, same capability receipt, semantic receipt, and task oracle |
 | resource diagnosis | limit/headroom change reproduces or relieves the symptom; durable repair remains red |
-| durable resource repair | owner source changed; fresh-server repeated cycles show stable FDs/children; owned extras are gone |
+| durable resource repair | auto-starting global stdio source removed; explicit pinned project HTTP owner has an admitted envelope; fresh-server repeated cycles show stable FDs/children; same-project duplicate start is denied; foreground shutdown removes owned descendants and reservation |
 
 Report these surfaces independently. One green row never launders another red row.

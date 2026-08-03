@@ -19,7 +19,7 @@ description: >-
 
 # Driving Serena — prove the symbolic service before trusting it
 
-> **Version**: v2607.1.0 (2026-07-27). Live-session evidence plus current official Serena docs.
+> **Version**: v2608.1.1 (2026-08-03). Explicit project-scoped HTTP lifecycle under kernel limits.
 > **Scope**: Serena capability, project state, memory hygiene, and resource-safe operation.
 
 > **Build order (atomic; run from this Skill directory):**
@@ -63,7 +63,7 @@ routing between Serena, native tools, CocoIndex, and change-discipline skills.
 | **SR2 PROJECT-CAPABILITY** | Prove root, backend, and the actual load-bearing locus. Treat health check as a sample. Probe the target file/symbol and require the observed result to match the expected locus/result; nonempty alone never passes. Repeat for each locus/language the claim depends on. | **CAPABILITY RECEIPT** `{session, backend, root, language, target_file, target_symbol, operation, expected_result, observed_result}` |
 | **SR3 ROUTE** | Name the operation shape before choosing a tool. Follow the routing table below. | `OPERATION-SHAPE=<shape> → <route>` |
 | **SR4 MUTATE** | Follow the live manual's retrieval and reference checks. Use a dedicated semantic refactor when available; otherwise state the weaker guarantee before editing. | `{retrieval_locus, operation_receipt}` |
-| **SR5 RESOURCE-BUDGET** | On spawn/FD errors, process multiplication, or heavy-service coexistence, inspect ownership and headroom first. Stop only revalidated task-owned identities. | `{owner_pid, owner_start, transport, limit, used_fds, relevant_children, pre_state, action, post_state}` |
+| **SR5 RESOURCE-BUDGET** | On spawn/FD errors, process multiplication, or heavy-service coexistence, inspect ownership and headroom first. Stop only revalidated task-owned identities. Do not repair multiplication with another global stdio registration: use one explicit pinned foreground HTTP service per project, admitted by sibling P7. | `{owner_pid, owner_start, transport, endpoint, project, resource_envelope, relevant_children, pre_state, action, post_state}` |
 | **SR6 MEMORY-IS-CACHE** | Verify every load-bearing memory claim against its canonical file or command. Write only durable facts, then run the live memory checker. | `{memory, canonical_locus, checked_fact}` |
 
 No gate artifact means no semantic-capability claim. A protocol-success result proves only the
@@ -107,6 +107,14 @@ When two heavy services interfere, validate one service in isolation, then reint
 once. `driving-cocoindex` owns its daemon commands. Leave unrelated sessions and their processes
 untouched. A transient limit increase is evidence for the diagnosis, not a durable fix.
 
+If a user-global stdio entry lets every client/session/subagent spawn its own Serena and LSP set,
+the topology is the defect. Hand registration removal to `operating-the-harness`; do not blame a
+single current server for the multiplication. Durable local use is
+`serena-foreground --project <absolute-root>`: a pinned, localhost streamable-HTTP service with a
+project-stable job id, explicit CPU/RAM/process/walltime envelope, foreground ownership, and
+TERM→KILL cleanup. Register its HTTP endpoint only in the intended project/session. Never restore
+`--project-from-cwd` as a user-global stdio launcher.
+
 ## Acceptance
 
 [`references/operations.md`](references/operations.md) §5 is the sole acceptance matrix. Keep
@@ -126,6 +134,7 @@ may retain startup state; restart them by transport, not merely by reconnecting 
 | memory checker exits zero | "memory facts are current" | inspect findings, then compare each claim to its source |
 | teardown prints a stack fragment | "the whole index failed" or "all is fine" | adjudicate report, log, failures, and cold probe |
 | many Serena processes exist | "kill them all" | revalidate ownership; use the owner's graceful path |
+| one Serena/LSP set per client or subagent | "Serena always leaks" | inspect registration topology; remove global stdio and use one project-scoped foreground HTTP owner |
 
 ## MUST-NOT-FIRE — F3 trigger set
 

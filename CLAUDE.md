@@ -112,6 +112,14 @@ All repo tasks go through **mise** (`mise tasks` to list):
   (`-n` / `--update=none`) that exited 0 and fooled callers (esp. agents) into thinking a
   copy/move succeeded when it was dropped. Mirrors `rm`→`rip`; OS-agnostic (same on BSD/GNU).
   When you *intend* to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
+- **Terminal state is repaired by WRITING a known-good state, never by querying the terminal.**
+  A dropped link never delivers the remote TUI's disable sequences, so the terminal is left
+  reporting mouse motion as escapes (`\e[<35;86;59M` → `command not found: 35`) and stuck on the
+  alternate screen. A `precmd` hook re-asserts the safe modes before every prompt; `ssh` is also a
+  function (interactive shells only — scripts get the binary) that leaves the alternate screen on
+  exit 255. Both paths WRITE ONLY: a read there hangs the shell on a short reply, eats type-ahead,
+  and SIGTTINs a backgrounded `ssh`. `fixterm` is the manual sledgehammer (it may clear the
+  screen). Guarded by `mise run test:zsh` — a real pty, where a hang counts as a failure.
 - Clipboard is cross-platform (`cc`, `pp`, `pwdc`) with UTF-8/UTF-16 handling for WSL.
 
 ## Notes for Claude

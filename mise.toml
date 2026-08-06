@@ -196,8 +196,8 @@ git ls-files -z -- \
 
 [tasks.test]
 alias = "t"
-description = "Test the repo: hooks, resource control, repo-search, and Bun script floor"
-depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts"]
+description = "Test the repo: hooks, resource control, repo-search, Bun script floor, and zsh terminal hygiene"
+depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts", "test:zsh"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
@@ -222,6 +222,21 @@ description = "This repo's own script tests (scripts/tests) plus the house Bun-s
 # `bun test scripts/tests` is a substring filter, not a path: it also matches
 # agents/skills/writing-bun-scripts/tests, which is confusing rather than deliberate.
 run = "bun test scripts/tests agents/skills/writing-bun-scripts/tests"
+
+# The one non-Bun test suite, and deliberately so: it exercises zsh functions whose behaviour is
+# defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.
+# Bun has no pty, so a Bun test cannot reach those branches at all.
+[tasks."test:zsh"]
+dir = "{{config_root}}"
+description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
+run = '''
+to="$(command -v timeout || command -v gtimeout || true)"
+if [ -z "$to" ]; then
+  echo "⚠️  no timeout(1) on PATH — running unbounded; a hang regression will block instead of failing"
+  exec zsh zsh/tests/terminal-hygiene.test.zsh
+fi
+"$to" 120 zsh zsh/tests/terminal-hygiene.test.zsh
+'''
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
 # lint.depends: dotfiles has no reports/memos to scan (they live in research repos).

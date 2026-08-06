@@ -436,6 +436,7 @@ show_aliases_help() {
   zl           List frequent directories
   zs           Directory statistics
   Ctrl+R       Enhanced history search
+  fixterm      Repair a terminal wrecked by a dropped ssh / crashed TUI
 
 💡 Tip: Most commands have enhanced modern versions!
     grep→rg, find→fd, cd→zoxide
@@ -582,6 +583,106 @@ alias t6='th 6'
 alias to='touch'
 
 alias tf='tail -fF'
+
+# ============================================
+# Terminal state hygiene (remote TUI / dropped ssh)
+# ============================================
+# A remote full-screen app (herdr, tmux, vim, an agent TUI) drives THIS terminal: it switches
+# on mouse reporting + bracketed paste and moves to the alternate screen. It undoes all of that
+# when it exits cleanly — but a link that dies mid-session (`client_loop: send disconnect:
+# Broken pipe`) never delivers the disable sequences, so the local terminal is left mid-flight:
+#   - it keeps reporting mouse motion as SGR escapes (`\e[<35;86;59M`); zle swallows the
+#     leading `\e[<` and hands the rest to zsh -> `zsh: command not found: 35`
+#   - it stays on the alternate screen, so the dead remote frame sits under the prompt and
+#     scrollback is gone
+# ssh restores the tty *modes* (termios) on exit but never the remote app's DEC private modes —
+# it cannot know which were set. Only this side can undo them, so undo them here.
+#
+# LAW — the automatic paths WRITE ONLY; they never read the terminal. A read here would
+#   (a) HANG the shell whenever fewer bytes arrive than it asked for: zsh's `read -t` bounds the
+#       wait for the FIRST byte, not the whole `-k n` read (measured — see zsh/tests/),
+#   (b) swallow whatever the user typed ahead while a slow connect was failing, and
+#   (c) take SIGTTIN and suspend the job whenever the triggering ssh was backgrounded
+#       (`ssh -N -L 8080:localhost:80 host &`), because `read -k` reads /dev/tty, not fd 0.
+# So state is repaired by asserting a known-good state blind, never by asking the terminal what
+# state it is in. Only `fixterm`, which the user invokes deliberately, is allowed to read.
+
+# ONE definition of each repair — the ssh wrapper, the per-prompt hook and `fixterm` all send
+# exactly these, so a newly-discovered leaking mode is added in one place. `$'…'` expands at parse
+# time, so these hold real bytes and must be written with `print -r` (no second round of escapes).
+# mouse: X10(9) / normal(1000) / highlight(1001) / btn-event(1002) / any-event(1003); focus
+# events(1004); and the UTF-8 / SGR / urxvt / SGR-pixel encodings (1005/1006/1015/1016).
+typeset -g _TERM_MODES_OFF=$'\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1004l\e[?1005l\e[?1006l\e[?1015l\e[?1016l'
+# Render state a crashed app leaves behind: hidden cursor, autowrap off, a stuck SGR colour, and
+# G0 mapped to the line-drawing set (the "every character is a box-drawing glyph" wreck).
+# Bracketed paste (2004) is deliberately absent: zle turns it on and off per line and owns it.
+typeset -g _TERM_RENDER_RESET=$'\e[?25h\e[?7h\e[0m\017\e(B'
+# Leave the alternate screen — 1047, NOT 1049. xterm defines the 1047 reset as "use the Normal
+# Screen Buffer, clearing screen first if currently in the Alternate", i.e. CONDITIONAL, and it
+# carries no DECRC cursor restore. So on a healthy terminal it is a no-op, instead of 1049l's
+# restore-to-a-stale-saved-cursor that drops the next prompt over line 1. That is precisely what
+# makes it safe to send blind, which is what lets this whole block avoid querying the terminal.
+typeset -g _TERM_LEAVE_ALTSCREEN=$'\e[?1047l'
+
+# Everything safe to assert at any moment: writes only, moves the cursor nowhere, touches no
+# screen buffer, and is a no-op on a healthy terminal. Runs before every prompt and after ssh.
+_term_restore() {
+  [[ -t 1 ]] || return 0                       # piped/redirected: no terminal to fix
+  print -rn -- "$_TERM_MODES_OFF$_TERM_RENDER_RESET"
+  return 0
+}
+
+# Discard input the dead session already queued — the stray mouse escapes that would otherwise be
+# run as commands. BOUNDED: a terminal that keeps feeding us (a multiplexer that ignored the
+# disable, a mouse still moving) must not spin the shell forever. `fixterm` is the ONLY caller,
+# because this also eats type-ahead — unacceptable on an automatic path, fine when asked for.
+_term_drain() {
+  [[ -t 0 ]] || return 0
+  local junk i
+  for (( i = 0; i < 4096; i++ )); do
+    read -s -t 0 -k 1 junk 2>/dev/null || break
+  done
+  return 0
+}
+
+# ssh: hand the terminal back usable however the session ended. No message: on a healthy exit
+# there is nothing to report, and a warning here would fire on every typo'd hostname too.
+ssh() {
+  command ssh "$@"
+  local ec=$?
+  _term_restore
+  # 255 is ssh's OWN error status — a dropped link included. That is the case where the remote app
+  # never got to leave the alternate screen. Sent blind; see _TERM_LEAVE_ALTSCREEN for why that is
+  # safe even when we were never on it, and the LAW above for why we must not ask instead.
+  (( ec == 255 )) && [[ -t 1 ]] && print -rn -- "$_TERM_LEAVE_ALTSCREEN"
+  # ssh restores termios itself on every NORMAL exit, its own 255 included; only a signal kill
+  # leaves the tty raw. Running `stty sane` after every ssh would fork each time and silently undo
+  # a user's own `stty -ixon` / custom erase / intr, so pay for it only where it is the cure.
+  (( ec >= 128 && ec != 255 )) && [[ -t 0 ]] && stty sane 2>/dev/null
+  return $ec
+}
+
+# Manual sledgehammer for a terminal wrecked by anything else (a crashed TUI, a cat'ed binary, a
+# killed ssh). Unlike the automatic paths this MAY read input, fork, move the cursor and clear the
+# screen — you asked for it — so it finishes in a known state rather than printing the next prompt
+# over whatever the stale saved cursor happened to point at.
+fixterm() {
+  _term_restore
+  _term_drain
+  [[ -t 0 ]] && stty sane 2>/dev/null
+  # normal screen buffer (both spellings), no scroll region, cursor home, screen cleared
+  [[ -t 1 ]] && print -rn -- $'\e[?1049l\e[?1047l\e[r\e[H\e[2J'
+  return 0
+}
+
+# The ssh() wrapper above only sees a TOP-LEVEL `ssh`. It cannot see an ssh that another program
+# execs for you — `herdr --remote` spawns its own `ssh -F <generated config> ... remote-client-bridge`,
+# so the function is bypassed entirely — nor an ssh killed by a signal, nor a locally crashed TUI.
+# So assert the same safe repair before every prompt: one write, no fork, and a prompt is by
+# definition a moment when no full-screen app owns the terminal. add-zsh-hook is idempotent, so
+# re-sourcing this file does not stack duplicates (asserted in zsh/tests/).
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _term_restore
 
 # File operation safety: cp / mv overwrite-guard
 # 旧実装は silent no-clobber (cp -n / cp --update=none) で、上書きをブロックしても

@@ -13,6 +13,7 @@ behavior — note the version caveats inline (they're load‑bearing).
 7. OpenSSH certificate authority — a minimal starter
 8. mosh + tmux (roaming + persistence)
 9. Windows host: native OpenSSH anchor + Tailscale (the Windows side of a mesh)
+   — 9b: which shell the session lands in (cmd.exe vs PowerShell) + the `/c` trap
 
 ---
 
@@ -251,3 +252,48 @@ icacls $f /inheritance:r /grant "Administrators:F" /grant "SYSTEM:F"
 The SSH login name for Windows is the **Windows account** (`whoami` → the part after `\`), which
 is usually different from the WSL Linux user. To chain this anchor into a WSL Linux env behind
 it, see `wsl2-mac.md`.
+
+### 9b. Which shell the session lands in — and the `/c` trap that breaks every scripted command
+
+Windows OpenSSH defaults to **cmd.exe** whenever `HKLM\SOFTWARE\OpenSSH\DefaultShell` is absent.
+Check before assuming — a missing key IS the answer, not an error:
+```powershell
+reg query "HKLM\SOFTWARE\OpenSSH" /v DefaultShell   # "unable to find" => cmd.exe
+```
+This matters most for **non‑interactive** use (`ssh host '<cmd>'`, i.e. every agent‑ and
+script‑driven call): under cmd, `;` is **not** a separator, so `ssh host 'whoami; hostname'`
+echoes the string instead of running it — chain with `&`. If the Windows side exists only as the
+"do what WSL can't" console (`wsl --shutdown`, services, GPU/driver state), that work is
+PowerShell‑shaped anyway, so switching the default shell usually pays.
+
+**Set BOTH registry values or you break the host for scripting.** `DefaultShell` alone leaves
+sshd passing cmd's `/c` to PowerShell; `DefaultShellCommandOption` overrides it to `-c`:
+```powershell
+reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShell /t REG_SZ ^
+  /d "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" /f
+reg add "HKLM\SOFTWARE\OpenSSH" /v DefaultShellCommandOption /t REG_SZ /d "-c" /f
+```
+Diagnostic signature of the omission: **interactive login looks perfect while every
+`ssh host '<cmd>'` fails** — the split is what identifies it. HKLM writes need an elevated
+(Administrators‑account) session. Existing sessions keep the old shell; test on a NEW connection.
+`pwsh` (PowerShell 7) is **not** present on stock Windows — the path above is Windows PowerShell
+5.1 unless the box has 7 installed.
+
+Verify the switch by the three things it buys, not by the banner:
+```bash
+ssh host 'whoami; hostname; $PSVersionTable.PSVersion.ToString()'   # ; now chains
+ssh host 'exit 3'; echo $?                                          # => 3, exit codes propagate
+ssh host 'Get-Service sshd | Select-Object Name,Status | ConvertTo-Json -Compress'  # parseable
+```
+
+**"Changing DefaultShell breaks scp" is stale folklore — check before believing it.** sshd
+launches the transfer server as a *subsystem*, bypassing the login shell entirely, and OpenSSH
+**≥ 9.0** `scp` speaks the SFTP protocol. So on a modern host the shell change is transfer‑safe:
+```powershell
+ssh -V                                                    # >= 9.0 => scp uses SFTP
+findstr /i "subsystem" C:\ProgramData\ssh\sshd_config     # expect: Subsystem sftp sftp-server.exe
+```
+The folklore holds only where a legacy `scp` still rides the login shell, or a PowerShell
+**profile prints** on startup and corrupts the stream — keep the profile silent either way.
+(Verified 2026‑07‑28 on `OpenSSH_for_Windows_9.5p2`, Windows 11 26200: default shell flipped to
+5.1, then a scp round‑trip and the three checks above all passed.)

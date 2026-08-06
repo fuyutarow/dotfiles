@@ -10,7 +10,8 @@ description: >-
   reaching a home/remote/dev box from a laptop, Tailscale or any zero-trust /
   WireGuard mesh access, SSH certificates or a CA (step-ca, Vault, Teleport),
   FIDO2 / YubiKey / Secure-Enclave / 1Password SSH keys, VS Code Remote-SSH or
-  JetBrains Gateway, mosh, ~/.ssh/config, or remote access into WSL2. Trigger
+  JetBrains Gateway, mosh, ~/.ssh/config, remote access into WSL2, or which shell
+  a Windows SSH session lands in (cmd.exe vs PowerShell, DefaultShell). Trigger
   even on a bare "how do I ssh into X", "set up ssh on my server", or a tool name
   like "Tailscale" — this skill picks the right architecture for the situation
   and hands over verified, current (2026) recipes and the gotchas that bite.
@@ -149,6 +150,12 @@ keyless/ACL convenience the platform ruled out anyway.
     inherit (it's *appended*, so Linux tools keep precedence), or add only the dirs you want.
   - **The "Failed to start the systemd user session" warning is benign** — sshd is a *system*
     service and is unaffected.
+- **A Windows SSH session lands in cmd.exe unless you say otherwise**, so scripted
+  `ssh host 'a; b'` echoes instead of running (`;` isn't a cmd separator). Switching the default
+  shell to PowerShell takes **two** registry values — set `DefaultShell` without
+  `DefaultShellCommandOption="-c"` and interactive login still looks fine while every
+  non‑interactive command breaks. scp/sftp are unaffected by the change on OpenSSH ≥ 9.0
+  (subsystem, not the login shell) — see `references/playbooks.md` §9b.
 
 ## Reference router
 
@@ -159,7 +166,8 @@ keyless/ACL convenience the platform ruled out anyway.
 - `references/playbooks.md` — Copy‑paste recipes: hardened keyed‑sshd `sshd_config` drop‑in,
   ed25519 + FIDO2 key generation, `~/.ssh/config` patterns with `ControlMaster`, host‑key/TOFU
   handling, Tailscale‑as‑transport, an OpenSSH CA starter, mosh+tmux, and **the Windows host as
-  an always‑on OpenSSH + Tailscale anchor**. Read when implementing.
+  an always‑on OpenSSH + Tailscale anchor** (incl. §9b, the `DefaultShell` cmd‑vs‑PowerShell
+  decision and its `/c` trap). Read when implementing.
 - `references/wsl2-mac.md` — The applied worked example: the **robust Mac ↔ Windows ↔ WSL
   full chain**. The key move — make the always‑on anchor a *Windows service* (Tailscale +
   native OpenSSH), not WSL, so you're never locked out — plus reaching WSL behind it via

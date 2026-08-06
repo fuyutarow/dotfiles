@@ -7,7 +7,15 @@
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
 //   line 1: PS1 mirror   user@host:MM-DD HH:MM|cwd    (mirrors .zshrc PROMPT)
-//   line 2: Model | Eff | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//   line 2: session_id — the FULL uuid, on its own row, labelled like every other segment.
+//           NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
+//           prefix form, so a shortened id stops being a resume handle. The label is free
+//           here because tmux/tmux.conf sets `word-separators ' \t'` — a hyphen is not a
+//           separator, so its DoubleClick1Pane -> select-word binding grabs the whole uuid
+//           and nothing else, label or no label. It rides with line 1 because both are
+//           static session identity, and above the live row so a tail wrap can never shift
+//           it. Omitted when the field is absent (older CLIs).
+//   line 3: Model | Eff | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
 //   Job:  work running OUTSIDE the harness — the window Claude Code itself cannot draw.
 //         A child started with setsid/nohup is reparented to PID 1, so the background-task
 //         tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
@@ -30,8 +38,8 @@
 //         (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
 //         omitted when its .resets_at is absent; each window is independently optional.
 //   wt:   worktree.name — shown only in --worktree sessions.
-//   Fit:  line 2 stays on one row when the pane is wide; when it would overflow $COLUMNS
-//         the Rate/wt/branch/diff tail wraps to a 3rd row. Width is measured in BYTES of
+//   Fit:  line 3 stays on one row when the pane is wide; when it would overflow $COLUMNS
+//         the Rate/wt/branch/diff tail wraps to a 4th row. Width is measured in BYTES of
 //         the SGR-stripped string — multibyte glyphs over-count, biasing us to wrap a hair
 //         early (safe, never truncates). Claude Code exports COLUMNS (v2.1.153+); unset ->
 //         assume wide, stay one row.
@@ -49,6 +57,7 @@ interface RateWindow {
 }
 interface StatusInput {
   cwd?: string;
+  session_id?: string;
   workspace?: { current_dir?: string };
   model?: { display_name?: string; id?: string };
   context_window?: {
@@ -111,6 +120,7 @@ try {
 // || (not ??) here: an empty cwd string must ALSO fall through to PWD, matching the old
 // sh's `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
 const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
+const sid = data.session_id || undefined; // "" is not an id either — drop the row, don't print blank
 let model = data.model?.display_name ?? "";
 const modelId = data.model?.id ?? "";
 const ctxTok =
@@ -333,9 +343,14 @@ const vlen = (s: string): number =>
 const cols = Number(process.env.COLUMNS);
 const usable = (Number.isFinite(cols) && cols > 0 ? cols : 999) - 2;
 
-// --- render: one row if head + " | " + tail fits $COLUMNS, else wrap tail to row 3 ---
-const out2 =
+// --- render: PS1 mirror, bare session id, then the live row — one row if head + " | " + tail
+// fits $COLUMNS, else the tail wraps below it ---
+const live =
   vlen(head) + 3 + vlen(tail) <= usable
     ? head + SEP + tail
     : `${head}\n${tail}`;
-process.stdout.write(`${line1(cwd)}\n${out2}`);
+// Label colored, value DIM — the `Rate:` pattern. The uuid keeps the row to itself (nothing
+// after it) so double-click select-word stays a one-gesture copy of the --resume argument.
+const sidRow =
+  sid != null ? `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}\n` : "";
+process.stdout.write(`${line1(cwd)}\n${sidRow}${live}`);

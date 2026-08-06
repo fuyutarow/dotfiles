@@ -4,7 +4,8 @@ description: >-
   Systematizes a source CORPUS into a known/uncertain/disputed/missing position. Use for SoK,
   survey / literature review / 文献レビュー, evidence maps, conflicting studies, and field-level
   claims. Also compiles a target-agnostic `DONOR SET` from cross-domain source relations; target
-  correspondence/prediction/thesis → forging-novel-theses. Cuts: one fact → raising-resolution;
+  correspondence/prediction/thesis → forging-novel-theses. Signed position's gaps → typed, test-bound,
+  expiring openings → operationalizing-research-gaps. Cuts: one fact → raising-resolution;
   one-paper appraisal → arguing-research-papers; premise audit → surfacing-blind-spots; programme
   judgment → supervising-research-programmes; expensive selected tree → acting-on-hypotheses; settled IA →
   structuring-documents; agent dispatch → orchestrating-agents; document authority/lifecycle →
@@ -129,6 +130,7 @@ Then `governing-research-documentation` decides `DOC ADMISSION`, authority, and 
 | Position and defend the governing claim of one manuscript | `arguing-research-papers` — PURPOSE: the manuscript's argument there; the field's evidence state here |
 | Construct/select/formulate research problems or rank/allocate across >=2 future directions | `supervising-research-programmes` — future programme judgment there; corpus evidence state here |
 | Generate thesis candidates beyond the bounded corpus position | `forging-novel-theses` — genesis there; nearest-prior evidence here |
+| Turn a signed position's gaps into typed, test-bound, addressed, expiring openings with retirement accounting | `operationalizing-research-gaps` — this skill signs the position and remains SOLE owner of the gap typology (`references/delivery.md` §5) and of the no-manufactured-priorities rule; the operable bill of work is theirs. Seam agrees in substance; do not diff for byte identity |
 | Find relation-level source donors for a selected or selected-for-probe frame, without mapping them to the target | **HERE** — return a target-agnostic `DONOR SET`; then `forging-novel-theses` maps or records `MAPPING-BREAK` |
 | Map a `DONOR SET` to a selected target frame, derive a target prediction, or write a transfer thesis | `forging-novel-theses` — source discovery stops here; correspondence and candidate/break are there |
 | Test, commit, pivot, or kill one expensive/irreversible selected future hypothesis tree | `acting-on-hypotheses` — hard-gated tree there; corpus state here |

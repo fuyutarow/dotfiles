@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**45 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**46 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -37,6 +37,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
 - [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
+- [`operationalizing-research-gaps`](operationalizing-research-gaps/) — Turn a signed position's gaps into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring openings retired only by a pre-declared observation.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
 - [`directing-research`](directing-research/) — Legacy route-only shim for broad or ambiguous creative-research invocations.
@@ -73,6 +74,9 @@ section receipt-linked learning → programme signal   arguing-research-papers: 
                             ▼
 supervising-research-programmes: update/reopen portfolio
 
+signed corpus position → operationalizing-research-gaps: typed, test-bound, expiring openings
+                       → supervising-research-programmes selects/ranks them into the portfolio
+
 frozen bounded episode → auditing-research-processes: audit + non-enacting recommendation
 ```
 
@@ -80,6 +84,7 @@ frozen bounded episode → auditing-research-processes: audit + non-enacting rec
 |---|---|---|---|
 | PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
 | CORPUS-GROUND | unsystematized corpus → evidence state | claim/evidence ledger | `systematizing-knowledge` |
+| OPERATIONALIZE | signed position's gaps → unselected, non-authoritative bill of work | `OPENINGS SHEET` / `RETIREMENT LEDGER` | `operationalizing-research-gaps` |
 | EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
 | FRAME / STEER | exposed premises/evidence → selected programme problem/state | `PROGRAMME_SNAPSHOT` / `OPEN_ISSUE` / `SECTION_MANDATE` / `PROGRAMME_DECISION` | `supervising-research-programmes` |
 | DIRECT SECTION | granted mandate → local admitted run/learning state | `SECTION_CHARTER` / `RUN_INTENT` / `SECTION_SIGNAL` | `directing-research-sections` |

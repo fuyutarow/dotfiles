@@ -72,6 +72,7 @@ Each skill retains its own entry gate. This route does not create an `OPEN_ISSUE
 | Ask | Sole owner |
 |---|---|
 | Corpus position or target-agnostic donor discovery | `systematizing-knowledge` |
+| A signed position's gaps turned into typed, test-bound, addressed, expiring openings | `operationalizing-research-gaps` |
 | One present fact, source, dataset, code path, or anomaly | `raising-resolution` |
 | Premises or tacit constraints in one existing plan/frame | `surfacing-blind-spots` |
 | Candidate-thesis genesis or selected-target mapping | `forging-novel-theses` |

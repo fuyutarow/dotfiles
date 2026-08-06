@@ -23,6 +23,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-supervised-execution.ts"
+          }
+        ]
+      },
+      {
         "matcher": "*",
         "hooks": [
           {

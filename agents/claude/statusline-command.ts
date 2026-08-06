@@ -7,7 +7,19 @@
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
 //   line 1: PS1 mirror   user@host:MM-DD HH:MM|cwd    (mirrors .zshrc PROMPT)
-//   line 2: Model | Eff | Ctx: <k>·<pct>% | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//   line 2: Model | Eff | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//   Job:  work running OUTSIDE the harness — the window Claude Code itself cannot draw.
+//         A child started with setsid/nohup is reparented to PID 1, so the background-task
+//         tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
+//         outlives the session (even the project) that spawned it. Rebuilt from the OS:
+//           <name> <elapsed> · <vram>  a live `agent-resource-run --manifest` admission —
+//                                      the chokepoint every GPU run passes through, so it
+//                                      cannot be opted out of by whatever spawned the job
+//           det×N                      shells/helpers reparented to init that still point at
+//                                      a Claude scratchpad, i.e. runaway drivers and leaks.
+//                                      Red when N>0 with NOTHING admitted: invisible
+//                                      processes alive, no job actually holding resources.
+//         Whole segment is omitted when both are zero, so ordinary sessions pay nothing.
 //   Eff:  live /effort level (.effort.level) + ✦ when extended thinking on; hidden when
 //         the model has no reasoning-effort param (field absent). ultracode -> xhigh.
 //   Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
@@ -189,7 +201,81 @@ function reset7(epoch: number): string {
   return `${RSET}${clock}(${rem})`;
 }
 
-// HEAD = identity: Model [| Eff ✦] | Ctx [· pct%]
+// --- Out-of-harness work (see the `Job:` note in the header) ---------------------------
+// ONE `ps` pass answers both halves; nvidia-smi is paid for only when something is admitted.
+interface Admitted {
+  name: string;
+  secs: number;
+}
+// argv[0] itself, or argv[1] under a runtime/wrapper — never a match buried deeper in the
+// line. Without that position rule, any shell, pgrep or awk whose COMMAND STRING merely
+// mentions agent-resource-run would report itself as a running job.
+const RUNTIME = new Set(["bun", "node", "deno", "taskset", "systemd-run"]);
+// -> the manifest's job name, or undefined when this line is not an admission.
+function admittedName(tok: string[]): string | undefined {
+  const i = tok.findIndex(
+    (t) => t === "agent-resource-run" || t.endsWith("/agent-resource-run"),
+  );
+  if (i < 0 || i > 1) return undefined;
+  if (i === 1 && !RUNTIME.has(tok[0].split("/").pop() ?? "")) return undefined;
+  if (tok[i + 1] !== "--manifest") return undefined;
+  const name = (tok[i + 2] ?? "")
+    .split("/")
+    .pop()
+    ?.replace(/\.resource\.json$/, "");
+  return name === "" ? undefined : name;
+}
+function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
+  let raw: string;
+  try {
+    raw = execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+    });
+  } catch {
+    return { jobs: [], orphans: 0 }; // no ps -> segment silently disappears
+  }
+  const jobs: Admitted[] = [];
+  let orphans = 0;
+  for (const line of raw.split("\n")) {
+    // .match(), not RegExp.prototype.exec(): this file imports node:child_process, and the
+    // writing-bun-scripts floor (F4) fails any such file that also carries the token `exec(`.
+    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S.*)$/);
+    if (!m) continue;
+    const [, ppid, etimes, args] = m;
+    const name = admittedName(args.split(/\s+/));
+    if (name != null) jobs.push({ name, secs: Number(etimes) });
+    // Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked
+    // helper) that outlived its session. Counted, never judged — deciding which orphan is
+    // "real work" is exactly the guess this segment exists to stop us making.
+    else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
+  }
+  return { jobs, orphans };
+}
+function vramFrac(): string | undefined {
+  try {
+    const out = execFileSync(
+      "nvidia-smi",
+      ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+      { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8", timeout: 2000 },
+    );
+    const [used, total] = (out.split("\n")[0] ?? "")
+      .split(",")
+      .map((s) => Number(s.trim()));
+    if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0)
+      return undefined;
+    return `${(used / 1024).toFixed(1)}/${(total / 1024).toFixed(0)}G`;
+  } catch {
+    return undefined; // no GPU / no driver -> just omit the fraction
+  }
+}
+// elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
+const dur = (s: number) =>
+  s >= 3600
+    ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
+    : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
+
+// HEAD = identity: Model [| Eff ✦] | Ctx [· pct%] [| Job]
 let head = `${ESC}[38;5;30mModel:${RST} ${model}`;
 if (effort) {
   head += `${SEP}${ESC}[38;5;209mEff:${RST} ${effort}`;
@@ -199,6 +285,25 @@ head += `${SEP}${ESC}[38;5;66mCtx:${RST} ${ctx}`;
 if (ctxPct != null) {
   const { pct, col } = pctFmt(ctxPct);
   head += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
+}
+
+// Job: lives in HEAD, not TAIL — the tail is what wraps away on a narrow pane, and the one
+// thing that must never wrap away is evidence that something is running where you can't see it.
+const { jobs, orphans } = scanOutOfHarness();
+if (jobs.length > 0 || orphans > 0) {
+  head += `${SEP}${ESC}[38;5;173mJob:${RST}`;
+  if (jobs.length > 0) {
+    const [first] = jobs;
+    const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
+    head += ` ${first.name}${more} ${dur(first.secs)}`;
+    const vram = vramFrac();
+    if (vram != null) head += ` ${DIM}${MID} ${vram}${RST}`;
+    if (orphans > 0) head += ` ${DIM}det×${orphans}${RST}`;
+  } else {
+    // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
+    // are states the harness reports as "idle", which is the failure this segment answers.
+    head += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${orphans}${RST}`;
+  }
 }
 
 // TAIL = limits/repo: [Rate 5h·7d] [| wt] [| branch] | (+add,-del)

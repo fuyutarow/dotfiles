@@ -19,6 +19,17 @@
   `RESOURCE-ENVELOPE(/absolute/path.json): agent-resource-run only`; pilot is not exempt.
   The hook denies missing, malformed, relative-path, or duplicate declarations. The schema and
   GPU-first/CPU-exception rules live only in `orchestrating-agents` P7.
+- **Execution stays observable; durability is earned, not stolen.** A PreToolUse hook denies
+  Bash that orphans work to init — `setsid` (bare), `nohup`, `disown`, a detacher inside a
+  nested shell string, detached `tmux`/`screen` launches, and `at`/`batch`/`crontab` writes.
+  What is banned is UNOBSERVABLE durability, not durability: `setsid --wait` (the parent still
+  waits, and agent-resource-run's own launch form) and `systemd-run --user --unit=<name>`
+  (manager-owned, so stoppable, journal-streamed, and exit-status recorded) stay open. Order of
+  preference: `run_in_background:true` to watch it now → `agent-resource-run --manifest` for
+  compute → a named transient user unit to outlive the session. If none fit, STOP and say so;
+  do not invent a fourth way. Live jobs and orphan count render in the statusline's `Job:`
+  segment. NOTE: `agent-resource-run` still admits via `--scope` (caller-owned), so an admitted
+  multi-hour job dies with its caller — the durable `--detach` mode is not built yet.
 - **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-search`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious

@@ -37,6 +37,7 @@ prefix = "ctrl+g" # tmux prefix C-g
 split_vertical = "prefix+|"        # tmux `|` side-by-side. Raw | char is valid. NEVER use "prefix+shift+backslash" (silently fails to fire on many terminals)
 split_horizontal = "prefix+minus"  # tmux `-` (equals herdr default; explicit on purpose)
 new_workspace = "prefix+v"         # tmux v = new-session; workspace ~= tmux session; v is freed because split_vertical moved to |
+detach = "prefix+d"                # tmux d detach-client (herdr default is prefix+q; moved to d for muscle memory). NB prefix+shift+d = close_workspace (destructive); lowercase d is free
 next_workspace = "prefix+f"        # tmux f
 previous_workspace = "prefix+b"    # tmux b - collides with default toggle_sidebar, hence next line
 toggle_sidebar = "prefix+a"        # relocated; tmux a toggled the status bar (same semantics)

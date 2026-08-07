@@ -29,6 +29,14 @@ const MIN_HOST_RAM_SAFETY_BYTES = 4 * GiB;
 const HOST_RAM_SAFETY_FRACTION = 0.1;
 const GPU_SAFETY_BYTES = 512 * MiB;
 const GPU_IDLE_UTILIZATION_PERCENT = 20;
+// VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
+// device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
+// ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
+const GPU_MAX_CONCURRENT_JOBS = 4;
+// CUDA.jl releases cached pool blocks at the soft limit and refuses allocation at the hard one.
+// Leaving the soft limit below the hard limit turns pool fragmentation into a reclaim instead of
+// an out-of-memory error. Ref: CUDA.jl docs/src/usage/memory.md "Memory limits".
+const GPU_SOFT_LIMIT_FRACTION = 0.9;
 const SCRATCH_SAFETY_BYTES = GiB;
 const DEFAULT_MONITOR_INTERVAL_MS = 200;
 const LOCK_WAIT_MS = 2_000;
@@ -493,22 +501,66 @@ function hostRamSafety(snapshot: HostSnapshot): number {
   );
 }
 
+type GpuLedger = {
+  jobs: number;
+  reserved_bytes: number;
+  available_bytes: number;
+};
+
+/**
+ * Price one GPU against the live reservations held on it.
+ *
+ * `used_bytes` from nvidia-smi counts unmanaged processes plus whatever our own reserved jobs
+ * have actually allocated so far, and a caching allocator (CUDA.jl's pool, PyTorch's) never
+ * returns freed blocks to the driver. So neither number alone is a sound floor:
+ *
+ *   unmanaged = max(0, used_bytes - reserved)      // what we do not control
+ *   committed = reserved + unmanaged = max(reserved, used_bytes)
+ *
+ * The `max` form is conservative in both regimes — before our jobs allocate, `reserved`
+ * dominates; when an unmanaged process holds the card, `used_bytes` does.
+ */
+function gpuLedger(gpu: GpuSnapshot, reservations: Reservation[]): GpuLedger {
+  const held = reservations.filter(
+    (reservation) =>
+      reservation.device.kind === "gpu" && reservation.device.gpu_id === gpu.id,
+  );
+  const reserved = held.reduce(
+    (sum, reservation) =>
+      sum +
+      (reservation.device.kind === "gpu"
+        ? reservation.device.vram_peak_bytes
+        : 0),
+    0,
+  );
+  const committed = Math.max(reserved, gpu.used_bytes);
+  return {
+    jobs: held.length,
+    reserved_bytes: reserved,
+    available_bytes: Math.max(
+      0,
+      gpu.total_bytes - committed - GPU_SAFETY_BYTES,
+    ),
+  };
+}
+
 function gpuHasHeadroom(
   gpu: GpuSnapshot,
   requiredBytes: number,
   reservations: Reservation[],
 ): boolean {
-  if (gpu.utilization_percent > GPU_IDLE_UTILIZATION_PERCENT) return false;
+  const ledger = gpuLedger(gpu, reservations);
+  if (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS) return false;
+  // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
+  // this device makes an admitted job block the next admission with its own compute load, which
+  // silently degrades the ledger to one job per GPU.
   if (
-    reservations.some(
-      (reservation) =>
-        reservation.device.kind === "gpu" &&
-        reservation.device.gpu_id === gpu.id,
-    )
+    ledger.jobs === 0 &&
+    gpu.utilization_percent > GPU_IDLE_UTILIZATION_PERCENT
   ) {
     return false;
   }
-  return gpu.total_bytes - gpu.used_bytes - GPU_SAFETY_BYTES >= requiredBytes;
+  return ledger.available_bytes >= requiredBytes;
 }
 
 export function decideAdmission(
@@ -617,11 +669,21 @@ export function decideAdmission(
     };
   }
   if (!gpuHasHeadroom(gpu, manifest.device.vram_peak_bytes, reservations)) {
+    const ledger = gpuLedger(gpu, reservations);
     return {
       ok: false,
       reason:
-        `GPU ${gpu.id} is busy, already reserved, or lacks ` +
-        `${manifest.device.vram_peak_bytes} bytes plus safety headroom`,
+        `VRAM request ${manifest.device.vram_peak_bytes} exceeds ${ledger.available_bytes} ` +
+        `available on GPU ${gpu.id} after ${ledger.jobs} live reservation(s) ` +
+        `(${ledger.reserved_bytes} bytes declared, ${gpu.used_bytes} bytes observed in use) ` +
+        `and ${GPU_SAFETY_BYTES} bytes of device safety headroom` +
+        (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS
+          ? `; the device already holds the ${GPU_MAX_CONCURRENT_JOBS}-job concurrency cap`
+          : "") +
+        (ledger.jobs === 0 &&
+        gpu.utilization_percent > GPU_IDLE_UTILIZATION_PERCENT
+          ? `; unmanaged load holds the device at ${gpu.utilization_percent}% utilization`
+          : ""),
     };
   }
   return {
@@ -885,7 +947,42 @@ async function terminateProcessGroup(
   }
 }
 
-function commandEnvironment(
+/**
+ * Push the reserved VRAM budget into the job's runtime.
+ *
+ * Sharing one device between declared jobs is only sound if the declaration binds the process.
+ * There is no cgroup controller for VRAM, so the ceiling has to be set inside the runtime:
+ * CUDA.jl checks `JULIA_CUDA_HARD_MEMORY_LIMIT` before every allocation, and without it "will
+ * configure the memory pool to use all available device memory" — one arm then swallows the card
+ * no matter what its manifest claimed. `AGENT_RESOURCE_VRAM_BYTES` publishes the same budget for
+ * runtimes we cannot configure through the environment (PyTorch wants an in-process
+ * `set_per_process_memory_fraction`); honouring it is the job's responsibility, not the floor's.
+ */
+function gpuBudgetEnvironment(
+  device: Reservation["device"],
+): Record<string, string | undefined> {
+  if (device.kind !== "gpu") {
+    // Clear, don't merely omit: these keys are inherited from the caller's environment, so a CPU
+    // job launched from a shell that once held a GPU budget would otherwise run under it.
+    return {
+      CUDA_VISIBLE_DEVICES: "",
+      AGENT_RESOURCE_VRAM_BYTES: undefined,
+      JULIA_CUDA_HARD_MEMORY_LIMIT: undefined,
+      JULIA_CUDA_SOFT_MEMORY_LIMIT: undefined,
+    };
+  }
+  const hard = device.vram_peak_bytes;
+  return {
+    CUDA_VISIBLE_DEVICES: String(device.gpu_id),
+    AGENT_RESOURCE_VRAM_BYTES: String(hard),
+    JULIA_CUDA_HARD_MEMORY_LIMIT: String(hard),
+    JULIA_CUDA_SOFT_MEMORY_LIMIT: String(
+      Math.floor(hard * GPU_SOFT_LIMIT_FRACTION),
+    ),
+  };
+}
+
+export function commandEnvironment(
   manifest: ResourceManifest,
   reservation: Reservation,
 ): Record<string, string | undefined> {
@@ -904,10 +1001,7 @@ function commandEnvironment(
     NUMEXPR_NUM_THREADS: threads,
     RAYON_NUM_THREADS: threads,
     POLARS_MAX_THREADS: threads,
-    CUDA_VISIBLE_DEVICES:
-      reservation.device.kind === "gpu"
-        ? String(reservation.device.gpu_id)
-        : "",
+    ...gpuBudgetEnvironment(reservation.device),
   };
 }
 
@@ -983,7 +1077,7 @@ function defaultReport(line: string): void {
 function admissionDescription(lease: Lease): string {
   const device =
     lease.reservation.device.kind === "gpu"
-      ? `gpu:${lease.reservation.device.gpu_id}`
+      ? `gpu:${lease.reservation.device.gpu_id} vram_bytes=${lease.reservation.device.vram_peak_bytes}`
       : "cpu";
   return (
     `ADMIT job=${lease.reservation.job_id} cpu_ids=${lease.reservation.cpu_ids.join(",")} ` +

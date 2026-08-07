@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildSystemdLaunch,
+  commandEnvironment,
   decideAdmission,
   checkJob,
   executeJob,
@@ -82,6 +83,27 @@ function reservation(overrides: Partial<Reservation> = {}): Reservation {
     started_at: new Date().toISOString(),
     ...overrides,
   };
+}
+
+function gpuManifest(
+  overrides: Partial<ResourceManifest> = {},
+): ResourceManifest {
+  return cpuManifest({
+    device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
+    ...overrides,
+  });
+}
+
+function gpuReservation(
+  name: string,
+  vramBytes = 2 * GiB,
+  gpuId = 0,
+): Reservation {
+  return reservation({
+    reservation_id: name,
+    job_id: `job-${name}`,
+    device: { kind: "gpu", gpu_id: gpuId, vram_peak_bytes: vramBytes },
+  });
 }
 
 const temporaryDirectories: string[] = [];
@@ -165,6 +187,99 @@ describe("admission", () => {
     expect(result.reason).toContain("host RAM");
   });
 
+  test("packs several declared GPU jobs onto one device", () => {
+    const result = decideAdmission(gpuManifest(), hostSnapshot(), [
+      gpuReservation("a"),
+      gpuReservation("b"),
+    ]);
+    expect(result).toMatchObject({
+      ok: true,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
+    });
+  });
+
+  test("aggregates declared VRAM and denies the job that overflows the device", () => {
+    const snapshot = hostSnapshot({
+      gpus: [
+        { id: 0, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
+      ],
+    });
+    const result = decideAdmission(gpuManifest(), snapshot, [
+      gpuReservation("a", 5 * GiB),
+      gpuReservation("b", 5 * GiB),
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("VRAM request");
+    expect(result.reason).toContain(`${1536 * MiB} available`);
+  });
+
+  test("observed device usage still floors the ledger above the declarations", () => {
+    const snapshot = hostSnapshot({
+      gpus: [
+        {
+          id: 0,
+          total_bytes: 12 * GiB,
+          used_bytes: 9 * GiB,
+          utilization_percent: 0,
+        },
+      ],
+    });
+    const held = [gpuReservation("a", 2 * GiB)];
+    expect(decideAdmission(gpuManifest(), snapshot, held).ok).toBe(true);
+    expect(
+      decideAdmission(
+        gpuManifest({
+          device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 3 * GiB },
+        }),
+        snapshot,
+        held,
+      ).ok,
+    ).toBe(false);
+  });
+
+  test("utilization screens unmanaged load but not a job's own reservations", () => {
+    const busy = hostSnapshot({
+      gpus: [
+        {
+          id: 0,
+          total_bytes: 12 * GiB,
+          used_bytes: 2 * GiB,
+          utilization_percent: 97,
+        },
+      ],
+    });
+    const unmanaged = decideAdmission(gpuManifest(), busy, []);
+    expect(unmanaged.ok).toBe(false);
+    expect(unmanaged.reason).toContain("97% utilization");
+    expect(decideAdmission(gpuManifest(), busy, [gpuReservation("a")]).ok).toBe(
+      true,
+    );
+  });
+
+  test("caps concurrent jobs on one device even when VRAM is abundant", () => {
+    const result = decideAdmission(gpuManifest(), hostSnapshot(), [
+      gpuReservation("a", 128 * MiB),
+      gpuReservation("b", 128 * MiB),
+      gpuReservation("c", 128 * MiB),
+      gpuReservation("d", 128 * MiB),
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("concurrency cap");
+  });
+
+  test("reservations on another device do not consume this device's ledger", () => {
+    const snapshot = hostSnapshot({
+      gpus: [
+        { id: 0, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
+        { id: 1, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
+      ],
+    });
+    const result = decideAdmission(gpuManifest(), snapshot, [
+      gpuReservation("elsewhere", 11 * GiB, 1),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
   test("rejects a duplicate live job id", () => {
     const result = decideAdmission(cpuManifest(), hostSnapshot(), [
       reservation({ job_id: "test-job" }),
@@ -208,6 +323,26 @@ describe("kernel enforcement", () => {
 
   test("the current host accepts the required user-systemd properties", () => {
     expect(probeKernelEnforcement()).toEqual({ available: true });
+  });
+
+  test("binds the reserved VRAM budget inside the job's CUDA runtime", () => {
+    const environment = commandEnvironment(
+      gpuManifest(),
+      gpuReservation("controller-1", 2 * GiB),
+    );
+    expect(environment).toMatchObject({
+      CUDA_VISIBLE_DEVICES: "0",
+      AGENT_RESOURCE_VRAM_BYTES: String(2 * GiB),
+      JULIA_CUDA_HARD_MEMORY_LIMIT: String(2 * GiB),
+      JULIA_CUDA_SOFT_MEMORY_LIMIT: String(Math.floor(2 * GiB * 0.9)),
+    });
+  });
+
+  test("leaves no CUDA budget behind on a CPU reservation", () => {
+    const environment = commandEnvironment(cpuManifest(), reservation());
+    expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
+    expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
+    expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
   });
 });
 

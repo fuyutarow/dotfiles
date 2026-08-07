@@ -130,7 +130,7 @@ agent自身が次のsystem reserveを下げる欄はない。
 | CPU | allowed logical CPUのうち最低1個を予約外に残す。`-t auto`、`-n auto`、`n_jobs=-1`は禁止。 |
 | host RAM | `max(4 GiB, MemTotalの10%)`をsystem用に残し、live reservationを差し引く。 |
 | scratch | 1 GiBを残し、live reservationを差し引く。 |
-| NVIDIA GPU | 512 MiBを残す。利用率20%以下、必要VRAMあり、同GPUのlive reservationなしを「空き」とする。GPU予約は排他的。 |
+| NVIDIA GPU | 512 MiBを残す。同一GPUのlive reservationの宣言VRAMを**合算**し、`total − max(宣言合算, nvidia-smiのused) − 512 MiB ≥ 必要VRAM` を「空き」とする。utilization 20%の門は、そのGPUにlive reservationが一つも無いとき、すなわち負荷が管理外のときだけ適用する。同一GPU上のlive reservationは4本を上限とする。 |
 
 実行器は `setsid` で新しいprocess groupを作り、user systemdの一時scopeへ
 `CPUQuota=cpu_threads×100% / MemoryMax=host_ram_peak_bytes / MemorySwapMax=0 /
@@ -144,9 +144,23 @@ KILLする。終了時はsystemd scopeもstopし、process groupを脱出した�
 予約を解放する。同じ `job_id` の二重起動も拒否する。user systemd managerまたは
 必要なpropertyのprobeが失敗したらfail closedとし、monitor-onlyの直接実行へfallbackしない。
 
+GPU予約は排他ではなく合算である（2026-08-06改定）。排他が正当なのは宣言VRAMが**どこでも強制されて
+いない**ときだけで、その条件下では一台一本が唯一の安全な近似だった。実行器が予約VRAMをjobのruntimeへ
+押し込むようになった以上、台帳の方が厳密に強い。宣言を守る腕は排他より多く通り、宣言を破る腕は排他でも
+守られなかったからである。合算だけを入れて強制を入れない改変は、この理由により不可。
+
+実行器はGPU予約に対し `CUDA_VISIBLE_DEVICES` に加えて
+`JULIA_CUDA_HARD_MEMORY_LIMIT` / `JULIA_CUDA_SOFT_MEMORY_LIMIT` / `AGENT_RESOURCE_VRAM_BYTES`
+を渡す。CUDA.jlは既定で「pool that uses all available device memory」を取るため、この変数が無い腕は
+宣言と無関係に一台を飲み込む。
+
 kernel hard limitはCPU、host memory、job swap、coarse task数に対するものである。VRAMとscratchは
-admission/reservationでありkernel capではない。`TasksMax`はthreadも数えるため、宣言した
-exact process capの検収はsampled monitorが担う。この強度の違いを隠さない。
+admission/reservationでありkernel capではない。VRAMの上限は**runtime内の検査**であって
+cgroup controllerではない。CUDA.jlは毎allocation前に確認するが、他のruntime（PyTorchは
+in-processの `set_per_process_memory_fraction`）は `AGENT_RESOURCE_VRAM_BYTES` を自ら守る責任を負う。
+WSL2では `nvidia-smi` がprocess別VRAMを返さないため、floorは遵守を実測で検収できない。
+`TasksMax`はthreadも数えるため、宣言したexact process capの検収はsampled monitorが担う。
+この強度の違いを隠さない。
 
 ### 発射と検収
 

@@ -26,10 +26,23 @@
 #
 # Registered projects are NOT only under ~/Workspace — /home/fuyu/DPP/min-sys-dpp-mvp is one.
 # Enumerate before swapping; a project missed during a swap keeps a stale-dimension index.
+#
+# Device history:
+#   2026-08-06  device unset → cpu.  With `device` unset, sentence-transformers auto-selects
+#     cuda:0 ("No device provided, using cuda:0" in ~/.cocoindex_code/daemon.log), so the daemon
+#     took a CUDA context, granite-311m, and a PyTorch caching allocator that never returns freed
+#     blocks — on the 12 GiB RTX 3060 that competes directly with every experiment, and
+#     `daemon.keep_alive_with_mcp` (default true) holds it past the 180-minute idle timeout for as
+#     long as an MCP client is attached.  Search is a support tool; the GPU is the research
+#     resource, so search yields it.  Safe to flip in place: same model, same 768 dims, so NO
+#     `ccc reset` / reindex is required (CPU vs GPU fp32 differ far below ranking resolution).
+#     Cost: query embedding moves to CPU, and a full reindex of a large project is slower.
+#     Revert with `device: cuda` (or delete the key) plus `ccc daemon stop`.
 
 embedding:
   provider: sentence-transformers
   model: ibm-granite/granite-embedding-311m-multilingual-r2
+  device: cpu
   indexing_params: {}
   query_params:
     prompt_name: query

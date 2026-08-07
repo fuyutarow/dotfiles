@@ -19,11 +19,25 @@ re-run it after any description edit.
   header enumerates what it cannot catch, so judgment keeps the ceiling.
 - **§5 audits BOTH scopes.** Items 1–7 are project-shaped and structurally cannot see a defect
   that lives at user scope. Item 8 exists for that blind spot and must not be folded back in.
+- **A decision owes its reader the whole list.** §3 taught how to EMIT a decision (exit codes,
+  the JSON channel) and never what a decision must CONTAIN. The reader of a PreToolUse deny is an
+  agent that will re-issue the call, so an incomplete list costs a turn per omitted axis and
+  teaches that one fix sufficed. The batched-diagnostics bullet (2026-08-08) is that rule;
+  `scripts/gate-diagnostics-check.ts` holds the declarable half of it.
 
 **Open defects:** the 4 live P3 violations found by the floor (below) are NOT yet fixed — the
 hooks must move to the firedancer repo, which has an active session. Tracked, not closed.
 
 **Retired decisions (do not resurrect):**
+
+- **A standalone "error recovery / batched diagnostics" skill** — rejected 2026-08-08, on two
+  grounds. (1) It is a *property* of output, like idempotency or observability, not an activity;
+  the house naming shape is a gerund naming what you DO, and nobody ever asks to "do error
+  recovery", so it has no firing moment. (2) The surveyed application surface was **one gate of
+  three** (table in the 2026-08-08 entry) — below the function-first existence bar. It landed
+  instead as a §3 invariant plus `scripts/gate-diagnostics-check.ts`. The judgment the rule needs
+  — which axes are independent — is domain knowledge a skill could not have supplied anyway; the
+  rule therefore ships as a QUESTION ("does B consume A's output?"), not as an answer.
 
 - **Rename to drop the article** — rejected 2026-07-29, measured. `operating-the-harness` is the
   only one of 49 skill names carrying an article (the 11 non-gerund names are all vendored
@@ -86,6 +100,63 @@ sentences; version header **14 → 14**. The first draft of P3 added 4 long sent
 split back out rather than waived, leaving **net +1**. The residue is not cleared: clearing 25
 pre-existing sentences plus a 14-line header is a full body pass, not a rider on a LAW change.
 Queue position: behind the P3 violations above and behind the writing-bun-scripts BG0 marker work.
+
+## 2026-08-08 reforge — batched diagnostics (§3) + its floor
+
+**Source: a live defect in this repo's own gate, not a document.**
+`agents/claude/hooks/enforce-dispatch-contract.ts` verified three independent axes per `agent()`
+call (model, effort, resource) and already collected each axis into its own line array — the
+batching instinct was there. But each array was emitted through its own `decidePre("deny", …)`,
+and `decidePre` ends in `process.exit(0)` (`lib.ts`). Only the first array could ever reach the
+caller. A script violating all three was denied three times in a row, one axis per turn, with the
+per-call fix list never assembled.
+
+**Why the skill produced this.** §3 was complete on the *channel* (exit 0 + JSON vs exit 2 +
+stderr, `permissionDecision` placement, tighten-not-loosen) and silent on the *payload*. Nothing
+asked what a deny owes the agent that will read it and re-issue the call. Two supporting gaps: the
+verification loop in §2 is written for the human's check, not for the gate's own message; and §5
+had no item that inspects a hook's diagnostic behavior at all.
+
+**Scope survey before writing the rule.** All three PreToolUse gates were read, not assumed:
+
+| Gate | Shape | Serialized? |
+|---|---|---|
+| `enforce-dispatch-contract.ts` | 3 genuinely independent axes | **yes** — the defect |
+| `enforce-supervised-execution.ts` | `detachmentIn()` returns the first matching form | no — alternatives, one remedy |
+| `enforce-search-route.ts` | `isRawSearch()` is one boolean OR | no — single axis by construction |
+
+One site of three. That count is why this landed as an invariant with a floor and **not** as a new
+skill (see Retired decisions).
+
+**Changes landed.** §3: the batched-diagnostics bullet (batch / poison / cap / declare). §5: item
+9. New `scripts/gate-diagnostics-check.ts` + its line in the existence-check block. Wired into the
+repo gate as `mise run lint:gates` (a member of `lint`, so `mise run check` carries it). All three
+gates annotated at every deny site. `enforce-dispatch-contract.ts` rewritten to one batched
+emitter per tool arm, with poisoning for unbalanced spans and a stated cap at 20 lines.
+
+**Gate proof (both directions).** `gate-diagnostics-check.ts` was run before being trusted:
+
+| Run | Result |
+|---|---|
+| the 3 gates, pre-annotation | **FAIL, exit 1** — 9 undeclared deny sites |
+| the 3 gates, post-annotation | **PASS, exit 0** |
+| fixture: one declaration removed | **FAIL, exit 1** |
+| fixture: `BATCHED` gate with its batching test renamed away | **FAIL, exit 1** |
+| fixture: bare `// SINGLE-AXIS:` with an empty reason | **FAIL, exit 1** |
+
+`bun script-check.ts gate-diagnostics-check.ts` → **FAIL=0 WARN=0**. On the hook side,
+`enforce-dispatch-contract.test.ts` grew a `batched diagnostics` block (12 cases: three axes on one
+line, per-call grouping, poisoning suppressing the cascade, the cap stating its remainder, the
+incompleteness NOTE, HOW TO FIX listing only fired axes). Suite: 63 pass in that file, 194 pass /
+1 skip / 0 fail across `agents/claude/hooks/tests/`, `mise run check` exit 0.
+
+**PROSE-DEBT waiver (dated 2026-08-08).** Measured: **26 → 30 → 27** long sentences; version
+header **14 → 15 → 14**. The first draft added 4 long sentences and a header line; three sentences
+were split back out and the header recompressed, leaving **net +1** — same discipline as
+2026-07-29. The 26-sentence residue is still queued behind the P3 violations.
+
+**Description untouched**, so the trigger set below was not re-run. Budget unchanged at 1479 /
+1536.
 
 ## Trigger set (F3 desk-check) — re-run after any description edit
 

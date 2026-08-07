@@ -144,7 +144,7 @@ describe("Workflow", () => {
     );
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("line(s) 2");
+    expect(d.permissionDecisionReason).toContain("line 2:");
   });
 
   test.each([
@@ -287,7 +287,7 @@ describe("Workflow low-effort declaration (2026-07-28)", () => {
     const r = runHook(HOOK, wf(script));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("line(s) 4");
+    expect(d.permissionDecisionReason).toContain("line 4:");
   });
 
   test("effort:'medium' -> silent pass, no declaration needed", () => {
@@ -353,6 +353,134 @@ describe("Workflow low-effort declaration (2026-07-28)", () => {
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("missing model:'sonnet'");
+  });
+});
+
+// Independent axes must not be reported one-per-deny: a caller should see the whole fix
+// list once instead of being denied N times in a row.
+describe("batched diagnostics (2026-08-08)", () => {
+  test("one call violating model + resource + effort -> ONE deny naming all three", () => {
+    const r = runHook(
+      HOOK,
+      rawWf(`await agent('x', {schema: S, effort: 'low'})`),
+    );
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("missing model:'sonnet'");
+    expect(d.permissionDecisionReason).toContain("resource declaration");
+    expect(d.permissionDecisionReason).toContain("LOW-EFFORT");
+  });
+
+  test("findings are grouped under the agent() call that owns them", () => {
+    const r = runHook(
+      HOOK,
+      rawWf(`await agent('x', {schema: S, effort: 'low'})`),
+    );
+    const [entry] = decisionOf(r.stdout)
+      .permissionDecisionReason.split("\n")
+      .filter((l: string) => l.startsWith("  line "));
+    expect(entry).toContain("line 1:");
+    expect(entry).toContain("missing model:'sonnet'");
+    expect(entry).toContain("resource declaration");
+    expect(entry).toContain("LOW-EFFORT");
+  });
+
+  test("two calls with different violations -> both lines in a single deny", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent('a', {schema: S})\nawait agent('b', {model: 'sonnet', effort: 'low'})`,
+      ),
+    );
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("line 1: missing model:'sonnet'");
+    expect(reason).toContain("line 2:");
+    expect(reason).toContain("LOW-EFFORT");
+  });
+
+  test("a clean call alongside a violating one is not named", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('a', {model: 'sonnet'})\nawait agent('b', {schema: S})`),
+    );
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("line 2:");
+    expect(reason).not.toContain("line 1:");
+  });
+
+  test("POISONING: an unbalanced span is reported as syntax, not as a missing model", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {model: 'sonnet'`));
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("unbalanced");
+    expect(reason).not.toContain("missing model:'sonnet'");
+    expect(reason).not.toContain("resource declaration");
+  });
+
+  test("CAP: more offending lines than the cap -> the remainder is stated, not dropped", () => {
+    const script = Array.from(
+      { length: 25 },
+      (_, i) => `await agent('a${i}', {schema: S})`,
+    ).join("\n");
+    const r = runHook(HOOK, wf(script));
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("line 20:");
+    expect(reason).not.toContain("line 21:");
+    expect(reason).toContain("…and 5 more line(s)");
+  });
+
+  test("indirection plus a per-call violation -> both, with an incompleteness NOTE", () => {
+    const r = runHook(
+      HOOK,
+      wf(`const dispatch = agent\nawait agent('x', {schema: S})`),
+    );
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("alias or indirection");
+    expect(reason).toContain("missing model:'sonnet'");
+    expect(reason).toContain("NOTE:");
+  });
+
+  test("no shape finding -> no incompleteness NOTE", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {schema: S})`));
+    expect(decisionOf(r.stdout).permissionDecisionReason).not.toContain(
+      "NOTE:",
+    );
+  });
+
+  test("HOW TO FIX lists only the axes that actually fired", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {schema: S})`));
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("HOW TO FIX");
+    expect(reason).toContain("model    —");
+    expect(reason).not.toContain("effort   —");
+    expect(reason).not.toContain("resource —");
+  });
+
+  test("Agent: a bad model AND a missing resource declaration -> ONE deny naming both", () => {
+    const r = runHook(
+      HOOK,
+      rawPre("Agent", { prompt: "inspect", model: "opus" }),
+    );
+    const d = decisionOf(r.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("RESOURCE-CLASS(NONCOMPUTE)");
+    expect(d.permissionDecisionReason).toContain("'opus' is not allowed");
+  });
+
+  test("Agent: fork AND a missing resource declaration -> ONE deny naming both", () => {
+    const r = runHook(
+      HOOK,
+      rawPre("Task", { subagent_type: "fork", prompt: "x" }),
+    );
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("fork");
+    expect(reason).toContain("RESOURCE-CLASS(NONCOMPUTE)");
+  });
+
+  test("Agent: a single violation stays a one-line reason", () => {
+    const r = runHook(HOOK, pre("Agent", { prompt: "x", model: "opus" }));
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).not.toContain("\n");
+    expect(reason).toContain("'opus' is not allowed");
   });
 });
 

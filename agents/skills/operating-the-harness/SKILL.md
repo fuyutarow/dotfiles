@@ -21,7 +21,7 @@ description: >-
 
 # Claude Code — Operating Discipline & Harness Engineering
 
-> **Version**: v2607.1.0 (2026-07-29) — P3 (scope) + this skill's first floor & ledger.
+> **Version**: v2608.1.0 (2026-08-08) — P3 (scope) + batched diagnostics (§3), each with a floor.
 > **Scope**: how to *operate and configure Claude Code itself* well — CLAUDE.md/memory
 > discipline, the verification loop, hooks, permissions/settings, MCP, Skills/commands,
 > subagents/parallelism, plan-mode & context workflow. Host-agnostic.
@@ -41,6 +41,7 @@ for f in memory hooks settings-permissions-mcp commands-and-skills subagents-and
   workflow-and-context headless-and-ci methodologies; do
   test -f references/$f.md || echo MISSING references/$f.md; done
 test -f scripts/scope-check.ts || echo MISSING scope-check.ts
+test -f scripts/gate-diagnostics-check.ts || echo MISSING gate-diagnostics-check.ts
 test -f tests/forge-verification-ledger.md || echo MISSING ledger
 ```
 
@@ -210,6 +211,15 @@ post-hoc, it cannot block or undo**):
   `${CLAUDE_PROJECT_DIR}` paths, quote variables, keep auto-approve matchers narrow, and gate any
   `~/.zshrc`/`~/.bashrc` echo behind `if [[ $- == *i* ]]` so it doesn't corrupt shell-form hook
   stdout/JSON. Kill all hooks with `"disableAllHooks": true`.
+- **A gate that can fail on N *independent* axes must emit all N in ONE decision.** Denying one
+  axis at a time costs a turn per axis. It also teaches the caller that fixing one thing is enough.
+  Independence is mechanical: *does check B consume check A's output?* **No → batch** — collect,
+  group by the call that owns each finding, emit once. **Yes → poison** — report A, suppress the
+  cascade B fires off it. A wrong label is worse than silence. Cap the list and **say** it was
+  capped; a silent truncation reads as "that was everything." Then declare the answer at every deny
+  site: `// FATAL:` / `// SINGLE-AXIS:` / `// BATCHED(<axes>):`. A later axis then cannot silently
+  re-serialize the gate. `scripts/gate-diagnostics-check.ts` is the floor. A `BATCHED` gate also
+  owes a test proving two violations return in one decision.
 
 → Every event, matcher rules, and the recipe book: `references/hooks.md`.
 
@@ -294,3 +304,8 @@ Then audit the OTHER scope — the one a project-shaped checklist cannot see (P3
    `.claude/`. Then budget the survivors: each user-scope hook costs a process on **every** matching
    event in **every** project. A hook with no owner and no retirement condition is a permanent
    tax — retire it or move it down.
+9. **Every gate reports all it knows in ONE decision?** Run `bun scripts/gate-diagnostics-check.ts`.
+   Every `decidePre("deny", …)` in an `enforce-*.ts` gate must declare `FATAL`, `SINGLE-AXIS`, or
+   `BATCHED(<axes>)`. A `BATCHED` gate must also carry a test proving two violations return
+   together (§3). The floor checks that the judgment was *made*, never that it was *right*.
+   Two independent checks both marked `SINGLE-AXIS` still pass.

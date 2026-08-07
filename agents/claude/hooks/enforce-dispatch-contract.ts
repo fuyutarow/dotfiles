@@ -24,6 +24,19 @@
 // call spans by paren depth; model values are matched against the ORIGINAL source, so a
 // "model:'sonnet'" inside a prompt string cannot fake a pass.
 //
+// DIAGNOSTICS — batched, not first-error-wins. The three per-call axes (model, effort,
+// resource) are INDEPENDENT: none of them consumes another's output, so there is nothing to
+// "recover" into and every violation in a script is collected and emitted in ONE deny,
+// grouped by the agent() call that owns it. A caller therefore sees the whole fix list once
+// instead of being denied N times in a row. Two borrowings from compiler diagnostics:
+//   - POISONING: an agent() span whose parens never close cannot be parsed, so its other
+//     axes are NOT reported — a cascade off one syntax error is noise, not information.
+//   - CAP: at most MAX_REPORTED_LINES lines are listed, and the remainder is stated out
+//     loud rather than silently dropped.
+// Findings that make the verification MODEL itself unsound (indirect dispatch, child
+// workflows) are reported in the same batch and additionally flagged, because calls reached
+// through them were never scanned.
+//
 // FAIL CLOSED: any error (bad payload, fs error) -> deny. run.sh also denies when bun
 // itself is missing.
 
@@ -35,6 +48,110 @@ import {
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /(?:^|[-_])sonnet(?:$|[-_])/i;
+
+// ---------------------------------------------------------------------------
+// Batched diagnostics
+// ---------------------------------------------------------------------------
+
+// "shape" is script-level (the capability was not called directly); the rest are per-call.
+type Axis = "shape" | "syntax" | "model" | "effort" | "resource";
+type Finding = { line: number; axis: Axis; detail: string };
+
+// Report order for the HOW TO FIX block: unsound-model first, then unparseable, then axes.
+const AXIS_ORDER: Axis[] = ["shape", "syntax", "model", "effort", "resource"];
+
+// A flood costs the reader more than it informs. Cap the listing and SAY it was capped.
+const MAX_REPORTED_LINES = 20;
+
+const AXIS_HINT: Record<Axis, string> = {
+  shape:
+    "shape    — every executor must be a direct, inspectable agent(prompt, {model:'sonnet'}) call. " +
+    "Remove aliases, computed access, and child workflow() calls, and inline the child's agents.",
+  syntax:
+    "syntax   — this agent( span never closes, so nothing about it can be verified. " +
+    "Fix the parentheses first; its other axes were NOT checked.",
+  model:
+    "model    — exactly one literal {model:'sonnet'} property, top-level in the options object " +
+    "(no nesting, no spread, no computed key).",
+  effort:
+    "effort   — omit effort to inherit the session default, or declare inside the SAME agent() call " +
+    "(a prompt string or a comment both count): " +
+    '"LOW-EFFORT(<stage>): <why this stage is not intelligence-sensitive>" (two non-empty fields).',
+  resource: `resource — ${RESOURCE_DECLARATION_HELP}, inside the SAME agent() call.`,
+};
+
+function lineAt(src: string, index: number): number {
+  let line = 1;
+  for (let i = 0; i < index; i++) if (src[i] === "\n") line++;
+  return line;
+}
+
+// dispatch-declaration.ts appends the full HELP text to every reason. That belongs in the
+// HOW TO FIX block once, not on every finding line, so strip it back to the distinguishing part.
+function shortResourceReason(reason: string): string {
+  const short = reason
+    .replace(/;?\s*require\s+exactly one[\s\S]*$/i, "")
+    .replace(/^resource declaration is /i, "")
+    .replace(/^resource envelope /i, "envelope ")
+    .replace(
+      /^found (\d+) resource declaration token\(s\)$/i,
+      "found $1 token(s), need exactly 1",
+    )
+    .trim();
+  return `resource declaration: ${short === "" ? "invalid" : short}`;
+}
+
+// ONE deny carrying every finding, grouped by the agent() call that owns it — a caller fixes
+// the whole list in a single pass instead of being denied once per axis.
+function denyFindings(findings: Finding[], totalCalls: number): void {
+  if (findings.length === 0) return;
+
+  const byLine = new Map<number, string[]>();
+  for (const f of findings) {
+    byLine.set(f.line, [...(byLine.get(f.line) ?? []), f.detail]);
+  }
+  const lines = [...byLine.keys()].sort((a, b) => a - b);
+  const shown = lines.slice(0, MAX_REPORTED_LINES);
+
+  const body = shown.map(
+    (line) => `  line ${line}: ${[...new Set(byLine.get(line))].join("; ")}`,
+  );
+  if (lines.length > shown.length) {
+    body.push(
+      `  …and ${lines.length - shown.length} more line(s) with findings, not listed ` +
+        `(cap ${MAX_REPORTED_LINES}). Fix these first and re-invoke to see the rest.`,
+    );
+  }
+
+  const axes = new Set(findings.map((f) => f.axis));
+  if (axes.has("shape")) {
+    body.push(
+      "  NOTE: dispatch reached through the indirection above was never scanned, " +
+        "so the list may be incomplete.",
+    );
+  }
+
+  const scope =
+    lines.length === 1 ? "1 line violates" : `${lines.length} lines violate`;
+  const scanned =
+    totalCalls === 1
+      ? "1 direct agent() call"
+      : `${totalCalls} direct agent() calls`;
+
+  // BATCHED(shape, syntax, model, effort, resource): none of these consumes another's output,
+  // so all of them are collected across the whole script and reported in this one decision.
+  decidePre(
+    "deny",
+    `dispatch-contract: ${scope} the dispatch contract in this Workflow script ` +
+      `(${scanned} scanned). Every finding is listed below — fix them all, then re-invoke.\n` +
+      body.join("\n") +
+      "\nHOW TO FIX\n" +
+      AXIS_ORDER.filter((a) => axes.has(a))
+        .map((a) => `  ${AXIS_HINT[a]}`)
+        .join("\n"),
+  );
+}
+
 // LOW-EFFORT(<stage>): <reason>
 // Two fields, not three — modeled on hasEscalationDeclaration() above. Both the stage
 // (inside the parens) and the reason (after the colon) must be non-empty; a bare marker
@@ -173,13 +290,18 @@ function directWorkflowModel(
 
 function checkWorkflowScript(src: string): void {
   const blanked = blank(src);
+  const findings: Finding[] = [];
 
-  if (/\bworkflow\s*\(/.test(blanked)) {
-    decidePre(
-      "deny",
-      "dispatch-contract: script calls workflow() and its child agents cannot be verified. " +
-        "Inline every executor as an inspectable agent() call with model:'sonnet'.",
-    );
+  // --- script-level shape: the capability must be reachable for inspection at all --------
+  const childWorkflow = /\bworkflow\s*\(/g;
+  let child: RegExpExecArray | null;
+  while ((child = childWorkflow.exec(blanked)) !== null) {
+    findings.push({
+      line: lineAt(src, child.index),
+      axis: "shape",
+      detail:
+        "calls workflow(); a child workflow's agents cannot be verified — inline them",
+    });
   }
 
   // A quoted computed key is blanked with ordinary strings, so inspect the original source
@@ -188,11 +310,11 @@ function checkWorkflowScript(src: string): void {
   let computed: RegExpExecArray | null;
   while ((computed = computedAgent.exec(src)) !== null) {
     if (blanked[computed.index] !== "[") continue;
-    decidePre(
-      "deny",
-      "dispatch-contract: Workflow agent capability must be a direct, inspectable " +
-        "agent(prompt, {model:'sonnet'}) call; computed access is denied.",
-    );
+    findings.push({
+      line: lineAt(src, computed.index),
+      axis: "shape",
+      detail: "computed access to the agent capability",
+    });
   }
 
   // The capability must be called directly so its options can be verified. Any other
@@ -201,19 +323,20 @@ function checkWorkflowScript(src: string): void {
   let ref: RegExpExecArray | null;
   while ((ref = agentRef.exec(blanked)) !== null) {
     if (/^\s*\(/.test(blanked.slice(ref.index + ref[0].length))) continue;
-    decidePre(
-      "deny",
-      "dispatch-contract: Workflow agent capability must be a direct, inspectable " +
-        "agent(prompt, {model:'sonnet'}) call; aliases and indirection are denied.",
-    );
+    findings.push({
+      line: lineAt(src, ref.index),
+      axis: "shape",
+      detail: "agent referenced without calling it (alias or indirection)",
+    });
   }
 
-  const bad: number[] = [];
-  const badEffort: number[] = [];
-  const badResource: number[] = [];
+  // --- per-call axes: independent, so all of them are collected -------------------------
+  let calls = 0;
   const re = /\bagent\s*\(/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(blanked)) !== null) {
+    calls++;
+    const line = lineAt(src, m.index);
     const open = m.index + m[0].length;
     let depth = 1;
     let i = open;
@@ -223,15 +346,29 @@ function checkWorkflowScript(src: string): void {
       i++;
     }
     if (depth !== 0) {
-      bad.push(src.slice(0, m.index).split("\n").length);
+      // POISONED: the span has no end, so model/effort/resource cannot be located inside it.
+      // Report the real defect once and suppress the three cascade findings it would produce.
+      findings.push({
+        line,
+        axis: "syntax",
+        detail: "agent( span is unbalanced and cannot be verified",
+      });
       continue;
     }
     const span = blanked.slice(open, i);
     const originalSpan = src.slice(open, i);
-    if (!directWorkflowModel(src, blanked, open, i - 1))
-      bad.push(src.slice(0, m.index).split("\n").length);
-    if (!resourceDeclarationResult(originalSpan).ok) {
-      badResource.push(src.slice(0, m.index).split("\n").length);
+
+    if (!directWorkflowModel(src, blanked, open, i - 1)) {
+      findings.push({ line, axis: "model", detail: "missing model:'sonnet'" });
+    }
+
+    const resource = resourceDeclarationResult(originalSpan);
+    if (!resource.ok) {
+      findings.push({
+        line,
+        axis: "resource",
+        detail: shortResourceReason(resource.reason),
+      });
     }
 
     // A literal effort:'low' on this call needs a same-span LOW-EFFORT(<stage>): <reason>
@@ -250,40 +387,16 @@ function checkWorkflowScript(src: string): void {
       }
     }
     if (low && !hasLowEffortDeclaration(originalSpan)) {
-      badEffort.push(src.slice(0, m.index).split("\n").length);
+      findings.push({
+        line,
+        axis: "effort",
+        detail:
+          "literal effort:'low' with no LOW-EFFORT declaration in this call",
+      });
     }
   }
 
-  if (bad.length > 0) {
-    decidePre(
-      "deny",
-      `dispatch-contract: agent() call(s) missing model:'sonnet' at line(s) ` +
-        `${[...new Set(bad)].join(", ")}. Every agent() in a Workflow script MUST have ` +
-        `exactly one literal {model:'sonnet'} property. Fix the script and re-invoke.`,
-    );
-  }
-
-  if (badEffort.length > 0) {
-    decidePre(
-      "deny",
-      `dispatch-contract: agent() call(s) pass a literal effort:'low' without a ` +
-        `declaration at line(s) ${[...new Set(badEffort)].join(", ")}. Dropping effort ` +
-        `below the model's documented default needs a declaration inside that SAME ` +
-        `agent() call (a prompt string or a comment both count): ` +
-        `"LOW-EFFORT(<stage>): <why this stage is not intelligence-sensitive>" ` +
-        `(two non-empty fields). Omit effort to inherit the session default, or add the ` +
-        `declaration and re-invoke.`,
-    );
-  }
-
-  if (badResource.length > 0) {
-    decidePre(
-      "deny",
-      `dispatch-contract: agent() call(s) lack exactly one valid same-call resource ` +
-        `declaration at line(s) ${[...new Set(badResource)].join(", ")}. Require ` +
-        `${RESOURCE_DECLARATION_HELP}.`,
-    );
-  }
+  denyFindings(findings, calls);
 }
 
 function main(): void {
@@ -293,17 +406,20 @@ function main(): void {
 
   if (tool === "Agent" || tool === "Task") {
     if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
+      // FATAL: with no object there is no prompt and no model key, so no axis can be located.
       decidePre(
         "deny",
         "dispatch-contract: Agent/Task input is malformed and cannot be verified.",
       );
     }
+    const problems: string[] = [];
+
     if (ti.subagent_type === "fork") {
-      decidePre(
-        "deny",
-        "dispatch-contract: fork is not allowed; dispatch an Agent or Task on Sonnet.",
+      problems.push(
+        "subagent_type 'fork' is not allowed — dispatch an Agent or Task on Sonnet",
       );
     }
+
     const prompt =
       typeof ti.prompt === "string"
         ? ti.prompt
@@ -311,26 +427,41 @@ function main(): void {
           ? ti.message
           : null;
     if (prompt === null) {
-      decidePre(
-        "deny",
-        `dispatch-contract: Agent/Task has no inspectable prompt; require ${RESOURCE_DECLARATION_HELP}.`,
+      problems.push(
+        `no inspectable prompt, so the resource class cannot be verified; require ${RESOURCE_DECLARATION_HELP}`,
+      );
+    } else {
+      const resource = resourceDeclarationResult(prompt);
+      if (!resource.ok) problems.push(resource.reason);
+    }
+
+    // An ABSENT model is not a violation — it is injected below. Only an explicit one is judged.
+    if (
+      "model" in ti &&
+      (typeof ti.model !== "string" || !SONNET.test(ti.model))
+    ) {
+      problems.push(
+        `model '${String(ti.model)}' is not allowed — every executor runs on Sonnet; ` +
+          "re-issue with model:'sonnet' or omit model",
       );
     }
-    const resource = resourceDeclarationResult(prompt);
-    if (!resource.ok) {
-      decidePre("deny", `dispatch-contract: ${resource.reason}.`);
+
+    // BATCHED(fork, resource, model): subagent shape, resource class and model are independent
+    // of one another, so a caller violating two of them is told both at once, not denied twice.
+    if (problems.length > 0) {
+      decidePre(
+        "deny",
+        problems.length === 1
+          ? `dispatch-contract: ${problems[0]}.`
+          : `dispatch-contract: ${problems.length} violations — fix them all, then re-invoke.\n` +
+              problems.map((p) => `  - ${p}`).join("\n"),
+      );
     }
+
     if (!("model" in ti)) {
       decidePre("allow", "dispatch-contract: injected model:'sonnet'", {
         updatedInput: { ...ti, model: "sonnet" },
       });
-    }
-    if (typeof ti.model !== "string" || !SONNET.test(ti.model)) {
-      decidePre(
-        "deny",
-        `dispatch-contract: model '${String(ti.model)}' is not allowed — every executor runs on Sonnet. ` +
-          "Re-issue this call with model:'sonnet' or omit model.",
-      );
     }
     return;
   }
@@ -338,6 +469,7 @@ function main(): void {
   if (tool !== "Workflow") return;
 
   if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
+    // FATAL: with no object there is no script to scan, so no per-call axis exists yet.
     decidePre(
       "deny",
       "dispatch-contract: Workflow input is malformed and cannot be verified.",
@@ -349,6 +481,7 @@ function main(): void {
     try {
       src = readFileSync(ti.scriptPath, "utf8");
     } catch (e) {
+      // FATAL: the script never loaded, so there are no agent() calls to collect findings from.
       decidePre(
         "deny",
         `dispatch-contract: cannot read scriptPath '${ti.scriptPath}' ` +
@@ -357,6 +490,7 @@ function main(): void {
     }
   }
   if (src === null) {
+    // FATAL: a named workflow has no inspectable source, so every axis is unknowable here.
     decidePre(
       "deny",
       `dispatch-contract: named workflow '${ti.name ?? "?"}' — script not inspectable, ` +

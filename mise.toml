@@ -91,7 +91,14 @@ depends = ["fmt:sh:check", "fmt:ts:check"]
 [tasks.lint]
 alias = "l"
 description = "Lint the repo: Markdown + shell/zsh + Bun script contract + skills index"
-depends = ["lint:md", "lint:sh", "lint:zsh", "lint:bun", "lint:skills-index"]
+depends = [
+  "lint:md",
+  "lint:sh",
+  "lint:zsh",
+  "lint:bun",
+  "lint:skills-index",
+  "lint:gates",
+]
 
 [tasks."lint:md"]
 dir = "{{config_root}}"
@@ -135,6 +142,11 @@ done
 [ "$rc" -eq 0 ] && echo "✅ skills index complete"
 exit $rc
 '''
+
+[tasks."lint:gates"]
+dir = "{{config_root}}"
+description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
+run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks"
 
 [tasks."lint:bun"]
 dir = "{{config_root}}"

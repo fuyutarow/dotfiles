@@ -34,6 +34,9 @@ const CORPUS = [
   {
     path: "agents/skills/governing-research-documentation/scripts/research-docs-check.ts",
   },
+  {
+    path: "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts",
+  },
   { path: "agents/skills/operating-the-harness/scripts/scope-check.ts" },
   {
     path: "agents/skills/operationalizing-research-gaps/scripts/openings-check.ts",

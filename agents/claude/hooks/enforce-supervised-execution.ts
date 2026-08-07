@@ -105,6 +105,8 @@ function main(): void {
   const found = detachmentIn(command);
   if (!found) return;
 
+  // SINGLE-AXIS: detachmentIn() classifies one command into one detachment form; the forms are
+  // alternatives, not independent axes, and every one of them gets the same three-route remedy.
   decidePre(
     "deny",
     `supervised-execution: this command detaches work from the harness via ${found.what} ` +

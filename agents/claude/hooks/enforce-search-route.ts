@@ -127,6 +127,7 @@ function main(): void {
   if (!project || !cccIsAvailable()) return;
 
   if (!existsSync(ROUTER)) {
+    // FATAL: without the router there is no route to advise, so the normal deny cannot be built.
     decidePre(
       "deny",
       `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
@@ -135,6 +136,8 @@ function main(): void {
     );
   }
 
+  // SINGLE-AXIS: isRawSearch() is one boolean over alternative surfaces, not independent checks —
+  // whichever surface matched, the caller owes the same single fix (declare a query shape).
   decidePre(
     "deny",
     `search-route: raw ${tool} search is disabled in operational ccc project ${project}. ` +

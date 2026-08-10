@@ -19,6 +19,7 @@ typeset -g ROOT=${0:A:h:h:h}
 # The three constants aliases.zsh defines. Duplicated ON PURPOSE: the test must fail when the
 # shipped bytes change, which it cannot do if it sources the same definition it is checking.
 typeset -g MODES_OFF=$'\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1004l\e[?1005l\e[?1006l\e[?1015l\e[?1016l'
+typeset -g KEYS_OFF=$'\e[=0;1u'
 typeset -g RENDER=$'\e[?25h\e[?7h\e[0m\017\e(B'
 typeset -g ALT_OFF=$'\e[?1047l'
 
@@ -44,9 +45,10 @@ pty_run() {
 
 # --- 1. the safe repair actually reaches the terminal -------------------------------------
 out=$(pty_run '_term_restore; print -r -- MARK1')
-want "safe repair emits the mode-disable set"   "$MODES_OFF" "$out"
-want "safe repair emits the render reset"       "$RENDER"    "$out"
-want "shell stayed alive through it"            "MARK1"      "$out"
+want "safe repair emits the mouse-mode disable set"      "$MODES_OFF" "$out"
+want "safe repair disables the Kitty keyboard protocol"  "$KEYS_OFF"  "$out"
+want "safe repair emits the render reset"                "$RENDER"    "$out"
+want "shell stayed alive through it"                     "MARK1"      "$out"
 
 # --- 2. nothing on an automatic path may move the cursor or swap screen buffers ------------
 # A cursor-moving sequence here means the next prompt lands on top of existing output.
@@ -56,6 +58,7 @@ wantnot "automatic path never clears the screen"     $'\e[2J'     "$out"
 wantnot "automatic path never resets scroll region"  $'\e[r'      "$out"
 wantnot "automatic path never sends 1049l"           $'\e[?1049l' "$out"
 wantnot "automatic path never leaves alt screen"     "$ALT_OFF"   "$out"
+wantnot "automatic path never issues RIS"            $'\ec'       "$out"   # RIS wipes the screen
 
 # --- 3. ssh: exit status decides the alternate-screen repair, and passes through ------------
 # Bare `ssh` prints usage and exits 255 — a real 255 with no network involved.
@@ -90,10 +93,11 @@ want "_term_drain terminates" "DRAINED" "$out"
 
 # --- 7. fixterm is the only path allowed to move the cursor --------------------------------
 out=$(pty_run 'fixterm; print -r -- FIXED; exit')   # same reason as above: fixterm drains
-want "fixterm leaves the alternate screen (1049)" $'\e[?1049l' "$out"
-want "fixterm resets the scroll region"           $'\e[r'      "$out"
-want "fixterm ends in a known state"              $'\e[H\e[2J' "$out"
-want "fixterm returns"                            "FIXED"      "$out"
+want "fixterm issues a full reset (RIS) for unknown modes" $'\ec'       "$out"
+want "fixterm leaves the alternate screen (1049)"          $'\e[?1049l' "$out"
+want "fixterm resets the scroll region"                    $'\e[r'      "$out"
+want "fixterm ends in a known state"                       $'\e[H\e[2J' "$out"
+want "fixterm returns"                                     "FIXED"      "$out"
 
 # --- 8. no terminal, no output: never corrupt a pipe or a redirect --------------------------
 tmp=$(mktemp) || exit 1

@@ -524,7 +524,7 @@ alias sb='. $HOME/.bashrc'
 alias sz='. $HOME/.zshrc'
 # sz re-reads ONLY .zshrc (interactive rc); relogin reproduces a full login by replacing
 # this process with a fresh login shell — re-runs .zprofile THEN .zshrc clean, so
-# direnv/fnm/sheldon hooks are re-eval'd once (not stacked) and PATH is rebuilt from scratch.
+# direnv/sheldon hooks are re-eval'd once (not stacked) and PATH is rebuilt from scratch.
 alias relogin='exec zsh -l'
 alias rl='exec zsh -l'
 alias st='tmux source-file $HOME/.tmux.conf'
@@ -613,6 +613,16 @@ alias tf='tail -fF'
 # mouse: X10(9) / normal(1000) / highlight(1001) / btn-event(1002) / any-event(1003); focus
 # events(1004); and the UTF-8 / SGR / urxvt / SGR-pixel encodings (1005/1006/1015/1016).
 typeset -g _TERM_MODES_OFF=$'\e[?9l\e[?1000l\e[?1001l\e[?1002l\e[?1003l\e[?1004l\e[?1005l\e[?1006l\e[?1015l\e[?1016l'
+# Keyboard reporting is a SECOND, independent leak with the same shape and a different alphabet:
+# the Kitty keyboard protocol reports keys as `CSI code;mods:event u`, so a herdr/agent TUI that
+# dies with it enabled turns every keypress AND key release into text — `;1:3u12;5:3u…` at the
+# prompt (`:3` is event type 3, key release). Observed 2026-08-10 after `herdr --remote` lost its
+# bridge; mouse-only repair sailed straight past it. `CSI = 0 ; 1 u` sets the CURRENT flags to 0
+# (mode 1 = "set all"), which is idempotent and touches no stack, so it is safe every prompt.
+# Not included: xterm modifyOtherKeys (`CSI > 4 ; 0 m`) — same failure family, but its default is
+# terminal-dependent, so disabling it blind could take away key combos nothing here broke. Add it
+# here if `\e[27;…~` garbage ever shows up.
+typeset -g _TERM_KEYS_OFF=$'\e[=0;1u'
 # Render state a crashed app leaves behind: hidden cursor, autowrap off, a stuck SGR colour, and
 # G0 mapped to the line-drawing set (the "every character is a box-drawing glyph" wreck).
 # Bracketed paste (2004) is deliberately absent: zle turns it on and off per line and owns it.
@@ -628,7 +638,7 @@ typeset -g _TERM_LEAVE_ALTSCREEN=$'\e[?1047l'
 # screen buffer, and is a no-op on a healthy terminal. Runs before every prompt and after ssh.
 _term_restore() {
   [[ -t 1 ]] || return 0                       # piped/redirected: no terminal to fix
-  print -rn -- "$_TERM_MODES_OFF$_TERM_RENDER_RESET"
+  print -rn -- "$_TERM_MODES_OFF$_TERM_KEYS_OFF$_TERM_RENDER_RESET"
   return 0
 }
 
@@ -670,8 +680,12 @@ fixterm() {
   _term_restore
   _term_drain
   [[ -t 0 ]] && stty sane 2>/dev/null
-  # normal screen buffer (both spellings), no scroll region, cursor home, screen cleared
-  [[ -t 1 ]] && print -rn -- $'\e[?1049l\e[?1047l\e[r\e[H\e[2J'
+  # RIS (`\ec`) is the point of this command: the named disables above can only undo the modes we
+  # already know leak, and the list has grown twice (mouse, then the Kitty keyboard protocol).
+  # A full reset also takes the ones nobody has met yet — including the Kitty flag stack, which
+  # RIS clears. Then pin the end state explicitly, for terminals whose RIS is partial:
+  # normal screen buffer (both spellings), no scroll region, cursor home, screen cleared.
+  [[ -t 1 ]] && print -rn -- $'\ec\e[?1049l\e[?1047l\e[r\e[H\e[2J'
   return 0
 }
 

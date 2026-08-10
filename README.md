@@ -29,8 +29,9 @@ Most dotfiles configure a shell. Two things here are less usual:
   happened when the file was dropped. (`rm` is disabled in favor of `rip`, a trashcan `rm`; that half
   is ordinary hygiene — the overwrite guard is the uncommon part.) `ssh` is guarded too, for a
   different failure: a link that dies mid-session never delivers the remote TUI's disable
-  sequences, so the terminal is left reporting mouse motion as escapes and stuck on the alternate
-  screen. The shell re-asserts a known-good terminal state before every prompt — by **writing** it
+  sequences, so the terminal keeps reporting input as escapes — mouse motion *and*, separately,
+  Kitty-protocol key events — and stays on the alternate screen. The shell re-asserts a
+  known-good terminal state before every prompt — by **writing** it
   blind, never by querying the terminal, because a query there can hang the shell. `fixterm` is
   the manual sledgehammer.
 
@@ -98,6 +99,13 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
 4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on *every* invocation, including
    `ssh host 'cmd'`, so standalone CLIs in `~/.local/bin` work in non-login SSH shells.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
+6. **No implicit global toolchain.** A managed tool is reachable where a config *declares* it,
+   or not at all: no global default version, and no second version manager hooking a login
+   shell. mise's two delivery paths stay apart — `mise activate` serves interactive shells
+   per-directory; the shim directory serves *only* non-interactive ones (`ssh host 'cmd'`
+   never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a
+   name like `npm` on every PATH for a tool nothing declared, which then refuses to run.
+   Enforced by `mise run test:mise-scope`.
 
 ## Setup
 

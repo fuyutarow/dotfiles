@@ -60,8 +60,14 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (
    including `ssh host 'cmd'`. It exists so standalone user CLIs in `~/.local/bin` (notably
    Codex remote bootstrap) work in non-login SSH command shells. Do not put Homebrew shellenv,
    plugins, prompts, completions, or anything that can print/hang there.
-6. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
-7. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
+6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config
+   DECLARES it, or not at all. mise's two delivery paths must never merge: `mise activate`
+   (`zsh/zshrc`) = interactive shells, per-directory; the shim dir (`zsh/zshenv`) =
+   non-interactive ONLY, because `ssh host 'cmd'` skips `.zshrc`. Never `mise use -g`, never
+   add a second version manager to a login shell (fnm removed 2026-08-06), never put the shim
+   dir on an interactive PATH. `mise run test:mise-scope` fails on all three.
+7. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
+8. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    skills use one consistent shape — the official-recommended **gerund** form
    `<verb-ing>-<object>` describing the activity the skill provides (`writing-julia`,
    `compiling-latex`, `running-python-tools`, `securing-remote-access`, `systematizing-knowledge`,
@@ -113,9 +119,11 @@ All repo tasks go through **mise** (`mise tasks` to list):
   copy/move succeeded when it was dropped. Mirrors `rm`→`rip`; OS-agnostic (same on BSD/GNU).
   When you *intend* to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
 - **Terminal state is repaired by WRITING a known-good state, never by querying the terminal.**
-  A dropped link never delivers the remote TUI's disable sequences, so the terminal is left
-  reporting mouse motion as escapes (`\e[<35;86;59M` → `command not found: 35`) and stuck on the
-  alternate screen. A `precmd` hook re-asserts the safe modes before every prompt; `ssh` is also a
+  A dropped link never delivers the remote TUI's disable sequences, so the terminal keeps
+  reporting input as escapes — mouse motion (`\e[<35;86;59M`) and, independently, Kitty-protocol
+  key events (`\e[…;1:3u`, `:3` = key release) — and stays on the alternate screen. Input
+  reporting is TWO leaks, not one: repairing only the mouse looks fixed until a herdr/agent TUI
+  dies. A `precmd` hook re-asserts the safe modes before every prompt; `ssh` is also a
   function (interactive shells only — scripts get the binary) that leaves the alternate screen on
   exit 255. Both paths WRITE ONLY: a read there hangs the shell on a short reply, eats type-ahead,
   and SIGTTINs a backgrounded `ssh`. `fixterm` is the manual sledgehammer (it may clear the

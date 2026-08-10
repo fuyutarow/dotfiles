@@ -448,3 +448,122 @@ swap-procedure owner (`operations.md`), catalog.md stays untouched (concurrent d
 only). F3 — this entry is the adversarial-provenance artifact; `skill-check.ts` floor
 before/after this touch: 22 prose sentences / 1 table cell (WARN, exit 0) — unchanged, net
 zero new prose-debt.
+
+## 2026-08-08 (v2608.1.0): DAEMON-OWNED law clause + CC7 OWNED
+
+**Occasion.** The user asked whether ccc's CPU/RAM/GPU could be limited. Investigation found a
+live runaway on the house host: a client died at 01:27 with `BrokenPipeError`, and the index it
+had started ran on for 1h40m at ~6 of 12 cores and 4.85 GiB RSS, starving six concurrent Julia
+processes (load 17). Nothing warned. The idle reaper could not fire because indexing counts as
+activity.
+
+**Why a LAW clause and not a gotcha row.** Three prior rows already described pieces of this —
+"the daemon keeps indexing after the client dies" (§3 index-job ownership), "BrokenPipeError is
+cosmetic" (§3 logs), "no manual restart needed after a settings edit" (Gotchas) — and the skill
+still could not answer "can we cap it?". The missing object was not a fact but an OWNER: compute
+lives in a process that outlives its caller and is spawned into an accidental cgroup, so a
+ceiling written anywhere but a supervisor is discarded by the next spawn. That is a precedence
+rule, so it belongs in THE LAW; `owned before limited` joins the precedence chain. It also
+retires a wrong answer the skill would otherwise have produced — "wrap the `ccc` command" —
+which binds the caller while the work lives past it.
+
+**Source grade.** All primary. Installed `cocoindex_code` 0.2.40 source read line-by-line
+(`client.py` `start_daemon` / `_is_daemon_supervised` / `_needs_restart` / `stop_daemon`,
+`daemon.py` env overlay + `IdleReaper.should_exit`, `grep.py` client-side pool,
+`embedder_params.py` accepted kwargs); live process/cgroup probes; a throwaway `systemd-run
+--user` probe unit that established which properties reach cgroup v2 on this host and which are
+accepted-then-ignored; the before/after measurement of the real cutover. Ten agents (five
+investigators, five adversarial verifiers) checked the source claims; every load-bearing
+lifecycle claim came back CONFIRMED, with two evidentiary corrections that did not move a
+conclusion (a "sole grep hit" count, a cuDNN version parenthetical).
+
+**Corrections to existing content.** §3 `Spawn` and `Boot behavior` were true only of the stock
+regime and are now regime-qualified. §3 `Logs` said the `BrokenPipeError` is cosmetic; it is
+cosmetic for health but is precisely the timestamp a runaway dates from, and that has been
+rewritten. The Gotchas settings-restart row now names who respawns under supervision, and what
+happens when the unit is stopped.
+
+**One home.** The regime table and the verb-by-regime rules live in SKILL.md §Ownership because
+they change a command choice at read time. The mechanism, the enforceable/ignored property
+split, and the install procedure live in `operations.md` §3a. Numbers live in `catalog.md`. The
+durability policy that sanctions a manager-owned unit stays in `operating-the-harness`; the
+per-dispatch envelope path stays in `orchestrating-agents` — both now carry a typed cut row
+here (RESIDENT-vs-DISPATCH), and the corollary that the statusline's dispatch tracker cannot see
+a supervised daemon is stated so its silence is not read as evidence.
+
+**Not verified.** The ceilings are provisional: 4G/6G was sized from the pre-change 4.85 GiB
+peak, and the observed drop to 1.0 GiB is mostly the backpressure change, not the ceiling
+biting. A full `firedancer` index under the new settings has not completed, so the tightened
+values are deferred. `OPENBLAS_NUM_THREADS` timing for numpy (imported before the `envs:`
+overlay runs) is UNVERIFIED and no rule depends on it. The macOS LAZY-SPAWN path was reasoned
+from the same source but not exercised on a Mac this session.
+
+**Gate check.** F1 — every new row cites a runnable probe (`test -e` regime probe,
+`systemctl --user show`, `cpu.stat nr_throttled`) or a source locus. F2 — no new skill; CC7
+extends the existing gate table, §3a extends the existing daemon-internals owner, and two new
+typed cut rows resolve the resource-control overlap. F3 — this entry is the
+adversarial-provenance artifact; two fire rows and five gotcha rows added to the trigger set.
+`skill-check.ts` floor: 22 prose sentences / 1 table cell before this touch, 27/2 on first
+draft, 22/1 after paying it back — net zero new prose-debt, no waiver claimed. Frontmatter
+strict-parses; description 1131 chars. `mise run link:skills` re-run.
+
+### 2026-08-08 addendum: adversarial audit of the supervision change, and the defects it found
+
+Six agents (five hostile audits — unit, client-side guard, broken procedures, the reforge
+itself, search quality — plus a completeness critic) were run READ-ONLY against the change
+above. They found real defects; every one below was independently re-verified before the fix.
+
+**Introduced by the change, now fixed.**
+
+1. `scripts/ccc-swap.ts`'s blue-green build was BROKEN by the new zshenv export. `baseEnv()`
+   copies `process.env` verbatim into `shadowEnv`, so the supervision flag rode into a shadow
+   tree that no supervisor owns; every shadow `ccc index` would wait out the client's 30s
+   socket timeout and fail. This is the exact path CC5/CC6 mandate for a fleet-wide model swap.
+   Fixed by deleting the flag from `shadowEnv` only (`liveEnv` keeps it). `scripts/tests/fake-ccc.ts`
+   now reproduces the real failure when the flag is present, and a new regression test proves
+   red→green (1 fail without the fix, 33 pass with it). The suite could not have caught this
+   before: the fixture faked the binary and never modelled the supervised branch.
+2. `mise run wsl:ccc-daemon` was not idempotent — it stopped the daemon unconditionally, which
+   aborts every project's in-flight index. Now it skips the one-time migration stop when the
+   unit is already active, and it refuses to run when `ccc` is not on PATH (otherwise the unit
+   crash-loops into the start limit while clients are already forbidden to spawn).
+3. `mise run wsl:init` linked the unit — arming the zshenv guard — without ever enabling it,
+   so a fresh machine would have had every ccc call hang 30s and fail. `wsl:ccc-daemon` is now
+   called from `wsl:init` after the tool installs.
+4. The unit inherited systemd's default 5-starts-in-10s limit. With clients forbidden to spawn,
+   tripping it strands ccc with no self-heal. Now `StartLimitIntervalSec=120` / `StartLimitBurst=8`
+   in `[Unit]` (verified applied: `StartLimitIntervalUSec=2min`).
+5. `zsh/zshenv`'s `[[ ... ]] && export` made the file itself exit 1 on hosts without the unit,
+   which aborts a later `setopt ERR_EXIT; source ~/.zshenv`. Now an `if` block.
+
+**Pre-existing ccc behavior the change makes more dangerous, now documented.**
+
+6. `ccc daemon restart` never consults supervision (`cli.py` `daemon_restart` calls
+   `client.start_daemon` directly). On a supervised host it forks a SECOND uncapped daemon into
+   the calling shell's cgroup, wins the socket bind, and is orphaned ~2s later when the
+   supervisor re-binds — producing exactly the runaway this project exists to prevent. `stop`
+   and `restart` are therefore NOT equally "wrong"; CC7 and the §Ownership table now say so.
+7. ANY stop verb aborts every project's in-flight index on the daemon, not just the target's.
+8. Concurrent-index starvation: one daemon under one ceiling serves every project, and a search
+   awaits its project's index-start lock, so a large index elsewhere can make an unrelated
+   concept search return NOTHING for minutes (measured: 8+ minutes across three attempts).
+   Tightening `COCOINDEX_MAX_INFLIGHT_COMPONENTS` makes it worse — the knob is daemon-wide.
+9. Observed live during the audit: an out-of-band `uv tool upgrade` (0.2.40→0.2.41 at 14:18:26)
+   changed the binary under the running daemon; the next handshake's version-mismatch path
+   restarted it (`NRestarts` 0→1) and discarded a ~40-minute in-flight firedancer index. On-disk
+   state survived. Supervision widens this blast radius by keeping one daemon loaded with many
+   projects. The install is UNPINNED — already flagged in `catalog.md`.
+10. `IOSchedulingClass=idle` is inert here (every block device runs the `none` scheduler, which
+    never consults ioprio); `UnsetEnvironment=` is currently defensive rather than active; the
+    idle-exit reclaim does not fire while an MCP client holds a session. Unit comments corrected.
+
+**Reciprocal edit.** `orchestrating-agents` P7 DEVICE-BUDGET now carries a carve-out excluding
+host/systemd-managed resident daemons from per-dispatch admission, pointing back to LAW(e)/CC7.
+
+**Deferred, with reasons.** The settings-mtime restart path was NOT exercised end-to-end: it
+necessarily kills the daemon and would have destroyed an in-flight index. The supervised
+model-swap replacement in §6b is source-derived and marked UNVERIFIED in place. Ceiling values
+remain provisional pending a full large-project index.
+
+**Floor.** `skill-check.ts` 22 prose sentences / 1 table cell — unchanged from baseline across
+both passes. `orchestrating-agents` exit 0. `bun test scripts/tests/ccc-swap.test.ts`: 33 pass.

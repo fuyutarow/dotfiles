@@ -26,3 +26,15 @@ path=($_zshenv_path_prefix $path)
 typeset -U path
 unset _zshenv_dir _zshenv_path_prefix
 export PATH
+
+# cocoindex-code: when a supervisor unit owns the daemon, no client may spawn its own.
+# Without this, every client (shell, MCP server, agent) that finds the socket missing —
+# after a settings edit, a crash, or the idle exit — forks an UNCAPPED daemon into its own
+# cgroup, and that daemon outlives it. See cocoindex/ccc-daemon.service.wsl.
+# The guard is the unit file itself, not an OS test: no unit -> no supervisor -> stock
+# lazy-spawn behavior (macOS), which is what we want there.
+# An `if` block, not `test && export`: as the LAST statement, the latter makes .zshenv itself
+# exit 1 wherever the unit is absent (macOS), which aborts any later `setopt ERR_EXIT; source`.
+if [[ -e "$HOME/.config/systemd/user/ccc-daemon.service" ]]; then
+  export COCOINDEX_CODE_DAEMON_SUPERVISED=1
+fi

@@ -514,6 +514,32 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     expect(out).toContain("1 built, 0 skipped, 1 failed");
   });
 
+  test("build strips COCOINDEX_CODE_DAEMON_SUPERVISED so the shadow daemon can still self-spawn", () => {
+    // zsh/zshenv exports this whenever the systemd unit exists, so every real invocation
+    // inherits it. The shadow tree has no supervisor: leaked through, it makes each shadow
+    // `ccc index` wait out the client's 30s socket timeout and fail. Regression 2026-08-08.
+    const home = makeHome();
+    makeGlobalSettings(join(home, ".cocoindex_code"), "old/model");
+    makeProject(join(home, "proj-a"));
+
+    const { out, code } = runScript(
+      [
+        "build",
+        "--home",
+        home,
+        "--model",
+        "new/model",
+        "--ccc-bin",
+        FAKE_CCC,
+        "--yes",
+      ],
+      { COCOINDEX_CODE_DAEMON_SUPERVISED: "1" },
+    );
+    expect(code).toBe(0);
+    expect(out).not.toContain("Daemon did not start in time");
+    expect(out).toContain(`BUILD ${join(home, "proj-a")}: chunks=`);
+  });
+
   test("build times out via AbortSignal (not a hang) when ccc index never returns", () => {
     const home = makeHome();
     makeGlobalSettings(join(home, ".cocoindex_code"), "old/model");

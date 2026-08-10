@@ -703,6 +703,12 @@ async function cmdBuild(
     COCOINDEX_CODE_DIR: ctx.shadowDir,
     COCOINDEX_CODE_DB_PATH_MAPPING: mappingEnv,
   };
+  // The shadow daemon lives under COCOINDEX_CODE_DIR and has NO supervisor — the systemd unit
+  // owns the LIVE daemon only. zsh/zshenv exports COCOINDEX_CODE_DAEMON_SUPERVISED=1 for live
+  // clients; inherited here it would forbid the client from spawning a shadow daemon, so every
+  // shadow `ccc index` would wait out _wait_for_daemon's 30s for a socket nobody will create
+  // and fail with "Daemon did not start in time". liveEnv deliberately KEEPS the flag.
+  delete shadowEnv.COCOINDEX_CODE_DAEMON_SUPERVISED;
 
   // Always restart the shadow daemon fresh before indexing: COCOINDEX_CODE_DB_PATH_MAPPING is
   // read once and cached for the daemon PROCESS's whole lifetime (settings.py module global),

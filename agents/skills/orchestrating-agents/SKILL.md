@@ -283,7 +283,7 @@ P5はP2へ吸収済みであり、この番号を別のgateへ再利用しない
 | P3 PRE-SEND FLOOR | 目安十行超の報告は先にfileへ保存し、利用可能な文章検査を通す。報告・設計・登録のいずれでも、数値にはsourceと測定体制を添え、条件差を明記する。体制のない値を設計根拠にしない。 | report path、検査command/resultまたは不存在確認、数値→source/conditions表。 |
 | P4 ROUND-TRIP ECONOMY | briefを自己完結させ、全指摘に修復経路を求める。同型指摘が二巡続けば成果物でなく仕様へ戻す。 | `references/delegation-contracts.md` が SOLE home。brief id、round log、spec差分。 |
 | P6 VERIFY-NOT-TRUST | 載荷claimは自前計算、一次資料、独立再計算のいずれかで確定する。達成級の語もclaimであり、独立audit前は前進の報告とする。 | claim→evidence表、blind audit、scope付きverdict。不一致claimは裁定まで公表停止。 |
-| P7 DEVICE-BUDGET | pilotも含め、数値計算・parallel test・resident serviceは算術memory boundとaggregate資源envelopeのadmission後にだけ発射する。互換で空いたGPUがあればCPUを拒否し、auto parallelismを使わない。 | `references/measurement-and-resources.md` P7がSOLE home。dispatch marker、envelope、`agent-resource-run` verdict、高水位。 |
+| P7 DEVICE-BUDGET | pilotも含め、数値計算・parallel test・resident serviceは算術memory boundとaggregate資源envelopeのadmission後にだけ発射する。互換で空いたGPUがあればCPUを拒否し、auto parallelismを使わない。CARVE-OUT: host/systemd所有の常駐daemon（例 `ccc-daemon.service`）はdispatchが所有せず、ceilingはそのunitに一度だけ宣言される — per-call envelopeを被せない。所有と検証は`driving-cocoindex` LAW(e)/CC7。 | `references/measurement-and-resources.md` P7がSOLE home。dispatch marker、envelope、`agent-resource-run` verdict、高水位。 |
 | P8 FOOTING | 数値は比較軸が一致した土俵だけで差として読み、凍結基準の到達可能性を本走前に検算する。 | 同 reference P8。全軸差分表、到達可能性の式、独立再計算。 |
 | P9 CONFOUND-TABLE | 一変数の効果を問う前に交絡表を書く。機構の効果を主張するなら、機構を外した対照を同一条件で置く。 | 同 reference P9が SOLE home。交絡表、「機構なし」行、条件差が対象機構だけの照合。 |
 | P10 ARTIFACT-REUSE | 分単位以上の中間生成物は初回に保存し、指紋一致時だけ再利用する。更新・仕様変更・破損で失効させる。 | 同 reference P10。manifest、digest、input fingerprint、再構築理由。 |

@@ -60,6 +60,16 @@ if (command === "daemon" && sub === "stop") {
 if (command === "index") {
   const cwd = process.cwd();
 
+  // A shadow build has no supervisor, so the client MUST be allowed to spawn its own daemon.
+  // With COCOINDEX_CODE_DAEMON_SUPERVISED set, the real client takes the supervised branch
+  // (client.py _is_daemon_supervised -> _wait_for_daemon, no start_daemon), waits out 30s for a
+  // socket nobody will ever create, and raises DaemonStartError. Reproduce that here, or the
+  // suite silently passes on an env leak that breaks every real build (regression 2026-08-08).
+  if (process.env.COCOINDEX_CODE_DAEMON_SUPERVISED) {
+    process.stderr.write("Daemon did not start in time.\n");
+    process.exit(1);
+  }
+
   if (process.env.FAKE_CCC_FAIL && cwd.includes(process.env.FAKE_CCC_FAIL)) {
     process.stderr.write("fake ccc: simulated indexing failure\n");
     process.exit(1);

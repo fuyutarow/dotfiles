@@ -102,13 +102,90 @@ explicitly if you need the index back, and verify with `ccc status` before trust
 
 | Fact | Detail |
 |---|---|
-| Spawn | Lazy, self-daemonizing: any `ccc` command auto-spawns the daemon (`start_new_session=True`, i.e. `setsid`) if no live socket is found. Not launchd-registered — no plist anywhere, `launchctl list` shows nothing, `ccc daemon --help` has no install/enable subcommand. It survives its parent's exit only because it's detached into its own session, then orphan-reparented to PID 1. |
-| Boot behavior | Does **not** start on boot (no plist, no install path) — it only comes alive the next time a `ccc` command needs it and the socket is gone. |
+| Spawn | **LAZY-SPAWN (stock)**: any `ccc` command auto-spawns the daemon (`start_new_session=True`, i.e. `setsid`) if no live socket is found. Not launchd-registered — no plist anywhere, `launchctl list` shows nothing, `ccc daemon --help` has no install/enable subcommand. It survives its parent's exit only because it's detached into its own session, then orphan-reparented to PID 1. The spawn does NOT change cgroup, so the daemon lands in — and is bounded by — whichever client happened to start it. **SUPERVISED** overrides all of this: see §3a. |
+| Boot behavior | LAZY-SPAWN: does **not** start on boot (no plist, no install path) — it only comes alive the next time a `ccc` command needs it and the socket is gone. SUPERVISED: starts at login (and at boot, given `loginctl enable-linger`) and is restarted after every exit, so a client never needs to spawn one. |
 | Config-change restart | **PULL-BASED**, not manual: the daemon computes a settings-file mtime at boot and returns it on every handshake; the client detects a mismatch on the *next* connection and transparently restarts the daemon — one restart, on next use, no `ccc daemon restart` required after editing `global_settings.yml`. |
 | Uptime field | Backed by a monotonic-since-boot-awake clock, **not** wall-clock daemon age — it does not advance while the machine sleeps, so it silently undercounts real age across sleep/lid-close cycles. For true age, use `ps -o lstart -p $(cat ~/.cocoindex_code/daemon.pid)`, never the `doctor`/`daemon status` "Uptime" line. |
-| Logs | `~/.cocoindex_code/daemon.log`. Known, recurring `BrokenPipeError` / "Error during streaming response" crash noise on client disconnect — cosmetic, not a sign the daemon is unhealthy by itself. |
+| Logs | `~/.cocoindex_code/daemon.log`. Known, recurring `BrokenPipeError` / "Error during streaming response" on client disconnect. Cosmetic for HEALTH — but never cosmetic for RESOURCES: the line marks the moment a client died, and the daemon-side job it started keeps running (2026-08-08: a client died at 01:27, its index ran on for 1h40m at ~6 cores). Treat it as the timestamp to date a runaway from, not as noise to skip. |
 | Multi-project | One daemon serves every registered project (loads the embedder model once); `ccc daemon status` lists each project with an `idle`/`indexing` state — poll this before issuing a search if you want to avoid racing an in-flight (re)index. |
 | Index-job ownership | The `ccc index` CLI process is a thin client WATCHING a daemon-side job — killing the client (Ctrl-C, timeout, harness kill) does NOT stop indexing; the daemon carries the job to completion (observed live: a client killed at 473/853 files finished daemon-side minutes later). After any interrupted `ccc index`, poll `ccc daemon status` for `[indexing]`→`[idle]` rather than blindly re-running — and don't trust a search issued mid-build. |
+
+## 3a. Ownership and resource ceilings — SUPERVISED mode
+
+**Why the stock design cannot be capped in place.** Everything in §3 composes into one hazard.
+The daemon is where all compute happens; it is spawned by whichever client finds no socket; that
+spawn inherits the client's cgroup and then outlives the client. So the ceiling is decided by a
+race, a killed client does not stop the work, and any limit applied to one caller is discarded by
+the next spawn. Capping ccc is therefore an OWNERSHIP change, not a tuning change — and wrapping
+the `ccc` command does not achieve it, because the wrapper binds the caller while the work lives
+in a process that survives the caller.
+
+**The supervision switch already exists in ccc.** `COCOINDEX_CODE_DAEMON_SUPERVISED=1` is read
+independently by two sides (`client.py` `_is_daemon_supervised`, `daemon.py` at reaper
+construction). Client side: never call `start_daemon()`; on a missing socket, wait for it to
+reappear. Daemon side: disable the idle reaper. Set it for CLIENTS only — leaving it OFF inside
+the unit keeps the idle exit alive, and `Restart=always` then returns the multi-GiB model heap to
+the host on every idle cycle.
+
+**House implementation (WSL host, landed 2026-08-08).** One unit plus two config edits, no new code:
+
+| Piece | Where | Role |
+|---|---|---|
+| `ccc-daemon.service` | `dotfiles/cocoindex/ccc-daemon.service.wsl` → `~/.config/systemd/user/` | the sole owner; carries every ceiling, `Restart=always`, `UnsetEnvironment=COCOINDEX_CODE_DAEMON_SUPERVISED` |
+| client-side flag | `dotfiles/zsh/zshenv` | exports the flag, guarded on the UNIT FILE existing — so placement and de-authorization can never drift apart, and macOS stays LAZY-SPAWN untouched |
+| in-process caps | `envs:` in `global_settings.yml` | thread pools + engine backpressure; see below for why the unit alone is not enough |
+| activation | `mise run link:dots` then `mise run wsl:ccc-daemon` | two-step by design: link places the unit, the task enables it |
+
+**Enforceable vs silently ignored (this host, verified against a probe unit 2026-08-08).** The
+user manager delegates `cpu memory pids` only. `CPUQuota`, `CPUWeight`, `MemoryHigh`, `MemoryMax`,
+`MemorySwapMax`, `TasksMax`, `OOMPolicy` reach cgroup v2. `AllowedCPUs` (needs cpuset) and
+`IOWeight` / `IO*BandwidthMax` (need io) do NOT — and systemd accepts them without error, so a
+unit can look capped on an axis it never bounded. `Nice` and `IOSchedulingClass` work regardless,
+being syscalls rather than controllers. Confirm any claim by reading the unit's own cgroup files,
+never the property list you wrote.
+
+**Why `envs:` is required alongside the unit.** PyTorch sizes its thread pool from nproc and
+never consults the cgroup quota, so a quota alone yields full-width thread pools contending
+inside a narrow slice. `envs:` is applied inside the daemon at startup (`daemon.py`, right after
+settings load) — after numpy is imported but BEFORE `create_embedder()`, and torch's own import is
+deferred to the first model load, so thread-count variables still land in time. That timing is
+also why a shell `export` cannot cap a running daemon. Engine-side, `COCOINDEX_MAX_INFLIGHT_COMPONENTS`
+(default 1024) is the backpressure knob that dominates index-time heap. The engine's async worker
+threads scale with nproc and have NO environment knob — only `CPUQuota` bounds those.
+
+**No VRAM ceiling exists.** `embedding.device: cpu` (or an empty `CUDA_VISIBLE_DEVICES`) excludes
+the GPU entirely; that is the whole toolbox. Allocator variables tune fragmentation, not capacity;
+the one true per-process cap is a Python call with no ccc call site; MPS and MIG are unavailable
+on a consumer card. Never describe a GPU setting here as a memory limit.
+
+**Three traps that only exist under supervision** (all source-verified 2026-08-08):
+
+1. `ccc daemon restart` is NOT the mirror of `ccc daemon stop`. `cli.py`'s `daemon_restart()`
+   imports `start_daemon`/`stop_daemon` and calls them directly, never touching
+   `_connect_and_handshake()` — so `_is_daemon_supervised()` is never consulted. It forks a
+   second, uncapped daemon into the calling shell's cgroup, that process wins the socket bind
+   (it starts ~1s ahead of the supervisor's `RestartSec=2`), and ~2s later the supervisor's own
+   respawn unlinks and re-binds the same path — leaving the manual daemon alive, unreachable,
+   uncapped, and invisible to `ccc daemon status`. Always `systemctl --user restart ccc-daemon`.
+2. ANY stop verb aborts EVERY project's in-flight index on that daemon, not just the project you
+   were working on. The index coroutine is an untracked task and the process then hard-exits, so
+   nothing drains. Committed state on disk survives and a re-run resumes from `unchanged`, but
+   the current pass is lost. Poll `ccc daemon status` for `[indexing]` across ALL projects first.
+3. A shadow/throwaway ccc instance (anything pointed at its own `COCOINDEX_CODE_DIR`, notably
+   `scripts/ccc-swap.ts`'s blue-green build) has NO supervisor, so it MUST be allowed to
+   self-spawn. The supervision flag is exported shell-wide and would otherwise ride into it and
+   hang every shadow `ccc index` for 30s. `ccc-swap.ts` deletes the flag from its `shadowEnv`
+   for exactly this reason and keeps it in `liveEnv`; any new wrapper must do the same.
+
+**Verify a claim of boundedness:**
+
+```bash
+systemctl --user show ccc-daemon.service -p CPUQuotaPerSecUSec -p MemoryHigh -p MemoryMax -p MemorySwapMax -p TasksMax
+cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/app.slice/ccc-daemon.service/cpu.stat
+```
+
+`nr_throttled` rising is the only direct proof the CPU ceiling ever engaged. Measured before/after
+numbers live in `catalog.md` (2026-08-08 entry).
 
 ## 4. Search craft — routing around the doc-over-code bias
 
@@ -304,6 +381,19 @@ relative to a scripted reset→index loop across many projects is not something 
 Running `ccc daemon stop` before editing `global_settings.yml` for a dimension change removes
 the ambiguity outright — a freshly spawned daemon process cannot hold a stale LMDB handle for
 anything.
+
+REGIME QUALIFIER (2026-08-08). The paragraph above is the LAZY-SPAWN procedure. Under
+SUPERVISED (§3a) a bare `ccc daemon stop` no longer gives you a stopped daemon: the supervisor
+returns one in about two seconds, and it reads whatever is on disk at that moment — almost
+certainly the OLD file, since a human edit rarely finishes inside that window. Two supervised
+replacements, in order of preference: (1) edit `global_settings.yml` FIRST, then run
+`ccc reset --force && ccc index` — `ccc reset`'s first daemon call already goes through the
+handshake's settings-mtime check, which forces the same fresh-process boundary before any DB
+file is touched; (2) if you want a durably stopped daemon to inspect, use
+`systemctl --user stop ccc-daemon`, edit, then `systemctl --user start ccc-daemon`. Whether the
+two-second window alone still averts the stale-LMDB-handle failure is UNVERIFIED — do not rely
+on it. And note `scripts/ccc-swap.ts`'s blue-green path (§6c) sidesteps all of this by building
+in a shadow directory, which is one more reason to prefer it for anything fleet-wide.
 
 ### 6c. Fleet-wide swap: blue-green, and enumerate — never recall
 

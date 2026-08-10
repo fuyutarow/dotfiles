@@ -1,0 +1,78 @@
+# cocoindex-code daemon — owned by systemd, resource-capped.
+# Symlinked to ~/.config/systemd/user/ccc-daemon.service by scripts/link-dots.sh.
+# Enable with: mise run wsl:ccc-daemon
+#
+# WHY THIS UNIT EXISTS
+# --------------------
+# ccc's daemon is where all indexing and search compute happens, and by default it is
+# spawned lazily by whichever client happens to call `ccc` first (client.py start_daemon()
+# → subprocess.Popen(start_new_session=True)). That child inherits the CALLER's cgroup and
+# then outlives the caller. Measured 2026-08-08: a client died at 01:27 with a BrokenPipe;
+# its index kept running for 1h40m at 588% CPU / 4.4 GiB RSS inside a login-session scope,
+# starving six concurrent Julia runs (load 17 on 12 cores).
+#
+# Capping is therefore an OWNERSHIP problem, not a tuning problem. This unit makes systemd
+# the single owner; zsh/zshenv sets COCOINDEX_CODE_DAEMON_SUPERVISED=1 so no client may ever
+# spawn a competing, uncapped daemon (client.py:120-125 gates start_daemon on that var).
+#
+# NOT SET HERE, DELIBERATELY
+# --------------------------
+# - COCOINDEX_CODE_DAEMON_SUPERVISED is UNSET for the daemon itself (see UnsetEnvironment
+#   below). In the daemon process that flag disables the idle reaper (daemon.py:715, 243-249).
+#   We want the idle exit: the daemon leaves after `daemon.idle_timeout_minutes`, Restart=always
+#   brings back a fresh one, and the multi-GiB model heap is returned to the host.
+#   Two caveats, both measured 2026-08-08. (1) The directive is currently DEFENSIVE, not a fix
+#   for a live leak: `systemctl --user show-environment` has no such key, because a plain export
+#   in zshenv never reaches the user manager. (2) The idle exit does NOT fire while an MCP client
+#   holds a session open — its heartbeat resets the timer and `daemon.keep_alive_with_mcp`
+#   defaults true — so the reclaim benefit is conditional on no attached MCP client. No ccc MCP
+#   server is registered on this host today.
+# - AllowedCPUs= / IOWeight= / IOReadBandwidthMax= are omitted. This host delegates only
+#   `cpu memory pids` to the user manager; cpuset and io are absent, so those properties are
+#   ACCEPTED WITHOUT ERROR and then silently ignored (verified 2026-08-08 against a probe unit).
+#
+# `ccc daemon stop` will be undone by Restart=always. To actually stop it:
+#   systemctl --user stop ccc-daemon
+# NEVER run `ccc daemon restart` here. Unlike `stop`, it does not consult the supervision flag
+# at all (cli.py daemon_restart calls client.start_daemon directly): it forks a SECOND, uncapped
+# daemon into the calling shell's cgroup, wins the socket bind, and is then silently orphaned
+# when systemd's own respawn re-binds 2s later. Use `systemctl --user restart ccc-daemon`.
+
+[Unit]
+Description=cocoindex-code daemon (resource-capped)
+Documentation=file://%h/dotfiles/cocoindex/global_settings.yml
+# systemd's default 5-starts-in-10s is tripped by any crash recurring faster than RestartSec,
+# which leaves the unit permanently dead — and with clients forbidden to spawn, every ccc call
+# would then hang 30s and fail with no self-heal. Widen it so a transient burst survives, while
+# a true infinite crash loop is still eventually capped. These two keys belong to [Unit].
+StartLimitIntervalSec=120
+StartLimitBurst=8
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/ccc run-daemon
+Restart=always
+RestartSec=2
+
+# The daemon must keep its own idle-exit, so strip the client-side supervision flag
+# even if the user manager's environment happens to carry it.
+UnsetEnvironment=COCOINDEX_CODE_DAEMON_SUPERVISED
+
+# --- hard ceilings (enforceable here: cgroup v2 controllers cpu/memory/pids) ---
+CPUQuota=300%
+MemoryHigh=4G
+MemoryMax=6G
+MemorySwapMax=0
+TasksMax=256
+OOMPolicy=kill
+
+# --- always yield to the research workload (CPU only — see below) ---
+CPUWeight=20
+Nice=10
+# Kept for portability, but INERT on this host: every block device runs the `none` I/O
+# scheduler, which never consults per-process ioprio (only bfq/cfq do, and neither is offered
+# here). I/O yielding is NOT enforced; only the CPU levers above are real.
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target

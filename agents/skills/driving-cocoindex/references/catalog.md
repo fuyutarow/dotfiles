@@ -121,6 +121,35 @@ multiple (black-formatted) lines; a naive `rg '^\s*def __init__\(.*\) -> None:'`
 **2 of 9** — a 7-of-9 miss for line-based regex on real formatter-wrapped code. This is the
 concrete case for ccc grep's AST/structural, whitespace-invariant matching.
 
+## Daemon resource footprint — before/after supervision (2026-08-08, this host)
+
+Host: WSL2, 12 logical CPUs, 58 GiB RAM, RTX 3060 12 GiB, `granite-311m-multilingual-r2` on CPU.
+The "before" column is an unsupervised daemon indexing `firedancer` + `dotfiles`; the "after" is
+the same work under `ccc-daemon.service`. Procedure and the unit → `operations.md` §3a.
+
+| | before (LAZY-SPAWN, no ceiling) | after (SUPERVISED) |
+|---|---|---|
+| CPU, instantaneous | 588 % (≈6 of 12 cores) | 197 % (ceiling `CPUQuota=300%`) |
+| CPU, mean over the run | 560 % sustained across 1 h 43 m | — |
+| RSS peak | 4.85 GiB | 1.0 GiB |
+| threads | 73 | 27 |
+| cgroup | `…/session-994.scope` (a login session) | `…/app.slice/ccc-daemon.service` |
+| scheduling | default | `Nice=10`, `CPUWeight=20` |
+| quota engaged | n/a | `cpu.stat nr_throttled` 2 within 3 min |
+
+Ceilings in the unit as shipped: `CPUQuota=300%`, `MemoryHigh=4G`, `MemoryMax=6G`,
+`MemorySwapMax=0`, `TasksMax=256`, `OOMPolicy=kill`. Provisional — the 4G/6G pair was sized from
+the 4.85 GiB "before" peak, and the RSS drop is mostly `COCOINDEX_MAX_INFLIGHT_COMPONENTS` 1024→64
+rather than the ceiling biting, so re-measure after a full `firedancer` index and tighten.
+
+The occasion: a client died at 01:27 with `BrokenPipeError`; its index kept running until 03:07 at
+roughly 6 cores while six concurrent Julia processes got ~30 % each and load average sat at 17 on
+12 cores. Nothing warned, and the idle reaper could not fire because indexing counts as activity.
+
+Silently-ignored properties on this host (accepted by systemd, never applied — the user manager
+delegates `cpu memory pids` only): `AllowedCPUs`, `IOWeight`, `IOReadBandwidthMax`,
+`IOWriteBandwidthMax`, `MemoryZSwapMax` (no `CONFIG_ZSWAP` in this kernel at all).
+
 ## Markdown-corpus trial (2026-07-13, this host) — prose recall + the LANGUAGE-WALL
 
 Corpus: md-only mirror of the house `agents/skills/` tree (526 files / 5,432 chunks; 4.6MB

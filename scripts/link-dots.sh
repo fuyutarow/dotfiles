@@ -90,6 +90,12 @@ link agents/codex/hooks "$HOME/.codex/hooks"
 
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
 link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
+# The daemon needs a systemd owner or it is spawned uncapped by whichever client calls first.
+# Linking the unit is also what arms the client-side guard in zsh/zshenv, so the link and the
+# `export COCOINDEX_CODE_DAEMON_SUPERVISED=1` can never drift apart. Activate: mise run wsl:ccc-daemon
+if $IS_WSL; then
+  link cocoindex/ccc-daemon.service.wsl "$HOME/.config/systemd/user/ccc-daemon.service"
+fi
 
 # --- topgrade (govern which update steps run; e.g. disable flutter/tlmgr) ---
 link topgrade/topgrade.toml "$HOME/.config/topgrade.toml"

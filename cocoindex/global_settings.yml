@@ -47,9 +47,34 @@ embedding:
   query_params:
     prompt_name: query
 
+# Environment injected into the daemon process at startup (daemon.py:649-651), which runs
+# BEFORE create_embedder() and before torch is imported at all (the sentence-transformers
+# import is deferred to the first _get_model() call) — so thread-count vars set here are
+# honored, unlike a shell `export` against an already-running daemon, which does nothing.
+#
+# 2026-08-08  Added the thread/backpressure caps. Measured that day: the daemon ran 1h43m at
+#   588% CPU (≈6 of 12 cores) and 4.85 GiB peak RSS indexing firedancer + dotfiles, for a
+#   client that had died 1h40m earlier. Search is a support tool; it must yield. The hard
+#   ceilings live in cocoindex/ccc-daemon.service.wsl — these are the in-process complement,
+#   needed because PyTorch sizes its thread pool from nproc and never reads the cgroup quota.
+#   Values are provisional: re-measure peak RSS after a full firedancer index and tighten.
+envs:
+  # PyTorch / BLAS intra-op pools. Default without these is 6 threads (torch.get_num_threads()).
+  OMP_NUM_THREADS: "2"
+  MKL_NUM_THREADS: "2"
+  # HuggingFace tokenizers fork their own Rayon pool per call; off is the documented default
+  # for a long-lived server process.
+  TOKENIZERS_PARALLELISM: "false"
+  # Second lock on the GPU, independent of `embedding.device` above: cocoindex's GPU runner
+  # branches on an empty value explicitly (cocoindex/ops/.../runner.py _detect_num_gpus).
+  CUDA_VISIBLE_DEVICES: ""
+  # CocoIndex engine backpressure. Default 1024 in-flight components is what drives the
+  # multi-GiB heap during a large index; 64 bounds it. (Engine tokio worker threads still
+  # scale with nproc and have NO env knob — CPUQuota in the unit is what bounds those.)
+  COCOINDEX_MAX_INFLIGHT_COMPONENTS: "64"
+
 # To use a cloud embedding provider via LiteLLM instead, set `provider`/`model`
-# above and inject keys here. DO NOT commit real secrets — keep keys in the
-# machine's environment and reference them, or keep this block commented.
-# envs:
+# above and add keys to the `envs:` block. DO NOT commit real secrets — keep keys
+# in the machine's environment and reference them.
 #   OPENAI_API_KEY: ...
 #   VOYAGE_API_KEY: ...

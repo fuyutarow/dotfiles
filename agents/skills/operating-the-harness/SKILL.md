@@ -82,6 +82,7 @@ machine-absolute path still lands in a config you share across machines.
 | A behavioral nudge ("prefer X", "explain before editing") | **CLAUDE.md** (or a Skill) | advisory, cheap to state |
 | Knowledge needed only for *some* files | **path-scoped `.claude/rules/*.md`** (`paths:` glob) | defers tokens until a matching file is read |
 | A reusable procedure / domain expertise | **a Skill** (`SKILL.md`) | progressive disclosure; body loads only on invoke |
+| A **tie-break** for when two good rules conflict and nobody can ask | author it in `codifying-doctrine` **first**, then install it here | PURPOSE cut: that skill decides whether the rule sacrifices anything and what retires it; this one decides where it lives and what enforces it |
 | Something that **must happen every time** (format, log, guard) | **a hook** | deterministic; CLAUDE.md *cannot* enforce |
 | A hard allow/deny of a tool or path | **`settings.json` permissions** | enforced regardless of the model |
 | Proof that it worked | **a check Claude runs** (tests/build/lint/screenshot) | closes the loop so Claude iterates alone |

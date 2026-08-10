@@ -139,6 +139,7 @@ MUST NOT fire (with route):
 | `linting-prose` | PURPOSE cut — human-facing prose deliverables → there. SKILL.md prose is DUAL-READER (executor + auditor): floor (skill-check prose-debt WARNs) and judgment bar owned HERE (`references/architecture.md` §5). Counter-precedent: the 2026-07-24 mutual-deferral void (ledger). Seam: agrees in substance with linting-prose's cut; do not byte-diff. |
 | `raising-resolution` | owner-filter chain: its yield list routes skill craft here and harness contract to `operating-the-harness` (reciprocal edit landed 2026-07-02); inspect-before-assert runs as a silent sub-step inside every forge. |
 | `practicing-tiger-style` | PURPOSE cut: “Is the request to create, alter, audit, or trigger-test a SKILL.md rather than to apply a risk-calibrated code discipline?” **Yes** → this skill retains F1–F3 craft; **No** → `practicing-tiger-style` owns the risk-calibrated code ledger. |
+| `codifying-doctrine` | CARDINALITY/PURPOSE cut: “Is the artifact a task manual loaded by ONE executor for ONE class of task, or the trade-off ordering that governs actors ACROSS tasks when no procedure covers the case?” Manual → here. Tie-break → there. This skill remains the craft owner of `codifying-doctrine/SKILL.md` itself; reforging that file fires HERE, not there. Reciprocal row lives in its routing table. |
 
 **Co-fire clause (`operating-the-harness`).** On every skill authoring/edit, CO-FIRE: read that
 skill's commands-and-skills reference FIRST for the mechanical contract (frontmatter fields,

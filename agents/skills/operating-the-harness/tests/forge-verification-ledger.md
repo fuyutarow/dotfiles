@@ -183,3 +183,16 @@ MUST NOT fire (near-miss — each shares vocabulary with a FIRES row):
 | "what does Opus 5 cost per token?" | `claude-api` | names Claude, but it is the API not the harness |
 | 「誰にどう委任するか配役を決めて」 | `orchestrating-agents` | subagents appear in both; delegation policy is theirs |
 | 「`mise run check` の task を足して」 | `wiring-mise-tasks` | a runnable check, but the task graph is theirs |
+
+## 2026-08-08 — reciprocal row for `codifying-doctrine` (F2)
+
+Edit: one row added to §0's decision-reflex table — a tie-break for when two good rules conflict
+and nobody can ask is authored in `codifying-doctrine` FIRST, then installed here. PURPOSE cut:
+that skill decides whether the rule sacrifices anything and what retires it; this one decides
+where it lives and what enforces it. Its config-as-prose anti-pattern is that skill's D5 gate.
+Reciprocal row lives in `codifying-doctrine`'s routing table.
+
+**PROSE-DEBT waiver (dated 2026-08-08).** This commit leaves `operating-the-harness` at 27 long
+prose sentences and a 14-line version header — the pre-existing baseline, unchanged by this edit.
+The edit is a single table row. Queue position: clear at the next substantive reforge of this
+skill, not in a sibling's forge commit.

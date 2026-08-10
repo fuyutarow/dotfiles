@@ -154,3 +154,15 @@ Codex `quick_validate.py`は`Skill is valid!`。`skill-check.ts`はexit 0で長�
 Observed floor: 12 long prose sentences and 2 long table cells; exit 0.
 This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
 Queue: retain the existing reforge position; retire this waiver when the recorded classes reach 0.
+
+## 2026-08-08 — reciprocal row for `codifying-doctrine` (F2)
+
+Edit: one routing row added, typing the cut against the new sibling `codifying-doctrine`
+(CARDINALITY/PURPOSE — task manual for one executor vs. the trade-off ordering across tasks).
+This skill remains the craft owner of that file; reforging it fires HERE. The reciprocal row
+lives in `codifying-doctrine`'s routing table and its `tests/triggers.md` row C3.
+
+**PROSE-DEBT waiver (dated 2026-08-08).** This commit leaves `forging-skills` at 12 long prose
+sentences and 2 table cells >400 chars — the pre-existing baseline, unchanged by this edit. The
+edit is a single routing row and does not touch the debt-carrying sections. Queue position: clear
+at the next substantive reforge of this skill, not in a sibling's forge commit.

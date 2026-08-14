@@ -105,6 +105,21 @@ rule's SOLE home is the dual-reader bar, `architecture.md` §5, surfaced through
 stays with the semantic lenses. And prove any NEWLY added check fires —
 inject a known-bad string, watch it FAIL, revert. A gate never seen failing is decoration.
 
+**Wire it, or it is not a gate (F4).** "Run it over the whole collection whenever a description
+changed" is an instruction to a person, and people forge one skill at a time. In this repo that
+sentence held for two months while six orphan-reference FAILs and fifteen YAML-fragile
+descriptions accumulated, because every actual run was scoped to the one skill being forged. Put
+the collection sweep in whatever gate already runs unbidden — here `mise run lint:skills-floor`,
+inside `mise run lint`.
+
+**`--budget <path>` — the aggregate pass.** Given two or more directories the floor prints
+`LISTING <n> skills, <chars> charged per turn`: the name+description sum the harness injects on
+EVERY turn. With `--budget` it fails above the ceiling declared in that JSON file's
+`maxListingChars` and names the three largest spenders. Omit the flag and it only reports, so the
+floor stays portable — the ceiling belongs to a collection, never to this skill. When it binds,
+the answer is F4's: retire, merge, shorten, or raise the ceiling in the same commit with the
+reason. Raising it silently is the one move that defeats the whole mechanism.
+
 ## §6 Ship & maintain
 
 **Ship.** ONE atomic commit — SKILL.md + every reference + scripts, no dangling index

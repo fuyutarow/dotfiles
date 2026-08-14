@@ -98,6 +98,7 @@ depends = [
   "lint:bun",
   "lint:skills-index",
   "lint:skills-wiring",
+  "lint:skills-floor",
   "lint:gates",
 ]
 
@@ -148,6 +149,17 @@ exit $rc
 dir = "{{config_root}}"
 description = "Fail when a repo-owned skill is masked by a real dir in ~/.claude/skills, when ~/.agents/skills no longer points here, or when the provenance ledger drifts. Machine-state checks SKIP (not fail) on a fresh clone."
 run = "bun ~/dotfiles/scripts/skills-doctor.ts"
+
+# forging-skills' own floor, run over the WHOLE collection. It existed since the skill was forged
+# but was only ever invoked by hand on one skill at a time during a forge, so nothing swept the
+# rest: six orphan-reference FAILs sat in turnstile-spin from 2026-06-19 until 2026-08-15, and
+# fifteen plain-scalar descriptions waited for the one ': ' that would break a strict parser
+# (compiling-latex found it). --budget adds the F4 STANDING check the per-skill pass cannot make:
+# what the collection charges every turn, against a declared ratchet.
+[tasks."lint:skills-floor"]
+dir = "{{config_root}}"
+description = "Structural floor over every skill (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget"
+run = "bun agents/skills/forging-skills/scripts/skill-check.ts --budget agents/skills-listing-budget.json agents/skills/*/"
 
 [tasks."lint:gates"]
 dir = "{{config_root}}"

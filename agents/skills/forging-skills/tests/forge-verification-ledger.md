@@ -166,3 +166,53 @@ lives in `codifying-doctrine`'s routing table and its `tests/triggers.md` row C3
 sentences and 2 table cells >400 chars — the pre-existing baseline, unchanged by this edit. The
 edit is a single routing row and does not touch the debt-carrying sections. Queue position: clear
 at the next substantive reforge of this skill, not in a sibling's forge commit.
+
+## 2026-08-15 — F4 STANDING added: the collection's standing cost and retirement
+
+**The void this closes.** Every gate and every pipeline step was per-skill or pairwise. F1 judges
+one manual, F3 verifies one manual, F2 types the cut between two. Step 0 gates ADMISSION. Nothing
+gated the sum, and nothing ever re-asked whether an existing member still earned its slot — a
+collection could grow monotonically while every single admission was individually correct.
+
+**Measured on the day (`agents/skills`, 60 skills).** 56,420 chars of name+description charged on
+every turn. 18 descriptions over 1024 (44% of the total). **13 sat within 12 chars of the 1500
+per-skill cap** — an allowance being spent, not a length being chosen. That number is the evidence
+the void is real: a cap with no total produces exactly this shape.
+
+**Second finding, same class.** `scripts/skill-check.ts` existed since this skill's forge but was
+only ever invoked by hand on ONE skill during a forge. Nothing swept the collection. Consequence,
+found by the first sweep: 6 orphan-reference FAILs in `turnstile-spin` standing since 2026-06-19,
+and 15 plain-scalar descriptions each one `': '` away from breaking a strict YAML parser —
+`compiling-latex` had already broken and was being silently skipped by the `skills` CLI. Floor now
+runs from `mise run lint:skills-floor`, inside `mise run lint`. A check nobody runs is not a gate.
+
+**Artifacts.** `agents/skills-listing-budget.json` (declared ceiling, a RATCHET — not an estimate
+of what the platform affords; nobody here has that number) + `skill-check.ts --budget` reporting
+`LISTING <n> skills, <chars> charged per turn` and failing above the ceiling + the retirement
+answer required whenever it binds. No budget file → report only, so the floor stays portable.
+
+**Seam with `operating-the-harness`, sharpened rather than moved.** The NUMBERS stay theirs
+(per-skill cap, platform limit, truncation). The SPEND is here: what the total may be, and which
+member is retired when it binds. A budget with an owner for the cap but none for the decision is
+how 13 descriptions came to sit at the cap.
+
+**Gate-fires-red proof.** (a) ceiling at 56,419 with 56,420 measured → `FAIL listing budget:
+56420 chars > 56419`, exit 1, naming the three largest. (b) non-numeric `maxListingChars` → FAIL.
+(c) missing budget file → FAIL. (d) one directory → no aggregate line, exit 0, so a per-skill
+forge run is undisturbed. (e) **the gate fired on its own author**: adding F4's trigger words to
+this description took the collection to 56,582 and turned `lint:skills-floor` red before the
+ceiling moved. The ceiling was raised to 56,582 in the same commit with the reason recorded in
+`raises[]` — the mechanism working, not an exception to it.
+
+**Not done, deliberately.** No skill was retired. F4 gives the collection a ceiling and a place to
+record the trade; deciding WHICH member goes is a judgment for the humans who own the collection,
+and making that call inside the commit that builds the gate would be the gate authoring its own
+first verdict. The 18 descriptions over 1024 are the obvious first docket.
+
+**PROSE-DEBT waiver (dated 2026-08-15).** Floor after this change: 15 long prose sentences (from
+12) and 2 table cells >400 chars. The 3 added sentences are the F4 gate row, the seam sentence,
+and the LAW clause — each load-bearing and measured against the HEAD baseline. Queue position:
+unchanged, clear at the next substantive reforge. Verification tier: solo — F2/F3 fleets were not
+re-run, since the LAW clause and the new gate add a transition without re-typing any existing
+sibling cut. That waiver is `references/verifying.md` §7's scale calibration, recorded here rather
+than assumed.

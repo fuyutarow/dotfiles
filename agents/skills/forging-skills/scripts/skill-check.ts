@@ -11,6 +11,15 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 let failures = 0;
 
+/**
+ * Per-skill listing cost, accumulated across every directory this run checked. The name and the
+ * description are what the harness injects into EVERY turn, for every installed skill — so the
+ * quantity a collection actually spends is this sum, and no per-skill cap can bound it. A cap
+ * with no total is why 13 of this repo's descriptions sat within 12 chars of the 1500 limit:
+ * everyone spends their full allowance. Reported always; gated only with --budget.
+ */
+const listingCost: { name: string; chars: number }[] = [];
+
 function fail(directory: string, message: string): void {
   process.stdout.write(`FAIL ${directory}: ${message}\n`);
   failures += 1;
@@ -205,6 +214,12 @@ async function checkDirectory(input: string): Promise<void> {
       "plain-scalar description — any ': ' inside will break YAML parsing (observed 2026-07-02); use >-",
     );
   }
+  if (description !== undefined) {
+    listingCost.push({
+      name,
+      chars: [...name].length + [...description].length,
+    });
+  }
   if (description === undefined) {
     fail(directory, "description: missing or empty");
   } else if ([...description].length > 1500) {
@@ -270,6 +285,57 @@ async function checkDirectory(input: string): Promise<void> {
   }
 }
 
+/**
+ * F4 STANDING, mechanical half. Reports what the checked collection charges every turn, and — only
+ * when a budget file is named — refuses growth past the declared ceiling.
+ *
+ * The ceiling is a RATCHET, not an estimate of what the platform can afford: nobody here has a
+ * verified number for that. Its whole job is to make growth a deliberate, reviewable act instead
+ * of a sum nobody watches. Lowering it costs nothing. Raising it means editing the declared number
+ * in the same commit as the skill that needed the room, which puts the trade in the diff where a
+ * human sees it. The judgment the number cannot make — retire, merge, or pay — belongs to the
+ * skill, not here. No budget file → report only, so the check stays portable to other repos.
+ */
+async function reportListingBudget(budgetPath: string | undefined): Promise<void> {
+  if (listingCost.length < 2) return; // a single-skill forge has no collection to weigh
+  const total = listingCost.reduce((sum, s) => sum + s.chars, 0);
+  process.stdout.write(
+    `LISTING ${listingCost.length} skills, ${total} chars charged per turn\n`,
+  );
+  if (budgetPath === undefined) return;
+  if (!existsSync(budgetPath)) {
+    process.stdout.write(`FAIL listing budget: ${budgetPath} does not exist\n`);
+    failures += 1;
+    return;
+  }
+  let max: unknown;
+  try {
+    max = JSON.parse(await Bun.file(budgetPath).text())?.maxListingChars;
+  } catch (error) {
+    process.stdout.write(
+      `FAIL listing budget: ${budgetPath} is not readable JSON — ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    failures += 1;
+    return;
+  }
+  if (typeof max !== "number") {
+    process.stdout.write(
+      `FAIL listing budget: ${budgetPath} has no numeric maxListingChars\n`,
+    );
+    failures += 1;
+    return;
+  }
+  if (total > max) {
+    const worst = [...listingCost].sort((a, b) => b.chars - a.chars).slice(0, 3);
+    process.stdout.write(
+      `FAIL listing budget: ${total} chars > ${max} declared in ${budgetPath}. ` +
+        "Retire a skill, merge two, shorten a description, or raise the ceiling in this same " +
+        `commit and say why. Largest: ${worst.map((s) => `${s.name} ${s.chars}`).join(", ")}\n`,
+    );
+    failures += 1;
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -277,6 +343,7 @@ async function main(): Promise<void> {
       parameters: ["[directories...]"],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
+      flags: { budget: { type: String } },
     },
     undefined,
     Bun.argv.slice(2),
@@ -286,6 +353,7 @@ async function main(): Promise<void> {
     ? [process.cwd()]
     : directories)
     await checkDirectory(directory);
+  await reportListingBudget(parsed.flags.budget);
   process.exit(failures === 0 ? 0 : 1);
 }
 

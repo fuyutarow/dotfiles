@@ -1,0 +1,16 @@
+{
+  "maxListingChars": 56582,
+  "measuredOn": "2026-08-15",
+  "skillsAtMeasurement": 60,
+  "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
+  "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
+  "raises": [
+    {
+      "date": "2026-08-15",
+      "from": 56420,
+      "to": 56582,
+      "spentBy": "forging-skills",
+      "reason": "F4 STANDING itself. The gate cannot be reached without trigger words in the owning skill's description, so the collection pays 162 chars once to make every future addition visible. The gate fired red on this very edit before the ceiling moved, which is the mechanism working rather than an exception to it."
+    }
+  ]
+}

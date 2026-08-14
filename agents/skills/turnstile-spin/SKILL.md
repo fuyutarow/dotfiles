@@ -64,7 +64,18 @@ The user pasted the prompt. You are in a multi-step dialog. Detect what you can,
 
 9. **Worker deploy.** Run `bun scripts/worker-deploy.ts --name turnstile-siteverify-<project-slug>` with `WIDGET_SECRET` exported. Report the Worker URL on `status: ok`. On `set_secret_failed`, the Worker deployed but `TURNSTILE_SECRET_KEY` is not set on it; surface the error, then retry with `echo "$WIDGET_SECRET" | npx wrangler secret put TURNSTILE_SECRET_KEY --name <returned worker_name>` before running validation.
 
-10. **Frontend edits.** State the contract: "I'll add the widget + gate the existing submit handler on `success === true`. The existing handler logic stays the same." Ask "yes" / "show". **[wait for user]** If "show", print unified diffs and ask again. Do NOT propose alternate behavior (mail delivery, custom backends).
+10. **Frontend edits.** Load the snippet file for the framework Step 6 detected (table below) and start from it — do not write the markup from memory. State the contract: "I'll add the widget + gate the existing submit handler on `success === true`. The existing handler logic stays the same." Ask "yes" / "show". **[wait for user]** If "show", print unified diffs and ask again. Do NOT propose alternate behavior (mail delivery, custom backends).
+
+    | Step 6 detected | Load |
+    |---|---|
+    | no JS framework / static site | `references/vanilla-html.md` |
+    | Next.js, `app/` directory | `references/nextjs-app.md` |
+    | Next.js, `pages/` directory | `references/nextjs-pages.md` |
+    | Astro | `references/astro.md` |
+    | SvelteKit | `references/sveltekit.md` |
+    | Hugo | `references/hugo.md` |
+
+    None of these match? Adapt `references/vanilla-html.md` — it is the framework-free form, and every other file is that same markup moved into a framework's rendering model. Whatever you write still carries `data-action="turnstile-spin-v1"`.
 
 11. **Validation.** Run `bun scripts/validate.ts`. Report each check as it passes. If any fails, surface the error and stop. **[wait for user if anything fails]**
 

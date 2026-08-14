@@ -38,11 +38,14 @@
 #     `ccc reset` / reindex is required (CPU vs GPU fp32 differ far below ranking resolution).
 #     Cost: query embedding moves to CPU, and a full reindex of a large project is slower.
 #     Revert with `device: cuda` (or delete the key) plus `ccc daemon stop`.
+#   2026-08-12  device cpu → unset. Firedancer's search index must finish promptly, and the
+#     operator explicitly assigned GPU capacity to ccc indexing. Leaving the key unset keeps
+#     this shared file cross-platform: SentenceTransformers selects CUDA on WSL and the local
+#     accelerator on macOS. The current Firedancer index is rebuilt after this change.
 
 embedding:
   provider: sentence-transformers
   model: ibm-granite/granite-embedding-311m-multilingual-r2
-  device: cpu
   indexing_params: {}
   query_params:
     prompt_name: query
@@ -65,9 +68,6 @@ envs:
   # HuggingFace tokenizers fork their own Rayon pool per call; off is the documented default
   # for a long-lived server process.
   TOKENIZERS_PARALLELISM: "false"
-  # Second lock on the GPU, independent of `embedding.device` above: cocoindex's GPU runner
-  # branches on an empty value explicitly (cocoindex/ops/.../runner.py _detect_num_gpus).
-  CUDA_VISIBLE_DEVICES: ""
   # CocoIndex engine backpressure. Default 1024 in-flight components is what drives the
   # multi-GiB heap during a large index; 64 bounds it. (Engine tokio worker threads still
   # scale with nproc and have NO env knob — CPUQuota in the unit is what bounds those.)

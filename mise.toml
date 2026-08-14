@@ -97,6 +97,7 @@ depends = [
   "lint:zsh",
   "lint:bun",
   "lint:skills-index",
+  "lint:skills-wiring",
   "lint:gates",
 ]
 
@@ -143,6 +144,11 @@ done
 exit $rc
 '''
 
+[tasks."lint:skills-wiring"]
+dir = "{{config_root}}"
+description = "Fail when a repo-owned skill is masked by a real dir in ~/.claude/skills, when ~/.agents/skills no longer points here, or when the provenance ledger drifts. Machine-state checks SKIP (not fail) on a fresh clone."
+run = "bun ~/dotfiles/scripts/skills-doctor.ts"
+
 [tasks."lint:gates"]
 dir = "{{config_root}}"
 description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
@@ -185,8 +191,12 @@ run = "bun test cocoindex/tests"
 
 [tasks."test:scripts"]
 dir = "{{config_root}}"
-description = "House Bun-script floor tests, including proof-of-fire fixtures"
-run = "bun test agents/skills/writing-bun-scripts/tests"
+description = "This repo's own script tests (scripts/tests) plus the house Bun-script floor tests and their proof-of-fire fixtures"
+# scripts/tests/ was outside every test task until 2026-08-14 — link-skills.ts shipped with a
+# characterization suite that `mise run test` never ran. Both roots are named explicitly because
+# `bun test scripts/tests` is a substring filter, not a path: it also matches
+# agents/skills/writing-bun-scripts/tests, which is confusing rather than deliberate.
+run = "bun test scripts/tests agents/skills/writing-bun-scripts/tests"
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
 # lint.depends: dotfiles has no reports/memos to scan (they live in research repos).
@@ -445,3 +455,13 @@ run = 'bun ~/dotfiles/scripts/install-mcp.ts'
 [tasks."link:skills"]
 description = "Link agents/ commands and skills into AI tools' config directories"
 run = 'bun ~/dotfiles/scripts/link-skills.ts'
+
+# Third-party skills. The bare `bunx skills add` is deliberately NOT the documented entrypoint:
+# without -g it writes four paths into the current directory, without --skill it installs every
+# skill the source repo ships, and `add` overwrites a same-named directory with no prompt — all
+# three measured against skills@1.5.22. The wrapper pins the version, forces -g (so the bytes
+# land in agents/skills via ~/.agents/skills) and refuses a name this repo already owns.
+[tasks."skills:add"]
+dir = "{{config_root}}"
+description = "Vendor a third-party skill into agents/skills/. Usage: mise run skills:add -- <owner/repo> --skill <name> [--skill <name>…] [--dry-run]"
+run = 'bun ~/dotfiles/scripts/vendor-skill.ts'

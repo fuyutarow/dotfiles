@@ -15,6 +15,9 @@
 //   (d) ~/.codex/skills -> unlinked only if its raw target is EXACTLY "<dotfiles>/agents/commands"
 //       (cleanup of one specific historical misconfiguration).
 // Real plugin-installed skill directories (not symlinks) are never touched by any of the four.
+// A real directory occupying a name this repo DOES own is reported as "SHADOWED: …" rather than
+// the generic skip, because that case is a defect and not content worth protecting. It is still
+// left untouched here; `mise run lint:skills-wiring` is the check that actually fails on it.
 //
 // Two printed strings intentionally hardcode a literal "~/..." rather than interpolating the
 // actual home path — this reproduces the ORIGINAL shell's own quirk (its echo used a
@@ -294,11 +297,22 @@ function main(): void {
         }
         continue;
       }
-      linkPath(
-        `${dotfilesSkillsDir}/${name}`,
-        `${claudeSkillsDir}/${name}`,
-        dryRun,
-      );
+      // SHADOW report. linkPath's refusal to clobber a real directory is correct and stays, but
+      // its generic "skip (exists, not symlink)" line reads the same whether the destination is
+      // foreign content worth protecting or a stale copy MASKING this repo's own skill. Only the
+      // second case is a defect, and only here can it be told apart — the loop already knows the
+      // repo owns this name. Eight skills were masked this way for ~3 months behind that generic
+      // line. Naming the consequence is all that changes; the exit status stays 0 (this script is
+      // a tolerant linker, never a gate) and `mise run lint:skills-wiring` is what actually fails.
+      const claudeDst = `${claudeSkillsDir}/${name}`;
+      if (!isSymlinkOrAbsent(claudeDst)) {
+        print(
+          `SHADOWED: ${claudeDst} is a real path — agents/skills/${name} is NOT in use ` +
+            "(run: mise run lint:skills-wiring)",
+        );
+        continue;
+      }
+      linkPath(`${dotfilesSkillsDir}/${name}`, claudeDst, dryRun);
     }
 
     // Prune renamed/deleted skills (b): the loop above only ADDS, so a rename leaves the old

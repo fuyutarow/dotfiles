@@ -84,6 +84,14 @@ link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 
+# --- third-party skill provenance ledger ---
+# `bunx skills add -g` records where each vendored skill came from in ~/.agents/.skill-lock.json.
+# That file sits one level ABOVE ~/.agents/skills (which link:skills points at agents/skills), so
+# it would otherwise stay outside the repo and the provenance would never be committed. Measured:
+# the CLI writes THROUGH this symlink and leaves it intact, so the ledger lands in git by itself.
+# 1 source -> 1 destination, so it belongs here and not in link:skills.
+link agents/skills-lock.json "$HOME/.agents/.skill-lock.json"
+
 # --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
 link agents/codex/hooks.json "$HOME/.codex/hooks.json"
 link agents/codex/hooks "$HOME/.codex/hooks"

@@ -275,6 +275,51 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
   });
 });
 
+describe("link-skills: SHADOW report", () => {
+  test("a real dir occupying a name this repo OWNS is named, not folded into the generic skip", () => {
+    const dotfiles = makeDotfiles(["cloudflare"]);
+    const home = makeHome();
+    mkdirSync(`${home}/.claude/skills/cloudflare`, { recursive: true });
+    writeFileSync(
+      `${home}/.claude/skills/cloudflare/SKILL.md`,
+      "# stale copy\n",
+    );
+
+    const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
+    // Still a tolerant linker: it reports and moves on, it does not become a gate.
+    expect(code).toBe(0);
+    expect(out).toContain(
+      `SHADOWED: ${home}/.claude/skills/cloudflare is a real path — agents/skills/cloudflare is NOT in use`,
+    );
+    expect(out).not.toContain(
+      `skip (exists, not symlink): ${home}/.claude/skills/cloudflare`,
+    );
+    // And it still refuses to touch what it found.
+    expect(isSymlink(`${home}/.claude/skills/cloudflare`)).toBe(false);
+    expect(lstatSync(`${home}/.claude/skills/cloudflare`).isDirectory()).toBe(
+      true,
+    );
+    cleanup(dotfiles, home);
+  });
+
+  test("dry-run reports the shadow too (it is a finding, not an action)", () => {
+    const dotfiles = makeDotfiles(["cloudflare"]);
+    const home = makeHome();
+    mkdirSync(`${home}/.claude/skills/cloudflare`, { recursive: true });
+
+    const { out, code } = run([
+      "--dotfiles",
+      dotfiles,
+      "--home",
+      home,
+      "--dry-run",
+    ]);
+    expect(code).toBe(0);
+    expect(out).toContain("SHADOWED:");
+    cleanup(dotfiles, home);
+  });
+});
+
 describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
   test("an existing matching symlink at driving-claude is unlinked, never relinked", () => {
     const dotfiles = makeDotfiles(["driving-claude", "other-skill"]);

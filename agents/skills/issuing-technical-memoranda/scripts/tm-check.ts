@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * tm-check — the mechanical floor for a technical memorandum's WRAPPER.
  *
@@ -12,6 +11,8 @@
  *
  * Usage: bun scripts/tm-check.ts <file.md> [more.md ...]
  */
+
+import { cli } from "cleye";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUIRED = ["tm", "title", "date", "author", "authority", "release", "to"] as const;
@@ -63,7 +64,47 @@ const RETRO_TRIAD = [
 const EXEMPT =
   /no primary source|not a standard|isn't a standard|retro-attribut|my own call|my call for this|標準では?ない|一次資料は?(無|な)い|自分の判断|独自の/i;
 
-const files = Bun.argv.slice(2);
+// Argv goes through Cleye rather than being read raw: it is what gives this script `--help`,
+// rejection of a typo'd flag before any file is opened, and the house floor's BG1 boundary.
+// The parameter is declared as a SPREAD because extra positionals are the point here — every
+// one of them is another memorandum to check, so there is no "excess" to refuse.
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new Error(`unknown option '--${flag}'`);
+  }
+}
+
+// Only argv parsing can throw here, and a usage error is not a memorandum defect: it exits 2, so
+// a caller can tell "you invoked me wrong" from "the document failed the floor" (exit 1).
+// Cleye handles an ordinary unknown flag itself, exiting 1 from inside the framework.
+function parseArgv() {
+  try {
+    return cli(
+      {
+        name: "tm-check.ts",
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        parameters: ["[files...]"],
+        help: {
+          description:
+            "Structural floor for a technical memorandum's wrapper: cover, authority, addressee, release.",
+        },
+      },
+      undefined,
+      Bun.argv.slice(2),
+    );
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exit(2);
+  }
+}
+
+const files: string[] = parseArgv()._.files;
 if (!files.length) {
   console.error("usage: bun scripts/tm-check.ts <file.md> [...]");
   process.exit(2);

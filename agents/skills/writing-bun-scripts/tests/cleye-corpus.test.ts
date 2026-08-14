@@ -33,6 +33,9 @@ const CORPUS = [
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
   { path: "agents/skills/forging-skills/scripts/skill-check.ts" },
   {
+    path: "agents/skills/issuing-technical-memoranda/scripts/tm-check.ts",
+  },
+  {
     path: "agents/skills/governing-research-documentation/scripts/research-docs-check.ts",
   },
   {

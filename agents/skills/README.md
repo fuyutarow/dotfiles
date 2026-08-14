@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**47 authored** here, plus **11 vendored** upstream (Cloudflare/Workers). This page is the human map;
+**47 authored** here, plus **12 vendored** upstream (Cloudflare/Workers, Mintlify). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -139,7 +139,9 @@ the research judgments themselves.
 
 ## Vendored (upstream)
 
-Third-party skills kept in-tree for convenience — Cloudflare/Workers platform docs, not authored here.
+Third-party skills kept in-tree for convenience — vendor platform docs, not authored here.
+Acquired through `mise run skills:add`; provenance is recorded in `agents/skills-lock.json`.
+The pre-2026-08-14 Cloudflare entries predate that path and carry no ledger record.
 
 - [`cloudflare`](cloudflare/) — Umbrella guide to the whole Cloudflare platform: Workers, storage, AI, networking, security.
 - [`workers-best-practices`](workers-best-practices/) — Write and review Cloudflare Workers code against production best practices and anti-patterns.
@@ -152,6 +154,7 @@ Third-party skills kept in-tree for convenience — Cloudflare/Workers platform 
 - [`cloudflare-email-service`](cloudflare-email-service/) — Send and receive transactional email via Cloudflare Email Sending and Routing.
 - [`turnstile-spin`](turnstile-spin/) — Wire Cloudflare Turnstile CAPTCHA into a project end-to-end — to bot-protect a form.
 - [`web-perf`](web-perf/) — Audit page-load speed and Core Web Vitals with Chrome DevTools MCP.
+- [`mintlify`](mintlify/) — Build and maintain Mintlify documentation sites: pages, navigation, components, API references.
 
 ---
 

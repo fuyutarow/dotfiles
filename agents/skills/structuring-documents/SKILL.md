@@ -115,6 +115,7 @@ it. Guards, in order of precedence:
 | `systematizing-knowledge` | CARDINALITY cut. A CORPUS of papers → there (ledger, method-fit synthesis, optional taxonomy). A single document's internal structure → here. |
 | `forging-skills` | A `SKILL.md`'s model-facing prose → there. General internal/design docs → here. |
 | `governing-research-documentation` | CARDINALITY + LIFECYCLE cut. One document's information architecture → HERE. Admission, authority, evidence lineage, review, retirement, and deletion across a research-document portfolio → there. |
+| `issuing-technical-memoranda` | **WRAPPER-vs-BODY cut** (phrasing owned there; agrees in substance — do not byte-diff). Runtime question: *is the fix inside the body's section graph, or in the wrapper that makes the doc circulable?* MECE, DAG, section order, 目標規定文, 重点先行 → HERE. A memo's cover block, authority line, addressee, release, stable id → there. Co-fire order: that skill first, then HERE on the body it wraps. |
 
 ## Fire / no-fire
 
@@ -122,7 +123,9 @@ FIRES: "この設計書/README/spec/notes を再構成して" · 議論や数字
 MECE になっているか · 前方参照が多い / 章の順序がおかしい · 認識体系に一貫性がない ·
 restructure a sprawling doc without losing the argument · a model-facing design doc that's disorganized.
 
-MUST NOT fire: sentence/word/register/tone/claim-calibration (→ `linting-prose`) · slide deck or
+MUST NOT fire: sentence/word/register/tone/claim-calibration (→ `linting-prose`) · a memo's
+cover/authority/addressee/release wrapper, or "who should this go to?"
+(→ `issuing-technical-memoranda`) · slide deck or
 its order or inserting visuals (→ `designing-presentations`) · synthesizing many papers
 (→ `systematizing-knowledge`) · a `SKILL.md`'s prose (→ `forging-skills`) · a short doc already
 well-organized.

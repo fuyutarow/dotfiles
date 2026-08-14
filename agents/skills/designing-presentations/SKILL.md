@@ -42,7 +42,7 @@ order or a slide); STEPs 5–9 build and deliver it.
 
 | STEP | Move | Owns the answer to | Depth |
 |---|---|---|---|
-| **0** | **Pick the medium** — deck vs prose memo vs live demo — *before* content | "Should this even be a deck?" | `references/context-playbooks.md` |
+| **0** | **Pick the medium** — deck vs prose memo vs live demo — *before* content. Prose memo → hand off to `issuing-technical-memoranda` | "Should this even be a deck?" | `references/context-playbooks.md` |
 | **1** | **Name ONE goal as a future audience STATE** | "After this, [audience] will [decide/do/be] X" | `references/audience-and-message.md` |
 | **2** | **Model the audience's initial state** on five axes | knowledge · stakes · doubts · decision-criteria · expertise | `references/audience-and-message.md` |
 | **3** | **Defeat the Curse of Knowledge** with concreteness | "Can a non-expert picture every load-bearing claim?" | `references/audience-and-message.md` |
@@ -58,6 +58,10 @@ order or a slide); STEPs 5–9 build and deliver it.
 If the artifact will be **read alone** rather than presented, a deck is the wrong medium — write a
 prose memo (the reasoning survives without you). If the value *is* a live reveal, it is a demo, not a
 slide walk. Choose the medium before the content. (Deck-vs-doc-vs-demo gate: `references/context-playbooks.md` §1.)
+
+**The prose-memo branch exits this skill.** `issuing-technical-memoranda` owns it. That means the
+cover block, the authority line, the addressee declaration, the release marking. This step decides
+only the medium, never the memo's wrapper.
 
 ### STEP 1 — One goal as a future state
 

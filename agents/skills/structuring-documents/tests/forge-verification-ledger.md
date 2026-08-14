@@ -22,6 +22,13 @@ Append on reforge; never overwrite. Fire/no-fire desk-check set lives inline in 
 
 **Open defects:** none recorded.
 
+**PROSE-DEBT waiver (2026-08-10).** This skill sits at 17 prose sentences >120 chars, a 1648-char
+description, a 10-line version header, and 1 table cell >400 chars — all PRE-EXISTING. The
+2026-08-10 seam edit (adding the `issuing-technical-memoranda` WRAPPER-vs-BODY row and its
+MUST-NOT-fire entry) was measured against the HEAD baseline and added **zero** debt in every
+class. Clearing the pre-existing debt is deferred; queue position: behind the description, which
+is the only class that costs anything at runtime (listing truncation). Re-measure on next reforge.
+
 **Retired decisions (do not resurrect):**
 - "PURPOSE cut — AXIS / orthogonal axes" framing of the linting-prose boundary — RETRACTED
   2026-07-04 (owner falsified: the document-organization surface is shared; orthogonality was an

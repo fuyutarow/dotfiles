@@ -1,6 +1,13 @@
 ---
 name: transcribing-media
-description: Transcribe speech from any audio or video file (or URL) to text / subtitles using Whisper, run through uv — no global installs. On Apple Silicon use mlx-whisper (fastest); portable fallback is faster-whisper (whisper-ctranslate2), reference fallback is openai-whisper. Pipeline is always video/audio → ffmpeg-decoded audio → Whisper STT → txt/srt/vtt/json. Trigger whenever the user wants to transcribe, caption, or subtitle a `.mp4`/`.mov`/`.m4a`/`.wav`/`.mp3` (or YouTube/URL), asks for 文字起こし / 字幕 / キャプション, or mentions whisper/STT/speech-to-text/transcription.
+description: >-
+  Transcribe speech from any audio or video file (or URL) to text / subtitles using Whisper, run
+  through uv — no global installs. On Apple Silicon use mlx-whisper (fastest); portable fallback
+  is faster-whisper (whisper-ctranslate2), reference fallback is openai-whisper. Pipeline is
+  always video/audio → ffmpeg-decoded audio → Whisper STT → txt/srt/vtt/json. Trigger whenever the
+  user wants to transcribe, caption, or subtitle a `.mp4`/`.mov`/`.m4a`/`.wav`/`.mp3` (or
+  YouTube/URL), asks for 文字起こし / 字幕 / キャプション, or mentions
+  whisper/STT/speech-to-text/transcription.
 ---
 
 # Media transcription via Whisper (uv)

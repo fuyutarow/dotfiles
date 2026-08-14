@@ -1,6 +1,9 @@
 ---
 name: linting-sui-move
-description: Lint/review Sui Move 2024 code against a house style guide the compiler cannot fully enforce — Move 2024 compile-forced rules (public struct, let mut, module;, default aliases), naming (EPascalCase error consts + #[error], snake_case fns, no get_), method syntax (self receiver), match exhaustiveness (no _ wildcard), container selection gas-cliffs (VecMap<100 else Table; no vector::remove in loops), vector macros (map!/filter!/fold!), BCS peel-order discipline, and mutable-reference security. Use when writing or reviewing .move files, a Sui Move package, Move.toml, or a Sui smart contract. Machine floor is `sui move build`; this skill owns the WARNING/INFO tier the compiler won't catch. Not for Aptos Move (framework differs) or non-Move code. English skill; respond in the user's language (default Japanese).
+description: >-
+  Lint/review Sui Move 2024 code against a house style guide the compiler cannot fully enforce —
+  Move 2024 compile-forced rules (public struct, let mut, module;, default aliases), naming
+  (EPascalCase error consts +
 ---
 
 # Linting Sui Move — house style for Move 2024

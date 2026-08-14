@@ -1,6 +1,8 @@
 ---
 name: mintlify
-description: Build and maintain documentation sites with Mintlify. Use when creating docs pages, configuring navigation, adding components, or setting up API references.
+description: >-
+  Build and maintain documentation sites with Mintlify. Use when creating docs pages, configuring
+  navigation, adding components, or setting up API references.
 license: MIT
 compatibility: Requires Node.js for CLI. Works with any Git-based workflow.
 metadata:

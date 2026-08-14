@@ -1,6 +1,14 @@
 ---
 name: writing-typescript
-description: House TypeScript style — prefer type inference or `satisfies` over `as` casts; use `??` (nullish coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with zod `safeParse` instead of hand-written type guards. Auto-activates when .ts/.tsx files are in play; also use when writing or reviewing TypeScript. Not for language-agnostic change discipline (→ implementing-and-debugging), prose (→ linting-prose), or Bun script/runtime craft — spawn, bunx, deps, script anatomy (→ writing-bun-scripts, whose zero-dep floor wins in standalone scripts).
+description: >-
+  House TypeScript style — prefer type inference or `satisfies` over `as` casts; use `??` (nullish
+  coalescing) not `||` for defaults; model absence with `undefined`/`null` before reaching for
+  `""` sentinels; replace `switch` and nested ternaries with `ts-pattern`; validate/narrow with
+  zod `safeParse` instead of hand-written type guards. Auto-activates when .ts/.tsx files are in
+  play; also use when writing or reviewing TypeScript. Not for language-agnostic change discipline
+  (→ implementing-and-debugging), prose (→ linting-prose), or Bun script/runtime craft — spawn,
+  bunx, deps, script anatomy (→ writing-bun-scripts, whose zero-dep floor wins in standalone
+  scripts).
 paths: "**/*.{ts,tsx}"
 ---
 

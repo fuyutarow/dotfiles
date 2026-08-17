@@ -173,22 +173,6 @@
             "command": "sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-uncited-diagnosis.ts"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-footing-splice.ts"
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -199,15 +183,6 @@
             "type": "command",
             "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
             "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-unanchored-registration.ts"
           }
         ]
       }

@@ -99,6 +99,7 @@ depends = [
   "lint:skills-index",
   "lint:skills-wiring",
   "lint:skills-floor",
+  "lint:harness-scope",
   "lint:gates",
 ]
 
@@ -160,6 +161,18 @@ run = "bun ~/dotfiles/scripts/skills-doctor.ts"
 dir = "{{config_root}}"
 description = "Structural floor over every skill (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget"
 run = "bun agents/skills/forging-skills/scripts/skill-check.ts --budget agents/skills-listing-budget.json agents/skills/*/"
+
+# operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
+# scope behind a cwd check. The check existed since that skill was forged but nothing ran it, so
+# three firedancer-gated hooks sat here for weeks after their properly-scoped successors had already
+# landed in that repo — firing twice inside it and no-oping everywhere else.
+# Root is agents/claude, NOT the default ~/.claude: the RENDERED settings.json legitimately carries
+# the machine-specific autoMode overlay (see scripts/render-claude-settings.ts), and P3 is about
+# what this repo SHARES, not what one machine ends up holding.
+[tasks."lint:harness-scope"]
+dir = "{{config_root}}"
+description = "Fail when a user-scope config or hook in this repo hardcodes one repo's absolute path (operating-the-harness P3)"
+run = "bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/claude"
 
 [tasks."lint:gates"]
 dir = "{{config_root}}"

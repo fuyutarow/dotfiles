@@ -48,33 +48,32 @@ inputs. This is a different execution model from autodiff.md §2.7 (tracing, not
 per-call dispatch) — reach for it only when XLA/TPU or large-scale NN throughput is the actual
 requirement, not for a one-off gradient.
 
-**`Lux.jl` is the default NN library for new work, and it does NOT require Reactant** `[dated:2026-08]`.
-Verified in Lux v1.31.4's `Project.toml`: `Reactant`, `Enzyme` and `Zygote` are all `[weakdeps]`
-wired through extensions (`ReactantExt` needs Reactant *and* Enzyme) — none is in `[deps]`. So
-"install Lux" and "take on the XLA toolchain" are separate decisions, and the older framing of Lux
-as Reactant's companion mis-routed every plain CPU NN job to Flux. Prefer Lux because parameters
-and state live OUTSIDE the model (`model(x, ps, st)`, pure layers), which is also what makes a
-parameter count or an operation-count audit tractable. `Flux.jl` is **not** deprecated
-`[dated:2026-08]` — it ships near-weekly and grew its own Reactant/Enzyme compilation path in 2026
-— but DiffEqFlux.jl (SciML) documents a `Flux.destructure` correctness bug that silently downgrades
-`Float64` parameters to `Float32` and recommends Lux, with an opt-in `FromFluxAdaptor()` for
-existing models. Keep Flux for existing Flux code; do not start there.
+**`Lux.jl` is the default NN library for new work; Reactant is opt-in** `[dated:2026-08]`.
+Lux v1.31.4 keeps `Reactant`/`Enzyme`/`Zygote` in `[weakdeps]`, never `[deps]`. Installing Lux
+therefore does not take on XLA. `Flux.jl` is maintained, not deprecated — for existing Flux code
+only (why: packages.md NN).
 
-**AD inside a Lux model ranks DIFFERENTLY from AD over a plain function — this reversal is the
-rule, not a nuance.** autodiff.md §2.7.3 governs ordinary host-side functions, where Enzyme beats
-Zygote. Inside a Lux training loop without Reactant, Lux's own AD manual ranks Zygote ABOVE
-standalone Enzyme, because standalone Enzyme may fail against Lux when Reactant is absent. Lux's
-published order `[dated:2026-08]`, CPU: (1) Reactant+Enzyme, (2) Zygote — best without Reactant,
-(3) Enzyme — only if the code mutates or Zygote fails, (4) ReverseDiff. Its tier table puts
-Reactant+Enzyme, ChainRules, Enzyme, Zygote and ForwardDiff ALL at Tier I: there is no first/second
-class among them, so do not argue for a backend by claiming a higher tier.
+**Backend by device × Reactant** `[dated:2026-08]`, from Lux's own manual. Read this table, not
+autodiff.md §2.7.3, whenever the differentiated thing is a Lux model:
 
-**Escalation rule, runtime-answerable.** Does this model need GPU/TPU throughput at
-JAX/PyTorch-class speed, or does it mutate in a way Zygote cannot differentiate? Neither → plain
-Zygote-backed Lux, no Reactant. Either → `Reactant` + `Enzyme`, and re-read the control-flow caveat
-above before trusting a traced function. Mooncake is NOT a house option yet: Tier III in Lux's
-table with GPU ❌ — and that row was last touched 2025-12, so re-verify it rather than cite it if
-someone proposes Mooncake.
+| Lux model on | with Reactant | without Reactant |
+|---|---|---|
+| CPU | `Reactant`+`Enzyme` — fastest, mutation-safe | `Zygote`; `Enzyme` only if it mutates or Zygote fails |
+| GPU, NVIDIA | `Reactant`+`Enzyme` | `Zygote`, but Lux names no "best" here; Enzyme's GPU column is ❓ |
+| GPU, non-NVIDIA | `Reactant`+`Enzyme` | `Zygote` — Lux's stated best |
+| TPU | `Reactant` — the ONLY supported option | — |
+
+**The order INVERTS between the two tables.** Over a plain function, Enzyme beats Zygote. Inside a
+Lux model, Zygote outranks standalone Enzyme: the latter may fail against Lux without Reactant.
+Applying one table's order in the other's domain is the mistake to avoid.
+
+Tier is never an argument. Reactant+Enzyme, ChainRules, Enzyme, Zygote and ForwardDiff share Tier I.
+Mooncake is not a house option: Tier III, GPU ❌. That row predates its 2026 GPU work — re-verify it,
+never cite it.
+
+**Escalation, runtime-answerable.** Does the model need GPU/TPU throughput, or mutate where Zygote
+fails? Neither → Zygote-backed Lux, no Reactant. Either → add `Reactant`+`Enzyme`, then re-read the
+trace caveat above. Never take on Reactant for a one-off gradient.
 
 ## 2.9.4 Parallelism — OhMyThreads
 For data-parallel maps/reductions on one machine, `OhMyThreads.tmapreduce` / `@tasks` is the safe

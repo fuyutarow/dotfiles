@@ -187,6 +187,24 @@ even though `Lux.Embedding` and `Lux.MultiHeadAttention` were confirmed to exist
 skill contradicted that, so adding it would be scope creep. No code was executed: every claim here
 is documentation- or manifest-sourced, which is why each added clause carries `[dated:2026-08]`.
 
-**PROSE-DEBT.** Floor before and after this change: unchanged classes (long prose sentences, version
-header, long table cells) — the added text is body prose in an existing section, and the recorded
-counts move with it. Re-measure at the next substantive reforge; this entry claims no improvement.
+**PROSE-DEBT, measured — and a correction to this entry's first draft.** Measured against
+`51a6fdb` by extracting that revision with `git archive` and running the floor on both trees:
+long prose sentences **52 → 53**, version header **90 → 94 lines**, long table cells 5 → 5. The
+first draft of this paragraph claimed the classes were "unchanged"; that was asserted, not measured,
+and it was wrong.
+
+Two process errors are recorded here because both are the same error, and it recurred inside one
+session. (1) The first version of the toolchain.md §2.9.3 addition wrote this audit's ARGUMENT into
+the operating manual — 27 lines of prose where the operational content is a 5-row table plus two
+facts. The skill's own architecture forbids exactly that ("inline narratives belong in the ledger");
+the justification now lives here and the manual carries a device × Reactant lookup table.
+(2) The rewrite was then "verified" by re-measuring — but `skill-check.ts` reads **SKILL.md only**,
+never `references/`, so compacting toolchain.md could not move the number at all. The +2 came from
+the changelog block in SKILL.md. Both errors are the same shape as the plain-scalar `description`
+incident earlier the same week: **verify the artifact the checker actually reads, not the one you
+believe you changed.**
+
+Residual +1 sentence and +4 header lines are the version line, the staleness-registry row for the
+new dated facts (required by this skill's own contract), and a two-line changelog. Queue position:
+the 90-line version header is long-standing debt, untouched here; clear it at the next substantive
+reforge, not in a content commit.

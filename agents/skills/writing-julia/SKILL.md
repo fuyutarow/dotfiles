@@ -45,13 +45,8 @@ description: >-
 > (toolchain.md §2.9.3, packages.md NN, the heavy-deps checklist below).
 >
 > **Changelog (recent)**:
-> - v2608.3.0: **the Lux-needs-Reactant framing was false and mis-routed every plain CPU NN job.**
->   Verified in Lux v1.31.4's `Project.toml`: `Reactant`/`Enzyme`/`Zygote` are all `[weakdeps]`, none
->   in `[deps]`. Lux is now the stated default for new NN work, independent of Reactant; `Flux` is
->   explicitly NOT called deprecated (it ships near-weekly) but is for existing code only. New rule:
->   Lux's own AD order INVERTS autodiff.md §2.7.3 — inside a Lux loop without Reactant, Zygote ranks
->   above standalone Enzyme. autodiff.md is unchanged and still governs plain host-side functions.
->   Full entry + what was refuted: `tests/forge-verification-ledger.md` (2026-08-17).
+> - v2608.3.0: **Lux is the default NN library; Reactant is a `[weakdeps]` opt-in.** Backend order
+>   INVERTS between autodiff.md §2.7.3 and a Lux model — toolchain.md §2.9.3; ledger 2026-08-17.
 > - v2608.2.0: **data-axis void closed.** packages.md Data split into Persistence / Interchange /
 >   Visualization. Interchange: `JSON.jl` **v1**, not `JSON3` (deprecated `[dated:2026-08]`);
 >   `JSON.parse(s, T)` IS the §2.1.3 barrier; `allownan` now false by default. Full entry + source

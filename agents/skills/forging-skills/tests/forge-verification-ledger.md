@@ -216,3 +216,57 @@ unchanged, clear at the next substantive reforge. Verification tier: solo — F2
 re-run, since the LAW clause and the new gate add a transition without re-typing any existing
 sibling cut. That waiver is `references/verifying.md` §7's scale calibration, recorded here rather
 than assumed.
+
+## 2026-08-17 — F1's second half: line shape, and the 80% the floor never read
+
+**Trigger.** The user asked whether this skill should carry guidance about the executor's cognitive
+load. It should, and the void turned out to be two concrete defects rather than a gap in advice.
+
+**Defect 1 — the floor read SKILL.md only.** `checkDirectory` opened `join(directory, "SKILL.md")`
+and nothing else; `references/` was touched solely to check that each `.md` is MENTIONED in the body.
+Measured across the collection: `SKILL.md` 853,386 chars over 60 files, `references/` **3,337,663
+chars over 511 files — 80% of the corpus, never measured.** F1's exit condition is "prose-debt WARNs
+0", so a skill could pass F1 with unreadable references. Extending the floor to references surfaced
+**4,205 long sentences across 46 skills**, against the 53 the old check reported for the one skill
+being audited. The measured surface was showing roughly 1/80th of the debt. Reported as ONE aggregate
+WARN per skill naming the worst file — a flood of 4,205 individual lines would reproduce the same
+failure the check exists to catch. FAIL count unchanged at 0, so `mise run lint` stays green.
+
+**Defect 2 — the LAW tested retention, never shape.** The proving incident, same day: the Lux/Reactant
+correction in `writing-julia` shipped first as a 27-line paragraph. It passed the LAW (every clause
+did change what the executor does), passed F2 (no sibling raced it), passed F4 (body text charges no
+listing), and passed the floor (which did not read references). It was still wrong: a decision with
+TWO discriminating inputs — device × whether Reactant is present — was written as an argument, so the
+executor re-derived a lookup on every read. Rewritten as a 4-row table, it also exposed a missing GPU
+row that the prose form had hidden.
+
+**The rule added.** A new `## Line shape` section with a four-shape taxonomy (LOOKUP / PREDICATE /
+ARGUMENT / NARRATIVE) and one testable rule: **a decision keyed on 2+ discriminating inputs is a
+table, not a paragraph**; ARGUMENT and NARRATIVE belong in the ledger. Grep symptom for review:
+`because` / `since` / `verified in` / a version number / a historical date inside a rule paragraph.
+
+**EXTEND, not F5.** Step 0's own instruction was applied to this skill: the transition already had an
+owner (F1 owns "does this line belong"), so shape became F1's second half rather than a fifth gate.
+A new gate would have re-charged the gates table, the reference index, and every sibling ledger that
+cites F1–F4 — the exact marginal-admission move F4 exists to refuse.
+
+**No description edit, deliberately.** F4's ceiling is at 56,582 and the existing fire row
+「この SKILL.md、散文が読みにくい/監査して」 already routes readability asks here. Adding 認知負荷 as a
+trigger word would have charged the listing and required raising the ceiling for a surface that is
+already covered. Recorded so a later reader does not read the omission as an oversight.
+
+**Third instance of one error class, recorded because it recurred twice in one session.** (a) The
+plain-scalar `description` rewrite verified the intermediate string, not the file it wrote — 10 files
+shipped with the closing fence glued to the last line. (b) The line-shape compaction above was
+"verified" by re-running the floor, which does not read references, so the number could not move.
+(c) This entry's own first draft of the `writing-julia` prose-debt paragraph asserted "classes
+unchanged" without measuring; it was wrong and is corrected there. All three are: **measure the
+artifact the checker actually reads, not the one you believe you changed.**
+
+**PROSE-DEBT — measured, zero added.** HEAD vs this change, same floor on both trees: SKILL.md long
+prose sentences **15 → 15**, table cells >400 chars **2 → 2**, references long sentences **85 → 85**.
+No waiver needed. Reaching zero took two passes: the first draft put the 80% / 4,205 numbers INSIDE
+the F1 gate cell (pushing cells to 3) and joined two rule sentences past 120 chars (pushing sentences
+to 17) — i.e. the new rule's own two violations, NARRATIVE in a manual and an ARGUMENT written as
+prose. Both were moved here and split. A rule whose author cannot obey it in the commit that adds it
+is not yet a rule. Queue: the pre-existing 15 / 2 / 85 classes are untouched.

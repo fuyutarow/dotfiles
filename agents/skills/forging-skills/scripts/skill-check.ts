@@ -128,6 +128,43 @@ function countLongProseSentences(bodyLines: string[]): number {
   return longCount;
 }
 
+/**
+ * Prose debt across references/, aggregated. The per-file worst offender is named because that is
+ * the actionable half — "this skill has 210 long sentences" tells an editor nothing about where to
+ * start, and a rule an editor cannot act on is decoration.
+ */
+async function reportReferenceProse(directory: string): Promise<void> {
+  const dir = join(directory, "references");
+  if (!existsSync(dir)) return;
+  let total = 0;
+  let worstFile = "";
+  let worstCount = 0;
+  let files = 0;
+  for (const entry of await readdir(dir, { recursive: true })) {
+    if (!entry.endsWith(".md")) continue;
+    const path = join(dir, entry);
+    let text: string;
+    try {
+      text = await Bun.file(path).text();
+    } catch {
+      continue; // a directory entry or unreadable file — the mention check already covers absence
+    }
+    files += 1;
+    const count = countLongProseSentences(text.split("\n"));
+    total += count;
+    if (count > worstCount) {
+      worstCount = count;
+      worstFile = entry;
+    }
+  }
+  if (total === 0) return;
+  warn(
+    directory,
+    `references: ${total} prose sentences >120 chars across ${files} file(s) — worst ${worstFile} (${worstCount}). ` +
+      "A decision keyed on 2+ inputs belongs in a table; the argument for it belongs in the ledger",
+  );
+}
+
 // Version header length — the contiguous block starting at a `> **Version**` line plus
 // its continuation lines starting with `>`.
 function versionHeaderBlockLengths(bodyLines: string[]): number[] {
@@ -256,6 +293,15 @@ async function checkDirectory(input: string): Promise<void> {
     metadata.bodyStart === 0 ? 0 : lines.length - metadata.bodyStart;
   if (bodyLines > 500)
     warn(directory, `SKILL.md body ${bodyLines} lines > 500`);
+
+  // References were UNMEASURED until 2026-08-17: this function only ever read SKILL.md, while
+  // 80% of the corpus by character count lives under references/ (3.34M vs 853K chars over 60
+  // skills). F1's exit condition is "prose-debt WARNs 0", so a skill could pass it with
+  // unreadable references — and one did, which is how a 27-line argument shipped where a 4-row
+  // lookup table belonged. Reported as ONE aggregate line per skill naming the worst file, not
+  // per sentence: sixty readable lines beat a flood nobody reads, which is the same failure this
+  // check exists to catch.
+  await reportReferenceProse(directory);
 
   const bodyContentLines = lines.slice(metadata.bodyStart);
 

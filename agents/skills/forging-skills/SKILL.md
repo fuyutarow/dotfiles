@@ -18,7 +18,7 @@ description: >-
 
 # Forging skills — the craft of making operating manuals that outlive their maker
 
-> **Version**: v2608.1.0 (2026-08-15) — F4 STANDING: the collection's standing cost and retirement.
+> **Version**: v2608.2.0 (2026-08-17) — F1 gains line shape; the floor now reads `references/` (80% of the corpus was unmeasured).
 > History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
 
 Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:
@@ -31,7 +31,7 @@ for f in distilling architecture triggering execution-models verifying; do test 
 
 This skill is **English**; respond to the user in their language (default Japanese). Keep the
 house tokens stable even inside Japanese prose — they are technical identifiers, not
-translatable words: **LAW**, **gate** (F1/F2/F3), **fire / no-fire**, **鍛錬 / reforge**,
+translatable words: **LAW**, **gate** (F1–F4), **fire / no-fire**, **line shape**, **鍛錬 / reforge**,
 **solo / fan-out / barrier**, **DECISIVE / CARDINALITY / PURPOSE cut**, **function map**, **one home**,
 **scaffold theater**. Every skill you forge defines and pins ITS tokens the same way
 (`references/triggering.md`, `references/architecture.md` §6).
@@ -42,7 +42,7 @@ translatable words: **LAW**, **gate** (F1/F2/F3), **fire / no-fire**, **鍛錬 /
 > executes it later — not documentation, not a book summary. And it has TWO READERS: the
 > executor model, and the human auditor who must be able to trust it. 形式 is the floor; the
 > bar is that EVERY RETAINED LINE CHANGES WHAT THE EXECUTOR DOES — stated so both readers can
-> check it. FORM itself is floor-enforced, never line-retained (the dual-reader prose bar,
+> check it, and stated in the SHAPE the executor can act on without re-deriving it (§ Line shape). FORM itself is floor-enforced, never line-retained (the dual-reader prose bar,
 > `references/architecture.md` §5; carve-out at `references/distilling.md` §2). A skill that cannot be wrong — no
 > artifact, no check, no deny-list anywhere — is prose wearing a skill costume. And the
 > description is the skill's API: match is lexical and budgeted, so triggering is engineered,
@@ -58,10 +58,26 @@ grep-able artifact; no artifact → gate un-passed, 感触では通れない.
 
 | Gate | Inverts (the error) | ARTIFACT — must exist in the forged skill |
 |---|---|---|
-| **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor split → `references/architecture.md` §5). EXIT: prose-debt WARNs 0, or a dated PROSE-DEBT waiver in the ledger (§5; ≠ F3 solo-tier waiver) |
+| **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call. Second half: a line that earns its place but in the WRONG SHAPE, so the executor re-derives a lookup on every read (§ Line shape) | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor split → `references/architecture.md` §5). EXIT: prose-debt WARNs 0 across **SKILL.md AND `references/`** (why both: ledger 2026-08-17), or a dated PROSE-DEBT waiver in the ledger (§5; ≠ F3 solo-tier waiver) |
 | **F2 PLACEMENT** | collection collision / description races — two skills match the same ask and neither yields | A **function map** (`input state → verb → artifact → next state`) + one artifact owner + a TYPED cut per overlapping sibling + reciprocal pointers, or an owner-named deferral (`references/architecture.md`, `references/triggering.md`) |
 | **F3 SELF-VERIFICATION** | ship-and-hope — the skill that teaches verification ships unverified | Atomic build-order verify command + a fire/no-fire trigger set (≥5 fire / ≥5 near-miss no-fire) + an adversarial-verification findings ledger recording the skill-check run incl. prose-debt counts — waivable ONLY at the solo tier, waiver written (`references/verifying.md`) |
 | **F4 STANDING** | admission-only collection — every member was justified ONCE, none is ever re-justified, and the listing grows monotonically because each marginal skill looks cheap against a per-skill cap nobody sums | A declared listing ceiling the collection is measured against (`agents/skills-listing-budget.json` here) + the aggregate check wired into a routinely-run gate (`mise run lint:skills-floor`, i.e. `skill-check.ts --budget`) + a RETIREMENT answer whenever the ceiling binds: retire, merge, shorten, or raise the ceiling in the same commit with the reason in that commit |
+
+## Line shape — F1's second half
+
+Earning a place and being cheap to use are different tests. F1's first half asks whether the line
+changes a tool call. This asks what the executor must DO to use it.
+
+| Shape | Executor cost | Belongs |
+|---|---|---|
+| LOOKUP — a table keyed by the runtime-answerable inputs | read one cell | the manual |
+| PREDICATE — one if/then | evaluate once | the manual |
+| ARGUMENT — premises the executor must chain to reach the conclusion | re-derived on EVERY read | rewrite as LOOKUP or PREDICATE |
+| NARRATIVE — why we decided, what was refuted, what a source said | changes no decision | the ledger |
+
+**A decision keyed on 2+ discriminating inputs is a table, not a paragraph.**
+Grep symptom: `because` / `since` / `verified in`, a version number, or a date in a rule paragraph.
+Both halves of F1 can pass independently. The incident proving it: ledger 2026-08-17.
 
 ## The pipeline
 

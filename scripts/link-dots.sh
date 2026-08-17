@@ -81,8 +81,18 @@ link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"
 link agents/resource-control/agent-resource-run.ts "$HOME/.local/bin/agent-resource-run"
 link agents/serena-control/serena-foreground.ts "$HOME/.local/bin/serena-foreground"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
-link agents/claude/settings.json "$HOME/.claude/settings.json"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
+
+# settings.json is GENERATED, not linked — the one exception in this file, and it is forced.
+# `autoMode` is read from user settings ONLY (ignored in project and local settings, per
+# code.claude.com/docs 2026-08-17), and its content is inherently machine- and repo-specific. With
+# ~/.claude/settings.json symlinked at this PUBLIC repo, keeping that setting meant publishing a
+# private project's paths and sensitive-data map. So: committed base here + untracked overlay at
+# ~/.claude/settings.private.json, merged into a real file. Renderer owns the merge and atomicity.
+# Deliberately not `link`: the destination is not a symlink any more, and `link`'s no-clobber guard
+# would refuse to touch it. Runs before `mise run deps` on a fresh machine, so the renderer is
+# zero-dependency by design.
+bun "$DOTFILES/scripts/render-claude-settings.ts" || echo "warn: settings render failed — ~/.claude/settings.json left as-is" >&2
 
 # --- third-party skill provenance ledger ---
 # `bunx skills add -g` records where each vendored skill came from in ~/.agents/.skill-lock.json.

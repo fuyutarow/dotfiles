@@ -225,6 +225,7 @@
       }
     ]
   },
+  "enableWorkflows": true,
   "statusLine": {
     "type": "command",
     "command": "bun ~/.claude/statusline-command.ts"
@@ -240,6 +241,5 @@
   "theme": "dark",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true,
-  "enableWorkflows": true
+  "agentPushNotifEnabled": true
 }

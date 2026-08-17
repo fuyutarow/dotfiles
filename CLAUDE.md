@@ -43,7 +43,14 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.sh`
    (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
    tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
-   phantom skill or a dead hook link behind. Tool list lives ONLY in `Brewfile` (+
+   phantom skill or a dead hook link behind. **ONE file is generated, not linked**:
+   `~/.claude/settings.json` is rendered by `scripts/render-claude-settings.ts` (called from
+   `link-dots.sh`) from the committed base plus an untracked `~/.claude/settings.private.json`.
+   Forced, not preference — `autoMode` is read from user settings only, and its content is
+   machine/repo-specific, so a symlink at this PUBLIC repo meant choosing between losing the
+   setting and publishing a private project's structure. Cost: after editing
+   `agents/claude/settings.json`, run `mise run link:dots` (the post-merge hook already does).
+   Tool list lives ONLY in `Brewfile` (+
    `scripts/check-tools.sh` — a tool in the Brewfile but absent from that array is drift the
    check cannot catch). Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
    (retired); never reintroduce one.

@@ -44,10 +44,37 @@ uses EnzymeMLIR for AD. Crucially, **the compiled function assumes the same cont
 as the traced example** — type instabilities and branches are fixed at trace time, not resolved
 generally. Do not treat tracing as a cure for arbitrary dynamic dispatch or data-dependent
 branching; if the control flow depends on runtime data, the traced path may be wrong for other
-inputs. `Lux.jl` is the explicit-parameter NN library that pairs with it (`Flux.jl` remains valid
-for non-Reactant work). This is a different execution model from autodiff.md §2.7 (tracing, not
+inputs. This is a different execution model from autodiff.md §2.7 (tracing, not
 per-call dispatch) — reach for it only when XLA/TPU or large-scale NN throughput is the actual
 requirement, not for a one-off gradient.
+
+**`Lux.jl` is the default NN library for new work, and it does NOT require Reactant** `[dated:2026-08]`.
+Verified in Lux v1.31.4's `Project.toml`: `Reactant`, `Enzyme` and `Zygote` are all `[weakdeps]`
+wired through extensions (`ReactantExt` needs Reactant *and* Enzyme) — none is in `[deps]`. So
+"install Lux" and "take on the XLA toolchain" are separate decisions, and the older framing of Lux
+as Reactant's companion mis-routed every plain CPU NN job to Flux. Prefer Lux because parameters
+and state live OUTSIDE the model (`model(x, ps, st)`, pure layers), which is also what makes a
+parameter count or an operation-count audit tractable. `Flux.jl` is **not** deprecated
+`[dated:2026-08]` — it ships near-weekly and grew its own Reactant/Enzyme compilation path in 2026
+— but DiffEqFlux.jl (SciML) documents a `Flux.destructure` correctness bug that silently downgrades
+`Float64` parameters to `Float32` and recommends Lux, with an opt-in `FromFluxAdaptor()` for
+existing models. Keep Flux for existing Flux code; do not start there.
+
+**AD inside a Lux model ranks DIFFERENTLY from AD over a plain function — this reversal is the
+rule, not a nuance.** autodiff.md §2.7.3 governs ordinary host-side functions, where Enzyme beats
+Zygote. Inside a Lux training loop without Reactant, Lux's own AD manual ranks Zygote ABOVE
+standalone Enzyme, because standalone Enzyme may fail against Lux when Reactant is absent. Lux's
+published order `[dated:2026-08]`, CPU: (1) Reactant+Enzyme, (2) Zygote — best without Reactant,
+(3) Enzyme — only if the code mutates or Zygote fails, (4) ReverseDiff. Its tier table puts
+Reactant+Enzyme, ChainRules, Enzyme, Zygote and ForwardDiff ALL at Tier I: there is no first/second
+class among them, so do not argue for a backend by claiming a higher tier.
+
+**Escalation rule, runtime-answerable.** Does this model need GPU/TPU throughput at
+JAX/PyTorch-class speed, or does it mutate in a way Zygote cannot differentiate? Neither → plain
+Zygote-backed Lux, no Reactant. Either → `Reactant` + `Enzyme`, and re-read the control-flow caveat
+above before trusting a traced function. Mooncake is NOT a house option yet: Tier III in Lux's
+table with GPU ❌ — and that row was last touched 2025-12, so re-verify it rather than cite it if
+someone proposes Mooncake.
 
 ## 2.9.4 Parallelism — OhMyThreads
 For data-parallel maps/reductions on one machine, `OhMyThreads.tmapreduce` / `@tasks` is the safe

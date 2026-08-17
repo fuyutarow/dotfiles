@@ -95,9 +95,14 @@ Bayesian PPL work (`Turing`, which re-exports `Distributions` and owns `MCMCChai
 - `OrdinaryDiffEq` — ODE-only subset, lighter deps.
 - `SciMLSensitivity` — adjoint/forward sensitivity; takes an `ADTypes` backend.
 
-## NN / GPU / TPU (toolchain.md §2.9.3, heavy — install only when XLA/TPU or large NN throughput is the requirement)
-- `Reactant` — Julia → MLIR → XLA compilation; EnzymeMLIR AD.
-- `Lux` — explicit-parameter NN library pairing with Reactant (`Flux` for non-Reactant work).
+## NN (toolchain.md §2.9.3) — Lux is the default; Reactant is a separate, heavy, opt-in XLA layer
+- `Lux` — **default NN library for new work** `[dated:2026-08]`. Explicit parameters and state
+  (`model(x, ps, st)`), Zygote-backed out of the box. Installing it does NOT pull XLA: `Reactant`,
+  `Enzyme` and `Zygote` are `[weakdeps]` in Lux v1.31.4, never `[deps]`.
+- `Flux` — actively maintained `[dated:2026-08]`, not deprecated. Keep for existing Flux code only;
+  DiffEqFlux.jl documents a `Flux.destructure` bug (silent `Float64`→`Float32`) and prefers Lux.
+- `Reactant` — heavy. Install only when toolchain.md §2.9.3's escalation rule fires (GPU/TPU
+  throughput, or mutation Zygote cannot handle): Julia → MLIR → XLA compilation; EnzymeMLIR AD.
 
 ## Algebra, number theory, finite fields — use exact names
 - `Nemo` (Flint/Arb exact arithmetic), `AbstractAlgebra` (pure-Julia generic algebra),

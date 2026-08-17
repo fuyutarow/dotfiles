@@ -24,8 +24,8 @@ description: >-
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2608.2.0 (2026-08-14) — data split into persistence vs interchange axes; JSON.jl v1 is the interchange answer.
-> (prior: v2608.1.0 (2026-08-03, pre-pilot resource admission) · v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
+> **Version**: v2608.3.0 (2026-08-17) — Lux is the default NN library and is independent of Reactant; Lux-internal AD order inverts autodiff.md's.
+> (prior: v2608.2.0 (2026-08-14, persistence vs interchange axes) · v2608.1.0 (2026-08-03, pre-pilot resource admission) · v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -40,9 +40,18 @@ description: >-
 > `grep -rn '\[dated:' agents/skills/writing-julia/` and re-verify anything older than ~2 quarters:
 > Julia version baseline (here) · `juliac --trim` experimental status (setup.md §3.5/§3.5.1/§3.6) ·
 > JETLS-replaces-LanguageServer (setup.md §8) · no-native-traits / not-on-roadmap (architecture.md
-> §10.2.1) · JSON3-deprecated / JSON.jl-v1-is-the-answer (packages.md, Data — Interchange).
+> §10.2.1) · JSON3-deprecated / JSON.jl-v1-is-the-answer (packages.md, Data — Interchange) ·
+> Lux-is-default / Reactant-is-a-weakdep / Lux's published AD order / Mooncake-Tier-III
+> (toolchain.md §2.9.3, packages.md NN, the heavy-deps checklist below).
 >
 > **Changelog (recent)**:
+> - v2608.3.0: **the Lux-needs-Reactant framing was false and mis-routed every plain CPU NN job.**
+>   Verified in Lux v1.31.4's `Project.toml`: `Reactant`/`Enzyme`/`Zygote` are all `[weakdeps]`, none
+>   in `[deps]`. Lux is now the stated default for new NN work, independent of Reactant; `Flux` is
+>   explicitly NOT called deprecated (it ships near-weekly) but is for existing code only. New rule:
+>   Lux's own AD order INVERTS autodiff.md §2.7.3 — inside a Lux loop without Reactant, Zygote ranks
+>   above standalone Enzyme. autodiff.md is unchanged and still governs plain host-side functions.
+>   Full entry + what was refuted: `tests/forge-verification-ledger.md` (2026-08-17).
 > - v2608.2.0: **data-axis void closed.** packages.md Data split into Persistence / Interchange /
 >   Visualization. Interchange: `JSON.jl` **v1**, not `JSON3` (deprecated `[dated:2026-08]`);
 >   `JSON.parse(s, T)` IS the §2.1.3 barrier; `allownan` now false by default. Full entry + source
@@ -429,7 +438,8 @@ Environment — `references/setup.md`:
       committed code; packages added at point of use, not preemptively from the packages.md catalog;
       a dep whose last use was deleted is `Pkg.rm`'d in the same commit. Heavy offenders to never carry
       speculatively: `Enzyme`/`AllocCheck` (LLVM+GPUCompiler), `Manopt`+`Manifolds` (~100 transitive),
-      `Reactant`/`Lux` (XLA). Declared-but-unused deps inflate Manifest, instantiate, and TTFX, and make
+      `Reactant` (XLA compile toolchain — `Lux` alone does NOT pull this in; Reactant is a Lux
+      `[weakdeps]` extension `[dated:2026-08]`). Declared-but-unused deps inflate Manifest, instantiate, and TTFX, and make
       every `Pkg` op trigger native recompiles for code never called (packages.md §4 header).
 - [ ] Data crossing a process/language boundary names its axis first: persistence vs interchange.
       Persistence is `JLD2` (→ HDF5/Arrow by reader); interchange is **`JSON.jl` v1**, never JSON3

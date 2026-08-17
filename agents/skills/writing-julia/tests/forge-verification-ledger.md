@@ -133,3 +133,60 @@ rows sharing JSON vocabulary but owned elsewhere (Python/TypeScript/API-design/j
 
 **Deliberately NOT done**: relocating the 86-line changelog into this ledger, which would retire
 the version-block WARN. It is a structural edit outside this change's scope; re-queued above.
+
+## 2026-08-17 — Lux is the default NN library, and it never needed Reactant
+
+**Trigger.** A user asked whether NN work in Julia should now recommend Lux, quoting an assertion
+from another assistant. The assertion was treated as untrusted and tested against primary sources
+rather than adopted. Two of its four claims did not survive.
+
+**What was wrong in this skill.** One sentence, mirrored in three places, encoded a false binary:
+"`Lux.jl` is the explicit-parameter NN library that pairs with [Reactant] (`Flux.jl` remains valid
+for non-Reactant work)" — toolchain.md §2.9.3 (authority), packages.md NN header + entry, and the
+heavy-deps checklist in SKILL.md, which grouped `Reactant`/`Lux` as one XLA unit. An executor
+writing an ordinary CPU neural network read this and was routed to Flux.
+
+**Primary sources, fetched directly (not via an agent relay).**
+- `raw.githubusercontent.com/LuxDL/Lux.jl/main/Project.toml`, Lux **v1.31.4**: `Reactant`, `Enzyme`
+  and `Zygote` appear under `[weakdeps]`; NONE is in `[deps]`. `ReactantExt` requires Reactant AND
+  Enzyme. So installing Lux does not take on the XLA toolchain — the coupling the old text implied
+  does not exist in the package.
+- `lux.csail.mit.edu/stable/manual/autodiff`, support table: Reactant+Enzyme, ChainRules, Enzyme,
+  Zygote, ForwardDiff are ALL **Tier I**; Mooncake **Tier III** (GPU ❌); ReverseDiff, Tracker,
+  Diffractor **Tier IV**. CPU recommendation order, verbatim: (1) Reactant+Enzyme, (2) "Use
+  `Zygote.jl` for the best performance without `Reactant.jl`", (3) "Use `Enzyme.jl`, if there are
+  mutations in the code and/or `Zygote.jl` fails", (4) ReverseDiff.
+
+**Claims REFUTED — recorded so they are not re-adopted.**
+- "Lux's docs rank Reactant+Enzyme 1st and Zygote/standalone-Enzyme tied 2nd." False twice over:
+  there is no first/second class (five backends share Tier I), and Zygote ranks ABOVE standalone
+  Enzyme for CPU without Reactant, not level with it.
+- "Flux is effectively legacy." Overstated. Flux ships near-weekly and grew its own
+  Reactant/Enzyme compilation path in 2026. What IS sourced: DiffEqFlux.jl (SciML) documents a
+  `Flux.destructure` bug silently downgrading `Float64` parameters to `Float32`, recommends Lux, and
+  offers an OPT-IN `FromFluxAdaptor()` — not the "internal automatic conversion" the claim asserted.
+- "Zygote is no longer modern." No source says this; Zygote v0.7.12 shipped 2026-07-22 with ordinary
+  maintenance. The accurate statement is that it is Tier I and not the fastest.
+
+**The rule this produced — the reason the edit is worth its lines.** Backend rank is not global.
+autodiff.md §2.7.3 governs plain host-side functions and puts Enzyme ahead of Zygote. Lux's own
+manual INVERTS that inside a Lux loop without Reactant, because standalone Enzyme may fail against
+Lux when Reactant is absent. Both are correct in their own domain, so autodiff.md was left untouched
+and the Lux-specific order lives with the Lux section (one home). An executor that learns only one
+of the two orders will pick wrong in the other domain.
+
+**Preserved deliberately.** The Reactant trace-time control-flow caveat in §2.9.3 survives verbatim:
+a compiled function fixes the traced branch and ignores the condition on later calls. It was
+re-checked against Reactant's own control-flow documentation and still holds. Deleting a correct
+warning while modernizing around it is the failure mode this entry exists to prevent. The
+Enzyme-over-Zygote row in §2.9.5 and autodiff.md §2.7.3's shape-based table also survive unchanged.
+
+**Not done.** Mooncake gets one hedged line only (Tier III, GPU ❌, and a note that Lux's own row was
+last touched 2025-12 so it must be re-verified, not cited). No transformer/layer inventory was added
+even though `Lux.Embedding` and `Lux.MultiHeadAttention` were confirmed to exist — nothing in this
+skill contradicted that, so adding it would be scope creep. No code was executed: every claim here
+is documentation- or manifest-sourced, which is why each added clause carries `[dated:2026-08]`.
+
+**PROSE-DEBT.** Floor before and after this change: unchanged classes (long prose sentences, version
+header, long table cells) — the added text is body prose in an existing section, and the recorded
+counts move with it. Re-measure at the next substantive reforge; this entry claims no improvement.

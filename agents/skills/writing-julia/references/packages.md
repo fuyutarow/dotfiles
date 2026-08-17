@@ -220,14 +220,78 @@ in the search loop is orders of magnitude too slow); convert to `Symbolics` only
 - `Manifolds` — the manifold definitions and differential-geometry computations (SO(n), SE(n),
   SPD) that `Manopt` optimizes over.
 
-## Data & visualization
+## Data — persistence, interchange, visualization
+
 `DataFrames`, `CSV`; `CairoMakie` (publication plots, heavy deps).
+
+**Persistence and interchange are DIFFERENT axes — do not answer one with the other's ladder.**
+Persistence is "I read this back myself later": Julia types round-trip, and you escalate by *who
+reads it back*. Interchange is "another process wrote this, or must read this": no Julia type
+survives the wire, so you name the target type at the boundary or you get `Any`. A `.json` sidecar
+for a result struct is a lossy JLD2; a `.jld2` handed to a web client is unreadable.
+
+### Persistence — the result comes back to Julia
+
 - **Result persistence → `JLD2`** — the Julia-native `.jld2` save/load format DrWatson's
   `@tagsave` / `wsave` / `produce_or_load` write **by default** (setup.md §3.4). Reach for it
   whenever an experiment must checkpoint or persist a result struct/array — this is the
   serialization anchor the DrWatson lifecycle (JG4) already depends on. Escalate only by
   persistence boundary: `HDF5` when a non-Julia tool must read the arrays, `Arrow` for columnar
   tables shared with Python/R. (DrWatson's older `.bson` default is retired — use `.jld2`.)
+
+### Interchange — a document crosses a process or language boundary
+
+- **JSON → `JSON` (JSON.jl v1). Not `JSON3`.** `[dated:2026-08]` JSON3.jl carries a deprecation
+  banner in its own README ("This package has been deprecated. Please migrate to JSON.jl v1") and
+  is frozen at 1.14.3. JSON.jl was rewritten on `StructUtils.jl` for v1.0.0 (2025-10-03) and ships
+  1.7.x (2026-08). **This row exists because the default answer is inverted**: JSON3 was genuinely
+  the modern choice for years, so habit — and any model memory predating late 2025 — still names
+  it. Recommending JSON3 for new code is now recommending a deprecated package.
+- **The one surviving JSON3 use — struct generation.** Generating Julia struct definitions from
+  sample JSON (`JSON3.@generatetypes` / `JSON3.writetypes`) has no v1 equivalent, and the
+  migration guide explicitly says to keep JSON3 *for that purpose only*. Use it to EMIT a
+  definition you then commit; do not carry JSON3 as a runtime dep to get it.
+- **Parse to a TYPE at the boundary: `JSON.parse(s, T)`, not `JSON.parse(s)`.** Untyped
+  `JSON.parse` returns `JSON.Object{String,Any}` / `Vector{Any}`, so every value read out of it is
+  `Any` — exactly the runtime-typed data performance.md §2.1.3 requires a function barrier for.
+  Naming `T` makes the parse itself that barrier, and nothing `Any`-typed reaches the hot path.
+  The field macros come from `StructUtils` (a real dep to declare, per this file's header):
+  ```julia
+  using JSON, StructUtils
+  @defaults struct RunCfg
+      n::Int
+      dt::Float64 = 1e-3        # tolerated missing key, still concrete
+  end
+  cfg = JSON.parse(read(path, String), RunCfg)   # cfg.dt::Float64 at the boundary
+  # straight from a file: JSON.parsefile(path, RunCfg) — same rule, T still named
+  ```
+- **Do not pre-select JSON3 "for speed."** `[dated:2026-08]` The circulating datum is ONE
+  unresolved 2026-05 Discourse report (20k files, ~5s vs ~50s on struct materialization) whose own
+  minimal reproduction showed 2.604ms vs 3.499ms (≈1.3×), and which the maintainer answered by
+  asking for an issue with data. No diagnosed cause, no fix, no reproduction — it is not evidence.
+  If throughput decides the choice, measure it on your data (§2.6). A deprecated dependency is not
+  bought with a rumor.
+- **Adjacent formats, bounded.** Config → **stdlib `TOML`** (nothing to install; a *package* still
+  declares it in `[deps]` + `[compat]` like any stdlib — setup.md §7). YAML → `YAML.jl`.
+  `Serde` only when ONE strategy API must span JSON+TOML+XML+YAML+CSV+MsgPack+BSON — it is a
+  multi-format choice, never the answer to "which JSON package". `JSONTables` only when the JSON
+  *is* a table and the destination is a `DataFrame`.
+
+**v1 migration traps** — each of these renames or fails without a deprecation path:
+
+| Trap | What actually happens |
+|---|---|
+| `allownan` defaults to **`false`** now (parse and write) | `JSON.json(x)` **throws** where pre-1.0 JSON.jl and `JSON3.write` wrote `NaN`/`±Inf`. One diverged run kills the writer at the end of a long job. Pass `allownan=true` deliberately, or map to `nothing`/`missing` with `omit_null=true`. |
+| numbers parse to `Int64`/`BigInt`/`Float64`/**`BigFloat`** (was Int64/Float64 only) | a field you assumed was `Float64` can arrive `BigFloat` and poison inference downstream — another reason to name `T` |
+| default dict is `JSON.Object{String,Any}` | drop-in `AbstractDict` with dot-access that **preserves JSON key order**; pass `dicttype=Dict{String,Any}` for objects with hundreds of keys or to restore pre-1.0 behavior |
+| `JSON.lazy` is **truly** lazy | `obj.a.b.c` stays a `LazyValue`; `[]` materializes. JSON3 materialized on access, so ported code silently threads a `LazyValue` into numeric paths (§2.1 instability with a new face). |
+| `StructTypes.*` → `StructUtils` | no `StructType` declaration needed at all; `defaults`→`@defaults`, `names`→`@tags` field tags, `subtypes`→`JSON.@choosetype` (its `x` is a `LazyValue` — compare via `x.key[]`) |
+| `JSON3.write`→`JSON.json`, `JSON3.read`→`JSON.parse`/`JSON.lazy` | also `allow_inf`→`allownan`, `JSON3.pretty(JSON3.write(x))`→`JSON.json(x; pretty=true)`. Grep the old names; nothing warns you. |
+
+Migration guide (re-verify on reforge): https://juliaio.github.io/JSON.jl/stable/migrate/
+
+### Visualization
+
 - **CJK / non-Latin labels → set a CJK-capable theme font, or CairoMakie crashes.** Makie's
   default font (DejaVu / TeX Gyre) has no CJK glyphs, so any 日本語 / 中文 / 한글 in a title or
   label throws during text layout (or renders as tofu boxes). Root-fix with a theme — do **not**

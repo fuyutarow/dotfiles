@@ -39,6 +39,17 @@ asks — Rust/TS/C++ — which test nothing).
 | 「パッケージ読み込みが遅くなった — invalidation って何?」 | §10 TTFX & invalidation hygiene |
 | 「新しい Julia パッケージのディレクトリ構成、どうするのが正しい?」 | JG3 fires at package birth, not on request |
 
+### Data axes (added v2608.2.0 — the description now triggers on JSON/JSON3/TOML interchange)
+
+| Ask | Why |
+|---|---|
+| 「Julia で JSON 扱うなら何使う?」 / "which JSON package for Julia" | interchange axis → `JSON.jl` v1; JSON3 is deprecated `[dated:2026-08]` |
+| 「JSON3.read のこのコードを移行して」 | migration traps: `allownan` default flip, truly-lazy `JSON.lazy`, StructTypes→StructUtils |
+| 「この JSON を struct に読み込みたい」 | `JSON.parse(s, T)` — the typed parse IS the function barrier (§2.1.3) |
+| 「NaN を含む結果を JSON に書いたら例外で落ちる」 | v1 `allownan=false` by default on write; pre-1.0 JSON.jl and `JSON3.write` wrote it silently |
+| 「実験結果をファイルに残したい」 vs 「別言語のツールに渡したい」 | tests the axis split: persistence (JLD2→HDF5/Arrow) vs interchange (JSON.jl) |
+| 「サンプル JSON から Julia の struct 定義を生成したい」 | the ONE surviving JSON3 use (`@generatetypes`) — emit then commit, never a runtime dep |
+
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 
 | Ask | Route |
@@ -53,6 +64,10 @@ asks — Rust/TS/C++ — which test nothing).
 | 「行列積の計算量を説明して」 | math theory, no Julia code — plain answer |
 | 「CUDA.jl の `@cuda` カーネルが `InvalidIRError` で落ちる」 | device-side → `optimizing-julia-gpu-kernels` (this skill co-fires only for the host-side type discipline underneath) |
 | "CuArray のコードが遅い / occupancy を上げたい" | GPU performance → `optimizing-julia-gpu-kernels` (DECISIVE cut: runs on the device) |
+| 「Python の `json` モジュールで dict を読みたい」 | JSON vocabulary, no Julia in play → `running-python-tools` / plain answer |
+| 「TypeScript で JSON を型安全にパースしたい」 | same parse-to-a-type rule shape, different language → `writing-typescript` |
+| 「この Web API の JSON レスポンス仕様を設計して」 | schema/API design, no Julia code — plain answer (`structuring-documents` if the deliverable is a doc) |
+| 「jq で JSON を整形するワンライナー教えて」 | shell tooling, no Julia — plain answer |
 
 ## Co-fire order checks (not fire/no-fire — sequencing)
 

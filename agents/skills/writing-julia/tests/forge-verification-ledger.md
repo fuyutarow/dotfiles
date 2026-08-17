@@ -26,6 +26,10 @@ JG4 reproducibility.
   this skill supplies the Julia oracle components (JET/Aqua) + JG3-safe transforms.
 - PURPOSE cut vs `proving-theorems` (proof vs numerics); LANGUAGE cut vs `running-python-tools`
   (PythonCall/SymPyPythonCall from Julia stays HERE — a Julia dep-architecture decision).
+- **Data axes stay separate** (since v2608.2.0): persistence (`JLD2` → HDF5/Arrow, escalate by who
+  reads it back) vs interchange (`JSON.jl` v1 — never JSON3 `[dated:2026-08]`, one exception:
+  `@generatetypes`). The interchange parse names its target type, so the boundary IS the §2.1.3
+  function barrier. packages.md is the sole home; setup.md §7 routes to it and never copies.
 - **Staleness registry**: fast-moving facts carry a grep-able `[dated:YYYY-MM]` tag IN PLACE
   (locality > physical isolation); the registry of what to re-verify lives in the SKILL.md header.
   Current tagged facts: 1.12.6 baseline · `--trim` experimental · JETLS-replaces-LS · no-native-
@@ -76,3 +80,56 @@ no FAIL; the pre-existing description/prose/version/table warnings remain disclo
 Observed floor: description 1637 chars, 52 long prose sentences, 86-line version block, and 5 long table cells; exit 0.
 This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
 Queue: next Julia reforge; retire this waiver when the description and recorded classes meet the floor.
+**PARTIALLY RETIRED 2026-08-14 (v2608.2.0)**: the description class is retired (1498 ≤ 1500, WARN
+gone). Prose 52 (unchanged) / version block 90 (was 86; +4 from the appended changelog entry) /
+table cells 5 remain waived and re-queued to the next reforge.
+
+## 2026-08-14 data-axis void (v2608.2.0)
+
+**Trigger**: the user brought an external LLM thread that recommended JSON3.jl for new Julia code
+and asked what this skill says about it. The answer was: nothing. A case-insensitive sweep for
+`JSON` over the whole skill returned three incidental hits — `.ipynb` is JSON (setup.md §7-adjacent
+note), TOML/JSON as a `Val` instability source (performance.md §2.1.4), and JLD2 as the DrWatson
+result-serialization anchor (packages.md) — and zero package guidance.
+
+**The void was an AXIS conflation, not a missing catalog row.** packages.md's Data section carried
+only the persistence ladder (JLD2 → HDF5 → Arrow), whose escalation question is *who reads it back*.
+Interchange is a different question with a different hazard: persistence round-trips Julia types,
+interchange does not, so the target type is named at the boundary or every value arrives `Any`.
+That hazard is already this skill's §2.1.3 function-barrier rule with no interchange-side statement.
+Fixing it as a bare "use JSON.jl" bullet would have left the conflation in place.
+
+**Source grades** (captured at build time from primary sources, 2026-08-14):
+
+| Claim | Grade | Source |
+|---|---|---|
+| JSON3.jl deprecated → "migrate to JSON.jl v1" | author-confirmed (verbatim banner) | JSON3.jl README |
+| v1.0.0 = 2025-10-03; 1.7.0 = 2026-08-06; 1.7.1 registered | author-confirmed | GitHub releases API + General registry |
+| migration mapping; `allownan` now false-by-default; BigInt/BigFloat; `JSON.Object` key order; truly-lazy `JSON.lazy` | author-confirmed | `JSON.jl/docs/src/migrate.md`, fetched raw |
+| struct generation has no v1 equivalent — keep JSON3 for that alone | author-confirmed | same migrate.md, "Features unique to each library" |
+| the API name is `JSON3.@generatetypes` / `writetypes` | author-confirmed | JSON3 `docs/src/index.md`. The migration guide's `JSON3.generate_struct` example is INEXACT — do not copy it |
+| "JSON.jl is ~10× slower on struct materialization" | third-party, UNRESOLVED | one 2026-05 Discourse thread; its own minimal repro was ≈1.3× (2.604ms vs 3.499ms); maintainer asked for an issue; no cause, no fix |
+| parse-to-a-type-at-the-boundary as the rule | skill-supplied | §2.1.3 applied to the interchange axis; not a JSON.jl doc claim |
+
+**Calibration inversion**: the JSON.jl docs correct a *human* still sitting on an old package. The
+model's failure is inverse-shaped and worse — JSON3 was genuinely the right answer for years, so
+habit and any pre-late-2025 model memory actively recommend the now-deprecated package. The
+observed external thread did exactly that before self-correcting. Prominence therefore went to the
+INVERSION statement ("this row exists because the default answer is inverted") rather than a
+neutral catalog line, and the performance rumor carries an explicit UNVERIFIED guard so it cannot
+be spent as a reason to adopt the deprecated dep.
+
+**One-home decision**: the verdict, the traps table, and the migration URL live ONLY in
+packages.md "Data — Interchange". setup.md §7 (output files by data shape) gains a ROUTING row, not
+a copy. performance.md §2.1.3 is cross-referenced, never restated. SKILL.md carries one §9
+checklist row, the reference-index row, and the `[dated:]` staleness-registry entry.
+
+**Floor at freeze**: `skill-check.ts` exit 0; strict-YAML parse OK (PyYAML; keys name/description).
+**Description WARN retired**: 1558 → 1498 chars *while adding* the `JSON/JSON3/TOML interchange`
+trigger — trimmed the explanatory parentheticals in the co-fire clause, `Lean/`, the duplicate
+`SymPyPythonCall` inside the PythonCall parenthetical, and `CuArray perf` → `CuArray`. Trigger set
+desk-checked after the description edit (F3): +6 fire rows for the data axes, +4 near-miss no-fire
+rows sharing JSON vocabulary but owned elsewhere (Python/TypeScript/API-design/jq).
+
+**Deliberately NOT done**: relocating the 86-line changelog into this ledger, which would retire
+the version-block WARN. It is a structural edit outside this change's scope; re-queued above.

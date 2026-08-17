@@ -318,6 +318,11 @@ parser:**
   zero-extra-dependency choice; fast + low compile-latency on small homogeneous data.
 - **Real tabular data** (headers, quoting, embedded delimiters/newlines, `missing`, mixed/typed
   columns, large or multithreaded reads) → `CSV.jl` + `DataFrames.jl` / `Tables.jl` (packages.md §4).
+- **A structured document another process writes or reads** (JSON/JSONL config, an API payload, a
+  sidecar someone else's tool emits) → that is the *interchange* axis, not this one: packages.md §4
+  "Data — Interchange" owns the package choice (`JSON.jl` v1, **not** JSON3) and the
+  parse-to-a-type-at-the-boundary rule. Do not persist your own results this way — that axis ends
+  at `JLD2`.
 - **Hand-rolled `readlines` + `split` + `tryparse` is an ANTI-PATTERN for real CSV** — it silently
   mishandles quoting/escaping/`missing`/mixed types. Justified only as a niche perf trick for a
   *guaranteed-trivial, fixed* format (lazy/partial reads, minimal allocation), never as the default.

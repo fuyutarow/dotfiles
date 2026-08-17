@@ -1,31 +1,31 @@
 ---
 name: writing-julia
 description: >-
-  Write correct, performant Julia for research. Use whenever the user
-  runs Julia, writes hot numeric code, or does numerical experiments, AD/gradients, optimization,
+  Write correct, performant Julia for research. Use whenever running
+  Julia, writing hot numeric code, or doing numerical experiments, AD/gradients, optimization,
   symbolic algebra, differential equations, package architecture, TTFX, or .so/AOT. Trigger on
   scope/let/const, Val, column-major loops, immutable/mutable struct,
   type stability / 型安定, dynamic vs multiple dispatch, function barrier, DifferentiationInterface,
   ADTypes, ForwardDiff, Enzyme, Zygote, JET, Aqua, StaticArrays, ComponentArrays, OhMyThreads,
-  Optim/JuMP/Manopt,
+  Optim/JuMP/Manopt, JSON/JSON3/TOML interchange,
   SymEngine/Symbolics/ModelingToolkit/SymPyPythonCall, DrWatson/Pluto/Documenter/Quarto,
   PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
   weakdeps, type piracy, public API. MANDATORY before Julia code or a recordable experiment/benchmark
   (JG5 fires on the run). §2.0 forbids
   FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
   is not banned — the bug is type-unstable hot paths. Co-fires with ORDER: Julia feature/bugfix →
-  implementing-and-debugging first (change-safety), this for idiom; Julia refactor →
-  refactoring-code governs (two hats/oracle), this supplies JET/Aqua brackets + Julia-safe
-  transforms. Cross-language phase/risk/ledger → practicing-tiger-style; Julia mechanisms → HERE.
-  Lean/formal proofs → proving-theorems; Python tooling → running-python-tools
-  (PythonCall/SymPyPythonCall from Julia stays here); GPU kernels / CuArray performance /
-  CUDA.jl → optimizing-julia-gpu-kernels (host-side type & package discipline stays here).
+  implementing-and-debugging first, this for idiom; Julia refactor → refactoring-code governs,
+  this supplies JET/Aqua brackets + Julia-safe transforms. Cross-language risk ledger →
+  practicing-tiger-style; Julia mechanisms → HERE.
+  Formal proofs → proving-theorems; Python tooling → running-python-tools
+  (PythonCall from Julia stays here); GPU kernels/CuArray/CUDA.jl →
+  optimizing-julia-gpu-kernels (host-side type/package discipline here).
 ---
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2608.1.0 (2026-08-03) — recordable runs now require pre-pilot resource admission; auto parallelism retired.
-> (prior: v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
+> **Version**: v2608.2.0 (2026-08-14) — data split into persistence vs interchange axes; JSON.jl v1 is the interchange answer.
+> (prior: v2608.1.0 (2026-08-03, pre-pilot resource admission) · v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
 > numerical methodology); everything else lives in `references/` and is loaded on demand.
@@ -40,9 +40,13 @@ description: >-
 > `grep -rn '\[dated:' agents/skills/writing-julia/` and re-verify anything older than ~2 quarters:
 > Julia version baseline (here) · `juliac --trim` experimental status (setup.md §3.5/§3.5.1/§3.6) ·
 > JETLS-replaces-LanguageServer (setup.md §8) · no-native-traits / not-on-roadmap (architecture.md
-> §10.2.1).
+> §10.2.1) · JSON3-deprecated / JSON.jl-v1-is-the-answer (packages.md, Data — Interchange).
 >
 > **Changelog (recent)**:
+> - v2608.2.0: **data-axis void closed.** packages.md Data split into Persistence / Interchange /
+>   Visualization. Interchange: `JSON.jl` **v1**, not `JSON3` (deprecated `[dated:2026-08]`);
+>   `JSON.parse(s, T)` IS the §2.1.3 barrier; `allownan` now false by default. Full entry + source
+>   grades: `tests/forge-verification-ledger.md` (2026-08-14).
 > - v2607.3.1: **GPU sibling landed.** The "direct GPU-array entries (CUDA/Metal)" deferral
 >   below is now CLOSED for CUDA: `optimizing-julia-gpu-kernels` owns device kernels, CuArray
 >   performance, and kernel-under-AD (reciprocal routing row added). Metal remains deferred.
@@ -164,7 +168,7 @@ reference file that matches the task.
 | `references/performance.md` | §2.1–§2.6 hot-path performance — **§2.1 type discipline: multiple vs dynamic dispatch, instability sources (non-concrete struct fields → parametrize), function barriers, `Val` guardrails**, globals/`const`/captured `let`, pre-alloc, broadcast, column-major loop order, `@inbounds`/`@simd`, benchmarking + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, any struct definition, or before claiming code is correct |
 | `references/autodiff.md` | §2.7 DifferentiationInterface frontend, `prepare_*`, backend selection, **§2.7.4 Dual-propagation rules** | any function that will be differentiated |
 | `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
-| `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, viz) | deciding which package to install for a task |
+| `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, **data: persistence vs interchange — JLD2/HDF5/Arrow vs JSON.jl v1**, viz) | deciding which package to install for a task, or moving data across a process/language boundary |
 | `references/setup.md` | §3 install + project env + reproducibility + **§3.4 experiment-script lifecycle (DrWatson: an experiment is a *run* not a file; `src`/`scripts`/`_research`/distill 4-layer boundary; parameterize-don't-duplicate; distill-then-discard — prevents hundreds of accreted one-off scripts)** + TTFX + **§3.5.1 shipping a `.so` (PackageCompiler `create_library` vs `juliac --trim`)**, §5 running, §6 idioms, §7 output, §8 local-dev pointers + **§8.1 notebooks/literate docs (Pluto / Quarto / Documenter)** | setting up Julia, running code, managing reproducible experiments / avoiding experiment-script accretion, compiling a shared library / AOT binary, or choosing a notebook/report tool |
 | `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, **Holy traits for cross-hierarchy behavior (§10.2.1)**, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), **`@which`/`methods` dispatch tracing**, TTFX & invalidation hygiene | structuring a package beyond one file, organizing a large/growing codebase, or doing trait-based dispatch |
 
@@ -427,6 +431,10 @@ Environment — `references/setup.md`:
       speculatively: `Enzyme`/`AllocCheck` (LLVM+GPUCompiler), `Manopt`+`Manifolds` (~100 transitive),
       `Reactant`/`Lux` (XLA). Declared-but-unused deps inflate Manifest, instantiate, and TTFX, and make
       every `Pkg` op trigger native recompiles for code never called (packages.md §4 header).
+- [ ] Data crossing a process/language boundary names its axis first: persistence vs interchange.
+      Persistence is `JLD2` (→ HDF5/Arrow by reader); interchange is **`JSON.jl` v1**, never JSON3
+      (deprecated). The parse names its target type — `JSON.parse(s, T)` — so no `Any`/`LazyValue`
+      reaches a hot path (packages.md §4 "Data" · performance.md §2.1.3)
 - [ ] If symbolic computation is involved: the symbolic tool is chosen by ROLE, not preference (packages.md §4) — **SymEngine** for lightweight/throwaway algebra (no `simplify`/`integrate`); **Symbolics + ModelingToolkit** as the spine of an AI4S/SciML project (codegen, PDE/DAE, discovery — required there, not forbidden); **SymPyPythonCall** called as a service at a thin boundary for heavy CAS (`integrate`, `trigsimp`, `factor`, assumptions). Symbolic construction is localized in one module so the spine is never re-typed.
 
 Package architecture — `references/architecture.md` (when the code outgrows one file / a large package):

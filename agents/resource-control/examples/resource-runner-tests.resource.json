@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "job_id": "resource-runner-tests",
+  "run_class": "test",
+  "cpu_threads": 3,
+  "processes": 4,
+  "host_ram_peak_bytes": 805306368,
+  "memory_bound": "processes=4: outer Bun test runner (1) + inner launch bridge (2) + receipt child (1); RAM: inner 2-CPU receipt scope ≤ 512 MiB + outer runner/controller ≤ 256 MiB = 768 MiB",
+  "device": {
+    "kind": "cpu",
+    "gpu_status": "incompatible",
+    "rationale": "the outer receipt test envelope performs no GPU work"
+  },
+  "scratch_bytes": 0,
+  "child_fanout": 0,
+  "walltime_seconds": 180,
+  "cleanup": {
+    "mode": "term-then-kill",
+    "grace_seconds": 2
+  }
+}

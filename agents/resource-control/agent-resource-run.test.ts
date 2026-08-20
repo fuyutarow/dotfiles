@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -8,10 +9,11 @@ import {
   utimesSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   buildSystemdLaunch,
   commandEnvironment,
+  createAdmissionReceipt,
   decideAdmission,
   checkJob,
   executeJob,
@@ -19,7 +21,10 @@ import {
   parseCpuList,
   probeKernelEnforcement,
   probeHostSnapshot,
+  manifestSourceFromBytes,
+  scopeUnitFor,
   validateManifest,
+  verifyAdmissionReceipt,
   type HostSnapshot,
   type ResourceManifest,
   type Reservation,
@@ -104,6 +109,13 @@ function gpuReservation(
     job_id: `job-${name}`,
     device: { kind: "gpu", gpu_id: gpuId, vram_peak_bytes: vramBytes },
   });
+}
+
+function manifestSourceFor(manifest: ResourceManifest) {
+  return manifestSourceFromBytes(
+    "fixtures/test.resource.json",
+    Buffer.from(JSON.stringify(manifest), "utf8"),
+  );
 }
 
 const temporaryDirectories: string[] = [];
@@ -326,9 +338,22 @@ describe("kernel enforcement", () => {
   });
 
   test("binds the reserved VRAM budget inside the job's CUDA runtime", () => {
+    const manifest = gpuManifest();
+    const reserved = reservation({
+      reservation_id: "controller-1",
+      job_id: manifest.job_id,
+      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+      scratch_bytes: manifest.scratch_bytes,
+      device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 2 * GiB },
+    });
     const environment = commandEnvironment(
-      gpuManifest(),
-      gpuReservation("controller-1", 2 * GiB),
+      manifest,
+      reserved,
+      createAdmissionReceipt(
+        manifestSourceFor(manifest),
+        reserved,
+        "admit-gpu",
+      ),
     );
     expect(environment).toMatchObject({
       CUDA_VISIBLE_DEVICES: "0",
@@ -339,10 +364,408 @@ describe("kernel enforcement", () => {
   });
 
   test("leaves no CUDA budget behind on a CPU reservation", () => {
-    const environment = commandEnvironment(cpuManifest(), reservation());
+    const manifest = cpuManifest();
+    const reserved = reservation({
+      job_id: manifest.job_id,
+      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+      scratch_bytes: manifest.scratch_bytes,
+    });
+    const environment = commandEnvironment(
+      manifest,
+      reserved,
+      createAdmissionReceipt(
+        manifestSourceFor(manifest),
+        reserved,
+        "admit-cpu",
+      ),
+    );
     expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
     expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
     expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
+  });
+
+  test("refuses an environment when the live reservation differs from the manifest", () => {
+    const manifest = cpuManifest();
+    const reserved = reservation({
+      job_id: manifest.job_id,
+      host_ram_peak_bytes: 512 * MiB,
+    });
+    const receipt = createAdmissionReceipt(
+      manifestSourceFor(manifest),
+      reserved,
+      "admit-mismatch",
+    );
+    expect(() => commandEnvironment(manifest, reserved, receipt)).toThrow(
+      "manifest and reservation resources must match",
+    );
+  });
+
+  test("replaces spoofed resource environment with an exact scope-bound receipt", () => {
+    const manifest = cpuManifest({
+      cpu_threads: 2,
+      host_ram_peak_bytes: 512 * MiB,
+      scratch_bytes: 64 * MiB,
+    });
+    const reserved = reservation({
+      reservation_id: "reservation-123",
+      job_id: "test-job",
+      controller_pid: 4_242,
+      cpu_ids: [2, 5],
+      host_ram_peak_bytes: 512 * MiB,
+      scratch_bytes: 64 * MiB,
+      started_at: "2026-08-20T01:02:03.000Z",
+    });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
+    const source = manifestSourceFromBytes(
+      "fixtures/exact.resource.json",
+      manifestBytes,
+    );
+    const receipt = createAdmissionReceipt(source, reserved, "admission-456");
+    const expectedPayload = JSON.stringify({
+      schema: 1,
+      admission_id: "admission-456",
+      manifest_path: resolve("fixtures/exact.resource.json"),
+      manifest_sha256: createHash("sha256").update(manifestBytes).digest("hex"),
+      job_id: "test-job",
+      reservation_id: "reservation-123",
+      scope_unit: "agent-resource-reservation-123.scope",
+      controller_pid: 4_242,
+      cpu_ids: [2, 5],
+      host_ram_peak_bytes: 512 * MiB,
+      scratch_bytes: 64 * MiB,
+      device: { kind: "cpu" },
+      started_at: "2026-08-20T01:02:03.000Z",
+    });
+    expect(source).toEqual({
+      path: resolve("fixtures/exact.resource.json"),
+      sha256: createHash("sha256").update(manifestBytes).digest("hex"),
+    });
+    expect(receipt.payload).toBe(expectedPayload);
+    expect(receipt.sha256).toBe(
+      createHash("sha256").update(expectedPayload).digest("hex"),
+    );
+    expect(scopeUnitFor(reserved)).toBe("agent-resource-reservation-123.scope");
+    expect(
+      verifyAdmissionReceipt(
+        receipt.payload,
+        receipt.sha256,
+        "0::/user.slice/user-1000.slice/agent-resource-reservation-123.scope",
+      ),
+    ).toBe(true);
+    expect(
+      verifyAdmissionReceipt(
+        receipt.payload,
+        receipt.sha256,
+        "0::/user.slice/user-1000.slice/not-agent-resource-reservation-123.scope",
+      ),
+    ).toBe(false);
+    expect(
+      verifyAdmissionReceipt(
+        receipt.payload,
+        "0".repeat(64),
+        "0::/user.slice/user-1000.slice/agent-resource-reservation-123.scope",
+      ),
+    ).toBe(false);
+
+    const reservedKeys = [
+      "AGENT_RESOURCE_JOB_ID",
+      "AGENT_RESOURCE_CPU_IDS",
+      "AGENT_RESOURCE_MAX_PROCESSES",
+      "AGENT_RESOURCE_HOST_RAM_BYTES",
+      "AGENT_RESOURCE_SCRATCH_BYTES",
+      "AGENT_RESOURCE_MANIFEST_SHA256",
+      "AGENT_RESOURCE_MANIFEST_PATH",
+      "AGENT_RESOURCE_ADMISSION_ID",
+      "AGENT_RESOURCE_RESERVATION_ID",
+      "AGENT_RESOURCE_ADMISSION_RECEIPT",
+      "AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256",
+      "AGENT_RESOURCE_VRAM_BYTES",
+      "JULIA_CUDA_HARD_MEMORY_LIMIT",
+      "JULIA_CUDA_SOFT_MEMORY_LIMIT",
+      "CUDA_VISIBLE_DEVICES",
+    ];
+    const inherited = new Map(
+      reservedKeys.map((key) => [key, process.env[key]]),
+    );
+    try {
+      for (const key of reservedKeys) process.env[key] = "caller-spoofed";
+      const environment = commandEnvironment(manifest, reserved, receipt);
+      expect(environment).toMatchObject({
+        AGENT_RESOURCE_JOB_ID: "test-job",
+        AGENT_RESOURCE_CPU_IDS: "2,5",
+        AGENT_RESOURCE_MAX_PROCESSES: "2",
+        AGENT_RESOURCE_HOST_RAM_BYTES: String(512 * MiB),
+        AGENT_RESOURCE_SCRATCH_BYTES: String(64 * MiB),
+        AGENT_RESOURCE_MANIFEST_SHA256: source.sha256,
+        AGENT_RESOURCE_MANIFEST_PATH: source.path,
+        AGENT_RESOURCE_ADMISSION_ID: "admission-456",
+        AGENT_RESOURCE_RESERVATION_ID: "reservation-123",
+        AGENT_RESOURCE_ADMISSION_RECEIPT: expectedPayload,
+        AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256: receipt.sha256,
+      });
+      expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
+      expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
+      expect(environment.JULIA_CUDA_SOFT_MEMORY_LIMIT).toBeUndefined();
+      expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
+    } finally {
+      for (const [key, value] of inherited) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+});
+
+describe("admission receipt", () => {
+  test("rejects malformed, unknown, altered, and non-canonical receipts", () => {
+    const source = manifestSourceFromBytes(
+      "fixtures/receipt.resource.json",
+      Buffer.from('{"schema":1}\n', "utf8"),
+    );
+    const reserved = reservation({
+      reservation_id: "receipt-123",
+      job_id: "receipt-job",
+      controller_pid: 4_242,
+      cpu_ids: [1, 3],
+      host_ram_peak_bytes: 512 * MiB,
+      scratch_bytes: 0,
+      started_at: "2026-08-21T01:02:03.000Z",
+    });
+    const receipt = createAdmissionReceipt(source, reserved, "admission-123");
+    const cgroup =
+      "0::/user.slice/user-1000.slice/agent-resource-receipt-123.scope";
+    const validPayload = {
+      schema: 1,
+      admission_id: "admission-123",
+      manifest_path: source.path,
+      manifest_sha256: source.sha256,
+      job_id: "receipt-job",
+      reservation_id: "receipt-123",
+      scope_unit: "agent-resource-receipt-123.scope",
+      controller_pid: 4_242,
+      cpu_ids: [1, 3],
+      host_ram_peak_bytes: 512 * MiB,
+      scratch_bytes: 0,
+      device: { kind: "cpu" },
+      started_at: "2026-08-21T01:02:03.000Z",
+    };
+    const digestFor = (payload: string): string =>
+      createHash("sha256").update(payload).digest("hex");
+    const invalidPayloads = [
+      "{",
+      JSON.stringify({ ...validPayload, unexpected: true }),
+      JSON.stringify({ ...validPayload, schema: 2 }),
+      JSON.stringify({ ...validPayload, admission_id: 1 }),
+      JSON.stringify({ ...validPayload, manifest_path: "relative.json" }),
+      JSON.stringify({ ...validPayload, manifest_sha256: "A".repeat(64) }),
+      JSON.stringify({ ...validPayload, job_id: null }),
+      JSON.stringify({ ...validPayload, reservation_id: null }),
+      JSON.stringify({ ...validPayload, scope_unit: "wrong.scope" }),
+      JSON.stringify({ ...validPayload, controller_pid: 1.5 }),
+      JSON.stringify({ ...validPayload, cpu_ids: [1, 1] }),
+      JSON.stringify({ ...validPayload, host_ram_peak_bytes: 1.5 }),
+      JSON.stringify({ ...validPayload, scratch_bytes: -1 }),
+      JSON.stringify({
+        ...validPayload,
+        device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1.5 },
+      }),
+      JSON.stringify({ ...validPayload, started_at: "not-an-iso-timestamp" }),
+      JSON.stringify({
+        admission_id: validPayload.admission_id,
+        ...validPayload,
+      }),
+    ];
+    for (const payload of invalidPayloads) {
+      expect(verifyAdmissionReceipt(payload, digestFor(payload), cgroup)).toBe(
+        false,
+      );
+    }
+    expect(
+      verifyAdmissionReceipt(
+        receipt.payload.replace("admission-123", "admission-124"),
+        receipt.sha256,
+        cgroup,
+      ),
+    ).toBe(false);
+  });
+
+  test("check-only admission does not issue receipt identifiers", async () => {
+    const reports: string[] = [];
+    const result = await checkJob(cpuManifest(), {
+      stateDirectory: temporaryStateDirectory(),
+      snapshot: hostSnapshot(),
+      kernelEnforcement: { available: true },
+      report: (line) => reports.push(line),
+    });
+    expect(result).toMatchObject({ ok: true, exitCode: 0 });
+    expect(reports.join("\n")).toContain("check_only=true");
+    expect(reports.join("\n")).not.toContain("admission_id=");
+    expect(reports.join("\n")).not.toContain("receipt_sha256=");
+  });
+
+  test("accepts only a runner child in the receipt's live systemd scope", async () => {
+    const outerManifestPath = join(
+      import.meta.dir,
+      "examples/resource-runner-tests.resource.json",
+    );
+    const outerManifestBytes = readFileSync(outerManifestPath);
+    const outerManifest = validateManifest(
+      JSON.parse(outerManifestBytes.toString()),
+    );
+    const outerSource = manifestSourceFromBytes(
+      outerManifestPath,
+      outerManifestBytes,
+    );
+    expect(outerManifest).toMatchObject({
+      cpu_threads: 3,
+      processes: 4,
+      host_ram_peak_bytes: 768 * MiB,
+    });
+    const manifestPath = join(
+      import.meta.dir,
+      "examples/resource-runner-receipt-inner.resource.json",
+    );
+    const manifestBytes = readFileSync(manifestPath);
+    const manifest = validateManifest(JSON.parse(manifestBytes.toString()));
+    const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
+    const outerPayload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;
+    const outerReceiptSha256 =
+      process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;
+    const outerCgroup = readFileSync("/proc/self/cgroup", "utf8");
+    expect(process.env.AGENT_RESOURCE_MANIFEST_PATH).toBe(outerSource.path);
+    expect(process.env.AGENT_RESOURCE_MANIFEST_SHA256).toBe(outerSource.sha256);
+    expect(process.env.AGENT_RESOURCE_JOB_ID).toBe(outerManifest.job_id);
+    expect(typeof process.env.AGENT_RESOURCE_RESERVATION_ID).toBe("string");
+    expect(typeof outerPayload).toBe("string");
+    expect(typeof outerReceiptSha256).toBe("string");
+    if (
+      typeof outerPayload !== "string" ||
+      typeof outerReceiptSha256 !== "string"
+    ) {
+      throw new Error(
+        "the outer test envelope did not provide an admission receipt",
+      );
+    }
+    expect(outerReceiptSha256).toBe(
+      createHash("sha256").update(outerPayload).digest("hex"),
+    );
+    expect(
+      verifyAdmissionReceipt(outerPayload, outerReceiptSha256, outerCgroup),
+    ).toBe(true);
+    const outerReceipt = JSON.parse(outerPayload);
+    expect(JSON.stringify(outerReceipt)).toBe(outerPayload);
+    expect(outerReceipt).toMatchObject({
+      schema: 1,
+      admission_id: process.env.AGENT_RESOURCE_ADMISSION_ID,
+      manifest_path: outerSource.path,
+      manifest_sha256: outerSource.sha256,
+      job_id: outerManifest.job_id,
+      reservation_id: process.env.AGENT_RESOURCE_RESERVATION_ID,
+      host_ram_peak_bytes: outerManifest.host_ram_peak_bytes,
+      scratch_bytes: outerManifest.scratch_bytes,
+      device: { kind: "cpu" },
+    });
+    expect(outerReceipt.cpu_ids).toHaveLength(outerManifest.cpu_threads);
+    expect(outerReceipt.scope_unit).toBe(
+      `agent-resource-${process.env.AGENT_RESOURCE_RESERVATION_ID}.scope`,
+    );
+    expect(outerReceipt.manifest_path).not.toBe(manifestSource.path);
+    expect(outerReceipt.manifest_sha256).not.toBe(manifestSource.sha256);
+    expect(outerReceipt.job_id).not.toBe(manifest.job_id);
+    const stateDirectory = temporaryStateDirectory();
+    const receiptPath = join(stateDirectory, "child-receipt.json");
+    const runnerModulePath = join(import.meta.dir, "agent-resource-run.ts");
+    const childScript = [
+      'import { readFileSync, writeFileSync } from "node:fs";',
+      `import { verifyAdmissionReceipt } from ${JSON.stringify(runnerModulePath)};`,
+      `const receiptPath = ${JSON.stringify(receiptPath)};`,
+      "const payload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;",
+      "const sha256 = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;",
+      "const cgroup = readFileSync('/proc/self/cgroup', 'utf8');",
+      "const verified = typeof payload === 'string' && typeof sha256 === 'string' && verifyAdmissionReceipt(payload, sha256, cgroup);",
+      "const environment = Object.fromEntries(Object.entries(process.env));",
+      "writeFileSync(receiptPath, JSON.stringify({ verified, cgroup, environment }) + '\\n');",
+      "process.exit(verified ? 0 : 1);",
+    ].join("\n");
+    const reports: string[] = [];
+    const result = await executeJob(
+      manifest,
+      [process.execPath, "-e", childScript],
+      {
+        stateDirectory,
+        snapshot: probeHostSnapshot(process.cwd()),
+        monitorIntervalMs: 25,
+        manifestSource,
+        report: (line) => reports.push(line),
+      },
+    );
+    expect(result).toMatchObject({ ok: true, exitCode: 0 });
+    const admit = reports.find((line) => line.startsWith("ADMIT "));
+    expect(admit).toContain("admission_id=");
+    expect(admit).toContain("reservation_id=");
+    expect(admit).toContain("scope_unit=");
+    expect(admit).toContain("manifest_sha256=");
+    expect(admit).toContain("receipt_sha256=");
+
+    const saved = JSON.parse(readFileSync(receiptPath, "utf8"));
+    expect(saved.verified).toBe(true);
+    const innerEnvironment = saved.environment;
+    const innerPayload = innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT;
+    const innerReceiptSha256 =
+      innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;
+    expect(innerEnvironment.AGENT_RESOURCE_MANIFEST_PATH).toBe(
+      manifestSource.path,
+    );
+    expect(innerEnvironment.AGENT_RESOURCE_MANIFEST_SHA256).toBe(
+      manifestSource.sha256,
+    );
+    expect(innerEnvironment.AGENT_RESOURCE_JOB_ID).toBe(manifest.job_id);
+    expect(typeof innerEnvironment.AGENT_RESOURCE_RESERVATION_ID).toBe(
+      "string",
+    );
+    expect(typeof innerEnvironment.AGENT_RESOURCE_ADMISSION_ID).toBe("string");
+    expect(typeof innerPayload).toBe("string");
+    expect(typeof innerReceiptSha256).toBe("string");
+    expect(innerReceiptSha256).toBe(
+      createHash("sha256").update(innerPayload).digest("hex"),
+    );
+    expect(
+      verifyAdmissionReceipt(innerPayload, innerReceiptSha256, saved.cgroup),
+    ).toBe(true);
+    const innerReceipt = JSON.parse(innerPayload);
+    expect(JSON.stringify(innerReceipt)).toBe(innerPayload);
+    expect(innerReceipt).toMatchObject({
+      schema: 1,
+      admission_id: innerEnvironment.AGENT_RESOURCE_ADMISSION_ID,
+      manifest_path: manifestSource.path,
+      manifest_sha256: manifestSource.sha256,
+      job_id: manifest.job_id,
+      reservation_id: innerEnvironment.AGENT_RESOURCE_RESERVATION_ID,
+      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+      scratch_bytes: manifest.scratch_bytes,
+      device: { kind: "cpu" },
+    });
+    expect(innerReceipt.cpu_ids).toHaveLength(manifest.cpu_threads);
+    expect(innerReceipt.scope_unit).toBe(
+      `agent-resource-${innerEnvironment.AGENT_RESOURCE_RESERVATION_ID}.scope`,
+    );
+    expect(innerReceipt.manifest_path).not.toBe(outerSource.path);
+    expect(innerReceipt.manifest_sha256).not.toBe(outerSource.sha256);
+    expect(innerReceipt.job_id).not.toBe(outerManifest.job_id);
+    const directScript = [
+      'import { readFileSync } from "node:fs";',
+      `import { verifyAdmissionReceipt } from ${JSON.stringify(runnerModulePath)};`,
+      "const payload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;",
+      "const sha256 = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;",
+      "const verified = typeof payload === 'string' && typeof sha256 === 'string' && verifyAdmissionReceipt(payload, sha256, readFileSync('/proc/self/cgroup', 'utf8'));",
+      "process.exit(verified ? 1 : 0);",
+    ].join("\n");
+    const direct = Bun.spawnSync([process.execPath, "-e", directScript], {
+      env: { ...process.env, ...saved.environment },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(direct.exitCode).toBe(0);
   });
 });
 
@@ -392,7 +815,12 @@ describe("bounded execution", () => {
         "-c",
         'test "$OMP_NUM_THREADS" = 1 && test "$JULIA_NUM_THREADS" = 1',
       ],
-      { stateDirectory, snapshot, monitorIntervalMs: 25 },
+      {
+        stateDirectory,
+        snapshot,
+        monitorIntervalMs: 25,
+        manifestSource: manifestSourceFor(cpuManifest()),
+      },
     );
     expect(result).toMatchObject({ ok: true, exitCode: 0 });
     expect(readdirSync(stateDirectory)).toEqual([]);
@@ -405,7 +833,12 @@ describe("bounded execution", () => {
     const result = await executeJob(
       cpuManifest({ walltime_seconds: 1 }),
       ["sh", "-c", "sleep 10"],
-      { stateDirectory, snapshot, monitorIntervalMs: 25 },
+      {
+        stateDirectory,
+        snapshot,
+        monitorIntervalMs: 25,
+        manifestSource: manifestSourceFor(cpuManifest({ walltime_seconds: 1 })),
+      },
     );
     expect(result).toMatchObject({
       ok: false,
@@ -422,7 +855,12 @@ describe("bounded execution", () => {
     const result = await executeJob(
       cpuManifest({ processes: 1 }),
       ["sh", "-c", "sleep 10 & wait"],
-      { stateDirectory, snapshot, monitorIntervalMs: 25 },
+      {
+        stateDirectory,
+        snapshot,
+        monitorIntervalMs: 25,
+        manifestSource: manifestSourceFor(cpuManifest({ processes: 1 })),
+      },
     );
     expect(result).toMatchObject({
       ok: false,
@@ -444,7 +882,14 @@ describe("bounded execution", () => {
         "const value = Buffer.alloc(256 * 1024 * 1024, 1); " +
           "process.stdout.write(String(value.length)); await Bun.sleep(5_000);",
       ],
-      { stateDirectory, snapshot, monitorIntervalMs: 1_000 },
+      {
+        stateDirectory,
+        snapshot,
+        monitorIntervalMs: 1_000,
+        manifestSource: manifestSourceFor(
+          cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
+        ),
+      },
     );
     expect(result).toMatchObject({
       ok: false,
@@ -467,7 +912,12 @@ describe("bounded execution", () => {
         `setsid sh -c 'echo $$ > ${pidFile}; exec sleep 10' & ` +
           `while [ ! -s ${pidFile} ]; do sleep 0.01; done`,
       ],
-      { stateDirectory, snapshot, monitorIntervalMs: 25 },
+      {
+        stateDirectory,
+        snapshot,
+        monitorIntervalMs: 25,
+        manifestSource: manifestSourceFor(cpuManifest({ processes: 3 })),
+      },
     );
     const escapedPid = Number(readFileSync(pidFile, "utf8").trim());
     let escapedProcessIsLive = true;
@@ -497,6 +947,7 @@ describe("bounded execution", () => {
         kernelEnforcement: { available: true },
         monitorIntervalMs: 25,
         systemdScopeCleanup: () => false,
+        manifestSource: manifestSourceFor(cpuManifest()),
       }),
     ).rejects.toThrow("failed to verify cleanup of systemd scope");
     expect(readdirSync(stateDirectory)).toEqual([]);

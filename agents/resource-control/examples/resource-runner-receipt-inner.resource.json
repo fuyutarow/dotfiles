@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "job_id": "resource-runner-receipt-inner",
+  "run_class": "test",
+  "cpu_threads": 2,
+  "processes": 4,
+  "host_ram_peak_bytes": 536870912,
+  "memory_bound": "processes=4: systemd launch bridge, receipt child, and cleanup margin; RAM: receipt child and launch chain ≤ 256 MiB + runtime and cleanup headroom ≤ 256 MiB = 512 MiB",
+  "device": {
+    "kind": "cpu",
+    "gpu_status": "incompatible",
+    "rationale": "the inner receipt integration command performs no GPU work"
+  },
+  "scratch_bytes": 0,
+  "child_fanout": 0,
+  "walltime_seconds": 180,
+  "cleanup": {
+    "mode": "term-then-kill",
+    "grace_seconds": 2
+  }
+}

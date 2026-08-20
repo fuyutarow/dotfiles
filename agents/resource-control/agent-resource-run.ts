@@ -16,7 +16,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { cli } from "cleye";
@@ -112,6 +112,42 @@ export type Reservation = {
   started_at: string;
 };
 
+/**
+ * The manifest identity recorded by the CLI while it still has the exact input bytes.
+ * `path` is always absolute; `sha256` is lowercase hexadecimal SHA-256 of those bytes.
+ */
+export type ManifestSource = {
+  path: string;
+  sha256: string;
+};
+
+/**
+ * A receipt is an in-process, same-host assertion from this runner, not a signature or remote
+ * attestation. Its fixed field order makes JSON.stringify() a canonical payload for consumers.
+ */
+export type AdmissionReceiptPayload = {
+  schema: 1;
+  admission_id: string;
+  manifest_path: string;
+  manifest_sha256: string;
+  job_id: string;
+  reservation_id: string;
+  scope_unit: string;
+  controller_pid: number;
+  cpu_ids: number[];
+  host_ram_peak_bytes: number;
+  scratch_bytes: number;
+  device: Reservation["device"];
+  started_at: string;
+};
+
+export type AdmissionReceipt = {
+  payload: string;
+  sha256: string;
+  admissionId: string;
+  manifestSource: ManifestSource;
+};
+
 export type AdmissionResult =
   | {
       ok: true;
@@ -153,6 +189,8 @@ type ExecuteOptions = {
   report?: (line: string) => void;
   kernelEnforcement?: KernelEnforcement;
   systemdScopeCleanup?: (scopeUnit: string) => boolean;
+  /** Required for child execution so the receipt can name the exact admitted manifest bytes. */
+  manifestSource?: ManifestSource;
 };
 
 type Lease = {
@@ -206,6 +244,54 @@ function nonEmpty(value: unknown, label: string, maximum = 2_000): string {
     throw new UsageError(`${label} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function isNonEmptyText(value: unknown, maximum = 2_000): value is string {
+  return (
+    typeof value === "string" && value.trim() !== "" && value.length <= maximum
+  );
+}
+
+function isSafeIntegerInRange(
+  value: unknown,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= minimum &&
+    value <= maximum
+  );
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  const keys = Object.keys(value);
+  return (
+    keys.length === expected.length &&
+    keys.every((key) => expected.includes(key))
+  );
+}
+
+function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+export function manifestSourceFromBytes(
+  manifestPath: string,
+  manifestBytes: Uint8Array,
+): ManifestSource {
+  return {
+    path: resolve(manifestPath),
+    sha256: sha256Hex(manifestBytes),
+  };
 }
 
 function oneOf<T extends string>(
@@ -982,17 +1068,191 @@ function gpuBudgetEnvironment(
   };
 }
 
+export function createAdmissionReceipt(
+  manifestSource: ManifestSource,
+  reservation: Reservation,
+  admissionId = randomUUID(),
+): AdmissionReceipt {
+  const payload: AdmissionReceiptPayload = {
+    schema: 1,
+    admission_id: admissionId,
+    manifest_path: manifestSource.path,
+    manifest_sha256: manifestSource.sha256,
+    job_id: reservation.job_id,
+    reservation_id: reservation.reservation_id,
+    scope_unit: scopeUnitFor(reservation),
+    controller_pid: reservation.controller_pid,
+    cpu_ids: reservation.cpu_ids,
+    host_ram_peak_bytes: reservation.host_ram_peak_bytes,
+    scratch_bytes: reservation.scratch_bytes,
+    device: reservation.device,
+    started_at: reservation.started_at,
+  };
+  const canonicalPayload = JSON.stringify(payload);
+  return {
+    payload: canonicalPayload,
+    sha256: sha256Hex(Buffer.from(canonicalPayload, "utf8")),
+    admissionId,
+    manifestSource,
+  };
+}
+
+function receiptDeviceFrom(
+  value: unknown,
+): AdmissionReceiptPayload["device"] | null {
+  if (!isRecord(value) || typeof value.kind !== "string") return null;
+  if (value.kind === "cpu") {
+    return hasExactKeys(value, ["kind"]) ? { kind: "cpu" } : null;
+  }
+  if (
+    value.kind === "gpu" &&
+    hasExactKeys(value, ["kind", "gpu_id", "vram_peak_bytes"]) &&
+    isSafeIntegerInRange(value.gpu_id, 0, 1_024) &&
+    isSafeIntegerInRange(value.vram_peak_bytes, 1)
+  ) {
+    return {
+      kind: "gpu",
+      gpu_id: value.gpu_id,
+      vram_peak_bytes: value.vram_peak_bytes,
+    };
+  }
+  return null;
+}
+
+function admissionReceiptPayloadFrom(
+  value: unknown,
+): AdmissionReceiptPayload | null {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "schema",
+      "admission_id",
+      "manifest_path",
+      "manifest_sha256",
+      "job_id",
+      "reservation_id",
+      "scope_unit",
+      "controller_pid",
+      "cpu_ids",
+      "host_ram_peak_bytes",
+      "scratch_bytes",
+      "device",
+      "started_at",
+    ]) ||
+    value.schema !== 1 ||
+    !isNonEmptyText(value.admission_id) ||
+    !isNonEmptyText(value.manifest_path) ||
+    !isAbsolute(value.manifest_path) ||
+    resolve(value.manifest_path) !== value.manifest_path ||
+    !isSha256Hex(value.manifest_sha256) ||
+    !isNonEmptyText(value.job_id, 80) ||
+    !isNonEmptyText(value.reservation_id, 256) ||
+    !isNonEmptyText(value.scope_unit, 300) ||
+    !isSafeIntegerInRange(value.controller_pid, 1) ||
+    !Array.isArray(value.cpu_ids) ||
+    !isSafeIntegerInRange(value.host_ram_peak_bytes, 1) ||
+    !isSafeIntegerInRange(value.scratch_bytes, 0) ||
+    !isNonEmptyText(value.started_at, 64) ||
+    Number.isNaN(Date.parse(value.started_at))
+  ) {
+    return null;
+  }
+  if (new Date(value.started_at).toISOString() !== value.started_at)
+    return null;
+
+  const cpuIds: number[] = [];
+  for (const cpuId of value.cpu_ids) {
+    if (!isSafeIntegerInRange(cpuId, 0) || cpuIds.includes(cpuId)) return null;
+    cpuIds.push(cpuId);
+  }
+  if (cpuIds.length === 0) return null;
+
+  const device = receiptDeviceFrom(value.device);
+  if (device === null) return null;
+  if (value.scope_unit !== `agent-resource-${value.reservation_id}.scope`) {
+    return null;
+  }
+  return {
+    schema: 1,
+    admission_id: value.admission_id,
+    manifest_path: value.manifest_path,
+    manifest_sha256: value.manifest_sha256,
+    job_id: value.job_id,
+    reservation_id: value.reservation_id,
+    scope_unit: value.scope_unit,
+    controller_pid: value.controller_pid,
+    cpu_ids: cpuIds,
+    host_ram_peak_bytes: value.host_ram_peak_bytes,
+    scratch_bytes: value.scratch_bytes,
+    device,
+    started_at: value.started_at,
+  };
+}
+
+/**
+ * Verify the receipt's byte integrity and that this process is in its bound systemd scope.
+ * This is cooperative same-host provenance only: another process with the same UID can create
+ * matching environment variables and a scope, so it is not cryptographic launcher identity.
+ */
+export function verifyAdmissionReceipt(
+  payload: string,
+  expectedSha256: string,
+  cgroupText: string,
+): boolean {
+  if (!isSha256Hex(expectedSha256)) return false;
+  if (sha256Hex(Buffer.from(payload, "utf8")) !== expectedSha256) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return false;
+  }
+  const receipt = admissionReceiptPayloadFrom(parsed);
+  if (receipt === null || JSON.stringify(receipt) !== payload) return false;
+  return cgroupText.split("\n").some((line) => {
+    const cgroupPath = line.split(":", 3)[2];
+    return cgroupPath?.split("/").includes(receipt.scope_unit) ?? false;
+  });
+}
+
 export function commandEnvironment(
   manifest: ResourceManifest,
   reservation: Reservation,
+  receipt: AdmissionReceipt,
 ): Record<string, string | undefined> {
+  if (manifest.job_id !== reservation.job_id) {
+    throw new StateError("manifest and reservation job_id must match");
+  }
+  if (
+    manifest.cpu_threads !== reservation.cpu_ids.length ||
+    manifest.host_ram_peak_bytes !== reservation.host_ram_peak_bytes ||
+    manifest.scratch_bytes !== reservation.scratch_bytes ||
+    (manifest.device.kind === "cpu" && reservation.device.kind !== "cpu") ||
+    (manifest.device.kind === "gpu" &&
+      (reservation.device.kind !== "gpu" ||
+        manifest.device.gpu_id !== reservation.device.gpu_id ||
+        manifest.device.vram_peak_bytes !== reservation.device.vram_peak_bytes))
+  ) {
+    throw new StateError(
+      "manifest and reservation resources must match before constructing child environment",
+    );
+  }
   const threads = String(manifest.cpu_threads);
   return {
     ...process.env,
+    // These values are runner-owned. Replacing every key prevents a caller from passing a
+    // plausible-looking admission into its child before the real lease exists.
     AGENT_RESOURCE_JOB_ID: manifest.job_id,
     AGENT_RESOURCE_CPU_IDS: reservation.cpu_ids.join(","),
     AGENT_RESOURCE_MAX_PROCESSES: String(manifest.processes),
-    AGENT_RESOURCE_HOST_RAM_BYTES: String(manifest.host_ram_peak_bytes),
+    AGENT_RESOURCE_HOST_RAM_BYTES: String(reservation.host_ram_peak_bytes),
+    AGENT_RESOURCE_SCRATCH_BYTES: String(reservation.scratch_bytes),
+    AGENT_RESOURCE_MANIFEST_SHA256: receipt.manifestSource.sha256,
+    AGENT_RESOURCE_MANIFEST_PATH: receipt.manifestSource.path,
+    AGENT_RESOURCE_ADMISSION_ID: receipt.admissionId,
+    AGENT_RESOURCE_RESERVATION_ID: reservation.reservation_id,
+    AGENT_RESOURCE_ADMISSION_RECEIPT: receipt.payload,
+    AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256: receipt.sha256,
     JULIA_NUM_THREADS: threads,
     OPENBLAS_NUM_THREADS: threads,
     OMP_NUM_THREADS: threads,
@@ -1012,13 +1272,17 @@ export function kernelTasksMax(manifest: ResourceManifest): number {
   return Math.min(MAX_KERNEL_TASKS, Math.max(MIN_KERNEL_TASKS, requested));
 }
 
+export function scopeUnitFor(reservation: Reservation): string {
+  return `agent-resource-${reservation.reservation_id}.scope`;
+}
+
 export function buildSystemdLaunch(
   manifest: ResourceManifest,
   reservation: Reservation,
   command: string[],
 ): SystemdLaunch {
-  const scopeBase = `agent-resource-${reservation.reservation_id}`;
-  const scopeUnit = `${scopeBase}.scope`;
+  const scopeUnit = scopeUnitFor(reservation);
+  const scopeBase = scopeUnit.slice(0, -".scope".length);
   const tasksMax = kernelTasksMax(manifest);
   return {
     scopeUnit,
@@ -1074,15 +1338,25 @@ function defaultReport(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-function admissionDescription(lease: Lease): string {
+function admissionDescription(
+  lease: Lease,
+  receipt?: AdmissionReceipt,
+): string {
   const device =
     lease.reservation.device.kind === "gpu"
       ? `gpu:${lease.reservation.device.gpu_id} vram_bytes=${lease.reservation.device.vram_peak_bytes}`
       : "cpu";
+  const receiptFields =
+    receipt === undefined
+      ? ""
+      : ` admission_id=${receipt.admissionId} ` +
+        `reservation_id=${lease.reservation.reservation_id} ` +
+        `scope_unit=${scopeUnitFor(lease.reservation)} ` +
+        `manifest_sha256=${receipt.manifestSource.sha256} receipt_sha256=${receipt.sha256}`;
   return (
     `ADMIT job=${lease.reservation.job_id} cpu_ids=${lease.reservation.cpu_ids.join(",")} ` +
     `ram_bytes=${lease.reservation.host_ram_peak_bytes} device=${device} ` +
-    "enforcement=systemd-cgroup+affinity+sampled-process-group"
+    `enforcement=systemd-cgroup+affinity+sampled-process-group${receiptFields}`
   );
 }
 
@@ -1133,6 +1407,11 @@ export async function executeJob(
   if (command.length === 0 || command[0]?.trim() === "") {
     throw new UsageError("a command is required unless --check-only is used");
   }
+  if (options.manifestSource === undefined) {
+    throw new UsageError(
+      "executeJob requires manifestSource from the exact manifest bytes read by the runner",
+    );
+  }
   if (Bun.which("setsid") === null || Bun.which("taskset") === null) {
     report(
       `DENY job=${manifest.job_id} reason=setsid and taskset are required for enforcement`,
@@ -1158,7 +1437,11 @@ export async function executeJob(
   }
 
   const lease = acquired;
-  report(admissionDescription(lease));
+  const receipt = createAdmissionReceipt(
+    options.manifestSource,
+    lease.reservation,
+  );
+  report(admissionDescription(lease, receipt));
   const timeoutSignal = AbortSignal.timeout(manifest.walltime_seconds * 1_000);
   let walltimeFired = false;
   let interrupted = false;
@@ -1186,7 +1469,7 @@ export async function executeJob(
       // systemd independently enforces CPU, RAM, zero job swap, and a coarse task ceiling.
       child = Bun.spawn(launch.argv, {
         cwd,
-        env: commandEnvironment(manifest, lease.reservation),
+        env: commandEnvironment(manifest, lease.reservation, receipt),
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
@@ -1311,9 +1594,11 @@ async function main(): Promise<void> {
     throw new UsageError("--manifest is required");
   }
   const manifestPath = resolve(parsed.flags.manifest);
+  let manifestBytes: Uint8Array;
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifestBytes = readFileSync(manifestPath);
+    raw = JSON.parse(manifestBytes.toString());
   } catch (error) {
     throw new UsageError(
       `cannot read manifest '${manifestPath}': ${
@@ -1322,6 +1607,7 @@ async function main(): Promise<void> {
     );
   }
   const manifest = validateManifest(raw);
+  const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
   const command = parsed._.map(String);
   if (parsed.flags.checkOnly === true && command.length > 0) {
     throw new UsageError("--check-only does not accept a command");
@@ -1329,7 +1615,7 @@ async function main(): Promise<void> {
   const result =
     parsed.flags.checkOnly === true
       ? await checkJob(manifest)
-      : await executeJob(manifest, command);
+      : await executeJob(manifest, command, { manifestSource });
   process.exitCode = result.exitCode;
 }
 

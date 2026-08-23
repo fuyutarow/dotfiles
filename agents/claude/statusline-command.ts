@@ -6,7 +6,15 @@
 //   present on both OSes via Brewfile). If bun is somehow absent the bar goes blank —
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
-//   line 1: PS1 mirror   user@host:MM-DD HH:MM|cwd    (mirrors .zshrc PROMPT)
+//   line 1: PS1 mirror + account   user@host:MM-DD HH:MM|cwd · <email>
+//           The left half mirrors .zshrc PROMPT. The account is appended here, and nowhere
+//           else, for three reasons: it is IDENTITY like the rest of this row (user@host is
+//           the OS account, the email is the Claude one — they belong side by side); the
+//           Session row below is off-limits (see its note: the uuid must own its row); and
+//           the live row already wraps on a narrow pane, so static text must not compete
+//           there. Costs no extra row. Read from ~/.claude.json's `oauthAccount`, and
+//           deliberately NOT from ~/.claude/.credentials.json, which holds live OAuth tokens
+//           this script has no business opening. Omitted whenever that field is unreadable.
 //   line 2: session_id — the FULL uuid, on its own row, labelled like every other segment.
 //           NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
 //           prefix form, so a shortened id stops being a resume handle. The label is free
@@ -50,6 +58,7 @@
 
 import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 interface RateWindow {
   used_percentage?: number;
@@ -93,15 +102,34 @@ function shorten(p: string): string {
   return p;
 }
 
-// line 1: env-derived PS1 mirror. Needs no JSON, so it always renders.
+// Which Claude account this CLI is authenticated as. The statusline input carries no account
+// field, so it comes from ~/.claude.json — the same file `claude` itself writes on login.
+// Cost measured 2026-08-24: 0.64 ms read + 0.91 ms parse for a 129 KB file, against the
+// 8.8 ms this script already spends on its one `ps -eo` pass. Not worth caching.
+function account(): string | undefined {
+  try {
+    const o: { oauthAccount?: { emailAddress?: string } } = JSON.parse(
+      readFileSync(`${HOME}/.claude.json`, "utf8"),
+    );
+    // `||` not `??`: an empty string is not an account either, and must drop the segment.
+    return o.oauthAccount?.emailAddress || undefined;
+  } catch {
+    return undefined; // unreadable / not JSON / logged out -> segment just disappears
+  }
+}
+
+// line 1: env-derived PS1 mirror + Claude account. Needs no JSON, so it always renders.
 function line1(cwd: string): string {
   const user = userInfo().username;
   const host = osHostname().split(".")[0];
   const d = new Date();
   const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const acct = account();
+  const acctSeg =
+    acct != null ? ` ${DIM}${MID} ${ESC}[38;5;103m${acct}${RST}` : "";
   return (
     `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
-    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}`
+    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}${acctSeg}`
   );
 }
 

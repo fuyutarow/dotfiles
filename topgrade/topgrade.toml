@@ -41,16 +41,16 @@ disable = ["flutter", "tlmgr", "gcloud", "snap"]
 # `managedCodexVersion` (what `current` now points at). Restart only when they actually differ,
 # so a no-op `mise up` doesn't gratuitously kill a live remote-controlled session; and preserve
 # `codex update`'s own exit code as this step's status, per the guard note above.
+# KEEP CUSTOM STEPS TO ONE LINE THAT CALLS A REAL FILE. Anything with branching, exit-code
+# capture, or JSON belongs in a script under version control, not in this string.
+#
+# Measured 2026-08-24: the Codex step used to be an inline multi-line snippet, and it had
+# NEVER once succeeded. topgrade runs custom commands through `/usr/bin/zsh -c`, where
+# `status` is a READ-ONLY special parameter (csh-compatible synonym for `$?`), so its
+# `status=$?` aborted with "read-only variable: status" and the whole step reported FAILED.
+# Two things let that ship: code inside a config string is seen by no linter (this repo's
+# `lint:sh` covers scripts/ tmux/scripts agents/claude lazygit .githooks — not this file),
+# and shellcheck could not have caught it anyway because it does not analyse zsh.
+# As agents/codex/codex-update.ts it is covered by the existing fmt:ts / lint:bun tasks.
 [commands]
-"Codex CLI (standalone)" = '''if command -v codex > /dev/null 2>&1; then
-  codex update
-  status=$?
-  cur=$(codex app-server daemon version 2>/dev/null | jq -r '.appServerVersion // empty')
-  want=$(codex app-server daemon version 2>/dev/null | jq -r '.managedCodexVersion // empty')
-  if [ -n "$cur" ] && [ "$cur" != "$want" ]; then
-    codex app-server daemon restart
-  fi
-  exit "$status"
-else
-  echo 'codex absent — skipped'
-fi'''
+"Codex CLI (standalone)" = 'bun ~/dotfiles/agents/codex/codex-update.ts'

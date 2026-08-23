@@ -31,5 +31,26 @@ disable = ["flutter", "tlmgr", "gcloud", "snap"]
 #              line reads `Detected "/home/fuyu/.local/bin/codex"`. Hence this entry.
 # Guarded with `command -v` because this file is shared with macOS: an absent tool must skip,
 # not fail the run. The guard preserves the updater's own exit code when it IS present.
+#
+# `codex update` only repoints the `current` symlink to the newest downloaded release; it does
+# NOT touch the long-lived `codex app-server` daemon (remote control / ChatGPT desktop
+# connector), which keeps running the binary it was launched with until something restarts it.
+# Measured 2026-08-23: a daemon started 2026-08-03 was still serving 0.146.0 after `current` had
+# moved through 0.146.1 -> 0.147.0 -> 0.149.0 across several intervening `codex update` runs —
+# `codex app-server daemon version` reports the gap as `appServerVersion` (running) vs
+# `managedCodexVersion` (what `current` now points at). Restart only when they actually differ,
+# so a no-op `mise up` doesn't gratuitously kill a live remote-controlled session; and preserve
+# `codex update`'s own exit code as this step's status, per the guard note above.
 [commands]
-"Codex CLI (standalone)" = "if command -v codex > /dev/null 2>&1; then codex update; else echo 'codex absent — skipped'; fi"
+"Codex CLI (standalone)" = '''if command -v codex > /dev/null 2>&1; then
+  codex update
+  status=$?
+  cur=$(codex app-server daemon version 2>/dev/null | jq -r '.appServerVersion // empty')
+  want=$(codex app-server daemon version 2>/dev/null | jq -r '.managedCodexVersion // empty')
+  if [ -n "$cur" ] && [ "$cur" != "$want" ]; then
+    codex app-server daemon restart
+  fi
+  exit "$status"
+else
+  echo 'codex absent — skipped'
+fi'''

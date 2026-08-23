@@ -107,6 +107,8 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ## Git
 - Default branch: **`alpha`** (not main/master)
+- **Commit messages are ENGLISH — subject and body.** This repo has older Japanese commits;
+  they are history, not a template. Do not imitate them (2026-08-23).
 - Per-OS git config via `[include] ~/.local-gitconfig` (linked from `git/local.mac` or `git/local.wsl`)
 - Prefer lazygit (`lg`) for interactive git work
 
@@ -137,4 +139,4 @@ All repo tasks go through **mise** (`mise tasks` to list):
 3. Never write machine-absolute paths into shared files (`zsh/`, `git/`, `tmux/`) (tools like juliaup may try to append
    them to `.zshrc` — fold such blocks back into `$HOME`-relative guarded form).
 4. tmux is heavily customized (`tmux/tmux.conf`); prefix is Alt+g / Ctrl+g.
-5. Language: English for code/comments; Japanese OK in docs and conversation.
+5. Language: English for code/comments **and commit messages**; Japanese OK in docs and conversation.

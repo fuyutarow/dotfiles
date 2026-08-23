@@ -21,14 +21,21 @@
 # process-killer armed forever:
 #   systemctl --user disable --now mcp-reaper.timer
 #
-# WHY --min-age-sec 600 RATHER THAN THE SCRIPT DEFAULT OF 1800
+# WHY --min-age-sec 300 RATHER THAN THE SCRIPT DEFAULT OF 1800
 # ------------------------------------------------------------
-# Steady-state residue is (spawn rate) x (min-age). At the observed ~114 new processes per
-# 5 min, 1800s would park ~680 processes (~25 GiB) between sweeps; 600s parks ~230 (~8 GiB).
-# The cost of the shorter window is that a LIVE session which has not yet touched one of
-# its MCP servers within 10 minutes can have it reaped. That is acceptable here precisely
-# because every server this reaper can match is one already deleted from the configs — the
-# session loses a tool it was not using and should no longer have.
+# Steady-state residue is (spawn rate) x (min-age), so the window has to be sized against
+# the CURRENT subagent concurrency. Measured 2026-08-23 at 50 concurrent threads with the
+# stale daemon still spawning: ~130 new processes per 5 min, ~257 resident (12.6 GiB) at a
+# 600s window. Raising concurrency to 100 doubles the rate, which 600s would have parked at
+# ~520 processes (~25 GiB) — nearly half of RAM held by processes that have never run any
+# work. 300s halves it back.
+#
+# The cost of a short window is that a LIVE session which has not touched one of its MCP
+# servers within 5 minutes can have it reaped. That is acceptable here for two reasons:
+# every server this reaper can match is one ALREADY DELETED from the configs (so the session
+# loses a tool it should no longer have), and the --max-cpu-sec guard spares any server that
+# has actually served a call. Retune this alongside max_concurrent_threads_per_session; the
+# two numbers are coupled.
 
 [Unit]
 Description=Reap leaked stdio MCP server processes (stopgap; see unit comments)
@@ -36,7 +43,7 @@ Documentation=file://%h/dotfiles/agents/resource-control/mcp-reaper.sh
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/mcp-reaper --min-age-sec 600 --max-cpu-sec 1
+ExecStart=%h/.local/bin/mcp-reaper --min-age-sec 300 --max-cpu-sec 1
 
 # Never let the cleanup become the thing that needs cleaning up.
 CPUQuota=50%

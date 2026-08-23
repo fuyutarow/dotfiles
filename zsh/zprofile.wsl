@@ -53,10 +53,14 @@ for _wa in /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps(N); do
 done
 unset _wa
 # The Windows-exe symlink farm (_WIN_EXES / link-win-exes) and the WSL_DISTRO_NAME derivation
-# deliberately do NOT live here: this file is read by LOGIN shells only, and herdr spawns its
-# panes as plain `/usr/bin/zsh` (interactive, non-login) — they would never run. Their home is
-# zsh/wsl.zsh, which zsh/aliases.zsh sources for EVERY interactive shell (zshrc loads sheldon
-# when .zprofile was skipped). Keep it that way.
+# deliberately do NOT live here: this file is read by LOGIN shells only. herdr/config.toml now
+# forces `[terminal] shell_mode = "login"` so herdr panes DO read this file, but keep this logic
+# in zsh/wsl.zsh anyway — that file is sourced by EVERY interactive shell regardless of login
+# status (aliases.zsh → here; zshrc loads sheldon when .zprofile was skipped), so it survives a
+# bare `zsh` invocation, an SSH-forwarded session, or shell_mode ever reverting to non-login.
+# (Historical bug, root-caused 2026-08-23: before shell_mode=login, herdr's default non-login
+# panes skipped this file AND silently failed to load sheldon/aliases.zsh too — see
+# herdr/config.toml's [terminal] comment. Keep pane-critical setup in wsl.zsh, not here.)
 # DELIBERATELY NO bare-name `cmd.exe` shim: Zed's remote-SSH OS probe runs `cmd.exe /c ver`,
 # and via WSL interop that execs the REAL Windows cmd.exe printing "Microsoft Windows [...]",
 # so Zed misdetects this Linux box as Windows and aborts with "windows-%PROCESSOR_ARCHITECTURE%".

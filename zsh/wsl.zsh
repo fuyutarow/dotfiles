@@ -4,8 +4,12 @@
 #
 # THIS FILE IS THE HOME OF EVERY WSL↔WINDOWS BRIDGE, on purpose: it is sourced by EVERY
 # interactive shell (aliases.zsh → here; zshrc loads sheldon when .zprofile was skipped).
-# zsh/zprofile.wsl is LOGIN-only, and herdr spawns panes as bare `/usr/bin/zsh` — non-login.
-# Anything a pane needs must live here, or it silently never runs inside herdr.
+# zsh/zprofile.wsl is LOGIN-only. herdr/config.toml forces `[terminal] shell_mode = "login"`
+# so herdr panes DO read zprofile.wsl too now — but keep anything a pane needs here regardless:
+# a bare `zsh`, an SSH session, or shell_mode reverting to non-login would otherwise silently
+# skip it. (Historical bug, root-caused 2026-08-23: herdr's PRE-shell_mode=login non-login
+# panes had no Homebrew on PATH, so `command -v sheldon` failed in zshrc with no fallback —
+# aliases.zsh, and everything sourced from here, silently never loaded. See herdr/config.toml.)
 
 # ── WSL identity ──────────────────────────────────────────────────────────────
 # Windows-launched sessions get WSL_DISTRO_NAME injected; sshd- and herdr-born ones do NOT.

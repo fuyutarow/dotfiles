@@ -14,6 +14,10 @@ These mirror `CLAUDE.md`'s "Conventions to preserve" for Codex, which does not a
 - Do not reintroduce a `justfile`; this repo uses `mise.toml`.
 - For OS-dependent shell logic, use the existing `IS_MAC` / `IS_WSL` booleans from `zsh/aliases.zsh`.
 - Do not write machine-absolute paths into shared dotfiles under `zsh/`, `git/`, or `tmux/`.
+- No implicit global toolchain (INV-6): a managed tool is reachable where a config declares it,
+  or not at all. Never `mise use -g`, never add a second version manager (fnm, nvm, volta) to a
+  login shell, and never put the mise shim directory on an interactive shell's PATH — it is the
+  delivery path for non-interactive shells only. Verify with `mise run test:mise-scope`.
 
 ## Agent Assets
 

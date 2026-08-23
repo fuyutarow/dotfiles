@@ -8,23 +8,73 @@
 # - Keep this file silent and cheap. No Homebrew `shellenv`, plugin managers,
 #   prompts, completions, timeouts, or commands that may print or hang.
 # - Bun globals stay in .zprofile; ~/.local/bin must win over old npm/Bun shims.
+#
+# ── NO IMPLICIT GLOBAL TOOLCHAIN (INV-6) ─────────────────────────────────────
+# A managed tool is reachable where a config DECLARES it, or not at all. There is no
+# global default version anywhere: `~/.config/mise/config.toml` declares no [tools], and
+# nothing here may reintroduce one.
+#
+# mise ships TWO delivery paths and they are not interchangeable:
+#   `mise activate` (zsh/zshrc) — per-directory, declaration-driven → INTERACTIVE shells
+#   the shim dir    (below)     — one static dir holding a name for EVERY installed
+#                                 binary of EVERY installed version → NON-INTERACTIVE only
+# This file used to add the shim dir unconditionally, so both ran at once and every
+# installed tool squatted a name on the interactive PATH. What leaked was the NAME, not a
+# version: the shim resolves the version at exec time and, finding no declaration, refuses.
+# Measured 2026-08-06 — `which npm` answered with a path while `npm -V` died with
+# "No version is set for shim: npm". A name that exists and cannot run.
+#
+# The shim dir stays for the non-interactive case because that is the one thing it is
+# load-bearing for: `ssh host 'cmd'` skips .zshrc, so `mise activate` never runs and a
+# DECLARED tool would otherwise be unreachable. Measured in that exact environment:
+#   cd ~          → `bun --version` = "No version is set for shim" (correctly refuses)
+#   cd ~/dotfiles → `bun --version` = 1.3.14                        (mise.toml declares it)
+# Both halves are asserted by `mise run test:mise-scope`.
+#
+# Corollary, enforced by the same test: no second version manager may hook a login shell.
+# fnm was removed 2026-08-06 for exactly this reason — it held no node yet ran `fnm env`
+# on every login, prepending a PATH entry no config asked for (and leaving 1672 stale
+# multishell dirs behind).
+
+_zshenv_shims="$HOME/.local/share/mise/shims"
+_zshenv_cand=(
+  "$HOME/.local/bin"
+  "$_zshenv_shims"
+  "$HOME/.cargo/bin"
+  "$HOME/.foundry/bin"
+)
 
 _zshenv_path_prefix=()
-for _zshenv_dir in \
-  "$HOME/.local/bin" \
-  "$HOME/.local/share/mise/shims" \
-  "$HOME/.cargo/bin" \
-  "$HOME/.foundry/bin"; do
+for _zshenv_dir in "${_zshenv_cand[@]}"; do
+  [[ "$_zshenv_dir" == "$_zshenv_shims" ]] && [[ -o interactive ]] && continue
   [[ -d "$_zshenv_dir" ]] && _zshenv_path_prefix+=("$_zshenv_dir")
 done
 
-for _zshenv_dir in "${_zshenv_path_prefix[@]}"; do
+# Strip EVERY candidate, not only the ones being re-added. An interactive shell inherits
+# PATH from whatever spawned it — the tmux server, an editor, a non-interactive parent —
+# so without this the shim dir rides in from the parent and the gate above is decorative.
+for _zshenv_dir in "${_zshenv_cand[@]}"; do
   path=("${(@)path:#$_zshenv_dir}")
 done
 path=($_zshenv_path_prefix $path)
 
+# Second carrier, same leak. `mise activate` stashes the pre-activation PATH in an EXPORTED
+# __MISE_ORIG_PATH and reuses an inherited one verbatim (`if [ -z "${__MISE_ORIG_PATH:-}" ]`),
+# rebuilding PATH from it on every hook. So an interactive shell spawned from an activated
+# NON-interactive parent — Claude Code's Bash tool, an `ssh host 'cmd'` session that then
+# starts tmux — inherits a base PATH that still holds the shim dir, and mise restores it one
+# prompt after the block above stripped it. Measured 2026-08-06 in a real login pty:
+# clean env → no shim dir; env inherited from an activated parent → shim dir back.
+# __MISE_DIFF is deliberately left alone: that is how mise undoes the PARENT's tool dirs.
+if [[ -o interactive ]] && [[ -n "${__MISE_ORIG_PATH:-}" ]]; then
+  _zshenv_orig=("${(@s.:.)__MISE_ORIG_PATH}")
+  _zshenv_orig=("${(@)_zshenv_orig:#$_zshenv_shims}")
+  export __MISE_ORIG_PATH="${(j.:.)_zshenv_orig}"
+  unset _zshenv_orig
+fi
+
 typeset -U path
-unset _zshenv_dir _zshenv_path_prefix
+unset _zshenv_dir _zshenv_cand _zshenv_shims _zshenv_path_prefix
 export PATH
 
 # cocoindex-code: when a supervisor unit owns the daemon, no client may spawn its own.

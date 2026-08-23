@@ -7,7 +7,8 @@ brew "bat"          # better cat (alias: p)
 brew "coreutils"
 brew "eza"          # better ls (l, ll, la)
 brew "fd"           # better find (f)
-brew "fnm"
+# fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
+# implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
 brew "gh"
 brew "git"
 brew "git-delta"    # better diff

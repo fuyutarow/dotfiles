@@ -79,20 +79,12 @@ else
   _dbg "Warning: $HOME/.cargo/env not found"
 fi
 
-_dbg "Setting up fnm"
-# NOTE (both eval blocks below): the old form piped into the FIXED names /tmp/fnm_env and
-# /tmp/sheldon_source, then sourced them as shell code. /tmp is world-writable and sticky, so on
-# any shared host another user could pre-create those paths (or a symlink through them) and get
-# their code sourced into this login shell; concurrent shells also raced on the same file. Eval
-# the output directly — no file, no race, no plant surface. The 5s timeout survives (a wedged
-# `fnm`/`sheldon` must not hang the shell); with $() the timeout's exit status is what we test.
-if command -v fnm &> /dev/null; then
-  _fnm_env="$(timeout 5s fnm env 2>/dev/null)" && eval "$_fnm_env" ||
-    _dbg "Warning: fnm env timed out or failed"
-  unset _fnm_env
-else
-  _dbg "Warning: fnm not found"
-fi
+# fnm removed 2026-08-06 (INV-6, see zsh/zshenv): a second version manager hooking every
+# login shell is an implicit global toolchain by construction. Measured on the Mac before
+# removal — `fnm list` held nothing but `* system`, so `fnm env` prepended a PATH entry for
+# zero installed nodes and had left 1672 stale dirs under ~/.local/state/fnm_multishells.
+# Node, if ever needed again, is declared in a project's mise.toml like every other tool.
+# Do not reintroduce fnm, nvm, volta, or a `mise use -g`; `mise run test:mise-scope` fails.
 
 
 # X11 configuration
@@ -102,9 +94,15 @@ if [[ -f /etc/resolv.conf ]]; then
 fi
 
 # Sheldon (load this last)
+# NOTE: the old form piped into the FIXED name /tmp/sheldon_source, then sourced it as shell
+# code. /tmp is world-writable and sticky, so on any shared host another user could pre-create
+# that path (or a symlink through it) and get their code sourced into this login shell;
+# concurrent shells also raced on the same file. Eval the output directly — no file, no race,
+# no plant surface. The 5s timeout survives (a wedged `sheldon` must not hang the shell); with
+# $() the timeout's exit status is what we test. (This note also covered the fnm block, removed
+# 2026-08-06 — the rule outlives it: never stage a hook's output through a fixed /tmp path.)
 _dbg "Setting up sheldon"
 if command -v sheldon &> /dev/null; then
-  # Eval directly — see the /tmp note above the fnm block.
   if _sheldon_src="$(timeout 5s sheldon source 2>/dev/null)"; then
     eval "$_sheldon_src"
   else

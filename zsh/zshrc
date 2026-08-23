@@ -79,7 +79,11 @@ _dbg "Finished .zshrc"
 # block, fold it back into a $HOME-relative existence-guarded form (INV-4).
 #
 # mise: interactive per-directory tool activation (cross-OS). ONLY mise activation in the shell.
-# NOT in .zshenv (ssh host 'cmd' reads only .zshenv and gets tools from the static shim dir).
+# This is the INTERACTIVE half of INV-6 (no implicit global toolchain; the law and the
+# measurements are in zsh/zshenv). Interactive shells get tools ONLY from here — declaration
+# by declaration, directory by directory — and .zshenv deliberately withholds the shim dir
+# from them. The shim dir is the NON-interactive half, for `ssh host 'cmd'`, which reads only
+# .zshenv and would otherwise reach no declared tool at all. Never merge the two halves.
 # Here in zshrc so it covers BOTH login and non-login interactive shells (tmux panes, bare zsh),
 # after every PATH edit in this file so __MISE_ORIG_PATH captures them and mise prepends tool
 # dirs ahead of everything (this, not the removed brew julia, is what makes mise beat a brew dup).
@@ -107,7 +111,7 @@ unset _mise_bin _mise_cand
 # `typeset -U path` (zshenv) only dedupes writes made THROUGH the array; every
 # `export PATH="X:$PATH"` in zprofile/zshrc/tool-installers bypasses it (measured: 6 duplicate
 # entries in a login shell). Rewriting the array once, here at the end of the load chain,
-# applies uniqueness AND drops entries whose directory has vanished (stale fnm multishells,
+# applies uniqueness AND drops entries whose directory has vanished (retired version-manager
 # uninstalled CUDA, retired plugin bins) — a shorter PATH is a faster command lookup.
 typeset -U path PATH
 path=( ${(u)^path}(N-/) )

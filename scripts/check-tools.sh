@@ -7,7 +7,7 @@ set -uo pipefail
 # command[:install-hint] — keep in sync with Brewfile (that file is the installer)
 TOOLS=(
   bat eza rg fd dust procs zoxide just fzf lazygit jq yq tldr
-  atuin delta direnv rip sheldon tmux herdr gh mise topgrade fnm bun kondo hunk
+  atuin delta direnv rip sheldon tmux herdr gh mise topgrade bun kondo hunk
   # LaTeX toolchain (mactex-no-gui / texlive + tex-fmt + poppler)
   lualatex latexmk tlmgr chktex tex-fmt pdftoppm
   # Markdown lint+format (Rust; `mise run fmt:md` / `lint:md`)

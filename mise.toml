@@ -196,8 +196,8 @@ git ls-files -z -- \
 
 [tasks.test]
 alias = "t"
-description = "Test the repo: hooks, resource control, repo-search, Bun script floor, and zsh terminal hygiene"
-depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts", "test:zsh"]
+description = "Test the repo: hooks, resource control, repo-search, Bun script floor, zsh terminal hygiene, and toolchain scope"
+depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts", "test:zsh", "test:mise-scope"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
@@ -236,6 +236,22 @@ if [ -z "$to" ]; then
   exec zsh zsh/tests/terminal-hygiene.test.zsh
 fi
 "$to" 120 zsh zsh/tests/terminal-hygiene.test.zsh
+'''
+
+# The machine enforcement of INV-6 (no implicit global toolchain — see zsh/zshenv). zsh again,
+# and again deliberately: the unit under test is a startup file whose behaviour is a function of
+# shell mode (`-o interactive`) and inherited PATH, and its last case needs a real login tty.
+# The timeout is an assertion here too — that last case boots the user's whole login chain.
+[tasks."test:mise-scope"]
+dir = "{{config_root}}"
+description = "Toolchain-scope regression tests (INV-6): the mise shim dir reaches non-interactive shells only, no global default version, no second version manager on login"
+run = '''
+to="$(command -v timeout || command -v gtimeout || true)"
+if [ -z "$to" ]; then
+  echo "⚠️  no timeout(1) on PATH — running unbounded; a wedged login shell will block instead of failing"
+  exec zsh zsh/tests/mise-scope.test.zsh
+fi
+"$to" 120 zsh zsh/tests/mise-scope.test.zsh
 '''
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as

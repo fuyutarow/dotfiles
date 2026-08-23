@@ -35,12 +35,12 @@ else
   _dbg "Warning: $HOME/.cargo/env not found"
 fi
 
-_dbg "Setting up fnm"
-if command -v fnm &> /dev/null; then
-  eval "$(fnm env)"
-else
-  _dbg "Warning: fnm not found"
-fi
+# fnm removed 2026-08-06 (INV-6, see zsh/zshenv): a second version manager hooking every
+# login shell is an implicit global toolchain by construction. Measured before removal —
+# `fnm list` held nothing but `* system`, so `fnm env` prepended a PATH entry for zero
+# installed nodes and had accumulated 1672 stale dirs under ~/.local/state/fnm_multishells.
+# Node, if ever needed again, is declared in a project's mise.toml like every other tool.
+# Do not reintroduce fnm, nvm, volta, or a `mise use -g`; `mise run test:mise-scope` fails.
 
 # Sheldon (load this last)
 _dbg "Setting up sheldon"

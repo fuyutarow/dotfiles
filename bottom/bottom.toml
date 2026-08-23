@@ -1,0 +1,41 @@
+# bottom (btm) — system monitor
+#
+# Only deliberate deviations from the defaults live here; everything else stays
+# at bottom's own default. Run `btm --help` for the full option list.
+#
+# Verified against bottom 0.14.8 (2026-08-23).
+
+[flags]
+
+# Show GPU rows (memory widget + temperature widget).
+# This machine has an NVIDIA RTX 3060; VRAM pressure is a real failure mode for
+# local model work, so surface it rather than relying on a separate nvidia-smi.
+# Still a [flags] key in 0.14.8 — unlike the two below, it is not deprecated.
+enable_gpu = true
+
+[processes]
+
+# Group same-named processes into ONE row, with a Count column.
+#
+# WHY this is the default here (2026-08-23 incident): a leak left ~2400 MCP
+# server processes resident, holding 53 GB of 58 GB RAM. Per-PID rows made this
+# INVISIBLE — each process held only 0.2-0.3% of RAM, so sorting the process
+# widget by Mem% put the real consumer nowhere near the top; the largest single
+# row was an unrelated 4% process. Grouped, the same data showed one row —
+# `node  734  54.6%` — at a glance.
+#
+# Rule of thumb: a per-PID view can only find ONE fat process. It is structurally
+# blind to a swarm of small ones, which is what agent/MCP fan-out actually produces.
+# Press `Tab` in the process widget to toggle back to per-PID when needed.
+#
+# Key name note: the old `[flags] group_processes` is deprecated in 0.14.8
+# (it still works, but warns on every start). This is the current spelling.
+default_grouped = true
+
+[memory]
+
+# Show cache/buffer memory as its own line in the memory widget.
+# Without it, reclaimable page cache is indistinguishable from real pressure —
+# which is exactly the distinction that matters when diagnosing a memory scare.
+# Replaces the deprecated `[flags] enable_cache_memory`.
+cache_memory = true

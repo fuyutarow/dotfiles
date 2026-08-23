@@ -71,6 +71,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
 ├── cocoindex/   # cocoindex-code settings + the typed repo-search query router
+├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)

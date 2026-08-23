@@ -1,0 +1,26 @@
+# Drives mcp-reaper.service. Symlinked to ~/.config/systemd/user/mcp-reaper.timer
+# by scripts/link-dots.sh. Enable with: mise run wsl:mcp-reaper
+#
+# Cadence rationale: the sweep only reclaims processes older than --min-age-sec (600s),
+# so sweeping much faster than that buys nothing — the extra runs find the same set still
+# too young. 5 minutes gives two sweeps per eligibility window, which keeps the residue
+# near the floor without spinning ps every minute over ~2000 processes.
+#
+# See mcp-reaper.service.wsl for why this exists and when to retire it.
+
+[Unit]
+Description=Periodic sweep for leaked stdio MCP server processes
+
+[Timer]
+# Anchor on timer ACTIVATION, not on manager startup. OnStartupSec= is measured from when the
+# user manager came up; on a long-lived session (this host's had been up 20 days) that instant
+# is far in the past, so enabling the timer produced NEXT="-" and it never scheduled a run.
+# OnActiveSec= is relative to the timer becoming active, so `enable --now` always schedules.
+OnActiveSec=1min
+OnUnitActiveSec=5min
+# Do not stack sweeps if one runs long.
+AccuracySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

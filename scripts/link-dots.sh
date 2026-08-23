@@ -79,6 +79,7 @@ link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"
 link agents/resource-control/agent-resource-run.ts "$HOME/.local/bin/agent-resource-run"
+link agents/resource-control/mcp-reaper.sh "$HOME/.local/bin/mcp-reaper"
 link agents/serena-control/serena-foreground.ts "$HOME/.local/bin/serena-foreground"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
@@ -115,8 +116,18 @@ if $IS_WSL; then
   link cocoindex/ccc-daemon.service.wsl "$HOME/.config/systemd/user/ccc-daemon.service"
 fi
 
+# --- mcp-reaper (STOPGAP: bounds the leaked-stdio-MCP-server pile until app-server restarts;
+#     see agents/resource-control/mcp-reaper.service.wsl for why, and when to retire it) ---
+if $IS_WSL; then
+  link agents/resource-control/mcp-reaper.service.wsl "$HOME/.config/systemd/user/mcp-reaper.service"
+  link agents/resource-control/mcp-reaper.timer.wsl "$HOME/.config/systemd/user/mcp-reaper.timer"
+fi
+
 # --- topgrade (govern which update steps run; e.g. disable flutter/tlmgr) ---
 link topgrade/topgrade.toml "$HOME/.config/topgrade.toml"
+
+# --- bottom/btm (group processes by default; per-PID rows hide swarm leaks) ---
+link bottom/bottom.toml "$HOME/.config/bottom/bottom.toml"
 
 # --- lazygit (cross-OS topic; config dir differs by OS — lazygit honors XDG_CONFIG_HOME on both) ---
 if $IS_MAC; then

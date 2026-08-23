@@ -1,19 +1,21 @@
 {
+  "_comment": [
+    "MCP servers for this repo. HTTP-ONLY BY POLICY (2026-08-23) — no 'command' (stdio) entries.",
+    "WHY: an agent host spawns the full stdio server set once per session AND per subagent, and",
+    "codex's app-server does not reap them when a session ends. Measured 2026-08-23: 2365 leaked",
+    "processes holding 53 GB of 58 GB RAM, 97% of them with <=1s cumulative CPU (spawned, never",
+    "used, never freed). Cost scales as (stdio servers) x (sessions ever run), so a stdio entry is",
+    "a standing leak, not a fixed cost. A 'url' entry spawns nothing locally.",
+    "TO ADD A CAPABILITY, in order: (1) hosted endpoint as 'url' here; (2) an Agent Skill that",
+    "shells out per call, the way cocoindex is handled (repo-search script + skill); (3) resident",
+    "stdio only with a written justification and a reaping story. Nothing has needed (3) yet.",
+    "REMOVED: fetch (uvx mcp-server-fetch) -- exa's web_fetch_exa covers it; for localhost/intranet",
+    "URLs exa cannot reach, use `curl -sL \"$URL\" | pandoc -f html -t markdown`."
+  ],
   "mcpServers": {
     "context7": {
-      "type": "stdio",
-      "command": "bunx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp"
-      ]
-    },
-    "fetch": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ]
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
     },
     "exa": {
       "type": "http",

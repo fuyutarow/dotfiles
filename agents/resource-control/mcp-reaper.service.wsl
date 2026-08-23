@@ -1,0 +1,48 @@
+# mcp-reaper — reclaim leaked stdio MCP server processes.
+# Symlinked to ~/.config/systemd/user/mcp-reaper.service by scripts/link-dots.sh.
+# Driven by mcp-reaper.timer; this unit is oneshot and does nothing on its own.
+#
+# WHY THIS UNIT EXISTS
+# --------------------
+# `codex app-server` spawns the full stdio MCP server set once per session and does NOT
+# reap it when the session ends. Measured 2026-08-23: 2365 leaked processes holding 53 GB
+# of 58 GB RAM, with 97% of them at <=1s cumulative CPU — spawned, never used, never freed.
+# Cost scales as (stdio servers) x (sessions ever run), so it is a standing leak, not a
+# fixed cost, and it ends in OOM.
+#
+# The REAL fix is the url-only MCP config (~/.codex/config.toml, ~/.claude.json,
+# dotfiles/.mcp.json — all converted 2026-08-23), which leaves nothing to leak. But a
+# long-running app-server reads its config ONCE at startup: the daemon on this host had
+# been up 20 days and kept spawning the OLD server set for as long as it stayed up.
+# This unit bounds memory during that window.
+#
+# THIS IS A STOPGAP. Once the app-server has restarted under the url-only config, the
+# reaper matches nothing and becomes a no-op. Retire it then rather than keeping a
+# process-killer armed forever:
+#   systemctl --user disable --now mcp-reaper.timer
+#
+# WHY --min-age-sec 600 RATHER THAN THE SCRIPT DEFAULT OF 1800
+# ------------------------------------------------------------
+# Steady-state residue is (spawn rate) x (min-age). At the observed ~114 new processes per
+# 5 min, 1800s would park ~680 processes (~25 GiB) between sweeps; 600s parks ~230 (~8 GiB).
+# The cost of the shorter window is that a LIVE session which has not yet touched one of
+# its MCP servers within 10 minutes can have it reaped. That is acceptable here precisely
+# because every server this reaper can match is one already deleted from the configs — the
+# session loses a tool it was not using and should no longer have.
+
+[Unit]
+Description=Reap leaked stdio MCP server processes (stopgap; see unit comments)
+Documentation=file://%h/dotfiles/agents/resource-control/mcp-reaper.sh
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/mcp-reaper --min-age-sec 600 --max-cpu-sec 1
+
+# Never let the cleanup become the thing that needs cleaning up.
+CPUQuota=50%
+MemoryMax=512M
+TasksMax=64
+Nice=10
+
+# A sweep is ps + signals; anything longer than this is a hang, not slow work.
+TimeoutStartSec=120

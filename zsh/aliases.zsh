@@ -525,6 +525,9 @@ alias sz='. $HOME/.zshrc'
 # sz re-reads ONLY .zshrc (interactive rc); relogin reproduces a full login by replacing
 # this process with a fresh login shell — re-runs .zprofile THEN .zshrc clean, so
 # direnv/sheldon hooks are re-eval'd once (not stacked) and PATH is rebuilt from scratch.
+# Twin entrypoint: `mise run relogin` (mise.toml) runs the same command, and is reachable in the
+# one shell where THIS alias is not — one started before the commit that defined it. It NESTS
+# instead of replacing (a mise task is a child process); rationale is in mise.toml.
 alias relogin='exec zsh -l'
 alias rl='exec zsh -l'
 alias st='tmux source-file $HOME/.tmux.conf'

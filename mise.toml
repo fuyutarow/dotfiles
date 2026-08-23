@@ -22,6 +22,37 @@ alias = "u"
 description = "Update system packages"
 run = '''topgrade --disable containers || echo "Topgrade completed with some errors"'''
 
+# ── shell ────────────────────────────────────────────────────────────────────
+# The zsh alias in zsh/aliases.zsh is the primary `relogin`; this is its mise-side entrypoint.
+# It looks like a second home for the same three tokens, but it is a DIFFERENT entrypoint to the
+# same act, and it exists because the alias cannot cover its own failure case: an alias is baked
+# into a shell at startup, while mise.toml is re-read from disk on every `mise run`. So the one
+# situation that most calls for a relogin — this shell predates the config it should be running —
+# is exactly the situation where the alias may not be defined yet. Observed 2026-08-23 on WSL:
+# `relogin` → "command not found" in a shell older than the commit that added the alias.
+#
+# NOT equivalent to the alias, and the difference is not visible at runtime. `mise run` is a
+# child; a child cannot replace its parent. The alias `exec`s, so your shell IS the new one;
+# this opens a NESTED login shell and `exit` drops you back into the old, stale one. SHLVL does
+# not give it away either — measured 2026-08-23, both paths leave SHLVL unchanged (zsh's exec
+# fixup on one side, mise not being a shell on the other). Alias for daily use; this for rescue.
+#
+# Everything else about the resulting shell IS identical to the alias's — measured in a real pty
+# on the same cwd: same first PATH entry, same 21 PATH entries, same MISE_SHELL/__MISE_DIFF.
+# `mise run` leaks no extra activation state into the login shell.
+#
+# dir is load-bearing: a task's dir DEFAULTS to {{config_root}}, so without this line a relogin
+# from ~/dotfiles/zsh would silently land you in ~/dotfiles (measured). raw declares that this
+# task owns the terminal; a lone foreground task happens to inherit stdio without it, but that is
+# incidental, not contract — and it would stop being true the moment this task gained a sibling.
+[tasks.relogin]
+alias = "rl"
+description = "Open a fresh login zsh (mise-side entrypoint for the `relogin`/`rl` alias; use when the alias itself is stale or missing). NESTS rather than replaces — `exit` returns to the old shell."
+dir = "{{cwd}}"
+raw = true
+quiet = true
+run = 'exec zsh -l'
+
 # ── Format / Lint ────────────────────────────────────────────────────────────
 # fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
 # mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for

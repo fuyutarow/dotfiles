@@ -543,9 +543,20 @@ systemctl --user list-timers mcp-reaper.timer --no-pager
 
 [tasks."wsl:mcp-reaper:off"]
 description = "Retire the MCP reaper stopgap (do this once app-server has restarted under url-only MCP config)"
+# `systemctl --user disable` DELETES the unit-file symlink that link-dots.sh placed in
+# ~/.config/systemd/user/ — systemd treats any symlink found in the unit search path as an
+# enablement link and removes it, not just the timers.target.wants/ entry. Measured
+# 2026-08-24: a bare `disable --now` left mcp-reaper.service linked but made the timer
+# report `not-found`, because its link was gone. So relink afterwards. Every unit this repo
+# deploys has that shape (ccc-daemon.service too), so never `disable` one without relinking.
 run = '''
-systemctl --user disable --now mcp-reaper.timer 2>/dev/null || true
-echo "mcp-reaper disabled. The units stay linked; re-arm with: mise run wsl:mcp-reaper"
+systemctl --user stop mcp-reaper.timer 2>/dev/null || true
+systemctl --user disable mcp-reaper.timer 2>/dev/null || true
+bash ~/dotfiles/scripts/link-dots.sh --force > /dev/null
+systemctl --user reset-failed mcp-reaper.timer mcp-reaper.service 2>/dev/null || true
+systemctl --user daemon-reload
+echo "mcp-reaper disabled and unit links restored. Re-arm with: mise run wsl:mcp-reaper"
+systemctl --user list-timers mcp-reaper.timer --all --no-pager
 '''
 
 [tasks."wsl:fix-gitexe"]

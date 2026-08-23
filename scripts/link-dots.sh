@@ -107,6 +107,12 @@ link agents/skills-lock.json "$HOME/.agents/.skill-lock.json"
 link agents/codex/hooks.json "$HOME/.codex/hooks.json"
 link agents/codex/hooks "$HOME/.codex/hooks"
 
+# NOTE for every systemd unit linked below: `systemctl --user disable <unit>` DELETES the
+# symlink this script places in ~/.config/systemd/user/. systemd treats any symlink found in
+# the unit search path as an enablement link and removes it, not just the *.wants/ entry —
+# so a disable leaves the unit reporting `not-found`, not `disabled`. Measured 2026-08-24 on
+# mcp-reaper.timer. Always re-run `mise run link:dots` after disabling one.
+#
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
 link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
 # The daemon needs a systemd owner or it is spawned uncapped by whichever client calls first.

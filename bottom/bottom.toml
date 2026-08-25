@@ -13,6 +13,27 @@
 # Still a [flags] key in 0.14.8 — unlike the two below, it is not deprecated.
 enable_gpu = true
 
+# Start the CPU/memory/network graphs already at the widest window instead of the
+# 60s default, so a launch doesn't need a manual scroll-out to see any trend.
+# These three graphs share ONE global time axis — bottom has no per-widget window
+# (confirmed 2026-08-24 against the CPU/memory/network graph config docs: none of
+# them expose a time-range key, only cosmetics like legend position and units).
+#
+# `retention` is the hard ceiling: it is how much history bottom keeps at all, so
+# it is also the farthest any zoom-out (scroll, `-`, or this default) can reach.
+# `default_time_value` MUST be <= retention or bottom refuses to start — verified:
+# setting it even 1ms over produces `Error: Argument error: 'default_time_value'
+# must be less than 10m` at launch, not a silent clamp. Set equal, and the initial
+# view IS the max scrollable window. Widening the horizon means raising BOTH keys
+# together; retention alone would just make more data available a scroll away
+# without changing what greets you on launch, and default_time_value alone would
+# fail to start once it exceeds the (here-implicit 10m default) retention.
+# Cost: `btm --help` warns retention "may result in higher memory usage" — kept at
+# bottom's own default rather than widened, since nothing has asked for more than
+# 10 minutes of history yet.
+retention = "10m"
+default_time_value = "10m"
+
 [processes]
 
 # Group same-named processes into ONE row, with a Count column.

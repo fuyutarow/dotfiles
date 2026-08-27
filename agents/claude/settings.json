@@ -60,6 +60,11 @@
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh herdr-tab-name.ts",
+            "timeout": 10
           }
         ]
       },

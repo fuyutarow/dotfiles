@@ -6,7 +6,7 @@
 //   present on both OSes via Brewfile). If bun is somehow absent the bar goes blank —
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
-//   line 1: PS1 mirror + account   user@host:MM-DD HH:MM|cwd · <email>
+//   line 1: PS1 mirror + account + session name   user@host:MM-DD HH:MM|cwd · <email> · <name>
 //           The left half mirrors .zshrc PROMPT. The account is appended here, and nowhere
 //           else, for three reasons: it is IDENTITY like the rest of this row (user@host is
 //           the OS account, the email is the Claude one — they belong side by side); the
@@ -15,6 +15,25 @@
 //           there. Costs no extra row. Read from ~/.claude.json's `oauthAccount`, and
 //           deliberately NOT from ~/.claude/.credentials.json, which holds live OAuth tokens
 //           this script has no business opening. Omitted whenever that field is unreadable.
+//           `Name:` rides the same row for the same reason: it is IDENTITY, and the Session
+//           row is reserved for the bare uuid. Source: the name `/list-agents` and
+//           `claude agents --json` show for this session_id — the one other sessions actually
+//           address it by, defaulting to "firedancer-fe" and tracking `--name`/`/rename`.
+//           NOT `session_name` from stdin: that field looked like the same thing but ISN'T —
+//           it can independently hold an AI-generated conversation title (e.g. "最新戦況把握")
+//           that has nothing to do with cross-session addressing, and DOES win a same-session
+//           mismatch against the real one (caught live 2026-08-28: one session showed its AI
+//           title here while `claude agents --json` still had it as "firedancer-1d"). So this
+//           segment ignores `session_name` entirely and only ever shows the addressable name.
+//           Not delivered on stdin either way (verified 2026-08-28: no env var, no statusLine
+//           field carries it) — getting it means shelling out to `claude agents --json`
+//           ourselves. Measured cost 2026-08-28: 0.46-0.75s per call — one call refreshes every
+//           co-resident session's name, not just ours, so sessions sharing this cache warm it
+//           for each other. Paid only on a cache miss or a stale (>5 min) entry in
+//           ~/.cache/claude/statusline-agent-names.json; every other render is a plain file
+//           read. A negative result (session not in the list yet, or the `claude` call itself
+//           failing) is cached too, at the same TTL, so a persistent failure costs one slow
+//           render per window, never every render. Segment omitted when it doesn't resolve.
 //   line 2: session_id — the FULL uuid, on its own row, labelled like every other segment.
 //           NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
 //           prefix form, so a shortened id stops being a resume handle. The label is free
@@ -58,7 +77,7 @@
 
 import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 interface RateWindow {
   used_percentage?: number;
@@ -67,6 +86,8 @@ interface RateWindow {
 interface StatusInput {
   cwd?: string;
   session_id?: string;
+  // NOTE: stdin also carries a `session_name` field. Deliberately NOT read — see the `Name:`
+  // header note above for why it can mismatch the actual cross-session-addressable name.
   workspace?: { current_dir?: string };
   model?: { display_name?: string; id?: string };
   context_window?: {
@@ -118,8 +139,61 @@ function account(): string | undefined {
   }
 }
 
-// line 1: env-derived PS1 mirror + Claude account. Needs no JSON, so it always renders.
-function line1(cwd: string): string {
+// `name` — the actual field `claude agents --json` returns per session (confirmed live
+// 2026-08-28), and what `/list-agents` addresses it by. NOT a label this file invented: it
+// defaults to the auto-generated "firedancer-fe" form (docs call that default value the
+// "default display name"; sessions.md), and tracks `--name`/`/rename` after that. Not on stdin
+// (see the line-1 header note above — `session_name` is a DIFFERENT, independently-tracked
+// field) — resolved by shelling out to `claude agents --json` and matching our own session_id,
+// then cached. One cache file, keyed by session_id, shared by every session on this machine —
+// whichever renders first warms it for the rest, and a miss (session absent from the listing,
+// or the call itself failing) is cached too, at the same TTL, so a persistent failure costs one
+// slow render per window, not every one.
+const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
+const AGENT_NAME_TTL_MS = 5 * 60_000; // renames are rare/deliberate; a stale read is harmless
+// statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
+// var Claude Code exports for its own binary over a bare PATH lookup.
+const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
+
+function agentName(sid: string): string | undefined {
+  type Entry = { name?: string; at: number };
+  let cache: Record<string, Entry> = {};
+  try {
+    cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
+  } catch {
+    // missing / corrupt cache file -> treat as empty and refetch below
+  }
+  const hit = cache[sid];
+  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
+
+  // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
+  try {
+    const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: 3000,
+    });
+    const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
+    const now = Date.now();
+    const next: Record<string, Entry> = {};
+    for (const a of list)
+      if (a.sessionId) next[a.sessionId] = { name: a.name, at: now };
+    if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
+    try {
+      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+      writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+    } catch {
+      // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
+    }
+    return next[sid]?.name;
+  } catch {
+    return undefined; // `claude` missing/slow/errored -> segment just disappears this render
+  }
+}
+
+// line 1: env-derived PS1 mirror + Claude account + session name. Needs no JSON for the first
+// two, so those always render; sessionName is passed in once stdin has been parsed.
+function line1(cwd: string, sessionName?: string): string {
   const user = userInfo().username;
   const host = osHostname().split(".")[0];
   const d = new Date();
@@ -127,9 +201,13 @@ function line1(cwd: string): string {
   const acct = account();
   const acctSeg =
     acct != null ? ` ${DIM}${MID} ${ESC}[38;5;103m${acct}${RST}` : "";
+  const nameSeg =
+    sessionName != null
+      ? ` ${DIM}${MID} ${ESC}[38;5;214m${sessionName}${RST}`
+      : "";
   return (
     `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
-    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}${acctSeg}`
+    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}${acctSeg}${nameSeg}`
   );
 }
 
@@ -149,6 +227,8 @@ try {
 // sh's `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
 const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
 const sid = data.session_id || undefined; // "" is not an id either — drop the row, don't print blank
+// See agentName's header note for why this is `claude agents --json`'s `name` field, not `session_name`.
+const sessionName = sid != null ? agentName(sid) : undefined;
 let model = data.model?.display_name ?? "";
 const modelId = data.model?.id ?? "";
 const ctxTok =
@@ -381,4 +461,4 @@ const live =
 // after it) so double-click select-word stays a one-gesture copy of the --resume argument.
 const sidRow =
   sid != null ? `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}\n` : "";
-process.stdout.write(`${line1(cwd)}\n${sidRow}${live}`);
+process.stdout.write(`${line1(cwd, sessionName)}\n${sidRow}${live}`);

@@ -78,6 +78,7 @@
 import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createConnection } from "node:net";
 
 interface RateWindow {
   used_percentage?: number;
@@ -146,11 +147,15 @@ function account(): string | undefined {
 // (see the line-1 header note above — `session_name` is a DIFFERENT, independently-tracked
 // field) — resolved by shelling out to `claude agents --json` and matching our own session_id,
 // then cached. One cache file, keyed by session_id, shared by every session on this machine —
-// whichever renders first warms it for the rest, and a miss (session absent from the listing,
-// or the call itself failing) is cached too, at the same TTL, so a persistent failure costs one
-// slow render per window, not every one.
+// whichever renders first warms it for the rest. A HIT is trusted for 5 minutes (renames are
+// rare/deliberate). A MISS gets a much shorter 30s TTL: caught live 2026-08-28, restarting a
+// session with `claude -c` can race `claude agents --json`'s own self-registration, so the
+// very first lookup right after a restart can miss even though the session is real — 30s lets
+// the next render self-heal instead of showing nothing for up to 5 minutes. (herdr-tab-name.ts
+// additionally retries within its own SessionStart firing, since it gets no next render.)
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
-const AGENT_NAME_TTL_MS = 5 * 60_000; // renames are rare/deliberate; a stale read is harmless
+const AGENT_NAME_POSITIVE_TTL_MS = 5 * 60_000;
+const AGENT_NAME_NEGATIVE_TTL_MS = 30_000;
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
@@ -164,7 +169,13 @@ function agentName(sid: string): string | undefined {
     // missing / corrupt cache file -> treat as empty and refetch below
   }
   const hit = cache[sid];
-  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
+  if (hit != null) {
+    const ttl =
+      hit.name != null
+        ? AGENT_NAME_POSITIVE_TTL_MS
+        : AGENT_NAME_NEGATIVE_TTL_MS;
+    if (Date.now() - hit.at < ttl) return hit.name;
+  }
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
   try {
@@ -262,6 +273,57 @@ if (!model) model = "?";
 // Trim the verbose extended-context tag: "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)".
 if (model.endsWith(" context)"))
   model = `${model.slice(0, -" context)".length)})`;
+
+// Best-effort: push the live model to herdr as the $model row token (see
+// herdr/config.toml's [ui.sidebar.agents] rows and its show_agent_labels_on_pane_borders).
+// A raw write to the same JSON-RPC unix socket herdr's own vendored integration
+// (hooks/herdr-agent-state.sh) already talks to — not a subprocess, so unlike agentName()'s
+// `claude agents --json` this is cheap enough to do on every render, which is what keeps the
+// sidebar in sync across a mid-session model switch (manual /model, switchModelsOnFlag).
+// Bounded by a 200ms timeout so an unavailable or slow socket never meaningfully delays the
+// statusline itself; any failure is silently swallowed like every other segment in this file.
+async function reportModelToHerdr(m: string): Promise<void> {
+  const socketPath = process.env.HERDR_SOCKET_PATH;
+  const paneId = process.env.HERDR_PANE_ID;
+  if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
+
+  const req = {
+    id: `dotfiles:statusline-model:${Date.now()}`,
+    method: "pane.report_metadata",
+    params: {
+      pane_id: paneId,
+      source: "dotfiles:statusline-model",
+      tokens: { model: m },
+    },
+  };
+
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    const timer = setTimeout(finish, 200);
+    try {
+      const socket = createConnection(socketPath, () => {
+        socket.write(`${JSON.stringify(req)}\n`, () => {
+          clearTimeout(timer);
+          socket.end();
+          finish();
+        });
+      });
+      socket.on("error", () => {
+        clearTimeout(timer);
+        finish();
+      });
+    } catch {
+      clearTimeout(timer);
+      finish();
+    }
+  });
+}
+await reportModelToHerdr(model);
 
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);

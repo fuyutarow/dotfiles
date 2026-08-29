@@ -135,6 +135,19 @@ alias start='/mnt/c/Windows/System32/cmd.exe /c start'  # abs path, NOT a bare `
 # real Windows cmd via WSL interop -> Zed misdetects this Linux box as Windows. See zprofile.wsl.
 alias mnt-d='sudo mount -t drvfs D: /mnt/d' # mount Windows D: drive
 
+# ── Claude Code: force fullscreen rendering over SSH ───────────────────────────
+# Claude Code silently falls back to its classic renderer whenever it detects it is running
+# over SSH into a Windows-hosted machine — which every WSL SSH session is, regardless of the
+# client's own OS — even though `tui: "fullscreen"` (agents/claude/settings.json) is saved.
+# No warning, no persistent indicator. Symptom root-caused 2026-08-29: the prompt input box
+# scrolls away with the transcript instead of staying pinned at the bottom, because classic
+# mode has no split fixed-input-row/scrollable-transcript layout — that only exists in
+# fullscreen. CLAUDE_CODE_NO_FLICKER=1 is the documented override that forces fullscreen back
+# on regardless of the SSH-to-Windows check. Unconditional here, not gated on $SSH_CONNECTION:
+# fullscreen is the intended default either way, and the var has no documented downside for a
+# non-SSH WSL shell.
+export CLAUDE_CODE_NO_FLICKER=1
+
 # ── tmux: manual attach by design ─────────────────────────────────────────────
 # NO auto-attach on inbound SSH — attach on YOUR timing with `t`/`ta` (aliases in
 # zsh/aliases.zsh), detach with prefix+d. A durable "auto-attach tmux on inbound

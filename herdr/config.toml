@@ -80,7 +80,7 @@ prompt_new_tab_name = false # tmux c created windows instantly - no name prompt
 # sidebar row — the thing to look at when a pane has no manual name set (prefix+, renames).
 show_agent_labels_on_pane_borders = true
 
-agent_panel_sort = "priority"
+agent_panel_sort = "spaces"
 
 # Default rows join workspace+tab on one line ("firedancer · firedancer-c7") — redundant now
 # that tab labels are the real agent name (see agents/claude/hooks/herdr-tab-name.ts), not a

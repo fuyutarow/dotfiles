@@ -182,6 +182,7 @@ MUST NOT fire (route):
 | `compiling-latex` | PURPOSE — TeX toolchain + `latex:*` leaf tasks → there (its `assets/mise-latex.toml`); cross-language verb contract + grammar → here. Reciprocal pointer lives in its Core Decisions. Both sides agree in SUBSTANCE; do not diff for byte-identity. |
 | `operating-the-harness` | PURPOSE — hooks/settings/CLAUDE.md enforcement → there; the task graph a hook invokes → here. `mise run check` as a verification loop is the seam: the loop's EXISTENCE is their doctrine, its SHAPE is this contract. |
 | `driving-cocoindex` | no overlap — ccc state facts are theirs entirely. |
+| `wiring-repositories` | CARDINALITY — ONE wiring artifact (this task graph, its verb contract, its `templates/*.mise.toml`) → here, INCLUDING 「新リポに mise.toml 置いて」; WHICH layers a repo admits at all, in what order, and whether the joint stays coherent → there. That skill calls this one for the mise layer and ships no competing template. The names carry the cut: this wires ONE artifact, that wires the SET. Both sides carry it; agree in SUBSTANCE, do not diff for byte-identity. |
 
 ## Reference index
 

@@ -457,6 +457,33 @@ echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
 
+# ── 横断監査 ──────────────────────────────────────────────────────────────
+# 各 repo は自分の check の中で lint:scaffold を持つべきだが、それは「誰かが配線を
+# 憶えていた repo」しか覆えない。立ち上げ直後の repo が漏れるのはそこである。
+# この sweep は ~/Workspace 直下の git repo を全部 enumerate するので、新しい repo は
+# 作られた瞬間から対象になる — 誰も何も憶えていなくてよい。
+#
+# dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちるのは
+# 結合の誤りである。強制は各 repo の check が持ち、ここは差分を見るための眺めに徹する。
+[tasks."repos:audit"]
+dir = "{{config_root}}"
+description = "~/Workspace の全 git repo の配線健全性を一望する (scaffolding-repositories の floor を横断実行)"
+run = '''
+check="${WIRING_CHECK:-$HOME/.claude/skills/wiring-repositories/scripts/wiring-check.ts}"
+[ -f "$check" ] || { echo "repos:audit: scaffold-check not found at $check" >&2; exit 2; }
+root="${WORKSPACE_ROOT:-$HOME/Workspace}"
+rc=0
+for d in "$root"/*/ "$HOME/dotfiles/"; do
+  [ -d "$d.git" ] || continue
+  name=$(basename "$d")
+  out=$(bun "$check" --repo "$d" --audit 2>&1) || rc=1
+  n=$(printf '%s\n' "$out" | grep -c '^FAIL' || true)
+  printf '\n=== %-16s %s FAIL ===\n' "$name" "$n"
+  printf '%s\n' "$out" | sed 's/^/  /'
+done
+exit $rc
+'''
+
 [tasks."link:dots"]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
 run = 'bash ~/dotfiles/scripts/link-dots.sh --force'

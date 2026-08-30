@@ -1,5 +1,5 @@
 {
-  "maxListingChars": 56582,
+  "maxListingChars": 58008,
   "measuredOn": "2026-08-15",
   "skillsAtMeasurement": 60,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
@@ -11,6 +11,14 @@
       "to": 56582,
       "spentBy": "forging-skills",
       "reason": "F4 STANDING itself. The gate cannot be reached without trigger words in the owning skill's description, so the collection pays 162 chars once to make every future addition visible. The gate fired red on this very edit before the ceiling moved, which is the mechanism working rather than an exception to it."
+    },
+    {
+      "date": "2026-08-30",
+      "from": 56582,
+      "to": 58008,
+      "spentBy": "wiring-repositories",
+      "reason": "Two distinct amounts, recorded separately because they have different causes. 82 chars were ALREADY over the ceiling before this admission: measured 56,664 at 60 skills, so descriptions drifted upward since 2026-08-15 without anyone re-measuring — the ratchet caught drift it was built to catch, and it is absorbed here rather than hunted. 1,349 chars are the new skill's description. It was admitted because the battery found no owner: 8 EN/JA queries over 60 readable SKILL.md files returned only incidental hits, plus wiring-mise-tasks which scopes itself to the mise task-graph layer alone. Retiring a sibling was considered and rejected — no sibling was found doing this job badly; the ceiling had simply never been re-measured since it was set.",
+      "alsoFound": "Two descriptions sit at or past the observed truncation window (~1520-1570): structuring-documents 1669 and issuing-technical-memoranda 1515. Their tail-positioned language directives may already be silently dropped. That is a live defect independent of this raise, reported rather than absorbed — trimming them would also return ~170 chars."
     }
   ]
 }

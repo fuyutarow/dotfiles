@@ -33,6 +33,10 @@ import { readStdinJson } from "./lib.ts";
 const HOME = process.env.HOME ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
 const TURN_SEPARATOR = "\n\n---\n\n";
+// Matches capture-last-response.ts's KEEP — that file only ever HAS this many turns to give,
+// so validating against a different number here would let a request past this check just to
+// fail confusingly later. Keep the two in step if either changes.
+const MAX_TURNS = 20;
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
@@ -41,15 +45,34 @@ function block(reason: string): never {
 
 let sid = "";
 let count = 1;
+let rawArgs = "";
 try {
   const payload = readStdinJson();
   if (typeof payload?.session_id === "string") sid = payload.session_id;
-  // command_args is whatever followed the command name. Anything non-numeric or < 1 falls back
-  // to 1 rather than erroring: a typo should still copy something useful.
-  const n = Number.parseInt(String(payload?.command_args ?? "").trim(), 10);
-  if (Number.isFinite(n) && n > 0) count = n;
+  rawArgs = String(payload?.command_args ?? "").trim();
 } catch {
   block("/quote could not read its hook input.");
+}
+
+// No argument -> default to 1, the common case, and not an error. An argument that IS given
+// but isn't a clean positive whole number is rejected rather than coerced: a mistyped count
+// should say so, not silently copy something the user didn't ask for.
+if (rawArgs !== "") {
+  if (!/^\d+$/.test(rawArgs)) {
+    block(
+      `/quote's argument must be a whole number of turns, or omitted entirely. Got "${rawArgs}". ` +
+        `Try "/quote" for the last turn, or "/quote 3" for the last 3.`,
+    );
+  }
+  const n = Number.parseInt(rawArgs, 10);
+  if (n < 1 || n > MAX_TURNS) {
+    block(
+      `/quote N must be between 1 and ${MAX_TURNS} — capture-last-response.ts only keeps the ` +
+        `last ${MAX_TURNS} turns of history, so anything beyond that could never be honored. ` +
+        `Got ${n}. Try "/quote ${MAX_TURNS}" to go back as far as possible.`,
+    );
+  }
+  count = n;
 }
 
 // Written every turn by capture-last-response.ts (Stop hook); newest last.

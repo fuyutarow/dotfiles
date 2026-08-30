@@ -255,42 +255,11 @@ alias hs='atuin search'                 # CLI history search
 alias hst='atuin stats'                 # History statistics
 alias hi='atuin import auto'            # Import existing history
 
-# Cross-platform clipboard function.
-# OSC 52 fallback for SSH: native tools (clip.exe/pbcopy/xclip) target the SERVER
-# and never reach your terminal — and in WSL-over-SSH clip.exe isn't even on
-# PATH/interop. Over SSH we emit an OSC 52 escape so the copy lands in the terminal
-# CLIENT's clipboard. Needs a terminal that supports OSC 52 (Windows Terminal,
-# iTerm2, WezTerm, …) and, inside tmux, `set -g set-clipboard on` (tmux/clipboard.conf).
-osc52_copy() { printf '\e]52;c;%s\a' "$(base64 | tr -d '\n')" > /dev/tty; }
-
-copytoclipboard() {
-  # Over SSH (incl. WSL-over-SSH): route to the terminal client via OSC 52.
-  if [ -n "${SSH_CONNECTION:-}${SSH_TTY:-}" ]; then
-    local data; data=$(cat)
-    printf '%s\n' "$data" > /dev/tty          # echo for the human (like tee)
-    printf '%s' "$data" | osc52_copy
-    return
-  fi
-  # Local sessions: use the native clipboard (no OSC 52 size limits).
-  if $IS_WSL; then
-    # WSL - convert UTF-8 to UTF-16LE for Windows clipboard
-    tee /dev/tty | iconv -f UTF-8 -t UTF-16LE | clip.exe
-  elif $IS_MAC; then
-    # macOS
-    tee /dev/tty | pbcopy
-  elif command -v xclip &> /dev/null; then
-    # Linux with xclip
-    tee /dev/tty | xclip -selection clipboard
-  elif command -v xsel &> /dev/null; then
-    # Linux with xsel
-    tee /dev/tty | xsel --clipboard --input
-  else
-    # headless / no clipboard tool -> OSC 52
-    local data; data=$(cat)
-    printf '%s\n' "$data" > /dev/tty
-    printf '%s' "$data" | osc52_copy
-  fi
-}
+# Cross-platform clipboard function. Logic lives in zsh/copy-to-clipboard.sh (single source of
+# truth, POSIX sh) so a non-interactive caller with no zsh functions loaded — a Claude Code
+# slash command's `!command` step (/quote, /c) — can reuse the exact same
+# SSH/WSL/mac/OSC-52 handling instead of a second, drifting copy. This is a thin exec wrapper.
+copytoclipboard() { "${DOTFILES:-$HOME/dotfiles}/zsh/copy-to-clipboard.sh"; }
 
 # Clipboard aliases
 alias c='copytoclipboard'

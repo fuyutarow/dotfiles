@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "defaultMode": "auto"
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(sh ~/.claude/hooks/copy-session-response.sh)"
+    ]
   },
   "hooks": {
     "PreToolUse": [
@@ -176,6 +179,14 @@
           {
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh capture-last-response.ts"
           }
         ]
       }

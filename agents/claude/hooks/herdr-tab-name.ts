@@ -5,11 +5,10 @@
 // (herdr-agent-state.sh), never inside it — that file is overwritten on every
 // `herdr integration` update, per its own header comment.
 //
-// Shares its cache file (~/.cache/claude/statusline-agent-names.json) and TTLs with
-// ../statusline-command.ts's `agentName()` — same format, same source of truth, so whichever
-// of the two runs first warms the cache for the other. Duplicated rather than imported: the
-// two scripts run from unrelated invocation paths (statusLine vs SessionStart) and neither
-// wants a cross-directory dependency for ~20 lines of caching logic.
+// WRITES the shared cache file (~/.cache/claude/statusline-agent-names.json) that
+// ../statusline-command.ts's `agentName()` reads, warming it in the same format — but never
+// reads it itself; see the note on agentName() below for why that asymmetry is the fix, not
+// an oversight.
 //
 // Fires on startup/resume/compact (see settings.json's matcher for this hook). Renaming to
 // the same value twice is a no-op in herdr, so repeat firings are harmless. Runs only inside
@@ -23,15 +22,11 @@
 // within this one firing closes that race instead of relying on the next resume/compact.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { readStdinJson } from "./lib.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
-// Mirrors statusline-command.ts's agentName(): a HIT is trusted for 5 minutes, a MISS only
-// for 30s, so a lookup that raced registration self-heals soon rather than sticking for 5 min.
-const AGENT_NAME_POSITIVE_TTL_MS = 5 * 60_000;
-const AGENT_NAME_NEGATIVE_TTL_MS = 30_000;
 const LOOKUP_RETRIES = 3;
 const LOOKUP_RETRY_DELAY_MS = 500;
 
@@ -40,23 +35,18 @@ const LOOKUP_RETRY_DELAY_MS = 500;
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
 
+// DELIBERATELY DOES NOT READ THE CACHE — only writes it. The cache is keyed by session id,
+// but a session's NAME is not stable under that key: restarting with `claude -c` keeps the
+// session id and mints a fresh suffix (firedancer-72 -> firedancer-dd, observed 2026-08-30).
+// The statusline re-renders constantly, so a live session's cache entry is always inside its
+// 5-minute positive TTL — meaning a cache-reading lookup here would return the PRE-restart
+// name every single time, not occasionally. This hook then froze that stale name into the tab
+// label until the next session start, while the statusline moved on at its next refetch: the
+// sidebar and the status row disagreed, which is exactly the bug. This runs ONCE per session
+// start, so paying the full ~0.5-0.75s `claude agents --json` for a correct answer is trivially
+// the right trade; the cache exists to keep the STATUSLINE cheap, not this.
 async function agentName(sid: string): Promise<string | undefined> {
   type Entry = { name?: string; at: number };
-  let cache: Record<string, Entry> = {};
-  try {
-    cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
-  } catch {
-    // missing / corrupt cache file -> treat as empty and refetch below
-  }
-  const hit = cache[sid];
-  if (hit != null) {
-    const ttl =
-      hit.name != null
-        ? AGENT_NAME_POSITIVE_TTL_MS
-        : AGENT_NAME_NEGATIVE_TTL_MS;
-    if (Date.now() - hit.at < ttl) return hit.name;
-  }
-
   for (let attempt = 1; attempt <= LOOKUP_RETRIES; attempt++) {
     try {
       const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {

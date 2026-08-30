@@ -12,8 +12,12 @@
 # 1.3.14, so which bun a task actually ran was decided by PATH order, not by this repo.
 # 1.3.14 is the newest bun in existence as of 2026-07-25 (npm `bun@latest`, GitHub
 # releases/latest = bun-v1.3.14, and `mise ls-remote bun` after a cache clear all agree).
-# uv / rust are deliberately NOT declared yet — they would shadow existing toolchains; see
-# the mise-contract FAILs, which stay red on purpose until that is decided separately.
+# uv / rust are NOT declared, and no longer need to be: the FAILs that said otherwise were a
+# gate defect, not debt. Measured 2026-08-30 — the only `uv` in this file was inside
+# `echo "... (uv tool install cocoindex-code)"`, a MESSAGE, never an invocation. The runtime
+# census matched inside quoted strings, and the false positive had been written up here as
+# deliberate non-compliance. mise-contract now strips echo/printf arguments before the census.
+# If a body ever really invokes uv or rust, it will FAIL again, and that FAIL will be true.
 [tools]
 bun = "1.3.14"
 
@@ -78,40 +82,20 @@ description = "Format Markdown with rumdl (config = .rumdl.toml: structural gate
 run = "rumdl fmt"
 
 [tasks."fmt:sh"]
-dir = "{{config_root}}"
 description = "Format bash scripts in place with shfmt (2-space, -ci -sr -bn -s; bash dialect)"
-run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
-[ -z "$files" ] && { echo "no shell files"; exit 0; }
-printf '%s\n' "$files" | xargs shfmt -w -ln bash -i 2 -ci -sr -bn -s
-'''
+run = 'bun ~/dotfiles/scripts/fmt-sh.ts'
 
 [tasks."fmt:sh:check"]
-dir = "{{config_root}}"
 description = "Check bash formatting without writing (CI gate; prints diff + non-zero on drift)"
-run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
-[ -z "$files" ] && { echo "no shell files"; exit 0; }
-printf '%s\n' "$files" | xargs shfmt -d -ln bash -i 2 -ci -sr -bn -s
-'''
+run = 'bun ~/dotfiles/scripts/fmt-sh-check.ts'
 
 [tasks."fmt:ts"]
-dir = "{{config_root}}"
 description = "Format TypeScript in place with biome (house 2-space; agents/skills/** templates excluded)"
-run = '''
-files="$(fd -e ts -E agents/skills .)"
-[ -z "$files" ] && { echo "no ts files"; exit 0; }
-printf '%s\n' "$files" | xargs biome format --write --indent-style=space --indent-width=2
-'''
+run = 'bun ~/dotfiles/scripts/fmt-ts.ts'
 
 [tasks."fmt:ts:check"]
-dir = "{{config_root}}"
 description = "Check TS formatting without writing (CI gate; prints diff + non-zero on drift)"
-run = '''
-files="$(fd -e ts -E agents/skills .)"
-[ -z "$files" ] && { echo "no ts files"; exit 0; }
-printf '%s\n' "$files" | xargs biome format --indent-style=space --indent-width=2
-'''
+run = 'bun ~/dotfiles/scripts/fmt-ts-check.ts'
 
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
@@ -140,42 +124,16 @@ description = "Markdown structural gate: rumdl check (render-breaking defects on
 run = "rumdl check"
 
 [tasks."lint:sh"]
-dir = "{{config_root}}"
 description = "ShellCheck static analysis on bash scripts (-x follow sources; file list reused from shfmt -f)"
-run = '''
-files="$(shfmt -f scripts tmux/scripts agents/claude lazygit .githooks)"
-[ -z "$files" ] && { echo "no shell files"; exit 0; }
-printf '%s\n' "$files" | xargs shellcheck -x
-'''
+run = 'bun ~/dotfiles/scripts/lint-sh.ts'
 
 [tasks."lint:zsh"]
-dir = "{{config_root}}"
 description = "zsh syntax gate: `zsh -n` parse-only on boot-critical zsh config (MUST use the zsh binary, never bash -n)"
-run = '''
-rc=0
-for f in zsh/aliases.zsh zsh/mac.zsh zsh/wsl.zsh \
-         zsh/zshrc zsh/zshenv zsh/zprofile.mac zsh/zprofile.wsl; do
-  [ -f "$f" ] || continue
-  if zsh -n "$f"; then echo "✅ $f"; else echo "❌ $f"; rc=1; fi
-done
-exit $rc
-'''
+run = 'bun ~/dotfiles/scripts/lint-zsh.ts'
 
 [tasks."lint:skills-index"]
-dir = "{{config_root}}"
 description = "Catalog completeness: every agents/skills/*/ with a SKILL.md must be linked in agents/skills/README.md"
-run = '''
-idx="agents/skills/README.md"
-[ -f "$idx" ] || { echo "❌ missing $idx"; exit 1; }
-rc=0
-for d in agents/skills/*/; do
-  n="$(basename "$d")"
-  [ -f "$d/SKILL.md" ] || continue          # skip dangling symlinks / non-skill dirs
-  if grep -q "]($n/)" "$idx"; then :; else echo "❌ not in index: $n"; rc=1; fi
-done
-[ "$rc" -eq 0 ] && echo "✅ skills index complete"
-exit $rc
-'''
+run = 'bun ~/dotfiles/scripts/lint-skills-index.ts'
 
 [tasks."lint:skills-wiring"]
 dir = "{{config_root}}"
@@ -258,32 +216,16 @@ run = "bun test scripts/tests agents/skills/writing-bun-scripts/tests"
 # defined by tty-ness, a zle precmd hook and raw DEC escapes, via a real pty from `zsh/zpty`.
 # Bun has no pty, so a Bun test cannot reach those branches at all.
 [tasks."test:zsh"]
-dir = "{{config_root}}"
 description = "Terminal-state hygiene regression tests (real pty via zsh/zpty; the timeout IS an assertion — one guarded regression is a hang)"
-run = '''
-to="$(command -v timeout || command -v gtimeout || true)"
-if [ -z "$to" ]; then
-  echo "⚠️  no timeout(1) on PATH — running unbounded; a hang regression will block instead of failing"
-  exec zsh zsh/tests/terminal-hygiene.test.zsh
-fi
-"$to" 120 zsh zsh/tests/terminal-hygiene.test.zsh
-'''
+run = 'bun ~/dotfiles/scripts/test-zsh.ts'
 
 # The machine enforcement of INV-6 (no implicit global toolchain — see zsh/zshenv). zsh again,
 # and again deliberately: the unit under test is a startup file whose behaviour is a function of
 # shell mode (`-o interactive`) and inherited PATH, and its last case needs a real login tty.
 # The timeout is an assertion here too — that last case boots the user's whole login chain.
 [tasks."test:mise-scope"]
-dir = "{{config_root}}"
 description = "Toolchain-scope regression tests (INV-6): the mise shim dir reaches non-interactive shells only, no global default version, no second version manager on login"
-run = '''
-to="$(command -v timeout || command -v gtimeout || true)"
-if [ -z "$to" ]; then
-  echo "⚠️  no timeout(1) on PATH — running unbounded; a wedged login shell will block instead of failing"
-  exec zsh zsh/tests/mise-scope.test.zsh
-fi
-"$to" 120 zsh zsh/tests/mise-scope.test.zsh
-'''
+run = 'bun ~/dotfiles/scripts/test-mise-scope.ts'
 
 # CI aggregate (wiring-mise-tasks contract). lint:prose is deliberately excluded, same as
 # lint.depends: dotfiles has no reports/memos to scan (they live in research repos).
@@ -313,28 +255,11 @@ run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:pre-commit"]
 description = "git pre-commit body: run `fmt` and re-stage the formatted files that were ALREADY staged (formatting fallout in unrelated working-tree files stays unstaged). Called by .githooks/pre-commit; safe to run by hand."
-run = '''
-staged=$(git diff --cached --name-only --diff-filter=ACM)
-echo "$staged" | grep -qE '\.(md|sh|ts)$' || exit 0   # fmt が触る拡張子だけ
-mise run f > /dev/null 2>&1 || {
-  echo "pre-commit: mise run f failed — fix the formatter, or bypass once with 'git commit --no-verify'" >&2
-  exit 1
-}
-for f in $staged; do
-  [ -f "$f" ] && git add "$f"
-done
-exit 0
-'''
+run = 'bun ~/dotfiles/scripts/hook-pre-commit.ts'
 
 [tasks."hook:post-commit"]
 description = "git post-commit body: warm the cocoindex index incrementally (`ccc index`) so search never pays the update latency. No-op when ccc is absent, when the repo has no .cocoindex_code/, or when the daemon is already [indexing]. Called detached by .githooks/post-commit."
-run = '''
-command -v ccc > /dev/null 2>&1 || exit 0
-[ -d "$(git rev-parse --show-toplevel)/.cocoindex_code" ] || exit 0   # 索引していない repo では黙って抜ける
-ccc daemon status 2> /dev/null | grep -q "\\[indexing\\]" && exit 0    # 走行中なら間引く
-ccc index > /dev/null 2>&1 || true
-exit 0
-'''
+run = 'bun ~/dotfiles/scripts/hook-post-commit.ts'
 
 [tasks."hook:post-merge"]
 description = "git post-merge body: after a pull/merge, relink dotfiles (link-dots.sh, SAFE mode) then relink skills, so newly-pulled config appears with no manual step. Idempotent. Called by .githooks/post-merge."
@@ -360,76 +285,11 @@ run = 'kondo --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 # delegatable: an agent working from cache:audit physically cannot lose data.
 [tasks."cache:audit"]
 description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune."
-run = '''
-stale_days="${STALE_DAYS:-180}"
-now=$(date +%s)
-
-_mtime() { stat -c %Y "$1" 2> /dev/null || stat -f %m "$1" 2> /dev/null; }   # GNU then BSD
-_when() { # → "2026-02-25 (148d)"
-  m=$(_mtime "$1") || return 0
-  printf '%s (%dd)' "$(date -d "@$m" +%F 2> /dev/null || date -r "$m" +%F)" "$(((now - m) / 86400))"
-}
-
-echo "== 1. ~/ の隠しディレクトリ: 最終更新が ${stale_days} 日以上前 =="
-for d in "$HOME"/.[!.]*/; do
-  d="${d%/}"; m=$(_mtime "$d") || continue
-  [ $(((now - m) / 86400)) -ge "$stale_days" ] || continue
-  printf '  %-8s %-28s %s\n' "$(du -sh "$d" 2> /dev/null | cut -f1)" "~/${d##*/}" "$(_when "$d")"
-done
-echo "  (サイズは候補のみ計測。年齢は手掛かりであって証拠ではない — 親の mtime は中身の"
-echo "   更新を反映しないので ~/.local や ~/.rustup のような現役も並ぶ。§2〜§4 で裏を取れ)"
-
-echo
-echo "== 2. rustup toolchain: 既定と、プロジェクトによる固定の有無 =="
-if command -v rustup > /dev/null 2>&1; then
-  rustup toolchain list | sed 's/^/  /'
-  echo "  -- rust-toolchain で固定しているプロジェクト --"
-  if command -v fd > /dev/null 2>&1; then
-    fd -H -t f "^rust-toolchain(\\.toml)?$" "${AUDIT_PROJECTS:-$HOME/Workspace}" 2> /dev/null |
-      while read -r f; do printf '  %s → %s\n' "$f" "$(grep -h channel "$f" 2> /dev/null | tr -d ' ')"; done
-    echo "  (この一覧が空なら、既定以外の toolchain を固定しているものは無い)"
-  else
-    echo "  fd 不在のため未検索"
-  fi
-fi
-
-echo
-echo "== 3. vscode-server: 現行版以外は再接続で取り直される =="
-s="$HOME/.vscode-server/cli/servers"
-[ -d "$s" ] && for v in "$s"/Stable-*; do
-  [ -e "$v" ] || continue
-  printf '  %-8s %-46s %s\n' "$(du -sh "$v" 2> /dev/null | cut -f1)" "${v##*/}" "$(_when "$v")"
-done
-
-echo
-echo "== 4. ~/.cache 内訳(降順) =="
-du -sh "$HOME"/.cache/* 2> /dev/null | sort -rh | head -12 | sed "s|$HOME|~|" | sed 's/^/  /'
-
-echo
-echo "== 5. graveyard(rip 済み・まだ空きは増えていない) =="
-for g in "${GRAVEYARD:-/tmp/graveyard-$USER}" "/tmp/graveyard-$USER"; do
-  [ -d "$g" ] && { printf '  %s  %s\n' "$(du -sh "$g" 2> /dev/null | cut -f1)" "$g"; break; }
-done
-echo
-echo "df: $(df -h "$HOME" | awk 'NR==2{print $4" free / "$2}')"
-echo "→ 判断が要らない分は cache:clean / 受け入れた候補は rip / 空きが増えるのは cache:purge だけ"
-'''
+run = 'bun ~/dotfiles/scripts/cache-audit.ts'
 
 [tasks."cache:purge"]
 description = "IRREVERSIBLE: empty rip's graveyard. This is the ONLY step that actually frees disk — rip is a same-filesystem rename, so ripped data still occupies space until purged. Prints the contents and requires typing 'yes'. Human-only gate; never run this from an agent."
-run = '''
-g="${GRAVEYARD:-/tmp/graveyard-$USER}"
-[ -d "$g" ] || { echo "graveyard 無し: $g"; exit 0; }
-echo "== $g の中身 =="
-du -sh "$g"/* 2> /dev/null | sort -rh | head -20
-echo
-echo "合計 $(du -sh "$g" 2> /dev/null | cut -f1) — これを完全に削除します。復元はできません。"
-printf "続けるなら yes と入力: "
-read -r ans
-[ "$ans" = "yes" ] || { echo "中止しました。"; exit 1; }
-find "$g" -mindepth 1 -maxdepth 1 -exec /bin/rm -rf -- {} +   # 絶対パスで shell の rm 無効化を回避
-echo "✅ purge 完了。 $(df -h "$HOME" | awk 'NR==2{print $4" free"}')"
-'''
+run = 'bun ~/dotfiles/scripts/cache-purge.ts'
 
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"
@@ -466,23 +326,8 @@ echo "Setup complete. Run: exec zsh"
 # dotfiles 自身の `lint` には入れない。他 repo の状態で dotfiles の gate が落ちるのは
 # 結合の誤りである。強制は各 repo の check が持ち、ここは差分を見るための眺めに徹する。
 [tasks."repos:audit"]
-dir = "{{config_root}}"
 description = "~/Workspace の全 git repo の配線健全性を一望する (scaffolding-repositories の floor を横断実行)"
-run = '''
-check="${WIRING_CHECK:-$HOME/.claude/skills/wiring-repositories/scripts/wiring-check.ts}"
-[ -f "$check" ] || { echo "repos:audit: scaffold-check not found at $check" >&2; exit 2; }
-root="${WORKSPACE_ROOT:-$HOME/Workspace}"
-rc=0
-for d in "$root"/*/ "$HOME/dotfiles/"; do
-  [ -d "$d.git" ] || continue
-  name=$(basename "$d")
-  out=$(bun "$check" --repo "$d" --audit 2>&1) || rc=1
-  n=$(printf '%s\n' "$out" | grep -c '^FAIL' || true)
-  printf '\n=== %-16s %s FAIL ===\n' "$name" "$n"
-  printf '%s\n' "$out" | sed 's/^/  /'
-done
-exit $rc
-'''
+run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
 description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
@@ -490,11 +335,7 @@ run = 'bash ~/dotfiles/scripts/link-dots.sh --force'
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
-run = '''
-TPM_DIR="$HOME/.tmux/plugins/tpm"
-[ -d "$TPM_DIR/.git" ] || git clone --depth 1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
-"$TPM_DIR/bin/install_plugins"
-'''
+run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 
 [tasks."check:tools"]
 description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
@@ -506,46 +347,14 @@ run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
-run = '''
-sudo apt install -y zsh
-brew install sheldon topgrade
-bash ~/dotfiles/scripts/link-dots.sh --force
-brew bundle --file=~/dotfiles/Brewfile
-mise run deps
-mise run tmux:plugins
-topgrade
-# After the tool installs: zsh/zshenv arms the no-self-spawn guard as soon as link-dots places
-# the unit, so leaving the unit un-enabled would make every ccc call wait 30s and fail.
-mise run wsl:ccc-daemon
-chsh -s $(which zsh)
-echo "---"
-echo "Setup complete. Run: exec zsh"
-'''
+run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 
 [tasks."wsl:ccc-daemon"]
 description = "Hand the ccc daemon to systemd with CPU/RAM caps (link:dots must have run first)"
 # Two-step by design, like cc:install-mcp: link:dots places the unit, this activates it.
 # Stop the incumbent first — a fresh daemon unlinks and rebinds the socket at startup, so
 # skipping this leaves the old uncapped process alive and orphaned from its socket.
-run = '''
-test -e ~/.config/systemd/user/ccc-daemon.service || { echo "unit not linked — run: mise run link:dots"; exit 1; }
-# Without the binary the unit would crash-loop into systemd's start limit and stay dead, while
-# zsh/zshenv has already forbidden clients from spawning their own — fail loudly instead.
-command -v ccc > /dev/null 2>&1 || { echo "ccc not on PATH — install it first (uv tool install cocoindex-code)"; exit 1; }
-# The stop is a ONE-TIME migration off an uncapped lazy-spawned daemon. Re-running it while the
-# unit already owns a daemon would abort every project's in-flight index (a StopRequest cancels
-# them with no resume), so an already-active unit skips it and this task stays idempotent.
-if systemctl --user is-active --quiet ccc-daemon.service; then
-  echo "unit already active — skipping the one-time migration stop"
-else
-  ccc daemon stop > /dev/null 2>&1 || true
-fi
-systemctl --user daemon-reload
-systemctl --user enable --now ccc-daemon.service
-systemctl --user status ccc-daemon.service --no-pager | head -12
-echo "---"
-systemctl --user show ccc-daemon.service -p CPUQuotaPerSecUSec -p MemoryHigh -p MemoryMax -p MemorySwapMax -p TasksMax
-'''
+run = 'bun ~/dotfiles/scripts/wsl-ccc-daemon.ts'
 
 [tasks."wsl:mcp-reaper"]
 description = "STOPGAP: sweep leaked stdio MCP server processes on a timer (link:dots must have run first)"
@@ -554,19 +363,7 @@ description = "STOPGAP: sweep leaked stdio MCP server processes on a timer (link
 # (2026-08-23: 2365 processes, 53 GB). The configs are now url-only, but a running
 # app-server keeps its startup config, so this bounds memory until it restarts.
 # RETIRE IT once that has happened: mise run wsl:mcp-reaper:off
-run = '''
-test -e ~/.config/systemd/user/mcp-reaper.timer || { echo "units not linked — run: mise run link:dots"; exit 1; }
-# No runtime check: the reaper is POSIX sh on purpose. Its first version was bun TS and died
-# under systemd with `/usr/bin/env: 'bun': No such file or directory` — the user manager's PATH
-# does not carry linuxbrew, and a memory-emergency reaper must not depend on that.
-# Prove the matcher before arming a process-killer on a timer.
-echo "--- dry run (no signals sent) ---"
-~/.local/bin/mcp-reaper --dry-run --min-age-sec 600 | head -5
-echo "---"
-systemctl --user daemon-reload
-systemctl --user enable --now mcp-reaper.timer
-systemctl --user list-timers mcp-reaper.timer --no-pager
-'''
+run = 'bun ~/dotfiles/scripts/wsl-mcp-reaper.ts'
 
 [tasks."wsl:mcp-reaper:off"]
 description = "Retire the MCP reaper stopgap (do this once app-server has restarted under url-only MCP config)"

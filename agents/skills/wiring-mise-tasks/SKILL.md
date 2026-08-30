@@ -108,7 +108,14 @@ TeX: leaf tasks (`latex:*`) are owned by `compiling-latex`; the repo-level `chec
 | Rule | Artifact | Origin |
 |---|---|---|
 | **RUNTIME-DECLARED** — every runtime a task body invokes (`bun`/`node`/`uv`/`julia`/`cargo`/`deno`) is declared and pinned in `[tools]`. | `mise-contract.ts` prints `OK tools: <x> declared`; an invoked-but-undeclared runtime FAILs. | Census 2026-07-25, 3 repos: two had no `[tools]` section at all, the third declared one runtime of four. Every one of them invoked runtimes from task bodies regardless. |
-| **BODY-IS-DECLARATION** — a task body is a launcher, not a program. Over 10 non-blank lines, or any branching/parsing logic, moves to a script file. | `mise-contract.ts` FAILs on an over-length body. | `cc:install-mcp` was a 52-line shell body that silently pruned nothing for weeks; the bug was invisible because a body embedded in TOML **cannot be imported or tested**. `link:skills` is 79 lines. |
+| **BODY-IS-DECLARATION** — a task body is a launcher, not a program. Over 10 non-blank lines, **or any branching/parsing logic**, moves to a script file. | `mise-contract.ts` FAILs on BOTH halves (2026-08-30). Control flow = `if`/`for`/`while`/`until`/`case`/`[` test/`test` at command position. Comments and quoted spans are stripped first. `&&`/`||` are not tells. | `cc:install-mcp` was a 52-line body that pruned nothing for weeks, invisibly. A body in TOML **cannot be imported or tested**. |
+
+> `実測` 2026-08-30. Two defects, one cause. Only the LENGTH half was ever enforced. And the
+> section parser split on the first line-initial `[`. So a `'''` body holding `[ -z "$x" ]` ended
+> its own section. The closing `'''` was never found, and **the body vanished from the gate**.
+> Proven with a 14-line fixture: no over-length FAIL, and the runtime census counted one
+> task instead of two. The gate was blind to exactly the bodies most likely to violate it. With
+> the parser fixed and control flow detected, five repos went from **8 violations to 39**.
 
 The first rule exists because the two halves are not separable: a body that says `bun x` is only
 correct if `[tools]` says `bun`. Pinning was previously routed out of this skill as model-native
@@ -182,7 +189,7 @@ MUST NOT fire (route):
 | `compiling-latex` | PURPOSE — TeX toolchain + `latex:*` leaf tasks → there (its `assets/mise-latex.toml`); cross-language verb contract + grammar → here. Reciprocal pointer lives in its Core Decisions. Both sides agree in SUBSTANCE; do not diff for byte-identity. |
 | `operating-the-harness` | PURPOSE — hooks/settings/CLAUDE.md enforcement → there; the task graph a hook invokes → here. `mise run check` as a verification loop is the seam: the loop's EXISTENCE is their doctrine, its SHAPE is this contract. |
 | `driving-cocoindex` | no overlap — ccc state facts are theirs entirely. |
-| `wiring-repositories` | CARDINALITY — ONE wiring artifact (this task graph, its verb contract, its `templates/*.mise.toml`) → here, INCLUDING 「新リポに mise.toml 置いて」; WHICH layers a repo admits at all, in what order, and whether the joint stays coherent → there. That skill calls this one for the mise layer and ships no competing template. The names carry the cut: this wires ONE artifact, that wires the SET. Both sides carry it; agree in SUBSTANCE, do not diff for byte-identity. |
+| `wiring-repositories` | CARDINALITY — the names carry the cut: this wires ONE artifact, that wires the SET. This task graph, its verbs, its `templates/*.mise.toml` → here, INCLUDING 「新リポに mise.toml 置いて」. Which layers a repo admits, in what order, and whether the joint holds → there; it calls this skill for the mise layer and ships no competing template. Agree in SUBSTANCE; do not diff. |
 
 ## Reference index
 

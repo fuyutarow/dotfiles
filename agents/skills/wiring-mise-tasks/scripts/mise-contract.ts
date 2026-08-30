@@ -157,23 +157,116 @@ const RUNTIMES: Array<[RegExp, string]> = [
 
 // Raw-text parse on purpose: we need the BODY of every task, and `mise tasks ls` reports
 // names, not sources. Handles `run = '''…'''`, `run = "…"`, and `run = ['…', '…']`.
+/**
+ * Task `run` bodies, isolated. Multi-line-string aware, and that is load-bearing.
+ *
+ * The previous implementation split sections on the first `\n[`. A `'''` body whose line begins
+ * with a shell test — `[ -z "$files" ] && …` — therefore ENDED its own section there, the closing
+ * `'''` was never found, and the body vanished from the gate entirely. Proven 2026-08-30 with a
+ * 14-line fixture: no over-length FAIL, and the runtime census counted one task instead of two.
+ *
+ * The gate was blind to precisely the bodies most likely to violate it — the ones carrying shell
+ * control flow. Both checks below depend on this being right.
+ */
 function taskBodies(source: string): Array<{ name: string; body: string }> {
   const out: Array<{ name: string; body: string }> = [];
-  const re = /\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]([\s\S]*?)(?=\n\[|$)/g;
-  for (const match of source.matchAll(re)) {
-    const name = match[1] ?? match[2] ?? "?";
-    const section = match[3] ?? "";
-    const triple = /run\s*=\s*'''([\s\S]*?)'''|run\s*=\s*"""([\s\S]*?)"""/.exec(
-      section,
-    );
-    if (triple) {
-      out.push({ name, body: triple[1] ?? triple[2] ?? "" });
+  let name: string | undefined;
+  let body: string[] | undefined;
+  let closer: string | undefined;
+
+  for (const line of source.split("\n")) {
+    if (closer !== undefined) {
+      const end = line.indexOf(closer);
+      if (end === -1) {
+        body?.push(line);
+      } else {
+        if (end > 0) body?.push(line.slice(0, end));
+        if (name !== undefined && body !== undefined) out.push({ name, body: body.join("\n") });
+        body = undefined;
+        closer = undefined;
+      }
       continue;
     }
-    const single = /run\s*=\s*(?:'([^']*)'|"([^"]*)")/.exec(section);
-    if (single) out.push({ name, body: single[1] ?? single[2] ?? "" });
+    const header = /^\s*\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]/.exec(line);
+    if (header !== null) {
+      name = header[1] ?? header[2];
+      continue;
+    }
+    if (/^\s*\[/.test(line)) {
+      name = undefined;
+      continue;
+    }
+    if (name === undefined) continue;
+
+    const run = /^\s*run\s*=\s*(.*)$/.exec(line);
+    if (run === null) continue;
+    const rest = run[1] ?? "";
+    const open = /^('''|""")/.exec(rest);
+    if (open !== null) {
+      closer = open[1];
+      const tail = rest.slice(3);
+      const end = tail.indexOf(closer ?? "");
+      if (end === -1) {
+        body = tail.trim() === "" ? [] : [tail];
+      } else {
+        out.push({ name, body: tail.slice(0, end) });
+        closer = undefined;
+      }
+      continue;
+    }
+    const single = /^(?:'([^']*)'|"([^"]*)")/.exec(rest);
+    if (single !== null) out.push({ name, body: single[1] ?? single[2] ?? "" });
   }
   return out;
+}
+
+/**
+ * A body reduced to text that could actually RUN a command.
+ *
+ * Comments go, and so do `echo`/`printf` arguments. Measured 2026-08-30: a body whose only
+ * mention of `uv` was inside `echo "... (uv tool install cocoindex-code)"` was reported as
+ * invoking uv. The FAIL was then written into that repo's config as deliberate debt —
+ * **a false positive institutionalised as intentional non-compliance.**
+ *
+ * Only echo/printf are stripped, not every quoted span. `sh -c "uv ..."` really does invoke uv,
+ * and blanket quote-stripping would hide it. This is the mention-vs-action cut, drawn where the
+ * mention actually lives.
+ */
+function commandText(body: string): string {
+  return body
+    .split("\n")
+    .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
+    .join("\n")
+    .replace(/\b(?:echo|printf)\b[^\n;]*/g, " ");
+}
+
+/**
+ * Shell control flow at command position, after comments and quoted spans are removed.
+ *
+ * Stripping first is not optional: a body that MENTIONS `if` inside an echo string is not
+ * branching, and reading a mention as an action is the failure this house has recorded three
+ * times against itself.
+ *
+ * `&&` and `||` are deliberately NOT tells. `cmd_a && cmd_b` is a fail-fast sequence, not logic,
+ * and flagging it would fire on almost every benign body.
+ */
+function controlFlow(body: string): string[] {
+  const code = body
+    .split("\n")
+    .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
+    .join("\n")
+    .replace(/'[^'\n]*'|"[^"\n]*"/g, " ");
+  const at = "(?:^|[\\n;|&(]|\\bthen\\b|\\bdo\\b)\\s*";
+  const tells: Array<[RegExp, string]> = [
+    [new RegExp(`${at}if\\b`, "m"), "if"],
+    [new RegExp(`${at}for\\b`, "m"), "for"],
+    [new RegExp(`${at}while\\b`, "m"), "while"],
+    [new RegExp(`${at}until\\b`, "m"), "until"],
+    [new RegExp(`${at}case\\b`, "m"), "case"],
+    [new RegExp(`${at}\\[\\[?\\s`, "m"), "a [ test"],
+    [new RegExp(`${at}test\\s`, "m"), "a test command"],
+  ];
+  return tells.filter(([re]) => re.test(code)).map(([, label]) => label);
 }
 
 function declaredTools(source: string): Set<string> {
@@ -196,8 +289,9 @@ function checkBodies(source: string): [number, number] {
 
   const needed = new Map<string, string[]>();
   for (const { name, body } of bodies) {
+    const cmd = commandText(body);
     for (const [re, tool] of RUNTIMES) {
-      if (!re.test(body)) continue;
+      if (!re.test(cmd)) continue;
       const users = needed.get(tool);
       if (users === undefined) needed.set(tool, [name]);
       else users.push(name);
@@ -208,6 +302,18 @@ function checkBodies(source: string): [number, number] {
         `FAIL  body: task '${name}' has ${lines} lines (max ${BODY_MAX_LINES}) — ` +
           `a TOML-embedded body cannot be imported or tested; move the logic to a ` +
           `script file and leave a one-line launcher\n`,
+      );
+      failures += 1;
+    }
+    // Length is the weaker half of C-B and always was: the rule reads "over 10 non-blank lines,
+    // OR any branching/parsing logic". Only the count was ever enforced, so a 4-line body with a
+    // shell test passed. Measured 2026-08-30: exactly such a body broke a sibling gate's parser.
+    const flow = controlFlow(body);
+    if (flow.length > 0 && lines <= BODY_MAX_LINES) {
+      process.stdout.write(
+        `FAIL  body: task '${name}' branches in TOML (${flow.join(", ")}) — ` +
+          `length is not the rule, testability is; a body with control flow cannot be ` +
+          `imported or tested. Move it to a script file and leave a one-line launcher\n`,
       );
       failures += 1;
     }

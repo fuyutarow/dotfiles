@@ -177,6 +177,12 @@ async function main(): Promise<void> {
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
   });
+  // Cleye leaves excess positionals in `_` rather than refusing them, and this command takes
+  // none — a stray argument means the caller expected a different interface (BG1).
+  if (argv._.length > 0) {
+    process.stderr.write(`unexpected argument: ${argv._[0]} (this command takes no positionals)\n`);
+    process.exit(2);
+  }
   const root = resolve(argv.flags.repo);
   if (!existsSync(join(root, ".git"))) {
     process.stderr.write(`FATAL: ${root} is not a git repository\n`);

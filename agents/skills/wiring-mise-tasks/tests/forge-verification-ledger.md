@@ -74,3 +74,31 @@ by the editor and re-proven red→green. Full lens returns: session workflow `wf
 | no_change | bloat | lineage/immunization sentence flagged as narrative | KEPT — the header formula (components f+g, verbatim immunization) is mandated by forging-skills execution-models Step B; verifier lacked that bar |
 | no_change | bloat | frontmatter Workflow-native/Cuts "duplicate" the body | KEPT — frontmatter must be self-contained for match-time routing (accepted pattern) |
 | deferred | sibling-cuts | operating-the-harness carries no reciprocal pointer to this skill's `check` seam | DEFERRED, owner named: land a one-line pointer in operating-the-harness §2 on its next reforge (seam is named from this side; its file is untouched this commit) |
+
+## 2026-08-30 — C-B's second half was never enforced, and could not have been
+
+The rule always read "over 10 non-blank lines, **or any branching/parsing logic**". Only the count
+was ever checked. Worse, `taskBodies` split sections on the first line-initial `[`, so any `'''`
+body containing a shell test — `[ -z "$files" ] && …` — terminated its own section, its closing
+`'''` was never found, and the body left the gate's view entirely.
+
+Proven with a fixture: a 14-line body whose third line began with `[` produced no over-length
+FAIL, and the runtime census reported one task where two existed. **The gate was blind to exactly
+the class of body the rule exists to catch.**
+
+Fixed together: a multi-line-string-aware parser, and control-flow detection at command position
+with comments and quoted spans stripped first (a body that MENTIONS `if` in an echo string is not
+branching — the mention-as-action failure this house has recorded three times). `&&` and `||` are
+deliberately not tells; a fail-fast sequence is not logic.
+
+Census across five repos went from 8 visible violations to **39**. Migration of 36 of them
+followed in the same session; two in a repo with 82 files of another session's in-flight work
+were deferred rather than merged into that tree.
+
+### PROSE-DEBT waiver (`forging-skills` architecture.md §5)
+
+This commit edits `SKILL.md`, so "touch it, clear it" applies. **Waived, dated 2026-08-30.**
+The additions themselves land at zero: measured before and after, SKILL.md prose >120 chars stays
+at 13 and no new oversize table cell survives. The residue is pre-existing — 13 in SKILL.md, 18 in
+`references/recipes.md`, and a 9-line version header. Queue position: behind the recipes.md
+rewrite, which is the larger half and wants its own pass.

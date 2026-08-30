@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// UserPromptExpansion hook (matcher: quote|c) — runs /quote and /c to completion HERE and
-// returns decision:"block", so the turn ends without an inference call.
+// UserPromptExpansion hook (matcher: quote) — runs /quote to completion HERE and returns
+// decision:"block", so the turn ends without an inference call.
 //
 // WHY NOT JUST THE COMMAND FILE. A skill/command is a prompt-injection mechanism: its rendered
 // body — `!command` output included — becomes a message that a model turn then processes.
@@ -12,8 +12,8 @@
 // NAME, and its decision:"block" "prevents the command from expanding".
 //
 // Because it fires BEFORE expansion, the command file's own `!command` step never runs when we
-// block — so the work has to happen here, and agents/commands/{quote,c}.md are reduced to
-// name-registering placeholders. Keep the matcher in settings.json in step with those names.
+// block — so the work has to happen here, and agents/commands/quote.md is reduced to a
+// name-registering placeholder. Keep the matcher in settings.json in step with that name.
 //
 // Everything is best-effort: on any failure we still block (the user typed a clipboard
 // command, not a prompt for Claude — silently falling through to an inference turn would be

@@ -257,7 +257,7 @@ alias hi='atuin import auto'            # Import existing history
 
 # Cross-platform clipboard function. Logic lives in zsh/copy-to-clipboard.sh (single source of
 # truth, POSIX sh) so a non-interactive caller with no zsh functions loaded — a Claude Code
-# slash command's `!command` step (/quote, /c) — can reuse the exact same
+# slash command's shell step (/quote) — can reuse the exact same
 # SSH/WSL/mac/OSC-52 handling instead of a second, drifting copy. This is a thin exec wrapper.
 copytoclipboard() { "${DOTFILES:-$HOME/dotfiles}/zsh/copy-to-clipboard.sh"; }
 

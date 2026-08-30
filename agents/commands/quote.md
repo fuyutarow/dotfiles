@@ -1,5 +1,5 @@
 ---
-description: Copy this session's last response to the clipboard WITH its source attached — `from: <session name>` then the body. For pasting into a chat or another session where several Claude Code sessions are in flight and the reader needs to know which one said it. The built-in /copy copies the body alone. `/c` is the short alias.
+description: Copy this session's last response to the clipboard WITH its source attached — `from: <session name>` then the body. For pasting into a chat or another session where several Claude Code sessions are in flight and the reader needs to know which one said it. The built-in /copy copies the body alone.
 argument-hint: (no arguments)
 disable-model-invocation: true
 ---

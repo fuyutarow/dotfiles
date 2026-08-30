@@ -106,7 +106,7 @@
     ],
     "UserPromptExpansion": [
       {
-        "matcher": "quote|c",
+        "matcher": "quote",
         "hooks": [
           {
             "type": "command",

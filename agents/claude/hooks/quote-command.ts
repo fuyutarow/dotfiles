@@ -15,49 +15,105 @@
 // block — so the work has to happen here, and agents/commands/quote.md is reduced to a
 // name-registering placeholder. Keep the matcher in settings.json in step with that name.
 //
+// `/quote N` means the last N turns, oldest first — a QUANTITY. Note this deliberately differs
+// from the built-in `/copy N`, where N is an INDEX ("copies the Nth-latest"). The point of this
+// command is handing someone a readable excerpt of what a session just said, and for that
+// "the last two things" is the useful ask; "only the second-to-last, without the last" is not.
+//
 // Everything is best-effort: on any failure we still block (the user typed a clipboard
 // command, not a prompt for Claude — silently falling through to an inference turn would be
 // the worst outcome) and say what went wrong in `reason`.
 
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 
 const HOME = process.env.HOME ?? "";
-const SCRIPT = `${HOME}/.claude/hooks/copy-session-response.sh`;
+const HOOKS = `${HOME}/.claude/hooks`;
+const TURN_SEPARATOR = "\n\n---\n\n";
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
   process.exit(0);
 }
 
-let out = "";
+let sid = "";
+let count = 1;
 try {
   const payload = readStdinJson();
-  const sid = typeof payload?.session_id === "string" ? payload.session_id : "";
-  out = execFileSync("sh", [SCRIPT, sid], {
-    stdio: ["ignore", "pipe", "ignore"],
-    encoding: "utf8",
-    timeout: 15000,
-  });
-} catch (e) {
-  block(`/quote failed: ${e instanceof Error ? e.message : String(e)}`);
+  if (typeof payload?.session_id === "string") sid = payload.session_id;
+  // command_args is whatever followed the command name. Anything non-numeric or < 1 falls back
+  // to 1 rather than erroring: a typo should still copy something useful.
+  const n = Number.parseInt(String(payload?.command_args ?? "").trim(), 10);
+  if (Number.isFinite(n) && n > 0) count = n;
+} catch {
+  block("/quote could not read its hook input.");
 }
 
-const status = /^STATUS: (\S+)/m.exec(out)?.[1];
-const name = /^NAME: (.+)$/m.exec(out)?.[1] ?? "?";
+// Written every turn by capture-last-response.ts (Stop hook); newest last.
+let turns: string[] = [];
+try {
+  turns = readFileSync(
+    `${HOME}/.cache/claude/last-response/${sid}.jsonl`,
+    "utf8",
+  )
+    .split("\n")
+    .filter((l) => l.trim() !== "")
+    .map((l) => JSON.parse(l)?.text)
+    .filter((t): t is string => typeof t === "string");
+} catch {
+  // no history file -> handled as "nothing captured" below
+}
 
-if (status === "delivered") block(`Copied to clipboard as "from: ${name}".`);
-
-if (status === "no-body") {
+if (turns.length === 0) {
   block(
     "Nothing captured for this session yet — capture-last-response.ts writes it on each Stop, " +
       "so there is nothing to quote until Claude has finished a turn here.",
   );
 }
 
-// undelivered: no idle shell pane to hand the payload to (see copy-via-herdr-pane.ts). Show
-// the text so the copy is still one selection away.
-const body = out.split("PAYLOAD_START\n")[1]?.split("\nPAYLOAD_END")[0] ?? "";
-block(
-  `Could not reach an idle shell pane, so nothing was copied. Select this to copy it by hand:\n\n${body}`,
-);
+const selected = turns.slice(-count);
+
+// The cross-session addressable name ("firedancer-fe"), not the AI-generated title — that
+// distinction is the whole point of the from: header. Falls back to the raw session id.
+let name = sid;
+try {
+  const resolved = execFileSync(
+    "bun",
+    [`${HOOKS}/resolve-agent-name.ts`, sid],
+    { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8", timeout: 5000 },
+  ).trim();
+  if (resolved) name = resolved;
+} catch {
+  // leave the session id as the name
+}
+
+const payloadText = `from: ${name}\n${selected.join(TURN_SEPARATOR)}`;
+
+// Claude Code cannot reach the clipboard from a process it spawns — see
+// hooks/copy-via-herdr-pane.ts's header for why, and what it does instead. The payload travels
+// as a FILE PATH: it is arbitrary assistant prose, and shell-quoting it into a command line
+// would be a needless injection surface.
+let paneId = "";
+try {
+  const file = join(mkdtempSync(join(tmpdir(), "quote-")), "payload.txt");
+  writeFileSync(file, payloadText);
+  paneId = execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`, file], {
+    stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf8",
+    timeout: 15000,
+  }).trim();
+} catch {
+  block(
+    `Could not reach an idle shell pane, so nothing was copied. Select this to copy it by hand:\n\n${payloadText}`,
+  );
+}
+
+const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
+const short =
+  selected.length < count
+    ? ` — only ${selected.length} turn${selected.length === 1 ? "" : "s"} captured so far`
+    : "";
+block(`Copied to clipboard as "from: ${name}"${scope}${short}. [${paneId}]`);

@@ -1,9 +1,6 @@
 {
   "permissions": {
-    "defaultMode": "auto",
-    "allow": [
-      "Bash(sh ~/.claude/hooks/copy-session-response.sh)"
-    ]
+    "defaultMode": "auto"
   },
   "hooks": {
     "PreToolUse": [

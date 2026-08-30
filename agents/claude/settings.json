@@ -104,6 +104,18 @@
         ]
       }
     ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "quote|c",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh quote-command.ts",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "matcher": "*",

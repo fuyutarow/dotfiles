@@ -4,17 +4,16 @@ argument-hint: (no arguments)
 disable-model-invocation: true
 ---
 
-```!
-sh ~/.claude/hooks/copy-session-response.sh
-```
+<!--
+PLACEHOLDER BY DESIGN — this body never runs.
 
-Based on `STATUS` above:
-- `delivered` — one short sentence: copied, naming `NAME`. `PANE` is incidental; the user does
-  not need it.
-- `undelivered` — one short sentence saying auto-copy could not reach an idle shell pane, then
-  output the exact text between `PAYLOAD_START` and `PAYLOAD_END` verbatim in a fenced code
-  block so the user can select-and-copy it.
-- `no-body` — say there is no captured response yet for this session (capture-last-response.ts
-  writes it on each Stop — this may be the first turn).
+The work happens in agents/claude/hooks/quote-command.ts, a UserPromptExpansion hook matched
+on this command's NAME, which blocks the expansion so the turn costs no inference. See that
+file's header for why a normal command body can't do this. All this file does is make `quote`
+a real command name for the hook's matcher to match, and carry the description users see.
 
-Take no other action.
+If the hook is ever removed, this command silently becomes a no-op — wire them together, or
+restore a `!` block here.
+-->
+
+Copy this session's last response to the clipboard, prefixed with `from: <session name>`.

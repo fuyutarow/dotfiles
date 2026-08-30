@@ -9,7 +9,9 @@
 #   STATUS: no-body                        — nothing captured for this session yet
 set -eu
 
-sid="${CLAUDE_CODE_SESSION_ID:-}"
+# Session id: argv[1] when a hook passes it in (a hook gets session_id on stdin, and does NOT
+# reliably inherit CLAUDE_CODE_SESSION_ID), else the env var for a plain shell/`!` invocation.
+sid="${1:-${CLAUDE_CODE_SESSION_ID:-}}"
 dotfiles="${DOTFILES:-$HOME/dotfiles}"
 body_file="$HOME/.cache/claude/last-response/$sid.txt"
 

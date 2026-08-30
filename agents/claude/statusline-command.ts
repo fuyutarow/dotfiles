@@ -274,30 +274,44 @@ if (!model) model = "?";
 if (model.endsWith(" context)"))
   model = `${model.slice(0, -" context)".length)})`;
 
-// Best-effort: push the live model to herdr as the $model row token (see
-// herdr/config.toml's [ui.sidebar.agents] rows and its show_agent_labels_on_pane_borders).
-// A raw write to the same JSON-RPC unix socket herdr's own vendored integration
-// (hooks/herdr-agent-state.sh) already talks to — not a subprocess, so unlike agentName()'s
-// `claude agents --json` this is cheap enough to do on every render, which is what keeps the
-// sidebar in sync across a mid-session model switch (manual /model, switchModelsOnFlag).
+// Best-effort push to herdr over the same JSON-RPC unix socket its own vendored integration
+// (hooks/herdr-agent-state.sh) already talks to. A raw socket write, not a subprocess, so
+// unlike agentName()'s `claude agents --json` this is cheap enough to do on EVERY render —
+// which is the point: it makes the sidebar self-correcting.
+//
+//   pane.report_metadata  the live model as the $model row token (herdr/config.toml's
+//                         [ui.sidebar.agents] rows), so a mid-session model switch (manual
+//                         /model, switchModelsOnFlag) shows up.
+//   tab.rename            the addressable session name as the tab label.
+//
+// WHY THE STATUSLINE RENAMES THE TAB, when hooks/herdr-tab-name.ts already does it at
+// SessionStart: a once-per-session write has now failed twice, in two different ways, and each
+// time left a permanently wrong label until the next session start.
+//   1. `claude -c` keeps the session id but mints a new name suffix, so the hook wrote the
+//      pre-restart name (fixed separately, by making that hook stop reading the shared cache).
+//   2. `claude --fork-session` starts a session that is not yet in `claude agents --json` when
+//      SessionStart fires, so the hook's bounded retries expire and it writes nothing at all —
+//      observed 2026-08-30: the tab kept herdr's default numeric label while the status row
+//      showed the real name.
+// Both are the same shape: a single write at one instant cannot survive a value that is either
+// wrong or unknowable at that instant. Re-asserting it every render is what actually holds.
+// Renaming to the value it already has is a no-op in herdr, so this sends unconditionally
+// rather than paying a read round-trip to compare.
+//
+// COST: a manual `herdr tab rename` on a Claude pane's tab is reverted on the next render.
+// That follows from the same rule this whole setup exists to enforce — the tab label IS the
+// session's name — but it does mean tab labels are not free-form while a session is live.
+//
 // Bounded by a 200ms timeout so an unavailable or slow socket never meaningfully delays the
 // statusline itself; any failure is silently swallowed like every other segment in this file.
-async function reportModelToHerdr(m: string): Promise<void> {
-  const socketPath = process.env.HERDR_SOCKET_PATH;
-  const paneId = process.env.HERDR_PANE_ID;
-  if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
-
-  const req = {
-    id: `dotfiles:statusline-model:${Date.now()}`,
-    method: "pane.report_metadata",
-    params: {
-      pane_id: paneId,
-      source: "dotfiles:statusline-model",
-      tokens: { model: m },
-    },
-  };
-
-  await new Promise<void>((resolve) => {
+// ONE REQUEST PER CONNECTION, deliberately. Writing two newline-delimited requests down a
+// single socket and closing it immediately silently drops everything after the first —
+// measured 2026-08-31: the pane token landed, the tab.rename that followed it on the same
+// connection did not, while the identical pair on two connections both landed. We never read
+// the replies (fire-and-forget is the whole point of doing this every render), so there is no
+// point at which waiting would be safe; a connection each is the cheap, correct shape.
+function herdrSend(socketPath: string, req: unknown): Promise<void> {
+  return new Promise<void>((resolve) => {
     let done = false;
     const finish = () => {
       if (done) return;
@@ -323,7 +337,32 @@ async function reportModelToHerdr(m: string): Promise<void> {
     }
   });
 }
-await reportModelToHerdr(model);
+
+async function reportToHerdr(m: string, sessionName?: string): Promise<void> {
+  const socketPath = process.env.HERDR_SOCKET_PATH;
+  const paneId = process.env.HERDR_PANE_ID;
+  const tabId = process.env.HERDR_TAB_ID;
+  if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
+
+  const stamp = Date.now();
+  await herdrSend(socketPath, {
+    id: `dotfiles:statusline-model:${stamp}`,
+    method: "pane.report_metadata",
+    params: {
+      pane_id: paneId,
+      source: "dotfiles:statusline-model",
+      tokens: { model: m },
+    },
+  });
+  if (tabId && sessionName) {
+    await herdrSend(socketPath, {
+      id: `dotfiles:statusline-tab:${stamp}`,
+      method: "tab.rename",
+      params: { tab_id: tabId, label: sessionName },
+    });
+  }
+}
+await reportToHerdr(model, sessionName);
 
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);

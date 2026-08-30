@@ -84,11 +84,22 @@ agent_panel_sort = "spaces"
 
 # Default rows join workspace+tab on one line ("firedancer · firedancer-c7") — redundant now
 # that tab labels are the real agent name (see agents/claude/hooks/herdr-tab-name.ts), not a
-# bare number. Move tab down, and swap the agent-type slot ("claude") for $model — a custom
-# token reported via pane.report_metadata (see statusline-command.ts) — since every pane here
-# already runs "claude"; the model (Opus 5 / Sonnet 5 / gpt-5.6-terra) is the useful signal.
+# bare number. Lead with tab (the per-pane agent name), and swap the agent-type slot ("claude")
+# for $model — a custom token reported via pane.report_metadata (see statusline-command.ts) —
+# since every pane here already runs "claude"; the model (Opus 5 / Sonnet 5 / gpt-5.6-terra) is
+# the useful signal. Workspace moves to the second line since it's shared across a group's panes.
+# Row position alone doesn't move the look — "workspace" and "tab" each carry their own
+# hardcoded base color+weight wherever they appear (src/ui/sidebar.rs: workspace always paints
+# on the theme's `text`/`subtext0` + bold; tab/pane/agent always paint on the fixed muted
+# `overlay0` + dim — bold/dim flags alone only toggle modifiers on top of that base color, they
+# don't repaint it). So the emphasis is swapped explicitly, fg included, using one-dark's own
+# `text`/`overlay0` hex (src/app/state.rs Palette::one_dark): tab (per-pane identity, line 1)
+# gets `text`'s bright fg + bold; workspace (shared, line 2) gets `overlay0`'s muted fg + dim.
 [ui.sidebar.agents]
-rows = [["state_icon", "workspace"], ["tab", "$model"]]
+rows = [
+  ["state_icon", { token = "tab", fg = "#abb2bf", bold = true, dim = false }],
+  [{ token = "workspace", fg = "#5c6370", bold = false, dim = true }, "$model"],
+]
 [session]
 # resume_agents_on_restore = true (default)
 # Replaces tmux-resurrect/continuum; on server restart herdr re-runs

@@ -39,6 +39,48 @@ const withCcc = () => ({
   PATH: `${cccPath()}:${process.env.PATH ?? ""}`,
 });
 
+/** 統治宣言(`rnd.config.json`)を持ち、かつ ccc 登録もされた repo。 */
+function governedAndRegistered(): string {
+  const dir = registerProject();
+  writeFileSync(join(dir, "rnd.config.json"), "{}\n");
+  return dir;
+}
+
+describe("**統治下では黙って抜ける**(2026-09-01、発注者の裁定)", () => {
+  // WHY: この hook は Grep/Bash を deny し、腕を `repo-search.ts`(886 行)へ誘導していた。
+  //   その 886 行は統治宣言を持たない repo に在り、統治下の repo の関門からは見えず、
+  //   protocol の動詞としても登録されていない。**repo は見えないものを統治できない。**
+  //   腕は二つの判定に挟まれて詰まった——統治側はこの deny を解けず、deny が案内する経路は
+  //   NO_INDEX を返し続けた。
+  //
+  //   **一つの行為に、権威ある判定は一つ。**統治を宣言した repo では、その repo の関門が
+  //   何を許すかを決める。統治外では従来どおり——この試験の他の 11 件がそれを守る。
+
+  test("統治宣言のある repo では Grep を deny しない", () => {
+    const dir = governedAndRegistered();
+    expect(
+      decisionOf(runHook(HOOK, grepPayload(dir), withCcc()).stdout),
+    ).toBeNull();
+  });
+
+  test("統治宣言のある repo では生の rg も deny しない", () => {
+    const dir = governedAndRegistered();
+    expect(
+      decisionOf(
+        runHook(HOOK, bashPayload(dir, "rg needle"), withCcc()).stdout,
+      ),
+    ).toBeNull();
+  });
+
+  test("**統治宣言が無ければ従来どおり deny**——免除は宣言に紐づく", () => {
+    const dir = registerProject(); // rnd.config.json を置かない
+    expect(
+      decisionOf(runHook(HOOK, bashPayload(dir, "rg needle"), withCcc()).stdout)
+        ?.permissionDecision,
+    ).toBe("deny");
+  });
+});
+
 describe("enforce-search-route", () => {
   test("denies built-in Grep in an operational ccc project", () => {
     const result = runHook(HOOK, grepPayload(registerProject()), withCcc());

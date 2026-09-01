@@ -85,6 +85,37 @@ function startPath(payload: any): string {
   return isAbsolute(raw) ? raw : resolve(cwd, raw);
 }
 
+/**
+ * **Governed repos are exempt: judgment lives in one place, and here it is not that place.**
+ *
+ * WHY (2026-09-01, the commissioner's ruling, after arms were measurably stuck):
+ *   This hook denies Grep/Bash and directs the arm to `repo-search.ts` — 886 lines of judgment
+ *   living in a repo that declares no governance, invisible to the governed repo's own gate,
+ *   registered under no protocol verb. **A repo cannot govern what it cannot see.** The arm was
+ *   caught between the two: the governance layer could not lift this denial, and the denial's
+ *   own route was returning NO_INDEX in a loop.
+ *
+ *   Where a repo declares governance (`rnd.config.json`), that repo's gate owns which searches
+ *   are allowed. This one steps aside — **not because raw search became safe there, but because
+ *   two judgments over the same act cannot both be authoritative.** Outside governed repos
+ *   nothing changes: the ban stands exactly as before.
+ */
+function governedRepo(start: string): string | null {
+  let current: string;
+  try {
+    current = statSync(start).isDirectory() ? start : dirname(start);
+  } catch {
+    current = start;
+  }
+  current = resolve(current);
+  while (true) {
+    if (existsSync(join(current, "rnd.config.json"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
 function registeredProject(start: string): string | null {
   let current: string;
   try {
@@ -122,6 +153,11 @@ function main(): void {
   if (tool === "Bash" && !isRawSearch(payload?.tool_input?.command)) {
     return;
   }
+
+  // **A governed repo owns its own search policy.** See `governedRepo` above — one act, one
+  // authoritative judgment. This is checked before the ccc registration so a repo that is both
+  // governed and ccc-registered falls to its own gate.
+  if (governedRepo(startPath(payload))) return;
 
   const project = registeredProject(startPath(payload));
   if (!project || !cccIsAvailable()) return;

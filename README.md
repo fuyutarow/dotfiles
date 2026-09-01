@@ -74,6 +74,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)
+├── macos/       # declarative `defaults write` system settings (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/
 ├── scripts/     # plumbing — link-dots.sh (all symlinks), check-tools.sh

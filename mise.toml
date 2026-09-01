@@ -313,9 +313,14 @@ mise run link:dots
 mise run deps
 mise run link:skills
 mise run tmux:plugins
+mise run macos:defaults
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
+
+[tasks."macos:defaults"]
+description = "Apply declarative macOS system defaults (single source: macos/defaults.sh)"
+run = 'bash ~/dotfiles/macos/defaults.sh'
 
 # ── 横断監査 ──────────────────────────────────────────────────────────────
 # 各 repo は自分の check の中で lint:scaffold を持つべきだが、それは「誰かが配線を

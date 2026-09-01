@@ -27,7 +27,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
-`zsh git tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` (mac), `wsl` (WSL).
+`zsh git tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` (mac), `wsl` (WSL).
 Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (or `mac.zsh` / `wsl.zsh`).

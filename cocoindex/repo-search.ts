@@ -557,9 +557,52 @@ async function runRg(
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
   } else if (exitCode === 1) {
-    process.stderr.write(`RESULT: NO_MATCH route=${route} engine=rg\n`);
+    process.stderr.write(lexicalMissLine(route, query));
   }
   return exitCode;
+}
+
+/**
+ * **語彙で外したことは、無いことではない。**その一行を `NO_MATCH` に付ける。
+ *
+ * WHY: 語彙 route の `NO_MATCH` は `RESULT: NO_MATCH route=literal engine=rg` の一行だけで、
+ *   **注意書きが無かった**——ccc 側の `NO_MATCH` には
+ *   「exit 0 with no result blocks is not PASS and does not by itself prove absence」が付いて
+ *   いるのに、語彙側には無い。腕はそこから「無い」と読み、不在の主張や新規実装の判断に使う。
+ *
+ * **当初の設計(①)は、ここで意味検索を自動発火させて
+ *   `NO_MATCH(語彙、意味では N 件)` と `NO_MATCH(両方)` を分ける、というものだった。
+ *   実装して実測し、前提が偽であることが分かったので採らない**——
+ *
+ *     件数: ccc search は常に上限まで返す。`--limit 5` なら不在の語でも 5 件。**情報が無い。**
+ *     score: 在る 6 問 0.879〜0.930 / 無い 6 問 0.824〜0.895。**帯が重なる。**
+ *            無意味な子音列 `wpfjkd nvqxzl bmtrhg` が 0.873、実在する主題
+ *            「overlay で子プロセスを隔離する」が 0.879——**閾値を置けない。**
+ *
+ *   件数でも score でも分離しないので、道具が「語が違うだけで在る」と言えば、それは
+ *   **捏造した信号**である。誤った信号は信号が無いより悪い(誤った分母が正しい分母より
+ *   危険であるのと同じ理由——測ったことになってしまう)。
+ *
+ * だから付けるのは**判定ではなく、次に打てる route** だけにする。撃たないので遅くもならない。
+ */
+function lexicalMissLine(
+  route: "literal" | "exhaustive" | "files",
+  query: string | undefined,
+): string {
+  const head = `RESULT: NO_MATCH route=${route} engine=rg`;
+  if (route === "files") {
+    return `${head}; glob に一致する path が無い(内容は見ていない)\n`;
+  }
+  return (
+    `${head}; **語彙で外しただけであって、不在の証明ではない。**` +
+    `この repo の記録は同じ事柄を別の語で書く(日本語/英語、略号/正式名)。\n` +
+    `  不在を主張する前に: repo-search battery --queries "<3本以上の言い換え>"` +
+    (query === undefined
+      ? ""
+      : `\n  意味で引き直す: repo-search concept --query ${JSON.stringify(query)}`) +
+    `\n  **意味検索の応答は不在を否定も肯定もしない**——件数は常に上限まで返り、` +
+    `score は在る/無いを分離しない(実測 2026-09-02)。読むのは中身であって件数ではない。\n`
+  );
 }
 
 type SearchFlags = {

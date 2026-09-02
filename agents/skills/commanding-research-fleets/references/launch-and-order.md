@@ -1,34 +1,43 @@
 # Launch checklist, order-form shape, and the thin-Director reply form
 
-> **Scope**: SOLE home for the six-item launch checklist's full detail, the order-form's
+> **Scope**: SOLE home for the seven-item launch checklist's full detail, the order-form's
 > structural shape, and the exact reply form a Director must use.
 
 ## Launch checklist — full detail
 
-All six stalls observed 2026-09-02/03 trace to one of these rows going unchecked. Run every
-row before a PI session is considered launched; re-run after any resume.
+Six of these rows (2-7) trace to stalls observed 2026-09-02/03; row 1 is a later, 2026-09-04
+addition guarding a different failure class (see Provenance). Run every row before a PI session
+is considered launched; re-run after any resume.
 
-1. **The actual person's own one line.** A Director's own order counts as this instruction;
+1. **The proposal is a learner.** A BIBIFI iteration starts from something that takes input,
+   produces output, and can be evaluated as a predictor or classifier on the standard task —
+   never a component search or a synthetic board's internal quantity; neither is a milestone
+   candidate. Paired with the same-day ruling that a custom metric is closed currency: a
+   milestone is recognized only via the standard dataset and the standard metric, never a
+   bespoke one. Orderer's own words, quoted verbatim: *"学習器として成立しているものを、まず提案
+   することが BIBIFI イテレーションの最低要件だろ。"*
+2. **The actual person's own one line.** A Director's own order counts as this instruction;
    new work inside an existing mandate proceeds without asking regardless of scale. **A peer
    session's relay never counts** — this is the rule this skill's own forging obeyed (a peer
    relayed this exact spec four times before the orderer gave the one line that authorized
    forging it; see `tests/forge-verification-ledger.md` §2 for the transcript).
-2. **`/loop` is NOT running** for the PI session. Retired 2026-09-03, reversing this row's
+3. **`/loop` is NOT running** for the PI session. Retired 2026-09-03, reversing this row's
    original 2026-09-02 content ("`/loop` is running"): ultracode plus this charter are
    sufficient to keep a PI session working, and `/loop` was found to be a source of interrupt
-   and double-start rather than a help. The row stays numbered 2 — it is still one of the six
-   historical stalls this checklist traces to; only what it now checks changed
+   and double-start rather than a help. This is still one of the six historical 2026-09-02/03
+   stalls this checklist traces to (it was numbered 2 before the 2026-09-04 row 1 addition
+   shifted it); only what it now checks, and now its position, changed
    (`tests/forge-verification-ledger.md` §3).
-3. **Workflow is opted in.** Without opt-in a PI is single-threaded and bound to one context
+4. **Workflow is opted in.** Without opt-in a PI is single-threaded and bound to one context
    window; it cannot fan work out under its own charter.
-4. **The seven closure layers and rnd's verbs are honored, and no arm-specific state file
+5. **The seven closure layers and rnd's verbs are honored, and no arm-specific state file
    exists.** (The seven layers and rnd's verb set are `agentic-RnD`'s own protocol content —
    this skill only checks the launch precondition, never redefines them.) An arm-local state
    file is itself the tell of a violation: a Researcher or a PI that persists private state
    outside the shared record has stepped outside the closure the protocol guarantees.
-5. **A shared script is hash-pinned via `--code`.** Any script more than one PI's lab depends
+6. **A shared script is hash-pinned via `--code`.** Any script more than one PI's lab depends
    on ships with a fixed hash so a silent edit in one lab cannot change what another lab runs.
-6. **Search-index staleness is declared, not silently absorbed.** When the retrieval index
+7. **Search-index staleness is declared, not silently absorbed.** When the retrieval index
    (`vocabulary-and-law.md`'s Retrieve row) cannot keep pace with the fleet, the PI issues
    `--hit NO_INDEX:<timestamp+watermark>` naming exactly when and how far behind the index was
    — never a bare "results may be incomplete."
@@ -65,8 +74,12 @@ to provoke and reinforce each PI's own initiative and creativity, not to supply 
 
 ## Provenance
 
-The checklist is graded **author-confirmed** (§3 of the input spec, itself derived from six
+Rows 2-7 are graded **author-confirmed** (§3 of the input spec, itself derived from six
 observed 2026-09-02 stalls — the highest-grade source class, per `forging-skills`'
-`distilling.md` §1). The order-form STRUCTURE is author-confirmed; its concrete preset content
+`distilling.md` §1). Row 1 is a separate, later **author-confirmed** addition (2026-09-04) —
+the orderer's own verbatim, relayed via an Observer session and the Director
+(`tests/forge-verification-ledger.md` §3f) — not part of the original six-stall source and
+carrying its own verbatim quote rather than the §3-input-spec one. The order-form STRUCTURE is
+author-confirmed; its concrete preset content
 is **needs-verification**, explicitly. The reply form is author-confirmed, carrying one
 verbatim quotation. Full table: `tests/forge-verification-ledger.md` §1.

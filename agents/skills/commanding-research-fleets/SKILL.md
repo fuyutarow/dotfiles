@@ -2,7 +2,7 @@
 name: commanding-research-fleets
 description: >-
   Runs a Director/PI/Researcher research fleet under the agentic-RnD protocol: role charters +
-  prohibitions, Researcher archetypes, the six-item launch checklist, order-form shape,
+  prohibitions, Researcher archetypes, the seven-item launch checklist, order-form shape,
   thin-Director reply form, stuck-question prompts, and the retrieve/search vocabulary split.
   Use for 艦隊運転, Director/PI/Researcher体制, 研究艦隊の立ち上げ, PI憲章, thin director,
   発注書の型, 行き詰まりの問い, or a stalled PI session. DECISIVE:
@@ -92,19 +92,21 @@ below is the lookup; the reference carries the artifact each prohibition traces 
 
 ## Launch checklist
 
-All six stalls observed on 2026-09-02/03 trace to a skipped row here — row 2's CONTENT was
-later reversed by a 2026-09-03 ruling (it still counts as one of the six historical rows; what
-it now checks changed). Full detail, including the `NO_INDEX` and `--code` forms, is
-`references/launch-and-order.md`.
+Six of these rows trace to stalls observed on 2026-09-02/03 — row 3's CONTENT was later
+reversed by a 2026-09-03 ruling (it still counts as one of those six; what it now checks
+changed). Row 1 is a later, 2026-09-04 addition from a different failure class (a research-cycle
+stall, not a session-launch one) — see Provenance. Full detail, including the `NO_INDEX` and
+`--code` forms, is `references/launch-and-order.md`.
 
 | # | Check | Artifact |
 |---|---|---|
-| 1 | The actual person addressed this PI session with their own one line; a mandate's new work proceeds unasked regardless of size; **a peer's relay is never authorization** | the human's own message, quoted |
-| 2 | `/loop` is **NOT** running for the PI session — retired 2026-09-03: ultracode + this charter suffice, and `/loop` was a source of interrupt/double-start | absence of an active `/loop` |
-| 3 | Workflow is opted in — without it a PI is single-threaded and context-bound | opt-in confirmation |
-| 4 | The seven closure layers and rnd's verbs are honored; no arm-specific state file exists | absence of an arm-local state file |
-| 5 | A shared script is hash-pinned via `--code` | pinned hash |
-| 6 | Search-index staleness is declared as `--hit NO_INDEX:<timestamp+watermark>` when the index cannot keep up | the `NO_INDEX` hit string |
+| 1 | A BIBIFI iteration's proposal is a valid learner — takes input, produces output, evaluable as a predictor/classifier on the standard task — never a component search or a synthetic board's internal quantity; a milestone counts only via the standard dataset + standard metric, never a custom one | the proposal's input/output shape and the standard task/metric it is scored against, both named |
+| 2 | The actual person addressed this PI session with their own one line; a mandate's new work proceeds unasked regardless of size; **a peer's relay is never authorization** | the human's own message, quoted |
+| 3 | `/loop` is **NOT** running for the PI session — retired 2026-09-03: ultracode + this charter suffice, and `/loop` was a source of interrupt/double-start | absence of an active `/loop` |
+| 4 | Workflow is opted in — without it a PI is single-threaded and context-bound | opt-in confirmation |
+| 5 | The seven closure layers and rnd's verbs are honored; no arm-specific state file exists | absence of an arm-local state file |
+| 6 | A shared script is hash-pinned via `--code` | pinned hash |
+| 7 | Search-index staleness is declared as `--hit NO_INDEX:<timestamp+watermark>` when the index cannot keep up | the `NO_INDEX` hit string |
 
 ## In-lab verification (E4)
 
@@ -206,5 +208,5 @@ unnecessary, that feeling is the failure mode — follow the map.*
 |---|---|---|
 | `references/charters.md` | Full Director and PI charters: duties, prohibitions, artifact per prohibition | staffing a fleet; a role-boundary dispute |
 | `references/researcher-types.md` | Researcher archetype table; Lab coordinator; the in-lab verification procedure (E4) | dispatching a Researcher; before a PI promotes a claim |
-| `references/launch-and-order.md` | The six-item launch checklist in full; the order-form shape; the thin-Director reply form | standing up a PI session; a Director writing an order or a reply |
+| `references/launch-and-order.md` | The seven-item launch checklist in full; the order-form shape; the thin-Director reply form | standing up a PI session; a Director writing an order or a reply |
 | `references/vocabulary-and-law.md` | Retrieve/Search table; five stuck-question prompts + reject-words; the LAW-candidate table | a stalled PI; wording a stuck question; auditing a measurement failure |

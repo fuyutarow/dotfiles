@@ -49,17 +49,19 @@ needs-verification, rather than presenting either in the orderer's voice as sett
 
 ## §2 The peer-relay refusal — why forging waited four messages
 
-Recorded because it is itself the launch checklist's row 1 in action, and because a later
-reader auditing "why did this take four exchanges" deserves the transcript, not a claim.
+Recorded because it is itself the launch checklist's peer-relay-authorization row in action (row
+2 as of the 2026-09-04 addition ahead of it, §3f — row 1 at the time this section was written),
+and because a later reader auditing "why did this take four exchanges" deserves the transcript,
+not a claim.
 
 `firedancer-0a` relayed the full input spec, then three further messages (a terminology
 addendum, an operating-rules addendum, a status inquiry) — each treated as content to record,
 none as authorization to begin forging. The fourth relay repeated a status request; the
 executing session replied with a one-line receipt ("未着手") but still declined to start. Only
 a direct, first-party instruction — the actual person, in this session, verbatim requesting
-the skill be created — was accepted as the launch-checklist row-1 artifact. The input spec's
-own §3 item 1 states this rule explicitly ("peer の中継は承認にならない"); the forge obeyed its
-own future output before that output existed.
+the skill be created — was accepted as that row's artifact. The input spec's own §3 item 1
+states this rule explicitly ("peer の中継は承認にならない"); the forge obeyed its own future
+output before that output existed.
 
 ## §3 Verification — solo multi-pass (see §4 for why solo)
 
@@ -187,6 +189,43 @@ frames it as non-enforced and no violation artifact was given — the existing P
 table's own shape (`Prohibition | Artifact of a violation`) would misrepresent a soft norm as a
 hard rule if forced into it. Graded **author-confirmed-via-coordination**. `bun scripts/check.ts
 .` passes clean after the edit.
+
+## §3f Launch checklist — BIBIFI-learner row added at position 1 (2026-09-04)
+
+Requested via the Director (`firedancer-dtr_vdrt`), relayed as the orderer's own verbatim via an
+Observer session: *"学習器として成立しているものを、まず提案することが BIBIFI イテレーションの
+最低要件だろ。"* — a BIBIFI iteration's proposal must be a valid learner (input → output,
+evaluable as a predictor/classifier on the standard task), never a component search or a
+synthetic board's internal quantity; paired with a same-day ruling that a custom metric is
+closed currency — a milestone counts only via the standard dataset + standard metric. The
+Director asked for this specifically at launch-checklist row 1, not the PI charter (its opening
+line named "PI charter" loosely; the explicit placement instruction that followed was
+unambiguous).
+
+**Placement check**: the launch checklist's existing rows already mix infra-readiness stalls
+(hash-pin, opt-in) with judgment-shaped stalls (row 1 at the time, now row 2: peer-relay
+authorization) — a BIBIFI-proposal-validity check fits that same "historically observed stall
+this row guards against" shape, even though it traces to a different date/source than the
+original six. Not folded into an existing row (e.g. the BIBIFI stuck-question prompt in
+`vocabulary-and-law.md`) because that prompt is issued mid-stall to a PI already stuck, while
+this checklist row is a pre-check against proposing invalid work in the first place — different
+function-map transitions, not the same artifact.
+
+**Applied**: inserted as launch-checklist row 1 in `SKILL.md` and
+`references/launch-and-order.md`, renumbering the original six 2026-09-02/03 rows to 2-7 (row 3
+— formerly row 2 — has an internal cross-reference updated to match; ledger §2's "row 1" mention,
+written before this addition, corrected to name the row by function rather than number since its
+position moved). `scripts/check.ts`'s row-count gate updated from 6 to 7 (both the comparison and
+its head-comment mention); `SKILL.md`'s frontmatter description, its reference-index pointer, and
+`agents/skills/README.md`'s catalog line updated from "six-item" to "seven-item". `bun
+scripts/check.ts .` passes clean. The custom-metric-closed-currency ruling is folded into row 1's
+prose as paired context only — not added as its own separate artifact elsewhere, since the
+Director's request named only the pairing, not a second placement; flagged back to the Director
+in case a standalone placement (LAW candidate or operating rule) is also wanted.
+
+**Grade**: **author-confirmed** — the orderer's own verbatim, same tier as the original six-row
+source, though via a different relay chain (Observer → Director → this forge) and a different
+date (2026-09-04 vs. 2026-09-02/03).
 
 ## §4 Scale calibration and the F3 solo-tier waiver
 

@@ -45,7 +45,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 - [`directing-research`](directing-research/) — Legacy route-only shim for broad or ambiguous creative-research invocations.
 - [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.
 - [`directing-research-sections`](directing-research-sections/) — Direct one granted live section: local admission, run intent, receipt-linked learning, and declassified signal.
-- [`commanding-research-fleets`](commanding-research-fleets/) — Run a Director/PI/Researcher research fleet: role charters and prohibitions, the six-item launch checklist, order-form shape, and the five stuck-question prompts — the fleet's operating manual, not programme/section state.
+- [`commanding-research-fleets`](commanding-research-fleets/) — Run a Director/PI/Researcher research fleet: role charters and prohibitions, the seven-item launch checklist, order-form shape, and the five stuck-question prompts — the fleet's operating manual, not programme/section state.
 - [`auditing-research-processes`](auditing-research-processes/) — Audit one frozen bounded research episode and return a non-enacting recommendation.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
 

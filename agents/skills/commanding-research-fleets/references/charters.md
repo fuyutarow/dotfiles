@@ -47,6 +47,12 @@ A `kill`ed claim is never revived by re-seeding it. The judgment statistic is co
 new claim is opened that supersedes the old one (`vocabulary-and-law.md`'s operating-rules
 table, row 2 — a ruled operating rule, not a LAW candidate).
 
+**Commit hygiene (soft norm, not enforced)**: a PI commits its own files itself, frequently —
+stage only its own files, then commit with no pathspec argument if the repo's own gate is known
+to hang on a pathspec-scoped commit. Strict worktree isolation is not required; a git specialist's
+bulk-ingestion sweeps up whatever is left, later. (2026-09-04 orderer guidance, not a
+prohibition — no violation artifact is defined for it.)
+
 ## Lab coordinator
 
 Fleet-local role with no formal correspondent in `supervising-research-programmes` or
@@ -96,5 +102,8 @@ correction, both relayed by the Director (`firedancer-dtr_vdrt`) from an Observe
 file (`observer-tapping-vs-intent-routing.md`) this forge has not itself read. The
 Director-must-not-be-tapped-for-others'-information refinement is **needs-verification** — it is
 `firedancer-obs_e2zp`'s own self-correction, Director-endorsed but not yet orderer-confirmed; the
-Director has said it will seek that confirmation. Full grade table and correction record:
-`tests/forge-verification-ledger.md` §1, §3c.
+Director has said it will seek that confirmation. The PI charter's commit-hygiene note is graded
+**author-confirmed-via-coordination** — relayed by the Director as direct orderer guidance
+(2026-09-04, evidenced by an observed 59-and-growing uncommitted-item count), not a verbatim
+quote this forge has independently seen. Full grade table and correction record:
+`tests/forge-verification-ledger.md` §1, §3c, §3e.

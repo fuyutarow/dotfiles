@@ -167,6 +167,27 @@ blanket in `references/charters.md`'s Provenance section: (a) and (b) promoted t
 Director. Folded into this same §3c rather than a separate `§3d` — nothing had shipped yet, and
 this is a provenance correction to already-drafted content, not a fourth independent request.
 
+## §3e PI charter — commit-hygiene norm (2026-09-04)
+
+Requested via the Director (`firedancer-dtr_vdrt`), relayed as direct orderer guidance (not
+drafted by an Observer this time): a PI should commit its own files itself, frequently — stage
+only its own files, commit with no pathspec if the repo's own gate is known to hang on a
+pathspec-scoped commit, and skip strict worktree isolation; a git specialist sweeps up the rest
+later. Stated explicitly as a **soft norm, not enforced** ("努力目標"). Evidence cited: an
+observed count of 59-and-growing uncommitted items since this thread's start.
+
+Independent check before applying: this forge has itself been following exactly this pattern all
+session — `git add <its own files>` then a plain `git commit` with no pathspec, never `git
+commit -- <pathspec>` — without having been told to, simply because scoping the `add` already
+achieves narrow staging. That is corroborating behavioral evidence the norm is sound practice,
+**not** independent confirmation of the specific claim that a pathspec-scoped commit hangs this
+repo's gate — that mechanism was never triggered or tested here. Added as a short paragraph in
+`references/charters.md`'s PI charter, not a Prohibitions-table row, since the request explicitly
+frames it as non-enforced and no violation artifact was given — the existing Prohibitions
+table's own shape (`Prohibition | Artifact of a violation`) would misrepresent a soft norm as a
+hard rule if forced into it. Graded **author-confirmed-via-coordination**. `bun scripts/check.ts
+.` passes clean after the edit.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

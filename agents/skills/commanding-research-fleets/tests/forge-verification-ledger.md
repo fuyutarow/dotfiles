@@ -246,6 +246,42 @@ directions (row 1's own text already named the pairing from §3f; row 8 now name
 
 **Grade**: **author-confirmed** — orderer's own verbatim, same chain and date as §3f's row 1.
 
+## §3h Director-proposed candidate — corpus-transfer completeness (2026-09-04)
+
+Requested via the Director, self-graded **needs-verification** by the Director itself — its own
+judgment over an observed incident, explicitly NOT relayed as an orderer ruling and NOT
+orderer-labeled LAW候補 (contrast with §3f/§3g, both orderer verbatim). Proposed rule: corpus
+knowledge passed to another arm carries (a) the claim's identifier, (b) the limitations-column
+text verbatim, (c) the ledger-named alternative — a file name alone is auxiliary, and the
+receiving side must read the limitations column before implementing.
+
+Evidence cited (2026-09-03 late night): `pbq4` passed `pi_ynxy` a file-name-only pointer to
+"primary documents to read before implementing"; `ynxy` read them and even reported the design
+implications, but the CTW-style structure it then implemented had a defect (byte-granularity
+chains violate the binary-tree precondition) already written verbatim in the claim ledger's
+limitations column as VOCT-001/VOCT-006, with the alternative (VLMC, VOCT-004/005) already named
+there. Stated reason: a claim ledger's rows run long, and a file-name-only pointer lets a
+recipient reach the ruling/verdict column without reaching the limitations column, where the
+actual weight sits.
+
+**Placement check**: does not fit the existing "LAW candidates" table — that table's identity is
+specifically the nine 2026-09-02/03 measurement incidents, explicitly orderer-labeled LAW候補;
+this is a different domain (knowledge-transfer practice, not measurement), a different date, and
+Director-sourced rather than orderer-sourced. Does not fit "Operating rules" either — that table
+is "ruled, not candidate — apply directly," and this is explicitly not yet ruled. Added as a new,
+separately-identified section, "Director-proposed rule candidates — NOT yet ruled," in
+`references/vocabulary-and-law.md`, with its own two-column-plus-evidence table using a distinct
+header ("Rule candidate" vs. the existing table's "Candidate rule") so `scripts/check.ts`'s
+row-count regex for the nine-item table cannot accidentally match it. Cross-referenced with
+operating rule 7 in both directions (fidelity vs. completeness of distribution). `SKILL.md`'s LAW
+candidates section gained one sentence naming this sits alongside, not inside, the nine-item
+count. No row-count gate added for this new table (it currently holds one row; a count gate would
+need updating on every future addition here, unlike the fixed nine-item incident set). `bun
+scripts/check.ts .` passes clean.
+
+**Grade**: **needs-verification**, as the Director itself specified — this forge did not
+independently observe the `pbq4`/`pi_ynxy` incident or the VOCT ledger entries.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

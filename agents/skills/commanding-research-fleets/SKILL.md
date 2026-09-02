@@ -162,9 +162,11 @@ Nine measurement-instrument breaks on 2026-09-02/03 produced candidate rules —
 seed-count floors, a windowed-M-of-K replacement for an uncalibratable cumulative test, and a
 retain/no-retain split. These are CANDIDATES, not yet reconciled against
 `orchestrating-agents`' existing P7–P10 measurement discipline (`references/measurement-and-
-resources.md`) — a real overlap risk the ledger names explicitly. Full table:
-`references/vocabulary-and-law.md`; do not treat any row there as binding LAW until that
-reconciliation runs.
+resources.md`) — a real overlap risk the ledger names explicitly. A separate, later
+Director-proposed candidate (corpus-knowledge transfer between arms — identifier + limitations-
+column verbatim + named alternative, pairing with operating rule 7) sits alongside this table,
+not folded into its nine-item count. Full table: `references/vocabulary-and-law.md`; do not
+treat any row in either candidate list as binding LAW until reconciled.
 
 ## Execution model
 

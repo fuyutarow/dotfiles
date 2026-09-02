@@ -46,7 +46,9 @@ progress:
 Ruled, not candidate — apply directly. Row 6 points to its full procedure rather than
 restating it (one-home, `researcher-types.md`). Row 8 pairs with the launch checklist's row 1
 (`launch-and-order.md`) — one guards what counts as a valid *proposal*, the other what counts as
-a valid *milestone*.
+a valid *milestone*. Row 7 pairs with the Director-proposed candidate below it (§ Director-
+proposed rule candidates) — one guards distribution FIDELITY, the other distribution
+COMPLETENESS.
 
 | # | Rule | Artifact |
 |---|---|---|
@@ -94,6 +96,16 @@ fixed budget ceiling, an n=30 null, an infeasible threshold.
 | 8 | Pre-verification survival is never spent as an admission slot |
 | 9 | A new instrument is proposed before it is used; a primary source is retained, a secondary source runs `--no-retain` |
 
+## Director-proposed rule candidates — NOT yet ruled
+
+Distinct from the nine measurement-incident candidates above: sourced from the Director's own
+judgment over an observed incident, not an orderer ruling and not orderer-labeled LAW候補. Not
+part of the nine-item table's count or identity — do not fold into it.
+
+| # | Rule candidate | Evidence |
+|---|---|---|
+| 1 | Corpus knowledge passed to another arm carries: (a) the claim's identifier, (b) the limitations-column text verbatim, (c) the alternative the ledger names. A file name alone is auxiliary — the receiving side reads the limitations column before implementing. Pairs with operating rule 7 (§ Operating rules) — that rule guards distribution FIDELITY (identical wording), this one guards distribution COMPLETENESS (the limitations column, not just a file-name pointer). | 2026-09-03 late night: `pbq4` passed `pi_ynxy` a file-name-only pointer to "primary documents to read before implementing"; `ynxy` read them and even reported the design implications, but the CTW-style structure it then implemented had a defect (byte-granularity chains violate the binary-tree precondition) already written verbatim in the claim ledger's limitations column as VOCT-001/VOCT-006, with the alternative (VLMC, VOCT-004/005) already named there — the file-name pointer let the recipient reach the ruling/verdict column without reaching the limitations column carrying the actual weight. |
+
 ## Provenance
 
 Retrieve/Search and the stuck-question set are graded **author-confirmed**, both carrying
@@ -102,5 +114,7 @@ ruling, not a candidate); row 8 is a separate, later **author-confirmed** additi
 (2026-09-04, the orderer's own verbatim, relayed via an Observer session and the Director —
 `tests/forge-verification-ledger.md` §3g). The LAW-candidate table's rule LIST is
 author-confirmed; the nine underlying measurement incidents are **needs-verification** — this
-skill did not independently observe them. Full grade table and the reconciliation flag:
-`tests/forge-verification-ledger.md` §1, §3.
+skill did not independently observe them. The Director-proposed candidate is graded
+**needs-verification** — self-graded so by its own source (the Director, not the orderer, and
+not orderer-labeled LAW候補): `tests/forge-verification-ledger.md` §3h. Full grade table and the
+reconciliation flag: `tests/forge-verification-ledger.md` §1, §3.

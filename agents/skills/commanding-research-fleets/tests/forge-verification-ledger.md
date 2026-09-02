@@ -94,6 +94,29 @@ lens reading `charters.md` against `researcher-types.md` side-by-side plausibly 
 same-skill contradictions a single sequential reader misses. Recorded as evidence for §4's
 scale-calibration choice, not yet acted on by re-running with a fleet.
 
+## §3b Post-ship correction (2026-09-03, session handoff to `dotfiles-agtt105`)
+
+The forging session (`dotfiles-aa`) was lost mid-task. The user directly instructed the
+successor session (`dotfiles-agtt105`) to take over and relay that handoff to `firedancer-0a`
+— its own one line, satisfying launch-checklist row 1 for the takeover itself, and continuing
+the same "coordinate with thin Director for the duration of the task" authorization §3a already
+established. `firedancer-0a` (thin Director) then reported the two §3a-requested fixes already
+applied (confirmed by re-reading `references/launch-and-order.md` and this file's §3a table:
+both present) and relayed one new item, sourced from an **in-lab observation, not a ruling**:
+today's verifier Researchers checked recomputation match but not reference-value freshness,
+and a promote against arm6's pre-calibration reference values (1.8 / 10.8) was later withdrawn
+— the day's second such incident.
+
+Independently checked before applying: the gap is real given the procedure as shipped — step 3
+(as it read before this correction) named only "recomputes from raw data and attempts to
+falsify," which a stale-but-internally-consistent reference value passes cleanly. No existing
+row in `references/researcher-types.md` or `vocabulary-and-law.md`'s operating rules already
+covered docid/calibration currency for a *comparison* value (rule 4 there covers citing a
+`docid` in an order, a different artifact). Applied as a new step 4 in the in-lab verification
+procedure (`references/researcher-types.md`, renumbering the old steps 4–5 to 5–6); graded
+**author-confirmed-via-coordination**, matching §3a's grading discipline for content that
+arrives only through this relay rather than one of the four original direct sources.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

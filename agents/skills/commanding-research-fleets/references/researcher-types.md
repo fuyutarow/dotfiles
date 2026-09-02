@@ -31,9 +31,16 @@ lab, dispatched by that PI, before the PI reports or promotes anything.
    claim's raw data.
 3. That verifier Researcher **recomputes from raw data** and **attempts to falsify** the claim
    — not a re-read of the PI's own summary.
-4. If the claim survives, the PI promotes it: `--who <PI>` names the author, `--certifier
+4. The verifier also confirms that every cited reference value's **docid and calibration
+   status are current**. A deterministic re-execution alone confirms only that the
+   recomputation matches, not that what it was compared against is still valid — a promote can
+   pass step 3 cleanly against a stale, pre-calibration reference and still be wrong. (Observed
+   2026-09-03: arm6's reference values 1.8 / 10.8 were pre-calibration; a claim recomputed
+   correctly against them, promoted, and was later withdrawn — the day's second reference-value
+   freshness incident.)
+5. If the claim survives, the PI promotes it: `--who <PI>` names the author, `--certifier
    <verifier Researcher>` names the one who recomputed and could not falsify it.
-5. The Director receives only the resulting receipt. It never dispatches the verification
+6. The Director receives only the resulting receipt. It never dispatches the verification
    step, never queues it, and never sees the raw recomputation.
 
 The orderer's own words for this, quoted verbatim (2026-09-03 ruling): *"各PIがsubagentを呼び
@@ -48,4 +55,7 @@ an author and its independent verifier are never the same bearer.
 
 The archetype table is graded **author-confirmed** (§2 of the input spec). The in-lab
 procedure and its quoted ruling are graded **author-confirmed**, sourced from the 2026-09-03
-addendum. Full grade table: `tests/forge-verification-ledger.md` §1.
+addendum. Step 4 (reference-value docid/calibration check) is a later addition, graded
+**author-confirmed-via-coordination** — recorded and independently checked in
+`tests/forge-verification-ledger.md` §3b, not part of the original four-source ruling set.
+Full grade table: `tests/forge-verification-ledger.md` §1.

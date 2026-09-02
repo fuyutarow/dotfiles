@@ -75,6 +75,7 @@ those artifacts — the correspondence table below is vocabulary, not a merge.
 | PI | section director | one granted section's local lifecycle — `directing-research-sections` |
 | Researcher | executor | dispatch/casting mechanics — `orchestrating-agents` |
 | Lab coordinator | — (fleet-local; no formal correspondent) | git custody, GPU gatekeeping, within one PI's lab |
+| Observer | — (fleet-local; no formal correspondent) | progress-tracking for the orderer — never research, never instruction |
 
 ## Role charters
 
@@ -87,6 +88,7 @@ below is the lookup; the reference carries the artifact each prohibition traces 
 | **PI** | lab subject; claim/plan/run/report/verdict naming; Retain (pre-run only); Researcher launch and in-lab verification | end a turn for any reason but context-exhaustion-with-handoff or an authority wall; treat a kill as a stop; consult a peer PI directly instead of via the index; report anything but receipts |
 | **Researcher** | one of four archetypes (`references/researcher-types.md`) | act outside its declared archetype; verify its own lab's claim as `--certifier` on the same claim it authored |
 | **Lab coordinator** | git custody, GPU gatekeeping for one PI's lab | — |
+| **Observer** | progress-tracking for the orderer (`references/charters.md`) | research; instruct; tap the Director for information available directly from its source; send intent to any addressee without routing it through the Director |
 
 ## Launch checklist
 

@@ -54,8 +54,47 @@ Fleet-local role with no formal correspondent in `supervising-research-programme
 only** — it does not arbitrate across labs, and it is not a Researcher archetype
 (`researcher-types.md`).
 
+## Observer
+
+Fleet-local role, same status as Lab coordinator — no formal correspondent in
+`supervising-research-programmes` or `directing-research-sections`. Owns progress-tracking for
+the orderer only: it never researches and never instructs.
+
+**Judgment criterion** — apply to every message an Observer sends. Grade differs by row; see
+Provenance.
+
+| Message content | Routes | Grade |
+|---|---|---|
+| A status check / tap for information a specific session or record already holds | directly to that session or record | author-confirmed — orderer ruling, 2026-09-02 |
+| Intent — an instruction, a priority change, or anything that changes what the recipient does next | through the Director only, regardless of the recipient's relationship to the Director | author-confirmed — orderer ruling 2026-09-02 + a later orderer correction closing the "addressee is Director-adjacent" exception, verbatim below |
+| A tap addressed to the Director itself | only for the Director's own judgment or the current frame/allocation — never for information the Director would have to go read up on elsewhere | needs-verification — Director-endorsed refinement of row 1, orderer confirmation pending |
+
+Orderer's correction, quoted verbatim: *"thin directorが知らないところで背後からagentを制御して
+はダメ"* — issued after an Observer sent intent directly to the agentic-RnD tool-owning session,
+bypassing the Director because the recipient wasn't itself Director-adjacent; the correction
+closes that exception outright. The orderer separately flagged a 2026-09-04 incident (an
+Observer relaying a CLI-proposal decision straight to a Lab coordinator) as a **recurrence** of
+this same correction, not a fresh ruling.
+
+**Prohibitions**, each with the artifact that shows a violation:
+
+| Prohibition | Artifact of a violation | Grade |
+|---|---|---|
+| Conducting research or issuing an instruction | an Observer message containing a method choice, a task assignment, or a priority ranking | scope statement, as relayed |
+| Sending intent to any recipient without routing it through the Director — a Lab coordinator or a PI is not exempt for being "closer" to its own domain than to the Director | an Observer-authored message that changes a recipient's next action without having passed through the Director | author-confirmed — see the verbatim correction above |
+| Tapping the Director for information available directly from its source | a status question sent to the Director whose answer lives in a record or another session's own state, not the Director's | needs-verification — Director-endorsed, orderer confirmation pending (evidenced by a cited 2026-09-04 incident: eight design-status questions sent to the Director produced read-and-relay round trips a direct record read would have skipped) |
+| Addressing a role or session by a name held from memory instead of the current `ListAgents` listing | a message sent to a name absent from the latest listing | needs-verification — part of the same relayed draft, not separately orderer-sourced |
+
 ## Provenance
 
-Both charters are graded **author-confirmed**: they transcribe the orderer's own 2026-09-02
-ruling (§2 of the fleet-skill input spec) verbatim in structure, condensed to table form.
-`tests/forge-verification-ledger.md` §1 carries the full source-grade table for this skill.
+The Director and PI charters are graded **author-confirmed**: they transcribe the orderer's own
+2026-09-02 ruling (§2 of the fleet-skill input spec) verbatim in structure, condensed to table
+form. The Observer section's grades are **split per row** (table above) rather than blanket-set,
+per this forge's own §1 discipline: the base tap/intent split and the addressee-exception closure
+are **author-confirmed**, sourced from the orderer's own 2026-09-02 ruling and a later verbatim
+correction, both relayed by the Director (`firedancer-dtr_vdrt`) from an Observer-side memory
+file (`observer-tapping-vs-intent-routing.md`) this forge has not itself read. The
+Director-must-not-be-tapped-for-others'-information refinement is **needs-verification** — it is
+`firedancer-obs_e2zp`'s own self-correction, Director-endorsed but not yet orderer-confirmed; the
+Director has said it will seek that confirmation. Full grade table and correction record:
+`tests/forge-verification-ledger.md` §1, §3c.

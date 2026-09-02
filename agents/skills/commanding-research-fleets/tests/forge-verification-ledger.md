@@ -117,6 +117,56 @@ procedure (`references/researcher-types.md`, renumbering the old steps 4–5 to 
 **author-confirmed-via-coordination**, matching §3a's grading discipline for content that
 arrives only through this relay rather than one of the four original direct sources.
 
+## §3c Reforge — Observer role added (2026-09-04, via `forging-skills` pipeline step 0)
+
+Requested via the Director channel (`firedancer-dtr_vdrt`, itself renamed twice more in this
+same thread — `firedancer-0a` → `firedancer-agtc1x6` → `firedancer-agtf963` [typo, unreachable]
+→ `firedancer-agt_vdrt` → `firedancer-dtr_vdrt`; each rename independently confirmed live via
+`ListAgents` before replying, never assumed): a new `assign <role>` mechanism now targets
+`dtr`/`pi`/`obs`, and **obs (Observer) had no charter in this skill's role taxonomy.** Content
+was drafted by a fourth session (`firedancer-obs_e2zp`) and relayed through the Director, in two
+passes — the second arriving mid-edit as a self-correction of the first (the routing table's
+first draft sent all taps to "any session"; the revision split "tap the actual holder" from "tap
+the Director only for the Director's own judgment/allocation," since the whole point of an
+Observer is to lighten the Director's load, not add to it).
+
+**Gate 0 (function + existence)**: run before drafting. `commanding-research-fleets` already
+owns the Director/PI/Researcher/Lab-coordinator role taxonomy — Observer is a missing row in an
+owned table, not a reason to forge a sibling. EXTEND, not create. `orchestrating-agents`' generic
+"visibility" dispatch mechanic is a plausible correspondent but unconfirmed — left unmapped
+(`— fleet-local`, mirroring Lab coordinator) rather than asserted.
+
+**Scale**: solo, zero fan-out — same reasoning as this skill's own §4: the content arrived fully
+specified (no harvest step), and the change is bounded (one new charter section plus the
+lookup-table rows one-home already requires elsewhere: `SKILL.md`'s role table and
+correspondence table, `references/researcher-types.md`'s not-a-Researcher-archetype line).
+
+**Independent check before applying**: no existing rule in this skill already covered tap-vs-
+intent routing for a role other than the Director/PI pair; no self-contradiction against THE LAW
+— the Observer's intent-routing rule is a direct extension of THE LAW's own already-confirmed
+line ("a peer session's relay is never authorization"), which is evidence the RULE is coherent
+with this skill's design, **not** evidence the cited 09-04 incidents themselves occurred as
+described. `bun scripts/check.ts .` passes clean after the edit (no row-count check covers the
+touched tables).
+
+**Grade — initial pass**: shipped blanket **needs-verification** at first, one tier below
+§3a/§3b's author-confirmed-via-coordination, since the content had passed through an extra hop
+(`firedancer-obs_e2zp`'s draft) and was still being revised as this forge applied it.
+
+**Grade — corrected, same forging pass, before commit**: the Director followed up with a
+per-component provenance breakdown its own memory file (`observer-tapping-vs-intent-routing.md`,
+not itself read by this forge) supports: (a) the base tap-direct / intent-via-Director split is
+the orderer's own 2026-09-02 ruling; (b) closing the "addressee is Director-adjacent" exception
+is a later orderer correction with a verbatim quote, evidenced by an incident (Observer → the
+agentic-RnD tool-owning session) distinct from the 09-04 CLI-proposal-A incident, which the
+orderer separately flagged as a recurrence of the SAME correction, not a fresh ruling; (c) the
+"don't tap the Director for what it doesn't own" refinement is `firedancer-obs_e2zp`'s own
+self-correction, Director-endorsed but not yet orderer-confirmed. Re-graded per row rather than
+blanket in `references/charters.md`'s Provenance section: (a) and (b) promoted to
+**author-confirmed**; (c) stays **needs-verification**, orderer confirmation pending from the
+Director. Folded into this same §3c rather than a separate `§3d` — nothing had shipped yet, and
+this is a provenance correction to already-drafted content, not a fourth independent request.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

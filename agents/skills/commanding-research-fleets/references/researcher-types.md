@@ -17,9 +17,10 @@ declaration, per `orchestrating-agents`' generic dispatch contract.
 | **builder** | produces an executable specification or an artifact |
 | **verifier** | recomputes from raw data and attempts to falsify — the archetype that carries `--certifier` (below) |
 
-**NOT** a Researcher archetype: the **Lab coordinator** (git custody, GPU gatekeeping —
-`charters.md`). Do not dispatch a Lab coordinator task under a Researcher archetype; the two
-are separate roles even when the same session happens to fill both.
+**NOT** a Researcher archetype: the **Lab coordinator** (git custody, GPU gatekeeping) or the
+**Observer** (progress-tracking for the orderer — `charters.md`). Do not dispatch either under a
+Researcher archetype; a status tap is not a dispatch, and both are separate roles even when the
+same session happens to fill more than one.
 
 ## In-lab verification — the full procedure (E4)
 

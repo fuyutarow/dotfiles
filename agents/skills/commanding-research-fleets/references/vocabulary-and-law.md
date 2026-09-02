@@ -41,10 +41,12 @@ progress:
 | 突破口の気配 | a feeling, not an observable |
 | フロントライン | a variable file — content drifts under a name that implies stability |
 
-## Operating rules (2026-09-03 ruling, seven items)
+## Operating rules (seven items ruled 2026-09-03, one added 2026-09-04)
 
 Ruled, not candidate — apply directly. Row 6 points to its full procedure rather than
-restating it (one-home, `researcher-types.md`).
+restating it (one-home, `researcher-types.md`). Row 8 pairs with the launch checklist's row 1
+(`launch-and-order.md`) — one guards what counts as a valid *proposal*, the other what counts as
+a valid *milestone*.
 
 | # | Rule | Artifact |
 |---|---|---|
@@ -55,6 +57,16 @@ restating it (one-home, `researcher-types.md`).
 | 5 | "No run needed" is written only after the instrument's granularity is verified in code — otherwise it is written conditionally | either a code-verified granularity check, or explicit conditioning language |
 | 6 | A certifier writes its verdict in the report; the claim's author promotes it, recording the certifier via `--certifier` (E4) | → full procedure: `researcher-types.md`'s in-lab verification |
 | 7 | Only verified frames are distributed to every PI in identical wording; an unverified one is hedged as "X reported it" | distributed text either matches a verified frame verbatim, or carries the hedge |
+| 8 | A custom metric is closed currency — a milestone counts only via a standard dataset+metric pairing; dissatisfaction with a proposed benchmark means finding a more suitable standard one, never inventing a bespoke metric | milestone claim cites a standard benchmark's dataset+metric pairing, not an in-lab-only metric |
+
+Orderer's ruling, quoted verbatim (2026-09-04, via Observer relay): *"同意できない。同じデータ
+セットと指標をセットにしたベンチマークがあったから、機械学習は飛躍的に成長した。提案したベンチ
+マークで不満なら、似つかわしいベンチマークを探してくるべきだ。独自指標には意味がない。そんなも
+のはラボ内やドキュメントに閉じた貨幣でしかない。"* — with a supplementary point in the same
+ruling: *"局所則の学習器と継続学習の文献でのベンチマークも比べるべきだとは思うが、それをハン
+ディキャップにいつまでもしてはいけない。LLM などの本流とも、いずれは伍していく必要がある。"* —
+comparing against local-rule-learner and continual-learning literature benchmarks is fine, but
+never as a standing excuse; eventual parity with the mainstream (e.g. LLMs) remains the bar.
 
 ## LAW candidates (2026-09-02/03 measurement incidents) — NOT yet binding
 
@@ -85,7 +97,10 @@ fixed budget ceiling, an n=30 null, an infeasible threshold.
 ## Provenance
 
 Retrieve/Search and the stuck-question set are graded **author-confirmed**, both carrying
-verbatim quotations. The seven operating rules are **author-confirmed** (a direct ruling, not a
-candidate). The LAW-candidate table's rule LIST is author-confirmed; the nine underlying
-measurement incidents are **needs-verification** — this skill did not independently observe
-them. Full grade table and the reconciliation flag: `tests/forge-verification-ledger.md` §1, §3.
+verbatim quotations. The original seven operating rules are **author-confirmed** (a direct
+ruling, not a candidate); row 8 is a separate, later **author-confirmed** addition
+(2026-09-04, the orderer's own verbatim, relayed via an Observer session and the Director —
+`tests/forge-verification-ledger.md` §3g). The LAW-candidate table's rule LIST is
+author-confirmed; the nine underlying measurement incidents are **needs-verification** — this
+skill did not independently observe them. Full grade table and the reconciliation flag:
+`tests/forge-verification-ledger.md` §1, §3.

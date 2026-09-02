@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // THIS IS NOT A SEMANTIC CHECK. It is a structural floor over commanding-research-fleets: file
 // presence, frontmatter shape, and a handful of greppable content counts (checklist has seven
-// items, operating rules has seven, LAW candidates has nine, etc.). It cannot judge whether any
+// items, operating rules has eight, LAW candidates has nine, etc.). It cannot judge whether any
 // rule is TRUE, whether the sibling cuts are accurate, or whether the description actually wins
 // its trigger races — those are the semantic lenses (`tests/forge-verification-ledger.md`).
 //
@@ -112,8 +112,8 @@ if (checklistRows !== 7) fail(`launch checklist has ${checklistRows} rows, expec
 else ok("launch checklist has exactly 7 rows");
 
 const opRulesRows = countTableRows(checklist, /\| # \| Rule \|\n\|---\|---\|\n\| 1 \| A frozen plan/);
-if (opRulesRows !== 7) fail(`operating rules has ${opRulesRows} rows, expected exactly 7`);
-else ok("operating rules has exactly 7 rows");
+if (opRulesRows !== 8) fail(`operating rules has ${opRulesRows} rows, expected exactly 8`);
+else ok("operating rules has exactly 8 rows");
 
 const vocabAndLaw = readFileSync(join(dir, "references/vocabulary-and-law.md"), "utf8");
 const stuckRows = countTableRows(vocabAndLaw, /\| # \| Prompt \(verbatim\) \|/);

@@ -123,9 +123,10 @@ Every Director reply is: receipt acknowledged, then one question or one frame, t
 design is yours." A reply never states arm composition, a seed count, or a predicted value —
 those are the PI's to set. Full form and worked shape: `references/launch-and-order.md`.
 
-## Operating rules (2026-09-03 ruling)
+## Operating rules
 
-Seven ruled items — apply directly, unlike the LAW candidates below. Full table:
+Seven items ruled 2026-09-03, plus one later 2026-09-04 addition (row 8, paired with the launch
+checklist's row 1) — all apply directly, unlike the LAW candidates below. Full table:
 `references/vocabulary-and-law.md`.
 
 | # | Rule |
@@ -137,6 +138,7 @@ Seven ruled items — apply directly, unlike the LAW candidates below. Full tabl
 | 5 | "No run needed" is written only after the instrument's granularity is code-verified, or conditionally |
 | 6 | A certifier writes its verdict in the report; the author promotes via `--certifier` (E4 — full procedure above) |
 | 7 | Only verified frames go to every PI verbatim; an unverified one is hedged as "X reported it" |
+| 8 | A custom metric is closed currency — a milestone counts only via a standard dataset+metric pairing, never a bespoke one (§ launch-checklist row 1) |
 
 ## Vocabulary — Retrieve vs Search
 

@@ -227,6 +227,25 @@ in case a standalone placement (LAW candidate or operating rule) is also wanted.
 source, though via a different relay chain (Observer → Director → this forge) and a different
 date (2026-09-04 vs. 2026-09-02/03).
 
+## §3g Operating rules — custom-metric-closed-currency row added (2026-09-04)
+
+Follow-up to §3f: the Director confirmed the "custom metric is closed currency" ruling should
+ALSO be recorded as its own operating-rule row, not just folded into launch-checklist row 1's
+prose. Orderer's own verbatim, relayed via the same Observer→Director chain: *"同意できない。同
+じデータセットと指標をセットにしたベンチマークがあったから、機械学習は飛躍的に成長した。提案し
+たベンチマークで不満なら、似つかわしいベンチマークを探してくるべきだ。独自指標には意味がない。
+そんなものはラボ内やドキュメントに閉じた貨幣でしかない。"* — plus a supplementary point in the
+same ruling on not using non-mainstream-literature benchmarks as a standing excuse.
+
+**Applied**: appended as operating-rule row 8 (not inserted/renumbered — no chronological or
+functional reason to reorder the existing seven) in `SKILL.md` and
+`references/vocabulary-and-law.md`, cross-referenced with launch-checklist row 1 in both
+directions (row 1's own text already named the pairing from §3f; row 8 now names it back).
+`scripts/check.ts`'s operating-rules row-count gate updated 7 → 8 (comparison + head comment).
+`bun scripts/check.ts .` passes clean.
+
+**Grade**: **author-confirmed** — orderer's own verbatim, same chain and date as §3f's row 1.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

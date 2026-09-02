@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // THIS IS NOT A SEMANTIC CHECK. It is a structural floor over commanding-research-fleets: file
-// presence, frontmatter shape, and a handful of greppable content counts (checklist has seven
+// presence, frontmatter shape, and a handful of greppable content counts (checklist has eight
 // items, operating rules has eight, LAW candidates has nine, etc.). It cannot judge whether any
 // rule is TRUE, whether the sibling cuts are accurate, or whether the description actually wins
 // its trigger races — those are the semantic lenses (`tests/forge-verification-ledger.md`).
@@ -108,8 +108,8 @@ function countTableRows(source: string, headerRe: RegExp): number {
 
 const checklist = readFileSync(join(dir, "SKILL.md"), "utf8");
 const checklistRows = countTableRows(checklist, /\| # \| Check \| Artifact \|/);
-if (checklistRows !== 7) fail(`launch checklist has ${checklistRows} rows, expected exactly 7`);
-else ok("launch checklist has exactly 7 rows");
+if (checklistRows !== 8) fail(`launch checklist has ${checklistRows} rows, expected exactly 8`);
+else ok("launch checklist has exactly 8 rows");
 
 const opRulesRows = countTableRows(checklist, /\| # \| Rule \|\n\|---\|---\|\n\| 1 \| A frozen plan/);
 if (opRulesRows !== 8) fail(`operating rules has ${opRulesRows} rows, expected exactly 8`);

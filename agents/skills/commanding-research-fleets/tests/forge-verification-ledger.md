@@ -282,6 +282,43 @@ scripts/check.ts .` passes clean.
 **Grade**: **needs-verification**, as the Director itself specified — this forge did not
 independently observe the `pbq4`/`pi_ynxy` incident or the VOCT ledger entries.
 
+## §3i Launch checklist — PI-learner-line row added at position 8 (2026-09-04)
+
+Requested via the Director, grounded in the orderer's own verbatim on a general principle:
+*"構造的欠陥がわかっているなら、形式的な仕組みへ蒸留したい。形式化できない残差だけを skill に
+蒸留するんですよね?"* — if a structural defect is understood, distill it into a formal
+mechanism; the skill gets only the residual formalization can't reach. The Director then stated
+the specific rule in its own words (no quote marks around this part): a PI is never staffed
+without its own learner-line — the order form names a standard-benchmark phase and the
+`BENCH-ROW` target that PI fills, never a purely-reference or purely-instrument PI. Evidence:
+the old `ba` line (instrument-only) sat waiting until the orderer called for "close it or
+rebuild it" (2026-09-03); the same night, whether `pbq4` should become a PI required the
+identical Director judgment repeatedly.
+
+**Provenance check before applying**: the Director graded the whole package
+author-confirmed, but only the general PRINCIPLE quote is verbatim orderer text — the SPECIFIC
+RULE is the Director's own operationalization of that principle against two incidents, not a
+quoted orderer sentence the way the row-1 (§3f) and operating-rule-8 (§3g) content was. Recorded
+this distinction explicitly in `references/launch-and-order.md`'s Provenance section rather than
+silently accepting the blanket grade — the underlying principle is genuinely author-confirmed,
+which is not the same claim as the specific rule text being a direct quote.
+
+**Applied**: appended as launch-checklist row 8 (SKILL.md, `references/launch-and-order.md`) —
+appended rather than inserted, since no position was specified this time (contrast §3f, where
+row 1 placement was explicit). Split the mechanical/residual boundary explicitly in the row's
+full detail: the order form having a phase identifier + `BENCH-ROW` field is what's checked;
+WHICH phase a PI gets assigned stays the Director's judgment, not automated by this row —
+consistent with the orderer's own quoted principle and with the ongoing §1/(1) triage work this
+same thread is running (this row is itself now a candidate for that same "move the mechanical
+part to agentic-RnD, leave the residual" pipeline once it resumes). `scripts/check.ts`'s
+checklist row-count gate updated 7 → 8 (comparison + head comment); `SKILL.md`'s frontmatter
+description, reference-index pointer, and `agents/skills/README.md`'s catalog line updated
+seven-item → eight-item. `bun scripts/check.ts .` passes clean.
+
+**Grade**: **author-confirmed** for the general principle (direct orderer quote); the specific
+rule text is the Director's own derivation from two cited incidents, not itself a verbatim
+orderer sentence — both facts stated plainly rather than collapsed into one blanket grade.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

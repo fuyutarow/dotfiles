@@ -2,7 +2,7 @@
 name: commanding-research-fleets
 description: >-
   Runs a Director/PI/Researcher research fleet under the agentic-RnD protocol: role charters +
-  prohibitions, Researcher archetypes, the seven-item launch checklist, order-form shape,
+  prohibitions, Researcher archetypes, the eight-item launch checklist, order-form shape,
   thin-Director reply form, stuck-question prompts, and the retrieve/search vocabulary split.
   Use for 艦隊運転, Director/PI/Researcher体制, 研究艦隊の立ち上げ, PI憲章, thin director,
   発注書の型, 行き詰まりの問い, or a stalled PI session. DECISIVE:
@@ -94,9 +94,9 @@ below is the lookup; the reference carries the artifact each prohibition traces 
 
 Six of these rows trace to stalls observed on 2026-09-02/03 — row 3's CONTENT was later
 reversed by a 2026-09-03 ruling (it still counts as one of those six; what it now checks
-changed). Row 1 is a later, 2026-09-04 addition from a different failure class (a research-cycle
-stall, not a session-launch one) — see Provenance. Full detail, including the `NO_INDEX` and
-`--code` forms, is `references/launch-and-order.md`.
+changed). Rows 1 and 8 are later, 2026-09-04 additions from different failure classes (a
+research-cycle stall and a PI-staffing stall, neither a session-launch one) — see Provenance.
+Full detail, including the `NO_INDEX` and `--code` forms, is `references/launch-and-order.md`.
 
 | # | Check | Artifact |
 |---|---|---|
@@ -107,6 +107,7 @@ stall, not a session-launch one) — see Provenance. Full detail, including the 
 | 5 | The seven closure layers and rnd's verbs are honored; no arm-specific state file exists | absence of an arm-local state file |
 | 6 | A shared script is hash-pinned via `--code` | pinned hash |
 | 7 | Search-index staleness is declared as `--hit NO_INDEX:<timestamp+watermark>` when the index cannot keep up | the `NO_INDEX` hit string |
+| 8 | A PI is never staffed without its own learner-line: the order form names a standard-benchmark phase (1a/1c/2a/2b/C…) and the `BENCH-ROW` target that PI fills — never a PI that is purely a reference-supplier or purely an instrument/measurement role | the order form's phase identifier and `BENCH-ROW` target field, both present and named |
 
 ## In-lab verification (E4)
 
@@ -212,5 +213,5 @@ unnecessary, that feeling is the failure mode — follow the map.*
 |---|---|---|
 | `references/charters.md` | Full Director and PI charters: duties, prohibitions, artifact per prohibition | staffing a fleet; a role-boundary dispute |
 | `references/researcher-types.md` | Researcher archetype table; Lab coordinator; the in-lab verification procedure (E4) | dispatching a Researcher; before a PI promotes a claim |
-| `references/launch-and-order.md` | The seven-item launch checklist in full; the order-form shape; the thin-Director reply form | standing up a PI session; a Director writing an order or a reply |
+| `references/launch-and-order.md` | The eight-item launch checklist in full; the order-form shape; the thin-Director reply form | standing up a PI session; a Director writing an order or a reply |
 | `references/vocabulary-and-law.md` | Retrieve/Search table; five stuck-question prompts + reject-words; the LAW-candidate table | a stalled PI; wording a stuck question; auditing a measurement failure |

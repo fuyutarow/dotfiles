@@ -1,13 +1,13 @@
 # Launch checklist, order-form shape, and the thin-Director reply form
 
-> **Scope**: SOLE home for the seven-item launch checklist's full detail, the order-form's
+> **Scope**: SOLE home for the eight-item launch checklist's full detail, the order-form's
 > structural shape, and the exact reply form a Director must use.
 
 ## Launch checklist — full detail
 
-Six of these rows (2-7) trace to stalls observed 2026-09-02/03; row 1 is a later, 2026-09-04
-addition guarding a different failure class (see Provenance). Run every row before a PI session
-is considered launched; re-run after any resume.
+Six of these rows (2-7) trace to stalls observed 2026-09-02/03; rows 1 and 8 are later,
+2026-09-04 additions guarding different failure classes (see Provenance). Run every row before
+a PI session is considered launched; re-run after any resume.
 
 1. **The proposal is a learner.** A BIBIFI iteration starts from something that takes input,
    produces output, and can be evaluated as a predictor or classifier on the standard task —
@@ -41,6 +41,19 @@ is considered launched; re-run after any resume.
    (`vocabulary-and-law.md`'s Retrieve row) cannot keep pace with the fleet, the PI issues
    `--hit NO_INDEX:<timestamp+watermark>` naming exactly when and how far behind the index was
    — never a bare "results may be incomplete."
+8. **A PI is never staffed without its own learner-line.** The order form names a
+   standard-benchmark phase (`1a`/`1c`/`2a`/`2b`/`C`…) and the `BENCH-ROW` target that PI fills
+   — never a PI that is purely a reference-supplier or purely an instrument/measurement role.
+   The mechanical part stops at the check: the order form has a phase identifier and a
+   `BENCH-ROW` target field, both named. WHICH phase a given PI gets assigned stays the
+   Director's own judgment call, not something this row automates. Evidenced by two incidents:
+   the old `ba` line (a purely instrument/measurement PI) sat waiting on other sessions'
+   questions until the orderer called for "close it or rebuild it" (2026-09-03); the same night,
+   whether `pbq4` (a reference-authority role) should become a PI required the identical
+   Director judgment call, repeatedly. Orderer's own words on the underlying principle, quoted
+   verbatim: *"構造的欠陥がわかっているなら、形式的な仕組みへ蒸留したい。形式化できない残差だけ
+   を skill に蒸留するんですよね?"* — if a structural defect is understood, distill it into a
+   formal mechanism; the skill gets only the residual that formalization can't reach.
 
 ## Order-form shape
 
@@ -79,7 +92,12 @@ observed 2026-09-02 stalls — the highest-grade source class, per `forging-skil
 `distilling.md` §1). Row 1 is a separate, later **author-confirmed** addition (2026-09-04) —
 the orderer's own verbatim, relayed via an Observer session and the Director
 (`tests/forge-verification-ledger.md` §3f) — not part of the original six-stall source and
-carrying its own verbatim quote rather than the §3-input-spec one. The order-form STRUCTURE is
-author-confirmed; its concrete preset content
-is **needs-verification**, explicitly. The reply form is author-confirmed, carrying one
-verbatim quotation. Full table: `tests/forge-verification-ledger.md` §1.
+carrying its own verbatim quote rather than the §3-input-spec one. Row 8 is graded
+**author-confirmed** as the Director stated, but with a distinction worth keeping visible: the
+row's own operative text (the learner-line / `BENCH-ROW` requirement) is the Director's
+operationalization of two cited incidents, not itself wrapped in orderer quote marks — only the
+underlying formalize-what-can-be-formalized PRINCIPLE carries a direct orderer verbatim
+(`tests/forge-verification-ledger.md` §3i). The order-form STRUCTURE is author-confirmed; its
+concrete preset content is **needs-verification**, explicitly. The reply form is
+author-confirmed, carrying one verbatim quotation. Full table:
+`tests/forge-verification-ledger.md` §1.

@@ -1,0 +1,91 @@
+# Vocabulary, stuck-question prompts, operating rules, and LAW candidates
+
+> **Scope**: SOLE home for the Retrieve/Search distinction in full, the five stuck-question
+> prompt shapes and reject-words, the seven 2026-09-03 operating rules, and the nine
+> 2026-09-02/03 measurement LAW candidates.
+
+## Retrieve vs Search — the full distinction
+
+Both terms are load-bearing across every R&D repo under this doctrine. A tool's own
+**identifier** (e.g. `repo-search`) is a name, not an instance of either sense — do not relabel
+tools to match this vocabulary.
+
+| Term | Meaning | Verb | Not to be confused with |
+|---|---|---|---|
+| **Retrieve** | CBR's 4R sense: pull a precedent from records, soks, or a fold | "引く" / "照合" | machine exploration of a hypothesis space |
+| **Search** | the Bitter Lesson sense: the machine explores hypothesis/design space by computation, turning compute into capability | "探索" | looking something up in an index |
+
+Orderer's ruling, quoted verbatim (2026-09-02): *"プロジェクト全体で retrieve と search が厳密に
+使い分けされたい。retrieve は CBR 4R の意味で。search は search and Learn (bitter lesson) の意味
+で使っています。"*
+
+## Stuck-question prompts — five verbatim shapes
+
+Issue one of these, verbatim, when a PI is genuinely stuck — never invent a sixth without a new
+ruling. Ordered as given; none is a default over the others.
+
+| # | Prompt (verbatim) |
+|---|---|
+| 1 | BIBIFI |
+| 2 | 絶壁か突破口か + 脳とLLM + soksの水平伝播 |
+| 3 | 反証済みの言い換え禁止・効く測定と効かない観測を書けるclaimだけ + レク |
+| 4 | GPU first・MWE・基準線と対照・当てずっぽう禁止・御託はいい |
+| 5 | token mixingとchannel mixingをどう実現するか |
+
+**Reject-words** — a PI's report using any of these is treated as papering over a stall, not as
+progress:
+
+| Word | Why rejected |
+|---|---|
+| ドライバー | names a mechanism without a falsifiable claim |
+| 突破口の気配 | a feeling, not an observable |
+| フロントライン | a variable file — content drifts under a name that implies stability |
+
+## Operating rules (2026-09-03 ruling, seven items)
+
+Ruled, not candidate — apply directly. Row 6 points to its full procedure rather than
+restating it (one-home, `researcher-types.md`).
+
+| # | Rule | Artifact |
+|---|---|---|
+| 1 | A frozen plan's run needs no Director permission; the PI holds the `run`'s name | run record naming the PI, no Director sign-off attached |
+| 2 | A `kill`ed claim is never seed-rescued — correct the judgment statistic and open a new claim that supersedes it | new claim's `supersedes` pointer to the killed one |
+| 3 | Calibration under a null regime runs exactly once, pre-registered | pre-registration timestamp preceding the single calibration run |
+| 4 | An order cites a `docid`, never a raw number — this is what stops a Director's mis-citation from repeating | order text contains a docid, not a bare figure |
+| 5 | "No run needed" is written only after the instrument's granularity is verified in code — otherwise it is written conditionally | either a code-verified granularity check, or explicit conditioning language |
+| 6 | A certifier writes its verdict in the report; the claim's author promotes it, recording the certifier via `--certifier` (E4) | → full procedure: `researcher-types.md`'s in-lab verification |
+| 7 | Only verified frames are distributed to every PI in identical wording; an unverified one is hedged as "X reported it" | distributed text either matches a verified frame verbatim, or carries the hedge |
+
+## LAW candidates (2026-09-02/03 measurement incidents) — NOT yet binding
+
+Nine measurement-instrument breaks produced these candidates. They are explicitly labeled
+LAW候補 (candidates) by the orderer, not ruled — and they have not been reconciled against
+`orchestrating-agents`' existing P7–P10 measurement discipline
+(`orchestrating-agents/references/measurement-and-resources.md`), which already owns
+comparison/causal-claim/cache-reuse discipline generically across every dispatch. Treat this
+table as a dated proposal, not a rule this skill enforces on its own authority.
+
+The nine breaks (grade: author-confirmed as a list; the underlying incidents themselves are
+**needs-verification** — named by the orderer, not independently re-derived here): P=32 outside
+its domain, pruned arithmetic, quantization, statistic mismatch, shared RNG, AND-asymmetry, a
+fixed budget ceiling, an n=30 null, an infeasible threshold.
+
+| # | Candidate rule |
+|---|---|
+| 1 | Run a 32-point check before any run |
+| 2 | A null model is measured per regime, at seed ≥ 150 |
+| 3 | A threshold is calibrated by exposure length, and only after confirming feasibility |
+| 4 | Random draws are separated by unit |
+| 5 | A √n-boundary cumulative judgment is not LIL-calibratable — replace it with windowed M-of-K |
+| 6 | No post-hoc swap of the judgment statistic once a result exists |
+| 7 | best-of-N is an arbiter WITHIN a statistic, never a substitute for one |
+| 8 | Pre-verification survival is never spent as an admission slot |
+| 9 | A new instrument is proposed before it is used; a primary source is retained, a secondary source runs `--no-retain` |
+
+## Provenance
+
+Retrieve/Search and the stuck-question set are graded **author-confirmed**, both carrying
+verbatim quotations. The seven operating rules are **author-confirmed** (a direct ruling, not a
+candidate). The LAW-candidate table's rule LIST is author-confirmed; the nine underlying
+measurement incidents are **needs-verification** — this skill did not independently observe
+them. Full grade table and the reconciliation flag: `tests/forge-verification-ledger.md` §1, §3.

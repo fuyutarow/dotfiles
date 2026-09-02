@@ -1,7 +1,7 @@
 {
-  "maxListingChars": 58008,
-  "measuredOn": "2026-08-15",
-  "skillsAtMeasurement": 60,
+  "maxListingChars": 59102,
+  "measuredOn": "2026-09-03",
+  "skillsAtMeasurement": 62,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
@@ -19,6 +19,13 @@
       "spentBy": "wiring-repositories",
       "reason": "Two distinct amounts, recorded separately because they have different causes. 82 chars were ALREADY over the ceiling before this admission: measured 56,664 at 60 skills, so descriptions drifted upward since 2026-08-15 without anyone re-measuring — the ratchet caught drift it was built to catch, and it is absorbed here rather than hunted. 1,349 chars are the new skill's description. It was admitted because the battery found no owner: 8 EN/JA queries over 60 readable SKILL.md files returned only incidental hits, plus wiring-mise-tasks which scopes itself to the mise task-graph layer alone. Retiring a sibling was considered and rejected — no sibling was found doing this job badly; the ceiling had simply never been re-measured since it was set.",
       "alsoFound": "Two descriptions sit at or past the observed truncation window (~1520-1570): structuring-documents 1669 and issuing-technical-memoranda 1515. Their tail-positioned language directives may already be silently dropped. That is a live defect independent of this raise, reported rather than absorbed — trimming them would also return ~170 chars."
+    },
+    {
+      "date": "2026-09-03",
+      "from": 58008,
+      "to": 59102,
+      "spentBy": "commanding-research-fleets",
+      "reason": "One amount, one cause: the new skill's own description (1,094 chars), no drift absorbed — the collection re-measured clean at 58,008 for 61 skills before this admission. Forged solo per an explicit direct-user instruction (\"thin directorと協調してスキル作成してください\") after four earlier peer relays of the same spec were each refused as non-authorizing. Function+existence gate (forging-skills step 0) found no owner: supervising-research-programmes/directing-research-sections own the programme/section state machinery this doctrine's vocabulary maps onto but never merges with, orchestrating-agents owns generic dispatch not this fleet's specific role content, and codifying-doctrine's own routing table sends a named-executor runbook here rather than claiming it. Full source-grade table and the placement reasoning: commanding-research-fleets/tests/forge-verification-ledger.md §0-§1."
     }
   ]
 }

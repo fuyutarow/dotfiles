@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**47 authored** here, plus **12 vendored** upstream (Cloudflare/Workers, Mintlify). This page is the human map;
+**48 authored** here, plus **12 vendored** upstream (Cloudflare/Workers, Mintlify). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -45,6 +45,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 - [`directing-research`](directing-research/) — Legacy route-only shim for broad or ambiguous creative-research invocations.
 - [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.
 - [`directing-research-sections`](directing-research-sections/) — Direct one granted live section: local admission, run intent, receipt-linked learning, and declassified signal.
+- [`commanding-research-fleets`](commanding-research-fleets/) — Run a Director/PI/Researcher research fleet: role charters and prohibitions, the six-item launch checklist, order-form shape, and the five stuck-question prompts — the fleet's operating manual, not programme/section state.
 - [`auditing-research-processes`](auditing-research-processes/) — Audit one frozen bounded research episode and return a non-enacting recommendation.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
 

@@ -821,6 +821,46 @@ grep() {
   command grep "$@"
 }
 
+# claude wrapper: auto-name new sessions "<project>-agt_<4-char Crockford base32>", keeping
+# Claude Code's own "<project>-<suffix>" shape but swapping the 2-hex-char suffix for our own.
+# No settings.json key, env var, or hook output field can change the built-in default (checked
+# settings-reference/env-vars/hooks docs directly, 2026-09-02) — the only lever is `-n/--name`
+# at launch, so this supplies it automatically. <project> is the lowercased cwd basename, same
+# source Claude Code itself uses for the default. Skips subcommands (`claude mcp ...`, `claude
+# doctor`, ...) since they don't take --name, and skips an explicit `-n/--name` the caller gave.
+#
+# Also skips plain -c/--continue/-r/--resume/--teleport/--from-pr: verified live (real `claude
+# -p --resume`/`-p -c`, 2026-09-02, see .agent-state/tasks/claude-session-naming/) that --name
+# on any of these RENAMES the resumed session every time (transcript's custom-title/agent-name
+# entries get overwritten) rather than being a no-op — injecting a fresh random suffix here
+# would silently re-randomize an already-named session's name on every continue. --fork-session
+# is the one exception: it creates a genuinely new, independent session ID (confirmed: original
+# session's name is untouched), so a resume/continue paired with --fork-session still gets named.
+typeset -ga _CLAUDE_SUBCOMMANDS=(
+  agents attach auth auto-mode doctor gateway import install logs mcp
+  plugin plugins project respawn rm setup-token stop kill ultrareview update upgrade
+)
+claude() {
+  local first="${1:-}" has_name=0 is_resume=0 is_fork=0 a
+  for a in "$@"; do
+    case "$a" in
+      -n | --name) has_name=1 ;;
+      -c | --continue | -r | --resume | --teleport | --from-pr) is_resume=1 ;;
+      --fork-session) is_fork=1 ;;
+    esac
+  done
+  if (( has_name )) || (( is_resume && ! is_fork )) || (( ${_CLAUDE_SUBCOMMANDS[(Ie)$first]} )); then
+    command claude "$@"
+    return $?
+  fi
+  local alphabet="0123456789abcdefghjkmnpqrstvwxyz" # Crockford base32, lowercase (no i/l/o/u)
+  local chars=(${(s::)alphabet}) suffix="" _i
+  for _i in {1..4}; do
+    suffix+="${chars[$((RANDOM % 32 + 1))]}"
+  done
+  command claude --name "${PWD:t:l}-agt_${suffix}" "$@"
+}
+
 # ============================================
 # Additional Recommended Tools (not replacements)
 # ============================================

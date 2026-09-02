@@ -436,6 +436,7 @@ function rgFlags(values: {
   context?: number;
   filesWithMatches?: boolean;
   count?: boolean;
+  limit?: number;
 }): string[] {
   if (values.filesWithMatches && values.count) {
     throw new Error("--files-with-matches and --count are mutually exclusive");
@@ -449,6 +450,12 @@ function rgFlags(values: {
   }
   if (values.filesWithMatches) flags.push("--files-with-matches");
   if (values.count) flags.push("--count");
+  // **`literal`/`exhaustive` に `--limit` が無かった**(2026-09-02、腕 0a の報告)。
+  //   `concept`/`battery` は最初から `--limit` を持つのに、語彙 route だけ rg の
+  //   `-m/--max-count` を露出していなかった——広い正規表現が大きな repo で無制限に
+  //   一致を返しうる。rg 自身の `-m` へそのまま渡す(ファイルごとの上限)。
+  if (values.limit !== undefined)
+    flags.push("--max-count", String(values.limit));
   for (const glob of values.glob ?? []) flags.push("--glob", glob);
   return flags;
 }
@@ -648,6 +655,7 @@ function rgSearchFlags() {
     context: positiveInteger("context"),
     filesWithMatches: Boolean,
     count: Boolean,
+    limit: positiveInteger("limit"),
   };
 }
 

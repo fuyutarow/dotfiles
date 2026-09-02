@@ -884,10 +884,13 @@ describe("repo-search route contract", () => {
   }
 
   test("a flag belonging to another route is rejected", () => {
+    // `--limit` moved from concept/battery-only to also cover literal/exhaustive
+    // (2026-09-02, 0a's report: a broad regex on a large repo had no cap). `files` still
+    // has no notion of a match count, so it stays the negative case here.
     const result = run(registerProject(), [
-      "literal",
-      "--query",
-      "needle",
+      "files",
+      "--path",
+      "cocoindex",
       "--limit",
       "3",
     ]);
@@ -895,6 +898,20 @@ describe("repo-search route contract", () => {
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("Error: Unknown flag: --limit.");
     expect(result.log).toBe("");
+  });
+
+  test("**literal/exhaustive now accept `--limit`**——rg の -m/--max-count へ渡す", () => {
+    // WHY (2026-09-02、腕 0a の報告): concept/battery は最初から --limit を持つのに、
+    //   語彙 route だけ rg の -m を露出していなかった。広い正規表現が大きな repo で
+    //   無制限に一致を返しうる。
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--limit",
+      "3",
+    ]);
+    expect(result.stderr).not.toContain("Unknown flag");
   });
 
   test("files rejects search-result modifiers that would change rg mode", () => {

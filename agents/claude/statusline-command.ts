@@ -147,15 +147,33 @@ function account(): string | undefined {
 // (see the line-1 header note above — `session_name` is a DIFFERENT, independently-tracked
 // field) — resolved by shelling out to `claude agents --json` and matching our own session_id,
 // then cached. One cache file, keyed by session_id, shared by every session on this machine —
-// whichever renders first warms it for the rest. A HIT is trusted for 5 minutes (renames are
-// rare/deliberate). A MISS gets a much shorter 30s TTL: caught live 2026-08-28, restarting a
-// session with `claude -c` can race `claude agents --json`'s own self-registration, so the
-// very first lookup right after a restart can miss even though the session is real — 30s lets
-// the next render self-heal instead of showing nothing for up to 5 minutes. (herdr-tab-name.ts
+// whichever renders first warms it for the rest.
+//
+// NOTE 2026-09-02: Claude Code's own "prompt bar" (the input box's own border) already shows
+// this same name live, with no caching of its own — confirmed via sessions.md / cli-reference.md
+// / changelog v2.1.75, not gated to `tui: fullscreen`. This segment is not redundant with that:
+// its real reason for existing here is feeding reportToHerdr() below.
+//
+// TTL is 30s for BOTH a hit and a miss — a hit used to be trusted for 5 minutes on the theory
+// that renames are rare/deliberate, which is backwards: rare-and-deliberate means a human is
+// watching right when it happens, so a 5-minute-stale hit is maximally visible at the worst
+// possible moment (caught live 2026-09-02: right after `/rename`, this segment and the herdr
+// push it feeds both lagged behind the prompt bar above). 30s keeps the miss-only cost
+// (~0.5-0.75s `claude agents --json`) rare enough not to matter, for a 10x smaller worst case.
+// A miss keeps 30s for the reason it always had: caught live 2026-08-28, restarting a session
+// with `claude -c` can race `claude agents --json`'s own self-registration, so the very first
+// lookup right after a restart can miss even though the session is real — 30s lets the next
+// render self-heal instead of showing nothing for up to 5 minutes. (herdr-tab-name.ts
 // additionally retries within its own SessionStart firing, since it gets no next render.)
+//
+// TTL only bounds staleness for a pane that actually RE-RENDERS. A pane blocked on a
+// long-running subagent (Task tool work) may not redraw its statusline for the whole duration,
+// so its on-screen name (and the herdr push) can lag far longer than any TTL here — verified
+// live 2026-09-02: a session still showed its pre-rename name after an unrelated subagent had
+// been running 28+ minutes. That gap is Claude Code's own render cadence, which no cache TTL
+// here can shorten.
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
-const AGENT_NAME_POSITIVE_TTL_MS = 5 * 60_000;
-const AGENT_NAME_NEGATIVE_TTL_MS = 30_000;
+const AGENT_NAME_TTL_MS = 30_000;
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
@@ -169,13 +187,7 @@ function agentName(sid: string): string | undefined {
     // missing / corrupt cache file -> treat as empty and refetch below
   }
   const hit = cache[sid];
-  if (hit != null) {
-    const ttl =
-      hit.name != null
-        ? AGENT_NAME_POSITIVE_TTL_MS
-        : AGENT_NAME_NEGATIVE_TTL_MS;
-    if (Date.now() - hit.at < ttl) return hit.name;
-  }
+  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
   try {
@@ -281,8 +293,21 @@ if (model.endsWith(" context)"))
 //
 //   pane.report_metadata  the live model as the $model row token (herdr/config.toml's
 //                         [ui.sidebar.agents] rows), so a mid-session model switch (manual
-//                         /model, switchModelsOnFlag) shows up.
-//   tab.rename            the addressable session name as the tab label.
+//                         /model, switchModelsOnFlag) shows up. The addressable session name
+//                         rides the same request as $fullname, for the sidebar (herdr's
+//                         rows_by_agent.claude reads that back, not "tab" — see below). $rc is a
+//                         one-glyph Remote Control indicator, placed right of $model in that
+//                         same row (2026-09-03, on request) — 🔗 while
+//                         $CLAUDE_CODE_BRIDGE_SESSION_ID is set (Claude Code v2.1.199+ sets it
+//                         only while this session has an active Remote Control connection),
+//                         else "". Unlike fullname, $rc is sent every render even when empty —
+//                         fullname is a one-way "eventually known" value so an absent key is
+//                         fine, but $rc must actively toggle off on disconnect, and omitting the
+//                         key here would leave a stale 🔗 showing (untested against herdr's own
+//                         merge-vs-replace semantics for a dropped key, so don't rely on that).
+//   tab.rename            only the trailing `-`-segment of the session name ("firedancer-dc"
+//                         -> "dc"), so the desktop tab bar (which shows the tab's real name)
+//                         stays compact. The untruncated name lives in $fullname instead.
 //
 // WHY THE STATUSLINE RENAMES THE TAB, when hooks/herdr-tab-name.ts already does it at
 // SessionStart: a once-per-session write has now failed twice, in two different ways, and each
@@ -345,20 +370,29 @@ async function reportToHerdr(m: string, sessionName?: string): Promise<void> {
   if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
 
   const stamp = Date.now();
+  const tokens: Record<string, string> = { model: m };
+  // Rides the SAME request as model — one socket round-trip, not two (see the
+  // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
+  // dropped anyway).
+  if (sessionName) tokens.fullname = sessionName;
+  // Always set, never omitted — see the pane.report_metadata header note above for why $rc
+  // needs an active off-toggle instead of an absent key.
+  tokens.rc = process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ? "🔗" : "";
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",
     params: {
       pane_id: paneId,
       source: "dotfiles:statusline-model",
-      tokens: { model: m },
+      tokens,
     },
   });
   if (tabId && sessionName) {
+    const shortName = sessionName.split("-").pop() || sessionName;
     await herdrSend(socketPath, {
       id: `dotfiles:statusline-tab:${stamp}`,
       method: "tab.rename",
-      params: { tab_id: tabId, label: sessionName },
+      params: { tab_id: tabId, label: shortName },
     });
   }
 }

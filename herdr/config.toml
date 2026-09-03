@@ -82,23 +82,50 @@ show_agent_labels_on_pane_borders = true
 
 agent_panel_sort = "spaces"
 
-# Default rows join workspace+tab on one line ("firedancer · firedancer-c7") — redundant now
-# that tab labels are the real agent name (see agents/claude/hooks/herdr-tab-name.ts), not a
-# bare number. Lead with tab (the per-pane agent name), and swap the agent-type slot ("claude")
-# for $model — a custom token reported via pane.report_metadata (see statusline-command.ts) —
-# since every pane here already runs "claude"; the model (Opus 5 / Sonnet 5 / gpt-5.6-terra) is
-# the useful signal. Workspace moves to the second line since it's shared across a group's panes.
-# Row position alone doesn't move the look — "workspace" and "tab" each carry their own
-# hardcoded base color+weight wherever they appear (src/ui/sidebar.rs: workspace always paints
-# on the theme's `text`/`subtext0` + bold; tab/pane/agent always paint on the fixed muted
-# `overlay0` + dim — bold/dim flags alone only toggle modifiers on top of that base color, they
-# don't repaint it). So the emphasis is swapped explicitly, fg included, using one-dark's own
-# `text`/`overlay0` hex (src/app/state.rs Palette::one_dark): tab (per-pane identity, line 1)
-# gets `text`'s bright fg + bold; workspace (shared, line 2) gets `overlay0`'s muted fg + dim.
+# Line 1: state icon + tab (the per-pane agent name, see agents/claude/hooks/herdr-tab-name.ts).
+# Line 2: $model, then $rc — both custom tokens reported via pane.report_metadata (see
+# statusline-command.ts). $rc is a one-glyph Remote Control indicator (🔗 while connected, ""
+# otherwise, per that file's own header note) added 2026-09-03, on request. Order was flipped
+# twice the same day (rc-first, then back to model-first) — model-first is the settled one.
+# Left unstyled on purpose: it's an emoji, not text, so an fg override wouldn't reliably repaint
+# it anyway — nudge this if it reads oddly once seen live. Verified end-to-end against a fake
+# herdr socket (2026-09-03): the tokens payload correctly carries `"rc":"🔗"` with
+# $CLAUDE_CODE_BRIDGE_SESSION_ID set and `"rc":""` with it unset — herdr's own on-screen
+# rendering of an empty-string token is still unseen.
+# Workspace was dropped from here entirely 2026-09-03, on request:
+# agent_panel_sort="spaces" already groups rows by workspace with its own header, so repeating
+# the workspace name on every row was pure redundancy once someone looked for it.
+# Row position alone doesn't move the look — "tab" carries its own hardcoded base color+weight
+# wherever it appears (src/ui/sidebar.rs: tab/pane/agent always paint on the fixed muted
+# `overlay0` + dim; bold/dim flags alone only toggle modifiers on top of that base color, they
+# don't repaint it). `tab` keeps bold weight for scanability but drops to a muted `#7f848e` fg
+# (tuned by eye against Claude Code's own native status line) so it doesn't overpower the row.
+# `$model` is deliberately inconspicuous too, but matches a real fixed reference instead of an
+# eyeballed one: `#008787`, the exact ANSI-256 idx-30 color that dotfiles's own
+# statusline-command.ts hardcodes for its `Model:` label (`head` assembly, line ~520) — read
+# straight from that file's source, not approximated. `dim` was considered and rejected here
+# since it fades the fg color itself, and legibility matters more than looking extra-subdued. A
+# bare token would fall back to the hardcoded `overlay0`+dim pairing, which measured
+# near-invisible against this theme's background (found 2026-09-03) — hence the explicit `fg` on
+# both.
 [ui.sidebar.agents]
 rows = [
-  ["state_icon", { token = "tab", fg = "#abb2bf", bold = true, dim = false }],
-  [{ token = "workspace", fg = "#5c6370", bold = false, dim = true }, "$model"],
+  ["state_icon", { token = "tab", fg = "#7f848e", bold = true, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, "$rc"],
+]
+
+[ui.sidebar.agents.rows_by_agent]
+# Claude only — an override REPLACES rows, it doesn't extend them, so this repeats the layout
+# above rather than diffing against it. agents/claude/hooks/herdr-tab-name.ts and
+# statusline-command.ts now send the real herdr tab name as just its trailing `-`-segment
+# ("firedancer-dc" -> "dc"), to keep the desktop tab bar compact — reading that back via the
+# "tab" token here would shorten the sidebar too. $fullname is a second pane-metadata token
+# those same two writers report alongside it, carrying the untruncated name; this row reads
+# that instead, so the sidebar keeps the full name independently of the tab bar. Same colors and
+# same dropped-workspace layout as the default rows above — see that block's comment for why.
+claude = [
+  ["state_icon", { token = "$fullname", fg = "#7f848e", bold = true, dim = false }],
+  [{ token = "$model", fg = "#008787", bold = false, dim = false }, "$rc"],
 ]
 [session]
 # resume_agents_on_restore = true (default)

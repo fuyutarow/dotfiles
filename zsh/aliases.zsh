@@ -777,6 +777,40 @@ alias mvf='command mv'   # 強制上書き (両OS共通)
 # rip for safer file removal
 command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
 
+# Git operation safety: checkout ban
+# `git checkout` (plus its git/gitconfig aliases co/cb) is dangerously overloaded — the same
+# verb switches branches, creates a branch (-b/-B), restores files, and can detach HEAD, so a
+# typo silently does something else plausible instead of erroring. Since git 2.23 the
+# disambiguated replacements are `git switch` (branches) and `git restore` (files); block the
+# ambiguous verb entirely and point at the unambiguous one — same shape as rm()/cp()/mv() above:
+# fail loud, never guess. `command git checkout ...` remains the escape hatch, same as rm's
+# /bin/rm. Interactive shells only (functions in this file never reach scripts/CI/hooks), so
+# git/gitconfig's co/cb aliases are left in place for non-interactive callers.
+git() {
+  local sub="$1"
+  if [[ "$sub" == "checkout" || "$sub" == "co" || "$sub" == "cb" ]]; then
+    shift
+    print -u2 "⛔ git ${sub}: BLOCKED — checkout/co/cb are disabled in this shell (branch/file ambiguity)."
+    if [[ "$sub" == "cb" || "$1" == "-b" || "$1" == "-B" ]]; then
+      [[ "$sub" != "cb" ]] && shift
+      print -u2 "   New branch instead:       git switch -c $*"
+    elif [[ "$1" == "--" ]]; then
+      shift
+      print -u2 "   Discard changes instead:  git restore -- $*"
+    elif [[ -n "$1" ]] && command git show-ref --verify --quiet "refs/heads/$1" 2>/dev/null; then
+      local name="$1"; shift
+      print -u2 "   Switch branches instead:  git switch $name $*"
+    elif [[ -n "$1" && -e "$1" ]]; then
+      print -u2 "   Discard changes instead:  git restore $*"
+    else
+      print -u2 "   Switch branches:  git switch <branch>   (new branch: git switch -c <branch>)"
+      print -u2 "   Discard changes:  git restore <path>"
+    fi
+    return 1
+  fi
+  command git "$@"
+}
+
 # grep nudge: a NUDGE, not a block (unlike rm() above) — real grep always runs,
 # unchanged args, unchanged exit status. Prints ONE suggestion line to stderr
 # first, context-aware on whether $PWD is inside a cocoindex-code (ccc) project.
@@ -826,8 +860,12 @@ grep() {
 # No settings.json key, env var, or hook output field can change the built-in default (checked
 # settings-reference/env-vars/hooks docs directly, 2026-09-02) — the only lever is `-n/--name`
 # at launch, so this supplies it automatically. <project> is the lowercased cwd basename, same
-# source Claude Code itself uses for the default. Skips subcommands (`claude mcp ...`, `claude
-# doctor`, ...) since they don't take --name, and skips an explicit `-n/--name` the caller gave.
+# source Claude Code itself uses for the default, with any `-` normalized to `_` (2026-09-02: a
+# hyphenated dir like "agentic-RnD" produced "agentic-rnd-agt_bvxj" — a second hyphen sitting
+# right next to the project/role separator — so the project segment is snake_case, keeping the
+# ONE hyphen unambiguous as "where the project ends"; matches assign-lib.ts's sessionName()).
+# Skips subcommands (`claude mcp ...`, `claude doctor`, ...) since they don't take --name, and
+# skips an explicit `-n/--name` the caller gave.
 #
 # Also skips plain -c/--continue/-r/--resume/--teleport/--from-pr: verified live (real `claude
 # -p --resume`/`-p -c`, 2026-09-02, see .agent-state/tasks/claude-session-naming/) that --name
@@ -858,7 +896,7 @@ claude() {
   for _i in {1..4}; do
     suffix+="${chars[$((RANDOM % 32 + 1))]}"
   done
-  command claude --name "${PWD:t:l}-agt_${suffix}" "$@"
+  command claude --name "${PWD:t:l:gs/-/_/}-agt_${suffix}" "$@"
 }
 
 # ============================================

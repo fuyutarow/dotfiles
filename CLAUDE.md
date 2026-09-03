@@ -120,6 +120,11 @@ All repo tasks go through **mise** (`mise tasks` to list):
   (`-n` / `--update=none`) that exited 0 and fooled callers (esp. agents) into thinking a
   copy/move succeeded when it was dropped. Mirrors `rm`→`rip`; OS-agnostic (same on BSD/GNU).
   When you *intend* to overwrite (incl. in scripts), call `cpf`/`mvf` — a bare `cp`/`mv` won't.
+- `git checkout` (and its `git/gitconfig` aliases `co`/`cb`) is a shell **function** that refuses
+  and prints the disambiguated replacement instead of running — branches → `git switch
+  [<branch>|-c <branch>]`, files → `git restore [-- <path>]`. Never suggest raw `git checkout`;
+  use `git switch`/`git restore` directly. Interactive shells only (scripts/CI/hooks get the
+  real binary via `command git`, and `git/gitconfig`'s `co`/`cb` still work there too).
 - **Terminal state is repaired by WRITING a known-good state, never by querying the terminal.**
   A dropped link never delivers the remote TUI's disable sequences, so the terminal keeps
   reporting input as escapes — mouse motion (`\e[<35;86;59M`) and, independently, Kitty-protocol

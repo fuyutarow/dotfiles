@@ -27,7 +27,10 @@ Most dotfiles configure a shell. Two things here are less usual:
   file — they name the conflict and point you at `cpf` / `mvf` to force it. The usual silent
   no-clobber (`cp -n`) exits `0`, fooling a caller — *especially an LLM agent* — into thinking a copy
   happened when the file was dropped. (`rm` is disabled in favor of `rip`, a trashcan `rm`; that half
-  is ordinary hygiene — the overwrite guard is the uncommon part.) `ssh` is guarded too, for a
+  is ordinary hygiene — the overwrite guard is the uncommon part.) `git checkout` is disabled the
+  same way, for the reason it was split upstream: one verb does branch-switch, file-restore, and
+  branch-creation duty at once, so a typo does something else plausible instead of erroring — the
+  guard names which one you meant and points at `git switch` or `git restore`. `ssh` is guarded too, for a
   different failure: a link that dies mid-session never delivers the remote TUI's disable
   sequences, so the terminal keeps reporting input as escapes — mouse motion *and*, separately,
   Kitty-protocol key events — and stays on the alternate screen. The shell re-asserts a

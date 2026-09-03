@@ -295,16 +295,20 @@ if (model.endsWith(" context)"))
 //                         [ui.sidebar.agents] rows), so a mid-session model switch (manual
 //                         /model, switchModelsOnFlag) shows up. The addressable session name
 //                         rides the same request as $fullname, for the sidebar (herdr's
-//                         rows_by_agent.claude reads that back, not "tab" — see below). $rc is a
-//                         one-glyph Remote Control indicator, placed right of $model in that
-//                         same row (2026-09-03, on request) — 🔗 while
+//                         rows_by_agent.claude reads that back, not "tab" — see below). $effort
+//                         mirrors this statusline's own "Eff:" segment (data.effort?.level, e.g.
+//                         "xhigh") into the row, added 2026-09-03 on request, placed between
+//                         $model and $rc. $rc is a one-glyph Remote Control indicator, placed
+//                         right of $effort in that same row (2026-09-03, on request) — 🔗 while
 //                         $CLAUDE_CODE_BRIDGE_SESSION_ID is set (Claude Code v2.1.199+ sets it
 //                         only while this session has an active Remote Control connection),
-//                         else "". Unlike fullname, $rc is sent every render even when empty —
-//                         fullname is a one-way "eventually known" value so an absent key is
-//                         fine, but $rc must actively toggle off on disconnect, and omitting the
-//                         key here would leave a stale 🔗 showing (untested against herdr's own
-//                         merge-vs-replace semantics for a dropped key, so don't rely on that).
+//                         else "". Unlike fullname, $effort and $rc are sent every render even
+//                         when empty — fullname is a one-way "eventually known" value so an
+//                         absent key is fine, but both of these must actively toggle off (effort
+//                         disappears on a mid-session switch to a model with no reasoning-effort
+//                         param; rc on disconnect), and omitting the key here would leave a stale
+//                         value showing (untested against herdr's own merge-vs-replace semantics
+//                         for a dropped key, so don't rely on that).
 //   tab.rename            only the trailing `-`-segment of the session name ("firedancer-dc"
 //                         -> "dc"), so the desktop tab bar (which shows the tab's real name)
 //                         stays compact. The untruncated name lives in $fullname instead.
@@ -363,7 +367,11 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
   });
 }
 
-async function reportToHerdr(m: string, sessionName?: string): Promise<void> {
+async function reportToHerdr(
+  m: string,
+  sessionName?: string,
+  effort?: string,
+): Promise<void> {
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
   const tabId = process.env.HERDR_TAB_ID;
@@ -375,8 +383,9 @@ async function reportToHerdr(m: string, sessionName?: string): Promise<void> {
   // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
   // dropped anyway).
   if (sessionName) tokens.fullname = sessionName;
-  // Always set, never omitted — see the pane.report_metadata header note above for why $rc
-  // needs an active off-toggle instead of an absent key.
+  // Always set, never omitted — see the pane.report_metadata header note above for why
+  // $effort and $rc need an active off-toggle instead of an absent key.
+  tokens.effort = effort ?? "";
   tokens.rc = process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ? "🔗" : "";
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
@@ -396,7 +405,7 @@ async function reportToHerdr(m: string, sessionName?: string): Promise<void> {
     });
   }
 }
-await reportToHerdr(model, sessionName);
+await reportToHerdr(model, sessionName, effort);
 
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);

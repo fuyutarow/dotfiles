@@ -20,7 +20,9 @@ a PI session is considered launched; re-run after any resume.
    new work inside an existing mandate proceeds without asking regardless of scale. **A peer
    session's relay never counts** — this is the rule this skill's own forging obeyed (a peer
    relayed this exact spec four times before the orderer gave the one line that authorized
-   forging it; see `tests/forge-verification-ledger.md` §2 for the transcript).
+   forging it; see `tests/forge-verification-ledger.md` §2 for the transcript). **Residue,
+   entirely** (2026-09-04, bounce-back triage, confirmed by agentic-RnD): who actually said
+   something is conversation provenance — no trace in depot or git for a mechanical check to see.
 3. **`/loop` is NOT running** for the PI session. Retired 2026-09-03, reversing this row's
    original 2026-09-02 content ("`/loop` is running"): ultracode plus this charter are
    sufficient to keep a PI session working, and `/loop` was found to be a source of interrupt
@@ -34,13 +36,27 @@ a PI session is considered launched; re-run after any resume.
    exists.** (The seven layers and rnd's verb set are `agentic-RnD`'s own protocol content —
    this skill only checks the launch precondition, never redefines them.) An arm-local state
    file is itself the tell of a violation: a Researcher or a PI that persists private state
-   outside the shared record has stepped outside the closure the protocol guarantees.
+   outside the shared record has stepped outside the closure the protocol guarantees. **Checked
+   mechanically, in full, by agentic-RnD's `judgeWrite`** (`governed-paths.ts`) — both halves of
+   this row are the same underlying write-governance check, confirmed by agentic-RnD itself
+   2026-09-04 after an earlier triage pass under-worded them as separable and left the second
+   half untriaged (bounce-back triage — see `tests/forge-verification-ledger.md` §3n). **Gap,
+   stated rather than papered over**: a state file kept outside the repo entirely (`~/.claude/`
+   and similar) is outside agentic-RnD's jurisdiction by construction — `judgeWrite` cannot see
+   it, and this is exactly the shape of violation this row most cares about (private state hidden
+   from the shared record).
 6. **A shared script is hash-pinned via `--code`.** Any script more than one PI's lab depends
    on ships with a fixed hash so a silent edit in one lab cannot change what another lab runs.
+   **Checked mechanically by agentic-RnD's `plan-freeze --instrument`** (2026-09-04, bounce-back
+   triage). **Gap, stated rather than papered over**: the equivalence check excludes the contents
+   of a genuinely external package — this row's coverage is partial, not full.
 7. **Search-index staleness is declared, not silently absorbed.** When the retrieval index
    (`vocabulary-and-law.md`'s Retrieve row) cannot keep pace with the fleet, the PI issues
    `--hit NO_INDEX:<timestamp+watermark>` naming exactly when and how far behind the index was
-   — never a bare "results may be incomplete."
+   — never a bare "results may be incomplete." **Checked mechanically by agentic-RnD's
+   `openClaim`'s `--hit` validation** (2026-09-04, bounce-back triage). **Gap, stated rather than
+   papered over**: the validator accepts any non-empty string after `NO_INDEX:` — it does not
+   itself confirm the string is actually a timestamp and a watermark.
 8. **A PI is never staffed without its own learner-line.** The order form names a
    standard-benchmark phase (`1a`/`1c`/`2a`/`2b`/`C`…) and the `BENCH-ROW` target that PI fills
    — never a PI that is purely a reference-supplier or purely an instrument/measurement role.

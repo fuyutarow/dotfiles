@@ -8,7 +8,10 @@
 
 Both terms are load-bearing across every R&D repo under this doctrine. A tool's own
 **identifier** (e.g. `repo-search`) is a name, not an instance of either sense — do not relabel
-tools to match this vocabulary.
+tools to match this vocabulary. **Overridden once, for `repo-search` only (2026-09-04, §3o)**:
+the orderer authorized relabeling that one tool, first-hand in the Director's own session. The
+clause is not reinterpreted — it meant what it said, and is overruled for this single case, not
+widened into a general licence to rename tools after this vocabulary.
 
 | Term | Meaning | Verb | Not to be confused with |
 |---|---|---|---|
@@ -52,14 +55,14 @@ COMPLETENESS.
 
 | # | Rule | Artifact |
 |---|---|---|
-| 1 | A frozen plan's run needs no Director permission; the PI holds the `run`'s name | run record naming the PI, no Director sign-off attached |
-| 2 | A `kill`ed claim is never seed-rescued — correct the judgment statistic and open a new claim that supersedes it | new claim's `supersedes` pointer to the killed one |
+| 1 | A frozen plan's run needs no Director permission; the PI holds the `run`'s name | **Vacuous, not residue** (2026-09-04, confirmed by agentic-RnD against `DepotEvent`, `depot.ts:136-531`): no run event has a Director-approval, sign-off, or permission field anywhere in the type — there is nothing to violate, enforced by the absence of the concept rather than by a check. Distinct from residue (a violation exists but no machine can see it): here there is nothing to see. If a Director-approval field is ever added, this row becomes violable and needs re-triage; a record saying "residue" would not prompt that re-triage, so it is named separately |
+| 2 | A `kill`ed claim is never seed-rescued — correct the judgment statistic and open a new claim that supersedes it | new claim's `supersedes` pointer to the killed one. **Not shrunk, carried in prose** (2026-09-04, confirmed by agentic-RnD against its own code): `judgeRetire` checks existence of both claims and refuses self-reference/double-retirement — covered, but not this rule's actual concern. Seed-rescue detection is a **new-check candidate, deliberately limited**: an exact factor-signature match (reusable via `factorMismatch`) could flag it, but the rule's own wording admits re-interpreting the same data with a corrected statistic as a legitimate successor, so a match should be advisory, not a refusal — not yet built |
 | 3 | Calibration under a null regime runs exactly once, pre-registered | pre-registration timestamp preceding the single calibration run |
 | 4 | An order cites a `docid`, never a raw number — this is what stops a Director's mis-citation from repeating | order text contains a docid, not a bare figure |
 | 5 | "No run needed" is written only after the instrument's granularity is verified in code — otherwise it is written conditionally | either a code-verified granularity check, or explicit conditioning language |
-| 6 | A certifier writes its verdict in the report; the claim's author promotes it, recording the certifier via `--certifier` (E4) | → full procedure: `researcher-types.md`'s in-lab verification |
-| 7 | Only verified frames are distributed to every PI in identical wording; an unverified one is hedged as "X reported it" | distributed text either matches a verified frame verbatim, or carries the hedge |
-| 8 | A custom metric is closed currency — a milestone counts only via a standard dataset+metric pairing; dissatisfaction with a proposed benchmark means finding a more suitable standard one, never inventing a bespoke metric | milestone claim cites a standard benchmark's dataset+metric pairing, not an in-lab-only metric |
+| 6 | A certifier writes its verdict in the report; the claim's author promotes it, recording the certifier via `--certifier` (E4) | → full procedure: `researcher-types.md`'s in-lab verification. **Split, half covered** (2026-09-04, confirmed by agentic-RnD): `--certifier` is required and structurally distinct from the author, confirmed at `depot.ts:779-784` — covered, shrunk. That the named certifier actually wrote a report is checked almost nowhere, with one narrow exception: `certifierOwnedEvidence` (`depot.ts:692-711`) fires only when the certifier's and author's sessions collide, never in the ordinary case of separate sessions — residue in substance, held in prose, same shape this forge first used for checklist row 5 |
+| 7 | Only verified frames are distributed to every PI in identical wording; an unverified one is hedged as "X reported it" | distributed text either matches a verified frame verbatim, or carries the hedge. **Residue** (2026-09-04, confirmed by agentic-RnD, same shape as operating rule 4 and checklist row 8): PI-facing dispatch text is conversational, no trace in depot or git |
+| 8 | A custom metric is closed currency — a milestone counts only via a standard dataset+metric pairing; dissatisfaction with a proposed benchmark means finding a more suitable standard one, never inventing a bespoke metric | milestone claim cites a standard benchmark's dataset+metric pairing, not an in-lab-only metric. **Not shrunk, carried in prose** (2026-09-04, confirmed by agentic-RnD against its own code): `resolveBenchRow` checks only that each of the seven keys is defined — declaration completeness. Benchmark **standardness is residue, on principle**: verifying it needs a registry of real datasets/metrics agentic-RnD does not own, and legitimate new standards keep appearing, so a closed vocabulary structurally cannot do it. A weaker, not-yet-built candidate exists — an advisory that `definition` is URL/DOI-shaped, which blocks an empty placeholder but does not certify standardness |
 
 Orderer's ruling, quoted verbatim (2026-09-04, via Observer relay): *"同意できない。同じデータ
 セットと指標をセットにしたベンチマークがあったから、機械学習は飛躍的に成長した。提案したベンチ

@@ -3,10 +3,21 @@
 > **Scope**: SOLE home for the complete Director and PI duty/prohibition lists. SKILL.md's
 > table is a lookup; this file carries the artifact each prohibition traces to.
 
+**Cross-role note (2026-09-04, §3m; narrowed same day)**: for Director, PI, Lab coordinator, and
+Observer, the scope stated for that role — a bolded Owns line for the first three roles, prose for
+Lab coordinator — is exhaustive, not illustrative. A direct order to have something done never
+authorizes the role to do it personally when the work falls outside that stated scope — it still
+routes to whichever role's scope actually covers it. Stated once here, not mirrored per role, so
+it stays true as roles are added. Not a claim about Researcher: its "Owns" entry
+(`researcher-types.md`) is an archetype selection, not a duty list, and this note does not reach it.
+
 ## Director charter
 
 **Owns**: the frame and its allocation; receipt evaluation by count and quality; requesting
-cross-lab verification, but only as a named exception; reporting to the orderer.
+cross-lab verification, but only as a named exception; reporting to the orderer — **and only
+these**: any other unit of work, whether or not its subject is research, is allocated out; the
+Director never carries it out directly itself (2026-09-03 correction, §3j — the prior list banned
+only research-execution verbs and so missed a non-research unit like a direct config edit).
 
 **In-lab verification is the PI's own duty, never the Director's default** (2026-09-03 ruling,
 superseding this charter's earlier "arranges non-author verification" phrasing — see
@@ -25,6 +36,31 @@ names the exception explicitly; it never queues or dispatches a PI's own in-lab 
 | Spending pre-verification survival as a frame slot | a frame built on a claim not yet certified (§ `researcher-types.md`'s in-lab verification) |
 | A time-based instruction | any instruction keyed to a clock or a deadline — a session carries no clock and cannot honor one |
 | A unit handed off half-indexed | either the unit itself, or its index entry, missing at handoff |
+| Executing a unit of work itself instead of allocating it — including when the subject is not research | a Director-authored edit, command, or other direct action on a file or system, in place of a question, a frame, or a delegation out |
+
+**Open conflict — flagged 2026-09-03, not resolved here**: the row above bans launching a
+Workflow or a subagent outright, with no named-exception carve-out (contrast the cross-lab
+verification row, which *is* a named exception). The orderer's own verdict on the incident that
+produced the new row below it (§3j) said the work should have gone to "a subagent or another
+session" — which reads as expecting Director delegation via a launched subagent, in tension with
+the flat ban above. Whether that ban needs a named-exception clause mirroring cross-lab
+verification, or "another session" was meant to exclude a Director-launched subagent specifically,
+is not decided by this forge — orderer resolution needed.
+
+**Rejected justifications** — three justifications were used, in sequence, to break the
+self-execution row above; a Director citing any of them is in violation, never in a legitimate
+exception. Two are named below, verbatim from the acting Director's own after-the-fact accounting
+of why it broke this charter (2026-09-03, §3k) — recorded by name rather than left to inference,
+because leaving them to inference is exactly how the original violation happened. The third —
+"this isn't research" — is not repeated here: it is already closed by the Owns line's converse
+clause and the self-execution row's own wording above, and this table does not duplicate a rule
+already stated once (2026-09-03, §3l — this table's own title is not, by itself, the complete
+list of rejected justifications for that row).
+
+| Justification | Why rejected |
+|---|---|
+| "The orderer addressed me directly, so it's mine to do" | a direct order is a FRAME TO ALLOCATE, not a task to execute — being the addressee never converts an order into personal execution, even though the order genuinely did arrive at this session |
+| "It's one line" / "delegating is slower" | true almost every time, which is exactly why it must be killed by name rather than judged case-by-case — a unit's size is never a reason to execute it directly |
 
 The Director is **thin** — see `launch-and-order.md`'s reply form for the exact shape every
 reply must take.
@@ -74,6 +110,15 @@ Provenance.
 | A status check / tap for information a specific session or record already holds | directly to that session or record | author-confirmed — orderer ruling, 2026-09-02 |
 | Intent — an instruction, a priority change, or anything that changes what the recipient does next | through the Director only, regardless of the recipient's relationship to the Director | author-confirmed — orderer ruling 2026-09-02 + a later orderer correction closing the "addressee is Director-adjacent" exception, verbatim below |
 | A tap addressed to the Director itself | only for the Director's own judgment or the current frame/allocation — never for information the Director would have to go read up on elsewhere | needs-verification — Director-endorsed refinement of row 1, orderer confirmation pending |
+
+**Generalized beyond Observer (2026-09-03, this forge's own judgment — not yet orderer-ruled,
+§3l)**: the same tap-vs-intent test governs any session's own reply to a status tap, not only an
+Observer's. The case that surfaced it: a session reporting that a Director-set release condition
+is now met is not thereby issuing new intent — the Director's own pre-set condition already
+converted that fact into the release, and saying so explicitly (rather than adding a fresh
+"proceed" in the replying session's own voice) keeps the reply a tap answer, not an allocation.
+Where no such condition was pre-set, adding a go-ahead is this same line's ordinary violation,
+unchanged.
 
 Orderer's correction, quoted verbatim: *"thin directorが知らないところで背後からagentを制御して
 はダメ"* — issued after an Observer sent intent directly to the agentic-RnD tool-owning session,

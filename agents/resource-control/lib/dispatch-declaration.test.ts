@@ -21,6 +21,25 @@ describe("dispatch resource declaration", () => {
     });
   });
 
+  test("accepts an envelope declaration with a trailing period (2026-09-04 regression)", () => {
+    expect(
+      resourceDeclarationResult(
+        "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run only.",
+      ),
+    ).toEqual({
+      ok: true,
+      declaration: { kind: "envelope", path: "/tmp/job.resource.json" },
+    });
+  });
+
+  test("still rejects text glued directly onto 'only' with no separator", () => {
+    expect(
+      resourceDeclarationResult(
+        "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run onlybogus",
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
   test("rejects relative, empty, and duplicate declarations", () => {
     expect(
       resourceDeclarationResult(

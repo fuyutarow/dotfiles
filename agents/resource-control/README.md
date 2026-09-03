@@ -6,12 +6,23 @@ GPU-first argument live in
 
 `agent-resource-run.ts` is linked to `~/.local/bin/agent-resource-run`. On Linux it reserves a
 disjoint CPU set and aggregate RAM/VRAM/scratch headroom. Each admitted command runs in a transient
-user-systemd scope with a CPU quota, `MemoryMax`, zero job swap, `OOMPolicy=kill`, and a coarse
-thread-aware `TasksMax`. A process-group monitor still enforces the exact declared process count,
+user-systemd scope with a CPU quota, `MemoryHigh` and `MemoryMax` both set to the exact declared
+RAM envelope (no runner-added margin on either — 2026-09-04, see `agent-resource-run.test.ts`'s
+"no runner-added margin" test), zero job swap, `OOMPolicy=kill`, and a coarse thread-aware
+`TasksMax`. This only covers commands actually launched through this file's own `buildSystemdLaunch`
+— a job started via a hand-typed `systemd-run --user --unit=<name> …` (the sanctioned durability
+pattern for outliving a session) bypasses this entirely; that is a distinct, known coverage gap,
+not something this tool can see or enforce. A process-group monitor still enforces the exact declared process count,
 walltime, and TERM→KILL cleanup. Finalization also stops and rechecks the whole systemd scope, so a
 descendant that creates a new session cannot survive by escaping the monitored process group; an
 unverifiable scope cleanup cannot produce `PASS`. Missing user-cgroup enforcement is a denial, not
 a monitor-only fallback.
+
+**Investigating an unattributed `agent-resource-*.scope` OOM-kill?** `agent-resource-run.test.ts`
+deliberately triggers a real kernel OOM-kill against a real systemd scope as one test's passing
+condition (2026-09-04, mistaken for live-dispatch harm twice in one evening). Check whether
+`bun test agents/resource-control/` ran around that time before assuming the kill came from a real
+dispatch — see that test's own comment for the incident history.
 
 Several declared GPU jobs may share one device: the controller aggregates the declared
 `vram_peak_bytes` of the live reservations on that GPU and admits against

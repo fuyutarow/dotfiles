@@ -36,8 +36,13 @@ export function resourceDeclarationResult(
     };
   }
 
+  // A trailing "." is admitted (2026-09-04): the phrase is often the closing clause of a
+  // natural sentence in the surrounding dispatch message ("...: agent-resource-run only."),
+  // and the parser already tolerates arbitrary trailing prose after a whitespace — this only
+  // extends that same tolerance to a period abutting "only" with no space before it. Six
+  // otherwise well-formed dispatches were denied on exactly this before the fix.
   const envelope =
-    /RESOURCE-ENVELOPE\s*\(([^)\r\n]+)\)\s*:\s*agent-resource-run only(?:\s|$)/i.exec(
+    /RESOURCE-ENVELOPE\s*\(([^)\r\n]+)\)\s*:\s*agent-resource-run only\.?(?:\s|$)/i.exec(
       text,
     );
   if (envelope !== null) {

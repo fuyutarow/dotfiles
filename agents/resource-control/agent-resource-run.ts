@@ -1298,6 +1298,18 @@ export function buildSystemdLaunch(
       "--expand-environment=no",
       `--unit=${scopeBase}`,
       `--property=CPUQuota=${manifest.cpu_threads * 100}%`,
+      // MemoryHigh at the SAME value as MemoryMax (2026-09-04, incident: a 28 GiB declaration
+      // grew to a 34.5 GB peak and starved the host — the job never went through this function
+      // at all, a separate coverage-hole finding; this fix hardens what this function itself
+      // emits). Deliberately no runner-chosen multiplier on either number: the declared envelope
+      // is the sole source of truth for both the soft-reclaim threshold and the hard-kill
+      // threshold. MemoryHigh gives the kernel almost no room to grow past the declared line
+      // before MemoryMax's OOM-kill fires — reclaim can run across several small allocations
+      // near that line, not exactly once, but the margin stays negligible either way. Strictly
+      // tighter than a `declared × 1.1` two-tier design (considered, not used): host safety is
+      // what this fix exists for, and a runner-added margin is exactly the "declaration ≠
+      // enforced number" shape already rejected for the OOM floor, even framed as kill hysteresis.
+      `--property=MemoryHigh=${manifest.host_ram_peak_bytes}`,
       `--property=MemoryMax=${manifest.host_ram_peak_bytes}`,
       "--property=MemorySwapMax=0",
       `--property=TasksMax=${tasksMax}`,

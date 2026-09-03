@@ -319,6 +319,7 @@ describe("kernel enforcement", () => {
       tasksMax: 54,
     });
     expect(launch.argv).toContain("--property=CPUQuota=200%");
+    expect(launch.argv).toContain(`--property=MemoryHigh=${128 * MiB}`);
     expect(launch.argv).toContain(`--property=MemoryMax=${128 * MiB}`);
     expect(launch.argv).toContain("--property=MemorySwapMax=0");
     expect(launch.argv).toContain("--property=TasksMax=54");
@@ -331,6 +332,22 @@ describe("kernel enforcement", () => {
       "-c",
       "true",
     ]);
+  });
+
+  test("MemoryHigh and MemoryMax both equal the declared envelope, no runner-added margin (2026-09-04 incident)", () => {
+    const declared = 28 * GiB;
+    const manifest = cpuManifest({ host_ram_peak_bytes: declared });
+    const launch = buildSystemdLaunch(manifest, reservation(), ["true"]);
+    expect(launch.argv).toContain(`--property=MemoryHigh=${declared}`);
+    expect(launch.argv).toContain(`--property=MemoryMax=${declared}`);
+    // No multiplier anywhere: both properties cite the exact declared byte count.
+    const memoryProps = launch.argv.filter((a) =>
+      a.startsWith("--property=Memory"),
+    );
+    for (const prop of memoryProps) {
+      if (prop.startsWith("--property=MemorySwapMax=")) continue;
+      expect(prop.endsWith(`=${declared}`)).toBe(true);
+    }
   });
 
   test("the current host accepts the required user-systemd properties", () => {
@@ -870,6 +887,13 @@ describe("bounded execution", () => {
     expect(readdirSync(stateDirectory)).toEqual([]);
   });
 
+  // This test deliberately triggers a REAL kernel OOM-kill against a REAL systemd scope —
+  // it is not simulated (2026-09-04, recurred twice in one evening as "unattributed OOM kill on
+  // agent-resource-*.scope" reports to two other fleets, once resolved by matching this run's
+  // own scope UUIDs against dmesg, once by attribution failing because the dmesg ring had
+  // already rolled past the run and only a firedancer journal read settled it). Before
+  // investigating an unattributed `agent-resource-*.scope` OOM-kill in dmesg or a journal, check
+  // whether `bun test agents/resource-control/` ran around that time — this is very likely it.
   test("the cgroup kills a job before it can exceed its RAM envelope", async () => {
     const stateDirectory = temporaryStateDirectory();
     const snapshot = probeHostSnapshot(process.cwd());

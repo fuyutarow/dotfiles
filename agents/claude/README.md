@@ -36,8 +36,7 @@ hook to the house form: `sh ~/.claude/hooks/herdr-agent-state.sh session`.
 
 Hook logic is TypeScript run by **bun** (in `Brewfile`, both OSes); the only shell left
 is `hooks/run.sh`, a ~30-line runner that locates bun (hooks can run with a narrow PATH)
-and execs the named `.ts` with stdin passed through. Heavy detection lives in the
-**correo** Rust binary; the `.ts` wrappers own hook-protocol plumbing + block policy.
+and execs the named `.ts` with stdin passed through.
 
 | hook (event) | job | fail direction |
 |---|---|---|
@@ -45,7 +44,11 @@ and execs the named `.ts` with stdin passed through. Heavy detection lives in th
 | `enforce-search-route.ts` (PreToolUse `Grep\|Bash`) | in an operational ccc project, deny raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious inline-runtime search reimplementations; require a declared route through repo-search | **CLOSED** — any hook error, missing bun, or missing compatibility symlink ⇒ deny; ccc absent/unregistered ⇒ silent allow |
 | `detect-leaked-toolcall.ts` (Stop) | alert (never block) on a tool call emitted as plain text; log + bell + desktop notify | OPEN |
 | `detect-audit-theater.ts` (Stop) | exit 2 when a prose-audit turn uses self-justifying / unbounded gate language | OPEN |
-| `detect-prose-correo.ts` (Stop) | exit 2 on correo findings — calque / codemix density / coinage | OPEN (no correo ⇒ silent skip) |
+| `assign-command.ts` (UserPromptSubmit, no matcher — fires on EVERY prompt) | implements `/assign <role>`: renames this session to `<project>-<role>_<suffix>` via `sessionTitle` (same effect as `/rename`) and injects any configured role charter (`assign-roles.toml`) as `additionalContext` — no extra model turn, no subprocess spawned | OPEN — any error or non-`/assign` prompt silently passes through unmodified (fail-open by construction; see the script's own header) |
+
+`detect-prose-correo.ts`, a Stop hook wrapping an external `correo` Rust binary for
+Japanese-prose linting (calque/codemix/coinage/readability), was removed 2026-09-03 at the
+user's explicit direction, along with `correo.toml` and its dedicated tests.
 
 `lib.ts` holds the shared plumbing (stdin JSON, turn-scoped transcript slicing,
 code/quote stripping, PreToolUse decision JSON, `findExe`). Rules: **zero npm deps**
@@ -53,7 +56,7 @@ code/quote stripping, PreToolUse decision JSON, `findExe`). Rules: **zero npm de
 direction is explicit** in each hook's top-level try/catch — a TS exception exits 1,
 which Claude Code treats as non-blocking, i.e. silent fail-open unless caught.
 
-Tests spawn each hook end-to-end with synthetic payloads (fake `correo` included):
+Tests spawn each hook end-to-end with synthetic payloads:
 
 ```sh
 mise run test:hooks     # = bun test agents/claude/hooks

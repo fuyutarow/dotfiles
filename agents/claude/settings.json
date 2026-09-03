@@ -99,6 +99,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh assign-command.ts",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptExpansion": [
@@ -172,14 +181,6 @@
           {
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh detect-audit-theater.ts"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh detect-prose-correo.ts"
           }
         ]
       },

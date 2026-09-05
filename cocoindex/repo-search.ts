@@ -33,9 +33,21 @@
 // gets to assume it: absence of a watermark is never inferred as "fine", only ever read back as
 // the fact something already recorded. See the long comment above gitHead() for the reasoning and
 // the reproduction that motivated it, and checkIndexFreshness() for the read-side mechanics.
-// `structural` (ccc grep) and the rg routes read the working tree directly — verified empirically
-// (grep found a brand-new never-indexed file and a same-second unindexed edit) — so they are
-// correctly current always and are NOT gated by any of this.
+// The rg routes read the working tree directly and are correctly current always — re-verified
+// live 2026-09-04 (a brand-new file with a unique marker was found by `literal` immediately).
+//
+// `structural` (ccc grep) was ALSO believed to read the working tree directly, on an earlier
+// claim of empirical verification with a named reproduction. That claim is CONTRADICTED by live
+// measurement (2026-09-04): the same brand-new-file test that confirms the rg routes above
+// returns NO_MATCH from `structural` for content `literal` finds instantly, reproduced
+// independently twice (by gnya, and separately by this forge with a different marker/file, after
+// ruling out a dotfile-naming confound in its own first attempt). Bounded claim, not
+// generalized: contradicted for this ccc version, this project — not established as a universal
+// property, and not yet resolved into a fix. Until resolved, do NOT assume `structural` sees
+// content newer than its last `ccc index` run; this row is NOT gated by checkIndexFreshness
+// either, so there is currently no refusal to protect a caller from a stale `structural` result —
+// see the forge ledger for the open item (orderer decision pending, behaviour deliberately
+// unchanged pending it).
 //
 // Exit: 0 success, 1 no rg/ccc-search matches or Cleye ordinary-unknown refusal, 2 other
 // usage/environment failure, 3 stale/missing/corrupt/unrecorded index watermark (NO_INDEX), 75 ccc
@@ -288,7 +300,9 @@ function remedy(project: string): string {
   return `run 'repo-search index' in ${project} to build a fresh, verified watermark`;
 }
 
-type Freshness = { status: "fresh" } | { status: "stale"; message: string };
+type Freshness =
+  | { status: "fresh"; watermark: Watermark }
+  | { status: "stale"; message: string };
 
 // Deliberately NOT self-healing: an earlier design considered treating "the index DB's mtime is
 // newer than the watermark" as proof of an out-of-band `ccc index`, and auto-adopting current
@@ -342,11 +356,19 @@ async function checkIndexFreshness(
   if (watermark.value.head !== currentHead) {
     return {
       status: "stale",
+      // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
+      // real index exists and was genuinely fresh at some point -- the launch checklist's row 7
+      // requires a PI to declare `--hit NO_INDEX:<timestamp+watermark>` naming exactly how far
+      // behind the index was, but until now this message gave two commit hashes and no
+      // timestamp, so a PI had to go compute that separately. `Watermark.indexedAt` was already
+      // recorded; it just was not being printed. The other NO_INDEX branches (missing/invalid/
+      // stamp/no-artifacts) do not get this treatment -- there either is no trustworthy
+      // watermark to read a timestamp from, or the "how stale" question does not apply.
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
-        `index was built at HEAD=${headLabel(watermark.value.head)} but the working tree is now at ` +
-        `HEAD=${headLabel(currentHead)}; that drift is exactly what this gate exists to refuse serving. ` +
-        `Remedy: ${remedy(project)}\n`,
+        `index was built at HEAD=${headLabel(watermark.value.head)} (indexedAt=${watermark.value.indexedAt}) ` +
+        `but the working tree is now at HEAD=${headLabel(currentHead)}; that drift is exactly what this ` +
+        `gate exists to refuse serving. Remedy: ${remedy(project)}\n`,
     };
   }
   // Cheap sanity check, NOT a security boundary (a hand-written watermark file cannot be told
@@ -363,7 +385,7 @@ async function checkIndexFreshness(
         `an index that was never built is refused. Remedy: ${remedy(project)}\n`,
     };
   }
-  return { status: "fresh" };
+  return { status: "fresh", watermark: watermark.value };
 }
 
 function exactlyOneQuery(route: string, queries: string[]): string {
@@ -486,7 +508,21 @@ async function runCccSearch(
   // "stamp" watermark is refused as stale before it ever gets here -- see the source === "stamp"
   // branch there), so every fresh result was produced by `index` observing a real `ccc index`
   // child succeed. There is no second, lower-confidence tier anymore.
-  const confidence = "confidence=verified(index)";
+  //
+  // indexedAt/head ride on EVERY result this function can still produce, not only NO_INDEX
+  // (2026-09-04, feature not repair -- see this file's own git history / the forge ledger for
+  // the reasoning). Before this, "was the index fresh when this absence was claimed" survived
+  // only if a PI remembered to declare `NO_INDEX:<timestamp+watermark>` themselves; a plain
+  // NO_MATCH carried nothing. Stamping the success path moves that fact out of memory and into
+  // the output for BOTH NO_MATCH and PASS, so a gate can check it later instead of trusting
+  // recall. Scoped to concept/battery only (this function's only two callers) -- `structural`
+  // and the rg routes read the working tree directly (verified empirically, see the file-header
+  // comment above) and have no persisted watermark to stamp; `route=` alone already tells a
+  // reader which class a line belongs to, so a missing stamp on those routes is never ambiguous
+  // with an omission here.
+  const confidence =
+    `confidence=verified(index) indexedAt=${freshness.watermark.indexedAt} ` +
+    `head=${headLabel(freshness.watermark.head)}`;
 
   const ccc = requireExecutable("ccc");
   const statusTimeoutMs = Math.min(timeoutMs, 5_000);

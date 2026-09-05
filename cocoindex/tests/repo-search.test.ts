@@ -339,6 +339,22 @@ describe("repo-search route contract", () => {
     expect(result.log).toBe("");
   });
 
+  test("a head-drift NO_INDEX names the watermark's indexedAt, so a PI can cite it (row 7)", () => {
+    const { dir } = registerGitProject();
+    const staleHead = "a".repeat(40);
+    const builtAt = "2026-08-30T12:00:00.000Z";
+    writeWatermarkFile(dir, { head: staleHead, indexedAt: builtAt });
+
+    const result = run(dir, [
+      "concept",
+      "--query",
+      "where authorization is enforced",
+    ]);
+
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain(`indexedAt=${builtAt}`);
+  });
+
   test("battery is refused as NO_INDEX before any query runs, not partway through", () => {
     const { dir } = registerGitProject();
     writeWatermarkFile(dir, { head: "b".repeat(40) });
@@ -544,6 +560,23 @@ describe("repo-search route contract", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("confidence=verified(index)");
     expect(result.stdout).not.toContain("operator-asserted");
+  });
+
+  test("a fresh result carries the watermark's indexedAt and head, not only a bare confidence tag (2026-09-04)", () => {
+    const { dir, head } = registerGitProject();
+    plantIndexArtifact(dir);
+    const builtAt = "2026-09-01T00:00:00.000Z";
+    writeWatermarkFile(dir, { head, indexedAt: builtAt });
+
+    const result = run(dir, [
+      "concept",
+      "--query",
+      "where authorization is enforced",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`indexedAt=${builtAt}`);
+    expect(result.stdout).toContain(`head=${head}`);
   });
 
   test("index runs ccc index then records the watermark at the resulting HEAD, labelled verified", () => {

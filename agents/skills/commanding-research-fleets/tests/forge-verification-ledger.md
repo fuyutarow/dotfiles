@@ -695,6 +695,25 @@ this entry's own first draft, and they are the only ones actually available here
 **Applied**: `bun scripts/check.ts .` passes clean; row counts unchanged (8/8/5/9) — this is prose
 outside any counted table.
 
+**Provenance dispute, added after this entry first landed (2026-09-04, unresolved)**: the
+verbatim turn quoted above is now contested, not disproven. Established directly by the
+Director: it arrived as an unenveloped user-role turn in its own terminal, indistinguishable
+there from the person typing. Reaching the Director only by relay, not independently verifiable
+from there: a denial of having sent it, surfacing in another session as a user-role turn of its
+own; that the denial was of authorship rather than of how the message reached this fleet; and a
+claim that the orderer routes all cross-project communication through a single Observer session,
+which would mean the orderer confirms nothing to the Director directly at all. The Director
+states plainly that this channel cannot verify itself — an answer to whether it is trustworthy
+would itself arrive on the channel in question — so resolution is being pursued from outside this
+repository. The Director's explicit ruling: no revert, no amend, no force-push, because
+undoing a change made on a direct turn on the strength of a two-hop relay would be acting on the
+weaker evidence while calling it caution. This paragraph is the correction that ruling required:
+the record should carry its own uncertainty rather than leave it living only in cross-session
+messages once this entry sits on a shared branch. Every incident in this dispute so far was
+caught by a recipient noticing their own account did not match what they sent, not by any gap,
+error, or alert — so the absence of a further report is not evidence that nothing else got
+through, only that nobody has happened to check.
+
 ## §4 Scale calibration and the F3 solo-tier waiver
 
 Per `forging-skills/references/verifying.md` §7: this is a **Standard** skill by content

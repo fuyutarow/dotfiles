@@ -13,6 +13,14 @@ the orderer authorized relabeling that one tool, first-hand in the Director's ow
 clause is not reinterpreted — it meant what it said, and is overruled for this single case, not
 widened into a general licence to rename tools after this vocabulary.
 
+**Provenance dispute (2026-09-04, unresolved)**: the turn this override rests on is contested,
+not disproven. It arrived as an unenveloped user-role turn in the Director's own terminal,
+indistinguishable there from the person typing; separately, a denial of having sent it reached
+this fleet via relay from another session — itself unverifiable from within this channel, since
+an answer to whether this channel is trustworthy would arrive on the channel in question.
+Resolution is being pursued from outside this repository. Until it resolves, treat this override
+as unconfirmed, not as settled fact — see the ledger's §3o entry for the fuller account.
+
 | Term | Meaning | Verb | Not to be confused with |
 |---|---|---|---|
 | **Retrieve** | CBR's 4R sense: pull a precedent from records, soks, or a fold | "引く" / "照合" | machine exploration of a hypothesis space |

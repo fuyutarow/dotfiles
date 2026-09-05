@@ -58,6 +58,10 @@ to a source):
    operationalisation.
 4. **The introduction-type-specific extra requirement.** The types are drawn from the corpus. The
    per-type obligation attached to each is engineered here.
+5. **Branch agreement as a mechanical rung.** `Closed route`, `Introduction type` and `Status`
+   state one decision from three sides. Disagreement between them is therefore checkable with no
+   semantic judgement at all. No corpus claim proposes this. It is engineering, and it exists
+   because the first forge shipped a packet whose succeeded branch could not be written.
 
 ## 4. Provenance grade table — SOLE home for this skill
 

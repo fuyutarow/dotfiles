@@ -321,7 +321,7 @@ These are **generation-completeness** failures, not comparative selection.
 | “Persist, review, supersede, or retire this frozen packet or transfer bundle.” | `governing-research-documentation` — govern durable locus, lineage, review, and lifecycle only; mapping and `MAPPING-BREAK` meaning stay HERE |
 | “What are we not seeing, and what does the practitioner know but not write down?” | `surfacing-blind-spots` |
 | “Is this residual real or an artifact?” | `raising-resolution` |
-| “There is an anomaly the current account does not predict, and no frame is selected yet.” | `forming-hypotheses-from-anomalies` — it fixes the contrast, exhausts the closed-vocabulary route, and emits an `ABDUCTION LICENSE`; a LICENSE typed `TRANSFER` with a non-empty `Introduced terms` row is a provenance-bearing seed for entry-gate item 4. It never emits candidates, and this skill never routes back to it (added 2026-09-05, reciprocal of that skill’s DECISIVE cut) |
+| “There is an anomaly the current account does not predict, and no frame is selected yet.” | `forming-hypotheses-from-anomalies` — it fixes the contrast, explains inside the current vocabulary first, and builds exactly ONE `HYPOTHESIS` packet; one typed `TRANSFER` with a non-empty `Introduced terms` row is a provenance-bearing seed for entry-gate item 4. It never ranks a batch, and this skill never routes back to it (2026-09-05, reciprocal of that skill’s DECISIVE cut) |
 | “Generate distinct thesis candidates for this selected frame.” | **HERE** |
 | “Which candidate is important/feasible enough to admit locally?” | `directing-research-sections` |
 | “Design a precommitted falsifying experiment for this expensive/irreversible chosen thesis.” | `acting-on-hypotheses` |

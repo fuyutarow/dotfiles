@@ -39,10 +39,17 @@ system's own authors said so:
 **What it cannot catch.** Naming the supplied set does not make it a good one. The row is
 self-reported. It converts an invisible assumption into an auditable one. That is all.
 
-## A3 EXHAUSTION — the license, and why it is a record rather than a judgement
+## A3 VOCABULARY — which branch you are in, and why it is a record rather than a judgement
 
-**Rule.** A vocabulary-introducing hypothesis requires one of two rows. Either
-`EXHAUSTED — <what was tried, what failed>`, or an argued `NOT-EXHAUSTED`. Missing → `NO-LICENSE`.
+**Rule.** Record how the closed-vocabulary attempt came out, in one of three rows.
+`SUCCEEDED — <the account it produced>` ends the packet at `CLOSED-VOCABULARY`. Nothing was
+introduced, so nothing needed licensing. `EXHAUSTED — <what was tried, what failed>` licenses an
+introduction. `NOT-EXHAUSTED — <why not>` licenses one only with the argument written in that row.
+A vocabulary-introducing packet with none of the three is `NO-LICENSE`.
+
+`SUCCEEDED` is not the gate failing — it is the common outcome, and usually the correct one.
+The first forge omitted it, which made that branch unrepresentable in its own packet.
+`scripts/hypothesis-check.ts` now carries a clean good-packet case per branch (ledger 2026-09-05).
 
 ### Why a record and not a judgement
 
@@ -69,13 +76,17 @@ simple syntactic condition ensuring it holds is known. That is stated by the aut
 one of whom wrote the original theory (CLV-009, CLV-Y002). Hence the gate checks *that the closed route was
 attempted*, never *that the setting was closed*.
 
-**What it cannot catch.** A perfunctory attempt recorded as EXHAUSTED. The floor sees a non-empty
-row. Only a reader sees whether the attempt was serious. Fan out the attempt when it matters.
+**What it cannot catch.** A perfunctory attempt recorded as `EXHAUSTED`, or a thin account
+recorded as `SUCCEEDED`. The floor sees a non-empty row and that the three branch rows agree.
+Only a reader sees whether the attempt was serious. Fan out the attempt when it matters.
 
-## A4 DISCRIMINATION — an introduction must buy an observation
+## A4 DISCRIMINATION — a hypothesis must buy an observation
 
-**Rule.** Name an observation the old vocabulary could not express, plus the outcome that retires
-the introduction. No discriminator → the term renames the anomaly. Emit `NO-LICENSE`.
+**Rule.** Name an observation that comes out differently if the hypothesis is false, plus the
+outcome that retires it. BOTH branches owe this row. An account that no observation could separate
+from the one you already had is a rename too, even with nothing introduced.
+Where a term WAS introduced, that observation must be one the OLD vocabulary could not express.
+Otherwise the introduction is `NO-LICENSE`, though the hypothesis itself survives.
 
 | Claim | Result | Consequence for the gate |
 |---|---|---|
@@ -94,7 +105,7 @@ All four gates REPORT. None certifies that an introduction was necessary, good, 
 |---|---|---|
 | A1 | the foil | whether it was well chosen |
 | A2 | the frame | whether it was a good frame |
-| A3 | the attempt | whether a new term was necessary |
+| A3 | the attempt and its outcome | whether a new term was necessary |
 | A4 | the discriminator | whether it is obtainable |
 
 VOC-003 is why this asymmetry is structural rather than timid. A gate failing closed on necessity

@@ -247,7 +247,8 @@ fixtures, not success evidence; they cannot establish novelty, value, or truth.
 ## PROSE-DEBT waiver (2026-09-05)
 
 Touched by the `forming-hypotheses-from-anomalies` forge: ONE reciprocal routing row added to
-SKILL.md. F2 requires reciprocal pointers, the new skill's DECISIVE cut named this table, and the
+SKILL.md, then re-worded in place on 2026-09-05 when that skill was reorganized and its
+artifact became a `HYPOTHESIS` packet rather than an `ABDUCTION LICENSE`. F2 requires reciprocal pointers, the new skill's DECISIVE cut named this table, and the
 row did not yet exist. SKILL.md body is at 0 prose-debt WARNs. `references/` carries 32 long
 sentences (worst `generation-engine.md`, 14), all PRE-EXISTING and untouched by this edit.
 

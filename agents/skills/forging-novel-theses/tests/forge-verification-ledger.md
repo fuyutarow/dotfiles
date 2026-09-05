@@ -243,3 +243,13 @@ human-tacit elicitation, semantic-dedup verdict, or orchestration contract.
 The RECIPES are evidence-informed but not a MECE or end-to-end validated causal theory of creativity.
 The coordinates are skill-supplied bookkeeping axes. Case examples and gate checks are mechanical
 fixtures, not success evidence; they cannot establish novelty, value, or truth.
+
+## PROSE-DEBT waiver (2026-09-05)
+
+Touched by the `forming-hypotheses-from-anomalies` forge: ONE reciprocal routing row added to
+SKILL.md. F2 requires reciprocal pointers, the new skill's DECISIVE cut named this table, and the
+row did not yet exist. SKILL.md body is at 0 prose-debt WARNs. `references/` carries 32 long
+sentences (worst `generation-engine.md`, 14), all PRE-EXISTING and untouched by this edit.
+
+**Waived**, per `forging-skills` `references/architecture.md` §5: full atomization is explicitly
+NOT indicated for references' argued prose. Queue position: next reforge of this skill.

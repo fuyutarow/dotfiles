@@ -1,7 +1,7 @@
 {
-  "maxListingChars": 59102,
-  "measuredOn": "2026-09-03",
-  "skillsAtMeasurement": 62,
+  "maxListingChars": 60520,
+  "measuredOn": "2026-09-05",
+  "skillsAtMeasurement": 63,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
@@ -26,6 +26,15 @@
       "to": 59102,
       "spentBy": "commanding-research-fleets",
       "reason": "One amount, one cause: the new skill's own description (1,094 chars), no drift absorbed — the collection re-measured clean at 58,008 for 61 skills before this admission. Forged solo per an explicit direct-user instruction (\"thin directorと協調してスキル作成してください\") after four earlier peer relays of the same spec were each refused as non-authorizing. Function+existence gate (forging-skills step 0) found no owner: supervising-research-programmes/directing-research-sections own the programme/section state machinery this doctrine's vocabulary maps onto but never merges with, orchestrating-agents owns generic dispatch not this fleet's specific role content, and codifying-doctrine's own routing table sends a named-executor runbook here rather than claiming it. Full source-grade table and the placement reasoning: commanding-research-fleets/tests/forge-verification-ledger.md §0-§1."
+    },
+    {
+      "date": "2026-09-05",
+      "from": 59102,
+      "to": 60520,
+      "spentBy": "forming-hypotheses-from-anomalies",
+      "reason": "Two amounts, separated because they have different causes. 2 chars were ALREADY over the ceiling before this admission: the collection measured 59,104 at 62 skills against a 59,102 ratchet set on 2026-09-03, i.e. descriptions drifted in two days. That drift is absorbed here rather than hunted. 1,416 chars are the new skill's own description (1,410 as first written, plus 6 for the 語彙の外 doublet that the F3 desk-check proved was missing — trigger row F5 could not have fired without it). It was admitted because the forging-skills step-0 existence battery (6 EN/JA paraphrases via repo-search battery, route ccc, 6/6 queries with hits, confidence verified(index)) found NO OWNER for the transition anomaly -> contrast -> exhausted closed route -> licensed vocabulary-introducing hypothesis. forging-novel-theses was the near miss and was read in full: its entry gate REQUIRES a selected frame plus a provenance-bearing seed or frozen DONOR SET (items 1 and 4) — it consumes that precondition and does not manufacture it. EXTEND was considered and rejected: a LICENSE is retired by its kill condition and a CANDIDATE by a test, so merging them would put GENESIS and the license decision in one packet, which is the collapse the new skill's A3 gate exists to prevent. Retiring a sibling was considered and rejected — no sibling was found doing this job badly. The skill derives from a signed SoK corpus position admitted the same day (soks 208e187, 8 units / 103 captures, 36 load-bearing captures adversarially re-verified).",
+      "alsoFound": "Unchanged from the 2026-08-30 raise and still unfixed: structuring-documents charges 1,669 chars, above the observed truncation window (~1,520-1,570), so its tail-positioned language directive may already be silently dropped; issuing-technical-memoranda (1,515) and driving-antigravity (1,514) sit at the edge. Trimming those three would return roughly 200 chars AND repair a live defect. Reported rather than absorbed: editing three unrelated skills' descriptions is outside this forge's scope, and the defect is a triggering-correctness problem, not a budget problem.",
+      "reduceWhen": "CONDITIONAL RAISE. Objected to by the dotfiles Director on 2026-09-05: raise is the weakest of F4's four permitted answers and is self-serving by construction, and this forge held a shortening that pays twice (see alsoFound). Accepted. The obligation is recorded here rather than left to memory: when the structuring-documents / issuing-technical-memoranda / driving-antigravity descriptions are trimmed under the observed truncation window, re-run 'mise run lint:skills-floor' and pin maxListingChars to the newly MEASURED total in that same commit — do not leave the recovered headroom sitting as slack. Lowering is free (see 'why'). Until that lands, this raise is the reason the budget is not currently binding, and any later raise should be refused while this reduction is outstanding."
     }
   ]
 }

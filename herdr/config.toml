@@ -85,7 +85,10 @@ agent_panel_sort = "spaces"
 # Line 1: state icon + tab (the per-pane agent name, see agents/claude/hooks/herdr-tab-name.ts).
 # Line 2: $model, then $effort, then $rc — all three custom tokens reported via
 # pane.report_metadata (see statusline-command.ts). $effort mirrors that statusline's own
-# "Eff:" segment (e.g. "xhigh"); added 2026-09-03, on request, between $model and $rc. $rc is a
+# unlabeled effort readout (e.g. "xhigh", or "xhigh+WF" while ultracode's dynamic-workflow
+# orchestration is genuinely engaged — see effortDisplay in statusline-command.ts, folded in
+# 2026-09-05 on request, replacing an earlier separate WF segment); added 2026-09-03, on request,
+# between $model and $rc. $rc is a
 # one-glyph Remote Control indicator (🔗 while connected, "" otherwise, per that file's own
 # header note) added 2026-09-03, on request. Order was flipped twice the same day (rc-first,
 # then back to model-first) — model-first is the settled one; $effort slotted in after that

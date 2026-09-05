@@ -15,6 +15,12 @@
 // a herdr pane (HERDR_ENV/HERDR_SOCKET_PATH/HERDR_TAB_ID all present); anything else exits
 // silently — this is cosmetic, never worth failing a session start over.
 //
+// SHORT TAB, FULL SIDEBAR. The desktop tab bar renders the tab's real name, so the actual
+// `tab rename` below now sends only its trailing `-`-segment ("firedancer-dc" -> "dc") to keep
+// that strip compact. The untruncated name still needs to reach the sidebar though, so it also
+// goes out as a separate `$fullname` pane-metadata token (herdr/config.toml's
+// `rows_by_agent.claude` reads that token instead of the "tab" token). Two channels, one each.
+//
 // RETRIES: unlike the statusline, which gets a fresh chance every render, this hook fires
 // once per session start and then goes quiet. Caught live 2026-08-28: restarting with
 // `claude -c` raced `claude agents --json`'s own self-registration, so the single lookup
@@ -105,10 +111,36 @@ try {
   const name = await agentName(sid);
   if (!name) process.exit(0);
 
-  execFileSync(HERDR_BIN, ["tab", "rename", tabId, name], {
+  const shortName = name.split("-").pop() || name;
+  execFileSync(HERDR_BIN, ["tab", "rename", tabId, shortName], {
     stdio: ["ignore", "ignore", "ignore"],
     timeout: 3000,
   });
+
+  // Bonus, not required: statusline-command.ts re-reports $fullname on every render anyway
+  // (the same belt-and-suspenders reasoning as the tab rename above — see its own header
+  // note), so a failure here just means the sidebar's full name fills in a render later
+  // instead of immediately.
+  const paneId = process.env.HERDR_PANE_ID;
+  if (paneId) {
+    try {
+      execFileSync(
+        HERDR_BIN,
+        [
+          "pane",
+          "report-metadata",
+          "--source",
+          "dotfiles:herdr-tab-name",
+          paneId,
+          "--token",
+          `fullname=${name}`,
+        ],
+        { stdio: ["ignore", "ignore", "ignore"], timeout: 3000 },
+      );
+    } catch {
+      // metadata is a bonus for the sidebar label -> the tab rename above already landed
+    }
+  }
 } catch {
   // cosmetic hook -> never fail a session start over this
 }

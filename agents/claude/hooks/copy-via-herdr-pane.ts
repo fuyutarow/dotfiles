@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // CLI: bun copy-via-herdr-pane.ts <payload-file>
-//   exit 0 = delivered (prints the pane id it used), non-zero = could not deliver.
+//   exit 0 = delivered (prints the pane id it used, already closed by then), non-zero =
+//   could not deliver.
 //
 // WHY THIS EXISTS. Claude Code cannot put arbitrary text on the clipboard, by design:
 // every process it spawns (Bash tool, hooks — both verified 2026-08-30) has NO controlling
@@ -9,19 +10,24 @@
 // get, the `terminalSequence` JSON field, names "OSC 52 clipboard writes" in its REJECTED
 // list (hooks.md). Built-in /copy works only because Claude Code's own process owns the pty.
 //
-// THE WAY AROUND IT. herdr owns the panes. A sibling pane running an ordinary interactive
-// shell DOES have a real pty, so a command run *there* reaches the terminal exactly as if the
-// human had typed it — which is how zsh/copy-to-clipboard.sh's OSC 52 branch gets delivered
-// over SSH. `herdr pane run` types the command into that pane for us. Verified end-to-end
-// 2026-08-30: a marker sent this way landed in the Mac client's clipboard over
-// Tailscale -> SSH -> WSL2 -> herdr.
+// THE WAY AROUND IT. herdr owns the panes. A pane running an ordinary interactive shell DOES
+// have a real pty, so a command run *there* reaches the terminal exactly as if the human had
+// typed it — which is how zsh/copy-to-clipboard.sh's OSC 52 branch gets delivered over SSH.
 //
-// SAFETY — this WRITES INTO A SHELL THE HUMAN OWNS. `herdr pane run` appends text + Enter to
-// whatever that pane's shell currently holds, so firing it at a pane with half-typed input
-// would execute the human's fragment glued to our command. Hence: only a pane whose last line
-// is a BARE PROMPT is eligible (see idlePrompt()), and agent panes are excluded outright.
-// If no pane qualifies we exit non-zero and the caller falls back to printing the text —
-// never "probably fine, send it anyway".
+// v2 — DOES NOT HUNT FOR AN EXISTING IDLE PANE. The v1 design searched the workspace for a
+// pane that looked idle and typed into it. That failed live 2026-08-31: the one eligible pane
+// in the workspace was mid-`less`, so delivery fell back to printing the whole payload for
+// manual copy. "Find something idle" is a bet on what else the human happens to be doing at
+// that exact moment, and the bet can lose. Splitting our OWN disposable pane off our own pane
+// removes the bet: it is guaranteed unoccupied (it did not exist a moment ago), guaranteed a
+// real pty (herdr just created it as one), and guaranteed the same terminal (it is a child of
+// the pane we are running in). Verified live: the prompt is ready on the FIRST poll after
+// split, every time so far — the retry budget below is generosity, not an observed need.
+//
+// Visible cost, accepted on purpose: a small pane flashes open and closes. --no-focus keeps
+// it from stealing keyboard focus, but it is not invisible. That is a strictly better trade
+// than either (a) typing into a pane the human is actively looking at, or (b) silently
+// falling back and making them copy by hand.
 //
 // The payload travels as a FILE PATH, never interpolated into the command line: it is
 // arbitrary assistant prose (quotes, backticks, newlines, $) and shell-quoting it would be a
@@ -33,6 +39,8 @@ import { existsSync } from "node:fs";
 const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
 const DOTFILES = process.env.DOTFILES || `${process.env.HOME}/dotfiles`;
 const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
+const POLL_ATTEMPTS = 10;
+const POLL_DELAY_MS = 200;
 
 function herdr(args: string[]): any {
   const out = execFileSync(HERDR_BIN, args, {
@@ -43,14 +51,21 @@ function herdr(args: string[]): any {
   return JSON.parse(out);
 }
 
-// A pane is safe to type into only when its shell is sitting at an empty prompt. Matches a
-// bare prompt character alone on the final line — `$` (this repo's PS1 puts user@host on its
-// OWN line above), `%` (zsh default), `#` (root), `>` (continuation). Anything else — a
-// half-typed command, a pager, a TUI, a running job — fails closed.
-function idlePrompt(paneId: string): boolean {
+function closeQuietly(paneId: string): void {
   try {
-    // `pane read` prints the pane's visible text RAW — it is the one herdr subcommand here
-    // that does not answer in JSON, so this deliberately does not go through herdr().
+    execFileSync(HERDR_BIN, ["pane", "close", paneId], {
+      stdio: ["ignore", "ignore", "ignore"],
+      timeout: 5000,
+    });
+  } catch {
+    // a stray small leftover pane is cosmetic, not a delivery failure -> never throw from here
+  }
+}
+
+// `pane read` prints the pane's visible text RAW — the one herdr subcommand here that does
+// not answer in JSON, so this deliberately does not go through herdr().
+function isBarePrompt(paneId: string): boolean {
+  try {
     const text = execFileSync(HERDR_BIN, ["pane", "read", paneId], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
@@ -71,41 +86,60 @@ if (!payloadFile || !existsSync(payloadFile)) {
 }
 if (process.env.HERDR_ENV !== "1" || !existsSync(CLIP_SCRIPT)) process.exit(3);
 
-const workspace = process.env.HERDR_WORKSPACE_ID;
 const selfPane = process.env.HERDR_PANE_ID;
+if (!selfPane) process.exit(3);
 
-let panes: Array<{ pane_id?: string; workspace_id?: string; agent?: string }>;
+let paneId: string | undefined;
 try {
-  panes = herdr(["pane", "list"])?.result?.panes ?? [];
+  const split = herdr([
+    "pane",
+    "split",
+    selfPane,
+    "--direction",
+    "down",
+    "--ratio",
+    "0.05",
+    "--no-focus",
+  ]);
+  paneId = split?.result?.pane?.pane_id;
 } catch {
-  process.exit(4);
+  process.exit(4); // split itself failed (e.g. too small to split) -> caller falls back
 }
+if (!paneId) process.exit(4);
 
-const candidates = panes.filter(
-  (p) =>
-    p.pane_id &&
-    p.pane_id !== selfPane &&
-    // Same workspace only: a pane in another workspace may be attached to a different client
-    // (or none), so "it has a pty" would not mean "it has THIS human's terminal".
-    (!workspace || p.workspace_id === workspace) &&
-    // An agent pane's shell belongs to that agent's TUI, not to a prompt we may type at.
-    !p.agent,
-);
-
-for (const p of candidates) {
-  const id = p.pane_id as string;
-  if (!idlePrompt(id)) continue;
-  try {
-    execFileSync(
-      HERDR_BIN,
-      ["pane", "run", id, `'${CLIP_SCRIPT}' < '${payloadFile}'`],
-      { stdio: ["ignore", "ignore", "ignore"], timeout: 5000 },
-    );
-    console.log(id);
-    process.exit(0);
-  } catch {
-    // that pane refused the run — try the next candidate
+let ready = false;
+for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+  if (isBarePrompt(paneId)) {
+    ready = true;
+    break;
   }
+  await Bun.sleep(POLL_DELAY_MS);
+}
+if (!ready) {
+  closeQuietly(paneId);
+  process.exit(5);
 }
 
-process.exit(5); // no idle shell pane available -> caller prints the text instead
+try {
+  execFileSync(
+    HERDR_BIN,
+    ["pane", "run", paneId, `'${CLIP_SCRIPT}' < '${payloadFile}'`],
+    { stdio: ["ignore", "ignore", "ignore"], timeout: 5000 },
+  );
+} catch {
+  closeQuietly(paneId);
+  process.exit(6);
+}
+
+// `pane run` returns once herdr has SENT the keystrokes, not once the shell has finished
+// executing them — closing immediately could kill the copy mid-flight. Poll for the prompt
+// to reappear (confirming the script actually completed) before tearing the pane down; give
+// up and close anyway after the same budget used above, rather than leaving it open forever.
+for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+  await Bun.sleep(POLL_DELAY_MS);
+  if (isBarePrompt(paneId)) break;
+}
+
+closeQuietly(paneId);
+console.log(paneId);
+process.exit(0);

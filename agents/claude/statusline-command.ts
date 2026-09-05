@@ -42,7 +42,11 @@
 //           and nothing else, label or no label. It rides with line 1 because both are
 //           static session identity, and above the live row so a tail wrap can never shift
 //           it. Omitted when the field is absent (older CLIs).
-//   line 3: Model | Eff | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//   line 3: Model | Eff[+WF] [✦] | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//         Neither Model nor Eff carries a label (both dropped on request 2026-09-05) — each one's
+//         old label color moved onto its own value instead, joined by the normal SEP pipe (a
+//         same-day KMID "・" divider, then a bare space, were both tried and cut — SEP won for
+//         consistency with the rest of the line): "Sonnet 5 | xhigh+WF✦".
 //   Job:  work running OUTSIDE the harness — the window Claude Code itself cannot draw.
 //         A child started with setsid/nohup is reparented to PID 1, so the background-task
 //         tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
@@ -55,8 +59,20 @@
 //                                      Red when N>0 with NOTHING admitted: invisible
 //                                      processes alive, no job actually holding resources.
 //         Whole segment is omitted when both are zero, so ordinary sessions pay nothing.
-//   Eff:  live /effort level (.effort.level) + ✦ when extended thinking on; hidden when
-//         the model has no reasoning-effort param (field absent). ultracode -> xhigh.
+//   Eff:  (no label in the render, see line 3 above) live /effort level (.effort.level) + ✦ when
+//         extended thinking on; hidden when the model has no reasoning-effort param (field
+//         absent). ultracode -> xhigh.
+//   +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the Eff
+//         value (green "+WF" suffix) instead of a separate segment, on request 2026-09-05.
+//         Present only while BOTH hold: `ultracode: true` in the CLI's live
+//         ~/.claude/settings.json, AND this render's live `.effort.level` actually reads back
+//         `xhigh` — ultracode forces xhigh whenever it genuinely engages, and a
+//         higher-precedence effort lever (env var, an interactive /effort choice, a per-model
+//         modelSettings entry the CLI itself writes back — see ultracodeConfigured()'s note) can
+//         silently push effort off xhigh and turn the orchestration OFF even though the setting
+//         still reads true. Reading the LIVE value instead of trusting the setting is what makes
+//         this catch that silent case: the suffix just disappears (no red "off" marker — absence
+//         IS "off", per the same request that dropped the old standalone segment).
 //   Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
 //   Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
 //         Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
@@ -137,6 +153,23 @@ function account(): string | undefined {
     return o.oauthAccount?.emailAddress || undefined;
   } catch {
     return undefined; // unreadable / not JSON / logged out -> segment just disappears
+  }
+}
+
+// Is `ultracode: true` set in the CLI's OWN live settings file — not this repo's committed
+// agents/claude/settings.json, which only seeds it. The CLI rewrites ~/.claude/settings.json
+// itself on interactive /model or /effort changes (confirmed 2026-09-05: a live effort choice
+// showed up here as modelSettings.<model>.effortLevel, not as this repo's flat `effortLevel`
+// key), so this file — not the repo source — is the only place that reflects what is ACTUALLY
+// configured right now. Cheap like account() just above: same file class, smaller payload.
+function ultracodeConfigured(): boolean {
+  try {
+    const s: { ultracode?: boolean } = JSON.parse(
+      readFileSync(`${HOME}/.claude/settings.json`, "utf8"),
+    );
+    return s.ultracode === true;
+  } catch {
+    return false; // unreadable / not JSON -> treat as not configured, segment reads "off"
   }
 }
 
@@ -261,6 +294,18 @@ const ctxTok =
 const add = data.cost?.total_lines_added ?? 0;
 const del = data.cost?.total_lines_removed ?? 0;
 const effort = data.effort?.level; // string | undefined
+// "Dynamic workflow" (ultracode's auto multi-agent orchestration) is armed ONLY while BOTH
+// hold: the setting says so, and the live effort actually running is xhigh — ultracode forces
+// xhigh whenever it genuinely engages, and per workflow-and-context.md's gotcha note a
+// higher-precedence effort lever can silently push effort off xhigh and turn orchestration OFF
+// even though `ultracode: true` still sits in settings. Reading the live value here (not the
+// setting alone) is what makes this segment catch that silent case instead of lying about it.
+const wfOn = ultracodeConfigured() && effort === "xhigh";
+// Folds wfOn into the effort readout itself ("xhigh" vs "xhigh+WF") instead of a separate
+// standalone "WF:" segment — on request 2026-09-05, both in this statusline and in the $effort
+// token mirrored to herdr below. `effort` is guaranteed "xhigh" whenever wfOn is true (see its
+// own condition above), so the suffix is never appended to a non-xhigh value.
+const effortDisplay = effort ? `${effort}${wfOn ? "+WF" : ""}` : effort;
 const ctxPct = data.context_window?.used_percentage; // number | undefined
 const rl5 = data.rate_limits?.five_hour?.used_percentage;
 const rl7 = data.rate_limits?.seven_day?.used_percentage;
@@ -296,9 +341,11 @@ if (model.endsWith(" context)"))
 //                         /model, switchModelsOnFlag) shows up. The addressable session name
 //                         rides the same request as $fullname, for the sidebar (herdr's
 //                         rows_by_agent.claude reads that back, not "tab" — see below). $effort
-//                         mirrors this statusline's own "Eff:" segment (data.effort?.level, e.g.
-//                         "xhigh") into the row, added 2026-09-03 on request, placed between
-//                         $model and $rc. $rc is a one-glyph Remote Control indicator, placed
+//                         mirrors this statusline's own effort readout (effortDisplay above:
+//                         data.effort?.level, plus "+WF" when dynamic-workflow orchestration is
+//                         engaged — e.g. "xhigh" or "xhigh+WF") into the row, added 2026-09-03 on
+//                         request, placed between $model and $rc. $rc is a one-glyph Remote
+//                         Control indicator, placed
 //                         right of $effort in that same row (2026-09-03, on request) — 🔗 while
 //                         $CLAUDE_CODE_BRIDGE_SESSION_ID is set (Claude Code v2.1.199+ sets it
 //                         only while this session has an active Remote Control connection),
@@ -370,7 +417,7 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
 async function reportToHerdr(
   m: string,
   sessionName?: string,
-  effort?: string,
+  effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF" — see effortDisplay above the call site
 ): Promise<void> {
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
@@ -385,7 +432,7 @@ async function reportToHerdr(
   if (sessionName) tokens.fullname = sessionName;
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
-  tokens.effort = effort ?? "";
+  tokens.effort = effortDisplay ?? "";
   tokens.rc = process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ? "🔗" : "";
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
@@ -405,7 +452,7 @@ async function reportToHerdr(
     });
   }
 }
-await reportToHerdr(model, sessionName, effort);
+await reportToHerdr(model, sessionName, effortDisplay);
 
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
@@ -537,10 +584,17 @@ const dur = (s: number) =>
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
 
-// HEAD = identity: Model [| Eff ✦] | Ctx [· pct%] [| Job]
-let head = `${ESC}[38;5;30mModel:${RST} ${model}`;
+// HEAD = identity: Model | Eff[+WF] [✦] | Ctx [· pct%] [| Job]
+// Neither Model nor Eff carries a label — both dropped on request 2026-09-05, each one's old
+// label color moved onto its own value instead. Joined with the normal SEP pipe (an intermediate
+// KMID "・" divider, then a bare space, were both tried and cut the same day — SEP won for
+// consistency with every other segment in this line). "+WF" (green, only when wfOn) is folded
+// straight into the effort value instead of a separate standalone "WF:" segment (also cut
+// 2026-09-05): "on" is just the suffix itself, "off" is simply its absence.
+let head = `${ESC}[38;5;30m${model}${RST}`;
 if (effort) {
-  head += `${SEP}${ESC}[38;5;209mEff:${RST} ${effort}`;
+  head += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
+  if (wfOn) head += `${ESC}[38;5;40m+WF${RST}`;
   if (thinking) head += `${ESC}[38;5;222m${SPARK}${RST}`;
 }
 head += `${SEP}${ESC}[38;5;66mCtx:${RST} ${ctx}`;

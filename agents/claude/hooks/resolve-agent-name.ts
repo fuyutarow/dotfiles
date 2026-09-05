@@ -16,8 +16,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
-const AGENT_NAME_POSITIVE_TTL_MS = 5 * 60_000;
-const AGENT_NAME_NEGATIVE_TTL_MS = 30_000;
+// 30s for both a hit and a miss — was 5min on a hit until 2026-09-02, when a stale hit right
+// after `/rename` (the exact moment someone is watching) turned out to matter more than the
+// rare extra `claude agents --json` call it now costs. See statusline-command.ts's agentName()
+// for the fuller writeup — same cache file, same fix, kept in sync deliberately.
+const AGENT_NAME_TTL_MS = 30_000;
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
 function agentName(sid: string): string | undefined {
@@ -29,13 +32,7 @@ function agentName(sid: string): string | undefined {
     // missing / corrupt cache file -> treat as empty and refetch below
   }
   const hit = cache[sid];
-  if (hit != null) {
-    const ttl =
-      hit.name != null
-        ? AGENT_NAME_POSITIVE_TTL_MS
-        : AGENT_NAME_NEGATIVE_TTL_MS;
-    if (Date.now() - hit.at < ttl) return hit.name;
-  }
+  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
 
   try {
     const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {

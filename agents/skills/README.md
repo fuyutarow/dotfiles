@@ -35,6 +35,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 
 - [`raising-resolution`](raising-resolution/) — Inspect the actual code/data/source before asserting a fact — reach for it when tempted to guess.
 - [`surfacing-blind-spots`](surfacing-blind-spots/) — Expose hidden premises and human tacit constraints in an existing plan/frame; emit a bounded blind-spot packet, not solutions.
+- [`forming-hypotheses-from-anomalies`](forming-hypotheses-from-anomalies/) — Build ONE explanatory hypothesis from an anomaly, with the record of what entitled it; explain inside the current vocabulary before introducing a term outside it.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
 - [`codifying-doctrine`](codifying-doctrine/) — Codify and audit the ordered trade-off rules that let distributed actors decide alike when nobody can confer; every rule names what it sacrifices, and agreement is measured, not asserted.
 - [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
@@ -77,6 +78,9 @@ section receipt-linked learning → programme signal   arguing-research-papers: 
                             ▼
 supervising-research-programmes: update/reopen portfolio
 
+anomaly the account did not predict → forming-hypotheses-from-anomalies: ONE HYPOTHESIS packet
+                       → forging-novel-theses for a ranked batch, or acting-on-hypotheses for one costly bet
+
 signed corpus position → operationalizing-research-gaps: typed, test-bound, expiring openings
                        → supervising-research-programmes selects/ranks them into the portfolio
 
@@ -91,6 +95,7 @@ frozen bounded episode → auditing-research-processes: audit + non-enacting rec
 | EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
 | FRAME / STEER | exposed premises/evidence → selected programme problem/state | `PROGRAMME_SNAPSHOT` / `OPEN_ISSUE` / `SECTION_MANDATE` / `PROGRAMME_DECISION` | `supervising-research-programmes` |
 | DIRECT SECTION | granted mandate → local admitted run/learning state | `SECTION_CHARTER` / `RUN_INTENT` / `SECTION_SIGNAL` | `directing-research-sections` |
+| ABDUCE | anomaly + an account that did not predict it → one grounded explanatory claim | `HYPOTHESIS` packet | `forming-hypotheses-from-anomalies` |
 | FORGE | selected frame → thesis batch | Candidate packets + coverage matrix | `forging-novel-theses` |
 | TEST / COMMIT | one expensive/irreversible selected tree → confidence/commit decision | Map / Loop table / Leap decision | `acting-on-hypotheses` |
 | RUN CHEAP PROBE | one deterministic/reversible selected tree → observed result | result with locus | domain/plain executor |

@@ -144,7 +144,9 @@ checklist's row 1) — all apply directly, unlike the LAW candidates below. Full
 ## Vocabulary — Retrieve vs Search
 
 Both words are load-bearing across every R&D repo under this doctrine and must never be used
-interchangeably (identifiers such as `repo-search` are names, not instances of this rule):
+interchangeably (identifiers such as `repo-search` are names, not instances of this rule —
+`repo-search` itself is a one-time, named exception to that clause, 2026-09-04, `references/
+vocabulary-and-law.md`):
 
 | Term | Meaning | Verb |
 |---|---|---|

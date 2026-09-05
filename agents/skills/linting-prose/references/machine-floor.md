@@ -209,10 +209,12 @@ green): **prh role 3** in `prh-house.yml` HARD-catches verb calques (`/[a-zA-Z]{
 exact-equivalent nouns (deliverable/framing/moat); **`scripts/codemix-flag.py`** (zero-dep) flags
 paragraphs ≥8 latin/100字 as MIX — the model then classifies each token 3-way: standard domain term
 (keep) / pinned house token (keep, identifier) / gratuitous (violate). This skill is the
-FEEDBACK/detection layer at *deliverable* time; the UPSTREAM cure (the generation guardrail + the
-always-on `detect-prose-correo.ts` Stop hook (correo calque layer) gating the latin-verb+する residue every turn) is owned by
-`operating-the-harness` — code-switching is Language Confusion (Marchisio, EMNLP 2024), and a gate
-cannot cure a generation pathology. The earlier framing
+FEEDBACK/detection layer at *deliverable* time; the UPSTREAM cure (the generation guardrail,
+owned by `operating-the-harness`) is the only layer left for this pathology — a per-turn Stop
+hook (`detect-prose-correo.ts`, correo calque layer) once gated the latin-verb+する residue on
+every turn too, but was removed 2026-09-03 at the orderer's direct order, its per-Stop
+regeneration cost having outweighed the catch. Code-switching is Language Confusion (Marchisio,
+EMNLP 2024), and a gate cannot cure a generation pathology regardless. The earlier framing
 "internal register leaves ルー語 alone" was WRONG and is retracted: internal waives comprehension,
 not hygiene. Blanket translation is the opposite error (非飽和iciency) — pinned tokens and domain
 terms stay. **Katakana rootedness is READER-relative — no dictionary floor.** The 国語研「外来語」言い換え提案

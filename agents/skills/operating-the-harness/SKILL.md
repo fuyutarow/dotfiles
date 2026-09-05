@@ -237,8 +237,11 @@ on real domain terms). So SHAPE generation and CATCH only the deterministic resi
    *「思考から最終出力まで一言語で統一。英語動詞を する に接がない(コミットする, not commitする)。専門語はカタカナか日本語で。」* Negative constraints bind harder than "please write in Japanese"; a few-shot example of the fixed form helps most (the paper's finding).
 2. **Context** — your own prompt's English licenses the model to mix; feed cleaner input.
 3. **Feedback** — detection is `linting-prose` (`codemix-flag.py` + prh, at *deliverable* time, not
-   every turn). The one always-wrong class (latin verb + する) is gated by the Stop hook
-   `agents/claude/hooks/detect-prose-correo.ts` (narrow, code/quote-stripped, exit 2 → forces a rewrite).
+   every turn). A per-turn Stop hook once gated the always-wrong class (latin verb + する) on
+   top of that — `detect-prose-correo.ts`, removed 2026-09-03 at the orderer's direct order (its
+   block-on-every-Stop cost outweighed the catch, even after narrowing it to a project opt-in and
+   downgrading its lowest-precision layer) — so deliverable-time `linting-prose` is now the only
+   detection layer left for this pathology.
 4. **Operation** — long context drifts toward English; refresh/summarize in the target language.
 
 Register-relative: internal engineering chat legitimately mixes; the guard is for external/deliverable

@@ -137,6 +137,34 @@ function headLabel(head: string | null): string {
   return head ?? "(none — not a git repo, or no commits yet)";
 }
 
+// --- Verbatim citation token ------------------------------------------------------------------
+//
+// A claim about "no hits" is a claim about a SEARCHED STATE, not about HEAD-right-now -- HEAD
+// moves every few minutes in a multi-writer repo, so any claim phrased in terms of it is stale
+// before the sentence finishes. `indexedAt` alone does not fix this: a timestamp names WHEN
+// something was checked, never WHAT was checked -- it cannot be verified against anything later
+// (there is no `git cat-file -t <timestamp>`). A commit can be: `git cat-file -t <head>` (or
+// `git show <head>`) still answers the same question next week, next month, after HEAD has moved
+// a hundred commits on. So the citable unit is the pair (indexedAt, head) the watermark already
+// carries, not either half alone.
+//
+// Shape is deliberately aligned with the sibling fleet's existing `--hit NO_INDEX:<timestamp+
+// watermark>` string (agents/skills/commanding-research-fleets/SKILL.md row 7 and
+// references/launch-and-order.md #7): that row already ships a bare, non-validated string after
+// `NO_INDEX:` (per its own stated gap: "the validator accepts any non-empty string ... it does
+// not itself confirm the string is actually a timestamp and a watermark"), so whatever shape this
+// side adopts becomes the de facto contract the sibling side follows -- this function is where
+// that shape gets DEFINED, once, rather than re-invented ad hoc at each call site. Rendered as
+// `<indexedAt>+<head>`, `+`-joined to match the sibling string literally, with `head` spelled
+// "none" (not the prose-y headLabel() form, which has spaces/parens and would break a token
+// meant to be pasted verbatim into `--hit ...:<here>`) for the real, watermark-recorded case of
+// "this project had no git HEAD when it was indexed" (see the Watermark.head doc comment above).
+function citationToken(
+  watermark: Pick<Watermark, "indexedAt" | "head">,
+): string {
+  return `${watermark.indexedAt}+${watermark.head ?? "none"}`;
+}
+
 // --- Index freshness watermark -------------------------------------------------
 //
 // ccc's own index carries no watermark (confirmed against `ccc status` and `ccc --help`: chunk
@@ -368,7 +396,9 @@ async function checkIndexFreshness(
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
         `index was built at HEAD=${headLabel(watermark.value.head)} (indexedAt=${watermark.value.indexedAt}) ` +
         `but the working tree is now at HEAD=${headLabel(currentHead)}; that drift is exactly what this ` +
-        `gate exists to refuse serving. Remedy: ${remedy(project)}\n`,
+        `gate exists to refuse serving. cite=${citationToken(watermark.value)} names the index's own ` +
+        `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
+        `Remedy: ${remedy(project)}\n`,
     };
   }
   // Cheap sanity check, NOT a security boundary (a hand-written watermark file cannot be told
@@ -520,9 +550,17 @@ async function runCccSearch(
   // comment above) and have no persisted watermark to stamp; `route=` alone already tells a
   // reader which class a line belongs to, so a missing stamp on those routes is never ambiguous
   // with an omission here.
+  //
+  // `cite=` (2026-09-08) adds the verbatim `<indexedAt>+<head>` token (see citationToken()) next
+  // to the existing separate indexedAt=/head= fields. This turns "the index this claim is about"
+  // from something a PI would otherwise reconstruct by hand out of two other fields into a single
+  // string that carries straight into a claim -- `--hit PASS:<cite>` or `--hit NO_MATCH:<cite>` --
+  // exactly the way row 7's `--hit NO_INDEX:<timestamp+watermark>` already does. A NO_MATCH or a
+  // PASS made today keeps `cite=` pointing at the commit it actually searched even after HEAD
+  // moves on without it -- the claim was never about "current HEAD" to begin with.
   const confidence =
     `confidence=verified(index) indexedAt=${freshness.watermark.indexedAt} ` +
-    `head=${headLabel(freshness.watermark.head)}`;
+    `head=${headLabel(freshness.watermark.head)} cite=${citationToken(freshness.watermark)}`;
 
   const ccc = requireExecutable("ccc");
   const statusTimeoutMs = Math.min(timeoutMs, 5_000);

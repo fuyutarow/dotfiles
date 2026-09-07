@@ -7,8 +7,9 @@ argument-hint: "<role> — a short lowercase token (e.g. obs, dtr, pi)"
 The rename is a SIDE EFFECT of agents/claude/hooks/assign-command.ts (a UserPromptSubmit hook,
 fired before this template even expands) — this body does not do it. This body is only what
 reaches the model: the role-announcement instruction. If assign-command.ts found a charter entry
-for $0 in agents/claude/hooks/assign-roles.toml, that text rides alongside this as additional
-context; if not, this generic instruction is all the model gets.
+for $0 in fleet_policy.toml — the project's own root copy if it has one, else the skill-shipped
+default at agents/skills/commanding-research-fleets/fleet_policy.toml — that text rides alongside
+this as additional context; if not, this generic instruction is all the model gets.
 -->
 
 You have just been assigned the **$0** role for this project (this session was renamed

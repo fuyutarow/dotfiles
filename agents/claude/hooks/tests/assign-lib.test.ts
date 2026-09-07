@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   isValidRole,
+  loadFleetPolicy,
   randomSuffix,
   rolePrompt,
   sessionName,
@@ -76,5 +80,34 @@ describe("rolePrompt", () => {
 
   test("returns null for a table with no prompt key at all", () => {
     expect(rolePrompt("obs", { obs: {} })).toBeNull();
+  });
+});
+
+describe("loadFleetPolicy", () => {
+  test("a project-root fleet_policy.toml wins over the skill-shipped default", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "fleet-policy-project-"));
+    writeFileSync(
+      join(projectDir, "fleet_policy.toml"),
+      '[dtr]\nprompt = "project override"\n',
+    );
+    const policy = await loadFleetPolicy(projectDir);
+    expect(rolePrompt("dtr", policy)).toBe("project override");
+  });
+
+  test("falls back to the skill-shipped default when the project defines none", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "fleet-policy-empty-"));
+    const policy = await loadFleetPolicy(projectDir);
+    // The shipped default (agents/skills/commanding-research-fleets/fleet_policy.toml)
+    // configures dtr/pi/obs — same charter text assign-roles.toml carried before the
+    // 2026-09-07 migration.
+    expect(rolePrompt("dtr", policy)).toMatch(/thin Director/);
+    expect(rolePrompt("pi", policy)).toMatch(/grit PI/);
+    expect(rolePrompt("obs", policy)).toMatch(/観察者/);
+  });
+
+  test("an unconfigured role stays unconfigured under the shipped default", async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), "fleet-policy-empty2-"));
+    const policy = await loadFleetPolicy(projectDir);
+    expect(rolePrompt("gpu", policy)).toBeNull();
   });
 });

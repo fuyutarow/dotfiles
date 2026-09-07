@@ -1,14 +1,24 @@
-# Role -> initial message a freshly `assign`ed Claude Code session opens with
-# (agents/claude/hooks/assign-session.ts). A role with no table here still works — `assign`
-# still names the session, it just opens with no initial message.
+# Fleet role -> initial message a freshly `assign`ed Claude Code session opens with
+# (agents/claude/hooks/assign-command.ts via assign-lib.ts's loadFleetPolicy()). A role with
+# no table here still works — `assign` still names the session, it just opens with no
+# initial message.
 #
-# CONTENT OWNERSHIP: what a role announces on arrival is fleet-charter content, not mechanism —
-# see agents/skills/commanding-research-fleets/references/charters.md for the Director/PI
-# charter this fleet runs on. This file is the wire between that charter and a launched session,
-# not a second copy of the charter: keep entries short and point back at the charter doc rather
-# than restating it, so the two never drift apart.
+# THIS FILE IS THE SKILL-SHIPPED DEFAULT. Resolution order (assign-lib.ts's
+# loadFleetPolicy()): a `fleet_policy.toml` at the PROJECT ROOT wins when one exists; only
+# when a project defines none does this file apply. There is no further fallback —
+# `assign-roles.toml` (retired 2026-09-07, ruling: 「assign-roles.toml は廃止して
+# fleet_policy.toml に移行してください」) is gone, not layered underneath this file.
 #
-# Content below is the Director's (firedancer-dtr_vdrt, 2026-09-02), not invented here.
+# CONTENT OWNERSHIP: what a role announces on arrival is fleet-charter content, owned by
+# this skill (commanding-research-fleets) — see references/charters.md for the Director/PI
+# charter this fleet runs on. This file is the wire between that charter and a launched
+# session, not a second copy of the charter: keep entries short and point back at the
+# charter doc rather than restating it, so the two never drift apart.
+#
+# Content below is the Director's (firedancer-dtr_vdrt, 2026-09-02), migrated verbatim
+# 2026-09-07 from the retired agents/claude/hooks/assign-roles.toml — not invented here,
+# not reworded in the move. A project that wants different charter text places its own
+# fleet_policy.toml at its own root; it never edits this shipped copy to do so.
 
 # 2026-09-03: the "fleet log" first move below has no home yet — the memory directory holds
 # only MEMORY.md + per-topic memory files, no fleet-wide log (verified live by dotfiles-dtr_1xex

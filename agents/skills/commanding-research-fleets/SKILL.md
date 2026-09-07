@@ -82,6 +82,14 @@ those artifacts — the correspondence table below is vocabulary, not a merge.
 Full duties and the complete prohibition lists are in `references/charters.md` — the table
 below is the lookup; the reference carries the artifact each prohibition traces to.
 
+**Wire to a launched session** (2026-09-07 ruling, replacing the retired
+`agents/claude/hooks/assign-roles.toml`): `agents/claude/hooks/assign-command.ts`'s
+`/assign <role>` delivers a role's charter text as `additionalContext` by reading a
+`fleet_policy.toml` — a project's own root copy wins when one exists; otherwise this skill's
+own shipped default, `fleet_policy.toml` (this directory), applies. There is no further
+fallback. This file is the wire, not a second charter: keep its entries short and point back
+at `references/charters.md` rather than restating it.
+
 | Role | Owns | May never |
 |---|---|---|
 | **Director** | frame, allocation, receipt evaluation, cross-lab verification requests (named exception only), orderer report | design an experiment; launch a Workflow/subagent; write to rnd; offer a PI a stop option; spend pre-verification survival as a frame slot; give a time-based instruction; hand off a unit half-indexed; arrange or queue a PI's in-lab verification |

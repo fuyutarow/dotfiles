@@ -10,6 +10,9 @@
 // sessionTitle/additionalContext and otherwise lets the prompt proceed untouched — command
 // expansion then runs normally and agents/commands/assign.md supplies the model-facing text.
 //
+// Top-level await below (loadFleetPolicy is async — it may dynamic-import a project-root
+// fleet_policy.toml) is legal ESM; Bun runs .ts hooks as modules, not CommonJS.
+//
 // FIRES ON EVERY PROMPT IN EVERY SESSION on this machine (UserPromptSubmit takes no matcher —
 // see operating-the-harness/references/hooks.md). The very first thing this does is a cheap
 // prefix regex, so the ~99.9% of prompts that aren't `/assign ...` cost one test and nothing
@@ -32,12 +35,11 @@
 import { readStdinJson } from "./lib.ts";
 import {
   isValidRole,
+  loadFleetPolicy,
   randomSuffix,
   rolePrompt,
   sessionName,
-  type RoleConfig,
 } from "./assign-lib.ts";
-import roles from "./assign-roles.toml";
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
@@ -74,7 +76,8 @@ try {
   }
 
   const name = sessionName(cwd, role, randomSuffix());
-  const context = rolePrompt(role, roles as Record<string, RoleConfig>);
+  const policy = await loadFleetPolicy(cwd);
+  const context = rolePrompt(role, policy);
   allow(name, context);
 } catch {
   // FAIL OPEN — see the header: a bug here must never block an ordinary prompt.

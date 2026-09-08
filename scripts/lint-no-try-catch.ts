@@ -87,8 +87,15 @@ export function stripNonCode(source: string): string {
   return output.join("");
 }
 
-const CATCH_KEYWORD = /\bcatch\b/g;
-const EXCEPTION_MARKER = /\/\/\s*try-catch-exception:\s*\S/;
+// Split token so this file's own source does not trip its own scan (self-scan guard, same
+// trick as writing-bun-scripts' script-check.ts BUNX/KILLED): the bare word spelled out in a
+// regex literal is plain source text that stripNonCode does not blank (it strips comments and
+// quoted/template strings, not regex literals).
+const CATCH_KEYWORD = new RegExp(`\\b${"cat" + "ch"}\\b`, "g");
+// Same self-scan guard: the marker's own name embeds the banned word.
+const EXCEPTION_MARKER = new RegExp(
+  `//\\s*try-${"cat" + "ch"}-exception:\\s*\\S`,
+);
 
 export type CatchFinding = { line: number };
 

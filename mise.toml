@@ -326,9 +326,15 @@ run = 'brew bundle --file=~/dotfiles/Brewfile'
 description = "Restore the repo's pinned Bun dependencies from bun.lock (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
 run = "bun install --frozen-lockfile"
 
-[tasks."install:bun_packages"]
+# Global AI-agent CLIs installed via bun, not Brewfile — these are npm packages, not brew
+# formulas. Standalone: nothing else in this file depends on it, and it is not wired into
+# mac:init/wsl:init. Package names verified live against the npm registry 2026-09-09 (the
+# previous names, @anthropic/claude-code and @openapi/doex, both 404 — this task had been
+# silently broken since whenever they were typed in).
+[tasks."install:ai-clis"]
+description = "Install AI coding-agent CLIs globally via bun (claude-code, codex, gemini-cli) — supplements Brewfile, does not replace it"
 run = '''
-bun i -g @anthropic/claude-code @openapi/doex @google/gemini-cli
+bun i -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
 '''
 
 [tasks."mac:init"]
@@ -340,12 +346,12 @@ mise run link:dots
 mise run deps
 mise run link:skills
 mise run tmux:plugins
-mise run macos:defaults
+mise run mac:defaults
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
 
-[tasks."macos:defaults"]
+[tasks."mac:defaults"]
 description = "Apply declarative macOS system defaults (single source: macos/defaults.sh)"
 run = 'bash ~/dotfiles/macos/defaults.sh'
 
@@ -369,10 +375,21 @@ run = 'bash ~/dotfiles/scripts/link-dots.sh --force'
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"
 run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 
-[tasks."check:tools"]
-description = "Check recommended tools (single source: scripts/check-tools.sh; install via Brewfile)"
+# Renamed from check:tools (2026-09-09): "check:" is the reserved CI-aggregate verb namespace
+# (mise run check = fmt:check + lint + test) and this task was never part of it — read-only,
+# no gate, no exit-1 path. `tools:` here matches the existing audit-verb idiom (cache:audit,
+# repos:audit): report evidence, human decides.
+[tasks."tools:audit"]
+description = "Audit recommended tools against the Brewfile (single source: scripts/check-tools.sh; install missing ones via Brewfile)"
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
+# FLAGGED 2026-09-09, not yet acted on: unlike check:tools (renamed to tools:audit, above),
+# this one genuinely exits nonzero on failure (verified: currently FAILs for real — a retired
+# model entry mismarked 'deprecated' — checked_out=1) and reads as a lint-tier floor by its own
+# description ("SSOT floor"), yet it is in neither `lint.depends` nor `check.depends`. Left as
+# `check:` for now pending a decision: rename to `lint:models` + wire into `lint`, or keep it a
+# standalone tool a human runs on purpose. Do not "fix" by silently wiring it in — the pass/fail
+# flip is a real CI-behavior change, not a naming one.
 [tasks."check:models"]
 description = "Model-release SSOT floor (agents/models/releases.toml): staleness, retirements, dead refs"
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'

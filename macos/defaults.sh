@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # macOS system defaults — declarative, idempotent (single source of truth).
-# Run via `mise run macos:defaults` (wired into `mise run mac:init`).
+# Run via `mise run mac:defaults` (wired into `mise run mac:init`).
 # macOS-only topic dir (like karabiner/); do not source this on WSL.
 set -euo pipefail
 

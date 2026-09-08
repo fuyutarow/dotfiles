@@ -1,6 +1,6 @@
 # Single source of truth for CLI tooling (macOS AND WSL/linuxbrew).
 # Apply with: brew bundle --file=~/dotfiles/Brewfile
-# Check with: mise run check-tools  (scripts/check-tools.sh)
+# Check with: mise run tools:audit  (scripts/check-tools.sh)
 
 # Core CLI tools
 brew "bat"          # better cat (alias: p)

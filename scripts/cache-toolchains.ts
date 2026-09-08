@@ -13,6 +13,10 @@
 //                  rest via rip (falls back to rm, same as cache-clean's cargo step). A fresh
 //                  VS Code Remote reconnect just redownloads what it needs.
 //
+// No try/catch (house policy for this repo's scripts/*.ts — lint:no-try-catch): a throwing call
+// (statSync, Bun.spawnSync) goes through neverthrow's fromThrowable(); `.catch(() => "")` below
+// on Bun.file().text() is Promise.prototype.catch, a different thing entirely — exempt.
+//
 // Usage: bun scripts/cache-toolchains.ts [--dry-run] [--home <path>]
 //   KEEP_DAYS (default 2) and AUDIT_PROJECTS (default $HOME/Workspace) tune the guards.
 // Exit: mirrors cache-clean.ts — every valid pass reaches 0 (each mutating command's failure is
@@ -21,6 +25,7 @@
 import { $ } from "bun";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 class UsageError extends Error {}
 
@@ -59,15 +64,12 @@ export function isProcessRunning(
   pattern: string,
   spawn = Bun.spawnSync,
 ): boolean {
-  try {
-    const proc = spawn(["pgrep", "-f", pattern], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    return proc.exitCode === 0;
-  } catch {
-    return true;
-  }
+  return fromThrowable(spawn)(["pgrep", "-f", pattern], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+    .map((proc) => proc.exitCode === 0)
+    .unwrapOr(true);
 }
 
 // ---- rustup toolchains ----------------------------------------------------------------------
@@ -229,12 +231,9 @@ function runVscodeServerSection(
   for (const name of readdirSync(serversDir).sort()) {
     if (!name.startsWith("Stable-")) continue;
     const path = `${serversDir}/${name}`;
-    let st: ReturnType<typeof statSync>;
-    try {
-      st = statSync(path);
-    } catch {
-      continue;
-    }
+    const statResult = fromThrowable(statSync)(path);
+    if (statResult.isErr()) continue;
+    const st = statResult.value;
     if (!st.isDirectory()) continue;
     versions.push({
       name,

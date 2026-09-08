@@ -49,6 +49,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 class UsageError extends Error {}
 
@@ -145,12 +146,10 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
 export function loadMcpServers(
   mcpJsonPath: string,
 ): Record<string, ServerEntry> {
-  try {
+  return fromThrowable(() => {
     const raw = JSON.parse(readFileSync(mcpJsonPath, "utf8")) as McpJson;
     return raw.mcpServers ?? {};
-  } catch {
-    return {};
-  }
+  })().unwrapOr({});
 }
 
 export function buildPlan(name: string, entry: ServerEntry): Plan {
@@ -184,11 +183,11 @@ function which(bin: string): boolean {
 /** Best-effort subprocess call whose failure is swallowed — mirrors `cmd 2>/dev/null || true`
  * (stdout inherited, stderr discarded, exit code and thrown ENOENT both ignored). */
 function runIgnoringFailure(bin: string, args: string[]): void {
-  try {
-    Bun.spawnSync([bin, ...args], { stdout: "inherit", stderr: "ignore" });
-  } catch {
-    // command-not-found or any other spawn failure: swallowed, matching `|| true`.
-  }
+  // command-not-found or any other spawn failure: swallowed, matching `|| true`.
+  fromThrowable(Bun.spawnSync)([bin, ...args], {
+    stdout: "inherit",
+    stderr: "ignore",
+  });
 }
 
 /** Thrown by `runOrAbort` to unwind to the top-level catch while carrying the FAILING command's
@@ -211,21 +210,20 @@ export class AbortError extends Error {
  * an AbortError carrying that exit code, aborting the whole run exactly where the shell would
  * have. */
 function runOrAbort(bin: string, args: string[]): void {
-  let exitCode: number;
-  try {
-    const proc = Bun.spawnSync([bin, ...args], {
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    exitCode = proc.exitCode ?? 1;
-  } catch {
-    // Disclosed divergence (accepted): real bash prints "bash: line N: <bin>: command not
-    // found" on this path. This message is a port-invented approximation of that diagnostic,
-    // not a byte-for-byte transcript — byte-matching bash's own prefix is neither achievable
-    // nor desirable in a port.
-    process.stderr.write(`${bin}: command not found\n`);
-    exitCode = 127;
-  }
+  const exitCode = fromThrowable(Bun.spawnSync)([bin, ...args], {
+    stdout: "inherit",
+    stderr: "inherit",
+  }).match(
+    (proc) => proc.exitCode ?? 1,
+    () => {
+      // Disclosed divergence (accepted): real bash prints "bash: line N: <bin>: command not
+      // found" on this path. This message is a port-invented approximation of that diagnostic,
+      // not a byte-for-byte transcript — byte-matching bash's own prefix is neither achievable
+      // nor desirable in a port.
+      process.stderr.write(`${bin}: command not found\n`);
+      return 127;
+    },
+  );
   if (exitCode !== 0) {
     throw new AbortError(
       `${bin} ${args.join(" ")} failed (exit ${exitCode})`,
@@ -373,17 +371,14 @@ function main(): void {
   // deleting an entry here never uninstalls it. Read-only (`claude mcp list`), so it runs
   // regardless of --dry-run.
   const declared = names; // already alphabetically sorted, matching jq's `keys[] | sort`
-  let liveText = "";
-  try {
-    const proc = Bun.spawnSync([claudeBin, "mcp", "list"], {
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    liveText = proc.stdout.toString();
-  } catch {
-    liveText = ""; // matches the shell: a failed `claude mcp list` still ends in `| sort`,
-    // whose own exit status is what `set -e` sees — never an abort.
-  }
+  // matches the shell: a failed `claude mcp list` still ends in `| sort`, whose own exit status
+  // is what `set -e` sees — never an abort.
+  const liveText = fromThrowable(Bun.spawnSync)([claudeBin, "mcp", "list"], {
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+    .map((proc) => proc.stdout.toString())
+    .unwrapOr("");
   const liveNames = liveText
     .split("\n")
     .map((line) => /^([a-zA-Z0-9_-]*): /.exec(line)?.[1])
@@ -438,11 +433,10 @@ function main(): void {
 // argv, not any CLI args), every default would resolve to the REAL $HOME/dotfiles and REAL
 // `claude`/`codex` binaries. Confirmed by direct reproduction during this port's own test
 // development; see behaviorNotes.
+// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
+// is the sync equivalent of BG1's mandated `main().catch(...)`.
 if (import.meta.main) {
-  try {
-    main();
-    process.exit(0);
-  } catch (error) {
+  process.on("uncaughtException", (error) => {
     if (error instanceof AbortError) {
       // Parity with `set -eu`: the original prints NOTHING of its own on abort — the failing
       // command's own diagnostic already went to (inherited) stderr above — and the shell exits
@@ -459,5 +453,8 @@ if (import.meta.main) {
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );
     process.exit(1);
-  }
+  });
+
+  main();
+  process.exit(0);
 }

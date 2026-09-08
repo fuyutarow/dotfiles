@@ -62,6 +62,7 @@ import {
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 const USAGE =
   "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
@@ -98,20 +99,15 @@ function print(line: string): void {
  * of the run — each site stays locally tolerant, exactly like the original shell body.
  */
 function tryOp(fn: () => void): void {
-  try {
-    fn();
-  } catch {
-    // swallowed — see function doc.
-  }
+  // swallowed — see function doc.
+  fromThrowable(fn)();
 }
 
 /** Directory-follows check: mirrors POSIX `[ -d p ]` (false for missing/non-dir, no throw). */
 function isDir(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
+  return fromThrowable(statSync)(p)
+    .map((s) => s.isDirectory())
+    .unwrapOr(false);
 }
 
 /**
@@ -120,11 +116,8 @@ function isDir(p: string): boolean {
  * a symlink at all, including "does not exist".
  */
 function symlinkTarget(p: string): string | null {
-  try {
-    if (!lstatSync(p).isSymbolicLink()) return null;
-  } catch {
-    return null;
-  }
+  const lstat = fromThrowable(lstatSync)(p);
+  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
   return readlinkSync(p);
 }
 
@@ -134,12 +127,9 @@ function symlinkTarget(p: string): string | null {
  * symlink"; combining it with the `-L`/lstat check does.
  */
 function isSymlinkOrAbsent(p: string): boolean {
-  let isSymlink = false;
-  try {
-    isSymlink = lstatSync(p).isSymbolicLink();
-  } catch {
-    isSymlink = false;
-  }
+  const isSymlink = fromThrowable(lstatSync)(p)
+    .map((s) => s.isSymbolicLink())
+    .unwrapOr(false);
   return isSymlink || !existsSync(p);
 }
 
@@ -150,13 +140,9 @@ function isSymlinkOrAbsent(p: string): boolean {
  * which never match hidden entries unless `shopt -s dotglob` is set (it is not, in the original).
  */
 function listEntries(dir: string): string[] {
-  try {
-    return readdirSync(dir)
-      .filter((n) => !n.startsWith("."))
-      .sort();
-  } catch {
-    return [];
-  }
+  return fromThrowable(readdirSync)(dir)
+    .map((names) => names.filter((n) => !n.startsWith(".")).sort())
+    .unwrapOr([]);
 }
 
 /**
@@ -235,17 +221,11 @@ function main(): void {
       `[dry-run] would set: git -C ${dotfiles} config core.hooksPath .githooks`,
     );
   } else {
-    try {
-      Bun.spawnSync(
-        ["git", "-C", dotfiles, "config", "core.hooksPath", ".githooks"],
-        {
-          stdout: "ignore",
-          stderr: "ignore",
-        },
-      );
-    } catch {
-      // swallowed, matching `|| true`
-    }
+    // swallowed, matching `|| true`
+    fromThrowable(Bun.spawnSync)(
+      ["git", "-C", dotfiles, "config", "core.hooksPath", ".githooks"],
+      { stdout: "ignore", stderr: "ignore" },
+    );
   }
 
   // Claude Code — slash commands
@@ -330,11 +310,7 @@ function main(): void {
         // Unlike every other prune/exclude site, the original gates this one on success —
         // `rm -f "$old" && echo "pruned ...`. A failed `rm -f` short-circuits the `&&`, so
         // the message must NOT print and the loop just moves to the next entry.
-        try {
-          unlinkSync(old);
-        } catch {
-          continue;
-        }
+        if (fromThrowable(unlinkSync)(old).isErr()) continue;
         print(`pruned (renamed/deleted): ${old}`);
       }
     }
@@ -384,20 +360,23 @@ function main(): void {
 }
 
 // No outer abort here, matching the original's total tolerance: every mutation above already
-// guards itself locally via tryOp(), so main() should never throw. This catch is a last-resort
+// guards itself locally via tryOp(), so main() should never throw. This handler is a last-resort
 // safety net only — even in the unforeseen case something escapes a local guard, it is
 // swallowed silently (no new "FATAL" stderr line the original never printed) and the process
 // still exits 0, exactly like the original shell body always reaching its final `echo` (last
 // command run, so its exit status — always 0 — is the task's exit status).
-try {
-  main();
-} catch (error) {
+// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
+// is the sync equivalent of BG1's mandated `main().catch(...)`.
+process.on("uncaughtException", (error) => {
   if (error instanceof UsageError) {
     process.stderr.write(`${error.message}\n${USAGE}`);
     process.exitCode = 2;
   }
   // Every non-usage failure is swallowed — see comment above.
-}
+  process.exit(process.exitCode ?? 0);
+});
+
+main();
 // `?? 0` preserves the original's unconditional exit 0 for valid mutation paths. Locally caught
 // usage errors (including `--__proto__`) set exit 2 before this line; Cleye ordinary-unknown
 // strictness exits 1 inside the framework, before any filesystem work.

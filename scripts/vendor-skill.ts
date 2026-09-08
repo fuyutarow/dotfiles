@@ -34,6 +34,7 @@
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 /** Pinned deliberately: `add` is the one command here that can overwrite repo content. */
 const SKILLS_CLI = "skills@1.5.22";
@@ -75,11 +76,8 @@ function nonEmptyString(flag: string): (value: string) => string {
 
 /** Raw, non-canonicalizing symlink probe — the stored target string, never resolved. */
 function symlinkTarget(p: string): string | null {
-  try {
-    if (!lstatSync(p).isSymbolicLink()) return null;
-  } catch {
-    return null;
-  }
+  const lstat = fromThrowable(lstatSync)(p);
+  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
   return readlinkSync(p);
 }
 
@@ -250,9 +248,10 @@ function main(): void {
   );
 }
 
-try {
-  main();
-} catch (error) {
+// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
+// is the sync equivalent of BG1's mandated `main().catch(...)`, a listener registered before
+// main() runs rather than a local try/catch wrapped around the call.
+process.on("uncaughtException", (error) => {
   if (error instanceof UsageError) {
     fail(`${error.message}\n${USAGE}`);
     process.exitCode = 2;
@@ -260,5 +259,8 @@ try {
     fail(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   }
-}
+  process.exit(process.exitCode ?? 0);
+});
+
+main();
 process.exit(process.exitCode ?? 0);

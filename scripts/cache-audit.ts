@@ -1,6 +1,7 @@
 import { $ } from "bun";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+import { fromThrowable } from "neverthrow";
 
 // READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search),
 // vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date
@@ -43,12 +44,9 @@ console.log(`== 1. ~/ の隠しディレクトリ: 最終更新が ${staleDays} 
 for (const name of readdirSync(home).sort()) {
   if (!(name.length >= 2 && name[0] === "." && name[1] !== ".")) continue;
   const d = `${home}/${name}`;
-  let st: ReturnType<typeof statSync>;
-  try {
-    st = statSync(d);
-  } catch {
-    continue;
-  }
+  const statResult = fromThrowable(statSync)(d);
+  if (statResult.isErr()) continue;
+  const st = statResult.value;
   if (!st.isDirectory()) continue;
   const m = await mtime(d);
   if (m === null) continue;

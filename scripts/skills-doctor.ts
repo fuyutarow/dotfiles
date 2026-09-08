@@ -26,6 +26,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 const USAGE =
   "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]\n";
@@ -55,40 +56,33 @@ function nonEmptyString(flag: string): (value: string) => string {
 }
 
 function isDir(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
+  return fromThrowable(statSync)(p)
+    .map((s) => s.isDirectory())
+    .unwrapOr(false);
 }
 
 function symlinkTarget(p: string): string | null {
-  try {
-    if (!lstatSync(p).isSymbolicLink()) return null;
-  } catch {
-    return null;
-  }
+  const lstat = fromThrowable(lstatSync)(p);
+  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
   return readlinkSync(p);
 }
 
 /** True when p exists on disk as something OTHER than a symlink (a real file or directory). */
 function isRealPath(p: string): boolean {
-  try {
-    return !lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
-  }
+  return fromThrowable(lstatSync)(p)
+    .map((s) => !s.isSymbolicLink())
+    .unwrapOr(false);
 }
 
 function listSkillNames(skillsDir: string): string[] {
-  try {
-    return readdirSync(skillsDir)
-      .filter((n) => !n.startsWith("."))
-      .filter((n) => isDir(`${skillsDir}/${n}`))
-      .sort();
-  } catch {
-    return [];
-  }
+  return fromThrowable(readdirSync)(skillsDir)
+    .map((names) =>
+      names
+        .filter((n) => !n.startsWith("."))
+        .filter((n) => isDir(`${skillsDir}/${n}`))
+        .sort(),
+    )
+    .unwrapOr([]);
 }
 
 /** Every agents/skills/<name> this repo owns must reach Claude Code as a link, not be masked. */
@@ -182,18 +176,18 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
       },
     ];
   }
-  let names: string[];
-  try {
+  const namesResult = fromThrowable(() => {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
     const skills =
       typeof parsed === "object" && parsed !== null && "skills" in parsed
         ? (parsed as { skills: unknown }).skills
         : undefined;
-    names =
-      typeof skills === "object" && skills !== null
-        ? Object.keys(skills).sort()
-        : [];
-  } catch (error) {
+    return typeof skills === "object" && skills !== null
+      ? Object.keys(skills).sort()
+      : [];
+  })();
+  if (namesResult.isErr()) {
+    const error = namesResult.error;
     return [
       {
         level: "FAIL",
@@ -201,7 +195,7 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
       },
     ];
   }
-  return names
+  return namesResult.value
     .filter((n) => !existsSync(`${dotfiles}/agents/skills/${n}/SKILL.md`))
     .map((n) => ({
       level: "FAIL" as const,
@@ -260,9 +254,9 @@ function main(): void {
   print("✅ SKILLS-WIRING PASS: no shadowed skill, wiring and ledger intact");
 }
 
-try {
-  main();
-} catch (error) {
+// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
+// is the sync equivalent of BG1's mandated `main().catch(...)`.
+process.on("uncaughtException", (error) => {
   if (error instanceof UsageError) {
     process.stderr.write(`${error.message}\n${USAGE}`);
     process.exitCode = 2;
@@ -272,5 +266,8 @@ try {
     );
     process.exitCode = 1;
   }
-}
+  process.exit(process.exitCode ?? 0);
+});
+
+main();
 process.exit(process.exitCode ?? 0);

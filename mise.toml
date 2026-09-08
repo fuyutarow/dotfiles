@@ -111,6 +111,7 @@ depends = [
   "lint:sh",
   "lint:zsh",
   "lint:bun",
+  "lint:no-try-catch",
   "lint:skills-index",
   "lint:skills-wiring",
   "lint:skills-floor",
@@ -181,6 +182,21 @@ git ls-files -z -- \
   'agents/serena-control/serena-foreground.ts' \
   ':(exclude)agents/claude/hooks/repo-search.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
+'''
+
+# House-specific, narrower than lint:bun: scripts/*.ts ONLY. NOT hooks (BG3 zero-dep — they
+# cannot import neverthrow) and NOT agents/skills/**/scripts/** (a skill's own floor is
+# writing-bun-scripts' script-check.ts, not a dotfiles-repo-only rule).
+# render-claude-settings.ts is excluded for the identical zero-dep reason as hooks: its own
+# header ("NO FLAGS, NO DEPENDENCIES — deliberate") documents that it runs from link-dots.sh on
+# a fresh machine BEFORE `mise run deps` restores node_modules — importing neverthrow there would
+# break bootstrap exactly like importing cleye would.
+[tasks."lint:no-try-catch"]
+dir = "{{config_root}}"
+description = "Ban try/catch in this repo's scripts/*.ts — use neverthrow's Result (fromThrowable) instead, or declare `// try-catch-exception: <reason>` if unavoidable"
+run = '''
+git ls-files -z -- ':(glob)scripts/*.ts' ':(exclude)scripts/render-claude-settings.ts' |
+  xargs -0 bun scripts/lint-no-try-catch.ts
 '''
 
 [tasks.test]

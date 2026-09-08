@@ -13,6 +13,11 @@
 // swallowed (mirrors the original's `|| true` — this script never fails because ONE tool's
 // cache-clean command failed).
 //
+// No try/catch (house policy for this repo's scripts/*.ts — lint:no-try-catch): every call that
+// can throw (Bun.spawnSync, mkdtempSync, writeFileSync) goes through neverthrow's
+// fromThrowable(), and swallowing is done via .unwrapOr()/`if (result.isOk())`, not a catch
+// block. `main().catch(...)` below is Promise.prototype.catch, not this statement — exempt.
+//
 // Usage: bun scripts/cache-clean.ts [--dry-run] [--home <path>]
 //   --home defaults to $HOME — pass a fixture dir to test without touching the real one.
 // Exit: every valid cleanup invocation reaches 0. The original shell body has no `set -e` —
@@ -25,6 +30,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 class UsageError extends Error {}
 
@@ -50,16 +56,12 @@ function nonEmptyString(flag: string): (value: string) => string {
 
 /** `df -h <home> | awk 'NR==2{print $4" free"}'` — read-only, safe against any existing path. */
 export function freeSpace(home: string, spawn = Bun.spawnSync): string {
-  let out = "";
-  try {
-    const proc = spawn(["df", "-h", home], {
-      stdout: "pipe",
-      stderr: "inherit", // original `df -h "$HOME" | awk ...` never redirects df's own stderr
-    });
-    out = proc.stdout.toString();
-  } catch {
-    return "";
-  }
+  const result = fromThrowable(spawn)(["df", "-h", home], {
+    stdout: "pipe",
+    stderr: "inherit", // original `df -h "$HOME" | awk ...` never redirects df's own stderr
+  });
+  if (result.isErr()) return "";
+  const out = result.value.stdout.toString();
   const rawLines = out.split("\n");
   if (rawLines[rawLines.length - 1] === "") rawLines.pop(); // drop trailing-newline artifact
   if (rawLines.length < 2) return ""; // awk's NR==2 never fires -> no output at all
@@ -81,15 +83,12 @@ export function toolAvailable(tool: string): boolean {
  * as NOT busy and cache prune proceeds.
  */
 export function isUvBusy(spawn = Bun.spawnSync): boolean {
-  try {
-    const proc = spawn(["pgrep", "-f", "[u]v tool|[u]vx"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    return proc.exitCode === 0;
-  } catch {
-    return false;
-  }
+  return fromThrowable(spawn)(["pgrep", "-f", "[u]v tool|[u]vx"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+    .map((proc) => proc.exitCode === 0)
+    .unwrapOr(false);
 }
 
 /**
@@ -103,17 +102,16 @@ export function cleanupTempDir(
 ): void {
   const ripAvailable = opts.ripAvailable ?? toolAvailable("rip");
   const spawn = opts.spawn ?? Bun.spawnSync;
-  let ripOk = false;
-  if (ripAvailable) {
-    try {
-      // original: `rip "$_bt" 2>/dev/null` — only rip's stderr is redirected; its stdout
-      // (e.g. any confirmation line) still reaches the terminal.
-      const proc = spawn(["rip", dir], { stdout: "inherit", stderr: "ignore" });
-      ripOk = proc.exitCode === 0;
-    } catch {
-      ripOk = false;
-    }
-  }
+  // original: `rip "$_bt" 2>/dev/null` — only rip's stderr is redirected; its stdout (e.g. any
+  // confirmation line) still reaches the terminal.
+  const ripOk = ripAvailable
+    ? fromThrowable(spawn)(["rip", dir], {
+        stdout: "inherit",
+        stderr: "ignore",
+      })
+        .map((proc) => proc.exitCode === 0)
+        .unwrapOr(false)
+    : false;
   if (!ripOk) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -136,16 +134,13 @@ export function runSimpleStep(step: SimpleStep, dryRun: boolean): void {
     return;
   }
   console.log(`• ${step.label}`);
-  try {
-    // bounded: no timeout in the original shell body either (`cmd || true`) — a hanging tool
-    // is the same pre-existing risk as bash, not a regression this port introduces.
-    Bun.spawnSync(step.cmd, {
-      stdout: "inherit",
-      stderr: step.suppressStderr ? "ignore" : "inherit",
-    });
-  } catch {
-    // mirror `|| true`: a failed/missing command must not stop the rest of the pass
-  }
+  // bounded: no timeout in the original shell body either (`cmd || true`) — a hanging tool is
+  // the same pre-existing risk as bash, not a regression this port introduces. Result discarded
+  // by design: a thrown OR a nonzero exit are both `|| true` — this step must not stop the pass.
+  fromThrowable(Bun.spawnSync)(step.cmd, {
+    stdout: "inherit",
+    stderr: step.suppressStderr ? "ignore" : "inherit",
+  });
 }
 
 // bun: native `bun pm cache rm` errors outside a project (oven-sh/bun #16101/#18733), so it
@@ -163,29 +158,24 @@ function runBunStep(dryRun: boolean): void {
   // bun pm cache rm ) || true` — the header echo above already ran unconditionally, and this
   // whole && chain (tempdir creation included) is guarded by a trailing `|| true`: a failure
   // ANYWHERE in it (ENOSPC/EACCES on mkdtemp is exactly the full-disk case this task exists
-  // for) must not escape and must not stop the rest of the pass. Wrap the entire sequence,
-  // not just the bun subprocess, to mirror that.
-  try {
-    const dir = mkdtempSync(join(tmpdir(), "cache-clean-bun-"));
-    try {
-      writeFileSync(join(dir, "package.json"), "{}");
-      try {
-        // bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true` — no timeout there.
-        Bun.spawnSync(["bun", "pm", "cache", "rm"], {
-          cwd: dir,
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-      } catch {
-        // mirror `|| true`
-      }
-    } finally {
-      cleanupTempDir(dir);
+  // for) must not escape and must not stop the rest of the pass.
+  //
+  // `.map()`'s callback runs only when mkdtempSync succeeded (mirrors the outer try's scope: no
+  // dir, nothing to write/spawn/clean up). Inside it, writeFileSync failing still runs
+  // cleanupTempDir(dir) unconditionally — mirroring the original's `finally { cleanupTempDir }`,
+  // which ran even when the write above it threw.
+  fromThrowable(mkdtempSync)(join(tmpdir(), "cache-clean-bun-")).map((dir) => {
+    const wrote = fromThrowable(writeFileSync)(join(dir, "package.json"), "{}");
+    if (wrote.isOk()) {
+      // bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true` — no timeout there.
+      fromThrowable(Bun.spawnSync)(["bun", "pm", "cache", "rm"], {
+        cwd: dir,
+        stdout: "inherit",
+        stderr: "inherit",
+      });
     }
-  } catch {
-    // mirror `|| true`: tempdir setup itself failed (dir was never created, so there is
-    // nothing to clean up) — swallow and let main() proceed to the remaining steps.
-  }
+    cleanupTempDir(dir);
+  });
 }
 
 // uv: `uv cache clean/prune` blocks on the cache lock while ANY uv process runs (e.g. uvx-
@@ -203,15 +193,11 @@ function runUvStep(dryRun: boolean): void {
     return;
   }
   console.log("• uv cache prune");
-  try {
-    // bounded: mirrors the original `uv cache prune || true` — no timeout there either.
-    Bun.spawnSync(["uv", "cache", "prune"], {
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-  } catch {
-    // mirror `|| true`
-  }
+  // bounded: mirrors the original `uv cache prune || true` — no timeout there either.
+  fromThrowable(Bun.spawnSync)(["uv", "cache", "prune"], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
 }
 
 // julia: `Pkg.gc()` removes packages/artifacts no known environment manifest references — the
@@ -223,15 +209,12 @@ function runUvStep(dryRun: boolean): void {
 // (this host runs one, `raw-julia-watch.sh`) — `-x` matches only a process actually named
 // `julia`. Missing pgrep mirrors isUvBusy's own fallback (`if pgrep ...` false -> proceeds).
 export function isJuliaBusy(spawn = Bun.spawnSync): boolean {
-  try {
-    const proc = spawn(["pgrep", "-x", "julia"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    return proc.exitCode === 0;
-  } catch {
-    return false;
-  }
+  return fromThrowable(spawn)(["pgrep", "-x", "julia"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+    .map((proc) => proc.exitCode === 0)
+    .unwrapOr(false);
 }
 
 function runJuliaStep(dryRun: boolean): void {
@@ -247,15 +230,11 @@ function runJuliaStep(dryRun: boolean): void {
     return;
   }
   console.log("• julia Pkg.gc()");
-  try {
-    // bounded: mirrors every other step's `... || true` — no timeout there either.
-    Bun.spawnSync(["julia", "--startup-file=no", "-e", "using Pkg; Pkg.gc()"], {
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-  } catch {
-    // mirror `|| true`
-  }
+  // bounded: mirrors every other step's `... || true` — no timeout there either.
+  fromThrowable(Bun.spawnSync)(
+    ["julia", "--startup-file=no", "-e", "using Pkg; Pkg.gc()"],
+    { stdout: "inherit", stderr: "inherit" },
+  );
 }
 
 // cargo: no built-in cache cleaner on stable — rip the regenerable download caches instead
@@ -278,12 +257,11 @@ function runCargoStep(home: string, dryRun: boolean): void {
     return;
   }
   console.log("• cargo registry/git caches (rip → graveyard)");
-  try {
-    // bounded: mirrors the original `rip ... 2>/dev/null || true` — no timeout there either.
-    Bun.spawnSync(["rip", ...paths], { stdout: "inherit", stderr: "ignore" });
-  } catch {
-    // mirror `|| true`
-  }
+  // bounded: mirrors the original `rip ... 2>/dev/null || true` — no timeout there either.
+  fromThrowable(Bun.spawnSync)(["rip", ...paths], {
+    stdout: "inherit",
+    stderr: "ignore",
+  });
 }
 
 // ---- entry --------------------------------------------------------------------------------

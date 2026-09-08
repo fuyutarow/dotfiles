@@ -68,6 +68,7 @@ import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
+import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 
 // ---------------------------------------------------------------------------------------------
 // Constants
@@ -167,13 +168,11 @@ export function discoverProjects(
     excludeAbs.some((ex) => dir === ex || dir.startsWith(`${ex}/`));
 
   const walk = (dir: string): void => {
-    let entries: ReturnType<typeof readdirSync>;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return; // permission denied / vanished mid-walk — skip, never crash discover
-    }
-    for (const entry of entries) {
+    const entriesResult = fromThrowable(() =>
+      readdirSync(dir, { withFileTypes: true }),
+    )();
+    if (entriesResult.isErr()) return; // permission denied / vanished mid-walk — skip, never crash discover
+    for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
       const full = join(dir, entry.name);
       if (entry.name === SETTINGS_DIR_NAME) {
@@ -196,23 +195,19 @@ export function dirSizeBytes(dir: string): number {
   while (stack.length > 0) {
     const current = stack.pop();
     if (current === undefined) continue;
-    let entries: ReturnType<typeof readdirSync>;
-    try {
-      entries = readdirSync(current, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
+    const entriesResult = fromThrowable(() =>
+      readdirSync(current, { withFileTypes: true }),
+    )();
+    if (entriesResult.isErr()) continue;
+    for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink()) continue;
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(full);
       } else if (entry.isFile()) {
-        try {
-          total += statSync(full).size;
-        } catch {
-          /* vanished mid-walk */
-        }
+        // vanished mid-walk
+        const sizeResult = fromThrowable(() => statSync(full).size)();
+        if (sizeResult.isOk()) total += sizeResult.value;
       }
     }
   }
@@ -236,24 +231,23 @@ export function computeIndexDimension(
   targetSqliteDbPath: string,
 ): number | null {
   if (!existsSync(targetSqliteDbPath)) return null;
-  let db: Database;
+  const dbResult = fromThrowable(
+    () => new Database(targetSqliteDbPath, { readonly: true }),
+  )();
+  if (dbResult.isErr()) return null;
+  const db = dbResult.value;
   try {
-    db = new Database(targetSqliteDbPath, { readonly: true });
-  } catch {
-    return null;
-  }
-  try {
-    const row = db
-      .query(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
-      )
-      .get() as { sql: string } | null;
-    const match = row?.sql?.match(/embedding\s+float\[(\d+)\]/);
-    if (!match?.[1]) return null;
-    const dim = Number(match[1]);
-    return Number.isFinite(dim) ? dim : null;
-  } catch {
-    return null;
+    return fromThrowable(() => {
+      const row = db
+        .query(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
+        )
+        .get() as { sql: string } | null;
+      const match = row?.sql?.match(/embedding\s+float\[(\d+)\]/);
+      if (!match?.[1]) return null;
+      const dim = Number(match[1]);
+      return Number.isFinite(dim) ? dim : null;
+    })().unwrapOr(null);
   } finally {
     db.close();
   }
@@ -262,21 +256,20 @@ export function computeIndexDimension(
 /** Row count of `code_chunks_vec_rowids` — a plain table, queryable without the vec0 extension. */
 export function countIndexedRows(targetSqliteDbPath: string): number | null {
   if (!existsSync(targetSqliteDbPath)) return null;
-  let db: Database;
+  const dbResult = fromThrowable(
+    () => new Database(targetSqliteDbPath, { readonly: true }),
+  )();
+  if (dbResult.isErr()) return null;
+  const db = dbResult.value;
   try {
-    db = new Database(targetSqliteDbPath, { readonly: true });
-  } catch {
-    return null;
-  }
-  try {
-    const row = db
-      .query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids")
-      .get() as {
-      n: number;
-    } | null;
-    return row ? row.n : null;
-  } catch {
-    return null;
+    return fromThrowable(() => {
+      const row = db
+        .query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids")
+        .get() as {
+        n: number;
+      } | null;
+      return row ? row.n : null;
+    })().unwrapOr(null);
   } finally {
     db.close();
   }
@@ -395,24 +388,20 @@ export function snapshotDir(dir: string): Map<string, FileSnapshot> {
   const snap = new Map<string, FileSnapshot>();
   if (!existsSync(dir)) return snap;
   const walk = (current: string): void => {
-    let entries: ReturnType<typeof readdirSync>;
-    try {
-      entries = readdirSync(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
+    const entriesResult = fromThrowable(() =>
+      readdirSync(current, { withFileTypes: true }),
+    )();
+    if (entriesResult.isErr()) return;
+    for (const entry of entriesResult.value) {
       if (entry.isSymbolicLink()) continue;
       const full = join(current, entry.name);
       if (entry.isDirectory()) {
         walk(full);
       } else if (entry.isFile()) {
-        try {
-          const st = statSync(full);
+        // vanished mid-walk
+        fromThrowable(() => statSync(full))().map((st) => {
           snap.set(relative(dir, full), { size: st.size, mtimeMs: st.mtimeMs });
-        } catch {
-          /* vanished mid-walk */
-        }
+        });
       }
     }
   };
@@ -443,14 +432,12 @@ export interface PrevGeneration {
 
 /** `.cocoindex_code.prev-<ts>` siblings of a project root, newest first. */
 export function listPrevGenerations(projectRoot: string): PrevGeneration[] {
-  let entries: ReturnType<typeof readdirSync>;
-  try {
-    entries = readdirSync(projectRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  const entriesResult = fromThrowable(() =>
+    readdirSync(projectRoot, { withFileTypes: true }),
+  )();
+  if (entriesResult.isErr()) return [];
   const gens: PrevGeneration[] = [];
-  for (const entry of entries) {
+  for (const entry of entriesResult.value) {
     if (!entry.isDirectory()) continue;
     const match = entry.name.match(PREV_DIR_RE);
     if (!match?.[1]) continue;
@@ -521,13 +508,13 @@ export async function removeDir(
   const spawn = opts.spawn ?? Bun.spawnSync;
   let ripOk = false;
   if (Bun.which("rip") !== null) {
-    try {
-      // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
-      const proc = spawn(["rip", path], { stdout: "ignore", stderr: "ignore" });
-      ripOk = proc.exitCode === 0;
-    } catch {
-      ripOk = false;
-    }
+    // bounded: a single fast filesystem rename into rip's own graveyard, never hangs
+    ripOk = fromThrowable(spawn)(["rip", path], {
+      stdout: "ignore",
+      stderr: "ignore",
+    })
+      .map((proc) => proc.exitCode === 0)
+      .unwrapOr(false);
   }
   if (!ripOk) {
     await rm(path, { recursive: true, force: true });
@@ -635,13 +622,17 @@ async function cmdBuild(
     return 2;
   }
   const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
-  let shadowYaml: string;
-  try {
-    shadowYaml = replaceEmbeddingModel(liveYaml, flags.model);
-  } catch (error) {
-    process.stderr.write(`FATAL: ${(error as Error).message}\n`);
+  const shadowYamlResult = fromThrowable(() =>
+    replaceEmbeddingModel(liveYaml, flags.model),
+  )();
+  if (shadowYamlResult.isErr()) {
+    const error = shadowYamlResult.error;
+    process.stderr.write(
+      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     return 2;
   }
+  const shadowYaml = shadowYamlResult.value;
 
   const plans: BuildPlan[] = projects.map((root) => {
     const shadowDbDir = mirrorShadowDbDir(ctx.shadowDir, root);
@@ -743,15 +734,17 @@ async function cmdBuild(
       continue;
     }
     const { chunks, files } = parseChunksAndFiles(result.stdout);
-    try {
+    const copyResult = await fromAsyncThrowable(async () => {
       await mkdir(p.shadowDbDir, { recursive: true });
       await copyFile(
         join(p.root, SETTINGS_DIR_NAME, PROJECT_SETTINGS_FILE),
         join(p.shadowDbDir, PROJECT_SETTINGS_FILE),
       );
-    } catch (error) {
+    })();
+    if (copyResult.isErr()) {
+      const error = copyResult.error;
       process.stdout.write(
-        `BUILD ${p.root}: WARN settings.yml copy failed: ${(error as Error).message}\n`,
+        `BUILD ${p.root}: WARN settings.yml copy failed: ${error instanceof Error ? error.message : String(error)}\n`,
       );
     }
     built += 1;
@@ -762,15 +755,14 @@ async function cmdBuild(
   // Best-effort refresh for skipped (already-built) projects too, so their settings.yml copy
   // never goes stale across separate build runs — read-only on the live side either way.
   for (const p of skipped) {
-    try {
+    // best effort
+    await fromAsyncThrowable(async () => {
       await mkdir(p.shadowDbDir, { recursive: true });
       await copyFile(
         join(p.root, SETTINGS_DIR_NAME, PROJECT_SETTINGS_FILE),
         join(p.shadowDbDir, PROJECT_SETTINGS_FILE),
       );
-    } catch {
-      /* best effort */
-    }
+    })();
   }
 
   const liveTouched: string[] = [];
@@ -1035,14 +1027,14 @@ async function cmdRollback(
   const markerPath = join(ctx.shadowDir, `cutover-${targetTs}.json`);
   let previousModel: string | null = null;
   if (existsSync(markerPath)) {
-    try {
+    // best effort
+    const markerResult = await fromAsyncThrowable(async () => {
       const marker = JSON.parse(await readFile(markerPath, "utf8")) as {
         previousModel?: string | null;
       };
-      previousModel = marker.previousModel ?? null;
-    } catch {
-      /* best effort */
-    }
+      return marker.previousModel ?? null;
+    })();
+    if (markerResult.isOk()) previousModel = markerResult.value;
   }
   process.stdout.write(
     previousModel
@@ -1152,7 +1144,8 @@ async function cmdGc(
         return !deletedTimestamps.has(ts);
       }),
   );
-  try {
+  // best effort — shadowDir may not exist yet
+  await fromAsyncThrowable(async () => {
     for (const entry of readdirSync(ctx.shadowDir, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const match = entry.name.match(/^cutover-(\d+)\.json$/);
@@ -1161,9 +1154,7 @@ async function cmdGc(
         await rm(join(ctx.shadowDir, entry.name), { force: true });
       }
     }
-  } catch {
-    /* best effort — shadowDir may not exist yet */
-  }
+  })();
 
   process.stdout.write(
     `RESULT: gc deleted ${toDelete.length} generation(s), kept ${flags.keep} newest per project\n`,

@@ -61,6 +61,7 @@ const CORPUS = [
   { path: "scripts/ccc-swap.ts", command: "discover" },
   { path: "scripts/install-mcp.ts" },
   { path: "scripts/link-skills.ts" },
+  { path: "scripts/lint-no-try-catch.ts" },
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/vendor-skill.ts" },
 ] satisfies readonly CorpusEntry[];

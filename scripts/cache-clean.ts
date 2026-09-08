@@ -3,9 +3,13 @@
 // running `mise run cache:clean` — output is verdict-style lines meant for eyeballing, not a
 // machine envelope, matching the shell original.
 //
-// Reclaims disk by clearing package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/
-// docker/cargo). Safe — only regenerable caches. Best-effort by construction: every step is
-// independently guarded (tool present? not busy?) and every mutating command's failure is
+// Reclaims disk by clearing package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/
+// go/docker/cargo/mise/julia). Safe — only regenerable caches, and only via each tool's OWN
+// gc/prune command: the tool itself judges what is unused, we never guess. That is the line
+// that keeps this script agent-blind-safe — a target that has no such built-in judgment (rustup
+// toolchains, vscode-server old versions) belongs in `cache:toolchains` instead, which writes an
+// explicit safety predicate rather than borrowing one. Best-effort by construction: every step
+// is independently guarded (tool present? not busy?) and every mutating command's failure is
 // swallowed (mirrors the original's `|| true` — this script never fails because ONE tool's
 // cache-clean command failed).
 //
@@ -210,6 +214,50 @@ function runUvStep(dryRun: boolean): void {
   }
 }
 
+// julia: `Pkg.gc()` removes packages/artifacts no known environment manifest references — the
+// Julia depot's own equivalent of `uv cache prune`/`brew cleanup`. Guarded broader than
+// isUvBusy's tool-specific pattern: LanguageServer.jl, Pluto workers, and a plain REPL all count
+// as "a julia process", since gc mutates the shared depot's manifest-usage log a live process
+// may be reading. `-x` (exact comm-name match), not `-f` (cmdline substring): a `-f 'julia'`
+// pattern also fires on any unrelated script whose PATH or filename merely contains "julia"
+// (this host runs one, `raw-julia-watch.sh`) — `-x` matches only a process actually named
+// `julia`. Missing pgrep mirrors isUvBusy's own fallback (`if pgrep ...` false -> proceeds).
+export function isJuliaBusy(spawn = Bun.spawnSync): boolean {
+  try {
+    const proc = spawn(["pgrep", "-x", "julia"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+function runJuliaStep(dryRun: boolean): void {
+  if (!toolAvailable("julia")) return;
+  if (isJuliaBusy()) {
+    console.log("• julia Pkg.gc() — skipped (a julia process is running)");
+    return;
+  }
+  if (dryRun) {
+    console.log(
+      "[dry-run] would run: julia --startup-file=no -e using Pkg; Pkg.gc()",
+    );
+    return;
+  }
+  console.log("• julia Pkg.gc()");
+  try {
+    // bounded: mirrors every other step's `... || true` — no timeout there either.
+    Bun.spawnSync(["julia", "--startup-file=no", "-e", "using Pkg; Pkg.gc()"], {
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+  } catch {
+    // mirror `|| true`
+  }
+}
+
 // cargo: no built-in cache cleaner on stable — rip the regenerable download caches instead
 // (recoverable via rip's graveyard). Requires BOTH cargo and rip; no rm fallback here (matches
 // the original, which has no `|| rm -rf` on this line, only `|| true`).
@@ -336,10 +384,19 @@ async function main(): Promise<void> {
     dryRun,
   );
   runCargoStep(home, dryRun);
+  runSimpleStep(
+    {
+      tool: "mise",
+      label: "mise prune --tools",
+      cmd: ["mise", "prune", "--tools", "--yes"],
+    },
+    dryRun,
+  );
+  runJuliaStep(dryRun);
 
   console.log(`after:  ${freeSpace(home)}`);
   console.log(
-    "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+    "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
   );
 }
 

@@ -24,6 +24,7 @@ import { join } from "node:path";
 import {
   cleanupTempDir,
   freeSpace,
+  isJuliaBusy,
   isUvBusy,
   resolveHome,
   runSimpleStep,
@@ -140,6 +141,41 @@ describe("isUvBusy", () => {
       throw new Error("ENOENT");
     }) as unknown as typeof Bun.spawnSync;
     expect(isUvBusy(fakeSpawn)).toBe(false);
+  });
+});
+
+// ---- unit: isJuliaBusy ------------------------------------------------------------------------
+
+describe("isJuliaBusy", () => {
+  test("pgrep exit 0 => busy", () => {
+    const fakeSpawn = (() => ({
+      exitCode: 0,
+    })) as unknown as typeof Bun.spawnSync;
+    expect(isJuliaBusy(fakeSpawn)).toBe(true);
+  });
+
+  test("pgrep nonzero exit => not busy", () => {
+    const fakeSpawn = (() => ({
+      exitCode: 1,
+    })) as unknown as typeof Bun.spawnSync;
+    expect(isJuliaBusy(fakeSpawn)).toBe(false);
+  });
+
+  test("pgrep missing (spawn throws) => not busy", () => {
+    const fakeSpawn = (() => {
+      throw new Error("ENOENT");
+    }) as unknown as typeof Bun.spawnSync;
+    expect(isJuliaBusy(fakeSpawn)).toBe(false);
+  });
+
+  test("checks by exact comm name (-x julia), not a cmdline substring", () => {
+    let seenArgv: string[] | undefined;
+    const fakeSpawn = ((cmd: string[]) => {
+      seenArgv = cmd;
+      return { exitCode: 1 };
+    }) as unknown as typeof Bun.spawnSync;
+    isJuliaBusy(fakeSpawn);
+    expect(seenArgv).toEqual(["pgrep", "-x", "julia"]);
   });
 });
 
@@ -295,8 +331,11 @@ describe("cache-clean.ts CLI", () => {
       "docker",
       "cargo",
       "rip",
-      // deliberately no "uv" stub: leaves uv-detection deterministic (absent) regardless of
-      // whatever uv/uvx activity happens to be running on the host machine during the test
+      "mise",
+      // deliberately no "uv"/"julia" stub: leaves their detection deterministic (absent)
+      // regardless of whatever uv/uvx/julia activity happens to be running on the host machine
+      // during the test — a stub would make toolAvailable() true, and then runUvStep/
+      // runJuliaStep's busy-check calls the REAL system pgrep against the REAL process table
     ]) {
       makeStub(stubAll, name, 0);
     }
@@ -320,7 +359,7 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[lines.length - 2]).toMatch(/^after: {2}/);
     expect(lines[lines.length - 1]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
     );
 
     const idx = (needle: string) => lines.findIndex((l) => l.includes(needle));
@@ -334,6 +373,7 @@ describe("cache-clean.ts CLI", () => {
       idx("go clean -cache"),
       idx("docker builder prune"),
       idx(`rip ${join(fixtureHome, ".cargo", "registry", "src")}`),
+      idx("mise prune --tools"),
     ];
     for (const i of order) expect(i).toBeGreaterThanOrEqual(0);
     for (let i = 1; i < order.length; i++) {
@@ -345,8 +385,9 @@ describe("cache-clean.ts CLI", () => {
       expect(current).toBeGreaterThan(previous);
     }
 
-    // uv has no stub on this fixture PATH -> silently absent, exactly like every other missing tool
+    // uv/julia have no stub on this fixture PATH -> silently absent, like every other missing tool
     expect(lines.some((l) => l.includes("uv cache"))).toBe(false);
+    expect(lines.some((l) => l.includes("julia"))).toBe(false);
   });
 
   test("--dry-run with no tools on PATH: only before/after/banner, nothing else", () => {
@@ -359,7 +400,7 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
     );
   });
 
@@ -375,7 +416,7 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
     );
   });
 
@@ -391,7 +432,7 @@ describe("cache-clean.ts CLI", () => {
       expect(out).toContain("• brew cleanup --prune=all");
       expect(out).toContain("• npm cache clean");
       expect(out).toContain(
-        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
       );
     } finally {
       rmSync(stubDir, { recursive: true, force: true });
@@ -421,7 +462,7 @@ describe("cache-clean.ts CLI", () => {
       expect(out).toContain("• bun pm cache rm"); // header line still prints (mirrors the shell's unconditional echo)
       expect(out).toContain("• npm cache clean"); // the rest of the pass still ran
       expect(out).toContain(
-        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects",
+        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
       );
     } finally {
       rmSync(stubDir, { recursive: true, force: true });

@@ -57,6 +57,7 @@ const CORPUS = [
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
   { path: "cocoindex/repo-search.ts", command: "literal" },
   { path: "scripts/cache-clean.ts" },
+  { path: "scripts/cache-toolchains.ts" },
   { path: "scripts/ccc-swap.ts", command: "discover" },
   { path: "scripts/install-mcp.ts" },
   { path: "scripts/link-skills.ts" },

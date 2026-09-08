@@ -269,20 +269,31 @@ exec mise run link:skills
 '''
 
 [tasks."cache:clean"]
-description = "Reclaim disk: clear package-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
+description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
 run = 'bun ~/dotfiles/scripts/cache-clean.ts'
+
+[tasks."cache:toolchains"]
+description = "Prune rustup toolchains and vscode-server old versions — no tool-native gc exists for either, so this writes an explicit safety predicate instead (default/pin-scan for rustup; busy/recency for vscode-server). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
+run = 'bun ~/dotfiles/scripts/cache-toolchains.ts'
 
 [tasks."cache:projects"]
 description = "Clean project build artifacts (node_modules/target/build…) via kondo — interactive, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override."
 run = 'kondo --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
-# --- the 断捨離 pass, split by WHO MAY DECIDE ------------------------------------------------
-#   cache:clean   no judgment needed (regenerable package caches)   → any agent, run blind
-#   cache:audit   evidence only, deletes NOTHING                    → any agent, run blind
-#   (rip)         accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
-#   cache:purge   empty the graveyard — THE irreversible step       → human only
+# --- the 断捨離 pass, split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN -------------
+#   cache:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
+#   cache:toolchains  a WRITTEN predicate (busy-check / pin-scan) —     → any agent, run blind
+#                     no built-in gc exists, so the predicate errs toward keeping on missing
+#                     evidence (no fd -> skip rustup entirely) rather than guessing
+#   cache:audit       evidence only, deletes NOTHING                    → any agent, run blind
+#   (rip)             accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
+#   cache:purge       empty the graveyard — THE irreversible step       → human only
 # The gate sits on the ONE irreversible action, not on the delete. That is what makes the rest
-# delegatable: an agent working from cache:audit physically cannot lose data.
+# delegatable: an agent working from cache:audit physically cannot lose data. Adding a new target
+# to this pass: if its own tool ships a trustworthy gc/prune, it goes in cache:clean; if not,
+# write a predicate that keeps on missing evidence and it goes in cache:toolchains. A target
+# whose safety is a genuine value judgment (which model checkpoints are still needed, which repo
+# clones still matter) belongs in the interactive tier (cache:projects), not either blind one.
 [tasks."cache:audit"]
 description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune."
 run = 'bun ~/dotfiles/scripts/cache-audit.ts'

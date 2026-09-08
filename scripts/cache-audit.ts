@@ -143,5 +143,5 @@ const dfLine =
   await $`df -h ${home} | awk 'NR==2{print $4" free / "$2}'`.text();
 console.log(`df: ${dfLine.trim()}`);
 console.log(
-  "→ 判断が要らない分は cache:clean / 受け入れた候補は rip / 空きが増えるのは cache:purge だけ",
+  "→ 判断が要らない分は cache:clean(tool-native gc) / rustup・vscode-server は cache:toolchains(述語) / 受け入れた候補は rip / 空きが増えるのは cache:purge だけ",
 );

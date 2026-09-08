@@ -32,6 +32,8 @@ import {
 } from "../cache-clean";
 
 const SCRIPT = new URL("../cache-clean.ts", import.meta.url).pathname;
+const HUGGINGFACE_SCRIPT = new URL("../huggingface-gc.py", import.meta.url)
+  .pathname;
 
 // mise ships a `bun` SHIM (a symlink to the mise binary itself, dispatched by argv[0]) ahead of
 // the real bun on PATH. Bun.spawnSync's `env` option REPLACES rather than merges the child's
@@ -484,6 +486,60 @@ describe("cache-clean.ts CLI", () => {
     } finally {
       rmSync(stubDir, { recursive: true, force: true });
     }
+  });
+
+  // Isolated fixture PATH with only a stub "uv" — deliberately NOT added to stubAll (that set
+  // stays uv-free for the same isUvBusy-determinism reason documented above).
+  describe("runHuggingfaceStep (isolated stub)", () => {
+    function makeUvStub(dir: string, echoToStderr: boolean): void {
+      const redirect = echoToStderr ? " >&2" : "";
+      writeFileSync(
+        join(dir, "uv"),
+        `#!/bin/sh\necho "UV CALLED: $@"${redirect}\nexit 0\n`,
+      );
+      chmodSync(join(dir, "uv"), 0o755);
+    }
+
+    test("dry-run prints the command and never invokes uv", () => {
+      const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-dry-"));
+      try {
+        makeUvStub(stubDir, true);
+        const { out, err, code } = runScript(
+          ["--dry-run", "--home", fixtureHome],
+          { pathDirs: [stubDir] },
+        );
+        expect(code).toBe(0);
+        expect(out).toContain(
+          `[dry-run] would run: uv run ${HUGGINGFACE_SCRIPT}`,
+        );
+        expect(err).not.toContain("UV CALLED");
+      } finally {
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    });
+
+    test("real run invokes `uv run <script>`", () => {
+      const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-real-"));
+      try {
+        makeUvStub(stubDir, false);
+        const { out, code } = runScript(["--home", fixtureHome], {
+          pathDirs: [stubDir],
+        });
+        expect(code).toBe(0);
+        expect(out).toContain("• huggingface_hub gc (detached revisions)");
+        expect(out).toContain(`UV CALLED: run ${HUGGINGFACE_SCRIPT}`);
+      } finally {
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    });
+
+    test("uv absent -> no huggingface line at all", () => {
+      const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
+        pathDirs: [stubNone],
+      });
+      expect(code).toBe(0);
+      expect(out).not.toContain("huggingface");
+    });
   });
 
   test("rejects --__proto__ before running any cleanup step", () => {

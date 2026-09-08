@@ -4,8 +4,8 @@
 // machine envelope, matching the shell original.
 //
 // Reclaims disk by clearing package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/
-// go/docker/cargo/mise/julia). Safe — only regenerable caches, and only via each tool's OWN
-// gc/prune command: the tool itself judges what is unused, we never guess. That is the line
+// go/docker/cargo/mise/julia/huggingface_hub). Safe — only regenerable caches, and only via each
+// tool's OWN gc/prune command: the tool itself judges what is unused, we never guess. That is the line
 // that keeps this script agent-blind-safe — a target that has no such built-in judgment (rustup
 // toolchains, vscode-server old versions) belongs in `cache:toolchains` instead, which writes an
 // explicit safety predicate rather than borrowing one. Best-effort by construction: every step
@@ -264,6 +264,27 @@ function runCargoStep(home: string, dryRun: boolean): void {
   });
 }
 
+// huggingface_hub: `scan_cache_dir().delete_revisions(...)` removes only "detached" revisions —
+// zero refs pointing to them (a moved default branch, a commit pulled once and never reused).
+// No bare `huggingface-cli` flag exposes this; only the Python API sees each revision's `refs`
+// set. PEP 723 single-file script (scripts/huggingface-gc.py), invoked via plain `uv run
+// <path>` — its own header declares `dependencies = ["huggingface_hub"]`, so uv resolves an
+// ephemeral env with no persistent install and no `--with` needed here.
+function runHuggingfaceStep(dryRun: boolean): void {
+  if (!toolAvailable("uv")) return;
+  const scriptPath = join(import.meta.dir, "huggingface-gc.py");
+  if (dryRun) {
+    console.log(`[dry-run] would run: uv run ${scriptPath}`);
+    return;
+  }
+  console.log("• huggingface_hub gc (detached revisions)");
+  // bounded: mirrors every other step's `... || true` — no timeout there either.
+  fromThrowable(Bun.spawnSync)(["uv", "run", scriptPath], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+}
+
 // ---- entry --------------------------------------------------------------------------------
 
 /**
@@ -371,6 +392,7 @@ async function main(): Promise<void> {
     dryRun,
   );
   runJuliaStep(dryRun);
+  runHuggingfaceStep(dryRun);
 
   console.log(`after:  ${freeSpace(home)}`);
   console.log(

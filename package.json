@@ -6,6 +6,7 @@
   "dependencies": {
     "cleye": "2.6.0",
     "neverthrow": "8.2.0",
+    "oxc-parser": "0.149.0",
     "type-flag": "4.5.0",
     "yaml": "2.9.0"
   }

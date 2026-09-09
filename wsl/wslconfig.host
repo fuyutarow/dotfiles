@@ -1,0 +1,80 @@
+# WSL2 host-side config for r99 (compute server).
+# ASCII/UTF-8 ONLY. This file was previously saved as CP932 with Japanese comments and the
+# bytes were already corrupted on disk; rewritten 2026-09-06, revised 2026-09-09.
+[wsl2]
+
+# Host has 63.9 GB physical. 60 GB left Windows ~3.9 GB, which is over-committed: on 2026-09-06,
+# while C: was also full, the NVIDIA LocalSystem Container service crashed repeatedly under the
+# resulting pressure. 56 GB is the value this file itself pre-designated as the fallback.
+#
+# READ THIS BEFORE EXPECTING IT TO FREE MEMORY: memory= is a CAP, not a reservation - WSL grows
+# on demand and this only bounds the worst case. Measured 2026-09-09 with the cap still at 60 GB:
+# vmmemWSL held 44.96 GB while the guest reported 27 GB used / 24 GB buff+cache / 31 GB
+# available, with memory PSI flat at 0.00. The guest was never short of memory and never reached
+# the cap, so lowering 60 -> 56 frees nothing by itself. What actually holds host RAM is the
+# guest's page cache; reclaim it live, with no restart, from inside the distro:
+#   sync; echo 3 > /proc/sys/vm/drop_caches
+memory=56GB
+
+# 12 of the host's 16 logical processors, leaving 4 for Windows. Guest loadavg was 19.28 on these
+# 12 (1.6x oversubscribed) on 2026-09-09 under a 4-process julia workload, with cpu PSI some
+# avg10=18.5%. That is the workload's shape, not a misconfiguration - do not raise this to 16
+# without leaving Windows something, since the host CPU already reads 100%.
+processors=12
+
+# Backed by %TEMP%\<guid>\swap.vhdx, which is materialised on distro start and counts against C:.
+# Measured 2026-09-08: 16 GB on disk while only 350 MB was in use. It cannot be relocated off C:
+# with swapFile= here, because the only other volume (E:) is exFAT and cannot host a sparse vhdx.
+swap=16GB
+
+# Bridges Windows 127.0.0.1:<port> to a WSL listener. Keeps the ProxyJump fallback route into
+# WSL sshd (port 2222) available when the in-WSL tailnet node is down, and serves dev servers.
+localhostForwarding=true
+
+nestedVirtualization=true
+
+# Default is 10 retained crash dumps under %TEMP%\wsl-crashes. Measured 2026-09-09: that
+# directory regrew 1.37 GB in ONE day after being emptied - this distro crashes often enough that
+# the default retention is a standing disk cost on a drive that has hit zero free twice this
+# week. Two is enough to compare a repeat crash against its predecessor.
+maxCrashDumpCount=2
+
+# Ceiling for the file system of any distro created FROM NOW ON (400 GiB in bytes; this key takes
+# a byte count and is spelled out rather than "400GB" so a suffix-parsing difference can never
+# make the whole file malformed - a malformed .wslconfig is silently IGNORED IN FULL by WSL).
+#
+# It does NOT resize the existing Ubuntu-24.04, whose vhdx max is still the 1 TB default. That
+# 1 TB ceiling is larger than C: itself (930 GB), which is precisely how WSL was able to fill the
+# system drive on 2026-09-06. Capping the existing distro needs the distro Stopped:
+#   wsl --manage Ubuntu-24.04 --resize <size>
+defaultVhdSize=429496729600
+
+# Headless compute server: nothing is known to open a Linux GUI window here, and WSLg runs its
+# own Wayland/X/RDP stack plus a /mnt/wslg mount. Turning it off would reclaim that overhead.
+# LEFT ON DELIBERATELY: a julia workload that plots to a window would break silently, and that
+# has not been ruled out on this box. Enable only after confirming no GUI use.
+#guiApplications=false
+
+# NOT EFFECTIVE - kept only so a future WSL that honours it does the right thing.
+# Note also that -1 is NOT a documented value: the published contract is "the number of
+# milliseconds that a VM is idle, before it is shut down", default 60000, with no documented
+# meaning for a negative number. So there is no basis for expecting this to work, independent of
+# the regression below.
+# Measured 2026-09-06 on WSL 2.9.8.0: with this set, WSL still cleanly terminated the distro
+# (SIGTERM from PID 1, ext4 unmount) about 60s after the last Windows-side wsl.exe attachment
+# detached - even while an ssh session was actively running a job inside the distro. An
+# in-distro workload does NOT count as activity. Known regression: microsoft/WSL #13291, #13416.
+# What actually keeps the distro resident is the Windows scheduled task WSL-keepalive:
+#   wsl.exe -d Ubuntu-24.04 -u root --exec /usr/bin/tail -f /dev/null
+vmIdleTimeout=-1
+
+[experimental]
+
+# Any NEWLY created vhdx becomes sparse automatically. The existing Ubuntu-24.04 vhdx is already
+# sparse (verified with `fsutil sparse queryflag`), so this changes nothing today; it only keeps
+# the next distro from starting out non-sparse.
+sparseVhd=true
+
+# autoMemoryReclaim is DELIBERATELY UNSET. Its default is already dropCache, the most aggressive
+# of the three values (disabled / gradual / dropCache). Setting "gradual" reads like an
+# improvement but is strictly LESS aggressive reclaim. Do not add it expecting more memory back.

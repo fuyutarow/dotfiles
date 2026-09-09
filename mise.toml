@@ -292,9 +292,26 @@ run = 'bun ~/dotfiles/scripts/cache-clean.ts'
 description = "Prune rustup toolchains and vscode-server old versions — no tool-native gc exists for either, so this writes an explicit safety predicate instead (default/pin-scan for rustup; busy/recency for vscode-server). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
 run = 'bun ~/dotfiles/scripts/cache-toolchains.ts'
 
+# --same-filesystem is not a nicety on WSL: without it a KONDO_DIR above the mount points walks
+# /mnt/c and /mnt/e over the DrvFs bridge — ruinously slow, and it aims a build-artifact deleter
+# at the Windows filesystem. The $HOME default happens to be safe; the flag makes it safe by
+# construction. Measured on r99 2026-09-08: kondo IS installed (Brewfile + check-tools already
+# declare it) — an earlier "absent" reading was `command -v` run as root, whose PATH lacks
+# /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
 [tasks."cache:projects"]
-description = "Clean project build artifacts (node_modules/target/build…) via kondo — interactive, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override."
-run = 'kondo --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+description = "Clean project build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override. Blind/agent-safe form: cache:builds."
+run = 'kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
+
+# The blind half of the pair, split on the house's WHO-MAY-DECIDE axis (see the 断捨離 comment
+# above cache:audit): cache:projects asks a human which projects to strip, so nothing automated
+# ever runs it — and that is exactly why artifacts accumulate. Measured on r99 2026-09-08 with
+# cache:projects never having run: target/ 11.0 GB + .venv/ 7.8 GB + node_modules/ 6.4 GB +
+# build|dist/ 2.7 GB = ~28 GB. Everything kondo strips is regenerable by a rebuild, which puts
+# this in cache:clean's tier (no judgment needed) rather than cache:purge's (irreversible).
+# The ≥30d default is the safety: a project touched this month is never a candidate.
+[tasks."cache:builds"]
+description = "Reclaim project build artifacts (node_modules/target/build…) NON-interactively via kondo -a, scoped to projects untouched ≥30d. Regenerable only — any agent may run it blind. Human picker: cache:projects."
+run = 'kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
 # --- the 断捨離 pass, split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN -------------
 #   cache:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
@@ -397,6 +414,27 @@ run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = 'bun ~/dotfiles/scripts/wsl-init.ts'
+
+# The Linux SYSTEM-state half of the 断捨離 pass; cache:clean owns the per-user package caches
+# and stays sudo-free so it also runs on macOS. Split on WHO OWNS THE BYTES, not on OS.
+# Measured on r99 2026-09-07: apt archives 1.6 GB, journal 571 MB, 4 disabled snap revisions
+# 388 MB — none of which cache:clean touches. The task also encodes the fact that cost us the
+# most time that day: freeing guest space does NOT return it to Windows while the distro runs
+# (fstrim reported 522.9 GiB trimmed; C: free moved 15.79 -> 15.81 GB). A sparse vhdx compacts
+# at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
+[tasks."wsl:reclaim"]
+description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are cache:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
+run = 'bun ~/dotfiles/scripts/wsl-reclaim.ts'
+
+# The ONE Windows-side file this repo owns, and the only one it cannot symlink: %USERPROFILE%\
+# .wslconfig is read by the Windows WSL service, which does not follow symlinks made inside WSL.
+# So it is copied, and drift is REPORTED rather than silently overwritten. Second
+# generated-not-linked exception in this repo, after ~/.claude/settings.json.
+# Guarded: refuses to deploy a memory= that would leave Windows under ~6 GB on this host, since
+# an over-committed memory=60GB on a 63.9 GB box measurably destabilised it on 2026-09-06.
+[tasks."wsl:wslconfig"]
+description = "Deploy wsl/wslconfig.host to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
+run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 
 [tasks."wsl:ccc-daemon"]
 description = "Hand the ccc daemon to systemd with CPU/RAM caps (link:dots must have run first)"

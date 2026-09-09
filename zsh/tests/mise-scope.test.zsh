@@ -152,6 +152,37 @@ done
 [[ -n $refs ]] && bad "shell startup runs a global mise pin: $refs" \
                || ok "shell startup never runs 'mise use -g'"
 
+# --- 7b. the same law, checked on the OUTCOME rather than on this repo's files ---------------
+# The loop above reads the four files this repo tracks. INV-6 is not a statement about those
+# files — it is a statement about a LOGIN SHELL — and a version manager can hook one from a file
+# the repo has never heard of. That is not hypothetical: ~/.profile, which zsh ignores but
+# `sh -l` and `bash -l` read, carried a juliaup block whose FIRST PATH entry was an absolute
+# ~/.juliaup/bin, installed out-of-band and contradicting zsh/zshrc's recorded decision that
+# julia is mise-managed and juliaup deliberately unused. Section 7 could not see it, because it
+# was looking at the wrong noun.
+#
+# So ask the shells themselves. This covers any source — tracked, untracked, or appended by an
+# installer tomorrow. sh and bash are included precisely because zsh is NOT the only login shell
+# on the box, and they are the two that read ~/.profile.
+#
+# Machine-state, so a missing shell SKIPs rather than fails; a fresh clone must stay green.
+for _sh in zsh sh bash; do
+  _bin=$(command -v $_sh 2>/dev/null) || _bin=""
+  if [[ -z $_bin ]]; then
+    skip "no $_sh on PATH — login-shell PATH not checked for it"
+    continue
+  fi
+  # -l only: an INTERACTIVE probe would need a pty (that is case 9's job) and would hang here.
+  _lp=$($_bin -lc 'printf %s "$PATH"' 2>/dev/null)
+  _hits=""
+  for _vm in juliaup fnm nvm volta nodenv asdf rbenv pyenv; do
+    [[ ":$_lp:" == *"/.$_vm/"* || ":$_lp:" == *"/$_vm/"* ]] && _hits+=" $_vm"
+  done
+  [[ -n $_hits ]] && bad "$_sh -l PATH carries a second version manager:$_hits — INV-6 says a managed tool is reachable where a config DECLARES it, or not at all" \
+                  || ok "$_sh -l PATH carries no second version manager"
+done
+unset _sh _bin _lp _hits _vm
+
 # --- 8. end to end, in the real ssh-cmd environment ------------------------------------------
 # Declared → runs. Undeclared → refuses. Both halves matter: the first is why the shim dir
 # survives at all, the second IS the law.

@@ -1,0 +1,62 @@
+# SSH client policy — the TRANSPORT half of this repo's remote-access story.
+# Symlinked to ~/.ssh/config by scripts/link-dots.sh. OS-neutral: nothing here branches on
+# macOS vs WSL, so there is no config.mac / config.wsl split.
+#
+# THE SPLIT, and why it is not negotiable. This repo is PUBLIC. A host inventory is
+# HostName / Port / User — a map of the tailnet and who to log in as — so it lives in an
+# UNTRACKED ~/.ssh/config.local, exactly as per-machine git identity lives in ~/.local-gitconfig
+# (see git/gitconfig). What stays here is POLICY: options that are argued from measurement and
+# are worth carrying to any machine that clones this repo. Host ALIASES appear here because they
+# are already all over this repo's tracked files (mise.toml, scripts/wsl-reclaim.ts); the
+# addresses behind them are not.
+#
+# ORDER IS LOAD-BEARING. ssh takes the FIRST value it obtains for any option and never revises
+# it, so this file reads most-specific -> least-specific, and the Include comes first so a
+# machine-local decision always outranks a house default. A missing config.local is NOT an
+# error (verified: ssh -G still resolves, exit 0), so a fresh clone works before the local file
+# exists — you simply have no hosts defined yet.
+
+Include ~/.ssh/config.local
+
+# --- bandwidth: compress before the bytes reach a slow uplink -----------------------------
+# r99 is a compute box on an ASYMMETRIC line. Measured 2026-09-09: egress caps at ~1.3 MB/s
+# (~10.4 Mbps) while ingress reaches 145 Mbps — 40x. A remote TUI sends keystrokes UP the fast
+# path and receives redraws DOWN the slow one, which is exactly why `herdr --remote r99-wsl`
+# felt laggy while every latency metric read clean: RTT 33ms, 0% loss over 240 packets, ssh
+# round-trip p99 146ms with zero samples over 500ms in 60 trials.
+#
+# It is genuinely the link, not a tuning problem: 4 parallel streams measured SLOWER than one
+# (0.48 vs 0.72 MB/s). A TCP window limit would have summed HIGHER; degradation under
+# parallelism is a saturated bottleneck. So the only remaining lever is sending fewer bytes.
+#
+# Terminal data is ~10x compressible (a 2,225,104-byte `ls -laR` dump gzips to 225,552).
+# Measured A/B across this link with the same payload:
+#     Compression=no   6.47s / 8.02s
+#     Compression=yes  0.84s / 0.89s      <- ~8x
+# Client-side only: `ssh -v` shows `compression: zlib@openssh.com` negotiated in BOTH
+# directions against a stock sshd, so nothing is required on the server.
+#
+# This reaches herdr WITHOUT changing how herdr is launched. `herdr --remote` writes its own ssh
+# config, and that file's first line is `Include "~/.ssh/config"` — so with first-value-wins,
+# a Host block here outranks herdr's own `Host *` defaults. Verified through herdr's generated
+# config: `ssh -F <herdr's config> -G r99-wsl` reports `compression yes`.
+# NOTE: ControlPersist keeps an existing master alive, so an already-running `herdr --remote`
+# must be restarted before it picks this up.
+#
+# COST, so the tradeoff is visible rather than folded away: CPU on both ends (both had headroom
+# — host 53%, guest loadavg ~2), and a small LOSS on already-compressed payloads. Compression is
+# therefore scoped to this slow link, never `Host *`. For a bulk transfer of compressed data:
+#     ssh -o Compression=no ...
+Host r99-wsl r99
+    Compression yes
+
+# --- keepalive: prevent an idle NAT/firewall from silently reaping a live connection -------
+# Probe every 30s, give up after 3 misses (~90s), so a long-lived agent session notices a dead
+# link and reconnects promptly instead of hanging on a socket the path has already forgotten.
+# TCPKeepAlive is off deliberately: it is the kernel-level, spoofable probe, and the
+# application-level ServerAlive* pair above is both encrypted and the one that actually drives
+# ssh's own disconnect decision.
+Host *
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive no

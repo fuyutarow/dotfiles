@@ -57,6 +57,16 @@ elif $IS_WSL; then
   link git/local.wsl "$HOME/.local-gitconfig"
 fi
 
+# --- ssh (client POLICY only; the host inventory stays machine-local) ---
+# Same split as git above: tracked policy here, untracked machine identity beside it.
+# ssh/config Includes ~/.ssh/config.local FIRST, and that file holds HostName/Port/User — a
+# tailnet map that must never enter this PUBLIC repo. A missing config.local is not an error
+# (ssh -G still resolves, exit 0), so a fresh clone links cleanly and simply has no hosts yet.
+# ~/.ssh must exist and be 700 before ssh will read anything in it; create it if this is a fresh
+# machine, since unlike ~/.config the linker cannot assume it is there.
+[[ -d "$HOME/.ssh" ]] || { mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"; }
+link ssh/config "$HOME/.ssh/config"
+
 # --- tmux ---
 link tmux/tmux.conf "$HOME/.tmux.conf"
 
@@ -164,6 +174,24 @@ if $IS_WSL; then
   else
     echo "skip: /etc/wsl.conf needs root — run: sudo ln -sfn $DOTFILES/wsl/wsl.conf /etc/wsl.conf"
   fi
+
+  # Kernel tunables. Same guarded-sudo shape as wsl.conf above, and the same reason for a
+  # symlink rather than a copy: systemd-sysctl reads the path at boot and follows links fine.
+  # 50- so it applies after the distro's own 10-* drop-ins and before 99-sysctl.conf.
+  # Editing the file alone changes nothing until `sudo sysctl --system` or a distro restart.
+  sysctl_dst=/etc/sysctl.d/50-dotfiles.conf
+  if [[ "$(readlink "$sysctl_dst" 2> /dev/null)" == "$DOTFILES/wsl/sysctl.conf" ]]; then
+    : # already linked -> no sudo prompt
+  elif sudo ln -sfn "$DOTFILES/wsl/sysctl.conf" "$sysctl_dst" 2> /dev/null; then
+    echo "linked: $sysctl_dst -> $DOTFILES/wsl/sysctl.conf (sudo) — apply: sudo sysctl --system"
+  else
+    echo "skip: $sysctl_dst needs root — run: sudo ln -sfn $DOTFILES/wsl/sysctl.conf $sysctl_dst"
+  fi
+
+  # .wslconfig is NOT linked here on purpose: it is read by the Windows-side WSL service, which
+  # cannot follow a WSL symlink, so it must be COPIED. That is a separate, reportable step —
+  # `mise run wsl:wslconfig` (scripts/wsl-wslconfig.ts), which also guards the machine-specific
+  # memory= against the host's actual RAM before writing.
 fi
 
 if ! $IS_MAC && ! $IS_WSL; then

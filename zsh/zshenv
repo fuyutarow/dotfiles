@@ -36,6 +36,34 @@
 # on every login, prepending a PATH entry no config asked for (and leaving 1672 stale
 # multishell dirs behind).
 
+# TELL mise, do not out-edit it. `mise activate` gained a setting, `activate_shims` (default
+# TRUE), whose effect is to append the shim dir to PATH from inside activate's own output —
+# measured on mise 2026.9.3, the emitted script ends with `export PATH='<shims>:...'`. activate
+# runs from .zshrc, i.e. AFTER everything below, so every defence written here was being undone
+# one file later and `mise run test:mise-scope` failed on exactly that (18 passed / 1 failed,
+# "shim dir LEAKED — some later startup file re-adds it").
+#
+# The direction of the flow is the whole point. Correcting mise's output downstream is a race
+# this file cannot win: mise writes last, so the only durable answer is to stop it CONTRIBUTING,
+# which is an input to mise, not an edit of its result. One declaration replaces a defence that
+# would otherwise have to grow a new mechanism every time activate changes. Measured, whole gate:
+#   as-is                        18 passed / 1 failed
+#   MISE_ACTIVATE_SHIMS=false    19 passed / 0 failed
+#
+# The env var rather than `[settings]` in ~/.config/mise/config.toml, because THIS file already
+# owns the question "who puts the shim dir on PATH" — the answer belongs beside the rule it
+# qualifies, not in a second file in a second format. It must be exported before .zshrc runs
+# activate; .zshenv always does.
+#
+# What this does NOT do is remove the two guards further down. Both were re-verified by deleting
+# them one at a time with this declaration already in place, and each still fails its own case:
+#   without the strip loop        18/1  "inherited shim dir survived (strip is missing)"
+#   without the ORIG_PATH block   18/1  "shim dir survives in __MISE_ORIG_PATH"
+# They defend a different boundary — PROCESS INHERITANCE, where there is no upstream to declare
+# to, because a child cannot tell the parent that spawned it what to export. Sanitising what
+# arrives at the entry point is the correct shape there, not a symptom of the same race.
+export MISE_ACTIVATE_SHIMS=false
+
 _zshenv_shims="$HOME/.local/share/mise/shims"
 _zshenv_cand=(
   "$HOME/.local/bin"

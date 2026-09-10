@@ -64,7 +64,9 @@
 //   Eff:  (no label in the render, see line 3 above) live /effort level (.effort.level); hidden
 //         when the model has no reasoning-effort param (field absent). ultracode -> xhigh.
 //   +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the Eff
-//         value (green "+WF" suffix) instead of a separate segment, on request 2026-09-05.
+//         value (Tailwind violet-500 "+WF" suffix, matching Claude Code's own /effort slider
+//         "ultracode" label — picked 2026-09-11, green until then) instead of a separate
+//         segment, on request 2026-09-05.
 //         Present only while BOTH hold: `ultracode: true` in the CLI's live
 //         ~/.claude/settings.json, AND this render's live `.effort.level` actually reads back
 //         `xhigh` — ultracode forces xhigh whenever it genuinely engages, and a
@@ -598,7 +600,11 @@ const dur = (s: number) =>
 let head = `${ESC}[38;5;30m${model}${RST}`;
 if (effort) {
   head += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
-  if (wfOn) head += `${ESC}[38;5;40m+WF${RST}`;
+  // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
+  // slider "ultracode" label (screenshotted) — picked over green to read as "ultracode is
+  // on" at a glance. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in this file:
+  // the palette's nearest steps (ANSI 93/129/135/141) were all visibly off during the pick.
+  if (wfOn) head += `${ESC}[38;2;139;92;246m+WF${RST}`;
 }
 head += `${SEP}${ESC}[38;5;66mCtx:${RST} ${ctx}`;
 if (ctxPct != null) {

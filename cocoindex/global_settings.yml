@@ -69,9 +69,11 @@ envs:
   # for a long-lived server process.
   TOKENIZERS_PARALLELISM: "false"
   # CocoIndex engine backpressure. Default 1024 in-flight components is what drives the
-  # multi-GiB heap during a large index; 64 bounds it. (Engine tokio worker threads still
+  # multi-GiB heap during a large index; 32 is the first bounded recovery step after
+  # TasksMax=256 exhaustion (pids.events:max=3165).  It halves the current work fan-out while
+  # retaining the finite unit ceiling; review after one supervised reindex. (Engine tokio worker threads still
   # scale with nproc and have NO env knob — CPUQuota in the unit is what bounds those.)
-  COCOINDEX_MAX_INFLIGHT_COMPONENTS: "64"
+  COCOINDEX_MAX_INFLIGHT_COMPONENTS: "32"
 
 # To use a cloud embedding provider via LiteLLM instead, set `provider`/`model`
 # above and add keys to the `envs:` block. DO NOT commit real secrets — keep keys

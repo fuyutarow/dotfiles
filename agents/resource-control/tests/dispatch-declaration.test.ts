@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resourceDeclarationResult } from "./dispatch-declaration.ts";
+import { resourceDeclarationResult } from "../lib/dispatch-declaration.ts";
 
 describe("dispatch resource declaration", () => {
   test("accepts one reasoned NONCOMPUTE declaration", () => {

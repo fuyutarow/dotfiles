@@ -28,7 +28,7 @@ import {
   type HostSnapshot,
   type ResourceManifest,
   type Reservation,
-} from "./agent-resource-run.ts";
+} from "../agent-resource-run.ts";
 
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;

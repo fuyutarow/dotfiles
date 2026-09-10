@@ -52,7 +52,7 @@ is removed from context.
 
 ## The prevention boundary — what a harness CANNOT do
 
-Three intervention points (full survey → `reference.md`):
+Three intervention points (full survey → `references/reference.md`):
 
 | Point | What | Reachable by a Claude Code USER? |
 |---|---|---|
@@ -74,6 +74,6 @@ job. Calibrate expectations accordingly.
 
 ## Full evidence
 
-`reference.md` — adversarially-verified, cited survey (P1/P2/P3 framework, 30 confirmed
+`references/reference.md` — adversarially-verified, cited survey (P1/P2/P3 framework, 30 confirmed
 techniques across constrained decoding / framework error-handling / context hygiene /
 the Claude Code regression / parse-repair layer, plus honest gaps).

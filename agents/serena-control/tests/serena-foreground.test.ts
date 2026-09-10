@@ -4,7 +4,7 @@ import {
   SERENA_DEFAULT_CONTEXT,
   buildSerenaCommand,
   buildSerenaManifest,
-} from "./serena-foreground.ts";
+} from "../serena-foreground.ts";
 
 const GiB = 1024 ** 3;
 

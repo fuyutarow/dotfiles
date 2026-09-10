@@ -1,25 +1,19 @@
 ---
 name: structuring-documents
 description: >-
-  Organize and restructure a DOCUMENT'S information architecture — the layer beneath sentence
-  readability. Make it MECE (every fact in exactly ONE section; every fact has a home),
-  single-source-of-truth (no claim/number duplicated across sections → one update point), a
-  backward-only reference DAG (later sections cite earlier, never forward), and coherent as a
-  whole 認識体系. Restructure preservation-first: fear the edit that destroys a load-bearing
-  argument, don't rewrite what's already adequate, preserve ambitious claims' implications, and
-  delete genuine nonsense sections — 構造化 is the goal, not 圧縮. Use when a
-  report/spec/design-doc/README/notes is scattered, repeats itself, references forward, or needs
-  reorganizing; also for internal / model-facing docs (reader = the next agent/LLM), and when a
-  linting-prose finding needs a fix that MOVES information (relocate/dedupe/reorder). Owns the
-  pre-writing architecture of 木下『理科系の作文技術』第2〜3章: 目標規定文・一文書一主題・内容の精選・
-  重点先行(document scale). Triggers: MECE, 局所化, 情報が散在, 重複, 単一の情報源, 前方参照,
-  ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化, 章立て, 目標規定文, 内容の精選, 重点先行,
-  single source of truth, restructure/reorganize a doc. Cut vs linting-prose is FIX-LOCALITY:
-  rewrite-words-in-place → linting-prose; move-information-across-the-document → here. NOT
-  sentence/word/register readability or a paragraph's own topic sentence (→ linting-prose); NOT
-  slide/deck order or inserting diagrams (→ designing-presentations); NOT a paper corpus (→
-  systematizing-knowledge); NOT SKILL.md prose (→ forging-skills); NOT code structure — module/責務
-  boundaries (→ refactoring-code). English skill; respond in the user's language (default Japanese).
+  Structures a DOCUMENT’s information architecture: MECE/one home, single source, backward-only DAG,
+  coherent 認識体系. Preserve argument/ambition; leave adequate material; delete only nonsense—
+  構造化≠圧縮. Fire: scattered/repeated/forward refs in report/spec/design doc/README/note;
+  internal/model docs; or lint fixes that MOVE information (relocate/dedupe/reorder). Owns 木下第2–3章:
+  目標規定文・一文書一主題・内容の精選・重点先行 (document scale). Triggers: MECE, 局所化,
+  情報が散在, 重複, 単一の情報源, 前方参照, ドキュメント再構成, REORG, 保全原則, 認識体系, 構造化,
+  章立て, 目標規定文, 内容の精選, 重点先行, single source of truth, restructure/reorganize a doc.
+  FIX-LOCALITY: word/sentence/paragraph-topic rewrite in place → linting-prose; information move →
+  here. Not sentence/word/register readability; slide/deck order or diagrams → designing-presentations;
+  paper corpus → systematizing-knowledge; SKILL.md prose → forging-skills; code module/責務 structure
+  → refactoring-code; memo wrapper → issuing-technical-memoranda (first; then here for body);
+  research-doc portfolio lifecycle → governing-research-documentation. English skill; respond in the
+  user’s language (default Japanese).
 ---
 
 # Structuring documents — information architecture, not sentence polish

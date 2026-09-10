@@ -1,5 +1,10 @@
 # Forge verification ledger — implementing-and-debugging (F3 artifact)
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One typed routing row distinguishes implementation from configuration-contract selection.
+Existing prose/version/table debt remains pre-existing. Queue: next implementing-and-debugging reforge.
+
 Append on reforge; never overwrite. First entry — no prior ledger existed for this skill.
 
 ## 2026-07-23 — combinatorial-flags rule grafted (v2607.1.0 → v2607.2.0)

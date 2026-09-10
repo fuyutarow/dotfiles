@@ -1,23 +1,19 @@
 ---
 name: driving-antigravity
 description: >-
-  Drives the Antigravity CLI (agy) as a headless worker — Google's official successor to the
-  deprecated gemini-cli — via `agy -p` in Bash, an Agent subagent, or a Workflow sonnet wrapper.
-  Edge: a MULTI-VENDOR roster (Gemini 3.x + Claude 4.6 + GPT-OSS) on ONE Google subscription
-  (one sub, N vendors). Use when embedding agy in a pipeline (sonnet draft→agy audit; same
-  prompt to Gemini+Claude+GPT-OSS, 不一致=signal), probing served models (agy models), choosing
-  --model, parsing agy output, or unsticking a hung/misbehaving agy call. Triggers: agy,
-  Antigravity CLI, antigravity, agy を workflow に組み込む, agy で監査, Claude 4.6 を agy 経由で,
+  Drives Antigravity CLI (agy), Google’s gemini-cli successor, as headless agy -p worker
+  (Bash/Agent subagent/Workflow sonnet wrapper). MULTI-VENDOR: Gemini 3.x/Claude 4.6/GPT-OSS on one
+  Google sub. Use for pipeline/audits, model probes (agy models), --model, output, or hangs.
+  Triggers: antigravity, agy を workflow に組み込む, agy で監査, Claude 4.6 を agy 経由で,
   マルチベンダー検証, agy のモデル一覧, agy がファイルを勝手に書いた, agy -p が返らない. LAW:
-  NO-METER — agy exposes ZERO per-call token/cost (never fabricate one; count calls, can't measure
-  spend); UNCONFINED — default -p auto-approves file writes, no confinement, cwd≠boundary;
-  CATALOG-BY-PROBE — --model wants the EXACT `agy models` display string; VERSION-DRIFTS — agy
-  self-updates out-of-band from brew. Cuts: codex subprocess (metered, sandboxed, single-vendor) →
-  driving-codex; claude harness (hooks/Workflow/subagents) → operating-the-harness; Anthropic
-  API/Claude pricing → claude-api (agy→Claude is still driving agy → here); prompt wording →
-  prompting-llms. gemini-cli は deprecated → agy のみ駆動. Workflow-native: model/containment/prompt
-  + cross-model adjudication stay SOLO; parallel agy calls fan out one sonnet wrapper each. English
-  skill; respond in the user's language (default Japanese).
+  NO-METER—no per-call token/cost; count calls, never invent spend. UNCONFINED—default -p
+  auto-approves writes; cwd≠boundary. CATALOG-BY-PROBE—--model needs exact agy models string.
+  VERSION-DRIFTS—self-updates outside brew. Cuts: BINARY codex/grok→driving-codex/driving-grok;
+  PURPOSE Claude harness (hooks/Workflow/subagents)→operating-the-harness; Anthropic API/Claude
+  pricing→claude-api (may co-fire; driving agy to Claude stays here); prompt wording→prompting-llms.
+  gemini-cli deprecated; agy only. Workflow-native: selection/containment/prompt/adjudication stay
+  SOLO; parallel calls fan out one sonnet wrapper each. English skill; respond in the user's language
+  (default Japanese).
 ---
 
 # Driving Antigravity — the agy CLI as a headless worker

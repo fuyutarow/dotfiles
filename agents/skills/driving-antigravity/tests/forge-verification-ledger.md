@@ -248,3 +248,10 @@ catalog 側に「どれを選ぶか」を置くのが根治である。本節が
 Anthropic の legacy 表にもある。
 
 **残務**: 同じ欄を driving-codex と driving-grok にも置く(監査が走行中)。
+
+## 2026-09-10 — F4 listing remediation and PROSE-DEBT waiver
+
+- Description shortened from 1,514 to 1,095 Unicode characters after a trigger/cut desk-check.
+- Remaining debt is pre-existing: 25 long body sentences, a 16-line version header, three long cells,
+  and 35 long reference sentences.
+- A dedicated reforge owns debt retirement. This change only restores collection listing capacity.

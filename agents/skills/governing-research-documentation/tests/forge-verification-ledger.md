@@ -1,5 +1,10 @@
 # Governing research documentation — forge verification ledger (2026-08-01)
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One routing row excludes runtime/gate configuration from the portfolio-lifecycle artifact.
+Existing reference debt remains pre-existing. Queue: next governing-research-documentation reforge.
+
 ## Existence decision
 
 A repository-wide battery searched existing Skills for research-document admission, authority,

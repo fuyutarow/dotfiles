@@ -1,23 +1,19 @@
 ---
 name: issuing-technical-memoranda
 description: >-
-  Issues a TECHNICAL MEMORANDUM — the individually-authored, internally-circulated document
-  (技術メモ, 社内技術文書, テクニカルメモランダム, 覚書, 議事録, design doc, decision memo, ADR,
-  internal RFC, incident write-up, working paper) — by fixing what the genre actually regulates: the
-  COVER (title, date, stable id, author + reachable contact, abstract, size counts), the AUTHORITY
-  line (personal by default; organizational only with a named signer), the ADDRESSEE declared
-  BEFORE the body is finished, and the RELEASE marking. Use for 「メモを書いて」「TM を起こして」
-  「社内向けに文書化して」「design doc を書いて」「これ誰に配るべき?」, circulating an unfinished
-  finding, or auditing a draft memo. LAW — the body is deliberately UNREGULATED: never present a
-  body-section template as "the standard technical-memorandum format"; no primary source defines
-  one (grounded record: references/genre-record.md). Cuts — WRAPPER-vs-BODY vs
-  structuring-documents: the body's own section graph, MECE, 前方参照, 章立て → there. PURPOSE vs
-  linting-prose: words, register, 冗長. CARDINALITY vs governing-research-documentation: the
-  portfolio's lifecycle, admission, authority-key, retirement. PURPOSE vs arguing-research-papers:
-  external venue submission and reviewer response. DECISIVE vs designing-presentations: slides and
-  decks stay there, but its STEP-0 "prose memo" branch hands off HERE. Workflow-native: cover, authority, addressee and release stay SOLO; body
-  drafting and reviewer collection may fan out. English skill; respond in the user's language
-  (default Japanese).
+  Issues TECHNICAL MEMORANDA—individually-authored internal documents (技術メモ, 社内技術文書,
+  テクニカルメモランダム, 覚書, 議事録; design doc, decision memo, ADR, internal RFC, incident
+  write-up, working paper). Owns COVER (title/date/stable ID/author+contact/abstract/size); personal
+  AUTHORITY (organization needs named signer); pre-body ADDRESSEE; RELEASE. Use for 「メモを書いて」
+  「TM を起こして」「社内向けに文書化して」「design doc を書いて」「これ誰に配るべき?」,
+  unfinished-finding circulation, or draft-memo audit. LAW: body unregulated—never call a body
+  template standard (no primary source; references/genre-record.md). WRAPPER-vs-BODY: wrapper→HERE;
+  body graph/MECE/前方参照/章立て→structuring-documents (HERE first, then it). PURPOSE:
+  words/register/冗長→linting-prose; external submission/reviewer response→arguing-research-papers.
+  CARDINALITY: portfolio lifecycle/admission/authority-key/retirement→governing-research-documentation.
+  DECISIVE: slides/decks→designing-presentations; its STEP-0 prose-memo branch→HERE.
+  Cover/authority/addressee/release SOLO; body drafting/reviewers may fan out. English skill; respond
+  in the user's language (default Japanese).
 ---
 
 # Issuing technical memoranda — the wrapper, not the body

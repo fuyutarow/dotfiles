@@ -286,6 +286,12 @@ the source, gate only the residue that is deterministically always-wrong.
 
 ---
 
+## Cross-skill configuration seam
+
+**DECISIVE:** .claude settings, hooks, MCP, permission scope, events, and client mechanics stay
+HERE. Consumer/trust, effective declaration, integrity representation, and actual-input acceptance
+across configuration formats co-fire governing-configuration-systems.
+
 ## §5. Setup / audit checklist
 
 When setting up or auditing a project's Claude Code config, in order:

@@ -184,6 +184,7 @@ MUST NOT fire (with route):
 
 | Sibling | Cut |
 |---|---|
+| governing-configuration-systems | **DECISIVE:** which config layers a repo admits and their wiring order → HERE. The selected layer's consumer/trust, authority, integrity representation, and acceptance contract → governing-configuration-systems. |
 | `wiring-mise-tasks` | **CARDINALITY** — "Is the ask about ONE wiring artifact, or about which artifacts this repo gets and in what order?" One → theirs. The SET and the ORDER → here. It already claims 新リポの雛形 for the mise layer and **keeps it**. This skill calls it, ships no competing template, and writes no task body. Seam: agrees in substance; do not diff for byte-identity |
 | `operating-the-harness` | **PURPOSE, on two seams.** *Hooks*: theirs are Claude Code's (events, matchers, `settings.json`); **git** hooks are HOOK-1/HOOK-2 above, here. *`.claude/`*: standing it up and the inheritance rule → here; its contents and rule scoping → theirs, **MANDATORY co-fire once content is written** |
 | `driving-cocoindex` | **PURPOSE** — "Is there already a `cd`-able directory?" Registration, indexing, freshness, query shapes, and every daemon resource rule → theirs, **never restated**. Whether this repo admits an index, and the two orderings around it, → here |

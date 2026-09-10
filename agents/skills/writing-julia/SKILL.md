@@ -142,6 +142,7 @@ description: >-
 
 | Sibling | Cut |
 |---|---|
+| governing-configuration-systems | **DECISIVE:** Project.toml, Manifest.toml, and Julia-side parsing/interchange implementation → HERE. Consumer/trust, authority, canonicalization, and target-acceptance contract → governing-configuration-systems. |
 | `implementing-and-debugging` | **Co-fire on any non-trivial Julia feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Julia looks like inside that frame (JG0–JG4). Its reciprocal row: "language skills own correctness/perf idiom." |
 | `refactoring-code` | **Co-fire on any behavior-preserving Julia restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Julia-specific oracle components (JET / Aqua / `report_package` as the green bracket) and the Julia-safe transforms (JG3: include-order moves, subpackage extraction, weakdeps migration). A Julia refactor that improves no named property is still 場当たり churn — its G3 applies unchanged. |
 | `practicing-tiger-style` | **LANGUAGE cut**: “Is the unresolved question Julia/SciML method, type stability, numerical semantics, or Julia-specific measurement rather than the cross-language risk ledger?” **Yes** → Julia mechanisms stay HERE; **No** → `practicing-tiger-style` owns the ledger. Co-fire when both remain material. |

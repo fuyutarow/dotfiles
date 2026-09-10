@@ -1,5 +1,10 @@
 # Forge verification ledger — writing-bun-scripts F3 artifact (2026-07-23)
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One typed routing row distinguishes Bun implementation from configuration-contract selection.
+Existing prose/version/table debt remains pre-existing. Queue: next writing-bun-scripts reforge.
+
 Adversarial-verification findings ledger demanded by gate F3 (`forging-skills`). Append on
 reforge, never overwrite. The fire/no-fire trigger set lives in SKILL.md (MUST-NOT-FIRE
 section) and is desk-checked after every description edit.

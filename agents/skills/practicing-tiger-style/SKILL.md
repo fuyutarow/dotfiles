@@ -146,6 +146,7 @@ checklist is educational and conditional, not proof that every rule applies.
 
 | Question | Route |
 |---|---|
+| Does a costly/irreversible release need a risk tier, bound, exception authority, and acceptance decision? | This skill owns that ledger. When representation, canonicalization, or verifier-input evidence is material, co-fire governing-configuration-systems. |
 | Does a high-risk behavior change need the ledger before or alongside implementation? | For a bug, root-cause, or observable change, `implementing-and-debugging` diagnoses intent/cause first, then this ledger hardens the selected risk. For greenfield high-risk design or promotion with no unresolved cause, this skill may calibrate first; implementation and regression proof remain there. |
 | Does behavior-preserving restructuring need a review of bounds, lifetime, and negative cases? | `refactoring-code` retains the oracle and structural purpose; this skill may co-fire for the ledger. |
 | Does an untested load-bearing hypothesis drive expensive or hard-to-reverse work? | `acting-on-hypotheses` owns the hypothesis tree, prewritten threshold, outcome table, and Commit/Pivot/Kill first. This skill then owns experiment-integrity bounds and negative cases only. |

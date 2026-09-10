@@ -1,5 +1,11 @@
 # Forge verification ledger — operating-the-harness (F3 artifact)
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One typed routing paragraph now points executable cross-format configuration contracts to
+governing-configuration-systems. Existing prose/version debt remains pre-existing.
+Queue: next operating-the-harness reforge.
+
 Append on reforge; never overwrite. The fire/no-fire desk-check set lives here (§ Trigger set) —
 re-run it after any description edit.
 

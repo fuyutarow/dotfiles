@@ -157,6 +157,7 @@ MUST NOT fire (route):
 
 | Sibling | Cut |
 |---|---|
+| governing-configuration-systems | **DECISIVE:** Bun/TS config reader or generator implementation and argv/runtime contract → HERE. Its effective declaration, signature/digest boundary, and target acceptance → governing-configuration-systems. |
 | `writing-typescript` | PURPOSE — how TS READS (idiom floor: `satisfies`, `??`, absence modeling) → theirs; how a SCRIPT is built/run/tested/shipped → here. It auto-co-fires via its `paths` glob on any `.ts`. SEAM RULING (canonical home HERE, mirrored there): in zero-config standalone scripts the zero-dep floor beats its zod/ts-pattern rows — hand-rolled narrowing (`isRecord`) is the accepted form; those rows re-enter at graduation. |
 | `running-python-tools` | DECISIVE by payload language — Python tool/snippet NOW → there (uvx / `uv run`); JS/TS tool/script → here (`bunx` pinned). This skill is the home of the bunx-over-npx rule that its body names as "the Python analogue … used for JS" (reciprocal landed there 2026-07-23). |
 | `writing-python` | the same DECISIVE cut for KEPT code — kept Python → there; kept TS scripts → here. |

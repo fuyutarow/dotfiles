@@ -211,3 +211,9 @@ Clearing is deferred to that skill's next reforge.
   guard must be rewritten, not merely softened.
 - A sibling adds memo-genre vocabulary to its description — re-run the sibling-cut lens across
   the family.
+
+## 2026-09-10 — F4 listing remediation and PROSE-DEBT waiver
+
+- Description shortened from 1,515 to 1,094 Unicode characters after a trigger/cut desk-check.
+- The floor reports 15 long reference sentences in genre-record.md; they predate this description edit.
+- A dedicated reforge owns reference-prose retirement. This change only repairs listing pressure.

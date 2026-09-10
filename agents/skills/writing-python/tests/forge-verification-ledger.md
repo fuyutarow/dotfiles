@@ -1,5 +1,10 @@
 # Forge verification ledger — writing-python (F3 artifact)
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One typed routing row distinguishes Python implementation from cross-format configuration contracts.
+Existing prose/version/table debt remains pre-existing. Queue: next writing-python reforge.
+
 Append on reforge; never overwrite. The fire/no-fire desk-check set is `tests/trigger-set.md` —
 re-run it after any description edit.
 

@@ -82,3 +82,9 @@ desk-check / 木下-fidelity) — results appended on completion.
   chars >1500, 17 prose sentences >120 chars, version header 10 lines >3, and 1 table cell >400
   chars. This reciprocal-pointer edit does not clear or accept that debt; a dedicated reforge owns
   retirement of this waiver.
+
+## 2026-09-10 — F4 listing remediation and PROSE-DEBT waiver
+
+- Description shortened from 1,669 to 1,096 Unicode characters after a trigger/cut desk-check.
+- Remaining debt is pre-existing: 17 long prose sentences, a 10-line version header, and one long table cell.
+- This description-only remediation does not clear body debt. A dedicated reforge owns its retirement.

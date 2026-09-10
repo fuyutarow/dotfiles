@@ -138,6 +138,7 @@ the research judgments themselves.
 
 ### Systems & security
 
+- [`governing-configuration-systems`](governing-configuration-systems/) — Design or audit executable configuration: consumer/trust regime, canonical bytes, authority, exceptions, and target validation.
 - [`securing-remote-access`](securing-remote-access/) — Pick and harden the right remote-shell architecture: SSH keys, certs, hardware tokens, or zero-trust mesh.
 
 ### People & media

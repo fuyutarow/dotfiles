@@ -210,6 +210,7 @@ That skill never decides `DOC ADMISSION` or lifecycle meaning. This skill consum
 
 | Request | Owner |
 |---|---|
+| Executable configuration consumed by a runtime or gate | governing-configuration-systems — effective declaration and integrity contract there; portfolio lifecycle remains HERE. |
 | Facts duplicated across sections of one document | `structuring-documents` |
 | Wording, register, paragraph logic, or reader comprehension | `linting-prose` |
 | Known/uncertain/disputed position across a source corpus | `systematizing-knowledge` |

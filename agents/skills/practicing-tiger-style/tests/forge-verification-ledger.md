@@ -1,5 +1,10 @@
 # Forge verification ledger — `practicing-tiger-style`
 
+## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
+
+One routing row names the seam between risk-ledger decisions and configuration representation.
+Existing prose/reference debt remains pre-existing. Queue: next practicing-tiger-style reforge.
+
 > Status vocabulary: `PASS`, `FAIL`, `WARN`, `NOT-RUN`. `NOT-RUN` is never evidence of PASS.
 
 ## Version, scope, and source pointers

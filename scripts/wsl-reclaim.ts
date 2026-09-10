@@ -72,16 +72,37 @@ const tally: Array<{ label: string; outcome: Outcome; detail: string }> = [];
 async function run(cmd: string[], ms: number): Promise<Ran> {
   const sig = AbortSignal.timeout(ms);
   const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", signal: sig });
-  // One Promise.all: draining the pipes sequentially deadlocks on whichever one is not being
-  // read, and the only symptom would be our own timeout firing on a healthy command.
-  const [out, err, code] = await Promise.all([
+
+  // One Promise.all for the two pipes and the exit: draining them sequentially deadlocks on
+  // whichever one is not being read, and the only symptom would be our own timeout firing on a
+  // healthy command.
+  const work = Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
-  ]);
+  ]).then(([out, err, code]) => ({ out, err, code }));
+
+  // RACE it against the abort, and do not wait for the pipes once the bound has passed. This is
+  // not belt-and-braces; awaiting the drain is itself unbounded. The signal kills the process we
+  // SPAWNED, and a shell wrapper's grandchild survives that kill holding the write end of the
+  // same pipe open, so text() waits for an EOF that never comes and the bound never reports.
+  // Measured 2026-09-10 on r99, against a fixture `sudo` of `#!/bin/sh` + `sleep 999`: the run
+  // printed nothing and was still alive at 80s under a 60s bound, until an external `timeout`
+  // killed it (exit 124). A local probe missed it because it spawned `sleep` DIRECTLY, with no
+  // shell in between and therefore no grandchild — only the end-to-end shape exposes this.
+  const aborted = new Promise<null>((resolve) => {
+    sig.addEventListener("abort", () => resolve(null), { once: true });
+  });
+  const done = await Promise.race([work, aborted]);
+
   // Read the overrun off the SIGNAL. proc.killed is true after ANY clean exit, and signalCode
   // cannot tell our timeout apart from an external kill — neither can answer "did this overrun?".
-  return { code, out, err, timedOut: sig.aborted };
+  if (done === null) {
+    // Residual risk, accepted and named: an orphaned grandchild may outlive this process. It is
+    // strictly better than the alternative it replaces, which was this script never returning.
+    return { code: -1, out: "", err: "", timedOut: true };
+  }
+  return { ...done, timedOut: sig.aborted };
 }
 
 async function step(

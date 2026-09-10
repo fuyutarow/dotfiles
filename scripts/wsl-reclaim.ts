@@ -50,53 +50,176 @@ if (!canSudo) {
   process.exit(1);
 }
 
-const df = async () =>
-  (await $`df -h --output=used,avail,pcent /`.text()).trim();
-console.log(`before:\n${await df()}`);
+// --- bounded step runner -------------------------------------------------------------------
+// Every reclaim step is a sudo subprocess, and an unbounded one is the failure this task can
+// least afford: `mise run wsl:reclaim` would sit forever holding a sudo session, on a machine
+// whose whole problem was that it had run out of disk. apt can block on the dpkg lock, snapd
+// can wedge, and fstrim walks the entire filesystem.
+//
+// The bounds are measured on r99 (2026-09-10), not chosen for their roundness:
+//     fstrim, cold       32457 ms      <- the only slow step, by two orders of magnitude
+//     fstrim, warm          94 ms
+//     apt-get clean          9 ms
+//     journalctl            18 ms
+//     snap list            165 ms
+// FSTRIM_MS is ~9x the cold measurement, so a bigger filesystem or a busy device does not trip
+// it; STEP_MS is ~360x the slowest of the rest. Both are wide on purpose — the bound exists to
+// convert a HANG into a reported failure, not to police normal variance.
+//
+// AbortSignal, and the timeout is read off the SIGNAL rather than the process: `proc.killed` is
+// true after any clean exit and `signalCode` cannot tell our timeout apart from an external
+// kill, so neither can answer "did this overrun?".
+const FSTRIM_MS = 300_000;
+const STEP_MS = 60_000;
+const SNAP_MAX = 32; // r99 held 4 disabled revisions on 2026-09-07; 8x headroom
 
-if (Bun.which("apt-get")) {
-  console.log("• apt-get clean (downloaded .deb archives — regenerable)");
-  await $`sudo -n apt-get clean`.nothrow();
+type Outcome = "ok" | "failed" | "timeout" | "skipped";
+const tally: Array<{ label: string; outcome: Outcome; detail: string }> = [];
+
+async function step(
+  label: string,
+  cmd: string[],
+  ms: number = STEP_MS,
+): Promise<Outcome> {
+  if (!Bun.which(cmd[0] ?? "")) {
+    tally.push({ label, outcome: "skipped", detail: `${cmd[0]} not on PATH` });
+    return "skipped";
+  }
+  const sig = AbortSignal.timeout(ms);
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", signal: sig });
+  // One Promise.all: draining the pipes sequentially deadlocks on whichever one is not being
+  // read, and the only symptom would be our own timeout firing on a healthy command.
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  const outcome: Outcome = sig.aborted
+    ? "timeout"
+    : code === 0
+      ? "ok"
+      : "failed";
+  const detail =
+    outcome === "timeout"
+      ? `no exit within ${ms / 1000}s — killed`
+      : (out.trim() || err.trim() || `exit ${code}`).slice(0, 200);
+  tally.push({ label, outcome, detail });
+  console.log(`• ${label}: ${outcome}${detail ? ` — ${detail}` : ""}`);
+  return outcome;
 }
+
+// Free bytes, as a NUMBER, so the run can report what it actually reclaimed. `df -h` is for
+// eyes; a caller cannot subtract "12G" from "9.4G".
+async function freeBytes(): Promise<number> {
+  const raw = await $`df -B1 --output=avail /`.nothrow().text();
+  const n = Number(raw.split("\n")[1]?.trim());
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+const before = await freeBytes();
+console.log(`before: ${(before / 1024 ** 3).toFixed(2)} GiB free`);
+
+await step("apt-get clean (downloaded .deb archives)", [
+  "sudo",
+  "-n",
+  "apt-get",
+  "clean",
+]);
 
 // The journal is capped by SystemMaxUse in journald.conf, which defaults to 10% of the
 // filesystem — on a 1 TB vhdx that is a 100 GB ceiling nobody intended. Vacuum to a size the
 // box can actually afford; this is lossy for OLD logs only, never for the current boot.
-if (Bun.which("journalctl")) {
-  console.log("• journalctl --vacuum-size=200M (old archived journals)");
-  await $`sudo -n journalctl --vacuum-size=200M`.nothrow();
-}
+// 200M is a JUDGEMENT, not a measurement: it is comfortably more than the 571 MB the journal
+// held on r99 minus its archives, and small next to the 100 GB default ceiling. If a real
+// retention requirement ever appears, measure how far back incidents are actually read and
+// size it from that instead.
+await step("journalctl --vacuum-size=200M (old archived journals)", [
+  "sudo",
+  "-n",
+  "journalctl",
+  "--vacuum-size=200M",
+]);
 
 // snap keeps the previous revision of every package so it can roll back. Those are whole
 // squashfs images; four disabled revisions measured 388 MB on r99. `snap remove --revision`
 // drops only the DISABLED ones, never the active install.
+//
+// The cap matters more than it looks: without it the number of sudo invocations is a function
+// of text this script parsed, so malformed or unexpected `snap list` output turns into an
+// unbounded run of privileged deletions. Bounded, and the remainder is REPORTED — a silent
+// truncation would read as "there were only 32", which is the failure mode of every quiet cap.
 if (Bun.which("snap")) {
-  const listed = await $`snap list --all`.text().catch(() => "");
+  const listed = await $`snap list --all`.nothrow().text();
   const disabled = listed
     .split("\n")
     .map((line) => line.trim().split(/\s+/))
     .filter((f) => f.length >= 6 && f[5]?.includes("disabled"))
     .map((f) => ({ name: f[0] ?? "", revision: f[2] ?? "" }))
     .filter((s) => s.name !== "" && s.revision !== "");
-  console.log(`• snap disabled revisions: ${disabled.length}`);
-  for (const s of disabled) {
-    await $`sudo -n snap remove ${s.name} --revision=${s.revision}`.nothrow();
+  const take = disabled.slice(0, SNAP_MAX);
+  if (disabled.length > SNAP_MAX) {
+    console.log(
+      `• snap: ${disabled.length} disabled revisions found, removing ${SNAP_MAX} this run — ${disabled.length - SNAP_MAX} left for the next`,
+    );
+  }
+  for (const s of take) {
+    await step(`snap remove ${s.name} --revision=${s.revision}`, [
+      "sudo",
+      "-n",
+      "snap",
+      "remove",
+      s.name,
+      `--revision=${s.revision}`,
+    ]);
+  }
+  if (take.length === 0) {
+    tally.push({
+      label: "snap disabled revisions",
+      outcome: "skipped",
+      detail: "none",
+    });
+    console.log("• snap disabled revisions: none");
   }
 }
 
-// fstrim LAST: it can only release blocks the steps above have actually freed.
-console.log("• fstrim / (marks freed blocks discardable)");
-await $`sudo -n fstrim -v /`.nothrow();
+// fstrim LAST: it can only release blocks the steps above have actually freed. Its own bound is
+// the wide one — this is the step that walks the whole filesystem.
+await step(
+  "fstrim / (release freed blocks to Windows)",
+  ["sudo", "-n", "fstrim", "-v", "/"],
+  FSTRIM_MS,
+);
 
-console.log(`after:\n${await df()}`);
+const after = await freeBytes();
+const gained = after - before;
+
+console.log("---");
+for (const t of tally) console.log(`  ${t.outcome.padEnd(8)} ${t.label}`);
+
+const attempted = tally.filter((t) => t.outcome !== "skipped");
+const failed = attempted.filter((t) => t.outcome !== "ok");
 console.log("---");
 console.log(
-  "Guest space reclaimed. The sparse vhdx releases these blocks to the Windows drive LIVE —",
+  `after: ${(after / 1024 ** 3).toFixed(2)} GiB free  (${gained >= 0 ? "+" : ""}${(gained / 1024 ** 3).toFixed(2)} GiB)`,
 );
 console.log(
-  "no shutdown needed. Verify from Windows, or from here with `du -sh` (NOT Get-Item.Length,",
+  "The sparse vhdx releases these blocks to the Windows drive LIVE — no shutdown needed.",
 );
-console.log("which reports a sparse file's logical size) on the vhdx.");
 console.log(
-  "Sibling tasks: cache:clean (package caches) / cache:toolchains (rustup, vscode-server)",
+  "Verify with `du -sh <vhdx>`, NOT Get-Item.Length, which reports the logical size.",
 );
+console.log(
+  "Siblings: cache:clean (package caches) / cache:toolchains (rustup, vscode-server)",
+);
+
+// Exit code answers ONE question: did this run do anything at all? A partial failure still
+// reclaimed space and is worth reporting as success — the tally above says which step fell over.
+// Every attempted step failing is different in kind: it means the run had no effect, and the
+// usual cause is a sudo timestamp that expired between the gate and here, which a caller must
+// be able to detect without parsing this output.
+if (attempted.length > 0 && failed.length === attempted.length) {
+  console.log(
+    `FATAL: all ${attempted.length} attempted step(s) failed — nothing was reclaimed`,
+  );
+  process.exit(1);
+}

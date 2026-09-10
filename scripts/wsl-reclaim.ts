@@ -1,5 +1,3 @@
-import { $ } from "bun";
-
 // Reclaim disk INSIDE a WSL2 distro — the Linux system caches that `cache:clean` does not own,
 // then fstrim. Consumer: human/agent running `mise run wsl:reclaim`; output is verdict lines.
 //
@@ -39,17 +37,6 @@ if (!osrelease.toLowerCase().includes("microsoft")) {
   process.exit(1);
 }
 
-// Every step below is root-owned. Probe once with `sudo -n` (non-interactive) rather than letting
-// each step hang on a password prompt inside a task runner that may have no tty.
-const canSudo = (await $`sudo -n true`.quiet().nothrow()).exitCode === 0;
-if (!canSudo) {
-  console.log(
-    "passwordless sudo unavailable — run this task from an interactive shell:",
-  );
-  console.log("  sudo -v && mise run wsl:reclaim");
-  process.exit(1);
-}
-
 // --- bounded step runner -------------------------------------------------------------------
 // Every reclaim step is a sudo subprocess, and an unbounded one is the failure this task can
 // least afford: `mise run wsl:reclaim` would sit forever holding a sudo session, on a machine
@@ -74,7 +61,28 @@ const STEP_MS = 60_000;
 const SNAP_MAX = 32; // r99 held 4 disabled revisions on 2026-09-07; 8x headroom
 
 type Outcome = "ok" | "failed" | "timeout" | "skipped";
+type Ran = { code: number; out: string; err: string; timedOut: boolean };
 const tally: Array<{ label: string; outcome: Outcome; detail: string }> = [];
+
+// EVERY subprocess in this file goes through here, with no exceptions — including the ones that
+// only read. That rule was earned: an earlier version bounded the reclaim steps but left the
+// `sudo -n true` probe on Bun.$, and a fixture `sudo` that never returns hung the whole script
+// before it printed a single line. A bound that covers the work but not the gate in front of it
+// is not a bound. `df` and `snap list` are here for the same reason.
+async function run(cmd: string[], ms: number): Promise<Ran> {
+  const sig = AbortSignal.timeout(ms);
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", signal: sig });
+  // One Promise.all: draining the pipes sequentially deadlocks on whichever one is not being
+  // read, and the only symptom would be our own timeout firing on a healthy command.
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  // Read the overrun off the SIGNAL. proc.killed is true after ANY clean exit, and signalCode
+  // cannot tell our timeout apart from an external kill — neither can answer "did this overrun?".
+  return { code, out, err, timedOut: sig.aborted };
+}
 
 async function step(
   label: string,
@@ -85,24 +93,15 @@ async function step(
     tally.push({ label, outcome: "skipped", detail: `${cmd[0]} not on PATH` });
     return "skipped";
   }
-  const sig = AbortSignal.timeout(ms);
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", signal: sig });
-  // One Promise.all: draining the pipes sequentially deadlocks on whichever one is not being
-  // read, and the only symptom would be our own timeout firing on a healthy command.
-  const [out, err, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  const outcome: Outcome = sig.aborted
+  const r = await run(cmd, ms);
+  const outcome: Outcome = r.timedOut
     ? "timeout"
-    : code === 0
+    : r.code === 0
       ? "ok"
       : "failed";
-  const detail =
-    outcome === "timeout"
-      ? `no exit within ${ms / 1000}s — killed`
-      : (out.trim() || err.trim() || `exit ${code}`).slice(0, 200);
+  const detail = r.timedOut
+    ? `no exit within ${ms / 1000}s — killed`
+    : (r.out.trim() || r.err.trim() || `exit ${r.code}`).slice(0, 200);
   tally.push({ label, outcome, detail });
   console.log(`• ${label}: ${outcome}${detail ? ` — ${detail}` : ""}`);
   return outcome;
@@ -111,9 +110,26 @@ async function step(
 // Free bytes, as a NUMBER, so the run can report what it actually reclaimed. `df -h` is for
 // eyes; a caller cannot subtract "12G" from "9.4G".
 async function freeBytes(): Promise<number> {
-  const raw = await $`df -B1 --output=avail /`.nothrow().text();
-  const n = Number(raw.split("\n")[1]?.trim());
+  const r = await run(["df", "-B1", "--output=avail", "/"], STEP_MS);
+  const n = Number(r.out.split("\n")[1]?.trim());
   return Number.isFinite(n) ? n : Number.NaN;
+}
+
+// The gate, now bounded like everything else. `sudo -n` is non-interactive on purpose: a task
+// runner may have no tty, and a password prompt there is indistinguishable from a hang.
+if (!Bun.which("sudo")) {
+  console.log("no sudo on PATH — this task needs root to reclaim system state");
+  process.exit(1);
+}
+const probe = await run(["sudo", "-n", "true"], STEP_MS);
+if (probe.timedOut || probe.code !== 0) {
+  console.log(
+    probe.timedOut
+      ? `sudo did not answer within ${STEP_MS / 1000}s — refusing to start`
+      : "passwordless sudo unavailable — run this task from an interactive shell:",
+  );
+  if (!probe.timedOut) console.log("  sudo -v && mise run wsl:reclaim");
+  process.exit(1);
 }
 
 const before = await freeBytes();
@@ -149,7 +165,7 @@ await step("journalctl --vacuum-size=200M (old archived journals)", [
 // unbounded run of privileged deletions. Bounded, and the remainder is REPORTED — a silent
 // truncation would read as "there were only 32", which is the failure mode of every quiet cap.
 if (Bun.which("snap")) {
-  const listed = await $`snap list --all`.nothrow().text();
+  const listed = (await run(["snap", "list", "--all"], STEP_MS)).out;
   const disabled = listed
     .split("\n")
     .map((line) => line.trim().split(/\s+/))

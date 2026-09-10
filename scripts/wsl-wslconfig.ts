@@ -1,5 +1,40 @@
-import { $ } from "bun";
 import { existsSync, copyFileSync } from "node:fs";
+import { fromThrowable } from "neverthrow";
+
+// Bounds and failure handling, in the shape practicing-tiger-style asks for.
+//
+// INTEROP_MS — the two PowerShell calls below cross the WSL/Windows boundary, and that boundary
+// hangs: an interop call wedged an entire ssh session during the 2026-09-09 incident. Measured
+// on r99 2026-09-10 over three runs, a round trip took 0.85 / 0.85 / 1.92 s including ~0.2 s of
+// ssh. 20 s is ~12x the slowest of those — wide enough that a loaded box never trips it, narrow
+// enough that a wedged call fails in twenty seconds instead of never.
+//
+// The copies are the OTHER hazard, and it is not hypothetical: the destination lives on C:, the
+// drive that reached 1,134,592 bytes free twice in one week. copyFileSync throws on ENOSPC, and
+// an unhandled throw here would surface as a stack trace — technically visible, operationally
+// useless, and worst of all it could leave the .bak written and the real file half-replaced.
+// fromThrowable turns both copies into values so the failure is reported as what it is: an
+// OPERATIONAL error (the disk is full), not a programmer error worth crashing over.
+const INTEROP_MS = 20_000;
+const copyFile = fromThrowable(copyFileSync);
+
+// Same rule as scripts/wsl-reclaim.ts: no subprocess runs unbounded. Bun.$ has no timeout, so
+// interop goes through Bun.spawn with a native AbortSignal, and the overrun is read off the
+// SIGNAL — proc.killed is true after any clean exit and cannot answer "did this overrun?".
+async function capture(cmd: string[], ms: number): Promise<string> {
+  if (!Bun.which(cmd[0] ?? "")) return "";
+  const sig = AbortSignal.timeout(ms);
+  const proc = Bun.spawn(cmd, {
+    stdout: "pipe",
+    stderr: "ignore",
+    signal: sig,
+  });
+  const [out] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  return sig.aborted ? "" : out.replace(/\r/g, "").trim();
+}
 
 // Deploy wsl/wslconfig.host to the Windows profile as %USERPROFILE%\.wslconfig.
 // Consumer: human/agent running `mise run wsl:wslconfig`; output is verdict lines.
@@ -49,15 +84,16 @@ if (!existsSync(src)) {
 // paths in shared files. cmd.exe is deliberately absent from this box's non-interactive PATH
 // (it made Zed misdetect WSL2 as Windows), so PowerShell is the interop path. cwd must be a
 // Windows-reachable path or interop warns about the UNC fallback and pollutes stdout.
-const profileRaw = (
-  await $`powershell.exe -NoProfile -NonInteractive -Command ${"Write-Output $env:USERPROFILE"}`
-    .cwd("/mnt/c")
-    .quiet()
-    .nothrow()
-    .text()
-)
-  .replace(/\r/g, "")
-  .trim();
+const profileRaw = await capture(
+  [
+    "powershell.exe",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    "Write-Output $env:USERPROFILE",
+  ],
+  INTEROP_MS,
+);
 
 if (profileRaw === "") {
   console.log(
@@ -69,9 +105,7 @@ if (profileRaw === "") {
   process.exit(1);
 }
 
-const profile = (
-  await $`wslpath -u ${profileRaw}`.quiet().nothrow().text()
-).trim();
+const profile = await capture(["wslpath", "-u", profileRaw], INTEROP_MS);
 if (profile === "" || !existsSync(profile)) {
   console.log(`wslpath could not map ${profileRaw} to a readable directory`);
   process.exit(1);
@@ -83,15 +117,16 @@ const dest = `${profile}/.wslconfig`;
 const wanted = (await Bun.file(src).text()).match(
   /^\s*memory\s*=\s*(\d+)\s*GB/im,
 );
-const totalRaw = (
-  await $`powershell.exe -NoProfile -NonInteractive -Command ${"Write-Output (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"}`
-    .cwd("/mnt/c")
-    .quiet()
-    .nothrow()
-    .text()
-)
-  .replace(/\r/g, "")
-  .trim();
+const totalRaw = await capture(
+  [
+    "powershell.exe",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    "Write-Output (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+  ],
+  INTEROP_MS,
+);
 const hostGb = Number(totalRaw) / 1024 ** 3;
 if (wanted?.[1] !== undefined && Number.isFinite(hostGb) && hostGb > 0) {
   const askGb = Number(wanted[1]);
@@ -120,11 +155,29 @@ if (existsSync(dest)) {
     process.exit(0);
   }
   const backup = `${dest}.bak`;
-  copyFileSync(dest, backup);
+  // Back up BEFORE overwriting, and stop if that fails: the point of the .bak is to survive a
+  // failed replace, so a run that could not write it must not go on to replace anything.
+  const saved = copyFile(dest, backup);
+  if (saved.isErr()) {
+    console.log(`could not back up ${dest} to ${backup}: ${saved.error}`);
+    console.log("host copy left untouched — nothing was written.");
+    process.exit(1);
+  }
   console.log(`drift found — previous host copy saved to ${backup}`);
 }
 
-copyFileSync(src, dest);
+// ENOSPC here is an OPERATIONAL error on a drive this repo has watched hit 1,134,592 bytes free,
+// not a programmer error: report it as itself and leave the .bak in place, rather than exiting
+// through a stack trace that says nothing about what to do next.
+const wroteRes = copyFile(src, dest);
+if (wroteRes.isErr()) {
+  console.log(`could not write ${dest}: ${wroteRes.error}`);
+  console.log(
+    "If this is ENOSPC, free space on C: first — the .bak (if any) still holds the",
+  );
+  console.log("previous contents, so the host is in its pre-run state.");
+  process.exit(1);
+}
 const wrote = (await Bun.file(dest).arrayBuffer()).byteLength;
 console.log(`deployed: ${dest} (${wrote} bytes)`);
 console.log("---");

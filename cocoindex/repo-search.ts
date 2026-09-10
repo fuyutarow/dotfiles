@@ -63,8 +63,8 @@
 // an unearned pass for an earned one.
 
 import { readdir, rename } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
 
 const ROUTES = [
@@ -124,6 +124,37 @@ function findRegisteredProject(start: string): string | null {
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
+  }
+}
+
+const GLOB_MAGIC = /[*?\[\]{}]/;
+
+// ccc's --path consumes a file-path glob, not a directory name. Preserve a caller's explicit
+// glob and file path exactly, but turn an existing directory inside the selected project into
+// the recursive glob that actually selects its indexed files. realpath keeps an in-project
+// symlink to an outside directory from accidentally widening the search scope.
+// This is accidental-scope normalization, not a hostile TOCTOU security boundary: the filesystem
+// may change after these checks and before ccc consumes the resulting glob.
+function cccSearchPath(project: string, path: string): string {
+  if (GLOB_MAGIC.test(path)) return path;
+
+  try {
+    const projectPath = realpathSync(project);
+    const candidate = realpathSync(resolve(projectPath, path));
+    const insideProject = relative(projectPath, candidate);
+    if (
+      insideProject === ".." ||
+      insideProject.startsWith(`..${sep}`) ||
+      isAbsolute(insideProject) ||
+      !statSync(candidate).isDirectory()
+    ) {
+      return path;
+    }
+    return `${insideProject || "."}/**`;
+  } catch {
+    // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
+    // recursive scope for it.
+    return path;
   }
 }
 
@@ -582,11 +613,12 @@ async function runCccSearch(
     );
     return 75;
   }
+  const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
     const command = [ccc, "search", query, "--limit", String(limit)];
-    if (path !== undefined) command.push("--path", path);
+    if (cccPath !== undefined) command.push("--path", cccPath);
     if (refresh && index === 0) command.push("--refresh");
 
     process.stderr.write(

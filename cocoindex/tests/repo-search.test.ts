@@ -6,10 +6,11 @@ import {
   readFileSync,
   realpathSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 
@@ -155,6 +156,16 @@ if [ "${name}" = ccc ] && [ "$1" = grep ]; then
   fi
   exit "\${FAKE_SEARCH_EXIT:-0}"
 fi
+if [ "${name}" = ccc ] && [ "\${FAKE_CCC_REQUIRE_RECURSIVE_DIRECTORY_PATH:-0}" = 1 ] && [ "$1" = search ]; then
+  case " $* " in
+    *" --path knowledge "*) exit "\${FAKE_SEARCH_EXIT:-0}" ;;
+  esac
+fi
+if [ "${name}" = ccc ] && [ "\${FAKE_CCC_REQUIRE_SINGLE_SPACE_PATH:-0}" = 1 ] && [ "$1" = search ]; then
+  if [ "$5" != --path ] || [ "$6" != 'knowledge space/**' ] || [ "\${7:-}" != "" ]; then
+    exit "\${FAKE_SEARCH_EXIT:-0}"
+  fi
+fi
 if [ "${name}" = ccc ] && [ "\${FAKE_SEARCH_EMPTY:-0}" != 1 ]; then printf '%s\\n' '--- Result 1 (score: 0.9) ---'; fi
 exit "\${FAKE_SEARCH_EXIT:-0}"
 `,
@@ -220,6 +231,234 @@ describe("repo-search route contract", () => {
     expect(result.log).toContain("--path src/**/*.ts");
     expect(result.log).not.toContain("--refresh");
     expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+  });
+
+  test("a directory path is passed to ccc as a recursive file glob", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge"));
+
+    const result = run(
+      dir,
+      ["concept", "--query", "known content", "--path", "knowledge"],
+      { FAKE_CCC_REQUIRE_RECURSIVE_DIRECTORY_PATH: "1" },
+    );
+
+    // The fixture models ccc's actual contract: --path is a file-path glob, so the
+    // bare directory emitted by the pre-fix router produces no result blocks.
+    expect(result.code).toBe(0);
+    expect(result.log).toContain(
+      "ccc search known content --limit 8 --path knowledge/**",
+    );
+    expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+  });
+
+  test("a trailing slash on a directory path is normalized to the same recursive glob", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge"));
+
+    const result = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge/",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--path knowledge/**");
+  });
+
+  test("the project directory and an absolute in-project directory become recursive relative globs", () => {
+    const { dir } = registerFreshGitProject();
+    const knowledge = join(dir, "knowledge");
+    mkdirSync(knowledge);
+
+    const root = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      ".",
+    ]);
+    const absolute = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      knowledge,
+    ]);
+
+    expect(root.code).toBe(0);
+    expect(root.log).toContain("--path ./**");
+    expect(absolute.code).toBe(0);
+    expect(absolute.log).toContain("--path knowledge/**");
+  });
+
+  test("an in-project directory symlink is normalized, while an escaping symlink remains exact", () => {
+    const { dir } = registerFreshGitProject();
+    const knowledge = join(dir, "knowledge");
+    const outsideDir = tempDir("repo-search-outside-");
+    mkdirSync(knowledge);
+    symlinkSync(knowledge, join(dir, "knowledge-link"), "dir");
+    symlinkSync(outsideDir, join(dir, "outside-link"), "dir");
+
+    const inside = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge-link",
+    ]);
+    const outside = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "outside-link",
+    ]);
+
+    expect(inside.code).toBe(0);
+    expect(inside.log).toContain("--path knowledge/**");
+    expect(outside.code).toBe(0);
+    expect(outside.log).toContain("--path outside-link");
+    expect(outside.log).not.toContain("--path outside-link/**");
+  });
+
+  test("an existing directory with spaces remains one ccc argv element", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge space"));
+
+    const result = run(
+      dir,
+      ["concept", "--query", "known content", "--path", "knowledge space"],
+      { FAKE_CCC_REQUIRE_SINGLE_SPACE_PATH: "1" },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--path knowledge space/**");
+  });
+
+  test("an explicit ccc path glob and an existing file path remain exact", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge"));
+    writeFileSync(join(dir, "knowledge", "entry.md"), "fixture\n");
+
+    const glob = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge/*.md",
+    ]);
+    const file = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge/entry.md",
+    ]);
+
+    expect(glob.code).toBe(0);
+    expect(glob.log).toContain("--path knowledge/*.md");
+    expect(file.code).toBe(0);
+    expect(file.log).toContain("--path knowledge/entry.md");
+  });
+
+  test("existing paths containing ccc glob characters remain caller-exact", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge[exact]"));
+    writeFileSync(join(dir, "knowledge*.md"), "fixture\n");
+
+    const directory = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge[exact]",
+    ]);
+    const file = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "knowledge*.md",
+    ]);
+
+    expect(directory.code).toBe(0);
+    expect(directory.log).toContain("--path knowledge[exact]");
+    expect(directory.log).not.toContain("--path knowledge[exact]/**");
+    expect(file.code).toBe(0);
+    expect(file.log).toContain("--path knowledge*.md");
+  });
+
+  test("a nonexistent or project-escaping path is not broadened into a recursive glob", () => {
+    const { dir } = registerFreshGitProject();
+    const outsideDir = tempDir("repo-search-outside-");
+    const outsidePath = relative(dir, outsideDir);
+
+    const missing = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "missing",
+    ]);
+    const outside = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      outsidePath,
+    ]);
+
+    expect(missing.code).toBe(0);
+    expect(missing.log).toContain("--path missing");
+    expect(missing.log).not.toContain("--path missing/**");
+    expect(outside.code).toBe(0);
+    expect(outside.log).toContain(`--path ${outsidePath}`);
+    expect(outside.log).not.toContain(`--path ${outsidePath}/**`);
+  });
+
+  test("the parent-directory path is not broadened into a recursive glob", () => {
+    const { dir } = registerFreshGitProject();
+    const result = run(dir, [
+      "concept",
+      "--query",
+      "known content",
+      "--path",
+      "..",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--path ..");
+    expect(result.log).not.toContain("--path ../**");
+  });
+
+  test("battery applies the same recursive directory glob to every query", () => {
+    const { dir } = registerFreshGitProject();
+    mkdirSync(join(dir, "knowledge"));
+
+    const result = run(dir, [
+      "battery",
+      "--query",
+      "first",
+      "--query",
+      "second",
+      "--query",
+      "third",
+      "--path",
+      "knowledge",
+    ]);
+    const searches = result.log
+      .trim()
+      .split("\n")
+      .filter((call) => call.startsWith("ccc search"));
+
+    expect(result.code).toBe(0);
+    expect(searches).toHaveLength(3);
+    for (const search of searches) {
+      expect(search).toContain("--path knowledge/**");
+    }
   });
 
   test("an exit-zero empty ccc result is not reported as PASS", () => {

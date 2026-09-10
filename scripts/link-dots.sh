@@ -89,7 +89,6 @@ link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"
 link agents/resource-control/agent-resource-run.ts "$HOME/.local/bin/agent-resource-run"
-link agents/resource-control/mcp-reaper.sh "$HOME/.local/bin/mcp-reaper"
 link agents/serena-control/serena-foreground.ts "$HOME/.local/bin/serena-foreground"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
@@ -120,8 +119,9 @@ link agents/codex/hooks "$HOME/.codex/hooks"
 # NOTE for every systemd unit linked below: `systemctl --user disable <unit>` DELETES the
 # symlink this script places in ~/.config/systemd/user/. systemd treats any symlink found in
 # the unit search path as an enablement link and removes it, not just the *.wants/ entry —
-# so a disable leaves the unit reporting `not-found`, not `disabled`. Measured 2026-08-24 on
-# mcp-reaper.timer. Always re-run `mise run link:dots` after disabling one.
+# so a disable leaves the unit reporting `not-found`, not `disabled`. Always re-run
+# `mise run link:dots` after disabling one. Measured 2026-08-24 on the since-retired
+# mcp-reaper.timer — the lesson outlived the unit and applies to every unit linked below.
 #
 # --- cocoindex-code (MCP code search; declarative global settings = no interactive `ccc init`) ---
 link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
@@ -130,13 +130,6 @@ link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
 # `export COCOINDEX_CODE_DAEMON_SUPERVISED=1` can never drift apart. Activate: mise run wsl:ccc-daemon
 if $IS_WSL; then
   link cocoindex/ccc-daemon.service.wsl "$HOME/.config/systemd/user/ccc-daemon.service"
-fi
-
-# --- mcp-reaper (STOPGAP: bounds the leaked-stdio-MCP-server pile until app-server restarts;
-#     see agents/resource-control/mcp-reaper.service.wsl for why, and when to retire it) ---
-if $IS_WSL; then
-  link agents/resource-control/mcp-reaper.service.wsl "$HOME/.config/systemd/user/mcp-reaper.service"
-  link agents/resource-control/mcp-reaper.timer.wsl "$HOME/.config/systemd/user/mcp-reaper.timer"
 fi
 
 # --- topgrade (govern which update steps run; e.g. disable flutter/tlmgr) ---

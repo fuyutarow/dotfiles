@@ -782,7 +782,9 @@ command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() f
 # verb switches branches, creates a branch (-b/-B), restores files, and can detach HEAD, so a
 # typo silently does something else plausible instead of erroring. Since git 2.23 the
 # disambiguated replacements are `git switch` (branches) and `git restore` (files); block the
-# ambiguous verb entirely and point at the unambiguous one — same shape as rm()/cp()/mv() above:
+# ambiguous verb entirely and point at the unambiguous one — same shape as cp()/mv() above and
+# rm() further down, under "Command Override Functions" (they are one family split across two
+# banners; the guards live here because they are file-operation safety, rm() lives there):
 # fail loud, never guess. `command git checkout ...` remains the escape hatch, same as rm's
 # /bin/rm. Interactive shells only (functions in this file never reach scripts/CI/hooks), so
 # git/gitconfig's co/cb aliases are left in place for non-interactive callers.
@@ -900,91 +902,13 @@ claude() {
 }
 
 # ============================================
-# Additional Recommended Tools (not replacements)
-# ============================================
-typeset -A ADDITIONAL_TOOLS=(
-  ["just"]="brew install just:cargo install just"
-  ["fzf"]="brew install fzf:cargo install skim"
-  ["lazygit"]="brew install lazygit:cargo install gitui"
-  ["lazydocker"]="brew install lazydocker:go install github.com/jesseduffield/lazydocker@latest"
-  ["jq"]="brew install jq:cargo install jaq"
-  ["yq"]="brew install yq:pip install yq"
-  ["direnv"]="brew install direnv:curl -sfL https://direnv.net/install.sh | bash"
-  ["starship"]="brew install starship:cargo install starship"
-  ["atuin"]="brew install atuin:cargo install atuin"
-  ["mcfly"]="brew install mcfly:cargo install mcfly"
-  ["navi"]="brew install navi:cargo install navi"
-)
-
-# Check additional tools
-check_additional_tools() {
-  echo "📦 Checking for additional recommended tools..."
-  for tool in ${(k)ADDITIONAL_TOOLS}; do
-    if ! command_exists "$tool"; then
-      local info="${ADDITIONAL_TOOLS[$tool]}"
-      IFS=':' read -r brew_install other_install <<< "$info"
-      echo "💡 Consider installing '$tool':"
-      echo "   Install: $brew_install (macOS) or $other_install"
-    fi
-  done
-}
-
-# ============================================
 # Command Override Functions
 # ============================================
 
-# Generic function to handle command overrides with warnings
-_command_warning() {
-  local cmd="$1"
-  shift
-  local info="${COMMAND_RECOMMENDATIONS[$cmd]}"
-
-  if [[ -n "$info" ]]; then
-    IFS=':' read -r recommended _ _ <<< "$info"
-
-    if ! command_exists "$recommended"; then
-      echo "⚠️  Warning: '$recommended' is not installed. Install it for better experience:"
-      get_install_instructions "$cmd"
-      echo "   Using standard $cmd instead..."
-    else
-      echo "⚠️  Warning: Consider using '$recommended' instead of $cmd!"
-      echo "   Proceeding with $cmd..."
-    fi
-  fi
-
-  command "$cmd" "$@"
-}
-
-# Generic function for disabled commands
-_command_disabled() {
-  local cmd="$1"
-  local info="${COMMAND_RECOMMENDATIONS[$cmd]}"
-
-  if [[ -n "$info" ]]; then
-    IFS=':' read -r recommended _ _ <<< "$info"
-
-    echo "⛔ Error: '$cmd' command is disabled!"
-    if ! command_exists "$recommended"; then
-      echo "   The recommended alternative '$recommended' is not installed."
-      get_install_instructions "$cmd"
-    else
-      echo "   Please use '$recommended' instead."
-      # Show relevant aliases if applicable
-      case "$cmd" in
-        "ls") echo "   Aliases available: l, ll, la, lll, lt" ;;
-        "grep") echo "   Aliases available: gr, grr, gv, gl" ;;
-        "find") echo "   Alias available: f" ;;
-        "du") echo "   Alias available: du2" ;;
-        "ps") echo "   Alias available: pp" ;;
-      esac
-    fi
-    echo "   If you really need $cmd, use the full path (e.g., /bin/$cmd, /usr/bin/$cmd)."
-  fi
-
-  return 1
-}
-
-# Special cases that don't fit the pattern
+# Each of these writes its own message. There WAS a generic pair driven by
+# COMMAND_RECOMMENDATIONS (_command_warning / _command_disabled), and in the end nothing called
+# it — every override wanted wording specific to its own replacement, which is the whole value
+# of the message. Removed 2026-09-10 rather than left standing as a shape to conform to.
 rm() {
   print -u2 "⛔ rm: BLOCKED — 'rm' is permanently disabled in this shell."
   print -u2 "   Use 'rip' for file removal (moves to trash, recoverable). Do NOT retry rm."

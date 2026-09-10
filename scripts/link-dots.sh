@@ -73,18 +73,33 @@ link tmux/tmux.conf "$HOME/.tmux.conf"
 # --- herdr (agent multiplexer; link the config file only — ~/.config/herdr/ also holds live sockets/logs) ---
 link herdr/config.toml "$HOME/.config/herdr/config.toml"
 
-# --- claude code (user-level config; the repo's own project .claude/ is separate) ---
 # Prune first: a link this script USED to create keeps pointing into the repo after the source is
-# renamed (the .sh → .ts hook migration left six dangling links under ~/.claude). Only symlinks
-# INTO this repo that no longer resolve are removed — foreign or healthy links are untouched.
-for _stale in "$HOME"/.claude/*; do
-  [ -L "$_stale" ] || continue
-  [ -e "$_stale" ] && continue
-  case "$(readlink "$_stale")" in
-    "$DOTFILES"/*) rm -f "$_stale" && echo "pruned (dangling): $_stale" ;;
-  esac
+# renamed or deleted (the .sh → .ts hook migration left six dangling links under ~/.claude). Only
+# symlinks INTO this repo that no longer resolve are removed — foreign or healthy links are never
+# touched, so a link some other tool owns is safe here.
+#
+# EVERY directory this script links INTO is swept, not just ~/.claude. It scanned only ~/.claude
+# until 2026-09-10, which was enough for the migration that prompted it and silently wrong for
+# everything else: retiring the mcp-reaper stopgap deleted its three sources and left
+# ~/.local/bin/mcp-reaper and two units under ~/.config/systemd/user/ pointing at nothing, through
+# a full `mise run link:dots`. A prune that covers one of five destinations is not a prune; it is
+# a coincidence that happened to match the first case anyone tested.
+#
+# Keep this list in step with the `link` calls below — a new destination directory needs a line
+# here, or its dead links become the next thing nobody notices.
+for _dir in "$HOME"/.claude "$HOME"/.local/bin "$HOME"/.config/systemd/user "$HOME"/.codex "$HOME"/.config; do
+  [ -d "$_dir" ] || continue
+  for _stale in "$_dir"/*; do
+    [ -L "$_stale" ] || continue
+    [ -e "$_stale" ] && continue
+    case "$(readlink "$_stale")" in
+      "$DOTFILES"/*) rm -f "$_stale" && echo "pruned (dangling): $_stale" ;;
+    esac
+  done
 done
-unset _stale
+unset _stale _dir
+
+# --- claude code (user-level config; the repo's own project .claude/ is separate) ---
 link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
 link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"

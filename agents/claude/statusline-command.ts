@@ -42,11 +42,13 @@
 //           and nothing else, label or no label. It rides with line 1 because both are
 //           static session identity, and above the live row so a tail wrap can never shift
 //           it. Omitted when the field is absent (older CLIs).
-//   line 3: Model | Eff[+WF] [✦] | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
+//   line 3: Model | Eff[+WF] | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
 //         Neither Model nor Eff carries a label (both dropped on request 2026-09-05) — each one's
 //         old label color moved onto its own value instead, joined by the normal SEP pipe (a
 //         same-day KMID "・" divider, then a bare space, were both tried and cut — SEP won for
-//         consistency with the rest of the line): "Sonnet 5 | xhigh+WF✦".
+//         consistency with the rest of the line): "Sonnet 5 | xhigh+WF". A ✦ extended-thinking
+//         marker rode here too, same day, until removed — see the "HEAD =" comment further down
+//         for why it didn't actually track what its name implied.
 //   Job:  work running OUTSIDE the harness — the window Claude Code itself cannot draw.
 //         A child started with setsid/nohup is reparented to PID 1, so the background-task
 //         tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
@@ -59,9 +61,8 @@
 //                                      Red when N>0 with NOTHING admitted: invisible
 //                                      processes alive, no job actually holding resources.
 //         Whole segment is omitted when both are zero, so ordinary sessions pay nothing.
-//   Eff:  (no label in the render, see line 3 above) live /effort level (.effort.level) + ✦ when
-//         extended thinking on; hidden when the model has no reasoning-effort param (field
-//         absent). ultracode -> xhigh.
+//   Eff:  (no label in the render, see line 3 above) live /effort level (.effort.level); hidden
+//         when the model has no reasoning-effort param (field absent). ultracode -> xhigh.
 //   +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the Eff
 //         value (green "+WF" suffix) instead of a separate segment, on request 2026-09-05.
 //         Present only while BOTH hold: `ultracode: true` in the CLI's live
@@ -115,7 +116,6 @@ interface StatusInput {
   cost?: { total_lines_added?: number; total_lines_removed?: number };
   effort?: { level?: string };
   rate_limits?: { five_hour?: RateWindow; seven_day?: RateWindow };
-  thinking?: { enabled?: boolean };
   worktree?: { name?: string };
 }
 
@@ -126,7 +126,6 @@ const ESC = "\x1b";
 const RST = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 const SEP = ` ${DIM}|${RST} `;
-const SPARK = "✦"; // extended-thinking marker
 const MID = "·"; //   meter middot
 const BR = "⎇"; //    git branch glyph
 const RSET = "⟳"; //  rate-limit reset marker
@@ -309,7 +308,6 @@ const effortDisplay = effort ? `${effort}${wfOn ? "+WF" : ""}` : effort;
 const ctxPct = data.context_window?.used_percentage; // number | undefined
 const rl5 = data.rate_limits?.five_hour?.used_percentage;
 const rl7 = data.rate_limits?.seven_day?.used_percentage;
-const thinking = data.thinking?.enabled === true;
 const wt = data.worktree?.name; // string | undefined
 const rl5Reset = data.rate_limits?.five_hour?.resets_at;
 const rl7Reset = data.rate_limits?.seven_day?.resets_at;
@@ -584,18 +582,23 @@ const dur = (s: number) =>
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
 
-// HEAD = identity: Model | Eff[+WF] [✦] | Ctx [· pct%] [| Job]
+// HEAD = identity: Model | Eff[+WF] | Ctx [· pct%] [| Job]
 // Neither Model nor Eff carries a label — both dropped on request 2026-09-05, each one's old
 // label color moved onto its own value instead. Joined with the normal SEP pipe (an intermediate
 // KMID "・" divider, then a bare space, were both tried and cut the same day — SEP won for
 // consistency with every other segment in this line). "+WF" (green, only when wfOn) is folded
 // straight into the effort value instead of a separate standalone "WF:" segment (also cut
 // 2026-09-05): "on" is just the suffix itself, "off" is simply its absence.
+// A ✦ extended-thinking marker (data.thinking.enabled) lived here too until removed the same
+// day: it turned out NOT to track whether the model was actually doing extended reasoning —
+// Sonnet 5 (and every current model except pre-4.6) runs adaptive thinking by default even with
+// no `thinking` param at all (confirmed against the claude-api skill's own model table), so a
+// field that's false most of the time was measuring some Claude-Code-internal display/keyword
+// state we couldn't pin down, not "is thinking happening." Better absent than misleading.
 let head = `${ESC}[38;5;30m${model}${RST}`;
 if (effort) {
   head += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
   if (wfOn) head += `${ESC}[38;5;40m+WF${RST}`;
-  if (thinking) head += `${ESC}[38;5;222m${SPARK}${RST}`;
 }
 head += `${SEP}${ESC}[38;5;66mCtx:${RST} ${ctx}`;
 if (ctxPct != null) {

@@ -439,16 +439,16 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 # The Windows half of the Brewfile. Brewfile is the single source of truth for tools on macOS and
 # WSL; the Windows host underneath had none — 113 winget-managed packages (2026-09-11) lived only
 # on the machine. `winget export` / `winget import` give the same source-of-truth shape, so the
-# tracked file is wsl/winget.json and these two verbs are the plumbing. dump and restore are each
+# tracked file is wsl/winget.host.json and these two verbs are the plumbing. dump and restore are each
 # one-way (host -> repo, repo -> host); drift is a git diff after dump, never a silent merge.
 # Coverage limit, by winget's contract: only packages a source can resolve are exported (96 of
 # 113 here). The NVIDIA display driver is NOT in winget; CUDA is.
 [tasks."wsl:winget:dump"]
-description = "Capture the Windows host's winget-managed packages into wsl/winget.json (winget export via interop, ids sorted for stable diffs). Review the diff, then commit."
+description = "Capture the Windows host's winget-managed packages into wsl/winget.host.json (winget export via interop, ids sorted for stable diffs). Review the diff, then commit."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts dump'
 
 [tasks."wsl:winget:restore"]
-description = "Install everything wsl/winget.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
+description = "Install everything wsl/winget.host.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts restore'
 
 [tasks."wsl:ccc-daemon"]

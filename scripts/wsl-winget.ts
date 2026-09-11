@@ -3,7 +3,7 @@ import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 
 // The Windows half of the Brewfile: capture what winget manages on the host into
-// wsl/winget.json, or restore the host from it. Consumer: human/agent running
+// wsl/winget.host.json, or restore the host from it. Consumer: human/agent running
 // `mise run wsl:winget:dump` / `mise run wsl:winget:restore`; output is verdict lines.
 //
 // WHY THIS EXISTS. Brewfile is this repo's single source of truth for tools on macOS and WSL.
@@ -17,7 +17,7 @@ import { fromThrowable } from "neverthrow";
 // winget-managed, and 96 survive export (17 fail source lookup: the tool prints "not available
 // from any source" for each — that is winget's contract, not a bug here). Everything else is
 // unmanaged: installers run by hand, the NVIDIA display driver (NOT in winget — CUDA is), Nsight,
-// MSI leftovers. wsl/winget.json is the part that is reproducible, not an inventory of the box.
+// MSI leftovers. wsl/winget.host.json is the part that is reproducible, not an inventory of the box.
 //
 // DIRECTION. Both verbs are one-way. `dump` reads the host and writes the repo file; `restore`
 // reads the repo file and drives the host. Neither reads the file it is about to write, so there
@@ -118,7 +118,7 @@ async function wingetPath(): Promise<string> {
   return p;
 }
 
-const repoFile = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/winget.json`;
+const repoFile = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/winget.host.json`;
 
 // A Windows temp path winget can write to, and the same path as seen from WSL.
 async function scratch(): Promise<{ win: string; wsl: string }> {
@@ -190,7 +190,7 @@ async function dump(): Promise<void> {
   }
   console.log(`wrote ${repoFile}`);
   console.log(
-    "Review with `git diff wsl/winget.json`; commit if the change is intended.",
+    "Review with `git diff wsl/winget.host.json`; commit if the change is intended.",
   );
 }
 
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
       parameters: ["<verb>"],
       help: {
         description:
-          "dump: capture the Windows host's winget packages into wsl/winget.json. restore: install what that file lists.",
+          "dump: capture the Windows host's winget packages into wsl/winget.host.json. restore: install what that file lists.",
       },
       flags: { dryRun: { type: Boolean, default: false } },
     },

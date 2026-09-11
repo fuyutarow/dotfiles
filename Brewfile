@@ -40,7 +40,7 @@ if OS.linux?
 end
 brew "tldr"         # better man (h)
 brew "yq"
-brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run cache:projects`
+brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run reclaim:pick`
 brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)
 
 # TeX / LaTeX — base distribution differs by OS (see skill: compiling-latex → Environment).
@@ -69,4 +69,8 @@ if OS.mac?
   # WSL has no cask: there `code` is a symlink to the Windows VS Code WSL launcher, wired by
   # zsh/zprofile.wsl's _WIN_EXES allowlist — which is why check-tools.sh does not check `code`.
   cask "visual-studio-code"
+  # Clipboard history (Cmd+B popup, paste-on-select). Its two defaults live in macos/defaults.sh.
+  # Was an orphan ~/.config/mise/tasks/setup-maccy.sh (Apr 2026) outside this repo — folded in
+  # 2026-09-11 so install has one home (here) and configuration has one home (defaults.sh).
+  cask "maccy"
 end

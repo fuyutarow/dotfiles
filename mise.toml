@@ -284,13 +284,57 @@ bash "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.sh" || true
 exec mise run link:skills
 '''
 
-[tasks."cache:clean"]
-description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
-run = 'bun ~/dotfiles/scripts/cache-clean.ts'
+# ── reclaim ─────────────────────────────────────────────────────────────────
+# Disk-space recovery. Named for the PURPOSE, because the previous domain name was a lie: this
+# family lived under `cache:` while five of its six members touched no cache at all —
+# toolchains, build artifacts, stale dotdirs, rip's graveyard, and (outside the family entirely,
+# as `wsl:reclaim`) apt/journal/snap. The one honest member, cache:clean, kept its meaning as
+# reclaim:clean: "the part of reclaim that handles package caches". Renamed 2026-09-11.
+#
+# The family is split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN:
+#   reclaim:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
+#   reclaim:builds      kondo -a, regenerable build output, ≥30d idle     → any agent, run blind
+#   reclaim:toolchains  a WRITTEN predicate (busy-check / pin-scan) —     → any agent, run blind
+#                       no built-in gc exists, so the predicate errs toward keeping on missing
+#                       evidence (no fd -> skip rustup entirely) rather than guessing
+#   reclaim:system      root-owned Linux state + fstrim (WSL only)        → any agent, needs sudo
+#   reclaim:pick        kondo INTERACTIVE — a human picks projects        → human, by design
+#   reclaim:audit       evidence only, deletes NOTHING                    → any agent, run blind
+#   (rip)               accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
+#   reclaim:purge       empty the graveyard — THE irreversible step       → human only
+# The gate sits on the ONE irreversible action, not on the delete. That is what makes the rest
+# delegatable: an agent working from reclaim:audit physically cannot lose data. Adding a new
+# target: if its own tool ships a trustworthy gc/prune, it goes in reclaim:clean; if not, write a
+# predicate that keeps on missing evidence and it goes in reclaim:toolchains. A target whose
+# safety is a genuine value judgment (which checkpoints matter, which clones still matter) belongs
+# in the interactive tier (reclaim:pick), never in a blind one.
+#
+# `reclaim` (bare) = the blind tier in one command. It is depends-only, like `check`: every member
+# is safe to run unattended, and nothing interactive or irreversible is reachable from it.
+# reclaim:system is included because it is also blind; on macOS it exits 1 with "WSL-only" and
+# mise reports that member as failed while the others still run — acceptable, and honest.
+[tasks.reclaim]
+description = "Reclaim disk, blind tier: clean + builds + toolchains + system (WSL). Nothing interactive, nothing irreversible. Human tiers: reclaim:pick, reclaim:purge."
+depends = ["reclaim:clean", "reclaim:builds", "reclaim:toolchains", "reclaim:system"]
 
-[tasks."cache:toolchains"]
+[tasks."reclaim:clean"]
+description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."
+run = 'bun ~/dotfiles/scripts/reclaim-clean.ts'
+
+[tasks."reclaim:toolchains"]
 description = "Prune rustup toolchains and vscode-server old versions — no tool-native gc exists for either, so this writes an explicit safety predicate instead (default/pin-scan for rustup; busy/recency for vscode-server). Deletes via rip. KEEP_DAYS/AUDIT_PROJECTS to retune."
-run = 'bun ~/dotfiles/scripts/cache-toolchains.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-toolchains.ts'
+
+# The Linux SYSTEM-state half of the 断捨離 pass; reclaim:clean owns the per-user package caches
+# and stays sudo-free so it also runs on macOS. Split on WHO OWNS THE BYTES, not on OS.
+# Measured on r99 2026-09-07: apt archives 1.6 GB, journal 571 MB, 4 disabled snap revisions
+# 388 MB — none of which reclaim:clean touches. The task also encodes the fact that cost us the
+# most time that day: freeing guest space does NOT return it to Windows while the distro runs
+# (fstrim reported 522.9 GiB trimmed; C: free moved 15.79 -> 15.81 GB). A sparse vhdx compacts
+# at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
+[tasks."reclaim:system"]
+description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are reclaim:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
+run = 'bun ~/dotfiles/scripts/reclaim-system.ts'
 
 # --same-filesystem is not a nicety on WSL: without it a KONDO_DIR above the mount points walks
 # /mnt/c and /mnt/e over the DrvFs bridge — ruinously slow, and it aims a build-artifact deleter
@@ -298,42 +342,25 @@ run = 'bun ~/dotfiles/scripts/cache-toolchains.ts'
 # construction. Measured on r99 2026-09-08: kondo IS installed (Brewfile + check-tools already
 # declare it) — an earlier "absent" reading was `command -v` run as root, whose PATH lacks
 # /home/linuxbrew/.linuxbrew/bin. Probe brew tools by absolute path, never by root's PATH.
-[tasks."cache:projects"]
-description = "Clean project build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override. Blind/agent-safe form: cache:builds."
+[tasks."reclaim:pick"]
+description = "Clean project build artifacts (node_modules/target/build…) via kondo — INTERACTIVE picker, scoped to projects untouched ≥30d. Set KONDO_DIR / KONDO_OLDER to override. Blind/agent-safe form: reclaim:builds."
 run = 'kondo --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
-# The blind half of the pair, split on the house's WHO-MAY-DECIDE axis (see the 断捨離 comment
-# above cache:audit): cache:projects asks a human which projects to strip, so nothing automated
-# ever runs it — and that is exactly why artifacts accumulate. Measured on r99 2026-09-08 with
-# cache:projects never having run: target/ 11.0 GB + .venv/ 7.8 GB + node_modules/ 6.4 GB +
-# build|dist/ 2.7 GB = ~28 GB. Everything kondo strips is regenerable by a rebuild, which puts
-# this in cache:clean's tier (no judgment needed) rather than cache:purge's (irreversible).
+# Why a blind twin of reclaim:pick exists: an interactive task never runs unattended, and that
+# is exactly why artifacts accumulate — measured on r99 2026-09-08 with the picker never having
+# run: target/ 11.0 GB + .venv/ 7.8 GB + node_modules/ 6.4 GB + build|dist/ 2.7 GB = ~28 GB.
 # The ≥30d default is the safety: a project touched this month is never a candidate.
-[tasks."cache:builds"]
-description = "Reclaim project build artifacts (node_modules/target/build…) NON-interactively via kondo -a, scoped to projects untouched ≥30d. Regenerable only — any agent may run it blind. Human picker: cache:projects."
+[tasks."reclaim:builds"]
+description = "Reclaim project build artifacts (node_modules/target/build…) NON-interactively via kondo -a, scoped to projects untouched ≥30d. Regenerable only — any agent may run it blind. Human picker: reclaim:pick."
 run = 'kondo --all --same-filesystem --older "${KONDO_OLDER:-30d}" ${KONDO_DIR:-$HOME}'
 
-# --- the 断捨離 pass, split by WHO MAY DECIDE, crossed with HOW SAFETY IS PROVEN -------------
-#   cache:clean       tool-native gc/prune (the tool judges "unused")   → any agent, run blind
-#   cache:toolchains  a WRITTEN predicate (busy-check / pin-scan) —     → any agent, run blind
-#                     no built-in gc exists, so the predicate errs toward keeping on missing
-#                     evidence (no fd -> skip rustup entirely) rather than guessing
-#   cache:audit       evidence only, deletes NOTHING                    → any agent, run blind
-#   (rip)             accept a candidate — reversible, same-fs rename   → any agent, no space freed yet
-#   cache:purge       empty the graveyard — THE irreversible step       → human only
-# The gate sits on the ONE irreversible action, not on the delete. That is what makes the rest
-# delegatable: an agent working from cache:audit physically cannot lose data. Adding a new target
-# to this pass: if its own tool ships a trustworthy gc/prune, it goes in cache:clean; if not,
-# write a predicate that keeps on missing evidence and it goes in cache:toolchains. A target
-# whose safety is a genuine value judgment (which model checkpoints are still needed, which repo
-# clones still matter) belongs in the interactive tier (cache:projects), not either blind one.
-[tasks."cache:audit"]
+[tasks."reclaim:audit"]
 description = "READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search), vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune."
-run = 'bun ~/dotfiles/scripts/cache-audit.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
 
-[tasks."cache:purge"]
+[tasks."reclaim:purge"]
 description = "IRREVERSIBLE: empty rip's graveyard. This is the ONLY step that actually frees disk — rip is a same-filesystem rename, so ripped data still occupies space until purged. Prints the contents and requires typing 'yes'. Human-only gate; never run this from an agent."
-run = 'bun ~/dotfiles/scripts/cache-purge.ts'
+run = 'bun ~/dotfiles/scripts/reclaim-purge.ts'
 
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"
@@ -394,7 +421,7 @@ run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 
 # Renamed from check:tools (2026-09-09): "check:" is the reserved CI-aggregate verb namespace
 # (mise run check = fmt:check + lint + test) and this task was never part of it — read-only,
-# no gate, no exit-1 path. `tools:` here matches the existing audit-verb idiom (cache:audit,
+# no gate, no exit-1 path. `tools:` here matches the existing audit-verb idiom (reclaim:audit,
 # repos:audit): report evidence, human decides.
 [tasks."tools:audit"]
 description = "Audit recommended tools against the Brewfile (single source: scripts/check-tools.sh; install missing ones via Brewfile)"
@@ -407,24 +434,13 @@ run = 'bash ~/dotfiles/scripts/check-tools.sh'
 # `check:` for now pending a decision: rename to `lint:models` + wire into `lint`, or keep it a
 # standalone tool a human runs on purpose. Do not "fix" by silently wiring it in — the pass/fail
 # flip is a real CI-behavior change, not a naming one.
-[tasks."check:models"]
+[tasks."models:audit"]
 description = "Model-release SSOT floor (agents/models/releases.toml): staleness, retirements, dead refs"
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"
 run = 'bun ~/dotfiles/scripts/wsl-init.ts'
-
-# The Linux SYSTEM-state half of the 断捨離 pass; cache:clean owns the per-user package caches
-# and stays sudo-free so it also runs on macOS. Split on WHO OWNS THE BYTES, not on OS.
-# Measured on r99 2026-09-07: apt archives 1.6 GB, journal 571 MB, 4 disabled snap revisions
-# 388 MB — none of which cache:clean touches. The task also encodes the fact that cost us the
-# most time that day: freeing guest space does NOT return it to Windows while the distro runs
-# (fstrim reported 522.9 GiB trimmed; C: free moved 15.79 -> 15.81 GB). A sparse vhdx compacts
-# at shutdown only, and .wslconfig has no storage key — so preventing GROWTH is the whole point.
-[tasks."wsl:reclaim"]
-description = "Reclaim disk inside WSL: apt archives, journald, snap disabled revisions, then fstrim. Needs sudo. Per-user package caches are cache:clean; freed blocks return to Windows only on `wsl.exe --shutdown`."
-run = 'bun ~/dotfiles/scripts/wsl-reclaim.ts'
 
 # The ONE Windows-side file this repo owns, and the only one it cannot symlink: %USERPROFILE%\
 # .wslconfig is read by the Windows WSL service, which does not follow symlinks made inside WSL.

@@ -5,7 +5,7 @@
 # ///
 """Free huggingface_hub cache entries no ref points to anymore ("detached" revisions).
 
-House cache:clean tier: tool-native gc, borrowed from huggingface_hub's own accounting of what
+House reclaim:clean tier: tool-native gc, borrowed from huggingface_hub's own accounting of what
 counts as safe to remove -- a revision with zero refs pointing to it (left behind after a repo's
 default branch moved, or a specific commit was pulled once and never reused). A revision still
 reachable by ANY ref (main, a tag, a pinned commit some project still requests) is never touched.
@@ -14,9 +14,9 @@ API (`scan_cache_dir().delete_revisions(...)`) exposes the per-revision `refs` s
 
 PEP 723 single-file script: `uv run scripts/huggingface-gc.py` resolves huggingface_hub into an
 ephemeral environment with no persistent install and no project pyproject.toml/uv.lock needed
-(scripts/cache-clean.ts invokes it exactly this way).
+(scripts/reclaim-clean.ts invokes it exactly this way).
 
-Best-effort like every other cache:clean step: any failure here (huggingface_hub unimportable, a
+Best-effort like every other reclaim:clean step: any failure here (huggingface_hub unimportable, a
 malformed/corrupt cache) prints one line and exits 0 rather than aborting the rest of the pass.
 """
 

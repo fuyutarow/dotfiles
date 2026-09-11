@@ -32,7 +32,7 @@ its Google arm — the OLDEST generation in this file — and `claude-opus-4-6-t
 
 Dates are the one ordering that survives a tier name, and the ONLY view that exposes the failure
 is a cross-vendor sort — which no per-vendor catalog can produce. So the dates live in one file
-for all vendors, with a floor (`mise run check:models`) that FAILs on staleness, on approaching
+for all vendors, with a floor (`mise run models:audit`) that FAILs on staleness, on approaching
 retirements, and on guidance prose still naming a retired/legacy slug.
 
 Restating a date here would recreate exactly the defect this file was caught in: four inventories,

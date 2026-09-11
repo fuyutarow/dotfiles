@@ -9,7 +9,7 @@
 //
 // Layers:
 //  1. Unit tests against the exported pure/injectable helpers — host-independent.
-//  2. CLI-level tests that spawn the REAL script as a subprocess (mirrors cache-clean.test.ts's
+//  2. CLI-level tests that spawn the REAL script as a subprocess (mirrors reclaim-clean.test.ts's
 //     pattern, incl. the mise-bun-shim dodge below).
 //  3. A full build -> cutover -> rollback -> gc lifecycle against fake-ccc, including the
 //     explicit safety proof: sha256 + mtime of every file under the live `.cocoindex_code`
@@ -52,7 +52,7 @@ const FAKE_CCC = join(import.meta.dir, "fake-ccc.ts");
 // mise ships a `bun` SHIM (a symlink to the mise binary itself, dispatched by argv[0]) ahead of
 // the real bun on PATH. Bun.spawnSync's `env` option REPLACES rather than merges the child's
 // environment, so a restricted-env subprocess needs an absolute path to the REAL bun binary —
-// resolving "bun" via the shim would just re-invoke mise. Same trick as cache-clean.test.ts.
+// resolving "bun" via the shim would just re-invoke mise. Same trick as reclaim-clean.test.ts.
 function resolveRealBun(): string {
   for (const dir of (process.env.PATH ?? "").split(":").filter(Boolean)) {
     const candidate = join(dir, "bun");

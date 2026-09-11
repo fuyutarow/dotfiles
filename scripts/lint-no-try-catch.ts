@@ -7,7 +7,7 @@
 // What this does NOT ban:
 //   - `try { } finally { }` with no catch clause (a TryStatement whose `handler` is null) —
 //     neither problem above applies, and it legitimately can't be expressed as a Result chain
-//     (see cache-clean.ts's runBunStep for the neverthrow-native replacement of the try/finally
+//     (see reclaim-clean.ts's runBunStep for the neverthrow-native replacement of the try/finally
 //     this repo used to write for the "always cleanup" shape).
 //   - `promise.catch(...)` — a CallExpression, not a TryStatement at all. BG1's mandated
 //     `main().catch((err) => …)` entry pattern stays untouched.

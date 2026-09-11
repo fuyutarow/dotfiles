@@ -18,7 +18,7 @@ import { fromThrowable } from "neverthrow";
 const INTEROP_MS = 20_000;
 const copyFile = fromThrowable(copyFileSync);
 
-// Same rule as scripts/wsl-reclaim.ts: no subprocess runs unbounded. Bun.$ has no timeout, so
+// Same rule as scripts/reclaim-system.ts: no subprocess runs unbounded. Bun.$ has no timeout, so
 // interop goes through Bun.spawn with a native AbortSignal, and the overrun is read off the
 // SIGNAL — proc.killed is true after any clean exit and cannot answer "did this overrun?".
 async function capture(cmd: string[], ms: number): Promise<string> {

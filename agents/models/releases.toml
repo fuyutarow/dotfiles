@@ -10,7 +10,7 @@
 #
 # THIS FILE IS THE ONLY HOME for release dates. driving-* catalogs must POINT here,
 # never restate a date. `check-releases.ts` is the floor that keeps it honest:
-#   mise run check:models
+#   mise run models:audit
 #
 # Editing rules:
 #   - `released`: what the VENDOR states. Never inferred from a version number, a

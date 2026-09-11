@@ -62,7 +62,7 @@ async function run(
     proc.exited,
   ]).then(([out, err, code]) => ({ code, out: out + err }));
   // Raced against the abort: killing the child does not close a pipe a grandchild holds, so
-  // awaiting the drain alone is unbounded (measured in scripts/wsl-reclaim.ts).
+  // awaiting the drain alone is unbounded (measured in scripts/reclaim-system.ts).
   const aborted = new Promise<null>((resolve) => {
     sig.addEventListener("abort", () => resolve(null), { once: true });
   });

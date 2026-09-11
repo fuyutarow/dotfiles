@@ -1,4 +1,4 @@
-// bun test for scripts/cache-clean.ts — the bun port of mise task `cache:clean`.
+// bun test for scripts/reclaim-clean.ts — the bun port of mise task `reclaim:clean`.
 //
 // Two layers:
 //  1. Unit tests against the exported pure/injectable helpers (freeSpace, isUvBusy,
@@ -29,9 +29,9 @@ import {
   resolveHome,
   runSimpleStep,
   toolAvailable,
-} from "../cache-clean";
+} from "../reclaim-clean";
 
-const SCRIPT = new URL("../cache-clean.ts", import.meta.url).pathname;
+const SCRIPT = new URL("../reclaim-clean.ts", import.meta.url).pathname;
 const HUGGINGFACE_SCRIPT = new URL("../huggingface-gc.py", import.meta.url)
   .pathname;
 
@@ -315,7 +315,7 @@ describe("runSimpleStep", () => {
 
 // ---- CLI integration: the whole script as a subprocess, fixture PATH + fixture --home ---------
 
-describe("cache-clean.ts CLI", () => {
+describe("reclaim-clean.ts CLI", () => {
   let stubAll: string;
   let stubNone: string;
   let fixtureHome: string;
@@ -361,7 +361,7 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[lines.length - 2]).toMatch(/^after: {2}/);
     expect(lines[lines.length - 1]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+      "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
 
     const idx = (needle: string) => lines.findIndex((l) => l.includes(needle));
@@ -402,14 +402,14 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+      "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
   });
 
   // Parity, not a new feature: the original shell body never validates $HOME either — a bare
   // "$HOME" that resolves empty is passed straight through to `df -h "$HOME"` and still reaches
   // the final echo with exit 0. A hard-fail here would be an unauthorized new behavior with no
-  // shell analogue (see cache-clean.ts's resolveHome doc comment).
+  // shell analogue (see reclaim-clean.ts's resolveHome doc comment).
   test("no --home and no HOME env resolvable -> degrades gracefully, still completes with exit 0", () => {
     const { out, err, code } = runScript([], { pathDirs: [stubNone] });
     expect(code).toBe(0);
@@ -418,7 +418,7 @@ describe("cache-clean.ts CLI", () => {
     expect(lines[0]).toMatch(/^before: /);
     expect(lines[1]).toMatch(/^after: {2}/);
     expect(lines[2]).toBe(
-      "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+      "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
   });
 
@@ -434,7 +434,7 @@ describe("cache-clean.ts CLI", () => {
       expect(out).toContain("• brew cleanup --prune=all");
       expect(out).toContain("• npm cache clean");
       expect(out).toContain(
-        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+        "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
       );
     } finally {
       rmSync(stubDir, { recursive: true, force: true });
@@ -442,7 +442,7 @@ describe("cache-clean.ts CLI", () => {
   });
 
   // MAJOR regression guard: runBunStep's mkdtempSync/writeFileSync setup must never escape
-  // uncaught — a full disk (ENOSPC) is exactly the condition cache:clean exists for, and the
+  // uncaught — a full disk (ENOSPC) is exactly the condition reclaim:clean exists for, and the
   // original shell's `mktemp -d ... || true` tolerates it and keeps going. We can't fill a real
   // disk in a test, so TMPDIR is pointed at a path that does not exist: mkdtempSync throws
   // ENOENT at the same call site, which is a faithful stand-in for "tempdir creation fails".
@@ -464,7 +464,7 @@ describe("cache-clean.ts CLI", () => {
       expect(out).toContain("• bun pm cache rm"); // header line still prints (mirrors the shell's unconditional echo)
       expect(out).toContain("• npm cache clean"); // the rest of the pass still ran
       expect(out).toContain(
-        "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+        "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
       );
     } finally {
       rmSync(stubDir, { recursive: true, force: true });

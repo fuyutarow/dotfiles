@@ -1,6 +1,6 @@
-// bun test for scripts/cache-toolchains.ts — the bun port of mise task `cache:toolchains`.
+// bun test for scripts/reclaim-toolchains.ts — the bun port of mise task `reclaim:toolchains`.
 //
-// Two layers, same shape as cache-clean.test.ts:
+// Two layers, same shape as reclaim-clean.test.ts:
 //  1. Unit tests against the exported pure/injectable helpers — host-independent, no real
 //     rustup toolchain or vscode-server directory is ever touched.
 //  2. CLI-level tests that spawn the REAL script as a subprocess with a fully-replaced PATH
@@ -29,11 +29,11 @@ import {
   serverHash,
   serverVersionsToRemove,
   toolAvailable,
-} from "../cache-toolchains";
+} from "../reclaim-toolchains";
 
-const SCRIPT = new URL("../cache-toolchains.ts", import.meta.url).pathname;
+const SCRIPT = new URL("../reclaim-toolchains.ts", import.meta.url).pathname;
 
-// Same trick as cache-clean.test.ts: mise ships a `bun` shim ahead of the real bun on PATH, and
+// Same trick as reclaim-clean.test.ts: mise ships a `bun` shim ahead of the real bun on PATH, and
 // Bun.spawnSync's `env` REPLACES rather than merges, so a restricted-PATH subprocess needs the
 // real bun's absolute path.
 function resolveRealBun(): string {
@@ -316,7 +316,7 @@ describe("toolAvailable", () => {
 
 // ---- CLI integration: the whole script as a subprocess -------------------------------------------
 
-describe("cache-toolchains.ts CLI", () => {
+describe("reclaim-toolchains.ts CLI", () => {
   let fixtureHome: string;
 
   beforeAll(() => {
@@ -340,7 +340,7 @@ describe("cache-toolchains.ts CLI", () => {
       expect(out).toContain("rustup 不在");
       expect(out).toContain("== vscode-server versions ==");
       expect(out).toContain("無し — skip");
-      expect(out).toContain("✅ cache:toolchains done.");
+      expect(out).toContain("✅ reclaim:toolchains done.");
     } finally {
       rmSync(emptyStubs, { recursive: true, force: true });
     }

@@ -1,11 +1,11 @@
-// Sibling of `cache-clean.ts` in the same "no judgment needed" WHO-MAY-DECIDE tier (mise.toml's
+// Sibling of `reclaim-clean.ts` in the same "no judgment needed" WHO-MAY-DECIDE tier (mise.toml's
 // cache: task block), but for the two dev-toolchain stores that have no tool-native gc/prune to
 // borrow judgment from: rustup toolchains and vscode-server old versions. Where cache-clean
 // trusts each tool's OWN definition of "unused", this script writes an explicit safety
 // PREDICATE per target and errs toward keeping whenever evidence is missing:
 //
 //   rustup:        keep the default toolchain + anything pinned by a rust-toolchain(.toml) file
-//                  under AUDIT_PROJECTS (the same scan cache:audit's §2 already performs) —
+//                  under AUDIT_PROJECTS (the same scan reclaim:audit's §2 already performs) —
 //                  remove the rest via `rustup toolchain uninstall`. No `fd` on PATH means no
 //                  pin evidence, so rustup is skipped ENTIRELY rather than guessed.
 //   vscode-server: keep the single most-recently-modified version, anything newer than
@@ -17,9 +17,9 @@
 // (statSync, Bun.spawnSync) goes through neverthrow's fromThrowable(); `.catch(() => "")` below
 // on Bun.file().text() is Promise.prototype.catch, a different thing entirely — exempt.
 //
-// Usage: bun scripts/cache-toolchains.ts [--dry-run] [--home <path>]
+// Usage: bun scripts/reclaim-toolchains.ts [--dry-run] [--home <path>]
 //   KEEP_DAYS (default 2) and AUDIT_PROJECTS (default $HOME/Workspace) tune the guards.
-// Exit: mirrors cache-clean.ts — every valid pass reaches 0 (each mutating command's failure is
+// Exit: mirrors reclaim-clean.ts — every valid pass reaches 0 (each mutating command's failure is
 // swallowed); Cleye ordinary-unknown refusals exit 1; local usage errors exit 2.
 
 import { $ } from "bun";
@@ -29,7 +29,7 @@ import { fromThrowable } from "neverthrow";
 
 class UsageError extends Error {}
 
-// Same prototype-flag hole as cache-clean.ts (Cleye 2.6.0's strictFlags misses --__proto__).
+// Same prototype-flag hole as reclaim-clean.ts (Cleye 2.6.0's strictFlags misses --__proto__).
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
@@ -205,7 +205,7 @@ function removeDir(dir: string, dryRun: boolean): void {
   }
   console.log(`  • rip ${dir}`);
   if (toolAvailable("rip")) {
-    // bounded: mirrors cache-clean.ts's cleanupTempDir — a same-filesystem rename, no timeout there either.
+    // bounded: mirrors reclaim-clean.ts's cleanupTempDir — a same-filesystem rename, no timeout there either.
     const res = Bun.spawnSync(["rip", dir], {
       stdout: "inherit",
       stderr: "ignore",
@@ -261,7 +261,7 @@ function runVscodeServerSection(
 async function main(): Promise<void> {
   const parsed = cli(
     {
-      name: "cache-toolchains.ts",
+      name: "reclaim-toolchains.ts",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: [],
@@ -292,7 +292,7 @@ async function main(): Promise<void> {
   runVscodeServerSection(dryRun, home, keepDays);
 
   console.log(
-    "✅ cache:toolchains done. Deletions went through rip → mise run cache:purge frees the space.",
+    "✅ reclaim:toolchains done. Deletions went through rip → mise run reclaim:purge frees the space.",
   );
 }
 

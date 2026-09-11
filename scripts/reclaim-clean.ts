@@ -1,13 +1,13 @@
-// Port of mise task `cache:clean` (see mise.toml). Structural port only — same tools, same
+// Port of mise task `reclaim:clean` (see mise.toml). Structural port only — same tools, same
 // order, same guards, same printed lines as the original shell body. Consumer: human/agent
-// running `mise run cache:clean` — output is verdict-style lines meant for eyeballing, not a
+// running `mise run reclaim:clean` — output is verdict-style lines meant for eyeballing, not a
 // machine envelope, matching the shell original.
 //
 // Reclaims disk by clearing package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/
 // go/docker/cargo/mise/julia/huggingface_hub). Safe — only regenerable caches, and only via each
 // tool's OWN gc/prune command: the tool itself judges what is unused, we never guess. That is the line
 // that keeps this script agent-blind-safe — a target that has no such built-in judgment (rustup
-// toolchains, vscode-server old versions) belongs in `cache:toolchains` instead, which writes an
+// toolchains, vscode-server old versions) belongs in `reclaim:toolchains` instead, which writes an
 // explicit safety predicate rather than borrowing one. Best-effort by construction: every step
 // is independently guarded (tool present? not busy?) and every mutating command's failure is
 // swallowed (mirrors the original's `|| true` — this script never fails because ONE tool's
@@ -18,7 +18,7 @@
 // fromThrowable(), and swallowing is done via .unwrapOr()/`if (result.isOk())`, not a catch
 // block. `main().catch(...)` below is Promise.prototype.catch, not this statement — exempt.
 //
-// Usage: bun scripts/cache-clean.ts [--dry-run] [--home <path>]
+// Usage: bun scripts/reclaim-clean.ts [--dry-run] [--home <path>]
 //   --home defaults to $HOME — pass a fixture dir to test without touching the real one.
 // Exit: every valid cleanup invocation reaches 0. The original shell body has no `set -e` —
 // every guard (`command -v x && ...`) and every mutating command's failure (`... || true`) is
@@ -300,7 +300,7 @@ export function resolveHome(homeArg: string | undefined): string {
 async function main(): Promise<void> {
   const parsed = cli(
     {
-      name: "cache-clean.ts",
+      name: "reclaim-clean.ts",
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       parameters: [],
@@ -396,7 +396,7 @@ async function main(): Promise<void> {
 
   console.log(`after:  ${freeSpace(home)}`);
   console.log(
-    "✅ cache:clean done. Project build artifacts (node_modules/target/…) → mise run cache:projects. rustup/vscode-server → mise run cache:toolchains",
+    "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
   );
 }
 

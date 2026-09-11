@@ -1,11 +1,11 @@
-// Reclaim disk INSIDE a WSL2 distro — the Linux system caches that `cache:clean` does not own,
-// then fstrim. Consumer: human/agent running `mise run wsl:reclaim`; output is verdict lines.
+// Reclaim disk INSIDE a WSL2 distro — the Linux system caches that `reclaim:clean` does not own,
+// then fstrim. Consumer: human/agent running `mise run reclaim:system`; output is verdict lines.
 //
-// WHY THIS IS A SEPARATE TASK FROM cache:clean. cache:clean is the OS-neutral, sudo-free,
+// WHY THIS IS A SEPARATE TASK FROM reclaim:clean. reclaim:clean is the OS-neutral, sudo-free,
 // per-user PACKAGE-manager cache task (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo). Everything
 // here is root-owned Linux SYSTEM state (apt archives, the journal, snap revisions) plus fstrim,
 // which is not a cache at all but the WSL↔Windows disk boundary. Splitting on "who owns the
-// bytes" keeps cache:clean runnable on macOS and keeps sudo out of it.
+// bytes" keeps reclaim:clean runnable on macOS and keeps sudo out of it.
 //
 // WHY IT MATTERS MORE THAN IT LOOKS (measured on r99, 2026-09-09). Freeing space in here DOES
 // return it to the Windows drive, live, with the distro running: ~127 GB deleted inside the guest
@@ -32,14 +32,14 @@ const osrelease = await Bun.file("/proc/sys/kernel/osrelease")
   .catch(() => "");
 if (!osrelease.toLowerCase().includes("microsoft")) {
   console.log(
-    "not running inside WSL — this task is WSL-only (see: mise run cache:clean)",
+    "not running inside WSL — this task is WSL-only (see: mise run reclaim:clean)",
   );
   process.exit(1);
 }
 
 // --- bounded step runner -------------------------------------------------------------------
 // Every reclaim step is a sudo subprocess, and an unbounded one is the failure this task can
-// least afford: `mise run wsl:reclaim` would sit forever holding a sudo session, on a machine
+// least afford: `mise run reclaim:system` would sit forever holding a sudo session, on a machine
 // whose whole problem was that it had run out of disk. apt can block on the dpkg lock, snapd
 // can wedge, and fstrim walks the entire filesystem.
 //
@@ -149,7 +149,7 @@ if (probe.timedOut || probe.code !== 0) {
       ? `sudo did not answer within ${STEP_MS / 1000}s — refusing to start`
       : "passwordless sudo unavailable — run this task from an interactive shell:",
   );
-  if (!probe.timedOut) console.log("  sudo -v && mise run wsl:reclaim");
+  if (!probe.timedOut) console.log("  sudo -v && mise run reclaim:system");
   process.exit(1);
 }
 
@@ -246,7 +246,7 @@ console.log(
   "Verify with `du -sh <vhdx>`, NOT Get-Item.Length, which reports the logical size.",
 );
 console.log(
-  "Siblings: cache:clean (package caches) / cache:toolchains (rustup, vscode-server)",
+  "Siblings: reclaim:clean (package caches) / reclaim:toolchains (rustup, vscode-server)",
 );
 
 // Exit code answers ONE question: did this run do anything at all? A partial failure still

@@ -7,7 +7,7 @@
 # UNTRACKED ~/.ssh/config.local, exactly as per-machine git identity lives in ~/.local-gitconfig
 # (see git/gitconfig). What stays here is POLICY: options that are argued from measurement and
 # are worth carrying to any machine that clones this repo. Host ALIASES appear here because they
-# are already all over this repo's tracked files (mise.toml, scripts/wsl-reclaim.ts); the
+# are already all over this repo's tracked files (mise.toml, scripts/reclaim-system.ts); the
 # addresses behind them are not.
 #
 # ORDER IS LOAD-BEARING. ssh takes the FIRST value it obtains for any option and never revises

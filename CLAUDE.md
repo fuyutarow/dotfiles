@@ -30,14 +30,18 @@ The annotated topic tree (every directory + what it holds + how it deploys) is t
 `zsh git tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` (mac), `wsl` (WSL).
 Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
-OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` (or `mac.zsh` / `wsl.zsh`).
+OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
+`*.win` = the Windows HOST under WSL (read by Windows, so copied, never symlinked).
 
 **Conventions to preserve:**
 1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.sh`.
    Never recreate `common`/`mac`/`wsl` as OS-variance *bucket* dirs — OS variance of a
-   cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` (or `mac.zsh` /
-   `wsl.zsh`) files. A genuinely single-OS *topic* may still own its dir (e.g. `karabiner/`
-   for macOS, `wsl/` for the `wsl.conf` system config) — those are tools, not OS buckets.
+   cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` / `*.win` (or
+   `mac.zsh` / `wsl.zsh`) files. `*.win` is the third target: the Windows HOST underneath WSL
+   (`wsl/wslconfig.win`, `wsl/winget.win.json`) — Windows reads it, so it is COPIED by a
+   `wsl:*` task, never symlinked. A genuinely single-OS *topic* may still own its dir (e.g.
+   `karabiner/` for macOS, `wsl/` for the `wsl.conf` system config) — those are tools, not OS
+   buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.sh`
@@ -140,7 +144,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 ## Notes for Claude
 1. Check `jl` / `mise tasks` before suggesting manual installs; prefer `brew bundle`.
 2. New OS-dependent logic: branch on `$IS_MAC` / `$IS_WSL`; OS-only files go INSIDE the
-   topic dir as `*.mac` / `*.wsl` (e.g. `zsh/mac.zsh`, `git/local.wsl`).
+   topic dir as `*.mac` / `*.wsl` / `*.win` (e.g. `zsh/mac.zsh`, `git/local.wsl`, `wsl/wslconfig.win`).
 3. Never write machine-absolute paths into shared files (`zsh/`, `git/`, `tmux/`) (tools like juliaup may try to append
    them to `.zshrc` — fold such blocks back into `$HOME`-relative guarded form).
 4. tmux is heavily customized (`tmux/tmux.conf`); prefix is Alt+g / Ctrl+g.

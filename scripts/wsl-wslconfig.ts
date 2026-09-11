@@ -36,7 +36,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
   return sig.aborted ? "" : out.replace(/\r/g, "").trim();
 }
 
-// Deploy wsl/wslconfig.host to the Windows profile as %USERPROFILE%\.wslconfig.
+// Deploy wsl/wslconfig.win to the Windows profile as %USERPROFILE%\.wslconfig.
 // Consumer: human/agent running `mise run wsl:wslconfig`; output is verdict lines.
 //
 // WHY A COPY AND NOT A SYMLINK — the one place this repo cannot use its usual mechanism.
@@ -51,7 +51,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
 // Windows host — the machine ended up with settings that existed nowhere in the repo, which is
 // precisely the drift the single-source rule exists to prevent. Bringing it here undoes that.
 //
-// MACHINE-SPECIFIC SIZING IS GUARDED, NOT ASSUMED. wslconfig.host's memory= is tuned to r99's
+// MACHINE-SPECIFIC SIZING IS GUARDED, NOT ASSUMED. wslconfig.win's memory= is tuned to r99's
 // 63.9 GB of physical RAM. On a smaller host the same number would over-commit Windows into the
 // instability this repo already hit once. So the deploy REFUSES on a host whose RAM cannot
 // afford the configured memory=, rather than trusting that only one machine will ever run it.
@@ -74,7 +74,7 @@ if (
   process.exit(1);
 }
 
-const src = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/wslconfig.host`;
+const src = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/wslconfig.win`;
 if (!existsSync(src)) {
   console.log(`missing source: ${src}`);
   process.exit(1);
@@ -136,7 +136,7 @@ if (wanted?.[1] !== undefined && Number.isFinite(hostGb) && hostGb > 0) {
       `REFUSED: memory=${askGb}GB leaves Windows under ${RESERVE_GB} GB on a ${hostGb.toFixed(1)} GB host.`,
     );
     console.log(
-      "Lower memory= in wsl/wslconfig.host for this machine, then re-run.",
+      "Lower memory= in wsl/wslconfig.win for this machine, then re-run.",
     );
     process.exit(1);
   }

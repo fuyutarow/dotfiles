@@ -3,9 +3,16 @@
 # bytes were already corrupted on disk; rewritten 2026-09-06, revised 2026-09-09.
 [wsl2]
 
-# Host has 63.9 GB physical. 60 GB left Windows ~3.9 GB, which is over-committed: on 2026-09-06,
-# while C: was also full, the NVIDIA LocalSystem Container service crashed repeatedly under the
-# resulting pressure. 56 GB is the value this file itself pre-designated as the fallback.
+# Host has 63.9 GB physical. 60 GB left Windows ~3.9 GB, which is over-committed; 56 GB is the
+# value this file itself pre-designated as the fallback.
+# CORRECTION 2026-09-11: an earlier version of this comment blamed memory pressure for the NVIDIA
+# LocalSystem Container crashing on 2026-09-06. That was a misdiagnosis. The service was crash-
+# looping every ~8 s from 2026-09-08 20:24 for three days (~29,000 times) because a 2025-05-07
+# NVIDIA App update left a 0-byte plugin DLL beside its _-prefixed predecessor, and the container
+# exited with code 14109 on every start. It was independent of memory and of C:. That storm is
+# what eventually crashed WSLg's weston (rdp-backend.so segfault) and took the VM down on
+# 2026-09-11. Root-caused and removed: GeForce Experience and all its containers are uninstalled;
+# the display driver (591.86) and CUDA 12.4-13.2 are untouched. This box does CUDA, not games.
 #
 # READ THIS BEFORE EXPECTING IT TO FREE MEMORY: memory= is a CAP, not a reservation - WSL grows
 # on demand and this only bounds the worst case. Measured 2026-09-09 with the cap still at 60 GB:

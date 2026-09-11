@@ -49,11 +49,15 @@ maxCrashDumpCount=2
 #   wsl --manage Ubuntu-24.04 --resize <size>
 defaultVhdSize=429496729600
 
-# Headless compute server: nothing is known to open a Linux GUI window here, and WSLg runs its
-# own Wayland/X/RDP stack plus a /mnt/wslg mount. Turning it off would reclaim that overhead.
-# LEFT ON DELIBERATELY: a julia workload that plots to a window would break silently, and that
-# has not been ruled out on this box. Enable only after confirming no GUI use.
-#guiApplications=false
+# WSLg is OFF. It was left on out of caution ("a julia plot window would break silently"), and
+# that caution had no basis and a real cost. On 2026-09-11 weston - WSLg's compositor - crashed
+# ten times in sixteen minutes (09:46:48 to 10:02:24, every ~100 s) and took the whole VM down
+# with it at 10:03; the previous boot's journal holds ZERO references to DISPLAY, WAYLAND or
+# Xwayland, i.e. nothing had ever asked WSLg for a window. A compositor nobody uses crashed a
+# compute server. Note also that the crash-dump cap above did not contain it: ten dumps were
+# on disk against maxCrashDumpCount=2, so the cap is not a defence against a crash LOOP.
+# If a GUI is ever genuinely needed here, turn this back on deliberately, with the reason.
+guiApplications=false
 
 # NOT EFFECTIVE - kept only so a future WSL that honours it does the right thing.
 # Note also that -1 is NOT a documented value: the published contract is "the number of

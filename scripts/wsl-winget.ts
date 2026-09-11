@@ -81,12 +81,41 @@ async function requireWsl(): Promise<void> {
     );
     process.exit(1);
   }
-  if (!Bun.which("winget.exe") && !Bun.which("wslpath")) {
+  if (!Bun.which("wslpath") || !Bun.which("powershell.exe")) {
     console.log(
-      "winget.exe / wslpath not reachable — is [interop] enabled in /etc/wsl.conf?",
+      "wslpath / powershell.exe not reachable — is [interop] enabled in /etc/wsl.conf?",
     );
     process.exit(1);
   }
+}
+
+// winget.exe is NOT on the WSL PATH, and that is this repo's own doing: the Windows PATH is
+// stripped from WSL shells on purpose (zsh/ keeps /mnt/* off PATH so a DrvFs walk never slows
+// command lookup). So resolve it from the Windows side — %LOCALAPPDATA%\Microsoft\WindowsApps is
+// where the App Installer alias lives — and derive the user, never hardcode one (CLAUDE.md).
+// An earlier guard checked `which winget.exe || which wslpath`, which passed on wslpath alone
+// and then died at spawn time with "Executable not found". Measured; hence the resolve step.
+async function wingetPath(): Promise<string> {
+  const la = await run(
+    [
+      "powershell.exe",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Write-Output $env:LOCALAPPDATA",
+    ],
+    INTEROP_MS,
+  );
+  const win = `${la.out.trim()}\\Microsoft\\WindowsApps\\winget.exe`;
+  const w = await run(["wslpath", "-u", win], INTEROP_MS);
+  const p = w.out.trim();
+  if (p === "" || !existsSync(p)) {
+    console.log(
+      `winget.exe not found at ${win} — is App Installer (winget) installed on Windows?`,
+    );
+    process.exit(1);
+  }
+  return p;
 }
 
 const repoFile = `${process.env.DOTFILES ?? `${process.env.HOME}/dotfiles`}/wsl/winget.json`;
@@ -113,8 +142,9 @@ async function dump(): Promise<void> {
   console.log(
     "• winget export (resolving every installed package against its source)",
   );
+  const winget = await wingetPath();
   const r = await run(
-    ["winget.exe", "export", "-o", win, "--accept-source-agreements"],
+    [winget, "export", "-o", win, "--accept-source-agreements"],
     EXPORT_MS,
   );
   if (r.timedOut) {
@@ -177,8 +207,9 @@ async function restore(dryRun: boolean): Promise<void> {
     console.log(`could not stage manifest at ${wsl}: ${staged.error}`);
     process.exit(1);
   }
+  const winget = await wingetPath();
   const args = [
-    "winget.exe",
+    winget,
     "import",
     "-i",
     win,

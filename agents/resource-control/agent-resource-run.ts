@@ -1398,9 +1398,19 @@ function stopSystemdScope(scopeUnit: string): boolean {
   if (scopeIsInactive(active.exitCode)) return true;
   if (active.exitCode !== 0) return false;
 
-  const stopped = boundedSystemctl(["stop", scopeUnit]);
-  if (stopped.exitCode !== 0) return false;
-
+  // `stop`'s own exit code cannot be trusted as the verification signal: `--collect` unloads a
+  // scope from the manager the moment it goes inactive, and the payload here is a `sh -c test`
+  // that has usually already exited by the time we reach this line — so the SAME race the
+  // `active` check above exists to close can also land here, one syscall later. `systemctl stop`
+  // on a unit the manager already unloaded prints "Unit … not loaded" and exits 5, which looks
+  // exactly like a genuine failure to stop but means cleanup already succeeded on its own.
+  // Measured 2026-09-12 on WSL2 (systemd --user, `systemctl --user is-system-running` = running):
+  // a probe running this exact is-active -> stop -> is-active sequence against a real one-shot
+  // scope hit exit 5 on 3 of 6 runs, and every one of those runs' final `is-active` already read
+  // inactive/unloaded (3 or 4) — i.e. `stop` failing here is not evidence cleanup failed. Ignoring
+  // `stop`'s exit code and trusting only the `is-active` re-check below closes that gap without
+  // weakening the real failure mode: a scope that is still active after `stop` still fails closed.
+  boundedSystemctl(["stop", scopeUnit]);
   const verified = boundedSystemctl(["is-active", "--quiet", scopeUnit]);
   return scopeIsInactive(verified.exitCode);
 }

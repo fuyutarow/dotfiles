@@ -237,10 +237,14 @@ dir = "{{config_root}}"
 description = "Claude Code, Codex, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters)"
 run = "bun test agents/claude/hooks agents/codex/hooks agents/goal-kernel"
 
+# Launcher, not a bare `bun test`: the receipt integration test must run INSIDE the runner's own
+# admission envelope, and deciding whether this machine can admit is control flow — which the
+# wiring-mise-tasks contract keeps out of TOML bodies. The why and the measurement live in the
+# script's header.
 [tasks."test:resource-control"]
 dir = "{{config_root}}"
-description = "Bounded resource admission and explicit Serena lifecycle tests"
-run = "bun test agents/resource-control agents/serena-control"
+description = "Bounded resource admission and explicit Serena lifecycle tests (wrapped in the runner's own envelope where a user systemd can admit it)"
+run = "bun ~/dotfiles/scripts/test-resource-control.ts"
 
 [tasks."test:cocoindex"]
 dir = "{{config_root}}"

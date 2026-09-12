@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
-// CLI: bun copy-via-herdr-pane.ts <payload-file>
+// COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts
 //   exit 0 = delivered (prints the pane id it used, already closed by then), non-zero =
-//   could not deliver.
+//   could not deliver. The file path rides the ENVIRONMENT, not argv: a hook is zero-dep
+//   (writing-bun-scripts BG3) and BG1 forbids hand-parsing process.argv without Cleye, which a
+//   zero-dep file cannot import — an env var needs no parser at all.
 //
 // WHY THIS EXISTS. Claude Code cannot put arbitrary text on the clipboard, by design:
 // every process it spawns (Bash tool, hooks — both verified 2026-08-30) has NO controlling
@@ -29,9 +31,9 @@
 // than either (a) typing into a pane the human is actively looking at, or (b) silently
 // falling back and making them copy by hand.
 //
-// The payload travels as a FILE PATH, never interpolated into the command line: it is
-// arbitrary assistant prose (quotes, backticks, newlines, $) and shell-quoting it would be a
-// needless injection surface.
+// The payload travels as a FILE PATH (in COPY_PAYLOAD_FILE), never interpolated into a
+// command line: it is arbitrary assistant prose (quotes, backticks, newlines, $) and
+// shell-quoting it would be a needless injection surface.
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -79,9 +81,11 @@ function isBarePrompt(paneId: string): boolean {
   }
 }
 
-const payloadFile = process.argv[2];
+const payloadFile = process.env.COPY_PAYLOAD_FILE;
 if (!payloadFile || !existsSync(payloadFile)) {
-  console.error("usage: copy-via-herdr-pane.ts <payload-file>");
+  console.error(
+    "usage: COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts",
+  );
   process.exit(2);
 }
 if (process.env.HERDR_ENV !== "1" || !existsSync(CLIP_SCRIPT)) process.exit(3);

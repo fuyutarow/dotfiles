@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
-// CLI: bun resolve-agent-name.ts <session_id>  ->  prints the addressable name (e.g.
-// "firedancer-fe") to stdout, or nothing on any failure. Exit code is always 0 — callers
-// (agents/commands/mycopy.md) treat empty output as "name unavailable" and fall back.
+// AGENT_NAME_SESSION_ID=<session_id> bun resolve-agent-name.ts  ->  prints the addressable
+// name (e.g. "firedancer-fe") to stdout, or nothing on any failure. Exit code is always 0 —
+// the caller (hooks/quote-command.ts) treats empty output as "name unavailable" and falls back.
+// The input rides the ENVIRONMENT, not argv: a hook is zero-dep (writing-bun-scripts BG3), and
+// BG1 says a zero-dep tree that needs argv parsing must graduate first — zero-dep is never
+// permission to hand-parse process.argv. An env var needs no parser.
 //
 // A THIRD copy of the same cache-and-fetch logic already in statusline-command.ts's
 // agentName() and hooks/herdr-tab-name.ts's agentName() — deliberately not imported from
-// either: both are already shipped/tested and this file has a different call shape (sync CLI
-// arg, no retry loop — /mycopy is a manual one-shot invocation, so paying the plain
+// either: both are already shipped/tested and this file has a different call shape (one sync
+// input, no retry loop — /quote is a manual one-shot invocation, so paying the plain
 // ~0.5-0.75s `claude agents --json` cost on an outright cache miss is fine, no race to guard
 // against the way SessionStart has). Shares the SAME cache file, so whichever of the three
 // warms it first still helps the others.
@@ -75,7 +78,7 @@ function agentName(sid: string): string | undefined {
   }
 }
 
-const sid = process.argv[2];
+const sid = process.env.AGENT_NAME_SESSION_ID;
 if (sid) {
   const name = agentName(sid);
   if (name) process.stdout.write(name);

@@ -103,11 +103,12 @@ const selected = turns.slice(-count);
 // distinction is the whole point of the from: header. Falls back to the raw session id.
 let name = sid;
 try {
-  const resolved = execFileSync(
-    "bun",
-    [`${HOOKS}/resolve-agent-name.ts`, sid],
-    { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8", timeout: 5000 },
-  ).trim();
+  const resolved = execFileSync("bun", [`${HOOKS}/resolve-agent-name.ts`], {
+    env: { ...process.env, AGENT_NAME_SESSION_ID: sid },
+    stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf8",
+    timeout: 5000,
+  }).trim();
   if (resolved) name = resolved;
 } catch {
   // leave the session id as the name
@@ -117,13 +118,16 @@ const payloadText = `from: ${name}\n${selected.join(TURN_SEPARATOR)}`;
 
 // Claude Code cannot reach the clipboard from a process it spawns — see
 // hooks/copy-via-herdr-pane.ts's header for why, and what it does instead. The payload travels
-// as a FILE PATH: it is arbitrary assistant prose, and shell-quoting it into a command line
-// would be a needless injection surface.
+// as a FILE PATH, handed over in the child's environment: it is arbitrary assistant prose, and
+// shell-quoting it into a command line would be a needless injection surface. Both helper
+// hooks take their one input from the environment rather than argv — hooks are zero-dep, and
+// BG1 rules out hand-parsing process.argv in a file that cannot import Cleye.
 let paneId = "";
 try {
   const file = join(mkdtempSync(join(tmpdir(), "quote-")), "payload.txt");
   writeFileSync(file, payloadText);
-  paneId = execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`, file], {
+  paneId = execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
+    env: { ...process.env, COPY_PAYLOAD_FILE: file },
     stdio: ["ignore", "pipe", "ignore"],
     encoding: "utf8",
     timeout: 15000,

@@ -199,9 +199,27 @@ const AGENT_NAME_TTL_MS = 30_000;
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
+type AgentNameEntry = { name?: string; at: number };
+// Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
+// entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
+// under max-depth; the exactOptionalPropertyTypes name-omission below is unchanged.
+function agentNameEntries(
+  list: Array<{ sessionId?: string; name?: string }>,
+  now: number,
+): Record<string, AgentNameEntry> {
+  const next: Record<string, AgentNameEntry> = {};
+  for (const a of list) {
+    if (!a.sessionId) continue;
+    // exactOptionalPropertyTypes: omit `name` rather than set it to explicit undefined.
+    next[a.sessionId] = {
+      at: now,
+      ...(a.name !== undefined ? { name: a.name } : {}),
+    };
+  }
+  return next;
+}
 function agentName(sid: string): string | undefined {
-  type Entry = { name?: string; at: number };
-  let cache: Record<string, Entry> = {};
+  let cache: Record<string, AgentNameEntry> = {};
   try {
     cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
   } catch {
@@ -219,14 +237,7 @@ function agentName(sid: string): string | undefined {
     });
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
     const now = Date.now();
-    const next: Record<string, Entry> = {};
-    // exactOptionalPropertyTypes: omit `name` rather than set it to explicit undefined.
-    for (const a of list)
-      if (a.sessionId)
-        next[a.sessionId] = {
-          at: now,
-          ...(a.name !== undefined ? { name: a.name } : {}),
-        };
+    const next = agentNameEntries(list, now);
     if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
     try {
       mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
@@ -626,6 +637,38 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // the middot between them — same role MID plays between a job's elapsed time and its vram
 // fraction in Job below. Line 5 (conditional) is Job, always its own row so nothing can ever
 // cause it to be silently dropped.
+// Rate row, 5h-window half: "5h NN% [⟳reset]" — extracted out of render() only to keep its
+// nesting under max-depth; the formatting itself is unchanged from the inline version.
+function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
+  const { pct, col } = pctFmt(rl5);
+  let seg = ` 5h ${ESC}[${col}m${pct}%${RST}`;
+  if (rl5Reset != null) seg += ` ${DIM}${reset5(rl5Reset)}${RST}`;
+  return seg;
+}
+// Rate row, 7d-window half: same shape as rl5Segment, plus the leading middot that marks the
+// 5h/7d pair as independent siblings (see render()'s header note on MID).
+function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
+  const { pct, col } = pctFmt(rl7);
+  let seg = ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
+  if (rl7Reset != null) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
+  return seg;
+}
+// Job row, admitted-work half: "<name>[+N] <elapsed> [· <vram>] [det×N]" — extracted out of
+// render() only to keep its nesting under max-depth; formatting unchanged from the inline version.
+function admittedJobSegment(
+  jobs: Admitted[],
+  vram: string | undefined,
+  orphans: number,
+): string {
+  const first = jobs[0];
+  const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
+  // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
+  let seg =
+    first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
+  if (vram != null) seg += ` ${DIM}${MID} ${vram}${RST}`;
+  if (orphans > 0) seg += ` ${DIM}det×${orphans}${RST}`;
+  return seg;
+}
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
@@ -670,18 +713,8 @@ function render(df: Dataframe): string {
   let rateLine = "";
   if (df.rl5 != null || df.rl7 != null) {
     rateLine = `${ESC}[38;5;108mRate:${RST}`;
-    if (df.rl5 != null) {
-      const { pct, col } = pctFmt(df.rl5);
-      rateLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
-      if (df.rl5Reset != null)
-        rateLine += ` ${DIM}${reset5(df.rl5Reset)}${RST}`;
-    }
-    if (df.rl7 != null) {
-      const { pct, col } = pctFmt(df.rl7);
-      rateLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
-      if (df.rl7Reset != null)
-        rateLine += ` ${DIM}${reset7(df.rl7Reset)}${RST}`;
-    }
+    if (df.rl5 != null) rateLine += rl5Segment(df.rl5, df.rl5Reset);
+    if (df.rl7 != null) rateLine += rl7Segment(df.rl7, df.rl7Reset);
   }
 
   let repoLine = "";
@@ -694,14 +727,7 @@ function render(df: Dataframe): string {
   if (df.jobs.length > 0 || df.orphans > 0) {
     jobLine = `${ESC}[38;5;173mJob:${RST}`;
     if (df.jobs.length > 0) {
-      const first = df.jobs[0];
-      const more =
-        df.jobs.length > 1 ? `${DIM}+${df.jobs.length - 1}${RST}` : "";
-      // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
-      jobLine +=
-        first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
-      if (df.vram != null) jobLine += ` ${DIM}${MID} ${df.vram}${RST}`;
-      if (df.orphans > 0) jobLine += ` ${DIM}det×${df.orphans}${RST}`;
+      jobLine += admittedJobSegment(df.jobs, df.vram, df.orphans);
     } else {
       // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
       // are states the harness reports as "idle", which is the failure this segment answers.

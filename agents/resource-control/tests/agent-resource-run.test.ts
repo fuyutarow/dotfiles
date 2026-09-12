@@ -25,6 +25,8 @@ import {
   scopeUnitFor,
   validateManifest,
   verifyAdmissionReceipt,
+  type AdmissionFailure,
+  type AdmissionResult,
   type HostSnapshot,
   type ResourceManifest,
   type Reservation,
@@ -111,11 +113,25 @@ function gpuReservation(
   });
 }
 
+/** Asserts admission was denied, the same runtime check the callers below used inline, and
+ * narrows the result so `.reason` is available afterward. */
+function denied(result: AdmissionResult): AdmissionFailure {
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected admission to be denied");
+  return result;
+}
+
 function manifestSourceFor(manifest: ResourceManifest) {
   return manifestSourceFromBytes(
     "fixtures/test.resource.json",
     Buffer.from(JSON.stringify(manifest), "utf8"),
   );
+}
+
+/** Restores one env var to its pre-test value, deleting it when it was previously unset. */
+function restoreEnvValue(key: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
 }
 
 const temporaryDirectories: string[] = [];
@@ -163,8 +179,7 @@ describe("admission", () => {
         rationale: "CPU fallback only if no compatible GPU is available",
       },
     });
-    const result = decideAdmission(manifest, hostSnapshot(), []);
-    expect(result.ok).toBe(false);
+    const result = denied(decideAdmission(manifest, hostSnapshot(), []));
     expect(result.reason).toContain("gpu-first");
   });
 
@@ -190,12 +205,13 @@ describe("admission", () => {
       cpu_threads: 2,
       host_ram_peak_bytes: 2 * GiB,
     });
-    const result = decideAdmission(
-      manifest,
-      hostSnapshot({ mem_available_bytes: 8 * GiB }),
-      [existing],
+    const result = denied(
+      decideAdmission(
+        manifest,
+        hostSnapshot({ mem_available_bytes: 8 * GiB }),
+        [existing],
+      ),
     );
-    expect(result.ok).toBe(false);
     expect(result.reason).toContain("host RAM");
   });
 
@@ -216,11 +232,12 @@ describe("admission", () => {
         { id: 0, total_bytes: 12 * GiB, used_bytes: 0, utilization_percent: 0 },
       ],
     });
-    const result = decideAdmission(gpuManifest(), snapshot, [
-      gpuReservation("a", 5 * GiB),
-      gpuReservation("b", 5 * GiB),
-    ]);
-    expect(result.ok).toBe(false);
+    const result = denied(
+      decideAdmission(gpuManifest(), snapshot, [
+        gpuReservation("a", 5 * GiB),
+        gpuReservation("b", 5 * GiB),
+      ]),
+    );
     expect(result.reason).toContain("VRAM request");
     expect(result.reason).toContain(`${1536 * MiB} available`);
   });
@@ -260,8 +277,7 @@ describe("admission", () => {
         },
       ],
     });
-    const unmanaged = decideAdmission(gpuManifest(), busy, []);
-    expect(unmanaged.ok).toBe(false);
+    const unmanaged = denied(decideAdmission(gpuManifest(), busy, []));
     expect(unmanaged.reason).toContain("97% utilization");
     expect(decideAdmission(gpuManifest(), busy, [gpuReservation("a")]).ok).toBe(
       true,
@@ -269,13 +285,14 @@ describe("admission", () => {
   });
 
   test("caps concurrent jobs on one device even when VRAM is abundant", () => {
-    const result = decideAdmission(gpuManifest(), hostSnapshot(), [
-      gpuReservation("a", 128 * MiB),
-      gpuReservation("b", 128 * MiB),
-      gpuReservation("c", 128 * MiB),
-      gpuReservation("d", 128 * MiB),
-    ]);
-    expect(result.ok).toBe(false);
+    const result = denied(
+      decideAdmission(gpuManifest(), hostSnapshot(), [
+        gpuReservation("a", 128 * MiB),
+        gpuReservation("b", 128 * MiB),
+        gpuReservation("c", 128 * MiB),
+        gpuReservation("d", 128 * MiB),
+      ]),
+    );
     expect(result.reason).toContain("concurrency cap");
   });
 
@@ -293,10 +310,11 @@ describe("admission", () => {
   });
 
   test("rejects a duplicate live job id", () => {
-    const result = decideAdmission(cpuManifest(), hostSnapshot(), [
-      reservation({ job_id: "test-job" }),
-    ]);
-    expect(result.ok).toBe(false);
+    const result = denied(
+      decideAdmission(cpuManifest(), hostSnapshot(), [
+        reservation({ job_id: "test-job" }),
+      ]),
+    );
     expect(result.reason).toContain("already reserved");
   });
 });
@@ -525,10 +543,7 @@ describe("kernel enforcement", () => {
       expect(environment.JULIA_CUDA_SOFT_MEMORY_LIMIT).toBeUndefined();
       expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
     } finally {
-      for (const [key, value] of inherited) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
+      for (const [key, value] of inherited) restoreEnvValue(key, value);
     }
   });
 });
@@ -587,10 +602,14 @@ describe("admission receipt", () => {
         device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 1.5 },
       }),
       JSON.stringify({ ...validPayload, started_at: "not-an-iso-timestamp" }),
-      JSON.stringify({
-        admission_id: validPayload.admission_id,
-        ...validPayload,
-      }),
+      // Same field values as validPayload but with admission_id reordered to the front: the
+      // canonical round-trip in admissionReceiptPayloadFrom must reject non-canonical key order,
+      // not just semantic equality. Destructuring (not a literal duplicate key) reorders without
+      // ever naming admission_id twice in one object literal.
+      (() => {
+        const { admission_id, ...rest } = validPayload;
+        return JSON.stringify({ admission_id, ...rest });
+      })(),
     ];
     for (const payload of invalidPayloads) {
       expect(verifyAdmissionReceipt(payload, digestFor(payload), cgroup)).toBe(

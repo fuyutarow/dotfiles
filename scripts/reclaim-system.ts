@@ -27,6 +27,8 @@
 // larger than C: itself (931 GB), which is precisely why WSL could fill the whole system drive.
 // Capping an existing distro needs `wsl --manage <distro> --resize`, with the distro Stopped.
 
+import { match } from "ts-pattern";
+
 const osrelease = await Bun.file("/proc/sys/kernel/osrelease")
   .text()
   .catch(() => "");
@@ -115,11 +117,10 @@ async function step(
     return "skipped";
   }
   const r = await run(cmd, ms);
-  const outcome: Outcome = r.timedOut
-    ? "timeout"
-    : r.code === 0
-      ? "ok"
-      : "failed";
+  const outcome: Outcome = match(r)
+    .with({ timedOut: true }, () => "timeout" as const)
+    .with({ code: 0 }, () => "ok" as const)
+    .otherwise(() => "failed" as const);
   const detail = r.timedOut
     ? `no exit within ${ms / 1000}s — killed`
     : (r.out.trim() || r.err.trim() || `exit ${r.code}`).slice(0, 200);

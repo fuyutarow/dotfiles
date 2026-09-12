@@ -60,20 +60,25 @@ run = 'exec zsh -l'
 # ── Format / Lint ────────────────────────────────────────────────────────────
 # fmt (alias f) + lint aggregate over per-language sub-tasks (<domain>:<action>),
 # mirroring qoed. Markdown = rumdl (.rumdl.toml). Shell = shfmt + shellcheck for
-# bash. TypeScript = biome (formatter only, 2-space pinned via CLI flags to match
-# the house style — biome's own default is tabs). zsh is syntax-gated with `zsh -n`
+# bash. TypeScript = the ox toolchain, same as Coral-dpp: oxfmt for FORMAT (.oxfmtrc.json)
+# + oxlint for LINT (.oxlintrc.json, see lint:ts) + tsgo for TYPES (tsconfig.json, see
+# typecheck), all pinned in package.json and restored by `mise run deps`. oxfmt replaced
+# biome on 2026-09-12 with a ZERO-diff migration: `.oxfmtrc.json` (2-space, width 80,
+# double quotes, semi, trailing commas) reproduced biome's output byte-for-byte on all 93
+# house TS files, so history carries no reformat commit. zsh is syntax-gated with `zsh -n`
 # ONLY: shfmt's zsh dialect (v3.13+) is real but incomplete, and these zsh files are
 # boot-critical config (break = no interactive shell), so we do NOT auto-format them.
 # Bash file discovery is centralised via `shfmt -f <dirs>` (extension+shebang
-# detection); TS via `fd -e ts -E agents/skills` (house source only — agents/skills/**
-# holds vendored skill templates, excluded like it is for shfmt/rumdl). JSON/TOML are
-# deliberately NOT auto-formatted: the JSON population is dominated by karabiner's
-# vendored/auto-backup files and boot-critical config. `-ln bash` pins shfmt's dialect
+# detection); TS discovery is oxfmt's own glob walk, `'**/*.ts' '!agents/skills/**'`
+# (house source only — agents/skills/** holds vendored skill templates, excluded like it
+# is for shfmt/rumdl). JSON/TOML are deliberately NOT auto-formatted: the JSON population
+# is dominated by karabiner's vendored/auto-backup files and boot-critical config — hence
+# the explicit *.ts glob rather than a bare `oxfmt .`. `-ln bash` pins shfmt's dialect
 # deterministically (and makes shfmt ignore any stray .editorconfig).
 
 [tasks.fmt]
 alias = "f"
-description = "Format the repo in place: Markdown (rumdl) + bash (shfmt) + TypeScript (biome). alias: f"
+description = "Format the repo in place: Markdown (rumdl) + bash (shfmt) + TypeScript (oxfmt). alias: f"
 depends = ["fmt:md", "fmt:sh", "fmt:ts"]
 
 [tasks."fmt:md"]
@@ -90,28 +95,31 @@ description = "Check bash formatting without writing (CI gate; prints diff + non
 run = 'bun ~/dotfiles/scripts/fmt-sh-check.ts'
 
 [tasks."fmt:ts"]
-description = "Format TypeScript in place with biome (house 2-space; agents/skills/** templates excluded)"
-run = 'bun ~/dotfiles/scripts/fmt-ts.ts'
+dir = "{{config_root}}"
+description = "Format TypeScript in place with oxfmt (.oxfmtrc.json; agents/skills/** templates excluded)"
+run = "bunx oxfmt '**/*.ts' '!agents/skills/**'"
 
 [tasks."fmt:ts:check"]
-description = "Check TS formatting without writing (CI gate; prints diff + non-zero on drift)"
-run = 'bun ~/dotfiles/scripts/fmt-ts-check.ts'
+dir = "{{config_root}}"
+description = "Check TS formatting without writing (CI gate; lists drifted files + non-zero on drift)"
+run = "bunx oxfmt --check '**/*.ts' '!agents/skills/**'"
 
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
 [tasks."fmt:check"]
-description = "整形チェック (CI用・非破壊): bash (shfmt) + TypeScript (biome)"
+description = "整形チェック (CI用・非破壊): bash (shfmt) + TypeScript (oxfmt)"
 depends = ["fmt:sh:check", "fmt:ts:check"]
 
 [tasks.lint]
 alias = "l"
-description = "Lint the repo: Markdown + shell/zsh + Bun script contract + skills index"
+description = "Lint the repo: Markdown + shell/zsh + Bun script contract + TS (oxlint + tsgo) + skills index"
 depends = [
   "lint:md",
   "lint:sh",
   "lint:zsh",
   "lint:bun",
-  "lint:no-try-catch",
+  "lint:ts",
+  "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
   "lint:skills-floor",
@@ -184,20 +192,40 @@ git ls-files -z -- \
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
 
-# House-specific, narrower than lint:bun: scripts/*.ts ONLY. NOT hooks (BG3 zero-dep — they
-# cannot import neverthrow) and NOT agents/skills/**/scripts/** (a skill's own floor is
-# writing-bun-scripts' script-check.ts, not a dotfiles-repo-only rule).
-# render-claude-settings.ts is excluded for the identical zero-dep reason as hooks: its own
-# header ("NO FLAGS, NO DEPENDENCIES — deliberate") documents that it runs from link-dots.sh on
-# a fresh machine BEFORE `mise run deps` restores node_modules — importing neverthrow there would
-# break bootstrap exactly like importing cleye would.
-[tasks."lint:no-try-catch"]
+# oxlint over the repo's own TS (config: .oxlintrc.json). Default correctness rules everywhere
+# tracked except agents/skills/** (vendored templates), plus the house syntax ban on
+# scripts/*.ts ONLY: `switch` and nested ternaries -> ts-pattern, try/catch -> neverthrow
+# (try/finally alone is fine). Same mechanism as Coral-dpp's .oxlintrc.json: oxlint's native
+# rules cannot ban a syntax SHAPE, but the oxlint-plugin-eslint JS plugin carries ESLint's
+# no-restricted-syntax with esquery selectors. This replaced the hand-rolled oxc-parser
+# walker scripts/lint-no-try-catch.ts (2026-09-12), whose reason to exist was "oxlint cannot
+# express this" — true of the native rules, false once jsPlugins landed.
+# WHY scripts/*.ts only: that is where the graduation project (package.json) makes ts-pattern
+# and neverthrow importable. NOT hooks (BG3 zero-dep — they run before `mise run deps`) and NOT
+# agents/skills/**/scripts/** (a skill's own floor is writing-bun-scripts' script-check.ts).
+# render-claude-settings.ts opts out IN-FILE (`/* oxlint-disable ... */` with its bootstrap
+# reason) because oxlint 1.82's overrides.files has no working exclusion glob — a `!path` entry
+# matches every OTHER file instead (verified 2026-09-12).
+# Escape hatch, declared not silent: `// oxlint-disable-next-line eslint-js/no-restricted-syntax -- <reason>`.
+# ALSO repo-wide (hooks included — nesting needs no import): `max-depth` 2, oxlint-native.
+# The `if { if { if } }` shape a ts-pattern ban cannot reach. WARN, not error, because the
+# measured backlog on 2026-09-12 was 103 sites in 16 house files (26 at depth 3); ratchet to
+# "error" once that backlog is paid down — a warn that never becomes an error is theater.
+[tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "Ban try/catch in this repo's scripts/*.ts — use neverthrow's Result (fromThrowable) instead, or declare `// try-catch-exception: <reason>` if unavoidable"
-run = '''
-git ls-files -z -- ':(glob)scripts/*.ts' ':(exclude)scripts/render-claude-settings.ts' |
-  xargs -0 bun scripts/lint-no-try-catch.ts
-'''
+description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns everywhere; in scripts/*.ts switch/nested ternary -> ts-pattern and try/catch -> neverthrow are errors"
+run = "bunx oxlint"
+
+# Type-check (tsconfig.json). Bun transpiles and never type-checks, so this task is the ONLY
+# place the strict flags bite. Same command and name as Coral-dpp's task. In `lint`'s depends
+# since 2026-09-12, the day the flags landed: the 203-error backlog they exposed was paid down
+# the same day (10 file units, each fix adversarially reviewed) rather than parked as a warning
+# — the flags were never lowered, and must not be.
+[tasks.typecheck]
+alias = "tc"
+dir = "{{config_root}}"
+description = "Type-check the repo's own TS with tsgo (tsconfig.json: Coral-dpp-strict incl. noUncheckedIndexedAccess / exactOptionalPropertyTypes)"
+run = "bunx tsgo --noEmit"
 
 [tasks.test]
 alias = "t"

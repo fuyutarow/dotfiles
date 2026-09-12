@@ -215,7 +215,11 @@ async function main(): Promise<void> {
             const report = buildPostmortem(
               workspaceRoot(parsed.flags.root),
               parsed._.runId,
-              { include_transcript: parsed.flags.includeTranscript },
+              // exactOptionalPropertyTypes: omit the key rather than pass an explicit
+              // undefined when the flag was not given.
+              parsed.flags.includeTranscript === undefined
+                ? {}
+                : { include_transcript: parsed.flags.includeTranscript },
             );
             if (parsed.flags.json) {
               jsonLine({

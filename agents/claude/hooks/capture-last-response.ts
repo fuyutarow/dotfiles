@@ -18,27 +18,30 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const HOME = process.env.HOME ?? "";
 const KEEP = 20; // deepest `/quote N` worth supporting; bounds the file for a long session
 
+function recordResponse(sid: unknown, text: unknown): void {
+  if (!(typeof sid === "string" && sid && typeof text === "string")) return;
+  const dir = `${HOME}/.cache/claude/last-response`;
+  const file = `${dir}/${sid}.jsonl`;
+
+  let lines: string[] = [];
+  try {
+    lines = readFileSync(file, "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "");
+  } catch {
+    // no history yet -> start one
+  }
+  lines.push(JSON.stringify({ at: Date.now(), text }));
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);
+}
+
 try {
   const payload = JSON.parse(readFileSync(0, "utf8"));
   const sid = payload?.session_id;
   const text = payload?.last_assistant_message;
-  if (typeof sid === "string" && sid && typeof text === "string") {
-    const dir = `${HOME}/.cache/claude/last-response`;
-    const file = `${dir}/${sid}.jsonl`;
-
-    let lines: string[] = [];
-    try {
-      lines = readFileSync(file, "utf8")
-        .split("\n")
-        .filter((l) => l.trim() !== "");
-    } catch {
-      // no history yet -> start one
-    }
-    lines.push(JSON.stringify({ at: Date.now(), text }));
-
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);
-  }
+  recordResponse(sid, text);
 } catch {
   // best-effort snapshot -> never fail Stop over this
 }

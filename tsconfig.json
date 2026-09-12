@@ -1,0 +1,45 @@
+{
+  // Type-check contract for this repo's own TS (mise: typecheck). Bun TRANSPILES and never
+  // type-checks (writing-bun-scripts LAW), so until 2026-09-12 nothing in this repo had ever
+  // been type-checked; `tsgo --noEmit` is the only place these flags bite. Flags mirror
+  // Coral-dpp's tsconfig minus Next/React/DOM. The two flags that carry most of the backlog
+  // are `noUncheckedIndexedAccess` (arr[i] is T | undefined) and `exactOptionalPropertyTypes`
+  // (`{a?: T}` refuses an explicit undefined) — measured 2026-09-12: 203 errors at this
+  // setting, 90 with those two off. Both stay ON; the 203 were paid down the same day (real
+  // findings among them: a bogus type predicate on learning-bus.ts's timestamp(), a cleye
+  // multi-value flag tuple in ccc-swap.ts, an acquireLease() return type wider than its
+  // returns). agents/skills/** is excluded like every other repo gate (vendored templates
+  // share that tree); lint:bun still reaches those scripts structurally.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "useUnknownInCatchVariables": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "agents/skills"]
+}

@@ -33,6 +33,12 @@ const CORPUS = [
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
   { path: "agents/skills/forging-skills/scripts/skill-check.ts" },
   {
+    path: "agents/skills/forming-hypotheses-from-anomalies/scripts/hypothesis-check.ts",
+  },
+  {
+    path: "agents/skills/governing-configuration-systems/scripts/configuration-contract-check.ts",
+  },
+  {
     path: "agents/skills/issuing-technical-memoranda/scripts/tm-check.ts",
   },
   {
@@ -54,6 +60,7 @@ const CORPUS = [
   { path: "agents/skills/turnstile-spin/scripts/widget-create.ts" },
   { path: "agents/skills/turnstile-spin/scripts/worker-deploy.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" },
+  { path: "agents/skills/wiring-repositories/scripts/wiring-check.ts" },
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
   { path: "cocoindex/repo-search.ts", command: "literal" },
   { path: "scripts/reclaim-clean.ts" },
@@ -61,9 +68,10 @@ const CORPUS = [
   { path: "scripts/ccc-swap.ts", command: "discover" },
   { path: "scripts/install-mcp.ts" },
   { path: "scripts/link-skills.ts" },
-  { path: "scripts/lint-no-try-catch.ts" },
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/vendor-skill.ts" },
+  { path: "scripts/wsl-wake.ts" },
+  { path: "scripts/wsl-winget.ts" },
 ] satisfies readonly CorpusEntry[];
 
 function run(entry: CorpusEntry, argv: string[]) {

@@ -20,11 +20,13 @@
 // NO FLAGS, NO DEPENDENCIES — deliberate. This runs from link-dots.sh, which on a fresh machine
 // executes BEFORE `mise run deps` restores node_modules, so importing cleye would break bootstrap.
 // With no argv read there is no Cleye boundary to owe (writing-bun-scripts BG1). The same
-// constraint is why this file is excluded from `lint:no-try-catch` (mise.toml): the house
-// try/catch-ban's replacement, neverthrow, is a graduation-project import too — this file cannot
-// take on ANY dependency that isn't already resolvable before `mise run deps` has run, so its
-// try/catch below stay try/catch, not fromThrowable. Inputs come from
-// the environment so tests can point it at fixtures:
+// constraint is why this file opts out of the try/catch ban (`lint:ts` in mise.toml, via the
+// oxlint-disable directive below): the ban's replacement, neverthrow, is a graduation-project
+// import too — this file cannot take on ANY dependency that isn't already resolvable before
+// `mise run deps` has run, so its try/catch below stay try/catch, not fromThrowable. The opt-out
+// lives HERE rather than in .oxlintrc.json because oxlint 1.82's overrides.files has no working
+// exclusion glob (`!path` matches every OTHER file instead). Inputs come from the environment so
+// tests can point it at fixtures:
 //   DOTFILES                  repo root            (default: $HOME/dotfiles)
 //   HOME                      destination root     (default: os.homedir())
 //   CLAUDE_SETTINGS_PRIVATE   overlay path         (default: $HOME/.claude/settings.private.json)
@@ -36,6 +38,7 @@
 // Exit: 0 rendered or already current · 1 the base is missing/unreadable, or an overlay exists but
 // is not readable JSON (a typo in the overlay must never silently drop private rules).
 
+/* oxlint-disable eslint-js/no-restricted-syntax -- bootstrap: runs before `mise run deps`, cannot import neverthrow (see header) */
 import {
   existsSync,
   lstatSync,

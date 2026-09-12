@@ -23,8 +23,28 @@ const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 const AGENT_NAME_TTL_MS = 30_000;
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
+type Entry = { name?: string; at: number };
+
+function buildEntries(
+  list: Array<{ sessionId?: string; name?: string }>,
+  sid: string,
+  now: number,
+): Record<string, Entry> {
+  const next: Record<string, Entry> = {};
+  for (const a of list) {
+    if (!a.sessionId) continue;
+    // exactOptionalPropertyTypes: omit `name` entirely when absent rather than
+    // assigning an explicit `undefined` into the optional slot (JSON.stringify would
+    // drop it either way). name-then-at keeps the on-disk key order this file has
+    // always written (herdr-tab-name.ts likewise), so a refactor leaves no byte-diff.
+    next[a.sessionId] =
+      a.name !== undefined ? { name: a.name, at: now } : { at: now };
+  }
+  if (!(sid in next)) next[sid] = { at: now };
+  return next;
+}
+
 function agentName(sid: string): string | undefined {
-  type Entry = { name?: string; at: number };
   let cache: Record<string, Entry> = {};
   try {
     cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
@@ -42,10 +62,7 @@ function agentName(sid: string): string | undefined {
     });
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
     const now = Date.now();
-    const next: Record<string, Entry> = {};
-    for (const a of list)
-      if (a.sessionId) next[a.sessionId] = { name: a.name, at: now };
-    if (!(sid in next)) next[sid] = { at: now };
+    const next = buildEntries(list, sid, now);
     try {
       mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
       writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));

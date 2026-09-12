@@ -52,7 +52,7 @@ function record(value: unknown): value is RecordValue {
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
-function timestamp(value: unknown): value is number | undefined {
+function timestamp(value: unknown): number | undefined {
   if (!text(value) || !RFC3339.test(value)) return undefined;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? undefined : parsed;
@@ -499,7 +499,8 @@ export function nearestRankPercentile(
 ): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.ceil(percentile * sorted.length) - 1];
+  const value = sorted[Math.ceil(percentile * sorted.length) - 1];
+  return value === undefined ? null : value;
 }
 
 export type LearningBusResult = {
@@ -522,7 +523,7 @@ export type LearningBusResult = {
 
 export function checkLearningBus(input: unknown): LearningBusResult {
   const findings: BusFinding[] = [];
-  const zero = {
+  const zero: LearningBusResult["metrics"] = {
     transferPacketsPublished: 0,
     transferDeliveries: 0,
     transferAdmissionsByClass: { ADOPT: 0, REJECT: 0, DEFER: 0 },
@@ -605,9 +606,10 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     "admissions",
     "commits",
   ] as const;
+  const artifacts = input.artifacts;
   if (
-    !exactKeys(input.artifacts, kinds) ||
-    !kinds.every((kind) => Array.isArray(input.artifacts[kind]))
+    !exactKeys(artifacts, kinds) ||
+    !kinds.every((kind) => Array.isArray(artifacts[kind]))
   ) {
     add(
       findings,
@@ -616,7 +618,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     );
     return finish(source.summary);
   }
-  const all = kinds.flatMap((kind) => input.artifacts[kind] as unknown[]);
+  const all = kinds.flatMap((kind) => artifacts[kind] as unknown[]);
   const envelopes: Envelope[] = [];
   const ids = new Set<string>();
   for (const raw of all) {
@@ -927,7 +929,8 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     (admission) =>
       timestamp(admission.body.decidedAt)! -
       timestamp(
-        deliveryByDigest.get(admission.body.deliverySha256)?.body.deliveredAt,
+        deliveryByDigest.get(String(admission.body.deliverySha256))?.body
+          .deliveredAt,
       )!,
   );
   return finish(source.summary, {

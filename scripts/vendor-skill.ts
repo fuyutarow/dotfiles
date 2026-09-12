@@ -76,7 +76,7 @@ function nonEmptyString(flag: string): (value: string) => string {
 
 /** Raw, non-canonicalizing symlink probe — the stored target string, never resolved. */
 function symlinkTarget(p: string): string | null {
-  const lstat = fromThrowable(lstatSync)(p);
+  const lstat = fromThrowable((path: string) => lstatSync(path))(p);
   if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
   return readlinkSync(p);
 }

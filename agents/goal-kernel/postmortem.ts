@@ -55,11 +55,15 @@ export type ToolTrace = Readonly<{
   requested_at?: string;
   completed_at?: string;
   input_sha256?: string;
-  response_sha256?: string;
-  error_sha256?: string;
+  // `| undefined` (not just `?:`): toolTraces() unconditionally overwrites these three on every
+  // matching event, including back to undefined, so a later duplicate/replayed same-type event
+  // can legitimately clear a value a prior event set. exactOptionalPropertyTypes requires the
+  // explicit union to accept that assignment; JSON.stringify drops the key either way.
+  response_sha256?: string | undefined;
+  error_sha256?: string | undefined;
   exit_code?: number;
   workspace_paths: readonly string[];
-  kernel_decision?: string;
+  kernel_decision?: string | undefined;
   outcome: "completed" | "failed" | "denied" | "not_observed_completed";
 }>;
 
@@ -154,6 +158,149 @@ function redactText(input: string): Readonly<{ text: string; count: number }> {
   return { text, count };
 }
 
+type EntryParseResult = Readonly<{
+  role: "user" | "assistant" | undefined;
+  rawText: string;
+  textBytes: number;
+  truncated: boolean;
+  claudeMessages: number;
+  codexMessages: number;
+}>;
+
+/** tool_use blocks found in one Claude message's content array. */
+function collectClaudeToolUseCalls(
+  content: readonly unknown[],
+  sourceLine: number,
+  toolCalls: TranscriptToolCall[],
+  textBytes: number,
+): Readonly<{ textBytes: number; truncated: boolean }> {
+  for (const block of content) {
+    if (
+      !isRecord(block) ||
+      block.type !== "tool_use" ||
+      typeof block.name !== "string"
+    ) {
+      continue;
+    }
+    const input = block.input ?? null;
+    const inputBytes = Buffer.byteLength(JSON.stringify(input));
+    const outputBytes = 64;
+    if (
+      toolCalls.length >= MAX_MESSAGES ||
+      textBytes + outputBytes > MAX_TEXT_BYTES
+    ) {
+      return { textBytes, truncated: true };
+    }
+    toolCalls.push({
+      ...(typeof block.id === "string" ? { tool_use_id: block.id } : {}),
+      tool_name: block.name,
+      input_sha256: sha256Value(input),
+      input_bytes: inputBytes,
+      source_line: sourceLine,
+    });
+    textBytes += outputBytes;
+  }
+  return { textBytes, truncated: false };
+}
+
+/** One Codex response_item function_call payload. */
+function collectCodexFunctionCall(
+  name: string,
+  args: unknown,
+  callId: unknown,
+  sourceLine: number,
+  toolCalls: TranscriptToolCall[],
+  textBytes: number,
+): Readonly<{ textBytes: number; truncated: boolean }> {
+  const rawInput =
+    typeof args === "string" ? args : JSON.stringify(args ?? null);
+  const inputBytes = Buffer.byteLength(rawInput);
+  const outputBytes = 64;
+  if (
+    toolCalls.length >= MAX_MESSAGES ||
+    textBytes + outputBytes > MAX_TEXT_BYTES
+  ) {
+    return { textBytes, truncated: true };
+  }
+  toolCalls.push({
+    ...(typeof callId === "string" ? { tool_use_id: callId } : {}),
+    tool_name: name,
+    input_sha256: sha256Text(rawInput),
+    input_bytes: inputBytes,
+    source_line: sourceLine,
+  });
+  return { textBytes: textBytes + outputBytes, truncated: false };
+}
+
+/** Role/text/tool-call extraction for one parsed transcript line (Claude or Codex JSONL). */
+function parseTranscriptEntry(
+  entry: Record<string, unknown>,
+  sourceLine: number,
+  toolCalls: TranscriptToolCall[],
+  textBytes: number,
+): EntryParseResult {
+  let role: "user" | "assistant" | undefined;
+  let rawText = "";
+  let truncated = false;
+  let claudeMessages = 0;
+  let codexMessages = 0;
+  if (
+    (entry.type === "user" || entry.type === "assistant") &&
+    isRecord(entry.message)
+  ) {
+    role = entry.type;
+    rawText = contentText(entry.message.content, ["text"]);
+    claudeMessages = rawText === "" ? 0 : 1;
+    if (Array.isArray(entry.message.content)) {
+      const result = collectClaudeToolUseCalls(
+        entry.message.content,
+        sourceLine,
+        toolCalls,
+        textBytes,
+      );
+      textBytes = result.textBytes;
+      truncated = result.truncated;
+    }
+  } else if (entry.type === "response_item" && isRecord(entry.payload)) {
+    const payload = entry.payload;
+    if (
+      payload.type === "message" &&
+      (payload.role === "user" || payload.role === "assistant")
+    ) {
+      role = payload.role;
+      rawText = contentText(payload.content, [
+        "input_text",
+        "output_text",
+        "text",
+      ]);
+      codexMessages = rawText === "" ? 0 : 1;
+    } else if (
+      payload.type === "function_call" &&
+      typeof payload.name === "string"
+    ) {
+      const result = collectCodexFunctionCall(
+        payload.name,
+        payload.arguments,
+        payload.call_id,
+        sourceLine,
+        toolCalls,
+        textBytes,
+      );
+      textBytes = result.textBytes;
+      truncated = result.truncated;
+      codexMessages = result.truncated ? 0 : 1;
+    }
+  }
+  return {
+    role,
+    rawText,
+    textBytes,
+    truncated,
+    claudeMessages,
+    codexMessages,
+  };
+}
+
 function parseTranscript(path: string): TranscriptReadout {
   if (!existsSync(path)) {
     return {
@@ -205,96 +352,26 @@ function parseTranscript(path: string): TranscriptReadout {
     }
     if (!isRecord(entry)) continue;
 
-    let role: "user" | "assistant" | undefined;
-    let rawText = "";
-    if (
-      (entry.type === "user" || entry.type === "assistant") &&
-      isRecord(entry.message)
-    ) {
-      role = entry.type;
-      rawText = contentText(entry.message.content, ["text"]);
-      claudeMessages += rawText === "" ? 0 : 1;
-      if (Array.isArray(entry.message.content)) {
-        for (const block of entry.message.content) {
-          if (
-            !isRecord(block) ||
-            block.type !== "tool_use" ||
-            typeof block.name !== "string"
-          ) {
-            continue;
-          }
-          const input = block.input ?? null;
-          const inputBytes = Buffer.byteLength(JSON.stringify(input));
-          const outputBytes = 64;
-          if (
-            toolCalls.length >= MAX_MESSAGES ||
-            textBytes + outputBytes > MAX_TEXT_BYTES
-          ) {
-            truncated = true;
-            break;
-          }
-          toolCalls.push({
-            ...(typeof block.id === "string" ? { tool_use_id: block.id } : {}),
-            tool_name: block.name,
-            input_sha256: sha256Value(input),
-            input_bytes: inputBytes,
-            source_line: index + 1,
-          });
-          textBytes += outputBytes;
-        }
-      }
-    } else if (entry.type === "response_item" && isRecord(entry.payload)) {
-      const payload = entry.payload;
-      if (
-        payload.type === "message" &&
-        (payload.role === "user" || payload.role === "assistant")
-      ) {
-        role = payload.role;
-        rawText = contentText(payload.content, [
-          "input_text",
-          "output_text",
-          "text",
-        ]);
-        codexMessages += rawText === "" ? 0 : 1;
-      } else if (
-        payload.type === "function_call" &&
-        typeof payload.name === "string"
-      ) {
-        const rawInput =
-          typeof payload.arguments === "string"
-            ? payload.arguments
-            : JSON.stringify(payload.arguments ?? null);
-        const inputBytes = Buffer.byteLength(rawInput);
-        const outputBytes = 64;
-        if (
-          toolCalls.length >= MAX_MESSAGES ||
-          textBytes + outputBytes > MAX_TEXT_BYTES
-        ) {
-          truncated = true;
-          break;
-        }
-        toolCalls.push({
-          ...(typeof payload.call_id === "string"
-            ? { tool_use_id: payload.call_id }
-            : {}),
-          tool_name: payload.name,
-          input_sha256: sha256Text(rawInput),
-          input_bytes: inputBytes,
-          source_line: index + 1,
-        });
-        textBytes += outputBytes;
-        codexMessages += 1;
-      }
+    const parsed = parseTranscriptEntry(entry, index + 1, toolCalls, textBytes);
+    textBytes = parsed.textBytes;
+    claudeMessages += parsed.claudeMessages;
+    codexMessages += parsed.codexMessages;
+    if (parsed.truncated) {
+      truncated = true;
+      break;
     }
-    if (truncated) break;
-    if (role === undefined || rawText === "") continue;
-    const redacted = redactText(rawText);
+    if (parsed.role === undefined || parsed.rawText === "") continue;
+    const redacted = redactText(parsed.rawText);
     const bytes = Buffer.byteLength(redacted.text);
     if (messages.length >= MAX_MESSAGES || textBytes + bytes > MAX_TEXT_BYTES) {
       truncated = true;
       break;
     }
-    messages.push({ role, text: redacted.text, source_line: index + 1 });
+    messages.push({
+      role: parsed.role,
+      text: redacted.text,
+      source_line: index + 1,
+    });
     redactions += redacted.count;
     textBytes += bytes;
   }
@@ -331,13 +408,45 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
     requested_at?: string;
     completed_at?: string;
     input_sha256?: string;
-    response_sha256?: string;
-    error_sha256?: string;
+    response_sha256?: string | undefined;
+    error_sha256?: string | undefined;
     exit_code?: number;
     workspace_paths: string[];
-    kernel_decision?: string;
+    kernel_decision?: string | undefined;
     outcome: ToolTrace["outcome"];
   };
+
+  function applyToolRequested(trace: MutableTrace, event: RunEvent): void {
+    trace.requested_at = event.occurred_at;
+    // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
+    // duplicate/replayed tool.requested event of the same tool_use_id.
+    const kernelDecision = optionalString(event.kernel_decision);
+    trace.kernel_decision = kernelDecision;
+    if (kernelDecision === "deny") trace.outcome = "denied";
+  }
+
+  function applyToolCompleted(trace: MutableTrace, event: RunEvent): void {
+    trace.completed_at = event.occurred_at;
+    // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
+    // duplicate/replayed tool.completed event of the same tool_use_id.
+    trace.response_sha256 = optionalString(event.tool_response_sha256);
+    if (typeof event.tool_exit_code === "number") {
+      trace.exit_code = event.tool_exit_code;
+    }
+    trace.outcome =
+      trace.exit_code === undefined || trace.exit_code === 0
+        ? "completed"
+        : "failed";
+  }
+
+  function applyToolFailed(trace: MutableTrace, event: RunEvent): void {
+    trace.completed_at = event.occurred_at;
+    // Unconditional overwrite (incl. undefined): matches pre-refactor semantics for a
+    // duplicate/replayed tool.failed event of the same tool_use_id.
+    trace.error_sha256 = optionalString(event.tool_error_sha256);
+    trace.outcome = "failed";
+  }
+
   const traces = new Map<string, MutableTrace>();
   for (const event of events) {
     if (!event.event_type.startsWith("tool.")) continue;
@@ -348,10 +457,13 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
       outcome: "not_observed_completed",
       workspace_paths: [],
     };
-    trace.tool_name = optionalString(event.tool_name) ?? trace.tool_name;
-    trace.turn_id = optionalString(event.turn_id) ?? trace.turn_id;
-    trace.input_sha256 =
-      optionalString(event.tool_input_sha256) ?? trace.input_sha256;
+    // exactOptionalPropertyTypes: only write when defined, never assign an explicit undefined.
+    const toolName = optionalString(event.tool_name);
+    if (toolName !== undefined) trace.tool_name = toolName;
+    const turnId = optionalString(event.turn_id);
+    if (turnId !== undefined) trace.turn_id = turnId;
+    const inputSha256 = optionalString(event.tool_input_sha256);
+    if (inputSha256 !== undefined) trace.input_sha256 = inputSha256;
     if (Array.isArray(event.workspace_paths)) {
       trace.workspace_paths = [
         ...new Set([
@@ -363,23 +475,11 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
       ].sort();
     }
     if (event.event_type === "tool.requested") {
-      trace.requested_at = event.occurred_at;
-      trace.kernel_decision = optionalString(event.kernel_decision);
-      if (trace.kernel_decision === "deny") trace.outcome = "denied";
+      applyToolRequested(trace, event);
     } else if (event.event_type === "tool.completed") {
-      trace.completed_at = event.occurred_at;
-      trace.response_sha256 = optionalString(event.tool_response_sha256);
-      if (typeof event.tool_exit_code === "number") {
-        trace.exit_code = event.tool_exit_code;
-      }
-      trace.outcome =
-        trace.exit_code === undefined || trace.exit_code === 0
-          ? "completed"
-          : "failed";
+      applyToolCompleted(trace, event);
     } else if (event.event_type === "tool.failed") {
-      trace.completed_at = event.occurred_at;
-      trace.error_sha256 = optionalString(event.tool_error_sha256);
-      trace.outcome = "failed";
+      applyToolFailed(trace, event);
     }
     traces.set(toolUseId, trace);
   }
@@ -439,18 +539,20 @@ export function buildPostmortem(
 
   const prompts = events
     .filter((event) => event.event_type === "prompt.submitted")
-    .map((event) => ({
-      occurred_at: event.occurred_at,
-      ...(optionalString(event.turn_id) === undefined
-        ? {}
-        : { turn_id: optionalString(event.turn_id) }),
-      ...(optionalString(event.prompt_sha256) === undefined
-        ? {}
-        : { prompt_sha256: optionalString(event.prompt_sha256) }),
-      ...(typeof event.prompt_bytes === "number"
-        ? { prompt_bytes: event.prompt_bytes }
-        : {}),
-    }));
+    .map((event) => {
+      // Resolve once so the narrowed `string` type (not `string | undefined`) flows into
+      // the conditional spread below — exactOptionalPropertyTypes forbids the alternative.
+      const turnId = optionalString(event.turn_id);
+      const promptSha256 = optionalString(event.prompt_sha256);
+      return {
+        occurred_at: event.occurred_at,
+        ...(turnId === undefined ? {} : { turn_id: turnId }),
+        ...(promptSha256 === undefined ? {} : { prompt_sha256: promptSha256 }),
+        ...(typeof event.prompt_bytes === "number"
+          ? { prompt_bytes: event.prompt_bytes }
+          : {}),
+      };
+    });
 
   let transcript: TranscriptReadout | undefined;
   if (options.include_transcript === true) {

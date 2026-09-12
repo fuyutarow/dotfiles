@@ -44,7 +44,9 @@ console.log(`== 1. ~/ の隠しディレクトリ: 最終更新が ${staleDays} 
 for (const name of readdirSync(home).sort()) {
   if (!(name.length >= 2 && name[0] === "." && name[1] !== ".")) continue;
   const d = `${home}/${name}`;
-  const statResult = fromThrowable(statSync)(d);
+  // statSync is overloaded (bigint/throwIfNoEntry variants); wrapping the CALL rather than the
+  // bare function keeps this single-argument overload's plain-Stats return through fromThrowable.
+  const statResult = fromThrowable(() => statSync(d))();
   if (statResult.isErr()) continue;
   const st = statResult.value;
   if (!st.isDirectory()) continue;
@@ -61,6 +63,30 @@ console.log(
   "   更新を反映しないので ~/.local や ~/.rustup のような現役も並ぶ。§2〜§4 で裏を取れ)",
 );
 
+async function auditRustToolchainPins(home: string): Promise<void> {
+  console.log("  -- rust-toolchain で固定しているプロジェクト --");
+  if (!Bun.which("fd")) {
+    console.log("  fd 不在のため未検索");
+    return;
+  }
+  const projects = process.env.AUDIT_PROJECTS ?? `${home}/Workspace`;
+  const fdRes = await $`fd -H -t f "^rust-toolchain(\\.toml)?$" ${projects}`
+    .quiet()
+    .nothrow();
+  const found = fdRes.stdout.toString().split("\n").filter(Boolean);
+  for (const f of found) {
+    const grepRes = await $`grep -h channel ${f}`.quiet().nothrow();
+    const channel = grepRes.stdout
+      .toString()
+      .replace(/ /g, "")
+      .replace(/\n+$/, "");
+    console.log(`  ${f} → ${channel}`);
+  }
+  console.log(
+    "  (この一覧が空なら、既定以外の toolchain を固定しているものは無い)",
+  );
+}
+
 console.log();
 console.log("== 2. rustup toolchain: 既定と、プロジェクトによる固定の有無 ==");
 if (Bun.which("rustup")) {
@@ -68,33 +94,10 @@ if (Bun.which("rustup")) {
   for (const line of list.replace(/\n$/, "").split("\n")) {
     console.log(`  ${line}`);
   }
-  console.log("  -- rust-toolchain で固定しているプロジェクト --");
-  if (Bun.which("fd")) {
-    const projects = process.env.AUDIT_PROJECTS ?? `${home}/Workspace`;
-    const fdRes = await $`fd -H -t f "^rust-toolchain(\\.toml)?$" ${projects}`
-      .quiet()
-      .nothrow();
-    const found = fdRes.stdout.toString().split("\n").filter(Boolean);
-    for (const f of found) {
-      const grepRes = await $`grep -h channel ${f}`.quiet().nothrow();
-      const channel = grepRes.stdout
-        .toString()
-        .replace(/ /g, "")
-        .replace(/\n+$/, "");
-      console.log(`  ${f} → ${channel}`);
-    }
-    console.log(
-      "  (この一覧が空なら、既定以外の toolchain を固定しているものは無い)",
-    );
-  } else {
-    console.log("  fd 不在のため未検索");
-  }
+  await auditRustToolchainPins(home);
 }
 
-console.log();
-console.log("== 3. vscode-server: 現行版以外は再接続で取り直される ==");
-const serversDir = `${home}/.vscode-server/cli/servers`;
-if (existsSync(serversDir) && statSync(serversDir).isDirectory()) {
+async function auditVscodeServerVersions(serversDir: string): Promise<void> {
   for (const name of readdirSync(serversDir).sort()) {
     if (!name.startsWith("Stable-")) continue;
     const v = `${serversDir}/${name}`;
@@ -105,23 +108,36 @@ if (existsSync(serversDir) && statSync(serversDir).isDirectory()) {
 }
 
 console.log();
-console.log("== 4. ~/.cache 内訳(降順) ==");
-const cacheDir = `${home}/.cache`;
-if (existsSync(cacheDir)) {
+console.log("== 3. vscode-server: 現行版以外は再接続で取り直される ==");
+const serversDir = `${home}/.vscode-server/cli/servers`;
+if (existsSync(serversDir) && statSync(serversDir).isDirectory()) {
+  await auditVscodeServerVersions(serversDir);
+}
+
+async function auditCacheBreakdown(
+  cacheDir: string,
+  home: string,
+): Promise<void> {
   // Shell glob expansion (`.cache/*`) is sorted; readdirSync is not — match it so a size tie
   // in `sort -rh` breaks the same way.
   const entries = readdirSync(cacheDir)
     .sort()
     .map((n) => `${cacheDir}/${n}`);
-  if (entries.length > 0) {
-    const duRaw = (
-      await $`du -sh ${entries}`.quiet().nothrow()
-    ).stdout.toString();
-    const sorted = await $`echo ${duRaw} | sort -rh | head -12`.text();
-    for (const line of sorted.split("\n").filter(Boolean)) {
-      console.log(`  ${line.replace(home, "~")}`);
-    }
+  if (entries.length === 0) return;
+  const duRaw = (
+    await $`du -sh ${entries}`.quiet().nothrow()
+  ).stdout.toString();
+  const sorted = await $`echo ${duRaw} | sort -rh | head -12`.text();
+  for (const line of sorted.split("\n").filter(Boolean)) {
+    console.log(`  ${line.replace(home, "~")}`);
   }
+}
+
+console.log();
+console.log("== 4. ~/.cache 内訳(降順) ==");
+const cacheDir = `${home}/.cache`;
+if (existsSync(cacheDir)) {
+  await auditCacheBreakdown(cacheDir, home);
 }
 
 console.log();

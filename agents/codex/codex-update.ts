@@ -30,6 +30,10 @@
  * stopping a daemon drops every session on it, which is not an unattended updater's call.
  */
 
+// Script-scoped, not a library: this makes it a module so the top-level `await` calls
+// below are legal under tsgo.
+export {};
+
 const CODEX = "codex";
 
 interface DaemonVersion {

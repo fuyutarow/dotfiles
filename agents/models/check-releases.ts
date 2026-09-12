@@ -93,6 +93,16 @@ function daysBetween(fromMs: number, toMs: number): number {
   return Math.round((toMs - fromMs) / 86_400_000);
 }
 
+// Read one guidance file's body; unreadable is not a finding.
+function readGuidanceFile(p: string): string | undefined {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    /* unreadable file is not a finding */
+    return undefined;
+  }
+}
+
 // Walk the skills tree once, returning [path, text] for every markdown body a reader
 // would treat as guidance (SKILL.md + references/), excluding history files.
 function guidanceFiles(): Array<[string, string]> {
@@ -112,16 +122,15 @@ function guidanceFiles(): Array<[string, string]> {
       } catch {
         continue;
       }
+      if (st.isDirectory() && (name === "tests" || name === "node_modules"))
+        continue;
       if (st.isDirectory()) {
-        if (name === "tests" || name === "node_modules") continue;
         walk(p);
-      } else if (name.endsWith(".md") && !HISTORY_FILE.test(p)) {
-        try {
-          out.push([p, readFileSync(p, "utf8")]);
-        } catch {
-          /* unreadable file is not a finding */
-        }
+        continue;
       }
+      if (!name.endsWith(".md") || HISTORY_FILE.test(p)) continue;
+      const text = readGuidanceFile(p);
+      if (text !== undefined) out.push([p, text]);
     }
   };
   walk(SKILLS_DIR);
@@ -191,6 +200,21 @@ function main(): void {
       );
   };
 
+  // Escalate a retirement-warning window into fail/warn. Called only when something
+  // in the repo actually points at it. A deadline nothing references is a note; a
+  // floor that is permanently red gets ignored, which costs more than the alarm buys.
+  const escalateRetirement = (m: Model, left: number): void => {
+    const refs = namedIn(m.slug);
+    const when = `retires in ${left} days (${m.retires})`;
+    if (refs.length > 0) {
+      fail(
+        `${m.slug} ${when} and is still referenced by: ${refs.join(", ")} — migrate them`,
+      );
+      return;
+    }
+    warn(`${m.slug} ${when}; nothing in agents/skills references it`);
+  };
+
   // Row hygiene + F2 — retirements.
   const bySlug = new Map<string, Model>();
   for (const m of models) {
@@ -205,30 +229,20 @@ function main(): void {
     if (!m.source || !m.verified)
       fail(`${m.slug}: every row needs a source and a verified date`);
 
-    if (m.retires) {
-      const r = parseDay(m.retires);
-      if (r === null) {
-        fail(`${m.slug}: retires '${m.retires}' is not YYYY-MM-DD`);
-        continue;
-      }
-      const left = daysBetween(todayMs, r);
-      if (left < 0 && m.status !== "retired") {
-        fail(
-          `${m.slug} passed its retirement date ${m.retires} (${-left} days ago) but is still ` +
-            `marked '${m.status}' — fix the status or the date`,
-        );
-      } else if (left >= 0 && left <= meta.retirement_warning_days) {
-        // Escalate only when something in the repo actually points at it. A deadline
-        // nothing references is a note; a floor that is permanently red gets ignored,
-        // which costs more than the alarm buys.
-        const refs = namedIn(m.slug);
-        const when = `retires in ${left} days (${m.retires})`;
-        if (refs.length > 0)
-          fail(
-            `${m.slug} ${when} and is still referenced by: ${refs.join(", ")} — migrate them`,
-          );
-        else warn(`${m.slug} ${when}; nothing in agents/skills references it`);
-      }
+    if (!m.retires) continue;
+    const r = parseDay(m.retires);
+    if (r === null) {
+      fail(`${m.slug}: retires '${m.retires}' is not YYYY-MM-DD`);
+      continue;
+    }
+    const left = daysBetween(todayMs, r);
+    if (left < 0 && m.status !== "retired") {
+      fail(
+        `${m.slug} passed its retirement date ${m.retires} (${-left} days ago) but is still ` +
+          `marked '${m.status}' — fix the status or the date`,
+      );
+    } else if (left >= 0 && left <= meta.retirement_warning_days) {
+      escalateRetirement(m, left);
     }
   }
 

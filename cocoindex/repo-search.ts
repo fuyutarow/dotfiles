@@ -127,7 +127,7 @@ function findRegisteredProject(start: string): string | null {
   }
 }
 
-const GLOB_MAGIC = /[*?\[\]{}]/;
+const GLOB_MAGIC = /[*?[\]{}]/;
 
 // ccc's --path consumes a file-path glob, not a directory name. Preserve a caller's explicit
 // glob and file path exactly, but turn an existing directory inside the selected project into
@@ -290,9 +290,15 @@ const SETTINGS_BASENAME = "settings.yml";
 // in a directory `ccc index` never actually touched, describing an index that does not exist.
 async function hasIndexArtifacts(project: string): Promise<boolean> {
   const dir = join(project, ".cocoindex_code");
-  let entries: Awaited<ReturnType<typeof readdir>>;
+  // Wrapped in a plain (non-overloaded) local function so `ReturnType<typeof list>` resolves to
+  // the type these exact arguments (default utf8 encoding, withFileTypes: true) actually select
+  // -- Dirent<string>[]. `Awaited<ReturnType<typeof readdir>>` directly does not: readdir's LAST
+  // overload signature returns Dirent<Buffer>[], and ReturnType on an overloaded function always
+  // picks that last signature, never the one these arguments select.
+  const list = () => readdir(dir, { recursive: true, withFileTypes: true });
+  let entries: Awaited<ReturnType<typeof list>>;
   try {
-    entries = await readdir(dir, { recursive: true, withFileTypes: true });
+    entries = await list();
   } catch {
     return false;
   }
@@ -450,10 +456,11 @@ async function checkIndexFreshness(
 }
 
 function exactlyOneQuery(route: string, queries: string[]): string {
-  if (queries.length !== 1 || queries[0].trim() === "") {
+  const query = queries[0];
+  if (queries.length !== 1 || query === undefined || query.trim() === "") {
     throw new Error(`${route} requires exactly one non-empty --query`);
   }
-  return queries[0];
+  return query;
 }
 
 async function runChild(command: string[], timeoutMs: number): Promise<number> {
@@ -512,14 +519,16 @@ function cccResultCount(stdout: string): number {
   return stdout.match(/^--- Result \d+ \(/gm)?.length ?? 0;
 }
 
+// Same `| undefined` reasoning as SearchFlags above: this is always called with a SearchFlags
+// value (or a slice of one), whose optional fields are real present-with-undefined keys.
 function rgFlags(values: {
-  glob?: string[];
-  ignoreCase?: boolean;
-  hidden?: boolean;
-  context?: number;
-  filesWithMatches?: boolean;
-  count?: boolean;
-  limit?: number;
+  glob?: string[] | undefined;
+  ignoreCase?: boolean | undefined;
+  hidden?: boolean | undefined;
+  context?: number | undefined;
+  filesWithMatches?: boolean | undefined;
+  count?: boolean | undefined;
+  limit?: number | undefined;
 }): string[] {
   if (values.filesWithMatches && values.count) {
     throw new Error("--files-with-matches and --count are mutually exclusive");
@@ -718,35 +727,55 @@ function lexicalMissLine(
   );
 }
 
+// Every field is `| undefined`, not just optional: this type receives cleye's `parsed.flags`
+// directly, where a flag with no default is always a present key holding `undefined` (a real,
+// distinct state -- see the `?? <default>` / `!== undefined` reads throughout this file), not an
+// absent key. exactOptionalPropertyTypes distinguishes the two, so the type must say which one
+// this is.
 type SearchFlags = {
-  query?: string[];
-  path?: string[];
-  glob?: string[];
-  limit?: number;
-  timeoutMs?: number;
-  refresh?: boolean;
-  ignoreCase?: boolean;
-  hidden?: boolean;
-  context?: number;
-  filesWithMatches?: boolean;
-  count?: boolean;
+  query?: string[] | undefined;
+  path?: string[] | undefined;
+  glob?: string[] | undefined;
+  limit?: number | undefined;
+  timeoutMs?: number | undefined;
+  refresh?: boolean | undefined;
+  ignoreCase?: boolean | undefined;
+  hidden?: boolean | undefined;
+  context?: number | undefined;
+  filesWithMatches?: boolean | undefined;
+  count?: boolean | undefined;
 };
 
 function queryFlag() {
   return {
-    query: { type: [nonEmptyString("query")], alias: "q", default: () => [] },
+    // `as const` marks this a fixed 1-element tuple (cleye's FlagType wants `readonly
+    // [TypeFunction]` for a repeatable flag), not a variable-length array -- without it TS infers
+    // a plain mutable array type, which a tuple type can never accept.
+    query: {
+      type: [nonEmptyString("query")] as const,
+      alias: "q",
+      default: () => [],
+    },
   };
 }
 
 function pathFlag() {
   return {
-    path: { type: [nonEmptyString("path")], alias: "p", default: () => [] },
+    path: {
+      type: [nonEmptyString("path")] as const,
+      alias: "p",
+      default: () => [],
+    },
   };
 }
 
 function globFlag() {
   return {
-    glob: { type: [nonEmptyString("glob")], alias: "g", default: () => [] },
+    glob: {
+      type: [nonEmptyString("glob")] as const,
+      alias: "g",
+      default: () => [],
+    },
   };
 }
 
@@ -868,33 +897,41 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
 }
 
 function routeCommand(route: Route) {
-  const flags =
-    route === "concept" || route === "battery"
-      ? {
-          ...queryFlag(),
-          ...pathFlag(),
-          limit: positiveInteger("limit"),
-          ...timeoutFlag(),
-          refresh: Boolean,
-        }
-      : route === "literal" || route === "exhaustive"
-        ? {
-            ...queryFlag(),
-            ...pathFlag(),
-            ...globFlag(),
-            ...timeoutFlag(),
-            ...rgSearchFlags(),
-          }
-        : route === "files"
-          ? { ...pathFlag(), ...globFlag(), ...timeoutFlag(), hidden: Boolean }
-          : route === "structural"
-            ? { ...queryFlag(), ...pathFlag(), ...timeoutFlag() }
-            : { ...queryFlag(), ...timeoutFlag() };
   return command(
     {
       name: route,
       parameters: [],
-      flags,
+      // Inlined (not hoisted to a `const flags = ...` above) so each branch stays a fresh object
+      // literal at the point cleye's `Flags` (a string-index-signature type) checks it -- a
+      // literal gets an implicit index signature synthesized here; a variable holding the same
+      // value does not, and fails as "index signature missing".
+      flags:
+        route === "concept" || route === "battery"
+          ? {
+              ...queryFlag(),
+              ...pathFlag(),
+              limit: positiveInteger("limit"),
+              ...timeoutFlag(),
+              refresh: Boolean,
+            }
+          : route === "literal" || route === "exhaustive"
+            ? {
+                ...queryFlag(),
+                ...pathFlag(),
+                ...globFlag(),
+                ...timeoutFlag(),
+                ...rgSearchFlags(),
+              }
+            : route === "files"
+              ? {
+                  ...pathFlag(),
+                  ...globFlag(),
+                  ...timeoutFlag(),
+                  hidden: Boolean,
+                }
+              : route === "structural"
+                ? { ...queryFlag(), ...pathFlag(), ...timeoutFlag() }
+                : { ...queryFlag(), ...timeoutFlag() },
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       help: { description: `Run the ${route} repository-search route.` },

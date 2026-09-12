@@ -157,6 +157,9 @@ export type AdmissionResult =
     }
   | { ok: false; reason: string };
 
+/** The subset of AdmissionResult that decideAdmission's callers actually propagate as a failure. */
+export type AdmissionFailure = Extract<AdmissionResult, { ok: false }>;
+
 export type ExecutionResult = {
   ok: boolean;
   exitCode: number;
@@ -389,7 +392,9 @@ export function validateManifest(value: unknown): ResourceManifest {
   if (value.cleanup.mode !== "term-then-kill") {
     throw new UsageError("cleanup.mode must be term-then-kill");
   }
-  const childFanout = integer(value.child_fanout, "child_fanout", 0, 0);
+  // Validated to be exactly 0; child_fanout is pinned to the literal type 0 in ResourceManifest
+  // (no nested agent fanout is supported yet), so the checked value is used as that literal below.
+  integer(value.child_fanout, "child_fanout", 0, 0);
 
   return {
     schema: 1,
@@ -409,7 +414,7 @@ export function validateManifest(value: unknown): ResourceManifest {
     memory_bound: nonEmpty(value.memory_bound, "memory_bound"),
     device,
     scratch_bytes: integer(value.scratch_bytes, "scratch_bytes", 0),
-    child_fanout: childFanout,
+    child_fanout: 0,
     walltime_seconds: integer(
       value.walltime_seconds,
       "walltime_seconds",
@@ -428,6 +433,23 @@ export function validateManifest(value: unknown): ResourceManifest {
   };
 }
 
+function addCpuRange(
+  range: RegExpExecArray,
+  part: string,
+  cpus: Set<number>,
+): void {
+  const first = Number(range[1]);
+  const last = Number(range[2]);
+  if (
+    !Number.isSafeInteger(first) ||
+    !Number.isSafeInteger(last) ||
+    last < first
+  ) {
+    throw new StateError(`invalid CPU range '${part}'`);
+  }
+  for (let cpu = first; cpu <= last; cpu += 1) cpus.add(cpu);
+}
+
 export function parseCpuList(text: string): number[] {
   const cpus = new Set<number>();
   for (const rawPart of text.trim().split(",")) {
@@ -435,16 +457,7 @@ export function parseCpuList(text: string): number[] {
     if (part === "") continue;
     const range = /^(\d+)-(\d+)$/.exec(part);
     if (range !== null) {
-      const first = Number(range[1]);
-      const last = Number(range[2]);
-      if (
-        !Number.isSafeInteger(first) ||
-        !Number.isSafeInteger(last) ||
-        last < first
-      ) {
-        throw new StateError(`invalid CPU range '${part}'`);
-      }
-      for (let cpu = first; cpu <= last; cpu += 1) cpus.add(cpu);
+      addCpuRange(range, part, cpus);
       continue;
     }
     if (!/^\d+$/.test(part)) throw new StateError(`invalid CPU id '${part}'`);
@@ -747,7 +760,10 @@ export function decideAdmission(
     };
   }
 
-  const gpu = snapshot.gpus.find((item) => item.id === manifest.device.gpu_id);
+  // Hoisted out of the closure below: property narrowing on `manifest.device.kind` does not
+  // survive into a nested arrow function, even though it holds for the rest of this function body.
+  const gpuId = manifest.device.gpu_id;
+  const gpu = snapshot.gpus.find((item) => item.id === gpuId);
   if (gpu === undefined) {
     return {
       ok: false,
@@ -830,6 +846,49 @@ function releaseLockDirectory(lockDirectory: string): void {
   }
 }
 
+function handleLockAcquisitionError(
+  error: unknown,
+  lockDirectory: string,
+): void {
+  if (errorCode(error) === "EEXIST") return;
+  try {
+    releaseLockDirectory(lockDirectory);
+  } catch {
+    // Preserve the original lock/setup error.
+  }
+  throw new StateError(
+    `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
+function readOwnerPid(lockDirectory: string): number | null {
+  try {
+    const owner = JSON.parse(
+      readFileSync(join(lockDirectory, "owner.json"), "utf8"),
+    ) as { pid?: unknown };
+    return typeof owner.pid === "number" ? owner.pid : null;
+  } catch {
+    // The owner may still be writing. Age decides whether this becomes stale.
+    return null;
+  }
+}
+
+function releaseIfStale(
+  lockDirectory: string,
+  ownerPid: number | null,
+): boolean {
+  try {
+    const oldEnough =
+      Date.now() - statSync(lockDirectory).mtimeMs >= LOCK_STALE_MS;
+    if (!oldEnough || (ownerPid !== null && pidIsAlive(ownerPid))) return false;
+    releaseLockDirectory(lockDirectory);
+    return true;
+  } catch {
+    // A concurrent owner can release/recreate the bounded lock; retry.
+    return false;
+  }
+}
+
 async function acquireStateLock(stateDirectory: string): Promise<() => void> {
   const lockDirectory = join(stateDirectory, ".lock");
   const deadline = performance.now() + LOCK_WAIT_MS;
@@ -843,36 +902,12 @@ async function acquireStateLock(stateDirectory: string): Promise<() => void> {
       );
       return () => releaseLockDirectory(lockDirectory);
     } catch (error) {
-      if (errorCode(error) !== "EEXIST") {
-        try {
-          releaseLockDirectory(lockDirectory);
-        } catch {
-          // Preserve the original lock/setup error.
-        }
-        throw new StateError(
-          `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+      handleLockAcquisitionError(error, lockDirectory);
     }
 
-    let ownerPid: number | null = null;
-    try {
-      const owner = JSON.parse(
-        readFileSync(join(lockDirectory, "owner.json"), "utf8"),
-      ) as { pid?: unknown };
-      if (typeof owner.pid === "number") ownerPid = owner.pid;
-    } catch {
-      // The owner may still be writing. Age decides whether this becomes stale.
-    }
-    try {
-      const oldEnough =
-        Date.now() - statSync(lockDirectory).mtimeMs >= LOCK_STALE_MS;
-      if (oldEnough && (ownerPid === null || !pidIsAlive(ownerPid))) {
-        releaseLockDirectory(lockDirectory);
-        continue;
-      }
-    } catch {
-      // A concurrent owner can release/recreate the bounded lock; retry.
+    const ownerPid = readOwnerPid(lockDirectory);
+    if (releaseIfStale(lockDirectory, ownerPid)) {
+      continue;
     }
     await Bun.sleep(25);
   }
@@ -907,6 +942,14 @@ function reservationFrom(value: unknown): Reservation | null {
   return null;
 }
 
+function unlinkIgnoringMissing(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch (error) {
+    if (errorCode(error) !== "ENOENT") throw error;
+  }
+}
+
 function liveReservations(stateDirectory: string): Reservation[] {
   const result: Reservation[] = [];
   for (const name of readdirSync(stateDirectory)) {
@@ -922,11 +965,7 @@ function liveReservations(stateDirectory: string): Reservation[] {
       result.push(reservation);
       continue;
     }
-    try {
-      unlinkSync(path);
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") throw error;
-    }
+    unlinkIgnoringMissing(path);
   }
   return result;
 }
@@ -935,7 +974,7 @@ async function acquireLease(
   manifest: ResourceManifest,
   snapshot: HostSnapshot,
   requestedStateDirectory?: string,
-): Promise<Lease | AdmissionResult> {
+): Promise<Lease | AdmissionFailure> {
   const stateDirectory = ensureStateDirectory(
     requestedStateDirectory ?? defaultStateDirectory(),
   );
@@ -975,13 +1014,41 @@ async function acquireLease(
 async function releaseLease(lease: Lease): Promise<void> {
   const unlock = await acquireStateLock(lease.stateDirectory);
   try {
-    try {
-      unlinkSync(lease.reservationPath);
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") throw error;
-    }
+    unlinkIgnoringMissing(lease.reservationPath);
   } finally {
     unlock();
+  }
+}
+
+/**
+ * Read one /proc entry's contribution to `pgid`'s usage, or null when it is not a member.
+ * The stat and status reads are guarded separately so a process exiting between them still
+ * counts toward `processes` (matching the pre-extraction control flow exactly) while
+ * contributing zero RSS instead of throwing.
+ */
+function sampleProcessGroupMember(
+  entry: string,
+  pgid: number,
+): { rssBytes: number } | null {
+  let stat: string;
+  try {
+    stat = readFileSync(join("/proc", entry, "stat"), "utf8");
+  } catch {
+    // A process can exit between /proc enumeration and either read.
+    return null;
+  }
+  const close = stat.lastIndexOf(")");
+  if (close === -1) return null;
+  const fields = stat.slice(close + 2).split(" ");
+  const processGroup = Number(fields[2]);
+  if (processGroup !== pgid) return null;
+  try {
+    const status = readFileSync(join("/proc", entry, "status"), "utf8");
+    const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status)?.[1];
+    return { rssBytes: rss !== undefined ? Number(rss) * KiB : 0 };
+  } catch {
+    // A process can exit between /proc enumeration and either read.
+    return { rssBytes: 0 };
   }
 }
 
@@ -990,20 +1057,10 @@ function processGroupUsage(pgid: number): GroupUsage {
   let rssBytes = 0;
   for (const entry of readdirSync("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
-    try {
-      const stat = readFileSync(join("/proc", entry, "stat"), "utf8");
-      const close = stat.lastIndexOf(")");
-      if (close === -1) continue;
-      const fields = stat.slice(close + 2).split(" ");
-      const processGroup = Number(fields[2]);
-      if (processGroup !== pgid) continue;
-      processes += 1;
-      const status = readFileSync(join("/proc", entry, "status"), "utf8");
-      const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status)?.[1];
-      if (rss !== undefined) rssBytes += Number(rss) * KiB;
-    } catch {
-      // A process can exit between /proc enumeration and either read.
-    }
+    const sample = sampleProcessGroupMember(entry, pgid);
+    if (sample === null) continue;
+    processes += 1;
+    rssBytes += sample.rssBytes;
   }
   return { processes, rssBytes };
 }
@@ -1071,7 +1128,9 @@ function gpuBudgetEnvironment(
 export function createAdmissionReceipt(
   manifestSource: ManifestSource,
   reservation: Reservation,
-  admissionId = randomUUID(),
+  // Explicitly widened from randomUUID()'s template-literal return type: callers (notably tests)
+  // legitimately pass human-readable ids, and nothing downstream requires UUID shape.
+  admissionId: string = randomUUID(),
 ): AdmissionReceipt {
   const payload: AdmissionReceiptPayload = {
     schema: 1,
@@ -1409,6 +1468,27 @@ export async function checkJob(
   }
 }
 
+/**
+ * Poll `pgid`'s usage until it breaches the manifest's declared limits or `isDone` reports the
+ * job is no longer being monitored (exited/walltime/interrupt). Returns the breach reason, or
+ * null when monitoring simply ended.
+ */
+async function monitorProcessGroup(
+  pgid: number,
+  manifest: ResourceManifest,
+  exitedPromise: Promise<number>,
+  intervalMs: number,
+  isDone: () => boolean,
+): Promise<"memory" | "processes" | null> {
+  while (!isDone()) {
+    const usage = processGroupUsage(pgid);
+    if (usage.rssBytes > manifest.host_ram_peak_bytes) return "memory";
+    if (usage.processes > manifest.processes) return "processes";
+    await Promise.race([exitedPromise, Bun.sleep(intervalMs)]);
+  }
+  return null;
+}
+
 export async function executeJob(
   manifest: ResourceManifest,
   command: string[],
@@ -1508,15 +1588,14 @@ export async function executeJob(
       10,
       options.monitorIntervalMs ?? DEFAULT_MONITOR_INTERVAL_MS,
     );
-    let breach: "memory" | "processes" | null = null;
 
-    while (!exited && !walltimeFired && !interrupted && breach === null) {
-      const usage = processGroupUsage(pgid);
-      if (usage.rssBytes > manifest.host_ram_peak_bytes) breach = "memory";
-      else if (usage.processes > manifest.processes) breach = "processes";
-      if (breach !== null) break;
-      await Promise.race([exitedPromise, Bun.sleep(interval)]);
-    }
+    const breach = await monitorProcessGroup(
+      pgid,
+      manifest,
+      exitedPromise,
+      interval,
+      () => exited || walltimeFired || interrupted,
+    );
 
     if (walltimeFired || interrupted || breach !== null) {
       await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
@@ -1557,7 +1636,10 @@ export async function executeJob(
     const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
     const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
     await releaseLease(lease);
+    // Overriding the try block's `return` is the point: a job that PASSED but left its systemd
+    // scope alive must not report success — the cleanup failure outranks the job result.
     if (!scopeStopped) {
+      // oxlint-disable-next-line no-unsafe-finally -- deliberate: cleanup failure overrides the job's own return
       throw new StateError(
         `failed to verify cleanup of systemd scope '${scopeUnit}'`,
       );

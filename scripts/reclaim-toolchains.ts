@@ -13,7 +13,7 @@
 //                  rest via rip (falls back to rm, same as cache-clean's cargo step). A fresh
 //                  VS Code Remote reconnect just redownloads what it needs.
 //
-// No try/catch (house policy for this repo's scripts/*.ts — lint:no-try-catch): a throwing call
+// No try/catch (house policy for this repo's scripts/*.ts — lint:ts / .oxlintrc.json): a throwing call
 // (statSync, Bun.spawnSync) goes through neverthrow's fromThrowable(); `.catch(() => "")` below
 // on Bun.file().text() is Promise.prototype.catch, a different thing entirely — exempt.
 //
@@ -231,7 +231,9 @@ function runVscodeServerSection(
   for (const name of readdirSync(serversDir).sort()) {
     if (!name.startsWith("Stable-")) continue;
     const path = `${serversDir}/${name}`;
-    const statResult = fromThrowable(statSync)(path);
+    // statSync is overloaded (bigint/throwIfNoEntry variants); wrapping the CALL rather than the
+    // bare function keeps this single-argument overload's plain-Stats return through fromThrowable.
+    const statResult = fromThrowable(() => statSync(path))();
     if (statResult.isErr()) continue;
     const st = statResult.value;
     if (!st.isDirectory()) continue;

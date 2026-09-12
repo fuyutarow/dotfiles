@@ -862,7 +862,7 @@ describe("repo-search route contract", () => {
   });
 
   test("index leaves the watermark unchanged when ccc index itself fails", () => {
-    const { dir, head } = registerGitProject();
+    const { dir } = registerGitProject();
     run(dir, ["index"]); // establish a known-good watermark first
     const before = readFileSync(watermarkFilePath(dir), "utf8");
 
@@ -1259,7 +1259,7 @@ describe("repo-search route contract", () => {
     ["concept", "--limit", "0"],
     ["literal", "--timeout-ms", "NaN"],
     ["literal", "--context", "-1"],
-  ]) {
+  ] as const) {
     test(`${flag} rejects a non-positive or malformed integer`, () => {
       const result = run(registerProject(), [
         route,

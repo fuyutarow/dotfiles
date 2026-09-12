@@ -56,26 +56,26 @@ function nonEmptyString(flag: string): (value: string) => string {
 }
 
 function isDir(p: string): boolean {
-  return fromThrowable(statSync)(p)
+  return fromThrowable((path: string) => statSync(path))(p)
     .map((s) => s.isDirectory())
     .unwrapOr(false);
 }
 
 function symlinkTarget(p: string): string | null {
-  const lstat = fromThrowable(lstatSync)(p);
+  const lstat = fromThrowable((path: string) => lstatSync(path))(p);
   if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
   return readlinkSync(p);
 }
 
 /** True when p exists on disk as something OTHER than a symlink (a real file or directory). */
 function isRealPath(p: string): boolean {
-  return fromThrowable(lstatSync)(p)
+  return fromThrowable((path: string) => lstatSync(path))(p)
     .map((s) => !s.isSymbolicLink())
     .unwrapOr(false);
 }
 
 function listSkillNames(skillsDir: string): string[] {
-  return fromThrowable(readdirSync)(skillsDir)
+  return fromThrowable((dir: string) => readdirSync(dir))(skillsDir)
     .map((names) =>
       names
         .filter((n) => !n.startsWith("."))

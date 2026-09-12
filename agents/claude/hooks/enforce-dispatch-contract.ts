@@ -162,9 +162,87 @@ function hasLowEffortDeclaration(text: string): boolean {
   for (const line of text.split("\n")) {
     const m = /LOW-EFFORT\s*\(([^)]*)\)\s*:(.*)$/i.exec(line);
     if (m === null) continue;
-    if (m[1].trim() !== "" && m[2].trim() !== "") return true;
+    const stage = m[1];
+    const reason = m[2];
+    if (stage === undefined || reason === undefined) continue;
+    if (stage.trim() !== "" && reason.trim() !== "") return true;
   }
   return false;
+}
+
+type LexState = "code" | "s1" | "s2" | "tpl" | "line" | "block";
+
+// Handle one "code" character: detects the start of a string/template/comment.
+function blankCodeChar(
+  chars: string[],
+  i: number,
+  c: string | undefined,
+  n: string | undefined,
+): LexState {
+  if (c === "'") return "s1";
+  if (c === '"') return "s2";
+  if (c === "`") return "tpl";
+  if (c === "/" && n === "/") {
+    chars[i] = " ";
+    return "line";
+  }
+  if (c === "/" && n === "*") {
+    chars[i] = " ";
+    return "block";
+  }
+  return "code";
+}
+
+// Handle one character inside a quoted string/template literal. An escape blanks the
+// backslash and (unless it precedes a newline) the escaped character too — the caller
+// advances its index by the returned `skip`, matching the original inline `i++`.
+function blankQuotedChar(
+  chars: string[],
+  i: number,
+  c: string | undefined,
+  n: string | undefined,
+  st: "s1" | "s2" | "tpl",
+): { st: LexState; skip: number } {
+  const q = st === "s1" ? "'" : st === "s2" ? '"' : "`";
+  if (c === "\\") {
+    chars[i] = " ";
+    if (n !== undefined && n !== "\n") {
+      chars[i + 1] = " ";
+      return { st, skip: 1 };
+    }
+    return { st, skip: 0 };
+  }
+  if (c === q) return { st: "code", skip: 0 };
+  if (c !== "\n") chars[i] = " ";
+  return { st, skip: 0 };
+}
+
+// Handle one character inside a line comment.
+function blankLineChar(
+  chars: string[],
+  i: number,
+  c: string | undefined,
+): LexState {
+  if (c === "\n") return "code";
+  chars[i] = " ";
+  return "line";
+}
+
+// Handle one character inside a block comment. `*/` blanks both characters and closes it —
+// the caller advances its index by the returned `skip`, matching the original inline `i++`.
+function blankBlockChar(
+  chars: string[],
+  i: number,
+  c: string | undefined,
+  n: string | undefined,
+): { st: LexState; skip: number } {
+  if (c === "*" && n === "/") {
+    chars[i] = " ";
+    chars[i + 1] = " ";
+    return { st: "code", skip: 1 };
+  }
+  if (c !== "\n") chars[i] = " ";
+  return { st: "block", skip: 0 };
 }
 
 // Blank string/template/comment interiors, preserving length and newlines, so that
@@ -172,42 +250,23 @@ function hasLowEffortDeclaration(text: string): boolean {
 // spoof `agent(` / `model:`.
 function blank(s: string): string {
   const chars = [...s];
-  let st: "code" | "s1" | "s2" | "tpl" | "line" | "block" = "code";
+  let st: LexState = "code";
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i];
     const n = chars[i + 1];
     if (st === "code") {
-      if (c === "'") st = "s1";
-      else if (c === '"') st = "s2";
-      else if (c === "`") st = "tpl";
-      else if (c === "/" && n === "/") {
-        st = "line";
-        chars[i] = " ";
-      } else if (c === "/" && n === "*") {
-        st = "block";
-        chars[i] = " ";
-      }
+      st = blankCodeChar(chars, i, c, n);
     } else if (st === "s1" || st === "s2" || st === "tpl") {
-      const q = st === "s1" ? "'" : st === "s2" ? '"' : "`";
-      if (c === "\\") {
-        chars[i] = " ";
-        if (n !== undefined && n !== "\n") {
-          chars[i + 1] = " ";
-          i++;
-        }
-      } else if (c === q) st = "code";
-      else if (c !== "\n") chars[i] = " ";
+      const result = blankQuotedChar(chars, i, c, n, st);
+      st = result.st;
+      i += result.skip;
     } else if (st === "line") {
-      if (c === "\n") st = "code";
-      else chars[i] = " ";
+      st = blankLineChar(chars, i, c);
     } else {
       // block comment
-      if (c === "*" && n === "/") {
-        chars[i] = " ";
-        chars[i + 1] = " ";
-        i++;
-        st = "code";
-      } else if (c !== "\n") chars[i] = " ";
+      const result = blankBlockChar(chars, i, c, n);
+      st = result.st;
+      i += result.skip;
     }
   }
   return chars.join("");
@@ -216,8 +275,16 @@ function blank(s: string): string {
 type Span = { start: number; end: number };
 
 function trimSpan(src: string, start: number, end: number): Span {
-  while (start < end && /\s/.test(src[start])) start++;
-  while (end > start && /\s/.test(src[end - 1])) end--;
+  while (start < end) {
+    const c = src[start];
+    if (c === undefined || !/\s/.test(c)) break;
+    start++;
+  }
+  while (end > start) {
+    const c = src[end - 1];
+    if (c === undefined || !/\s/.test(c)) break;
+    end--;
+  }
   return { start, end };
 }
 
@@ -233,11 +300,12 @@ function directSegments(
   let depth = 0;
   for (let i = start; i < end; i++) {
     const c = src[i];
+    // An unmatched close bracket ends the scan immediately; check it before the main
+    // classification below so the check itself never nests inside that if/else-if chain.
+    if ((c === ")" || c === "}" || c === "]") && depth === 0) return null;
     if (c === "(" || c === "{" || c === "[") depth++;
-    else if (c === ")" || c === "}" || c === "]") {
-      if (depth === 0) return null;
-      depth--;
-    } else if (c === "," && depth === 0) {
+    else if (c === ")" || c === "}" || c === "]") depth--;
+    else if (c === "," && depth === 0) {
       spans.push(trimSpan(src, segmentStart, i));
       segmentStart = i + 1;
     }
@@ -257,6 +325,7 @@ function directWorkflowModel(
   if (args === null || args.length !== 2) return false;
 
   const options = args[1];
+  if (options === undefined) return false;
   if (blanked[options.start] !== "{") return false;
   let close = options.start + 1;
   let depth = 1;
@@ -286,6 +355,24 @@ function directWorkflowModel(
     sonnetLiteral = /^(['"])sonnet\1/.test(src.slice(valueStart));
   }
   return models === 1 && sonnetLiteral;
+}
+
+// Scan forward from `open` (just past "agent(") to find where this call's parens balance.
+// Returns the index right after the matching close paren, plus the depth the scan ended at
+// (0 means balanced) — mirrors the original inline scan exactly, including running to the end
+// of the string with depth still > 0 when the call is unbalanced.
+function scanBalancedParens(
+  blanked: string,
+  open: number,
+): { index: number; depth: number } {
+  let depth = 1;
+  let i = open;
+  while (i < blanked.length && depth > 0) {
+    if (blanked[i] === "(") depth++;
+    else if (blanked[i] === ")") depth--;
+    i++;
+  }
+  return { index: i, depth };
 }
 
 function checkWorkflowScript(src: string): void {
@@ -338,14 +425,9 @@ function checkWorkflowScript(src: string): void {
     calls++;
     const line = lineAt(src, m.index);
     const open = m.index + m[0].length;
-    let depth = 1;
-    let i = open;
-    while (i < blanked.length && depth > 0) {
-      if (blanked[i] === "(") depth++;
-      else if (blanked[i] === ")") depth--;
-      i++;
-    }
-    if (depth !== 0) {
+    const scan = scanBalancedParens(blanked, open);
+    const i = scan.index;
+    if (scan.depth !== 0) {
       // POISONED: the span has no end, so model/effort/resource cannot be located inside it.
       // Report the real defect once and suppress the three cascade findings it would produce.
       findings.push({
@@ -376,16 +458,11 @@ function checkWorkflowScript(src: string): void {
     // BY DESIGN: if the effort value is not a quoted literal — a variable, a computed
     // expression, a template interpolation — this loop does not evaluate it and the call
     // passes with no declaration. This gate targets careless literals, not obfuscation.
-    let low = false;
     const ere = /\beffort\s*:\s*/g;
-    let em: RegExpExecArray | null;
-    while ((em = ere.exec(span)) !== null) {
+    const low = [...span.matchAll(ere)].some((em) => {
       const vpos = open + em.index + em[0].length;
-      if (/^['"`]low['"`]/.test(src.slice(vpos, vpos + 5))) {
-        low = true;
-        break;
-      }
-    }
+      return /^['"`]low['"`]/.test(src.slice(vpos, vpos + 5));
+    });
     if (low && !hasLowEffortDeclaration(originalSpan)) {
       findings.push({
         line,
@@ -397,6 +474,17 @@ function checkWorkflowScript(src: string): void {
   }
 
   denyFindings(findings, calls);
+}
+
+// The resource class must be inspectable in the prompt. Returns the problem message for
+// `problems`, or null when there is nothing to report (no prompt, or a prompt with a valid
+// declaration).
+function promptResourceProblem(prompt: string | null): string | null {
+  if (prompt === null) {
+    return `no inspectable prompt, so the resource class cannot be verified; require ${RESOURCE_DECLARATION_HELP}`;
+  }
+  const resource = resourceDeclarationResult(prompt);
+  return resource.ok ? null : resource.reason;
 }
 
 function main(): void {
@@ -426,14 +514,8 @@ function main(): void {
         : typeof ti.message === "string"
           ? ti.message
           : null;
-    if (prompt === null) {
-      problems.push(
-        `no inspectable prompt, so the resource class cannot be verified; require ${RESOURCE_DECLARATION_HELP}`,
-      );
-    } else {
-      const resource = resourceDeclarationResult(prompt);
-      if (!resource.ok) problems.push(resource.reason);
-    }
+    const resourceProblem = promptResourceProblem(prompt);
+    if (resourceProblem !== null) problems.push(resourceProblem);
 
     // An ABSENT model is not a violation — it is injected below. Only an explicit one is judged.
     if (

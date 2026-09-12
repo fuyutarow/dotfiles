@@ -1125,16 +1125,22 @@ function toolWorkspacePaths(
   }
   const command = toolInput.command;
   if (typeof command === "string" && command.includes("*** Begin Patch")) {
-    for (const match of command.matchAll(
-      /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm,
-    )) {
-      const path = match[1]?.trim();
-      if (path !== undefined && path !== "") {
-        paths.push(safeWorkspacePath(path, workspaceRoot));
-      }
-    }
+    paths.push(...patchFilePaths(command, workspaceRoot));
   }
   return [...new Set(paths)].sort();
+}
+
+/** Paths touched by an apply_patch-style "*** Begin Patch" command body. */
+function patchFilePaths(command: string, workspaceRoot: string): string[] {
+  const paths: string[] = [];
+  for (const match of command.matchAll(
+    /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm,
+  )) {
+    const path = match[1]?.trim();
+    if (path === undefined || path === "") continue;
+    paths.push(safeWorkspacePath(path, workspaceRoot));
+  }
+  return paths;
 }
 
 function providerEventType(event: string): string {
@@ -1150,6 +1156,18 @@ function providerEventType(event: string): string {
     SubagentStop: "subagent.stopped",
   };
   return mapping[event] ?? "provider.event";
+}
+
+/** Sets event.tool_exit_code from a PostToolUse tool_response, when present and numeric. */
+function recordToolExitCode(
+  event: Record<string, unknown>,
+  toolResponse: unknown,
+): void {
+  if (!isRecord(toolResponse)) return;
+  const exitCode = toolResponse.exit_code ?? toolResponse.exitCode;
+  if (typeof exitCode === "number" && Number.isSafeInteger(exitCode)) {
+    event.tool_exit_code = exitCode;
+  }
 }
 
 function hookEvent(
@@ -1207,13 +1225,7 @@ function hookEvent(
     if (workspacePaths.length > 0) event.workspace_paths = workspacePaths;
     if (providerEvent === "PostToolUse") {
       event.tool_response_sha256 = sha256Value(input.tool_response ?? null);
-      if (isRecord(input.tool_response)) {
-        const exitCode =
-          input.tool_response.exit_code ?? input.tool_response.exitCode;
-        if (typeof exitCode === "number" && Number.isSafeInteger(exitCode)) {
-          event.tool_exit_code = exitCode;
-        }
-      }
+      recordToolExitCode(event, input.tool_response);
     } else {
       event.tool_error_sha256 = sha256Value(input.error ?? null);
     }

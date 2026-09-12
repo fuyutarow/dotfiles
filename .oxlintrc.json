@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": [
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    }
+  ],
+  "ignorePatterns": [
+    "node_modules",
+    "agents/skills"
+  ],
+  "rules": {
+    "max-depth": [
+      "warn",
+      2
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "scripts/*.ts"
+      ],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "SwitchStatement",
+            "message": "switch is banned in scripts/*.ts: use ts-pattern's match(..).exhaustive()"
+          },
+          {
+            "selector": "ConditionalExpression ConditionalExpression",
+            "message": "nested ternaries are banned in scripts/*.ts: one level max, otherwise ts-pattern's match()"
+          },
+          {
+            "selector": "TryStatement:has(> CatchClause)",
+            "message": "try/catch is banned in scripts/*.ts: return a neverthrow Result (fromThrowable / fromAsyncThrowable); try/finally alone is fine"
+          }
+        ]
+      }
+    }
+  ]
+}

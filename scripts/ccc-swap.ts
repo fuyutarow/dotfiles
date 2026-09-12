@@ -55,7 +55,7 @@
 // invalid flag input, ccc missing, malformed global_settings.yml, or a live index changed during
 // build — that last one should never happen and is a bug).
 
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import {
   copyFile,
   mkdir,
@@ -69,6 +69,7 @@ import { join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import { match } from "ts-pattern";
 
 // ---------------------------------------------------------------------------------------------
 // Constants
@@ -167,6 +168,11 @@ export function discoverProjects(
   const isPruned = (dir: string): boolean =>
     excludeAbs.some((ex) => dir === ex || dir.startsWith(`${ex}/`));
 
+  // Records `dir` when `full` (its `.cocoindex_code`) carries ccc's own project marker.
+  const recordIfProjectRoot = (dir: string, full: string): void => {
+    if (existsSync(join(full, PROJECT_SETTINGS_FILE))) found.push(dir);
+  };
+
   const walk = (dir: string): void => {
     const entriesResult = fromThrowable(() =>
       readdirSync(dir, { withFileTypes: true }),
@@ -176,7 +182,7 @@ export function discoverProjects(
       if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
       const full = join(dir, entry.name);
       if (entry.name === SETTINGS_DIR_NAME) {
-        if (existsSync(join(full, PROJECT_SETTINGS_FILE))) found.push(dir);
+        recordIfProjectRoot(dir, full);
         continue;
       }
       if (excludeNames.has(entry.name) || isPruned(full)) continue;
@@ -187,6 +193,24 @@ export function discoverProjects(
   const root = resolve(searchRoot);
   if (!isPruned(root)) walk(root);
   return found.sort();
+}
+
+/** One `readdirSync` entry's contribution to {@link dirSizeBytes}: bytes to add, dirs pushed onto `stack`. */
+function accumulateDirEntry(
+  current: string,
+  entry: Dirent,
+  stack: string[],
+): number {
+  if (entry.isSymbolicLink()) return 0;
+  const full = join(current, entry.name);
+  if (entry.isDirectory()) {
+    stack.push(full);
+    return 0;
+  }
+  if (!entry.isFile()) return 0;
+  // vanished mid-walk
+  const sizeResult = fromThrowable(() => statSync(full).size)();
+  return sizeResult.isOk() ? sizeResult.value : 0;
 }
 
 export function dirSizeBytes(dir: string): number {
@@ -200,15 +224,7 @@ export function dirSizeBytes(dir: string): number {
     )();
     if (entriesResult.isErr()) continue;
     for (const entry of entriesResult.value) {
-      if (entry.isSymbolicLink()) continue;
-      const full = join(current, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.isFile()) {
-        // vanished mid-walk
-        const sizeResult = fromThrowable(() => statSync(full).size)();
-        if (sizeResult.isOk()) total += sizeResult.value;
-      }
+      total += accumulateDirEntry(current, entry, stack);
     }
   }
   return total;
@@ -478,7 +494,9 @@ export async function runCcc(
 ): Promise<CccRunResult> {
   const signal = AbortSignal.timeout(opts.timeoutMs);
   const proc = Bun.spawn([cccBin, ...args], {
-    cwd: opts.cwd,
+    // exactOptionalPropertyTypes: omit the key entirely rather than pass an explicit `cwd:
+    // undefined` — SpawnOptions declares `cwd?: string`, not `cwd?: string | undefined`.
+    ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
     env: opts.env,
     stdout: "pipe",
     stderr: "pipe",
@@ -845,13 +863,20 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   const problems: string[] = [];
   for (const c of checks) {
     if (c.ready) continue;
-    const reason = !existsSync(c.shadowDb)
-      ? "no shadow index (missing)"
-      : (c.rows ?? 0) === 0
-        ? "shadow index is empty (0 rows)"
-        : !c.hasSettings
-          ? "shadow index has no settings.yml copy"
-          : "shadow index dimension unreadable";
+    const reason = match(c)
+      .when(
+        (x) => !existsSync(x.shadowDb),
+        () => "no shadow index (missing)",
+      )
+      .when(
+        (x) => (x.rows ?? 0) === 0,
+        () => "shadow index is empty (0 rows)",
+      )
+      .with(
+        { hasSettings: false },
+        () => "shadow index has no settings.yml copy",
+      )
+      .otherwise(() => "shadow index dimension unreadable");
     problems.push(`${c.root}: ${reason}`);
   }
   const dims = new Set(checks.filter((c) => c.dim !== null).map((c) => c.dim));
@@ -1179,18 +1204,23 @@ const SWAP_FLAGS = {
   generation: { type: nonEmptyString("--generation") },
   cccBin: { type: nonEmptyString("--ccc-bin") },
   timeoutMs: { type: Number, default: DEFAULT_TIMEOUT_MS },
-  exclude: { type: [nonEmptyString("--exclude")], default: () => [] },
+  // `as const` pins this to the readonly one-tuple cleye's Flags type requires for a
+  // multi-value flag; a bare array literal infers as a general array and fails assignability.
+  exclude: { type: [nonEmptyString("--exclude")] as const, default: () => [] },
 };
 
 type SwapFlags = {
-  shadowDir?: string;
-  home?: string;
-  model?: string;
+  // cleye's parsed flags carry these keys unconditionally, valued `undefined` when the flag
+  // was not passed — a real, distinct "not given" state the code below relies on (`??`,
+  // truthiness checks), so `| undefined` is written explicitly rather than left implicit.
+  shadowDir?: string | undefined;
+  home?: string | undefined;
+  model?: string | undefined;
   force: boolean;
   yes: boolean;
   keep: number;
-  generation?: string;
-  cccBin?: string;
+  generation?: string | undefined;
+  cccBin?: string | undefined;
   timeoutMs: number;
   exclude: string[];
 };
@@ -1228,26 +1258,22 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
     cccBin,
     timeoutMs,
   };
-  switch (verb) {
-    case "discover":
-      return cmdDiscover(ctx);
-    case "build":
+  return match(verb)
+    .with("discover", () => cmdDiscover(ctx))
+    .with("build", () => {
       if (!flags.model) throw new Error("build requires --model <hf-id>");
       return cmdBuild(ctx, {
         model: flags.model,
         force: flags.force,
         yes: flags.yes,
       });
-    case "cutover":
-      return cmdCutover(ctx, { yes: flags.yes });
-    case "rollback":
-      return cmdRollback(ctx, {
-        yes: flags.yes,
-        generation: flags.generation,
-      });
-    case "gc":
-      return cmdGc(ctx, { yes: flags.yes, keep });
-  }
+    })
+    .with("cutover", () => cmdCutover(ctx, { yes: flags.yes }))
+    .with("rollback", () =>
+      cmdRollback(ctx, { yes: flags.yes, generation: flags.generation }),
+    )
+    .with("gc", () => cmdGc(ctx, { yes: flags.yes, keep }))
+    .exhaustive();
 }
 
 async function main(): Promise<void> {

@@ -41,6 +41,86 @@ const LOOKUP_RETRY_DELAY_MS = 500;
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
 
+type Entry = { name?: string; at: number };
+
+// Outcome of one `attemptLookup` call: `done: true` means agentName should return `name`
+// right away (found, or gave up after exhausting retries); `done: false` means try again.
+// `name` sits on the `done: true` branch as a required (non-optional) field so returning an
+// explicit `undefined` here never trips exactOptionalPropertyTypes the way an optional `name?`
+// slot would.
+type LookupOutcome = { done: true; name: string | undefined } | { done: false };
+
+function buildEntryMap(
+  list: Array<{ sessionId?: string; name?: string }>,
+  now: number,
+): Record<string, Entry> {
+  const next: Record<string, Entry> = {};
+  for (const a of list) {
+    if (!a.sessionId) continue;
+    // exactOptionalPropertyTypes: omit `name` entirely when absent rather than
+    // assigning an explicit `undefined` into the optional slot (JSON.stringify would
+    // drop it either way, so this changes nothing on disk). Key order matches the
+    // pre-refactor literal (`{ name: a.name, at: now }`) so entries that carry a name
+    // still serialize byte-identically to what this hook wrote before the refactor.
+    next[a.sessionId] =
+      a.name !== undefined ? { name: a.name, at: now } : { at: now };
+  }
+  return next;
+}
+
+function persistFoundCache(next: Record<string, Entry>): void {
+  try {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+  } catch {
+    // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
+  }
+}
+
+// One retry attempt of the `claude agents --json` lookup, pulled out of agentName's loop so
+// that loop doesn't add a second layer of nesting on top of this function's own try/catch.
+// Any sleep this attempt needs happens in here, before returning, so the delay lands at the
+// exact point it did when this was still inline in the loop body.
+async function attemptLookup(
+  sid: string,
+  attempt: number,
+): Promise<LookupOutcome> {
+  try {
+    const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: 3000,
+    });
+    const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
+    const now = Date.now();
+    const next = buildEntryMap(list, now);
+    if (sid in next) {
+      persistFoundCache(next);
+      return { done: true, name: next[sid]?.name };
+    }
+    // Not in the list yet: retry rather than accept a possibly-racy miss, since this hook
+    // gets no next render to fall back on.
+    if (attempt < LOOKUP_RETRIES) {
+      await Bun.sleep(LOOKUP_RETRY_DELAY_MS);
+      return { done: false };
+    }
+    next[sid] = { at: now }; // exhausted retries -> cache the miss, short TTL, done above
+    try {
+      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+      writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+    } catch {
+      // cache write failed -> nothing to persist, we're returning undefined anyway
+    }
+    return { done: false };
+  } catch {
+    if (attempt === LOOKUP_RETRIES) {
+      return { done: true, name: undefined }; // `claude` missing/slow/errored
+    }
+    await Bun.sleep(LOOKUP_RETRY_DELAY_MS);
+    return { done: false };
+  }
+}
+
 // DELIBERATELY DOES NOT READ THE CACHE — only writes it. The cache is keyed by session id,
 // but a session's NAME is not stable under that key: restarting with `claude -c` keeps the
 // session id and mints a fresh suffix (firedancer-72 -> firedancer-dd, observed 2026-08-30).
@@ -52,48 +132,35 @@ const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
 // start, so paying the full ~0.5-0.75s `claude agents --json` for a correct answer is trivially
 // the right trade; the cache exists to keep the STATUSLINE cheap, not this.
 async function agentName(sid: string): Promise<string | undefined> {
-  type Entry = { name?: string; at: number };
   for (let attempt = 1; attempt <= LOOKUP_RETRIES; attempt++) {
-    try {
-      const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: 3000,
-      });
-      const list: Array<{ sessionId?: string; name?: string }> =
-        JSON.parse(out);
-      const now = Date.now();
-      const next: Record<string, Entry> = {};
-      for (const a of list)
-        if (a.sessionId) next[a.sessionId] = { name: a.name, at: now };
-      if (sid in next) {
-        try {
-          mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-          writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
-        } catch {
-          // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
-        }
-        return next[sid]?.name;
-      }
-      // Not in the list yet: retry rather than accept a possibly-racy miss, since this hook
-      // gets no next render to fall back on.
-      if (attempt < LOOKUP_RETRIES) {
-        await Bun.sleep(LOOKUP_RETRY_DELAY_MS);
-        continue;
-      }
-      next[sid] = { at: now }; // exhausted retries -> cache the miss, short TTL, done above
-      try {
-        mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-        writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
-      } catch {
-        // cache write failed -> nothing to persist, we're returning undefined anyway
-      }
-    } catch {
-      if (attempt === LOOKUP_RETRIES) return undefined; // `claude` missing/slow/errored
-      await Bun.sleep(LOOKUP_RETRY_DELAY_MS);
-    }
+    const result = await attemptLookup(sid, attempt);
+    if (result.done) return result.name;
   }
   return undefined;
+}
+
+// Bonus, not required: statusline-command.ts re-reports $fullname on every render anyway
+// (the same belt-and-suspenders reasoning as the tab rename above — see its own header
+// note), so a failure here just means the sidebar's full name fills in a render later
+// instead of immediately.
+function reportPaneMetadata(paneId: string, name: string): void {
+  try {
+    execFileSync(
+      HERDR_BIN,
+      [
+        "pane",
+        "report-metadata",
+        "--source",
+        "dotfiles:herdr-tab-name",
+        paneId,
+        "--token",
+        `fullname=${name}`,
+      ],
+      { stdio: ["ignore", "ignore", "ignore"], timeout: 3000 },
+    );
+  } catch {
+    // metadata is a bonus for the sidebar label -> the tab rename above already landed
+  }
 }
 
 try {
@@ -117,30 +184,8 @@ try {
     timeout: 3000,
   });
 
-  // Bonus, not required: statusline-command.ts re-reports $fullname on every render anyway
-  // (the same belt-and-suspenders reasoning as the tab rename above — see its own header
-  // note), so a failure here just means the sidebar's full name fills in a render later
-  // instead of immediately.
   const paneId = process.env.HERDR_PANE_ID;
-  if (paneId) {
-    try {
-      execFileSync(
-        HERDR_BIN,
-        [
-          "pane",
-          "report-metadata",
-          "--source",
-          "dotfiles:herdr-tab-name",
-          paneId,
-          "--token",
-          `fullname=${name}`,
-        ],
-        { stdio: ["ignore", "ignore", "ignore"], timeout: 3000 },
-      );
-    } catch {
-      // metadata is a bonus for the sidebar label -> the tab rename above already landed
-    }
-  }
+  if (paneId) reportPaneMetadata(paneId, name);
 } catch {
   // cosmetic hook -> never fail a session start over this
 }

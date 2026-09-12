@@ -222,7 +222,10 @@ export function checkTrace(input: unknown): TraceResult {
     lineageNames.map((name) => [name, authorityRoot[name]]),
   ) as Record<(typeof lineageNames)[number], unknown>;
   const authorityRecord = lineageNames.every((name) => record(lineage[name]));
-  const link = (child: string, parent: string): boolean => {
+  const link = (
+    child: (typeof lineageNames)[number],
+    parent: (typeof lineageNames)[number],
+  ): boolean => {
     const c = lineage[child] as R;
     const p = lineage[parent] as R;
     return (
@@ -387,6 +390,7 @@ export function checkTrace(input: unknown): TraceResult {
       !nonempty(raw.kind) ||
       !nonempty(raw.actorInstanceId) ||
       !nonempty(raw.grantId) ||
+      !nonempty(raw.at) ||
       time(raw.at) === undefined ||
       ids.has(raw.id)
     ) {
@@ -428,25 +432,33 @@ export function checkTrace(input: unknown): TraceResult {
         event.id,
       );
   }
-  for (let i = 1; i < events.length; i += 1)
-    if (time(events[i - 1].at)! >= time(events[i].at)!)
+  for (let i = 1; i < events.length; i += 1) {
+    const previous = events[i - 1];
+    const current = events[i];
+    if (
+      previous !== undefined &&
+      current !== undefined &&
+      time(previous.at)! >= time(current.at)!
+    )
       add(
         findings,
         "TRACE_INVALID",
         "event times must strictly increase",
-        events[i].id,
+        current.id,
       );
+  }
   const byId = new Map(events.map((event) => [event.id, event]));
   const mandates = events.filter((event) => event.kind === "MANDATE");
+  const firstMandate = mandates.length === 1 ? mandates[0] : undefined;
   const mandate =
-    mandates.length === 1 &&
-    mandates[0].mandateId === lease.mandateId &&
-    grants.get(mandates[0].grantId)?.role === "programme-supervisor" &&
+    firstMandate !== undefined &&
+    firstMandate.mandateId === lease.mandateId &&
+    grants.get(firstMandate.grantId)?.role === "programme-supervisor" &&
     start !== undefined &&
     due !== undefined &&
-    time(mandates[0].at)! >= start &&
-    time(mandates[0].at)! <= due
-      ? mandates[0]
+    time(firstMandate.at)! >= start &&
+    time(firstMandate.at)! <= due
+      ? firstMandate
       : undefined;
   if (mandate === undefined)
     add(
@@ -731,115 +743,119 @@ export function checkTrace(input: unknown): TraceResult {
   const validReceipts = new Map<string, E>();
   const scientificReceipts = new Map<string, E>();
   const blockers: E[] = [];
-  for (const event of events)
-    if (event.kind === "RECEIPT" || event.kind === "EXACT_BLOCKER") {
-      const intent = nonempty(event.intentId)
-        ? byId.get(event.intentId)
-        : undefined;
-      const joined =
-        grants.get(event.grantId)?.role === "executor" &&
-        intent !== undefined &&
-        validIntentIds.has(intent.id) &&
-        time(event.at)! > time(intent.at)! &&
-        event.intentSha256 === intent.artifactSha256;
-      if (!joined) {
-        add(
-          findings,
-          event.kind === "EXACT_BLOCKER"
-            ? "EXACT_BLOCKER_INVALID"
-            : "RECEIPT_WITHOUT_INTENT",
-          "terminal lacks exact valid intent join",
-          event.id,
-        );
-        if (
-          intent !== undefined &&
-          nonempty(event.intentSha256) &&
-          event.intentSha256 !== intent.artifactSha256
-        )
-          digestMismatch(event, "terminal intent digest mismatch");
-        continue;
-      }
-      const count = (terminalCounts.get(intent.id) ?? 0) + 1;
-      terminalCounts.set(intent.id, count);
-      if (count > 1)
-        add(
-          findings,
-          "DUPLICATE_TERMINAL",
-          "intent has more than one terminal",
-          event.id,
-        );
-      if (!evidence(event.evidence))
-        add(
-          findings,
-          "TRANSIENT_SCIENTIFIC_EVIDENCE",
-          "scientific evidence is invalid",
-          event.id,
-        );
-      if (event.kind === "RECEIPT") {
-        const spec = nonempty(intent.executableSpecificationId)
-          ? byId.get(intent.executableSpecificationId)
-          : undefined;
-        const measurementJoined =
-          spec?.kind === "EXECUTABLE_SPEC" &&
-          event.measurementContractSha256 === spec.measurementContractSha256 &&
-          ["PASS", "FAIL", "UNKNOWN"].includes(
-            String(event.measurementValidity),
-          );
-        if (!measurementJoined)
-          add(
-            findings,
-            "MEASUREMENT_CONTRACT_MISMATCH",
-            "receipt must exact-join its executable measurement contract",
-            event.id,
-          );
-        if (!evidence(event.measurementValidityEvidence))
-          add(
-            findings,
-            "MEASUREMENT_VALIDITY_EVIDENCE_INVALID",
-            "receipt needs durable measurement validity evidence separate from observation evidence",
-            event.id,
-          );
-        if (
-          event.terminalClass !== lease.terminalTarget ||
-          lease.terminalTarget === "EXACT_BLOCKER"
-        )
-          add(
-            findings,
-            "TERMINAL_TARGET_MISMATCH",
-            "receipt terminal class differs from lease target",
-            event.id,
-          );
-        else if (sha(event.artifactSha256) && measurementJoined) {
-          validReceipts.set(event.id, event);
-          terminalsByIntent.set(intent.id, [event]);
-          if (
-            event.measurementValidity === "PASS" &&
-            evidence(event.evidence) &&
-            evidence(event.measurementValidityEvidence)
-          )
-            scientificReceipts.set(event.id, event);
-        }
-      } else {
-        blockers.push(event);
-        if (
-          input.status !== "TERMINATED" ||
-          lease.terminalTarget !== "EXACT_BLOCKER" ||
-          !fields(event, [
-            "failedPrerequisite",
-            "externalAuthorityOrEvent",
-            "releaseCondition",
-          ]) ||
-          !evidence(event.evidence)
-        )
-          add(
-            findings,
-            "EXACT_BLOCKER_INVALID",
-            "blocker terminal is invalid",
-            event.id,
-          );
-        else terminalsByIntent.set(intent.id, [event]);
-      }
+  const handleReceipt = (event: E, intent: E): void => {
+    const spec = nonempty(intent.executableSpecificationId)
+      ? byId.get(intent.executableSpecificationId)
+      : undefined;
+    const measurementJoined =
+      spec?.kind === "EXECUTABLE_SPEC" &&
+      event.measurementContractSha256 === spec.measurementContractSha256 &&
+      ["PASS", "FAIL", "UNKNOWN"].includes(String(event.measurementValidity));
+    if (!measurementJoined)
+      add(
+        findings,
+        "MEASUREMENT_CONTRACT_MISMATCH",
+        "receipt must exact-join its executable measurement contract",
+        event.id,
+      );
+    if (!evidence(event.measurementValidityEvidence))
+      add(
+        findings,
+        "MEASUREMENT_VALIDITY_EVIDENCE_INVALID",
+        "receipt needs durable measurement validity evidence separate from observation evidence",
+        event.id,
+      );
+    if (
+      event.terminalClass !== lease.terminalTarget ||
+      lease.terminalTarget === "EXACT_BLOCKER"
+    ) {
+      add(
+        findings,
+        "TERMINAL_TARGET_MISMATCH",
+        "receipt terminal class differs from lease target",
+        event.id,
+      );
+      return;
     }
+    if (!(sha(event.artifactSha256) && measurementJoined)) return;
+    validReceipts.set(event.id, event);
+    terminalsByIntent.set(intent.id, [event]);
+    if (
+      event.measurementValidity === "PASS" &&
+      evidence(event.evidence) &&
+      evidence(event.measurementValidityEvidence)
+    )
+      scientificReceipts.set(event.id, event);
+  };
+  const handleBlocker = (event: E, intent: E): void => {
+    blockers.push(event);
+    if (
+      input.status !== "TERMINATED" ||
+      lease.terminalTarget !== "EXACT_BLOCKER" ||
+      !fields(event, [
+        "failedPrerequisite",
+        "externalAuthorityOrEvent",
+        "releaseCondition",
+      ]) ||
+      !evidence(event.evidence)
+    )
+      add(
+        findings,
+        "EXACT_BLOCKER_INVALID",
+        "blocker terminal is invalid",
+        event.id,
+      );
+    else terminalsByIntent.set(intent.id, [event]);
+  };
+  const handleTerminalEvent = (event: E): void => {
+    const intent = nonempty(event.intentId)
+      ? byId.get(event.intentId)
+      : undefined;
+    const joined =
+      grants.get(event.grantId)?.role === "executor" &&
+      intent !== undefined &&
+      validIntentIds.has(intent.id) &&
+      time(event.at)! > time(intent.at)! &&
+      event.intentSha256 === intent.artifactSha256;
+    if (!joined) {
+      add(
+        findings,
+        event.kind === "EXACT_BLOCKER"
+          ? "EXACT_BLOCKER_INVALID"
+          : "RECEIPT_WITHOUT_INTENT",
+        "terminal lacks exact valid intent join",
+        event.id,
+      );
+      if (
+        intent !== undefined &&
+        nonempty(event.intentSha256) &&
+        event.intentSha256 !== intent.artifactSha256
+      )
+        digestMismatch(event, "terminal intent digest mismatch");
+      return;
+    }
+    const count = (terminalCounts.get(intent.id) ?? 0) + 1;
+    terminalCounts.set(intent.id, count);
+    if (count > 1)
+      add(
+        findings,
+        "DUPLICATE_TERMINAL",
+        "intent has more than one terminal",
+        event.id,
+      );
+    if (!evidence(event.evidence))
+      add(
+        findings,
+        "TRANSIENT_SCIENTIFIC_EVIDENCE",
+        "scientific evidence is invalid",
+        event.id,
+      );
+    if (event.kind === "RECEIPT") handleReceipt(event, intent);
+    else handleBlocker(event, intent);
+  };
+  for (const event of events)
+    if (event.kind === "RECEIPT" || event.kind === "EXACT_BLOCKER")
+      handleTerminalEvent(event);
   const validBlocker = blockers.some(
     (event) =>
       !findings.some(
@@ -866,9 +882,10 @@ export function checkTrace(input: unknown): TraceResult {
   const learning = events.filter((event) => event.kind === "LEARNING");
   const validLearning = new Map<string, E>();
   const usedReceipts = new Set<string>();
-  for (const item of learning) {
-    const receipt = nonempty(item.receiptId)
-      ? validReceipts.get(item.receiptId)
+  const processLearningItem = (item: E): void => {
+    const receiptId = item.receiptId;
+    const receipt = nonempty(receiptId)
+      ? validReceipts.get(receiptId)
       : undefined;
     const scientific =
       receipt !== undefined && scientificReceipts.has(receipt.id);
@@ -881,9 +898,10 @@ export function checkTrace(input: unknown): TraceResult {
       );
     const good =
       receipt !== undefined &&
+      nonempty(receiptId) &&
       time(item.at)! > time(receipt.at)! &&
       item.receiptSha256 === receipt.artifactSha256 &&
-      !usedReceipts.has(item.receiptId) &&
+      !usedReceipts.has(receiptId) &&
       sha(item.artifactSha256) &&
       ["SCIENTIFIC", "INSTRUMENTATION_REPAIR"].includes(
         String(item.learningClass),
@@ -909,16 +927,15 @@ export function checkTrace(input: unknown): TraceResult {
         item.receiptSha256 !== receipt.artifactSha256
       )
         digestMismatch(item, "learning receipt digest mismatch");
-    } else {
-      usedReceipts.add(item.receiptId);
+    } else if (nonempty(receiptId)) {
+      usedReceipts.add(receiptId);
       validLearning.set(item.id, item);
     }
-  }
+  };
+  for (const item of learning) processLearningItem(item);
   const committed = new Map<string, E>();
   const scientificCommits = new Map<string, E>();
-  for (const commit of events.filter(
-    (event) => event.kind === "DIRECTOR_COMMIT",
-  )) {
+  const processDirectorCommit = (commit: E): void => {
     const item = nonempty(commit.learningId)
       ? validLearning.get(commit.learningId)
       : undefined;
@@ -960,7 +977,11 @@ export function checkTrace(input: unknown): TraceResult {
       if (item.learningClass === "SCIENTIFIC" && commit.decision === "COMMIT")
         scientificCommits.set(item.id, commit);
     }
-  }
+  };
+  for (const commit of events.filter(
+    (event) => event.kind === "DIRECTOR_COMMIT",
+  ))
+    processDirectorCommit(commit);
   for (const item of validLearning.values())
     if (!committed.has(item.id))
       add(
@@ -970,43 +991,42 @@ export function checkTrace(input: unknown): TraceResult {
         item.id,
       );
   const unreleasedEscalatedSpecs = new Set<string>();
-  for (const spec of specs)
-    if (spec.runScale === "ESCALATED_CONFIRMATION") {
-      const receipt = [...scientificReceipts.values()].find(
+  for (const spec of specs) {
+    if (spec.runScale !== "ESCALATED_CONFIRMATION") continue;
+    const receipt = [...scientificReceipts.values()].find(
+      (item) =>
+        item.artifactSha256 === spec.priorPassReceiptSha256 &&
+        time(item.at)! < time(spec.at)!,
+    );
+    const release = nonempty(spec.scaleReleaseCommitId)
+      ? events.find((event) => event.id === spec.scaleReleaseCommitId)
+      : undefined;
+    const learned =
+      receipt !== undefined &&
+      [...validLearning.values()].some(
         (item) =>
-          item.artifactSha256 === spec.priorPassReceiptSha256 &&
-          time(item.at)! < time(spec.at)!,
+          item.learningClass === "SCIENTIFIC" && item.receiptId === receipt.id,
       );
-      const release = nonempty(spec.scaleReleaseCommitId)
-        ? events.find((event) => event.id === spec.scaleReleaseCommitId)
-        : undefined;
-      const learned =
-        receipt !== undefined &&
-        [...validLearning.values()].some(
-          (item) =>
-            item.learningClass === "SCIENTIFIC" &&
-            item.receiptId === receipt.id,
-        );
-      const committedReceipt =
-        release?.kind === "DIRECTOR_COMMIT" &&
-        sha(release.artifactSha256) &&
-        release.decision === "COMMIT" &&
-        release.scaleRelease === "ESCALATED_CONFIRMATION" &&
-        release.artifactSha256 === spec.scaleReleaseCommitSha256 &&
-        receipt !== undefined &&
-        release.receiptSha256 === receipt.artifactSha256 &&
-        time(release.at)! < time(spec.at)! &&
-        [...scientificCommits.values()].some((item) => item.id === release.id);
-      if (!learned || !committedReceipt) {
-        unreleasedEscalatedSpecs.add(spec.id);
-        add(
-          findings,
-          "SWEEP_WITHOUT_RELEASE",
-          "escalated confirmation needs an exact scientifically learned PASS receipt and released Director commit",
-          spec.id,
-        );
-      }
+    const committedReceipt =
+      release?.kind === "DIRECTOR_COMMIT" &&
+      sha(release.artifactSha256) &&
+      release.decision === "COMMIT" &&
+      release.scaleRelease === "ESCALATED_CONFIRMATION" &&
+      release.artifactSha256 === spec.scaleReleaseCommitSha256 &&
+      receipt !== undefined &&
+      release.receiptSha256 === receipt.artifactSha256 &&
+      time(release.at)! < time(spec.at)! &&
+      [...scientificCommits.values()].some((item) => item.id === release.id);
+    if (!learned || !committedReceipt) {
+      unreleasedEscalatedSpecs.add(spec.id);
+      add(
+        findings,
+        "SWEEP_WITHOUT_RELEASE",
+        "escalated confirmation needs an exact scientifically learned PASS receipt and released Director commit",
+        spec.id,
+      );
     }
+  }
   const unreleasedEscalatedIntents = new Set(
     validIntents
       .filter((intent) =>
@@ -1072,7 +1092,7 @@ export function checkTrace(input: unknown): TraceResult {
       (item) =>
         item.receiptId === receipt.id &&
         committed.get(item.id) !== undefined &&
-        time(committed.get(item.id)?.at)! < time(next?.at ?? item.at),
+        time(committed.get(item.id)?.at)! < time(next?.at ?? item.at)!,
     );
     if (next !== undefined && !complete)
       add(

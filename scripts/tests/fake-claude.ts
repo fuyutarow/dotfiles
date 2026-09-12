@@ -14,6 +14,10 @@
 //   FAKE_CLAUDE_FAIL_REMOVE - comma-separated server names for which `mcp remove` exits 1
 //                             (used to prove the caller ignores remove failures)
 
+// Script-scoped fixture, not a library: this makes it a module so its top-level names
+// (args, verb, name, csv, nameArg) don't collide with fake-codex.ts under tsgo.
+export {};
+
 const args = Bun.argv.slice(2);
 process.stdout.write(`CALL claude ${args.join(" ")}\n`);
 

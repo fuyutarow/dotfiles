@@ -232,6 +232,88 @@ function runOrAbort(bin: string, args: string[]): void {
   }
 }
 
+/** `mcp add` (or its dry-run announcement), shared by both the Claude and Codex call sites since
+ * each just builds an argv array and branches on --dry-run the same way. */
+function runOrPrintAdd(bin: string, args: string[], dryRun: boolean): void {
+  if (dryRun) print(`[dry-run] would run: ${bin} ${args.join(" ")}`);
+  else runOrAbort(bin, args);
+}
+
+/** codex's remove-then-add pair for one server; only called when a codex binary resolves. */
+function registerWithCodex(
+  codexBin: string,
+  plan: Plan,
+  dryRun: boolean,
+): void {
+  if (dryRun) {
+    print(
+      `[dry-run] would run: ${codexBin} mcp remove ${plan.name} (errors ignored)`,
+    );
+  } else {
+    runIgnoringFailure(codexBin, ["mcp", "remove", plan.name]);
+  }
+
+  if (plan.url !== "") {
+    const addArgs = ["mcp", "add", plan.name, "--url", plan.url];
+    runOrPrintAdd(codexBin, addArgs, dryRun);
+  } else {
+    const addArgs = ["mcp", "add", plan.name, "--", ...plan.execTokens];
+    runOrPrintAdd(codexBin, addArgs, dryRun);
+  }
+}
+
+/** One undeclared-but-live server's removal for MCP_PRUNE=1 — claude first, then codex when a
+ * codex binary resolves; both remain best-effort even under prune. */
+function pruneServer(
+  name: string,
+  claudeBin: string,
+  codexBin: string,
+  dryRun: boolean,
+): void {
+  if (dryRun) {
+    print(
+      `[dry-run] would run: ${claudeBin} mcp remove -s user ${name} (errors ignored)`,
+    );
+    if (which(codexBin)) {
+      print(
+        `[dry-run] would run: ${codexBin} mcp remove ${name} (errors ignored)`,
+      );
+    }
+    return;
+  }
+  runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
+  if (which(codexBin)) runIgnoringFailure(codexBin, ["mcp", "remove", name]);
+}
+
+/** The DRIFT REPORT's undeclared-name computation and printing (see main()'s comment above its
+ * call site for the semantics); split out purely to keep this out of main()'s own nesting. */
+function printDriftReport(
+  declared: string[],
+  liveNames: string[],
+  claudeBin: string,
+  codexBin: string,
+  dryRun: boolean,
+  prune: boolean,
+): void {
+  const undeclared = commOnlyInSecond(declared, liveNames);
+  if (undeclared.length === 0) return;
+  print("--- DRIFT: registered but NOT declared in .mcp.json ---");
+  for (const n of undeclared) print(`  ${n}`);
+  if (!prune) {
+    print(
+      "  (declare them in .mcp.json, or re-run with MCP_PRUNE=1 to uninstall them)",
+    );
+    print(
+      "  NOTE: .mcp.json is documented as the single source of truth; this list is the gap.",
+    );
+    return;
+  }
+  for (const name of undeclared) {
+    pruneServer(name, claudeBin, codexBin, dryRun);
+    print(`  pruned: ${name}`);
+  }
+}
+
 function main(): void {
   const parsed = cli(
     {
@@ -322,9 +404,7 @@ function main(): void {
         name,
         plan.url,
       ];
-      if (dryRun)
-        print(`[dry-run] would run: ${claudeBin} ${addArgs.join(" ")}`);
-      else runOrAbort(claudeBin, addArgs);
+      runOrPrintAdd(claudeBin, addArgs, dryRun);
     } else {
       const addArgs = [
         "mcp",
@@ -335,31 +415,11 @@ function main(): void {
         "--",
         ...plan.execTokens,
       ];
-      if (dryRun)
-        print(`[dry-run] would run: ${claudeBin} ${addArgs.join(" ")}`);
-      else runOrAbort(claudeBin, addArgs);
+      runOrPrintAdd(claudeBin, addArgs, dryRun);
     }
 
     if (which(codexBin)) {
-      if (dryRun) {
-        print(
-          `[dry-run] would run: ${codexBin} mcp remove ${name} (errors ignored)`,
-        );
-      } else {
-        runIgnoringFailure(codexBin, ["mcp", "remove", name]);
-      }
-
-      if (plan.url !== "") {
-        const addArgs = ["mcp", "add", name, "--url", plan.url];
-        if (dryRun)
-          print(`[dry-run] would run: ${codexBin} ${addArgs.join(" ")}`);
-        else runOrAbort(codexBin, addArgs);
-      } else {
-        const addArgs = ["mcp", "add", name, "--", ...plan.execTokens];
-        if (dryRun)
-          print(`[dry-run] would run: ${codexBin} ${addArgs.join(" ")}`);
-        else runOrAbort(codexBin, addArgs);
-      }
+      registerWithCodex(codexBin, plan, dryRun);
     }
 
     print(`registered: ${name} (${plan.display})`);
@@ -377,7 +437,7 @@ function main(): void {
     stdout: "pipe",
     stderr: "ignore",
   })
-    .map((proc) => proc.stdout.toString())
+    .map((proc) => proc.stdout?.toString() ?? "")
     .unwrapOr("");
   const liveNames = liveText
     .split("\n")
@@ -389,37 +449,7 @@ function main(): void {
     .filter((n): n is string => typeof n === "string")
     .sort();
 
-  const undeclared = commOnlyInSecond(declared, liveNames);
-  if (undeclared.length > 0) {
-    print("--- DRIFT: registered but NOT declared in .mcp.json ---");
-    for (const n of undeclared) print(`  ${n}`);
-    if (prune) {
-      for (const name of undeclared) {
-        if (dryRun) {
-          print(
-            `[dry-run] would run: ${claudeBin} mcp remove -s user ${name} (errors ignored)`,
-          );
-          if (which(codexBin)) {
-            print(
-              `[dry-run] would run: ${codexBin} mcp remove ${name} (errors ignored)`,
-            );
-          }
-        } else {
-          runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
-          if (which(codexBin))
-            runIgnoringFailure(codexBin, ["mcp", "remove", name]);
-        }
-        print(`  pruned: ${name}`);
-      }
-    } else {
-      print(
-        "  (declare them in .mcp.json, or re-run with MCP_PRUNE=1 to uninstall them)",
-      );
-      print(
-        "  NOTE: .mcp.json is documented as the single source of truth; this list is the gap.",
-      );
-    }
-  }
+  printDriftReport(declared, liveNames, claudeBin, codexBin, dryRun, prune);
 
   print(
     "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",

@@ -13,7 +13,7 @@
 // swallowed (mirrors the original's `|| true` — this script never fails because ONE tool's
 // cache-clean command failed).
 //
-// No try/catch (house policy for this repo's scripts/*.ts — lint:no-try-catch): every call that
+// No try/catch (house policy for this repo's scripts/*.ts — lint:ts / .oxlintrc.json): every call that
 // can throw (Bun.spawnSync, mkdtempSync, writeFileSync) goes through neverthrow's
 // fromThrowable(), and swallowing is done via .unwrapOr()/`if (result.isOk())`, not a catch
 // block. `main().catch(...)` below is Promise.prototype.catch, not this statement — exempt.
@@ -56,10 +56,15 @@ function nonEmptyString(flag: string): (value: string) => string {
 
 /** `df -h <home> | awk 'NR==2{print $4" free"}'` — read-only, safe against any existing path. */
 export function freeSpace(home: string, spawn = Bun.spawnSync): string {
-  const result = fromThrowable(spawn)(["df", "-h", home], {
-    stdout: "pipe",
-    stderr: "inherit", // original `df -h "$HOME" | awk ...` never redirects df's own stderr
-  });
+  // spawn is called INSIDE the thunk (not passed bare to fromThrowable) so Bun.spawnSync's
+  // generic return type resolves against these literal stdout/stderr options, not against
+  // whatever defaults fromThrowable's own generic inference would otherwise pick.
+  const result = fromThrowable(() =>
+    spawn(["df", "-h", home], {
+      stdout: "pipe",
+      stderr: "inherit", // original `df -h "$HOME" | awk ...` never redirects df's own stderr
+    }),
+  )();
   if (result.isErr()) return "";
   const out = result.value.stdout.toString();
   const rawLines = out.split("\n");
@@ -164,18 +169,25 @@ function runBunStep(dryRun: boolean): void {
   // dir, nothing to write/spawn/clean up). Inside it, writeFileSync failing still runs
   // cleanupTempDir(dir) unconditionally — mirroring the original's `finally { cleanupTempDir }`,
   // which ran even when the write above it threw.
-  fromThrowable(mkdtempSync)(join(tmpdir(), "cache-clean-bun-")).map((dir) => {
-    const wrote = fromThrowable(writeFileSync)(join(dir, "package.json"), "{}");
-    if (wrote.isOk()) {
-      // bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true` — no timeout there.
-      fromThrowable(Bun.spawnSync)(["bun", "pm", "cache", "rm"], {
-        cwd: dir,
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-    }
-    cleanupTempDir(dir);
-  });
+  // mkdtempSync is overloaded (encoding/buffer variants); wrapping the CALL rather than the bare
+  // function keeps this single-argument overload's plain-string return through fromThrowable.
+  fromThrowable(() => mkdtempSync(join(tmpdir(), "cache-clean-bun-")))().map(
+    (dir) => {
+      const wrote = fromThrowable(writeFileSync)(
+        join(dir, "package.json"),
+        "{}",
+      );
+      if (wrote.isOk()) {
+        // bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true` — no timeout there.
+        fromThrowable(Bun.spawnSync)(["bun", "pm", "cache", "rm"], {
+          cwd: dir,
+          stdout: "inherit",
+          stderr: "inherit",
+        });
+      }
+      cleanupTempDir(dir);
+    },
+  );
 }
 
 // uv: `uv cache clean/prune` blocks on the cache lock while ANY uv process runs (e.g. uvx-

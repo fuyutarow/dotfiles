@@ -554,9 +554,10 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("replay is dropped without multiplying propagation or scientific metrics", () => {
     const value = input();
-    const replay = structuredClone(
-      ((value.artifacts as R).deliveries as R[])[0],
-    );
+    const seededDelivery = ((value.artifacts as R).deliveries as R[])[0];
+    if (seededDelivery === undefined)
+      throw new Error("expected a seeded delivery");
+    const replay = structuredClone(seededDelivery);
     replay.id = "delivery-replay";
     ((value.artifacts as R).deliveries as R[]).push(replay);
     const result = checkLearningBus(value);
@@ -569,7 +570,9 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a replay cannot create a second local transfer commit", () => {
     const value = input();
-    const replay = structuredClone(((value.artifacts as R).commits as R[])[0]);
+    const seededCommit = ((value.artifacts as R).commits as R[])[0];
+    if (seededCommit === undefined) throw new Error("expected a seeded commit");
+    const replay = structuredClone(seededCommit);
     replay.id = "commit-replay";
     ((value.artifacts as R).commits as R[]).push(replay);
     expect(checkLearningBus(value)).toMatchObject({
@@ -579,7 +582,9 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a source commit publishes only one packet", () => {
     const value = input();
-    const replay = structuredClone(((value.artifacts as R).packets as R[])[0]);
+    const seededPacket = ((value.artifacts as R).packets as R[])[0];
+    if (seededPacket === undefined) throw new Error("expected a seeded packet");
+    const replay = structuredClone(seededPacket);
     replay.id = "packet-replay";
     ((value.artifacts as R).packets as R[]).push(replay);
     expect(checkLearningBus(value)).toMatchObject({
@@ -591,17 +596,20 @@ describe("cross-section-learning-bus/v1", () => {
     const value = input({ sourceCommitEventId: "missing" });
     expect(codes(value)).toContain("TRANSFER_WITHOUT_COMMIT");
     const mismatched = input();
-    const packetBody = ((mismatched.artifacts as R).packets as R[])[0]
-      .body as R;
+    const mismatchedPacket = ((mismatched.artifacts as R).packets as R[])[0];
+    if (mismatchedPacket === undefined)
+      throw new Error("expected a seeded packet");
+    const packetBody = mismatchedPacket.body as R;
     packetBody.sourceCommitSha256 = digest("f");
-    ((mismatched.artifacts as R).packets as R[])[0].sha256 =
-      bodySha256(packetBody)!;
+    mismatchedPacket.sha256 = bodySha256(packetBody)!;
     expect(codes(mismatched)).toContain("TRANSFER_WITHOUT_COMMIT");
   });
   test("packet receipt lineage rejects an unrelated extra digest", () => {
     const value = input();
     const artifacts = value.artifacts as R;
     const packetEnvelope = (artifacts.packets as R[])[0];
+    if (packetEnvelope === undefined)
+      throw new Error("expected a seeded packet");
     const packetBody = packetEnvelope.body as R;
     (packetBody.sourceReceiptDigests as string[]).push(digest("f"));
     packetEnvelope.sha256 = bodySha256(packetBody)!;
@@ -629,20 +637,26 @@ describe("cross-section-learning-bus/v1", () => {
   ])("forbidden dependency %s is classified", (code, kind) => {
     const value = input();
     const p = ((value.artifacts as R).packets as R[])[0];
+    if (p === undefined) throw new Error("expected a seeded packet");
     p.dependencies = [{ kind, id: "wait", sha256: digest("d") }];
     expect(codes(value)).toContain(code);
   });
   test("programme visibility and auto-enactment fail closed", () => {
     const visible = input();
-    const packetBody = ((visible.artifacts as R).packets as R[])[0].body as R;
+    const visiblePacket = ((visible.artifacts as R).packets as R[])[0];
+    if (visiblePacket === undefined)
+      throw new Error("expected a seeded packet");
+    const packetBody = visiblePacket.body as R;
     packetBody.programmeVisible = true;
-    ((visible.artifacts as R).packets as R[])[0].sha256 =
-      bodySha256(packetBody)!;
+    visiblePacket.sha256 = bodySha256(packetBody)!;
     expect(codes(visible)).toContain("RAW_METHOD_LEAK_TO_PROGRAMME");
     const mutation = input();
-    const body = ((mutation.artifacts as R).admissions as R[])[0].body as R;
+    const mutationAdmission = ((mutation.artifacts as R).admissions as R[])[0];
+    if (mutationAdmission === undefined)
+      throw new Error("expected a seeded admission");
+    const body = mutationAdmission.body as R;
     body.localStateMutation = true;
-    ((mutation.artifacts as R).admissions as R[])[0].sha256 = bodySha256(body)!;
+    mutationAdmission.sha256 = bodySha256(body)!;
     expect(codes(mutation)).toContain("TRANSFER_AUTO_ENACTED");
   });
   test("caller supplied scientific counters fail closed", () =>

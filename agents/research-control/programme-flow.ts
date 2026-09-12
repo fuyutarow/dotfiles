@@ -172,9 +172,81 @@ export type FlowResult = {
   };
 };
 
+function recordDependencyNotReady(
+  findings: FlowFinding[],
+  item: Job,
+  locator: string,
+): void {
+  if (
+    !record(item.wait) ||
+    item.wait.reason !== "DEPENDENCY_NOT_READY" ||
+    item.wait.locator !== locator
+  )
+    add(
+      findings,
+      "DEPENDENCY_NOT_READY",
+      "dependency is not complete",
+      item.id,
+      locator,
+    );
+}
+
+function evaluateWaitedJob(
+  findings: FlowFinding[],
+  item: Job,
+  wait: unknown,
+  capacity: number,
+  now: number,
+  ready: Job[],
+): void {
+  if (
+    !record(wait) ||
+    typeof wait.reason !== "string" ||
+    typeof wait.locator !== "string" ||
+    wait.locator.trim() === ""
+  ) {
+    add(
+      findings,
+      "FLOW_INVALID",
+      "wait requires reason and nonempty blocker locator",
+      item.id,
+    );
+    return;
+  }
+  const reason = wait.reason;
+  const forbiddenCode = forbidden.get(reason);
+  if (forbiddenCode !== undefined) {
+    add(findings, forbiddenCode, `forbidden wait ${reason}`, item.id);
+    if (item.readyAt <= now && capacity > 0)
+      add(
+        findings,
+        "READY_WORK_NOT_DISPATCHED",
+        "ready compatible work was blocked",
+        item.id,
+      );
+    return;
+  }
+  if (!waits.has(reason)) {
+    add(findings, "FLOW_INVALID", "unknown wait reason", item.id);
+    return;
+  }
+  if (
+    reason === "NO_COMPATIBLE_CAPACITY" &&
+    (wait.locator !== item.resource || capacity > 0)
+  ) {
+    add(
+      findings,
+      "READY_WORK_NOT_DISPATCHED",
+      "claimed no capacity despite matching free slot",
+      item.id,
+    );
+    ready.push(item);
+  }
+}
+
 export function checkProgrammeFlow(input: unknown): FlowResult {
   const findings: FlowFinding[] = [];
-  const zero = {
+  const zero: FlowResult["metrics"] = {
     candidateInventory: 0,
     builds: 0,
     searchReceipts: 0,
@@ -328,10 +400,10 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     traceMetrics.searchReceipts += checked.summary.receipts;
     traceMetrics.learningCommits += checked.summary.commits;
   }
+  const counts = record(input.counts) ? input.counts : {};
   if (
-    record(input.counts) &&
     ["candidateInventory", "builds", "searchReceipts", "learningCommits"].some(
-      (key) => key in input.counts,
+      (key) => key in counts,
     )
   )
     add(
@@ -341,7 +413,6 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     );
   if (traceMetrics.learningCommits > traceMetrics.searchReceipts)
     add(findings, "FLOW_INVALID", "derived commits exceed receipts");
-  const counts = record(input.counts) ? input.counts : {};
   const infrastructureChecks =
     finite(counts.infrastructureChecks) && counts.infrastructureChecks >= 0
       ? counts.infrastructureChecks
@@ -422,18 +493,7 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     );
     if (unresolvedDependency !== undefined) {
       const locator = `job:${unresolvedDependency}`;
-      if (
-        !record(item.wait) ||
-        item.wait.reason !== "DEPENDENCY_NOT_READY" ||
-        item.wait.locator !== locator
-      )
-        add(
-          findings,
-          "DEPENDENCY_NOT_READY",
-          "dependency is not complete",
-          item.id,
-          locator,
-        );
+      recordDependencyNotReady(findings, item, locator);
       continue;
     }
     if (
@@ -468,22 +528,19 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     }
     if (
       item.stage === "EXECUTION" &&
-      item.runScale === "ESCALATED_CONFIRMATION"
-    ) {
-      if (
-        typeof item.releaseReceiptDigest !== "string" ||
+      item.runScale === "ESCALATED_CONFIRMATION" &&
+      (typeof item.releaseReceiptDigest !== "string" ||
         item.releaseReceiptDigest === "" ||
         !releasedReceiptDigests.has(item.releaseReceiptDigest) ||
-        !releasedScientificReceipts.has(item.releaseReceiptDigest)
-      ) {
-        add(
-          findings,
-          "SWEEP_WITHOUT_RELEASE",
-          "escalated confirmation requires a released prior receipt digest",
-          item.id,
-        );
-        continue;
-      }
+        !releasedScientificReceipts.has(item.releaseReceiptDigest))
+    ) {
+      add(
+        findings,
+        "SWEEP_WITHOUT_RELEASE",
+        "escalated confirmation requires a released prior receipt digest",
+        item.id,
+      );
+      continue;
     }
     if (
       ambiguousSections.has(item.sectionId) ||
@@ -515,49 +572,7 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     const wait = item.wait;
     const capacity = free.get(item.resource) ?? 0;
     if (wait !== undefined) {
-      if (
-        !record(wait) ||
-        typeof wait.reason !== "string" ||
-        typeof wait.locator !== "string" ||
-        wait.locator.trim() === ""
-      ) {
-        add(
-          findings,
-          "FLOW_INVALID",
-          "wait requires reason and nonempty blocker locator",
-          item.id,
-        );
-        continue;
-      }
-      const reason = wait.reason;
-      const forbiddenCode = forbidden.get(reason);
-      if (forbiddenCode !== undefined) {
-        add(findings, forbiddenCode, `forbidden wait ${reason}`, item.id);
-        if (item.readyAt <= input.now && capacity > 0)
-          add(
-            findings,
-            "READY_WORK_NOT_DISPATCHED",
-            "ready compatible work was blocked",
-            item.id,
-          );
-        continue;
-      }
-      if (!waits.has(reason)) {
-        add(findings, "FLOW_INVALID", "unknown wait reason", item.id);
-        continue;
-      }
-      if (
-        reason === "NO_COMPATIBLE_CAPACITY" &&
-        (wait.locator !== item.resource || capacity > 0)
-      ) {
-        add(
-          findings,
-          "READY_WORK_NOT_DISPATCHED",
-          "claimed no capacity despite matching free slot",
-          item.id,
-        );
-        ready.push(item);
-      }
+      evaluateWaitedJob(findings, item, wait, capacity, input.now, ready);
       continue;
     }
     if (item.readyAt <= input.now && capacity > 0) ready.push(item);

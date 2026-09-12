@@ -1,94 +1,148 @@
 #!/usr/bin/env bun
-// Claude Code statusLine — two lines, bun/TypeScript. mac & WSL.
+// Claude Code statusLine — bun/TypeScript. mac & WSL.
 // Source of truth: ~/dotfiles/agents/claude/statusline-command.ts
 //   -> symlinked to ~/.claude/statusline-command.ts by scripts/link-dots.sh
 //   invoked as: bun ~/.claude/statusline-command.ts   (bun is the house Node runtime,
 //   present on both OSes via Brewfile). If bun is somehow absent the bar goes blank —
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
-//   line 1: PS1 mirror + account + session name   user@host:MM-DD HH:MM|cwd · <email> · <name>
-//           The left half mirrors .zshrc PROMPT. The account is appended here, and nowhere
-//           else, for three reasons: it is IDENTITY like the rest of this row (user@host is
-//           the OS account, the email is the Claude one — they belong side by side); the
-//           Session row below is off-limits (see its note: the uuid must own its row); and
-//           the live row already wraps on a narrow pane, so static text must not compete
-//           there. Costs no extra row. Read from ~/.claude.json's `oauthAccount`, and
-//           deliberately NOT from ~/.claude/.credentials.json, which holds live OAuth tokens
-//           this script has no business opening. Omitted whenever that field is unreadable.
-//           `Name:` rides the same row for the same reason: it is IDENTITY, and the Session
-//           row is reserved for the bare uuid. Source: the name `/list-agents` and
-//           `claude agents --json` show for this session_id — the one other sessions actually
-//           address it by, defaulting to "firedancer-fe" and tracking `--name`/`/rename`.
-//           NOT `session_name` from stdin: that field looked like the same thing but ISN'T —
-//           it can independently hold an AI-generated conversation title (e.g. "最新戦況把握")
-//           that has nothing to do with cross-session addressing, and DOES win a same-session
-//           mismatch against the real one (caught live 2026-08-28: one session showed its AI
-//           title here while `claude agents --json` still had it as "firedancer-1d"). So this
-//           segment ignores `session_name` entirely and only ever shows the addressable name.
-//           Not delivered on stdin either way (verified 2026-08-28: no env var, no statusLine
-//           field carries it) — getting it means shelling out to `claude agents --json`
-//           ourselves. Measured cost 2026-08-28: 0.46-0.75s per call — one call refreshes every
-//           co-resident session's name, not just ours, so sessions sharing this cache warm it
-//           for each other. Paid only on a cache miss or a stale (>5 min) entry in
-//           ~/.cache/claude/statusline-agent-names.json; every other render is a plain file
-//           read. A negative result (session not in the list yet, or the `claude` call itself
-//           failing) is cached too, at the same TTL, so a persistent failure costs one slow
-//           render per window, never every render. Segment omitted when it doesn't resolve.
+//
+// REORGANIZED 2026-09-12 (on request): rows are now grouped by MEANING, one category per
+// row, instead of the prior HEAD/TAIL layout that mixed config+budget+background on one row
+// and budget+repo on another (Ctx sat next to Model/Effort while Rate — the other budget
+// figure — sat next to the git branch). The prior layout also let PS1-mirror row 1 grow
+// arbitrarily long (cwd + account email + session name all on one line) — the concrete
+// complaint that triggered this pass. Rows, in order:
+//   1 identity (PS1 mirror)   user@host:MM-DD HH:MM|cwd — ONLY this; nothing appended, ever
+//   2 identity (resume)       Session: <uuid> — unchanged from before this reorg
+//   3 identity (account)      <email> · <name> — what row 1 used to carry; omitted if both absent
+//   4 config                  Model | Effort[+WF]
+//   5 budget                  Ctx: <k>·<pct>% | Rate: 5h..% · 7d..% — Ctx and Rate are BOTH
+//                             "how much room is left"; previously torn across two rows
+//   6 repo                    <branch> | (+add,-del) [| wt: <name>]
+//   7 background (conditional) Job: ... — only rendered when a job or orphan exists
+// Every row is now printed unconditionally on its own line: the old byte-width "does HEAD+TAIL
+// fit $COLUMNS" wrap logic is GONE. It existed only because two semantically different rows
+// were being squeezed onto one line when they'd fit; once every row holds exactly one category,
+// nothing needs to conditionally merge with anything else, so there was nothing left for that
+// logic to decide. Every row can still overflow $COLUMNS on its own (the terminal wraps it,
+// same as line 1's cwd always could) — that was never something this script controlled.
+//
+//   line 1: PS1 mirror ONLY  user@host:MM-DD HH:MM|cwd
+//           Mirrors .zshrc's PROMPT — see zsh/zshrc if this format ever needs to change, and
+//           change both together. Account email and session name USED to ride this row (see the
+//           2026-09-05 through 2026-09-11 history below); moved to their own row 2026-09-12
+//           because a long cwd plus both of those made this row the least readable one in the
+//           whole statusline, and it is the one row that gets read on every single glance.
 //   line 2: session_id — the FULL uuid, on its own row, labelled like every other segment.
 //           NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
 //           prefix form, so a shortened id stops being a resume handle. The label is free
 //           here because tmux/tmux.conf sets `word-separators ' \t'` — a hyphen is not a
 //           separator, so its DoubleClick1Pane -> select-word binding grabs the whole uuid
-//           and nothing else, label or no label. It rides with line 1 because both are
-//           static session identity, and above the live row so a tail wrap can never shift
-//           it. Omitted when the field is absent (older CLIs).
-//   line 3: Model | Eff[+WF] | Ctx: <k>·<pct>% | [Job] | Rate: 5h/7d | [wt] | <branch> | (+add,-del)
-//         Neither Model nor Eff carries a label (both dropped on request 2026-09-05) — each one's
-//         old label color moved onto its own value instead, joined by the normal SEP pipe (a
-//         same-day KMID "・" divider, then a bare space, were both tried and cut — SEP won for
-//         consistency with the rest of the line): "Sonnet 5 | xhigh+WF". A ✦ extended-thinking
-//         marker rode here too, same day, until removed — see the "HEAD =" comment further down
-//         for why it didn't actually track what its name implied.
-//   Job:  work running OUTSIDE the harness — the window Claude Code itself cannot draw.
-//         A child started with setsid/nohup is reparented to PID 1, so the background-task
-//         tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
-//         outlives the session (even the project) that spawned it. Rebuilt from the OS:
-//           <name> <elapsed> · <vram>  a live `agent-resource-run --manifest` admission —
-//                                      the chokepoint every GPU run passes through, so it
-//                                      cannot be opted out of by whatever spawned the job
-//           det×N                      shells/helpers reparented to init that still point at
-//                                      a Claude scratchpad, i.e. runaway drivers and leaks.
-//                                      Red when N>0 with NOTHING admitted: invisible
-//                                      processes alive, no job actually holding resources.
-//         Whole segment is omitted when both are zero, so ordinary sessions pay nothing.
-//   Eff:  (no label in the render, see line 3 above) live /effort level (.effort.level); hidden
-//         when the model has no reasoning-effort param (field absent). ultracode -> xhigh.
-//   +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the Eff
-//         value (Tailwind violet-500 "+WF" suffix, matching Claude Code's own /effort slider
-//         "ultracode" label — picked 2026-09-11, green until then) instead of a separate
-//         segment, on request 2026-09-05.
-//         Present only while BOTH hold: `ultracode: true` in the CLI's live
-//         ~/.claude/settings.json, AND this render's live `.effort.level` actually reads back
-//         `xhigh` — ultracode forces xhigh whenever it genuinely engages, and a
-//         higher-precedence effort lever (env var, an interactive /effort choice, a per-model
-//         modelSettings entry the CLI itself writes back — see ultracodeConfigured()'s note) can
-//         silently push effort off xhigh and turn the orchestration OFF even though the setting
-//         still reads true. Reading the LIVE value instead of trusting the setting is what makes
-//         this catch that silent case: the suffix just disappears (no red "off" marker — absence
-//         IS "off", per the same request that dropped the old standalone segment).
-//   Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
-//   Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
-//         Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
-//           5h -> ⟳HH:MM(<h>h<mm>m)          same-window, so time-of-day only
-//           7d -> ⟳MM-DD HH:MM(<d>d<hh>h)     multi-day horizon, so date + time
-//         (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
-//         omitted when its .resets_at is absent; each window is independently optional.
-//   wt:   worktree.name — shown only in --worktree sessions.
-//   Fit:  line 3 stays on one row when the pane is wide; when it would overflow $COLUMNS
-//         the Rate/wt/branch/diff tail wraps to a 4th row. Width is measured in BYTES of
-//         the SGR-stripped string — multibyte glyphs over-count, biasing us to wrap a hair
-//         early (safe, never truncates). Claude Code exports COLUMNS (v2.1.153+); unset ->
-//         assume wide, stay one row.
+//           and nothing else, label or no label. NOTHING rides after the uuid on this row,
+//           by design, both before and after the 2026-09-12 reorg: appending text here would
+//           either break that one-gesture double-click copy (if it ever wrapped a narrow pane)
+//           or, at best, buy nothing since row 3 exists for exactly that overflow now. Omitted
+//           when the field is absent (older CLIs).
+//   line 3: <email> · <name> — what used to ride line 1 (see its note above), moved here
+//           2026-09-12. Both are STATIC identity, like the uuid on line 2, which is why they
+//           sit directly below it rather than back up on line 1: grouping by "how often does
+//           this change" (never, this render) is exactly why line 1 (which DOES change: cwd,
+//           the clock) shouldn't carry them. Whole row omitted when both are absent.
+//     email:  read from ~/.claude.json's `oauthAccount`, and deliberately NOT from
+//             ~/.claude/.credentials.json, which holds live OAuth tokens this script has no
+//             business opening. Omitted whenever that field is unreadable.
+//     name:   the actual field `claude agents --json` returns per session (confirmed live
+//             2026-08-28), and what `/list-agents` addresses it by — NOT `session_name` from
+//             stdin, which is a DIFFERENT, independently-tracked field that can hold an
+//             AI-generated conversation title instead (caught live 2026-08-28: one session
+//             showed its title here while `claude agents --json` still had the real name).
+//             Not delivered on stdin either way — getting it means shelling out to
+//             `claude agents --json` ourselves; see agentName()'s own header note for the full
+//             caching story (TTL, cost, the restart-race case) — unchanged by this reorg.
+//   line 4: config = Model | Effort[+WF]
+//           Neither carries a label (dropped on request 2026-09-05) — each one's old label
+//           color moved onto its own value instead, joined by the normal SEP pipe (a same-day
+//           KMID "・" divider, then a bare space, were both tried and cut — SEP won for
+//           consistency with the rest of the file): "Sonnet 5 | xhigh+WF". A ✦ extended-thinking
+//           marker rode here too, same day, until removed — see the "config = " comment further
+//           down for why it didn't actually track what its name implied.
+//     Eff:  live /effort level (.effort.level); hidden when the model has no reasoning-effort
+//           param (field absent). ultracode -> xhigh.
+//     +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the
+//           effort value (Tailwind violet-500 "+WF" suffix, matching Claude Code's own /effort
+//           slider "ultracode" label — picked 2026-09-11, green until then) instead of a
+//           separate segment, on request 2026-09-05. Present only while BOTH hold:
+//           `ultracode: true` in the CLI's live ~/.claude/settings.json, AND this render's live
+//           `.effort.level` actually reads back `xhigh` — ultracode forces xhigh whenever it
+//           genuinely engages, and a higher-precedence effort lever (env var, an interactive
+//           /effort choice, a per-model modelSettings entry the CLI itself writes back — see
+//           ultracodeConfigured()'s note) can silently push effort off xhigh and turn the
+//           orchestration OFF even though the setting still reads true. Reading the LIVE value
+//           instead of trusting the setting is what makes this catch that silent case: the
+//           suffix just disappears (no red "off" marker — absence IS "off").
+//   line 5: budget = Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
+//           Ctx and Rate are the SAME kind of fact — "how much of a shared allowance is used up"
+//           — and used to sit on different rows (Ctx with Model/Effort, Rate with the git
+//           branch) purely because that was how much fit per row under the old width-fitting
+//           scheme, not because they meant different things. Merged onto one row 2026-09-12.
+//     Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
+//     Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
+//           Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
+//             5h -> ⟳HH:MM(<h>h<mm>m)          same-window, so time-of-day only
+//             7d -> ⟳MM-DD HH:MM(<d>d<hh>h)     multi-day horizon, so date + time
+//           (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
+//           omitted when its .resets_at is absent; each window is independently optional.
+//   line 6: repo = <branch> | (+add,-del) [| wt: <name>]
+//           Everything about the git working state the harness is sitting in, together —
+//           branch used to sit on the same row as Rate (a budget fact) for no reason but shared
+//           width; now it sits with the diff stat and the worktree name, which are the same
+//           category as it (repo state), not with Rate (budget). Omitted entirely (the whole
+//           row) only when there is no branch, no worktree, AND the diff is 0/0 — in practice
+//           the (+add,-del) segment always renders (it defaults to 0/0 rather than being
+//           conditional, unchanged from before this reorg), so this row is effectively always
+//           present once inside any git-tracked cwd.
+//     wt:   worktree.name — shown only in --worktree sessions.
+//   line 7 (conditional): Job: <name><+more> <elapsed> [· <vram>] [det×N]  OR  Job: — det×N
+//           Work running OUTSIDE the harness — the window Claude Code itself cannot draw.
+//           A child started with setsid/nohup is reparented to PID 1, so the background-task
+//           tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
+//           outlives the session (even the project) that spawned it. Rebuilt from the OS:
+//             <name> <elapsed> · <vram>  a live `agent-resource-run --manifest` admission —
+//                                        the chokepoint every GPU run passes through, so it
+//                                        cannot be opted out of by whatever spawned the job
+//             det×N                      shells/helpers reparented to init that still point at
+//                                        a Claude scratchpad, i.e. runaway drivers and leaks.
+//                                        Red when N>0 with NOTHING admitted: invisible
+//                                        processes alive, no job actually holding resources.
+//           Whole row omitted when both are zero, so ordinary sessions pay nothing. Used to
+//           live folded into the config row specifically so it could never "wrap away" on a
+//           narrow pane; giving every row its own line 2026-09-12 satisfies that same
+//           requirement more directly — a row that is present is simply printed, with nothing
+//           upstream of it that could ever cause it to be silently dropped by a width
+//           calculation. (There is no such calculation left in this file at all — see the
+//           top-of-file note.)
+//
+// TIGER-STYLE PASS 2026-09-12 (practicing-tiger-style; explicit request, scoped to this file's
+// existing risk shape — not a new production-hardening exercise): every OTHER subprocess call
+// in this file already bounds its wait (agentName: 3000ms: this file, `execFileSync(CLAUDE_BIN,
+// ...)`; herdrSend: 200ms via its own timer; vramFrac: 2000ms) and degrades the same way on
+// timeout as on any other failure — catch, treat the value as absent, omit the segment. Two
+// calls were the exception: the `git rev-parse` branch lookup and `scanOutOfHarness`'s `ps -eo`
+// process-table scan had NO timeout at all. Bound: negative case is a stale NFS-mounted repo, a
+// git index.lock held by a concurrent process, or a `ps` invocation delayed by extreme
+// scheduling pressure (this host has run 40+ concurrent Claude sessions plus several 100%-CPU
+// numerical experiments at once — observed live in this same conversation) — any of which would
+// hang THIS call synchronously (execFileSync blocks the whole render) and, because nothing
+// downstream of it could run either, freeze the entire statusline for this session indefinitely,
+// not just the branch/Job segment. Evidence for the bound value: reused the 2000ms already
+// established in this exact file for vramFrac()'s analogous "nice-to-have enrichment, never
+// core" subprocess call, rather than inventing a new number for an equivalent risk. Handling:
+// identical to every other bounded call here — catch, omit, no visible error. This closes the
+// only two unbounded subprocess calls in the file; it does not add a test suite (there was and
+// remains none for this script — an accepted, named gap, not a silent one: verification for
+// this pass was manual invocation with real and synthetic stdin, shown in the commit).
+//
 // Zero runtime deps on purpose: this file is executed standalone as `bun <path>` with no
 // package.json / node_modules beside it, so nothing importable (zod, ts-pattern) resolves.
 // Static safety comes from the all-optional StatusInput shape + native `!= null` narrowing.
@@ -106,7 +160,7 @@ interface RateWindow {
 interface StatusInput {
   cwd?: string;
   session_id?: string;
-  // NOTE: stdin also carries a `session_name` field. Deliberately NOT read — see the `Name:`
+  // NOTE: stdin also carries a `session_name` field. Deliberately NOT read — see the `name`
   // header note above for why it can mismatch the actual cross-session-addressable name.
   workspace?: { current_dir?: string };
   model?: { display_name?: string; id?: string };
@@ -131,6 +185,10 @@ const SEP = ` ${DIM}|${RST} `;
 const MID = "·"; //   meter middot
 const BR = "⎇"; //    git branch glyph
 const RSET = "⟳"; //  rate-limit reset marker
+// Tiger-Style bound (see the header note above): the timeout shared by every "nice-to-have
+// enrichment" subprocess call in this file that is not already governed by its own specific
+// number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
+const ENRICHMENT_TIMEOUT_MS = 2000;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -178,7 +236,7 @@ function ultracodeConfigured(): boolean {
 // 2026-08-28), and what `/list-agents` addresses it by. NOT a label this file invented: it
 // defaults to the auto-generated "firedancer-fe" form (docs call that default value the
 // "default display name"; sessions.md), and tracks `--name`/`/rename` after that. Not on stdin
-// (see the line-1 header note above — `session_name` is a DIFFERENT, independently-tracked
+// (see line 3's header note above — `session_name` is a DIFFERENT, independently-tracked
 // field) — resolved by shelling out to `claude agents --json` and matching our own session_id,
 // then cached. One cache file, keyed by session_id, shared by every session on this machine —
 // whichever renders first warms it for the rest.
@@ -248,24 +306,30 @@ function agentName(sid: string): string | undefined {
   }
 }
 
-// line 1: env-derived PS1 mirror + Claude account + session name. Needs no JSON for the first
-// two, so those always render; sessionName is passed in once stdin has been parsed.
-function line1(cwd: string, sessionName?: string): string {
+// line 1: PS1 mirror ONLY — user@host:MM-DD HH:MM|cwd. See the top-of-file 2026-09-12 note for
+// why account/name no longer ride here.
+function line1(cwd: string): string {
   const user = userInfo().username;
   const host = osHostname().split(".")[0];
   const d = new Date();
   const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const acct = account();
-  const acctSeg =
-    acct != null ? ` ${DIM}${MID} ${ESC}[38;5;103m${acct}${RST}` : "";
-  const nameSeg =
-    sessionName != null
-      ? ` ${DIM}${MID} ${ESC}[38;5;214m${sessionName}${RST}`
-      : "";
   return (
     `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
-    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}${acctSeg}${nameSeg}`
+    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}`
   );
+}
+
+// line 3: <email> · <name> — see the top-of-file 2026-09-12 note. Undefined when neither field
+// resolves, so the caller can omit the whole row rather than print an empty one.
+function identityRow(
+  acct: string | undefined,
+  name: string | undefined,
+): string | undefined {
+  const parts: string[] = [];
+  if (acct != null) parts.push(`${ESC}[38;5;103m${acct}${RST}`);
+  if (name != null) parts.push(`${ESC}[38;5;214m${name}${RST}`);
+  if (parts.length === 0) return undefined;
+  return parts.join(` ${DIM}${MID}${RST} `);
 }
 
 // --- read stdin JSON (graceful: render line 1 + hint if it is missing/invalid) ---
@@ -457,7 +521,8 @@ await reportToHerdr(model, sessionName, effortDisplay);
 // Ctx: live context tokens -> 100800 -> "100.8k"
 const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
 
-// git branch from cwd (segment omitted if not a repo)
+// git branch from cwd (segment omitted if not a repo, or if the lookup hangs/times out — see
+// the top-of-file Tiger-Style note for why this call is now bounded).
 let branch: string | undefined;
 try {
   branch = execFileSync(
@@ -466,6 +531,7 @@ try {
     {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
+      timeout: ENRICHMENT_TIMEOUT_MS,
     },
   ).trim();
 } catch {
@@ -510,7 +576,7 @@ function reset7(epoch: number): string {
   return `${RSET}${clock}(${rem})`;
 }
 
-// --- Out-of-harness work (see the `Job:` note in the header) ---------------------------
+// --- Out-of-harness work (see line 7's header note) -------------------------------------
 // ONE `ps` pass answers both halves; nvidia-smi is paid for only when something is admitted.
 interface Admitted {
   name: string;
@@ -537,12 +603,16 @@ function admittedName(tok: string[]): string | undefined {
 function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
   let raw: string;
   try {
+    // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
+    // has no reason to be instant on a heavily loaded host, and this call used to have no
+    // timeout at all.
     raw = execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
+      timeout: ENRICHMENT_TIMEOUT_MS,
     });
   } catch {
-    return { jobs: [], orphans: 0 }; // no ps -> segment silently disappears
+    return { jobs: [], orphans: 0 }; // no ps / timed out -> segment silently disappears
   }
   const jobs: Admitted[] = [];
   let orphans = 0;
@@ -566,7 +636,11 @@ function vramFrac(): string | undefined {
     const out = execFileSync(
       "nvidia-smi",
       ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-      { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8", timeout: 2000 },
+      {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+        timeout: ENRICHMENT_TIMEOUT_MS,
+      },
     );
     const [used, total] = (out.split("\n")[0] ?? "")
       .split(",")
@@ -584,88 +658,76 @@ const dur = (s: number) =>
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
 
-// HEAD = identity: Model | Eff[+WF] | Ctx [· pct%] [| Job]
-// Neither Model nor Eff carries a label — both dropped on request 2026-09-05, each one's old
-// label color moved onto its own value instead. Joined with the normal SEP pipe (an intermediate
-// KMID "・" divider, then a bare space, were both tried and cut the same day — SEP won for
-// consistency with every other segment in this line). "+WF" (green, only when wfOn) is folded
-// straight into the effort value instead of a separate standalone "WF:" segment (also cut
-// 2026-09-05): "on" is just the suffix itself, "off" is simply its absence.
-// A ✦ extended-thinking marker (data.thinking.enabled) lived here too until removed the same
-// day: it turned out NOT to track whether the model was actually doing extended reasoning —
-// Sonnet 5 (and every current model except pre-4.6) runs adaptive thinking by default even with
-// no `thinking` param at all (confirmed against the claude-api skill's own model table), so a
-// field that's false most of the time was measuring some Claude-Code-internal display/keyword
-// state we couldn't pin down, not "is thinking happening." Better absent than misleading.
-let head = `${ESC}[38;5;30m${model}${RST}`;
+// line 4: config = Model | Effort[+WF]. See the top-of-file 2026-09-12 note for why this no
+// longer also carries Ctx or Job — both moved to their own rows.
+let configLine = `${ESC}[38;5;30m${model}${RST}`;
 if (effort) {
-  head += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
+  configLine += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
   // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
   // slider "ultracode" label (screenshotted) — picked over green to read as "ultracode is
   // on" at a glance. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in this file:
   // the palette's nearest steps (ANSI 93/129/135/141) were all visibly off during the pick.
-  if (wfOn) head += `${ESC}[38;2;139;92;246m+WF${RST}`;
+  if (wfOn) configLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
 }
-head += `${SEP}${ESC}[38;5;66mCtx:${RST} ${ctx}`;
+
+// line 5: budget = Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%. See the top-of-file 2026-09-12 note
+// for why Ctx and Rate are merged onto one row now (both are "how much allowance is left").
+let budgetLine = `${ESC}[38;5;66mCtx:${RST} ${ctx}`;
 if (ctxPct != null) {
   const { pct, col } = pctFmt(ctxPct);
-  head += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
+  budgetLine += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
 }
-
-// Job: lives in HEAD, not TAIL — the tail is what wraps away on a narrow pane, and the one
-// thing that must never wrap away is evidence that something is running where you can't see it.
-const { jobs, orphans } = scanOutOfHarness();
-if (jobs.length > 0 || orphans > 0) {
-  head += `${SEP}${ESC}[38;5;173mJob:${RST}`;
-  if (jobs.length > 0) {
-    const [first] = jobs;
-    const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
-    head += ` ${first.name}${more} ${dur(first.secs)}`;
-    const vram = vramFrac();
-    if (vram != null) head += ` ${DIM}${MID} ${vram}${RST}`;
-    if (orphans > 0) head += ` ${DIM}det×${orphans}${RST}`;
-  } else {
-    // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
-    // are states the harness reports as "idle", which is the failure this segment answers.
-    head += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${orphans}${RST}`;
-  }
-}
-
-// TAIL = limits/repo: [Rate 5h·7d] [| wt] [| branch] | (+add,-del)
-let tail = "";
 if (rl5 != null || rl7 != null) {
-  tail = `${ESC}[38;5;108mRate:${RST}`;
+  budgetLine += `${SEP}${ESC}[38;5;108mRate:${RST}`;
   if (rl5 != null) {
     const { pct, col } = pctFmt(rl5);
-    tail += ` 5h ${ESC}[${col}m${pct}%${RST}`;
-    if (rl5Reset != null) tail += ` ${DIM}${reset5(rl5Reset)}${RST}`;
+    budgetLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
+    if (rl5Reset != null) budgetLine += ` ${DIM}${reset5(rl5Reset)}${RST}`;
   }
   if (rl7 != null) {
     const { pct, col } = pctFmt(rl7);
-    tail += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
-    if (rl7Reset != null) tail += ` ${DIM}${reset7(rl7Reset)}${RST}`;
+    budgetLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
+    if (rl7Reset != null) budgetLine += ` ${DIM}${reset7(rl7Reset)}${RST}`;
   }
 }
+
+// line 6: repo = <branch> | (+add,-del) [| wt: <name>]. See the top-of-file 2026-09-12 note
+// for why branch no longer rides with Rate (a budget fact, not a repo fact).
 const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
-if (wt) tail = join(tail, `${ESC}[38;5;140mwt: ${wt}${RST}`);
-if (branch) tail = join(tail, `${ESC}[38;5;96m${BR} ${branch}${RST}`);
-tail = join(tail, `${ESC}[38;5;178m(+${add},-${del})${RST}`);
+let repoLine = "";
+if (branch) repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${branch}${RST}`);
+repoLine = join(repoLine, `${ESC}[38;5;178m(+${add},-${del})${RST}`);
+if (wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${wt}${RST}`);
 
-// Visible width = strip SGR escapes, count BYTES (multibyte glyphs over-count, biasing us
-// to wrap a hair early — safe, never truncates). Reserve ~2 cols for Claude Code's indent.
-const vlen = (s: string): number =>
-  Buffer.byteLength(s.replace(/\x1b\[[0-9;]*m/g, ""), "utf8");
-const cols = Number(process.env.COLUMNS);
-const usable = (Number.isFinite(cols) && cols > 0 ? cols : 999) - 2;
+// line 7 (conditional): Job. See the top-of-file 2026-09-12 note for why this is now always
+// its own row rather than folded into config specifically to avoid a width-driven wrap.
+const { jobs, orphans } = scanOutOfHarness();
+let jobLine: string | undefined;
+if (jobs.length > 0 || orphans > 0) {
+  jobLine = `${ESC}[38;5;173mJob:${RST}`;
+  if (jobs.length > 0) {
+    const [first] = jobs;
+    const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
+    jobLine += ` ${first.name}${more} ${dur(first.secs)}`;
+    const vram = vramFrac();
+    if (vram != null) jobLine += ` ${DIM}${MID} ${vram}${RST}`;
+    if (orphans > 0) jobLine += ` ${DIM}det×${orphans}${RST}`;
+  } else {
+    // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
+    // are states the harness reports as "idle", which is the failure this segment answers.
+    jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${orphans}${RST}`;
+  }
+}
 
-// --- render: PS1 mirror, bare session id, then the live row — one row if head + " | " + tail
-// fits $COLUMNS, else the tail wraps below it ---
-const live =
-  vlen(head) + 3 + vlen(tail) <= usable
-    ? head + SEP + tail
-    : `${head}\n${tail}`;
-// Label colored, value DIM — the `Rate:` pattern. The uuid keeps the row to itself (nothing
-// after it) so double-click select-word stays a one-gesture copy of the --resume argument.
-const sidRow =
-  sid != null ? `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}\n` : "";
-process.stdout.write(`${line1(cwd, sessionName)}\n${sidRow}${live}`);
+// --- render: one row per category, in the order documented at the top of this file ---
+const acctEmail = account();
+const rows = [
+  line1(cwd),
+  sid != null ? `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}` : undefined,
+  identityRow(acctEmail, sessionName),
+  configLine,
+  budgetLine,
+  repoLine,
+  jobLine,
+].filter((r): r is string => r != null && r !== "");
+process.stdout.write(rows.join("\n"));

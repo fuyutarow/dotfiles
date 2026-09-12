@@ -21,12 +21,11 @@
 // Current row grouping (change this by editing render(), not this comment — see the module
 // docstring on render() for the box the design lives inside; e.g. the Session-uuid MUST stay
 // last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
-//   1 user@host:MM-DD HH:MM|cwd                       (PS1 mirror, byte-for-byte)
+//   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
 //   2 <email> | Session: <uuid>                       (identity strings)
 //   3 <name> | Model | Effort[+WF] | Ctx: <k> <pct>%  (agent + config + budget-now)
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...)         (budget-over-time)
-//   5 ⎇ <branch> | (+add,-del) [| wt]                 (repo state)
-//   6 Job: ... (conditional)                          (background work)
+//   5 Job: ... (conditional)                          (background work)
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
 // buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
@@ -603,20 +602,21 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // the ONLY function a future "move field X to a different row" request should touch.
 //
 // Current grouping (see the top-of-file note for the full list): line 1 is the PS1 mirror
-// ONLY — reverted 2026-09-12, same day as the fold-in, once folding repo state into it made the
-// "PS1 mirror" claim stop being true and that cost more than the one shorter line was worth.
-// Line 1 is once again a byte-for-byte match of .zshrc's real PROMPT's first segment (confirmed
-// against zsh/zshrc's own `PROMPT=` line — that line carries no git info, so this file
-// shouldn't add any either). Repo state (branch + diff + worktree) moved to its own line 5.
-// Line 2 pairs email with the Session uuid (both are copy/reference identity strings, not live
-// state); the uuid MUST stay LAST on whatever row it appears on — tmux/tmux.conf sets
-// `word-separators ' \t'`, so a row ending in the raw uuid is a one-gesture `claude --resume
-// <id>` double-click copy, which breaks if the row wraps before reaching the uuid on a narrow
-// pane. Keeping this row short (just email ahead of it) is what keeps that risk small; if a
-// future change puts more before the uuid and this starts biting in practice, give Session its
-// own row back rather than reintroducing width-fitting logic (deliberately absent from this
-// whole file: every row here is an unconditional `join()` of present pieces, never a
-// width-driven merge across rows).
+// PLUS repo state (branch + diff + worktree) again — folded back in 2026-09-12, on request,
+// after a same-day round trip that briefly split them onto separate rows. KNOWN, ACCEPTED
+// DIVERGENCE: this makes line 1 no longer a byte-for-byte mirror of .zshrc's real PROMPT (which
+// carries no git info at all — confirmed against zsh/zshrc's own `PROMPT=` line), only of its
+// user@host:date|cwd portion. If that divergence ever needs to close instead, the fix is adding
+// git info to the REAL PROMPT in zsh/zshrc, not reverting this — see the conversation that
+// requested this cut. Line 2 pairs email with the Session uuid (both are copy/reference
+// identity strings, not live state); the uuid MUST stay LAST on whatever row it appears on —
+// tmux/tmux.conf sets `word-separators ' \t'`, so a row ending in the raw uuid is a one-gesture
+// `claude --resume <id>` double-click copy, which breaks if the row wraps before reaching the
+// uuid on a narrow pane. Keeping this row short (just email ahead of it) is what keeps that
+// risk small; if a future change puts more before the uuid and this starts biting in practice,
+// give Session its own row back rather than reintroducing width-fitting logic (deliberately
+// absent from this whole file: every row here is an unconditional `join()` of present pieces,
+// never a width-driven merge across rows).
 // Line 3 pairs the agent's addressable name with its live Model/Effort AND the current Ctx
 // reading — "what's running, right now, and how full its context is". Between the Ctx token
 // count and its own percentage there is deliberately NO middot (MID, below): that glyph means
@@ -624,8 +624,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // is one fact shown twice, not two facts — a bare space reads as one unit. Line 4 is Rate,
 // where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
 // the middot between them — same role MID plays between a job's elapsed time and its vram
-// fraction in Job below. Line 5 is repo state (branch, diff, worktree), its own row now that it
-// no longer rides line 1. Line 6 (conditional) is Job, always its own row so nothing can ever
+// fraction in Job below. Line 5 (conditional) is Job, always its own row so nothing can ever
 // cause it to be silently dropped.
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
@@ -710,7 +709,7 @@ function render(df: Dataframe): string {
     }
   }
 
-  return [line1, identityLine, agentLine, rateLine, repoLine, jobLine]
+  return [join(line1, repoLine), identityLine, agentLine, rateLine, jobLine]
     .filter((r): r is string => r != null && r !== "")
     .join("\n");
 }

@@ -7,51 +7,38 @@
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
 //
-// REORGANIZED 2026-09-12 (on request): rows are now grouped by MEANING, one category per
-// row, instead of the prior HEAD/TAIL layout that mixed config+budget+background on one row
-// and budget+repo on another (Ctx sat next to Model/Effort while Rate — the other budget
-// figure — sat next to the git branch). The prior layout also let PS1-mirror row 1 grow
-// arbitrarily long (cwd + account email + session name all on one line) — the concrete
-// complaint that triggered this pass. Rows, in order:
+// REORGANIZED 2026-09-12, twice, same day (both on request). First pass grouped strictly by
+// abstract category, one per row (identity / identity / identity / config / budget / repo /
+// background) — 5-7 rows once everything is present. Second pass merged two of those pairs
+// back together for readability ("見栄えとして" — visual economy, not a category error): the
+// account row alone and the budget row alone were each too short to be worth their own line,
+// and likewise for the session+name row and the config row. Rows, in final order:
 //   1 identity (PS1 mirror)   user@host:MM-DD HH:MM|cwd — ONLY this; nothing appended, ever
-//   2 identity (resume)       Session: <uuid> — unchanged from before this reorg
-//   3 identity (account)      <email> · <name> — what row 1 used to carry; omitted if both absent
-//   4 config                  Model | Effort[+WF]
-//   5 budget                  Ctx: <k>·<pct>% | Rate: 5h..% · 7d..% — Ctx and Rate are BOTH
-//                             "how much room is left"; previously torn across two rows
-//   6 repo                    <branch> | (+add,-del) [| wt: <name>]
-//   7 background (conditional) Job: ... — only rendered when a job or orphan exists
-// Every row is now printed unconditionally on its own line: the old byte-width "does HEAD+TAIL
-// fit $COLUMNS" wrap logic is GONE. It existed only because two semantically different rows
-// were being squeezed onto one line when they'd fit; once every row holds exactly one category,
-// nothing needs to conditionally merge with anything else, so there was nothing left for that
-// logic to decide. Every row can still overflow $COLUMNS on its own (the terminal wraps it,
-// same as line 1's cwd always could) — that was never something this script controlled.
+//   2 account + budget        <email> | Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
+//   3 agent + config + resume <name> | Model | Effort[+WF] | Session: <uuid>
+//   4 repo                    <branch> | (+add,-del) [| wt: <name>]
+//   5 background (conditional) Job: ... — only rendered when a job or orphan exists
+// The old byte-width "does HEAD+TAIL fit $COLUMNS" wrap logic is still gone (removed in the
+// first pass): every row here is an unconditional `join()` of whichever of its pieces are
+// present, never a width-driven merge with a DIFFERENT row.
 //
 //   line 1: PS1 mirror ONLY  user@host:MM-DD HH:MM|cwd
 //           Mirrors .zshrc's PROMPT — see zsh/zshrc if this format ever needs to change, and
-//           change both together. Account email and session name USED to ride this row (see the
-//           2026-09-05 through 2026-09-11 history below); moved to their own row 2026-09-12
-//           because a long cwd plus both of those made this row the least readable one in the
-//           whole statusline, and it is the one row that gets read on every single glance.
-//   line 2: session_id — the FULL uuid, on its own row, labelled like every other segment.
-//           NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
-//           prefix form, so a shortened id stops being a resume handle. The label is free
-//           here because tmux/tmux.conf sets `word-separators ' \t'` — a hyphen is not a
-//           separator, so its DoubleClick1Pane -> select-word binding grabs the whole uuid
-//           and nothing else, label or no label. NOTHING rides after the uuid on this row,
-//           by design, both before and after the 2026-09-12 reorg: appending text here would
-//           either break that one-gesture double-click copy (if it ever wrapped a narrow pane)
-//           or, at best, buy nothing since row 3 exists for exactly that overflow now. Omitted
-//           when the field is absent (older CLIs).
-//   line 3: <email> · <name> — what used to ride line 1 (see its note above), moved here
-//           2026-09-12. Both are STATIC identity, like the uuid on line 2, which is why they
-//           sit directly below it rather than back up on line 1: grouping by "how often does
-//           this change" (never, this render) is exactly why line 1 (which DOES change: cwd,
-//           the clock) shouldn't carry them. Whole row omitted when both are absent.
+//           change both together. Account email and session name used to ride this row before
+//           2026-09-12; moved off because a long cwd plus both of those made this the least
+//           readable row in the whole statusline, and it's the one read on every single glance.
+//   line 2: account = <email> | Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
 //     email:  read from ~/.claude.json's `oauthAccount`, and deliberately NOT from
 //             ~/.claude/.credentials.json, which holds live OAuth tokens this script has no
 //             business opening. Omitted whenever that field is unreadable.
+//     Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
+//     Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
+//           Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
+//             5h -> ⟳HH:MM(<h>h<mm>m)          same-window, so time-of-day only
+//             7d -> ⟳MM-DD HH:MM(<d>d<hh>h)     multi-day horizon, so date + time
+//           (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
+//           omitted when its .resets_at is absent; each window is independently optional.
+//   line 3: agent = <name> | Model | Effort[+WF] | Session: <uuid>
 //     name:   the actual field `claude agents --json` returns per session (confirmed live
 //             2026-08-28), and what `/list-agents` addresses it by — NOT `session_name` from
 //             stdin, which is a DIFFERENT, independently-tracked field that can hold an
@@ -59,14 +46,7 @@
 //             showed its title here while `claude agents --json` still had the real name).
 //             Not delivered on stdin either way — getting it means shelling out to
 //             `claude agents --json` ourselves; see agentName()'s own header note for the full
-//             caching story (TTL, cost, the restart-race case) — unchanged by this reorg.
-//   line 4: config = Model | Effort[+WF]
-//           Neither carries a label (dropped on request 2026-09-05) — each one's old label
-//           color moved onto its own value instead, joined by the normal SEP pipe (a same-day
-//           KMID "・" divider, then a bare space, were both tried and cut — SEP won for
-//           consistency with the rest of the file): "Sonnet 5 | xhigh+WF". A ✦ extended-thinking
-//           marker rode here too, same day, until removed — see the "config = " comment further
-//           down for why it didn't actually track what its name implied.
+//             caching story (TTL, cost, the restart-race case).
 //     Eff:  live /effort level (.effort.level); hidden when the model has no reasoning-effort
 //           param (field absent). ultracode -> xhigh.
 //     +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the
@@ -81,29 +61,21 @@
 //           orchestration OFF even though the setting still reads true. Reading the LIVE value
 //           instead of trusting the setting is what makes this catch that silent case: the
 //           suffix just disappears (no red "off" marker — absence IS "off").
-//   line 5: budget = Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
-//           Ctx and Rate are the SAME kind of fact — "how much of a shared allowance is used up"
-//           — and used to sit on different rows (Ctx with Model/Effort, Rate with the git
-//           branch) purely because that was how much fit per row under the old width-fitting
-//           scheme, not because they meant different things. Merged onto one row 2026-09-12.
-//     Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
-//     Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
-//           Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
-//             5h -> ⟳HH:MM(<h>h<mm>m)          same-window, so time-of-day only
-//             7d -> ⟳MM-DD HH:MM(<d>d<hh>h)     multi-day horizon, so date + time
-//           (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
-//           omitted when its .resets_at is absent; each window is independently optional.
-//   line 6: repo = <branch> | (+add,-del) [| wt: <name>]
-//           Everything about the git working state the harness is sitting in, together —
-//           branch used to sit on the same row as Rate (a budget fact) for no reason but shared
-//           width; now it sits with the diff stat and the worktree name, which are the same
-//           category as it (repo state), not with Rate (budget). Omitted entirely (the whole
-//           row) only when there is no branch, no worktree, AND the diff is 0/0 — in practice
-//           the (+add,-del) segment always renders (it defaults to 0/0 rather than being
-//           conditional, unchanged from before this reorg), so this row is effectively always
-//           present once inside any git-tracked cwd.
+//     Session: the FULL uuid, DELIBERATELY LAST on this row and nothing else ever rides after
+//           it. NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
+//           prefix form, so a shortened id stops being a resume handle. tmux/tmux.conf sets
+//           `word-separators ' \t'` — a hyphen is not a separator, so DoubleClick1Pane ->
+//           select-word grabs the whole uuid and nothing else, PROVIDED the click lands on a
+//           single unwrapped screen line. KNOWN, ACCEPTED COST of putting name/Model/Effort
+//           BEFORE the uuid on the same row (2026-09-12, on request, for the visual economy of
+//           one fewer row): on a narrow enough pane this row can now wrap before reaching the
+//           uuid, which a bare "Session: <uuid>" row on its own could never do. That was the
+//           entire reason this used to be its own row. Accepted because it only bites on a
+//           genuinely narrow pane; if it turns out to bite often, the fix is to give Session
+//           its own row back, not to add width-fitting logic (already removed once).
+//   line 4: repo = <branch> | (+add,-del) [| wt: <name>]
 //     wt:   worktree.name — shown only in --worktree sessions.
-//   line 7 (conditional): Job: <name><+more> <elapsed> [· <vram>] [det×N]  OR  Job: — det×N
+//   line 5 (conditional): Job: <name><+more> <elapsed> [· <vram>] [det×N]  OR  Job: — det×N
 //           Work running OUTSIDE the harness — the window Claude Code itself cannot draw.
 //           A child started with setsid/nohup is reparented to PID 1, so the background-task
 //           tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
@@ -115,13 +87,9 @@
 //                                        a Claude scratchpad, i.e. runaway drivers and leaks.
 //                                        Red when N>0 with NOTHING admitted: invisible
 //                                        processes alive, no job actually holding resources.
-//           Whole row omitted when both are zero, so ordinary sessions pay nothing. Used to
-//           live folded into the config row specifically so it could never "wrap away" on a
-//           narrow pane; giving every row its own line 2026-09-12 satisfies that same
-//           requirement more directly — a row that is present is simply printed, with nothing
-//           upstream of it that could ever cause it to be silently dropped by a width
-//           calculation. (There is no such calculation left in this file at all — see the
-//           top-of-file note.)
+//           Whole row omitted when both are zero, so ordinary sessions pay nothing. Its own
+//           row, unconditionally, so nothing upstream can ever wrap it away (there is no
+//           width calculation left in this file that could).
 //
 // TIGER-STYLE PASS 2026-09-12 (practicing-tiger-style; explicit request, scoped to this file's
 // existing risk shape — not a new production-hardening exercise): every OTHER subprocess call
@@ -306,8 +274,8 @@ function agentName(sid: string): string | undefined {
   }
 }
 
-// line 1: PS1 mirror ONLY — user@host:MM-DD HH:MM|cwd. See the top-of-file 2026-09-12 note for
-// why account/name no longer ride here.
+// line 1: PS1 mirror ONLY — user@host:MM-DD HH:MM|cwd. See line 1's header note above for why
+// account/name no longer ride here.
 function line1(cwd: string): string {
   const user = userInfo().username;
   const host = osHostname().split(".")[0];
@@ -319,18 +287,10 @@ function line1(cwd: string): string {
   );
 }
 
-// line 3: <email> · <name> — see the top-of-file 2026-09-12 note. Undefined when neither field
-// resolves, so the caller can omit the whole row rather than print an empty one.
-function identityRow(
-  acct: string | undefined,
-  name: string | undefined,
-): string | undefined {
-  const parts: string[] = [];
-  if (acct != null) parts.push(`${ESC}[38;5;103m${acct}${RST}`);
-  if (name != null) parts.push(`${ESC}[38;5;214m${name}${RST}`);
-  if (parts.length === 0) return undefined;
-  return parts.join(` ${DIM}${MID}${RST} `);
-}
+// Joins two segments with the standard SEP pipe, or returns `seg` alone when `t` is still
+// empty — used throughout the render section below to build each row from whichever of its
+// pieces are actually present, in order.
+const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
 // --- read stdin JSON (graceful: render line 1 + hint if it is missing/invalid) ---
 const raw = await Bun.stdin.text();
@@ -658,8 +618,7 @@ const dur = (s: number) =>
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
 
-// line 4: config = Model | Effort[+WF]. See the top-of-file 2026-09-12 note for why this no
-// longer also carries Ctx or Job — both moved to their own rows.
+// config segment (part of line 3, see the top-of-file note): Model | Effort[+WF].
 let configLine = `${ESC}[38;5;30m${model}${RST}`;
 if (effort) {
   configLine += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
@@ -670,8 +629,7 @@ if (effort) {
   if (wfOn) configLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
 }
 
-// line 5: budget = Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%. See the top-of-file 2026-09-12 note
-// for why Ctx and Rate are merged onto one row now (both are "how much allowance is left").
+// budget segment (part of line 2, see the top-of-file note): Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%.
 let budgetLine = `${ESC}[38;5;66mCtx:${RST} ${ctx}`;
 if (ctxPct != null) {
   const { pct, col } = pctFmt(ctxPct);
@@ -691,16 +649,13 @@ if (rl5 != null || rl7 != null) {
   }
 }
 
-// line 6: repo = <branch> | (+add,-del) [| wt: <name>]. See the top-of-file 2026-09-12 note
-// for why branch no longer rides with Rate (a budget fact, not a repo fact).
-const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
+// line 4: repo = <branch> | (+add,-del) [| wt: <name>].
 let repoLine = "";
 if (branch) repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${branch}${RST}`);
 repoLine = join(repoLine, `${ESC}[38;5;178m(+${add},-${del})${RST}`);
 if (wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${wt}${RST}`);
 
-// line 7 (conditional): Job. See the top-of-file 2026-09-12 note for why this is now always
-// its own row rather than folded into config specifically to avoid a width-driven wrap.
+// line 5 (conditional): Job.
 const { jobs, orphans } = scanOutOfHarness();
 let jobLine: string | undefined;
 if (jobs.length > 0 || orphans > 0) {
@@ -719,15 +674,28 @@ if (jobs.length > 0 || orphans > 0) {
   }
 }
 
-// --- render: one row per category, in the order documented at the top of this file ---
+// --- render: rows in the order documented at the top of this file ---
+// line 2: account + budget. budgetLine is never empty (Ctx always has a value, even "0"), so
+// this line is too — no need to guard the whole row on acctEmail being present.
 const acctEmail = account();
-const rows = [
-  line1(cwd),
-  sid != null ? `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}` : undefined,
-  identityRow(acctEmail, sessionName),
-  configLine,
-  budgetLine,
-  repoLine,
-  jobLine,
-].filter((r): r is string => r != null && r !== "");
+let accountLine = "";
+if (acctEmail != null)
+  accountLine = join(accountLine, `${ESC}[38;5;103m${acctEmail}${RST}`);
+accountLine = join(accountLine, budgetLine);
+
+// line 3: agent + config + resume. configLine is never empty (model falls back to "?"), so
+// this line is too. Session — see its header note above — stays LAST, deliberately.
+let agentLine = "";
+if (sessionName != null)
+  agentLine = join(agentLine, `${ESC}[38;5;214m${sessionName}${RST}`);
+agentLine = join(agentLine, configLine);
+if (sid != null)
+  agentLine = join(
+    agentLine,
+    `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}`,
+  );
+
+const rows = [line1(cwd), accountLine, agentLine, repoLine, jobLine].filter(
+  (r): r is string => r != null && r !== "",
+);
 process.stdout.write(rows.join("\n"));

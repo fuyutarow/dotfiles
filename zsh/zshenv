@@ -36,6 +36,36 @@
 # on every login, prepending a PATH entry no config asked for (and leaving 1672 stale
 # multishell dirs behind).
 
+# ── LOCALE SAFETY NET (2026-09-13, root-caused) ──────────────────────────────
+# Something upstream of this shell exports LC_ALL=en_US.UTF-8 — not this repo: searched
+# zsh/*, wsl/*, herdr/config.toml, and every system-level /etc/{profile,zsh,locale.conf,
+# default/locale} on this WSL host, none set LANG/LC_ALL. Whatever sets it (Windows
+# Terminal profile env, WSL init — outside this repo's reach) assumes en_US.UTF-8 is
+# installed; on this host `locale -a` only has C / C.utf8 / POSIX. glibc's setlocale()
+# then fails (the "setlocale: LC_ALL: cannot change locale" warning every subshell
+# prints), and falls back to the C locale for width-aware string handling — which is why
+# `git log --graph` (CJK commit subjects next to ASCII graph lines), `less`, and `column`
+# render garbled even though the underlying bytes are correct UTF-8. The real fix is
+# `sudo locale-gen en_US.UTF-8` at the host that's missing it, which a dotfile can't do
+# (needs root, and doing it silently on every shell start would be worse than the bug).
+# Normalize instead: if the locale this shell was HANDED isn't actually generated, fall
+# back to C.UTF-8 — always present on modern glibc, still fully UTF-8-aware — rather than
+# silently running in a broken one. Pure zsh + one `locale -a` call: cheap, no network,
+# can't hang.
+if [[ -n "${LC_ALL:-$LANG}" ]]; then
+  _zshenv_locale="${(L)${LC_ALL:-$LANG}//-/}"
+  _zshenv_avail=("${(f)$(locale -a 2>/dev/null)}")
+  _zshenv_locale_ok=0
+  for _zshenv_l in "${_zshenv_avail[@]}"; do
+    [[ "${(L)_zshenv_l//-/}" == "$_zshenv_locale" ]] && { _zshenv_locale_ok=1; break }
+  done
+  if (( ! _zshenv_locale_ok )); then
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+  fi
+  unset _zshenv_locale _zshenv_avail _zshenv_locale_ok _zshenv_l
+fi
+
 # TELL mise, do not out-edit it. `mise activate` gained a setting, `activate_shims` (default
 # TRUE), whose effect is to append the shim dir to PATH from inside activate's own output —
 # measured on mise 2026.9.3, the emitted script ends with `export PATH='<shims>:...'`. activate

@@ -7,109 +7,38 @@
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house
 //   standard; the docs officially bless a JS/TS statusline (stdin JSON -> stdout).
 //
-// REORGANIZED 2026-09-12, twice, same day (both on request). First pass grouped strictly by
-// abstract category, one per row (identity / identity / identity / config / budget / repo /
-// background) — 5-7 rows once everything is present. Second pass merged two of those pairs
-// back together for readability ("見栄えとして" — visual economy, not a category error): the
-// account row alone and the budget row alone were each too short to be worth their own line,
-// and likewise for the session+name row and the config row. Rows, in final order:
-//   1 identity (PS1 mirror)   user@host:MM-DD HH:MM|cwd — ONLY this; nothing appended, ever
-//   2 account + budget        <email> | Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
-//   3 agent + config + resume <name> | Model | Effort[+WF] | Session: <uuid>
-//   4 repo                    <branch> | (+add,-del) [| wt: <name>]
-//   5 background (conditional) Job: ... — only rendered when a job or orphan exists
-// The old byte-width "does HEAD+TAIL fit $COLUMNS" wrap logic is still gone (removed in the
-// first pass): every row here is an unconditional `join()` of whichever of its pieces are
-// present, never a width-driven merge with a DIFFERENT row.
+// SHAPE (2026-09-12): dataframe / viewer, separated on request after three same-day row-layout
+// changes each cost a 70-100+ line diff dominated by comment churn — the row grouping and the
+// value computation used to live in the same pass, so re-grouping meant re-writing prose too.
+//   buildDataframe(): stdin -> Dataframe. Every value this file can possibly show, already
+//                     computed (subprocess calls, cache lookups, formatting) — NO ANSI, NO row
+//                     grouping, NO knowledge that rows exist at all.
+//   render(df):       Dataframe -> row strings. ALL styling and ALL row grouping. Changing
+//                     which fields share a row is a small edit here and NOWHERE else.
+// Everything else (herdr reporting, the subprocess helpers) is unchanged in substance from
+// before this split; they just got called from a different top-level shape.
 //
-//   line 1: PS1 mirror ONLY  user@host:MM-DD HH:MM|cwd
-//           Mirrors .zshrc's PROMPT — see zsh/zshrc if this format ever needs to change, and
-//           change both together. Account email and session name used to ride this row before
-//           2026-09-12; moved off because a long cwd plus both of those made this the least
-//           readable row in the whole statusline, and it's the one read on every single glance.
-//   line 2: account = <email> | Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%
-//     email:  read from ~/.claude.json's `oauthAccount`, and deliberately NOT from
-//             ~/.claude/.credentials.json, which holds live OAuth tokens this script has no
-//             business opening. Omitted whenever that field is unreadable.
-//     Ctx%: context_window.used_percentage, colored green <70 / yellow <90 / red >=90.
-//     Rate: rate_limits 5h & 7d used_percentage (Pro/Max, after 1st API resp), same colors.
-//           Each window shows its reset from .resets_at (Unix epoch s) as ⟳<clock>(remaining):
-//             5h -> ⟳HH:MM(<h>h<mm>m)          same-window, so time-of-day only
-//             7d -> ⟳MM-DD HH:MM(<d>d<hh>h)     multi-day horizon, so date + time
-//           (7d falls back to <h>h<mm>m remaining inside its final day.) A window's reset is
-//           omitted when its .resets_at is absent; each window is independently optional.
-//   line 3: agent = <name> | Model | Effort[+WF] | Session: <uuid>
-//     name:   the actual field `claude agents --json` returns per session (confirmed live
-//             2026-08-28), and what `/list-agents` addresses it by — NOT `session_name` from
-//             stdin, which is a DIFFERENT, independently-tracked field that can hold an
-//             AI-generated conversation title instead (caught live 2026-08-28: one session
-//             showed its title here while `claude agents --json` still had the real name).
-//             Not delivered on stdin either way — getting it means shelling out to
-//             `claude agents --json` ourselves; see agentName()'s own header note for the full
-//             caching story (TTL, cost, the restart-race case).
-//     Eff:  live /effort level (.effort.level); hidden when the model has no reasoning-effort
-//           param (field absent). ultracode -> xhigh.
-//     +WF:  "dynamic workflow" — ultracode's auto multi-agent orchestration — folded into the
-//           effort value (Tailwind violet-500 "+WF" suffix, matching Claude Code's own /effort
-//           slider "ultracode" label — picked 2026-09-11, green until then) instead of a
-//           separate segment, on request 2026-09-05. Present only while BOTH hold:
-//           `ultracode: true` in the CLI's live ~/.claude/settings.json, AND this render's live
-//           `.effort.level` actually reads back `xhigh` — ultracode forces xhigh whenever it
-//           genuinely engages, and a higher-precedence effort lever (env var, an interactive
-//           /effort choice, a per-model modelSettings entry the CLI itself writes back — see
-//           ultracodeConfigured()'s note) can silently push effort off xhigh and turn the
-//           orchestration OFF even though the setting still reads true. Reading the LIVE value
-//           instead of trusting the setting is what makes this catch that silent case: the
-//           suffix just disappears (no red "off" marker — absence IS "off").
-//     Session: the FULL uuid, DELIBERATELY LAST on this row and nothing else ever rides after
-//           it. NOT truncated: `claude --resume <id>` matches an id EXACTLY and documents no
-//           prefix form, so a shortened id stops being a resume handle. tmux/tmux.conf sets
-//           `word-separators ' \t'` — a hyphen is not a separator, so DoubleClick1Pane ->
-//           select-word grabs the whole uuid and nothing else, PROVIDED the click lands on a
-//           single unwrapped screen line. KNOWN, ACCEPTED COST of putting name/Model/Effort
-//           BEFORE the uuid on the same row (2026-09-12, on request, for the visual economy of
-//           one fewer row): on a narrow enough pane this row can now wrap before reaching the
-//           uuid, which a bare "Session: <uuid>" row on its own could never do. That was the
-//           entire reason this used to be its own row. Accepted because it only bites on a
-//           genuinely narrow pane; if it turns out to bite often, the fix is to give Session
-//           its own row back, not to add width-fitting logic (already removed once).
-//   line 4: repo = <branch> | (+add,-del) [| wt: <name>]
-//     wt:   worktree.name — shown only in --worktree sessions.
-//   line 5 (conditional): Job: <name><+more> <elapsed> [· <vram>] [det×N]  OR  Job: — det×N
-//           Work running OUTSIDE the harness — the window Claude Code itself cannot draw.
-//           A child started with setsid/nohup is reparented to PID 1, so the background-task
-//           tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it
-//           outlives the session (even the project) that spawned it. Rebuilt from the OS:
-//             <name> <elapsed> · <vram>  a live `agent-resource-run --manifest` admission —
-//                                        the chokepoint every GPU run passes through, so it
-//                                        cannot be opted out of by whatever spawned the job
-//             det×N                      shells/helpers reparented to init that still point at
-//                                        a Claude scratchpad, i.e. runaway drivers and leaks.
-//                                        Red when N>0 with NOTHING admitted: invisible
-//                                        processes alive, no job actually holding resources.
-//           Whole row omitted when both are zero, so ordinary sessions pay nothing. Its own
-//           row, unconditionally, so nothing upstream can ever wrap it away (there is no
-//           width calculation left in this file that could).
+// Current row grouping (change this by editing render(), not this comment — see the module
+// docstring on render() for the box the design lives inside; e.g. the Session-uuid MUST stay
+// last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
+//   1 user@host:MM-DD HH:MM|cwd                     (PS1 mirror)
+//   2 <email> | Session: <uuid>                     (identity strings)
+//   3 <name> | Model | Effort[+WF]                  (agent + config)
+//   4 Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%          (budget)
+//   5 <branch> | (+add,-del) [| wt: <name>]          (repo)
+//   6 Job: ... (conditional)                         (background work)
 //
-// TIGER-STYLE PASS 2026-09-12 (practicing-tiger-style; explicit request, scoped to this file's
-// existing risk shape — not a new production-hardening exercise): every OTHER subprocess call
-// in this file already bounds its wait (agentName: 3000ms: this file, `execFileSync(CLAUDE_BIN,
-// ...)`; herdrSend: 200ms via its own timer; vramFrac: 2000ms) and degrades the same way on
-// timeout as on any other failure — catch, treat the value as absent, omit the segment. Two
-// calls were the exception: the `git rev-parse` branch lookup and `scanOutOfHarness`'s `ps -eo`
-// process-table scan had NO timeout at all. Bound: negative case is a stale NFS-mounted repo, a
-// git index.lock held by a concurrent process, or a `ps` invocation delayed by extreme
-// scheduling pressure (this host has run 40+ concurrent Claude sessions plus several 100%-CPU
-// numerical experiments at once — observed live in this same conversation) — any of which would
-// hang THIS call synchronously (execFileSync blocks the whole render) and, because nothing
-// downstream of it could run either, freeze the entire statusline for this session indefinitely,
-// not just the branch/Job segment. Evidence for the bound value: reused the 2000ms already
-// established in this exact file for vramFrac()'s analogous "nice-to-have enrichment, never
-// core" subprocess call, rather than inventing a new number for an equivalent risk. Handling:
-// identical to every other bounded call here — catch, omit, no visible error. This closes the
-// only two unbounded subprocess calls in the file; it does not add a test suite (there was and
-// remains none for this script — an accepted, named gap, not a silent one: verification for
-// this pass was manual invocation with real and synthetic stdin, shown in the commit).
+// TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
+// buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
+// -eo` process-table scan — used to have NO timeout, unlike every other call here (agentName:
+// 3000ms, herdrSend: 200ms, vramFrac: 2000ms). A stale NFS-mounted repo, a held git index.lock,
+// or `ps` delayed by extreme scheduling pressure (this host has run 40+ concurrent Claude
+// sessions plus several 100%-CPU experiments at once, observed live) would hang either call
+// synchronously and freeze the whole render, not just its own segment. Both now share
+// ENRICHMENT_TIMEOUT_MS, reusing vramFrac's existing 2000ms rather than inventing a new number
+// for an equivalent risk; handling is identical to every other bounded call — catch, omit, no
+// visible error. Named, not silently closed: this script still has no dedicated test suite —
+// verification here is the manual stdin invocations recorded in the commit, not an automated net.
 //
 // Zero runtime deps on purpose: this file is executed standalone as `bun <path>` with no
 // package.json / node_modules beside it, so nothing importable (zod, ts-pattern) resolves.
@@ -128,8 +57,10 @@ interface RateWindow {
 interface StatusInput {
   cwd?: string;
   session_id?: string;
-  // NOTE: stdin also carries a `session_name` field. Deliberately NOT read — see the `name`
-  // header note above for why it can mismatch the actual cross-session-addressable name.
+  // stdin also carries a `session_name` field. Deliberately NOT read: it can independently hold
+  // an AI-generated conversation title instead of the real cross-session-addressable name
+  // (caught live 2026-08-28 — one session showed its title here while `claude agents --json`
+  // still had the real name "firedancer-1d"). See buildDataframe()'s sessionName lookup instead.
   workspace?: { current_dir?: string };
   model?: { display_name?: string; id?: string };
   context_window?: {
@@ -143,6 +74,32 @@ interface StatusInput {
   worktree?: { name?: string };
 }
 
+// Every value this file can show, already computed — the sole output of buildDataframe() and
+// sole input to render(). No ANSI codes, no row grouping, no ordering: a value here says
+// nothing about where or whether it appears on screen.
+interface Dataframe {
+  cwd: string;
+  sid?: string;
+  sessionName?: string;
+  email?: string;
+  model: string;
+  effort?: string;
+  wfOn: boolean;
+  ctx: string;
+  ctxPct?: number;
+  rl5?: number;
+  rl5Reset?: number;
+  rl7?: number;
+  rl7Reset?: number;
+  branch?: string;
+  add: number;
+  del: number;
+  wt?: string;
+  jobs: Admitted[];
+  orphans: number;
+  vram?: string;
+}
+
 const HOME = process.env.HOME ?? "";
 
 // --- ANSI / glyph constants (literals so segment assembly stays readable) ---
@@ -154,8 +111,8 @@ const MID = "·"; //   meter middot
 const BR = "⎇"; //    git branch glyph
 const RSET = "⟳"; //  rate-limit reset marker
 // Tiger-Style bound (see the header note above): the timeout shared by every "nice-to-have
-// enrichment" subprocess call in this file that is not already governed by its own specific
-// number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
+// enrichment" subprocess call in buildDataframe() that is not already governed by its own
+// specific number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
 const ENRICHMENT_TIMEOUT_MS = 2000;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -204,9 +161,9 @@ function ultracodeConfigured(): boolean {
 // 2026-08-28), and what `/list-agents` addresses it by. NOT a label this file invented: it
 // defaults to the auto-generated "firedancer-fe" form (docs call that default value the
 // "default display name"; sessions.md), and tracks `--name`/`/rename` after that. Not on stdin
-// (see line 3's header note above — `session_name` is a DIFFERENT, independently-tracked
-// field) — resolved by shelling out to `claude agents --json` and matching our own session_id,
-// then cached. One cache file, keyed by session_id, shared by every session on this machine —
+// (see StatusInput's own note — `session_name` is a DIFFERENT, independently-tracked field) —
+// resolved by shelling out to `claude agents --json` and matching our own session_id, then
+// cached. One cache file, keyed by session_id, shared by every session on this machine —
 // whichever renders first warms it for the rest.
 //
 // NOTE 2026-09-02: Claude Code's own "prompt bar" (the input box's own border) already shows
@@ -274,87 +231,6 @@ function agentName(sid: string): string | undefined {
   }
 }
 
-// line 1: PS1 mirror ONLY — user@host:MM-DD HH:MM|cwd. See line 1's header note above for why
-// account/name no longer ride here.
-function line1(cwd: string): string {
-  const user = userInfo().username;
-  const host = osHostname().split(".")[0];
-  const d = new Date();
-  const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  return (
-    `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
-    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}`
-  );
-}
-
-// Joins two segments with the standard SEP pipe, or returns `seg` alone when `t` is still
-// empty — used throughout the render section below to build each row from whichever of its
-// pieces are actually present, in order.
-const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
-
-// --- read stdin JSON (graceful: render line 1 + hint if it is missing/invalid) ---
-const raw = await Bun.stdin.text();
-let data: StatusInput;
-try {
-  data = JSON.parse(raw); // any -> StatusInput at the trust boundary (no `as` cast)
-} catch {
-  process.stdout.write(`${line1(process.env.PWD ?? "")}\n`);
-  process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
-  process.exit(0);
-}
-
-// --- extract fields (same fallbacks as the jq pass in the old sh version) ---
-// || (not ??) here: an empty cwd string must ALSO fall through to PWD, matching the old
-// sh's `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
-const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
-const sid = data.session_id || undefined; // "" is not an id either — drop the row, don't print blank
-// See agentName's header note for why this is `claude agents --json`'s `name` field, not `session_name`.
-const sessionName = sid != null ? agentName(sid) : undefined;
-let model = data.model?.display_name ?? "";
-const modelId = data.model?.id ?? "";
-const ctxTok =
-  data.context_window?.total_input_tokens ??
-  data.context_window?.current_usage?.input_tokens ??
-  0;
-const add = data.cost?.total_lines_added ?? 0;
-const del = data.cost?.total_lines_removed ?? 0;
-const effort = data.effort?.level; // string | undefined
-// "Dynamic workflow" (ultracode's auto multi-agent orchestration) is armed ONLY while BOTH
-// hold: the setting says so, and the live effort actually running is xhigh — ultracode forces
-// xhigh whenever it genuinely engages, and per workflow-and-context.md's gotcha note a
-// higher-precedence effort lever can silently push effort off xhigh and turn orchestration OFF
-// even though `ultracode: true` still sits in settings. Reading the live value here (not the
-// setting alone) is what makes this segment catch that silent case instead of lying about it.
-const wfOn = ultracodeConfigured() && effort === "xhigh";
-// Folds wfOn into the effort readout itself ("xhigh" vs "xhigh+WF") instead of a separate
-// standalone "WF:" segment — on request 2026-09-05, both in this statusline and in the $effort
-// token mirrored to herdr below. `effort` is guaranteed "xhigh" whenever wfOn is true (see its
-// own condition above), so the suffix is never appended to a non-xhigh value.
-const effortDisplay = effort ? `${effort}${wfOn ? "+WF" : ""}` : effort;
-const ctxPct = data.context_window?.used_percentage; // number | undefined
-const rl5 = data.rate_limits?.five_hour?.used_percentage;
-const rl7 = data.rate_limits?.seven_day?.used_percentage;
-const wt = data.worktree?.name; // string | undefined
-const rl5Reset = data.rate_limits?.five_hour?.resets_at;
-const rl7Reset = data.rate_limits?.seven_day?.resets_at;
-
-// model name (guarantee e.g. "Opus 4.8"): keep display_name if it already has a version,
-// else derive "Family X.Y" from the id (claude-opus-4-8[1m] -> Opus 4.8).
-if (!/[0-9]/.test(model)) {
-  const base = modelId.replace(/^claude-/, "").split("[")[0];
-  const dash = base.indexOf("-");
-  const fam = dash === -1 ? base : base.slice(0, dash);
-  const ver = (dash === -1 ? "" : base.slice(dash + 1)).replace(/-/g, ".");
-  if (fam) {
-    const famCap = fam.charAt(0).toUpperCase() + fam.slice(1);
-    model = ver ? `${famCap} ${ver}` : famCap;
-  }
-}
-if (!model) model = "?";
-// Trim the verbose extended-context tag: "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)".
-if (model.endsWith(" context)"))
-  model = `${model.slice(0, -" context)".length)})`;
-
 // Best-effort push to herdr over the same JSON-RPC unix socket its own vendored integration
 // (hooks/herdr-agent-state.sh) already talks to. A raw socket write, not a subprocess, so
 // unlike agentName()'s `claude agents --json` this is cheap enough to do on EVERY render —
@@ -365,12 +241,11 @@ if (model.endsWith(" context)"))
 //                         /model, switchModelsOnFlag) shows up. The addressable session name
 //                         rides the same request as $fullname, for the sidebar (herdr's
 //                         rows_by_agent.claude reads that back, not "tab" — see below). $effort
-//                         mirrors this statusline's own effort readout (effortDisplay above:
-//                         data.effort?.level, plus "+WF" when dynamic-workflow orchestration is
-//                         engaged — e.g. "xhigh" or "xhigh+WF") into the row, added 2026-09-03 on
-//                         request, placed between $model and $rc. $rc is a one-glyph Remote
-//                         Control indicator, placed
-//                         right of $effort in that same row (2026-09-03, on request) — 🔗 while
+//                         mirrors this statusline's own effort readout ("xhigh" or "xhigh+WF"
+//                         when dynamic-workflow orchestration is engaged) into the row, added
+//                         2026-09-03 on request, placed between $model and $rc. $rc is a
+//                         one-glyph Remote Control indicator, placed right of $effort in that
+//                         same row (2026-09-03, on request) — 🔗 while
 //                         $CLAUDE_CODE_BRIDGE_SESSION_ID is set (Claude Code v2.1.199+ sets it
 //                         only while this session has an active Remote Control connection),
 //                         else "". Unlike fullname, $effort and $rc are sent every render even
@@ -441,7 +316,7 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
 async function reportToHerdr(
   m: string,
   sessionName?: string,
-  effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF" — see effortDisplay above the call site
+  effortDisplay?: string, // plain-text "xhigh" / "xhigh+WF"
 ): Promise<void> {
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
@@ -475,27 +350,6 @@ async function reportToHerdr(
       params: { tab_id: tabId, label: shortName },
     });
   }
-}
-await reportToHerdr(model, sessionName, effortDisplay);
-
-// Ctx: live context tokens -> 100800 -> "100.8k"
-const ctx = ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
-
-// git branch from cwd (segment omitted if not a repo, or if the lookup hangs/times out — see
-// the top-of-file Tiger-Style note for why this call is now bounded).
-let branch: string | undefined;
-try {
-  branch = execFileSync(
-    "git",
-    ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
-    {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: ENRICHMENT_TIMEOUT_MS,
-    },
-  ).trim();
-} catch {
-  branch = undefined;
 }
 
 // Usage-percent -> rounded int + threshold color (green <70 / yellow <90 / red >=90).
@@ -536,8 +390,11 @@ function reset7(epoch: number): string {
   return `${RSET}${clock}(${rem})`;
 }
 
-// --- Out-of-harness work (see line 7's header note) -------------------------------------
-// ONE `ps` pass answers both halves; nvidia-smi is paid for only when something is admitted.
+// --- Out-of-harness work: work running OUTSIDE the harness, the window Claude Code itself
+// cannot draw. A child started with setsid/nohup is reparented to PID 1, so the background-task
+// tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it outlives the
+// session (even the project) that spawned it. ONE `ps` pass answers both halves below; nvidia-smi
+// is paid for only when something is admitted (see buildDataframe()'s call to vramFrac()). ---
 interface Admitted {
   name: string;
   secs: number;
@@ -560,6 +417,9 @@ function admittedName(tok: string[]): string | undefined {
     ?.replace(/\.resource\.json$/, "");
   return name === "" ? undefined : name;
 }
+// Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked helper)
+// that outlived its session. Counted, never judged — deciding which orphan is "real work" is
+// exactly the guess this segment exists to stop us making.
 function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
   let raw: string;
   try {
@@ -584,9 +444,6 @@ function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
     const [, ppid, etimes, args] = m;
     const name = admittedName(args.split(/\s+/));
     if (name != null) jobs.push({ name, secs: Number(etimes) });
-    // Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked
-    // helper) that outlived its session. Counted, never judged — deciding which orphan is
-    // "real work" is exactly the guess this segment exists to stop us making.
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
   return { jobs, orphans };
@@ -618,84 +475,220 @@ const dur = (s: number) =>
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
 
-// config segment (part of line 3, see the top-of-file note): Model | Effort[+WF].
-let configLine = `${ESC}[38;5;30m${model}${RST}`;
-if (effort) {
-  configLine += `${SEP}${ESC}[38;5;209m${effort}${RST}`;
-  // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
-  // slider "ultracode" label (screenshotted) — picked over green to read as "ultracode is
-  // on" at a glance. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in this file:
-  // the palette's nearest steps (ANSI 93/129/135/141) were all visibly off during the pick.
-  if (wfOn) configLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
-}
+// --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
+async function buildDataframe(data: StatusInput): Promise<Dataframe> {
+  // || (not ??): an empty cwd string must ALSO fall through to PWD, matching the old sh's
+  // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
+  const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
+  const sid = data.session_id || undefined; // "" is not an id either
+  const sessionName = sid != null ? agentName(sid) : undefined;
+  const email = account();
 
-// budget segment (part of line 2, see the top-of-file note): Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%.
-let budgetLine = `${ESC}[38;5;66mCtx:${RST} ${ctx}`;
-if (ctxPct != null) {
-  const { pct, col } = pctFmt(ctxPct);
-  budgetLine += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
-}
-if (rl5 != null || rl7 != null) {
-  budgetLine += `${SEP}${ESC}[38;5;108mRate:${RST}`;
-  if (rl5 != null) {
-    const { pct, col } = pctFmt(rl5);
-    budgetLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
-    if (rl5Reset != null) budgetLine += ` ${DIM}${reset5(rl5Reset)}${RST}`;
+  let model = data.model?.display_name ?? "";
+  const modelId = data.model?.id ?? "";
+  // model name (guarantee e.g. "Opus 4.8"): keep display_name if it already has a version,
+  // else derive "Family X.Y" from the id (claude-opus-4-8[1m] -> Opus 4.8).
+  if (!/[0-9]/.test(model)) {
+    const base = modelId.replace(/^claude-/, "").split("[")[0];
+    const dash = base.indexOf("-");
+    const fam = dash === -1 ? base : base.slice(0, dash);
+    const ver = (dash === -1 ? "" : base.slice(dash + 1)).replace(/-/g, ".");
+    if (fam) {
+      const famCap = fam.charAt(0).toUpperCase() + fam.slice(1);
+      model = ver ? `${famCap} ${ver}` : famCap;
+    }
   }
-  if (rl7 != null) {
-    const { pct, col } = pctFmt(rl7);
-    budgetLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
-    if (rl7Reset != null) budgetLine += ` ${DIM}${reset7(rl7Reset)}${RST}`;
+  if (!model) model = "?";
+  // Trim the verbose extended-context tag: "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)".
+  if (model.endsWith(" context)"))
+    model = `${model.slice(0, -" context)".length)})`;
+
+  const effort = data.effort?.level; // string | undefined
+  // "Dynamic workflow" (ultracode's auto multi-agent orchestration) is armed ONLY while BOTH
+  // hold: the setting says so, and the live effort actually running is xhigh — ultracode forces
+  // xhigh whenever it genuinely engages, and a higher-precedence effort lever (env var, an
+  // interactive /effort choice, a per-model modelSettings entry the CLI itself writes back —
+  // see ultracodeConfigured()'s note) can silently push effort off xhigh and turn orchestration
+  // OFF even though `ultracode: true` still sits in settings. Reading the live value here (not
+  // the setting alone) is what makes this catch that silent case instead of lying about it.
+  const wfOn = ultracodeConfigured() && effort === "xhigh";
+  // Plain-text form for herdr only ("xhigh" vs "xhigh+WF") — render() does its OWN combining
+  // (with its own +WF color) from the raw `effort`/`wfOn` pair below; a dataframe field must
+  // hold one raw fact, not a pre-styled/pre-joined display string, or a future render() change
+  // duplicates work already done here (caught live 2026-09-12: the first cut of this split
+  // stored the combined string AND re-appended "+WF" in render(), rendering "xhigh+WF+WF").
+  const effortDisplay = effort ? `${effort}${wfOn ? "+WF" : ""}` : effort;
+
+  await reportToHerdr(model, sessionName, effortDisplay);
+
+  const ctxTok =
+    data.context_window?.total_input_tokens ??
+    data.context_window?.current_usage?.input_tokens ??
+    0;
+  const ctx =
+    ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
+
+  // git branch from cwd (omitted if not a repo, or if the lookup hangs/times out — see the
+  // top-of-file Tiger-Style note for why this call is bounded).
+  let branch: string | undefined;
+  try {
+    branch = execFileSync(
+      "git",
+      ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+      {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+        timeout: ENRICHMENT_TIMEOUT_MS,
+      },
+    ).trim();
+  } catch {
+    branch = undefined;
   }
+
+  const { jobs, orphans } = scanOutOfHarness();
+  // nvidia-smi is paid for only when something is admitted — see the header note above render().
+  const vram = jobs.length > 0 ? vramFrac() : undefined;
+
+  return {
+    cwd,
+    sid,
+    sessionName,
+    email,
+    model,
+    effort,
+    wfOn,
+    ctx,
+    ctxPct: data.context_window?.used_percentage,
+    rl5: data.rate_limits?.five_hour?.used_percentage,
+    rl5Reset: data.rate_limits?.five_hour?.resets_at,
+    rl7: data.rate_limits?.seven_day?.used_percentage,
+    rl7Reset: data.rate_limits?.seven_day?.resets_at,
+    branch,
+    add: data.cost?.total_lines_added ?? 0,
+    del: data.cost?.total_lines_removed ?? 0,
+    wt: data.worktree?.name,
+    jobs,
+    orphans,
+    vram,
+  };
 }
 
-// line 4: repo = <branch> | (+add,-del) [| wt: <name>].
-let repoLine = "";
-if (branch) repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${branch}${RST}`);
-repoLine = join(repoLine, `${ESC}[38;5;178m(+${add},-${del})${RST}`);
-if (wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${wt}${RST}`);
+// --- render: Dataframe -> row strings. ALL styling and ALL row grouping lives here — this is
+// the ONLY function a future "move field X to a different row" request should touch.
+//
+// Current grouping (see the top-of-file note for the full list): line 1 is the PS1 mirror,
+// alone, unconditionally — mirrors .zshrc's PROMPT, change both together. Line 2 pairs email
+// with the Session uuid (both are copy/reference identity strings, not live state); the uuid
+// MUST stay LAST on whatever row it appears on — tmux/tmux.conf sets `word-separators ' \t'`,
+// so a row ending in the raw uuid is a one-gesture `claude --resume <id>` double-click copy,
+// which breaks if the row wraps before reaching the uuid on a narrow pane. Keeping this row
+// short (just email ahead of it) is what keeps that risk small; if a future change puts more
+// before the uuid and this starts biting in practice, give Session its own row back rather
+// than reintroducing width-fitting logic (deliberately absent from this whole file: every row
+// here is an unconditional `join()` of present pieces, never a width-driven merge across rows).
+// Line 3 pairs the agent's addressable name with its live Model/Effort — "what's running,
+// right now". Line 4 is budget (Ctx + Rate — the same kind of fact, "how much allowance is
+// left"). Line 5 is repo state (branch + diff + worktree). Line 6 is Job, conditional, always
+// its own row so nothing can ever cause it to be silently dropped.
+function render(df: Dataframe): string {
+  const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
-// line 5 (conditional): Job.
-const { jobs, orphans } = scanOutOfHarness();
-let jobLine: string | undefined;
-if (jobs.length > 0 || orphans > 0) {
-  jobLine = `${ESC}[38;5;173mJob:${RST}`;
-  if (jobs.length > 0) {
-    const [first] = jobs;
-    const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
-    jobLine += ` ${first.name}${more} ${dur(first.secs)}`;
-    const vram = vramFrac();
-    if (vram != null) jobLine += ` ${DIM}${MID} ${vram}${RST}`;
-    if (orphans > 0) jobLine += ` ${DIM}det×${orphans}${RST}`;
-  } else {
-    // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
-    // are states the harness reports as "idle", which is the failure this segment answers.
-    jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${orphans}${RST}`;
+  const user = userInfo().username;
+  const host = osHostname().split(".")[0];
+  const d = new Date();
+  const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const line1 =
+    `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
+    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(df.cwd)}${RST}`;
+
+  let identityLine = "";
+  if (df.email != null)
+    identityLine = join(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
+  if (df.sid != null)
+    identityLine = join(
+      identityLine,
+      `${ESC}[38;5;103mSession:${RST} ${DIM}${df.sid}${RST}`,
+    );
+
+  let agentLine = "";
+  if (df.sessionName != null)
+    agentLine = join(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
+  agentLine = join(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
+  if (df.effort) {
+    agentLine += `${SEP}${ESC}[38;5;209m${df.effort}${RST}`;
+    // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
+    // slider "ultracode" label. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in
+    // this file: the palette's nearest steps (ANSI 93/129/135/141) were all visibly off.
+    if (df.wfOn) agentLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
   }
+
+  let budgetLine = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
+  if (df.ctxPct != null) {
+    const { pct, col } = pctFmt(df.ctxPct);
+    budgetLine += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
+  }
+  if (df.rl5 != null || df.rl7 != null) {
+    budgetLine += `${SEP}${ESC}[38;5;108mRate:${RST}`;
+    if (df.rl5 != null) {
+      const { pct, col } = pctFmt(df.rl5);
+      budgetLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
+      if (df.rl5Reset != null)
+        budgetLine += ` ${DIM}${reset5(df.rl5Reset)}${RST}`;
+    }
+    if (df.rl7 != null) {
+      const { pct, col } = pctFmt(df.rl7);
+      budgetLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
+      if (df.rl7Reset != null)
+        budgetLine += ` ${DIM}${reset7(df.rl7Reset)}${RST}`;
+    }
+  }
+
+  let repoLine = "";
+  if (df.branch)
+    repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
+  repoLine = join(repoLine, `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`);
+  if (df.wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
+
+  let jobLine: string | undefined;
+  if (df.jobs.length > 0 || df.orphans > 0) {
+    jobLine = `${ESC}[38;5;173mJob:${RST}`;
+    if (df.jobs.length > 0) {
+      const [first] = df.jobs;
+      const more =
+        df.jobs.length > 1 ? `${DIM}+${df.jobs.length - 1}${RST}` : "";
+      jobLine += ` ${first.name}${more} ${dur(first.secs)}`;
+      if (df.vram != null) jobLine += ` ${DIM}${MID} ${df.vram}${RST}`;
+      if (df.orphans > 0) jobLine += ` ${DIM}det×${df.orphans}${RST}`;
+    } else {
+      // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
+      // are states the harness reports as "idle", which is the failure this segment answers.
+      jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${df.orphans}${RST}`;
+    }
+  }
+
+  return [line1, identityLine, agentLine, budgetLine, repoLine, jobLine]
+    .filter((r): r is string => r != null && r !== "")
+    .join("\n");
 }
 
-// --- render: rows in the order documented at the top of this file ---
-// line 2: account + budget. budgetLine is never empty (Ctx always has a value, even "0"), so
-// this line is too — no need to guard the whole row on acctEmail being present.
-const acctEmail = account();
-let accountLine = "";
-if (acctEmail != null)
-  accountLine = join(accountLine, `${ESC}[38;5;103m${acctEmail}${RST}`);
-accountLine = join(accountLine, budgetLine);
-
-// line 3: agent + config + resume. configLine is never empty (model falls back to "?"), so
-// this line is too. Session — see its header note above — stays LAST, deliberately.
-let agentLine = "";
-if (sessionName != null)
-  agentLine = join(agentLine, `${ESC}[38;5;214m${sessionName}${RST}`);
-agentLine = join(agentLine, configLine);
-if (sid != null)
-  agentLine = join(
-    agentLine,
-    `${ESC}[38;5;103mSession:${RST} ${DIM}${sid}${RST}`,
+// --- entry: read stdin JSON, build the dataframe, render, write. Graceful: an invalid/missing
+// JSON payload still renders line 1 (from $PWD, no dataframe needed) plus a hint. ---
+const raw = await Bun.stdin.text();
+let data: StatusInput;
+try {
+  data = JSON.parse(raw); // any -> StatusInput at the trust boundary (no `as` cast)
+} catch {
+  const cwd = process.env.PWD ?? "";
+  const user = userInfo().username;
+  const host = osHostname().split(".")[0];
+  const d = new Date();
+  const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  process.stdout.write(
+    `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}\n`,
   );
+  process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
+  process.exit(0);
+}
 
-const rows = [line1(cwd), accountLine, agentLine, repoLine, jobLine].filter(
-  (r): r is string => r != null && r !== "",
-);
-process.stdout.write(rows.join("\n"));
+const df = await buildDataframe(data);
+process.stdout.write(render(df));

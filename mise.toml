@@ -452,6 +452,20 @@ run = 'bun ~/dotfiles/scripts/wsl-init.ts'
 description = "Deploy wsl/wslconfig.win to %USERPROFILE%\\.wslconfig (COPY — Windows cannot follow a WSL symlink). Idempotent, backs up drift, guards memory= against host RAM. Needs `wsl --shutdown` to take effect."
 run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 
+# Start WSL on a Windows host parked at its LOGON SCREEN — the thing that actually fixes the
+# "Windows Update rebooted overnight and the box was unreachable for 5 hours" failure.
+#
+# The obvious fix looked like auto-logon, because WSL-keepalive and WSL-revive are onlogon tasks.
+# That was a means mistaken for the goal, and it cost a long detour (Sysinternals Autologon in two
+# builds, LsaStorePrivateData by P/Invoke, AutoLogonSID removal — none of which logs in a
+# MicrosoftAccount that has Windows Hello configured). Measured 2026-09-12: `wsl.exe` over ssh
+# starts the distro at the logon screen anyway, exit 0. The onlogon limit is Task Scheduler's,
+# not WSL's. Goes over r99-lan because the tailnet is precisely what is missing there — Windows
+# Tailscale is a user-session GUI client, while sshd is a service.
+[tasks."wsl:wake"]
+description = "Start WSL on the Windows host over the LAN, no logon needed — for when Windows rebooted and sits at the logon screen. Holds the distro up with a detached anchor (WSL stops it ~60s after the last attachment otherwise). --status to only report."
+run = 'bun ~/dotfiles/scripts/wsl-wake.ts'
+
 # The Windows half of the Brewfile. Brewfile is the single source of truth for tools on macOS and
 # WSL; the Windows host underneath had none — 113 winget-managed packages (2026-09-11) lived only
 # on the machine. `winget export` / `winget import` give the same source-of-truth shape, so the

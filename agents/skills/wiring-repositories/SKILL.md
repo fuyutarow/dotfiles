@@ -124,10 +124,12 @@ answer.
 | repo-local `.claude/skills/` | a procedure repeats across sessions **in this repo only** | `forging-skills` |
 
 **The global-inheritance rule.** Global settings already wire four PreToolUse hooks for every
-repo, plus the session-lifecycle set. The global mise config already pins the shared language
-majors. A repo-local file re-declaring any of them is not belt-and-braces. It is a second arguing
-home, and it will drift. Repo-local carries **only** what is repo-specific. Which majors are
-global, and the exact-patch exception, are dated facts — `references/layers.md` §2.
+repo, plus the session-lifecycle set. The global mise config pins **no** tools. INV-6 rules:
+a runtime is reachable where a repo's `mise.toml` declares it, or not at all. So every runtime
+a repo invokes is declared repo-locally; nothing sits above it to re-declare. What IS global
+(hooks, lifecycle, statusline) a repo-local file must not re-declare: a second arguing home
+drifts. Repo-local carries **only** what is repo-specific. The measured global surface and the
+exact-patch pin rule are dated facts — `references/layers.md` §2.
 
 ## The pipeline
 

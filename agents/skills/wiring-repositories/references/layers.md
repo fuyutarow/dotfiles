@@ -27,14 +27,15 @@ Measured 2026-08-30. Re-declaring any of these creates a second arguing home tha
 
 | Surface | Already global | Consequence for a new repo |
 |---|---|---|
-| global mise `[tools]` | `julia` and `node` majors; `idiomatic_version_file_enable_tools=[]` | Do not re-declare those **majors**. `bun`, `rust`, `uv` are absent globally — a repo using them **must** declare them |
+| global mise `[tools]` | **none** (re-measured 2026-09-12; `[settings] idiomatic_version_file_enable_tools=[]` only) | Every managed runtime a repo invokes (`julia`, `node`, `bun`, `rust`, `uv`) **must** be declared in that repo's `mise.toml`. The `julia`/`node` majors measured global on 2026-08-30 were an INV-6 violation. dotfiles `test:mise-scope` §6 had failed on them since 2026-08-23. Removed 2026-09-12; firedancer, the one repo that leaned on them, now declares `julia = "1.12"` |
 | global Claude PreToolUse | dispatch-contract, search-route, supervised-execution, goal-kernel; matchers `Agent\|Task\|Workflow`, `Grep\|Bash`, `Bash`, `*` | Every repo inherits all four. Repo-local carries only repo-specific rules |
 | global lifecycle hooks | SessionStart / SessionEnd / PreCompact / Stop / PostToolUse, plus the statusline | Inherited; never re-registered per repo |
 | `autoMode.environment` | scoped **by name** to one trusted repo | **Not** a template. A new repo inherits none of its entries |
 
-**The exact-patch exception.** A repo may re-pin an exact patch on top of a global major. Observed:
-`julia = "1.12.6"` over a global `1.12`. That is legitimate when a lockfile or `Manifest.toml`
-pins a resolution that patch drift would invalidate. It is a narrower constraint, not a duplicate.
+**The exact-patch rule** (formerly "exception", when a global major sat above it). A repo may pin
+an exact patch (`julia = "1.12.6"`) rather than a major (`"1.12"`). Do so when a lockfile or
+`Manifest.toml` pins a resolution that patch drift would invalidate — a narrower constraint, not a
+duplicate.
 
 **Require the reason in a comment.** An exact pin with no stated reason cannot be told apart from
 a copy-paste. It will never be relaxed.

@@ -21,12 +21,11 @@
 // Current row grouping (change this by editing render(), not this comment — see the module
 // docstring on render() for the box the design lives inside; e.g. the Session-uuid MUST stay
 // last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
-//   1 user@host:MM-DD HH:MM|cwd                     (PS1 mirror)
+//   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
 //   2 <email> | Session: <uuid>                     (identity strings)
 //   3 <name> | Model | Effort[+WF]                  (agent + config)
 //   4 Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%          (budget)
-//   5 <branch> | (+add,-del) [| wt: <name>]          (repo)
-//   6 Job: ... (conditional)                         (background work)
+//   5 Job: ... (conditional)                         (background work)
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
 // buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
@@ -576,9 +575,14 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // --- render: Dataframe -> row strings. ALL styling and ALL row grouping lives here — this is
 // the ONLY function a future "move field X to a different row" request should touch.
 //
-// Current grouping (see the top-of-file note for the full list): line 1 is the PS1 mirror,
-// alone, unconditionally — mirrors .zshrc's PROMPT, change both together. Line 2 pairs email
-// with the Session uuid (both are copy/reference identity strings, not live state); the uuid
+// Current grouping (see the top-of-file note for the full list): line 1 is the PS1 mirror
+// PLUS repo state (branch + diff + worktree) — on request 2026-09-12, since together they were
+// short enough to read as one line in practice. KNOWN, ACCEPTED DIVERGENCE: this makes line 1
+// no longer a byte-for-byte mirror of .zshrc's real PROMPT (which carries no git info at all —
+// confirmed against zsh/zshrc's own `PROMPT=` line), only of its user@host:date|cwd portion. If
+// that divergence ever needs to close instead, the fix is adding git info to the REAL PROMPT in
+// zsh/zshrc, not reverting this — see the conversation that requested this cut. Line 2 pairs
+// email with the Session uuid (both are copy/reference identity strings, not live state); the uuid
 // MUST stay LAST on whatever row it appears on — tmux/tmux.conf sets `word-separators ' \t'`,
 // so a row ending in the raw uuid is a one-gesture `claude --resume <id>` double-click copy,
 // which breaks if the row wraps before reaching the uuid on a narrow pane. Keeping this row
@@ -588,8 +592,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // here is an unconditional `join()` of present pieces, never a width-driven merge across rows).
 // Line 3 pairs the agent's addressable name with its live Model/Effort — "what's running,
 // right now". Line 4 is budget (Ctx + Rate — the same kind of fact, "how much allowance is
-// left"). Line 5 is repo state (branch + diff + worktree). Line 6 is Job, conditional, always
-// its own row so nothing can ever cause it to be silently dropped.
+// left"). Line 5 (conditional) is Job, always its own row so nothing can ever cause it to be
+// silently dropped.
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
@@ -666,7 +670,7 @@ function render(df: Dataframe): string {
     }
   }
 
-  return [line1, identityLine, agentLine, budgetLine, repoLine, jobLine]
+  return [join(line1, repoLine), identityLine, agentLine, budgetLine, jobLine]
     .filter((r): r is string => r != null && r !== "")
     .join("\n");
 }

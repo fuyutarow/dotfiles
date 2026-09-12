@@ -50,6 +50,24 @@ Include ~/.ssh/config.local
 Host r99-wsl r99
     Compression yes
 
+# r99-lan is the SAME Windows host as r99, over the LAN rather than the tailnet, and it exists
+# because Tailscale on Windows is a USER-SESSION GUI client: the tailnet address is unreachable
+# while the machine sits at a logon screen — precisely when you most need to get in. sshd is a
+# service and answers on the LAN throughout. Proven 2026-09-12: after a reboot `ssh r99` timed out
+# while `ssh r99-lan` worked, and the auto-logon diagnosis happened only through it.
+#
+# Deliberately NOT compressed: the ~10x win above is an asymmetric-WAN result (r99's uplink is
+# ~10 Mbps). On a gigabit LAN, zlib is slower than the wire, so compressing costs CPU for nothing.
+# Addressed by mDNS, NOT by IP, which is why this block can live in a public repo at all: the LAN
+# address is DHCP and drifts, but `R99.local` follows it — verified 2026-09-12, resolves to the
+# current lease. `.local` is also not routable off the segment, so it discloses nothing and cannot
+# be reached from the internet; the thing never to publish is the WAN address, and this is not it.
+# If mDNS is ever unavailable (some managed networks block it), override in ~/.ssh/config.local
+# with a literal `HostName <ip>` — that file is Included first, so it wins.
+Host r99-lan
+    HostName R99.local
+    User fuyutarow
+
 # --- keepalive: prevent an idle NAT/firewall from silently reaping a live connection -------
 # Probe every 30s, give up after 3 misses (~90s), so a long-lived agent session notices a dead
 # link and reconnects promptly instead of hanging on a socket the path has already forgotten.

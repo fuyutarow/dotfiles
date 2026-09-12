@@ -79,9 +79,20 @@ out=$(pty_run 'ssh' 'print -r -- AFTER_255')
 want "no read on the ssh path: shell survives exit 255" "AFTER_255" "$out"
 
 # --- 5. the precmd hook is registered exactly once, however often the file is sourced -------
+# `${#${(M)arr:#pat}}` is a zsh trap, and NOT atuin- or this-box-specific (root-caused 2026-09-12,
+# verified directly against zsh 5.9 across 0/1/2/3-element arrays): without `@`, a nested
+# substitution collapses the WHOLE array to a SCALAR (elements joined on $IFS[1]) BEFORE `:#pat`
+# is applied, so `:#pat` then keeps that joined string only if the ENTIRE thing matches `pat`,
+# discarding it (empty) otherwise. That can never report the match count: with exactly one hook
+# registered the joined string IS `pat`, so `${#...}` reports the FUNCTION NAME'S length (13, not
+# 1); with two or more hooks — atuin's, a real double-stack, or any other precmd function — the
+# joined string can never equal the bare pattern, so it reports 0. Confirmed unconditional: every
+# matching and non-matching shape tried printed 0 or 13, never once "1". `(@M)` keeps the filtered
+# result as an array through the nesting, so `${#…}` counts elements correctly (0/1/N; verified
+# for 0-, 1-of-1, 1-of-2, and 2-of-2 match shapes on a real zsh).
 out=$(pty_run "source $ROOT/zsh/aliases.zsh >/dev/null 2>&1" \
               "source $ROOT/zsh/aliases.zsh >/dev/null 2>&1" \
-              'print -r -- "HOOKCOUNT=${#${(M)precmd_functions:#_term_restore}}"')
+              'print -r -- "HOOKCOUNT=${#${(@M)precmd_functions:#_term_restore}}"')
 want "precmd hook does not stack on re-source" "HOOKCOUNT=1" "$out"
 
 # --- 6. bounded drain returns instead of spinning ------------------------------------------

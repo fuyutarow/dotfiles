@@ -21,11 +21,12 @@
 // Current row grouping (change this by editing render(), not this comment — see the module
 // docstring on render() for the box the design lives inside; e.g. the Session-uuid MUST stay
 // last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
-//   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
-//   2 <email> | Session: <uuid>                     (identity strings)
-//   3 <name> | Model | Effort[+WF]                  (agent + config)
-//   4 Ctx: <k>·<pct>% | Rate: 5h..% · 7d..%          (budget)
-//   5 Job: ... (conditional)                         (background work)
+//   1 user@host:MM-DD HH:MM|cwd                       (PS1 mirror, byte-for-byte)
+//   2 <email> | Session: <uuid>                       (identity strings)
+//   3 <name> | Model | Effort[+WF] | Ctx: <k> <pct>%  (agent + config + budget-now)
+//   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...)         (budget-over-time)
+//   5 ⎇ <branch> | (+add,-del) [| wt]                 (repo state)
+//   6 Job: ... (conditional)                          (background work)
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
 // buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
@@ -76,27 +77,32 @@ interface StatusInput {
 // Every value this file can show, already computed — the sole output of buildDataframe() and
 // sole input to render(). No ANSI codes, no row grouping, no ordering: a value here says
 // nothing about where or whether it appears on screen.
+// Optional fields carry explicit `| undefined`, not just `?:` — with exactOptionalPropertyTypes
+// this is deliberate, not a widening-to-dodge-the-checker: undefined here is a real, distinct
+// state render() branches on (its `!= null` checks decide whether a segment shows at all), and
+// buildDataframe() assembles this object as one literal rather than conditionally spreading each
+// of the ~11 optional keys in and out.
 interface Dataframe {
   cwd: string;
-  sid?: string;
-  sessionName?: string;
-  email?: string;
+  sid?: string | undefined;
+  sessionName?: string | undefined;
+  email?: string | undefined;
   model: string;
-  effort?: string;
+  effort?: string | undefined;
   wfOn: boolean;
   ctx: string;
-  ctxPct?: number;
-  rl5?: number;
-  rl5Reset?: number;
-  rl7?: number;
-  rl7Reset?: number;
-  branch?: string;
+  ctxPct?: number | undefined;
+  rl5?: number | undefined;
+  rl5Reset?: number | undefined;
+  rl7?: number | undefined;
+  rl7Reset?: number | undefined;
+  branch?: string | undefined;
   add: number;
   del: number;
-  wt?: string;
+  wt?: string | undefined;
   jobs: Admitted[];
   orphans: number;
-  vram?: string;
+  vram?: string | undefined;
 }
 
 const HOME = process.env.HOME ?? "";
@@ -215,8 +221,13 @@ function agentName(sid: string): string | undefined {
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
     const now = Date.now();
     const next: Record<string, Entry> = {};
+    // exactOptionalPropertyTypes: omit `name` rather than set it to explicit undefined.
     for (const a of list)
-      if (a.sessionId) next[a.sessionId] = { name: a.name, at: now };
+      if (a.sessionId)
+        next[a.sessionId] = {
+          at: now,
+          ...(a.name !== undefined ? { name: a.name } : {}),
+        };
     if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
     try {
       mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
@@ -408,7 +419,13 @@ function admittedName(tok: string[]): string | undefined {
     (t) => t === "agent-resource-run" || t.endsWith("/agent-resource-run"),
   );
   if (i < 0 || i > 1) return undefined;
-  if (i === 1 && !RUNTIME.has(tok[0].split("/").pop() ?? "")) return undefined;
+  if (i === 1) {
+    const first = tok[0];
+    // i === 1 means tok has at least 2 elements, so tok[0] is always defined here;
+    // the check is only for noUncheckedIndexedAccess, not a reachable runtime case.
+    if (first === undefined || !RUNTIME.has(first.split("/").pop() ?? ""))
+      return undefined;
+  }
   if (tok[i + 1] !== "--manifest") return undefined;
   const name = (tok[i + 2] ?? "")
     .split("/")
@@ -441,6 +458,10 @@ function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
     const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S.*)$/);
     if (!m) continue;
     const [, ppid, etimes, args] = m;
+    // All three are non-optional capture groups, so a successful match always has them;
+    // this guard exists only for noUncheckedIndexedAccess, never actually taken.
+    if (ppid === undefined || etimes === undefined || args === undefined)
+      continue;
     const name = admittedName(args.split(/\s+/));
     if (name != null) jobs.push({ name, secs: Number(etimes) });
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
@@ -458,9 +479,13 @@ function vramFrac(): string | undefined {
         timeout: ENRICHMENT_TIMEOUT_MS,
       },
     );
-    const [used, total] = (out.split("\n")[0] ?? "")
+    const [usedRaw, totalRaw] = (out.split("\n")[0] ?? "")
       .split(",")
       .map((s) => Number(s.trim()));
+    // A short/malformed csv line leaves these missing; NaN fails isFinite below exactly like
+    // Number("") already would, so this default changes no observable behavior.
+    const used = usedRaw ?? NaN;
+    const total = totalRaw ?? NaN;
     if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0)
       return undefined;
     return `${(used / 1024).toFixed(1)}/${(total / 1024).toFixed(0)}G`;
@@ -488,7 +513,9 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // model name (guarantee e.g. "Opus 4.8"): keep display_name if it already has a version,
   // else derive "Family X.Y" from the id (claude-opus-4-8[1m] -> Opus 4.8).
   if (!/[0-9]/.test(model)) {
-    const base = modelId.replace(/^claude-/, "").split("[")[0];
+    // String.split always returns at least one element, so this is never actually undefined;
+    // the fallback is only to satisfy noUncheckedIndexedAccess.
+    const base = modelId.replace(/^claude-/, "").split("[")[0] ?? "";
     const dash = base.indexOf("-");
     const fam = dash === -1 ? base : base.slice(0, dash);
     const ver = (dash === -1 ? "" : base.slice(dash + 1)).replace(/-/g, ".");
@@ -576,24 +603,30 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // the ONLY function a future "move field X to a different row" request should touch.
 //
 // Current grouping (see the top-of-file note for the full list): line 1 is the PS1 mirror
-// PLUS repo state (branch + diff + worktree) — on request 2026-09-12, since together they were
-// short enough to read as one line in practice. KNOWN, ACCEPTED DIVERGENCE: this makes line 1
-// no longer a byte-for-byte mirror of .zshrc's real PROMPT (which carries no git info at all —
-// confirmed against zsh/zshrc's own `PROMPT=` line), only of its user@host:date|cwd portion. If
-// that divergence ever needs to close instead, the fix is adding git info to the REAL PROMPT in
-// zsh/zshrc, not reverting this — see the conversation that requested this cut. Line 2 pairs
-// email with the Session uuid (both are copy/reference identity strings, not live state); the uuid
-// MUST stay LAST on whatever row it appears on — tmux/tmux.conf sets `word-separators ' \t'`,
-// so a row ending in the raw uuid is a one-gesture `claude --resume <id>` double-click copy,
-// which breaks if the row wraps before reaching the uuid on a narrow pane. Keeping this row
-// short (just email ahead of it) is what keeps that risk small; if a future change puts more
-// before the uuid and this starts biting in practice, give Session its own row back rather
-// than reintroducing width-fitting logic (deliberately absent from this whole file: every row
-// here is an unconditional `join()` of present pieces, never a width-driven merge across rows).
-// Line 3 pairs the agent's addressable name with its live Model/Effort — "what's running,
-// right now". Line 4 is budget (Ctx + Rate — the same kind of fact, "how much allowance is
-// left"). Line 5 (conditional) is Job, always its own row so nothing can ever cause it to be
-// silently dropped.
+// ONLY — reverted 2026-09-12, same day as the fold-in, once folding repo state into it made the
+// "PS1 mirror" claim stop being true and that cost more than the one shorter line was worth.
+// Line 1 is once again a byte-for-byte match of .zshrc's real PROMPT's first segment (confirmed
+// against zsh/zshrc's own `PROMPT=` line — that line carries no git info, so this file
+// shouldn't add any either). Repo state (branch + diff + worktree) moved to its own line 5.
+// Line 2 pairs email with the Session uuid (both are copy/reference identity strings, not live
+// state); the uuid MUST stay LAST on whatever row it appears on — tmux/tmux.conf sets
+// `word-separators ' \t'`, so a row ending in the raw uuid is a one-gesture `claude --resume
+// <id>` double-click copy, which breaks if the row wraps before reaching the uuid on a narrow
+// pane. Keeping this row short (just email ahead of it) is what keeps that risk small; if a
+// future change puts more before the uuid and this starts biting in practice, give Session its
+// own row back rather than reintroducing width-fitting logic (deliberately absent from this
+// whole file: every row here is an unconditional `join()` of present pieces, never a
+// width-driven merge across rows).
+// Line 3 pairs the agent's addressable name with its live Model/Effort AND the current Ctx
+// reading — "what's running, right now, and how full its context is". Between the Ctx token
+// count and its own percentage there is deliberately NO middot (MID, below): that glyph means
+// "these are two different sibling values", and a raw count next to its own derived percentage
+// is one fact shown twice, not two facts — a bare space reads as one unit. Line 4 is Rate,
+// where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
+// the middot between them — same role MID plays between a job's elapsed time and its vram
+// fraction in Job below. Line 5 is repo state (branch, diff, worktree), its own row now that it
+// no longer rides line 1. Line 6 (conditional) is Job, always its own row so nothing can ever
+// cause it to be silently dropped.
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
@@ -626,24 +659,29 @@ function render(df: Dataframe): string {
     if (df.wfOn) agentLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
   }
 
-  let budgetLine = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
+  let ctxSeg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
   if (df.ctxPct != null) {
     const { pct, col } = pctFmt(df.ctxPct);
-    budgetLine += ` ${DIM}${MID}${RST} ${ESC}[${col}m${pct}%${RST}`;
+    // No MID here on purpose — see render()'s header note: this is one fact (context usage)
+    // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
+    ctxSeg += ` ${ESC}[${col}m${pct}%${RST}`;
   }
+  agentLine = join(agentLine, ctxSeg);
+
+  let rateLine = "";
   if (df.rl5 != null || df.rl7 != null) {
-    budgetLine += `${SEP}${ESC}[38;5;108mRate:${RST}`;
+    rateLine = `${ESC}[38;5;108mRate:${RST}`;
     if (df.rl5 != null) {
       const { pct, col } = pctFmt(df.rl5);
-      budgetLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
+      rateLine += ` 5h ${ESC}[${col}m${pct}%${RST}`;
       if (df.rl5Reset != null)
-        budgetLine += ` ${DIM}${reset5(df.rl5Reset)}${RST}`;
+        rateLine += ` ${DIM}${reset5(df.rl5Reset)}${RST}`;
     }
     if (df.rl7 != null) {
       const { pct, col } = pctFmt(df.rl7);
-      budgetLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
+      rateLine += ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
       if (df.rl7Reset != null)
-        budgetLine += ` ${DIM}${reset7(df.rl7Reset)}${RST}`;
+        rateLine += ` ${DIM}${reset7(df.rl7Reset)}${RST}`;
     }
   }
 
@@ -657,10 +695,12 @@ function render(df: Dataframe): string {
   if (df.jobs.length > 0 || df.orphans > 0) {
     jobLine = `${ESC}[38;5;173mJob:${RST}`;
     if (df.jobs.length > 0) {
-      const [first] = df.jobs;
+      const first = df.jobs[0];
       const more =
         df.jobs.length > 1 ? `${DIM}+${df.jobs.length - 1}${RST}` : "";
-      jobLine += ` ${first.name}${more} ${dur(first.secs)}`;
+      // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
+      jobLine +=
+        first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
       if (df.vram != null) jobLine += ` ${DIM}${MID} ${df.vram}${RST}`;
       if (df.orphans > 0) jobLine += ` ${DIM}det×${df.orphans}${RST}`;
     } else {
@@ -670,7 +710,7 @@ function render(df: Dataframe): string {
     }
   }
 
-  return [join(line1, repoLine), identityLine, agentLine, budgetLine, jobLine]
+  return [line1, identityLine, agentLine, rateLine, repoLine, jobLine]
     .filter((r): r is string => r != null && r !== "")
     .join("\n");
 }

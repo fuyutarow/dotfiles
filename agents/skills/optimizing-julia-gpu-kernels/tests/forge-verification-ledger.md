@@ -125,3 +125,79 @@ the aggregate live host/VRAM buffers; task-per-cell plus agent-level GPU fanout 
 desk-check added the CPU-RAM/GPU-idle Krylov row; existing `CuArray`/GPU tokens fire this skill and P7
 co-fires without taking kernel-craft ownership. No live GPU kernel was run for this documentation-only
 seam; resource admission and hook tests were machine-run separately (`80 pass / 0 fail`).
+
+## Reforge v2609.1.0 — reduced-precision representation-to-execution contract
+
+### Function and existence gate
+
+```text
+Julia GPU workload + target + reduced-precision intent
+  -- specify and verify --> PRECISION CONTRACT
+  -- optimizing-julia-gpu-kernels GK4 --> implementation/measurement-ready device path
+```
+
+`writing-julia` retains host-only scalar/type/package work. Generic terminology remains a plain
+answer. A new format- or package-named skill was rejected: Microfloats and cuTile are component roles
+inside GK4, not distinct artifacts. The collection measured 64 skills / 60,228 listing characters at
+baseline; no new member and no budget raise were admitted.
+
+### Source grades
+
+| Rule family | Grade | Locus and handling |
+|---|---|---|
+| OCP MX payload/scale/block and layout boundary | author-confirmed | stable SoK `urn:uuid:01a0946e-e4ee-71da-a275-8438973dfb4b#RPF-S01`–`S04` |
+| NVFP4 representation and NVIDIA target support | author-confirmed, dated | same SoK `#RPF-S05`, `#RPF-S06`, `#RPF-S08` |
+| AMD CDNA4 OCP MX support | author-confirmed, dated | same SoK `#RPF-S07` |
+| Microfloats/cuTile software state | author-confirmed, dated | canonical HAC claims plus same SoK `#RPF-S09`, `#RPF-Y03`, `#RPF-Y04` |
+| conditional format-policy evidence | primary-study, scope-limited | same SoK `#RPF-S10`–`S13`, synthesis `#RPF-Y05` |
+| `PRECISION CONTRACT` and validation ladder | skill-supplied | operationalization of SoK `#RPF-Y06`; never attribute the table to OCP or a vendor |
+| terminology table | constructed | disambiguation for executor decisions, not a standards claim |
+
+The SoK is a bounded critical review, not a systematic literature review. Its source, method,
+doctrine, and technical refutation passes are recorded in local commit `2aa3c4d`.
+
+### Calibration
+
+The source and model fail in the same direction: element names become packed-storage claims, public
+frontends become target support, and structural precision becomes universal accuracy. GK4 therefore
+puts the contract and deny-gates before package examples. Package-name-only asks remain outside the
+device trigger.
+
+### Corrected RTX 3060 / cuTile claim
+
+The inherited claim “cuTile supports CC 8.0+, so its FP4 reinterpret and widening path is supported
+on sm_86” was refuted. Package admission, frontend emission, target lowering, and native MMA are
+different gates. Current evidence supports opaque `UInt8` storage on CC 8.6 and no native FP4 Tensor
+Core input. Tile IR may diagnose or emulate the typed source; no sm_86 compile/run receipt was taken.
+The durable rule is the four-state table in `references/reduced-precision-formats.md`, sourced from
+SoK `#RPF-S08`, `#RPF-S09`, and `#RPF-Y03`.
+
+### Header-history relocation
+
+- v2607.1.1 added the latency-bound `CuRef`/CUDA Graph distinction after a measured small-GEMM
+  regression.
+- v2607.2.0 added CAPTURE-PINS-ADDRESSES and the cached-path state-separation oracle.
+- v2608.1.0 moved P7 admission before warmup/allocation and bounded streams.
+- v2609.1.0 moved this history out of the invocation header and added the GK4 contract.
+
+### Verification record
+
+Status: PASS. Preflight: quick validator PASS; reference-existence check PASS;
+`git diff --check` PASS; collection floor exits 0 at 64 skills / 60,221 listing characters, below
+the unchanged 60,228 ratchet. The target floor has no structural failure or SKILL.md prose warning.
+
+| Lens | First finding | Resolution | Final |
+|---|---|---|---|
+| source fidelity | Hopper row blurred bytecode availability with target support; 3060 correction lacked a receipt | cited Tile IR's not-native plus diagnose/emulate contract; added the four-state correction record | PASS |
+| architecture / sibling cuts | compression dropped writing-julia JG0 forwarding; hash manifest mixed metadata with digest rows | restored JG0 and JG2→GK1; made baseline metadata a manifest comment | PASS |
+| trigger / bloat | five near misses had only body cuts; two positives lacked Julia scope; Japanese doublets were missing | added stage-1 device predicate, negative routes, scoped positive rows, and Japanese surfaces | PASS |
+| comparative old vs new | no material regression found | three reduced-precision asks improved; ordinary kernel legality preserved; terminology now no-fires | PASS |
+
+No GPU run was performed. This reforge changes operating guidance, not a kernel or a performance
+result. Future runtime claims remain gated by P7, GK2, and the contract's target/system rungs.
+
+**PROSE-DEBT waiver (2026-09-12).** The 2026-07-30 waiver promised cleanup before the next feature
+reforge; that queue was missed. This edit pays down SKILL.md debt from 25 to 0 long sentences,
+41 to 0 version-header lines beyond the limit, and 3 to 0 oversized cells. The new reference adds
+0 long prose sentences. Untouched legacy references still contain 208 long sentences; queue them
+for a dedicated prose reforge before another feature addition. This waiver does not excuse new debt.

@@ -147,7 +147,11 @@ materializes a dense array and loses the wrapper: `cu(Diagonal(rand(2,2)))` keep
 `Diagonal{Float32,CuArray{...}}`; `CuArray(Diagonal(rand(2,2)))` densifies it. `cu(x)` also
 narrows float scalars to Float32 by design — use `adapt` directly if unwanted.
 
-## §12 GK4 PRECISION — Float32 discipline (this gate's home)
+## §12 Wide-type precision — Float32 discipline
+
+Reduced-precision storage, scale, target, and accumulator contracts live in
+`reduced-precision-formats.md`. This section owns Float32/Float16/BFloat16 literals and ordinary
+wide-type choices only. The two homes agree in substance; do not diff them for byte identity.
 
 ### 12.1 Float32 by default, not Float64
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // UserPromptExpansion hook (matcher: quote) — runs /quote to completion HERE and returns
 // decision:"block", so the turn ends without an inference call.
 //

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // SessionStart hook — renames this session's herdr tab to the name `claude agents --json`
 // and `/list-agents` show for it (e.g. "firedancer-fe"), instead of herdr's default numeric
 // tab label ("1", "2", ...). A CUSTOM hook living BESIDE herdr's own vendored integration

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Claude Code statusLine — bun/TypeScript. mac & WSL.
 // Source of truth: ~/dotfiles/agents/claude/statusline-command.ts
 //   -> symlinked to ~/.claude/statusline-command.ts by scripts/link-dots.sh

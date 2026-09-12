@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // AGENT_NAME_SESSION_ID=<session_id> bun resolve-agent-name.ts  ->  prints the addressable
 // name (e.g. "firedancer-fe") to stdout, or nothing on any failure. Exit code is always 0 —
 // the caller (hooks/quote-command.ts) treats empty output as "name unavailable" and falls back.

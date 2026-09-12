@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Stop hook — appends the just-finished turn's `last_assistant_message` to a per-session
 // history file, so /quote (agents/claude/hooks/quote-command.ts) can quote the last turn, or
 // the last N, without touching transcript_path. hooks.md documents transcript_path as racy for

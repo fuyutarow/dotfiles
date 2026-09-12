@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts
 //   exit 0 = delivered (prints the pane id it used, already closed by then), non-zero =
 //   could not deliver. The file path rides the ENVIRONMENT, not argv: a hook is zero-dep

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Stop hook — audit-theater guard.
 //
 // BLOCKS (exit 2) when the assistant's own prose-audit / style-review report uses

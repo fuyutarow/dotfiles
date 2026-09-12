@@ -16,6 +16,7 @@ const CORPUS = [
   { path: "agents/serena-control/serena-foreground.ts" },
   { path: "agents/skills/arguing-research-papers/scripts/claim-check.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
+  { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
   {
     path: "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts",
   },

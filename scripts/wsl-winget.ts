@@ -223,7 +223,7 @@ async function restore(dryRun: boolean): Promise<void> {
     return;
   }
   console.log(
-    "• winget import (installs anything in the manifest that is missing; never upgrades)",
+    "• winget import — installs anything in the manifest that is missing; never upgrades",
   );
   const r = await run(args, IMPORT_MS);
   if (r.timedOut) {

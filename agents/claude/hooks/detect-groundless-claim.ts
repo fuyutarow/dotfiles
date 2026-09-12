@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Stop hook — groundless-claim guard.
 //
 // WARNS (never blocks) when the assistant's final text this turn makes a

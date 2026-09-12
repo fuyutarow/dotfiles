@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // Stop hook — "leaked tool-call" early-warning.
 //
 // Detects the Opus-4.x serialization regression where a tool call is emitted as PLAIN

@@ -248,6 +248,14 @@ function gb(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)}GB`;
 }
 
+// A reading we could not take renders as "?", NEVER as a zero or an omitted field — this
+// script exists because a confident-looking number that was never measured is what produced
+// the wrong calls. One home for that rule also keeps the report lines free of the nested
+// ternaries that scripts/*.ts bans.
+function gbOr(bytes: number | null): string {
+  return bytes === null ? "?" : gb(bytes);
+}
+
 function num(kv: Map<string, string>, key: string): number | null {
   const raw = kv.get(key);
   if (raw === undefined || raw === "" || raw === "na") return null;
@@ -448,7 +456,7 @@ function report(
   const sf = num(g, "swap_free");
   line(
     "mem",
-    `available ${ma === null ? "?" : gb(ma)} of ${mt === null ? "?" : gb(mt)}` +
+    `available ${gbOr(ma)} of ${gbOr(mt)}` +
       `   swap ${st === null || sf === null ? "?" : `${gb(st - sf)} / ${gb(st)}`}` +
       `   PSI ${g.get("mem_psi")}` +
       // pgscan sits next to memory PSI on purpose: PSI alone cannot distinguish a shortage from
@@ -475,10 +483,7 @@ function report(
   const rt = num(h, "host_ram_total");
   const rf = num(h, "host_ram_free");
   const vm = num(h, "host_vmmem");
-  line(
-    "mem",
-    `free ${rf === null ? "?" : gb(rf)} of ${rt === null ? "?" : gb(rt)}   vmmemWSL ${vm === null ? "?" : gb(vm)}`,
-  );
+  line("mem", `free ${gbOr(rf)} of ${gbOr(rt)}   vmmemWSL ${gbOr(vm)}`);
   const cf = num(h, "host_c_free");
   const ct = num(h, "host_c_total");
   line(
@@ -497,8 +502,7 @@ function report(
     "vhdx",
     vhdx.alloc === null && vhdx.apparent === null
       ? "n/a (path not resolved)"
-      : `allocated ${vhdx.alloc === null ? "?" : gb(vhdx.alloc)}` +
-          `   apparent ${vhdx.apparent === null ? "?" : gb(vhdx.apparent)}` +
+      : `allocated ${gbOr(vhdx.alloc)}   apparent ${gbOr(vhdx.apparent)}` +
           `   (allocated is the one that matters)`,
   );
 }

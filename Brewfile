@@ -23,6 +23,10 @@ brew "herdr"        # agent multiplexer (tmux-like workspace for AI coding agent
 brew "topgrade"
 brew "zoxide"       # better cd (,)
 brew "bun"          # JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)
+brew "uv"           # Python tool runner/installer: `uvx` (ephemeral, preferred) + `uv tool install` (ccc via
+                    # `mise run cc:install-mcp`). Its tool bins land in ~/.local/bin, on every shell's PATH via
+                    # zsh/zshenv. Was brew-installed by hand and never declared here until 2026-09-13 — a fresh
+                    # `brew bundle` would have skipped it and `cc:install-mcp` would have failed on the first step.
 
 # Productivity / TUI
 brew "atuin"        # shell history (Ctrl+R)

@@ -254,7 +254,24 @@ function num(kv: Map<string, string>, key: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-type Finding = { level: "CRIT" | "WARN"; text: string };
+// `key` is a STABLE identifier for the condition; `text` carries the live numbers. They are
+// separate fields because a watcher needs to answer "is this the same finding as last cycle?",
+// and the message cannot answer it: "guest memory PSI some avg10 = 34.28" differs from itself on
+// every poll, so keying on the text makes an unchanged condition look new every time and trains
+// the reader to ignore the alert.
+type FindingKey =
+  | "c-free"
+  | "guest-disk"
+  | "mem-avail"
+  | "swap-used"
+  | "host-cpu"
+  | "psi-cpu"
+  | "psi-memory"
+  | "psi-io"
+  | "host-spin"
+  | "host-crashes";
+
+type Finding = { level: "CRIT" | "WARN"; key: FindingKey; text: string };
 
 function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
   const f: Finding[] = [];
@@ -266,11 +283,13 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
     if (pct < C_FREE_CRIT_PCT) {
       f.push({
         level: "CRIT",
+        key: "c-free",
         text: `C: ${pct.toFixed(1)}% free (${gb(cFree)}) — the vhdx max exceeds C: itself, so the guest can finish the job`,
       });
     } else if (pct < C_FREE_WARN_PCT) {
       f.push({
         level: "WARN",
+        key: "c-free",
         text: `C: ${pct.toFixed(1)}% free (${gb(cFree)}) — below ${C_FREE_WARN_PCT}%; reclaim:system / reclaim:builds are the levers`,
       });
     }
@@ -281,13 +300,21 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
   if (dUsed !== null && dTotal !== null && dTotal > 0) {
     const pct = (dUsed / dTotal) * 100;
     if (pct > GUEST_DISK_WARN_PCT) {
-      f.push({ level: "WARN", text: `guest / at ${pct.toFixed(0)}% used` });
+      f.push({
+        level: "WARN",
+        key: "guest-disk",
+        text: `guest / at ${pct.toFixed(0)}% used`,
+      });
     }
   }
 
   const avail = num(g, "mem_avail");
   if (avail !== null && avail < MEM_AVAIL_WARN_GB * 1024 ** 3) {
-    f.push({ level: "WARN", text: `guest memory available ${gb(avail)}` });
+    f.push({
+      level: "WARN",
+      key: "mem-avail",
+      text: `guest memory available ${gb(avail)}`,
+    });
   }
 
   const swapTotal = num(g, "swap_total");
@@ -297,6 +324,7 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
     if (used > SWAP_USED_WARN_GB * 1024 ** 3) {
       f.push({
         level: "WARN",
+        key: "swap-used",
         text: `guest swap in use ${gb(used)} — the .wslconfig memory= cap is being hit`,
       });
     }
@@ -306,18 +334,23 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
   if (cpu !== null && cpu > HOST_CPU_WARN_PCT) {
     f.push({
       level: "WARN",
+      key: "host-cpu",
       text: `host CPU ${cpu}% — host saturation starves the vCPUs invisibly from inside the guest`,
     });
   }
 
-  for (const [key, label] of [
-    ["cpu_psi", "CPU"],
-    ["mem_psi", "memory"],
-    ["io_psi", "IO"],
+  for (const [probe, key, label] of [
+    ["cpu_psi", "psi-cpu", "CPU"],
+    ["mem_psi", "psi-memory", "memory"],
+    ["io_psi", "psi-io", "IO"],
   ] as const) {
-    const v = num(g, key);
+    const v = num(g, probe);
     if (v !== null && v > PSI_WARN) {
-      f.push({ level: "WARN", text: `guest ${label} PSI some avg10 = ${v}` });
+      f.push({
+        level: "WARN",
+        key,
+        text: `guest ${label} PSI some avg10 = ${v}`,
+      });
     }
   }
 
@@ -326,6 +359,7 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
     const names = h.get("host_spin_names") ?? "";
     f.push({
       level: "WARN",
+      key: "host-spin",
       text: `${spin} host process(es) past ${SPIN_CPU_SECONDS}s CPU${names ? ` — ${names}` : ""}; the 2026-09-09 set held 6.8 of 16 cores for 3 days`,
     });
   }
@@ -334,6 +368,7 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
   if (crashes !== null && crashes >= CRASH_WARN) {
     f.push({
       level: "WARN",
+      key: "host-crashes",
       text: `${crashes} unexpected service termination(s) in the last hour (System 7031/7034)`,
     });
   }

@@ -184,7 +184,7 @@ async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
 // Both probes emit `key=value` lines and nothing else, so one parser serves both. Anything that
 // is not a bare key=value (PowerShell's CLIXML progress noise, ssh banners, a stray warning) is
 // dropped rather than parsed — the probes are the contract, the transport is not.
-function parseKv(out: string): Map<string, string> {
+export function parseKv(out: string): Map<string, string> {
   const kv = new Map<string, string>();
   for (const line of out.split("\n")) {
     const m = /^([a-z0-9_]+)=(.*)$/.exec(line.trim());
@@ -203,6 +203,7 @@ awk '/^MemTotal:/{print "mem_total="$2*1024}
      /^MemAvailable:/{print "mem_avail="$2*1024}
      /^SwapTotal:/{print "swap_total="$2*1024}
      /^SwapFree:/{print "swap_free="$2*1024}' /proc/meminfo
+awk '$1=="pgscan_kswapd"||$1=="pgscan_direct"{s+=$2} END{print "pgscan="s+0}' /proc/vmstat
 df -B1 --output=size,used,avail / | awk 'NR==2{print "disk_total="$1; print "disk_used="$2; print "disk_avail="$3}'
 ps -eo pcpu=,rss=,comm= --sort=-pcpu 2>/dev/null | awk 'NR<=3{printf "top%d=%s %s %sMB\\n", NR, $3, $1"%", int($2/1024)}'
 `;
@@ -237,7 +238,7 @@ foreach ($k in $lx) {
 // Windows hands back \\?\C:\Users\... ; the guest needs /mnt/c/Users/... . Returning null (rather
 // than guessing) is deliberate: a wrong path would make `du` report 0 and read as "vhdx is tiny",
 // which is exactly the class of confident-wrong number this script exists to prevent.
-function toMntPath(winPath: string): string | null {
+export function toMntPath(winPath: string): string | null {
   const m = /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/.exec(winPath.trim());
   if (m === null) return null;
   return `/mnt/${m[1].toLowerCase()}/${m[2].replace(/\\/g, "/")}`;
@@ -259,7 +260,7 @@ function num(kv: Map<string, string>, key: string): number | null {
 // and the message cannot answer it: "guest memory PSI some avg10 = 34.28" differs from itself on
 // every poll, so keying on the text makes an unchanged condition look new every time and trains
 // the reader to ignore the alert.
-type FindingKey =
+export type FindingKey =
   | "c-free"
   | "guest-disk"
   | "mem-avail"
@@ -271,9 +272,16 @@ type FindingKey =
   | "host-spin"
   | "host-crashes";
 
-type Finding = { level: "CRIT" | "WARN"; key: FindingKey; text: string };
+export type Finding = {
+  level: "CRIT" | "WARN";
+  key: FindingKey;
+  text: string;
+};
 
-function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
+export function judge(
+  g: Map<string, string>,
+  h: Map<string, string>,
+): Finding[] {
   const f: Finding[] = [];
 
   const cFree = num(h, "host_c_free");
@@ -341,7 +349,6 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
 
   for (const [probe, key, label] of [
     ["cpu_psi", "psi-cpu", "CPU"],
-    ["mem_psi", "psi-memory", "memory"],
     ["io_psi", "psi-io", "IO"],
   ] as const) {
     const v = num(g, probe);
@@ -350,6 +357,52 @@ function judge(g: Map<string, string>, h: Map<string, string>): Finding[] {
         level: "WARN",
         key,
         text: `guest ${label} PSI some avg10 = ${v}`,
+      });
+    }
+  }
+
+  // MEMORY PSI NEEDS CORROBORATION ON WSL2, and this is not a softened threshold — it is the
+  // difference between a shortage and normal WSL housekeeping.
+  //
+  // .wslconfig leaves autoMemoryReclaim unset, whose default is dropCache: WSL periodically drops
+  // the guest page cache to hand memory back to Windows. Every dropped page that is touched again
+  // REFAULTS, and a refault stalls the task, which is exactly what memory PSI counts. So a
+  // file-heavy workload produces sustained memory PSI on a guest with tens of GB free.
+  //
+  // Measured on r99 2026-09-13 over a 20s window, with memory PSI some avg10 rising 37.9 -> 44.6
+  // and full avg10 at 28.8:
+  //     workingset_refault_file  +3041      <- the only counter that moved
+  //     pswpin / pswpout            +0
+  //     pgscan_kswapd / _direct     +0      <- the kernel never reclaimed at all
+  //     allocstall_*                 0
+  //     MemAvailable            42.45 GB of 54.93, swap 0 B used
+  // Zero pgscan with heavy refaults is the signature: pages left the cache without passing
+  // through LRU reclaim, i.e. something dropped them. Nothing was short of memory.
+  //
+  // Warning on PSI alone would therefore have fired permanently on a healthy machine — the
+  // standing false alarm this file's own watcher contract exists to prevent. So a real shortage
+  // must show itself in at least one counter that a dropCache cycle cannot move.
+  const memPsi = num(g, "mem_psi");
+  if (memPsi !== null && memPsi > PSI_WARN) {
+    const pgscan = num(g, "pgscan");
+    const availNow = num(g, "mem_avail");
+    const swapUsed =
+      swapTotal !== null && swapFree !== null ? swapTotal - swapFree : null;
+    const corroboration: string[] = [];
+    if (pgscan !== null && pgscan > 0) {
+      corroboration.push(`kernel reclaim ran (pgscan=${pgscan})`);
+    }
+    if (swapUsed !== null && swapUsed > 0) {
+      corroboration.push(`swap in use ${gb(swapUsed)}`);
+    }
+    if (availNow !== null && availNow < MEM_AVAIL_WARN_GB * 1024 ** 3) {
+      corroboration.push(`available ${gb(availNow)}`);
+    }
+    if (corroboration.length > 0) {
+      f.push({
+        level: "WARN",
+        key: "psi-memory",
+        text: `guest memory PSI some avg10 = ${memPsi}, corroborated: ${corroboration.join("; ")}`,
       });
     }
   }
@@ -397,7 +450,10 @@ function report(
     "mem",
     `available ${ma === null ? "?" : gb(ma)} of ${mt === null ? "?" : gb(mt)}` +
       `   swap ${st === null || sf === null ? "?" : `${gb(st - sf)} / ${gb(st)}`}` +
-      `   PSI ${g.get("mem_psi")}`,
+      `   PSI ${g.get("mem_psi")}` +
+      // pgscan sits next to memory PSI on purpose: PSI alone cannot distinguish a shortage from
+      // WSL's dropCache refaults, and pgscan=0 is what settles it. See judge().
+      `   pgscan ${g.get("pgscan") ?? "?"}`,
   );
   const du = num(g, "disk_used");
   const dt = num(g, "disk_total");
@@ -575,7 +631,11 @@ async function main(): Promise<void> {
   if (parsed.flags.strict && findings.length > 0) process.exit(1);
 }
 
-main().catch((err) => {
-  console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(err instanceof UsageError ? 2 : 1);
-});
+// Guarded so the test file can import judge/parseKv/toMntPath without this script reaching for
+// ssh on import — the house pattern (reclaim-clean.ts, reclaim-toolchains.ts).
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(err instanceof UsageError ? 2 : 1);
+  });
+}

@@ -142,6 +142,39 @@ typeset -U path
 unset _zshenv_dir _zshenv_cand _zshenv_shims _zshenv_path_prefix
 export PATH
 
+# ── WSL interop for sshd-spawned shells ──────────────────────────────────────
+# Launching ANY Windows binary from WSL2 needs WSL_INTEROP to name a live per-session unix
+# socket under /run/WSL/. sshd inherits none, so in every shell that arrives over ssh the
+# variable is UNSET and every Windows binary dies with a bare "Invalid argument" — a message
+# that names nothing, and sends the reader after PATH or /etc/wsl.conf interop instead.
+# Measured on r99 2026-09-13 — non-interactive `ssh host 'cmd'`, `zsh -lc` and an interactive
+# login shell were ALL unset, and with it unset:
+#   explorer.exe / clip.exe / cmd.exe    ->  rc=1 "Invalid argument"
+#   clip.exe with WSL_INTEROP=<live>     ->  rc=0
+# That socket is the whole WSL<->Windows bridge, so what was broken is not one tool: cc/pp/pwdc
+# (clipboard), o/oo/open (explorer), s/start, e/ee (VS Code launcher) and the wsl:* mise tasks
+# all route through it. On r99, ssh is the ONLY way in, so all of them were dead there.
+#
+# WHY THIS FILE and not zsh/wsl.zsh: wsl.zsh is sourced from aliases.zsh, i.e. interactive
+# shells only, while `ssh host 'mise run wsl:wslconfig'` reads nothing but .zshenv. Fixing it
+# in wsl.zsh would repair the half that is easiest to notice and leave the automated half —
+# the half agents and mise tasks use — still broken.
+#
+# BEST-EFFORT, and that limit is deliberate rather than overlooked. Socket FILES outlive their
+# session: 4 were present on r99 and 2 of them were dead. Liveness cannot be tested without
+# spawning a process, which this file must never do, so it takes the NEWEST socket — the most
+# recently created session being the one most likely still alive. Tools that need certainty
+# retry across candidates themselves (scripts/wsl-audit.ts does, newest-first, up to 4).
+# Glob qualifiers: `=` keeps only real sockets, `om` orders by mtime newest-first, `N` makes an
+# empty match empty rather than an error.
+if [[ -z "${WSL_INTEROP:-}" ]] && [[ -d /run/WSL ]]; then
+  _zshenv_socks=(/run/WSL/*_interop(N=om))
+  if (( $#_zshenv_socks )); then
+    export WSL_INTEROP="${_zshenv_socks[1]}"
+  fi
+  unset _zshenv_socks
+fi
+
 # cocoindex-code: when a supervisor unit owns the daemon, no client may spawn its own.
 # Without this, every client (shell, MCP server, agent) that finds the socket missing —
 # after a settings edit, a crash, or the idle exit — forks an UNCAPPED daemon into its own

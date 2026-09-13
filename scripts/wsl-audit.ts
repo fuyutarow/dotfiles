@@ -55,8 +55,24 @@ const C_FREE_WARN_PCT = 20; // the vhdx can still outgrow C:, so 20% is not comf
 const GUEST_DISK_WARN_PCT = 90;
 const MEM_AVAIL_WARN_GB = 4; // below this the guest starts reclaiming instead of working
 const SWAP_USED_WARN_GB = 1; // swap use means the .wslconfig memory= cap is being hit
+// Judged on the MEAN of several samples, never on one reading. Win32_Processor.LoadPercentage —
+// what this used at first — is a cached point-in-time value from the WMI provider and swings
+// wildly: 4, 20, 35, 54, 56, 79, 87 across successive polls on an otherwise steady r99, and the
+// 87 raised a WARN while the real sustained load, measured as 6 samples of
+// Win32_PerfFormattedData_PerfOS_Processor _Total 2s apart, was 17-28%. It also partly measures
+// the probe itself: PowerShell's cold start and WmiPrvSE are load this script creates.
+// Same error as the memory-PSI threshold — a noisy instantaneous number treated as evidence of a
+// sustained condition. 80% of a 3-sample mean is a real saturation signal; 80% of one sample is a
+// coin flip. host_cpu_max is carried alongside so a genuine spike stays visible without warning.
 const HOST_CPU_WARN_PCT = 80;
-const PSI_WARN = 20; // some avg10; sustained >20 means real stall, not scheduling noise
+// Judged on the 5-MINUTE window (some avg300), displayed as the 10-second one. avg10 tracks the
+// workload, not a fault: ccc indexing pushed guest IO PSI avg10 to 20.42 and raised a WARN while
+// the same instant read avg60=6.24 and avg300=3.39 — a burst, over before anyone could look. That
+// was the third noisy-threshold false positive in this file after memory PSI and host CPU, all the
+// same mistake: an instantaneous number used as evidence of a sustained condition. avg10 stays in
+// the report because it is exactly what you want when diagnosing "why does herdr feel slow right
+// now"; it is just not something to wake anyone for.
+const PSI_WARN = 20;
 const SPIN_CPU_SECONDS = 3600; // the 2026-09-09 zombies had each burned >70h of CPU
 const CRASH_WARN = 1; // NvContainer crash-looped ~29,000 times; one per hour is already wrong
 
@@ -196,9 +212,9 @@ export function parseKv(out: string): Map<string, string> {
 const GUEST_PROBE = `
 echo "nproc=$(nproc)"
 awk '{print "load1="$1; print "load5="$2; print "load15="$3}' /proc/loadavg
-awk -F'avg10=' '/^some/{split($2,a," "); print "cpu_psi="a[1]}' /proc/pressure/cpu 2>/dev/null || echo "cpu_psi=na"
-awk -F'avg10=' '/^some/{split($2,a," "); print "mem_psi="a[1]}' /proc/pressure/memory 2>/dev/null || echo "mem_psi=na"
-awk -F'avg10=' '/^some/{split($2,a," "); print "io_psi="a[1]}' /proc/pressure/io 2>/dev/null || echo "io_psi=na"
+awk '/^some/{for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="avg10")a=kv[2]; if(kv[1]=="avg300")b=kv[2]}; print "cpu_psi="a; print "cpu_psi300="b}' /proc/pressure/cpu 2>/dev/null || echo "cpu_psi=na"
+awk '/^some/{for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="avg10")a=kv[2]; if(kv[1]=="avg300")b=kv[2]}; print "mem_psi="a; print "mem_psi300="b}' /proc/pressure/memory 2>/dev/null || echo "mem_psi=na"
+awk '/^some/{for(i=1;i<=NF;i++){split($i,kv,"="); if(kv[1]=="avg10")a=kv[2]; if(kv[1]=="avg300")b=kv[2]}; print "io_psi="a; print "io_psi300="b}' /proc/pressure/io 2>/dev/null || echo "io_psi=na"
 awk '/^MemTotal:/{print "mem_total="$2*1024}
      /^MemAvailable:/{print "mem_avail="$2*1024}
      /^SwapTotal:/{print "swap_total="$2*1024}
@@ -219,7 +235,13 @@ $os = Get-CimInstance Win32_OperatingSystem
 $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 "host_c_total=" + $c.Size
 "host_c_free=" + $c.FreeSpace
-"host_cpu_pct=" + (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+$cpuSamples = 1..3 | ForEach-Object {
+  (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -eq '_Total' }).PercentProcessorTime
+  if ($_ -lt 3) { Start-Sleep -Milliseconds 700 }
+}
+"host_cpu_pct=" + [int](($cpuSamples | Measure-Object -Average).Average)
+"host_cpu_max=" + [int](($cpuSamples | Measure-Object -Maximum).Maximum)
+"host_cpu_n=" + @($cpuSamples).Count
 $vm = Get-Process -Name vmmemWSL
 "host_vmmem=" + $(if ($vm) { ($vm | Measure-Object -Property WorkingSet64 -Sum).Sum } else { 0 })
 $spin = Get-Process -Name sshd,pwsh,powershell,conhost | Where-Object { $_.CPU -gt ${SPIN_CPU_SECONDS} }
@@ -351,20 +373,20 @@ export function judge(
     f.push({
       level: "WARN",
       key: "host-cpu",
-      text: `host CPU ${cpu}% — host saturation starves the vCPUs invisibly from inside the guest`,
+      text: `host CPU ${cpu}% mean of ${h.get("host_cpu_n") ?? "?"} samples (max ${h.get("host_cpu_max") ?? "?"}%) — host saturation starves the vCPUs invisibly from inside the guest`,
     });
   }
 
   for (const [probe, key, label] of [
-    ["cpu_psi", "psi-cpu", "CPU"],
-    ["io_psi", "psi-io", "IO"],
+    ["cpu_psi300", "psi-cpu", "CPU"],
+    ["io_psi300", "psi-io", "IO"],
   ] as const) {
     const v = num(g, probe);
     if (v !== null && v > PSI_WARN) {
       f.push({
         level: "WARN",
         key,
-        text: `guest ${label} PSI some avg10 = ${v}`,
+        text: `guest ${label} PSI some avg300 = ${v} (sustained)`,
       });
     }
   }
@@ -390,7 +412,7 @@ export function judge(
   // Warning on PSI alone would therefore have fired permanently on a healthy machine — the
   // standing false alarm this file's own watcher contract exists to prevent. So a real shortage
   // must show itself in at least one counter that a dropCache cycle cannot move.
-  const memPsi = num(g, "mem_psi");
+  const memPsi = num(g, "mem_psi300");
   if (memPsi !== null && memPsi > PSI_WARN) {
     const pgscan = num(g, "pgscan");
     const availNow = num(g, "mem_avail");
@@ -410,7 +432,7 @@ export function judge(
       f.push({
         level: "WARN",
         key: "psi-memory",
-        text: `guest memory PSI some avg10 = ${memPsi}, corroborated: ${corroboration.join("; ")}`,
+        text: `guest memory PSI some avg300 = ${memPsi} (sustained), corroborated: ${corroboration.join("; ")}`,
       });
     }
   }
@@ -479,7 +501,12 @@ function report(
 
   console.log("HOST (Windows)");
   const cpu = h.get("host_cpu_pct");
-  line("cpu", `${cpu ?? "?"}%   uptime ${h.get("host_uptime_h") ?? "?"}h`);
+  // The mean is the judged number; max is shown so a spike is visible and not actionable.
+  line(
+    "cpu",
+    `${cpu ?? "?"}% mean of ${h.get("host_cpu_n") ?? "?"} (max ${h.get("host_cpu_max") ?? "?"}%)` +
+      `   uptime ${h.get("host_uptime_h") ?? "?"}h`,
+  );
   const rt = num(h, "host_ram_total");
   const rf = num(h, "host_ram_free");
   const vm = num(h, "host_vmmem");

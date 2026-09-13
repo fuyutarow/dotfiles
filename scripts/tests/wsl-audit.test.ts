@@ -24,8 +24,11 @@ function healthyGuest(over: Record<string, string> = {}): Map<string, string> {
       nproc: "12",
       load1: "1.0",
       cpu_psi: "0.5",
+      cpu_psi300: "0.4",
       mem_psi: "0.0",
+      mem_psi300: "0.0",
       io_psi: "0.0",
+      io_psi300: "0.0",
       mem_total: String(55 * GB),
       mem_avail: String(43 * GB),
       swap_total: String(16 * GB),
@@ -70,14 +73,22 @@ describe("judge — baseline", () => {
 describe("judge — memory PSI needs corroboration (the dropCache false positive)", () => {
   // The exact shape measured on r99 2026-09-13: PSI pinned high, and every counter that a real
   // shortage would move sitting at zero.
-  const dropCache = healthyGuest({ mem_psi: "44.6", pgscan: "0" });
+  const dropCache = healthyGuest({
+    mem_psi: "44.6",
+    mem_psi300: "44.0",
+    pgscan: "0",
+  });
 
   test("high memory PSI ALONE is silent — WSL drops the page cache, that is not a shortage", () => {
     expect(keys(dropCache, healthyHost())).toEqual([]);
   });
 
   test("PSI plus kernel reclaim (pgscan > 0) DOES warn", () => {
-    const g = healthyGuest({ mem_psi: "44.6", pgscan: "918273" });
+    const g = healthyGuest({
+      mem_psi: "44.6",
+      mem_psi300: "44.0",
+      pgscan: "918273",
+    });
     expect(keys(g, healthyHost())).toEqual(["psi-memory"]);
     expect(judge(g, healthyHost())[0].text).toContain("pgscan=918273");
   });
@@ -85,6 +96,7 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
   test("PSI plus swap in use DOES warn", () => {
     const g = healthyGuest({
       mem_psi: "44.6",
+      mem_psi300: "44.0",
       swap_free: String(14 * GB), // 2 GB used
     });
     // swap-used has its own finding above 1 GB; psi-memory must appear alongside it.
@@ -92,22 +104,47 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
   });
 
   test("PSI plus a genuinely low MemAvailable DOES warn", () => {
-    const g = healthyGuest({ mem_psi: "44.6", mem_avail: String(2 * GB) });
+    const g = healthyGuest({
+      mem_psi: "44.6",
+      mem_psi300: "44.0",
+      mem_avail: String(2 * GB),
+    });
     expect(keys(g, healthyHost())).toEqual(["mem-avail", "psi-memory"]);
   });
 
   test("corroboration is irrelevant when PSI itself is low", () => {
-    const g = healthyGuest({ mem_psi: "1.2", pgscan: "918273" });
+    const g = healthyGuest({
+      mem_psi: "1.2",
+      mem_psi300: "1.1",
+      pgscan: "918273",
+    });
     expect(keys(g, healthyHost())).toEqual([]);
   });
 
   test("CPU and IO PSI are NOT gated — the artifact is specific to memory", () => {
-    expect(keys(healthyGuest({ cpu_psi: "55" }), healthyHost())).toEqual([
+    expect(keys(healthyGuest({ cpu_psi300: "55" }), healthyHost())).toEqual([
       "psi-cpu",
     ]);
-    expect(keys(healthyGuest({ io_psi: "55" }), healthyHost())).toEqual([
+    expect(keys(healthyGuest({ io_psi300: "55" }), healthyHost())).toEqual([
       "psi-io",
     ]);
+  });
+
+  // The burst that produced the third false positive: ccc indexing drove IO PSI avg10 to 20.42
+  // while avg60 was 6.24 and avg300 was 3.39. A 10-second spike is the workload, not a fault.
+  test("a 10-second PSI spike with a calm 5-minute window is SILENT", () => {
+    const g = healthyGuest({
+      io_psi: "20.42",
+      io_psi300: "3.39",
+      cpu_psi: "48",
+      cpu_psi300: "0.08",
+    });
+    expect(keys(g, healthyHost())).toEqual([]);
+  });
+
+  test("a sustained 5-minute window warns even when the 10-second one has calmed", () => {
+    const g = healthyGuest({ io_psi: "0.4", io_psi300: "41.2" });
+    expect(keys(g, healthyHost())).toEqual(["psi-io"]);
   });
 });
 
@@ -165,7 +202,14 @@ describe("judge — a missing reading is never read as a healthy zero", () => {
   });
 
   test("'na' from a kernel without PSI is not treated as 0 or as a breach", () => {
-    const g = healthyGuest({ mem_psi: "na", cpu_psi: "na", io_psi: "na" });
+    const g = healthyGuest({
+      mem_psi: "na",
+      mem_psi300: "na",
+      cpu_psi: "na",
+      cpu_psi300: "na",
+      io_psi: "na",
+      io_psi300: "na",
+    });
     expect(keys(g, healthyHost())).toEqual([]);
   });
 });

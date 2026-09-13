@@ -504,6 +504,18 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 description = "Start WSL on the Windows host over the LAN, no logon needed — for when Windows rebooted and sits at the logon screen. Holds the distro up with a detached anchor (WSL stops it ~60s after the last attachment otherwise). --status to only report."
 run = 'bun ~/dotfiles/scripts/wsl-wake.ts'
 
+# READ-ONLY resource evidence, both halves at once. It is the second half that carries the
+# signal: every r99 outage this repo debugged was INVISIBLE from inside the guest — C: at 1.08 MB
+# free while the guest read 38% used (the vhdx max, 1007 GB, is larger than C: itself, 931 GB);
+# 7 spinning host processes holding 6.8 of 16 cores for 3 days with guest loadavg and PSI flat;
+# NvContainer crash-looping every 8s for 3 days. A guest-only monitor calls all three healthy.
+# Runs from the Mac (both legs over ssh) or inside the distro (--guest local --host local, which
+# reaches Windows through interop powershell.exe). Exit 0 clear / 1 threshold breached /
+# 2 could not measure — "I could not see" is never folded into "I saw a problem".
+[tasks."wsl:audit"]
+description = "READ-ONLY resource evidence for the WSL2 guest AND the Windows host under it, in one shot, with a threshold verdict (CPU/PSI, memory, swap, guest disk, C:, vmmemWSL, spinning processes, service crashes, vhdx allocated-vs-apparent). Deletes nothing. --json for machine use; --guest/--host take ssh aliases or 'local'."
+run = 'bun ~/dotfiles/scripts/wsl-audit.ts'
+
 # The Windows half of the Brewfile. Brewfile is the single source of truth for tools on macOS and
 # WSL; the Windows host underneath had none — 113 winget-managed packages (2026-09-11) lived only
 # on the machine. `winget export` / `winget import` give the same source-of-truth shape, so the

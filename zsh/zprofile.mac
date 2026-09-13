@@ -15,10 +15,12 @@ fi
 
 # PATH exports
 _dbg "Setting up PATH exports"
-# bun global package bins (claude, gemini, …); bun itself now comes from Homebrew, not ~/.bun
+# bun global package bins (claude, gemini, this repo's `bin` commands); bun itself comes from
+# Homebrew, not ~/.bun. .zshenv already puts both dirs on every shell's PATH (2026-09-13); this
+# re-prepend exists only to keep them AHEAD of the Homebrew dirs `brew shellenv` just inserted
+# above, in login shells. Order matters: ~/.local/bin last, so official standalone CLIs there
+# (e.g. Codex) beat stale npm/Bun shims of the same name.
 [ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
-# Keep ~/.local/bin after Bun insertion so official standalone CLIs (e.g. Codex)
-# beat stale npm/Bun shims in login shells too. Non-login SSH gets this from .zshenv.
 export PATH="$HOME/.local/bin:$PATH"
 
 

@@ -2,7 +2,12 @@
   "name": "dotfiles",
   "private": true,
   "type": "module",
-  "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves through the ~/.claude/skills symlinks to this realpath, so linked scripts resolve from any cwd. Hooks stay zero-dep: they run before any install.",
+  "description": "Repo-root graduation project (writing-bun-scripts BG3). Exists so repo .ts scripts may import pinned deps by bare specifier; the pin lives here and in bun.lock, never in the import string. Bun resolves through the ~/.claude/skills symlinks to this realpath, so linked scripts resolve from any cwd. Hooks stay zero-dep: they run before any install. Its `bin` entries are the repo's PATH commands: `bun link` (run by `mise run deps`) installs them into bun's global bin dir (~/.bun/bin), which zsh/zshenv puts on every shell's PATH. Nothing hand-symlinks a .ts into ~/.local/bin.",
+  "bin": {
+    "agent-resource-run": "agents/resource-control/agent-resource-run.ts",
+    "serena-foreground": "agents/serena-control/serena-foreground.ts",
+    "repo-search": "cocoindex/repo-search.ts"
+  },
   "dependencies": {
     "cleye": "2.6.0",
     "neverthrow": "8.2.0",

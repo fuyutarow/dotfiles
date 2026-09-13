@@ -398,9 +398,15 @@ run = 'bun ~/dotfiles/scripts/reclaim-purge.ts'
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
+# `bun link` after the install: package.json's `bin` entries (agent-resource-run,
+# serena-foreground, repo-search) are this repo's PATH commands, and `bun link` is what turns a
+# `bin` entry into a symlink in bun's global bin dir (~/.bun/bin, on every shell's PATH via
+# zsh/zshenv). Before 2026-09-13 link-dots.sh hand-symlinked the .ts files into ~/.local/bin —
+# a re-implementation of exactly this mechanism, minus the declaration that made their shebangs
+# legitimate. Idempotent: re-linking an already-linked package is a no-op.
 [tasks.deps]
-description = "Restore the repo's pinned Bun dependencies from bun.lock (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
-run = "bun install --frozen-lockfile"
+description = "Restore the repo's pinned Bun dependencies from bun.lock and `bun link` its bin commands into ~/.bun/bin (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
+run = "bun install --frozen-lockfile && bun link"
 
 # Global AI-agent CLIs installed via bun, not Brewfile — these are npm packages, not brew
 # formulas. Standalone: nothing else in this file depends on it, and it is not wired into

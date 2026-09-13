@@ -4,7 +4,8 @@ This directory implements the machine floor; it does not own policy. The sole sc
 GPU-first argument live in
 `agents/skills/orchestrating-agents/references/measurement-and-resources.md` P7.
 
-`agent-resource-run.ts` is linked to `~/.local/bin/agent-resource-run`. On Linux it reserves a
+`agent-resource-run.ts` is the package `bin` `agent-resource-run` (installed into `~/.bun/bin` by
+`bun link` via dotfiles `mise run deps`). On Linux it reserves a
 disjoint CPU set and aggregate RAM/VRAM/scratch headroom. Each admitted command runs in a transient
 user-systemd scope with a CPU quota, `MemoryHigh` and `MemoryMax` both set to the exact declared
 RAM envelope (no runner-added margin on either — 2026-09-04, see `agent-resource-run.test.ts`'s

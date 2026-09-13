@@ -4,7 +4,7 @@
 // NOTE: this file embeds known-bad fixture SOURCE STRINGS — running the floor over this
 // test file flags them by design; the floor's targets are scripts, not tests.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -16,12 +16,17 @@ function runFloor(
   content: string,
   filename = "fixture.ts",
   dependencies?: Record<string, string>,
+  manifest?: { bin?: Record<string, string>; mode?: number },
 ): { out: string; code: number } {
   const dir = mkdtempSync(join(tmpdir(), "floor-"));
   const file = join(dir, filename);
   writeFileSync(file, content);
-  if (dependencies !== undefined) {
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies }));
+  if (manifest?.mode !== undefined) chmodSync(file, manifest.mode);
+  if (dependencies !== undefined || manifest?.bin !== undefined) {
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ dependencies: dependencies ?? {}, bin: manifest?.bin }),
+    );
     writeFileSync(join(dir, "bun.lock"), "{}\n");
   }
   // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
@@ -139,12 +144,65 @@ describe("script-check floor", () => {
     expect(code).toBe(0);
   });
 
-  test("bun shebang on an ordinary script warns (BG1 fixture-only rule)", () => {
+  test("bun shebang on an ordinary script warns (BG1: not a package bin)", () => {
     const { out, code } = runFloor(
       "#!/usr/bin/env bun\nexport const ok = 1;\n",
     );
-    expect(out).toContain("binary-substituted fixture");
+    expect(out).toContain("no package.json `bin`");
     expect(code).toBe(0);
+  });
+
+  // F14 — a package.json `bin` entry IS a binary (`bun link` symlinks the file onto PATH), so
+  // the shebang and the exec bit flip from smell to requirement. Added 2026-09-13 when the
+  // repo's three PATH commands moved from hand-made ~/.local/bin symlinks to `bin` entries.
+  test("a package bin with shebang and exec bit is clean — no shebang WARN", () => {
+    const { out, code } = runFloor(
+      "#!/usr/bin/env bun\nexport const ok = 1;\n",
+      "cli.ts",
+      undefined,
+      { bin: { cli: "cli.ts" }, mode: 0o755 },
+    );
+    expect(out).not.toContain("shebang");
+    expect(out).toContain("FAIL=0");
+    expect(code).toBe(0);
+  });
+
+  test("a package bin without a shebang FAILs (the symlink could not run)", () => {
+    const { out, code } = runFloor("export const ok = 1;\n", "cli.ts", undefined, {
+      bin: { cli: "cli.ts" },
+      mode: 0o755,
+    });
+    expect(out).toContain("`bin` entry without a `#!/usr/bin/env bun` shebang");
+    expect(code).toBe(1);
+  });
+
+  test("a package bin without the exec bit FAILs", () => {
+    const { out, code } = runFloor(
+      "#!/usr/bin/env bun\nexport const ok = 1;\n",
+      "cli.ts",
+      undefined,
+      { bin: { cli: "cli.ts" }, mode: 0o644 },
+    );
+    expect(out).toContain("`bin` entry without the exec bit");
+    expect(code).toBe(1);
+  });
+
+  test("string-form bin (one command named after the package) is recognised too", () => {
+    const dir = mkdtempSync(join(tmpdir(), "floor-bin-"));
+    const file = join(dir, "main.ts");
+    writeFileSync(file, "#!/usr/bin/env bun\nexport const ok = 1;\n");
+    chmodSync(file, 0o755);
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "solo", bin: "main.ts" }),
+    );
+    writeFileSync(join(dir, "bun.lock"), "{}\n");
+    // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
+    const proc = Bun.spawnSync(["bun", FLOOR, file], { maxBuffer: 1024 * 1024 });
+    rmSync(dir, { recursive: true, force: true });
+    const out = proc.stdout.toString() + proc.stderr.toString();
+    expect(out).not.toContain("shebang");
+    expect(proc.exitCode).toBe(0);
   });
 
   test("the floor passes over its own source", () => {

@@ -99,12 +99,24 @@ for _dir in "$HOME"/.claude "$HOME"/.local/bin "$HOME"/.config/systemd/user "$HO
 done
 unset _stale _dir
 
+# --- retired destinations: links that still RESOLVE but must not exist any more ---
+# The dangling-prune above cannot see these: their targets are alive, only the mechanism moved.
+# Until 2026-09-13 this file hand-symlinked three .ts CLIs into ~/.local/bin; they are now
+# package.json `bin` entries that `bun link` (mise run deps) installs into ~/.bun/bin, the dir
+# bun owns for exactly this. ~/.local/bin holds standalone binaries and shell scripts only.
+# Only a symlink INTO this repo is removed — a real file or a foreign link at the same name is
+# somebody else's and is left alone.
+for _retired in "$HOME"/.local/bin/repo-search "$HOME"/.local/bin/agent-resource-run "$HOME"/.local/bin/serena-foreground; do
+  [ -L "$_retired" ] || continue
+  case "$(readlink "$_retired")" in
+    "$DOTFILES"/*) rm -f "$_retired" && echo "pruned (retired: now a package bin via bun link): $_retired" ;;
+  esac
+done
+unset _retired
+
 # --- claude code (user-level config; the repo's own project .claude/ is separate) ---
 link agents/claude/statusline-command.ts "$HOME/.claude/statusline-command.ts"
 link agents/claude/hooks "$HOME/.claude/hooks"
-link cocoindex/repo-search.ts "$HOME/.local/bin/repo-search"
-link agents/resource-control/agent-resource-run.ts "$HOME/.local/bin/agent-resource-run"
-link agents/serena-control/serena-foreground.ts "$HOME/.local/bin/serena-foreground"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 

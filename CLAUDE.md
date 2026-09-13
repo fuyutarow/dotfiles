@@ -47,7 +47,11 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
 3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.sh`
    (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
    tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
-   phantom skill or a dead hook link behind. **ONE file is generated, not linked**:
+   phantom skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
+   should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-search`) is a
+   `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
+   never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
+   and shell scripts only. **ONE file is generated, not linked**:
    `~/.claude/settings.json` is rendered by `scripts/render-claude-settings.ts` (called from
    `link-dots.sh`) from the committed base plus an untracked `~/.claude/settings.private.json`.
    Forced, not preference — `autoMode` is read from user settings only, and its content is
@@ -61,9 +65,10 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
 4. `zsh/mac.zsh` / `zsh/wsl.zsh` load **after** the common aliases, so they may override.
    sheldon sources ONLY `zsh/aliases.zsh` (never `*.zsh` glob — OS files are conditional).
 5. `zsh/zshenv` is deliberately tiny and quiet because zsh reads it for **every** invocation,
-   including `ssh host 'cmd'`. It exists so standalone user CLIs in `~/.local/bin` (notably
-   Codex remote bootstrap) work in non-login SSH command shells. Do not put Homebrew shellenv,
-   plugins, prompts, completions, or anything that can print/hang there.
+   including `ssh host 'cmd'`. It exists so user CLIs in `~/.local/bin` (notably Codex remote
+   bootstrap) and bun's global bins in `~/.bun/bin` (this repo's `bin` commands, `bun add -g`
+   tools) work in non-login SSH command shells. Do not put Homebrew shellenv, plugins, prompts,
+   completions, or anything that can print/hang there.
 6. **No implicit global toolchain (INV-6).** A managed tool is reachable where a config
    DECLARES it, or not at all. mise's two delivery paths must never merge: `mise activate`
    (`zsh/zshrc`) = interactive shells, per-directory; the shim dir (`zsh/zshenv`) =

@@ -102,7 +102,8 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
 3. **OS-neutral.** Shell logic branches on `IS_MAC` / `IS_WSL` (computed once in `zsh/aliases.zsh`);
    shared files never hard-code a machine-absolute path.
 4. **A quiet `zshenv`.** `zsh/zshenv` stays tiny — zsh reads it on *every* invocation, including
-   `ssh host 'cmd'`, so standalone CLIs in `~/.local/bin` work in non-login SSH shells.
+   `ssh host 'cmd'`, so user CLIs in `~/.local/bin` and bun's global bins in `~/.bun/bin`
+   (this repo's own `bin` commands) work in non-login SSH shells.
 5. **Fail loudly, never silently.** `rm` is disabled; `mv` / `cp` abort on overwrite (see above).
 6. **No implicit global toolchain.** A managed tool is reachable where a config *declares* it,
    or not at all: no global default version, and no second version manager hooking a login

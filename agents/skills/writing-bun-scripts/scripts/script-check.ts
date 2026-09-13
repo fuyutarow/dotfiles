@@ -11,7 +11,11 @@
 //
 // Checks (owner: writing-bun-scripts SKILL.md gates; facts: references/bun-facts.md):
 //   F1  node shebang            — bun honors `#!/usr/bin/env node` and would exec node
-//   W8  any other shebang       — BG1: shebang only on binary-substituted fixtures
+//   W8  any other shebang       — BG1: shebang only where the FILE is the binary: a package.json
+//                                 `bin` entry (`bun link` symlinks the file itself onto PATH) or a
+//                                 test fixture substituted for a driven binary. On a `bin` the
+//                                 shebang AND the exec bit are REQUIRED (F14: missing either is a
+//                                 FAIL — the symlink would not run); elsewhere a shebang WARNs
 //   F2  CommonJS require        — scripts are ESM only (top-level await incompatible)
 //   F3  external import         — bare import FAIL unless an ancestor package.json+bun.lock
 //                                 (BG3 graduation, resolved on the file's REALPATH) declares it
@@ -35,7 +39,7 @@
 //   F7  .sh with no shim marker — BG0: a surviving `.sh` carries `# shim: <class>` or is
 //                                 content-detected `vendored` (an external tool's own header)
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
 
@@ -117,7 +121,10 @@ function classifySpecifier(
 // package.json (walking the file's REALPATH, because skills are symlinked into ~/.claude/skills
 // and Bun resolves through the link) that has a sibling bun.lock, declaring the dep at an EXACT
 // version. A range pin (^ ~ * x) is not a pin — PINNED-OR-ABSENT.
-type Graduation = { root: string; deps: Map<string, string> };
+// `bins` carries the realpaths of the manifest's `bin` entries (string form = one bin named after
+// the package): those files ARE binaries — `bun link` symlinks each onto PATH — so W8/F14 treat
+// them as the one place a shebang is required rather than suspect.
+type Graduation = { root: string; deps: Map<string, string>; bins: Set<string> };
 const graduationCache = new Map<string, Graduation | null>();
 
 function findGraduation(fromFile: string): Graduation | null {
@@ -133,18 +140,29 @@ function findGraduation(fromFile: string): Graduation | null {
     const manifest = join(directory, "package.json");
     if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
       let deps = new Map<string, string>();
+      const bins = new Set<string>();
       try {
         const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
+          name?: string;
+          bin?: string | Record<string, string>;
           dependencies?: Record<string, string>;
           devDependencies?: Record<string, string>;
         };
         deps = new Map(
           Object.entries({ ...parsed.dependencies, ...parsed.devDependencies }),
         );
+        const binEntries =
+          typeof parsed.bin === "string"
+            ? [parsed.bin]
+            : Object.values(parsed.bin ?? {});
+        for (const target of binEntries) {
+          const abs = join(directory, target);
+          if (existsSync(abs)) bins.add(realpathSync(abs));
+        }
       } catch {
         deps = new Map();
       }
-      const found: Graduation = { root: directory, deps };
+      const found: Graduation = { root: directory, deps, bins };
       for (const d of seen) graduationCache.set(d, found);
       return found;
     }
@@ -362,20 +380,36 @@ async function checkFile(file: string): Promise<void> {
   const code = codeLines(source);
   const executable = executableCode(source);
 
-  // F1 / W8 — shebang policy
+  // F1 / W8 / F14 — shebang policy. A package.json `bin` entry is the file being the binary:
+  // `bun link` symlinks it onto PATH, so the kernel needs the shebang and the exec bit to run
+  // it. Everywhere else a shebang is a smell: ordinary scripts are invoked `bun <path>`.
   const shebang = lines[0]?.startsWith("#!") ? lines[0] : undefined;
-  if (shebang !== undefined) {
-    if (shebang.includes("node")) {
+  const realFile = realpathSync(file);
+  const isPackageBin = findGraduation(file)?.bins.has(realFile) ?? false;
+  if (shebang?.includes("node")) {
+    fail(
+      file,
+      "shebang names node — bun honors it and executes node; use env bun or none (BG1)",
+    );
+  }
+  if (isPackageBin) {
+    if (shebang === undefined) {
       fail(
         file,
-        "shebang names node — bun honors it and executes node; use env bun or none (BG1)",
-      );
-    } else {
-      warn(
-        file,
-        "shebang present — legal only on a binary-substituted fixture (BG1); ordinary scripts run `bun <path>`",
+        "package.json `bin` entry without a `#!/usr/bin/env bun` shebang — `bun link` symlinks the file itself, so it cannot run (BG1)",
       );
     }
+    if ((statSync(realFile).mode & 0o111) === 0) {
+      fail(
+        file,
+        "package.json `bin` entry without the exec bit — commit it 100755, or the linked command is not executable (BG1)",
+      );
+    }
+  } else if (shebang !== undefined && !shebang.includes("node")) {
+    warn(
+      file,
+      "shebang present but the file is no package.json `bin` — declare it as one (a PATH command via `bun link`) or drop it; ordinary scripts run `bun <path>` (BG1)",
+    );
   }
 
   // F2 — CJS require

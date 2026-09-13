@@ -434,3 +434,33 @@ production `from "cleye"` import, then pins help, ordinary unknown, and named `_
 rejection for all 30 entrypoints, including command-local guards in `repo-search literal` and
 `ccc-swap discover`: **31 pass / 0 fail / 181 assertions**. Combined with the floor suite:
 **72 pass / 0 fail / 279 assertions**.
+
+## 2026-09-13 — PATH commands are package `bin` entries; floor F14
+
+**Finding.** Three scripts (`agent-resource-run`, `serena-foreground`, `repo-search`) carried
+`#!/usr/bin/env bun` and tripped W8 on every `mise run lint:bun`, with no declared way to say why:
+link-dots.sh hand-symlinked each `.ts` into `~/.local/bin`, re-implementing npm/bun's `bin`
+mechanism without the declaration that makes a shebang legitimate. The floor had no exemption
+and the brief forbade inventing a comment marker for it — correctly: the declaration already has
+a home, `package.json`.
+
+**Change.** `package.json` `bin` entries now name the three; `mise run deps` runs `bun link`,
+which symlinks them into `~/.bun/bin` (measured on bun 1.3.14: `bun link` creates
+`~/.bun/bin/<name> -> ../install/global/node_modules/<pkg>/<file>` and chmods the target;
+`bun unlink` removes them). `zsh/zshenv` now puts `~/.bun/bin` on every shell's PATH beside
+`~/.local/bin` — until now only `.zprofile` did, so the commands existed in a terminal and
+vanished one process down (`env -i zsh -c` showed only `~/.local/bin`). The old `~/.local/bin`
+links are retired by link-dots.sh (a resolving link is invisible to the dangling prune).
+
+**Floor.** `findGraduation` also collects the manifest's `bin` realpaths. W8 splits: a `bin`
+file needs the shebang AND the exec bit (F14, FAIL on either missing — the symlink would not run);
+any other file with a shebang still WARNs, now pointing at the `bin` route. `script-check.test.ts`:
+**45 pass / 0 fail** (four F14 cases added: clean bin, bin without shebang, bin without exec bit,
+string-form `bin`). `mise run lint:bun`: shebang WARNs 3 → 0; one WARN remains
+(`assign-lib.ts` computed dynamic import — a separate floor gap, still open).
+
+**skill-check run.** `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/writing-bun-scripts`
+exits clean with exactly the pre-existing, already-waived prose debt (12 sentences >120 chars,
+11-line version header, 4 table cells >400 chars, 34 in `bun-facts.md`) — identical counts at
+HEAD before this change; no new debt.
+

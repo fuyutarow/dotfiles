@@ -72,6 +72,34 @@ const HOST_CPU_WARN_PCT = 80;
 // same mistake: an instantaneous number used as evidence of a sustained condition. avg10 stays in
 // the report because it is exactly what you want when diagnosing "why does herdr feel slow right
 // now"; it is just not something to wake anyone for.
+// The host-starvation floor, and the one failure mode this file had no alarm for at all.
+// .wslconfig caps WSL at memory=56GB on this 63.9GB box specifically to leave Windows ~6GB,
+// because memory=60GB measurably destabilised it on 2026-09-06. So "Windows is below its own
+// headroom budget" is the condition, and 4GB is two thirds of that budget gone.
+//
+// AVAILABLE, never FreePhysicalMemory: Windows drives free memory to near zero by design, and
+// FreePhysicalMemory read 0.2GB on this host while 4.5GB was genuinely available. Corroborated by
+// HARD PAGE READS rather than by the gauge alone, for the same reason the memory-PSI row is
+// corroborated — measured 2026-09-14 while the host recovered from a firedancer burst:
+//     avail_gb       0.7   2.28   3.29   4.28   4.49     <- climbing back on its own
+//     pages_sec    32661 116185 163016  30923      0     <- includes dirty-page WRITEBACK
+//     pagereads/s   2861     15     11      7      0     <- the reads that actually block
+// Pages/sec spikes after any large write and says nothing about pressure; page READS are the
+// system fetching back what it had to evict. Low available memory that is not forcing reads is a
+// busy cache, not a shortage.
+// pgscan must be read as a RATE, never as the total. /proc/vmstat counters are cumulative since
+// boot, so "the kernel reclaimed at some point" stays true forever — a gate on the total opens
+// once and never closes, which is the cumulative-counter form of the same instantaneous-vs-
+// sustained mistake made three times above. Measured 2026-09-14 on r99: total 8,358,408 with a
+// rate of 0 pages/s over 5s while memory PSI avg300 still read 66.15 — the gate was already
+// passing on history alone. Idle reads exactly 0; the firedancer burst moved ~6.3M pages in
+// roughly half an hour, of order 3500/s. 1000 sits between them with room on both sides.
+const PGSCAN_RATE_WARN = 1000; // pages/s
+const SWAP_CORROBORATION_MIN_GB = 0.25; // below this the message would print "0.0GB"
+
+const HOST_AVAIL_WARN_GB = 4;
+const HOST_PAGEREADS_WARN = 100; // /s; the recovering host settled to 0-15, the squeezed one 2861
+
 const PSI_WARN = 20;
 const SPIN_CPU_SECONDS = 3600; // the 2026-09-09 zombies had each burned >70h of CPU
 const CRASH_WARN = 1; // NvContainer crash-looped ~29,000 times; one per hour is already wrong
@@ -219,7 +247,10 @@ awk '/^MemTotal:/{print "mem_total="$2*1024}
      /^MemAvailable:/{print "mem_avail="$2*1024}
      /^SwapTotal:/{print "swap_total="$2*1024}
      /^SwapFree:/{print "swap_free="$2*1024}' /proc/meminfo
-awk '$1=="pgscan_kswapd"||$1=="pgscan_direct"{s+=$2} END{print "pgscan="s+0}' /proc/vmstat
+_pg() { awk '$1=="pgscan_kswapd"||$1=="pgscan_direct"{s+=$2} END{print s+0}' /proc/vmstat; }
+_pg1=$(_pg); sleep 2; _pg2=$(_pg)
+echo "pgscan=$_pg2"
+echo "pgscan_rate=$(( (_pg2 - _pg1) / 2 ))"
 df -B1 --output=size,used,avail / | awk 'NR==2{print "disk_total="$1; print "disk_used="$2; print "disk_avail="$3}'
 ps -eo pcpu=,rss=,comm= --sort=-pcpu 2>/dev/null | awk 'NR<=3{printf "top%d=%s %s %sMB\\n", NR, $3, $1"%", int($2/1024)}'
 `;
@@ -235,13 +266,20 @@ $os = Get-CimInstance Win32_OperatingSystem
 $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 "host_c_total=" + $c.Size
 "host_c_free=" + $c.FreeSpace
-$cpuSamples = 1..3 | ForEach-Object {
-  (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -eq '_Total' }).PercentProcessorTime
+$cpuSamples = @(); $availSamples = @(); $readSamples = @()
+1..3 | ForEach-Object {
+  $p = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor | Where-Object { $_.Name -eq '_Total' }
+  $m = Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory
+  $cpuSamples += $p.PercentProcessorTime
+  $availSamples += $m.AvailableMBytes
+  $readSamples += $m.PageReadsPersec
   if ($_ -lt 3) { Start-Sleep -Milliseconds 700 }
 }
 "host_cpu_pct=" + [int](($cpuSamples | Measure-Object -Average).Average)
 "host_cpu_max=" + [int](($cpuSamples | Measure-Object -Maximum).Maximum)
 "host_cpu_n=" + @($cpuSamples).Count
+"host_ram_avail=" + [int64]([int](($availSamples | Measure-Object -Average).Average)) * 1048576
+"host_pagereads=" + [int](($readSamples | Measure-Object -Average).Average)
 $vm = Get-Process -Name vmmemWSL
 "host_vmmem=" + $(if ($vm) { ($vm | Measure-Object -Property WorkingSet64 -Sum).Sum } else { 0 })
 $spin = Get-Process -Name sshd,pwsh,powershell,conhost | Where-Object { $_.CPU -gt ${SPIN_CPU_SECONDS} }
@@ -300,7 +338,8 @@ export type FindingKey =
   | "psi-memory"
   | "psi-io"
   | "host-spin"
-  | "host-crashes";
+  | "host-crashes"
+  | "host-mem";
 
 export type Finding = {
   level: "CRIT" | "WARN";
@@ -377,6 +416,21 @@ export function judge(
     });
   }
 
+  const hostAvail = num(h, "host_ram_avail");
+  const reads = num(h, "host_pagereads");
+  if (
+    hostAvail !== null &&
+    hostAvail < HOST_AVAIL_WARN_GB * 1024 ** 3 &&
+    reads !== null &&
+    reads > HOST_PAGEREADS_WARN
+  ) {
+    f.push({
+      level: "WARN",
+      key: "host-mem",
+      text: `Windows down to ${gb(hostAvail)} available with ${reads} hard page reads/s — WSL is squeezing the host below the headroom .wslconfig reserves for it`,
+    });
+  }
+
   for (const [probe, key, label] of [
     ["cpu_psi300", "psi-cpu", "CPU"],
     ["io_psi300", "psi-io", "IO"],
@@ -414,15 +468,18 @@ export function judge(
   // must show itself in at least one counter that a dropCache cycle cannot move.
   const memPsi = num(g, "mem_psi300");
   if (memPsi !== null && memPsi > PSI_WARN) {
-    const pgscan = num(g, "pgscan");
+    const pgscanRate = num(g, "pgscan_rate");
     const availNow = num(g, "mem_avail");
     const swapUsed =
       swapTotal !== null && swapFree !== null ? swapTotal - swapFree : null;
     const corroboration: string[] = [];
-    if (pgscan !== null && pgscan > 0) {
-      corroboration.push(`kernel reclaim ran (pgscan=${pgscan})`);
+    if (pgscanRate !== null && pgscanRate > PGSCAN_RATE_WARN) {
+      corroboration.push(`kernel reclaiming now (${pgscanRate} pages/s)`);
     }
-    if (swapUsed !== null && swapUsed > 0) {
+    // A floor, not `> 0`: a few megabytes of swap left over from hours ago is not evidence of
+    // anything, and it rendered as the self-refuting line "corroborated: swap in use 0.0GB" —
+    // a corroboration whose own displayed value reads as nothing.
+    if (swapUsed !== null && swapUsed > SWAP_CORROBORATION_MIN_GB * 1024 ** 3) {
       corroboration.push(`swap in use ${gb(swapUsed)}`);
     }
     if (availNow !== null && availNow < MEM_AVAIL_WARN_GB * 1024 ** 3) {
@@ -481,9 +538,9 @@ function report(
     `available ${gbOr(ma)} of ${gbOr(mt)}` +
       `   swap ${st === null || sf === null ? "?" : `${gb(st - sf)} / ${gb(st)}`}` +
       `   PSI ${g.get("mem_psi")}` +
-      // pgscan sits next to memory PSI on purpose: PSI alone cannot distinguish a shortage from
-      // WSL's dropCache refaults, and pgscan=0 is what settles it. See judge().
-      `   pgscan ${g.get("pgscan") ?? "?"}`,
+      // The reclaim RATE sits next to memory PSI on purpose: PSI alone cannot distinguish a
+      // shortage from WSL's dropCache refaults, and a rate of 0 is what settles it. See judge().
+      `   pgscan ${g.get("pgscan_rate") ?? "?"}/s`,
   );
   const du = num(g, "disk_used");
   const dt = num(g, "disk_total");
@@ -508,9 +565,17 @@ function report(
       `   uptime ${h.get("host_uptime_h") ?? "?"}h`,
   );
   const rt = num(h, "host_ram_total");
-  const rf = num(h, "host_ram_free");
+  const rf = num(h, "host_ram_avail");
   const vm = num(h, "host_vmmem");
-  line("mem", `free ${gbOr(rf)} of ${gbOr(rt)}   vmmemWSL ${gbOr(vm)}`);
+  // AVAILABLE, not free. Windows keeps free memory near zero by design (it caches
+  // aggressively), so FreePhysicalMemory reads alarmingly low on a perfectly healthy host —
+  // it showed 0.2GB here while 4.5GB was actually available. Hard page reads/s sits beside it
+  // because that, not the gauge, is what a memory shortage does to you.
+  line(
+    "mem",
+    `available ${gbOr(rf)} of ${gbOr(rt)}   vmmemWSL ${gbOr(vm)}` +
+      `   hard page reads/s ${h.get("host_pagereads") ?? "?"}`,
+  );
   const cf = num(h, "host_c_free");
   const ct = num(h, "host_c_total");
   line(

@@ -34,6 +34,7 @@ function healthyGuest(over: Record<string, string> = {}): Map<string, string> {
       swap_total: String(16 * GB),
       swap_free: String(16 * GB),
       pgscan: "0",
+      pgscan_rate: "0",
       disk_total: String(1000 * GB),
       disk_used: String(360 * GB),
       disk_avail: String(590 * GB),
@@ -51,6 +52,10 @@ function healthyHost(over: Record<string, string> = {}): Map<string, string> {
       host_c_free: String(400 * GB),
       host_cpu_pct: "20",
       host_vmmem: String(39 * GB),
+      host_cpu_max: "25",
+      host_cpu_n: "3",
+      host_ram_avail: String(20 * GB),
+      host_pagereads: "0",
       host_spin: "0",
       host_spin_names: "",
       host_crashes_1h: "0",
@@ -83,14 +88,35 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
     expect(keys(dropCache, healthyHost())).toEqual([]);
   });
 
-  test("PSI plus kernel reclaim (pgscan > 0) DOES warn", () => {
+  test("PSI plus ACTIVE kernel reclaim DOES warn", () => {
     const g = healthyGuest({
       mem_psi: "44.6",
       mem_psi300: "44.0",
-      pgscan: "918273",
+      pgscan_rate: "3500",
     });
     expect(keys(g, healthyHost())).toEqual(["psi-memory"]);
-    expect(judge(g, healthyHost())[0].text).toContain("pgscan=918273");
+    expect(judge(g, healthyHost())[0].text).toContain("3500 pages/s");
+  });
+
+  // The cumulative-counter trap: pgscan never decreases, so a gate on the total stays open for
+  // the rest of the boot. Measured on r99 with total 8,358,408 and a rate of 0.
+  test("a huge pgscan TOTAL with a zero rate is silent — the counter is cumulative", () => {
+    const g = healthyGuest({
+      mem_psi: "73.7",
+      mem_psi300: "66.15",
+      pgscan: "8358408",
+      pgscan_rate: "0",
+    });
+    expect(keys(g, healthyHost())).toEqual([]);
+  });
+
+  // The self-refuting corroboration: "swap in use 0.0GB" was accepted as evidence.
+  test("a trace of swap is not corroboration — it would print as 0.0GB", () => {
+    const g = healthyGuest({
+      mem_psi300: "66.15",
+      swap_free: String(16 * GB - 4 * 1024 * 1024), // 4 MB used
+    });
+    expect(keys(g, healthyHost())).toEqual([]);
   });
 
   test("PSI plus swap in use DOES warn", () => {
@@ -116,7 +142,7 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
     const g = healthyGuest({
       mem_psi: "1.2",
       mem_psi300: "1.1",
-      pgscan: "918273",
+      pgscan_rate: "3500",
     });
     expect(keys(g, healthyHost())).toEqual([]);
   });
@@ -189,6 +215,44 @@ describe("judge — the host-side failures the guest cannot see", () => {
     expect(keys(healthyGuest(), healthyHost({ host_cpu_pct: "95" }))).toEqual([
       "host-cpu",
     ]);
+  });
+});
+
+describe("judge — host memory starvation (available, corroborated by hard reads)", () => {
+  test("low available memory ALONE is silent — Windows caches to near-zero free by design", () => {
+    const h = healthyHost({
+      host_ram_avail: String(1.65 * GB),
+      host_pagereads: "0",
+    });
+    expect(keys(healthyGuest(), h)).toEqual([]);
+  });
+
+  // The recovering host measured on 2026-09-14: available climbing back, pages/sec still spiking
+  // from dirty-page writeback, but the reads that actually block already at single digits.
+  test("a recovering host is silent — writeback spikes are not a shortage", () => {
+    const h = healthyHost({
+      host_ram_avail: String(2.28 * GB),
+      host_pagereads: "15",
+    });
+    expect(keys(healthyGuest(), h)).toEqual([]);
+  });
+
+  test("low available AND sustained hard reads DOES warn", () => {
+    const h = healthyHost({
+      host_ram_avail: String(0.7 * GB),
+      host_pagereads: "2861",
+    });
+    const f = judge(healthyGuest(), h);
+    expect(f.map((x) => x.key)).toEqual(["host-mem"]);
+    expect(f[0].text).toContain("2861 hard page reads/s");
+  });
+
+  test("hard reads with plenty of memory available is not a memory finding", () => {
+    const h = healthyHost({
+      host_ram_avail: String(20 * GB),
+      host_pagereads: "2861",
+    });
+    expect(keys(healthyGuest(), h)).toEqual([]);
   });
 });
 

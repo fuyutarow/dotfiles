@@ -123,8 +123,20 @@ describe("judge — memory PSI raises nothing on WSL2 (it is a diagnostic)", () 
     expect(keys(healthyGuest({ cpu_psi300: "55" }), healthyHost())).toEqual([
       "psi-cpu",
     ]);
-    expect(keys(healthyGuest({ io_psi300: "55" }), healthyHost())).toEqual([
+    expect(keys(healthyGuest({ io_psi300: "75" }), healthyHost())).toEqual([
       "psi-io",
+    ]);
+  });
+
+  // The floors are separate because the two metrics have different normal ranges here. The
+  // observed IO maximum under wanted work (ccc indexing) was 23.57, so a value in that band must
+  // stay silent while the same number on the CPU side is far outside its 0.08-0.62 range.
+  test("IO PSI inside its observed-normal band is silent; the same value on CPU is not", () => {
+    expect(keys(healthyGuest({ io_psi300: "23.57" }), healthyHost())).toEqual(
+      [],
+    );
+    expect(keys(healthyGuest({ cpu_psi300: "23.57" }), healthyHost())).toEqual([
+      "psi-cpu",
     ]);
   });
 
@@ -139,7 +151,7 @@ describe("judge — memory PSI raises nothing on WSL2 (it is a diagnostic)", () 
   });
 
   test("a sustained 5-minute window warns even when the 10-second one has calmed", () => {
-    const g = healthyGuest({ io_psi: "0.4", io_psi300: "41.2" });
+    const g = healthyGuest({ io_psi: "0.4", io_psi300: "82.5" });
     expect(keys(g, healthyHost())).toEqual(["psi-io"]);
   });
 });

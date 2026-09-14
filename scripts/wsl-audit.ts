@@ -73,7 +73,23 @@ const HOST_CPU_WARN_PCT = 80;
 // the report because it is exactly what you want when diagnosing "why does herdr feel slow right
 // now"; it is just not something to wake anyone for.
 // Applies to CPU and IO only — memory PSI raises nothing at all on WSL2; see judge().
-const PSI_WARN = 20;
+//
+// SEPARATE FLOORS, because CPU and IO PSI have completely different normal ranges on this host and
+// one shared number was inside one of them. Observed across 2026-09-13..14 under known-good load
+// (firedancer writing tens of GB, ccc indexing, julia pinning a core):
+//     CPU PSI some avg300    0.08 - 0.62
+//     IO  PSI some avg300    0.00 - 23.57
+// The shared floor of 20 therefore sat INSIDE the IO range: it fired at 23.57 while the only
+// D-state task on the box was ccc, doing the indexing it is supposed to do, and avg300 was already
+// decaying (19.99 -> 16.26 over 60s) from work that had finished. A 5-minute window lags by five
+// minutes; that is the point of it, and it means a floor inside normal range alarms on echoes.
+//
+// Both floors now sit above the highest value observed under heavy WANTED work. Honest limit: no
+// pathological IO sample has ever been captured on this machine, so the IO floor is constructed
+// (above observed-normal), not measured against a real fault. Revisit it the first time a genuine
+// IO pathology is seen, and put the number here.
+const CPU_PSI_WARN = 20; // ~30x the observed maximum
+const IO_PSI_WARN = 60; // ~2.5x the observed maximum; see the caveat above
 
 // The host-starvation floor, and the one failure mode this file had no alarm for at all.
 // .wslconfig caps WSL at memory=56GB on this 63.9GB box specifically to leave Windows ~6GB,
@@ -422,12 +438,12 @@ export function judge(
     });
   }
 
-  for (const [probe, key, label] of [
-    ["cpu_psi300", "psi-cpu", "CPU"],
-    ["io_psi300", "psi-io", "IO"],
+  for (const [probe, key, label, floor] of [
+    ["cpu_psi300", "psi-cpu", "CPU", CPU_PSI_WARN],
+    ["io_psi300", "psi-io", "IO", IO_PSI_WARN],
   ] as const) {
     const v = num(g, probe);
-    if (v !== null && v > PSI_WARN) {
+    if (v !== null && v > floor) {
       f.push({
         level: "WARN",
         key,

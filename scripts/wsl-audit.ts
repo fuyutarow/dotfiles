@@ -72,6 +72,9 @@ const HOST_CPU_WARN_PCT = 80;
 // same mistake: an instantaneous number used as evidence of a sustained condition. avg10 stays in
 // the report because it is exactly what you want when diagnosing "why does herdr feel slow right
 // now"; it is just not something to wake anyone for.
+// Applies to CPU and IO only — memory PSI raises nothing at all on WSL2; see judge().
+const PSI_WARN = 20;
+
 // The host-starvation floor, and the one failure mode this file had no alarm for at all.
 // .wslconfig caps WSL at memory=56GB on this 63.9GB box specifically to leave Windows ~6GB,
 // because memory=60GB measurably destabilised it on 2026-09-06. So "Windows is below its own
@@ -87,20 +90,9 @@ const HOST_CPU_WARN_PCT = 80;
 // Pages/sec spikes after any large write and says nothing about pressure; page READS are the
 // system fetching back what it had to evict. Low available memory that is not forcing reads is a
 // busy cache, not a shortage.
-// pgscan must be read as a RATE, never as the total. /proc/vmstat counters are cumulative since
-// boot, so "the kernel reclaimed at some point" stays true forever — a gate on the total opens
-// once and never closes, which is the cumulative-counter form of the same instantaneous-vs-
-// sustained mistake made three times above. Measured 2026-09-14 on r99: total 8,358,408 with a
-// rate of 0 pages/s over 5s while memory PSI avg300 still read 66.15 — the gate was already
-// passing on history alone. Idle reads exactly 0; the firedancer burst moved ~6.3M pages in
-// roughly half an hour, of order 3500/s. 1000 sits between them with room on both sides.
-const PGSCAN_RATE_WARN = 1000; // pages/s
-const SWAP_CORROBORATION_MIN_GB = 0.25; // below this the message would print "0.0GB"
-
 const HOST_AVAIL_WARN_GB = 4;
 const HOST_PAGEREADS_WARN = 100; // /s; the recovering host settled to 0-15, the squeezed one 2861
 
-const PSI_WARN = 20;
 const SPIN_CPU_SECONDS = 3600; // the 2026-09-09 zombies had each burned >70h of CPU
 const CRASH_WARN = 1; // NvContainer crash-looped ~29,000 times; one per hour is already wrong
 
@@ -335,7 +327,6 @@ export type FindingKey =
   | "swap-used"
   | "host-cpu"
   | "psi-cpu"
-  | "psi-memory"
   | "psi-io"
   | "host-spin"
   | "host-crashes"
@@ -445,8 +436,7 @@ export function judge(
     }
   }
 
-  // MEMORY PSI NEEDS CORROBORATION ON WSL2, and this is not a softened threshold — it is the
-  // difference between a shortage and normal WSL housekeeping.
+  // MEMORY PSI IS A DIAGNOSTIC HERE, NOT AN ALARM.
   //
   // .wslconfig leaves autoMemoryReclaim unset, whose default is dropCache: WSL periodically drops
   // the guest page cache to hand memory back to Windows. Every dropped page that is touched again
@@ -463,36 +453,20 @@ export function judge(
   // Zero pgscan with heavy refaults is the signature: pages left the cache without passing
   // through LRU reclaim, i.e. something dropped them. Nothing was short of memory.
   //
-  // Warning on PSI alone would therefore have fired permanently on a healthy machine — the
-  // standing false alarm this file's own watcher contract exists to prevent. So a real shortage
-  // must show itself in at least one counter that a dropCache cycle cannot move.
-  const memPsi = num(g, "mem_psi300");
-  if (memPsi !== null && memPsi > PSI_WARN) {
-    const pgscanRate = num(g, "pgscan_rate");
-    const availNow = num(g, "mem_avail");
-    const swapUsed =
-      swapTotal !== null && swapFree !== null ? swapTotal - swapFree : null;
-    const corroboration: string[] = [];
-    if (pgscanRate !== null && pgscanRate > PGSCAN_RATE_WARN) {
-      corroboration.push(`kernel reclaiming now (${pgscanRate} pages/s)`);
-    }
-    // A floor, not `> 0`: a few megabytes of swap left over from hours ago is not evidence of
-    // anything, and it rendered as the self-refuting line "corroborated: swap in use 0.0GB" —
-    // a corroboration whose own displayed value reads as nothing.
-    if (swapUsed !== null && swapUsed > SWAP_CORROBORATION_MIN_GB * 1024 ** 3) {
-      corroboration.push(`swap in use ${gb(swapUsed)}`);
-    }
-    if (availNow !== null && availNow < MEM_AVAIL_WARN_GB * 1024 ** 3) {
-      corroboration.push(`available ${gb(availNow)}`);
-    }
-    if (corroboration.length > 0) {
-      f.push({
-        level: "WARN",
-        key: "psi-memory",
-        text: `guest memory PSI some avg300 = ${memPsi} (sustained), corroborated: ${corroboration.join("; ")}`,
-      });
-    }
-  }
+  // SO IT RAISES NOTHING — the conclusion of three attempts to make it an alarm, kept here as the
+  // reason not to attempt a fourth. Each fix removed one false positive and left another:
+  //   corroborate it            -> pgscan TOTAL is cumulative, so the gate opened once and stayed
+  //                                open (8,358,408 total while the rate was 0 pages/s)
+  //   read the rate, not total  -> reclaim at 12000 pages/s with MemAvailable 41.5 GB of 54.9,
+  //                                which is the kernel recycling cache under a write load, i.e.
+  //                                the system working
+  // Firing on every ordinary firedancer job is what it amounted to, and a warning its reader
+  // learns to skip costs more than it can ever return.
+  //
+  // What a real guest memory shortage DOES is exhaust MemAvailable or push pages to swap, and
+  // both already raise their own findings above. Memory PSI adds only "stalling while
+  // availability looks fine", which on WSL2 is the dropCache artifact by construction. It stays
+  // in the report, where it is exactly what you want when asking why herdr feels slow right now.
 
   const spin = num(h, "host_spin");
   if (spin !== null && spin > 0) {

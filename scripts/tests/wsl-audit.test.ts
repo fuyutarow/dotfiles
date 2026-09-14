@@ -75,34 +75,29 @@ describe("judge — baseline", () => {
   });
 });
 
-describe("judge — memory PSI needs corroboration (the dropCache false positive)", () => {
-  // The exact shape measured on r99 2026-09-13: PSI pinned high, and every counter that a real
-  // shortage would move sitting at zero.
-  const dropCache = healthyGuest({
-    mem_psi: "44.6",
-    mem_psi300: "44.0",
-    pgscan: "0",
+describe("judge — memory PSI raises nothing on WSL2 (it is a diagnostic)", () => {
+  // Three attempts were made to turn memory PSI into an alarm and all three fired on a healthy
+  // machine, because .wslconfig leaves autoMemoryReclaim at its dropCache default: WSL drops the
+  // guest page cache, the refaults stall tasks, and PSI counts exactly that. These pin the
+  // decision so a fourth attempt has to argue with a test rather than with a comment.
+  test("sustained memory PSI alone raises nothing", () => {
+    const g = healthyGuest({ mem_psi: "73.7", mem_psi300: "66.15" });
+    expect(keys(g, healthyHost())).toEqual([]);
   });
 
-  test("high memory PSI ALONE is silent — WSL drops the page cache, that is not a shortage", () => {
-    expect(keys(dropCache, healthyHost())).toEqual([]);
-  });
-
-  test("PSI plus ACTIVE kernel reclaim DOES warn", () => {
+  test("memory PSI with active reclaim STILL raises nothing when memory is plentiful", () => {
+    // Measured 2026-09-14: reclaim at 12000 pages/s with 41.5GB of 54.9GB available — the kernel
+    // recycling cache under a write load, which is the system working.
     const g = healthyGuest({
-      mem_psi: "44.6",
-      mem_psi300: "44.0",
-      pgscan_rate: "3500",
+      mem_psi300: "46.41",
+      pgscan_rate: "12000",
+      mem_avail: String(41.5 * GB),
     });
-    expect(keys(g, healthyHost())).toEqual(["psi-memory"]);
-    expect(judge(g, healthyHost())[0].text).toContain("3500 pages/s");
+    expect(keys(g, healthyHost())).toEqual([]);
   });
 
-  // The cumulative-counter trap: pgscan never decreases, so a gate on the total stays open for
-  // the rest of the boot. Measured on r99 with total 8,358,408 and a rate of 0.
-  test("a huge pgscan TOTAL with a zero rate is silent — the counter is cumulative", () => {
+  test("a huge cumulative pgscan raises nothing — the counter never decreases", () => {
     const g = healthyGuest({
-      mem_psi: "73.7",
       mem_psi300: "66.15",
       pgscan: "8358408",
       pgscan_rate: "0",
@@ -110,44 +105,21 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
     expect(keys(g, healthyHost())).toEqual([]);
   });
 
-  // The self-refuting corroboration: "swap in use 0.0GB" was accepted as evidence.
-  test("a trace of swap is not corroboration — it would print as 0.0GB", () => {
+  // What a REAL guest shortage does, and these rows are the ones that carry it.
+  test("exhausted MemAvailable warns on its own merits", () => {
+    const g = healthyGuest({ mem_psi300: "66.15", mem_avail: String(2 * GB) });
+    expect(keys(g, healthyHost())).toEqual(["mem-avail"]);
+  });
+
+  test("real swap use warns on its own merits", () => {
     const g = healthyGuest({
       mem_psi300: "66.15",
-      swap_free: String(16 * GB - 4 * 1024 * 1024), // 4 MB used
-    });
-    expect(keys(g, healthyHost())).toEqual([]);
-  });
-
-  test("PSI plus swap in use DOES warn", () => {
-    const g = healthyGuest({
-      mem_psi: "44.6",
-      mem_psi300: "44.0",
       swap_free: String(14 * GB), // 2 GB used
     });
-    // swap-used has its own finding above 1 GB; psi-memory must appear alongside it.
-    expect(keys(g, healthyHost())).toEqual(["psi-memory", "swap-used"]);
+    expect(keys(g, healthyHost())).toEqual(["swap-used"]);
   });
 
-  test("PSI plus a genuinely low MemAvailable DOES warn", () => {
-    const g = healthyGuest({
-      mem_psi: "44.6",
-      mem_psi300: "44.0",
-      mem_avail: String(2 * GB),
-    });
-    expect(keys(g, healthyHost())).toEqual(["mem-avail", "psi-memory"]);
-  });
-
-  test("corroboration is irrelevant when PSI itself is low", () => {
-    const g = healthyGuest({
-      mem_psi: "1.2",
-      mem_psi300: "1.1",
-      pgscan_rate: "3500",
-    });
-    expect(keys(g, healthyHost())).toEqual([]);
-  });
-
-  test("CPU and IO PSI are NOT gated — the artifact is specific to memory", () => {
+  test("CPU and IO PSI DO still alarm — the artifact is specific to memory", () => {
     expect(keys(healthyGuest({ cpu_psi300: "55" }), healthyHost())).toEqual([
       "psi-cpu",
     ]);
@@ -156,8 +128,6 @@ describe("judge — memory PSI needs corroboration (the dropCache false positive
     ]);
   });
 
-  // The burst that produced the third false positive: ccc indexing drove IO PSI avg10 to 20.42
-  // while avg60 was 6.24 and avg300 was 3.39. A 10-second spike is the workload, not a fault.
   test("a 10-second PSI spike with a calm 5-minute window is SILENT", () => {
     const g = healthyGuest({
       io_psi: "20.42",

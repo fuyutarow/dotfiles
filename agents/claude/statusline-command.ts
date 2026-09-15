@@ -23,7 +23,7 @@
 //   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
 //   2 <email> | Session: <uuid>                       (identity strings)
 //   3 <name> | Model | Effort[+WF] | Ctx: <k> <pct>%  (agent + config + budget-now)
-//   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...)         (budget-over-time)
+//   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
 //   5 Job: ... (conditional)                          (background work)
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
@@ -94,6 +94,7 @@ interface Dataframe {
   rl5Reset?: number | undefined;
   rl7?: number | undefined;
   rl7Reset?: number | undefined;
+  rlModel: ModelLimit[];
   branch?: string | undefined;
   add: number;
   del: number;
@@ -127,20 +128,68 @@ function shorten(p: string): string {
   return p;
 }
 
-// Which Claude account this CLI is authenticated as. The statusline input carries no account
-// field, so it comes from ~/.claude.json — the same file `claude` itself writes on login.
+// Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
+// one parse of ~/.claude.json serves both, the same file `claude` itself writes on login and
+// keeps refreshing (via `cachedUsageUtilization`) whenever it fetches usage data.
 // Cost measured 2026-08-24: 0.64 ms read + 0.91 ms parse for a 129 KB file, against the
 // 8.8 ms this script already spends on its one `ps -eo` pass. Not worth caching.
-function account(): string | undefined {
+interface ClaudeJson {
+  oauthAccount?: { emailAddress?: string };
+  cachedUsageUtilization?: {
+    utilization?: {
+      limits?: Array<{
+        kind?: string;
+        percent?: number;
+        resets_at?: string | null;
+        scope?: { model?: { display_name?: string } } | null;
+      }>;
+    };
+  };
+}
+function readClaudeJson(): ClaudeJson {
   try {
-    const o: { oauthAccount?: { emailAddress?: string } } = JSON.parse(
-      readFileSync(`${HOME}/.claude.json`, "utf8"),
-    );
-    // `||` not `??`: an empty string is not an account either, and must drop the segment.
-    return o.oauthAccount?.emailAddress || undefined;
+    return JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8"));
   } catch {
-    return undefined; // unreadable / not JSON / logged out -> segment just disappears
+    return {}; // unreadable / not JSON / logged out -> every reader below just sees absence
   }
+}
+function account(cj: ClaudeJson): string | undefined {
+  // `||` not `??`: an empty string is not an account either, and must drop the segment.
+  return cj.oauthAccount?.emailAddress || undefined;
+}
+
+// Fable (and any other model with its own weekly ceiling — the CLI's own "You've hit your Opus
+// limit" message confirms Opus gets one too) draws down the SAME five_hour/seven_day pool above
+// but ALSO gets its own dedicated weekly cap layered on top — confirmed live 2026-09-16 against
+// the account's own /usage screen ("Current week (Fable)"). This is NOT in the statusline's own
+// stdin JSON at all (checked against the documented schema: `rate_limits` carries only
+// five_hour/seven_day/spend_limit) — it lives only in this cache, under the generic
+// `weekly_scoped` kind with a `scope.model.display_name`, because that is the same field
+// Claude Code's own /usage view reads. Can be stale between whatever triggers Claude Code to
+// refetch it; same trust level as account() just above, which reads the same file with no
+// staleness check either.
+interface ModelLimit {
+  name: string;
+  pct: number;
+  resetEpoch: number | undefined;
+}
+function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
+  const limits = cj.cachedUsageUtilization?.utilization?.limits ?? [];
+  const out: ModelLimit[] = [];
+  for (const l of limits) {
+    if (l.kind !== "weekly_scoped" || l.percent == null) continue;
+    const name = l.scope?.model?.display_name;
+    if (!name) continue;
+    const epochMs = l.resets_at ? new Date(l.resets_at).getTime() : NaN;
+    out.push({
+      name,
+      pct: l.percent,
+      resetEpoch: Number.isFinite(epochMs)
+        ? Math.floor(epochMs / 1000)
+        : undefined,
+    });
+  }
+  return out;
 }
 
 // Is `ultracode: true` set in the CLI's OWN live settings file — not this repo's committed
@@ -515,7 +564,9 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
   const sid = data.session_id || undefined; // "" is not an id either
   const sessionName = sid != null ? agentName(sid) : undefined;
-  const email = account();
+  const cj = readClaudeJson();
+  const email = account(cj);
+  const rlModel = modelWeeklyLimits(cj);
 
   let model = data.model?.display_name ?? "";
   const modelId = data.model?.id ?? "";
@@ -598,6 +649,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     rl5Reset: data.rate_limits?.five_hour?.resets_at,
     rl7: data.rate_limits?.seven_day?.used_percentage,
     rl7Reset: data.rate_limits?.seven_day?.resets_at,
+    rlModel,
     branch,
     add: data.cost?.total_lines_added ?? 0,
     del: data.cost?.total_lines_removed ?? 0,
@@ -650,6 +702,15 @@ function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
   const { pct, col } = pctFmt(rl7);
   let seg = ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
   if (rl7Reset != null) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
+  return seg;
+}
+// Rate row, per-model weekly-cap half (e.g. "· Fable 100% ⟳reset") — same reset7 shape as the
+// 7d segment above since this window is also day-scale, plus the same leading middot marking it
+// as an independent sibling value (see render()'s header note on MID).
+function rlModelSegment(m: ModelLimit): string {
+  const { pct, col } = pctFmt(m.pct);
+  let seg = ` ${DIM}${MID}${RST} ${m.name} ${ESC}[${col}m${pct}%${RST}`;
+  if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
 // Job row, admitted-work half: "<name>[+N] <elapsed> [· <vram>] [det×N]" — extracted out of
@@ -710,10 +771,11 @@ function render(df: Dataframe): string {
   agentLine = join(agentLine, ctxSeg);
 
   let rateLine = "";
-  if (df.rl5 != null || df.rl7 != null) {
+  if (df.rl5 != null || df.rl7 != null || df.rlModel.length > 0) {
     rateLine = `${ESC}[38;5;108mRate:${RST}`;
     if (df.rl5 != null) rateLine += rl5Segment(df.rl5, df.rl5Reset);
     if (df.rl7 != null) rateLine += rl7Segment(df.rl7, df.rl7Reset);
+    for (const m of df.rlModel) rateLine += rlModelSegment(m);
   }
 
   let repoLine = "";

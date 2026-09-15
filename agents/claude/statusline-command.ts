@@ -38,8 +38,16 @@
 // visible error. Named, not silently closed: this script still has no dedicated test suite —
 // verification here is the manual stdin invocations recorded in the commit, not an automated net.
 //
-// Zero runtime deps on purpose: this file is executed standalone as `bun <path>` with no
-// package.json / node_modules beside it, so nothing importable (zod, ts-pattern) resolves.
+// BG3 dependencies (writing-bun-scripts floor), not a standalone zero-dep script: this file
+// lives inside the dotfiles repo tree, so even invoked via its ~/.claude symlink, Bun resolves
+// imports on the file's REALPATH and finds the repo-root node_modules -- confirmed live
+// 2026-09-16 (`bun ~/.claude/<probe>.ts` importing neverthrow resolved, exactly like any linked
+// skill script; agents/skills/writing-bun-scripts/tests/forge-verification-ledger.md documents
+// the same mechanism for the `~/.claude/skills/<skill>` symlinks). Every fallible sync call
+// below goes through neverthrow's fromThrowable() rather than try/catch, per that same floor;
+// .oxlintrc.json's ban override was extended from scripts/*.ts to agents/claude/*.ts to enforce
+// it here too (agents/claude/hooks/*.ts stays exempt -- those run before `mise run deps` has
+// necessarily restored node_modules, this file never does).
 // Static safety comes from the all-optional StatusInput shape + native `!= null` narrowing.
 // Input: JSON via stdin from Claude Code.
 
@@ -47,6 +55,7 @@ import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createConnection } from "node:net";
+import { fromThrowable } from "neverthrow";
 
 interface RateWindow {
   used_percentage?: number;
@@ -147,11 +156,9 @@ interface ClaudeJson {
   };
 }
 function readClaudeJson(): ClaudeJson {
-  try {
-    return JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8"));
-  } catch {
-    return {}; // unreadable / not JSON / logged out -> every reader below just sees absence
-  }
+  return fromThrowable((): ClaudeJson =>
+    JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
+  )().unwrapOr({}); // unreadable / not JSON / logged out -> every reader below just sees absence
 }
 function account(cj: ClaudeJson): string | undefined {
   // `||` not `??`: an empty string is not an account either, and must drop the segment.
@@ -199,14 +206,11 @@ function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
 // key), so this file — not the repo source — is the only place that reflects what is ACTUALLY
 // configured right now. Cheap like account() just above: same file class, smaller payload.
 function ultracodeConfigured(): boolean {
-  try {
-    const s: { ultracode?: boolean } = JSON.parse(
-      readFileSync(`${HOME}/.claude/settings.json`, "utf8"),
-    );
-    return s.ultracode === true;
-  } catch {
-    return false; // unreadable / not JSON -> treat as not configured, segment reads "off"
-  }
+  return fromThrowable((): { ultracode?: boolean } =>
+    JSON.parse(readFileSync(`${HOME}/.claude/settings.json`, "utf8")),
+  )()
+    .map((s) => s.ultracode === true)
+    .unwrapOr(false); // unreadable / not JSON -> treat as not configured, segment reads "off"
 }
 
 // `name` — the actual field `claude agents --json` returns per session (confirmed live
@@ -267,36 +271,38 @@ function agentNameEntries(
   return next;
 }
 function agentName(sid: string): string | undefined {
-  let cache: Record<string, AgentNameEntry> = {};
-  try {
-    cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
-  } catch {
-    // missing / corrupt cache file -> treat as empty and refetch below
-  }
+  // missing / corrupt cache file -> treat as empty and refetch below
+  const cache: Record<string, AgentNameEntry> = fromThrowable(
+    (): Record<string, AgentNameEntry> =>
+      JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
+  )().unwrapOr({});
   const hit = cache[sid];
   if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
-  try {
-    const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
+  const outResult = fromThrowable(() =>
+    execFileSync(CLAUDE_BIN, ["agents", "--json"], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
       timeout: 3000,
-    });
-    const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
-    const now = Date.now();
-    const next = agentNameEntries(list, now);
-    if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
-    try {
-      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-      writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
-    } catch {
-      // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
-    }
-    return next[sid]?.name;
-  } catch {
-    return undefined; // `claude` missing/slow/errored -> segment just disappears this render
-  }
+    }),
+  )();
+  if (outResult.isErr()) return undefined; // `claude` missing/slow/errored -> segment just disappears this render
+  const listResult = fromThrowable(
+    (): Array<{ sessionId?: string; name?: string }> =>
+      JSON.parse(outResult.value),
+  )();
+  if (listResult.isErr()) return undefined; // malformed JSON -> same as a missing `claude`
+  const now = Date.now();
+  const next = agentNameEntries(listResult.value, now);
+  if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
+  // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
+  // value below still returned, just not persisted.
+  fromThrowable(() => {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+  })();
+  return next[sid]?.name;
 }
 
 // Best-effort push to herdr over the same JSON-RPC unix socket its own vendored integration
@@ -362,7 +368,7 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
       resolve();
     };
     const timer = setTimeout(finish, 200);
-    try {
+    const socketResult = fromThrowable(() => {
       const socket = createConnection(socketPath, () => {
         socket.write(`${JSON.stringify(req)}\n`, () => {
           clearTimeout(timer);
@@ -370,14 +376,17 @@ function herdrSend(socketPath: string, req: unknown): Promise<void> {
           finish();
         });
       });
-      socket.on("error", () => {
-        clearTimeout(timer);
-        finish();
-      });
-    } catch {
+      return socket;
+    })();
+    if (socketResult.isErr()) {
       clearTimeout(timer);
       finish();
+      return;
     }
+    socketResult.value.on("error", () => {
+      clearTimeout(timer);
+      finish();
+    });
   });
 }
 
@@ -495,19 +504,18 @@ function admittedName(tok: string[]): string | undefined {
 // that outlived its session. Counted, never judged — deciding which orphan is "real work" is
 // exactly the guess this segment exists to stop us making.
 function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
-  let raw: string;
-  try {
-    // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
-    // has no reason to be instant on a heavily loaded host, and this call used to have no
-    // timeout at all.
-    raw = execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
+  // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
+  // has no reason to be instant on a heavily loaded host, and this call used to have no
+  // timeout at all.
+  const rawResult = fromThrowable(() =>
+    execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
       timeout: ENRICHMENT_TIMEOUT_MS,
-    });
-  } catch {
-    return { jobs: [], orphans: 0 }; // no ps / timed out -> segment silently disappears
-  }
+    }),
+  )();
+  if (rawResult.isErr()) return { jobs: [], orphans: 0 }; // no ps / timed out -> segment silently disappears
+  const raw = rawResult.value;
   const jobs: Admitted[] = [];
   let orphans = 0;
   for (const line of raw.split("\n")) {
@@ -527,7 +535,7 @@ function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
   return { jobs, orphans };
 }
 function vramFrac(): string | undefined {
-  try {
+  return fromThrowable((): string | undefined => {
     const out = execFileSync(
       "nvidia-smi",
       ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
@@ -547,9 +555,7 @@ function vramFrac(): string | undefined {
     if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0)
       return undefined;
     return `${(used / 1024).toFixed(1)}/${(total / 1024).toFixed(0)}G`;
-  } catch {
-    return undefined; // no GPU / no driver -> just omit the fraction
-  }
+  })().unwrapOr(undefined); // no GPU / no driver -> just omit the fraction
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
 const dur = (s: number) =>
@@ -603,7 +609,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // hold one raw fact, not a pre-styled/pre-joined display string, or a future render() change
   // duplicates work already done here (caught live 2026-09-12: the first cut of this split
   // stored the combined string AND re-appended "+WF" in render(), rendering "xhigh+WF+WF").
-  const effortDisplay = effort ? `${effort}${wfOn ? "+WF" : ""}` : effort;
+  const wfSuffix = wfOn ? "+WF" : "";
+  const effortDisplay = effort ? `${effort}${wfSuffix}` : effort;
 
   await reportToHerdr(model, sessionName, effortDisplay);
 
@@ -616,20 +623,14 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 
   // git branch from cwd (omitted if not a repo, or if the lookup hangs/times out — see the
   // top-of-file Tiger-Style note for why this call is bounded).
-  let branch: string | undefined;
-  try {
-    branch = execFileSync(
-      "git",
-      ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
-      {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: ENRICHMENT_TIMEOUT_MS,
-      },
-    ).trim();
-  } catch {
-    branch = undefined;
-  }
+  const branchResult = fromThrowable(() =>
+    execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      encoding: "utf8",
+      timeout: ENRICHMENT_TIMEOUT_MS,
+    }).trim(),
+  )();
+  const branch = branchResult.isOk() ? branchResult.value : undefined;
 
   const { jobs, orphans } = scanOutOfHarness();
   // nvidia-smi is paid for only when something is admitted — see the header note above render().
@@ -804,10 +805,9 @@ function render(df: Dataframe): string {
 // --- entry: read stdin JSON, build the dataframe, render, write. Graceful: an invalid/missing
 // JSON payload still renders line 1 (from $PWD, no dataframe needed) plus a hint. ---
 const raw = await Bun.stdin.text();
-let data: StatusInput;
-try {
-  data = JSON.parse(raw); // any -> StatusInput at the trust boundary (no `as` cast)
-} catch {
+// any -> StatusInput at the trust boundary (no `as` cast).
+const parseResult = fromThrowable((): StatusInput => JSON.parse(raw))();
+if (parseResult.isErr()) {
   const cwd = process.env.PWD ?? "";
   const user = userInfo().username;
   const host = osHostname().split(".")[0];
@@ -820,5 +820,5 @@ try {
   process.exit(0);
 }
 
-const df = await buildDataframe(data);
+const df = await buildDataframe(parseResult.value);
 process.stdout.write(render(df));

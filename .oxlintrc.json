@@ -6,35 +6,27 @@
       "specifier": "oxlint-plugin-eslint"
     }
   ],
-  "ignorePatterns": [
-    "node_modules",
-    "agents/skills"
-  ],
+  "ignorePatterns": ["node_modules", "agents/skills"],
   "rules": {
-    "max-depth": [
-      "warn",
-      2
-    ]
+    "max-depth": ["warn", 2]
   },
   "overrides": [
     {
-      "files": [
-        "scripts/*.ts"
-      ],
+      "files": ["scripts/*.ts", "agents/claude/*.ts"],
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",
           {
             "selector": "SwitchStatement",
-            "message": "switch is banned in scripts/*.ts: use ts-pattern's match(..).exhaustive()"
+            "message": "switch is banned here: use ts-pattern's match(..).exhaustive()"
           },
           {
             "selector": "ConditionalExpression ConditionalExpression",
-            "message": "nested ternaries are banned in scripts/*.ts: one level max, otherwise ts-pattern's match()"
+            "message": "nested ternaries are banned here: one level max, otherwise ts-pattern's match()"
           },
           {
             "selector": "TryStatement:has(> CatchClause)",
-            "message": "try/catch is banned in scripts/*.ts: return a neverthrow Result (fromThrowable / fromAsyncThrowable); try/finally alone is fine"
+            "message": "try/catch is banned here: return a neverthrow Result (fromThrowable / fromAsyncThrowable); try/finally alone is fine. Note: agents/claude/*.ts is on this floor because it's BG3-graduated (repo-root node_modules resolves through the ~/.claude symlink via realpath) -- agents/claude/hooks/*.ts is a SEPARATE directory and stays exempt (runs before deps are guaranteed installed)."
           }
         ]
       }

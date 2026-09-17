@@ -1255,6 +1255,56 @@ describe("repo-search route contract", () => {
     expect(result.log).toContain("-- needle src tests");
   });
 
+  // --- --multiline / --multiline-dotall: exposed 2026-09-17 after a measured miss (soks corpus)
+  // where hard-wrapped prose put a real line break inside the matched phrase, and rg's default
+  // per-line matching made it invisible to both `literal` and `exhaustive`. These tests only
+  // check the flag reaches rg's argv (fakeTools() never runs real rg) -- the claim that
+  // `--multiline` alone does NOT retroactively make a literal string absorb a newline, and that a
+  // wrap-tolerant match instead needs a regex query plus `-U --multiline-dotall`, was verified
+  // separately against the REAL `rg` binary before this change shipped (see the comment on
+  // rgFlags() in ../repo-search.ts for the exact commands and results). ---
+  test("--multiline reaches rg's argv on the literal route", () => {
+    const result = run(registerProject(), [
+      "literal",
+      "--query",
+      "needle",
+      "--multiline",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--multiline");
+    expect(result.log).not.toContain("--multiline-dotall");
+  });
+
+  test("--multiline-dotall reaches rg's argv on the exhaustive route, alongside --multiline", () => {
+    const result = run(registerProject(), [
+      "exhaustive",
+      "--query",
+      "needle.?",
+      "--multiline",
+      "--multiline-dotall",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("--multiline --multiline-dotall");
+  });
+
+  test("NO_MATCH on a lexical route names the line-wrap failure as distinct from a vocabulary miss", () => {
+    const result = run(registerProject(), ["literal", "--query", "needle"], {
+      FAKE_SEARCH_EXIT: "1",
+    });
+
+    expect(result.code).toBe(1);
+    // The pre-existing vocabulary caveat stays -- this is an ADDITION, not a replacement (the two
+    // failure modes have different remedies: paraphrase fixes one, a shorter re-query fixes the
+    // other, and battery/concept fix neither of the wrap case).
+    expect(result.stderr).toContain(
+      "語彙で外しただけであって、不在の証明ではない",
+    );
+    expect(result.stderr).toContain("改行またぎの可能性");
+    expect(result.stderr).toContain("--multiline");
+  });
+
   for (const [route, flag, value] of [
     ["concept", "--limit", "0"],
     ["literal", "--timeout-ms", "NaN"],

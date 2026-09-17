@@ -529,6 +529,8 @@ function rgFlags(values: {
   filesWithMatches?: boolean | undefined;
   count?: boolean | undefined;
   limit?: number | undefined;
+  multiline?: boolean | undefined;
+  multilineDotall?: boolean | undefined;
 }): string[] {
   if (values.filesWithMatches && values.count) {
     throw new Error("--files-with-matches and --count are mutually exclusive");
@@ -542,6 +544,22 @@ function rgFlags(values: {
   }
   if (values.filesWithMatches) flags.push("--files-with-matches");
   if (values.count) flags.push("--count");
+  // `-U`/`--multiline`, exposed 2026-09-17 after a measured miss (soks corpus, hard-wrapped
+  // knowledge/ prose): a phrase whose file has a real line break INSIDE it can never match
+  // `literal`/`exhaustive` without this, because rg matches per physical line by default. This
+  // flag alone is NOT the fix for a blind "find this exact phrase" query -- `--fixed-strings`
+  // (literal's own flag, see runRg) cannot express "there might be a newline here", so `literal`
+  // still needs the caller to pass a query that itself contains a real newline byte (useful only
+  // to CONFIRM a wrap you already located by other means). `exhaustive` is where this earns its
+  // keep: its query is a real regex, so a caller who suspects a wrap can write `foo\n?bar` once
+  // multiline is on. Verified empirically before shipping (not assumed from rg's docs alone):
+  // `rg --fixed-strings -U --multiline -- 'AB' file` where file holds "A\nB" still misses (exit
+  // 1) -- multiline lifts the "no match may cross a line" restriction, it does not retroactively
+  // let a literal string absorb a newline it never asked for. `--multiline-dotall` only changes
+  // `.`'s behavior and rg itself documents it as a no-op without `-U` first (checked live), so no
+  // extra validation is added here beyond what rgSearchFlags() already wires straight through.
+  if (values.multiline) flags.push("--multiline");
+  if (values.multilineDotall) flags.push("--multiline-dotall");
   // **`literal`/`exhaustive` に `--limit` が無かった**(2026-09-02、腕 0a の報告)。
   //   `concept`/`battery` は最初から `--limit` を持つのに、語彙 route だけ rg の
   //   `-m/--max-count` を露出していなかった——広い正規表現が大きな repo で無制限に
@@ -706,6 +724,15 @@ async function runRg(
  *   危険であるのと同じ理由——測ったことになってしまう)。
  *
  * だから付けるのは**判定ではなく、次に打てる route** だけにする。撃たないので遅くもならない。
+ *
+ * ADDENDUM (2026-09-17, soks corpus 実測報告): 語彙で外れていなくても NO_MATCH になる別の系統が
+ * ある——rg は行単位で照合するので、hard-wrap で一致点に改行が挟まった file はどちらの語彙
+ * route でも見つからない。同一文で全文 23 件・短い断片 45 件という実測差(soks-agt_bdpp、
+ * 2026-09-17)がこれを裏付ける。言い換え(battery/concept)はこの系統には効かないので、
+ * 別の一行として案内する(既存の語彙キャベアットを書き換えない——原因が違う)。
+ * `--multiline`(-U)は rg 側の制約を外すだけで、跨ぐ正規表現を書くのは呼び出し側の責務のまま
+ * ——実測: `--fixed-strings -U --multiline` の生の literal 文字列だけでは効かない
+ * (2026-09-17 実測、rgFlags() のコメント参照)。
  */
 function lexicalMissLine(
   route: "literal" | "exhaustive" | "files",
@@ -723,7 +750,14 @@ function lexicalMissLine(
       ? ""
       : `\n  意味で引き直す: repo-search concept --query ${JSON.stringify(query)}`) +
     `\n  **意味検索の応答は不在を否定も肯定もしない**——件数は常に上限まで返り、` +
-    `score は在る/無いを分離しない(実測 2026-09-02)。読むのは中身であって件数ではない。\n`
+    `score は在る/無いを分離しない(実測 2026-09-02)。読むのは中身であって件数ではない。\n` +
+    // 2026-09-17, soks corpus からの実測報告: rg は行単位で照合するので、hard-wrap された散文
+    // (knowledge/ 系に多い)で一致点の内側に改行が落ちている file は、語彙を変えても
+    // NO_MATCH のまま——言い換えでは直らない別の失敗系統。同一文で全文 23 件・断片 45 件と
+    // 実測差が出た(短い断片ほど改行を跨がずに収まりやすいため)。
+    `  **改行またぎの可能性**: hard-wrap で一致点に改行が挟まると、言い換えても直らない。` +
+    `短い部分文字列(改行を跨がない長さ)で引き直すか、--multiline(規約は跨げる正規表現側で` +
+    `\\n? を書く側の責務、--multiline はそれを許可するだけ)を試すこと。\n`
   );
 }
 
@@ -744,6 +778,8 @@ type SearchFlags = {
   context?: number | undefined;
   filesWithMatches?: boolean | undefined;
   count?: boolean | undefined;
+  multiline?: boolean | undefined;
+  multilineDotall?: boolean | undefined;
 };
 
 function queryFlag() {
@@ -791,6 +827,10 @@ function rgSearchFlags() {
     filesWithMatches: Boolean,
     count: Boolean,
     limit: positiveInteger("limit"),
+    // See rgFlags()'s own comment for what these do and do NOT fix (a wrap-tolerant query is
+    // still the caller's job; this only lifts rg's per-line restriction so that query can work).
+    multiline: Boolean,
+    multilineDotall: Boolean,
   };
 }
 

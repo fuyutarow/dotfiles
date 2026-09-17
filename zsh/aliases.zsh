@@ -265,6 +265,71 @@ copytoclipboard() { "${DOTFILES:-$HOME/dotfiles}/zsh/copy-to-clipboard.sh"; }
 alias c='copytoclipboard'
 alias pwdc='pwd | copytoclipboard'
 
+# Quote a herdr pane's raw terminal stdio to the clipboard (not Claude's response — that's
+# /quote inside a Claude session; this is the plain-shell equivalent for any pane).
+#   q               current pane's recent output
+#   q <direction>   the neighbor pane in that direction (left/right/up/down)
+#   q <direction> N override the line count (default 200)
+# --source recent-unwrapped joins soft-wrapped lines, which herdr's own docs recommend for
+# logs/transcripts over "visible" (viewport-only) or "recent" (keeps soft wraps).
+q() {
+  case "${1:-}" in
+    -h|--help)
+      cat <<'EOF'
+q — quote a herdr pane's terminal output to the clipboard.
+
+Usage:
+  q                    quote this pane's own recent output
+  q <direction>        quote the neighbor pane: left right up down
+  q <direction> <N>    also override the line count (default 200)
+  q -h | --help        show this help
+
+Examples:
+  q right              copy the pane to your right
+  q down 500           copy the pane below, last 500 lines
+EOF
+      return 0
+      ;;
+  esac
+
+  if [ "${HERDR_ENV:-}" != "1" ]; then
+    echo "q: HERDR_ENV is unset, so this isn't a herdr-managed pane. q reads ANOTHER pane's" \
+      "terminal output, which only exists inside herdr. Start/attach one first: herdr" \
+      "(or herdr --session <name>), then retry q from inside it." >&2
+    return 1
+  fi
+
+  local dir="${1:-}" n="${2:-200}" pane_id
+
+  case "$dir" in
+    ""|left|right|up|down) ;;
+    *)
+      echo "q: '$dir' isn't a direction (left right up down). Run 'q -h' for usage." >&2
+      return 1
+      ;;
+  esac
+
+  case "$n" in
+    ''|*[!0-9]*)
+      echo "q: line count must be a whole positive number, got '$n'" \
+        "(usage: q [left|right|up|down] [N])." >&2
+      return 1
+      ;;
+  esac
+
+  if [ -z "$dir" ]; then
+    pane_id=$(herdr pane current --current | jq -r '.result.pane.pane_id')
+  else
+    pane_id=$(herdr pane neighbor --current --direction "$dir" | jq -r '.result.neighbor.neighbor_pane_id // empty')
+    if [ -z "$pane_id" ]; then
+      echo "q: no pane $dir of the current one. Check the actual layout with" \
+        "'herdr pane layout --current', or run q with no direction to quote this pane." >&2
+      return 1
+    fi
+  fi
+
+  herdr pane read "$pane_id" --source recent-unwrapped --lines "$n" --format text | copytoclipboard
+}
 
 # WSL/macOS-specific aliases (open, o, oo, winget, …) now live in
 # zsh/wsl.zsh and zsh/mac.zsh, sourced conditionally at the end of this file.

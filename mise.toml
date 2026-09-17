@@ -440,6 +440,7 @@ description = "Initialize Mac environment (all-in-one setup)"
 run = '''
 brew install sheldon coreutils
 brew bundle --file=~/dotfiles/Brewfile
+mise run mac:rosetta
 mise run link:dots
 mise run deps
 mise run link:skills
@@ -457,6 +458,16 @@ run = 'bash ~/dotfiles/macos/defaults.sh'
 [tasks."mac:iterm2"]
 description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"
 run = 'bash ~/dotfiles/iterm2/setup.sh'
+
+[tasks."mac:rosetta"]
+description = "Install Rosetta 2 on Apple Silicon (idempotent no-op on Intel or if already installed)"
+run = '''
+if [[ "$(uname -m)" == "arm64" ]]; then
+  softwareupdate --install-rosetta --agree-to-license
+else
+  echo "skip: not Apple Silicon"
+fi
+'''
 
 # ── 横断監査 ──────────────────────────────────────────────────────────────
 # 各 repo は自分の check の中で lint:scaffold を持つべきだが、それは「誰かが配線を

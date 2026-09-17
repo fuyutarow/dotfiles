@@ -445,6 +445,7 @@ mise run deps
 mise run link:skills
 mise run tmux:plugins
 mise run mac:defaults
+mise run mac:iterm2
 echo "---"
 echo "Setup complete. Run: exec zsh"
 '''
@@ -452,6 +453,10 @@ echo "Setup complete. Run: exec zsh"
 [tasks."mac:defaults"]
 description = "Apply declarative macOS system defaults (single source: macos/defaults.sh)"
 run = 'bash ~/dotfiles/macos/defaults.sh'
+
+[tasks."mac:iterm2"]
+description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"
+run = 'bash ~/dotfiles/iterm2/setup.sh'
 
 # ── 横断監査 ──────────────────────────────────────────────────────────────
 # 各 repo は自分の check の中で lint:scaffold を持つべきだが、それは「誰かが配線を

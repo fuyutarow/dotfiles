@@ -78,6 +78,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)
 ├── macos/       # declarative `defaults write` system settings (macOS only)
+├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/
 ├── scripts/     # plumbing — link-dots.sh (all symlinks), check-tools.sh

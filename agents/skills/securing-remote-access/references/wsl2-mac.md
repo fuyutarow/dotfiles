@@ -149,6 +149,12 @@ does not fire when created** — trigger it once with `schtasks /run /tn WSL-kee
 out/in), then confirm with `wsl.exe -l --running` and, inside the distro, `ss -tlnp | grep 2222`.
 Even if the task never runs you're not locked out — `ssh win` then `wsl` recovers.
 
+> This step is PREVENTION config and lives here. When the box goes unreachable ANYWAY, reviving it
+> is **`operating-wsl2-on-windows`**. Causes it owns: idle-terminate, the logon-screen reboot where
+> this onlogon task never fires, sshd down, a full C: that wedged the guest. It also owns all
+> disk/vhdx/memory operation of the running host. Reachability config here; recovery-and-operation
+> there.
+
 **Trigger choice — a real decision:**
 
 - **`onlogon` (above)** runs in your real interactive logon. WSL hands each Windows user its own

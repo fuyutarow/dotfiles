@@ -84,27 +84,39 @@ async function ps(host: string, script: string, ms: number): Promise<Ran> {
 
 export type Method = {
   name: "Optimize-VHD" | "diskpart";
-  steps: (vhdxPath: string) => string[];
+  steps: (vhdxPath: string, distro: string) => string[];
 };
 
 // Choose the compaction method for this Windows edition. Optimize-VHD is preferred where present
 // (one command, native VHD compaction); diskpart is the universal fallback that needs no Hyper-V,
 // which is why Home relies on it. Pure and injectable so the edition branch is tested without a
 // host. `optimizeVhdAvailable` is what the probe reports from Get-Command Optimize-VHD.
+//
+// SPARSE MUST BE CLEARED FIRST. Both Optimize-VHD and diskpart's `compact vdisk` REFUSE a sparse
+// vhdx — "Virtual hard disk files ... must not be sparse" — and this box's vhdx is sparse by
+// default (wslconfig.win `sparseVhd=true`). So every method begins by clearing the attribute with
+// `wsl --manage <distro> --set-sparse false` after the shutdown. Re-enabling sparse afterwards is
+// deliberately NOT scripted: since WSL 2.5.6 `--set-sparse true` is gated behind `--allow-unsafe`
+// and carries documented data-corruption reports (microsoft/WSL#13075), so that is a decision for
+// the operator, not a step this planner prints.
 export function pickMethod(optimizeVhdAvailable: boolean): Method {
+  const clearSparse = (d: string): string[] => [
+    "wsl.exe --shutdown",
+    `wsl.exe --manage ${d} --set-sparse false`,
+  ];
   if (optimizeVhdAvailable) {
     return {
       name: "Optimize-VHD",
-      steps: (v) => [
-        "wsl.exe --shutdown",
+      steps: (v, d) => [
+        ...clearSparse(d),
         `Optimize-VHD -Path "${v}" -Mode Full`,
       ],
     };
   }
   return {
     name: "diskpart",
-    steps: (v) => [
-      "wsl.exe --shutdown",
+    steps: (v, d) => [
+      ...clearSparse(d),
       // diskpart reads a script file; compact needs the vdisk attached read-only first. The path
       // is written with its own double-quotes because it contains spaces.
       `'select vdisk file="${v}"','attach vdisk readonly','compact vdisk','detach vdisk' | Set-Content -Encoding ASCII "$env:TEMP\\compact.txt"; diskpart /s "$env:TEMP\\compact.txt"`,
@@ -231,8 +243,14 @@ async function main(): Promise<void> {
   console.log(
     "run these in an ELEVATED PowerShell ON THE HOST (admin; ssh is not elevated):",
   );
-  for (const step of method.steps(vhdxPath)) console.log(`  ${step}`);
+  for (const step of method.steps(vhdxPath, distro)) console.log(`  ${step}`);
   console.log("then re-check with: mise run wsl:audit");
+  console.log(
+    "note: --set-sparse false clears the attribute compaction requires; re-enabling sparse needs",
+  );
+  console.log(
+    "      `--allow-unsafe` (WSL 2.5.6+) and carries data-corruption reports, so it is left to you.",
+  );
 }
 
 if (import.meta.main) {

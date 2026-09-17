@@ -140,6 +140,7 @@ the research judgments themselves.
 
 - [`governing-configuration-systems`](governing-configuration-systems/) — Design or audit executable configuration: consumer/trust regime, canonical bytes, authority, exceptions, and target validation.
 - [`securing-remote-access`](securing-remote-access/) — Pick and harden the right remote-shell architecture: SSH keys, certs, hardware tokens, or zero-trust mesh.
+- [`operating-wsl2-on-windows`](operating-wsl2-on-windows/) — Operate a WSL2 compute host on Windows: why C: fills while the guest looks healthy, the disk-reclaim levers, the host-number measurement traps, and recovery when the box wedges.
 
 ### People & media
 

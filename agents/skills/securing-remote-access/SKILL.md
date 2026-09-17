@@ -177,3 +177,11 @@ keyless/ACL convenience the platform ruled out anyway.
   (onlogon, never SYSTEM). A **Field notes** section of everything that actually bit during a
   real deployment. Read for
   any task exposing a host OS *and* a guest Linux from one machine.
+
+## Routing — the one sibling cut
+
+- `operating-wsl2-on-windows` — **ACCESS vs OPERATE.** This skill owns the way IN. Once the box is
+  up, OPERATING it is the sibling's: disk/vhdx reclaim, host-number measurement, vmmemWSL, and
+  recovery when the box wedges on its own resources. Route disk/reclaim/recovery-when-wedged →
+  there; setting up and securing the connection → here. A bare post-reboot "ssh into WSL times out"
+  co-fires: recover it there, re-secure the path here.

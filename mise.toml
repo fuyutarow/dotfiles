@@ -394,6 +394,22 @@ run = 'bun ~/dotfiles/scripts/reclaim-audit.ts'
 description = "IRREVERSIBLE: empty rip's graveyard. This is the ONLY step that actually frees disk — rip is a same-filesystem rename, so ripped data still occupies space until purged. Prints the contents and requires typing 'yes'. Human-only gate; never run this from an agent."
 run = 'bun ~/dotfiles/scripts/reclaim-purge.ts'
 
+# The WINDOWS-HOST half of reclaim, for the C: space WSL leaves that no guest-side task can reach.
+# reclaim:clean/builds/system free GUEST bytes; on a sparse vhdx those do not always return to C:
+# (fstrim was a measured no-op here). These two target Windows-side bytes invisible from the guest.
+# reclaim:host is safe on a live box: the running instance's swap.vhdx is locked, so the OS refuses
+# to delete it even if the newest-is-live guess were wrong. reclaim:vhdx is a READ-ONLY PLANNER —
+# compaction needs admin (ssh is not elevated) and a stopped distro, so it measures the gap, picks
+# the method for this Windows edition (Optimize-VHD on Pro, diskpart on Home), and prints the
+# elevated procedure rather than pretending to run what it cannot test.
+[tasks."reclaim:host"]
+description = "Reclaim Windows-host disk under WSL2 that guest-side tasks cannot: orphaned swap.vhdx (from dead distro instances) and the winget cache. READ-ONLY plan by default; --execute frees. Safe live — the OS locks the running swap. --host is an ssh alias."
+run = 'bun ~/dotfiles/scripts/reclaim-host.ts'
+
+[tasks."reclaim:vhdx"]
+description = "READ-ONLY: plan the offline compaction of a WSL2 ext4.vhdx — the largest C: lever (~130GB on r99). Measures logical-vs-guest-used gap, detects Optimize-VHD (Pro) vs diskpart (Home), prints the elevated procedure. fstrim and --set-sparse were measured inert here; only compaction returns the gap."
+run = 'bun ~/dotfiles/scripts/reclaim-vhdx.ts'
+
 [tasks."install:tools"]
 description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
@@ -498,10 +514,14 @@ run = 'bun ~/dotfiles/scripts/wsl-wslconfig.ts'
 # builds, LsaStorePrivateData by P/Invoke, AutoLogonSID removal — none of which logs in a
 # MicrosoftAccount that has Windows Hello configured). Measured 2026-09-12: `wsl.exe` over ssh
 # starts the distro at the logon screen anyway, exit 0. The onlogon limit is Task Scheduler's,
-# not WSL's. Goes over r99-lan because the tailnet is precisely what is missing there — Windows
-# Tailscale is a user-session GUI client, while sshd is a service.
+# not WSL's. Reaches the host over TWO routes tried in order: r99-lan (LAN/mDNS) for the logon
+# screen where Windows Tailscale — a user-session GUI client — is down; then r99 (tailnet) for
+# everywhere else, including off-LAN, where mDNS will not resolve. A single hardcoded route failed
+# off-subnet on 2026-09-17. It also ENSURES the guest is reachable, not merely that the distro is
+# Running: the distro can be up while ssh.service inside WSL is not (measured same day), so it
+# starts sshd through the host and re-checks.
 [tasks."wsl:wake"]
-description = "Start WSL on the Windows host over the LAN, no logon needed — for when Windows rebooted and sits at the logon screen. Holds the distro up with a detached anchor (WSL stops it ~60s after the last attachment otherwise). --status to only report."
+description = "Start WSL and leave the guest ssh-reachable — for when Windows rebooted to the logon screen or the distro idle-terminated. Tries the LAN alias then the tailnet alias, holds the distro up with a detached anchor, then verifies the guest and starts its sshd if needed. --status to only report; --host to pin one route."
 run = 'bun ~/dotfiles/scripts/wsl-wake.ts'
 
 # READ-ONLY resource evidence, both halves at once. It is the second half that carries the

@@ -61,10 +61,19 @@ embedding:
 #   ceilings live in cocoindex/ccc-daemon.service.wsl — these are the in-process complement,
 #   needed because PyTorch sizes its thread pool from nproc and never reads the cgroup quota.
 #   Values are provisional: re-measure peak RSS after a full firedancer index and tighten.
+# TEMPORARY 2026-09-13 (user request): indexing prioritized over research-yield while
+# firedancer + soks are both mid-index. Values below raised from the 2026-08-08 baseline
+# (OMP/MKL=2, COCOINDEX_MAX_INFLIGHT_COMPONENTS=32) under the unit's TasksMax=256 backstop.
+# Paired with the same-day raise in the tracked unit cocoindex/ccc-daemon.service.wsl
+# (CPUQuota 300%→900%, CPUWeight 20→200, Nice 10→0; the untracked drop-in was folded in).
+# COMMITTED on purpose (governance decision 2026-09-13, see the unit's "Priority history"):
+# the experiment is git-visible, and so is its reversion. Revert to OMP/MKL="2",
+# COCOINDEX_MAX_INFLIGHT_COMPONENTS="32" together with the unit once indexing is done, then
+# `systemctl --user daemon-reload && systemctl --user restart ccc-daemon`.
 envs:
   # PyTorch / BLAS intra-op pools. Default without these is 6 threads (torch.get_num_threads()).
-  OMP_NUM_THREADS: "2"
-  MKL_NUM_THREADS: "2"
+  OMP_NUM_THREADS: "4"
+  MKL_NUM_THREADS: "4"
   # HuggingFace tokenizers fork their own Rayon pool per call; off is the documented default
   # for a long-lived server process.
   TOKENIZERS_PARALLELISM: "false"
@@ -73,7 +82,7 @@ envs:
   # TasksMax=256 exhaustion (pids.events:max=3165).  It halves the current work fan-out while
   # retaining the finite unit ceiling; review after one supervised reindex. (Engine tokio worker threads still
   # scale with nproc and have NO env knob — CPUQuota in the unit is what bounds those.)
-  COCOINDEX_MAX_INFLIGHT_COMPONENTS: "32"
+  COCOINDEX_MAX_INFLIGHT_COMPONENTS: "128"
 
 # To use a cloud embedding provider via LiteLLM instead, set `provider`/`model`
 # above and add keys to the `envs:` block. DO NOT commit real secrets — keep keys

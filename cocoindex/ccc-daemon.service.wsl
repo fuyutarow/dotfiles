@@ -37,6 +37,18 @@
 # at all (cli.py daemon_restart calls client.start_daemon directly): it forks a SECOND, uncapped
 # daemon into the calling shell's cgroup, wins the socket bind, and is then silently orphaned
 # when systemd's own respawn re-binds 2s later. Use `systemctl --user restart ccc-daemon`.
+#
+# Priority history:
+#   2026-09-13  CPUQuota 300%→900%, CPUWeight 20→200, Nice 10→0, TasksMax 256→768. TEMPORARY,
+#     at user request, while soks + firedancer were both mid-index and the 3-core/low-weight
+#     default made even the file-diff phase stall (not just embedding throughput) under
+#     contention from two concurrent large indexes sharing this one daemon. Previously this
+#     was an untracked systemd drop-in — folded into this tracked unit instead so the override
+#     is git-visible rather than invisible local state (dotfiles-governance decision, same day).
+#     Revert to CPUQuota=300%/CPUWeight=20/Nice=10/TasksMax=256 once the backlog clears; pair
+#     with the matching envs revert in global_settings.yml (OMP/MKL back to "2",
+#     COCOINDEX_MAX_INFLIGHT_COMPONENTS back to "32"). Mirrors the 2026-08-06→08-12 device
+#     flip-flop precedent: commit the experiment, commit the reversion, no untracked state.
 
 [Unit]
 Description=cocoindex-code daemon (resource-capped)
@@ -59,16 +71,18 @@ RestartSec=2
 UnsetEnvironment=COCOINDEX_CODE_DAEMON_SUPERVISED
 
 # --- hard ceilings (enforceable here: cgroup v2 controllers cpu/memory/pids) ---
-CPUQuota=300%
+# TEMPORARY 2026-09-13: CPUQuota 300%→900%, TasksMax 256→768 — see "Priority history" above.
+CPUQuota=900%
 MemoryHigh=4G
 MemoryMax=6G
 MemorySwapMax=0
-TasksMax=256
+TasksMax=768
 OOMPolicy=kill
 
 # --- always yield to the research workload (CPU only — see below) ---
-CPUWeight=20
-Nice=10
+# TEMPORARY 2026-09-13: CPUWeight 20→200, Nice 10→0 — see "Priority history" above.
+CPUWeight=200
+Nice=0
 # Kept for portability, but INERT on this host: every block device runs the `none` I/O
 # scheduler, which never consults per-process ioprio (only bfq/cfq do, and neither is offered
 # here). I/O yielding is NOT enforced; only the CPU levers above are real.

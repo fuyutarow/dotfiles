@@ -3,6 +3,8 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { fromThrowable } from "neverthrow";
 
+import { existingGraveyards, graveyardCandidates } from "./graveyards";
+
 // READ-ONLY 断捨離 evidence: stale dotdirs, rustup toolchains (with a pin search),
 // vscode-server versions, and the ~/.cache breakdown — each with size, last-touched date
 // and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune.
@@ -141,16 +143,19 @@ if (existsSync(cacheDir)) {
 }
 
 console.log();
-console.log("== 5. graveyard(rip 済み・まだ空きは増えていない) ==");
-const graveyardCandidates = [
-  process.env.GRAVEYARD ?? `/tmp/graveyard-${process.env.USER}`,
-  `/tmp/graveyard-${process.env.USER}`,
-];
-for (const g of graveyardCandidates) {
-  if (existsSync(g) && statSync(g).isDirectory()) {
-    console.log(`  ${await duH(g)}  ${g}`);
-    break;
-  }
+console.log("== 5. graveyard(削除済み・まだ空きは増えていない) ==");
+// EVERY mechanism, not the first one found. Reporting only rip's graveyard is what hid 33 GB of
+// trashed agent worktrees in the XDG trash beside it on r99 (2026-09-21) — see graveyards.ts.
+const graves = existingGraveyards(
+  graveyardCandidates(process.env, home),
+  (p) => existsSync(p) && statSync(p).isDirectory(),
+);
+if (graves.length === 0) console.log("  無し");
+for (const g of graves) {
+  const size = await duH(g.path);
+  console.log(
+    `  ${size.padEnd(8)} ${g.path.replace(home, "~").padEnd(40)} ${g.label}`,
+  );
 }
 console.log();
 const dfLine =

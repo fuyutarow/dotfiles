@@ -311,6 +311,50 @@ describe("runSimpleStep", () => {
     );
     expect(logs).toEqual(["• shell noop"]);
   });
+
+  // The outcome is REPORTED while the failure stays swallowed. Locked because the swallow once
+  // made a run where every tool errored still print a bare ✅ (r99, 2026-09-21: npm/pnpm/yarn/
+  // uv/pip/huggingface_hub all died on mise's "No version is set for shim" and the task claimed
+  // success). An ABSENT tool must never count as a failure — a box without brew is not broken.
+  test("a nonzero exit is reported as 'failed' — swallowed, not hidden", () => {
+    captureLog(() => {
+      const outcome = runSimpleStep(
+        { tool: "sh", label: "shell noop", cmd: ["sh", "-c", "exit 1"] },
+        false,
+      );
+      expect(outcome).toBe("failed");
+    });
+  });
+
+  test("a clean exit is 'ok'", () => {
+    captureLog(() => {
+      const outcome = runSimpleStep(
+        { tool: "sh", label: "shell noop", cmd: ["sh", "-c", "exit 0"] },
+        false,
+      );
+      expect(outcome).toBe("ok");
+    });
+  });
+
+  test("an absent tool is 'absent', never 'failed'", () => {
+    captureLog(() => {
+      const outcome = runSimpleStep(
+        { tool: "definitely-not-a-real-tool-xyz123", label: "x", cmd: ["x"] },
+        false,
+      );
+      expect(outcome).toBe("absent");
+    });
+  });
+
+  test("dry-run is its own outcome — it reclaimed nothing but nothing failed", () => {
+    captureLog(() => {
+      const outcome = runSimpleStep(
+        { tool: "sh", label: "shell noop", cmd: ["sh", "-c", "exit 0"] },
+        true,
+      );
+      expect(outcome).toBe("dry-run");
+    });
+  });
 });
 
 // ---- CLI integration: the whole script as a subprocess, fixture PATH + fixture --home ---------

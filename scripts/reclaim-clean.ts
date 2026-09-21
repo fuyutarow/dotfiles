@@ -132,31 +132,57 @@ export type SimpleStep = {
   suppressStderr?: boolean;
 };
 
-export function runSimpleStep(step: SimpleStep, dryRun: boolean): void {
-  if (!toolAvailable(step.tool)) return;
+/**
+ * What a step DID — reported, never acted on. Failures stay swallowed (one tool must not stop
+ * the pass, as the shell original's `|| true` guaranteed), but swallowed is not the same as
+ * invisible: without this, a run where every tool errored still printed a clean ✅.
+ *
+ * Measured on r99 2026-09-21: `ssh host 'mise run reclaim:clean'` reclaimed 1 GB while npm,
+ * pnpm, yarn, uv, pip and huggingface_hub each died with mise's "No version is set for shim"
+ * — a tool is reachable only where a config DECLARES it (INV-6) — and the task still reported
+ * success. `absent` is NOT a failure: a box without brew is not a broken run.
+ */
+export type StepOutcome = "absent" | "dry-run" | "skipped" | "ok" | "failed";
+
+export function runSimpleStep(step: SimpleStep, dryRun: boolean): StepOutcome {
+  if (!toolAvailable(step.tool)) return "absent";
   if (dryRun) {
     console.log(`[dry-run] would run: ${step.cmd.join(" ")}`);
-    return;
+    return "dry-run";
   }
   console.log(`• ${step.label}`);
   // bounded: no timeout in the original shell body either (`cmd || true`) — a hanging tool is
-  // the same pre-existing risk as bash, not a regression this port introduces. Result discarded
-  // by design: a thrown OR a nonzero exit are both `|| true` — this step must not stop the pass.
-  fromThrowable(Bun.spawnSync)(step.cmd, {
+  // the same pre-existing risk as bash, not a regression this port introduces. The outcome is
+  // REPORTED, never acted on: a thrown OR a nonzero exit are still both `|| true` here.
+  return fromThrowable(Bun.spawnSync)(step.cmd, {
     stdout: "inherit",
     stderr: step.suppressStderr ? "ignore" : "inherit",
-  });
+  })
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
+}
+
+// Split out of runBunStep only to keep its outcome expression one ternary deep (house lint bans
+// nesting them). bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true`.
+function bunCacheRm(dir: string): StepOutcome {
+  return fromThrowable(Bun.spawnSync)(["bun", "pm", "cache", "rm"], {
+    cwd: dir,
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
 }
 
 // bun: native `bun pm cache rm` errors outside a project (oven-sh/bun #16101/#18733), so it
 // runs inside an ephemeral package.json dir, then that dir is cleaned up via rip-or-rm.
-function runBunStep(dryRun: boolean): void {
-  if (!toolAvailable("bun")) return;
+function runBunStep(dryRun: boolean): StepOutcome {
+  if (!toolAvailable("bun")) return "absent";
   if (dryRun) {
     console.log(
       "[dry-run] would run: bun pm cache rm (in an ephemeral package.json dir)",
     );
-    return;
+    return "dry-run";
   }
   console.log("• bun pm cache rm");
   // original: `_bt="$(mktemp -d)" && printf '{}' > "$_bt/package.json" && ( cd "$_bt" &&
@@ -171,45 +197,41 @@ function runBunStep(dryRun: boolean): void {
   // which ran even when the write above it threw.
   // mkdtempSync is overloaded (encoding/buffer variants); wrapping the CALL rather than the bare
   // function keeps this single-argument overload's plain-string return through fromThrowable.
-  fromThrowable(() => mkdtempSync(join(tmpdir(), "cache-clean-bun-")))().map(
-    (dir) => {
+  return fromThrowable(() => mkdtempSync(join(tmpdir(), "cache-clean-bun-")))()
+    .map((dir): StepOutcome => {
       const wrote = fromThrowable(writeFileSync)(
         join(dir, "package.json"),
         "{}",
       );
-      if (wrote.isOk()) {
-        // bounded: mirrors the original `( cd "$_bt" && bun pm cache rm ) || true` — no timeout there.
-        fromThrowable(Bun.spawnSync)(["bun", "pm", "cache", "rm"], {
-          cwd: dir,
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-      }
+      const outcome: StepOutcome = wrote.isOk() ? bunCacheRm(dir) : "failed";
       cleanupTempDir(dir);
-    },
-  );
+      return outcome;
+    })
+    .unwrapOr("failed");
 }
 
 // uv: `uv cache clean/prune` blocks on the cache lock while ANY uv process runs (e.g. uvx-
 // launched MCP servers during an AI session) — skip rather than hang.
-function runUvStep(dryRun: boolean): void {
-  if (!toolAvailable("uv")) return;
+function runUvStep(dryRun: boolean): StepOutcome {
+  if (!toolAvailable("uv")) return "absent";
   if (isUvBusy()) {
     console.log(
       "• uv cache prune — skipped (uv/uvx active; would block on the cache lock)",
     );
-    return;
+    return "skipped";
   }
   if (dryRun) {
     console.log("[dry-run] would run: uv cache prune");
-    return;
+    return "dry-run";
   }
   console.log("• uv cache prune");
   // bounded: mirrors the original `uv cache prune || true` — no timeout there either.
-  fromThrowable(Bun.spawnSync)(["uv", "cache", "prune"], {
+  return fromThrowable(Bun.spawnSync)(["uv", "cache", "prune"], {
     stdout: "inherit",
     stderr: "inherit",
-  });
+  })
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
 }
 
 // julia: `Pkg.gc()` removes packages/artifacts no known environment manifest references — the
@@ -229,31 +251,33 @@ export function isJuliaBusy(spawn = Bun.spawnSync): boolean {
     .unwrapOr(false);
 }
 
-function runJuliaStep(dryRun: boolean): void {
-  if (!toolAvailable("julia")) return;
+function runJuliaStep(dryRun: boolean): StepOutcome {
+  if (!toolAvailable("julia")) return "absent";
   if (isJuliaBusy()) {
     console.log("• julia Pkg.gc() — skipped (a julia process is running)");
-    return;
+    return "skipped";
   }
   if (dryRun) {
     console.log(
       "[dry-run] would run: julia --startup-file=no -e using Pkg; Pkg.gc()",
     );
-    return;
+    return "dry-run";
   }
   console.log("• julia Pkg.gc()");
   // bounded: mirrors every other step's `... || true` — no timeout there either.
-  fromThrowable(Bun.spawnSync)(
+  return fromThrowable(Bun.spawnSync)(
     ["julia", "--startup-file=no", "-e", "using Pkg; Pkg.gc()"],
     { stdout: "inherit", stderr: "inherit" },
-  );
+  )
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
 }
 
 // cargo: no built-in cache cleaner on stable — rip the regenerable download caches instead
 // (recoverable via rip's graveyard). Requires BOTH cargo and rip; no rm fallback here (matches
 // the original, which has no `|| rm -rf` on this line, only `|| true`).
-function runCargoStep(home: string, dryRun: boolean): void {
-  if (!toolAvailable("cargo") || !toolAvailable("rip")) return;
+function runCargoStep(home: string, dryRun: boolean): StepOutcome {
+  if (!toolAvailable("cargo") || !toolAvailable("rip")) return "absent";
   // Template-literal concatenation, NOT path.join: the original shell body builds these paths
   // as literal `"$HOME"/.cargo/...` concatenation, which keeps its leading separator even when
   // $HOME is empty (yielding e.g. "/.cargo/registry/src"). path.join(home, ...) would instead
@@ -266,14 +290,16 @@ function runCargoStep(home: string, dryRun: boolean): void {
   ];
   if (dryRun) {
     console.log(`[dry-run] would run: rip ${paths.join(" ")}`);
-    return;
+    return "dry-run";
   }
   console.log("• cargo registry/git caches (rip → graveyard)");
   // bounded: mirrors the original `rip ... 2>/dev/null || true` — no timeout there either.
-  fromThrowable(Bun.spawnSync)(["rip", ...paths], {
+  return fromThrowable(Bun.spawnSync)(["rip", ...paths], {
     stdout: "inherit",
     stderr: "ignore",
-  });
+  })
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
 }
 
 // huggingface_hub: `scan_cache_dir().delete_revisions(...)` removes only "detached" revisions —
@@ -282,19 +308,21 @@ function runCargoStep(home: string, dryRun: boolean): void {
 // set. PEP 723 single-file script (scripts/huggingface-gc.py), invoked via plain `uv run
 // <path>` — its own header declares `dependencies = ["huggingface_hub"]`, so uv resolves an
 // ephemeral env with no persistent install and no `--with` needed here.
-function runHuggingfaceStep(dryRun: boolean): void {
-  if (!toolAvailable("uv")) return;
+function runHuggingfaceStep(dryRun: boolean): StepOutcome {
+  if (!toolAvailable("uv")) return "absent";
   const scriptPath = join(import.meta.dir, "huggingface-gc.py");
   if (dryRun) {
     console.log(`[dry-run] would run: uv run ${scriptPath}`);
-    return;
+    return "dry-run";
   }
   console.log("• huggingface_hub gc (detached revisions)");
   // bounded: mirrors every other step's `... || true` — no timeout there either.
-  fromThrowable(Bun.spawnSync)(["uv", "run", scriptPath], {
+  return fromThrowable(Bun.spawnSync)(["uv", "run", scriptPath], {
     stdout: "inherit",
     stderr: "inherit",
-  });
+  })
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
 }
 
 // ---- entry --------------------------------------------------------------------------------
@@ -343,70 +371,119 @@ async function main(): Promise<void> {
 
   console.log(`before: ${freeSpace(home)}`);
 
-  runSimpleStep(
-    {
-      tool: "brew",
-      label: "brew cleanup --prune=all",
-      cmd: ["brew", "cleanup", "--prune=all"],
-    },
-    dryRun,
+  // Collected, not acted on: the pass still runs every step regardless (best-effort is the
+  // contract). What changes is the verdict — a run where every tool errored no longer ends in a
+  // bare ✅.
+  const failed: string[] = [];
+  const record = (tool: string, outcome: StepOutcome): void => {
+    if (outcome === "failed") failed.push(tool);
+  };
+
+  record(
+    "brew",
+    runSimpleStep(
+      {
+        tool: "brew",
+        label: "brew cleanup --prune=all",
+        cmd: ["brew", "cleanup", "--prune=all"],
+      },
+      dryRun,
+    ),
   );
-  runBunStep(dryRun);
-  runSimpleStep(
-    {
-      tool: "npm",
-      label: "npm cache clean",
-      cmd: ["npm", "cache", "clean", "--force"],
-    },
-    dryRun,
+  record("bun", runBunStep(dryRun));
+  record(
+    "npm",
+    runSimpleStep(
+      {
+        tool: "npm",
+        label: "npm cache clean",
+        cmd: ["npm", "cache", "clean", "--force"],
+      },
+      dryRun,
+    ),
   );
-  runSimpleStep(
-    {
-      tool: "pnpm",
-      label: "pnpm store prune",
-      cmd: ["pnpm", "store", "prune"],
-    },
-    dryRun,
+  record(
+    "pnpm",
+    runSimpleStep(
+      {
+        tool: "pnpm",
+        label: "pnpm store prune",
+        cmd: ["pnpm", "store", "prune"],
+      },
+      dryRun,
+    ),
   );
-  runSimpleStep(
-    {
-      tool: "yarn",
-      label: "yarn cache clean",
-      cmd: ["yarn", "cache", "clean"],
-    },
-    dryRun,
+  record(
+    "yarn",
+    runSimpleStep(
+      {
+        tool: "yarn",
+        label: "yarn cache clean",
+        cmd: ["yarn", "cache", "clean"],
+      },
+      dryRun,
+    ),
   );
-  runUvStep(dryRun);
-  runSimpleStep(
-    { tool: "pip", label: "pip cache purge", cmd: ["pip", "cache", "purge"] },
-    dryRun,
+  record("uv", runUvStep(dryRun));
+  record(
+    "pip",
+    runSimpleStep(
+      { tool: "pip", label: "pip cache purge", cmd: ["pip", "cache", "purge"] },
+      dryRun,
+    ),
   );
-  runSimpleStep(
-    { tool: "go", label: "go clean -cache", cmd: ["go", "clean", "-cache"] },
-    dryRun,
+  record(
+    "go",
+    runSimpleStep(
+      { tool: "go", label: "go clean -cache", cmd: ["go", "clean", "-cache"] },
+      dryRun,
+    ),
   );
-  runSimpleStep(
-    {
-      tool: "docker",
-      label: "docker builder prune",
-      cmd: ["docker", "builder", "prune", "-f"],
-      suppressStderr: true,
-    },
-    dryRun,
+  record(
+    "docker",
+    runSimpleStep(
+      {
+        tool: "docker",
+        label: "docker builder prune",
+        cmd: ["docker", "builder", "prune", "-f"],
+        suppressStderr: true,
+      },
+      dryRun,
+    ),
   );
-  runCargoStep(home, dryRun);
-  runSimpleStep(
-    {
-      tool: "mise",
-      label: "mise prune --tools",
-      cmd: ["mise", "prune", "--tools", "--yes"],
-    },
-    dryRun,
+  record("cargo", runCargoStep(home, dryRun));
+  record(
+    "mise",
+    runSimpleStep(
+      {
+        tool: "mise",
+        label: "mise prune --tools",
+        cmd: ["mise", "prune", "--tools", "--yes"],
+      },
+      dryRun,
+    ),
   );
-  runJuliaStep(dryRun);
-  runHuggingfaceStep(dryRun);
+  record("julia", runJuliaStep(dryRun));
+  record("huggingface_hub", runHuggingfaceStep(dryRun));
 
   console.log(`after:  ${freeSpace(home)}`);
+  if (failed.length > 0) {
+    console.log(
+      `⚠️  reclaimed nothing for ${failed.length} tool(s): ${failed.join(", ")}`,
+    );
+    console.log(
+      '   A mise-shimmed tool exits "No version is set for shim" wherever no config DECLARES it',
+    );
+    console.log(
+      "   (INV-6) — the CACHE is global but the shim is not, so a non-interactive",
+    );
+    console.log(
+      "   `ssh host 'mise run reclaim:clean'` clears only the tools that host resolves. Re-run",
+    );
+    console.log(
+      "   where those tools resolve; the free-space delta above is NOT this task's ceiling.",
+    );
+  }
   console.log(
     "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
   );

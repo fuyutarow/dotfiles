@@ -255,3 +255,10 @@ Anthropic の legacy 表にもある。
 - Remaining debt is pre-existing: 25 long body sentences, a 16-line version header, three long cells,
   and 35 long reference sentences.
 - A dedicated reforge owns debt retirement. This change only restores collection listing capacity.
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

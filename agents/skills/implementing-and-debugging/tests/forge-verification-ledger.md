@@ -63,3 +63,10 @@ The prior unconditional Tiger-first phrase conflated diagnosis with greenfield c
 root-cause, and observable-change work now keeps intent/cause diagnosis HERE first; only a
 greenfield high-risk design or promotion without an unresolved cause may calibrate there first.
 The target's independent post-repair delta audit remains NOT-RUN.
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

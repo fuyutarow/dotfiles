@@ -171,3 +171,10 @@ limited (documented in-script, exact-match use only). Ship-ready.
   実証: 両社の本命は反証された)。
 - 教訓: 水平思考の相談は「リポジトリを見せず、問題の最小記述だけを渡す」形で品質が
   十分出る——G2 と品質は両立する。
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

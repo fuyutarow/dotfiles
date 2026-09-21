@@ -178,7 +178,11 @@ keyless/ACL convenience the platform ruled out anyway.
   real deployment. Read for
   any task exposing a host OS *and* a guest Linux from one machine.
 
-## Routing — the one sibling cut
+## Routing — sibling cuts
+
+- `driving-git` — **KEY vs USE.** The ssh key pair, its agent and hardware backing are here.
+  `gh auth` state and git's signing config (`gpg.format`, `user.signingkey`, `commit.gpgsign`)
+  are `driving-git`'s (2026-09-21). "gh auth login fails" → there; "make me a key for GitHub" → here.
 
 - `operating-wsl2-on-windows` — **ACCESS vs OPERATE.** This skill owns the way IN. Once the box is
   up, OPERATING it is the sibling's: disk/vhdx reclaim, host-number measurement, vmmemWSL, and

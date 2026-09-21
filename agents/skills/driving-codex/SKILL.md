@@ -253,7 +253,8 @@ MUST NOT fire (route):
 | "OpenAI API function calling の書き方" | no codex CLI involved — model-native (prompting-llms names an `openai-docs` owner; nonexistent as of 2026-07-12) |
 | "which Claude model should I use, and pricing?" | `claude-api` |
 | the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
-| 「プロンプトを改善して」 | `prompting-llms` |
+| 「プロンプトを改善して」 | `driving-git` | PURPOSE — whether this subprocess needs containment → here; the worktree/branch it is given, how its output is reviewed (`range-diff`) and integrated → `driving-git` (2026-09-21). |
+| `prompting-llms` |
 | the `grok`/Grok Build subprocess (xAI, EXFIL-RISK) or the `agy`/Antigravity subprocess | `driving-grok` / `driving-antigravity` — decide by which binary you invoke |
 | "what is Codex?" | trivial — no skill |
 

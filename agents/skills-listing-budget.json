@@ -1,10 +1,46 @@
 {
-  "maxListingChars": 61245,
-  "measuredOn": "2026-09-10",
-  "skillsAtMeasurement": 64,
+  "maxListingChars": 65242,
+  "measuredOn": "2026-09-21",
+  "skillsAtMeasurement": 71,
   "why": "A RATCHET, not an estimate of what the platform can afford \u2014 no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message \u2014 that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap \u2014 the signature of an allowance being spent, not a length being chosen.",
   "raises": [
+    {
+      "date": "2026-09-21",
+      "from": 64026,
+      "to": 65242,
+      "spentBy": "driving-git",
+      "reason": "A new 1,216-character name+description entry (11 + 1,205); the delta matches exactly, so no pre-existing drift is absorbed. Admitted because no skill owns git OPERATIONS: a lexical enumeration of agents/skills for git (commit|rebase|push|stash|worktree|reflog|bisect|switch|restore|checkout) returned only incidental lines (refactoring-code's stash-not-checkout rule, operating-the-harness permission examples and subagent worktree isolation, one pathspec line in a fleet ledger). The ccc semantic battery could not run (index rebuild timed out at 600 s); the residual is recorded in the skill's ledger §0 and §5. Source is the highest grade the house has: a live multi-session incident set (3.9 GB swept into a commit by a regex pathspec, a 90-minute silent push hang, an --amend --only that re-added dropped files, a peer's paused rebase reverting the shared tree) plus the current git man pages and release notes. Retiring a sibling was considered and rejected: nothing does this job at all, so nothing does it badly. EXTEND was considered and rejected: wiring-repositories owns repo LAYERS and stops at the git-hook shape; operating-the-harness owns permission rules and worktree mechanics, not the commands inside them; both are cut by PURPOSE in the new description.",
+      "alsoFound": "driving-codex charges 1,510 chars, ten under the observed ~1,520 truncation window; operating-the-harness 1,498 and driving-grok 1,496 sit at the per-skill cap. None is over the window today; reported so the next admission does not discover it as drift."
+    },
+    {
+      "date": "2026-09-21",
+      "from": 63355,
+      "to": 64026,
+      "spentBy": "typesafe-ai",
+      "reason": "A new 671-character name+description entry (671 = 11-char name + 660-char description; exact match to the delta, so no pre-existing drift absorbed). Vendored via `mise run skills:add -- typesafe-ai/skills --skill typesafe-ai` at direct user request; not an authored skill, so no ownership-void battery applies — admission is a vendor decision, same category as the existing Cloudflare/Mintlify entries. The same fetch also silently installed an unrequested `find-skills` companion skill (see scripts/vendor-skill.ts header note 4, added this same commit); it was removed and its ledger entry scrubbed before this measurement, so it charges nothing here."
+    },
+    {
+      "date": "2026-09-21",
+      "from": 62517,
+      "to": 63355,
+      "spentBy": "driving-jev",
+      "reason": "A new 897-character name+description entry; the 69-skill collection measures 63,355 characters after admission, with the prior collection at 62,458 (59 below its 62,517 ratchet). Admission closes a distinct ownership void: the existing driving-* family operates generative agents/models, while no house skill owns Jev's non-generative state-plus-typed-questions to probabilities boundary, primitive choice, caller-side abstention policy, and exact JSON relay. Retiring or merging a sibling was rejected because doing so would collapse JUDGMENT-NOT-AGENT into a tool-using/generative worker contract. The vendor typesafe-ai skill remains the application-integration owner; driving-jev owns immediate agent/shell operation through the bundled official-API runner."
+    },
+    {
+      "date": "2026-09-17",
+      "from": 61723,
+      "to": 62517,
+      "spentBy": "designing-developer-diagnostics",
+      "reason": "A new 794-character name+description entry, measured by `mise run lint:skills-floor` across 67 installed skill directories. Admission closes a demonstrated ownership void: no existing skill owns the DIAGNOSTIC CARD from observed developer-tool failure through recovery confidence, locus/grouping, and human-plus-machine receipt. Retiring a sibling was considered and rejected: linting-prose owns wording, implementing-and-debugging owns cause/fix work, governing-configuration-systems owns authority and integrity, and designing-interactions owns end-user interaction flows. The descriptor carries typed cuts for those races."
+    },
+    {
+      "date": "2026-09-17",
+      "from": 61245,
+      "to": 61723,
+      "spentBy": "designing-version-schemes",
+      "reason": "A new 478-character name+description entry. Admission closes a demonstrated ownership void: no existing skill owns the VERSIONING CONTRACT from compatibility/chronology/release-order signals through a target comparator and range receipt. Retiring a sibling was considered and rejected: growing-oss-adoption owns distribution and positioning, governing-configuration-systems owns executable configuration representation and integrity, and language skills own manifest/release implementation. The descriptor carries typed cuts for those selection races."
+    },
     {
       "date": "2026-08-15",
       "from": 56420,

@@ -224,7 +224,8 @@ MUST NOT fire (route):
 | GPT review — OpenAI's GPT via codex vs open-weight GPT-OSS via agy | OpenAI GPT (`codex exec`) → `driving-codex`; GPT-OSS through agy's Google-subscription roster → here |
 | `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | "which Claude model + Anthropic pricing / API" | `claude-api` — it owns Claude model facts & the Anthropic API and may co-fire on any "Claude" mention; no exclusivity claimed here. Runtime cut: asking about the API/pricing → claude-api; DRIVING the agy binary that routes to a Claude model → here |
-| 「プロンプトを改善して」 | `prompting-llms` |
+| 「プロンプトを改善して」 | `driving-git` | PURPOSE — whether this subprocess needs containment → here; the worktree/branch it is given, how its output is reviewed (`range-diff`) and integrated → `driving-git` (2026-09-21). |
+| `prompting-llms` |
 | the `grok`/Grok Build subprocess (xAI, METERED, EXFIL-RISK) or the `codex` subprocess (OpenAI GPT) | `driving-grok` / `driving-codex` — decide by which binary you invoke |
 | "what is Antigravity?" | trivial — no skill |
 | anything about gemini-cli | it is DEPRECATED (consumer OAuth dead 2026-06-18; brew-disable slated ~2026-12 [third-party, catalog]) — this skill NOTES that and drives agy instead; no gemini skill exists or should fire |

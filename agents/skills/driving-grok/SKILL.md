@@ -237,7 +237,8 @@ MUST NOT fire (route):
 | the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
 | `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | xAI's raw REST API used DIRECTLY (not via the `grok` CLI) — `api.x.ai`, `XAI_API_KEY` in your own HTTP client, grok-4.5 REST pricing for that | model-native, no skill — name it. (CLI-relevant per-token cost for G5 spend IS in this skill's `references/model-catalog.md`) |
-| 「プロンプトを改善して」 | `prompting-llms` |
+| 「プロンプトを改善して」 | `driving-git` | PURPOSE — whether this subprocess needs containment → here; the worktree/branch it is given, how its output is reviewed (`range-diff`) and integrated → `driving-git` (2026-09-21). |
+| `prompting-llms` |
 | the log-parsing tool named `grok` (Elasticsearch/Logstash pattern matcher) | unrelated — NOT this skill; name it explicitly to avoid the collision |
 | Groq (the hardware/inference vendor) | unrelated — NOT this skill (different company, different spelling) |
 | `xai-org/grok-1` (2024 open-weights release) or `superagent-ai/grok-cli` (unrelated ~2.4k★ community API wrapper) | unrelated projects — NOT this skill |

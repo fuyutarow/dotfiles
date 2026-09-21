@@ -292,6 +292,11 @@ the source, gate only the residue that is deterministically always-wrong.
 HERE. Consumer/trust, effective declaration, integrity representation, and actual-input acceptance
 across configuration formats co-fire governing-configuration-systems.
 
+**PURPOSE (git):** `Bash(git *)` permission rules, `--worktree` / `EnterWorktree` / `isolation:
+worktree` mechanics and their enforcement, and attribution settings stay HERE. The git commands
+run inside them — commit scope, push receipts, rewrites, the shared-checkout protocol — are
+`driving-git`'s (reciprocal, 2026-09-21).
+
 ## §5. Setup / audit checklist
 
 When setting up or auditing a project's Claude Code config, in order:

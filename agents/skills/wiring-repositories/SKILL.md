@@ -195,6 +195,7 @@ MUST NOT fire (with route):
 | `forging-skills` | **PURPOSE** — a repo-local `.claude/skills/` is a layer this skill may admit; the craft of any SKILL.md → theirs |
 | the built-in `init` | **DECISIVE by cardinality** — it produces exactly one file. One file → it; a wiring set → here. This skill may invoke it for that layer |
 | `compiling-latex` / `wrangler` | **DECISIVE** — a per-technology setup is theirs. This skill names the layer and calls them |
+| `driving-git` | **PURPOSE** — the `git` layer's WIRING (`.gitignore`, `core.hooksPath`, the git-hook shape) → here; OPERATING the repo afterwards (commit scope, rebase, push receipts, rewrites, shared checkouts) → theirs. Reciprocal row landed 2026-09-21 |
 
 ## Reference index
 

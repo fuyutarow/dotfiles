@@ -261,3 +261,10 @@ enforced budget is the explicit escape; token-only declaration is insufficient. 
 policy change, not a new claim about model availability. Trigger surface is unchanged; the existing
 `ultra`/parallel-Codex tokens still fire. Targeted skill floor has no FAIL; existing prose/version/table
 WARN debt remains disclosed.
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

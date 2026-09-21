@@ -202,3 +202,10 @@ Reciprocal row lives in `codifying-doctrine`'s routing table.
 prose sentences and a 14-line version header — the pre-existing baseline, unchanged by this edit.
 The edit is a single table row. Queue position: clear at the next substantive reforge of this
 skill, not in a sibling's forge commit.
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

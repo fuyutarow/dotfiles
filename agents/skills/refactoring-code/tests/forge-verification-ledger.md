@@ -134,3 +134,10 @@ history here first, then atomize prose without blurring the behavior-preservatio
 Observed floor: 26 long prose sentences, 7-line version block, and 2 long table cells; exit 0.
 This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
 Queue: retain the existing reforge position; retire this waiver when the recorded classes reach 0.
+
+
+## PROSE-DEBT waiver (2026-09-21)
+
+This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
+prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
+seam edit; queue position: with the next reforge of this skill, not before.

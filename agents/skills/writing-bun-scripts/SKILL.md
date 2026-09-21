@@ -1,25 +1,15 @@
 ---
 name: writing-bun-scripts
 description: >-
-  Writes and refactors local automation scripts in Bun TypeScript — the house default past a
-  thin POSIX shim (bootstrap / hook-entry). Ordinary CLIs run `bun <path>` with Cleye `cli`,
-  framework help and positional schemas, strict/prototype-safe flags, JSON envelope or verdict
-  lines, Bun.$ for
-  shell-outs, Bun.spawn with NATIVE timeout for hangable CLIs, bun test + fixtures,
-  BUN-NATIVE-FIRST over hand-rolled plumbing. Owns the dependency ladder (builtins →
-  repo-root graduation project → pinned `bunx pkg@x.y.z`), bunx-over-npx, and the bash→TS
-  migration of the corpus. Use when writing or migrating a local script or hook —
-  ローカルスクリプト,
-  スクリプト書いて, 自動化して, bash を bun/TS に書き換え, シェルスクリプト移行,
-  スクリプトのリファクタ, bun スクリプト, bunx, npx, hooks 実装, skill の scripts/. LAW:
-  NO-NEW-BASH beyond declared shims; CWD-HOSTILE (inline pinned imports THROW under an
-  ancestor node_modules — pin in bun.lock, import bare); ZERO-DEP WHERE DISTRIBUTED (hooks/,
-  templates/, `.zero-dep`); PINNED-OR-ABSENT; bun TRANSPILES, never type-checks.
-  Cuts: TS idiom → writing-typescript (co-fires on .ts; its zod/ts-pattern rows YIELD to the
-  zero-dep floor where distributed); Python payload → running-python-tools; mise task graph → wiring-mise-tasks; skill ships a script? → forging-skills;
-  hook events/settings → operating-the-harness; claude/codex/grok/agy CLI → driving-*.
-  Workflow-native: one script stays SOLO; corpus migrations fan out read-only per file.
-  English skill; respond in the user's language (default Japanese).
+  Writes and refactors local Bun TypeScript automation: scripts, hooks, Bun CLIs, bunx, and bash→TS
+  migration. Uses Cleye `cli`, strict/prototype-safe argv, verdict lines/JSON, Bun.$, native-timeout
+  Bun.spawn, and BUN-NATIVE-FIRST. Owns dependency ladder, bunx-over-npx, NO-NEW-BASH, CWD-HOSTILE,
+  ZERO-DEP, and PINNED-OR-ABSENT. Use for ローカルスクリプト, スクリプト書いて, 自動化して, bash を bun/TS
+  に書き換え, シェルスクリプト移行, bun スクリプト, bunx, npx, hooks 実装, or skill scripts/. CLI contract
+  → designing-command-line-interfaces; TS → writing-typescript; Python → running-python-tools; task
+  graph → wiring-mise-tasks; hook events → operating-the-harness; vendor CLI semantics → driving-*.
+  Workflow-native: one script SOLO; migrations fan out read-only. English skill; respond in the user's
+  language.
 ---
 
 # Writing Bun scripts — local automation in Bun TypeScript
@@ -150,6 +140,7 @@ MUST NOT fire (route):
 | 「codex exec の sandbox フラグどれ？」 | `driving-codex` — that CLI's own semantics |
 | 「Worker をデプロイして」 | wrangler / workers-best-practices family (but a deploy SCRIPT to author → co-fire: their wrangler semantics, this skill's script anatomy) |
 | 「bun で CLI ツール作って npm に publish したい」 | product/package engineering, not local automation — `writing-typescript` idiom floor; this skill's scope ends at the local graduation project |
+| “Design or audit a reusable CLI's consumers, grammar, effects, stdout/stderr or machine route, outcomes, or compatibility.” | `designing-command-line-interfaces`; return here once the contract is settled to implement the Bun script. |
 | 「Express サーバーをリファクタして」 | `refactoring-code` + `writing-typescript` — an app/server, not a local automation script |
 | 「zsh の alias 追加して」 | no skill — shell config is the zsh/ topic, not a script |
 
@@ -159,6 +150,7 @@ MUST NOT fire (route):
 |---|---|
 | governing-configuration-systems | **DECISIVE:** Bun/TS config reader or generator implementation and argv/runtime contract → HERE. Its effective declaration, signature/digest boundary, and target acceptance → governing-configuration-systems. |
 | `writing-typescript` | PURPOSE — how TS READS (idiom floor: `satisfies`, `??`, absence modeling) → theirs; how a SCRIPT is built/run/tested/shipped → here. It auto-co-fires via its `paths` glob on any `.ts`. SEAM RULING (canonical home HERE, mirrored there): in zero-config standalone scripts the zero-dep floor beats its zod/ts-pattern rows — hand-rolled narrowing (`isRecord`) is the accepted form; those rows re-enter at graduation. |
+| `designing-command-line-interfaces` | PURPOSE — reusable CLI consumers, grammar, effects, channels, outcomes, and compatibility → there; settled Bun implementation → here. |
 | `running-python-tools` | DECISIVE by payload language — Python tool/snippet NOW → there (uvx / `uv run`); JS/TS tool/script → here (`bunx` pinned). This skill is the home of the bunx-over-npx rule that its body names as "the Python analogue … used for JS" (reciprocal landed there 2026-07-23). |
 | `writing-python` | the same DECISIVE cut for KEPT code — kept Python → there; kept TS scripts → here. |
 | `wiring-mise-tasks` | PURPOSE — task NAME/verb/graph → theirs; the script BODY a task runs → here. |

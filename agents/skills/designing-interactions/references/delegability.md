@@ -80,28 +80,14 @@ editors, debuggers, pagers or REPLs, and by his literal definition every one of 
 Present these tests as inference from precedent, naming the precedent tools. Never attribute them
 to Gancarz, Raskin, or "the Unix philosophy."
 
-## 4. Command surfaces — the concrete rules
+## 4. Command surfaces — the seam
 
-Converging, independently-authored: clig.dev, the 12-Factor CLI essay, POSIX Utility Syntax
-Guidelines, GNU Coding Standards.
+U3 retains the medium-agnostic non-captive/delegability test and the command-regime probe.
 
-| Rule | Source anchor | Why it is a U3 rule |
-|---|---|---|
-| Payload to **stdout**, logs and errors to **stderr** | clig.dev; 12-Factor: "stdout is for output, stderr is for messaging" | `cmd \| jq .` must get clean data; a captured transcript must not force a consumer to filter prose out of its payload |
-| Ship `--json` (or equivalent) on every data-returning command and treat **that** as the stable contract | clig.dev | improving the human-facing default must never be a breaking change for machine consumers |
-| Gate colour and animation on `isatty(stdout)`; honour `NO_COLOR` when "set and not empty" | clig.dev | a piped spinner becomes a scroll of carriage returns; an explicit `--color=always` should still win |
-| **Every promptable value must also be settable by flag or stdin.** Check `isatty(stdin)`; when false or `--no-input`, fail fast naming the exact flag | clig.dev: "Never require a prompt" | this is the single highest-value rule in the gate |
-| Exit code is the sole truth of success/failure — never print an error and return 0 | clig.dev | a caught-and-logged exception falling through to exit 0 is invisible to every non-human caller |
-| `-h` / `--help` identical at every subcommand level; bare invocation of a command needing required args prints help, not a parse error | clig.dev; GNU (`--help`/`--version` unconditional) | help is the first probe any unfamiliar driver makes |
-| Destructive actions: interactive `y`/`yes` gate **when stdin is a TTY**, plus an unconditional `-f`/`--force` when it is not; scale the difficulty of `--force` to severity | clig.dev's mild/moderate/severe tiers | keeps the U4 gate without making the surface captive |
-| Re-running the identical invocation after a crash resumes or safely no-ops | clig.dev robustness / crash-only | agents and retry loops re-run blindly; genuinely non-idempotent effects need an idempotency key or a dry-run |
-| Prefer named flags to positional args past one or two operands | clig.dev; 12-Factor | a wrong positional order fails silently; a wrong flag name fails loudly |
-| Ordinary arguments are **inputs**; output goes to an explicit `-o`/`--output` | GNU | prevents clobbering when argument order shifts |
-| Options end at the first non-option token or an explicit `--`; **"Option-arguments should not be optional"** | POSIX Guideline 7 | ambiguous `-o[FILE]` lookahead is exactly what a machine-constructed argv gets wrong |
-| SIGINT handler acknowledges immediately, bounds cleanup with its own timeout, treats a second Ctrl-C as abort-cleanup | clig.dev | a harness reclaiming a hung child needs the process to actually die |
+CLI grammar, stdout/stderr and machine modes, exit/outcome mapping, and compatibility belong to
+`designing-command-line-interfaces`.
 
-A widely-used composite default: when stdout is a TTY, print a formatted table with colour; when it
-is not, default to JSON.
+The command-regime probe remains in SKILL.md U3. It tests non-captivity, not a CLI contract.
 
 ## 5. Agent-facing surfaces — one regime, with first-party guidance
 

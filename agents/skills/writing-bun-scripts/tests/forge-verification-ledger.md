@@ -1,5 +1,12 @@
 # Forge verification ledger — writing-bun-scripts F3 artifact (2026-07-23)
 
+**PROSE-DEBT waiver (dated 2026-09-18).** The F4 description shortening and the new
+`designing-command-line-interfaces` cut add no body prose debt. Existing measured debt remains
+pre-existing: 12 sentences over 120 characters, an 11-line version header, 4 table cells over 400
+characters, and 34 reference warnings in `bun-facts.md`. Queue position: **1 — next
+writing-bun-scripts full reforge after the F4 listing swap**. This waiver expires when that reforge
+starts; do not use a description-only change to declare the body debt resolved.
+
 ## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
 
 One typed routing row distinguishes Bun implementation from configuration-contract selection.
@@ -463,4 +470,3 @@ string-form `bin`). `mise run lint:bun`: shebang WARNs 3 → 0; one WARN remains
 exits clean with exactly the pre-existing, already-waived prose debt (12 sentences >120 chars,
 11-line version header, 4 table cells >400 chars, 34 in `bun-facts.md`) — identical counts at
 HEAD before this change; no new debt.
-

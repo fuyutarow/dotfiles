@@ -122,3 +122,16 @@ wrong diagnosis cost a whole rewrite that a two-line `Bun.argv` probe would have
 | Reciprocal rows in local siblings' routing tables (`linting-prose`, `structuring-documents`, `implementing-and-debugging`, `refactoring-code`, `growing-oss-adoption`, `web-perf`, `writing-bun-scripts`) | this repo | not landed in the forge commit; the cuts are stated one-directionally in this skill's description. First reforge should land the reciprocal side or record why not |
 | Re-fetch Apple HIG (modality, sheets, undo, principles) | `evidence.md` §4 | living document; the *Undo and redo* page was client-rendered and unreadable at forge time |
 | Read Poller & Garter (1984) in full | `evidence.md` §4 | the single most load-bearing empirical counter-result in the skill currently rests on a citation-level read |
+
+## 2026-09-18 — CLI seam / PROSE-DEBT waiver
+
+The description now routes command grammar, channels, outcomes, and compatibility to
+`designing-command-line-interfaces`. U3 retains the medium-agnostic non-captive/delegability test
+and command-regime probe; its detailed command-contract table was retired to the new sole owner.
+
+**PROSE-DEBT waiver (dated 2026-09-18).** Post-edit `skill-check` reports 135 reference prose
+sentences over 120 characters across 5 files; `complexity.md` is worst at 37. It reports no
+SKILL.md technical-communication or table-cell debt. This description/seam edit added no body
+debt. Queue position: **2 — after writing-bun-scripts, at the next designing-interactions full
+reforge**. This waiver expires when that full reforge starts; do not use this narrow routing edit
+to declare the reference debt resolved.

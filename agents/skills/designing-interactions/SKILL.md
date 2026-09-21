@@ -1,16 +1,14 @@
 ---
 name: designing-interactions
 description: >-
-  Designs and audits INTERACTION surfaces: what an act means, hidden state, undo/recovery, and
-  whether nonlocal actors can drive it. Covers GUI, touch, CLI/TUI, voice, physical controls, APIs,
-  and agent tools. Use for UI/UX review, 画面設計, 操作フロー, modes, モーダル, confirmation vs
-  undo, 可逆性, wizard/captive UI, affordance, usability, 認知負荷, or simple-vs-easy. LAW:
-  interaction cost is the hidden state needed to predict an act; complexity can only move, so name
-  who absorbs it. Cuts: visual styling → frontend-design; charts → dataviz; measured web trace →
-  web-perf; behavior edits → implementing-and-debugging; structural cleanup → refactoring-code;
-  wording → linting-prose; adoption → growing-oss-adoption. Real-user attention uses a domain test;
-  AOH fires only for expensive/irreversible downstream exposure. Verdicts stay SOLO; inventories
-  and adversarial probes may fan out read-only. English skill; answer in the user's language.
+  Designs and audits INTERACTION surfaces: act meaning, hidden state, undo/recovery, and delegability
+  across GUI, CLI/TUI, APIs, and agent tools. Use for UI/UX review, 画面設計, 操作フロー, modes,
+  モーダル, confirmation vs undo, 可逆性, wizard, captive UI, affordance, usability, 認知負荷, or
+  simple-vs-easy. CLI grammar, stdout/stderr and machine modes, exit/outcome mapping, and compatibility
+  → designing-command-line-interfaces. Visual styling → frontend-design; charts → dataviz; behavior
+  edits → implementing-and-debugging; wording → linting-prose; adoption → growing-oss-adoption.
+  Real-user attention needs a domain test. Verdicts stay SOLO; inventories may fan out. English skill;
+  answer in the user's language.
 ---
 
 # Designing interactions — what an act means, and who pays to know it
@@ -200,6 +198,7 @@ Asks this skill must NOT take:
 | "should we open-source this CLI, and how do we launch it" | `growing-oss-adoption` |
 | "restructure this design-spec **document**" | `structuring-documents` |
 | a one-line copy fix, or an ask a platform convention already settles | just do it — no ceremony |
+| “Choose this CLI's parser grammar, stdout/stderr or machine mode, exit/outcome mapping, or compatibility promise.” | `designing-command-line-interfaces`; this skill retains the medium-agnostic non-captive/delegability test and command-regime probe. |
 
 ## Fire / no-fire — the F3 desk-check set
 

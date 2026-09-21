@@ -1,0 +1,22 @@
+# VERSIONING CONTRACT
+
+- Consumer: internal service operators and deployment automation
+- Comparator: target SemVer parser and deployment tag sorter
+- Compatibility contract: documented HTTP API and migration protocol
+- Scheme name: compatibility-bound calendar scheme
+- Grammar: MAJOR.YYYYMM.REVISION
+- SemVer claim: syntax-only: three numeric segments parse, but revision is not PATCH-only
+- Compatibility signal: MAJOR for a breaking public contract change
+- Chronology signal: YYYYMM for the UTC release month
+- Release-order signal: REVISION for every release within the month
+- First release: 1.202609.0 establishes the stated contract
+- Compatible feature: 1.202609.1 increments REVISION and records the feature in the changelog
+- Compatible bug fix: 1.202609.2 increments REVISION
+- Breaking change: 2.202609.0 increments MAJOR and resets REVISION
+- Same-period second release: increment REVISION even when the release contains a feature
+- Period rollover: 1.202610.0 changes YYYYMM at the first UTC October release
+- Pre-release / build metadata: pre-release follows the target parser; build metadata is not an ordering signal
+- Range behavior: deployment accepts exact tags only; no dependency ranges are published
+- Parser verification: run target-semver-parse and tag-sort fixtures in CI
+- Positive receipt: 1.202610.0 sorts after 1.202609.2 in target fixture
+- Negative receipt: 1.202609 rejects because revision is required

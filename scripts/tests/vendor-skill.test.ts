@@ -1,8 +1,9 @@
 // bun test for scripts/vendor-skill.ts — the gates in front of `bunx skills add`. Nothing here
-// reaches the network: every case exercises a refusal or --dry-run, so the assertions are about
-// the three measured hazards of the bare CLI (project-scope litter, install-everything, silent
-// same-name overwrite) never getting the chance to happen. Fixtures are throwaway tmp trees
-// passed via --dotfiles/--home; the real $HOME is never touched (Safety rule).
+// reaches the network: every case exercises a refusal, --dry-run, or the pure `detectStowaways`
+// diff, so the assertions are about the four measured hazards of the bare CLI (project-scope
+// litter, install-everything, silent same-name overwrite, the uninvited find-skills companion)
+// never getting the chance to happen. Fixtures are throwaway tmp trees passed via
+// --dotfiles/--home; the real $HOME is never touched (Safety rule).
 import { describe, expect, test } from "bun:test";
 import {
   mkdirSync,
@@ -13,6 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { detectStowaways } from "../vendor-skill.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "vendor-skill.ts");
 
@@ -206,6 +208,34 @@ describe("vendor-skill: COLLISION gate", () => {
     expect(out).toContain(`force: will replace ${dotfiles}/agents/skills/one`);
     expect(out).not.toContain("REFUSED");
     cleanup(dotfiles, home);
+  });
+});
+
+describe("vendor-skill: detectStowaways (header note 4)", () => {
+  test("a name that appeared but was never requested is a stowaway", () => {
+    expect(
+      detectStowaways(["mintlify"], ["mintlify", "find-skills"], ["mintlify"]),
+    ).toEqual(["find-skills"]);
+  });
+
+  test("a requested name that newly appeared is not a stowaway", () => {
+    expect(
+      detectStowaways(
+        ["mintlify"],
+        ["mintlify", "typesafe-ai"],
+        ["typesafe-ai"],
+      ),
+    ).toEqual([]);
+  });
+
+  test("a name that already existed before the fetch is never a stowaway", () => {
+    expect(
+      detectStowaways(["writing-julia"], ["writing-julia"], ["typesafe-ai"]),
+    ).toEqual([]);
+  });
+
+  test("no surprises: unchanged before/after yields nothing", () => {
+    expect(detectStowaways(["a", "b"], ["a", "b"], ["a"])).toEqual([]);
   });
 });
 

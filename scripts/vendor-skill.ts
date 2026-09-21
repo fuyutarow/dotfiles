@@ -2,8 +2,9 @@
 // github.com/vercel-labs/skills). Consumer: human/agent running `mise run skills:add`.
 // Output is verdict-style lines, matching link-skills.ts / link-dots.sh, not a machine envelope.
 //
-// WHY A WRAPPER AT ALL — three measured behaviors of the bare CLI, each of which silently
-// damages this repo (probed 2026-08-14 against skills@1.5.22 in throwaway HOMEs):
+// WHY A WRAPPER AT ALL — four measured behaviors of the bare CLI, each of which silently
+// damages this repo (1-3 probed 2026-08-14, 4 probed 2026-09-21, all against skills@1.5.22 in
+// throwaway HOMEs):
 //
 //   1. Without `-g` everything is written into the CURRENT DIRECTORY: ./.agents/skills/<name>/
 //      (real bytes), ./.claude/skills/<name> (relative symlink), ./agent/skills/<name>/ (a
@@ -15,11 +16,20 @@
 //   3. `add` OVERWRITES an existing same-named directory with no prompt even without -y — a
 //      fixture holding a hand-authored SKILL.md plus an extra file came back containing only
 //      upstream's SKILL.md. Against agents/skills/ that destroys a house skill.
+//   4. Even WITH `--skill <name>` naming exactly one skill, `-y` also silently accepts the CLI's
+//      own first-run prompt to install ITS OWN companion `find-skills` skill (source
+//      vercel-labs/skills, the CLI's own repo) — a second, unrequested real directory plus a
+//      second ledger entry, landing in agents/skills/ next to whatever was actually asked for.
+//      Reproduced live vendoring typesafe-ai/skills --skill typesafe-ai: find-skills arrived
+//      unasked, both on disk and in the ledger. `--skill` scopes the SOURCE repo's own skills;
+//      it does not stop the CLI grafting on a skill from a DIFFERENT repo.
 //
-// So this wrapper pins the version, forces `-g`, requires explicit skill names, and REFUSES a
-// name this repo already owns. The one thing it does NOT reimplement is the fetch: with `-g` the
-// CLI writes to ~/.agents/skills, which link-skills.ts already points at agents/skills, so the
-// bytes land in the repo on their own and `git status` is the review surface.
+// So this wrapper pins the version, forces `-g`, requires explicit skill names, REFUSES a name
+// this repo already owns, and diffs the skill directory before/after the fetch to catch and
+// remove any name #4 sneaks in that nobody asked for. The one thing it does NOT reimplement is
+// the fetch: with `-g` the CLI writes to ~/.agents/skills, which link-skills.ts already points at
+// agents/skills, so the bytes land in the repo on their own and `git status` is the review
+// surface.
 //
 // Usage: bun scripts/vendor-skill.ts <owner/repo> --skill <name> [--skill <name>…]
 //                                    [--force] [--dry-run] [--dotfiles <path>] [--home <path>]
@@ -31,7 +41,16 @@
 // Exit: 0 vendored (or dry-run) · 1 the CLI itself failed · 2 usage · 3 a gate refused
 // (batched: every violating name is reported in ONE decision, never one-at-a-time).
 
-import { existsSync, lstatSync, readlinkSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
@@ -109,6 +128,58 @@ function collidingNames(
   return names
     .map((name) => ({ name, path: `${dotfiles}/agents/skills/${name}` }))
     .filter((entry) => existsSync(entry.path));
+}
+
+function isDir(p: string): boolean {
+  return fromThrowable((path: string) => statSync(path))(p)
+    .map((s) => s.isDirectory())
+    .unwrapOr(false);
+}
+
+function listSkillDirNames(skillsDir: string): string[] {
+  return fromThrowable((dir: string) => readdirSync(dir))(skillsDir)
+    .map((names) =>
+      names
+        .filter((n) => !n.startsWith("."))
+        .filter((n) => isDir(`${skillsDir}/${n}`)),
+    )
+    .unwrapOr([]);
+}
+
+/** A directory name that appeared during the fetch but was never in `--skill` (see header note 4). */
+export function detectStowaways(
+  before: string[],
+  after: string[],
+  requested: string[],
+): string[] {
+  const beforeSet = new Set(before);
+  const requestedSet = new Set(requested);
+  return after.filter((n) => !beforeSet.has(n) && !requestedSet.has(n));
+}
+
+/** Best-effort: drop a stowaway's entry from the committed provenance ledger too, so the ledger
+ * never records a name that no longer exists on disk (skills-doctor's ORPHAN check would flag
+ * the reverse gap otherwise). Never fatal — the directory removal is the safety net that matters. */
+function scrubLedger(dotfiles: string, names: string[]): void {
+  const path = `${dotfiles}/agents/skills-lock.json`;
+  const parsed = fromThrowable(() => JSON.parse(readFileSync(path, "utf8")))();
+  if (parsed.isErr()) return;
+  const doc = parsed.value;
+  if (typeof doc !== "object" || doc === null || !("skills" in doc)) return;
+  const skills = (doc as { skills: unknown }).skills;
+  if (typeof skills !== "object" || skills === null) return;
+  let changed = false;
+  for (const name of names) {
+    if (name in skills) {
+      delete (skills as Record<string, unknown>)[name];
+      changed = true;
+    }
+  }
+  if (changed) {
+    fromThrowable(() =>
+      writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`),
+    )();
+  }
 }
 
 function main(): void {
@@ -213,6 +284,9 @@ function main(): void {
     return;
   }
 
+  const skillsDir = `${dotfiles}/agents/skills`;
+  const before = listSkillDirNames(skillsDir);
+
   const proc = Bun.spawnSync(argv, {
     stdin: "inherit",
     stdout: "inherit",
@@ -223,6 +297,25 @@ function main(): void {
     fail(`FATAL: ${SKILLS_CLI} add exited ${proc.exitCode}`);
     process.exitCode = 1;
     return;
+  }
+
+  // Header note 4: the CLI can graft on a skill nobody named. Diff, remove, scrub the ledger.
+  const stowaways = detectStowaways(
+    before,
+    listSkillDirNames(skillsDir),
+    names,
+  );
+  if (stowaways.length > 0) {
+    for (const n of stowaways) {
+      fromThrowable(() =>
+        rmSync(`${skillsDir}/${n}`, { recursive: true, force: true }),
+      )();
+      print(
+        `STOWAWAY: removed ${skillsDir}/${n} — the CLI installed it without being asked ` +
+          "(see vendor-skill.ts header note 4)",
+      );
+    }
+    scrubLedger(dotfiles, stowaways);
   }
 
   // Post-condition: the CLI reports success per skill, but what matters here is whether the
@@ -248,19 +341,23 @@ function main(): void {
   );
 }
 
+// Guarded so a test can `import { detectStowaways } from "../vendor-skill.ts"` without running
+// main() for real — same pattern and same reason as install-mcp.ts (see its tail comment).
 // Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
 // is the sync equivalent of BG1's mandated `main().catch(...)`, a listener registered before
 // main() runs rather than a local try/catch wrapped around the call.
-process.on("uncaughtException", (error) => {
-  if (error instanceof UsageError) {
-    fail(`${error.message}\n${USAGE}`);
-    process.exitCode = 2;
-  } else {
-    fail(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
-    process.exitCode = 1;
-  }
-  process.exit(process.exitCode ?? 0);
-});
+if (import.meta.main) {
+  process.on("uncaughtException", (error) => {
+    if (error instanceof UsageError) {
+      fail(`${error.message}\n${USAGE}`);
+      process.exitCode = 2;
+    } else {
+      fail(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
+      process.exitCode = 1;
+    }
+    process.exit(process.exitCode ?? 0);
+  });
 
-main();
-process.exit(process.exitCode ?? 0);
+  main();
+  process.exit(process.exitCode ?? 0);
+}

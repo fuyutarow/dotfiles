@@ -9,7 +9,32 @@
       "skillFolderHash": "d9ce17880c2414dbdff7d8e91c9f68678f3204cf",
       "installedAt": "2026-08-14T16:01:15.521Z",
       "updatedAt": "2026-08-14T16:01:15.521Z"
+    },
+    "typesafe-ai": {
+      "source": "typesafe-ai/skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/typesafe-ai/skills.git",
+      "skillPath": "skills/typesafe-ai/SKILL.md",
+      "skillFolderHash": "678c375b883794bf4292715a43acbba5c84681aa",
+      "installedAt": "2026-09-21T01:35:01.648Z",
+      "updatedAt": "2026-09-21T01:35:01.648Z"
     }
   },
-  "dismissed": {}
+  "dismissed": {
+    "findSkillsPrompt": true
+  },
+  "lastSelectedAgents": [
+    "amp",
+    "cline",
+    "codex",
+    "cursor",
+    "droid",
+    "gemini-cli",
+    "github-copilot",
+    "kilo",
+    "kimi-code-cli",
+    "opencode",
+    "warp",
+    "zed"
+  ]
 }

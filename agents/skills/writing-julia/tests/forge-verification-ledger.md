@@ -214,7 +214,164 @@ new dated facts (required by this skill's own contract), and a two-line changelo
 the 90-line version header is long-standing debt, untouched here; clear it at the next substantive
 reforge, not in a content commit.
 
-## 2026-09-21: source delimiters vs output encoding (v2609.1.0)
+## 2026-09-16 — JG6 general package engineering reforge (v2609.1.0)
+
+**Trigger.** A package-directory suffix question exposed a larger void. The skill showed
+`src/MyPkg.jl` and named PkgTemplates, but it did not distinguish package identity, local path,
+remote repository, dependency contract, manifest profile, workspace, registry, or release.
+
+**Function map.**
+
+```text
+Julia package/project intent
+  --classify consumer + topology + distribution-->
+package profile
+  --name + declare + constrain + verify + release-->
+verifiable Julia package contract
+```
+
+The transition stops when identity, dependency roles, manifest policy, state, public version, and
+distribution checks agree. `packaging.md` is the SOLE arguing home. `architecture.md` owns source
+topology, `setup.md` owns execution and experiment provenance, and `packages.md` selects libraries.
+
+### Bounded corpus position
+
+**Review plan.** The decision was what a Julia package author must decide from birth through
+release. The corpus was restricted to current primary Julia/Pkg, PkgTemplates, and RegistryCI
+documentation. The synthesis operator was a decision map, not a command catalog.
+
+| State | Position |
+|---|---|
+| Known | package identity is `name` + `uuid`; entry point and top module match `name` |
+| Known | local `X/` and `X.jl/` can both load; `.jl` is a remote-repository convention |
+| Known | `[deps]`, `[weakdeps]`, `[extensions]`, `[sources]`, and workspaces have distinct roles |
+| Known | a manifest is one exact resolution and is maintained by Pkg |
+| Known | General adds registry-specific name, URL, license, compat, install, and load checks |
+| Uncertain | no primary Pkg rule universally commands library authors to commit or omit a root manifest |
+| Resolved | profile it: exact applications/research commit; a library snapshot is optional and never its compat contract |
+| Missing | private-registry admission policy is registry-specific and cannot be closed here |
+
+**Counterevidence attack.** PkgTemplates defaults to `manifest=false`, refuting the old universal
+commit rule. Julia's module manual explicitly supports submodules, refuting the old presentation
+of the SciML preference as a Pkg rule. Both remain available under scoped decisions.
+
+### Source grades `[dated:2026-09]`
+
+| Claim | Grade | Primary source |
+|---|---|---|
+| bare package dir, `src/Name.jl`, module/load naming | author-confirmed | https://pkgdocs.julialang.org/dev/creating-packages/ |
+| name/UUID/version and Project/Manifest roles | author-confirmed | https://pkgdocs.julialang.org/dev/toml-files/ |
+| `X/src/X.jl` and `X.jl/src/X.jl` both load | author-confirmed | https://docs.julialang.org/en/v1/manual/code-loading/ |
+| PkgTemplates remote `.jl` default; manifest not committed by default | author-confirmed | https://juliaci.github.io/PkgTemplates.jl/stable/user/ |
+| General AutoMerge admission rules | author-confirmed, registry-scoped | https://juliaregistries.github.io/RegistryCI.jl/stable/guidelines/ |
+| manifest policy by consumer profile | skill-supplied synthesis | Pkg manifest semantics + PkgTemplates default |
+| package contract tuple and JG6 artifact | skill-supplied operationalization | this reforge |
+
+**Calibration inversion.** Primary docs explain each mechanism in isolation. The model's dominant
+failure is to collapse those loci into one slogan: “packages end in `.jl`” or “always commit the
+manifest.” The manual therefore leads with classification and lookup tables, not a flat tips list.
+
+**One-home moves.** PkgTemplates, manifest policy, dependency transactions, workspaces, package
+state, and registry/release moved to `packaging.md`. Existing setup, architecture, and package
+catalog prose now point to that owner. JG3 became the house/SciML source-topology gate; JG6 owns
+generic packaging. The earlier `JG0–JG4` heading defect was corrected to `JG0–JG6`.
+
+**F3 additions.** The trigger set now covers package-vs-project, naming loci, scaffolding, manifest
+profiles, dependency roles, workspaces/sources, extensions, registry release, and Pkg apps. New
+near-misses distinguish repository wiring, configuration integrity, VCS-only changes, and legal
+license selection.
+
+### Verification receipts and prose-debt disposition
+
+- Primary-source refuter: three passes; every reported extension, registry, SemVer, workspace, and
+  compatibility-scope defect was corrected.
+- Architecture refuter: three passes; PK/P7 collision, one-home leaks, gate artifacts, and stale
+  trigger expectations were corrected.
+- Trigger desk-check: every FIRES, MUST-NOT-FIRE, and co-fire row resolves from name+description.
+- `quick_validate.py`: `Skill is valid!`.
+- `git diff --check -- agents/skills/writing-julia`: exit 0.
+- Target `skill-check.ts`: exit 0 with the measured warnings below.
+- `mise run lint:skills-floor`: exit 0; 64 skills and 59,707 listing characters.
+- `mise run link:skills`: pass; Claude and Codex links resolve to this source tree.
+
+**PROSE-DEBT waiver `[dated:2026-09-16]`.** Before this reforge, the floor reported 159 long
+reference sentences, 53 long SKILL sentences, a 94-line version block, and five long table cells.
+Afterward it reports 157 reference sentences and 10 SKILL sentences, with no version-block or
+table-cell warning. The remaining debt is outside the packaging decision surface and rewriting it
+would mix numerical/AD/package-catalog semantics into this reforge. Queue: a dedicated whole-skill
+prose reforge before the next broad, non-packaging expansion. Packaging additions were separately
+accepted by the F1 architecture refuter as lookup/predicate content rather than narrative.
+
+## 2026-09-17 — strict ZERO-EXPORTS namespace contract (v2609.2.0)
+
+**Trigger.** The user rejected the prior compromise of “export a small core.” The standing policy
+is now zero exports everywhere in authored packages, with no compatibility shim or transition
+period retaining exports.
+
+**Function map.**
+
+```text
+authored Julia package/module
+  --declare owned API + consume dependencies explicitly-->
+public-only namespace contract
+  --static source gate + runtime reflection + ExplicitImports-->
+zero-injection package with a locked public API
+```
+
+The transition stops only when root, owned child, and every declared extension module export
+nothing. Every discovered authored module's exact `public` set matches the executable API map,
+and every dependency import/access passes the strict ExplicitImports suite.
+
+### Source grades `[dated:2026-09]`
+
+| Claim | Grade | Source |
+|---|---|---|
+| `using M` introduces `M` plus its exported names | author-confirmed | https://docs.julialang.org/en/v1/manual/modules/ |
+| `public` marks API without namespace injection and requires Julia 1.11+ | author-confirmed | same Julia Modules manual |
+| qualified and explicitly named access do not depend on export status | author-confirmed | same Julia Modules manual |
+| only explicit `import M: f` permits unqualified method extension | author-confirmed | same Julia Modules manual |
+| public documented behavior drives SemVer | author-confirmed | https://pkgdocs.julialang.org/dev/creating-packages/ |
+| ExplicitImports check set and keyword semantics | author-confirmed | https://juliatesting.github.io/ExplicitImports.jl/stable/api/ |
+| every authored package has zero exports and minimum Julia 1.11 | user-ordered / skill-supplied | this reforge |
+| recursive reflection + source-AST gate + exact public-set lock | constructed enforcement | `assets/no_exports.jl` |
+
+**Calibration inversion.** Julia's manual teaches a choice between `export` and `public`. A model
+therefore “helpfully” preserves a few exports even when ordered to eliminate injection. The house
+consumer needs the inverse bias: `export` and `@reexport` are deny-gated, not ranked options.
+
+**One home.** `architecture.md` §10.5 solely owns exposure, import discipline, and the executable
+gate. `packaging.md` PK7 owns only the breaking-version consequence. SKILL.md carries JG7 and
+checklist pointers; the trigger set carries match-time proof.
+
+**Deliberate sacrifices.** Unqualified REPL ergonomics and backward compatibility for bare calls
+after `using Pkg` are retired. Removing a released export is versioned as breaking immediately.
+Supporting Julia 1.10 or earlier is also retired; `Compat.@compat public` is not an escape hatch.
+
+### Verification receipts and prose-debt disposition
+
+- Primary-source refuter: three passes; final verdict PASS after extension, ExplicitImports,
+  Julia-floor, self-binding, and public-map findings were corrected.
+- Architecture refuter: three passes; final semantic verdict PASS after one-home, JG7, F3, and
+  asset reachability findings were corrected.
+- `mise x julia@1.12.7`: asset syntax parse PASS.
+- Synthetic core probe: clean AST/runtime states green; `export`, `@reexport`, bare `using`, and
+  runtime exported member states red — `RED/GREEN PASS`.
+- Full temporary clean package: ZERO EXPORTS 16/16 and strict ExplicitImports 7/7; asset green.
+- Full temporary bad package: source-AST and runtime export assertions both failed; process exit 1
+  was accepted as `ASSET RED PASS`.
+- `quick_validate.py`: `Skill is valid!`; description length 1007 characters.
+- `git diff --check -- agents/skills/writing-julia`: exit 0.
+- Target `skill-check.ts`: structural exit 0 with the measured warnings below.
+- `mise run lint:skills-floor`: exit 0; 65 skills and 60,754 listing characters.
+- `mise run link:skills`: pass; Claude and Codex links resolve to this source tree.
+
+**PROSE-DEBT waiver `[dated:2026-09-17]`.** The target floor remains at 157 long reference
+sentences and 10 long SKILL sentences, unchanged from the accepted v2609.1 post-reforge baseline.
+This reforge adds no warning-class debt. The remaining older numerical/AD/catalog prose stays in
+the dedicated whole-skill prose-reforge queue; changing it inside a namespace-policy change would
+mix unrelated scientific semantics into the acceptance surface.
+
+## 2026-09-21: source delimiters vs output encoding (landed in parallel as v2609.1.0; folded into v2609.3.0 on merge, 2026-09-21)
 
 The new rule separates controlled text from an external format. Julia's official strings manual
 confirms that `"""..."""` permits `"` and interpolation uses `$`; `raw"..."` disables both
@@ -223,3 +380,7 @@ Source: https://docs.julialang.org/en/v1/manual/strings/
 
 F3 receipt: added the trigger row; parsed the `"""..."""` example with Julia; targeted
 `skill-check.ts` exited 0. Existing prose/version/table WARN debt remains disclosed above.
+
+Merge note (2026-09-21): this entry and the 09-16/17 package-engineering reforge were written in
+parallel on two machines, both as v2609.1.0. Merged as v2609.3.0; the string-construction section
+leaves the waived baseline at 10 long SKILL sentences after re-measurement.

@@ -4,7 +4,7 @@ Desk-check this table against the FULL skill collection (not just this descripti
 description edit. Added v2607.1.0 (type-discipline reforge); expanded v2607.1.1 (Effective Julia
 near-miss guardrails); overhauled v2607.2.0 — architecture asks added to FIRES (they were in the
 description but untested), no-fire set rebuilt as TRUE near-misses (the old set was far-language
-asks — Rust/TS/C++ — which test nothing).
+asks — Rust/TS/C++ — which test nothing). Expanded v2609.1.0 with JG6 package-contract asks.
 
 ## FIRES
 
@@ -31,13 +31,31 @@ asks — Rust/TS/C++ — which test nothing).
 |---|---|
 | 「Julia パッケージの `include` の順番でエラーが出る / UndefVarError」 | §10.1 boss-file include order |
 | 「struct A が B を参照して B も A を参照する — 循環依存どう解く?」 | §10.2 hoist abstract types to interfaces.jl |
-| 「パッケージが大きくなってきた。submodule に分けるべき?」 | §10.3 subpackage/interface package, NOT submodules |
-| "Plots のサポートを optional dependency にしたい / Requires.jl 使う?" | §10.4 `[weakdeps]` extensions, not Requires.jl |
+| 「パッケージが大きくなってきた。submodule に分けるべき?」 | §10.3 ownership/lifecycle lookup |
+| "Plots のサポートを optional dependency にしたい / Requires.jl 使う?" | native extension only; Requires.jl is forbidden |
 | 「他人のパッケージの型に自分のメソッドを生やしていい?」 | §10.6 type piracy — NO; Aqua catches it |
-| 「`export` と `public` どっち使う? API はどう見せる?」 | §10.5 public API |
+| 「`export` と `public` どっち使う? API はどう見せる?」 | §10.5: export禁止、`public` only |
+| 「Julia package の export を全面禁止して」 | JG7 ZERO-EXPORTS gate + PK7 migration |
+| "Make `using MyPkg` inject no member names" | zero exports; module binding only |
+| 「`@reexport` も Reexport.jl も全部禁止」 | JG7 forbids both syntax and dependency |
+| 「依存 package の bare `using` もCIで落として」 | strict ExplicitImports settings (§10.5.1) |
+| 「既存 package の export を全部 public に移して」 | breaking migration; retain no shim |
 | "MethodError: ambiguous — 曖昧性エラーの直し方" | §10.6.1 method ambiguity / `@which` tracing |
 | 「パッケージ読み込みが遅くなった — invalidation って何?」 | §10 TTFX & invalidation hygiene |
-| 「新しい Julia パッケージのディレクトリ構成、どうするのが正しい?」 | JG3 fires at package birth, not on request |
+
+### Packaging (JG6 — identity, dependency contract, distribution)
+
+| Ask | Why |
+|---|---|
+| 「Julia の package と普通の project environment、何が違う?」 | PK0 controls identity and manifest policy |
+| 「新しい Julia パッケージの構成を PkgTemplates で作って」 | PK1/PK2, then JG3 for source topology |
+| 「パッケージ名、repo、フォルダ、`src/*.jl` のどこに `.jl` を付ける?」 | PK1 locus lookup |
+| "Should a Julia library commit Manifest.toml?" | PK4 consumer-profile decision |
+| 「この依存は deps、weakdeps、test workspace のどれ?」 | PK3 role lookup |
+| 「モノレポ内の未登録 package を `[sources]` と workspace でつなぎたい」 | PK0/PK3/PK5 |
+| "Move this optional Plots integration to a package extension" | PK3/JG6 contract + JG3 ext module |
+| 「General に登録できる状態か確認して release したい」 | PK7/PK8 release gate |
+| "Ship this Julia package as a CLI with `[apps]`" | PK9 experimental app branch `[dated:2026-09]` |
 
 ### Data axes (added v2608.2.0 — the description now triggers on JSON/JSON3/TOML interchange)
 
@@ -59,13 +77,19 @@ asks — Rust/TS/C++ — which test nothing).
 | "uv で Python の数値実験環境を作って" | numerics vocabulary but Python tooling → `running-python-tools` |
 | 「JuMP と Gurobi のライセンス形態は?」 | ecosystem question, no code to write — plain answer |
 | 「Julia という言語の歴史と設計思想を教えて」 | encyclopedia ask, no code — plain answer |
+| 「Julia の `export` / `public` の歴史と仕様だけ説明して」 | descriptive language fact, no artifact decision — plain answer |
 | 「この Julia リポジトリを git subtree で分割したい」 | VCS surgery, not Julia structure — plain task (refactoring-code if code moves) |
+| 「Project.toml を署名・canonicalize する仕様を決めたい」 | trust/integrity contract → `governing-configuration-systems`; Julia parsing may co-fire |
+| 「GitHub 上の repo 名だけ変更したい。package metadata は変えない」 | VCS/hosting operation; JG6 fires only if package identity or registered URL changes |
+| 「この OSS package のライセンスを法的に選んで」 | legal/license decision, not Julia packaging mechanics |
 | 「NumPy の column-major/row-major の違いは?」 | memory-order vocabulary but Python/NumPy — plain answer (fires here ONLY if a Julia port is in play) |
 | 「行列積の計算量を説明して」 | math theory, no Julia code — plain answer |
 | 「CUDA.jl の `@cuda` カーネルが `InvalidIRError` で落ちる」 | device-side → `optimizing-julia-gpu-kernels` (this skill co-fires only for the host-side type discipline underneath) |
 | "CuArray のコードが遅い / occupancy を上げたい" | GPU performance → `optimizing-julia-gpu-kernels` (DECISIVE cut: runs on the device) |
 | 「Python の `json` モジュールで dict を読みたい」 | JSON vocabulary, no Julia in play → `running-python-tools` / plain answer |
 | 「TypeScript で JSON を型安全にパースしたい」 | same parse-to-a-type rule shape, different language → `writing-typescript` |
+| 「Python package の `__all__` を空にして」 | Python API surface → `writing-python` |
+| 「Rust の `pub use` / re-export を禁止して」 | Rust API surface → `writing-rust` |
 | 「この Web API の JSON レスポンス仕様を設計して」 | schema/API design, no Julia code — plain answer (`structuring-documents` if the deliverable is a doc) |
 | 「jq で JSON を整形するワンライナー教えて」 | shell tooling, no Julia — plain answer |
 
@@ -78,3 +102,5 @@ asks — Rust/TS/C++ — which test nothing).
 | 「Julia で数値計算を GPU 化したい」(型設計から) | this skill (JG2 type discipline) co-fires BEFORE `optimizing-julia-gpu-kernels` — instability that is slow on CPU is a compile error in a kernel |
 | 「サブエージェントに Julia の rank 探索を並列実行させたい。RAM と GPU 上限も決めて」 | this skill owns Julia method/run discipline; `orchestrating-agents` P7 co-fires before the pilot and owns the envelope/admission |
 | 「動かない Julia コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Julia-specific diagnosis (`@code_warntype`, JET) |
+| 「Julia package を含む新しい repo を一式 scaffold して」 | `wiring-repositories` chooses layers/order → this skill owns JG6 package contents |
+| 「既存 Julia package の export を全廃して breaking release にして」 | `implementing-and-debugging` governs migration → JG7 + PK7 enforce zero exports |

@@ -1,22 +1,8 @@
 # Recommended Packages by Research Domain (§4)
 
-> **This is a lookup catalog, not a starter kit. Add a package at the point of first
-> use, never preemptively.** A dependency you declared in `Project.toml` but never
-> `using`/`import` in committed code is not free: it inflates the `Manifest`, the
-> precompile/instantiate time, and TTFX — and the heavy ones drag in native-compile
-> toolchains that dominate every `Pkg` operation. Observed cost: `Enzyme` pulls
-> `Enzyme_jll` + LLVM IR compilation; `Manopt`+`Manifolds` pull ~100 transitive deps;
-> `AllocCheck` pulls GPUCompiler+LLVM. A project doing AD at `d≤5` with `ForwardDiff`,
-> and hand-rolled Riemannian steps, was carrying all of these **declared-but-unused** —
-> every Manifest touch triggered a multi-minute LLVM recompile storm for code never called.
->
-> **The rule:** when a task needs differentiation, add `DifferentiationInterface`+`ForwardDiff`
-> — not the whole AD section. When you later profile ForwardDiff as the bottleneck at high
-> input dim, *then* add `Enzyme`. Same for every section below. Treat each entry as
-> "reach for this *when* the described need arises," not "install this because the domain
-> matches." If you delete the last use of a package, remove it from `Project.toml` in the
-> same commit (`Pkg.rm`). Aqua's stale-deps test + ExplicitImports surface drift, but the
-> discipline is upstream: **add at point of use, prune at point of disuse.**
+> **This is a lookup catalog, not a starter kit.** Select only the row whose need has appeared.
+> Adding, classifying, constraining, and later removing that dependency is owned by
+> `packaging.md` §PK3.
 
 **Core (stdlib, no install needed):** `LinearAlgebra`, `Statistics`, `Random`, `SparseArrays`, `Printf`
 
@@ -44,12 +30,12 @@ Bayesian PPL work (`Turing`, which re-exports `Distributions` and owns `MCMCChai
 - `DispatchDoctor` — `@stable` to forbid instability at the definition site.
 - `AllocCheck` — `@check_allocs` for compile-time zero-allocation guarantee.
 - `Aqua` — **package-hygiene meta-tests** (`Aqua.test_all(MyPkg)` in `test/`): detects **type
-  piracy**, method ambiguities, unbound type parameters, undefined/undocumented exports, stale
-  deps, and `[compat]` gaps. The CI enforcement of the invariants the compiler does NOT check
+  piracy**, method ambiguities, unbound type parameters, stale deps, and `[compat]` gaps. The CI
+  enforcement of invariants the compiler does NOT check
   (architecture.md §10.6). Distinct from JET (type/bug analysis) and Runic (formatting); add it to
   every package you author.
-- `ExplicitImports` — namespace-hygiene check: flags implicit `using`-brought names and
-  unused/stale imports, pushing toward explicit `using A: f` (SciMLStyle). Complements Aqua.
+- `ExplicitImports` — strict namespace-hygiene suite. This skill runs every check with internal
+  imports/accesses enabled for scrutiny and no ignores (architecture.md §10.5.1).
 - `Chairmarks` — fast repeated benchmarking (`@b`); `BenchmarkTools` only for `BenchmarkGroup`.
 - `Runic` — code formatter. Zero-configuration by design (formatting is fixed, not tunable),
   which is exactly why it is the SciML-standard formatter — uniformity across a codebase over
@@ -240,7 +226,7 @@ for a result struct is a lossy JLD2; a `.jld2` handed to a web client is unreada
 - **Result persistence → `JLD2`** — the Julia-native `.jld2` save/load format DrWatson's
   `@tagsave` / `wsave` / `produce_or_load` write **by default** (setup.md §3.4). Reach for it
   whenever an experiment must checkpoint or persist a result struct/array — this is the
-  serialization anchor the DrWatson lifecycle (JG4) already depends on. Escalate only by
+  serialization anchor the DrWatson lifecycle (JG5) already depends on. Escalate only by
   persistence boundary: `HDF5` when a non-Julia tool must read the arrays, `Arrow` for columnar
   tables shared with Python/R. (DrWatson's older `.bson` default is retired — use `.jld2`.)
 

@@ -1,8 +1,8 @@
 # §10 Large-Package Architecture — file/module organization at scale
 
-How to structure a **large** Julia package so it stays fast (TTFX, dispatch) and does not turn
-into spaghetti. This is the community/SciML consensus, not personal taste. Sources: Julia manual
-*Modules* & *Style Guide*, SciMLStyle, Pkg.jl *Creating Packages*, PrecompileTools.jl.
+How to structure a **large research Julia package** so it stays fast and understandable.
+This is the house/SciML architecture profile, not a Pkg validity rule. Julia permits other module
+topologies. Package identity and distribution are owned by `packaging.md`.
 
 ---
 
@@ -20,22 +20,20 @@ Spaghetti is prevented by **four invariants**, not by file boundaries (§10.6):
 3. **No loose globals** — only `const` (UPPER_CASE).
 4. **No type piracy** — own the function OR the type.
 
-If you write Julia expecting *files* to isolate you (Python/Rust habit), you WILL collide names
-and get hurt. Isolate with the four invariants instead. **Do not reflexively reach for submodules
-to recover file-level walls** — that fights the language (§10.3).
+Files do not isolate names. Use the four invariants for ordinary role files.
+Use a submodule only when a real internal namespace shares the parent package lifecycle (§10.3).
 
 ## §10.1 One top-level module; split files by ROLE; all `include`s in the boss file
 
-- **One top-level `module` per package.** Submodules are an **anti-pattern** unless you have a
-  genuine, unavoidable name collision (§10.3). "Many submodules" is a signal the code should be
-  **several packages**, not nested modules.
+- **One public top-level module matching the package name.** Submodules are valid namespace
+  boundaries; §10.3 decides when a boundary instead deserves its own package.
 - **Split files by role — nouns then verbs:**
   - `types.jl` / `interfaces.jl` — abstract types, structs. **No logic.**
   - `*.jl` method/function files — behavior over those types.
-- **Subfiles contain NO `module` and NO `include`.** They are raw code spliced into the parent.
-- **Every `include` lives in the boss file (`MyPkg.jl`), in dependency order:** abstract
-  interfaces → concrete types → functions. A subfile that `include`s another causes
-  **double-definition** when both are pulled in. One place, one order.
+- **House default:** ordinary role files contain no `module` and no `include`.
+- **Keep ordinary `include`s in the boss file (`MyPkg.jl`), in dependency order:** abstract
+  interfaces → concrete types → functions. A submodule may own its own files, but the boss file
+  must not include those files again.
 
 ```julia
 module MyPkg
@@ -46,7 +44,7 @@ include("types.jl")                # 2. concrete structs
 include("solvers.jl")              # 3. behavior (may freely use the types above)
 include("plots.jl")
 
-export Solver, solve               # public API (§10.5)
+public Solver, solve               # public API; ZERO EXPORTS (§10.5)
 end
 ```
 
@@ -112,58 +110,100 @@ combine(::NotAddable, x, y) = error("$(typeof(x)) is not addable")
   - **Avoid** adding `BinaryTraits` / `WhereTraits` / `DuckDispatch` as deps: their coexistence
     signals there is **no canonical trait library** — a heavy dep here is a liability, not a win.
 
-## §10.3 Scale-out ladder: file → **subpackage / interface package**, NOT submodule
+## §10.3 Scale-out ladder: file, submodule, or package
 
-The defining lesson of LARGE Julia packages: **when one module gets too big, split into PACKAGES,
-not submodules.**
-
-> SciMLStyle: *"When in doubt, a submodule should become a subpackage or separate package."*
+Choose by ownership and lifecycle, not by file size alone. SciMLStyle prefers a subpackage when a
+component is independently useful; Julia itself supports submodules as namespace boundaries.
 
 | Growth stage | Right tool | Why |
 |---|---|---|
 | File too long | another `include`d file (§10.1) | free; no namespace cost |
-| Component is independently testable / reusable | **separate package** (or registered subpackage in a monorepo) | real isolation + own tests/docs/CI |
-| Need a name wall (true collision only) | submodule `module … end` + `using .Sub` | last resort; costs dispatch composition |
+| Internal component shares version, deps, and release | submodule `module … end` + relative imports | real namespace without a new package contract |
+| Component needs independent reuse, compat, tests, or release | **separate package** or monorepo subpackage | own identity and dependency contract |
 
 - **Interface packages are the backbone of large ecosystems.** Factor the shared abstract API into
   a lightweight package that everything depends on — the pattern behind `SciMLBase`,
   `ArrayInterface`, `ChainRulesCore`, `RecipesBase`. Core + plugins all depend on the interface
   package, so they compose **without** a monolith and **without** depending on each other.
-- **Monorepo with registered subpackages is fine and preferred over Requires.jl.** `ArrayInterface`
-  removed all `Requires.jl` usage (compile-time cost) in favor of subpackages registered in the
-  General registry.
+- Monorepo package identity, `[sources]`, workspaces, and registration are owned by `packaging.md`.
 
-## §10.4 Optional / heavy dependencies → package extensions (`[weakdeps]`), NOT `Requires.jl`
+## §10.4 Optional / heavy dependencies → package extensions
 
-Julia ≥1.9. If functionality is needed only by *some* users (a plotting recipe, a GPU backend, a
-SymPy bridge), **do not make it a hard dep** — every user would pay its load time. Use a **package
-extension**: conditional code that loads automatically only when the user has loaded *both* your
-package and the trigger package.
+The dependency declaration and version gates are owned by `packaging.md` §PK3.
+Here the architecture rule is narrow: optional integration code lives in its named `ext/` module,
+not in the core source tree. Use native package extensions. `Requires.jl` is forbidden.
 
-```toml
-# Project.toml
-[weakdeps]
-Plots = "91a5bcdd-..."
+## §10.5 Namespace contract — ZERO EXPORTS, explicit public API
 
-[extensions]
-MyPkgPlotsExt = "Plots"            # ext/MyPkgPlotsExt.jl is loaded when Plots is present
+### THE LAW — namespace injection is forbidden
+
+Every authored module has zero author-declared exports. `export` and `@reexport` are forbidden in
+top-level packages, submodules, and extensions. Julia's automatic module-self binding is the only
+`Base.isexported` result the gate excludes. Stable API is marked only with `public`; internal
+bindings use neither keyword. `Reexport.jl` is forbidden. Callers use qualified access or an
+explicit named import.
+
+Keep each module's `public` declarations in one block in that module's boss file. Included role
+files define behavior but do not scatter API declarations. The executable API manifest below
+fails when a declaration is missing, undefined, or added without review.
+
+This is a house rule stricter than Julia's language requirement. It sacrifices unqualified REPL
+ergonomics so adding a package cannot inject or collide with caller bindings.
+
+| Intent | Authoring form | Caller form |
+|---|---|---|
+| Stable API | `public solve` | `Pkg.solve()` or `import Pkg: solve` |
+| Internal implementation | no `public`; never `export` | not a supported dependency surface |
+| Qualified dependency use | `import Dep`; call `Dep.f()` | no implicit binding |
+| Selected dependency name | `using Dep: T` | explicit binding, no method extension |
+| Extend an external generic | `import Dep: f`; define `f(::OwnType)` | explicit extension |
+
+`using Pkg` still introduces the module binding `Pkg`, but injects no member names. Julia has no
+true private module binding: qualified access and explicit import remain technically possible.
+The contract is support and SemVer, not access control. `baremodule` does not solve this problem.
+
+Authored packages declare the canonical `[compat] julia = "1.11"`. Do not use a Compat fallback.
+The executable gate checks that exact floor; a verifiable public-only API is part of the contract.
+
+Package source under `src/` and `ext/` must not rely on bare `using Dep`. All dependency access is
+qualified or explicitly named. Every imported or qualified dependency binding must be public and
+accessed through its owning module.
+
+### §10.5.1 Executable ZERO-EXPORTS gate
+
+ExplicitImports does not ban a package's own exports. Copy `assets/no_exports.jl` to
+`test/no_exports.jl`. Define its three constants and load every extension trigger before including
+it from `test/runtests.jl`. Declare `Test`, `TOML`, and `ExplicitImports` in the test project:
+
+```julia
+import MyPackage
+
+const ZERO_EXPORTS_PACKAGE = MyPackage
+const ZERO_EXPORTS_PUBLIC_APIS = IdDict{Module, Set{Symbol}}(
+    MyPackage => Set{Symbol}((:solve, :Solver)),
+    MyPackage.InternalSubmodule => Set{Symbol}(),
+)
+const ZERO_EXPORTS_EXTENSIONS = (:MyPackagePlotsExt,)
+
+include("no_exports.jl")
 ```
 
-- Extension code goes in `ext/MyPkgPlotsExt.jl`. It is **precompiled** like normal code (unlike
-  `Requires.jl`, which `eval`s at runtime, kills precompilation, and bloats invalidations).
-- Declarative — all in `Project.toml`/`Manifest.toml`, version-bounded via `[compat]`.
-- SciML rule: **subpackaging and extensions are preferred over `Requires.jl`** purely for compile
-  time. Reach for `Requires.jl` only to back-support Julia <1.9.
+The asset parses every `src/**/*.jl` and `ext/**/*.jl` file. It rejects `export`, `@reexport`, and
+bare `using`, plus Reexport.jl in dependency sections. Runtime reflection catches generated
+exports and recursively inspects owned modules. The extension-name tuple must exactly match
+`Project.toml`'s `[extensions]`, and every extension must load. Every discovered authored module's
+exact `public` set is locked; absent map entries mean an empty public set.
 
-## §10.5 Public API surface — `export`, `public`, `@reexport`
+Every ExplicitImports check runs without ignores or unanalyzable-module escape. Only the
+implicit-import check permits Base/Core as the language baseline. Ownership and public-access
+checks pass `skip=()`. The package is removed from the implicit check's default skip set, so
+submodule imports are checked.
 
-- `export name` — adds `name` to the caller's namespace on `using MyPkg`, AND marks it public.
-- `public name` (Julia ≥1.11) — marks `name` as public API **without** dumping it into the
-  caller's namespace. Use for API you want documented/stable but accessed as `MyPkg.name`.
-- `@reexport using .Interface` (Reexport.jl) — re-surface an interface/sub package's API through
-  the umbrella package so users get one import.
-- **Document interfaces, not fields/methods one by one** (SciMLStyle). Provide a "90% use case"
-  tutorial separate from advanced docs.
+The static and runtime checks are deliberately redundant. Reflection catches generated member
+exports. Julia's automatic self binding is indistinguishable from a generated export of the same
+module name. Dynamic visibility mutation is forbidden by policy. Removing an existing export
+remains breaking even when the binding stays `public`; `using Pkg; name` stops resolving.
+Version it under `packaging.md` §PK7.
 
 ## §10.6 Anti-spaghetti invariants (enforce these, not file walls)
 
@@ -188,19 +228,19 @@ MyPkgPlotsExt = "Plots"            # ext/MyPkgPlotsExt.jl is loaded when Plots i
 Julia enforces almost none of §10.6 structurally (type piracy *compiles*; globals *compile*; the
 orphan rule that Rust enforces at compile time is, in Julia, a guideline). The discipline is real
 but **opt-in**, so re-impose it as automated checks in `test/` — this is how the ecosystem
-substitutes tooling for compiler guarantees. Three non-overlapping layers, all belong in CI:
+substitutes tooling for compiler guarantees. Five non-overlapping layers belong in CI:
 
 | Layer | Tool | Enforces |
 |---|---|---|
-| **Package hygiene** | **`Aqua.test_all(MyPkg)`** | **type piracy**, method ambiguities, unbound type params, undefined/undocumented exports, stale deps, `[compat]` gaps |
-| **Namespace hygiene** | `ExplicitImports.jl` | implicit/unused `using` imports → explicit `using A: f` |
+| **Package hygiene** | **`Aqua.test_all(MyPkg)`** | piracy, ambiguities, type params, stale deps, compat gaps |
+| **Namespace injection** | `test_no_exports` (§10.5.1) | any export in root, child, or extension modules |
+| **Import hygiene** | ExplicitImports checks (§10.5.1) | no implicit/private/non-owner/stale access |
 | **Type/bug analysis** | `JET.report_package` / `@test_opt` | type instability, nonexistent methods, error paths (performance.md §2.8) |
 | **Formatting** | `Runic` | fixed style, zero-config (packages.md) |
 
-`Aqua` is the direct enforcement of the §10.6 anti-piracy / dependency invariants — **add it to
-every package you author.** It is a *test suite*, not a formatter: it fails CI when discretion has
-been abused. `DispatchDoctor.@stable` (def-site) + `AllocCheck.@check_allocs` (hot kernels) round
-out the proactive side.
+`Aqua` enforces §10.6 package hygiene; add it to every authored package. It does not replace the
+ZERO-EXPORTS test. ExplicitImports governs dependency consumption, not the package's export list.
+`DispatchDoctor.@stable` and `AllocCheck.@check_allocs` cover hot-path contracts.
 
 **Interactively answering "which method actually ran / where did it come from?"** — the cost of the
 single shared namespace is that a call like `f(x, y)` may resolve to a method from any loaded
@@ -222,14 +262,14 @@ Cross-ref setup.md §3.5 (the layered TTFX map). For a **large** package specifi
 - Every hard dep you add is paid by every user at load time — this is the load-time argument for
   §10.3 (split) and §10.4 (extensions).
 
-## §10.8 Scaffolding & tests
+## §10.8 Package scaffold and tests
 
-- **Scaffold with `PkgTemplates.jl`** — generates `Project.toml`, `src/MyPkg.jl`, `test/`, CI,
-  docs, license in the standard layout. Don't hand-roll the skeleton.
+Package identity, repository naming, `PkgTemplates`, manifest policy, test workspaces,
+registration, and release are owned by `packaging.md`. This section adds only code-level test
+isolation to the architecture rules above.
+
 - **Tests isolated per item:** `@safetestset` (or TestItems `@testitem`, setup.md §8) so no
   variable leaks between test scripts; group by category; use a `GROUP` env var to shard CI.
-- Version-bound **all** deps in `[compat]`; lower bound = last tested version; CompatHelper +
-  downstream tests guard the public API.
 
 ## §10.9 Quick decision table
 
@@ -240,11 +280,12 @@ Cross-ref setup.md §3.5 (the layered TTFX map). For a **large** package specifi
 | Behavior cuts ACROSS the hierarchy / classify types you don't own | **Holy trait** (THTT, §10.2.1) — keep the trait fn inferable; don't add a trait dep |
 | Verify a type satisfies an interface contract | `Interfaces.jl` in `test/` (§10.2.1 / §10.6.1) |
 | "Which method actually ran / where from?" | `@which` · `methods` · `@code_typed` (§10.6.1) |
-| Component independently testable/reusable | make it a **separate/sub package**, not a submodule |
+| Component needs independent version/compat/reuse | make it a separate or monorepo subpackage |
 | Shared abstract API across packages | extract an **interface package** (SciMLBase-style) |
-| Optional / heavy dependency | **package extension** via `[weakdeps]` (not `Requires.jl`) |
-| Need a true name wall | submodule — **last resort only** (costs dispatch composition) |
-| Want stable API without namespace dump | `public` (≥1.11); else `export` |
+| Optional / heavy dependency | native extension; never Requires.jl |
+| Need an internal namespace with the same lifecycle | submodule with relative imports |
+| Want stable API | `public`; require Julia 1.11+ |
+| Tempted to `export` / `@reexport` | stop; the ZERO-EXPORTS gate forbids namespace injection |
 | Slow first call in a big package | `@compile_workload` + fix invalidations (§10.7) |
 | Tempted to use a non-const global | put it in a function arg or a `const` container |
 | Tempted to extend others' funcs on others' types | **stop — type piracy**; own one side |

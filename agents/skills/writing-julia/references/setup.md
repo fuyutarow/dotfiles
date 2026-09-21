@@ -62,15 +62,16 @@ precompile. This is normal — do not assume the process has hung.
 
 ## 3.3 Reproducibility
 
-`Project.toml` / `Manifest.toml` in the project dir capture the exact dep tree. Commit them.
-Restore the identical environment anywhere with:
+Manifest policy is owned by `packaging.md` §PK4. When that profile commits a manifest, restore the
+identical environment with:
 
 ```bash
 julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
 ```
 
-For an exact match, the Julia patch version, OS, glibc/libc, and CPU architecture should agree
-between machines (`Manifest.toml` records the Julia version it was resolved under).
+The manifest reproduces dependency resolution, not the entire runtime platform.
+Record Julia and platform details separately when numerical or binary reproducibility needs them.
+A reusable library must also test a fresh resolution from `Project.toml` and `[compat]`.
 
 ## 3.4 Experiment management — `DrWatson` (the layer above environment reproducibility)
 
@@ -80,7 +81,7 @@ not hand-roll path strings, ad-hoc filenames, or "did I already run this?" logic
 
 ```
 Experiment layer  : DrWatson — savename / produce_or_load / tagsave / datadir   ← this section
-Environment layer : Project.toml / Manifest.toml (§3.3)                          ← already covered
+Environment layer : Project.toml / Manifest.toml (§3.3; policy in packaging.md)  ← already covered
 ```
 
 Core API (the parts that earn their keep):

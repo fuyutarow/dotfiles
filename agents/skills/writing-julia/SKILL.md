@@ -1,161 +1,77 @@
 ---
 name: writing-julia
 description: >-
-  Write correct, performant Julia for research. Use whenever running
-  Julia, writing hot numeric code, or doing numerical experiments, AD/gradients, optimization,
-  symbolic algebra, differential equations, package architecture, TTFX, or .so/AOT. Trigger on
-  scope/let/const, Val, column-major loops, immutable/mutable struct,
-  type stability / 型安定, dynamic vs multiple dispatch, function barrier, DifferentiationInterface,
-  ADTypes, ForwardDiff, Enzyme, Zygote, JET, Aqua, StaticArrays, ComponentArrays, OhMyThreads,
-  Optim/JuMP/Manopt, JSON/JSON3/TOML interchange,
-  SymEngine/Symbolics/ModelingToolkit/SymPyPythonCall, DrWatson/Pluto/Documenter/Quarto,
-  PackageCompiler, juliac --trim, @ccallable, include order, submodules vs subpackages,
-  weakdeps, type piracy, public API. MANDATORY before Julia code or a recordable experiment/benchmark
-  (JG5 fires on the run). §2.0 forbids
-  FD derivative estimation, grid sampling, and lerp-as-evaluation. Use DI for AD; multiple dispatch
-  is not banned — the bug is type-unstable hot paths. Co-fires with ORDER: Julia feature/bugfix →
-  implementing-and-debugging first, this for idiom; Julia refactor → refactoring-code governs,
-  this supplies JET/Aqua brackets + Julia-safe transforms. Cross-language risk ledger →
-  practicing-tiger-style; Julia mechanisms → HERE.
-  Formal proofs → proving-theorems; Python tooling → running-python-tools
-  (PythonCall from Julia stays here); GPU kernels/CuArray/CUDA.jl →
-  optimizing-julia-gpu-kernels (host-side type/package discipline here).
+  Write strict modern Julia for research and packages. Use for Julia code/runs, experiments, AD,
+  hot paths, package layout/naming, Pkg metadata, deps/compat/sources/workspaces, extensions,
+  API/release, TTFX, or AOT. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
+  type stability/型安定, DI, JET/Aqua, DrWatson, JSON/TOML, include order, submodules,
+  export禁止, no exports, public API, 名前空間, and `.jl` suffix. ZERO-EXPORTS is mandatory:
+  every authored module forbids `export`/`@reexport`; stable API uses `public`; package source
+  forbids implicit imports. MANDATORY before Julia code or a recordable run. §2.0 forbids FD
+  derivatives, grid optimization, and lerp-as-evaluation.
+  Co-fire: feature/bugfix → implementing-and-debugging first. Refactor → refactoring-code governs.
+  GPU device work → optimizing-julia-gpu-kernels after host type discipline. Formal proofs →
+  proving-theorems. Python tooling → running-python-tools. Config authority →
+  governing-configuration-systems. Descriptive, VCS-only, and legal asks stay out.
 ---
 
-# Model Julia — Coding Discipline & Setup
+# Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.1.0 (2026-09-21) — string construction distinguishes source delimiters from output encoding; Lux is the default NN library and is independent of Reactant.
-> (prior: v2608.2.0 (2026-08-14, persistence vs interchange axes) · v2608.1.0 (2026-08-03, pre-pilot resource admission) · v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
-> **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
-> file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
-> numerical methodology); everything else lives in `references/` and is loaded on demand.
-> **Out of scope**: live REPL iteration tooling (Revise, TestItems, JETLS, Cthulhu) —
-> pointered from `references/setup.md` §8, not the focus here.
-> **Resource seam**: before any recordable experiment/benchmark, parallel test, or orchestrated
-> Julia subprocess, read `../orchestrating-agents/references/measurement-and-resources.md` P7 and
-> run through `agent-resource-run`. This applies even without a subagent. P7 alone owns the
-> envelope schema, GPU-first exception test, aggregate reservations, and limits.
-> **Staleness registry**: fast-moving facts are tagged `[dated:YYYY-MM]` in place (locality
-> beats physical isolation — the fact IS the decision input where it sits). Before trusting one,
-> `grep -rn '\[dated:' agents/skills/writing-julia/` and re-verify anything older than ~2 quarters:
-> Julia version baseline (here) · `juliac --trim` experimental status (setup.md §3.5/§3.5.1/§3.6) ·
-> JETLS-replaces-LanguageServer (setup.md §8) · no-native-traits / not-on-roadmap (architecture.md
-> §10.2.1) · JSON3-deprecated / JSON.jl-v1-is-the-answer (packages.md, Data — Interchange) ·
-> Lux-is-default / Reactant-is-a-weakdep / Lux's published AD order / Mooncake-Tier-III
-> (toolchain.md §2.9.3, packages.md NN, the heavy-deps checklist below).
->
-> **Changelog (recent)**:
-> - v2608.3.0: **Lux is the default NN library; Reactant is a `[weakdeps]` opt-in.** Backend order
->   INVERTS between autodiff.md §2.7.3 and a Lux model — toolchain.md §2.9.3; ledger 2026-08-17.
-> - v2608.2.0: **data-axis void closed.** packages.md Data split into Persistence / Interchange /
->   Visualization. Interchange: `JSON.jl` **v1**, not `JSON3` (deprecated `[dated:2026-08]`);
->   `JSON.parse(s, T)` IS the §2.1.3 barrier; `allownan` now false by default. Full entry + source
->   grades: `tests/forge-verification-ledger.md` (2026-08-14).
-> - v2607.3.1: **GPU sibling landed.** The "direct GPU-array entries (CUDA/Metal)" deferral
->   below is now CLOSED for CUDA: `optimizing-julia-gpu-kernels` owns device kernels, CuArray
->   performance, and kernel-under-AD (reciprocal routing row added). Metal remains deferred.
-> - v2607.3.0: **package-catalog gap patch (audit-driven: Terra 5.6 + a 5-lens fleet).** Closed the
->   holes where the catalog omitted anchors its OWN philosophy demands (frontend-per-primitive;
->   "each shape has one answer"; the mandatory DrWatson lifecycle) — NOT starter-kit inflation.
->   packages.md gains: a **Numerical integration** block (`QuadGK` 1-D · `Integrals` frontend), a
->   **linear & nonlinear systems at scale** block (`LinearSolve` frontend · `Krylov` backend — not
->   IterativeSolvers, superseded · `NonlinearSolve` for N-D F(x)=0), `Distributions` as the first
->   non-stdlib probability add, and `JLD2` as the DrWatson result-serialization anchor. Bugs fixed:
->   §2.0.2's "each shape has one answer" table was missing the N-D nonlinear-system row
->   (`NonlinearSolve` added; §9 checklist synced); setup.md §3.4's DrWatson example mixed a stale
->   `.bson` savename with `.jld2` @tagsave (now `.jld2` throughout — DrWatson's BSON default is
->   retired); toolchain.md §2.9.5 wrongly framed `Reactant` as replacing hand-written `CUDA.jl`
->   (they are parallel choices — XLA tracing vs GPU arrays). Deliberately deferred (point-of-use /
->   narrower audience): Optimization.jl frontend promotion, direct GPU-array entries (CUDA/Metal).
-> - v2607.2.0: **house-bar reforge (LAW + gates + routing).** External review accepted in part:
->   added THE LAW + named gates JG0–JG4 (JG3 promotes architecture.md §10 from
->   read-when-needed to a first-class gate — fires the moment a package outgrows one file);
->   added the Routing table (reciprocal cuts: implementing-and-debugging / refactoring-code
->   co-fire order, proving-theorems, running-python-tools) — the sibling side had these landed
->   since 2026-07-04/05, this side was missing (F2 asymmetry). Trigger set overhauled: fire set
->   gains the architecture asks (include order, circular deps, submodule-vs-subpackage,
->   weakdeps, piracy, public/export, ambiguity, invalidation), no-fire set rebuilt as true
->   near-misses. Dated-facts registry added (grep `[dated:`). `tests/forge-verification-ledger.md`
->   added (F3 was incomplete: trigger set only, no findings ledger).
-> - v2607.1.1: **Effective Julia gap patch.** Added the missing guardrails surfaced by the
->   `let`/`const` + "Effective Julia" near-miss: `let` is a scope/fresh-binding tool (not normal
->   declaration syntax), `const` is global/const-field only; `Val` is a type-domain contract, not
->   a runtime speed spell; dense `Array` loops respect column-major memory order or use
->   `eachindex`; immutable `struct` remains the default, with `mutable struct` reserved for real
->   identity/state mutation. Trigger rows updated.
-> - v2607.1.0: **type discipline reforged.** performance.md §2.1 rewritten as the type-stability
->   home: **multiple dispatch ≠ dynamic dispatch** (never "ban dispatch" — discipline is SCOPED to
->   hot loops / AD paths / compile boundaries); instability sources incl. **non-concrete struct
->   fields → parametrize** (`struct A{M<:AbstractMatrix}`); small `Union`s explicitly fine;
->   **§2.1.3 function barrier** (dynamic shell / type-stable core). setup.md **§3.5.1 shipping a
->   `.so` — two routes**: PackageCompiler `create_library` (STABLE — fat bundle, `init_julia`
->   contract, one Julia runtime per process) vs `juliac --trim` (EXPERIMENTAL — dispatch-free
->   `@ccallable` surface + type-stable deps); Layer-2 "not for research code" refined to "not for
->   whole research codebases — an extracted type-stable kernel is exactly what trim compiles".
->   Trigger keywords added (type stability/型安定, function barrier, PackageCompiler, juliac
->   --trim, @ccallable, .so). `tests/trigger-set.md` added (F3).
-> - v2606.6.2: setup.md **§7 Output Files** corrected + expanded. `DelimitedFiles` clarified as an
->   *upgradeable* stdlib (bundled/pre-installed since 1.9, **NOT** being removed/unbundled —
->   JuliaLang/julia#50697) that a package must still declare in **`[deps]` + `[compat]`** (Aqua-
->   enforced); the real "dependency risk" is undeclared implicit `@stdlib` loading, fixed by
->   declaring — not by rewriting I/O. I/O tool now chosen by data shape (readdlm/writedlm = simple
->   numeric · CSV.jl+DataFrames = real tabular); hand-rolled `readlines`+`split`+`tryparse` flagged
->   an anti-pattern for real CSV (niche perf trick only).
-> - v2606.6.1: packages.md **Data & visualization** gains the CairoMakie **CJK-font root fix** —
->   non-Latin (日本語/中文/한글) labels need a CJK-capable theme font (`set_theme!(fonts=…)` to a
->   Noto/HaranoAji/Hiragino OTF path) or Makie crashes on missing glyphs; shared `scripts/plots.jl`
->   preamble pattern; CairoMakie stays a script-only dep.
-> - v2606.6.0: architecture.md **§10.2.1 Holy traits** added — when single inheritance can't
->   express cross-hierarchy / foreign-type behavior; zero-cost **only when the trait fn is
->   inferable**; hand-rolled THTT as default (SimpleTraits/Interfaces optional, no heavy trait
->   dep); trait fn obeys no-piracy. §10.6.1 gains the `@which`/`methods`/`@code_typed` "which
->   method ran / where from" dispatch-tracing workflow. Decision table + checklist updated.
-> - v2606.5.0: **reorganized into progressive-disclosure layout.** SKILL.md trimmed to §1 + §2.0
->   + the reference index + the §9 checklist; performance/AD/toolchain/packages/setup split into
->   `references/`. Environment setup rewritten **host-agnostic** (juliaup + `--project=.`). No
->   coding-discipline content changed.
-> - v2606.4.0: §3.5 TTFX layered countermeasure map; `juliac`/`JuliaC.jl` as the 1.12 AOT face.
-> - v2606.3.x: AD layer restructured around DifferentiationInterface + ADTypes as the single
->   frontend; Chairmarks the default benchmarker; §4 package tables rewritten.
-> - v2604.2.0: §2.0 numerical methodology discipline added (FD / grid / lerp forbidden by default).
+> **Version**: v2609.3.0 (2026-09-21) — ZERO-EXPORTS + explicit imports mandatory; delimiters ≠ output encoding (merges parallel v2609.1.0).
+> **Scope**: modern Julia for research, from numerical method to a distributable package contract.
+> **History and source grades**: `tests/forge-verification-ledger.md`.
+
+```bash
+for f in performance autodiff toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
+```
+
+Fast-moving facts carry `[dated:YYYY-MM]` at their decision locus. Re-check stale tags against the
+primary source before spending them. The ledger records prior versions and retired claims.
+
+Before a recordable or parallel Julia run, read P7 in `orchestrating-agents`.
+Run through `agent-resource-run`. P7 alone owns resource limits.
 
 ## THE LAW
 
 > A fast implementation of the wrong method is still wrong, and an idiomatic-looking Julia file
 > can still be a Python program in disguise. Precedence: **method before speed, types before
-> tuning, architecture before growth.** §2.0 (methodology) and §1 (pitfalls) are read FIRST and
-> outrank everything in `references/`; and the moment a package outgrows one file, its structure
-> passes the architecture gate (JG3) — not "when someone asks about architecture."
+> tuning, package contract before repository decoration, architecture before growth. Namespace
+> injection is forbidden: **zero exports, public-only API, explicit imports.** §2.0 and §1 outrank
+> the references. JG6 fires at package birth; JG7 fires on every module/API/import change.
 
-## The gates — JG0–JG4, each with a checkable artifact
+## The gates — JG0–JG7, each with a checkable artifact
 
 | Gate | Rule | Artifact |
 |---|---|---|
-| **JG0 methodology** (§2.0, deny-gate) | FD derivative estimation / grid sampling / lerp-as-evaluation **FORBIDDEN by default**; long-running scripts flush per step | an invoked exception carries a **one-line comment in the code** naming which permitted exception applies — no comment = violation |
-| **JG1 pitfalls** (§1) | 1-indexing, `.*` vs `*`, no globals in hot loops, typed containers, `let`/`const` semantics | §9 Correctness checklist rows green |
-| **JG2 type discipline** (performance.md §2.1) | concrete/parametric struct fields; function barrier for runtime-typed data; dispatch discipline SCOPED to hot paths — never "ban dispatch" | **JET** `report_package` clean (or reports justified); `@code_warntype`/DispatchDoctor on must-be-fast fns |
-| **JG3 ARCHITECTURE** (architecture.md §10) ★ | **Fires the moment a package outgrows ONE file, adds a dep/extension, or defines public API** — do not wait to be asked: one top-level module; ALL `include`s in the boss file in dependency order (an `include` in a subfile is a defect); circular type deps → hoist to `interfaces.jl`; growth → **subpackage/interface package, not submodules**; optional/heavy deps → **`[weakdeps]` extensions, not Requires.jl**; API via `export`/`public`; **no type piracy, no non-const globals**; cross-hierarchy behavior → inferable Holy trait | **Aqua** `test_all` clean (piracy/ambiguities/stale deps); boss-file include order readable top-to-bottom; ExplicitImports clean |
-| **JG4 reproducibility** (setup.md) | `--project=.` on every invocation; `Project.toml`+`Manifest.toml` committed; no declared-but-unused deps; experiment scripts follow the DrWatson lifecycle | `Pkg.status` matches `using`s; §9 Environment rows green |
-| **JG5 EXPERIMENT PROVENANCE** (setup.md §3.4) ★ | Fires on RUNNING any experiment/benchmark whose numbers may enter a results record — not just on writing package code. A result-producing run MUST be reproducible from the repo: runner script lives in the repo (scratchpad-only runners are FORBIDDEN for recordable results), inputs/params declared, output written via DrWatson `@tagsave`/`savename` (git commit auto-recorded) or an equivalent registry binding experiment-ID → script+commit+params. Protocol constants (seeds, data slices, eval windows) come from ONE shared module, never copy-pasted per script | the run's output file contains the commit hash (tagsave `gitcommit` field) or the registry row exists; `grep` finds the runner under version control, not only in a scratchpad |
+| **JG0 method** (§2.0) | Deny FD/grid/lerp; flush long runs. | Exception comment. |
+| **JG1 pitfalls** (§1) | Julia syntax, scope, broadcast, typed data. | §9 rows green. |
+| **JG2 types** (`performance.md`) | Parametrize; isolate runtime types. | JET + hot checks. |
+| **JG3 architecture** (`architecture.md`) | Role files, includes, namespaces, API. | Include order + scoped Aqua/ExplicitImports. |
+| **JG4 environment** (`setup.md`) | Exact profiles instantiate; libraries resolve fresh. | `Pkg.status` or fresh `Pkg.test`. |
+| **JG5 provenance** (`setup.md`) | A run may enter a result record. | ID → runner + inputs + commit. |
+| **JG6 package** (`packaging.md`) | Identity, deps, workspace, registry, release. | PK0 + checklist + PK4/PK8 gate. |
+| **JG7 namespace** (`architecture.md` §10.5) | No exports; public API and dependency use are explicit. | `no_exports.jl` + strict ExplicitImports. |
 
 ## Routing — sibling cuts (reciprocal; the sibling side landed 2026-07-04/05)
 
 | Sibling | Cut |
 |---|---|
-| governing-configuration-systems | **DECISIVE:** Project.toml, Manifest.toml, and Julia-side parsing/interchange implementation → HERE. Consumer/trust, authority, canonicalization, and target-acceptance contract → governing-configuration-systems. |
-| `implementing-and-debugging` | **Co-fire on any non-trivial Julia feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, root-cause vs symptom, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Julia looks like inside that frame (JG0–JG4). Its reciprocal row: "language skills own correctness/perf idiom." |
-| `refactoring-code` | **Co-fire on any behavior-preserving Julia restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Julia-specific oracle components (JET / Aqua / `report_package` as the green bracket) and the Julia-safe transforms (JG3: include-order moves, subpackage extraction, weakdeps migration). A Julia refactor that improves no named property is still 場当たり churn — its G3 applies unchanged. |
-| `practicing-tiger-style` | **LANGUAGE cut**: “Is the unresolved question Julia/SciML method, type stability, numerical semantics, or Julia-specific measurement rather than the cross-language risk ledger?” **Yes** → Julia mechanisms stay HERE; **No** → `practicing-tiger-style` owns the ledger. Co-fire when both remain material. |
-| `proving-theorems` | PURPOSE cut: formalizing/machine-checking a THEOREM (Lean, proof assistants) → there, even when the math started life as Julia numerics. Numerical computation/experiment in Julia → here. "Port this Julia result to a formal proof" → there, this stays for the Julia side only. |
-| `optimizing-julia-gpu-kernels` | DECISIVE cut — **does the code run on (or manage) the device?** CUDA.jl / KernelAbstractions kernels, CuArray performance, launch config, GPU profiling, kernel-under-AD (rrule for a kernel) → there. Host-side type discipline, AD frontend choice, package architecture → HERE. Co-fire with ORDER on GPU-in-Julia work: JG2 type discipline is that skill's GK1 precondition — instability that is merely slow on CPU is a COMPILE ERROR inside a kernel. toolchain.md §2.9.5's Reactant-vs-CUDA.jl framing stays here; the moment a hand kernel or CuArray perf question appears → there. |
-| `running-python-tools` | LANGUAGE cut: invoking a Python CLI/one-off → there. Calling Python FROM Julia (SymPyPythonCall, PythonCall/juliacall boundary) → HERE — that is a Julia dependency-architecture decision (JG3/packages.md), not Python tooling. |
-| `writing-python` | LANGUAGE cut: authoring/reviewing Python that lives in a repo (a Python project beside the Julia one, pyproject.toml, Python library selection) → there; the PythonCall/juliacall boundary itself stays HERE. |
-| `raising-resolution` | Silent sub-step (its owner-filter chain routes Julia work here): inspect the actual code/env (`versioninfo()`, `Pkg.status`, `@which`) before asserting a Julia fact. |
+| governing-configuration-systems | **DECISIVE:** Julia manifests/parsers → HERE. Config authority → there. |
+| `wiring-repositories` | **BY ARTIFACT:** Julia package content → HERE. Repo layer set and polyglot roots → there. |
+| `implementing-and-debugging` | **Co-fire:** its BUILD/DEBUG gate first; Julia correctness here. |
+| `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
+| `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
+| `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
+| `optimizing-julia-gpu-kernels` | **DEVICE:** kernel/CuArray work → there. Host types/packages → HERE. |
+| `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
+| `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
+| `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |
 
 ## MUST NOT FIRE
 
-A question ABOUT the Julia ecosystem with no code to write (licensing, history, "what is JuliaHub")
-— plain answer. Prose/docs ABOUT a Julia project (README, paper text → `linting-prose` /
+A package-authoring or distribution decision fires even before code exists. Descriptive ecosystem
+questions stay plain when they change no artifact. Examples are history, hosting facts, and legal
+license interpretation. Prose/docs ABOUT a Julia project (README, paper text → `linting-prose` /
 `structuring-documents`). Formal proofs (→ `proving-theorems`). Python/R/C++ numerics with no Julia
 in play (Python tooling → `running-python-tools`). The full near-miss set is
 `tests/trigger-set.md` — desk-check it after any description edit.
@@ -170,12 +86,13 @@ reference file that matches the task.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/performance.md` | §2.1–§2.6 hot-path performance — **§2.1 type discipline: multiple vs dynamic dispatch, instability sources (non-concrete struct fields → parametrize), function barriers, `Val` guardrails**, globals/`const`/captured `let`, pre-alloc, broadcast, column-major loop order, `@inbounds`/`@simd`, benchmarking + §2.8 static verification (JET / DispatchDoctor / AllocCheck) | writing any repeated/hot-path computation, any struct definition, or before claiming code is correct |
-| `references/autodiff.md` | §2.7 DifferentiationInterface frontend, `prepare_*`, backend selection, **§2.7.4 Dual-propagation rules** | any function that will be differentiated |
-| `references/toolchain.md` | §2.9 modern toolchain map — StaticArrays, ComponentArrays, Lux+Reactant, OhMyThreads + selection table | choosing a data structure, GPU/NN, or parallelism tool |
-| `references/packages.md` | §4 recommended packages by domain (AD, optimization, diffeq, algebra, **symbolic discipline**, manifolds, **data: persistence vs interchange — JLD2/HDF5/Arrow vs JSON.jl v1**, viz) | deciding which package to install for a task, or moving data across a process/language boundary |
-| `references/setup.md` | §3 install + project env + reproducibility + **§3.4 experiment-script lifecycle (DrWatson: an experiment is a *run* not a file; `src`/`scripts`/`_research`/distill 4-layer boundary; parameterize-don't-duplicate; distill-then-discard — prevents hundreds of accreted one-off scripts)** + TTFX + **§3.5.1 shipping a `.so` (PackageCompiler `create_library` vs `juliac --trim`)**, §5 running, §6 idioms, §7 output, §8 local-dev pointers + **§8.1 notebooks/literate docs (Pluto / Quarto / Documenter)** | setting up Julia, running code, managing reproducible experiments / avoiding experiment-script accretion, compiling a shared library / AOT binary, or choosing a notebook/report tool |
-| `references/architecture.md` | §10 large-package architecture — one-module / role-split files / `include` order, circular-dep fix, **Holy traits for cross-hierarchy behavior (§10.2.1)**, subpackage & interface-package scale-out, package extensions (`[weakdeps]`), public API, anti-spaghetti invariants (no globals / no type piracy), **`@which`/`methods` dispatch tracing**, TTFX & invalidation hygiene | structuring a package beyond one file, organizing a large/growing codebase, or doing trait-based dispatch |
+| `references/performance.md` | types, hot paths, memory, benchmarks, checks | numeric or struct code |
+| `references/autodiff.md` | DI frontend, preparation, backend choice, dual propagation | differentiated functions |
+| `references/toolchain.md` | data structures, NN/accelerator stack, parallelism | structure or compute-tool choice |
+| `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
+| `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
+| `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT, output, REPL | runs and deployment |
+| `references/architecture.md` | topology, ZERO-EXPORTS, explicit imports, traits, API, hygiene | implementation structure |
 
 ---
 
@@ -200,7 +117,6 @@ reference file that matches the task.
 | `x // y` | `div(x, y)` or `x ÷ y` | `//` creates Rational in Julia |
 | `import time; time.time_ns()` | `time_ns()` | Top-level function, no module prefix |
 | `None` | `nothing` | |
-
 | `True / False` | `true / false` | Lowercase |
 | `len(x)` | `length(x)` | |
 | `x.append(v)` | `push!(x, v)` | Mutating functions end with `!` |
@@ -286,19 +202,17 @@ push!(results, 1.0)
 
 ## 2.0 Numerical Methodology Discipline (READ FIRST — FD / grid / lerp are FORBIDDEN by default)
 
-This is the precedence-setting section. §2.1–§2.9 (performance, AD, tooling — in `references/`)
-cover *how* to write the chosen approach correctly; §2.0 governs *what* approach is allowed.
+This section sets precedence. §2.0 governs *what* approach is allowed.
+The references govern *how* to implement that choice.
 
-LLMs habitually fall into three numerical-method pitfalls. **All three are FORBIDDEN as the
-primary approach.** Permitted exceptions are listed; if you must invoke one, write a one-line
-comment in the code stating which exception applies. **Do not deviate silently.**
+LLMs habitually fall into three numerical-method pitfalls. All three are denied as the primary
+approach. A permitted exception requires a one-line code comment naming the exception.
 
 ### 2.0.1 Finite-difference derivative *estimation* — FORBIDDEN. Use AD.
 
-This forbids estimating the derivative/gradient/Jacobian/Hessian of a smooth numerical objective
-by finite differencing. It does **not** forbid finite-difference *discretizations* where the
-mathematical method itself is a finite-difference scheme — PDE stencils, method-of-lines spatial
-derivatives, etc. are legitimate numerics, not derivative estimation.
+This forbids finite-difference estimates of derivatives for smooth numerical objectives.
+It does not forbid finite-difference discretizations. PDE stencils and method-of-lines spatial
+derivatives are numerical methods, not derivative estimation.
 
 ```julia
 # WRONG — estimating a derivative of a smooth objective by differencing
@@ -315,13 +229,10 @@ H     = hessian(f, backend, x)                 # Hessian
 # For input_dim ≫ 100, switch backend to AutoEnzyme() — see references/autodiff.md §2.7.3
 ```
 
-**Why**: FD derivative estimation trades truncation error against round-off, so it has an
-irreducible precision floor *and* needs step-size tuning. The floor depends on the scheme —
-forward difference bottoms out near √eps ≈ 1e-8 (measured 3e-9 for sin at x=1), central
-difference does better at ~eps^(2/3) ≈ 1e-11 (measured 1e-11) — but both stay far above machine
-precision, both need a tuned `h`, and high-order derivatives compound the error. AD has no
-truncation error (measured exactly 0.0 on the same test), needs no step size, and composes for
-higher derivatives.
+**Why**: FD balances truncation against round-off and requires a tuned step size.
+Forward difference bottoms out near √eps; central difference near eps^(2/3).
+Both remain above machine precision, and higher derivatives compound error.
+AD has no truncation error, needs no step size, and composes for higher derivatives.
 
 **Permitted exceptions** (write the exception in a comment):
 - Cross-checking an AD-computed gradient at one point during initial development (DI provides
@@ -349,8 +260,7 @@ result = Optim.optimize(v -> f(v[1], v[2]), [x0, y0], LBFGS();
 # Feasible set is a manifold → Manopt (packages.md). Closed form → use it.
 ```
 
-**Why**: N^D scaling (curse of dimensionality), resolution-bounded, no convergence guarantee,
-wastes compute on irrelevant regions.
+**Why**: grid cost scales as N^D, resolution bounds the answer, and convergence is not guaranteed.
 
 **Permitted exceptions** (write the exception in a comment):
 - Visualization (plotting f over a region — the grid IS the deliverable).
@@ -377,9 +287,8 @@ using Interpolations  # or ApproxFun.jl for Chebyshev
 itp = cubic_spline_interpolation(xs, ys)  # O(h^4), bounds analyzable
 ```
 
-**Why**: lerp injects an O(h²) error that becomes the *dominant* error in any downstream
-analysis requiring smoothness, derivatives, or convergence rates. AD on a lerp'd function
-produces a piecewise-constant "derivative" that is meaningless.
+**Why**: lerp injects O(h²) error. It can dominate work needing smoothness or convergence rates.
+AD through lerp produces a piecewise-constant derivative.
 
 **Permitted exceptions** (write the exception in a comment):
 - Visualization at sub-pixel scales (the lerp IS the rendering).
@@ -388,16 +297,13 @@ produces a piecewise-constant "derivative" that is meaningless.
 
 ### Combined pattern: grid + lerp = doubly wrong
 
-The most common LLM failure mode combines §2.0.2 and §2.0.3: "evaluate `f` on a 100-point grid,
-then `lerp` to 10000 query points." Both forbidden. Either compute analytically/AD, or use a
-proper interpolant with documented error bounds — never the grid+lerp combination.
+The common combined failure tabulates `f` on a coarse grid, then lerps many query points.
+Both steps are denied. Compute directly or use an interpolant with documented error bounds.
 
 ### 2.0.4 Long-running scripts: flush per-step progress, or you fly blind
 
-Julia **block-buffers `stdout` when it is not a TTY** — redirected to a file, a pipe, a background
-task, or a Monitor. Without an explicit `flush(stdout)` after each step, a script that runs for 20
-minutes emits **nothing** until it exits: its whole runtime is unobservable, and you cannot tell
-"still working" from "hung." Every loop / multi-step probe MUST flush a progress line per iteration.
+Julia block-buffers `stdout` when it is not a TTY. A pipe, file, background task, or Monitor can
+therefore show nothing until exit. Every long loop or multi-step probe must flush each iteration.
 
 ```julia
 # WRONG — buffered: 0 bytes visible for the entire run, then a dump at exit
@@ -411,11 +317,8 @@ for k in 1:K
 end
 ```
 
-For real progress bars use `ProgressMeter.jl` (`@showprogress` / `next!(p)` flush internally). For a
-restart heuristic, print **each restart's** result flushed, not just the final summary. And match
-batch size to observability: a 40-solve sweep with no per-solve flush is a 20-minute blind spot —
-prefer the smallest N that answers the question, emitted incrementally (this *is* the lightweight-probe
-discipline; a buffered batch silently defeats it).
+Use `ProgressMeter.jl` for real progress bars. Print and flush each restart, not only the summary.
+Match batch size to observability. Prefer the smallest increment that answers the question.
 
 ---
 
@@ -426,54 +329,63 @@ Correctness (§1):
 - [ ] No untyped containers (`Float64[]` not `[]`); no globals captured in hot loops
 - [ ] Functions return consistent types; `end` closes every block; `$` interpolation; `time_ns()`
 - [ ] Controlled text chooses `"""..."""` before source-level `\"`; JSON uses `JSON.json` on data, never a hand-escaped interpolation template
-- [ ] `let` creates a hard local scope / fresh binding; `const` is for globals or const fields in `mutable struct`, never a local variable declaration (setup.md §6 / performance.md §2.2)
+- [ ] `let` creates a fresh hard-local binding.
+- [ ] `const` is for globals or const fields, never a local declaration (§2.2).
 
 Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in code):
 - [ ] No FD *derivative estimation*: gradients/derivatives of smooth objectives go through DI
       (`gradient(f, backend, x)`), never `(f(x+h)-f(x))/h`. (FD *discretizations* like PDE stencils are fine.) (§2.0.1)
-- [ ] No grid sampling for continuous optima: `Optim`/`JuMP`/`Roots` (1-D) / `NonlinearSolve` (N-D systems F(x)=0) / closed form (§2.0.2)
+- [ ] Continuous optima use a solver or closed form, not a grid (§2.0.2).
 - [ ] No lerp as evaluation substitute; no grid+lerp combination (§2.0.3)
-- [ ] Long-running / looping scripts `flush(stdout)` per step (or `ProgressMeter`); never a buffered batch that emits nothing until exit — background tasks and Monitor are blind otherwise (§2.0.4)
+- [ ] Long loops flush each step or use `ProgressMeter` (§2.0.4).
 
 AD — `references/autodiff.md` (if any function will be differentiated):
 - [ ] Differentiation goes through `DifferentiationInterface` with an `ADTypes` backend, not raw backend calls (§2.7.1)
 - [ ] Repeated differentiation uses `prepare_*` once, reused in the loop (§2.7.2)
 - [ ] Backend choice justified by input dimension and profile, not habit (§2.7.3)
-- [ ] If `AutoForwardDiff` is in the path: all `zeros()` use `eltype(x)`, no `Float64()` casts, no `eigvals` in the AD path, branch selection done in Float64 first (§2.7.4)
+- [ ] ForwardDiff paths propagate `eltype(x)` and avoid `Float64` casts (§2.7.4).
 
-Performance & verification — `references/performance.md` (for hot paths; reach for a tool only when its need is real — see packages.md §4 header):
-- [ ] **Type discipline (§2.1)**: struct fields concrete or parametric (`struct A{M<:AbstractMatrix}`, never bare `data::AbstractMatrix` / untyped fields); runtime-typed data (config, I/O, `Any` columns) crosses a **function barrier** before the hot loop (§2.1.3); multiple dispatch used freely — only *runtime* dispatch inside hot loops / AD paths / `@ccallable` boundaries is the bug, never dispatch per se (§2.1.1)
-- [ ] `Val` appears only when the value is already a compile-time/type-domain fact; never wrap runtime config/user input in `Val(x)` to "make it fast" (§2.1.4)
+Performance & verification — `references/performance.md`:
+- [ ] Struct fields are concrete or parametric; runtime-typed data crosses a function barrier (§2.1).
+- [ ] Multiple dispatch is free to use; runtime dispatch is removed only from hot/static paths.
+- [ ] `Val` carries an existing compile-time fact, never runtime config (§2.1.4).
 - [ ] First call is warmup; timing on the second (§2.6); `@btime`/`@b` with `$`-interpolated args
-- [ ] Dense `Array` loops respect column-major memory order (`eachindex` or innermost first index); `@inbounds` follows an `axes`/`eachindex` proof, not hope (§2.5)
-- [ ] Small fixed-size data uses `StaticArrays`; *if* params are already structured into many named blocks, `ComponentArrays` (toolchain.md §2.9.1 / §2.9.2)
-- [ ] Default to immutable `struct`; use `mutable struct` only for identity/state mutation, with typed fields and `const` fields for invariants when useful (§2.1.2 / setup.md §6)
+- [ ] Dense loops use column-major order; `@inbounds` follows an index proof (§2.5).
+- [ ] Small fixed data uses StaticArrays; named parameter blocks may use ComponentArrays.
+- [ ] Immutable structs are default; mutation requires identity/state semantics (§2.1.2).
 - [ ] **JET**: `report_package` clean (or reports justified); consider `@stable` on must-be-fast functions (§2.8)
-- [ ] *If* an inner loop must be allocation-free and you've added AllocCheck for it: `@check_allocs` passes (§2.8) — don't carry AllocCheck without a guarded loop
-- [ ] **Aqua** (if authoring a package): `Aqua.test_all` clean — no type piracy / ambiguities / stale deps / compat gaps (architecture.md §10.6.1)
-- [ ] *If* the work is genuinely parallel: reductions use `OhMyThreads`, never `threadid()`-keyed buffers (toolchain.md §2.9.4) — serial code carries no threads dep
-- [ ] Recordable/pilot/benchmark/parallel runs have a P7 resource envelope and `agent-resource-run` verdict; no `-t auto`, unbounded process fanout, or runtime cap escalation
+- [ ] Allocation-free kernels pass `@check_allocs`; otherwise omit AllocCheck.
+- [ ] Authored packages pass scoped Aqua and ExplicitImports checks (§10.6.1).
+- [ ] Parallel reductions use OhMyThreads, never `threadid()` buffers (§2.9.4).
+- [ ] Recordable or parallel runs have a P7 envelope and `agent-resource-run` verdict.
 
 Environment — `references/setup.md`:
-- [ ] If shipping a `.so`/AOT binary: route chosen per §3.5.1 — PackageCompiler `create_library` (stable, fat) vs `juliac --trim` (experimental; needs a dispatch-free `@ccallable` surface + type-stable deps) — never "Julia can't make a .so" and never trim-by-default
+- [ ] A `.so`/AOT build follows setup.md §3.5.1; never trim by default.
 - [ ] `--project=.` (or a named env) on every `julia` invocation (§5)
-- [ ] `Project.toml` / `Manifest.toml` committed for reproducibility (§3.3)
-- [ ] **No declared-but-unused deps.** Every entry in `[deps]` is actually `using`/`import`ed in
-      committed code; packages added at point of use, not preemptively from the packages.md catalog;
-      a dep whose last use was deleted is `Pkg.rm`'d in the same commit. Heavy offenders to never carry
-      speculatively: `Enzyme`/`AllocCheck` (LLVM+GPUCompiler), `Manopt`+`Manifolds` (~100 transitive),
-      `Reactant` (XLA compile toolchain — `Lux` alone does NOT pull this in; Reactant is a Lux
-      `[weakdeps]` extension `[dated:2026-08]`). Declared-but-unused deps inflate Manifest, instantiate, and TTFX, and make
-      every `Pkg` op trigger native recompiles for code never called (packages.md §4 header).
-- [ ] Data crossing a process/language boundary names its axis first: persistence vs interchange.
-      Persistence is `JLD2` (→ HDF5/Arrow by reader); interchange is **`JSON.jl` v1**, never JSON3
-      (deprecated). The parse names its target type — `JSON.parse(s, T)` — so no `Any`/`LazyValue`
-      reaches a hot path (packages.md §4 "Data" · performance.md §2.1.3)
-- [ ] If symbolic computation is involved: the symbolic tool is chosen by ROLE, not preference (packages.md §4) — **SymEngine** for lightweight/throwaway algebra (no `simplify`/`integrate`); **Symbolics + ModelingToolkit** as the spine of an AI4S/SciML project (codegen, PDE/DAE, discovery — required there, not forbidden); **SymPyPythonCall** called as a service at a thin boundary for heavy CAS (`integrate`, `trigsimp`, `factor`, assumptions). Symbolic construction is localized in one module so the spine is never re-typed.
+- [ ] Exact environments use the manifest policy selected by JG6 (§3.3).
+- [ ] Recordable runs satisfy JG5 and the P7 resource gate.
 
-Package architecture — `references/architecture.md` (when the code outgrows one file / a large package):
-- [ ] One top-level module; files split by role (types vs functions); **every `include` in the boss file in dependency order**, none in subfiles (§10.1)
+Package contract — `references/packaging.md`:
+- [ ] PK0 names consumer, topology, and distribution target.
+- [ ] Package name, UUID, module, and `src/<name>.jl` agree.
+- [ ] Runtime, optional, development, and payload dependencies use distinct mechanisms.
+- [ ] `[compat]`, workspace, and manifest policy match the selected profile.
+- [ ] Package state is external, relocatable, and never written into the installed tree.
+- [ ] Fresh install/import/test passes; registry checks run only for the chosen registry.
+
+Namespace contract — `references/architecture.md` §10.5:
+- [ ] No root, child, or extension module exports or reexports any binding.
+- [ ] `Reexport.jl` is not a dependency.
+- [ ] `Requires.jl` is not a dependency.
+- [ ] Stable API uses `public`; `[compat] julia = "1.11"` exactly.
+- [ ] The copied `assets/no_exports.jl` gate passes for source, runtime state, API set, and extensions.
+- [ ] Every §10.5.1 ExplicitImports check passes under the strict keyword settings.
+- [ ] Existing exports are removed as a breaking release, never kept as a transition shim.
+
+Package architecture — `references/architecture.md`:
+- [ ] One public top-level module; ordinary role-file includes are ordered in the boss file (§10.1).
 - [ ] Circular type deps resolved by hoisting abstract types to `interfaces.jl` loaded first (§10.2)
-- [ ] Cross-hierarchy / foreign-type behavior done via **Holy trait** with an **inferable** trait fn (not a forced supertype, not a trait dep); trait fn obeys no-piracy (§10.2.1)
-- [ ] Growth handled by **subpackage / interface package**, not submodules; optional/heavy deps via **package extensions `[weakdeps]`**, not `Requires.jl` (§10.3–§10.4)
-- [ ] Anti-spaghetti invariants hold: no non-const globals, **no type piracy**, small dispatched functions (§10.6); public API via `export`/`public` (§10.5)
+- [ ] Cross-hierarchy behavior uses an inferable Holy trait without piracy (§10.2.1).
+- [ ] Namespace-only boundaries use submodules; independently reusable/versioned parts use packages (§10.3).
+- [ ] Optional integration code lives in its named `ext/` module (§10.4).
+- [ ] No non-const globals or piracy; public API uses `public` only (§10.5–§10.6).

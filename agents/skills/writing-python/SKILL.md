@@ -19,7 +19,7 @@ paths: "**/*.py"
 
 # Writing Python — modern environment, selection & coding discipline
 
-> **Version**: v2608.1.0 (2026-08-03) — bounded recordable runs; auto process/test fanout retired.
+> **Version**: v2609.1.0 (2026-09-21) — string construction distinguishes source delimiters from output encoding; bounded recordable runs; auto process/test fanout retired.
 > **Scope**: environment/packaging discipline + library selection + typing/validation/quality
 >   gates for Python that **lives in a repo** (project, module, kept script); host-agnostic.
 > **Resource seam**: before a recordable numerical run, benchmark, parallel test, resident
@@ -158,6 +158,7 @@ deliberately, do not diff for byte-identity):
 | `os.path` string-joining | `pathlib.Path` | `PTH1xx` |
 | `typing.List`/`Optional[X]`/`Union[X,Y]` | `list[int]` / `X \| None` | `UP006`/`UP007` |
 | `%`-formatting / `.format()` | f-strings (except lazy `%s` args **inside logging calls**) | — |
+| hand-escaped JSON/SQL/HTML/shell value inside an f-string | data → its serializer / parameter or builder API; f-strings only for controlled human text | PG3 / boundary API |
 | naive `datetime.now()` / `datetime.utcnow()` | `datetime.now(UTC)` | `DTZ` |
 | bare `except:` / `except Exception: pass` | narrow catch, or `contextlib.suppress(...)` + `logging.exception` | `E722`/`BLE001`/`S110`/`SIM105`/`TRY400` |
 | mutable default args (`def f(x=[])`) | default `None`, materialize inside the body | — |

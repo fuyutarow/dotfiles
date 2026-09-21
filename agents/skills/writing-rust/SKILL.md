@@ -21,7 +21,7 @@ paths: "**/*.rs"
 
 # Writing Rust — modern crate selection & coding discipline
 
-> **Version**: v2607.1.0 (2026-07-06) — crate landscape verified against crates.io / lib.rs
+> **Version**: v2609.1.0 (2026-09-21) — adds the string-construction boundary; crate landscape verified against crates.io / lib.rs
 >   `[dated:2026-07]`. Forged from a 15-category adversarially-verified harvest (see
 >   `tests/forge-verification-ledger.md`), NOT from the raw catalog it started as.
 > **Scope**: correct, effective, current Rust for real projects — with crate selection as the
@@ -238,6 +238,15 @@ Unicode, DST, overflow) — OR pulling a crate for three lines std already provi
 concurrency), reach for the crate; if it's a thin convenience over std, write the std. Don't
 reinvent `serde`/`regex`/`clap`; don't add `itertools` to call one `.chunks()` std has.
 
+### 2.5 formatting is prose; encoders and binders own target languages
+
+For controlled human text with quotes or backslashes, use a raw format literal rather than a field
+of `\"` escapes: `format!(r#"run "{name}" scored {score:.4}"#)`. Add `#` delimiters when the
+literal contains `"#`. Raw literals remove source escapes, not format braces or target-language
+escaping. JSON, SQL, HTML, shell arguments, and URLs therefore use their serializer or binding API;
+for JSON, `serde_json::to_string(&serde_json::json!({ "name": name, "score": score }))?`, never
+`format!`. Values remain raw until that boundary.
+
 ---
 
 ## Checklist before submitting Rust
@@ -252,6 +261,7 @@ Over-reaches (§2 — FORBIDDEN as default, deviation needs a stated reason):
 - [ ] Not async-by-default: `tokio`/`async` present ⇒ the job is genuinely concurrent I/O (§2.1)
 - [ ] No `.clone()`/`Arc<Mutex>`/`unsafe`/`.unwrap()` reached for to appease the borrow checker; ownership restructured first (§2.2 / ownership.md)
 - [ ] No heavyweight crate where a light one or std fits (§2.3); no hand-roll of what a crate does correctly, no crate for what std already does (§2.4)
+- [ ] `format!` produces controlled human text; machine formats use their serializer/binder, and raw strings remove source escapes only (§2.5)
 
 Correctness & idiom (RG2/RG3 — `references/ownership.md`, `references/errors.md`):
 - [ ] Error model matches the crate kind: binary → `anyhow`/`eyre` + `.context()`; library → typed `thiserror` enum; **no `unwrap`/`expect`/`panic!` on fallible library paths** (`clippy::unwrap_used` clean)

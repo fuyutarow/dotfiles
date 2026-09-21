@@ -19,6 +19,7 @@ states the order. Created v2607.1.0 (2026-07-06).
 | 「Rust で OpenAPI の schema から型を手で書き起こしてる…」 | §1 その手があったか → `typify`/`progenitor` |
 | "pick a date/time crate for a new Rust project" | §1 supersession + selection.md → jiff vs chrono/time |
 | "which crate for a fast concurrent hashmap in Rust?" | selection.md → `scc`/`dashmap` (not `Arc<Mutex<HashMap>>`) |
+| 「Rust の `format!` が `\"` だらけ。JSON も混ぜている」 | raw literal `r#"..."#` is for controlled text only; JSON goes through `serde_json::json!` + serialization |
 | 「この Rust struct を Python から使いたい — PyO3/maturin でどう公開する?」 | LANGUAGE cut: binding architecture FROM Rust stays HERE (RG0/selection.md), not running-python-tools |
 | review this `src/parser.rs` (paths auto-activation on `**/*.rs`) | general Rust idiom review — RG0–RG4 |
 | 「この Rust、思ったより速くない。blazing fast にしたい」 | performance.md — the measured ladder (Rust ≠ automatically fast; measure first) |

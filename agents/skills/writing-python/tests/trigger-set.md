@@ -20,6 +20,7 @@ fires instead; a co-fire row states the order. Created v2607.1.0 (2026-07-12).
 | "mypy strict にしたら3000エラー出たんだけどどうすれば" | PG2 — typing.md strict-rollout discipline (migrate per-path, never a repo-wide flip) + the checker-landscape verdict (mypy vs pyright/ty) |
 | "polars と pandas、新規の ETL はどっち？" (selection ask) | PG1 — selection.md dataframes row (polars default for new pipelines; pandas' honest niche stated, not "legacy") |
 | "この dict をそのまま4関数に引き回してるコード、型付けたい" | PG3 boundary — raw-dict threading is the deny pattern; validate once into a model, then PG2 typed signatures on the four functions |
+| 「Python の f-string で JSON の `\"` と値の escape を手で書いている」 | controlled text → quote-delimited f-string; JSON → `json.dumps` / typed boundary, never pre-escape values; Python 3.14 `t`-strings are only for a custom processor |
 
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 

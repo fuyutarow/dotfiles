@@ -215,3 +215,14 @@ self-introduced contradiction (R4) → editor-judgment residuals (R5). The final
 Observed floor: 31 long prose sentences, 21-line version block, and 2 long table cells; exit 0.
 This change is the reciprocal cut only; no unrelated prose rewrite was authorized.
 Queue: next Rust reforge; retire this waiver when the recorded classes reach 0.
+
+## 2026-09-21: source delimiters vs output encoding (v2609.1.0)
+
+The rule assigns `format!(r#"..."#)` to controlled human text only. Raw literals remove source
+escapes; they do not encode JSON or bind another target language. `serde_json::json!` plus
+serialization owns JSON. Sources: https://doc.rust-lang.org/reference/tokens.html#raw-string-literals
+and https://doc.rust-lang.org/std/fmt/
+
+F3 receipt: added the trigger row; targeted `skill-check.ts` exited 0. `rustc` was unavailable on
+this host, so the raw-literal example is documentation-verified rather than compiler-smoked.
+Existing prose/version/table WARN debt remains disclosed above.

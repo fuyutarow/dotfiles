@@ -78,6 +78,25 @@ f"{name} is {age}"              # general string building
 logger.info("x=%s", x)          # lazy args INSIDE logging calls — not an f-string
 ```
 Why: f-strings for building; lazy `%s` defers formatting until a handler needs it. **A blanket f-string ban in logging is itself a bug, not this rule** — `[CONSENSUS]`. Enforcement: ruff `UP031` (printf-string-formatting) / `UP032` (f-string conversion) cover general use; logging `G`-rules flag eager f-strings in log calls.
+
+### Delimiters are source syntax; encoding is a boundary
+
+For controlled human text containing double quotes, use the other delimiter rather than `\"`:
+
+```python
+message = f'run "{name}" scored {score:.4f}'
+```
+
+Literal `{` and `}` in an f-string still require `{{` and `}}`; that is a signal not to write
+JSON as an f-string. Keep values raw and call `json.dumps({"name": name, "score": score})` for
+JSON; use parameterized queries, a DOM/framework API, an argument-vector subprocess API, or
+`urllib.parse`/`httpx` parameters for their respective target languages. An f-string neither
+escapes nor validates its inserted value.
+
+Python 3.14's `t`-strings `[dated:2026-09]` are **not** a newer spelling of f-strings: they return
+`string.templatelib.Template`, preserving literal and interpolation parts for a custom processor.
+Use them only when such a processor deliberately owns rendering/escaping and the project's minimum
+Python is 3.14; ordinary display text remains an f-string.
 ## 9. Mutable default arguments
 ```python
 # WRONG

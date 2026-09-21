@@ -24,7 +24,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Setup
 
-> **Version**: v2608.3.0 (2026-08-17) — Lux is the default NN library and is independent of Reactant; Lux-internal AD order inverts autodiff.md's.
+> **Version**: v2609.1.0 (2026-09-21) — string construction distinguishes source delimiters from output encoding; Lux is the default NN library and is independent of Reactant.
 > (prior: v2608.2.0 (2026-08-14, persistence vs interchange axes) · v2608.1.0 (2026-08-03, pre-pilot resource admission) · v2607.3.0 (2026-07-14, Julia 1.12.6 baseline `[dated:2026-07]`)
 > **Scope**: Correct, performant, modern Julia for theoretical research — host-agnostic. This
 > file holds the two precedence-setting sections inline (§1 Python→Julia pitfalls, §2.0
@@ -196,9 +196,11 @@ reference file that matches the task.
 | `for i in range(n):` | `for i in 1:n ... end` | `end` required; `1:n` not `0:n-1` |
 | `if x: ... elif: ... else:` | `if x ... elseif ... else ... end` | `elseif` not `elif` |
 | `f"x={x}"` | `"x=$x"` or `"x=$(expr)"` | String interpolation uses `$` |
+| `f'"key": {value}'` | `""""key":$value"""` | For controlled text containing `"`, triple quotes avoid source escapes |
 | `x // y` | `div(x, y)` or `x ÷ y` | `//` creates Rational in Julia |
 | `import time; time.time_ns()` | `time_ns()` | Top-level function, no module prefix |
 | `None` | `nothing` | |
+
 | `True / False` | `true / false` | Lowercase |
 | `len(x)` | `length(x)` | |
 | `x.append(v)` | `push!(x, v)` | Mutating functions end with `!` |
@@ -208,6 +210,31 @@ reference file that matches the task.
 | `not / and / or` | `! / && / \|\|` | |
 | `x ** 2` | `x ^ 2` | |
 | `isinstance(x, T)` | `isa(x, T)` or `x isa T` | |
+
+### String construction — delimiters are syntax; encoding is a boundary
+
+For human-readable, controlled text, choose the delimiter before inserting escapes:
+
+```julia
+label = """run "$name" scored $(round(score; digits = 4))"""
+```
+
+`"""..."""` still interpolates `$name` and `$(expr)`, while allowing ordinary `"` in the
+source. `raw"..."` is for literal backslashes or dollar signs and deliberately disables
+interpolation, so it is not the answer here.
+
+Do **not** turn an external format into a template and pre-escape each value. Interpolation calls
+`string`; it does not JSON-escape `name`, quote a shell argument, or bind SQL. For JSON,
+construct typed data and serialize it at the boundary:
+
+```julia
+using JSON
+
+payload = JSON.json((; name, score = round(score; digits = 4)))
+```
+
+Likewise use the target's parameter/builder API for SQL, shell commands, HTML, and URLs. Values
+stay raw until that API encodes or binds them exactly once.
 
 ### 1.2 Semantics that silently produce wrong results
 
@@ -398,6 +425,7 @@ Correctness (§1):
 - [ ] All indices start at 1; matrix multiply uses `*` (not `@`); element-wise ops use dot (`.+`, `.*`, `sin.()`)
 - [ ] No untyped containers (`Float64[]` not `[]`); no globals captured in hot loops
 - [ ] Functions return consistent types; `end` closes every block; `$` interpolation; `time_ns()`
+- [ ] Controlled text chooses `"""..."""` before source-level `\"`; JSON uses `JSON.json` on data, never a hand-escaped interpolation template
 - [ ] `let` creates a hard local scope / fresh binding; `const` is for globals or const fields in `mutable struct`, never a local variable declaration (setup.md §6 / performance.md §2.2)
 
 Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in code):

@@ -244,6 +244,8 @@
 | Job | Default | Alternative | Switch when |
 |---|---|---|---|
 | Multiline literal at natural indentation (SQL, help text) | `indoc` 2.x (dtolnay) | raw string + `.trim` (avoid) | runtime (non-literal) string → `unindent` |
+| Controlled human text containing `"` / `\` | std `format!(r#"...{value}..."#)` | normal format literal | body contains `"#` → add `#`; format braces still use `{{` / `}}` |
+| JSON or another target language with dynamic values | its serializer / parameter or builder API (`serde_json::json!` + `to_string`) | `format!` | never pre-escape a value; `format!` is prose, not an encoder |
 | Compile-time concatenated `&'static str` | `const_format` `concatcp!`/`formatcp!` | std `concat!` (literals only) | runtime `String` fine → `format!` |
 | Runtime-templated format (i18n, user template) | `formatx` 0.3 (low bus-factor — vet it) | a template engine (`minijinja`/`tera`) | need loops/conditionals/escaping |
 | Compile-time size/const invariant | **std `const { assert!(size_of::<T>() == N) }`** (1.79) | `static_assertions` (trait-level only) | — |

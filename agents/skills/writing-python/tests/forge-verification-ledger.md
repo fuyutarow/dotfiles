@@ -146,3 +146,14 @@ allowed in agent/CI recordable runs. Process copies belong in the analytic RAM b
 The schema and thresholds are pointers to orchestrating-agents P7, not duplicated Python policy.
 The trigger set adds the ProcessPoolExecutor/xdist exhaustion co-fire case. Targeted skill floor has
 no FAIL; existing prose/version/table WARN debt remains unchanged in class and is not claimed fixed.
+
+## 2026-09-21: source delimiters vs output encoding (v2609.1.0)
+
+The f-string rule now separates readable source delimiters from output encoding: controlled text
+uses an outer quote that does not collide; JSON and other target languages use their boundary API.
+Python 3.14 `t`-strings are recorded as `Template` values for a custom processor, not a replacement
+for f-strings. Sources: https://docs.python.org/3/reference/lexical_analysis.html#f-strings and
+https://docs.python.org/3/library/string.templatelib.html
+
+F3 receipt: added the trigger row; targeted `skill-check.ts` exited 0. Existing prose/version/table
+WARN debt remains disclosed above.

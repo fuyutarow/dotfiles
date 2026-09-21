@@ -14,7 +14,7 @@ paths: "**/*.{ts,tsx}"
 
 # Writing TypeScript — house style
 
-> **Version**: v2607.1.0 (2026-07-04) — distilled from the house `/LINT_TS` prompt.
+> **Version**: v2609.1.0 (2026-09-21) — adds the string-construction boundary to the house `/LINT_TS` floor.
 > A lean per-filetype style floor; extend as house TS conventions accrete.
 
 Each rule changes what you write. Prefer the `✅` form; flag the `❌` in review.
@@ -34,6 +34,12 @@ Each rule changes what you write. Prefer the `✅` form; flag the `❌` in revie
 - **zod `safeParse` over hand-written type guards.** A hand-rolled `function isFoo(x): x is Foo`
   can drift from the type. `❌ if (isUser(data))` → `✅ const r = User.safeParse(data); if (r.success) ..`
   — one schema is the source of truth for both the runtime check and the static type (`z.infer`).
+- **Template literal for controlled text; encoder/binder for a target language.** `✅ const message =
+  \`run "${name}" scored ${score.toFixed(4)}\`;` uses backticks, so ordinary `"` needs no source
+  escape. But it is **not** JSON/HTML/SQL/shell escaping: `✅ JSON.stringify({ name, score })` for
+  JSON, and the target's DOM/framework, parameterized-query, argument-vector, or `URL` /
+  `URLSearchParams` API for the others. Never pre-escape an interpolated value. A literal backtick
+  or `${` is the remaining source-syntax exception; escape it only as literal syntax, not data.
 
 ## Cut
 

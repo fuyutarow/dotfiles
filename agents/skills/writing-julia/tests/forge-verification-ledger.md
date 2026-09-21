@@ -213,3 +213,13 @@ Residual +1 sentence and +4 header lines are the version line, the staleness-reg
 new dated facts (required by this skill's own contract), and a two-line changelog. Queue position:
 the 90-line version header is long-standing debt, untouched here; clear it at the next substantive
 reforge, not in a content commit.
+
+## 2026-09-21: source delimiters vs output encoding (v2609.1.0)
+
+The new rule separates controlled text from an external format. Julia's official strings manual
+confirms that `"""..."""` permits `"` and interpolation uses `$`; `raw"..."` disables both
+interpolation and unescaping. JSON stays with the existing `JSON.json` interchange rule.
+Source: https://docs.julialang.org/en/v1/manual/strings/
+
+F3 receipt: added the trigger row; parsed the `"""..."""` example with Julia; targeted
+`skill-check.ts` exited 0. Existing prose/version/table WARN debt remains disclosed above.

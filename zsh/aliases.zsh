@@ -843,7 +843,7 @@ alias mvf='command mv'   # 強制上書き (両OS共通)
 command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() function above
 
 # Git operation safety: checkout ban
-# `git checkout` (plus its git/gitconfig aliases co/cb) is dangerously overloaded — the same
+# `git checkout` (and the retired git/gitconfig aliases co/cb) is dangerously overloaded — the same
 # verb switches branches, creates a branch (-b/-B), restores files, and can detach HEAD, so a
 # typo silently does something else plausible instead of erroring. Since git 2.23 the
 # disambiguated replacements are `git switch` (branches) and `git restore` (files); block the
@@ -851,8 +851,9 @@ command_exists "rip" || alias rip='command rm -i'   # bypass the disabled rm() f
 # rm() further down, under "Command Override Functions" (they are one family split across two
 # banners; the guards live here because they are file-operation safety, rm() lives there):
 # fail loud, never guess. `command git checkout ...` remains the escape hatch, same as rm's
-# /bin/rm. Interactive shells only (functions in this file never reach scripts/CI/hooks), so
-# git/gitconfig's co/cb aliases are left in place for non-interactive callers.
+# /bin/rm. Interactive shells only (functions in this file never reach scripts/CI/hooks). The
+# co/cb aliases were removed from git/gitconfig on 2026-09-21; the names stay blocked here so
+# muscle memory prints the replacement instead of "not a git command".
 git() {
   local sub="$1"
   if [[ "$sub" == "checkout" || "$sub" == "co" || "$sub" == "cb" ]]; then

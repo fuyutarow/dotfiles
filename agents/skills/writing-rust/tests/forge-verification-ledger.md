@@ -226,3 +226,13 @@ and https://doc.rust-lang.org/std/fmt/
 F3 receipt: added the trigger row; targeted `skill-check.ts` exited 0. `rustc` was unavailable on
 this host, so the raw-literal example is documentation-verified rather than compiler-smoked.
 Existing prose/version/table WARN debt remains disclosed above.
+
+## 2026-09-22 — `paths:` scope removed (skill was invisible without a .rs file in play)
+
+The forge (2026-07-06) set `paths: "**/*.rs"`. Measured today in a dotfiles session with no Rust
+file in play: the skill was absent from the listing (not even by name) and `Skill("writing-rust")`
+returned *Unknown skill*. The description's own triggers ("どの crate", "Cargo.toml", "MANDATORY
+before writing ANY Rust") are conversational and fire before any `.rs` exists, so the scope defeated
+the trigger design. Removed; the skill now charges its 1,428 chars on every turn like its siblings.
+Prose-debt WARNs predate this two-line edit and are untouched (waived for this seam edit; queue
+position: the next reforge).

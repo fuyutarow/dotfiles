@@ -208,4 +208,6 @@ skill, not in a sibling's forge commit.
 
 This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
 prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
-seam edit; queue position: with the next reforge of this skill, not before.
+seam edit; queue position: with the next reforge of this skill, not before. Same-day addendum:
+the `paths:` gotcha comment in commands-and-skills.md (a path-scoped skill is absent, not merely
+description-less, until a matching file is in play — measured on writing-rust) rides on this waiver.

@@ -14,7 +14,6 @@ description: >-
   ANY dependency. Facts ROT — verify live (PG1). Workflow-native: harvest/verification fan
   out; SELECTION stays SOLO. English skill; respond in the user's language (default
   Japanese).
-paths: "**/*.py"
 ---
 
 # Writing Python — modern environment, selection & coding discipline

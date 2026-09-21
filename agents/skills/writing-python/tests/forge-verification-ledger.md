@@ -157,3 +157,9 @@ https://docs.python.org/3/library/string.templatelib.html
 
 F3 receipt: added the trigger row; targeted `skill-check.ts` exited 0. Existing prose/version/table
 WARN debt remains disclosed above.
+
+## 2026-09-22 — `paths:` scope removed (same defect as writing-rust, same day)
+
+`paths: "**/*.py"` made the skill absent — name and `Skill(name)` alike — in any session without
+a `.py` file in play, while its description promises to fire on conversational Python asks.
+Removed. Prose-debt WARNs predate this edit and are untouched (waived; queue: next reforge).

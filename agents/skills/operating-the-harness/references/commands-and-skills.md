@@ -41,7 +41,9 @@ model: inherit                 # /model values or `inherit`; applies for the tur
 effort: high                   # low|medium|high|xhigh|max; overrides session effort this turn
 context: fork                  # run in an isolated subagent (see below)
 agent: Explore                 # subagent type when context: fork (default general-purpose)
-paths: "src/**/*.ts"           # glob: auto-activate ONLY when matching files are in play
+paths: "src/**/*.ts"           # glob: auto-activate ONLY when matching files are in play — and
+                               # until one is, the skill is ABSENT: not listed by name, not
+                               # invocable via Skill(name) (measured 2026-09-22, writing-rust)
 hooks: {}                      # hooks scoped to this skill's lifecycle
 shell: bash                    # bash (default) | powershell
 ---

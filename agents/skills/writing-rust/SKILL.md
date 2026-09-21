@@ -16,7 +16,6 @@ description: >-
   before clone; lightest crate before the famous one. Workflow-native: crate-landscape harvest +
   adversarial verification fan out; the selection decision stays SOLO. English skill; respond in
   the user's language (default Japanese).
-paths: "**/*.rs"
 ---
 
 # Writing Rust — modern crate selection & coding discipline

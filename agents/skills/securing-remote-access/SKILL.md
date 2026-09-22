@@ -156,6 +156,10 @@ keyless/ACL convenience the platform ruled out anyway.
   `DefaultShellCommandOption="-c"` and interactive login still looks fine while every
   non‑interactive command breaks. scp/sftp are unaffected by the change on OpenSSH ≥ 9.0
   (subsystem, not the login shell) — see `references/playbooks.md` §9b.
+- **Removing the inbox Windows OpenSSH server can lock you out at the next boot**. If
+  `Remove-WindowsCapability` returns `RestartNeeded=True`, pending CBS operations empty the
+  `sshd` service. A winget/MSI server registered under that name then cannot start. Read
+  `C:\Windows\WinSxS\pending.xml` before any reboot; the fix is a distinct service name (§9c).
 
 ## Reference router
 
@@ -167,7 +171,8 @@ keyless/ACL convenience the platform ruled out anyway.
   ed25519 + FIDO2 key generation, `~/.ssh/config` patterns with `ControlMaster`, host‑key/TOFU
   handling, Tailscale‑as‑transport, an OpenSSH CA starter, mosh+tmux, and **the Windows host as
   an always‑on OpenSSH + Tailscale anchor** (incl. §9b, the `DefaultShell` cmd‑vs‑PowerShell
-  decision and its `/c` trap). Read when implementing.
+  decision and its `/c` trap). §9c moves the server off the inbox build via winget and defuses
+  the pending-reboot trap. Read when implementing.
 - `references/wsl2-mac.md` — The applied worked example: the **robust Mac ↔ Windows ↔ WSL
   full chain**. The key move — make the always‑on anchor a *Windows service* (Tailscale +
   native OpenSSH), not WSL, so you're never locked out — plus reaching WSL behind it via

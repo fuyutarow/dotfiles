@@ -14,6 +14,7 @@ behavior — note the version caveats inline (they're load‑bearing).
 8. mosh + tmux (roaming + persistence)
 9. Windows host: native OpenSSH anchor + Tailscale (the Windows side of a mesh)
    — 9b: which shell the session lands in (cmd.exe vs PowerShell) + the `/c` trap
+   — 9c: moving the server off the inbox build (winget) + the reboot that would gut it
 
 ---
 
@@ -297,3 +298,70 @@ The folklore holds only where a legacy `scp` still rides the login shell, or a P
 **profile prints** on startup and corrupts the stream — keep the profile silent either way.
 (Verified 2026‑07‑28 on `OpenSSH_for_Windows_9.5p2`, Windows 11 26200: default shell flipped to
 5.1, then a scp round‑trip and the three checks above all passed.)
+
+### 9c. Moving the server off the inbox build (winget) — and the reboot that would gut it
+
+Pick the build by what you need from it:
+
+| Need | Build |
+|---|---|
+| Patched by Windows Update, Microsoft's production channel | the inbox `OpenSSH.Server` capability |
+| Upstream features the inbox build lacks | winget `Microsoft.OpenSSH.Preview` (GitHub labels every release "preview") |
+
+The swap replaces the one door you are standing in. Run it from a channel that does not depend on it.
+On a WSL host that channel is the guest's own sshd plus interop `powershell.exe`.
+Interop inherits the guest's `PSModulePath`, so pin it first or `Get-FileHash` and the Dism cmdlets vanish:
+```powershell
+$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath','Machine')
+```
+
+1. Back up everything the new build must inherit. Both builds read the same `C:\ProgramData\ssh`.
+   ```powershell
+   Copy-Item C:\ProgramData\ssh C:\ProgramData\ssh.bak -Recurse
+   reg export HKLM\SOFTWARE\OpenSSH C:\ProgramData\ssh.bak\OpenSSH-registry.reg /y
+   ```
+2. Stop orphaned per-connection sshd processes first; they hold `sshd.exe` open.
+   How to tell an orphan from a live session → `operating-wsl2-on-windows`.
+3. Remove the inbox server and install the MSI, server only (the inbox client stays):
+   ```powershell
+   Stop-Service sshd -Force
+   Remove-WindowsCapability -Online -Name 'OpenSSH.Server~~~~0.0.1.0'   # note RestartNeeded
+   winget install --id Microsoft.OpenSSH.Preview -e --silent --override '/qn /norestart ADDLOCAL=Server'
+   ```
+   `--override` replaces winget's default installer switches, so it must carry `/qn` itself.
+4. Verify before trusting it, in this order:
+   ```powershell
+   (Get-CimInstance Win32_Service -Filter "Name='sshd'").PathName   # expect Program Files\OpenSSH
+   Get-FileHash C:\ProgramData\ssh\ssh_host_ed25519_key                # compare with the backup
+   Get-ItemProperty HKLM:\SOFTWARE\OpenSSH                             # DefaultShell pair intact (§9b)
+   & 'C:\Program Files\OpenSSH\sshd.exe' -t; Start-Service sshd
+   ```
+   Then reconnect from outside with `ssh -o BatchMode=yes`. A changed host key fails hard there.
+
+**If step 3 said `RestartNeeded=True`, do NOT reboot yet.** Read what the next boot will do:
+```powershell
+Select-String -Path C:\Windows\WinSxS\pending.xml -Pattern 'Services\\sshd'
+```
+`DeleteKeyValue` lines there empty the `sshd` service. The MSI registered under that same name.
+After that boot the server cannot start, and a box parked at its logon screen has no other door.
+`PendingFileRenameOperations` does not show these CBS operations; only `pending.xml` does.
+
+Move the server to its own service name and disable the old one. This needs no startup task:
+```powershell
+$exe = 'C:\Program Files\OpenSSH\sshd.exe'
+sc.exe create sshd10 binPath= $exe start= auto obj= LocalSystem DisplayName= 'OpenSSH SSH Server'
+sc.exe privs sshd10 SeAssignPrimaryTokenPrivilege/SeTcbPrivilege/SeBackupPrivilege/SeRestorePrivilege/SeImpersonatePrivilege
+sc.exe failure sshd10 reset= 86400 actions= restart/5000/restart/5000/restart/5000   # as the MSI's sshd
+Get-CimInstance Win32_Service -Filter "Name='sshd10'" |
+  Invoke-CimMethod -MethodName Change -Arguments @{ PathName = "`"$exe`"" }   # quote the path
+Stop-Service sshd -Force; sc.exe config sshd start= disabled; Start-Service sshd10
+```
+Disable `sshd`, never delete it: the MSI owns it, and the pending boot empties it anyway.
+
+| Symptom | Cause | Do |
+|---|---|---|
+| Service path reads `C:\Program Files\...` without quotes | PowerShell 5.1 strips embedded quotes on the way to `sc.exe` | Set `PathName` via `Invoke-CimMethod ... Change` |
+| `install-sshd.ps1` not found | The MSI does not ship it | Recreate by hand; the five privileges above are mandatory |
+| New build, a probe sees only one `sshd.exe` | Per-connection work moved to `sshd-session.exe` (`sshd-auth.exe` too) | Watch both images |
+| After `winget upgrade` of the preview | The MSI re-enables its own `sshd` | Disable it again; repoint `sshd10` if the path moved |
+| After the pending reboot | An inbox `sshd` may come back and race for `:22` | Check `Get-WindowsCapability`; disable a returned `sshd` |

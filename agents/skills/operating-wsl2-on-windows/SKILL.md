@@ -94,6 +94,8 @@ needs an idle box. The full order, the Home-vs-Pro method split, and the winget/
 | host itself unreachable, box was rebooted | Windows at the logon screen, Tailscale (a GUI client) down | reach host over the **LAN** alias; `wsl:wake` tries it first |
 | LAN alias won't resolve | you are off the box's subnet | tailnet alias; unattended Tailscale removes this whole row |
 | C: was full, everything wedged | HOST disk exhaustion, not a WSL bug | reclaim C: first (above), then `wsl:wake` |
+| host ssh hangs after connect; the banner reads `Exceeded MaxStartups` | host sshd pre-auth slots full | stop opening parallel ssh; it drains within `LoginGraceTime` |
+| host CPU pegged; `wsl:audit` flags spinning `sshd` / `sshd-session` | per-connection sshd orphaned (no child, no socket) | `mise run wsl:reap`, then `-- --execute`; never select by CPU time |
 
 `mise run wsl:wake` encodes this: LAN route then tailnet route, wake if Stopped, then verify the
 guest. It starts sshd when the guest is silent — Running is not reachable. Root causes and the

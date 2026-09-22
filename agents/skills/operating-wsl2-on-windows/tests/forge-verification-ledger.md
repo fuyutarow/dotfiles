@@ -75,3 +75,14 @@ Description kept tight to minimize the charge.
 | operationality | minor | measurement.md "measured anchors" bullets duplicated/drifted from wsl-audit.ts comments | replaced with a one-source-of-truth pointer to the code |
 | operationality | minor | routing cell packed 3 decisions as prose | split into labeled Cut/Order/Keys clauses |
 | trigger-deskcheck | minor (PASS) | fire #6 collides with securing-remote-access's broad WSL2 trigger | added a co-fire note to triggers.md |
+
+## 2026-09-22 — two Recover rows: MaxStartups hang, orphaned per-connection sshd
+
+Seam edit to the Recover table; both rows were observed on r99 the same day.
+- `Exceeded MaxStartups`: read directly from the sshd banner while `ssh r99` hung after TCP
+  connect (C: at 0.4%, many parallel ssh probes in flight). It cleared on its own once the
+  probes stopped. Whether the orphans below held pre-auth slots is UNVERIFIED.
+- Orphans: 9 `sshd.exe -R` with no socket, no child and ~58,000 s CPU each, born within 9
+  minutes while C: was full. The same shape appeared 2026-09-09 (7 processes, 3 days). The
+  reaper (`scripts/wsl-reap.ts`, task `wsl:reap`) selects structurally and is unit-tested; its
+  first draft was blind on OpenSSH 10.0 until `sshd-session.exe` was probed too.

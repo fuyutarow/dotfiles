@@ -507,6 +507,10 @@ run = 'bun ~/dotfiles/scripts/tmux-plugins.ts'
 description = "Audit recommended tools against the Brewfile (single source: scripts/check-tools.sh; install missing ones via Brewfile)"
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
+[tasks.doctor]
+description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
+run = 'bun ~/dotfiles/scripts/doctor.ts'
+
 # FLAGGED 2026-09-09, not yet acted on: unlike check:tools (renamed to tools:audit, above),
 # this one genuinely exits nonzero on failure (verified: currently FAILs for real — a retired
 # model entry mismarked 'deprecated' — checked_out=1) and reads as a lint-tier floor by its own

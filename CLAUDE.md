@@ -98,6 +98,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
 - **Audit tools**: `mise run tools:audit` · **Update everything**: `mise run up`
 - **MCP servers**: `mise run cc:install-mcp`
+- **Is this machine what the repo declares?** `mise run doctor` (read-only; each FAIL names its repair)
 
 (`j`/`jl` aliases for `just` remain for OTHER projects' justfiles — not used by this repo.)
 

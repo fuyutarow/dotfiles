@@ -145,6 +145,7 @@ mise tasks            # list
 mise run up           # update everything (topgrade)
 mise run link:dots    # (re)create symlinks   — scripts/link-dots.sh
 mise run tools:audit  # audit CLI toolbox     — scripts/check-tools.sh
+mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts
 mise run install:tools  # install toolbox     — Brewfile
 mise run link:skills  # deploy agents/ (skills → Claude/Codex, commands → +Gemini)
 ```

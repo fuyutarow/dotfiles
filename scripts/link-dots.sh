@@ -10,12 +10,22 @@
 #                       so the post-merge hook can relink on every `git pull`.
 #   --force           — overwrite a regular file with the symlink. For the
 #                       intentional `mise run link:dots` (initial setup / fix drift).
+#   --check           — READ-ONLY: change nothing, print one `drift:` line per declared link that
+#                       is not realized, exit 1 if any. Consumer: `mise run doctor`. The settings
+#                       render is skipped here; doctor compares it separately.
 set -euo pipefail
 
 DOTFILES="${DOTFILES:-$HOME/dotfiles}"
 
 FORCE=false
+CHECK=false
+DRIFT=0
 [[ ${1:-} == "--force" ]] && FORCE=true
+[[ ${1:-} == "--check" ]] && CHECK=true
+drift() { echo "drift: $*" && DRIFT=$((DRIFT + 1)); }
+what_is() { # what is at a path, for a drift line
+  if [[ -L $1 ]]; then readlink "$1"; elif [[ -e $1 ]]; then echo "a real file"; else echo nothing; fi
+}
 
 # --- OS detection (same convention as zsh/aliases.zsh) ---
 IS_MAC=false
@@ -30,6 +40,10 @@ link() { # link <repo-relative source> <target>
     return 0
   }
   [[ -L $dst && "$(readlink "$dst")" == "$src" ]] && return 0 # already correct -> no-op
+  if $CHECK; then
+    drift "$dst (want -> $src; have $(what_is "$dst"))"
+    return 0
+  fi
   if ! $FORCE && [[ -e $dst && ! -L $dst ]]; then
     echo "skip (exists, not symlink): $dst"
     return 0 # safe (default): don't clobber a real file
@@ -64,7 +78,7 @@ fi
 # (ssh -G still resolves, exit 0), so a fresh clone links cleanly and simply has no hosts yet.
 # ~/.ssh must exist and be 700 before ssh will read anything in it; create it if this is a fresh
 # machine, since unlike ~/.config the linker cannot assume it is there.
-[[ -d "$HOME/.ssh" ]] || { mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"; }
+$CHECK || [[ -d "$HOME/.ssh" ]] || { mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"; }
 link ssh/config "$HOME/.ssh/config"
 
 # --- tmux ---
@@ -93,7 +107,7 @@ for _dir in "$HOME"/.claude "$HOME"/.local/bin "$HOME"/.config/systemd/user "$HO
     [ -L "$_stale" ] || continue
     [ -e "$_stale" ] && continue
     case "$(readlink "$_stale")" in
-      "$DOTFILES"/*) rm -f "$_stale" && echo "pruned (dangling): $_stale" ;;
+      "$DOTFILES"/*) if $CHECK; then drift "$_stale (dangling link into the repo)"; else rm -f "$_stale" && echo "pruned (dangling): $_stale"; fi ;;
     esac
   done
 done
@@ -109,7 +123,7 @@ unset _stale _dir
 for _retired in "$HOME"/.local/bin/repo-search "$HOME"/.local/bin/agent-resource-run "$HOME"/.local/bin/serena-foreground; do
   [ -L "$_retired" ] || continue
   case "$(readlink "$_retired")" in
-    "$DOTFILES"/*) rm -f "$_retired" && echo "pruned (retired: now a package bin via bun link): $_retired" ;;
+    "$DOTFILES"/*) if $CHECK; then drift "$_retired (retired: now a package bin)"; else rm -f "$_retired" && echo "pruned (retired: now a package bin via bun link): $_retired"; fi ;;
   esac
 done
 unset _retired
@@ -129,7 +143,7 @@ link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 # Deliberately not `link`: the destination is not a symlink any more, and `link`'s no-clobber guard
 # would refuse to touch it. Runs before `mise run deps` on a fresh machine, so the renderer is
 # zero-dependency by design.
-bun "$DOTFILES/scripts/render-claude-settings.ts" || echo "warn: settings render failed — ~/.claude/settings.json left as-is" >&2
+$CHECK || bun "$DOTFILES/scripts/render-claude-settings.ts" || echo "warn: settings render failed — ~/.claude/settings.json left as-is" >&2
 
 # --- third-party skill provenance ledger ---
 # `bunx skills add -g` records where each vendored skill came from in ~/.agents/.skill-lock.json.
@@ -177,6 +191,8 @@ if $IS_MAC; then
   kdst="$HOME/.config/karabiner"
   if [[ -L $kdst && "$(readlink "$kdst")" == "$DOTFILES/karabiner" ]]; then
     : # already linked -> nothing to rm
+  elif $CHECK; then
+    link karabiner "$kdst" # reports the drift; never rm in check mode
   elif ! $FORCE && [[ -e $kdst && ! -L $kdst ]]; then
     echo "skip (exists, not symlink): $kdst" # safe (default): don't rm a real dir
   else
@@ -189,6 +205,8 @@ fi
 if $IS_WSL; then
   if [[ "$(readlink /etc/wsl.conf 2> /dev/null)" == "$DOTFILES/wsl/wsl.conf" ]]; then
     : # already linked -> no sudo prompt
+  elif $CHECK; then
+    drift "/etc/wsl.conf (want -> $DOTFILES/wsl/wsl.conf)"
   elif sudo ln -sfn "$DOTFILES/wsl/wsl.conf" /etc/wsl.conf 2> /dev/null; then
     echo "linked: /etc/wsl.conf -> $DOTFILES/wsl/wsl.conf (sudo)"
   else
@@ -202,6 +220,8 @@ if $IS_WSL; then
   sysctl_dst=/etc/sysctl.d/50-dotfiles.conf
   if [[ "$(readlink "$sysctl_dst" 2> /dev/null)" == "$DOTFILES/wsl/sysctl.conf" ]]; then
     : # already linked -> no sudo prompt
+  elif $CHECK; then
+    drift "$sysctl_dst (want -> $DOTFILES/wsl/sysctl.conf)"
   elif sudo ln -sfn "$DOTFILES/wsl/sysctl.conf" "$sysctl_dst" 2> /dev/null; then
     echo "linked: $sysctl_dst -> $DOTFILES/wsl/sysctl.conf (sudo) — apply: sudo sysctl --system"
   else
@@ -218,4 +238,8 @@ if ! $IS_MAC && ! $IS_WSL; then
   echo "warn: neither macOS nor WSL detected — OS-specific links skipped" >&2
 fi
 
+if $CHECK; then
+  echo "check: $DRIFT drift(s)"
+  exit $((DRIFT > 0 ? 1 : 0))
+fi
 echo "done."

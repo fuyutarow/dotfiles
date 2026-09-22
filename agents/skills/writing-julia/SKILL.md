@@ -17,12 +17,12 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.4.0 (2026-09-21) — compiler modes distinguish speed, TTFX, debugging, CPU target, and package images.
+> **Version**: v2609.5.0 (2026-09-22) — one NN stack selection home; facts and house defaults stay distinct.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
 ```bash
-for f in performance compilation autodiff toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
+for f in performance compilation autodiff nn-stack toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
 ```
 
 Fast-moving facts carry `[dated:YYYY-MM]` at their decision locus. Re-check stale tags against the
@@ -88,8 +88,9 @@ reference file that matches the task.
 |---|---|---|
 | `references/performance.md` | types, hot paths, memory, benchmarks, checks | numeric or struct code |
 | `references/compilation.md` | `-O`, JIT/TTFX measurement, debug flags, CPU target, package-image effects | selecting Julia launch/compiler flags or interpreting a speed/startup difference |
-| `references/autodiff.md` | DI frontend, preparation, backend choice, dual propagation | differentiated functions |
-| `references/toolchain.md` | data structures, NN/accelerator stack, parallelism | structure or compute-tool choice |
+| `references/autodiff.md` | ordinary host-function DI, preparation, backend choice, Dual propagation | eager host-function differentiation |
+| `references/nn-stack.md` | model API, primitives, AD, device, eager/XLA selection | NN models, direct NN primitives, or Reactant execution |
+| `references/toolchain.md` | data structures, parallelism, selection pointers | structure or compute-tool choice |
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
 | `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
 | `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT, output, REPL | runs and deployment |
@@ -340,8 +341,9 @@ Methodology (§2.0 — FORBIDDEN by default unless an exception is documented in
 - [ ] No lerp as evaluation substitute; no grid+lerp combination (§2.0.3)
 - [ ] Long loops flush each step or use `ProgressMeter` (§2.0.4).
 
-AD — `references/autodiff.md` (if any function will be differentiated):
-- [ ] Differentiation goes through `DifferentiationInterface` with an `ADTypes` backend, not raw backend calls (§2.7.1)
+AD — first distinguish ordinary host functions from model/compiler paths:
+- [ ] NN and compiled execution choices follow `references/nn-stack.md`; use the supported framework/compiler entrypoint.
+- [ ] Ordinary host differentiation follows `references/autodiff.md`: DI with an `ADTypes` backend (§2.7.1).
 - [ ] Repeated differentiation uses `prepare_*` once, reused in the loop (§2.7.2)
 - [ ] Backend choice justified by input dimension and profile, not habit (§2.7.3)
 - [ ] ForwardDiff paths propagate `eltype(x)` and avoid `Float64` casts (§2.7.4).

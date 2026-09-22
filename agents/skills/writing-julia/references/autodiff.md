@@ -1,4 +1,8 @@
-# Automatic Differentiation — DifferentiationInterface is the frontend (§2.7)
+# Ordinary host-function AD — DifferentiationInterface is the frontend (§2.7)
+
+**SOLE owner:** ordinary eager host-function AD, preparation, and Dual propagation.
+For NN model training or Reactant-compiled differentiation, first read `nn-stack.md`.
+The DI default below applies to ordinary host functions, not every framework/compiler entrypoint.
 
 **The default way to differentiate is through `DifferentiationInterface.jl` (DI), selecting a
 backend via an `ADTypes.jl` object.** Do not scatter raw `ForwardDiff.gradient` /
@@ -66,20 +70,20 @@ coloring. The call site does not change when you swap backends — only the prep
 ## 2.7.3 Backend selection
 
 Choose by problem shape, then justify by profiling — never by habit.
+These are initial house choices, not universal speed rankings; input count alone cannot select a winner.
 
 | Situation | Backend | Why |
 |---|---|---|
 | ≤ ~100 inputs; any Hessian | `AutoForwardDiff()` | Forward mode is O(input_dim)·cost(f); cheap for small input, and forward-over-forward gives clean Hessians. **Default.** |
 | Scalar output, input_dim ≫ 100 | `AutoEnzyme(mode=Enzyme.Reverse)` | LLVM-IR reverse mode, very fast, supports mutation. Profile ForwardDiff first; switch only when AD is shown to be the bottleneck. |
-| Pure-Julia reverse, mutation-light | `AutoZygote()` | Mature source-to-source; slow on mutable code and discrete branches. |
+| Pure-Julia reverse, mutation-light | `AutoZygote()` | Candidate reverse-mode backend; check operation support and profile this workload. |
 | Hessian-vector products, large input | second-order DI (`AutoForwardDiff` over `AutoEnzyme`) | forward-over-reverse; DI composes these via `SecondOrder(outer, inner)`. |
 | Sparse Jacobian/Hessian | any backend + `AutoSparse(backend)` | DI handles sparsity detection (`SparseConnectivityTracer`) and coloring (`SparseMatrixColorings`) for you. |
-| NN training / GPU / TPU, need XLA | `Reactant` path (toolchain.md §2.9.3) | compiles to MLIR/XLA; different tradeoffs. |
 
 Caveat carried from experience: routing Enzyme through DI does not yet expose its full
 activity/multi-argument machinery. If `AutoEnzyme()` via DI fails or is slow, drop to Enzyme's
 native API for that one call and note it in a comment — this is the sanctioned exception to
-"DI everywhere".
+the ordinary-function DI default.
 
 ## 2.7.4 AutoForwardDiff hazard: Dual propagation rules (STILL CRITICAL)
 

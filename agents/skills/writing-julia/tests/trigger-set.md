@@ -70,6 +70,22 @@ asks — Rust/TS/C++ — which test nothing). Expanded v2609.1.0 with JG6 packag
 | 「実験結果をファイルに残したい」 vs 「別言語のツールに渡したい」 | tests the axis split: persistence (JLD2→HDF5/Arrow) vs interchange (JSON.jl) |
 | 「サンプル JSON から Julia の struct 定義を生成したい」 | the ONE surviving JSON3 use (`@generatetypes`) — emit then commit, never a runtime dep |
 
+## NN stack decision cases (v2609.5.0)
+
+These exercise selection after invocation; they do not claim measured runtime compatibility.
+The expected decisions are evaluated against `references/nn-stack.md`.
+
+| Request | Expected decision | Reject |
+|---|---|---|
+| New CPU Lux training loop with ordinary operations | Eager Lux; Zygote as initial house choice; explicitly load backend | Claim that installing Lux automatically installs Zygote |
+| Softmax in a numerical objective without a model | NNlib direct dependency; ordinary AD reference if differentiated | Add Lux solely to obtain softmax |
+| Compile a generic array function with XLA | Reactant; test tracing/control-flow assumptions | Require Lux for every Reactant computation |
+| New model explicitly requested in Flux | Preserve Flux | Override the request with the Lux default |
+| Mutable Lux loss fails with Zygote on a GPU | Check standalone Enzyme support for that operation/device; test gradients | Assume Enzyme supports it or automatically require Reactant |
+| CPU Lux throughput bottleneck | Permit a measured Reactant trial including compilation cost | Exclude CPU from escalation or assert universal fastest backend |
+| Lux inference without gradients | No AD dependency solely for inference | Add Zygote or Enzyme without a differentiation need |
+| Custom CUDA kernel for an unsupported primitive | Route device implementation to optimizing-julia-gpu-kernels | Treat NNlib presence as proof the operation is already supported |
+
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 
 | Ask | Route |

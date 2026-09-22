@@ -424,3 +424,46 @@ F3 receipt: added the trigger row; parsed the `"""..."""` example with Julia; ta
 Merge note (2026-09-21): this entry and the 09-16/17 package-engineering reforge were written in
 parallel on two machines, both as v2609.1.0. Merged as v2609.3.0; the string-construction section
 leaves the waived baseline at 10 long SKILL sentences after re-measurement.
+
+## 2026-09-22 — v2609.5.0: NN stack roles before package defaults
+
+**Observed failure.** The NN table and escalation prose chose different paths for a mutable Lux loss.
+The quick table also paired generic XLA array code with Lux and classified Zygote as an older replacement target.
+The catalog repeated selection policy and called Lux Zygote-backed out of the box despite its weak dependency.
+
+**Function map / editor decision.** Computation and environment requirements → select execution stack
+→ choices in existing task notes → dependency declarations and implementation checks.
+The incumbent owns this transition; no new skill or mandatory contract file is needed.
+`nn-stack.md` owns the combined choice; toolchain/catalog carry pointers.
+`autodiff.md` retains ordinary host-function differentiation and does not impose DI on framework training APIs.
+
+**Evidence.** soks position `urn:uuid:01a0c8c6-29bb-77fd-8aa8-ccca9694cd2c`, ledger
+`urn:uuid:01a0c8c6-29bb-77fd-8aa8-ccc9c7db0e81`, JNNR-001–006; corpus document commit `a2e18598`.
+Package roles and captured execution semantics are distilled from that bounded position.
+No new external survey or runtime benchmark was conducted during this skill revision.
+
+| Rule | Grade / boundary |
+|---|---|
+| Separate model, primitive, rule, and compiler responsibilities | Corpus-supported role synthesis; JNNR-001–006 |
+| Lux default when no framework is selected | skill-supplied convention, not comparative superiority |
+| Eager Lux starts with Zygote; inspect Enzyme for mutation/failure | inherited house policy from the 2026-08-17 entry; no new performance/support validation |
+| Respect explicit Flux selection, including new work | skill-supplied scope rule; removes an overbroad exclusion |
+| Test CPU/GPU bottlenecks before retaining compiled execution | skill-supplied measurement rule; no universal speed claim |
+
+**Calibration.** The source corpus describes complementary responsibilities.
+The observed executor error turned them into a single ranked menu and unconditional dependency choices.
+The correction makes computation/execution context explicit before defaults are applied.
+Retired: universal Enzyme-over-Zygote wording in the toolchain summary, the stale Mooncake tier exclusion,
+Flux-new-work exclusion, and mutation-as-automatic-XLA escalation. The earlier ledger entries remain history.
+
+**Verification.** Eight scenario cases are recorded in `trigger-set.md`; description is unchanged.
+Target `skill-check.ts` and `git diff --check` exit 0.
+Read-only Terra review exercised all eight cases and found four issues: the control-flow source pointer,
+an over-specific compiled AD entrypoint, missing failure terminal, and missing performance thresholds.
+After correction, its bounded recheck returned PASS. This is a content/decision desk review, not a Julia runtime test.
+`mise run lint:skills-floor` passed (71 skills, 65,226 listing characters); pre-existing prose warnings remain.
+`mise run link:skills` passed; Claude and Codex links resolve to this source tree.
+
+**PROSE-DEBT waiver [dated:2026-09-22].** Target floor reports 153 long reference sentences and
+10 long SKILL sentences (before: 157 and 10). Existing prose debt remains in the whole-skill
+prose-reforge queue; this bounded revision changes NN routing, not unrelated numerical semantics.

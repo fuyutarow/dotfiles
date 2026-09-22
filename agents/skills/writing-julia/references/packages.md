@@ -15,15 +15,10 @@ Bayesian PPL work (`Turing`, which re-exports `Distributions` and owns `MCMCChai
 
 ---
 
-## AD frontend & backends (the modern spine — autodiff.md §2.7)
-- `DifferentiationInterface` — the frontend. All differentiation goes through here.
-- `ADTypes` — the `AutoX()` backend-selector types. A dependency of DI; import for the constructors.
-- `ForwardDiff` — forward-mode via dual numbers, no compile overhead. **Default backend for ≤100
-  inputs and Hessians.** Dual rules in autodiff.md §2.7.4.
-- `Enzyme` — LLVM-IR reverse mode, very fast, supports mutation. Default reverse-mode when
-  input_dim ≫ 100 and ForwardDiff is profiled as the bottleneck.
-- `Zygote` — pure-Julia reverse mode; mature, slow on mutable/branchy code.
-- (sparse) `SparseConnectivityTracer` + `SparseMatrixColorings` — pulled in by `AutoSparse`.
+## AD frontend & backends
+
+Use `autodiff.md` for ordinary host-function AD selection and `nn-stack.md` for model/compiler paths.
+These references own backend choices; declare selected dependencies through `packaging.md` PK3.
 
 ## Verification & measurement (performance.md §2.8 / §2.6)
 - `JET` — static type-error / dispatch scanner; `@test_opt` in suites.
@@ -81,14 +76,10 @@ Bayesian PPL work (`Turing`, which re-exports `Distributions` and owns `MCMCChai
 - `OrdinaryDiffEq` — ODE-only subset, lighter deps.
 - `SciMLSensitivity` — adjoint/forward sensitivity; takes an `ADTypes` backend.
 
-## NN (toolchain.md §2.9.3) — Lux is the default; Reactant is a separate, heavy, opt-in XLA layer
-- `Lux` — **default NN library for new work** `[dated:2026-08]`. Explicit parameters and state
-  (`model(x, ps, st)`), Zygote-backed out of the box. Installing it does NOT pull XLA: `Reactant`,
-  `Enzyme` and `Zygote` are `[weakdeps]` in Lux v1.31.4, never `[deps]`.
-- `Flux` — actively maintained `[dated:2026-08]`, not deprecated. Keep for existing Flux code only;
-  DiffEqFlux.jl documents a `Flux.destructure` bug (silent `Float64`→`Float32`) and prefers Lux.
-- `Reactant` — heavy. Install only when toolchain.md §2.9.3's escalation rule fires (GPU/TPU
-  throughput, or mutation Zygote cannot handle): Julia → MLIR → XLA compilation; EnzymeMLIR AD.
+## NN and compiled array execution
+
+Read `nn-stack.md` for Lux, Flux, NNlib, LuxLib, and Reactant roles and selection.
+It owns the defaults and exceptions; this catalog does not maintain a second backend ranking.
 
 ## Algebra, number theory, finite fields — use exact names
 - `Nemo` (Flint/Arb exact arithmetic), `AbstractAlgebra` (pure-Julia generic algebra),

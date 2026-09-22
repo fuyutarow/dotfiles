@@ -37,43 +37,9 @@ p2 = @set p.bias = 0.9          # p unchanged; p2 has bias 0.9
 p3 = @set p.θ[1] = 5.0          # also reaches into nested fields
 ```
 
-## 2.9.3 NN / GPU / TPU compilation — Lux + Reactant
-When the task is neural-network training or array code that must hit GPU/TPU at JAX/PyTorch-class
-speed, compile through `Reactant.jl`: it traces Julia code into MLIR, runs XLA optimizations, and
-uses EnzymeMLIR for AD. Crucially, **the compiled function assumes the same control-flow pattern
-as the traced example** — type instabilities and branches are fixed at trace time, not resolved
-generally. Do not treat tracing as a cure for arbitrary dynamic dispatch or data-dependent
-branching; if the control flow depends on runtime data, the traced path may be wrong for other
-inputs. This is a different execution model from autodiff.md §2.7 (tracing, not
-per-call dispatch) — reach for it only when XLA/TPU or large-scale NN throughput is the actual
-requirement, not for a one-off gradient.
+## 2.9.3 NN / compiled array execution
 
-**`Lux.jl` is the default NN library for new work; Reactant is opt-in** `[dated:2026-08]`.
-Lux v1.31.4 keeps `Reactant`/`Enzyme`/`Zygote` in `[weakdeps]`, never `[deps]`. Installing Lux
-therefore does not take on XLA. `Flux.jl` is maintained, not deprecated — for existing Flux code
-only (why: packages.md NN).
-
-**Backend by device × Reactant** `[dated:2026-08]`, from Lux's own manual. Read this table, not
-autodiff.md §2.7.3, whenever the differentiated thing is a Lux model:
-
-| Lux model on | with Reactant | without Reactant |
-|---|---|---|
-| CPU | `Reactant`+`Enzyme` — fastest, mutation-safe | `Zygote`; `Enzyme` only if it mutates or Zygote fails |
-| GPU, NVIDIA | `Reactant`+`Enzyme` | `Zygote`, but Lux names no "best" here; Enzyme's GPU column is ❓ |
-| GPU, non-NVIDIA | `Reactant`+`Enzyme` | `Zygote` — Lux's stated best |
-| TPU | `Reactant` — the ONLY supported option | — |
-
-**The order INVERTS between the two tables.** Over a plain function, Enzyme beats Zygote. Inside a
-Lux model, Zygote outranks standalone Enzyme: the latter may fail against Lux without Reactant.
-Applying one table's order in the other's domain is the mistake to avoid.
-
-Tier is never an argument. Reactant+Enzyme, ChainRules, Enzyme, Zygote and ForwardDiff share Tier I.
-Mooncake is not a house option: Tier III, GPU ❌. That row predates its 2026 GPU work — re-verify it,
-never cite it.
-
-**Escalation, runtime-answerable.** Does the model need GPU/TPU throughput, or mutate where Zygote
-fails? Neither → Zygote-backed Lux, no Reactant. Either → add `Reactant`+`Enzyme`, then re-read the
-trace caveat above. Never take on Reactant for a one-off gradient.
+Read `nn-stack.md`: it solely owns model, primitive, AD, device, and eager/XLA selection together.
 
 ## 2.9.4 Parallelism — OhMyThreads
 For data-parallel maps/reductions on one machine, `OhMyThreads.tmapreduce` / `@tasks` is the safe
@@ -96,9 +62,8 @@ For clusters use `Distributed`/`MPI.jl`; for GPU kernels `KernelAbstractions.jl`
 
 | Job | Modern tool (use this) | Replaces / older |
 |---|---|---|
-| Differentiate anything | `DifferentiationInterface` + `ADTypes` | raw ForwardDiff/Zygote calls |
-| Fast reverse-mode AD | `AutoEnzyme()` | Zygote (slower; weak on mutation — autodiff.md §2.7.3) |
-| NN / array code on GPU/TPU via XLA | `Reactant` + `Lux` | `Flux`+`CUDA.jl` for that NN job — NOT a general `CUDA.jl` replacement (Reactant is XLA tracing; direct GPU-array/kernel work still uses `CUDA.jl` / `Metal.jl` / `KernelAbstractions`) |
+| Differentiate an ordinary host function | `autodiff.md` §2.7 | DI frontend, preparation, and measured backend selection |
+| NN model, direct NN primitive, or XLA array execution | `nn-stack.md` | Classify the computation before choosing packages |
 | Detect instability (CI) | `JET.@test_opt` | manual `@code_warntype` |
 | Forbid instability (def site) | `DispatchDoctor.@stable` | hope |
 | Guarantee zero alloc | `AllocCheck.@check_allocs` | eyeballing `@time` |

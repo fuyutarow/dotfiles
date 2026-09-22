@@ -298,13 +298,12 @@ description = "Prose lint (linting-prose machine floor): bunx textlint with the 
 run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json"
 
 # ── git hooks ────────────────────────────────────────────────────────────────────────────────
-# 規律: .githooks/* は mise task を呼ぶだけの薄い殻にする。中身は必ずここに置く(一つの家)。
-# フックは手で走らせにくく試験もしづらいが、task なら単体で走らせられ `mise tasks` に載る。
+# 規律: .githooks/* は mise task を呼ぶだけの薄い殻にする。
+# gate の hook(pre-commit)は契約 verb(fmt:check ::: lint)を直接呼び、hook 専用 task を持たない —
+# 専用の本体は verb から乖離する(2026-09-22: 旧 hook:pre-commit は整形だけで lint せず、1 日で
+# lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も巻き込んでいた)。
+# 下の hook:* は対応する契約 verb が無いイベント(post-commit / post-merge)の本体だけ。
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
-[tasks."hook:pre-commit"]
-description = "git pre-commit body: run `fmt`, re-stage the formatted files that were ALREADY staged (formatting fallout in unrelated working-tree files stays unstaged), then oxlint the STAGED .ts files and refuse the commit on any error. Called by .githooks/pre-commit; safe to run by hand."
-run = 'bun ~/dotfiles/scripts/hook-pre-commit.ts'
-
 [tasks."hook:post-commit"]
 description = "git post-commit body: warm the cocoindex index incrementally (`ccc index`) so search never pays the update latency. No-op when ccc is absent, when the repo has no .cocoindex_code/, or when the daemon is already [indexing]. Called detached by .githooks/post-commit."
 run = 'bun ~/dotfiles/scripts/hook-post-commit.ts'

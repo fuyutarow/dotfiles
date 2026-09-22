@@ -1,10 +1,11 @@
 #!/bin/sh
-# 薄い殻。中身は mise.toml の `hook:pre-commit` にある — フックにロジックを書かない。
-# 理由: フックは手で走らせにくく試験もしづらい。task なら `mise run hook:pre-commit` で
-# 単体で走らせられ、`mise tasks` に載って発見でき、他の repo と同じ形に揃う。
-# mise 不在は警告に落として通す(新しい機械でもコミットはできるべき)。
+# shim: hook-entry
+# The commit gate IS the contract verbs `fmt:check` + `lint` — no hook-specific body to drift from
+# them (wiring-repositories HOOK-1). `:::` is required: `mise run fmt:check lint` silently passes
+# `lint` as an ARGUMENT and never lints. `--jobs 1`: mise 2026.9.12's parallel scheduler hangs on
+# a failing dependency and ignores SIGTERM (measured 3/6); serial costs ~1 s here (HOOK-3).
 command -v mise > /dev/null 2>&1 || {
-  echo "pre-commit: mise not on PATH; skipping format (run 'mise run f' manually)" >&2
+  echo "pre-commit: mise not on PATH; gate skipped (run 'mise run check' manually)" >&2
   exit 0
 }
-exec mise run hook:pre-commit
+exec mise run --jobs 1 fmt:check ::: lint

@@ -1,0 +1,78 @@
+# storage-headroom — the declarative half of enforce-storage-headroom.ts.
+#
+# This file says WHAT is guarded and at what size; the hook says HOW (matching commands,
+# measuring, caching, locating a cargo target dir). Change a number or add a budget here — no
+# code edit. The hook validates this file on every Bash call: an unknown key, a wrong type, or a
+# missing field DENIES the call with every error listed, rather than silently falling back to a
+# default that would disarm the gate (fix it with the Edit tool, which this gate never sees;
+# STORAGE_ASSERT_OVERRIDE=1 in a command still passes). Contract: storage-headroom.contract.md.
+
+schema = 1
+
+# Free space below which a launch is refused (deny_gib) or allowed with a warning (warn_gib).
+# `host` is the Windows drive under WSL2, measured at /mnt/c — skipped where that path does not
+# exist (macOS). `guest` is the filesystem at /.
+[drive.host]
+label = "host C: (WSL vhdx)"
+path = "/mnt/c"
+deny_gib = 30
+warn_gib = 60
+
+[drive.guest]
+label = "guest /"
+path = "/"
+deny_gib = 40
+
+# Appended to every deny: what to reclaim, and why deleting inside WSL is not enough.
+[deny]
+advice = """\
+A full host drive takes down WSL and Windows together. Reclaim first (unreferenced .jls/.bin \
+dumps under archives/*/artifacts, Rust target/ dirs, ~/.julia/compiled of old versions; \
+`mise run reclaim` for the blind tier), then have the human compact the vhdx (`mise run \
+reclaim:vhdx` prints the elevated procedure) — deleting inside WSL does not return space to the \
+host until that step. STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate for a \
+cleanup that must build."""
+
+# Commands that START work that writes bytes. A launch matches `command` at a command position
+# (after ; && || | ( then do, and through sudo/env/time/nice/timeout/VAR= prefixes), optionally
+# followed by one of `subcommands`. Cleanup and reads (rm, cargo clean, du, df, git) are never
+# listed: cleanup must stay possible when the drive is full.
+[[launcher]]
+command = "systemd-run"
+
+[[launcher]]
+command = "agent-resource-run"
+
+[[launcher]]
+command = "polysearch"
+subcommands = ["run"]
+
+[[launcher]]
+command = "julia"
+
+[[launcher]]
+command = "cargo"
+subcommands = ["build", "test", "run", "bench", "install"]
+
+# Per-language artifact budgets: when a launch of one of `launchers` is inspected, the artifact
+# it grows is sized and, above warn_gib, a warning with `advice` rides along. Warn only.
+# `locate` names how the artifact is found: "path" (the `path` key, ~ expanded) or
+# "cargo-target" (CARGO_TARGET_DIR, .cargo/config.toml target-dir, else <workspace>/target,
+# following a leading `cd` and --manifest-path — logic that lives in the hook).
+[[budget]]
+name = "cargo target"
+launchers = ["cargo"]
+locate = "cargo-target"
+warn_gib = 30
+incremental = true
+advice = """\
+`cargo clean` when no build is running in this tree; otherwise stale session dirs under \
+target/*/incremental can go (the next build recompiles those crates). For agent/worktree builds \
+set CARGO_INCREMENTAL=0 — incremental sessions are per-build and pile up — and share one \
+CARGO_TARGET_DIR across worktrees."""
+
+# Sizing is `du`, bounded and cached per artifact path (a 100 GiB tree takes seconds to walk,
+# and agents launch builds many times an hour).
+[measure]
+du_timeout_seconds = 20
+cache_minutes = 20

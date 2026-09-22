@@ -158,7 +158,7 @@ run = "bun ~/dotfiles/scripts/skills-doctor.ts"
 [tasks."lint:skills-floor"]
 dir = "{{config_root}}"
 description = "Structural floor over every skill (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget"
-run = "bun agents/skills/forging-skills/scripts/skill-check.ts --budget agents/skills-listing-budget.json agents/skills/*/"
+run = "bun agents/skills/forging-skills/scripts/skill-check.ts --quiet --budget agents/skills-listing-budget.json agents/skills/*/"
 
 # operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
 # scope behind a cwd check. The check existed since that skill was forged but nothing ran it, so
@@ -451,19 +451,20 @@ bun i -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
 
 [tasks."mac:init"]
 description = "Initialize Mac environment (all-in-one setup)"
-run = '''
-brew install sheldon coreutils
-brew bundle --file=~/dotfiles/Brewfile
-mise run mac:rosetta
-mise run link:dots
-mise run deps
-mise run link:skills
-mise run tmux:plugins
-mise run mac:defaults
-mise run mac:iterm2
-echo "---"
-echo "Setup complete. Run: exec zsh"
-'''
+# An ordered list, not a script: each step is one command or one task, run in sequence. No
+# logic lives here, so the body rule (<= 10 lines, no branching) holds by construction.
+run = [
+  "brew install sheldon coreutils",
+  "brew bundle --file=~/dotfiles/Brewfile",
+  { task = "mac:rosetta" },
+  { task = "link:dots" },
+  { task = "deps" },
+  { task = "link:skills" },
+  { task = "tmux:plugins" },
+  { task = "mac:defaults" },
+  { task = "mac:iterm2" },
+  "echo '---'; echo 'Setup complete. Run: exec zsh'",
+]
 
 [tasks."mac:defaults"]
 description = "Apply declarative macOS system defaults (single source: macos/defaults.sh)"
@@ -475,13 +476,7 @@ run = 'bash ~/dotfiles/iterm2/setup.sh'
 
 [tasks."mac:rosetta"]
 description = "Install Rosetta 2 on Apple Silicon (idempotent no-op on Intel or if already installed)"
-run = '''
-if [[ "$(uname -m)" == "arm64" ]]; then
-  softwareupdate --install-rosetta --agree-to-license
-else
-  echo "skip: not Apple Silicon"
-fi
-'''
+run = 'bun ~/dotfiles/scripts/mac-rosetta.ts'
 
 # ── 横断監査 ──────────────────────────────────────────────────────────────
 # 各 repo は自分の check の中で lint:scaffold を持つべきだが、それは「誰かが配線を

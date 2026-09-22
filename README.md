@@ -73,14 +73,15 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
-├── cocoindex/   # cocoindex-code settings + the typed repo-retrieve query router
+├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
 ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)
 ├── macos/       # declarative `defaults write` system settings (macOS only)
 ├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
-├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/
+├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
+│                #   and shared agent tools (retrieval-control/ = repo-retrieve, resource-control/, …)
 ├── scripts/     # plumbing — link-dots.sh (all symlinks), check-tools.sh
 ├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)
 └── mise.toml    # the task runner (no justfile)

@@ -46,7 +46,7 @@ pulled `cocoindex-code@latest` through `uvx`, i.e. a THIRD floating copy alongsi
 
 The decisive argument is not the failures, it is duplication of a **guarded** capability by an
 **unguarded** one. `~/.claude/hooks/enforce-search-route.ts` denies raw search (including bare
-`ccc search`) inside a registered project and forces the caller through `cocoindex/repo-retrieve.ts`,
+`ccc search`) inside a registered project and forces the caller through `agents/retrieval-control/repo-retrieve.ts`,
 which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
 gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of
 those gates and never passed through the hook, whose matcher is `Grep|Bash`. Verified after

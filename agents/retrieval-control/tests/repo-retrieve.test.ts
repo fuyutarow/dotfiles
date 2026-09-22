@@ -19,7 +19,6 @@ const COMPATIBILITY_PATH = join(
   import.meta.dir,
   "..",
   "..",
-  "agents",
   "claude",
   "hooks",
   "repo-retrieve.ts",
@@ -102,7 +101,7 @@ function registerFreshGitProject(): { dir: string; head: string } {
 }
 
 // Plants a real, non-empty file under .cocoindex_code/ that hasIndexArtifacts() (in
-// repo-retrieve.ts) will see as "an index exists" — the filesystem-level stand-in for a real `ccc
+// ccc-index.ts) will see as "an index exists" — the filesystem-level stand-in for a real `ccc
 // index` run. Needed by any test that hand-writes a watermark via writeWatermarkFile() instead of
 // going through the real `index` route (whose fake `ccc index` in fakeTools() below plants its
 // own artifact), since checkIndexFreshness now refuses a matching watermark with nothing backing
@@ -136,7 +135,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_I
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ]; then
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
-  # hasIndexArtifacts() (repo-retrieve.ts) see a project the router just indexed as non-empty.
+  # hasIndexArtifacts() (ccc-index.ts) see a project the router just indexed as non-empty.
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
@@ -207,7 +206,7 @@ function run(
 }
 
 describe("repo-retrieve route contract", () => {
-  test("cocoindex owns the executable router and the old hook path resolves to it", () => {
+  test("retrieval-control owns the executable router and the old hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);
     expect(realpathSync(COMPATIBILITY_PATH)).toBe(realpathSync(ROUTER));

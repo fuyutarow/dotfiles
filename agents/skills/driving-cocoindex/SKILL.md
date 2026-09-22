@@ -99,7 +99,7 @@ into its own cgroup) — never say "the daemon restarts itself" without naming w
 ## The daily loop — invocation recipes (LOW freedom)
 
 On house hosts, `bun ~/.claude/hooks/repo-retrieve.ts --help` is the guaranteed compatibility
-entrypoint; its single implementation lives at `cocoindex/repo-retrieve.ts`, and `repo-retrieve`
+entrypoint; its single implementation lives at `agents/retrieval-control/repo-retrieve.ts`, and `repo-retrieve`
 links there directly. Routes: `concept` / `battery` → ccc search;
 `literal` / `exhaustive` / `files` → rg; `structural` → ccc grep; `symbol` → Serena. The
 user-global PreToolUse gate blocks direct Grep/rg/grep/find/fd/tree, direct ccc search/grep, and

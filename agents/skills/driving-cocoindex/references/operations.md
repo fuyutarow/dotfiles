@@ -211,7 +211,7 @@ that a bare `rg redirect` buries under a wall of unrelated `redirect_*` identifi
 House invocation is `repo-retrieve <route>`: `concept` / `battery` select `ccc search`,
 `literal` / `exhaustive` / `files` select rg, and `structural` selects `ccc grep`. The canonical
 compatibility entrypoint remains `bun ~/.claude/hooks/repo-retrieve.ts`, a relative symlink to the
-single implementation at `cocoindex/repo-retrieve.ts`; the PATH command links to that implementation
+single implementation at `agents/retrieval-control/repo-retrieve.ts`; the PATH command links to that implementation
 directly. A missing canonical file is a configuration fault, not
 permission to call ccc search/grep directly or emulate search with Python, Node, or shell loops.
 Exit-zero ccc output without a `--- Result` block is reported as NO_MATCH, never PASS. This file remains the arguing home for

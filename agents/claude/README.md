@@ -13,7 +13,7 @@ this repo. Keep the two separate.
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | user-global policy (sonnet-agent rule nudge) |
 | `statusline-command.ts` | `~/.claude/statusline-command.ts` | two-line statusline, run via bun (`settings.json` → `statusLine.command`) |
 | `hooks/` | `~/.claude/hooks/` (whole dir) | all hooks — TypeScript on bun (see below), plus `herdr-agent-state.sh` |
-| `../../cocoindex/repo-retrieve.ts` | `~/.bun/bin/repo-retrieve` (package `bin`, `bun link`); compatibility symlink at `~/.claude/hooks/repo-retrieve.ts` | declared query-shape router: ccc / rg / Serena; implementation belongs to the cocoindex topic |
+| `../retrieval-control/repo-retrieve.ts` | `~/.bun/bin/repo-retrieve` (package `bin`, `bun link`); compatibility symlink at `~/.claude/hooks/repo-retrieve.ts` | declared query-shape router: ccc / rg / Serena; implementation lives in the `agents/retrieval-control/` topic |
 
 `~/.claude/settings.local.json` (machine-specific permissions) stays **local**,
 not shared.
@@ -66,7 +66,7 @@ mise run test:hooks     # = bun test agents/claude/hooks
 `repo-retrieve` is tested separately with fake `ccc` and `rg` executables:
 
 ```sh
-mise run test:cocoindex
+mise run test:retrieval-control
 ```
 
 Its routes are:
@@ -77,7 +77,7 @@ structural      -> ccc grep      symbol                   -> Serena
 ```
 
 The policy gate checks the compatibility symlink in the already-linked `~/.claude/hooks/`
-directory, while the single implementation lives at `cocoindex/repo-retrieve.ts`.
+directory, while the single implementation lives at `agents/retrieval-control/repo-retrieve.ts`.
 The PATH command `~/.bun/bin/repo-retrieve` is a package `bin` (`bun link`) of that implementation. A missing canonical file is a
 hard configuration fault: stop and repair it, never emulate search with a general-purpose
 runtime. An exit-zero ccc call with no result blocks is reported as `NO_MATCH`, not `PASS`.

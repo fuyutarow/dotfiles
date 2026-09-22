@@ -1,1 +1,1 @@
-../../../cocoindex/repo-retrieve.ts
+../../retrieval-control/repo-retrieve.ts

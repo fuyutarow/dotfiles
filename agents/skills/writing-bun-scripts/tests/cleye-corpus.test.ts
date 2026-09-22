@@ -63,7 +63,7 @@ const CORPUS = [
   { path: "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" },
   { path: "agents/skills/wiring-repositories/scripts/wiring-check.ts" },
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
-  { path: "cocoindex/repo-retrieve.ts", command: "literal" },
+  { path: "agents/retrieval-control/repo-retrieve.ts", command: "literal" },
   { path: "scripts/reclaim-clean.ts" },
   { path: "scripts/reclaim-host.ts" },
   { path: "scripts/reclaim-toolchains.ts" },

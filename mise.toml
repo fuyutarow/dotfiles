@@ -182,7 +182,7 @@ dir = "{{config_root}}"
 description = "Enforce the writing-bun-scripts floor over every tracked production Bun CLI"
 run = '''
 git ls-files -z -- \
-  ':(glob)scripts/*.ts' ':(glob)cocoindex/*.ts' \
+  ':(glob)scripts/*.ts' ':(glob)agents/retrieval-control/*.ts' \
   ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
@@ -230,7 +230,7 @@ run = "bunx tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts", "test:zsh", "test:mise-scope"]
+depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "test:scripts", "test:zsh", "test:mise-scope"]
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
@@ -246,10 +246,10 @@ dir = "{{config_root}}"
 description = "Bounded resource admission and explicit Serena lifecycle tests (wrapped in the runner's own envelope where a user systemd can admit it)"
 run = "bun ~/dotfiles/scripts/test-resource-control.ts"
 
-[tasks."test:cocoindex"]
+[tasks."test:retrieval-control"]
 dir = "{{config_root}}"
-description = "CocoIndex repo-retrieve route and CLI contract tests"
-run = "bun test cocoindex/tests"
+description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables)"
+run = "bun test agents/retrieval-control/tests"
 
 [tasks."test:scripts"]
 dir = "{{config_root}}"

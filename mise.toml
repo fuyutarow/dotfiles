@@ -298,11 +298,16 @@ description = "Prose lint (linting-prose machine floor): bunx textlint with the 
 run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json"
 
 # ── git hooks ────────────────────────────────────────────────────────────────────────────────
-# 規律: .githooks/* は mise task を呼ぶだけの薄い殻にする。
-# gate の hook(pre-commit)は契約 verb(fmt:check ::: lint)を直接呼び、hook 専用 task を持たない —
-# 専用の本体は verb から乖離する(2026-09-22: 旧 hook:pre-commit は整形だけで lint せず、1 日で
-# lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も巻き込んでいた)。
-# 下の hook:* は対応する契約 verb が無いイベント(post-commit / post-merge)の本体だけ。
+# 規律: .githooks/<event> は `mise run --jobs 1 hook:<event>` を呼ぶだけの薄い殻。git の各 hook で
+# 何が走るかは、この mise.toml だけ見れば分かる(一元管理)。
+# gate の hook(pre-commit / pre-push)の task は depends のみ・契約 verb のみで、run 本体を持たない —
+# 本体は verb から乖離する(2026-09-22: 旧 hook:pre-commit は run に独自 script を持ち、整形だけで
+# lint せず、1 日で lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も
+# 巻き込んでいた)。event の hook(post-commit / post-merge)は対応する verb が無いので run を持つ。
+[tasks."hook:pre-commit"]
+description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs, never a run body (wiring-repositories HOOK-1): a gate cannot drift from `mise run lint` if it IS lint. Widen to [\"check\"] to add the ~30 s test suite."
+depends = ["fmt:check", "lint"]
+
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:post-commit"]
 description = "git post-commit body: warm the cocoindex index incrementally (`ccc index`) so search never pays the update latency. No-op when ccc is absent, when the repo has no .cocoindex_code/, or when the daemon is already [indexing]. Called detached by .githooks/post-commit."

@@ -6,8 +6,8 @@ description: >-
   Use for 新しいリポジトリ, プロジェクトを立ち上げ, リポジトリ初期構築, 雛形, scaffold a project,
   bootstrap a repo — and equally for 配線監査, 健全性チェック, health check, repo audit,
   不備がないか, 発火しない hook, 呼ばれない tool, 版が固定されていない, "clone したら動かない".
-  Owns the SET, the ORDER, the JOINT, and the GIT-HOOK shape (a gate hook only runs the contract
-  verbs — `mise run --jobs 1 fmt:check ::: lint`) across git/.gitignore, mise [tools], manifests,
+  Owns the SET, the ORDER, the JOINT, and the GIT-HOOK shape (hook shim runs `hook:<event>`; a gate's
+  task is depends-only over contract verbs) across git/.gitignore, mise [tools], manifests,
   .claude/, .githooks + core.hooksPath, the ccc index, and research-governance config — never a
   layer's contents. LAW: a layer enters only with the failure it prevents named in the commit.
   Cuts — CARDINALITY vs wiring-mise-tasks: ONE artifact (the task graph, its verbs, its
@@ -90,12 +90,16 @@ It is stated once, here.
 
 | Hook kind | Rule | Shim body |
 |---|---|---|
-| **Gate** — `pre-commit`, `pre-push` | **HOOK-1**: execute the contract verbs (`wiring-mise-tasks`) and nothing else. No `hook:pre-commit` task, no direct tool call | `exec mise run --jobs 1 fmt:check ::: lint` (pre-commit) · `exec mise run --jobs 1 check` (pre-push, or pre-commit when `check` fits the commit budget) |
-| **Event** — `post-commit`, `post-merge`, `post-checkout` | a thin wrapper; the body lives in a `hook:<event>` task, because no contract verb expresses it | `exec mise run hook:<event>` |
+| **Gate** — `pre-commit`, `pre-push` | **HOOK-1**: `hook:<event>` in mise.toml is **depends-only over contract verbs** (`wiring-mise-tasks`) — no `run` body, no direct tool call | shim: `exec mise run --jobs 1 hook:pre-commit` · task: `depends = ["fmt:check", "lint"]`, or `["check"]` when it fits the commit budget |
+| **Event** — `post-commit`, `post-merge`, `post-checkout` | the body lives in a `hook:<event>` task with a `run`, because no contract verb expresses it | `exec mise run hook:<event>` |
+
+Every hook is `.githooks/<event>` → `hook:<event>`. So **mise.toml alone says what each git hook
+runs**: one place to read and change it. The name mirrors git's own hook file 1:1. Its hyphen
+draws mise-contract's soft grammar WARN, accepted for that correspondence.
 
 | # | Rule | Why, and what it costs when broken |
 |---|---|---|
-| **HOOK-1** | A gate hook runs contract verbs only | A bespoke gate drifts from the verb it stands in for. `mise run check` never runs it, so the manual gate and the commit gate differ. Measured 2026-09-22 (ledger §9) |
+| **HOOK-1** | A gate task is depends-only over contract verbs, and the shim runs only that task | A `run` body — in the task or the shim — is a second gate that drifts from the verbs. `mise run check` never runs it, so the manual gate and the commit gate differ. Measured 2026-09-22 (ledger §9) |
 | **HOOK-3** | Separate tasks with `:::`; run with `--jobs 1` | `mise run a b` passes `b` as an ARGUMENT and exits 0 without running it. mise 2026.9.12's parallel scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM |
 | **gate refuses, never rewrites** | `fmt:check`, not `fmt`, at commit time | A formatting gate that re-`git add`s whole files sweeps the unstaged hunks of a partially staged file into the commit |
 | *(HOOK-2 retired)* | — | It checked a language filter inside bespoke bodies. HOOK-1 forbids the bespoke body, so the filter cannot exist |

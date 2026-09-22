@@ -148,6 +148,15 @@ HOOK-1; `mise run a b` → HOOK-3; no `--jobs 1` → HOOK-3; non-verb task → H
 polysearch-rs (`mise run f`: mutating, alias, parallel; also HOOK-3). Reported, not migrated —
 each is its owner's repo.
 
+**Correction, same day (user review).** The first cut removed `hook:pre-commit` entirely and had
+the shim call `fmt:check ::: lint` directly. The user rejected it: then only `.githooks/pre-commit`
+says what runs at commit, and mise.toml stops being the one place. Right — the defect was the task's
+`run` BODY, never its NAME. Final shape: `hook:pre-commit` is depends-only over contract verbs, the
+shim runs exactly it. It keeps mise.toml authoritative and still cannot drift, for the same reason
+`check` cannot: no body. Re-proven: 9 fixtures (body, off-verb dependency, shim bypassing the task,
+missing task, no `--jobs 1`, argument trap, foreign tool: all FAIL; both good forms clean) and the
+real hook in a worktree (try/catch and unformatted REFUSED untouched, clean COMMITTED, 0/5 hangs).
+
 **Skill vs hook, decided.** The rule is repo STATE that humans and every agent change, so it is
 enforced where repo state is judged: this floor, run by `--audit` across repos and by each repo's
 own gate. A Claude Code PreToolUse hook sees only Claude's tool calls and fires on every Bash call;

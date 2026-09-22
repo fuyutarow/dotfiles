@@ -1,11 +1,10 @@
 #!/bin/sh
 # shim: hook-entry
-# The commit gate IS the contract verbs `fmt:check` + `lint` — no hook-specific body to drift from
-# them (wiring-repositories HOOK-1). `:::` is required: `mise run fmt:check lint` silently passes
-# `lint` as an ARGUMENT and never lints. `--jobs 1`: mise 2026.9.12's parallel scheduler hangs on
-# a failing dependency and ignores SIGTERM (measured 3/6); serial costs ~1 s here (HOOK-3).
+# What the commit gate runs is declared in mise.toml's `hook:pre-commit` (depends-only over the
+# contract verbs) — one place to read and change it. `--jobs 1`: mise 2026.9.12's parallel
+# scheduler hangs on a failing dependency and ignores SIGTERM (measured 3/6); serial never did.
 command -v mise > /dev/null 2>&1 || {
-  echo "pre-commit: mise not on PATH; gate skipped (run 'mise run check' manually)" >&2
+  echo "pre-commit: mise not on PATH; gate skipped (run 'mise run hook:pre-commit' manually)" >&2
   exit 0
 }
-exec mise run --jobs 1 fmt:check ::: lint
+exec mise run --jobs 1 hook:pre-commit

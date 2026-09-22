@@ -60,7 +60,7 @@ function parseWaivers(mise: string): void {
   }
 }
 
-type Task = { readonly run: string; readonly alias: string[] };
+type Task = { readonly run: string; readonly alias: string[]; readonly deps: string[]; readonly hasRun: boolean };
 
 /**
  * Top-level `[tasks.x]` / `[tasks."x:y"]` headers, with their RUN bodies isolated.
@@ -79,14 +79,23 @@ function miseTasks(src: string): Map<string, Task> {
   let name: string | undefined;
   let run: string[] = [];
   let alias: string[] = [];
+  let deps: string[] = [];
+  let hasRun = false;
+  let inDeps = false;
   let multi: string | undefined; // the ''' or """ currently open
   let inRun = false;
 
   const flush = (): void => {
-    if (name !== undefined) out.set(name, { run: run.join("\n"), alias });
+    if (name !== undefined) out.set(name, { run: run.join("\n"), alias, deps, hasRun });
     run = [];
     alias = [];
+    deps = [];
+    hasRun = false;
+    inDeps = false;
     inRun = false;
+  };
+  const takeDeps = (text: string): void => {
+    for (const d of text.matchAll(/["']([^"']+)["']/g)) if (d[1] !== undefined) deps.push(d[1]);
   };
 
   for (const line of src.split("\n")) {
@@ -115,6 +124,12 @@ function miseTasks(src: string): Map<string, Task> {
     if (kv !== null) {
       const key = kv[1];
       const rest = kv[2] ?? "";
+      inDeps = false;
+      if (key === "run") hasRun = true;
+      if (key === "depends") {
+        takeDeps(rest);
+        inDeps = !rest.includes("]");
+      }
       const open = /^('''|""")/.exec(rest);
       if (open !== null) {
         const delim = open[1] ?? "";
@@ -140,7 +155,11 @@ function miseTasks(src: string): Map<string, Task> {
       continue;
     }
     // continuation lines of a multi-line `depends = [` array
-    if (/^\s*["']/.test(line)) run.push(line);
+    if (/^\s*["']/.test(line)) {
+      run.push(line);
+      if (inDeps) takeDeps(line);
+    }
+    if (inDeps && line.includes("]")) inDeps = false;
   }
   flush();
 
@@ -345,9 +364,9 @@ function miseRuns(body: string): MiseRun[] {
     }
   }
 
-  // HOOK-1 (gate hooks) — pre-commit / pre-push call CONTRACT VERBS, and nothing else.
-  // A thin shim over a hook-specific task is still a bespoke gate, and a bespoke gate drifts from
-  // the verbs it stands in for. Measured 2026-09-22 in dotfiles: `hook:pre-commit` formatted but
+  // HOOK-1 (gate hooks) — pre-commit / pre-push exec `hook:<event>`, which mise.toml declares as
+  // depends-only over CONTRACT VERBS. A gate with a body — in the task or in the shim — drifts
+  // from the verbs it stands in for. Measured 2026-09-22 in dotfiles: `hook:pre-commit` formatted but
   // never linted, so five lint failures reached the integration branch in one day while
   // `mise run lint` would have refused each; it also re-`git add`-ed whole files after formatting,
   // sweeping the unstaged hunks of partially staged files into the commit. The verbs are the
@@ -356,10 +375,23 @@ function miseRuns(body: string): MiseRun[] {
   const GATE_HOOKS = ["pre-commit", "pre-push"];
   const GATE_VERBS = new Set(["fmt:check", "lint", "test", "check"]);
   for (const hook of GATE_HOOKS) {
-    if (tasks.has(`hook:${hook}`)) {
-      fail("HOOK-1", `mise.toml defines \`hook:${hook}\` — a gate-specific body. Delete it and have ` +
-        `.githooks/${hook} exec the contract verbs directly (e.g. \`mise run --jobs 1 fmt:check ::: lint\`), ` +
-        `so the commit gate and \`mise run lint\` cannot diverge.`);
+    // The gate is DECLARED in mise.toml as `hook:<event>` so one file answers "what runs at commit"
+    // — and it is depends-only over contract verbs, so it cannot drift from them. A `run` body is
+    // exactly what broke dotfiles on 2026-09-22 (formatted, re-staged, never linted).
+    const gateTask = tasks.get(`hook:${hook}`);
+    if (gateTask !== undefined) {
+      if (gateTask.hasRun) {
+        fail("HOOK-1", `\`hook:${hook}\` has a run body. A gate task is depends-only over contract ` +
+          `verbs (e.g. \`depends = ["fmt:check", "lint"]\`); a body is a second gate that drifts from them.`);
+      }
+      const offVerb = gateTask.deps.filter((d) => !GATE_VERBS.has(d));
+      if (offVerb.length > 0) {
+        fail("HOOK-1", `\`hook:${hook}\` depends on ${offVerb.map((d) => `\`${d}\``).join(", ")} — not a ` +
+          `contract verb. Put a repo-specific check in a \`lint:*\` subtask so \`mise run lint\` runs it too.`);
+      }
+      if (gateTask.deps.length === 0 && !gateTask.hasRun) {
+        fail("HOOK-1", `\`hook:${hook}\` depends on nothing — the gate gates nothing.`);
+      }
     }
     const raw = existsSync(hooksDir) ? await readIf(join(hooksDir, hook)) : undefined;
     if (raw === undefined) continue;
@@ -392,10 +424,15 @@ function miseRuns(body: string): MiseRun[] {
       notes.push(`.githooks/${hook} executes nothing — it is bound but gates nothing.`);
     }
     for (const r of runs) {
-      const bespoke = r.tasks.filter((t) => !GATE_VERBS.has(t));
-      if (bespoke.length > 0) {
-        fail("HOOK-1", `.githooks/${hook} runs ${bespoke.map((t) => `\`${t}\``).join(", ")} — not a ` +
-          `contract verb (${[...GATE_VERBS].join(", ")}). A gate hook calls the verbs themselves.`);
+      const expected = `hook:${hook}`;
+      const wrong = r.tasks.filter((t) => t !== expected);
+      if (wrong.length > 0) {
+        fail("HOOK-1", `.githooks/${hook} runs ${wrong.map((t) => `\`${t}\``).join(", ")}. A gate hook ` +
+          `runs exactly \`${expected}\`, declared in mise.toml as depends-only over contract verbs, ` +
+          `so mise.toml alone says what the gate does.`);
+      }
+      if (!tasks.has(expected)) {
+        fail("HOOK-1", `.githooks/${hook} has no \`${expected}\` in mise.toml to run.`);
       }
       // HOOK-3 — the two ways a correct-looking gate line silently gates nothing, or never returns.
       const swallowedTasks = r.swallowed.filter((t) => tasks.has(t) || GATE_VERBS.has(t));

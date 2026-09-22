@@ -157,6 +157,18 @@ shim runs exactly it. It keeps mise.toml authoritative and still cannot drift, f
 missing task, no `--jobs 1`, argument trap, foreign tool: all FAIL; both good forms clean) and the
 real hook in a worktree (try/catch and unformatted REFUSED untouched, clean COMMITTED, 0/5 hangs).
 
+**Migration of the remaining repos, same day (user: "process formally; the design space is
+mise.toml only").** Every change lives in each repo's mise.toml plus the uniform shim.
+
+| Repo | Cause of the non-zero gate | Formal fix | Verification |
+|---|---|---|---|
+| firedancer | fmt:check named `src ext test scripts`, moved to archives/ on 2026-09-05 (commit 62e78b713). Its Runic env `scripts/Project.toml` was gone. 933 rumdl findings, all in archives/ | Runic on `packages/` via `@runic` (+ `setup:runic`). rumdl `--exclude archives`. `polysearch hook pre-commit` became `lint:polysearch`. The repo's own `fmt:julia` formatted 100 files | AST of all 100 files equal to HEAD, modulo Runic's tail `return` and a `nothing` after a trailing loop |
+| qoed | Paths predated today's layout move (bac177aa). `check:polysearch` called a deleted TS CLI. Biome crawled into `archives/biome.json` | `deliverables/` paths. `polysearch doctor`. Biome given its two files explicitly. chktex -n 9 12 17 18 23 35 39 45, each with its reason. The repo's own `fmt:tex` formatted 14 files | TeX-visible text equal to HEAD after TeX's comment rule |
+| soks | 462 rumdl findings in `knowledge/`, whose writes go through `soks-govern admit`. `floor` exits 2 by design | rumdl `--exclude knowledge`. `git-check` + `author-check` became `lint:govern`. `floor` moved to `check` (HOOK-1b). `hook:pre-push` became raw (HOOK-1a) | old and new pre-push both exit 2 with the same message on malformed stdin |
+
+Found on the way: qoed's `lint:tex` had exited 0 on nonexistent paths — it checked nothing
+until the paths were fixed.
+
 **Skill vs hook, decided.** The rule is repo STATE that humans and every agent change, so it is
 enforced where repo state is judged: this floor, run by `--audit` across repos and by each repo's
 own gate. A Claude Code PreToolUse hook sees only Claude's tool calls and fires on every Bash call;

@@ -100,6 +100,8 @@ draws mise-contract's soft grammar WARN, accepted for that correspondence.
 | # | Rule | Why, and what it costs when broken |
 |---|---|---|
 | **HOOK-1** | A gate task is depends-only over contract verbs, and the shim runs only that task | A `run` body — in the task or the shim — is a second gate that drifts from the verbs. `mise run check` never runs it, so the manual gate and the commit gate differ. Measured 2026-09-22 (ledger §9) |
+| **HOOK-1a** | The one run-bearing gate: `hook:pre-push` with `raw = true` | git passes the refs being pushed on stdin. No verb can supply that input; `raw = true` passes stdin through `mise run` |
+| **HOOK-1b** | Every task in a commit gate can reach exit 0 in one commit | A task that reports accumulated debt (a whole-corpus ratchet) cannot pass in one commit, so it blocks every commit. It belongs in `check` |
 | **HOOK-3** | Separate tasks with `:::`; run with `--jobs 1` | `mise run a b` passes `b` as an ARGUMENT and exits 0 without running it. mise 2026.9.12's parallel scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM |
 | **gate refuses, never rewrites** | `fmt:check`, not `fmt`, at commit time | A formatting gate that re-`git add`s whole files sweeps the unstaged hunks of a partially staged file into the commit |
 | *(HOOK-2 retired)* | — | It checked a language filter inside bespoke bodies. HOOK-1 forbids the bespoke body, so the filter cannot exist |

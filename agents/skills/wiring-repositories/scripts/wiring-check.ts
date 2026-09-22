@@ -60,7 +60,7 @@ function parseWaivers(mise: string): void {
   }
 }
 
-type Task = { readonly run: string; readonly alias: string[]; readonly deps: string[]; readonly hasRun: boolean };
+type Task = { readonly run: string; readonly alias: string[]; readonly deps: string[]; readonly hasRun: boolean; readonly raw: boolean };
 
 /**
  * Top-level `[tasks.x]` / `[tasks."x:y"]` headers, with their RUN bodies isolated.
@@ -81,16 +81,18 @@ function miseTasks(src: string): Map<string, Task> {
   let alias: string[] = [];
   let deps: string[] = [];
   let hasRun = false;
+  let raw = false;
   let inDeps = false;
   let multi: string | undefined; // the ''' or """ currently open
   let inRun = false;
 
   const flush = (): void => {
-    if (name !== undefined) out.set(name, { run: run.join("\n"), alias, deps, hasRun });
+    if (name !== undefined) out.set(name, { run: run.join("\n"), alias, deps, hasRun, raw });
     run = [];
     alias = [];
     deps = [];
     hasRun = false;
+    raw = false;
     inDeps = false;
     inRun = false;
   };
@@ -119,6 +121,7 @@ function miseTasks(src: string): Map<string, Task> {
       continue;
     }
     if (name === undefined) continue;
+    if (/^\s*raw\s*=\s*true\b/.test(line)) raw = true;
 
     const kv = /^\s*(run|depends|alias)\s*=\s*(.*)$/.exec(line);
     if (kv !== null) {
@@ -380,7 +383,11 @@ function miseRuns(body: string): MiseRun[] {
     // exactly what broke dotfiles on 2026-09-22 (formatted, re-staged, never linted).
     const gateTask = tasks.get(`hook:${hook}`);
     if (gateTask !== undefined) {
-      if (gateTask.hasRun) {
+      // The one formal exception: pre-push hands the check git's list of refs being pushed on
+      // stdin. No verb can supply that input, so `hook:pre-push` may run the consumer — only with
+      // `raw = true`, which is what passes the hook's stdin through `mise run`.
+      const stdinGate = hook === "pre-push" && gateTask.raw;
+      if (gateTask.hasRun && !stdinGate) {
         fail("HOOK-1", `\`hook:${hook}\` has a run body. A gate task is depends-only over contract ` +
           `verbs (e.g. \`depends = ["fmt:check", "lint"]\`); a body is a second gate that drifts from them.`);
       }
@@ -389,7 +396,7 @@ function miseRuns(body: string): MiseRun[] {
         fail("HOOK-1", `\`hook:${hook}\` depends on ${offVerb.map((d) => `\`${d}\``).join(", ")} — not a ` +
           `contract verb. Put a repo-specific check in a \`lint:*\` subtask so \`mise run lint\` runs it too.`);
       }
-      if (gateTask.deps.length === 0 && !gateTask.hasRun) {
+      if (gateTask.deps.length === 0 && !gateTask.hasRun && !stdinGate) {
         fail("HOOK-1", `\`hook:${hook}\` depends on nothing — the gate gates nothing.`);
       }
     }

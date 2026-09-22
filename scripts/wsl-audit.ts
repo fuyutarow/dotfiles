@@ -290,7 +290,7 @@ $cpuSamples = @(); $availSamples = @(); $readSamples = @()
 "host_pagereads=" + [int](($readSamples | Measure-Object -Average).Average)
 $vm = Get-Process -Name vmmemWSL
 "host_vmmem=" + $(if ($vm) { ($vm | Measure-Object -Property WorkingSet64 -Sum).Sum } else { 0 })
-$spin = Get-Process -Name sshd,pwsh,powershell,conhost | Where-Object { $_.CPU -gt ${SPIN_CPU_SECONDS} }
+$spin = Get-Process -Name sshd,sshd-session,pwsh,powershell,conhost | Where-Object { $_.CPU -gt ${SPIN_CPU_SECONDS} }
 "host_spin=" + @($spin).Count
 "host_spin_names=" + (@($spin | ForEach-Object { $_.ProcessName + ":" + [int]$_.CPU + "s" }) -join " ")
 $ev = Get-WinEvent -FilterHashtable @{LogName='System'; Id=7031,7034; StartTime=(Get-Date).AddHours(-1)}
@@ -490,7 +490,7 @@ export function judge(
     f.push({
       level: "WARN",
       key: "host-spin",
-      text: `${spin} host process(es) past ${SPIN_CPU_SECONDS}s CPU${names ? ` — ${names}` : ""}; the 2026-09-09 set held 6.8 of 16 cores for 3 days`,
+      text: `${spin} host process(es) past ${SPIN_CPU_SECONDS}s CPU${names ? ` — ${names}` : ""}; the 2026-09-09 set held 6.8 of 16 cores for 3 days. CPU alone does not mean orphaned (a long herdr session accrues it too) — \`mise run wsl:reap\` lists the true sshd orphans`,
     });
   }
 

@@ -74,6 +74,7 @@ const CORPUS = [
   { path: "scripts/skills-doctor.ts" },
   { path: "scripts/vendor-skill.ts" },
   { path: "scripts/wsl-audit.ts" },
+  { path: "scripts/wsl-reap.ts" },
   { path: "scripts/wsl-wake.ts" },
   { path: "scripts/wsl-winget.ts" },
 ] satisfies readonly CorpusEntry[];

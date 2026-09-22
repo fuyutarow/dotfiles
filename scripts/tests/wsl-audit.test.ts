@@ -185,6 +185,8 @@ describe("judge — the host-side failures the guest cannot see", () => {
     const f = judge(healthyGuest(), h);
     expect(f.map((x) => x.key)).toEqual(["host-spin"]);
     expect(f[0].text).toContain("sshd:254000s");
+    // CPU time flags long-lived live sessions too; the finding must point at the structural reaper.
+    expect(f[0].text).toContain("mise run wsl:reap");
   });
 
   test("a single service crash in the last hour is already a finding", () => {

@@ -406,6 +406,16 @@ run = 'bun ~/dotfiles/scripts/reclaim-purge.ts'
 description = "Reclaim Windows-host disk under WSL2 that guest-side tasks cannot: orphaned swap.vhdx (from dead distro instances) and the winget cache. READ-ONLY plan by default; --execute frees. Safe live — the OS locks the running swap. --host is an ssh alias."
 run = 'bun ~/dotfiles/scripts/reclaim-host.ts'
 
+# Remediation for what wsl:audit reports as "host process past 3600s CPU". Twice on r99 (2026-09-09
+# and 2026-09-22) sshd left per-connection `sshd -R` processes busy-looping after C: filled — 9 of
+# them at ~58,000 s CPU each the second time. Selection is STRUCTURAL, never CPU time: a live
+# session always has a `sshd -z` child and a socket, an orphan has neither, and a days-long herdr
+# session legitimately accumulates CPU. Plan by default; --execute stops only pids whose creation
+# time still matches the plan, so a pid reused by a new live session is left alone.
+[tasks."wsl:reap"]
+description = "Reap ORPHANED sshd on the Windows host: the per-connection `-R` process (sshd.exe on 9.x, sshd-session.exe on 10.x) under any sshd service with NO child and NO socket (a live session always has both). READ-ONLY plan by default; --execute stops them, pid+creation-time matched. CPU time is reported, never the criterion. --host is an ssh alias."
+run = 'bun ~/dotfiles/scripts/wsl-reap.ts'
+
 [tasks."reclaim:vhdx"]
 description = "READ-ONLY: plan the offline compaction of a WSL2 ext4.vhdx — usually the largest single C: lever. Measures the allocated-vs-guest-used gap FRESH (it shrinks as the guest writes: 130GB on r99 2026-09-17 was 57GB by 09-21, so never quote a remembered number), detects Optimize-VHD (Pro) vs diskpart (Home), prints the elevated procedure. fstrim and --set-sparse were measured inert here; only compaction returns the gap."
 run = 'bun ~/dotfiles/scripts/reclaim-vhdx.ts'

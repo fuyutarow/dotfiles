@@ -89,8 +89,9 @@ agent_panel_sort = "spaces"
 # orchestration is genuinely engaged — see effortDisplay in statusline-command.ts, folded in
 # 2026-09-05 on request, replacing an earlier separate WF segment); added 2026-09-03, on request,
 # between $model and $rc. $rc is a
-# one-glyph Remote Control indicator (🔗 while connected, "" otherwise, per that file's own
-# header note) added 2026-09-03, on request. Order was flipped twice the same day (rc-first,
+# three-state Remote Control indicator: "🔗" connected, "rc:off" disconnected, "rc:?" probe
+# unverified (see rcState() in statusline-command.ts — changed 2026-09-22 from 🔗-or-empty, because
+# an empty token made "off" and "cannot tell" look the same) added 2026-09-03, on request. Order was flipped twice the same day (rc-first,
 # then back to model-first) — model-first is the settled one; $effort slotted in after that
 # settled, so it did not get flipped. $rc is left unstyled on purpose: it's an emoji, not text,
 # so an fg override wouldn't reliably repaint it anyway — nudge this if it reads oddly once seen

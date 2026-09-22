@@ -22,8 +22,8 @@
 // last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
 //   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
 //   2 <email> | Session: <uuid>                       (identity strings)
-//   3 <name> | Model | Effort[+WF] [| 🔗] | Ctx: <k> <pct>%  (agent + config + budget-now;
-//                                                     🔗 = Remote Control connected)
+//   3 <name> | Model | Effort[+WF] | 🔗|rc:off|rc:? | Ctx: <k> <pct>%  (agent + config +
+//     budget-now; Remote Control on / off / probe unverified — see rcState())
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
 //   5 Job: ... (conditional)                          (background work)
 //
@@ -54,7 +54,15 @@
 
 import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createConnection } from "node:net";
 import { fromThrowable } from "neverthrow";
 
@@ -98,8 +106,8 @@ interface Dataframe {
   model: string;
   effort?: string | undefined;
   wfOn: boolean;
-  /** Remote Control connected right now — see rcConnected(). */
-  rc: boolean;
+  /** Remote Control: on / off / unknown — see rcState(). */
+  rc: RcState;
   ctx: string;
   ctxPct?: number | undefined;
   rl5?: number | undefined;
@@ -248,6 +256,97 @@ function ultracodeConfigured(): boolean {
 // live 2026-09-02: a session still showed its pre-rename name after an unrelated subagent had
 // been running 28+ minutes. That gap is Claude Code's own render cadence, which no cache TTL
 // here can shorten.
+/**
+ * Remote Control state — the SOLE probe for both surfaces (row 3 and herdr's $rc token), and
+ * deliberately THREE-valued, because "not connected" and "cannot tell" must not render alike:
+ *
+ *   on       $CLAUDE_CODE_BRIDGE_SESSION_ID is set. Claude Code writes it into its own
+ *            process.env when the bridge handle attaches and deletes it when it detaches
+ *            (read from the 2.1.278 bundle: `if(i!==void 0)process.env.…=i;else delete …`), so
+ *            every child — this statusline included — sees the live value.
+ *   off      unset, AND the running CLI binary still contains that exact write. Only then does
+ *            absence mean "disconnected".
+ *   unknown  unset, and the probe itself is unverified: the binary no longer contains the
+ *            write (renamed/removed upstream), or it cannot be located or read. Without this
+ *            state a silent upstream rename would read as "off" forever — the failure the user
+ *            named on 2026-09-22 ("null と off の違い").
+ *
+ * The binary check is a one-time scan per CLI build (path+size+mtime key, ~230 MB read once),
+ * cached in RC_PROBE_CACHE; every other render is a small JSON read.
+ */
+type RcState = "on" | "off" | "unknown";
+const RC_PROBE_CACHE = `${HOME}/.cache/claude/statusline-rc-probe.json`;
+const RC_NEEDLE = "process.env.CLAUDE_CODE_BRIDGE_SESSION_ID=";
+
+/** Stream `fd` in 8 MB chunks; a tail carry catches a match straddling two chunks. */
+function scanFd(fd: number, pat: Buffer): boolean | undefined {
+  const chunk = 8 << 20;
+  const buf = Buffer.alloc(chunk + pat.length);
+  let carry = 0;
+  for (;;) {
+    const read = fromThrowable(() => readSync(fd, buf, carry, chunk, null))();
+    if (read.isErr()) return undefined;
+    if (read.value <= 0) return false;
+    const end = carry + read.value;
+    if (buf.subarray(0, end).indexOf(pat) !== -1) return true;
+    carry = Math.min(pat.length - 1, end);
+    buf.copy(buf, 0, end - carry, end);
+  }
+}
+
+/** true/false = scanned; undefined = could not scan (missing, unreadable). */
+function binaryContains(path: string, needle: string): boolean | undefined {
+  const opened = fromThrowable(() => openSync(path, "r"))();
+  if (opened.isErr()) return undefined;
+  try {
+    return scanFd(opened.value, Buffer.from(needle));
+  } finally {
+    closeSync(opened.value);
+  }
+}
+
+/**
+ * Keyed by path+size+mtime, and a MAP rather than one slot: sessions on two CLI builds render
+ * side by side after an auto-update, and a single slot would make them evict each other and
+ * re-scan ~230 MB on every render.
+ */
+function rcProbeValid(): boolean | undefined {
+  const exe = process.env.CLAUDE_CODE_EXECPATH;
+  if (!exe) return undefined;
+  const st = fromThrowable(() => statSync(exe))();
+  if (st.isErr()) return undefined;
+  const key = `${exe}\u0000${st.value.size}\u0000${st.value.mtimeMs}`;
+  const cache = fromThrowable(
+    () =>
+      JSON.parse(readFileSync(RC_PROBE_CACHE, "utf8")) as Record<
+        string,
+        unknown
+      >,
+  )().unwrapOr({} as Record<string, unknown>);
+  const hit = cache[key];
+  if (typeof hit === "boolean") return hit;
+  const valid = binaryContains(exe, RC_NEEDLE);
+  if (valid === undefined) return undefined;
+  // The cache is an optimization; a failed write leaves the answer above standing.
+  fromThrowable(() => {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(RC_PROBE_CACHE, JSON.stringify({ ...cache, [key]: valid }));
+  })();
+  return valid;
+}
+
+function rcState(): RcState {
+  if ((process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "") return "on";
+  return rcProbeValid() === true ? "off" : "unknown";
+}
+
+/** Plain text for herdr's $rc token — same three states, no ANSI (herdr styles its own rows). */
+const RC_TOKEN: Record<RcState, string> = {
+  on: "🔗",
+  off: "rc:off",
+  unknown: "rc:?",
+};
+
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 const AGENT_NAME_TTL_MS = 30_000;
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
@@ -362,15 +461,6 @@ function agentName(sid: string): string | undefined {
 // connection did not, while the identical pair on two connections both landed. We never read
 // the replies (fire-and-forget is the whole point of doing this every render), so there is no
 
-/**
- * Remote Control state, the SOLE probe for both surfaces (row 3's 🔗 and herdr's $rc token).
- * $CLAUDE_CODE_BRIDGE_SESSION_ID is injected per child spawn and toggles with the connection,
- * so this is a live read — see the note at its call site in buildDataframe().
- */
-function rcConnected(): boolean {
-  return (process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "";
-}
-
 // point at which waiting would be safe; a connection each is the cheap, correct shape.
 function herdrSend(socketPath: string, req: unknown): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -422,7 +512,7 @@ async function reportToHerdr(
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
   tokens.effort = effortDisplay ?? "";
-  tokens.rc = rcConnected() ? "🔗" : "";
+  tokens.rc = RC_TOKEN[rcState()];
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",
@@ -629,7 +719,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // /remote-control was active, absent in a fresh spawn after it dropped, set again on
   // reconnect. So a render reads the current state, not a launch-time snapshot (the claude
   // process's own /proc environ never carries it at all).
-  const rc = rcConnected();
+  const rc = rcState();
   const effortDisplay = effort ? `${effort}${wfSuffix}` : effort;
 
   await reportToHerdr(model, sessionName, effortDisplay);
@@ -782,11 +872,12 @@ function render(df: Dataframe): string {
     // this file: the palette's nearest steps (ANSI 93/129/135/141) were all visibly off.
     if (df.wfOn) agentLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
   }
-  // Absent, not dimmed, when disconnected: the common case is local-only, and a permanent
-  // placeholder on row 3 would cost width every render to say "nothing". The glyph is left
-  // unstyled — an emoji does not reliably repaint under an fg override (same reasoning as
-  // herdr/config.toml's $rc note).
-  if (df.rc) agentLine += `${SEP}🔗`;
+  // Always rendered, one distinct form per state (see rcState()): an absent segment would make
+  // "disconnected" and "probe broken" look identical, which is the ambiguity this exists to
+  // remove. 🔗 stays unstyled — an emoji does not reliably repaint under an fg override.
+  if (df.rc === "on") agentLine += `${SEP}🔗`;
+  else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
+  else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
 
   let ctxSeg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
   if (df.ctxPct != null) {

@@ -71,6 +71,18 @@ target/*/incremental can go (the next build recompiles those crates). For agent/
 set CARGO_INCREMENTAL=0 — incremental sessions are per-build and pile up — and share one \
 CARGO_TARGET_DIR across worktrees."""
 
+# Julia's precompile cache keeps one tree per Julia version and per package build; a toolchain
+# bump leaves the old version's tree behind. Measured 2026-09-22: 11 GiB for v1.12 alone.
+[[budget]]
+name = "julia compiled cache"
+launchers = ["julia"]
+locate = "path"
+path = "~/.julia/compiled"
+warn_gib = 20
+advice = """\
+directories for Julia versions no longer installed (`juliaup status`) can go whole; within the \
+current version, `using Pkg; Pkg.gc()` drops caches of packages no manifest references."""
+
 # Sizing is `du`, bounded and cached per artifact path (a 100 GiB tree takes seconds to walk,
 # and agents launch builds many times an hour).
 [measure]

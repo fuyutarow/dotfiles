@@ -23,14 +23,25 @@ const CORPUS = [
   {
     path: "agents/skills/continuing-long-running-tasks/scripts/continuation-checkpoint.ts",
   },
+  {
+    path: "agents/skills/designing-command-line-interfaces/scripts/cli-contract-check.ts",
+  },
+  {
+    path: "agents/skills/designing-developer-diagnostics/scripts/diagnostic-card-check.ts",
+  },
   { path: "agents/skills/designing-interactions/scripts/captive-probe.ts" },
+  {
+    path: "agents/skills/designing-version-schemes/scripts/versioning-contract-check.ts",
+  },
   { path: "agents/skills/directing-research/scripts/research-check.ts" },
   { path: "agents/skills/directing-research/scripts/research-run-check.ts" },
   { path: "agents/skills/driving-antigravity/scripts/probe-models.ts" },
   { path: "agents/skills/driving-claude/scripts/probe-models.ts" },
   { path: "agents/skills/driving-claude/scripts/run-claude.ts" },
   { path: "agents/skills/driving-codex/scripts/probe-models.ts" },
+  { path: "agents/skills/driving-git/scripts/git-check.ts" },
   { path: "agents/skills/driving-grok/scripts/probe-models.ts" },
+  { path: "agents/skills/driving-jev/scripts/jev.ts" },
   { path: "agents/skills/forging-novel-theses/scripts/gate-check.ts" },
   { path: "agents/skills/forging-skills/scripts/skill-check.ts" },
   {

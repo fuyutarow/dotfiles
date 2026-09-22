@@ -239,8 +239,8 @@ async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
 export function parseKv(out: string): Map<string, string> {
   const kv = new Map<string, string>();
   for (const line of out.split("\n")) {
-    const m = /^([a-z0-9_]+)=(.*)$/.exec(line.trim());
-    if (m !== null) kv.set(m[1], m[2]);
+    const [, key, value] = /^([a-z0-9_]+)=(.*)$/.exec(line.trim()) ?? [];
+    if (key !== undefined && value !== undefined) kv.set(key, value);
   }
   return kv;
 }
@@ -307,9 +307,10 @@ foreach ($k in $lx) {
 // than guessing) is deliberate: a wrong path would make `du` report 0 and read as "vhdx is tiny",
 // which is exactly the class of confident-wrong number this script exists to prevent.
 export function toMntPath(winPath: string): string | null {
-  const m = /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/.exec(winPath.trim());
-  if (m === null) return null;
-  return `/mnt/${m[1].toLowerCase()}/${m[2].replace(/\\/g, "/")}`;
+  const [, drive, rest] =
+    /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/.exec(winPath.trim()) ?? [];
+  if (drive === undefined || rest === undefined) return null;
+  return `/mnt/${drive.toLowerCase()}/${rest.replace(/\\/g, "/")}`;
 }
 
 function gb(bytes: number): string {

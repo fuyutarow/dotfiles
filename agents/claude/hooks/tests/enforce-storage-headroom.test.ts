@@ -47,6 +47,13 @@ describe("enforce-storage-headroom", () => {
     }
   });
 
+  test("host AND guest short come back in ONE deny naming both", () => {
+    const d = decisionOf(runHook(HOOK, bash("cargo build"), FULL).stdout);
+    expect(d?.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("host C:");
+    expect(d.permissionDecisionReason).toContain("guest /");
+  });
+
   test("never blocks cleanup, reads, or git — even when full", () => {
     for (const command of [
       "df -h / /mnt/c",

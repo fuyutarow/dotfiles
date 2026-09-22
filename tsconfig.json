@@ -41,5 +41,12 @@
     "skipLibCheck": true
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "agents/skills"]
+  "exclude": [
+    "node_modules",
+    "agents/skills",
+    // A symlink to agents/retrieval-control/repo-retrieve.ts. tsgo checks it at the LINK path and
+    // resolves its relative imports (./ccc-index.ts, ./child.ts) from agents/claude/hooks/,
+    // where they do not exist — two false errors. The real file is checked at its own path.
+    "agents/claude/hooks/repo-retrieve.ts"
+  ]
 }

@@ -187,12 +187,19 @@ async function push(cwd: string, remote: string, branch: string, timeoutS: numbe
   const args = ["push", remote, branch];
   if (lease !== undefined) args.push(`--force-with-lease=${branch}:${lease}`);
   process.stdout.write(`PUSH ${remote} ${branch} local=${local.slice(0, 12)} timeout=${timeoutS}s${lease === undefined ? "" : ` lease=${lease.slice(0, 12)}`}\n`);
-  const proc = Bun.spawn(["git", "-C", cwd, ...args], { stdout: "inherit", stderr: "inherit" });
-  const timer = setTimeout(() => proc.kill("SIGTERM"), timeoutS * 1000);
+  // Native timeout (writing-bun-scripts facts §3). SIGKILL, because a push wedged in send-pack
+  // is exactly the process that ignores politer signals. Timed out = signalCode set; `killed`
+  // is true after a CLEAN exit too and must not be read.
+  const proc = Bun.spawn(["git", "-C", cwd, ...args], {
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: timeoutS * 1000,
+    killSignal: "SIGKILL",
+  });
   const code = await proc.exited;
-  clearTimeout(timer);
   if (code !== 0) {
-    process.stdout.write(`REFUSE G4: push exited ${code}${proc.killed ? " (killed at timeout)" : ""}. A silent or hanging push is a failed push: check staged blob sizes (\`git-check staged\` on the commits), \`git ls-tree -r -l HEAD\`, and \`pgrep -a 'git push'\` for zombies.\n`);
+    const how = proc.signalCode !== null ? ` (killed by ${proc.signalCode} at the ${timeoutS}s timeout)` : "";
+    process.stdout.write(`REFUSE G4: push exited ${code}${how}. A silent or hanging push is a failed push: check staged blob sizes (\`git-check staged\` on the commits), \`git ls-tree -r -l HEAD\`, and \`pgrep -a 'git push'\` for zombies.\n`);
     return 1;
   }
   const tracking = await git(cwd, "rev-parse", `refs/remotes/${remote}/${branch}`);
@@ -250,9 +257,11 @@ function lint(paths: string[]): number {
 
 // ---------------------------------------------------------------- cli
 
+async function main(): Promise<number> {
 const argv = cli({
   name: "git-check",
   ignoreArgv: rejectPrototypeFlag,
+  strictFlags: true,
   parameters: ["<subcommand>", "[args...]"],
   flags: {
     cwd: { type: String, default: process.cwd(), description: "repository path (default: cwd)" },
@@ -271,13 +280,13 @@ const argv = cli({
       "git-check lint git/gitconfig .githooks/pre-commit",
     ],
   },
-});
+}, undefined, Bun.argv.slice(2));
 
 const sub = argv._.subcommand;
 const rest = argv._.args;
 const cwd = resolve(argv.flags.cwd);
 
-const rc = await (async (): Promise<number> => {
+return await (async (): Promise<number> => {
   if (sub === "state") return state(cwd, argv.flags.allowDetached);
   if (sub === "staged") return staged(cwd, argv.flags.maxBytes);
   if (sub === "push") {
@@ -291,4 +300,11 @@ const rc = await (async (): Promise<number> => {
   }
   return fatal(`unknown subcommand ${sub} (state | staged | push | lint)`);
 })();
-process.exit(rc);
+}
+
+main()
+  .then((code) => process.exit(code))
+  .catch((error: unknown) => {
+    process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(2);
+  });

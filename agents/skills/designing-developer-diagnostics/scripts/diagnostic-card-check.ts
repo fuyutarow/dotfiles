@@ -98,6 +98,10 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
+  // Cleye leaves surplus positionals in the array instead of refusing them (writing-bun-scripts BG1).
+  if (parsed._.length > 1) {
+    throw new Error(`unexpected argument '${parsed._[1]}'`);
+  }
   const card = parsed._[0];
   if (card === undefined) throw new Error("missing card path");
   const result = checkCard(await Bun.file(card).text());

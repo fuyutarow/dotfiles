@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**48 authored** here, plus **13 vendored** upstream (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
+**50 authored** here, plus **13 vendored** upstream (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -30,6 +30,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 ### Design & interfaces
 
 - [`designing-interactions`](designing-interactions/) — Design or audit any interaction surface (GUI, CLI, voice, agent-facing): modes, undo vs confirmation, hidden state, delegability.
+- [`designing-command-line-interfaces`](designing-command-line-interfaces/) — Design or audit a reusable CLI's contract: consumers, grammar, effects, stdout/stderr and machine route, outcomes, compatibility.
 - [`designing-developer-diagnostics`](designing-developer-diagnostics/) — Design developer-facing CLI/config/build diagnostics as observed failure, precise locus, safe recovery, and human-plus-machine receipt.
 - [`designing-version-schemes`](designing-version-schemes/) — Design versioning as a compatibility, chronology, and release-order contract; verify the target comparator and ranges.
 
@@ -138,6 +139,7 @@ the research judgments themselves.
 - [`running-python-tools`](running-python-tools/) — Run every Python tool via uv/uvx instead of pip, keeping environments isolated and reproducible.
 - [`wiring-mise-tasks`](wiring-mise-tasks/) — One mise verb contract for every repo (fmt/f, lint, test, up, check…): naming grammar, per-language templates, and a resolution gate that catches drift.
 - [`wiring-repositories`](wiring-repositories/) — Which wiring layers a repo admits, the order whose violations are silent, the git-hook shape, and a floor that audits the joint for life.
+- [`driving-git`](driving-git/) — Operate git by job: unambiguous verbs (switch/restore), enumerated commits, ceremony sized by blast radius, a receipt closing every operation, and a shared-checkout protocol.
 
 ### Systems & security
 

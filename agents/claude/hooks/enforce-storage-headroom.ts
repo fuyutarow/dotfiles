@@ -88,6 +88,8 @@ function main(): void {
   const guestLow = guest !== null && guest < GUEST_DENY;
 
   if (hostLow || guestLow) {
+    // BATCHED(host, guest): both drives are measured before this point and both numbers are in
+    // the one reason below, so a caller short on both learns it from a single denial.
     decidePre(
       "deny",
       `storage-headroom: refusing to launch ${hit[1]} — host C: (WSL vhdx) free ${gib(host)} ` +

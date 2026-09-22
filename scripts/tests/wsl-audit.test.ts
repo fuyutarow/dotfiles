@@ -161,7 +161,7 @@ describe("judge — C: is the drive that actually runs out", () => {
     const h = healthyHost({ host_c_free: String(115 * GB) });
     const f = judge(healthyGuest(), h);
     expect(f.map((x) => x.key)).toEqual(["c-free"]);
-    expect(f[0].level).toBe("WARN");
+    expect(f[0]?.level).toBe("WARN");
   });
 
   test("below 8% escalates to CRIT, not a second WARN", () => {
@@ -184,9 +184,9 @@ describe("judge — the host-side failures the guest cannot see", () => {
     });
     const f = judge(healthyGuest(), h);
     expect(f.map((x) => x.key)).toEqual(["host-spin"]);
-    expect(f[0].text).toContain("sshd:254000s");
+    expect(f[0]?.text).toContain("sshd:254000s");
     // CPU time flags long-lived live sessions too; the finding must point at the structural reaper.
-    expect(f[0].text).toContain("mise run wsl:reap");
+    expect(f[0]?.text).toContain("mise run wsl:reap");
   });
 
   test("a single service crash in the last hour is already a finding", () => {
@@ -228,7 +228,7 @@ describe("judge — host memory starvation (available, corroborated by hard read
     });
     const f = judge(healthyGuest(), h);
     expect(f.map((x) => x.key)).toEqual(["host-mem"]);
-    expect(f[0].text).toContain("2861 hard page reads/s");
+    expect(f[0]?.text).toContain("2861 hard page reads/s");
   });
 
   test("hard reads with plenty of memory available is not a memory finding", () => {

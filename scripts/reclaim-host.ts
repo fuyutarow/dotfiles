@@ -88,7 +88,7 @@ export function classifySwaps(swaps: Swap[]): {
   const byNewest = [...swaps].sort((a, b) => b.mtimeMs - a.mtimeMs);
   const [live, ...orphans] = byNewest;
   return {
-    live,
+    live: live ?? null,
     orphans,
     reclaimBytes: orphans.reduce((sum, s) => sum + s.bytes, 0),
   };
@@ -127,13 +127,9 @@ function parseProbe(out: string): {
   let wingetCache: number | null = null;
   for (const line of out.split("\n")) {
     const t = line.trim();
-    const swap = /^swap=(\d+)\|(\d+)\|(.+)$/.exec(t);
-    if (swap !== null) {
-      swaps.push({
-        mtimeMs: Number(swap[1]),
-        bytes: Number(swap[2]),
-        path: swap[3],
-      });
+    const [, mtime, bytes, path] = /^swap=(\d+)\|(\d+)\|(.+)$/.exec(t) ?? [];
+    if (mtime !== undefined && bytes !== undefined && path !== undefined) {
+      swaps.push({ mtimeMs: Number(mtime), bytes: Number(bytes), path });
       continue;
     }
     const kv = /^(c_free|c_total|winget_cache)=(\d+)$/.exec(t);

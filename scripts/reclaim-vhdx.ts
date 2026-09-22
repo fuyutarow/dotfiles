@@ -155,8 +155,9 @@ foreach ($k in $lx) {
 function parseHost(out: string): Map<string, string> {
   const kv = new Map<string, string>();
   for (const line of out.split("\n")) {
-    const m = /^([a-z_]+)=(.*)$/.exec(line.trim());
-    if (m !== null && !kv.has(m[1])) kv.set(m[1], m[2]);
+    const [, key, value] = /^([a-z_]+)=(.*)$/.exec(line.trim()) ?? [];
+    if (key !== undefined && value !== undefined && !kv.has(key))
+      kv.set(key, value);
   }
   return kv;
 }

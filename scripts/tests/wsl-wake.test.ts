@@ -24,7 +24,7 @@ describe("firstReachable — order, fallback, and the false-win guard", () => {
   const probeFrom =
     (answers: Record<string, string | null>) =>
     (host: string): Promise<string | null> =>
-      Promise.resolve(host in answers ? answers[host] : null);
+      Promise.resolve(answers[host] ?? null);
 
   test("the first reachable host wins and later hosts are not probed", async () => {
     const probed: string[] = [];

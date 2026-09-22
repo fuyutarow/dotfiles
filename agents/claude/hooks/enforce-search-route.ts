@@ -31,8 +31,8 @@ const INLINE_RUNTIME =
 const FILE_SCAN_PRIMITIVE =
   /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/;
 const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
-const ROUTER = join(import.meta.dir, "repo-search.ts");
-const ROUTER_COMMAND = "bun ~/.claude/hooks/repo-search.ts";
+const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
+const ROUTER_COMMAND = "bun ~/.claude/hooks/repo-retrieve.ts";
 
 function isRawSearch(command: unknown): boolean {
   if (typeof command !== "string" || command === "") return false;
@@ -89,7 +89,7 @@ function startPath(payload: any): string {
  * **Governed repos are exempt: judgment lives in one place, and here it is not that place.**
  *
  * WHY (2026-09-01, the commissioner's ruling, after arms were measurably stuck):
- *   This hook denies Grep/Bash and directs the arm to `repo-search.ts` — 886 lines of judgment
+ *   This hook denies Grep/Bash and directs the arm to `repo-retrieve.ts` — 886 lines of judgment
  *   living in a repo that declares no governance, invisible to the governed repo's own gate,
  *   registered under no protocol verb. **A repo cannot govern what it cannot see.** The arm was
  *   caught between the two: the governance layer could not lift this denial, and the denial's
@@ -168,7 +168,7 @@ function main(): void {
       "deny",
       `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
         `Do not bypass this gate with Python, Node, shell loops, or another search ` +
-        `implementation. Restore/deploy ~/.claude/hooks/repo-search.ts, then retry.`,
+        `implementation. Restore/deploy ~/.claude/hooks/repo-retrieve.ts, then retry.`,
     );
   }
 

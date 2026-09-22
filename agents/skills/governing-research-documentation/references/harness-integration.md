@@ -82,7 +82,7 @@ run the same local and CI commands above.
 
 ## Residual: discovery is not an authority-preserving read, and write must stay constrained
 
-`repo-search` is a discovery surface: it locates candidate files and text. It does not freeze which
+`repo-retrieve` is a discovery surface: it locates candidate files and text. It does not freeze which
 authority was read, what coverage was achieved, or which bytes later reasoning consumed. Do not relabel
 that discovery as a repository truth API.
 

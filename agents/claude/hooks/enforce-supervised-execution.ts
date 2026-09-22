@@ -32,7 +32,7 @@
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Command position: start of line, or after a shell separator / then / do. Keeps the gate off
-// mere MENTIONS — `repo-search literal --query 'setsid'` is an argument, not a command.
+// mere MENTIONS — `repo-retrieve literal --query 'setsid'` is an argument, not a command.
 const POS = String.raw`(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*`;
 const PREFIX = String.raw`(?:(?:sudo|command|time|nice|exec)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+)*`;
 const detacher = (name: string) =>

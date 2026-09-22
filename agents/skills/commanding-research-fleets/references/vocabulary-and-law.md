@@ -7,11 +7,14 @@
 ## Retrieve vs Search — the full distinction
 
 Both terms are load-bearing across every R&D repo under this doctrine. A tool's own
-**identifier** (e.g. `repo-search`) is a name, not an instance of either sense — do not relabel
+**identifier** (e.g. `repo-retrieve`) is a name, not an instance of either sense — do not relabel
 tools to match this vocabulary. **Overridden once, for `repo-search` only (2026-09-04, §3o)**:
 the orderer authorized relabeling that one tool, first-hand in the Director's own session. The
 clause is not reinterpreted — it meant what it said, and is overruled for this single case, not
-widened into a general licence to rename tools after this vocabulary.
+widened into a general licence to rename tools after this vocabulary. **Executed 2026-09-22**:
+the tool is now `repo-retrieve`, renamed on a direct request typed in a dotfiles session (not a
+relay). That request stands on its own; it neither confirms nor refutes the disputed 2026-09-04
+turn below.
 
 **Provenance dispute (2026-09-04, unresolved)**: the turn this override rests on is contested,
 not disproven. It arrived as an unenveloped user-role turn in the Director's own terminal,

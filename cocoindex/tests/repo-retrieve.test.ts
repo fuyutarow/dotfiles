@@ -14,7 +14,7 @@ import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 
-const ROUTER = join(import.meta.dir, "..", "repo-search.ts");
+const ROUTER = join(import.meta.dir, "..", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
   import.meta.dir,
   "..",
@@ -22,7 +22,7 @@ const COMPATIBILITY_PATH = join(
   "agents",
   "claude",
   "hooks",
-  "repo-search.ts",
+  "repo-retrieve.ts",
 );
 
 function tempDir(prefix: string): string {
@@ -30,7 +30,7 @@ function tempDir(prefix: string): string {
 }
 
 function registerProject(): string {
-  const dir = tempDir("repo-search-project-");
+  const dir = tempDir("repo-retrieve-project-");
   mkdirSync(join(dir, ".cocoindex_code"), { recursive: true });
   writeFileSync(
     join(dir, ".cocoindex_code", "settings.yml"),
@@ -57,8 +57,8 @@ function gitCmd(dir: string, args: string[]): string {
 function registerGitProject(): { dir: string; head: string } {
   const dir = registerProject();
   gitCmd(dir, ["init", "-q"]);
-  gitCmd(dir, ["config", "user.email", "repo-search-test@example.com"]);
-  gitCmd(dir, ["config", "user.name", "repo-search-test"]);
+  gitCmd(dir, ["config", "user.email", "repo-retrieve-test@example.com"]);
+  gitCmd(dir, ["config", "user.name", "repo-retrieve-test"]);
   gitCmd(dir, ["add", "-A"]);
   gitCmd(dir, ["commit", "-q", "-m", "init"]);
   return { dir, head: gitCmd(dir, ["rev-parse", "HEAD"]).trim() };
@@ -102,7 +102,7 @@ function registerFreshGitProject(): { dir: string; head: string } {
 }
 
 // Plants a real, non-empty file under .cocoindex_code/ that hasIndexArtifacts() (in
-// repo-search.ts) will see as "an index exists" — the filesystem-level stand-in for a real `ccc
+// repo-retrieve.ts) will see as "an index exists" — the filesystem-level stand-in for a real `ccc
 // index` run. Needed by any test that hand-writes a watermark via writeWatermarkFile() instead of
 // going through the real `index` route (whose fake `ccc index` in fakeTools() below plants its
 // own artifact), since checkIndexFreshness now refuses a matching watermark with nothing backing
@@ -115,8 +115,8 @@ function plantIndexArtifact(dir: string): void {
 }
 
 function fakeTools(): { bin: string; log: string } {
-  const bin = tempDir("repo-search-bin-");
-  const log = join(tmpdir(), `repo-search-${crypto.randomUUID()}.log`);
+  const bin = tempDir("repo-retrieve-bin-");
+  const log = join(tmpdir(), `repo-retrieve-${crypto.randomUUID()}.log`);
   for (const name of ["ccc", "rg"]) {
     const path = join(bin, name);
     writeFileSync(
@@ -136,7 +136,7 @@ if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_I
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ]; then
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
-  # hasIndexArtifacts() (repo-search.ts) see a project the router just indexed as non-empty.
+  # hasIndexArtifacts() (repo-retrieve.ts) see a project the router just indexed as non-empty.
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
@@ -206,7 +206,7 @@ function run(
   };
 }
 
-describe("repo-search route contract", () => {
+describe("repo-retrieve route contract", () => {
   test("cocoindex owns the executable router and the old hook path resolves to it", () => {
     expect(existsSync(ROUTER)).toBe(true);
     expect(statSync(ROUTER).mode & 0o111).not.toBe(0);
@@ -297,7 +297,7 @@ describe("repo-search route contract", () => {
   test("an in-project directory symlink is normalized, while an escaping symlink remains exact", () => {
     const { dir } = registerFreshGitProject();
     const knowledge = join(dir, "knowledge");
-    const outsideDir = tempDir("repo-search-outside-");
+    const outsideDir = tempDir("repo-retrieve-outside-");
     mkdirSync(knowledge);
     symlinkSync(knowledge, join(dir, "knowledge-link"), "dir");
     symlinkSync(outsideDir, join(dir, "outside-link"), "dir");
@@ -393,7 +393,7 @@ describe("repo-search route contract", () => {
 
   test("a nonexistent or project-escaping path is not broadened into a recursive glob", () => {
     const { dir } = registerFreshGitProject();
-    const outsideDir = tempDir("repo-search-outside-");
+    const outsideDir = tempDir("repo-retrieve-outside-");
     const outsidePath = relative(dir, outsideDir);
 
     const missing = run(dir, [
@@ -573,7 +573,7 @@ describe("repo-search route contract", () => {
     );
     expect(result.stderr).toContain(`index was built at HEAD=${staleHead}`);
     expect(result.stderr).toContain(`working tree is now at HEAD=${head}`);
-    expect(result.stderr).toContain("Remedy: run 'repo-search index'");
+    expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
     // The gate refuses BEFORE the child ever runs — no ccc invocation reaches the log.
     expect(result.log).toBe("");
   });
@@ -693,8 +693,8 @@ describe("repo-search route contract", () => {
     run(dir, ["index"]); // records head: null
 
     gitCmd(dir, ["init", "-q"]);
-    gitCmd(dir, ["config", "user.email", "repo-search-test@example.com"]);
-    gitCmd(dir, ["config", "user.name", "repo-search-test"]);
+    gitCmd(dir, ["config", "user.email", "repo-retrieve-test@example.com"]);
+    gitCmd(dir, ["config", "user.name", "repo-retrieve-test"]);
     gitCmd(dir, ["add", "-A"]);
     gitCmd(dir, [
       "commit",
@@ -758,7 +758,7 @@ describe("repo-search route contract", () => {
       "RESULT: NO_INDEX route=concept engine=ccc",
     );
     expect(result.stderr).toContain('source="stamp"');
-    expect(result.stderr).toContain("Remedy: run 'repo-search index'");
+    expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
     // The gate refuses BEFORE the child ever runs — no ccc invocation reaches the log.
     expect(result.log).toBe("");
   });
@@ -781,7 +781,7 @@ describe("repo-search route contract", () => {
       "RESULT: NO_INDEX route=concept engine=ccc",
     );
     expect(result.stderr).toContain("no ccc index artifacts exist");
-    expect(result.stderr).toContain("Remedy: run 'repo-search index'");
+    expect(result.stderr).toContain("Remedy: run 'repo-retrieve index'");
     expect(result.log).toBe("");
   });
 
@@ -849,7 +849,7 @@ describe("repo-search route contract", () => {
     const stale = run(dir, ["concept", "--query", "x"]);
     expect(stale.code).toBe(3);
 
-    // repo-search index closes the gap in one step: reindex + record the watermark at the
+    // repo-retrieve index closes the gap in one step: reindex + record the watermark at the
     // CURRENT head.
     const result = run(dir, ["index"]);
     expect(result.code).toBe(0);
@@ -956,7 +956,7 @@ describe("repo-search route contract", () => {
   });
 
   test("structural routes to ccc grep without requiring registration", () => {
-    const result = run(tempDir("repo-search-unregistered-"), [
+    const result = run(tempDir("repo-retrieve-unregistered-"), [
       "structural",
       "--query",
       "foo(\\(ARGS*\\))",
@@ -980,7 +980,7 @@ describe("repo-search route contract", () => {
 
   test("ccc grep's own literal 'No matches found.' sentinel is read as NO_MATCH, never PASS", () => {
     const result = run(
-      tempDir("repo-search-unregistered-"),
+      tempDir("repo-retrieve-unregistered-"),
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_SEARCH_EMPTY: "1" },
     );
@@ -999,7 +999,7 @@ describe("repo-search route contract", () => {
     // the whole output would misreport this as NO_MATCH; exact whole-output equality does not,
     // because a real match's output always leads with a "path\nline| content" block.
     const result = run(
-      tempDir("repo-search-unregistered-"),
+      tempDir("repo-retrieve-unregistered-"),
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_CCC_GREP_SPOOF: "1" },
     );
@@ -1012,7 +1012,7 @@ describe("repo-search route contract", () => {
 
   test("a genuinely empty ccc grep stdout is also read as NO_MATCH (defensive branch, not observed on real ccc)", () => {
     const result = run(
-      tempDir("repo-search-unregistered-"),
+      tempDir("repo-retrieve-unregistered-"),
       ["structural", "--query", "foo(\\(ARGS*\\))"],
       { FAKE_SEARCH_EMPTY: "1", FAKE_CCC_GREP_BLANK: "1" },
     );
@@ -1026,7 +1026,7 @@ describe("repo-search route contract", () => {
   });
 
   test("concept never degrades silently to rg outside a ccc project", () => {
-    const result = run(tempDir("repo-search-unregistered-"), [
+    const result = run(tempDir("repo-retrieve-unregistered-"), [
       "concept",
       "--query",
       "semantic request",
@@ -1262,7 +1262,7 @@ describe("repo-search route contract", () => {
   // `--multiline` alone does NOT retroactively make a literal string absorb a newline, and that a
   // wrap-tolerant match instead needs a regex query plus `-U --multiline-dotall`, was verified
   // separately against the REAL `rg` binary before this change shipped (see the comment on
-  // rgFlags() in ../repo-search.ts for the exact commands and results). ---
+  // rgFlags() in ../repo-retrieve.ts for the exact commands and results). ---
   test("--multiline reaches rg's argv on the literal route", () => {
     const result = run(registerProject(), [
       "literal",

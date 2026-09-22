@@ -6,7 +6,7 @@
   "bin": {
     "agent-resource-run": "agents/resource-control/agent-resource-run.ts",
     "serena-foreground": "agents/serena-control/serena-foreground.ts",
-    "repo-search": "cocoindex/repo-search.ts"
+    "repo-retrieve": "cocoindex/repo-retrieve.ts"
   },
   "dependencies": {
     "cleye": "2.6.0",

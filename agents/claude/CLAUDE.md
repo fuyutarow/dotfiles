@@ -30,14 +30,14 @@
   do not invent a fourth way. Live jobs and orphan count render in the statusline's `Job:`
   segment. NOTE: `agent-resource-run` still admits via `--scope` (caller-owned), so an admitted
   multi-hour job dies with its caller — the durable `--detach` mode is not built yet.
-- **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-search`.**
+- **ccc-registered repos: raw search is banned; declare QUERY-SHAPE through `repo-retrieve`.**
   (覆せる既定 2026-07-30) When ccc is installed and `.cocoindex_code/settings.yml` exists,
   a PreToolUse hook denies raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious
-  inline-runtime search reimplementations. Use `repo-search concept` for unknown-name meaning,
+  inline-runtime search reimplementations. Use `repo-retrieve concept` for unknown-name meaning,
   `battery` (≥3 JA/EN paraphrases) before absence/new implementation claims, `literal` for exact text,
   `exhaustive` for regex enumeration, `files` for path inventory, and `structural` for ccc
   by-example grep; known symbols go to Serena. The guaranteed entrypoint is
-  `bun ~/.claude/hooks/repo-search.ts`; the PATH command `repo-search` is the same file installed
+  `bun ~/.claude/hooks/repo-retrieve.ts`; the PATH command `repo-retrieve` is the same file installed
   as a package `bin` by `bun link` (dotfiles `mise run deps`) and is only a convenience. If the
   guaranteed file is missing, STOP and repair the harness — never bypass the gate with Python,
   Node, shell loops, or another search implementation. Empty ccc output is NO_MATCH, never PASS.

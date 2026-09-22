@@ -46,11 +46,11 @@ pulled `cocoindex-code@latest` through `uvx`, i.e. a THIRD floating copy alongsi
 
 The decisive argument is not the failures, it is duplication of a **guarded** capability by an
 **unguarded** one. `~/.claude/hooks/enforce-search-route.ts` denies raw search (including bare
-`ccc search`) inside a registered project and forces the caller through `cocoindex/repo-search.ts`,
+`ccc search`) inside a registered project and forces the caller through `cocoindex/repo-retrieve.ts`,
 which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
 gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of
 those gates and never passed through the hook, whose matcher is `Grep|Bash`. Verified after
-removal: `repo-search concept` in qoed still returns its anchor at rank 1 / 0.900 — the router
+removal: `repo-retrieve concept` in qoed still returns its anchor at rank 1 / 0.900 — the router
 never went through MCP.
 
 Restore (if a future need is argued): qinfogeo `claude mcp add cocoindex-code -- uvx
@@ -276,7 +276,7 @@ min-sys-dpp-mvp 3,649 / 32s.
 
 **End-to-end smoke anchor (qoed), current**: the JA query 「境界条件の正規化」 returns
 `docs/records/R2607_038-three_master_theorems_program.md:159-165` at rank 1 / **0.900** on the
-current (incumbent) index — verified live this session via `repo-search concept`. This replaces
+current (incumbent) index — verified live this session via `repo-retrieve concept`. This replaces
 the prior anchor (`\section{適用境界}` in `papers/P2606_003-sok_randomized_metrology/main.tex`,
 last recorded at 0.90): that document was excluded from qoed's index by commit `7d915ed`
 ("fix: 降格済み文書を意味検索の索引から外し、漏れを gate で止める"), dated **2026-07-28** — two
@@ -340,7 +340,7 @@ re-measured here).
 
 That basis was **CONFOUNDED and does not support any verdict about bekko.**
 `\section{適用境界}` lives in `papers/P2606_003-sok_randomized_metrology/main.tex:397` (this
-repo — confirmed via `repo-search literal`). qoed's own `.cocoindex_code/settings.yml` excludes
+repo — confirmed via `repo-retrieve literal`). qoed's own `.cocoindex_code/settings.yml` excludes
 `papers/P2606_003-sok_randomized_metrology/**` inside a generated "demoted document" block, an
 authority-gate cleanup that landed in commit `7d915ed` ("fix: 降格済み文書を意味検索の索引から外し、
 漏れを gate で止める"), dated **2026-07-28 14:56 JST — two days before the bekko swap**. The

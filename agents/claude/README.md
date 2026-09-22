@@ -13,7 +13,7 @@ this repo. Keep the two separate.
 | `CLAUDE.md` | `~/.claude/CLAUDE.md` | user-global policy (sonnet-agent rule nudge) |
 | `statusline-command.ts` | `~/.claude/statusline-command.ts` | two-line statusline, run via bun (`settings.json` → `statusLine.command`) |
 | `hooks/` | `~/.claude/hooks/` (whole dir) | all hooks — TypeScript on bun (see below), plus `herdr-agent-state.sh` |
-| `../../cocoindex/repo-search.ts` | `~/.local/bin/repo-search`; compatibility symlink at `~/.claude/hooks/repo-search.ts` | declared query-shape router: ccc / rg / Serena; implementation belongs to the cocoindex topic |
+| `../../cocoindex/repo-retrieve.ts` | `~/.bun/bin/repo-retrieve` (package `bin`, `bun link`); compatibility symlink at `~/.claude/hooks/repo-retrieve.ts` | declared query-shape router: ccc / rg / Serena; implementation belongs to the cocoindex topic |
 
 `~/.claude/settings.local.json` (machine-specific permissions) stays **local**,
 not shared.
@@ -41,7 +41,8 @@ and execs the named `.ts` with stdin passed through.
 | hook (event) | job | fail direction |
 |---|---|---|
 | `enforce-dispatch-contract.ts` (PreToolUse `Agent\|Task\|Workflow`) | dispatch enforcement. **Model**: omitted Agent/Task models are rewritten to `sonnet`; every explicit non-Sonnet model and fork is denied. Each Workflow `agent()` has exactly one top-level direct literal `model:'sonnet'`; aliases/indirection, nested models, spreads, computed keys, and child/named/unreadable workflows are denied. **Effort**: a literal `effort:'low'` needs a same-call `LOW-EFFORT(<stage>): <reason>`. **Resources**: every dispatch needs exactly one valid `RESOURCE-CLASS(NONCOMPUTE)` or absolute `RESOURCE-ENVELOPE`; the latter points to P7's `agent-resource-run` contract. | **CLOSED** — no bypass: any error or uninspectable dispatch ⇒ deny; `run.sh --fail-closed` denies even when bun is missing |
-| `enforce-search-route.ts` (PreToolUse `Grep\|Bash`) | in an operational ccc project, deny raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious inline-runtime search reimplementations; require a declared route through repo-search | **CLOSED** — any hook error, missing bun, or missing compatibility symlink ⇒ deny; ccc absent/unregistered ⇒ silent allow |
+| `enforce-search-route.ts` (PreToolUse `Grep\|Bash`) | in an operational ccc project, deny raw Grep/rg/grep/find/fd/tree, direct ccc search/grep, and obvious inline-runtime search reimplementations; require a declared route through repo-retrieve | **CLOSED** — any hook error, missing bun, or missing compatibility symlink ⇒ deny; ccc absent/unregistered ⇒ silent allow |
+| `enforce-no-new-bash.ts` (PreToolUse `Write\|Edit\|MultiEdit`) | NO-NEW-BASH (`writing-bun-scripts` BG0): a Write/Edit that leaves a shell script (`.sh`/`.bash`, or an sh/bash/zsh shebang) gets an `additionalContext` nudge toward a bun `.ts`; if the result exceeds 12 lines AND the edit creates or grows the file, it is denied. Legacy scripts may be fixed without growing; vendored (herdr header) and on-disk `# shim: bootstrap` files are exempt. Bash-written shell (`cat > x.sh`) is not covered | **CLOSED** on missing bun (`run.sh --fail-closed`); a hook exception exits 1 ⇒ non-blocking, the edit proceeds |
 | `detect-leaked-toolcall.ts` (Stop) | alert (never block) on a tool call emitted as plain text; log + bell + desktop notify | OPEN |
 | `detect-audit-theater.ts` (Stop) | exit 2 when a prose-audit turn uses self-justifying / unbounded gate language | OPEN |
 | `assign-command.ts` (UserPromptSubmit, no matcher — fires on EVERY prompt) | implements `/assign <role>`: renames this session to `<project>-<role>_<suffix>` via `sessionTitle` (same effect as `/rename`) and injects any configured role charter (`fleet_policy.toml` — project root wins, else the `commanding-research-fleets` skill's shipped default) as `additionalContext` — no extra model turn, no subprocess spawned | OPEN — any error or non-`/assign` prompt silently passes through unmodified (fail-open by construction; see the script's own header) |
@@ -62,7 +63,7 @@ Tests spawn each hook end-to-end with synthetic payloads:
 mise run test:hooks     # = bun test agents/claude/hooks
 ```
 
-`repo-search` is tested separately with fake `ccc` and `rg` executables:
+`repo-retrieve` is tested separately with fake `ccc` and `rg` executables:
 
 ```sh
 mise run test:cocoindex
@@ -76,8 +77,8 @@ structural      -> ccc grep      symbol                   -> Serena
 ```
 
 The policy gate checks the compatibility symlink in the already-linked `~/.claude/hooks/`
-directory, while the single implementation lives at `cocoindex/repo-search.ts`.
-`~/.local/bin/repo-search` links directly to that implementation. A missing canonical file is a
+directory, while the single implementation lives at `cocoindex/repo-retrieve.ts`.
+The PATH command `~/.bun/bin/repo-retrieve` is a package `bin` (`bun link`) of that implementation. A missing canonical file is a
 hard configuration fault: stop and repair it, never emulate search with a general-purpose
 runtime. An exit-zero ccc call with no result blocks is reported as `NO_MATCH`, not `PASS`.
 

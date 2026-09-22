@@ -9,8 +9,8 @@ description: >-
   combinations. DECISIVE cut: behavior-preserving refactor→refactoring-code; present-fact
   inspection→raising-resolution; expensive/irreversible future bet→acting-on-hypotheses; cheap
   reversible probe→domain/plain executor; post-hoc diff review→code
-  review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-search
-  battery` before new functionality; exact tokens use `repo-search literal`. Language skills
+  review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-retrieve
+  battery` before new functionality; exact tokens use `repo-retrieve literal`. Language skills
   co-fire for idiom. English skill; respond in the user's language (default Japanese).
   When implementation must survive a compaction, session, or executor handoff, co-fire
   continuing-long-running-tasks for the portable state record; this Skill still owns correctness.
@@ -103,7 +103,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 | `acting-on-hypotheses` | The change is a **known** implementation, not a bet on the world. An expensive/irreversible spike, MVP, will-it-scale, or future-durability bet → AOH. A deterministic, bounded, reversible probe with no costly downstream exposure → domain/plain executor. Executing the admitted change correctly → here. |
 | `/code-review` (built-in) | Post-hoc: reviews a DIFF for bugs after it's written. This skill governs BEFORE/DURING the change. Complementary — run `/code-review` after. |
 | `writing-julia`, `writing-python`, `writing-rust`, `writing-typescript`, `linting-sui-move`, other language skills | Co-fire: they own language-specific correctness/perf; this owns language-agnostic change-safety. Follow the language skill for idiom; follow this for intent/scope/root-cause/regression. |
-| `driving-cocoindex` | **Co-fire, FIRST, in any operational ccc-registered repo**: before writing NEW functionality, run `repo-search battery` (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway. Literal-token search stays correct through `repo-search literal`; raw Grep is hook-denied because it omits the QUERY-SHAPE declaration (their CC3). |
+| `driving-cocoindex` | **Co-fire, FIRST, in any operational ccc-registered repo**: before writing NEW functionality, run `repo-retrieve battery` (≥3 paraphrases, JA/EN) — grep-only "not implemented" is the duplicate-implementation pathway. Literal-token search stays correct through `repo-retrieve literal`; raw Grep is hook-denied because it omits the QUERY-SHAPE declaration (their CC3). |
 | `driving-git` | **DECISIVE — what vs how it enters history.** This skill owns the behavior change and its verification; how it becomes commits (enumerated scope, message, rewrite, push receipt) → `driving-git`, co-fired at commit time (2026-09-21) |
 | `continuing-long-running-tasks` | Co-fire only when this implementation must persist across a compact/session/executor boundary. This Skill owns behavior and verification; continuation owns one evidence-linked resumable state record. |
 

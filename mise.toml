@@ -188,7 +188,7 @@ git ls-files -z -- \
   'agents/goal-kernel/cli.ts' \
   'agents/resource-control/agent-resource-run.ts' \
   'agents/serena-control/serena-foreground.ts' \
-  ':(exclude)agents/claude/hooks/repo-search.ts' |
+  ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
 
@@ -229,7 +229,7 @@ run = "bunx tsgo --noEmit"
 
 [tasks.test]
 alias = "t"
-description = "Test the repo: hooks, resource control, repo-search, Bun script floor, zsh terminal hygiene, and toolchain scope"
+description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, zsh terminal hygiene, and toolchain scope"
 depends = ["test:hooks", "test:resource-control", "test:cocoindex", "test:scripts", "test:zsh", "test:mise-scope"]
 
 [tasks."test:hooks"]
@@ -248,7 +248,7 @@ run = "bun ~/dotfiles/scripts/test-resource-control.ts"
 
 [tasks."test:cocoindex"]
 dir = "{{config_root}}"
-description = "CocoIndex repo-search route and CLI contract tests"
+description = "CocoIndex repo-retrieve route and CLI contract tests"
 run = "bun test cocoindex/tests"
 
 [tasks."test:scripts"]
@@ -415,7 +415,7 @@ description = "Install the full CLI toolbox (single source: Brewfile)"
 run = 'brew bundle --file=~/dotfiles/Brewfile'
 
 # `bun link` after the install: package.json's `bin` entries (agent-resource-run,
-# serena-foreground, repo-search) are this repo's PATH commands, and `bun link` is what turns a
+# serena-foreground, repo-retrieve) are this repo's PATH commands, and `bun link` is what turns a
 # `bin` entry into a symlink in bun's global bin dir (~/.bun/bin, on every shell's PATH via
 # zsh/zshenv). Before 2026-09-13 link-dots.sh hand-symlinked the .ts files into ~/.local/bin —
 # a re-implementation of exactly this mechanism, minus the declaration that made their shebangs

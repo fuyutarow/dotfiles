@@ -118,7 +118,7 @@ the research judgments themselves.
 - [`driving-jev`](driving-jev/) — Drive TypeSafe Jev as a non-generative judgment engine: atomic Noul/Choice/Score questions, explicit abstention policy, and typed JSON relay.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.
 - [`driving-grok`](driving-grok/) — Drive xAI's Grok Build CLI (`grok`) as a headless worker: metered + real sandbox, but an EXFIL-RISK data-minimize law, catalog by probe.
-- [`driving-cocoindex`](driving-cocoindex/) — Route declared query shapes through `repo-search`: ccc for concepts/structure, rg for lexical enumeration.
+- [`driving-cocoindex`](driving-cocoindex/) — Route declared query shapes through `repo-retrieve`: ccc for concepts/structure, rg for lexical enumeration.
 - [`driving-serena`](driving-serena/) — Drive Serena MCP with live-contract, project/language capability, memory-freshness, and FD/process resource gates.
 - [`orchestrating-agents`](orchestrating-agents/) — 委任体制を運転する監督の規律: 宣言制・委任契約・検収の試験・pacing の12門(旧 acting-as-director)。
 

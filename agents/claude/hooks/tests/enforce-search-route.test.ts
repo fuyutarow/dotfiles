@@ -47,7 +47,7 @@ function governedAndRegistered(): string {
 }
 
 describe("**統治下では黙って抜ける**(2026-09-01、発注者の裁定)", () => {
-  // WHY: この hook は Grep/Bash を deny し、腕を `repo-search.ts`(886 行)へ誘導していた。
+  // WHY: この hook は Grep/Bash を deny し、腕を `repo-retrieve.ts`(886 行)へ誘導していた。
   //   その 886 行は統治宣言を持たない repo に在り、統治下の repo の関門からは見えず、
   //   protocol の動詞としても登録されていない。**repo は見えないものを統治できない。**
   //   腕は二つの判定に挟まれて詰まった——統治側はこの deny を解けず、deny が案内する経路は
@@ -89,7 +89,7 @@ describe("enforce-search-route", () => {
     expect(result.code).toBe(0);
     expect(decision.permissionDecision).toBe("deny");
     expect(decision.permissionDecisionReason).toContain(
-      "bun ~/.claude/hooks/repo-search.ts",
+      "bun ~/.claude/hooks/repo-retrieve.ts",
     );
     expect(decision.permissionDecisionReason).toContain("literal");
     expect(decision.permissionDecisionReason).toContain("concept");
@@ -106,7 +106,7 @@ describe("enforce-search-route", () => {
       'echo ready && grep -n "needle" src/a.ts',
       'git grep -n "needle"',
       'git -C . grep -n "needle"',
-      "repo-search files --path src | xargs rg needle",
+      "repo-retrieve files --path src | xargs rg needle",
       "sh -c 'rg -n needle src'",
       'find src -iname "*needle*"',
     ]) {
@@ -131,8 +131,8 @@ describe("enforce-search-route", () => {
   test("allows only the classified router and non-search ccc operations", () => {
     const project = registerProject();
     for (const command of [
-      "repo-search literal --query needle",
-      "bun ~/.claude/hooks/repo-search.ts exhaustive --query needle",
+      "repo-retrieve literal --query needle",
+      "bun ~/.claude/hooks/repo-retrieve.ts exhaustive --query needle",
       "ccc status",
       "ccc daemon status",
       "ccc doctor",
@@ -158,7 +158,7 @@ describe("enforce-search-route", () => {
 
       expect(decision.permissionDecision).toBe("deny");
       expect(decision.permissionDecisionReason).toContain(
-        "bun ~/.claude/hooks/repo-search.ts",
+        "bun ~/.claude/hooks/repo-retrieve.ts",
       );
     }
   });

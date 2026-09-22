@@ -69,5 +69,5 @@ The description must retain:
 - the final language directive.
 
 It must not imply that OKF conformance, a wiki tool, or the deterministic checker proves document
-quality or scientific truth. It must not present `repo-search` as a frozen read, implement a generic
+quality or scientific truth. It must not present `repo-retrieve` as a frozen read, implement a generic
 `repo-write`, or imply that a transfer artifact's lineage determines its target truth.

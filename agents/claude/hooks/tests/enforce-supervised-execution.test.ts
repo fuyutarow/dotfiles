@@ -88,7 +88,7 @@ describe("enforce-supervised-execution", () => {
       "tmux attach -t queue9",
       "tmux list-sessions",
       "crontab -l",
-      "bun ~/.claude/hooks/repo-search.ts literal --query 'setsid'",
+      "bun ~/.claude/hooks/repo-retrieve.ts literal --query 'setsid'",
       "git status",
       "echo 'nohup is a word in this sentence'",
     ]) {

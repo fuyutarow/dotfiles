@@ -29,7 +29,7 @@ wrong answer is a description bug or a badly designed query — decide which, in
 | N7 | "Where should this sheet live, who owns it, and when does it retire as a document?" | `governing-research-documentation` — durable locus and authority |
 | N8 | "Check whether HNSW's Theorem 1 really assumes an exact Delaunay graph." | `raising-resolution` — one cited observation |
 | N9 | "This report repeats itself and references forward twice. Reorganize it." | `structuring-documents` — information architecture |
-| N10 | "Find every place in the repo that mentions the ANN theme." | `driving-cocoindex` / `repo-search` — locating, not operationalizing |
+| N10 | "Find every place in the repo that mentions the ANN theme." | `driving-cocoindex` / `repo-retrieve` — locating, not operationalizing |
 | N11 | "Write a research proposal arguing why this direction matters." | `arguing-research-papers` — positioning a governing claim, not a bill of work |
 
 ## CO-FIRE — order matters

@@ -61,7 +61,7 @@ updates use the Skill's revision/digest/lock transaction instead of editing the 
 
 In a repository where `ccc` is installed and `.cocoindex_code/settings.yml` exists, do not issue
 raw `rg`, `grep`, `find`, `fd`, `tree`, `ccc search`, or `ccc grep` calls. Declare the query shape
-through `repo-search`: `concept` for unknown-name meaning, `battery` for absence/new-implementation
+through `repo-retrieve`: `concept` for unknown-name meaning, `battery` for absence/new-implementation
 checks, `literal` for exact text, `exhaustive` for regex enumeration, `files` for path inventory,
 and `structural` for by-example code patterns. Known-symbol definitions/references belong to
 Serena. Do not reimplement repository search with Python, Node, shell loops, or another tool when

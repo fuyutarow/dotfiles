@@ -16,7 +16,7 @@
 //                      with no race and no exotic tooling (see this file's git history for the
 //                      commit that removed it). A leftover `source: "stamp"` watermark on disk
 //                      from before the deletion is never trusted (see checkIndexFreshness):
-//                      re-run `repo-search index`.
+//                      re-run `repo-retrieve index`.
 //
 // INDEX FRESHNESS: `ccc status` exposes chunk/file counts but no watermark — it cannot tell you
 // whether its own index matches the working tree (verified: `ccc status`/`ccc --help`, no
@@ -59,7 +59,7 @@
 // fine" (PASS, exit 0) are the only two terminal answers about freshness -- there is no third
 // "warn and proceed anyway" branch anywhere in this file, and PASS is the only one of the two that
 // is ever allowed to appear on stdout. A caller that reads only stdout+exit code (the documented
-// calling convention -- see repo-search.test.ts and driving-cocoindex) can therefore never mistake
+// calling convention -- see repo-retrieve.test.ts and driving-cocoindex) can therefore never mistake
 // an unearned pass for an earned one.
 
 import { readdir, rename } from "node:fs/promises";
@@ -338,7 +338,7 @@ async function hasIndexArtifacts(project: string): Promise<boolean> {
 // means "still no git, nothing changed" and any other combination already means "drift,
 // re-index". A pre-existing project that has never run `index` under this scheme -- which, on day
 // one, is every project on the machine -- has no watermark at all yet, and gets the same answer
-// any unindexed project gets: NO_INDEX (exit 3), never a silent pass. One `repo-search index`
+// any unindexed project gets: NO_INDEX (exit 3), never a silent pass. One `repo-retrieve index`
 // closes that gap permanently, including for a project that never has and never will have a git
 // HEAD.
 async function gitHead(project: string): Promise<string | null> {
@@ -362,7 +362,7 @@ async function isWorkingTreeDirty(project: string): Promise<boolean> {
 }
 
 function remedy(project: string): string {
-  return `run 'repo-search index' in ${project} to build a fresh, verified watermark`;
+  return `run 'repo-retrieve index' in ${project} to build a fresh, verified watermark`;
 }
 
 type Freshness =
@@ -375,7 +375,7 @@ type Freshness =
 // failed/partial reindex) also advances the DB mtime, and "now" is later than almost any past
 // HEAD's commit time, so the heuristic would rubber-stamp exactly the confidently-wrong-index
 // case this gate exists to catch. A false PASS on stale data is worse than the false alarm it
-// would avoid, so staleness recovery instead runs through `repo-search index` -- an actual
+// would avoid, so staleness recovery instead runs through `repo-retrieve index` -- an actual
 // reindex, observed to succeed -- rather than a guess or a self-asserted claim.
 async function checkIndexFreshness(
   project: string,
@@ -745,10 +745,10 @@ function lexicalMissLine(
   return (
     `${head}; **語彙で外しただけであって、不在の証明ではない。**` +
     `この repo の記録は同じ事柄を別の語で書く(日本語/英語、略号/正式名)。\n` +
-    `  不在を主張する前に: repo-search battery --queries "<3本以上の言い換え>"` +
+    `  不在を主張する前に: repo-retrieve battery --queries "<3本以上の言い換え>"` +
     (query === undefined
       ? ""
-      : `\n  意味で引き直す: repo-search concept --query ${JSON.stringify(query)}`) +
+      : `\n  意味で引き直す: repo-retrieve concept --query ${JSON.stringify(query)}`) +
     `\n  **意味検索の応答は不在を否定も肯定もしない**——件数は常に上限まで返り、` +
     `score は在る/無いを分離しない(実測 2026-09-02)。読むのは中身であって件数ではない。\n` +
     // 2026-09-17, soks corpus からの実測報告: rg は行単位で照合するので、hard-wrap された散文
@@ -994,7 +994,7 @@ function routeCommand(route: Route) {
 // separate, faster, no-reindex path to recover it (that path used to be `stamp`; it asserted
 // freshness without ever observing an indexer run, and was deleted because that assertion could
 // not be verified -- see the file header). The only way to make the watermark fresh again is to
-// run `repo-search index`, which reindexes AND records the result in one step.
+// run `repo-retrieve index`, which reindexes AND records the result in one step.
 async function runIndexWrapper(timeoutMs: number): Promise<number> {
   const project = findRegisteredProject(process.cwd());
   if (!project) {
@@ -1034,7 +1034,7 @@ async function runIndexWrapper(timeoutMs: number): Promise<number> {
       `FATAL: HEAD moved during 'ccc index' (was ${headLabel(headBefore)}, now ` +
         `${headLabel(headAfter)}); a structural git mutation landed mid-scan, so the resulting ` +
         "index cannot be honestly certified against either HEAD. Watermark left unwritten -- " +
-        "re-run 'repo-search index' now that the tree is stable\n",
+        "re-run 'repo-retrieve index' now that the tree is stable\n",
     );
     return 2;
   }
@@ -1090,7 +1090,7 @@ function indexCommand() {
 async function main(): Promise<void> {
   await cli(
     {
-      name: "repo-search",
+      name: "repo-retrieve",
       parameters: ["[route]"],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -1112,7 +1112,7 @@ if (import.meta.main) {
   main().catch((error) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
-        "Run 'repo-search --help' for usage.\n",
+        "Run 'repo-retrieve --help' for usage.\n",
     );
     process.exitCode = 2;
   });

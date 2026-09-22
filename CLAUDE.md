@@ -48,7 +48,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
    tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
    phantom skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
-   should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-search`) is a
+   should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
    and shell scripts only. **ONE file is generated, not linked**:

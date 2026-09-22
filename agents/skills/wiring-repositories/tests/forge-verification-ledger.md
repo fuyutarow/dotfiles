@@ -119,6 +119,40 @@ governed repo in this house has made its own `.claude/` permanently unsearchable
 standing finding for the owner of the ccc layer, not a per-repo defect, and it is why ORDER-4
 names the decision rather than prescribing an exclude set.
 
+## 9. Reforge 2026-09-22 — gate hooks call contract verbs only (v2609.1.0)
+
+**Trigger (live, user-directed).** dotfiles' `pre-commit` obeyed old HOOK-1 — a thin shim over
+`hook:pre-commit` — and the gate still failed. The task body was bespoke: it formatted, re-staged
+whole files, and never linted. Five lint failures reached `alpha` in one day while `mise run lint`
+refused each. The whole-file re-stage also swept unstaged hunks into commits. The user's ruling:
+the pre-commit is a thin wrapper that calls the all-gates verb, and every repo must follow it.
+
+| Finding | Receipt |
+|---|---|
+| Staged try/catch in `scripts/` committed exit 0 under the old gate | disposable worktree, 2026-09-22 |
+| `mise run lint` hung with a failing dep, 3/6 default runs; `--jobs 1` 0/6 | 6+6 SIGKILL-capped runs, mise 2026.9.12 |
+| `mise run fmt:check lint` never runs `lint` (passed as an argument), exit 0 | subtask listing of the run |
+| New gate: try/catch REFUSED, unformatted REFUSED with the file untouched, clean COMMITTED 4.6 s, 0/5 hangs | worktree proof through `core.hooksPath` |
+
+**Floor defects found while extending the check** (all fixed, all silent): ORDER-2 read
+`mise run --jobs 1` as a task named `--jobs`; `miseTasks()` treated a one-line `'''…'''` body as
+an open multi-line string and swallowed 150 lines of tasks (`lint`, `fmt:check` read as undefined);
+`pathTokens()` dropped `~`, so `~/dotfiles/scripts/x.ts` read as missing; the positional exemption
+waved through correo's whole bash gate because its `$1` is a manual-mode switch.
+
+**Proof-of-fire** (throwaway repos): verbs + `:::` + `--jobs 1` clean; `hook:pre-commit` task →
+HOOK-1; `mise run a b` → HOOK-3; no `--jobs 1` → HOOK-3; non-verb task → HOOK-1; `check` alone clean.
+
+**House audit at reforge time**: clean — dotfiles, OpenFactory. HOOK-1 — firedancer and qoed
+(`polysearch hook pre-commit`), soks (`soks-govern`, pre-commit and pre-push), correo (bash body),
+polysearch-rs (`mise run f`: mutating, alias, parallel; also HOOK-3). Reported, not migrated —
+each is its owner's repo.
+
+**Skill vs hook, decided.** The rule is repo STATE that humans and every agent change, so it is
+enforced where repo state is judged: this floor, run by `--audit` across repos and by each repo's
+own gate. A Claude Code PreToolUse hook sees only Claude's tool calls and fires on every Bash call;
+a git hook cannot police its own shape.
+
 ## 4. F3 — fire / no-fire desk-check
 
 Protocol: read ONLY `name:` + `description:`, answer fire / no-fire / co-fire. Run 2026-08-30

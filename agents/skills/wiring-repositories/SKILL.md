@@ -6,8 +6,8 @@ description: >-
   Use for 新しいリポジトリ, プロジェクトを立ち上げ, リポジトリ初期構築, 雛形, scaffold a project,
   bootstrap a repo — and equally for 配線監査, 健全性チェック, health check, repo audit,
   不備がないか, 発火しない hook, 呼ばれない tool, 版が固定されていない, "clone したら動かない".
-  Owns the SET, the ORDER, the JOINT, and the GIT-HOOK shape (a hook is a thin wrapper; its body
-  lives in a `hook:*` mise task) across git/.gitignore, mise [tools], the language manifest,
+  Owns the SET, the ORDER, the JOINT, and the GIT-HOOK shape (a gate hook only runs the contract
+  verbs — `mise run --jobs 1 fmt:check ::: lint`) across git/.gitignore, mise [tools], manifests,
   .claude/, .githooks + core.hooksPath, the ccc index, and research-governance config — never a
   layer's contents. LAW: a layer enters only with the failure it prevents named in the commit.
   Cuts — CARDINALITY vs wiring-mise-tasks: ONE artifact (the task graph, its verbs, its
@@ -21,7 +21,7 @@ description: >-
 
 # Scaffolding repositories — the SET, the ORDER, and the JOINT
 
-> **Version**: v2608.1.0 (2026-08-30) — initial forge. Receipts, calibration, and the F3
+> **Version**: v2609.1.0 (2026-09-22) — gate hooks call contract verbs only (HOOK-1/3); HOOK-2 retired. Receipts, calibration, and the F3
 > desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
 > per-language recipe is load-bearing here; dated facts live in `references/layers.md`.
 
@@ -88,14 +88,21 @@ reference does not mention git hooks at all. So the git-hook layer's shape had n
 four repos each independently wrote the same rule into a comment at the top of their own hook.
 It is stated once, here.
 
+| Hook kind | Rule | Shim body |
+|---|---|---|
+| **Gate** — `pre-commit`, `pre-push` | **HOOK-1**: execute the contract verbs (`wiring-mise-tasks`) and nothing else. No `hook:pre-commit` task, no direct tool call | `exec mise run --jobs 1 fmt:check ::: lint` (pre-commit) · `exec mise run --jobs 1 check` (pre-push, or pre-commit when `check` fits the commit budget) |
+| **Event** — `post-commit`, `post-merge`, `post-checkout` | a thin wrapper; the body lives in a `hook:<event>` task, because no contract verb expresses it | `exec mise run hook:<event>` |
+
 | # | Rule | Why, and what it costs when broken |
 |---|---|---|
-| **HOOK-1** | A git hook is a **thin wrapper**. The body lives in a `hook:<name>` mise task | A hook carrying logic is absent from `mise tasks`, unrunnable without git, and untestable. **Exempt**: a hook that consumes git's positional arguments cannot be run standalone, so the rule's own reason fails and it does not apply |
-| **HOOK-2** | The commit filter covers **every language the repo declares** | A filter is an allowlist. A language added later is silently uncovered, and staged files reach the commit without ever meeting the formatter |
+| **HOOK-1** | A gate hook runs contract verbs only | A bespoke gate drifts from the verb it stands in for. `mise run check` never runs it, so the manual gate and the commit gate differ. Measured 2026-09-22 (ledger §9) |
+| **HOOK-3** | Separate tasks with `:::`; run with `--jobs 1` | `mise run a b` passes `b` as an ARGUMENT and exits 0 without running it. mise 2026.9.12's parallel scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM |
+| **gate refuses, never rewrites** | `fmt:check`, not `fmt`, at commit time | A formatting gate that re-`git add`s whole files sweeps the unstaged hunks of a partially staged file into the commit |
+| *(HOOK-2 retired)* | — | It checked a language filter inside bespoke bodies. HOOK-1 forbids the bespoke body, so the filter cannot exist |
 
-Measured 2026-08-30: three of four repos follow HOOK-1; the fourth had copied the third's shape
-in 2026-07 and stayed there after the original moved on. Convention propagates by citation here,
-so it also drifts by citation.
+A repo-specific check (governance, records, a version bump) becomes a `lint:*` subtask, so it
+runs from `mise run lint` by hand AND at commit. Event hooks keep the positional-argument
+exemption. `pre-commit` does not: githooks(5) gives it no parameters.
 
 **Waivers.** A finding is answered, not silenced, in the form this house already uses:
 

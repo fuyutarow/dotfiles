@@ -117,7 +117,16 @@ function miseTasks(src: string): Map<string, Task> {
       const rest = kv[2] ?? "";
       const open = /^('''|""")/.exec(rest);
       if (open !== null) {
-        multi = open[1];
+        const delim = open[1] ?? "";
+        const after = rest.slice(delim.length);
+        // A body that opens AND closes on one line (`run = '''cmd'''`) is not multi-line. Treating
+        // it as open swallowed every task until the next triple quote — 150 lines of dotfiles'
+        // mise.toml, `lint` and `fmt:check` among them (found 2026-09-22).
+        if (after.includes(delim)) {
+          if (key === "run") run.push(after.slice(0, after.indexOf(delim)));
+          continue;
+        }
+        multi = delim;
         inRun = key === "run";
         continue;
       }
@@ -153,10 +162,11 @@ function miseTasks(src: string): Map<string, Task> {
  */
 function pathTokens(body: string, root: string): string[] {
   const home = process.env["HOME"] ?? "";
-  return [...body.matchAll(/[\w./${}-]*[\w-]\.(?:ts|js|sh|jl|py|rs|toml|json)\b/g)]
+  return [...body.matchAll(/[\w./${}~-]*[\w-]\.(?:ts|js|sh|jl|py|rs|toml|json)\b/g)]
     .map((m) => m[0]
       .replace(/\{\{\s*config_root\s*\}\}/g, root)
-      .replace(/\$\{HOME\}|\$HOME/g, home))
+      .replace(/\$\{HOME\}|\$HOME/g, home)
+      .replace(/^~(?=\/)/, home))
     .filter((p) => !p.startsWith("http") && !/[${}]/.test(p));
 }
 
@@ -206,7 +216,49 @@ async function main(): Promise<void> {
     }
   }
 
-  // ORDER-2 — the task AND the script it runs must exist before anything binds to them.
+  // ---------------------------------------------------------------- `mise run` call sites
+//
+// Parsed, not pattern-matched. The first cut read `mise run --jobs 1 lint` as a call to a task
+// named `--jobs` (found 2026-09-22 when the gate shim gained `--jobs 1`), and `mise run a b` as a
+// call to both — but mise passes `b` as an ARGUMENT to `a` and never runs it. Only `:::` starts a
+// second task. Getting that wrong is the difference between a gate and a gate-shaped no-op.
+type MiseRun = { readonly tasks: string[]; readonly swallowed: string[]; readonly serial: boolean };
+
+const RUN_FLAGS_WITH_VALUE = new Set(["-j", "--jobs", "-C", "--cd", "-E", "--env", "-o", "--output"]);
+
+function miseRuns(body: string): MiseRun[] {
+  const out: MiseRun[] = [];
+  for (const m of body.matchAll(/mise\s+run\b([^\n]*)/g)) {
+    const toks = (m[1] ?? "").trim().split(/\s+/).filter((t) => t !== "");
+    const tasks: string[] = [];
+    const swallowed: string[] = [];
+    let serial = false;
+    let expectTask = true;
+    for (let i = 0; i < toks.length; i++) {
+      const t = toks[i] ?? "";
+      if (t === ":::") {
+        expectTask = true;
+        continue;
+      }
+      if (t.startsWith("-")) {
+        if (/^(-j|--jobs)(=1)?$/.test(t) && (t.endsWith("=1") || toks[i + 1] === "1")) serial = true;
+        if (RUN_FLAGS_WITH_VALUE.has(t)) i++;
+        continue;
+      }
+      if (/^[;&|)]/.test(t)) break;
+      if (expectTask) {
+        tasks.push(t);
+        expectTask = false;
+      } else {
+        swallowed.push(t);
+      }
+    }
+    if (tasks.length > 0) out.push({ tasks, swallowed, serial });
+  }
+  return out;
+}
+
+// ORDER-2 — the task AND the script it runs must exist before anything binds to them.
   const hooksDir = join(root, ".githooks");
   if (existsSync(hooksDir)) {
     for (const entry of await readdir(hooksDir)) {
@@ -221,9 +273,7 @@ async function main(): Promise<void> {
         .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
         .join("\n")
         .replace(/'[^'\n]*'|"[^"\n]*"/g, " ");
-      for (const m of body.matchAll(/mise\s+run\s+([\w:.-]+)/g)) {
-        const task = m[1];
-        if (task === undefined) continue;
+      for (const task of miseRuns(body).flatMap((r) => r.tasks)) {
         if (!tasks.has(task)) {
           fail("ORDER-2", `.githooks/${entry} calls \`mise run ${task}\`, which mise.toml does not define. ` +
             `git reports nothing — commits pass ungated.`);
@@ -276,7 +326,10 @@ async function main(): Promise<void> {
       // hides its positional inside quotes, and stripping quotes first erases the exemption's
       // own evidence (caught by proof-of-fire, 2026-08-30).
       const args = raw.split("\n").map((l) => l.replace(/(^|\s)#.*$/, "$1")).join("\n");
-      if (/\$[123@*]|\$\{[123@*]/.test(args)) {
+      // pre-commit is excluded: githooks(5) gives it NO parameters, so a `$1` there is the
+      // script's own manual-run switch (correo's `mode="${1:---index}"`), not git's argument —
+      // the exemption let a whole bespoke bash gate through (found 2026-09-22).
+      if (entry !== "pre-commit" && /\$[123@*]|\$\{[123@*]/.test(args)) {
         notes.push(`.githooks/${entry} reads git's hook arguments, so the thin-wrapper rule does ` +
           `not apply — it cannot be run standalone as a task.`);
         continue;
@@ -292,36 +345,69 @@ async function main(): Promise<void> {
     }
   }
 
-  // HOOK-2 — the commit filter must cover every language the repo declares.
-  // A filter is an allowlist, so a language added later is silently uncovered. Nothing reports it.
-  const langs = new Map<string, string>();
-  const manifest = async (dir: string): Promise<void> => {
-    for (const [file, ext] of [["Project.toml", "jl"], ["Cargo.toml", "rs"],
-      ["pyproject.toml", "py"], ["ruff.toml", "py"], ["package.json", "ts"],
-      ["tex-fmt.toml", "tex"]] as const) {
-      if (existsSync(join(dir, file))) langs.set(ext, file);
+  // HOOK-1 (gate hooks) — pre-commit / pre-push call CONTRACT VERBS, and nothing else.
+  // A thin shim over a hook-specific task is still a bespoke gate, and a bespoke gate drifts from
+  // the verbs it stands in for. Measured 2026-09-22 in dotfiles: `hook:pre-commit` formatted but
+  // never linted, so five lint failures reached the integration branch in one day while
+  // `mise run lint` would have refused each; it also re-`git add`-ed whole files after formatting,
+  // sweeping the unstaged hunks of partially staged files into the commit. The verbs are the
+  // wiring-mise-tasks contract, already resolved in every repo by its mise-contract gate.
+  // (Supersedes HOOK-2's language-filter check: a filter only exists inside a bespoke body.)
+  const GATE_HOOKS = ["pre-commit", "pre-push"];
+  const GATE_VERBS = new Set(["fmt:check", "lint", "test", "check"]);
+  for (const hook of GATE_HOOKS) {
+    if (tasks.has(`hook:${hook}`)) {
+      fail("HOOK-1", `mise.toml defines \`hook:${hook}\` — a gate-specific body. Delete it and have ` +
+        `.githooks/${hook} exec the contract verbs directly (e.g. \`mise run --jobs 1 fmt:check ::: lint\`), ` +
+        `so the commit gate and \`mise run lint\` cannot diverge.`);
     }
-  };
-  await manifest(root);
-  for (const e of await readdir(root, { withFileTypes: true })) {
-    if (e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules") {
-      await manifest(join(root, e.name));
+    const raw = existsSync(hooksDir) ? await readIf(join(hooksDir, hook)) : undefined;
+    if (raw === undefined) continue;
+    const code = raw
+      .split("\n")
+      .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
+      .join("\n")
+      .replace(/'[^'\n]*'|"[^"\n]*"/g, " ");
+    // Everything the gate EXECUTES must be `mise run <verbs>`, or the shim's own plumbing (the
+    // `command -v mise` guard, echo, exit). A direct `polysearch hook pre-commit` or
+    // `soks-govern … author-check` is the same disease as a hook:* task: `mise run check` does not
+    // run it, so the manual gate and the commit gate differ. Put it in a `lint:*` subtask.
+    const PLUMBING = new Set(["mise", "command", "echo", "printf", "exit", "true", ":", "{", "}", "set"]);
+    const foreign = new Set<string>();
+    for (const stmt of code.split(/\n|&&|\|\||;/)) {
+      const words = stmt.trim().replace(/^exec\s+/, "").split(/\s+/);
+      const head = words[0] ?? "";
+      // Shell control words are logic, reported by the "carries logic" check above — not commands.
+      const SHELL = /^(if|then|else|elif|fi|for|while|do|done|case|esac|\[|\[\[|\]|\)|\(|!)$/;
+      if (head === "" || PLUMBING.has(head) || SHELL.test(head) || /^[A-Za-z_]\w*=/.test(head)) continue;
+      foreign.add(head);
     }
-  }
-  if (langs.size > 0) {
-    const filterSrc = [
-      ...(await Promise.all((existsSync(hooksDir) ? await readdir(hooksDir) : [])
-        .map((e) => readIf(join(hooksDir, e))))),
-      tasks.get("hook:pre-commit")?.run ?? "",
-    ].join("\n");
-    const alt = /\\?\.\\?\(([a-z0-9|]+)\\?\)\$?/.exec(filterSrc);
-    if (alt?.[1] !== undefined) {
-      const covered = new Set(alt[1].split("|"));
-      const missing = [...langs].filter(([ext]) => !covered.has(ext));
-      if (missing.length > 0) {
-        fail("HOOK-2", `the commit filter (${alt[1]}) does not cover ` +
-          `${missing.map(([e, f]) => `.${e} (declared by ${f})`).join(", ")}. ` +
-          `Those files are staged and committed without ever reaching the formatter.`);
+    if (foreign.size > 0) {
+      fail("HOOK-1", `.githooks/${hook} executes ${[...foreign].map((c) => `\`${c}\``).join(", ")} ` +
+        `directly. \`mise run check\` never runs that, so the commit gate and the manual gate differ. ` +
+        `Move it into a \`lint:*\` (or \`check\`-reached) task and have the hook call the verbs.`);
+    }
+    const runs = miseRuns(code);
+    if (runs.length === 0 && foreign.size === 0) {
+      notes.push(`.githooks/${hook} executes nothing — it is bound but gates nothing.`);
+    }
+    for (const r of runs) {
+      const bespoke = r.tasks.filter((t) => !GATE_VERBS.has(t));
+      if (bespoke.length > 0) {
+        fail("HOOK-1", `.githooks/${hook} runs ${bespoke.map((t) => `\`${t}\``).join(", ")} — not a ` +
+          `contract verb (${[...GATE_VERBS].join(", ")}). A gate hook calls the verbs themselves.`);
+      }
+      // HOOK-3 — the two ways a correct-looking gate line silently gates nothing, or never returns.
+      const swallowedTasks = r.swallowed.filter((t) => tasks.has(t) || GATE_VERBS.has(t));
+      if (swallowedTasks.length > 0) {
+        fail("HOOK-3", `.githooks/${hook}: \`mise run ${r.tasks[0]} ${swallowedTasks.join(" ")}\` passes ` +
+          `${swallowedTasks.join(", ")} as ARGUMENTS to ${r.tasks[0]} — they never run, and the hook ` +
+          `exits 0. Separate tasks with \`:::\`.`);
+      }
+      if (!r.serial) {
+        fail("HOOK-3", `.githooks/${hook} runs mise without \`--jobs 1\`. mise 2026.9.12's parallel ` +
+          `scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM (measured 2026-09-22) — ` +
+          `a red gate must refuse, not hang the commit.`);
       }
     }
   }

@@ -136,10 +136,24 @@ SKILL.md's TeX line — leaf graph theirs, repo verb ours.
 
 Recorded so an audit doesn't re-discover them as news; fixing them is repo work, not skill work:
 
-- dotfiles: HARD misses `fmt:check`/`test`/`check`; 5 hyphen-separator names (`link-dots`,
-  `check-tools`, `cc:install-mcp`, `lint:skills-index`, `wsl:fix-gitexe`). Oldest mise.toml in the
-  house — predates the grammar.
+- dotfiles: RESOLVED 2026-09-22 for the HARD tokens (`fmt:check`/`test`/`check` exist; the two
+  body FAILs were cleared). Hyphen names remain WARN: `cc:install-mcp`, `install:ai-clis`,
+  `lint:harness-scope`, `lint:skills-*`. `hook:*` names are exempt (§8).
 - xoria: missing `up`/`u` — the 2026-07-17 incident (`m up` → no task found) that forged this skill.
 - correo: no aliases beyond `f`; no `setup` (waivable by design).
 - qoed: aliases `l`/`t`/`c` missing; harness/ Rust crate has no clippy/test task (gap vs both
   writing-rust RG2/RG3 and correo's quartet).
+
+## §8 Running tasks from a git hook — three mise facts (measured 2026-09-22, mise 2026.9.12)
+
+SOLE home of these facts. The hook SHAPE (shim -> `hook:<event>`, gate tasks depends-only over
+contract verbs) is `wiring-repositories` HOOK-1; this section only says how mise behaves there.
+
+| Fact | Consequence | Measured |
+|---|---|---|
+| `mise run a b` passes `b` as an ARGUMENT to `a`; only `:::` starts a second task | a hook written `mise run fmt:check lint` never lints and exits 0 | subtask listing of the run: only `fmt:*:check` ran |
+| With the default parallel scheduler, an aggregate whose dependency fails can hang and ignores SIGTERM | a red gate freezes the commit instead of refusing it | `mise run lint` with failing deps: 3 of 6 runs hung (SIGKILL at 20 s); `--jobs 1`: 0 of 6, and 0 of 5 through the real hook |
+| `raw = true` connects the task to the caller's stdin | the only way git's pre-push ref list reaches the check through `mise run` | a raw task running `cat` echoed the piped ref line |
+
+Naming: `hook:<event>` repeats git's hook file name verbatim (githooks(5)), hyphen included.
+`mise-contract.ts` exempts exactly those names from the hyphen WARN; `hook:my-thing` still warns.

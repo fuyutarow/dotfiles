@@ -72,3 +72,10 @@ depends = ["fmt:check", "lint", "test"]
 [tasks."mise:contract"]
 description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
 run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"
+
+# git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
+# だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
+# recipes.md §8)。gate の task は契約 verb の depends のみで、run 本体を持たない。
+[tasks."hook:pre-commit"]
+description = "commit gate — .githooks/pre-commit が走らせるものそのもの。契約 verb の depends のみ"
+depends = ["fmt:check", "lint"]

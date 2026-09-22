@@ -102,3 +102,20 @@ The additions themselves land at zero: measured before and after, SKILL.md prose
 at 13 and no new oversize table cell survives. The residue is pre-existing — 13 in SKILL.md, 18 in
 `references/recipes.md`, and a 9-line version header. Queue position: behind the recipes.md
 rewrite, which is the larger half and wants its own pass.
+
+## 2026-09-22 — grammar rule 6: `hook:<event>` (seam with wiring-repositories)
+
+Trigger: the user asked how this skill connects to the git-hook rule forged in
+`wiring-repositories` the same day. It did not: zero mentions of `hook:`, `pre-commit`, `:::`,
+`--jobs` or `.githooks` here, templates without a commit gate, and `mise-contract.ts` warning on
+`hook:pre-commit` as a hyphen violation.
+
+One home per fact: the task NAME (grammar rule 6) and the three mise facts (recipes §8) are here;
+the hook SHAPE stays in `wiring-repositories` HOOK-1, pointed at, not restated. `mise-contract.ts`
+exempts exactly githooks(5) names after `hook:` (test added: `hook:pre-commit` and
+`hook:post-merge` clean, `hook:my-thing` still warns; 14/14 pass). All five templates ship
+`hook:pre-commit = ["fmt:check", "lint"]` and parse under mise. recipes §7's dotfiles line was
+stale and is updated.
+
+**PROSE-DEBT waiver (2026-09-22).** This seam edit adds one grammar rule. The existing WARNs (long
+sentences, a 9-line version header) predate it and are untouched. Queue: the next reforge.

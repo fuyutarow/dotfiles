@@ -196,6 +196,21 @@ describe("mise-contract floor", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  test("hook:<git hook name> is exempt from the hyphen WARN; any other hook:* name is not", () => {
+    const dir = makeRoot(
+      '[tasks."hook:pre-commit"]\nrun = "true"\n' +
+        '[tasks."hook:post-merge"]\nrun = "true"\n' +
+        '[tasks."hook:my-thing"]\nrun = "true"\n',
+    );
+    const { out } = run(dir);
+    expect(out).toContain(
+      "WARN  grammar: hyphen in task name (colon-only rule): hook:my-thing\n",
+    );
+    expect(out).not.toContain("hook:pre-commit");
+    expect(out).not.toContain("hook:post-merge");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   test("hyphenated task name, empty check-depends, and a dangling dependency all WARN", () => {
     const dir = makeRoot(
       '[tasks.check]\ndepends = []\nrun = "true"\n' +

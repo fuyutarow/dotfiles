@@ -413,9 +413,20 @@ async function check(
     warnings += bodyWarnings;
   }
 
+  // `hook:<event>` names mirror git's own hook file names 1:1 (.githooks/pre-commit ->
+  // hook:pre-commit), so the hyphen is git's, not a separator. Exempt ONLY git's documented hook
+  // names (githooks(5)); `hook:my-thing` still warns. Shape of these tasks: wiring-repositories HOOK-1.
+  const GIT_HOOKS = new Set([
+    "applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit",
+    "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge",
+    "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update",
+    "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite",
+    "sendemail-validate", "fsmonitor-watchman", "post-index-change",
+  ]);
   const hyphens = local
     .map((task) => task.name)
-    .filter((name) => name.includes("-"));
+    .filter((name) => name.includes("-"))
+    .filter((name) => !(name.startsWith("hook:") && GIT_HOOKS.has(name.slice(5))));
   if (hyphens.length > 0) {
     process.stdout.write(
       `WARN  grammar: hyphen in task name (colon-only rule): ${hyphens.join(" ")}\n`,

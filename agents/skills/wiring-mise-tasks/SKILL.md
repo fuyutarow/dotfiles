@@ -85,6 +85,11 @@ skill now closes.
    them (`lint:*`, `slides:*`, `papers:*`).
 5. Polyglot: repo-level verbs are depends-only; language bodies live in `<verb>:<lang>` subtasks
    (`references/recipes.md` §6, qoed exemplar).
+6. Git hooks: `hook:<event>` is the task a `.githooks/<event>` shim runs. Its name repeats git's
+   hook name verbatim — the one place a hyphen is allowed; `mise-contract` exempts exactly those.
+   Its shape is `wiring-repositories` HOOK-1. It composes verbs already in `check`, so rule 3
+   holds. The mise facts a hook depends on (`:::`, `--jobs 1`, `raw = true`) are
+   `references/recipes.md` §8. Every template ships `hook:pre-commit = ["fmt:check", "lint"]`.
 
 ## Per-language bodies — the matrix
 

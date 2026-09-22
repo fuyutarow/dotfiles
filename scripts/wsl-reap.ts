@@ -114,9 +114,10 @@ export function parseProbe(out: string): {
       /^proc=(sshd(?:-session)?\.exe)\|(\d+)\|(\d+)\|([01])\|([01])\|([01])\|(\d+)\|(\d+)$/i.exec(
         t,
       );
-    if (m === null) continue;
+    const name = m?.[1];
+    if (m === null || name === undefined) continue;
     procs.push({
-      name: m[1],
+      name,
       pid: Number(m[2]),
       ppid: Number(m[3]),
       isR: m[4] === "1",

@@ -42,6 +42,8 @@ asks — Rust/TS/C++ — which test nothing). Expanded v2609.1.0 with JG6 packag
 | 「既存 package の export を全部 public に移して」 | breaking migration; retain no shim |
 | "MethodError: ambiguous — 曖昧性エラーの直し方" | §10.6.1 method ambiguity / `@which` tracing |
 | 「パッケージ読み込みが遅くなった — invalidation って何?」 | §10 TTFX & invalidation hygiene |
+| 「Julia の `-O3` は常に速い？ `-O0` をデバッグに使ってよい？」 | `compilation.md`: split steady-state, TTFX, and bounds/debugging questions before choosing a flag |
+| "Should we ship this Julia job with `--optimize=3` or `-C native`?" | `compilation.md`: a representative measurement plus deployment CPU contract, never a blanket `-O3` answer |
 
 ### Packaging (JG6 — identity, dependency contract, distribution)
 

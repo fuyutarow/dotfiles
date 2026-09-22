@@ -1,9 +1,9 @@
 ---
 name: writing-julia
 description: >-
-  Write strict modern Julia for research and packages. Use for Julia code/runs, experiments, AD,
-  hot paths, package layout/naming, Pkg metadata, deps/compat/sources/workspaces, extensions,
-  API/release, TTFX, or AOT. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
+  Write modern Julia for research packages. Use for Julia code/runs, experiments, AD,
+  hot paths, layout/naming, Pkg metadata, deps/compat/sources/workspaces,
+  API/release, TTFX, AOT, or `-O`/`--optimize`. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
   type stability/型安定, DI, JET/Aqua, DrWatson, JSON/TOML, include order, submodules,
   export禁止, no exports, public API, 名前空間, and `.jl` suffix. ZERO-EXPORTS is mandatory:
   every authored module forbids `export`/`@reexport`; stable API uses `public`; package source
@@ -17,12 +17,12 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.3.0 (2026-09-21) — ZERO-EXPORTS + explicit imports mandatory; delimiters ≠ output encoding (merges parallel v2609.1.0).
+> **Version**: v2609.4.0 (2026-09-21) — compiler modes distinguish speed, TTFX, debugging, CPU target, and package images.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
 ```bash
-for f in performance autodiff toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
+for f in performance compilation autodiff toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
 ```
 
 Fast-moving facts carry `[dated:YYYY-MM]` at their decision locus. Re-check stale tags against the
@@ -87,6 +87,7 @@ reference file that matches the task.
 | File | Covers | Read when |
 |---|---|---|
 | `references/performance.md` | types, hot paths, memory, benchmarks, checks | numeric or struct code |
+| `references/compilation.md` | `-O`, JIT/TTFX measurement, debug flags, CPU target, package-image effects | selecting Julia launch/compiler flags or interpreting a speed/startup difference |
 | `references/autodiff.md` | DI frontend, preparation, backend choice, dual propagation | differentiated functions |
 | `references/toolchain.md` | data structures, NN/accelerator stack, parallelism | structure or compute-tool choice |
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
@@ -358,6 +359,11 @@ Performance & verification — `references/performance.md`:
 - [ ] Authored packages pass scoped Aqua and ExplicitImports checks (§10.6.1).
 - [ ] Parallel reductions use OhMyThreads, never `threadid()` buffers (§2.9.4).
 - [ ] Recordable or parallel runs have a P7 envelope and `agent-resource-run` verdict.
+
+Compiler modes — `references/compilation.md` (only when a launch/compiler choice is in play):
+- [ ] The receipt names the goal and Julia version. It records flags, cache state, input, and result.
+- [ ] Retain `-O3` only after a warmed steady-state comparison.
+- [ ] Investigate `@inbounds` safety with `--check-bounds=yes`.
 
 Environment — `references/setup.md`:
 - [ ] A `.so`/AOT build follows setup.md §3.5.1; never trim by default.

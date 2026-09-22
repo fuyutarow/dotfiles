@@ -254,7 +254,9 @@ When element order does not matter, prefer `eachindex(A)`; it follows the array'
 indexing style and avoids hard-coding `1:length(A)`.
 
 `@inbounds` disables bounds checking — only use when you have verified that all indices are
-in range. `@simd` requires loop iterations to be independent.
+in range. `@simd` requires loop iterations to be independent and permits reordering.
+Julia can often auto-vectorize without it. `@simd` is neither a required SIMD switch nor a
+performance proof; see `compilation.md` for launch-mode claims.
 
 ```julia
 function dot_product(a, b)

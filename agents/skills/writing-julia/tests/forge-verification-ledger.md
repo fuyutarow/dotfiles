@@ -1,5 +1,45 @@
 # Forge verification ledger — writing-julia (F3 artifact)
 
+## 2026-09-21 — compiler-mode decision map (v2609.4.0)
+
+**Trigger:** a user supplied an attractive but over-general `-O0`–`-O3` explanation and found
+that the skill had no agent-operable answer for compiler-mode selection.
+
+**Function map:** launch/compiler question → choose the relevant goal and a bounded flag trial →
+`references/compilation.md` evidence record → retain default, retain a measured non-default flag,
+or hand the persistent TTFX problem to `setup.md` §3.5. Stop when the receipt makes that choice
+reproducible; no result from one workload generalizes to another.
+
+**Source grades (primary-source audit, 2026-09-21):**
+
+| Claim | Grade | Source |
+|---|---|---|
+| `-O` accepts 0–3; default is 2; bare `-O` is 3 | author-confirmed | Julia CLI manual |
+| `--compile`, `-g`, `--inline`, `--check-bounds`, and `-C` are distinct option dimensions | author-confirmed | Julia CLI manual |
+| package-image optimization-level cache rule | author-confirmed | Julia Package Images developer documentation |
+| automatic vectorization is conditional; `@simd` and `@fastmath` have semantic constraints | author-confirmed | Julia Performance Tips + JIT developer documentation |
+| `-C` controls session JIT while `JULIA_CPU_TARGET` controls system/package-image generation | author-confirmed | Julia environment-variable manual |
+| default-to-`-O2`, measure before retaining `-O3`, and separate TTFX/debugging/compatibility receipts | skill-supplied | operationalization of the audited contracts |
+
+**Calibration inversion:** CLI documentation is descriptive and makes every switch appear equally
+available. An agent's likely failure is the opposite: treating a memorable switch (`-O3`) as a
+universal optimization. The decision table therefore starts from the declared outcome and makes
+the default the no-evidence choice.
+
+**One home:** `compilation.md` solely owns flag selection and cache/CPU implications;
+`performance.md` owns loop form and in-process benchmarks; `setup.md` owns TTFX remedies. The
+only deliberate seams are pointers, not copied rules.
+
+**PROSE-DEBT waiver `[dated:2026-09-21]`:** This focused reforge adds no long-SKILL sentence or
+version-block warning class. Existing whole-skill/reference prose debt remains queued for its
+separate reforge; the post-change floor receipt below is the authoritative count.
+
+**Verification receipt:** local Julia 1.12.7 help confirmed the CLI flag surface. The two new F3
+fire rows desk-check to this skill from its `Julia` + `-O` surface; existing near-miss ownership is
+unchanged. Target YAML/index validation passed. `skill-check.ts` passed with the unchanged baseline
+of 157 reference and 10 SKILL prose WARNs. `mise run lint:skills-floor` passed at 65,230/65,242
+listing characters; `git diff --check` passed; `mise run link:skills` linked both live skill paths.
+
 ## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
 
 One typed routing row distinguishes Julia-side configuration implementation from shared contracts.

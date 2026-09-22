@@ -302,7 +302,7 @@ run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json
 # フックは手で走らせにくく試験もしづらいが、task なら単体で走らせられ `mise tasks` に載る。
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:pre-commit"]
-description = "git pre-commit body: run `fmt` and re-stage the formatted files that were ALREADY staged (formatting fallout in unrelated working-tree files stays unstaged). Called by .githooks/pre-commit; safe to run by hand."
+description = "git pre-commit body: run `fmt`, re-stage the formatted files that were ALREADY staged (formatting fallout in unrelated working-tree files stays unstaged), then oxlint the STAGED .ts files and refuse the commit on any error. Called by .githooks/pre-commit; safe to run by hand."
 run = 'bun ~/dotfiles/scripts/hook-pre-commit.ts'
 
 [tasks."hook:post-commit"]

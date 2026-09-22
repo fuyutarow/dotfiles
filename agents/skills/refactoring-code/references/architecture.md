@@ -173,6 +173,8 @@ fill and counts as a FAILED gate** — self-certified prose is itself 場当た�
    against a pre-edit observation, not asserted post-hoc:
    - `cohesion raised: <module> <level>→<level> — one-sentence test before: "<the ...and/then...
      sentence>", after: "<the single-verb sentence>"` (§2 grammar);
+   - removal branch: `cohesion raised: <module> removes unreachable <symbol> — before-state:
+     <exhaustive zero-live-reference/reachability evidence>; after-state: <G2 absence oracle>`;
    - `coupling lowered: <edge> <level>→<level> — before-state: <the grep/read that shows the flag /
      whole-record / global access at file:line>`;
    - `connascence lowered/localized: <strong>→<weak> / into <one home> — instance at file:line` (§5);
@@ -196,8 +198,8 @@ happen.** Leave the working code; say why. This gate gates `Edit` / `Write` / `r
 - **Over-refactor check (before ADDING abstraction/layer/pattern/param):** a **present** consumer
   must exist. No present caller → Speculative Generality (YAGNI violation) → do not add it. Prefer
   refactoring **away**: inline a Middle Man, collapse a one-subtype hierarchy, replace an
-  over-applied Strategy/Factory with a conditional. **Pattern/abstraction REMOVAL passes the gate**
-  (`smell removed: Speculative Generality / Middle Man` + `connascence lowered`).
+  over-applied Strategy/Factory with a conditional. Pattern/abstraction removal still owes both
+  gate lines and G2's absence/behavior oracles.
 - **Wrong-abstraction reversal is legal.** A shared abstraction accreting params+conditionals to fit
   divergent callers → **re-inline into each caller** (keep only that caller's branch). Adding
   param/conditional #N to a discriminating abstraction is **denied** as churn that deepens the wrong

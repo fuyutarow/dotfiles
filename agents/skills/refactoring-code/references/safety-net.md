@@ -11,14 +11,29 @@ Every refactoring step needs an oracle that behavior is unchanged. There are exa
 
 | Regime | Oracle | When it holds |
 |---|---|---|
-| **1 — tool-verified** | the refactoring engine's checked **precondition** | a real engine (LSP rename, gopls/Roslyn/rope, ast-grep/comby/codemod) performs an atomic Rename/Extract/Move/Inline/Change-Signature. Tests are optional defense-in-depth. **The agent is here ONLY if it actually invokes the tool.** |
-| **2 — manual & local** | a human/agent **eyeball** | a hand edit whose entire effect fits in one screen / one reviewer's working memory, no shared mutable state, no reflection/serialization/DI/public-API/concurrency crossed. Tests strongly advised. |
+| **1 — tool-verified** | the refactoring engine's checked **semantic precondition** | a real engine (LSP Rename, gopls/Roslyn/rope) performs an atomic supported operation. Generic AST/text rewrites are not in this regime. Tests remain defense-in-depth on risky code. |
+| **2 — manual & local** | review plus the claim-specific oracle stack below | a hand edit or generic ast-grep/comby/codemod rewrite whose entire effect fits in one screen, with no shared mutable state or dynamic/public coupling crossed. |
 | **3 — manual & non-local** | a **test/characterization** bracket | anything larger, or crossing a coupling a tool can't statically prove. **Feathers holds absolutely: characterization tests first, no exceptions.** |
 
 **The reflex (G2):** before edit #1, say which regime and name the oracle. If you can't name one and
 the edit crosses reflection / serialization / DI / public-API / concurrency, or exceeds one screen →
-**do not touch; install the bracket first.** Only claim "done" after a **green run on the final
-state**, cited. A refactor with no executed test evidence is *unverified*, not done.
+**do not touch; install the bracket first.** Only claim "done" after every declared oracle passes
+on the final state, with receipts cited. A refactor with no executed behavior-oracle receipt is
+*unverified*, not done.
+
+### 1.1 One task may need an oracle stack
+
+Choose an oracle for every claim you will make. These rows are cumulative, not alternatives.
+
+| Claim | Required oracle | Red condition |
+|---|---|---|
+| **Behavior stayed equivalent** | tool precondition and/or before→after tests over the declared observable surface | any covered observable changes |
+| **The requested structure exists** | AST/symbol/refactoring detector, compiler query, or explicit structural assertion | the named move is partial or replaced by another shape |
+| **The target is absent** | exhaustive lexical search, symbol references, and dynamic/config lookup where applicable | any live target/reference remains, including code retained behind a guard |
+| **Nothing unrelated changed** | enumerated intended loci compared with the final diff | an unexplained file, symbol, assertion, or observable changed |
+
+A green suite answers only its **behavior** row. It does not establish structure, absence, or scope.
+Conversely, an AST match proves the requested shape, not behavior preservation.
 
 ## 2. Characterization tests — pin CURRENT behavior (Feathers)
 
@@ -31,6 +46,17 @@ today**, discovered by running it — **not what the spec or the name says it sh
 3. **Never delete/simplify code you don't understand while it's untested** — an "unused"/"weird"
    branch is often load-bearing (a past bug fix). Get it under a characterization test first, so the
    deletion is *proven* behavior-preserving.
+
+For deletion, record the negative contract before editing:
+
+0. if the target is a supported feature or public API, stop and route to `implementing-and-debugging`;
+1. enumerate the symbol, callers, config/string references, generated artifacts, and public aliases;
+2. decide which occurrences must become zero and which migrations must remain;
+3. delete one atomic row, then run both the behavior oracle and the absence search; and
+4. reject a patch that leaves the target implementation behind an always-false or alternate guard.
+
+If safe deletion cannot be distinguished from retention, narrow the claim or stop. “Tests pass” is
+not evidence that a removal request was completed.
 
 **The Legacy Code Change Algorithm** (do the behavior change LAST): identify change points → find
 test points → **break dependencies** → write tests → change & refactor. First tool actions are
@@ -91,10 +117,11 @@ behavior-changing until proven otherwise.
 
 ## 6. The AST-vs-text gap — why an agent must prefer tools, and still bracket them
 
-- **You edit token streams; an IDE edits a verified AST with precondition checks.** So for
-  Rename/Extract/Move/Inline/Change-Signature, **delegate to a real tool** (LSP `rename_symbol` /
-  `find_referencing_symbols`, ast-grep, comby, jscodeshift, OpenRewrite, codemods) rather than
-  emulate one with text search-replace — the tool updates ALL references and respects scoping.
+- **You edit token streams; a semantic refactoring engine checks operation-specific preconditions.**
+  Prefer a supported LSP/IDE Rename/Extract/Move/Inline/Change-Signature over freehand replacement.
+- **AST/text rewrite tools are structural executors, not semantic proofs.** ast-grep, comby,
+  jscodeshift, OpenRewrite, and codemods can make a scoped transformation repeatable. They still
+  need separate behavior, reference, absence, and diff-scope oracles from §1.1.
 - **Before any rename/move, hunt for NON-STATIC references** the tool (and a naive grep) miss:
   reflection, string-keyed lookup, config files, serialization keys, DB columns, DI wiring,
   public/published API. `grep` the symbol **as a string**, and search config/serialization/build
@@ -109,6 +136,6 @@ behavior-changing until proven otherwise.
 - **Do not do wide reformat / mass rename in the same diff as a substantive change** — isolate
   cosmetic churn in its own commit so the real change isn't buried (a formatter reflow that explodes
   the diff defeats review).
-- **Don't trust a "refactor" label / commit message.** ~40% of refactorings aren't even mentioned in
-  commit logs (Murphy-Hill); read the actual diff and run tests, and only call your own change a
-  refactor if tests are green and behavior is genuinely unchanged.
+- **Don't trust a "refactor" label / commit message.** Read the actual diff and run every declared
+  oracle. Call your own change complete only when behavior and the requested structure/absence/scope
+  claims all pass.

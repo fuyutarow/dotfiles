@@ -141,3 +141,53 @@ Queue: retain the existing reforge position; retire this waiver when the recorde
 This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
 prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
 seam edit; queue position: with the next reforge of this skill, not before.
+
+## 2026-09-22 — LLM existing-code modification re-distillation (v2609.2.0)
+
+**Canonical sources.** The raw papers were synthesized before skill work. This reforge consumes
+the resulting positions, not the raw corpus:
+
+- general refactoring: `urn:uuid:01a0c779-fd07-719d-a845-3d9c0c8cfb3d`, especially `RFG-001`–`003`;
+- LLM existing-code modification: `urn:uuid:01a0c7a4-ceb4-7743-bdf6-52d96467c1e9`, especially
+  `LECM-Y001`–`Y004` and source claims `LECM-003`–`006`.
+
+**Function map.** `non-trivial behavior-preserving structural request (including deletion or a
+compound move) → classify the claims to prove → name behavior/structure/absence/scope oracles →
+execute atomic rows → return only when every required row is green`. The owned artifacts are the
+G2 claim→oracle table and G4 atomic acceptance table. The stop condition is a missing oracle or a
+red/partial row.
+
+**Calibration inversion.** The bounded literature does not establish that LLMs are universally
+worse at refactoring than generation. It does establish benchmark-specific partial/substituted
+refactors, under-deletion, and test oracles that miss unwanted retained code. The agent's default
+failure is SAME-direction: accept green tests as completion. Therefore the skill does not repeat a
+model-capability ranking; it promotes claim-specific completion oracles.
+
+**Distilled rules and grades.** G2's behavior/structure/absence/scope separation is a
+`supported-with-limitations` operationalization of `LECM-Y002`–`Y003` plus `RFG-002`–`003`.
+Deletion's zero-state contract is skill-supplied from the same claims. G4's compound→atomic table is
+skill-supplied from `LECM-004`'s observed partial operations. The rule that generic AST rewrites are
+not semantic proofs repairs an overclaim in the previous Regime 1 table.
+
+**Incidental defect fixed.** The routing table carried two identical `/code-review`, `/simplify`
+rows. One was removed; no semantic cut changed.
+
+**Adversarial verification.** The first source-fidelity pass found one P1 and two P2 issues:
+semantic engines were still conflated with generic AST executors; G4 required tests even when G2
+selected a semantic precondition; and the dead-code trigger exceeded the source boundary. The first
+structure pass found two P1 and one P2 issue: dead-private deletion could not fill G3, compound rows
+omitted scope, and public-API deletion lacked an early handoff. All were fixed. Follow-up source
+audit returned CLEAN. Follow-up structure audit confirmed all five desk checks; its one remaining
+pointer finding added `refactoring-survey-sok.md` to the literal verify command.
+
+**F3 receipts.** `skill-check.ts agents/skills/refactoring-code` has no structural FAIL. The full
+collection floor reports `LISTING 71 skills, 65218 chars charged per turn`, below the declared
+65242 ceiling. Fire/no-fire desk checks: proven-unreachable private removal→HERE; supported public
+feature/API removal→implementing-and-debugging; trivial tool rename→no-fire; compound split+move→
+HERE with atomic rows; green tests with guarded retained code→red absence oracle.
+
+**PROSE-DEBT waiver (2026-09-22).** Baseline was 122 long reference sentences, 26 long SKILL.md
+sentences, a 7-line version block, and two long table cells. This reforge leaves 119/26/2 and clears
+the version-header class; no debt class increased. The previous queue is partially discharged, not
+silently retired. Queue the remaining mature-body atomization as a dedicated prose-only reforge
+before another broad architecture/catalog revision; do not mix it into a source-fidelity change.

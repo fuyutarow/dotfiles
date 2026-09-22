@@ -4,8 +4,8 @@ description: >-
   Governs behavior-preserving structural change. DECISIVE Beck two-hats cut: observable behavior
   changes (feature, bugfix, performance, logs) → implementing-and-debugging; structure only → HERE.
   Co-fire sequentially for preparatory refactoring. Pursues 責務分界 and 局所化; refuses 場当たり
-  churn unless the smell and improved property are named. Name the oracle first: green tests, engine
-  precondition, or characterization test. Prefer small reversible edits and
+  churn unless the smell and improved property are named. Name claim-specific behavior, structure,
+  and deletion-absence oracles. Prefer small reversible edits and
   LSP/ast-grep/codemod over whole-file rewrites. Use for refactor/リファクタリング, cleanup, code
   smell, extract/inline/move, structural rename, duplication, wrong abstraction,
   coupling/cohesion, legacy seams, Strangler Fig, Branch by Abstraction, Parallel Change, Mikado,
@@ -16,13 +16,13 @@ description: >-
 
 # Refactoring — behavior-preserving structural change, on purpose
 
-> **Version**: v2607.1.0 (2026-07-05) — distilled from a 19-agent SoK survey of the refactoring
-> canon (Fowler / Beck / Feathers / Opdyke / empirical SE) + a 7-agent architecture-axis survey
-> (Parnas 1972 / Constantine / Martin / DDD). Full provenance, claim ledger, moderator table, and
-> GRADEs: `tests/refactoring-survey-sok.md`.
-> **Scope**: the discipline of changing HOW code is structured WITHOUT changing WHAT it observably
-> does. Behavior-CHANGING work (features, bug fixes) and the anti-flailing guards for it are the
-> sibling `implementing-and-debugging` — the cut is Beck's two hats (below).
+> **Version**: v2609.2.0 (2026-09-22) — re-distilled from the canonical general-refactoring and
+> LLM existing-code-modification positions; claim provenance lives in the forge ledger.
+> **Scope**: change HOW code is structured without changing WHAT it observably does.
+
+```bash
+for f in architecture catalog safety-net strategy; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; for f in forge-verification-ledger refactoring-survey-sok; do test -f "tests/$f.md" || echo "MISSING tests/$f.md"; done
+```
 
 ## Language & stable tokens
 
@@ -38,10 +38,10 @@ seam) stay in English/standard form as identifiers.
 > responsibility ONE home (**責務分界**) and keep each likely change LOCAL (**局所化**). Two
 > invariants bracket it, and each has a counterfeit the model ships by default:
 >
-> 1. **SAFETY.** Preservation is not the word's reassuring connotation — it is an **oracle you name
->    before you touch**. An LLM edits *text*, not a precondition-checked *AST*, so a "refactor" with
->    no oracle that would FAIL on a behavior slip is an edit-and-hope: **the next bug wearing the
->    safe word.** (Counterfeit: silently changing behavior inside a "refactor".)
+> 1. **SAFETY.** Preservation is an **oracle you name before you touch**, not a reassuring label.
+>    One oracle proves one claim: behavior, requested structure, absence, or edit scope.
+>    Name every oracle the task needs. (Counterfeit: green tests with a partial/substituted move,
+>    or code retained behind a guard instead of removed.)
 > 2. **PURPOSE.** A structural edit that improves **no named architecture property** — no cohesion
 >    raised, no coupling/connascence lowered, no responsibility re-homed, no change localized — is
 >    not refactoring. It is **場当たり churn**, and it is forbidden. (Counterfeit: motive-less /
@@ -79,16 +79,15 @@ first** as its own green step, then the easy change (co-fire with `implementing-
 sequencing in `references/strategy.md` §2–3.
 *Artifact*: two separable diffs, not one; the refactor diff has zero edited assertions.
 
-### G2 — Name your oracle before you touch
-Before the first structural Edit, **name the behavior-preservation oracle**: (a) a real refactoring
-**tool** performs the step (invoke it — LSP rename, gopls/Roslyn/rope, ast-grep/comby/codemod), its
-precondition IS the oracle; or (b) a **green test suite** brackets the change (run it *before* and
-after each step); or (c) the code is untested → write a **characterization test** that pins *current*
-behavior FIRST (Feathers), through a seam if needed. **An LLM hand-editing text is never in the
-tool-verified regime — its default is the strict branch.** No oracle you could name, and the edit
-crosses reflection / serialization / DI / public-API / concurrency, or exceeds one screen → do not
-touch; install the bracket first. → regimes, seams, mutation/golden-master in `references/safety-net.md`.
-*Artifact*: a named oracle (tool / green run cited / characterization test written) before edit #1.
+### G2 — Name the oracle stack before you touch
+Declare every claim the change must satisfy. Select its oracle from
+`references/safety-net.md` §1.1. **Behavior**, **requested structure**, **absence**, and
+**edit scope** are separate claims. A green suite supports only covered behavior. It does not prove
+that a named move finished, deleted code is absent, or unrelated loci stayed untouched.
+
+An LLM hand-edit is never tool-verified. A generic AST rewrite is a structural executor, not a
+behavior proof. If a required oracle is missing, install it or refuse the edit.
+*Artifact*: a claim→oracle table with a cited red condition for every required claim, before edit #1.
 
 ### G3 — 場当たり禁止 / 責務分界・局所化 へ  ★ the spine — emit the deny-gate or do NOT edit
 Before **any** structural edit (extract/inline/move/rename-for-structure/introduce-or-remove
@@ -106,22 +105,29 @@ with no cited command/file:line is a vacuous fill and **counts as a failed gate*
 **Cannot fill BOTH with cited fillers → it is 場当たり churn → do NOT edit** (leave the working
 code, say why). Supporting rules (full text in `architecture.md` §6): **SMELL ≠ EDIT** — next call
 after spotting a smell is a **Read/investigation**, never an Edit. **Over-refactor check** — a
-present consumer must exist before adding any abstraction; **removal passes the gate**.
-**Wrong-abstraction reversal** — inline back, don't add param N. **No "while I'm here".**
+present consumer must exist before adding any abstraction; **removal passes the PURPOSE gate** but
+never bypasses G2's absence and behavior oracles. **Wrong-abstraction reversal** — inline back,
+don't add param N. **No "while I'm here".**
 *Artifact*: the cited MOTIVE + PROPERTY-DELTA pair in the message/commit for every structural edit.
 
 ### G4 — Small reversible steps; Edit, not Write
 Refactor as a chain of **small, individually-reversible, named** steps (Extract Function here, Rename
-there), **test between each**, checkpoint on green (commit only when asked), **never hand off a red
-tree**. On red: revert **your own last step** — re-apply the inverse edit or `git stash` (recoverable);
+there). Run that row's declared oracles between steps. Checkpoint only when all required rows pass
+(commit only when asked), and **never hand off a red tree**. On red: revert **your own last step** — re-apply the inverse edit or `git stash` (recoverable);
 never a destructive `git checkout .` / file-restore without explicit user approval. Prefer many scoped
 **Edit** calls over one **Write** that regenerates a file (a whole-file rewrite loses comments/blame,
 balloons the diff, and hides behavior changes — that is a rewrite, not a refactor). Prefer
-symbol-aware tools (LSP `rename_symbol` / `find_referencing_symbols`, ast-grep, codemods) over
-freehand text edits — they update all references and you lack the AST precondition check. **Preserve
-WHY-comments and load-bearing "weirdness"** (an odd branch is often a past bug fix, not cruft). →
+semantic refactoring engines (LSP `rename_symbol` / `find_referencing_symbols`) when supported.
+Use ast-grep/codemods as structural executors with separate behavior and reference oracles; they do
+not prove semantic preservation or update every dynamic reference. **Preserve WHY-comments and
+load-bearing "weirdness"** (an odd branch is often a past bug fix, not cruft). →
 catalog of named moves + the depth test in `references/catalog.md`.
-*Artifact*: per-step green test runs; scoped Edits (not a file Write); references updated via tool.
+
+For a compound request, write atomic acceptance rows before editing:
+`named move | intended loci | structure/absence oracle | behavior oracle | scope oracle`. Execute and verify one
+row at a time. A partial compound, or a different structure that merely keeps tests green, is not
+done without explicit user acceptance.
+*Artifact*: per-step oracle receipts plus an all-passing atomic acceptance table and final intended-loci→diff check.
 
 ### G5 — Big change → incremental on trunk, never a rewrite-in-disguise
 A large structural change is **many always-green commits on trunk**, not a long-lived branch:
@@ -147,7 +153,6 @@ claim says 全面 is a G5 violation — either narrow the claim or finish the in
 | `practicing-tiger-style` | **CO-FIRE**: “Does behavior-preserving restructuring also need a ledger review of bounds, resource lifetime, and negative cases?” **Yes** → `practicing-tiger-style` owns the cross-language ledger review; this skill retains the preservation oracle and structural purpose. |
 | PERFORMANCE / OPTIMIZATION asks | Goal = change a runtime observable (latency / throughput / memory / allocation) — "make it faster", "optimize", "this is slow" — is **behavior-changing on the declared observable surface** (`references/safety-net.md` §5) → `implementing-and-debugging`, **even when phrased as "clean up"**. Fowler separates refactoring from optimization (optimization often trades clarity away — the opposite of the PURPOSE pole). A preparatory reshape BEFORE the measured optimization co-fires in sequence: reshape here → optimize there, profiler-first (`references/strategy.md`). |
 | `structuring-documents` | **PURPOSE cut = object**: that skill localizes information in a DOCUMENT/prose (MECE one-home, single-source-of-truth, backward-only reference DAG). This skill localizes responsibility in CODE. Same 認識体系 (Parnas's uses-DAG = its reference DAG; Martin's CCP = its single-update-point), different artifact — never run one on the other's object. |
-| `/code-review`, `/simplify` (built-in) | **TIME cut**: they review/clean an already-written DIFF post-hoc. This governs BEFORE/DURING the change. Complementary — `/code-review` after a refactor can catch a smuggled behavior change (a G1 violation). `/simplify` applies quality cleanups to a diff; this owns the discipline of doing them safely. |
 | `implementing-and-debugging` (again, on `raising-resolution`) | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
 | `writing-typescript`, `writing-julia`, `writing-python`, `writing-rust`, `writing-bun-scripts`, `linting-sui-move` | **Co-fire**: they own language idiom & language-specific safe transforms; this owns language-agnostic behavior-preservation + architecture. Follow the language skill for idiom, this for the two hats / oracle / deny-gate. |
 | `driving-git` | **DECISIVE — what vs how it enters history.** This skill owns WHAT changes and the oracle; how the change becomes commits (scope, message, rewrite, publish) and the `git stash`-not-`checkout .` discipline's owner is `driving-git`. Co-fire at commit time. Seam agrees in substance; do not byte-diff (2026-09-21) |
@@ -156,13 +161,15 @@ claim says 全面 is a G5 violation — either narrow the claim or finish the in
 ## Fire / no-fire
 
 FIRES: "refactor this module / リファクタして", "clean this up / 掃除して" (non-trivial), untangle a
-God class, remove duplication / reduce coupling, extract-or-inline for structure, "responsibilities
-are tangled / 責務が混ざってる", break dependencies to add tests to legacy code, a large structure
-migration (Strangler / Branch by Abstraction / Mikado), "reshape this before I add the feature"
+God class, remove duplication / reduce coupling, extract-or-inline for structure, or remove an
+already-proven unreachable private element with cited G3 evidence. It also fires on "responsibilities are tangled / 責務が混ざってる",
+dependency-breaking to add tests, a large structure migration (Strangler / Branch by Abstraction /
+Mikado), "reshape this before I add the feature"
 (preparatory), "is this refactor safe without tests", "should we rewrite or refactor X".
 
 MUST NOT fire: a single trivial tool-done rename / a pure formatter run / a one-line mechanical tidy ·
-adding or changing a feature, or fixing a bug (→ `implementing-and-debugging`) · a performance
+adding or changing a feature, fixing a bug, or removing a supported feature/API
+(→ `implementing-and-debugging`) · a performance
 optimization that targets the timing/allocation observable surface — "make it faster / optimize /
 this is slow" (→ `implementing-and-debugging`, two hats; see the PERFORMANCE routing row) · reviewing
 an already-written diff (→ `/code-review`) · restructuring a DOCUMENT or prose, not code (→
@@ -175,10 +182,11 @@ from-scratch greenfield build with no existing code to preserve.
 |---|---|---|
 | `references/architecture.md` | 責務分界 + 局所化 as checkable predicates: Parnas information-hiding + the `|modules touched by change|=1` locality test + uses-DAG; Constantine one-sentence cohesion test + coupling spectrum; SRP-actor + CCP (+ the structuring-documents isomorphism); DDD/Conway/vertical-slice next-change test; connascence spectrum (§5, SOLE home); the deny-gate (§6, SOLE owner of the wording); the YAGNI reconciliation (§7) incl. the 3-slot MANDATORY test | applying G3; deciding where a responsibility belongs; judging a decomposition; is this architecture or churn |
 | `references/catalog.md` | Smells as triggers (the ~24, read as coupling/cohesion failures); the named refactorings' mechanics + common shape; the depth test for extraction; Remove Flag Argument / narrow-signature / encapsulate-global by coupling class; Kerievsky refactor-to/away-from patterns | picking the transform for a smell; the mechanics of a named move; when to extract vs inline |
-| `references/safety-net.md` | The oracle regimes (tool/test/characterization); characterization tests + seams + Legacy Code Change Algorithm; mutation / golden-master / approval / property-based oracles; tools-still-ship-bugs; non-static-reference hunt before rename; the observable-surface boundary (timing/concurrency/serialization/logs/metrics); AST-vs-text gap; dynamic-language caveat | applying G2; refactoring untested or legacy code; any rename/move; deciding if "behavior-preserving" is trustworthy |
+| `references/safety-net.md` | Claim-specific oracle stack (behavior/structure/absence/scope); tool/test/characterization regimes; deletion negative contract; seams; mutation/golden-master/property-based oracles; non-static references; observable-surface boundary; AST-vs-text gap | applying G2; refactoring untested code; any rename/move/delete; deciding whether the requested transformation is both safe and complete |
 | `references/strategy.md` | WHETHER/WHEN: two hats, preparatory, Rule of Three, tidy first/after/never, DRY-vs-AHA, rewrite-vs-refactor decision, hotspot prioritization (churn×complexity), when NOT to refactor, epistemic status (Design-Stamina/DCF are hypotheses). HOW-BIG: Strangler / Branch by Abstraction / Parallel Change / Mikado / keystone / codemods at scale | deciding whether/when to refactor at all; sequencing a large change; a rewrite proposal |
 
 ## Forge provenance
 
-Two SoK surveys, provenance-verified: `tests/refactoring-survey-sok.md` (claim ledger, 9-debate
-moderator table, GRADEs, 15-gap agenda). Forge/verification log: `tests/forge-verification-ledger.md`.
+Canonical positions: `urn:uuid:01a0c779-fd07-719d-a845-3d9c0c8cfb3d` (general refactoring) and
+`urn:uuid:01a0c7a4-ceb4-7743-bdf6-52d96467c1e9` (LLM existing-code modification). Legacy survey:
+`tests/refactoring-survey-sok.md`. Distillation decisions: `tests/forge-verification-ledger.md`.

@@ -110,7 +110,9 @@ changed" is an instruction to a person, and people forge one skill at a time. In
 sentence held for two months while six orphan-reference FAILs and fifteen YAML-fragile
 descriptions accumulated, because every actual run was scoped to the one skill being forged. Put
 the collection sweep in whatever gate already runs unbidden — here `mise run lint:skills-floor`,
-inside `mise run lint`.
+inside `mise run lint`. That sweep runs `--quiet`: WARNs are counted into one summary line and
+FAILs still print. Listed WARNs are forge-exit measurement for one skill. Run the floor on
+that skill to see them. Printed on every commit, ~100 lines buried the FAILs (2026-09-22).
 
 **`--budget <path>` — the aggregate pass.** Given two or more directories the floor prints
 `LISTING <n> skills, <chars> charged per turn`: the name+description sum the harness injects on

@@ -270,3 +270,11 @@ the F1 gate cell (pushing cells to 3) and joined two rule sentences past 120 cha
 to 17) — i.e. the new rule's own two violations, NARRATIVE in a manual and an ARGUMENT written as
 prose. Both were moved here and split. A rule whose author cannot obey it in the commit that adds it
 is not yet a rule. Queue: the pre-existing 15 / 2 / 85 classes are untouched.
+
+## 2026-09-22 — `skill-check.ts --quiet` for the collection sweep
+
+`lint:skills-floor` now reaches every commit (dotfiles' pre-commit runs `lint`), and its ~100
+prose-debt WARN lines per run buried the FAIL lines the gate exists to show. `--quiet` counts WARNs
+into one summary line; FAILs always print; a per-skill run lists as before. Proven: collection run
+prints `WARN 113 … across 60 skill(s)`, a single-skill run lists its WARNs, and a deliberately
+broken fixture's FAIL prints under `--quiet`. Documented in `references/verifying.md` §5.

@@ -25,8 +25,20 @@ function fail(directory: string, message: string): void {
   failures += 1;
 }
 
+/**
+ * --quiet: WARNs are counted, not printed. They are prose-debt MEASUREMENT whose enforcement moment
+ * is a forge's exit, on the one skill being forged — not a collection sweep. Printed from a gate that
+ * runs on every commit they were ~100 lines per commit, burying the FAIL lines the gate exists to
+ * show (2026-09-22). FAILs always print. Run without --quiet on a skill to see its list.
+ */
+let quiet = false;
+const warnedDirs = new Set<string>();
+let warnCount = 0;
+
 function warn(directory: string, message: string): void {
-  process.stdout.write(`WARN ${directory}: ${message}\n`);
+  warnCount += 1;
+  warnedDirs.add(directory);
+  if (!quiet) process.stdout.write(`WARN ${directory}: ${message}\n`);
 }
 
 function frontmatter(lines: string[]): { lines: string[]; bodyStart: number } {
@@ -389,17 +401,27 @@ async function main(): Promise<void> {
       parameters: ["[directories...]"],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
-      flags: { budget: { type: String } },
+      flags: {
+        budget: { type: String },
+        quiet: { type: Boolean, description: "count WARNs instead of printing them; FAILs always print" },
+      },
     },
     undefined,
     Bun.argv.slice(2),
   );
+  quiet = parsed.flags.quiet === true;
   const directories = parsed._;
   for (const directory of directories.length === 0
     ? [process.cwd()]
     : directories)
     await checkDirectory(directory);
   await reportListingBudget(parsed.flags.budget);
+  if (quiet && warnCount > 0) {
+    process.stdout.write(
+      `WARN ${warnCount} prose-debt warning(s) across ${warnedDirs.size} skill(s), not listed (--quiet); ` +
+        `run skill-check.ts on one skill to see its list\n`,
+    );
+  }
   process.exit(failures === 0 ? 0 : 1);
 }
 

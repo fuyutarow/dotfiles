@@ -99,7 +99,7 @@ function main(): void {
         `return space to the host until that step. STORAGE_ASSERT_OVERRIDE=1 in the command text ` +
         `bypasses this gate for a cleanup that must build.`,
     );
-    return;
+    // decidePre() is `never` (it exits) — no `return` here, or typecheck reports unreachable code.
   }
   if (host !== null && host < HOST_WARN) {
     process.stderr.write(

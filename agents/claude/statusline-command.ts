@@ -22,7 +22,8 @@
 // last on whatever row it's in, that constraint is enforced/documented on `render`, not here):
 //   1 user@host:MM-DD HH:MM|cwd | <branch> | (+add,-del) [| wt]  (PS1 mirror + repo)
 //   2 <email> | Session: <uuid>                       (identity strings)
-//   3 <name> | Model | Effort[+WF] | Ctx: <k> <pct>%  (agent + config + budget-now)
+//   3 <name> | Model | Effort[+WF] [| 🔗] | Ctx: <k> <pct>%  (agent + config + budget-now;
+//                                                     🔗 = Remote Control connected)
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
 //   5 Job: ... (conditional)                          (background work)
 //
@@ -97,6 +98,8 @@ interface Dataframe {
   model: string;
   effort?: string | undefined;
   wfOn: boolean;
+  /** Remote Control connected right now — see rcConnected(). */
+  rc: boolean;
   ctx: string;
   ctxPct?: number | undefined;
   rl5?: number | undefined;
@@ -358,6 +361,16 @@ function agentName(sid: string): string | undefined {
 // measured 2026-08-31: the pane token landed, the tab.rename that followed it on the same
 // connection did not, while the identical pair on two connections both landed. We never read
 // the replies (fire-and-forget is the whole point of doing this every render), so there is no
+
+/**
+ * Remote Control state, the SOLE probe for both surfaces (row 3's 🔗 and herdr's $rc token).
+ * $CLAUDE_CODE_BRIDGE_SESSION_ID is injected per child spawn and toggles with the connection,
+ * so this is a live read — see the note at its call site in buildDataframe().
+ */
+function rcConnected(): boolean {
+  return (process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ?? "") !== "";
+}
+
 // point at which waiting would be safe; a connection each is the cheap, correct shape.
 function herdrSend(socketPath: string, req: unknown): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -409,7 +422,7 @@ async function reportToHerdr(
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
   tokens.effort = effortDisplay ?? "";
-  tokens.rc = process.env.CLAUDE_CODE_BRIDGE_SESSION_ID ? "🔗" : "";
+  tokens.rc = rcConnected() ? "🔗" : "";
   await herdrSend(socketPath, {
     id: `dotfiles:statusline-model:${stamp}`,
     method: "pane.report_metadata",
@@ -610,6 +623,13 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // duplicates work already done here (caught live 2026-09-12: the first cut of this split
   // stored the combined string AND re-appended "+WF" in render(), rendering "xhigh+WF+WF").
   const wfSuffix = wfOn ? "+WF" : "";
+  // Remote Control, read the SAME way reportToHerdr() reads it for the sidebar's $rc token, so
+  // the two surfaces can never disagree. $CLAUDE_CODE_BRIDGE_SESSION_ID is injected into every
+  // child Claude Code spawns and is LIVE: verified 2026-09-22 in one session — set while
+  // /remote-control was active, absent in a fresh spawn after it dropped, set again on
+  // reconnect. So a render reads the current state, not a launch-time snapshot (the claude
+  // process's own /proc environ never carries it at all).
+  const rc = rcConnected();
   const effortDisplay = effort ? `${effort}${wfSuffix}` : effort;
 
   await reportToHerdr(model, sessionName, effortDisplay);
@@ -644,6 +664,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     model,
     effort,
     wfOn,
+    rc,
     ctx,
     ctxPct: data.context_window?.used_percentage,
     rl5: data.rate_limits?.five_hour?.used_percentage,
@@ -761,6 +782,11 @@ function render(df: Dataframe): string {
     // this file: the palette's nearest steps (ANSI 93/129/135/141) were all visibly off.
     if (df.wfOn) agentLine += `${ESC}[38;2;139;92;246m+WF${RST}`;
   }
+  // Absent, not dimmed, when disconnected: the common case is local-only, and a permanent
+  // placeholder on row 3 would cost width every render to say "nothing". The glyph is left
+  // unstyled — an emoji does not reliably repaint under an fg override (same reasoning as
+  // herdr/config.toml's $rc note).
+  if (df.rc) agentLine += `${SEP}🔗`;
 
   let ctxSeg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
   if (df.ctxPct != null) {

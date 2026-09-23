@@ -128,6 +128,7 @@ No harness → same map, serial.
 
 | Question | Owner and handoff |
 |---|---|
+| Choose type/schema invariant placement without a consequential risk question? | `designing-type-contracts`; link its contract into T2/T4 when risk warrants this ledger. |
 | Explicit Tiger design, or consequential architecture constraints? | Here: T0 decisions and their ledger links. General decomposition stays with the task owner. |
 | Merely pick layers, services, frameworks, or a deployment topology? | Task/domain owner. Co-fire here only for requested Tiger constraints or material failure exposure. |
 | Root cause, feature, performance, or other observable change? | `implementing-and-debugging` first; this skill adds the risk ledger. |

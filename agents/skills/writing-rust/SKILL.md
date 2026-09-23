@@ -1,21 +1,16 @@
 ---
 name: writing-rust
 description: >-
-  Write correct, MODERN (2025/2026) Rust — crate SELECTION is the spine. Use whenever writing or
-  reviewing Rust, editing Cargo.toml / dependencies, or choosing a crate. Cuts: change/debug →
-  implementing-and-debugging; behavior-preserving restructure → refactoring-code; cross-language
-  phase/risk/ledger → practicing-tiger-style, Rust mechanisms → HERE; Python tooling →
-  running-python-tools (PyO3 / maturin bindings FROM Rust stay HERE); prose/README → linting-prose;
-  Julia/TS → writing-julia / writing-typescript. NOT for installing Rust-written CLI tools or concept
-  explainers with no code. Trigger on: Rust, cargo, crate, Cargo.toml, どの crate, blazing fast / 高速化,
-  依存選定, async / tokio, borrow checker / 所有権 / lifetime, clone / Arc<Mutex>, unsafe / SAFETY,
-  anyhow / thiserror / eyre / miette, serde / rkyv, clap / argh / bpaf, rayon /
-  dashmap, once_cell / lazy_static / OnceLock / LazyLock, bon / derive_more / strum / nutype,
-  jiff / chrono / time, winnow / nom, reqwest / ureq / axum, tracing, edition 2024. MANDATORY — read BEFORE writing ANY Rust or adding ANY dependency. Crate facts
-  ROT: verify against crates.io / lib.rs before recommending (RG4). Sync before async; ownership
-  before clone; lightest crate before the famous one. Workflow-native: crate-landscape harvest +
-  adversarial verification fan out; the selection decision stays SOLO. English skill; respond in
-  the user's language (default Japanese).
+  Writes/reviews Rust and Cargo.toml; selects crates/依存選定, ownership/所有権, async,
+  errors, serialization, CLI, concurrency and performance/高速化 mechanisms.
+  Read before Rust code or dependency edits. Verify crate facts; sync before async,
+  ownership before clone, lightest fit before famous.
+  Change/debug → implementing-and-debugging; structure-only → refactoring-code;
+  invariant placement/type-as-spec → designing-type-contracts; consequential risk → practicing-tiger-style.
+  PyO3/maturin binding design stays here; Python tooling → running-python-tools.
+  Excludes Rust-written CLI installation, plain concept explanations, and prose-only work.
+  Workflow-native: source harvest may fan out; crate selection stays SOLO.
+  English skill; respond in the user's language.
 ---
 
 # Writing Rust — modern crate selection & coding discipline
@@ -87,6 +82,7 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 
 | Sibling | Cut |
 |---|---|
+| `designing-type-contracts` | **PURPOSE:** choose predicates, representations, construction paths and residual obligations there. Rust visibility, ownership, conversions, Serde APIs and crate choices remain here. |
 | governing-configuration-systems | **DECISIVE:** Cargo.toml or a Rust parser's crate-specific manifest, API, and implementation → HERE. A format-independent configuration contract → governing-configuration-systems. |
 | `implementing-and-debugging` | **Co-fire on any non-trivial Rust feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, **root-cause vs symptom** — a `.clone()`/`unwrap()` band-aid is the symptom-fix it forbids, RG2 is the Rust form, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Rust looks like inside that frame (RG0–RG4). |
 | `refactoring-code` | **Co-fire on any behavior-preserving Rust restructuring, with ORDER**: its two-hats / oracle / deny-gate govern the change discipline; this skill supplies the Rust **oracle** (`cargo check` + `clippy` + `cargo nextest` green as the bracket) and the Rust-safe transforms (module/visibility moves, ownership refactors, `impl Trait` extraction). A Rust refactor that improves no named property is still 場当たり churn — its deny-gate applies unchanged. **The "oracle" role does NOT suspend RG0** — a rename/refactor here is still first-crate-entry; the fire/no-fire boundary is the ★ callout. |
@@ -182,11 +178,11 @@ named reference):
 | A `Config` struct (or many positional args) just to fake named arguments | **`bon`** | `#[builder]` on a struct *or a plain function* → named, compile-checked args; the struct becomes unnecessary (selection.md) |
 | A newtype `UserId(u32)`, then hand-writing `Display`/`Add`/`From`/`Deref` | **`derive_more`** | one derive line generates the delegations you'd hand-roll |
 | Hand-writing `FromStr`/`Display` match arms and an all-variants array for an enum | **`strum`** | derives enum↔string, `EnumIter`, variant metadata — the match-arm boilerplate disappears |
-| Validating a `String` (email, non-empty, trimmed) at every call site | **`nutype`** | `validate`+`sanitize` baked into the type — an invalid value is *unconstructable*, guaranteed by the type system, not by remembering to check |
+| Validating a `String` (email, non-empty, trimmed) at every call site | **`nutype`** | Candidate for checked construction and sanitization; verify the chosen predicates and every ingress/mutation path before claiming validity. |
 | Hand-maintaining a long expected value in `assert_eq!` | **`insta`** | snapshot on first run; `cargo insta accept` updates all expected values on a spec change |
 | Repeating the same setup (db conn, fixtures) at the top of every test | **`rstest`** fixtures | name the fixture as a test *argument*; the macro runs it and injects the value |
 | A runtime/test check for a compile-time invariant — a size/layout check (`assert_eq!(size_of::<H>(), 16)`) or "does `T` impl `Send`?" | std **`const { assert!(size_of::<H>() == 16) }`** for size/const; **`static_assertions`** only for *trait*-level asserts (`assert_impl_all!`, `assert_obj_safe!`) | the check runs at **compile time** — a violation fails the build, can't be skipped. Note std `const`-assert (1.57/inline `const{}` 1.79) now owns size/const; `static_assertions` is stale (2019) but the only one-liner for trait-level |
-| Hand-transcribing an OpenAPI / JSON-Schema spec into Rust structs | **`typify`** / **`progenitor`** | generate the types (and a typed client) from the schema; they can't drift from it |
+| Hand-transcribing an OpenAPI / JSON-Schema spec into Rust structs | **`typify`** / **`progenitor`** | Generate the supported surface; check regeneration and actual consumers. Unsupported refinements and deployed-version compatibility remain explicit. |
 | Reading HTML/CSS/config assets at runtime with `fs::read` (crashes if missing on deploy) | **`rust-embed`** / std `include_str!` | bake the folder into the binary at compile time → one static file to deploy, no missing-asset crash |
 | Manually stripping leading indentation from a multiline string literal | **`indoc`** | keep the source indentation; the macro removes the common leading whitespace at compile time |
 | `std::time::Instant`/`SystemTime` in a wasm-targeting library (panics in the browser) | **`web-time`** | drop-in shim: native `std::time` off-wasm, `performance.now()` on wasm — no runtime panic |

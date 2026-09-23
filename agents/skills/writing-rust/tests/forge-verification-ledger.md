@@ -287,3 +287,14 @@ this edit: identical WARN counts both times (references 81 long sentences / SKIL
 header 21 / 2 table cells >400). The first draft of this edit scored 85 and 3 — it was rewritten
 until the delta was zero rather than waived, since adding to disclosed debt is the failure F1
 exists to catch. Pre-existing debt is unchanged and still queued for the next reforge.
+
+## 2026-09-23 — type contract boundary distillation
+
+Added the invariant-design handoff to `designing-type-contracts`.
+Replaced absolute validity and no-drift promises in the nutype and generator lookup rows.
+Crate candidates remain; guarantees require construction-path and consumer checks.
+No crate-version recommendation was added or refreshed.
+Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19`, ESB-005–009 and Y001–003.
+Shortened the description; package lookup terms remain in the body.
+PROSE-DEBT waiver: references 81 long sentences, body 34, header 21 lines, 2 long cells; unchanged.
+Queue: next full Rust reforge; this boundary edit does not expand the debt.

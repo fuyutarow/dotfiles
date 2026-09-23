@@ -20,28 +20,33 @@ paths: "**/*.{ts,tsx}"
 Each rule changes what you write. Prefer the `✅` form; flag the `❌` in review.
 
 - **Inference / `satisfies` over `as`.** An `as` cast asserts a type the compiler can't verify —
-  it silences errors instead of proving them. `❌ const cfg = x as Config` → `✅` let inference
-  do it, or `const cfg = { .. } satisfies Config` (checks the shape AND keeps the narrow type).
+  it silences errors instead of proving them. Avoid `const cfg = x as Config`.
+  Let inference work, or use `const cfg = { .. } satisfies Config` to check compatibility.
   A pile of `as` casts is a design smell — the types aren't modeling the data.
 - **`??` not `||` for defaults.** `||` treats `0`, `""`, `false` as absent — a bug when those are
   valid values. `❌ const n = count || 10` → `✅ const n = count ?? 10` (only null/undefined fall through).
-- **Model absence honestly.** Before an empty-string `""` (or `-1`, sentinel) to mean "no value",
-  ask whether `undefined`/`null` models absence more correctly. `❌ name: string = ""` (is "" a
-  real name or "unset"?) → `✅ name?: string` / `name: string | null`.
+- **Model absence honestly.** Ask whether `undefined`/`null` describes absence instead of a sentinel.
+  For `name: string = ""`, decide whether `""` is a real name or an unset value.
+  Prefer `name?: string` / `name: string | null` for the latter.
 - **`ts-pattern` over `switch` / nested ternaries.** Exhaustive, typed matching beats a `switch`
   fall-through or a nested `? :` thicket. `❌ switch (kind) { .. }` / `a ? b ? c : d : e` →
   `✅ match(value).with(.., () => ..).exhaustive()`.
 - **zod `safeParse` over hand-written type guards.** A hand-rolled `function isFoo(x): x is Foo`
-  can drift from the type. `❌ if (isUser(data))` → `✅ const r = User.safeParse(data); if (r.success) ..`
-  — one schema is the source of truth for both the runtime check and the static type (`z.infer`).
-- **Template literal for controlled text; encoder/binder for a target language.** `✅ const message =
-  \`run "${name}" scored ${score.toFixed(4)}\`;` uses backticks, so ordinary `"` needs no source
-  escape. But it is **not** JSON/HTML/SQL/shell escaping: `✅ JSON.stringify({ name, score })` for
-  JSON, and the target's DOM/framework, parameterized-query, argument-vector, or `URL` /
-  `URLSearchParams` API for the others. Never pre-escape an interpolated value. A literal backtick
+  can drift from the type. Parse unknown input with the project's boundary schema and use the
+  successful parsed output, not the original input asserted as a type.
+  Derive the output type from that schema; record input/output differences when transformations apply.
+  `satisfies`, brands, and annotations alone do not validate external values.
+- **Template literal for controlled text; encoder/binder for a target language.**
+  Use backticks for controlled text; ordinary `"` needs no source escape there.
+  This does not escape data for JSON/HTML/SQL/shell. Use `JSON.stringify({ name, score })` for JSON.
+  Use the target's DOM/framework, query parameters, argument vectors, or URL builder for other formats.
+  Never pre-escape an interpolated value. A literal backtick
   or `${` is the remaining source-syntax exception; escape it only as literal syntax, not data.
 
 ## Cut
+
+Invariant placement, schema/type authority, and construction-path design → `designing-type-contracts`.
+This skill keeps TypeScript syntax and library idioms; the contract does not mandate a new dependency.
 
 Language-agnostic change discipline (intent, scope, root-cause, regression) → `implementing-and-debugging`.
 Prose/wording → `linting-prose`. This skill is ONLY the TypeScript-idiom floor.

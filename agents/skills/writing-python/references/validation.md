@@ -8,17 +8,14 @@
 
 | | External / untrusted data | Internal / trusted domain |
 |---|---|---|
-| Source | API/form body, env var, config file, CLI arg, LLM/tool-call output, webhook | already validated once, read from your own DB, passed between your own functions |
-| Needs | coercion, rich errors, JSON Schema/OpenAPI, strict/lax control | just a typed container — re-validating it on every call is pure overhead |
+| Source | API/form body, env var, config file, CLI arg, LLM/tool-call output, webhook; DB reload without established invariants | values whose required predicates remain established and preserved |
+| Needs | coercion, rich errors, JSON Schema/OpenAPI, strict/lax control | a domain representation preserving those predicates; repeat checks only when trust or validity changes |
 | Default | **pydantic v2** `BaseModel` (or `TypeAdapter` for a bare type) | `dataclass(slots=True)` — or `attrs` if you need validators/converters |
 
-**CONSENSUS** (official + independent, [dated:2026-07]): attrs' own docs draw the canonical line —
-*"Pydantic is a data validation library designed for parsing untrusted external data. attrs builds
-well-behaved classes for your domain layer."* Independent 2026 synthesis converges on the same cut
-("choose based on whether you're at a trust boundary … or building internal structures"). Treat
-this as settled, not a matter of taste: **validate at the boundary EXACTLY ONCE; everything past it
-stays plain.** Re-validating trusted internals with another `BaseModel` on every call is the
-opposite mistake from skipping validation — both cost you, in different directions.
+Use `designing-type-contracts` when the predicate, construction coverage, or trust boundary is unsettled.
+It owns the cross-language contract; this reference owns the Python validation-library choice.
+Reuse established facts only while mutation, reload, and external-state changes preserve them.
+Reading from your own database or calling an internal function does not by itself establish that condition.
 
 ## Decision table (by job)
 
@@ -104,8 +101,8 @@ file; don't wait for a removal release to force the migration.
 
 ## When NOT pydantic (honest rows)
 
-- **Trusted internal hot paths**: data already validated once at the boundary — re-validating it
-  again on every internal call via another `BaseModel` is waste, not safety.
+- **Trusted internal hot paths**: avoid repeating stable checks whose predicates are still preserved.
+  Revisit validation after a new trust boundary or invalidating mutation/state change.
 - **`TypedDict`**: static type-checking only, **zero runtime validation**. Fine for internal,
   already-trusted shapes threaded through typed code — never a substitute for a boundary model,
   even though it "type-checks" the same way `BaseModel` does. If external data ever reaches a

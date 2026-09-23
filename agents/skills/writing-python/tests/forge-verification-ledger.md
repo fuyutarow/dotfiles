@@ -163,3 +163,14 @@ WARN debt remains disclosed above.
 `paths: "**/*.py"` made the skill absent — name and `Skill(name)` alike — in any session without
 a `.py` file in play, while its description promises to fire on conversational Python asks.
 Removed. Prose-debt WARNs predate this edit and are untouched (waived; queue: next reforge).
+
+## 2026-09-23 — preserved predicates instead of permanent trust
+
+Aligned LAW, PG3, submission checklist and validation reference with the same boundary rule.
+Removed unconditional EXACTLY ONCE and automatic trust of data read from one's own DB.
+Reuse checked facts while preserved; mutation, reload and expiring authority need reassessment.
+Python library choices remain here; invariant placement routes to `designing-type-contracts`.
+Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19`, ESB-005–009 and Y001–002.
+No Pydantic version/API claims were added or refreshed.
+PROSE-DEBT waiver: references 156 long sentences, body 25, header 22 lines, 2 long cells after edit.
+Queue: next full Python reforge; this task fixes the substantive boundary contradiction only.

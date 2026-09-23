@@ -230,3 +230,11 @@ rather than waived. Pre-existing debt untouched and still queued.
 **Deliberately not included.** Dispatch mechanics (which isolation tier, worktree flags, resource
 envelopes) stay with `operating-the-harness`; what a session must check and announce when another
 may write the same repo stays with `driving-git`'s shared-checkouts. §8 owns only the code's shape.
+
+## 2026-09-23 — invariant design versus preservation
+
+Added the `designing-type-contracts` cut; preservation stays here.
+Tightening input acceptance/public construction must not silently become a behavior-preserving refactor.
+Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19` and this skill's two-hats rule.
+PROSE-DEBT waiver: references 119 long sentences, body 26, 2 long cells; unchanged from baseline.
+Queue: next full reforge; no additional structural rewrite belongs to this reciprocal seam.

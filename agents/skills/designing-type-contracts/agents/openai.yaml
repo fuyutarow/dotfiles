@@ -1,0 +1,4 @@
+interface:
+  display_name: "Designing Type Contracts"
+  short_description: "Place invariants in types, parsers, and state APIs"
+  default_prompt: "Use $designing-type-contracts to design the invariant and enforcement boundaries for this API."

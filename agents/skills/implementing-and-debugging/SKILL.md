@@ -1,19 +1,13 @@
 ---
 name: implementing-and-debugging
 description: >-
-  Governs non-trivial code changes that alter observable behavior. Use for implementation /
-  機能追加, debugging / デバッグ・バグ修正, performance optimization / 高速化, root-cause
-  analysis, fixes that keep missing, or redesign attempted before the original intent is
-  understood. Reconstruct intent, scope the edit surface, ground each file against a reference,
-  fix 病因 not 症状, declare unknowns, fear regression, and verify red→green plus flag
-  combinations. DECISIVE cut: behavior-preserving refactor→refactoring-code; present-fact
-  inspection→raising-resolution; expensive/irreversible future bet→acting-on-hypotheses; cheap
-  reversible probe→domain/plain executor; post-hoc diff review→code
-  review. In an operational ccc repo, co-fire driving-cocoindex FIRST and run `repo-retrieve
-  battery` before new functionality; exact tokens use `repo-retrieve literal`. Language skills
-  co-fire for idiom. English skill; respond in the user's language (default Japanese).
-  When implementation must survive a compaction, session, or executor handoff, co-fire
-  continuing-long-running-tasks for the portable state record; this Skill still owns correctness.
+  Governs non-trivial behavior changes: implementation/機能追加, debugging/デバッグ・バグ修正,
+  performance optimization/高速化, root-cause analysis, and fixes that keep missing.
+  Reconstruct intent, bound edits, fix causes, and verify regression and flag combinations.
+  Structure-only → refactoring-code; type/schema invariant design → designing-type-contracts;
+  present facts → raising-resolution; costly bets → acting-on-hypotheses; post-hoc diff → code review.
+  Co-fire writing-* for idiom, driving-cocoindex first for registered-repo retrieval,
+  continuing-long-running-tasks for durable handoff. English skill; respond in the user's language.
 ---
 
 # Implementing & debugging — the discipline of the act
@@ -67,6 +61,8 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
   well is an AOH bet only when expensive/irreversible downstream exposure rides on the answer; otherwise
   run the bounded reversible probe through the domain/plain executor.
 - **Declare unknowns.** Surface the opaque regions now, as output — don't paper over them.
+- **Unresolved invariant placement.** Use `designing-type-contracts` when deciding what a type,
+  parser, or state API must enforce. Use its contract as the design input; retain implementation and regression checks here.
 
 ## The DEBUG gate — when a fix is flailing
 
@@ -96,6 +92,7 @@ makes irrelevant, but do not skip because it "looks like a one-liner."
 
 | Sibling | Cut |
 |---|---|
+| `designing-type-contracts` | **PURPOSE:** invariant-to-representation/enforcer design → there. Implementing the selected contract and proving behavior changes → here plus the language owner. |
 | governing-configuration-systems | **DECISIVE:** changing parser, validator, merger, or runtime config-loading behavior → HERE plus the language owner. Choosing representation, signature boundary, authority, or actual-target acceptance without implementation → governing-configuration-systems. |
 | `refactoring-code` | **DECISIVE cut = Beck's two hats**: "Does this change alter OBSERVABLE behavior?" **No** (structure only — refactor, clean up, extract/move/rename for structure, 責務分界/局所化, break deps to add tests, Strangler/Branch-by-Abstraction) → there. **Yes** (add/change a feature, fix a bug) → here. They **co-fire in sequence** for "make the change easy, then make the easy change": preparatory refactor there (hat 1, own commit) → behavior change here (hat 2). One diff doing both violates the two hats — split it. |
 | `practicing-tiger-style` | **PHASE-SENSITIVE CO-FIRE**: “Does a high-risk change need a cross-language ledger for bounds, contracts, negative cases, and explicit exceptions before or alongside implementation?” Bug/root-cause/observable change: diagnose HERE first, then Tiger hardens risk. Greenfield design/promotion without an unresolved cause: Tiger may calibrate first. This retains implementation/regression proof. |

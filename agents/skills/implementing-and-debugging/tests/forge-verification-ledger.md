@@ -70,3 +70,11 @@ The target's independent post-repair delta audit remains NOT-RUN.
 This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
 prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
 seam edit; queue position: with the next reforge of this skill, not before.
+
+## 2026-09-23 — type contract design handoff
+
+Added a conditional BUILD pointer and reciprocal cut for `designing-type-contracts`.
+Shortened the description while retaining implementation, debugging, performance and change-owner routing.
+Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19`.
+PROSE-DEBT waiver: 19 long sentences, 8-line header, 1 long cell, unchanged from baseline.
+Queue: next full reforge, before adding further procedural content.

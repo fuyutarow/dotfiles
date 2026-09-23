@@ -45,8 +45,9 @@ description: >-
 
 > In modern Python the toolchain is the language: environments and dependencies flow
 > through uv against pyproject.toml + uv.lock, lint and format through ruff, every public
-> surface is typed, and external data crosses a validating model exactly once at the
-> boundary. Most of a project's effectiveness is decided by SELECTION — interpreter
+> surface is typed, and external data crosses a validating boundary before trusted use.
+> Reuse established predicates while they remain preserved (PG3).
+> Most of a project's effectiveness is decided by SELECTION — interpreter
 > version, stack, every dependency — before a line is written. And library facts ROT: a
 > recommendation not checked against live PyPI/docs today is a guess, not knowledge.
 > Precedence: **uv before any other env tool · modern default before famous legacy ·
@@ -60,7 +61,7 @@ description: >-
 | **PG0 ENVIRONMENT** (deny-gate, fires on ENTRY) ★ | Every env/dependency action is a **uv subcommand** against `pyproject.toml` + `uv.lock`. FORBIDDEN in new/owned work: `pip install` (and `uv pip install` inside a uv-managed project — silent-removal trap), `python -m venv` + activate rituals, poetry/pipenv/conda for NEW projects' Python-dependency management (conda/pixi's native-toolchain niche — CUDA toolkit, MPI, GDAL-class binaries — is `research.md` §2's declared exception), hand-authored `requirements.txt` as a source of truth (uv-export artifact only), `setup.py` for pure-Python builds, bare `python3`/system interpreter (system interpreters are routinely EOL — a 2026 Mac still ships 3.9.6, dead since 2025-10). | `pyproject.toml` (PEP 621) + committed `uv.lock`; every env command in the transcript is a `uv` subcommand. |
 | **PG1 SELECTION** | Every NEW dependency passes the selection consult (`references/selection.md`) AND a live PyPI/docs check — facts ROT. Lightest fit wins; stdlib when it genuinely suffices; famous ≠ current (`requests` is feature-frozen by its own maintainers). | One-line rationale per added dep, naming its selection-table row or the live check performed. |
 | **PG2 TYPES** | Public surfaces carry modern hints (`X \| None`, `list[int]`, PEP 695 on ≥3.12); a type checker is configured and clean per the DATED verdict in `references/typing.md`; "typed" without a checker run is a claim, not a fact. | Checker run output, or the scoped strict-rollout plan (`typeCheckingMode: strict` on a named path glob). |
-| **PG3 BOUNDARY** | External data (API/config/file/CLI/LLM output) is validated into a pydantic v2 model (or the declared lighter tool per `references/validation.md`) EXACTLY ONCE at the boundary; internals are `dataclass(slots=True)`/plain typed objects; no raw-dict threading; no pydantic v1 idioms. | The model at the seam + grep-clean: no `@validator(` / `.dict()` / `class Config:` in any file importing pydantic. |
+| **PG3 BOUNDARY** | Validate external data with the tool selected in `references/validation.md`. Reuse checked predicates only while preserved; assess mutation, reload and expiring authority. Use plain domain objects where appropriate; no unchecked raw-dict threading or pydantic v1 idioms. | Checked output at the seam; invalidating paths accounted for; no `@validator(` / `.dict()` / `class Config:` in files importing pydantic. |
 | **PG4 QUALITY** | `ruff check` (house strict `select`, `references/quality.md`) + `ruff format --check` clean; tests are pytest (new suites — an existing `unittest`/Django suite keeps its local style); datetimes are aware (`DTZ`); operational output goes through `logging`, `print` is CLI-user-facing only. | Clean `ruff`/`pytest` run output. |
 
 ### ★ PG0 fires on ENTRY — an env command is never "just this once"
@@ -79,6 +80,7 @@ style nit to clean up afterward.
 
 | Sibling | Cut |
 |---|---|
+| `designing-type-contracts` | **PURPOSE:** invariant placement and construction-path design → there. Python validation APIs, model idioms and library selection remain here. |
 | governing-configuration-systems | **DECISIVE:** pyproject.toml or a Python parser's valid syntax, API, and implementation → HERE. A cross-format consumer/trust, effective-declaration, authority, or integrity contract → governing-configuration-systems. |
 | `running-python-tools` | PURPOSE cut (canonical phrasing OWNED HERE, mirrored there): "Writing/reviewing Python that will **LIVE in a repo** (project, module, kept script) → HERE. Invoking a Python-based tool or one-off snippet **NOW** (`uvx ruff`, `uv run --with pypdf`, `yt-dlp`, `jupyter`) → `running-python-tools`." PEP 723 single-file scripts: **authoring** the script → here; **invoking** it → there. Seam note: the two descriptions agree in substance — do not diff for byte-identity. |
 | `implementing-and-debugging` | Co-fire with ORDER on any non-trivial Python feature/bugfix — its change-safety gates run FIRST; this skill owns what correct Python looks like inside that frame (PG0–PG4). |
@@ -228,7 +230,7 @@ Types (PG2 — `references/typing.md`):
 - [ ] `Protocol` vs `ABC` chosen deliberately, not by habit
 
 Boundary validation (PG3 — `references/validation.md`):
-- [ ] Every external input (API/config/file/CLI/LLM output) crosses a validating model exactly once at the boundary — pydantic v2 by default, or the declared lighter tool per `validation.md`'s decision table
+- [ ] Every external input crosses the validating boundary selected in `validation.md`; mutation, reload and expiring facts follow PG3
 - [ ] Internals are `dataclass(slots=True)` or plain typed objects — no raw-dict threading past the boundary
 - [ ] Files importing pydantic grep clean for `@validator(` / `.dict()` / `class Config:` (v1 idioms)
 - [ ] `TypedDict` used only for internal trusted shapes, never as a boundary substitute

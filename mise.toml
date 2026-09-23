@@ -438,16 +438,20 @@ run = 'brew bundle --file=~/dotfiles/Brewfile'
 description = "Restore the repo's pinned Bun dependencies from bun.lock and `bun link` its bin commands into ~/.bun/bin (writing-bun-scripts BG3 graduation project; node_modules is gitignored). Required before running repo .ts scripts on a fresh clone."
 run = "bun install --frozen-lockfile && bun link"
 
-# Global AI-agent CLIs installed via bun, not Brewfile — these are npm packages, not brew
-# formulas. Standalone: nothing else in this file depends on it, and it is not wired into
-# mac:init/wsl:init. Package names verified live against the npm registry 2026-09-09 (the
-# previous names, @anthropic/claude-code and @openapi/doex, both 404 — this task had been
-# silently broken since whenever they were typed in).
+# AI coding-agent CLIs, each through its vendor's own SELF-UPDATING installer — never bun/npm.
+# An npm-installed claude self-updates by shelling out to `npm view`, and on a box where npm has
+# no global version (INV-6: a toolchain exists only where a config declares it) that dies as
+# "Unable to fetch latest version from npm registry" while the registry answers 200. That is how
+# topgrade's Claude Code step failed on r99 and not on the Mac (native since install) until
+# 2026-09-23. Both installers work on macOS and Linux, and they are the channels topgrade's
+# `claude_code` and "Codex CLI (standalone)" steps update. gemini-cli dropped: Gemini is reached
+# through agy (driving-antigravity). Standalone: not wired into mac:init/wsl:init.
 [tasks."install:ai-clis"]
-description = "Install AI coding-agent CLIs globally via bun (claude-code, codex, gemini-cli) — supplements Brewfile, does not replace it"
-run = '''
-bun i -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
-'''
+description = "Install the AI coding-agent CLIs through each vendor's self-updating installer: Claude Code native (claude.ai/install.sh), Codex standalone (chatgpt.com/codex/install.sh). Never bun/npm — an npm claude cannot self-update where npm has no global version."
+run = [
+  "curl -fsSL https://claude.ai/install.sh | bash",
+  "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+]
 
 [tasks."mac:init"]
 description = "Initialize Mac environment (all-in-one setup)"

@@ -247,3 +247,64 @@ Verification receipts: `quick_validate.py` returned `Skill is valid!`; `skill-ch
 `FAIL=0 WARN=0`; the combined SoK/governance suites passed `76 pass / 0 fail / 157 assertions`.
 The stage-only mechanical receipt was `description=943 F=9 N=15 C=7`.
 Scoped `git diff --check` passed; `mise run lint:skills-index` reported a complete index.
+
+## 2026-09-23 — review design, venue contribution, and reporting
+
+Editor: Codex root. Baseline: `7424ced312b53d6aaaa954710bdaae155bf4fad4`.
+Decision: EXTEND the existing skill. Its earlier method-fit, evidence-unit, and reporting boundaries remain valid.
+The source-to-rule map and its four-source coverage limit live in `references/sources.md`.
+
+### Function map and placement
+
+```text
+question + evidence -> select review design -> review plan -> synthesis
+synthesis + venue requirements -> substantiate contribution -> bounded position -> optional document admission
+bounded position -> preserve source scope during distillation -> operational rule -> forging-skills
+```
+
+`framing-and-corpus.md` owns design choices, `synthesis.md` owns the operator,
+`delivery.md` owns the contribution test, and `sources.md` owns dated provenance.
+No new skill, reference file, or executable gate was added. Descriptions and sibling ownership remain unchanged.
+`arguing-research-papers` retains manuscript argument; `governing-research-documentation` retains admission.
+
+### Audit and accepted changes
+
+| Finding | Resolution |
+|---|---|
+| The mode table mixed supplied/rapid coverage, conduct, and venue SoK as peers | Use separate design choices and retain coverage declarations in §2 |
+| K1 omitted explicit contribution and reporting applicability | Add conditional plan requirements; retain `not applicable` |
+| Publication intent selected systematic pre-specification even for iterative work | Apply systematic protocol additions to systematic conduct; check venue rules separately |
+| Synthesis and delivery repeated the venue-SoK/critical-method pairing | Select operator by evidence; apply venue contribution requirements to the resulting output |
+| Structural admission or checklist success could be mistaken for scientific acceptance | Report check scope and preserve unsupported claim verdicts |
+| Generic skill distillation still required mechanism and magnitude for all claims | Correct the rule in forging-skills; do not duplicate claim appraisal here |
+
+Read-only boundary audit: Terra, task `skill_boundary_audit`.
+Accepted explicit K1 fields and reporting guidance across review types.
+Kept the existing manuscript/admission ownership seams.
+The suggested governance `review_request` gloss was not added: the existing role and purpose cuts already resolve that boundary.
+
+### Mechanical receipts and scope
+
+- Target `skill-check.ts`: exit 0, no structural FAIL; reference prose warnings decreased from 83 to 81 long sentences.
+- `mise run lint:skills-floor`: exit 0; 72 skills, 64,707 listing characters; 110 existing prose-debt warning groups across 58 skills.
+- Scoped `git diff --check`: exit 0.
+- Six semantic regression scenarios are in `tests/triggers.md`; no executable truth check is claimed.
+
+PROSE-DEBT waiver (2026-09-23): retain the 81 reference long-sentence findings for this bounded semantic revision.
+Queue position: next full prose pass for this skill starts with `framing-and-corpus.md` (19), then the remaining references.
+This waiver does not certify prose quality; the body has no reported prose-debt warning.
+
+### Independent comparison and final acceptance
+
+Terra task `skill_revision_verify` compared baseline and revised text without the editor's ledger or rationale.
+Four desk simulations covered venue SoK with systematic mapping, a closed 12-paper conceptual corpus,
+PRISMA/admission success with unsupported claims, and distillation of a qualitative guideline without effect sizes.
+All four showed a clearer applicable action in the revised text; this is a textual desk comparison, not a behavioral benchmark.
+
+The reviewer returned two findings: conduct must remain inside the coverage contract, and delivery rows must be cumulative.
+Both were corrected; the reviewer rechecked the changed passages and returned ACCEPT with no residual actionable finding.
+The editor also checked R4 and R6 against the explicit reporting-extension and target-venue conditions.
+No new claim about live trigger accuracy or research outcomes is made.
+
+`mise run link:skills` completed successfully. SHA-256 matched the source and both deployed skill paths.
+The checks establish file deployment; no fresh-session auto-trigger or in-session reload guarantee was tested.

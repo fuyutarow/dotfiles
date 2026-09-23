@@ -16,7 +16,7 @@ description: >-
 
 # Systematizing knowledge — method-fit evidence synthesis
 
-> **Version**: v2608.1.2 (2026-08-02) — DONOR SET locator, heading, and target-leakage floor hardened.
+> **Version**: v2609.1.0 (2026-09-23) — review design, venue contribution, and reporting separated.
 > Reforged around method selection, separate evidence units, traceability, and preserved uncertainty.
 
 Run from this skill directory; success prints nothing:
@@ -48,6 +48,7 @@ Machine-readable ledgers use the exact hyphenated enums in the ledger and AI4S r
 ## THE LAW
 
 > Select the method from the decision question and evidence type before selecting artifacts.
+> Record venue contribution and reporting requirements separately from review conduct.
 > Every load-bearing conclusion must be reconstructible through a coverage contract, evidence
 > records, and a claim ledger. Missing evidence stays missing. Never turn `not reported` into
 > demonstrated bias. Never turn failed support for C into support for not-C. Never turn unexplained
@@ -71,7 +72,7 @@ satisfy the names below.
 
 | Gate | Decision | Required artifact |
 |---|---|---|
-| **K1 FIT** | What decision must this synthesis support, and which review mode fits it? | `review plan`: question, audience/decision, corpus origin, `coverage contract`, review mode, synthesis operator, appraisal approach, intended output |
+| **K1 FIT** | What must be learned, and which review design fits? | `review plan`: question, audience/decision, corpus origin, `coverage contract`, conduct, synthesis/appraisal, output, applicable contribution and reporting requirements; see `framing-and-corpus.md` |
 | **K2 TRACE** | Can every load-bearing conclusion be reconstructed without counting claim rows as papers? | separate corpus/evidence records plus a `claim ledger`; run `scripts/check-ledger.ts` for a durable JSONL ledger |
 | **K3 CALIBRATE** | Did each method run only where applicable, with unknown and non-comparable states preserved? | method-applicability table plus discrepancy/appraisal records; unsupported claims are not negated |
 | **K4 CHALLENGE** | What counterevidence or alternative interpretation could change the position? | counterevidence attack and adjudication log within the `coverage contract`; a novelty claim also gets an authorized mechanism-synonym kill search |
@@ -83,8 +84,8 @@ compact inline table. A publication-grade systematic review needs durable record
 ## Adaptive pipeline
 
 1. **Name the decision.** State who will use the answer and what would change because of it.
-2. **Choose the review mode and coverage contract.** Corpus origins license different claims.
-   Distinguish supplied, rapid, systematic, iterative theory-building, and venue-SoK work.
+2. **Choose the review design and coverage contract.** Record corpus origin, conduct,
+   synthesis/appraisal, and output requirements separately under `framing-and-corpus.md`.
 3. **Freeze only what the mode requires.** Systematic work pre-specifies eligibility, sources,
    screening, extraction, appraisal, and synthesis. Exploratory modes keep an amendment log.
 4. **Retrieve and screen evidence.** Keep records, reports, studies/artifacts, and results separate.

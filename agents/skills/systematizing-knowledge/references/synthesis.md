@@ -17,10 +17,11 @@ Record the choice in the K1 review plan.
 | Complex causal explanation | realist or other theory-driven synthesis | “mixed literature” plus an invented moderator |
 | Formal/theoretical results | assumptions–statement–domain–prediction comparison | GRADE labels or paper-level quality scores |
 | Security attacks/defenses | threat-model and capability comparison; reproduction and boundary analysis | majority vote, since one valid counterexample can defeat a universal claim |
-| Venue SoK / critical review | evaluate and contextualize existing work around the contribution type | a mandatory taxonomy or five-section template |
+| Critical / conceptual reassessment | evaluate and contextualize existing work around the question | a mandatory taxonomy or five-section template |
 
 A review can combine operators, but each conclusion must say which evidence subset and operator
 produced it. Never let a quantitative subgroup silently license a qualitative field-wide claim.
+For a venue SoK, choose the operator from the evidence shape above; the venue contribution test lives in `delivery.md`.
 
 ## 2. Appraise at the claim level with a fitting method
 

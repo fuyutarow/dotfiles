@@ -1,8 +1,28 @@
 # Sources — primary method map and local adaptations
 
-> Checked 2026-07-30. **SOLE owner** of dated external method links and the distinction between
+> URL map checked 2026-07-30; later claim-level refreshes are listed below. **SOLE owner** of method links and the distinction between
 > published guidance and this skill's local operating artifacts. Venue calls, handbooks, and tool
 > versions can change; verify the live primary source before claiming current compliance.
+
+## Corpus derivation — review purpose and method selection (2026-09-23)
+
+Resolve the following identities in the `soks` corpus before extending these rules:
+
+- Position: `urn:uuid:01a0ce07-5cdb-7296-995d-4ff898e8e666` (`sok-review_purpose_and_method_selection.md`).
+- Claim ledger: `urn:uuid:01a0ce07-5cdb-7296-995d-4ff752324d20` (`led-review_purpose_and_method_selection.md`).
+- Source snapshot: commit `a34c453c8a0ed1a0fd1aa45cc6de16582eb7dbba`.
+
+| Corpus claim | Distilled action | Applicability retained |
+|---|---|---|
+| RPS-Y001, RPS-Y004 | Record conduct separately from coverage, contribution, and reporting; choose it within the declared coverage contract | Bounded four-source comparison; not an exhaustive review taxonomy |
+| RPS-001, RPS-Y002 | Check the target venue and link each claimed contribution to a supported insight | IEEE S&P 2027 criterion; verify another venue's own rule |
+| RPS-002, RPS-003 | Match the review purpose and applicable reporting guidance separately | JBI scoping purposes and PRISMA reporting scope |
+| RPS-004, RPS-005, RPS-Y003 | Preserve evidence units and report the search/selection boundary | Cochrane intervention-review conduct; transfer to other evidence types is an explicit adaptation |
+
+These four official-source captures were checked on 2026-09-23 with partial-read scopes recorded in `soks`.
+Their admission validates document structure, not scientific quality or an independently verified universal method.
+The plan fields and completion checks are `house` operational choices derived from those bounded claims.
+The remaining method-source rows below retain their earlier verification date.
 
 ## Method-source classes
 

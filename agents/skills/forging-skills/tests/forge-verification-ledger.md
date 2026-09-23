@@ -278,3 +278,29 @@ prose-debt WARN lines per run buried the FAIL lines the gate exists to show. `--
 into one summary line; FAILs always print; a per-skill run lists as before. Proven: collection run
 prints `WARN 113 … across 60 skill(s)`, a single-skill run lists its WARNs, and a deliberately
 broken fixture's FAIL prints under `--quiet`. Documented in `references/verifying.md` §5.
+
+## 2026-09-23 — preserve claim type and scope during corpus distillation
+
+Bounded revision to `references/distilling.md`, §2–§3; no change to descriptions, triggers, or artifact ownership.
+Function map: `bounded corpus position -> extract scoped operating rule -> graded rule -> skill verification`.
+
+| Rule | Source claim/locus | Applicability | Added convention / grade |
+|---|---|---|---|
+| Require proposition, locator, and scope; require magnitude/mechanism only for fitting claim types | systematizing-knowledge, `references/delivery.md` §3 and `references/synthesis.md` §2; observed contradiction with the old distilling §2 | Quantitative and explanatory claims retain their specific requirements; definitions and guidelines do not gain invented effect sizes | OBSERVED consistency repair; appraisal meaning stays with systematizing-knowledge |
+| Preserve venue, evidence, and coverage limits in derived rules | soks ledger `urn:uuid:01a0ce07-5cdb-7296-995d-4ff752324d20`, RPS-Y001–Y004, commit `a34c453c8a0ed1a0fd1aa45cc6de16582eb7dbba` | Bounded four-source comparison, including venue-specific SoK and reporting guidance | `rule / claim / applicability / added convention` columns are skill-supplied |
+| Do not turn reporting or corpus admission into conduct/causal validation | Same soks ledger, RPS-003 and RPS-Y003–Y004 | Reporting guidance and scoped structural checks | Operational prohibition is skill-supplied; not a measured effect of this skill |
+
+The previous rule required mechanism and magnitude for every load-bearing claim while pointing to an owner that made them conditional.
+The repair follows that owner's grammar and keeps the source-grade table as the sole rule-provenance home.
+No new external primary source was consulted for this revision; it consumes the captured corpus position and existing skill contracts.
+
+Mechanical receipts: targeted skill-check exit 0, no structural FAIL; scoped diff check exit 0.
+Collection floor exit 0: 72 skills, 64,707 listing characters, no new skill listing cost.
+PROSE-DEBT waiver (2026-09-23): baseline and revised counts remain 85 long reference sentences, 15 long body sentences, and 2 long table cells.
+Queue position: the next full prose pass for this skill starts with `architecture.md` (23 reference findings), followed by the core and other references.
+This bounded claim-type correction does not claim to resolve that unrelated prose debt.
+
+Independent Terra desk comparison (`skill_revision_verify`) checked the old/new qualitative-guideline scenario.
+The old mandatory mechanism/magnitude rule failed the claim-type boundary; the revision preserved that boundary.
+Final recheck returned ACCEPT; no runtime or scientific-outcome improvement is claimed from this desk comparison.
+`mise run link:skills` succeeded, and the revised distilling reference byte-matched both deployed skill paths by SHA-256.

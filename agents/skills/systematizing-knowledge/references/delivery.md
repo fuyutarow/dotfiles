@@ -18,20 +18,29 @@ Do not begin with a paper-by-paper chronology unless historical development is t
 Organize the body by claims, constructs, mechanisms, comparisons, or decision branches. Papers are
 evidence nodes, not section headings.
 
-## 2. Shape the deliverable to the review mode
+## 2. Combine the applicable output requirements
 
-| Review mode | Required shape |
+Use every applicable row: coverage and conduct requirements are cumulative.
+
+| Design choice | Required shape |
 |---|---|
 | Closed-corpus synthesis | supplied-corpus scope, claim clusters, evidence table, discrepancies, bounded conclusion, missing external search |
 | Rapid/bounded review | decision brief, exact search boundary, evidence summary, limitations caused by shortcuts |
 | Systematic review / SLR | protocol/registration, methods, applicable reporting checklist, study/result flow, appraisal, synthesis, certainty/limitations |
 | Scoping review / map | map dimensions, corpus distribution, descriptive findings, evidence gaps, limits on inference |
 | Realist/explanatory synthesis | programme theory, context–mechanism–outcome configurations, evidence roles, refinements and residuals |
-| Critical review / SoK | explicit contribution type, evaluation/contextualization of prior work, supporting synthesis, counterargument, field consequence |
+| Critical / conceptual review | evaluation/contextualization of prior work, supporting synthesis, counterargument, field consequence |
 
-For a venue SoK, state which contribution is being made: new viewpoint, evidence challenging or
-supporting a belief, taxonomy, or the venue’s current alternative. A taxonomy is not mandatory when
-another contribution carries the paper.
+Apply reporting guidance to any review type it covers, including an applicable scoping-review extension.
+For a venue SoK, add a contribution statement to the chosen review's output; it does not replace the method report.
+Check the target venue's current criteria using `sources.md`; do not apply one venue's rule to all SoKs.
+Link each claimed insight to the prior understanding, synthesis claims, and the change those claims support.
+A new viewpoint, belief test, or taxonomy must earn that label through those links; a paper list alone cannot.
+Use a taxonomy only when classification carries the contribution.
+
+Report completed checks by their scope: reporting checklist, structural validation, and source-to-claim review.
+An applicable checklist or repository admission can pass while a synthesis claim remains unsupported.
+Preserve that claim's verdict. Durable admission belongs to `governing-research-documentation` under the host policy.
 
 ## 3. Claim resolution
 

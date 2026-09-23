@@ -1,6 +1,6 @@
 # Framing and corpus — choose the review mode and license the coverage claim
 
-> **SOLE owner** of review-mode selection, the `coverage contract`, protocol depth, search,
+> **SOLE owner** of review-design selection, the `coverage contract`, protocol depth, search,
 > screening, record/report/study linkage, amendments, and stop-search rules. Result-to-claim
 > modeling begins in `evidence-ledger.md`; synthesis begins in `synthesis.md`.
 
@@ -11,22 +11,34 @@ Write one sentence before searching:
 > `<audience>` must decide `<decision>`; this synthesis will inform that decision by establishing
 > `<knowledge state>` within `<scope>`.
 
-Then choose the mode whose output answers that sentence. Do not infer the mode from the word
-“review” alone.
+Record the following choices in one `review plan`. `Review mode` is shorthand for that design,
+not a set of mutually exclusive labels.
 
-| Review mode | Use when | Coverage licensed |
+| Choice | Record | Does not establish |
 |---|---|---|
-| **Closed-corpus synthesis** | the user supplies a fixed set of papers/notes | only the supplied corpus; never “the literature” |
-| **Rapid or bounded review** | time/source limits are explicit and a timely answer matters more than exhaustive retrieval | named databases, dates, queries, and limits |
-| **Systematic review / SLR** | a focused question requires reproducible, bias-minimizing identification and appraisal | the pre-specified eligible evidence sought by the protocol |
-| **Scoping review / systematic map** | the aim is to characterize breadth, concepts, methods, populations, or evidence distribution | the mapped search space; not an effectiveness verdict by default |
-| **Realist / explanatory synthesis** | the question is what works, how, why, for whom, and under what circumstances | a transparent, theory-driven and often iterative evidence set |
-| **Critical review / venue SoK** | the contribution is evaluation, contextualization, a new viewpoint, a challenged belief, or a taxonomy | the search strategy actually used; venue rules may demand more |
+| Knowledge purpose | What the question must establish: effects, concepts, breadth, explanation, or critical reassessment | A search procedure |
+| Corpus and coverage | Supplied, bounded, systematic, or iterative coverage under §2 | A venue contribution |
+| Conduct | The applicable method below, with protocol depth under §3 | Reporting compliance |
+| Synthesis and appraisal | Operator and claim-specific appraisal from `synthesis.md` | Support beyond the included evidence |
+| Contribution requirement | Applicable venue criterion or `not applicable`; contribution test in `delivery.md` | A conduct method |
+| Reporting requirement | Applicable guideline/extension or `not applicable`; output shape in `delivery.md` | Conduct quality or scientific validity |
 
-`Meta-analysis` is a synthesis operator, not a synonym for systematic review. `Taxonomy` is a
-possible contribution, not a universal review mode. A security SoK can contribute a viewpoint or
-belief challenge without a taxonomy; confirm current venue rules against the primary call.
-`delivery.md` owns the detailed output shape for each mode.
+Choose conduct from the question and evidence:
+
+| Conduct | Use when | Coverage licensed |
+|---|---|---|
+| **Systematic review / SLR** | a focused question requires reproducible, bias-minimizing identification and appraisal | the pre-specified eligible evidence sought by the protocol |
+| **Scoping review or systematic map** | the aim is to characterize breadth, concepts, methods, populations, or evidence distribution; name the field-specific method | the mapped search space; not an effectiveness verdict by default |
+| **Realist / explanatory synthesis** | the question is what works, how, why, for whom, and under what circumstances | a transparent, theory-driven and often iterative evidence set |
+| **Critical / conceptual review** | the question requires evaluating, contextualizing, or configuring existing concepts and claims | the search strategy actually used; do not imply exhaustive coverage |
+
+For a supplied corpus, choose suitable synthesis and appraisal without adding unrequested retrieval.
+For rapid or bounded work, record which conduct steps were abbreviated and constrain the coverage claim.
+Scoping reviews and systematic maps require their own method choices; do not silently equate them.
+
+A venue SoK can use systematic, scoping, or critical methods. Record its contribution requirement separately.
+`Meta-analysis` is an operator; `taxonomy` is a possible output. Neither is a universal review requirement.
+`delivery.md` owns the contribution test and output shape; `sources.md` owns dated source applicability.
 
 ## 2. The coverage contract
 
@@ -60,12 +72,12 @@ Record:
 1. decision sentence and audience;
 2. review question and boundaries;
 3. corpus origin and `coverage contract`;
-4. review mode and why alternatives do not fit;
+4. conduct method and any bounded or rapid adaptations;
 5. eligible evidence types;
 6. intended synthesis operator and appraisal approach;
-7. output form and decision deadline.
+7. output form, applicable contribution/reporting requirements, and any decision deadline.
 
-### Protocol additions — systematic or publication-grade work
+### Protocol additions — systematic conduct
 
 Pre-specify:
 
@@ -79,6 +91,8 @@ Pre-specify:
 
 PRISMA and its extensions are reporting guidance, not a substitute for this conduct design. Use the
 version/extension appropriate to the review, and report compliance only when applicable.
+For a venue submission, also check its method requirements. Publication intent alone does not select systematic conduct.
+For iterative conduct, use the method's planning rules and §7 amendments; do not claim retrospective choices were pre-specified.
 
 ## 4. Preserve corpus identity before extraction
 

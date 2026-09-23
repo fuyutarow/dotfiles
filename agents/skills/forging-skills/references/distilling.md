@@ -28,10 +28,10 @@ Three tests; a candidate rule survives only if it passes all that apply.
    change a tool call"). Ask per line: *does this make the agent run a different command, or make
    a different decision?* No → cut, or compress into the rule it was justifying. A line that only
    explains is source residue.
-2. **Resolution on load-bearing claims.** Any claim a rule leans on states mechanism + magnitude +
-   regime, anchored to the specific result — the bar is owned by systematizing-knowledge's
-   source-claim and claim-type appraisal grammar, not restated here. "X improves quality" is not yet distilled; "X cuts
-   failure mode Y in regime Z because M" is.
+2. **Resolution on load-bearing claims.** Preserve the proposition, source locus, and supported scope.
+   Follow systematizing-knowledge's claim-type appraisal: magnitude applies to quantitative claims;
+   mechanism applies to explanatory or causal claims. Do not invent either for a definition or guideline.
+   A reporting rule licenses a reporting check; it does not establish conduct quality or causal benefit.
 3. **The 既視感 kill** (pattern owned by raising-resolution §C.5). State explicitly what the
    source SUBSUMES (classic tools in a fresh metaphor) vs what is GENUINELY NEW — and claim the
    skill's own delta (the agent-specific operationalization) as skill-supplied, never attributed
@@ -46,6 +46,10 @@ never distilled as content rules; a readability rule is not "cut" for changing n
 Canonical instance: raising-resolution §C.6 — declared the SOLE grade table for that entire skill.
 Reproduce the pattern, not the content: **one table per skill, one home, every distilled rule
 graded at capture time** (grading after writing invites laundering).
+
+For a surveyed position, record `rule | source claim/locus | applicability | added convention` in that table.
+Keep the source's venue, population, and coverage limits in the rule's trigger or condition.
+Label a broader operating choice `skill-supplied`; a structurally valid or admitted SoK does not validate that choice.
 
 | Grade | Meaning | Handling |
 |---|---|---|

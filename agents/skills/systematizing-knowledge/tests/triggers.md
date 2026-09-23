@@ -50,6 +50,19 @@ Do not use body knowledge to rescue an ambiguous description.
 | C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research-sections` later disposes attempts |
 | C7 | “Synthesize this corpus into a calibrated position, then make the accepted result our canonical authority.” | `systematizing-knowledge` signs the corpus position first → `governing-research-documentation` decides DOC ADMISSION, authority, review, and lifecycle |
 
+## Review-design regression scenarios
+
+These are semantic desk-check cases, not executable tests or measured trigger performance.
+
+| ID | User request | Required behavior | Failure |
+|---|---|---|---|
+| R1 | “Prepare a venue SoK using a systematic mapping study.” | Keep mapping conduct and the venue contribution criterion as separate plan fields | Force a choice between SoK and mapping |
+| R2 | “Here are 12 papers; no external search. Write a conceptual synthesis.” | Retain supplied-corpus coverage and choose conceptual synthesis | Infer systematic completeness or fetch more papers |
+| R3 | “We completed PRISMA; can we say the review is scientifically valid?” | Report checklist scope and inspect conduct and source support separately | Treat reporting compliance as certification |
+| R4 | “Map definitions with a scoping review; use the applicable reporting extension.” | Record the conceptual purpose, scoping conduct, and reporting extension | Force an intervention-effect question or ignore scoping reporting |
+| R5 | “The repository validator accepted this SoK; distill universal rules.” | Retain the position's scope and inspect claim support before handoff to forging-skills | Treat admission as evidence for universal rules |
+| R6 | “How do we make a good SoK for a venue other than IEEE S&P?” | Check that venue's requirements and select conduct from the question | Impose IEEE S&P's taxonomy or contribution criteria universally |
+
 ## Sharp cuts
 
 - **Function before cardinality:** a bounded factual extract from one artifact goes to

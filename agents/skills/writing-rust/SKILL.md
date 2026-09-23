@@ -20,7 +20,7 @@ description: >-
 
 # Writing Rust — modern crate selection & coding discipline
 
-> **Version**: v2609.1.0 (2026-09-21) — adds the string-construction boundary; crate landscape verified against crates.io / lib.rs
+> **Version**: v2609.2.0 (2026-09-23) — adds the string-construction boundary; crate landscape verified against crates.io / lib.rs
 >   `[dated:2026-07]`. Forged from a 15-category adversarially-verified harvest (see
 >   `tests/forge-verification-ledger.md`), NOT from the raw catalog it started as.
 > **Scope**: correct, effective, current Rust for real projects — with crate selection as the
@@ -193,6 +193,7 @@ named reference):
 | A plain-text error dump for a user-facing tool | **`miette`** | graphical diagnostics — source snippet, underlines, help text — instead of an opaque string |
 | `Arc<Mutex<HashMap<_,_>>>` for a shared concurrent map | **`scc`** (or `RwLock<HashMap>` at low contention) | sharded concurrent map — no global lock; `dashmap` only if you know its deadlock footgun (selection.md) |
 | `.to_string()` everywhere for short strings (IDs, statuses, enum names) | **`compact_str`** | small-string optimization: ≤24 bytes stay on the stack, serde-compatible drop-in for `String` |
+| A fact Cargo already knows, re-typed as a constant — `const VERSION: &str = "0.4.2"` beside `Cargo.toml`'s `version` — plus a release script that rewrites both copies | std **`env!("CARGO_PKG_VERSION")`** (+ `_MAJOR`/`_MINOR`/`_PATCH`, `CARGO_PKG_NAME`) | Cargo sets these for the crate being compiled; `env!` reads them at compile time, so the manifest is the one home and the copy cannot drift. Parts parse to integers in a `const fn`, making a malformed version a compile error (project.md) |
 
 ## 2. The four over-reaches (READ FIRST — these are the default failures)
 

@@ -36,6 +36,48 @@ that always runs on the latest stable can omit it.
   `[workspace.dependencies]` (since Rust 1.64) and reference it per-member with `dep.workspace =
   true`. One version, one update point — no per-member drift.
 
+## The manifest's own facts — read them, never re-type them (RG1)
+
+Cargo sets these for the crate being compiled; `env!` reads them at compile time.
+Source: [Cargo Book, environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
+
+| Want | Read | Note |
+|---|---|---|
+| full package version | `env!("CARGO_PKG_VERSION")` | `&'static str`, exactly the manifest's `version` |
+| version parts | `CARGO_PKG_VERSION_MAJOR` / `_MINOR` / `_PATCH` / `_PRE` | each a `&'static str`; **empty string** when the manifest omits it |
+| name / description / repository / authors / license | `CARGO_PKG_NAME` etc. | same rule |
+| the manifest's directory | `CARGO_MANIFEST_DIR` | pairs with `include_str!` for baked-in assets |
+| git sha, build time, rustc version | **not set by Cargo** | a `build.rs` emitting `cargo::rustc-env=`; never a hand-written constant |
+
+A `const` needs integers, and `str::parse` is not `const`.
+Parse the parts in a private `const fn` over `str::as_bytes()`.
+A malformed manifest version then fails `cargo check` — stronger than a test.
+
+```rust
+const fn dec(s: &str) -> u64 {                 // private; only called from a `const` initializer
+    let (b, mut i, mut acc) = (s.as_bytes(), 0, 0u64);
+    while i < b.len() {
+        assert!(b[i].is_ascii_digit(), "CARGO_PKG_VERSION part is not decimal");
+        acc = acc * 10 + (b[i] - b'0') as u64;  // overflow is a const-eval error, not a wrap
+        i += 1;
+    }
+    acc
+}
+pub const VERSION: (u64, u64, u64) = (
+    dec(env!("CARGO_PKG_VERSION_MAJOR")),
+    dec(env!("CARGO_PKG_VERSION_MINOR")),
+    dec(env!("CARGO_PKG_VERSION_PATCH")),
+);
+```
+
+Two seams:
+
+- Crate-wide `clippy::panic = "deny"` → `#[expect(clippy::panic, reason = "…")]`.
+  A `panic!` reached during const evaluation is a compile error, so the deny's intent holds.
+- A version grammar stricter than semver → keep a test that runs the strict parser
+  over `env!("CARGO_PKG_VERSION")`. Asserting a constant against its own `to_string()`
+  proves well-formedness, never agreement with the manifest.
+
 ## Lints — in `Cargo.toml`, not `RUSTFLAGS` `[dated:2026-07]`
 
 Since **Rust 1.74** lints are configured in a `[lints]` / `[workspace.lints]` table, **not** via

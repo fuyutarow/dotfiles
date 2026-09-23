@@ -236,3 +236,46 @@ before writing ANY Rust") are conversational and fire before any `.rs` exists, s
 the trigger design. Removed; the skill now charges its 1,428 chars on every turn like its siblings.
 Prose-debt WARNs predate this two-line edit and are untouched (waived for this seam edit; queue
 position: the next reforge).
+
+## 2026-09-23 — the void: facts Cargo already computes (その手があったか row + project.md §)
+
+**Observed failure, in the field.** In `polysearch-rs` (a release-cadence Rust CLI) the same package
+version was hand-written in THREE places — `Cargo.toml`'s `version`, and two `const` initializers in
+`src/common/generation.rs` — each rewritten by its own regex in the release script, with **no check
+anywhere that they agreed**. The only test that looked like one was circular: it round-tripped each
+constant through its own `to_string()` and the crate's parser, proving well-formedness and never
+agreement with the manifest. The repo's owner caught it and asked, correctly, whether parsing from
+`Cargo.toml` is not the convention. It is.
+
+**Why the skill did not prevent it.** `CARGO_PKG` was a literal NO_MATCH across the whole dotfiles
+corpus, and a 5-query semantic battery found nothing in `writing-rust`: the skill covered which
+crate to select (RG0), dependency hygiene (RG1), ownership (RG2), errors (RG3) and staleness (RG4),
+but never the class *"a fact the build system already computes, which the model re-types and then
+must keep in sync"*. That class is exactly the その手があったか table's premise — the model knows
+`env!` exists and still writes the constant, because nothing connects the pain (drift, a release
+script with N regexes) to the mechanism that deletes it.
+
+**Calibration (pipeline step 2).** Same direction as the table's other rows, not inverted: the
+model's default is to UNDER-reach for the build system, and the Cargo Book documents the variables
+without ever warning that hand-copying is the failure. So the row carries the warning, not the docs.
+
+**Placement (F2).** EXTEND, not a sibling — `writing-rust` already owns this transition, and
+`governing-configuration-systems`' cut already sends `Cargo.toml` here. Row in SKILL.md §1 (declared
+SOLE home); mechanism + the `const fn` and the `clippy::panic` seam in `references/project.md` (RG1's
+home). Description and trigger set untouched, so no F3 desk-check was owed.
+
+**Line shape (F1).** The row is a LOOKUP keyed on the pattern about to be written; this incident is
+NARRATIVE and therefore lives here, not in the rule line.
+
+**RG4.** `CARGO_PKG_VERSION`/`_MAJOR`/`_MINOR`/`_PATCH`/`_PRE` and the empty-string-when-absent
+behaviour verified against the Cargo Book's "Environment variables Cargo sets for crates"
+(fetched 2026-09-23). Deliberately named **no crate**: `vergen`/`built` are the obvious adjacent
+recommendation for git sha and build time, and naming an unverified crate would itself violate RG4 —
+the row points at `build.rs` generically instead. Verifying and naming them is queued for the next
+reforge.
+
+**F3 receipt.** `skill-check.ts agents/skills/writing-rust` run against the tree with and without
+this edit: identical WARN counts both times (references 81 long sentences / SKILL.md 34 / version
+header 21 / 2 table cells >400). The first draft of this edit scored 85 and 3 — it was rewritten
+until the delta was zero rather than waived, since adding to disclosed debt is the failure F1
+exists to catch. Pre-existing debt is unchanged and still queued for the next reforge.

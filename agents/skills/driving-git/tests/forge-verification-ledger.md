@@ -63,6 +63,14 @@ owns the transition above. **Re-run the semantic battery when the index is healt
 | House `gitconfig`: 15 modern keys absent; 7 legacy-alias findings | **measured** | `git-check lint git/gitconfig` 2026-09-21 |
 | "history is enumerated, never globbed"; "a silent push is a failed push"; blast-radius tiers; S1–S8 | **skill-supplied** | this skill's operationalization of the incidents; not any source's category |
 | The four gates and the deny-list as a floor | **constructed** | engineered from the incidents + docs; "engineered, not measured" |
+| Storage measurement distinguishes local refs, reflogs, packs, worktree, and LFS; packed size is not blob content size | **author-confirmed [paraphrase]** | 2026-09-23: git-count-objects, git-rev-list EXAMPLES, git-cat-file CAVEATS; URLs in `config.md` §6 |
+| Cleanup uses matched dry-run scope; worktree removal differs from metadata prune; offline mounts need protection | **author-confirmed [paraphrase]** | 2026-09-23: git-clean, git-worktree, git-remote; `config.md` §6 |
+| Generic `maintenance run` is not guaranteed non-destructive; `start` persists registration/scheduler state | **author-confirmed [paraphrase]** | 2026-09-23: git-maintenance SUBCOMMANDS/TASKS/CONFIGURATION; supersedes the blanket safe-maintenance alternative |
+| `filter-repo` analysis, rename limitations, fresh-clone check, ref/commit maps, origin removal, and automatic old-history cleanup | **author-confirmed [paraphrase]** | 2026-09-23: upstream manual, `config.md` §6 |
+| GitHub sensitive-data cleanup has a dedicated flag and host-owned residual refs; Support excludes ordinary non-sensitive data | **author-confirmed [paraphrase]** | 2026-09-23: GitHub sensitive-data guide fetched directly; `config.md` §6 |
+| LFS prune ignores reflogs, forbids cross-repo shared storage, and exposes remote/unreachable verification | **author-confirmed [paraphrase]** | 2026-09-23: Git LFS prune manual; `config.md` §6 |
+| Dropped stashes may be recovered before unreachable-object pruning; retained stashes have a reflog | **author-confirmed [paraphrase]** | 2026-09-23: git-stash DESCRIPTION and recovery example; independent verifier finding |
+| Diagnose → scope → smallest matching action → same-metric receipt; no automatic expiry escalation | **skill-supplied** | 2026-09-23 cleanup function map (§7); workflow engineering, not a vendor-defined protocol |
 
 Reflexive corollary: the harvest itself produced a fabrication — a WebFetch summary of RelNotes
 invented feature descriptions on the first call. Every RelNotes claim above was re-read from the
@@ -160,9 +168,10 @@ Protocol: read ONLY `name:` + `description:`; answer fire / no-fire / co-fire. R
   `worktree`, so the stage-1 race in V8 is resolved only at body level.
 - **A deny-list idiom lives in a sibling**: driving-cocoindex `references/operations.md:61` runs
   `git checkout -- .gitignore`. Reported to its owner; not edited here.
-- **GitHub's 100 MB limit and Copilot-agent branch policy** are search-summarized, not fetched.
-- **`git maintenance` default-strategy wording** (RelNotes "geometric" vs man page "incremental")
-  is unreconciled; the skill recommends `maintenance start` either way.
+- **GitHub file-limit evidence resolved 2026-09-23** by direct official fetch; units corrected to MiB in `config.md` §4.
+  The earlier Copilot-agent policy observation remains outside this cleanup refresh.
+- **Maintenance decision corrected 2026-09-23**: choose explicit tasks from effective configuration.
+  The procedure no longer relies on a single default-strategy claim or schedules work implicitly.
 - **`push` subcommand tested only against a local bare remote and an unroutable host**; not against
   a GitHub-side 100 MB rejection (would need a real remote and a 100 MB blob).
 - **House `gitconfig` legacy aliases and 15 absent keys**: reported (`config.md` §3), not changed —
@@ -181,3 +190,112 @@ is this skill's name+description exactly, so no drift was absorbed. The raise is
 `agents/skills-listing-budget.json` `raises[]` with the reason. Retiring a sibling was considered
 and rejected: no sibling does this job at all (§0), so nothing is doing it badly. `alsoFound`:
 driving-codex charges 1,510, ten under the observed truncation window; reported, not absorbed.
+
+## 7. Cleanup reforge — 2026-09-23
+
+Request: extend the Git distillation to bloated repositories and cleanup, then reorganize/revise it.
+Editor: `/root`. Baseline skill tree: `95ab5fb8b4c3c696ef9539914364923549f2787b`.
+Scope: cleanup decisions and their seams; existing commit/push/rebase implementation is not re-certified.
+
+### Function map and file treatment (editor-signed)
+
+```text
+storage/performance complaint -> select metric and classify cause -> measured scope
+measured scope + authorized targets -> preview and smallest matching operation -> changed local state
+changed local state -> same-scope measurement + preservation checks -> receipt or return to diagnosis
+reachable content requiring removal -> reason-specific rewrite -> complete intended-ref publication + tracked host residuals
+```
+
+Stop: the requested outcome is evidenced, or the remaining cause/host action is explicitly unresolved.
+`driving-git` already owns these Git operations; extend it rather than adding a skill/listing entry.
+
+| Artifact | Treatment / sole responsibility |
+|---|---|
+| SKILL.md | cleanup trigger vocabulary and gates; route to the detailed owners |
+| storage-and-cleanup.md | new reference: measurements, deletion boundaries, local cleanup, performance, storage receipt |
+| rewriting-and-recovery.md | reason-specific historical removal and ref publication; shared rewrite/recovery remain here |
+| jobs.md | retain job lookup; replace duplicated huge-repo recipes with pointers |
+| shared-checkouts.md | retain concurrency ownership; remove claims that worktrees isolate GC or that bare maintenance is always safe |
+| config.md | dated official source map, tool capability and hosting-policy facts |
+| git-check.ts | two diagnostic hints only; detection logic unchanged |
+
+Calibration: vendor docs help users discover maintenance/filtering tools.
+The agent already knows the tools and may select a destructive one from the word "cleanup".
+The correction is diagnosis before action, exact removal scope, and a receipt for the requested metric.
+The transition and gates are skill-supplied; individual command facts retain the source grades in §1.
+
+### Audit and resolutions
+
+Read-only auditor: `/root/git_cleanup_audit`, Terra, separate context, official-source relay.
+Root retained design/edit authority under `forging-skills`; no Git mutation was delegated.
+
+| Finding | Resolution |
+|---|---|
+| Secret and ordinary bloat removal conflated | reason table; credential rotation only where applicable; separate host residuals and Support eligibility |
+| Incomplete ref closure after filtering | declared ref universe, maps, expected-OID leases, and remote readback for every intended update/deletion |
+| G3 summary contradicted published-owned/shared distinction | main gate points to the sole radius table; existing authorization is reused |
+| Huge-repo row mixed performance with disk reduction | dedicated measurements and separate client-performance section; fixed latency receipt removed |
+| Sparse checkout could discard ignored files | preservation includes ignored work; receipt includes sparse selection and worktree size |
+| Maintenance start introduced persistent work implicitly | user-level registration/scheduling scope and explicit receipt |
+| Root seam audit: safe-maintenance claim survived in checker hint and S5 | both corrected; concurrent worktrees still share the object store |
+| Root seam audit: missing objects described as transient phantoms | preserve/recover and verify; no expectation of spontaneous object recovery |
+| Independent verifier: inherited claim that stash is reflog-less and dropped entries are lost forever | corrected `jobs.md` §2 against git-stash; no promise that a WIP branch survives every destructive operation |
+
+### Verification receipts
+
+- `mise exec -- bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/driving-git`: exit 0, no WARNs after prose fixes.
+- `mise run lint:skills-floor`: exit 0; 72 skills, 64,420 listing chars against 65,242 ceiling.
+  Other skills account for 111 existing prose warnings; this skill is clear.
+- Name+description charge: 1,216 → 929 characters (287 fewer), with cleanup vocabulary added.
+  No listing-ceiling increase or new skill.
+- `git diff --check -- agents/skills/driving-git`: exit 0.
+- Disposable Git fixture `/tmp/git-cleanup-skill.SAndoW`, Git 2.55.0, isolated user/system config:
+  retained tag kept 66,049 reachable bytes after branch deletion; removing the tag left 213 bytes from refs,
+  while refs plus reflog still reached 66,049 bytes. This discriminates retained references from recovery history.
+  A linked worktree resolved the same common directory; `fsck --connectivity-only` exited 0.
+- `git-check.ts lint /tmp/git-cleanup-skill.SAndoW/unsafe.sh`: expected exit 1 on immediate GC and forced clean.
+  Both updated hints printed. No cleanup command from this fixture was run against the user's repositories.
+
+Independent verifier: `/root/git_cleanup_verify`, Terra, fresh context, read-only.
+Verdict: SCOPE-LIMITED PASS on the five cleanup criteria, with the inherited stash finding above.
+The comparison below is a desk comparison of immutable old tree vs revised text, not a live model benchmark.
+
+| Ask | Old → new observed instruction difference |
+|---|---|
+| Deleted files, `.git` still 20 GB | client-performance suggestions → measured refs/reflogs/physical-storage diagnosis |
+| Stale branches and old worktree | sparse removal mention → retained-work checks, removal vs metadata-prune distinction |
+| LFS cache filling disk | side-effect exclusion only → cache measurement, preview, remote/unreachable verification |
+| Pushed 400 MB file vs exposed token | one combined flow → reason-specific response, ref closure, tracked hosted residuals |
+
+F3 description-only desk-check, independently performed:
+
+| Query | Expected / observed route |
+|---|---|
+| 「これコミットして push まで」 | FIRE / FIRE |
+| "rebase conflict, help" | FIRE / FIRE |
+| 「消したのに .git が 20GB」 | FIRE / FIRE |
+| 「不要 branch と worktree を掃除して」 | FIRE / FIRE |
+| "Git LFS cache is filling my disk" | FIRE / FIRE |
+| 「巨大ファイルを履歴から消して」 | FIRE / FIRE |
+| "a token leaked in Git history" | FIRE / FIRE |
+| 「別セッションも同じ repo を触っている」 | FIRE / FIRE |
+| 「新リポの .gitignore と hook を配線」 | NO-FIRE / wiring-repositories |
+| "deny Bash(git push *)" | NO-FIRE / operating-the-harness |
+| 「この関数をクリーンアップ」 | NO-FIRE / refactoring-code |
+| 「WSL の ext4.vhdx を縮めたい」 | NO-FIRE / operating-wsl2-on-windows |
+| "explain merge vs rebase" | NO-FIRE / direct answer; generic tokens can still match (§4's residual) |
+
+Follow-up on the corrected stash paragraph: independent verifier returned PASS with `jobs.md:35`
+and git-stash as its evidence. Editor accepted the cleanup delta and the narrow stash correction.
+
+Deployment: `mise run link:skills` exited 0.
+Both `~/.agents/skills/driving-git` and `~/.claude/skills/driving-git` resolved to this source directory.
+Final target floor and `git diff --check` exited 0 with no target WARNs.
+
+### Limits
+
+No real remote rewrite, hosted purge, scheduler registration, or LFS deletion was executed.
+`git-filter-repo` and Git LFS were not installed in this environment; those paths were checked against official docs.
+The fixture proves measurement/ref behavior, not a production cleanup's recovered capacity.
+Live installed-skill auto-triggering requires a fresh session; a description desk-check is not that experiment.
+The original semantic existence-battery residual remains; this revision extends the established owner.

@@ -1,31 +1,31 @@
 ---
 name: driving-git
 description: >-
-  Operates git by JOB, not by command — the verb that cannot be misread (switch/restore, never
-  checkout), a commit that is ENUMERATED not globbed, ceremony sized by blast radius, and a
-  checkable RECEIPT closing every operation. Use for commit / コミット, push, branch / ブランチ,
-  rebase / リベース, merge, stash, worktree, reflog, 履歴の書き換え, force
-  push, PR / プルリク (gh), コンフリクト解消, 間違えて main にコミットした, push が固まる,
-  巨大ファイルを履歴から消す, git checkout 使っていい?, 複数セッションで同じ repo,
-  "which commit broke it", 消えたコミットの復元. LAW: a silent push is a failed push.
-  Cuts — PURPOSE vs wiring-repositories:
-  .gitignore / hooksPath / git-hook shape theirs, day-to-day operation here. PURPOSE vs
-  operating-the-harness: Bash(git *) permission rules and worktree-isolation mechanics theirs, the
-  git commands inside here. DECISIVE vs implementing-and-debugging / refactoring-code: what changes
-  theirs, how it enters history here (co-fire at commit). gh auth and signing config here; the ssh key itself → securing-remote-access. Version meaning → designing-version-schemes.
-  Workflow-native: every mutation stays SOLO in the session that owns the working tree; only
-  read-only forensics fan out. English skill; respond in the user's language (default Japanese).
+  Operates Git with scoped changes and checkable receipts. Use for commit / コミット, push,
+  branch / ブランチ, rebase / リベース, merge, stash, worktree, reflog, PR / プルリク (gh),
+  コンフリクト解消, 履歴の書き換え, force push, push が固まる, 消えたコミットの復元,
+  "which commit broke it", git checkout, 複数セッションで同じ repo, repository bloat / Git肥大化,
+  .git が大きい, クリーンアップ / cleanup, gc / prune, 巨大ファイルを履歴から消す,
+  LFS cache, and leaked secrets. Measure storage before deleting; verify the selected outcome.
+  Cuts by PURPOSE: .gitignore / hooksPath / git-hook wiring → wiring-repositories;
+  harness permissions/isolation → operating-the-harness; code changes → implementing-and-debugging
+  or refactoring-code, Git co-fires at commit; SSH keys → securing-remote-access, gh auth/signing here;
+  version meaning → designing-version-schemes. Workflow-native: mutations stay SOLO with the
+  checkout owner; only read-only forensics fan out. English skill; respond in the user's language.
 ---
 
 # Driving git — jobs, verbs, receipts
 
-> **Version**: v2609.1.0 (2026-09-21) — initial forge from one live multi-session incident set plus
-> the current git man pages. Receipts, grades, calibration, F3 desk-check: `tests/forge-verification-ledger.md`.
+> **Version**: v2609.2.0 (2026-09-23) — storage diagnosis, cleanup, and reason-specific history removal.
+> Receipts, grades, calibration, F3 desk-check: `tests/forge-verification-ledger.md`.
 > **Durability**: no version number or "experimental" claim in this body — all in `references/config.md`.
 
 ```bash
-for f in jobs rewriting-and-recovery shared-checkouts config; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/git-check.ts || echo MISSING git-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger
+for f in jobs rewriting-and-recovery storage-and-cleanup shared-checkouts config; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/git-check.ts || echo MISSING git-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger
 ```
+
+Resolve bundled `scripts/` paths against the directory of the loaded SKILL.md.
+Keep the command's working directory at the target repository; do not run repository checks inside the skill directory.
 
 ## Language
 
@@ -48,7 +48,8 @@ Japanese prose.
 > misread. Close with a **RECEIPT**: an observable the next reader can check. A silent success
 > and a silent failure print the same nothing. History is **ENUMERATED, never globbed**. The
 > working tree does not decide what a commit contains. **BLAST RADIUS sets the ceremony**.
-> Private → move fast. Published or shared → tag, approve, prove, then push with a lease.
+> Apply the private / published-owned / shared protocol in `references/rewriting-and-recovery.md` §1.
+> For cleanup, measure the cause before deleting and verify the same storage scope afterward.
 
 **Why it runs this way.** The sources correct a human who does not know the features exist. A
 capable model knows them and fails the other way. It globs the tree into a commit. It reaches for
@@ -63,8 +64,8 @@ drop. So the **deny-list and G1/G4 are first-class**, and the feature catalog is
 |---|---|---|
 | **G1 SCOPE** | a commit shaped by the working tree — `add -A`, `add .`, `-a`, a pathspec built from `git status`, `--amend --only` re-reading disk | `git diff --cached --stat` and `bun scripts/git-check.ts staged` **in the turn, before `git commit`**; the pathspec is an enumerated list |
 | **G2 STATE** | acting on an assumed tree — wrong branch, detached HEAD, a paused rebase, a peer's checkout | `bun scripts/git-check.ts state` before any mutation and before any job that reads tracked files in a SHARED CHECKOUT; `op=none` and the expected branch |
-| **G3 BLAST RADIUS** | rewriting or discarding what others hold, or what nothing else references | `git branch -r --contains` decides PUBLISHED, `git branch --contains` (a `+` row = another worktree) helps decide SHARED; published/shared → approval in this turn + `git tag backup/…` + freeze notice; after → `git range-diff`; push only with `--lease` (`references/rewriting-and-recovery.md` §1) |
-| **G4 RECEIPT** | "done" claimed from the absence of an error | commit → `git log -1 --stat`; push → `bun scripts/git-check.ts push` (`timeout`, never `-q`, remote tip == local); rebase → `range-diff` or `log --oneline <upstream>..`; recovery → the recovered sha |
+| **G3 BLAST RADIUS** | rewriting or discarding what others hold, or what nothing else references | publication/sharing evidence → `references/rewriting-and-recovery.md` §1; deletion scope and recovery source → `references/storage-and-cleanup.md` §2. A missing remote-tracking ref does not prove private history |
+| **G4 RECEIPT** | "done" claimed from the absence of an error | commit → `log -1 --stat`; push → `git-check push` with remote-tip equality; rebase → `range-diff`; recovery → recovered sha; cleanup → same-scope before/after size plus preservation checks (`references/storage-and-cleanup.md` §5) |
 
 ## Deny-list — unguarded forms, with the verb that replaces each
 
@@ -75,10 +76,10 @@ drop. So the **deny-list and G1/G4 are first-class**, and the feature catalog is
 | pathspec from a regex/glob over `git status` | enumerate, then `git diff --cached --stat` |
 | `commit --amend --only -- <paths>` to DROP files | `git rm --cached -- <paths>` then `commit --amend --no-edit`; verify `git ls-tree -r -l HEAD` |
 | `push -f` / `--force` · `push -q` · a push with no timeout | `bun scripts/git-check.ts push origin <b> [--lease <sha>]` |
-| `reset --hard` · `clean -f` · `restore .` · `stash drop/clear` · `branch -D` | safety tag or stash first; `clean -ndx` dry run; `branch -d`; `reset --keep` |
+| `reset --hard` · unscoped `clean -f` · `restore .` · `stash drop/clear` · `branch -D` | preserve the actual data at risk; tags do not save uncommitted files. Cleanup uses the preview and scope rules in `references/storage-and-cleanup.md` |
 | `--no-verify` | fix what the hook reports; a wrong hook is its owner's fix |
 | amend / rebase / `switch -C` on a PUBLISHED commit | a new commit, or `git revert`; a rewrite only under G3 |
-| `gc --prune=now` · `reflog expire --expire=now` · `repack` on a checkout anyone else writes | `git maintenance run`; housekeeping when every session is idle |
+| immediate reflog expiry/prune · unqualified `maintenance run` as a "safe" GC substitute | diagnose and select the task; destructive housekeeping requires an idle common object store (`references/storage-and-cleanup.md` §2–§3) |
 | `git filter-branch` | `git filter-repo` — git's own warning says so |
 | `merge -Xtheirs` · `pull` that merges | resolve the conflict (`rerere` remembers); `pull.rebase` |
 | `git config --global` edits, `-c`/`-C` spellings that dodge a permission rule | propose the config to the user (`references/config.md` §2); never dodge |
@@ -103,8 +104,9 @@ The floor: `bun scripts/git-check.ts lint <files>` finds these idioms in scripts
 | when did text/function change | `log -S'<str>'` · `-G'<re>'` · `-L :<func>:<file>` · `blame -w -C -C -C` | the sha |
 | undo | unstaged `restore -- <p>` · staged `restore --staged -- <p>` · last unpublished `reset --soft HEAD~1` · published `revert <sha>` | `git-check state` |
 | recover lost work | `reflog` → `branch recover/<x> <sha>`; dropped stash → `fsck --lost-found` | the sha under `git log` |
-| remove a pushed secret / blob | rotate → G3 shared → `filter-repo` → `range-diff` → lease push → platform purge | `references/rewriting-and-recovery.md` §3 |
-| huge repo | `clone --filter=blob:none` · `sparse-checkout set` · `maintenance start` · `core.fsmonitor` | `git status` under a second |
+| remove historical blobs / sensitive data | reason → declared refs → independent clone → reviewed filter → verify → publish | `references/rewriting-and-recovery.md` §3 |
+| reclaim disk / clean branches, worktrees, or LFS | measure → classify → preview → scoped cleanup → remeasure | `references/storage-and-cleanup.md` §1–§3, §5 |
+| speed up a huge repo | select transfer/worktree/latency target → matching optimization | measured target before/after; `references/storage-and-cleanup.md` §4 |
 | open a PR | push first → `gh pr create --base <base> --fill` → `gh pr checks --watch` | the PR URL |
 | write the message | imperative English subject ≤72, body = why + numbers, `--trailer` for trailers; follow the repo's own `git log` convention | `git log -1` reads as a lab note |
 | many sessions, one repo | one worktree per session; if truly shared → `references/shared-checkouts.md` S1–S8 | `git-check state` per job |
@@ -148,7 +150,11 @@ FIRES:
 | 「rebase したらコンフリクトした、どうしよう」 | update-onto-upstream row; rerere; the dirty-file trap |
 | 「間違えて alpha に直接コミットしちゃった」 | undo row + G3 (published?) |
 | "the push has been sitting there for 20 minutes" | G4 — a silent push is a failed push; blob-size hunt |
-| 「800MB のファイルが履歴に入っちゃった、消したい」 | remove-pushed-blob row, G3 shared |
+| 「800MB のファイルが履歴に入っちゃった、消したい」 | diagnose/removal row; G3 follows actual publication and ownership |
+| 「ファイルは消したのに .git が 20GB、容量を減らしたい」 | storage diagnosis before choosing cleanup or rewrite |
+| 「不要な branch と worktree を掃除して」 | scoped cleanup and preservation checks |
+| "Git LFS cache is filling my disk" | LFS storage/remote checks, separate from ordinary GC |
+| 「git gc しても小さくならない」 | reachable refs, reflogs, and physical storage comparison |
 | 「別セッションも同じ repo 触ってるけど平気?」 | shared-checkouts protocol |
 | "which commit broke the test?" | bisect row |
 | 「git checkout って今は使っていいの?」 | deny-list row 1 + `references/config.md` §1 |
@@ -167,6 +173,8 @@ MUST NOT fire (with route):
 | 「jj (jujutsu) に乗り換えたい」 | no skill — out of scope; a colocated repo's git side still obeys this skill |
 | "what's the difference between a merge and a rebase?" (conceptual, no operation) | answer directly — no ceremony |
 | `git log --oneline -20` to orient before editing | a read — no pipeline, no receipt |
+| 「C: がいっぱい。WSL の VHDX を縮めたい」 | `operating-wsl2-on-windows`; Git fires only if a Git store is the measured cause |
+| 「この関数をクリーンアップして」 | `refactoring-code`; cleanup without a Git target is not this skill |
 
 ## Routing — sibling cuts (typed, runtime-answerable)
 
@@ -187,6 +195,7 @@ MUST NOT fire (with route):
 |---|---|---|
 | `references/jobs.md` | The full JTBD rows: exact command forms, the legacy idiom replaced, the receipt, per-job traps (`--only` semantics, the dirty-file `--continue` trap, tag push) | any job beyond the one-line lookup above |
 | `references/rewriting-and-recovery.md` | G3 by blast radius, the freeze notice, the recovery ladder, removing a pushed secret/blob, abandoning paused operations | any rewrite, any "lost" work, any paused op |
+| `references/storage-and-cleanup.md` | Storage diagnosis, cause/action table, deletion boundaries, LFS and worktree cleanup, client performance, before/after receipts | bloat, disk cleanup, GC/prune, large-repo latency or transfer |
 | `references/shared-checkouts.md` | One-worktree-per-session default, the S1–S8 shared-checkout protocol, the measured incidents, foreign-agent worktrees | a second session or agent can write this repo |
 | `references/config.md` | The ONE dated file: verb status in the current git, the modern-defaults config set with the failure each prevents, house `gitconfig` state and legacy aliases, platform limits, sources | any version / "is X still experimental" / config question; every reforge |
 | `scripts/git-check.ts` | The floor: `state` (G2), `staged` (G1), `push` (G4), `lint` (deny-list in scripts/aliases). Run it, never read it | G1, G2, G4; auditing aliases and hooks |

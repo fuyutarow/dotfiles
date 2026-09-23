@@ -220,10 +220,10 @@ const DENY: readonly (readonly [string, RegExp, string])[] = [
   ["FORCE-PUSH", /\bgit\s+push\b(?![^\n]*--force-with-lease)[^\n]*(\s-f\b|\s--force\b)/, "--force-with-lease=<ref>:<sha>"],
   ["QUIET-PUSH", /\bgit\s+push\b[^\n]*(\s-q\b|\s--quiet\b)/, "never quiet a push; timeout + rev-parse receipt"],
   ["RESET-HARD", /\bgit\s+reset\s+(--hard|--merge)\b/, "safety ref first; git restore for files"],
-  ["CLEAN-FORCE", /\bgit\s+clean\b(?![^\n]*(\s-[a-zA-Z]*n|--dry-run))[^\n]*\s-[a-zA-Z]*f/, "git clean -ndx first"],
+  ["CLEAN-FORCE", /\bgit\s+clean\b(?![^\n]*(\s-[a-zA-Z]*n|--dry-run))[^\n]*\s-[a-zA-Z]*f/, "preview the same enumerated paths and ignore flags with -n first"],
   ["NO-VERIFY", /--no-verify\b/, "fix what the hook reports"],
   ["FILTER-BRANCH", /\bgit\s+filter-branch\b/, "git filter-repo"],
-  ["PRUNE-NOW", /\b(gc|prune)\b[^\n]*--prune=now|--expire=now/, "git maintenance run; gc only when every session is idle"],
+  ["PRUNE-NOW", /\b(gc|prune)\b[^\n]*--prune=now|--expire=now/, "measure first; preserve recovery history; select maintenance tasks only in an idle common object store"],
   ["THEIRS-MERGE", /-X\s*theirs\b/, "resolve conflicts; rerere"],
   ["AMEND-ONLY", /--amend\b[^\n]*\s(-o|--only)\b|\s(-o|--only)\b[^\n]*--amend\b/, "git rm --cached then --amend --no-edit"],
 ];

@@ -21,7 +21,7 @@
 | `git sparse-checkout` | Cone mode is the default; command still marked EXPERIMENTAL | `man git-sparse-checkout` 2.55 |
 | `git repo info`, `git last-modified`, `git format-rev`, `git backfill` | EXPERIMENTAL (2.52–2.55) | `git help -a` 2.55 |
 | `git config get/set/list/unset` | The official spelling since 2.46; `git config foo.bar=baz` now prints advice (2.55) | RelNotes 2.54, 2.55 |
-| `git maintenance` | default strategy "geometric" since 2.54 (man page text still describes "incremental" — unresolved wording drift) | RelNotes 2.54; `man git-maintenance` |
+| `git maintenance` | strategy and enabled tasks differ between manual and scheduled operation; inspect effective config and installed help, then name the task | git-maintenance(1); cleanup refresh in §6 |
 | `core.fsmonitor` built-in daemon | Linux support arrived in 2.55 (mac/Windows earlier) | RelNotes 2.55 |
 | reftable ref backend | Not the default in 2.55; Git 3.0 will make it default for new repos; `init.defaultBranch` will default to `main` in 3.0 | RelNotes 2.51, 2.52 |
 | `diff.algorithm` | Default is still `myers`; `histogram` is opt-in | `man git-diff` 2.55 |
@@ -91,7 +91,7 @@ The safe siblings `sw` / `ch` / `chc` / `chd` → `switch` were already present 
 
 | Limit | Value | Consequence |
 |---|---|---|
-| GitHub single-file push limit | 100 MB hard (docs.github.com repository-limits); ~50 MB warning | `git-check staged --max-bytes` default 50 MB; over 100 MB the push fails inside send-pack, and under `-q` it fails silently |
+| GitHub regular Git file limit | files above 100 MiB blocked; above 50 MiB warned | check staged sizes and the remote's result; quiet output never proves a successful push; direct source in §6 |
 | Claude Code `Bash(git push *)` deny rule | does NOT match `git -C . push`, `git -c … push`, `git 'push'` (code.claude.com permissions doc) | a permission rule is not a boundary; the deny-list is behavior, and a `-c`/`-C` spelling to dodge a rule is itself denied |
 | Claude Code worktree enforcement | blocks edits, cwd, and git redirects (`-C`, `--git-dir`, `GIT_DIR`, `cd`) into the main checkout while isolated; cannot be turned off | mechanics → `operating-the-harness` |
 
@@ -112,3 +112,32 @@ The safe siblings `sw` / `ch` / `chc` / `chd` → `switch` were already present 
 Harvest caveat for the next reforge: a WebFetch summary of RelNotes fabricated feature
 descriptions on its first call. Every RelNotes fact above was re-read from the raw `.adoc` text.
 Cross-check any summary against the raw file before citing it.
+
+## 6. Storage/removal source refresh — 2026-09-23
+
+Local Git: `git version 2.55.0`. The following official pages were fetched for the cleanup reforge.
+Earlier version claims in §1 retain their original snapshot date; this refresh covers the changed workflow.
+
+| Primary source | Decision it supports |
+|---|---|
+| [git-count-objects](https://git-scm.com/docs/git-count-objects) | separate loose, packed, garbage, and alternate storage |
+| [git-rev-list](https://git-scm.com/docs/git-rev-list) and [git-cat-file](https://git-scm.com/docs/git-cat-file) | compare local refs/reflogs; distinguish content size from physical accounting and delta caveats |
+| [git-gc](https://git-scm.com/docs/git-gc) and [git-maintenance](https://git-scm.com/docs/git-maintenance) | retention and concurrent-write risk; choose explicit tasks; scheduling modifies persistent user/repo state |
+| [git-clean](https://git-scm.com/docs/git-clean) | preview the same paths/options; `-X` ignored-only vs `-x` all untracked; nested-repo protection |
+| [git-worktree](https://git-scm.com/docs/git-worktree) and [git-remote](https://git-scm.com/docs/git-remote) | worktree removal vs metadata pruning; offline locks; remote-prune dry run and refspec scope |
+| [git-clone](https://git-scm.com/docs/git-clone), [git-bundle](https://git-scm.com/docs/git-bundle), [git-sparse-checkout](https://git-scm.com/docs/git-sparse-checkout) | independent local clone, backup scope, deferred blobs, and ignored-file removal when sparsifying |
+| [git-filter-repo manual](https://github.com/newren/git-filter-repo/blob/main/Documentation/git-filter-repo.txt) | analysis reports, rename limits, fresh clone, maps, origin removal, old-history cleanup, and ref coverage |
+| [Git LFS prune](https://github.com/git-lfs/git-lfs/blob/main/docs/man/git-lfs-prune.adoc) | dry run, remote/unreachable verification, no cross-repo shared-cache pruning, no reflog protection |
+| [git-stash](https://git-scm.com/docs/git-stash) | retained stashes use a reflog; dropped entries may remain recoverable until their objects are pruned |
+| [GitHub sensitive-data removal](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) | reason-specific host cleanup and restricted support eligibility |
+| [GitHub large files](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github) and [LFS removal](https://docs.github.com/en/repositories/working-with-files/managing-large-files/removing-files-from-git-large-file-storage) | regular-Git size limits and separate hosted LFS storage accounting |
+
+**GitHub sensitive-data path.** The guide requires `filter-repo` with `--sensitive-data-removal` (at least 2.47).
+Check installed capability before executing; do not infer it from this snapshot.
+Capture changed PR refs, the first changed commits, and any orphaned-LFS report.
+Host-owned `refs/pull/*` cannot be rewritten by a normal push; inspect those residuals separately.
+Support will not remove non-sensitive data.
+Sensitive-data assistance is limited to cases whose risk cannot be mitigated by credential rotation.
+Fork/clone owners must handle their copies; do not claim their deletion from a local check.
+Hosted LFS objects and accounting need the provider's own removal procedure.
+Other hosting providers require their current documentation; GitHub's policy is not universal.

@@ -32,8 +32,9 @@ worktree per session only if the session never touches the submodule.
 | A peer's `rebase --continue` is blocked by your dirty file | `git stash push -- <file>`; pop after their rebase lands | `git status --short -uno` empty |
 | Save only staged hunks | `git stash push --staged` | `git stash show -p stash@{0}` |
 
-A stash is a reflog-less object: `stash drop`/`clear` loses it for good. A WIP commit on a branch
-survives everything. Prefer the commit whenever the parking lasts past this session.
+Stashes are tracked through `refs/stash` and its reflog.
+After `drop`/`clear`, recovery may still work while the unreachable objects survive; pruning can make the loss permanent.
+Prefer a WIP commit on a retained branch for work that must outlive this session.
 
 ## 3. Commit exactly what I mean (G1)
 
@@ -112,8 +113,9 @@ never the resulting tree (git-merge-tree(1) MISTAKES TO AVOID). Legacy: `merge` 
 
 Only the `--force-with-lease=<ref>:<expect>` form is non-experimental (git-push(1)). The bare form
 is defeated by any background fetch. `--force-if-includes` closes that gap for the bare form ONLY;
-paired with `<ref>:<expect>` it is a documented no-op. Plain `--force` is on the deny-list. A push that prints nothing and returns nothing is a failed push. 90 minutes were
-lost to one (ledger §1). Zombie pushes from killed shells: `pgrep -a 'git push'`, then kill them.
+With `<ref>:<expect>`, it is a documented no-op. Plain `--force` is on the deny-list.
+An unfinished push has no success receipt. Check surviving push processes after a shell is killed.
+Confirm the process belongs to this operation before terminating it; a name match alone is insufficient.
 
 ## 9. Prove a rewrite changed only what it should
 
@@ -172,23 +174,14 @@ recover/<x> <sha>`. Stash entries: `git stash list`. Dangling after `stash drop`
 
 ## 14. Remove a large file or secret that was pushed
 
-`rewriting-and-recovery.md` §3 has the sequence. Rotate the secret. Freeze peers. `git tag`.
-`git filter-repo`. `range-diff`. Lease push. Platform purge. Every clone re-clones.
-`git filter-branch` prints git's own warning pointing to filter-repo. It is on the deny-list.
+`rewriting-and-recovery.md` §3 owns the reason-specific flow, independent backup, removal scope,
+verification, and publication across refs. Ordinary size reduction starts with `storage-and-cleanup.md`.
 
-## 15. Work on a huge repo
+## 15. Diagnose bloat, reclaim disk, or speed up a huge repo
 
-| Need | Do |
-|---|---|
-| Clone without history blobs | `git clone --filter=blob:none <url>` (blobs fetched on demand) |
-| Check out only some directories | `git sparse-checkout set <dir>...` (cone mode is the default; the command is still marked experimental — `config.md` §1) |
-| Fast `status` | `git config set core.fsmonitor true` (built-in daemon; Linux support is recent — `config.md` §1), `core.untrackedCache true` |
-| Keep it fast without `gc --aggressive` | `git maintenance start` (hourly commit-graph/prefetch, daily loose-objects/incremental-repack; `gc` disabled) |
-| Find what is big | `git rev-list --objects --all \| git cat-file --batch-check='%(objectsize) %(rest)' \| sort -n \| tail` |
-
-Never `gc --prune=now` while any other process may write the repo. git-gc(1): it "increases the
-risk of corruption if another process is writing". The firedancer peer's gc produced `fsck`
-phantoms for exactly this reason.
+`storage-and-cleanup.md` owns diagnosis, scoped cleanup, and the before/after receipt.
+It also owns branch/worktree cleanup, LFS cache pruning, and recurring-maintenance scope.
+Do not substitute clone/sparse-checkout advice for a request to shrink existing history.
 
 ## 16. Open a pull request from the CLI
 
@@ -232,9 +225,10 @@ before it is finished.
 ## 19. Inspect state before acting (G2)
 
 `bun scripts/git-check.ts state` prints one line: branch, HEAD, paused op, dirty/unmerged/untracked/stash,
-ahead/behind, worktree count. Unmerged paths with no paused op are a stash-pop conflict. Underneath it: `git status --porcelain=v2 --branch` and `git
-rev-parse --abbrev-ref HEAD`. The paused-op sentinels are files in `git rev-parse --git-dir`. Newer: `git repo info`
-(experimental, `config.md` §1) for repository-level facts.
+ahead/behind, worktree count. Unmerged paths without a paused op may follow a stash-pop conflict.
+It reads `git status --porcelain=v2 --branch` and `git rev-parse --abbrev-ref HEAD`.
+It checks operation sentinels inside `git rev-parse --git-dir`.
+For `git repo info` availability, see `config.md` §1.
 
 ## 20. Tags and releases (mechanics only)
 

@@ -241,10 +241,18 @@ position: the next reforge).
 
 **Observed failure, in the field.** In `polysearch-rs` (a release-cadence Rust CLI) the same package
 version was hand-written in THREE places — `Cargo.toml`'s `version`, and two `const` initializers in
-`src/common/generation.rs` — each rewritten by its own regex in the release script, with **no check
-anywhere that they agreed**. The only test that looked like one was circular: it round-tripped each
-constant through its own `to_string()` and the crate's parser, proving well-formedness and never
-agreement with the manifest. The repo's owner caught it and asked, correctly, whether parsing from
+`src/common/generation.rs` — each rewritten by its own regex in the release script. The test in
+`generation_tests.rs` that looked like an agreement check was circular: it round-tripped each
+constant through its own `to_string()` and the crate's parser, proving well-formedness only.
+
+**Correction (same day, found by the arm that implemented the fix).** The first write-up of this
+entry said no check existed anywhere. That was wrong, and wrong because the search that produced it
+was truncated by `head -20`: `tests/spec_revisions.rs` had asserted
+`env!("CARGO_PKG_VERSION") == PROTOCOL_VERSION.value().to_string()` since 0.202609.120. So
+`PROTOCOL_VERSION` was covered — indirectly, at test time, by a check living in a spec-registry
+suite. `API_VERSION` was genuinely uncovered, and neither constant was covered *structurally*.
+The void this row records is real; the absence claim that motivated it was overstated. An absence
+asserted from a truncated search is not an absence. The repo's owner caught it and asked, correctly, whether parsing from
 `Cargo.toml` is not the convention. It is.
 
 **Why the skill did not prevent it.** `CARGO_PKG` was a literal NO_MATCH across the whole dotfiles

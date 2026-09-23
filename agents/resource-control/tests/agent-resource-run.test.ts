@@ -15,6 +15,8 @@ import {
   commandEnvironment,
   createAdmissionReceipt,
   decideAdmission,
+  hasUnmanagedGpuLoad,
+  parseNvidiaSmiGpuRow,
   checkJob,
   executeJob,
   kernelTasksMax,
@@ -282,6 +284,54 @@ describe("admission", () => {
     expect(decideAdmission(gpuManifest(), busy, [gpuReservation("a")]).ok).toBe(
       true,
     );
+  });
+
+  test("idle board power overrides a display-only utilization reading (WSL2 compositor)", () => {
+    // Observed 2026-09-24 on the WSL2 host: P8, 16 W, 462 MiB, no compute process, 39 %.
+    const displayOnly = hostSnapshot({
+      gpus: [
+        {
+          id: 0,
+          total_bytes: 12 * GiB,
+          used_bytes: 462 * MiB,
+          utilization_percent: 39,
+          power_watts: 16,
+        },
+      ],
+    });
+    expect(decideAdmission(gpuManifest(), displayOnly, []).ok).toBe(true);
+  });
+
+  test("high utilization with compute-level power, or unknown power, is still unmanaged load", () => {
+    const base = {
+      id: 0,
+      total_bytes: 12 * GiB,
+      used_bytes: 2 * GiB,
+      utilization_percent: 97,
+    };
+    expect(hasUnmanagedGpuLoad({ ...base, power_watts: 150 })).toBe(true);
+    expect(hasUnmanagedGpuLoad({ ...base })).toBe(true);
+    expect(hasUnmanagedGpuLoad({ ...base, utilization_percent: 10 })).toBe(
+      false,
+    );
+    const computeBound = hostSnapshot({
+      gpus: [{ ...base, power_watts: 150 }],
+    });
+    expect(
+      denied(decideAdmission(gpuManifest(), computeBound, [])).reason,
+    ).toContain("150 W board power");
+  });
+
+  test("parses the nvidia-smi row including power.draw, and tolerates [N/A] power", () => {
+    const row = parseNvidiaSmiGpuRow("0, 12288, 462, 39, 16.23");
+    expect(row.utilization_percent).toBe(39);
+    expect(row.power_watts).toBeCloseTo(16.23);
+    expect(row.used_bytes).toBe(462 * MiB);
+    expect(
+      parseNvidiaSmiGpuRow("0, 12288, 462, 39, [N/A]").power_watts,
+    ).toBeUndefined();
+    expect(() => parseNvidiaSmiGpuRow("0, 12288, 462, 39")).toThrow();
+    expect(() => parseNvidiaSmiGpuRow("0, 12288, oops, 39, 16")).toThrow();
   });
 
   test("caps concurrent jobs on one device even when VRAM is abundant", () => {

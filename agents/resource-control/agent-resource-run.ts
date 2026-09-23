@@ -29,6 +29,11 @@ const MIN_HOST_RAM_SAFETY_BYTES = 4 * GiB;
 const HOST_RAM_SAFETY_FRACTION = 0.1;
 const GPU_SAFETY_BYTES = 512 * MiB;
 const GPU_IDLE_UTILIZATION_PERCENT = 20;
+// On a WSL2 host `utilization.gpu` also counts the Windows desktop compositor (observed
+// 2026-09-24: 33-40 % at P8 / 16 W, no compute process, 462 MiB used), so utilization alone
+// misreads an idle card as busy and denies every GPU job. Board power separates the two: any
+// compute kernel on an RTX 3060-class card draws well above this floor, display load does not.
+const GPU_IDLE_POWER_WATTS = 30;
 // VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
 // device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
 // ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
@@ -88,6 +93,8 @@ export type GpuSnapshot = {
   total_bytes: number;
   used_bytes: number;
   utilization_percent: number;
+  // Board power draw in watts; undefined when nvidia-smi reports it as not available.
+  power_watts?: number;
 };
 
 export type HostSnapshot = {
@@ -474,6 +481,38 @@ function meminfoBytes(text: string, key: string): number {
   return Number(match[1]) * KiB;
 }
 
+// One row of `nvidia-smi --query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw
+// --format=csv,noheader,nounits`. The first four fields are required; power.draw may read
+// "[N/A]" on boards that do not report it, which leaves power_watts undefined.
+export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
+  const fields = line.split(",").map((field) => Number(field.trim()));
+  if (
+    fields.length !== 5 ||
+    fields.slice(0, 4).some((field) => !Number.isFinite(field))
+  ) {
+    throw new StateError(`unparseable nvidia-smi row: ${line}`);
+  }
+  const power = fields[4] as number;
+  const row: GpuSnapshot = {
+    id: fields[0] as number,
+    total_bytes: (fields[1] as number) * MiB,
+    used_bytes: (fields[2] as number) * MiB,
+    utilization_percent: fields[3] as number,
+  };
+  if (Number.isFinite(power)) row.power_watts = power;
+  return row;
+}
+
+// Unmanaged load: utilization above the idle threshold, unless the board draws idle power
+// (display-only load, e.g. a WSL2 host's desktop compositor). Unknown power keeps the
+// conservative utilization-only rule.
+export function hasUnmanagedGpuLoad(gpu: GpuSnapshot): boolean {
+  if (gpu.utilization_percent <= GPU_IDLE_UTILIZATION_PERCENT) return false;
+  if (gpu.power_watts !== undefined && gpu.power_watts < GPU_IDLE_POWER_WATTS)
+    return false;
+  return true;
+}
+
 function probeGpus(): GpuSnapshot[] {
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
     return [];
@@ -484,7 +523,7 @@ function probeGpus(): GpuSnapshot[] {
         "timeout",
         "5s",
         "nvidia-smi",
-        "--query-gpu=index,memory.total,memory.used,utilization.gpu",
+        "--query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw",
         "--format=csv,noheader,nounits",
       ],
       { stdout: "pipe", stderr: "ignore" },
@@ -495,21 +534,7 @@ function probeGpus(): GpuSnapshot[] {
       .trim()
       .split("\n")
       .filter(Boolean)
-      .map((line) => {
-        const fields = line.split(",").map((field) => Number(field.trim()));
-        if (
-          fields.length !== 4 ||
-          fields.some((field) => !Number.isFinite(field))
-        ) {
-          throw new StateError(`unparseable nvidia-smi row: ${line}`);
-        }
-        return {
-          id: fields[0] as number,
-          total_bytes: (fields[1] as number) * MiB,
-          used_bytes: (fields[2] as number) * MiB,
-          utilization_percent: fields[3] as number,
-        };
-      });
+      .map(parseNvidiaSmiGpuRow);
   } catch {
     return [];
   }
@@ -653,10 +678,7 @@ function gpuHasHeadroom(
   // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
   // this device makes an admitted job block the next admission with its own compute load, which
   // silently degrades the ledger to one job per GPU.
-  if (
-    ledger.jobs === 0 &&
-    gpu.utilization_percent > GPU_IDLE_UTILIZATION_PERCENT
-  ) {
+  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)) {
     return false;
   }
   return ledger.available_bytes >= requiredBytes;
@@ -782,9 +804,11 @@ export function decideAdmission(
         (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS
           ? `; the device already holds the ${GPU_MAX_CONCURRENT_JOBS}-job concurrency cap`
           : "") +
-        (ledger.jobs === 0 &&
-        gpu.utilization_percent > GPU_IDLE_UTILIZATION_PERCENT
-          ? `; unmanaged load holds the device at ${gpu.utilization_percent}% utilization`
+        (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)
+          ? `; unmanaged load holds the device at ${gpu.utilization_percent}% utilization` +
+            (gpu.power_watts === undefined
+              ? " (board power unknown)"
+              : ` and ${gpu.power_watts} W board power`)
           : ""),
     };
   }

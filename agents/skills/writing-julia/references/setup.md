@@ -10,7 +10,7 @@ Contents:
 - §3.4 Experiment management — DrWatson
 - §3.5 TTFX (time to first execution) — the layered countermeasure map
 - §3.5.1 Shipping a `.so` — PackageCompiler `create_library` vs `juliac --trim`
-- §3.6 Julia 1.12 runtime notes
+- §3.6 Runtime launch settings
 - §5 Running Julia code
 - §6 Quick reference: Julia idioms
 - §7 Output files
@@ -30,14 +30,15 @@ curl -fsSL https://install.julialang.org | sh      # or: brew install juliaup   
 # Windows
 #   winget install julia -s msstore
 
-juliaup add 1.12.6      # pin a version intentionally; bump deliberately
-juliaup default 1.12.6
+juliaup status
 julia --version
 ```
 
-If juliaup is unavailable in the environment, download the official binary for your platform
-from julialang.org and put `julia` on `PATH`. Pin the patch version so `Manifest.toml`
-(reproducibility, §3.3) stays valid.
+Choose the version through `runtime-upgrades.md`, then use `juliaup add X.Y.Z` and
+`julia +X.Y.Z --project=.` with the verified exact patch substituted.
+Do not change the global default as a side effect of project setup.
+If juliaup is unavailable, use the official platform binary or the repository's declared toolchain.
+Record the runtime separately from dependency resolution (§3.3).
 
 ## 3.2 Project environment & packages
 
@@ -235,7 +236,7 @@ Deps must be type-stable by construction: runtime-typed packages (TOML, CSV, Dat
 conflict with trim; type-stable alternatives (TypedTables, StructArrays) work
 ("This Month in Julia World" newsletter, julialang.org/blog/2026/02/this-month-in-julia-world).
 
-## 3.6 Julia 1.12 runtime notes
+## 3.6 Runtime launch settings
 
 - **Threading default changed**: `julia` (no `-t`) starts with 1 worker + 1 interactive thread
   (`-t1,1`). For agent/CI/recordable work, take explicit `N` from the admitted P7 envelope;
@@ -243,12 +244,12 @@ conflict with trim; type-stable alternatives (TypedTables, StructArrays) work
   those runs.** For an unrecorded local interactive run only, use an explicit `-tN`. **Do not key
   buffers on `threadid()`** — the interactive/worker split makes this unsafe (use OhMyThreads,
   toolchain.md §2.9.4).
-- **Parallel precompilation is the default**: large dep trees compile in parallel.
-- **`@atomic` supports reference assignment**: `@atomic x.field = value` works for atomic struct fields.
-- **`OncePerProcess{T}`**: "compute once per process" cache primitive; pairs with `@compile_workload`.
-- **`juliac` / `JuliaC.jl` + `--trim` (experimental)**: 1.12's gcc-like AOT driver wrapping the
-  `--trim` dead-code-elimination path; emits trimmed executables/libraries/sysimages (companion
-  to PackageCompiler). For binary deployment of type-stable kernels only — route per §3.5.1.
+- Budget GC, BLAS, and precompilation pools as well as Julia worker threads; CPU detection is not a reservation.
+- For release-specific API and CPU-default changes, use `runtime-upgrades.md`.
+- The Julia 1.12 `@atomic` addition covers indexed references such as `@atomic v[3] += 4`.
+  Ordinary atomic struct-field assignment is not the newly introduced feature.
+  Check the collection's atomic support and ordering requirements before relying on indexed atomics.
+- AOT and trimming decisions remain in §3.5.1, not a second release-summary recipe.
 
 ## 5. Running Julia Code
 
@@ -364,8 +365,9 @@ but separate workflow; the tools below shine when a JIT-warm REPL is preserved a
       @warn "Revise init failed" exception=e
   end
   ```
-  With 1.12 + Revise 3.13+, struct/const redefinition works. Max value when the JIT-warm REPL is
-  preserved across edits — irrelevant to one-shot `julia -e` processes (nothing to keep warm).
+  For struct/const redefinition, check the runtime and installed Revise support; follow the
+  world-age caveat in `runtime-upgrades.md`. A warm REPL is useful during iteration, but final
+  verification uses a fresh process so old bindings cannot hide an initialization problem.
 - **TestItems.jl / ReTestItems.jl** — modern test discovery integrated with the VS Code Julia
   extension (`@testitem` blocks).
 - **JETLS** — new compiler-powered language server (needs 1.12+); slated to replace

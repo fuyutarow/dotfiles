@@ -159,8 +159,8 @@ function barrier.
 
 Escalating in power:
 - `@code_warntype f(args...)` — quick, shows `Any`/`Union` in red, but only the outermost frame.
-- `JET.@report_opt f(args...)` / `@test_opt` — descends the whole call tree and flags every
-  "runtime dispatch" site; use in test suites (§2.8).
+- `JET.@report_opt f(args...)` / `@test_opt` — follows inferable callees and reports detected
+  optimization failures; unresolved dispatch limits downstream coverage (§2.8).
 - `Cthulhu.@descend f(args...)` — interactive, follows inference into callees (local dev — see setup.md).
 
 ## 2.2 No Globals in Hot Paths
@@ -299,17 +299,34 @@ Type stability and allocation discipline are **mechanically verifiable**. Don't 
 inspection — run the checkers.
 
 ### JET.jl — static type-error and dispatch detection
+
+**SOLE owner of JET check selection.** First confirm the Julia/JET version pair supports full analysis.
+Installation/import success is insufficient; on versions exposing `JET.JET_AVAILABLE`, check it explicitly.
+If unavailable, report the skipped gate and select a supported test environment; do not count a skip as a pass.
+
+| Question | Diagnostic | CI assertion |
+|---|---|---|
+| Possible method/type/runtime-error path for concrete arguments | `JET.@report_call` | `JET.@test_call` |
+| Optimization failure or unresolved dispatch in a hot call | `JET.@report_opt` | `JET.@test_opt` |
+| Broad package error-analysis scan | `JET.report_package` | Review reports and cover representative concrete call signatures separately |
+
 ```julia
-using JET
-@report_call f(x_typical)   # MethodError paths for a single call
-@report_opt  f(x_typical)   # optimization-level: catches dynamic dispatch / Any
-report_package(MyModule)    # whole-package scan
-# In a test suite, assert it:
-@test_opt f(x_typical)      # fails the test on any inferred instability
-@test_call f(x_typical)
+import JET
+JET.@report_call f(x_typical)
+JET.@report_opt f(x_typical)
+JET.report_package(MyModule)
+# These assert different properties:
+JET.@test_call f(x_typical)
+JET.@test_opt f(x_typical)
 ```
-**Workflow**: after `Pkg.precompile()`, run `report_package` once. Treat new JET reports as
-test failures, not warnings.
+JET uses static inference, but its macros evaluate call arguments and top-level analysis can execute definitions/macros.
+Unresolved dynamic dispatch hides downstream callees; `No errors detected` does not prove absence of bugs.
+Package scans use declared signatures and can be less precise than concrete call analysis.
+Review new reports, fix actionable failures, and record scoped exceptions rather than suppressing whole categories.
+Keep numerical assertions and runtime tests: neither JET entrypoint proves the intended arithmetic or every bounds condition.
+For numeric-literal/index mistakes, use `numeric-syntax.md`.
+
+Evidence: soks JLIT-004–005, `urn:uuid:01a0cdef-9a85-74aa-b386-0f10805c26de`.
 
 ### DispatchDoctor.jl — turn instability into an error at the definition site
 ```julia
@@ -344,4 +361,4 @@ julia --project=. -e '
   @check_allocs MyModule.hot_kernel!(out, in)
 '
 ```
-These catch in seconds what `@code_warntype` inspection would miss in hours.
+Report which checks actually ran and their input coverage; checker success is scoped to those observations.

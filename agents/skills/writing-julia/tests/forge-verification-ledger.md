@@ -467,3 +467,51 @@ After correction, its bounded recheck returned PASS. This is a content/decision 
 **PROSE-DEBT waiver [dated:2026-09-22].** Target floor reports 153 long reference sentences and
 10 long SKILL sentences (before: 157 and 10). Existing prose debt remains in the whole-skill
 prose-reforge queue; this bounded revision changes NN routing, not unrelated numerical semantics.
+
+## 2026-09-23 — v2609.6.0: release claims, numeric syntax, and diagnostic coverage
+
+**Input and scope.** A supplied AI conversation mixed release history, runtime selection, numeric
+literal interpretation, and lint advice. It was a claim list, not primary evidence.
+Its arithmetic explanation equated `4 * e - 3` with `4 * (e - 3)` and its JET advice treated
+optimization analysis as an infallible error detector. Existing references already owned public API
+and AOT; this revision adds only missing decision boundaries and repairs overlapping summaries.
+
+**Survey before distillation.** Two bounded soks positions were admitted:
+- `urn:uuid:01a0cdef-9a86-7127-994d-2d86e91b0a2d`, numeric literals and diagnostics; commit `912816c7`.
+- `urn:uuid:01a0cdef-e16f-75f7-8732-42a510dd980c`, release feature boundaries; commit `a1581c34`.
+Both remain draft bounded syntheses, with source depth and untested outcomes explicit.
+The local semantic-search battery timed out during other-project indexing; lexical authority
+inventory found only NNlib/FLA/cuTile neighbors. No exhaustive absence or full-ecosystem claim is made.
+
+**Function map and ownership.** An ambiguous numeric expression → determine parsed meaning and
+intended grouping → corrected expression plus focused cases (`numeric-syntax.md`).
+Runtime requirements → select a compatible version and upgrade checks → tested environment
+(`runtime-upgrades.md`). JET error/optimization selection stays solely in `performance.md` §2.8.
+Namespace policy stays in `architecture.md`; AOT and launch recipes stay in `setup.md`.
+
+| Retained rule | Source grade and boundary |
+|---|---|
+| Numeric coefficients can conflict with e/E/f literal syntax | JLIT-001–003, official language manual |
+| Explicit multiplication in index/size/offset expressions | skill-supplied prevention rule; no blanket variable-name or scientific-notation ban |
+| Separate error and optimization analysis; account for inference reachability | JLIT-004–005, JET author documentation |
+| Verify a style rule rather than inventing one or declaring lint impossible | JLIT-006/Y01; bounded tooling survey, not all-rule enumeration |
+| Separate release channel, feature floor, runtime behavior, and speed result | JULIA-REL-001–008; upgrade procedure is skill-supplied |
+
+**Verification.** Julia 1.13.0, one CPU under `agent-resource-run`, no external packages:
+11/11 checks passed for Float64/Float32 literal parsing, grouping, numeric-coefficient precedence,
+array index repair, the float-index exception, and parsing `public solve`.
+Command: `agent-resource-run --manifest syntax.resource.json -- mise exec julia@1.13.0 -- julia
+--project=<isolated-task-directory> --startup-file=no --threads=1,0 syntax-check.jl`.
+Raw command/result and test source are in the task-local continuation directory in soks.
+This is not a JET detection benchmark, cross-version test, or trim/build verification.
+Twelve decision cases are added to `trigger-set.md`; description remains unchanged.
+
+**Review and floor receipts.** Independent Terra content review accepted the new numeric/JET/runtime
+boundaries and found an existing ambiguous `using Pkg` sentence in §10.5. It now explicitly distinguishes
+`import` from `using` and limits the no-injection statement to modules with no exports.
+Target floor, whole-collection floor, and `git diff --check` pass; whole collection is 72 skills
+and 64,707 listing characters. The review is scoped to the changed decision surfaces, not all Julia guidance.
+
+**PROSE-DEBT waiver [dated:2026-09-23].** Target floor reports 157 long reference sentences and
+10 long core sentences; the prior revision reported 153 and 10. Remaining debt stays in the
+whole-skill prose-reforge queue. These checks validate document structure, not technical truth.

@@ -21,7 +21,7 @@ Use `autodiff.md` for ordinary host-function AD selection and `nn-stack.md` for 
 These references own backend choices; declare selected dependencies through `packaging.md` PK3.
 
 ## Verification & measurement (performance.md §2.8 / §2.6)
-- `JET` — static type-error / dispatch scanner; `@test_opt` in suites.
+- `JET` — inference-based diagnostics; choose error versus optimization checks in performance.md §2.8.
 - `DispatchDoctor` — `@stable` to forbid instability at the definition site.
 - `AllocCheck` — `@check_allocs` for compile-time zero-allocation guarantee.
 - `Aqua` — **package-hygiene meta-tests** (`Aqua.test_all(MyPkg)` in `test/`): detects **type

@@ -17,12 +17,12 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.5.0 (2026-09-22) — one NN stack selection home; facts and house defaults stay distinct.
+> **Version**: v2609.6.0 (2026-09-23) — runtime upgrade boundaries, explicit numeric syntax, and scoped diagnostics.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
 ```bash
-for f in performance compilation autodiff nn-stack toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
+for f in performance compilation autodiff nn-stack numeric-syntax runtime-upgrades toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
 ```
 
 Fast-moving facts carry `[dated:YYYY-MM]` at their decision locus. Re-check stale tags against the
@@ -90,6 +90,8 @@ reference file that matches the task.
 | `references/compilation.md` | `-O`, JIT/TTFX measurement, debug flags, CPU target, package-image effects | selecting Julia launch/compiler flags or interpreting a speed/startup difference |
 | `references/autodiff.md` | ordinary host-function DI, preparation, backend choice, Dual propagation | eager host-function differentiation |
 | `references/nn-stack.md` | model API, primitives, AD, device, eager/XLA selection | NN models, direct NN primitives, or Reactant execution |
+| `references/numeric-syntax.md` | coefficient/exponent ambiguity and expression-preserving fixes | numeric shorthand, suspicious indices, or lint requests |
+| `references/runtime-upgrades.md` | release channels, feature floors, and upgrade checks | selecting/upgrading Julia or interpreting a release claim |
 | `references/toolchain.md` | data structures, parallelism, selection pointers | structure or compute-tool choice |
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
 | `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
@@ -155,6 +157,10 @@ Likewise use the target's parameter/builder API for SQL, shell commands, HTML, a
 stay raw until that API encodes or binds them exactly once.
 
 ### 1.2 Semantics that silently produce wrong results
+
+In index/size/offset arithmetic, write coefficient multiplication explicitly: `4 * e - 3`.
+`4e-3` is the literal `0.004`; the grouping `4 * (e - 3)` is a different formula.
+Use `references/numeric-syntax.md` before repairing such expressions or choosing a lint rule.
 
 ```julia
 # WRONG: Python/NumPy-style assumption that `*` is element-wise
@@ -328,6 +334,7 @@ Match batch size to observability. Prefer the smallest increment that answers th
 
 Correctness (§1):
 - [ ] All indices start at 1; matrix multiply uses `*` (not `@`); element-wise ops use dot (`.+`, `.*`, `sin.()`)
+- [ ] Index coefficients use `*`; repairs preserve grouping (`numeric-syntax.md`).
 - [ ] No untyped containers (`Float64[]` not `[]`); no globals captured in hot loops
 - [ ] Functions return consistent types; `end` closes every block; `$` interpolation; `time_ns()`
 - [ ] Controlled text chooses `"""..."""` before source-level `\"`; JSON uses `JSON.json` on data, never a hand-escaped interpolation template
@@ -356,7 +363,7 @@ Performance & verification — `references/performance.md`:
 - [ ] Dense loops use column-major order; `@inbounds` follows an index proof (§2.5).
 - [ ] Small fixed data uses StaticArrays; named parameter blocks may use ComponentArrays.
 - [ ] Immutable structs are default; mutation requires identity/state semantics (§2.1.2).
-- [ ] **JET**: `report_package` clean (or reports justified); consider `@stable` on must-be-fast functions (§2.8)
+- [ ] **JET**: supported version pair; separate error/optimization checks; record coverage (§2.8).
 - [ ] Allocation-free kernels pass `@check_allocs`; otherwise omit AllocCheck.
 - [ ] Authored packages pass scoped Aqua and ExplicitImports checks (§10.6.1).
 - [ ] Parallel reductions use OhMyThreads, never `threadid()` buffers (§2.9.4).

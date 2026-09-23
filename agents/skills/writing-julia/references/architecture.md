@@ -158,9 +158,12 @@ ergonomics so adding a package cannot inject or collide with caller bindings.
 | Selected dependency name | `using Dep: T` | explicit binding, no method extension |
 | Extend an external generic | `import Dep: f`; define `f(::OwnType)` | explicit extension |
 
-`using Pkg` still introduces the module binding `Pkg`, but injects no member names. Julia has no
-true private module binding: qualified access and explicit import remain technically possible.
+`import Pkg` introduces the module binding alone. Bare `using Pkg` also imports its exported names.
+Only a module with no exported members avoids that injection under `using`.
+Julia has no true private module binding: qualified access and explicit import remain technically possible.
 The contract is support and SemVer, not access control. `baremodule` does not solve this problem.
+The declaration syntax is `public solve`, not `Base.public :solve`.
+Qualified access also existed before Julia 1.11; `public` added API marking, not permission to call a binding.
 
 Authored packages declare the canonical `[compat] julia = "1.11"`. Do not use a Compat fallback.
 The executable gate checks that exact floor; a verifiable public-only API is part of the contract.
@@ -235,7 +238,7 @@ substitutes tooling for compiler guarantees. Five non-overlapping layers belong 
 | **Package hygiene** | **`Aqua.test_all(MyPkg)`** | piracy, ambiguities, type params, stale deps, compat gaps |
 | **Namespace injection** | `test_no_exports` (§10.5.1) | any export in root, child, or extension modules |
 | **Import hygiene** | ExplicitImports checks (§10.5.1) | no implicit/private/non-owner/stale access |
-| **Type/bug analysis** | `JET.report_package` / `@test_opt` | type instability, nonexistent methods, error paths (performance.md §2.8) |
+| **Type/bug analysis** | Choose the JET entrypoint in performance.md §2.8 | Error analysis and optimization analysis have separate assertions and coverage limits. |
 | **Formatting** | `Runic` | fixed style, zero-config (packages.md) |
 
 `Aqua` enforces §10.6 package hygiene; add it to every authored package. It does not replace the

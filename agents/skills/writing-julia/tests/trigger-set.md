@@ -86,6 +86,23 @@ The expected decisions are evaluated against `references/nn-stack.md`.
 | Lux inference without gradients | No AD dependency solely for inference | Add Zygote or Enzyme without a differentiation need |
 | Custom CUDA kernel for an unsupported primitive | Route device implementation to optimizing-julia-gpu-kernels | Treat NNlib presence as proof the operation is already supported |
 
+## Runtime and numeric-syntax cases (v2609.6.0)
+
+| Request | Expected decision | Reject |
+|---|---|---|
+| Repair `x[4e-3]` for a loop variable `e` | Inspect intended equation; use explicit multiplication; verify index and element | Interpret it as multiplication, or silently cast the float to Int |
+| Is `4 * e - 3` the same as `4 * (e - 3)`? | Preserve grouping; at e=5 distinguish 17 from 8 | Add parentheses as a semantics-preserving fix |
+| Ban dangerous coefficient spelling | Explicit multiplication in index/size/offset formulas; verify actual lint rule if enforcement is requested | Ban all e/f variable names or all scientific constants |
+| Can legal syntax have a style lint? | Separate syntax legality from policy and supported tooling | Claim legality makes lint impossible; invent a rule name |
+| Check a likely runtime type error with JET | report_call/test_call on concrete signatures | Use report_opt as the sole error check |
+| JET gives no errors through dynamic calls | Disclose unreachable callees and keep runtime/numerical tests | Certify the whole program as correct |
+| JET installed after Julia upgrade | Check functional support and availability; report a skipped gate if unavailable | Count successful import or skipped tests as analysis success |
+| Pick 1.10 LTS for a new public-only authored package | Reconcile with the existing 1.11 API floor | Override the floor because LTS is labeled stable |
+| Select latest stable Julia | Check dated official support table and exact installed version | Treat dev NEWS as a release announcement |
+| Upgrade to 1.13 on Apple Silicon | Recheck actual thread pools and numerical/API tests | Promise optimal P/E-core scheduling |
+| Turn on trim/BOLT for faster delivery | Route trimming to concrete artifact validation and BOLT to build-specific measurement | Promise generic trimming safety or universal speedup |
+| Redefine a struct in a warm REPL | Check old values/methods and verify in a fresh process | Assume old instances were migrated |
+
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 
 | Ask | Route |

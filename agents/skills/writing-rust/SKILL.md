@@ -1,41 +1,37 @@
 ---
 name: writing-rust
 description: >-
-  Writes/reviews Rust and Cargo.toml; selects crates/依存選定, ownership/所有権, async,
-  errors, serialization, CLI, concurrency and performance/高速化 mechanisms.
-  Read before Rust code or dependency edits. Verify crate facts; sync before async,
-  ownership before clone, lightest fit before famous.
+  Writes/reviews Rust and Cargo.toml; creates packages/workspaces (cargo new/init,
+  プロジェクト構成, ディレクトリ構造, crate分割), selects crates/依存選定, and handles
+  ownership, async, errors, CLI and performance. Read before Rust code or manifest edits.
+  Verify crate facts; sync before async, ownership before clone, lightest fit before famous.
+  Cargo layout → here; repo layers/polyglot placement → wiring-repositories;
+  mise task graph → wiring-mise-tasks.
   Change/debug → implementing-and-debugging; structure-only → refactoring-code;
   invariant placement/type-as-spec → designing-type-contracts; consequential risk → practicing-tiger-style.
   PyO3/maturin binding design stays here; Python tooling → running-python-tools.
-  Excludes Rust-written CLI installation, plain concept explanations, and prose-only work.
+  Excludes Rust-written CLI installation, syntax explanations, and prose editing with settled design.
   Workflow-native: source harvest may fan out; crate selection stays SOLO.
   English skill; respond in the user's language.
 ---
 
 # Writing Rust — modern crate selection & coding discipline
 
-> **Version**: v2609.2.0 (2026-09-23) — adds the string-construction boundary; crate landscape verified against crates.io / lib.rs
->   `[dated:2026-07]`. Forged from a 15-category adversarially-verified harvest (see
->   `tests/forge-verification-ledger.md`), NOT from the raw catalog it started as.
-> **Scope**: correct, effective, current Rust for real projects — with crate selection as the
->   spine. `SKILL.md` holds the two precedence-setting sections inline (§1 modern default stack +
->   the deltas your training misses; §2 the four over-reaches read FIRST); everything else lives in
->   `references/` and loads on demand.
-> **Out of scope**: teaching Rust syntax to someone who doesn't know it (the model does); a
->   general crate encyclopedia (`references/selection.md` is a lookup, not a starter kit); OS/
->   embedded-specific stacks beyond a pointer (embassy / heapless named, not expanded).
-> **Build verify (atomic — all ship in one commit)**:
->   `for f in selection async errors ownership performance project; do test -f references/$f.md || echo MISSING $f; done; for t in trigger-set forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done`
-> **Staleness registry** — fast-moving facts carry a `[dated:YYYY-MM]` tag at TWO grains: per-fact
->   in prose files (locality: the fact IS the decision input where it sits), and ONCE at file
->   level for `references/selection.md` (the whole file is one dated snapshot table — per-row tags
->   would be noise). Before trusting one,
->   `grep -rn '\[dated:' agents/skills/writing-rust/` and re-verify anything older than ~2 quarters
->   against crates.io / lib.rs: the §1 supersession table · every version in `references/selection.md`
->   · edition-2024 baseline · the async-trait / AFIT boundary (async.md) · the allocator/hasher
->   defaults (performance.md). The mechanical floor is `forging-skills/scripts/skill-check.ts`
->   (shared; this skill ships no scripts/).
+> **Version**: v2609.3.0 (2026-09-23) — Cargo layout and verification scope.
+> Crate catalog snapshot: `[dated:2026-07]`; this layout revision does not refresh crate recommendations.
+> Provenance, comparison cases and verification: `tests/forge-verification-ledger.md`.
+
+Atomic build verification, from this skill directory:
+
+```sh
+for f in selection async errors ownership performance project layout; do test -f references/$f.md || echo MISSING $f; done; for t in trigger-set forge-verification-ledger; do test -f tests/$t.md || echo MISSING $t; done
+```
+
+Read §1 and §2 for selection precedence; load other references for the current task.
+The catalog is a lookup, not a starter kit; this skill does not teach syntax or cover every embedded stack.
+Fast-moving facts carry per-fact `[dated:YYYY-MM]` tags, or a file-level tag for selection.md.
+Locate them through the repository's declared retrieval route and reverify facts older than two quarters.
+RG4 still requires checking a crate recommendation at use time.
 
 ## THE LAW
 
@@ -48,15 +44,22 @@ description: >-
 > **right crate before hand-roll · lightest fit before famous · sync before async · ownership
 > before clone · verified before recommended.**
 
-## The gates — RG0–RG4, each with a checkable artifact
+## Function map
+
+Rust task → choose mechanisms and Cargo boundaries → scoped source/manifests → verified behavior and scope.
+For project creation or layout changes, RG5 owns the Cargo layout decision; its workflow stays SOLO.
+Repository layer admission and the mise task graph go to their named owners below.
+
+## The gates — RG0–RG5, each with a checkable artifact
 
 | Gate | Rule | Artifact |
 |---|---|---|
 | **RG0 SELECT-BY-ROLE** (§1 + selection.md, deny-gate) | Choose each crate by the JOB and current maintenance, from `references/selection.md` — **never by fame or training-recency.** App binary → `anyhow`/`eyre`; library → `thiserror` (RG3). **Sync by default**; `tokio` only for real concurrent I/O (async.md). Lightest crate that fits (`argh`/`ureq`/`rusqlite` over `clap`/`reqwest`/`sqlx` when the job is small). **RG0 is BIDIRECTIONAL**: auditing declared deps is only half the gate — the first time this session you add/change a **dependency**, or write/restructure non-trivial code (NOT gated on new logic; a bare feature-toggle / metadata edit / mechanical rename are NO-FIRE — ★ callout), SWEEP the WHOLE codebase for §1/その手 hand-rolls — once per session, whether or not the lines you touched expose one + the その手があったか table UNPROMPTED and produce the adopted/declined-with-reason table. Waiting for a reviewer to name each crate ("why no anyhow? why no clap?") is the gate's defining failure mode — distilled from a live session where clap AND anyhow were each user-prompted one at a time `[dated:2026-07]` | Every added dependency traces to a named job + a one-line "why not the lighter / std alternative"; the UNPROMPTED sweep table (adopted / declined-with-reason, one row per §1+その手 crate matched against the codebase) on first crate-entry this session; selection.md is the lookup |
-| **RG1 DEP-HYGIENE** (project.md) | `edition = "2024"`; **no declared-but-unused deps**; features trimmed (`default-features = false` where it buys something); workspace-inherited versions; supply chain checked | `cargo machete` (or `cargo +nightly udeps`) clean; `cargo deny check` / `cargo audit` clean; Cargo.toml `[features]` audited |
+| **RG1 DEP-HYGIENE** (project.md) | New crates use the current edition; preserve existing compatibility unless migrating. Remove unused deps, trim features, and inherit intentionally shared versions. | `cargo machete` findings resolved; supply-chain check; manifest features and inheritance checked. |
 | **RG2 OWNERSHIP-NOT-ESCAPE-HATCH** (ownership.md, deny-gate) | Do **not** `.clone()` / `Arc<Mutex<_>>` / `unsafe` / `.unwrap()` to make the compiler stop complaining — restructure ownership (borrow, `Cow`, split borrows, index-don't-hold). Every `unsafe` carries a `// SAFETY:` line stating the upheld invariant | `clippy` clean under `undocumented_unsafe_blocks`; no hot-path `.clone()` without a one-line reason; `unsafe` blocks greppable-commented |
 | **RG3 ERROR-MODEL** (errors.md) | Binary → `anyhow`/`eyre` + `.context()`; library → a typed `thiserror` enum. `?` not hand-rolled `match`. **No `unwrap`/`expect`/`panic!` on a fallible path in library non-test code** | lib crate: `clippy::unwrap_used` + `expect_used` clean; public error is an `enum`, not `Box<dyn Error>` by default |
 | **RG4 VERIFY-BEFORE-RECOMMEND** (staleness, citation-relay) | A crate fact not checked against crates.io / lib.rs **today** is a guess: before adding or recommending, confirm the latest version + last-release recency; a crate with no release in ~18 months is a maintenance flag to state. Dated facts carry `[dated:YYYY-MM]` | `grep -rn '\[dated:'` re-verified per the header registry; each recommendation cites a checked version |
+| **RG5 CARGO-BOUNDARIES** (layout.md) | On project creation or layout changes, choose package/workspace boundaries and explicit verification scope. | Compact layout decision + `cargo metadata` member/target check; scoped checks from layout.md. |
 
 ### RG0 fires on ENTRY — the sweep is your FIRST artifact, not the reviewer's job  ★
 
@@ -82,6 +85,8 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 
 | Sibling | Cut |
 |---|---|
+| `wiring-repositories` | **PURPOSE:** Cargo package/workspace/target semantics stay here; repository layer admission and cross-language manifest placement stay there. Agree in substance; do not diff for byte identity. |
+| `wiring-mise-tasks` | **PURPOSE:** Rust package, feature and test-mode coverage stays here; task names, dependencies and runtime declarations stay there. Pass the RG5 scope to the task writer. |
 | `designing-type-contracts` | **PURPOSE:** choose predicates, representations, construction paths and residual obligations there. Rust visibility, ownership, conversions, Serde APIs and crate choices remain here. |
 | governing-configuration-systems | **DECISIVE:** Cargo.toml or a Rust parser's crate-specific manifest, API, and implementation → HERE. A format-independent configuration contract → governing-configuration-systems. |
 | `implementing-and-debugging` | **Co-fire on any non-trivial Rust feature/bugfix, with ORDER**: that skill owns language-agnostic change-safety (intent reconstruction, edit-surface scoping, **root-cause vs symptom** — a `.clone()`/`unwrap()` band-aid is the symptom-fix it forbids, RG2 is the Rust form, regression fear) — run its BUILD/DEBUG gate FIRST; this skill owns what correct Rust looks like inside that frame (RG0–RG4). |
@@ -95,9 +100,9 @@ Full artifact spec + trigger: RG0 row above; lookup: `references/selection.md`.
 
 ## MUST NOT FIRE
 
-A question ABOUT the Rust ecosystem or language with no code to write (licensing, "what is
-crates.io", Rust history, "is Rust faster than Go", a pure concept explainer like "what is a
-lifetime") — plain answer. Installing or using a **Rust-written end-user
+A pure ecosystem or syntax question needs no construction workflow.
+Examples: licensing, Rust history, or explaining lifetimes without a code change.
+Installing or using a **Rust-written end-user
 CLI tool** (ripgrep, eza, bat, fd, starship) — that is package management (Brewfile / cargo
 install), **not writing Rust**. Prose/docs ABOUT a Rust project (README narrative, paper text) →
 `linting-prose` / `structuring-documents`. Non-Rust code with no Rust in play (Go/C++/Python
@@ -119,7 +124,8 @@ wrong line. Then open the reference that matches the task.
 | `references/errors.md` | RG3 home — the app-vs-library error split; `anyhow`/`eyre` context vs `thiserror` enums; `miette`/`snafu`/`error-stack` niches; `?` and `From`; no-`unwrap`-in-lib; error-enum design | writing any error type; designing a public API's fallibility; choosing an error crate |
 | `references/ownership.md` | RG2 home — the borrow-checker-discipline: restructure ownership instead of `.clone()`/`Arc<Mutex>`/`unsafe`; references, `Cow`, split borrows, `Rc`/`Arc` when sharing is real, interior mutability, when `.clone()` IS correct; `unsafe` + `// SAFETY:` discipline | fighting the borrow checker; reaching for `.clone()`/`Arc<Mutex>`/`unsafe`; a lifetime error |
 | `references/performance.md` | **Rust is NOT automatically fast** — the measured, layered ladder (grounded in *The Rust Performance Book*): build settings → don't-allocate/clone → data layout, buffered I/O, iterators → hashers/allocator/`rayon` → the advanced tier (SIMD/PGO/`unsafe`/`transmute`) gated behind profiling. The model's over-reach trap: reaching for `unsafe`/`get_unchecked` before measuring | asked to make code faster / 高速化 / "blazing fast"; a **measured**-slow hot path; choosing a hasher/allocator |
-| `references/project.md` | RG1 home — edition 2024, dependency hygiene (unused-dep pruning, feature trimming, `cargo deny`/`audit`/`machete`), workspace + dependency inheritance, `[profile]` release tuning, MSRV, `xtask`, test/lint tooling (`cargo-nextest`, clippy lint config) | setting up / auditing a project or workspace; CI; `Cargo.toml` structure; lint & test configuration |
+| `references/layout.md` | RG5 home — package/module/workspace choice, member vs dependency, examples and nested roots, verification scope | project creation; directory/crate reorganization; choosing which packages/tests a command covers |
+| `references/project.md` | RG1 home — edition/MSRV, dependency and lint inheritance, supply chain, profiles, tool selection | configuring a selected package/workspace; dependency hygiene; lint/test tools |
 
 ---
 
@@ -249,7 +255,7 @@ for JSON, `serde_json::to_string(&serde_json::json!({ "name": name, "score": sco
 
 Selection & dependencies (RG0/RG1 — `references/selection.md`, `references/project.md`):
 - [ ] Every dependency traces to a real job; the **lightest crate that fits** was chosen (not the famous one); no declared-but-unused deps (`cargo machete` clean)
-- [ ] `edition = "2024"`; features trimmed (`default-features = false` where it pays); versions workspace-inherited in a workspace
+- [ ] Edition/MSRV preserved or deliberately migrated; features trimmed; shared versions inherited by their consumers
 - [ ] Supply chain checked (`cargo deny check` / `cargo audit`); no crate flagged stale (no release ~18mo) used without noting it
 - [ ] No stale-training tell: std `OnceLock`/`LazyLock` (not `lazy_static`); `clap` v4 (not `structopt`); std `thread::scope` (not `crossbeam::scope`) — see §1 supersessions
 

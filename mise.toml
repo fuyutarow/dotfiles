@@ -97,12 +97,12 @@ run = 'bun ~/dotfiles/scripts/fmt-sh-check.ts'
 [tasks."fmt:ts"]
 dir = "{{config_root}}"
 description = "Format TypeScript in place with oxfmt (.oxfmtrc.json; agents/skills/** templates excluded)"
-run = "bunx oxfmt '**/*.ts' '!agents/skills/**'"
+run = "bunx --bun oxfmt '**/*.ts' '!agents/skills/**'"
 
 [tasks."fmt:ts:check"]
 dir = "{{config_root}}"
 description = "Check TS formatting without writing (CI gate; lists drifted files + non-zero on drift)"
-run = "bunx oxfmt --check '**/*.ts' '!agents/skills/**'"
+run = "bunx --bun oxfmt --check '**/*.ts' '!agents/skills/**'"
 
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
@@ -214,7 +214,8 @@ git ls-files -z -- \
 [tasks."lint:ts"]
 dir = "{{config_root}}"
 description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns everywhere; in scripts/*.ts switch/nested ternary -> ts-pattern and try/catch -> neverthrow are errors"
-run = "bunx oxlint"
+# These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
+run = "bunx --bun oxlint"
 
 # Type-check (tsconfig.json). Bun transpiles and never type-checks, so this task is the ONLY
 # place the strict flags bite. Same command and name as Coral-dpp's task. In `lint`'s depends
@@ -225,7 +226,7 @@ run = "bunx oxlint"
 alias = "tc"
 dir = "{{config_root}}"
 description = "Type-check the repo's own TS with tsgo (tsconfig.json: Coral-dpp-strict incl. noUncheckedIndexedAccess / exactOptionalPropertyTypes)"
-run = "bunx tsgo --noEmit"
+run = "bunx --bun tsgo --noEmit"
 
 [tasks.test]
 alias = "t"

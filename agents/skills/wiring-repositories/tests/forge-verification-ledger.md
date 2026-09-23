@@ -247,3 +247,26 @@ The ceiling was raised in the same commit that adds this skill, with the reason 
 `skills-listing-budget.json` `raises[]`. The alternative — retiring a sibling to make room — was
 rejected because no sibling was found to be doing this skill's job badly; the ceiling had simply
 never been re-measured since it was set at 60 skills.
+
+## 2026-09-23 — polyglot manifest boundaries
+
+**Source.** Rust construction survey, admitted in soks commit `e0c6dff`:
+`urn:uuid:01a0ce18-54a8-7386-8e88-79633e144b34`, RCP-016 and RCP-024.
+Pinned Tauri manifests are linked in layers.md §3.
+
+**Correction.** The old “exactly one language owns the repo root” rule generalized one local layout.
+Tauri's root Cargo and pnpm manifests are a direct counterexample.
+Replaced the rule with a manager/manifest/package/cwd/lockfile scope table.
+Root manifests may coexist; language owners verify their graphs and this skill verifies their placement.
+The step sequence no longer repeats the rejected rule.
+
+**Cuts.** Cargo package/workspace semantics stay in `writing-rust` RG5.
+Task composition stays in `wiring-mise-tasks`; Git-hook shape stays here.
+Corrected the reference table's stale attribution of Git-hook shape to the Claude harness owner.
+Setup verification now respects the task owner's explicit waiver and checks the chosen build entrypoint.
+
+**F3.** Read-only sibling audit and adversarial review found these defects; the editor resolved each.
+The paired old/new response probe rejected peer roots with old guidance and accepted them with the revision.
+Added a peer-root fire case and a Cargo-layout-only no-fire case.
+Skill floor and edited-file Markdown check pass; this skill has zero prose-debt warnings.
+No new skill or listing budget increase was introduced.

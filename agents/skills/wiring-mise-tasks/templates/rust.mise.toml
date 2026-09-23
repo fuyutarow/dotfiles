@@ -1,9 +1,12 @@
-# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
-# wiring-mise-tasks/SKILL.md。[tools] は宣言しない: Rust toolchain は既存の
-# cargo/rustup をそのまま使う (mise 管理外・correo 方式)。
+# <repo> — mise task runner。未完成の TEMPLATE fragment: そのまま実行用に配らない。
+# 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。コピー時に検証済みの runtime を [tools] に宣言する。
+# Rust の package/feature/test 範囲は writing-rust RG5 で決める。
+# この初期形は一つの Cargo workspace と default features を対象にする。
 # 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
-# setup は意図的に無い: cargo が build 時に依存を解決する (correo 前例)。
+# setup は Cargo だけで依存を解決できる場合に免除できる。native 前提があれば追加する。
+# setup の免除は [tools] 宣言を免除しない。
 # ↓ は生きている免除宣言 (可視の免除が無言の欠落に勝る。消せば WARN に戻る):
 # mise-contract: waive setup -- cargo resolves deps at build
 
@@ -20,13 +23,16 @@ run = "cargo fmt --all -- --check"
 # wiring-mise-tasks/references/recipes.md §2。表を導入したら -D warnings を落とす。
 [tasks.lint]
 alias = "l"
-description = "clippy 静的解析 (全 target/feature・warning を deny)"
-run = "cargo clippy --all-targets --all-features -- -D warnings"
+description = "clippy 静的解析 (workspace 全 member/target、default features)"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
 
 [tasks.test]
 alias = "t"
-description = "cargo test。高速化するなら cargo nextest run + cargo test --doc の対 (nextest は doctest を走らせない)"
-run = "cargo test"
+description = "workspace 全 member の test と doctest (default features)"
+run = "cargo test --workspace"
+
+# 別 workspace、simulation、feature 組合せは必要な test:* と lint:* を追加して集約する。
+# nextest を使う場合は同じ package/feature 範囲の cargo test --doc も配線する。
 
 # cargo 標準の update は Cargo.lock しか触らない → cargo-edit (cargo upgrade) で
 # Cargo.toml の要求 version 自体を上げる。破壊は後段の check が捕える運用。

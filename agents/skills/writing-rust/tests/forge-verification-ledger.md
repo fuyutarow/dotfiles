@@ -298,3 +298,40 @@ Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19`, ESB-005–009 and Y
 Shortened the description; package lookup terms remain in the body.
 PROSE-DEBT waiver: references 81 long sentences, body 34, header 21 lines, 2 long cells; unchanged.
 Queue: next full Rust reforge; this boundary edit does not expand the debt.
+
+## 2026-09-23 — project construction and Cargo scope (RG5)
+
+**Source and limit.** The 14-project synthesis is admitted and committed in soks at `e0c6dff`:
+`urn:uuid:01a0ce18-54a8-7386-8e88-79633e144b34`, RCP-001–028.
+The refreshed JA/EN three-query battery found adjacent topics but no competing authority for this question.
+Primary Cargo contracts and pinned upstream counterexamples are linked in layout.md.
+The survey supports available patterns, not a performance ranking or a claim about prevalence.
+
+**Function and placement.** Project intent/manifests → choose Cargo boundaries → layout decision and scoped checks.
+RG5 and layout.md own that transition. project.md keeps RG1 policy and tool choices.
+`wiring-repositories` owns cross-language placement; `wiring-mise-tasks` owns the task graph.
+This extends incumbents without another skill or another listing entry.
+
+**Calibration.** The likely model failure is copying a large repository tree without a needed boundary.
+Rules require a reason for each new package and evidence of the command's actual scope.
+The references do not carry a 14-project directory catalog into every Rust task.
+
+**Adversarial findings resolved.** Replaced blanket dependency inheritance with deliberate sharing.
+Added the refactoring co-fire to the existing-code split trigger.
+Clarified that one package with lib/main still has two crate targets.
+Made path dependencies relative to the consuming manifest and config-sensitive commands use the right cwd.
+
+**Paired response comparison.** Fresh Terra readers saw either the old or revised skills in the same turn.
+Four prompts covered a small lib/CLI, multiple test workspaces, peer Cargo/pnpm roots, and a new helper member.
+Both readers handled separate test workspaces; no improvement is claimed for that case alone.
+The old reader rejected peer roots and prescribed relocation; the new reader accepted both real manager graphs.
+The old reader centralized a member-only dependency; the new reader allowed a direct dependency.
+Both initially blurred crate/package terminology; the explicit two-target sentence closes that observed gap.
+These are four qualitative response probes, not a task-success rate or a live trigger benchmark.
+
+**F3 checks.** Updated fire/no-fire and co-fire cases cover creation, existing-code splits, survey-only asks and Move.
+Shared skill floor: zero structural failures. Markdown check: zero findings on the edited files.
+Collection floor: 72 skills, 64,610 listing characters; existing budget unchanged and passing.
+PROSE-DEBT waiver, 2026-09-23: 80 long reference sentences, 28 body sentences, 2 long cells remain.
+Baseline was 81 / 34 / 2 plus a 21-line header; the header debt is removed.
+Queue: next full Rust catalog/body reforge; unrelated crate facts were not refreshed.

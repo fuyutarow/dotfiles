@@ -8,6 +8,11 @@ states the order. Created v2607.1.0 (2026-07-06).
 
 | Ask | Why |
 |---|---|
+| 「Rust project を作りたい。lib と CLI はどう分ける？」 | RG5: package/target boundary before extra crates |
+| "Create a Cargo workspace with a primary root CLI and two helper libraries" | RG5: root package plus members, with explicit dependency edges |
+| 「Sui みたいに全部 crates/ にすればいい？」 | RG5: inspect needed boundaries; a large case is not a universal scaffold |
+| "Root tests passed but the helper crate and examples workspace were not checked" | RG5: metadata/default-members and separate roots; explicit coverage |
+| 「ファイルが長くなった。別 crate にするか module にするか決めたい」 | `refactoring-code` owns motive/oracles; RG5 supplies the Cargo/module boundary |
 | 「この Rust の関数、引数が5個もあって毎回 Config 構造体作ってる。もっと綺麗にできない?」 | §1 その手があったか → `bon` (no "crate" keyword — describes the pain, must still fire) |
 | "add a dependency to parse JSON in my Rust CLI" | RG0/RG1 + selection.md (serde) — a crate-selection decision |
 | 「borrow checker に怒られたから とりあえず全部 .clone() してる」 | RG2 / ownership.md — the escape-hatch reflex |
@@ -30,6 +35,9 @@ states the order. Created v2607.1.0 (2026-07-06).
 
 | Ask | Route |
 |---|---|
+| 「Rust project の構成を文献と事例からサーベイして」 | `systematizing-knowledge`; no implementation decision yet |
+| 「Sui の Move.toml と sources/greeting.move を直して」 | Move task; `linting-sui-move` for house Move review, not Rust platform layout |
+| "Wire only mise.toml for an already specified Cargo workspace" | `wiring-mise-tasks`; consume the settled scope |
 | 「ripgrep をインストールして」 / "install eza / bat / fd" | Rust-*written* end-user tool → package management (Brewfile / cargo install), NOT writing Rust |
 | 「Rust って Go より速いの?」 | language comparison, no code → plain answer |
 | "write the README for my Rust crate" | prose ABOUT Rust → `linting-prose` / `structuring-documents` |
@@ -47,6 +55,8 @@ states the order. Created v2607.1.0 (2026-07-06).
 
 | Ask | Expected order |
 |---|---|
+| "Set up Rust plus a web frontend, with hooks and mise tasks" | `wiring-repositories` admits roots/layers; RG5 owns Cargo semantics; `wiring-mise-tasks` owns tasks |
+| "Plan a Rust project layout without writing code or changing dependencies" | RG5 applies; RG0 codebase dependency sweep does not fire solely for the plan |
 | 「この Rust モジュールに機能を足して」 | `implementing-and-debugging` BUILD gate first (intent/edit-surface/root-cause) → this skill for the Rust inside (RG0–RG4) |
 | 「この Rust パッケージ、リファクタして」 | `refactoring-code` governs (two hats / oracle / deny-gate) → this skill supplies the Rust oracle (`cargo check`+clippy+nextest) + Rust-safe transforms |
 | 「動かない Rust コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Rust-specific diagnosis (`clippy`, `cargo check`, the error model) |

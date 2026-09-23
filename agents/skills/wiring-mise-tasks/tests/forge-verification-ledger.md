@@ -119,3 +119,40 @@ stale and is updated.
 
 **PROSE-DEBT waiver (2026-09-22).** This seam edit adds one grammar rule. The existing WARNs (long
 sentences, a 9-line version header) predate it and are untouched. Queue: the next reforge.
+
+## 2026-09-23 — Cargo scope and polyglot task composition
+
+**Source and ownership.** Rust construction survey, admitted in soks commit `e0c6dff`:
+`urn:uuid:01a0ce18-54a8-7386-8e88-79633e144b34`, especially RCP-004/005/014/016/021/027/028.
+`writing-rust` RG5 supplies package/feature/test-mode scope; this skill wires it into tasks.
+`wiring-repositories` supplies the manager roots, including valid peer roots.
+
+**Changes.** Rust template and matrix now explicitly select one workspace with default features.
+Feature combinations, nested workspaces and simulators need their own declared leaves.
+Removed the automatic all-features assumption and retained doctest coverage when choosing nextest.
+Polyglot setup/test/update/format-check bodies now live in leaves under depends-only repository verbs.
+Removed the runtime-pinning handoff that contradicted RUNTIME-DECLARED.
+
+**Template status.** These are materialization fragments, not immediately runnable repositories.
+The user of a template must select runtime pins, paths and supported scopes before verifying it.
+The old Rust header's “mise unmanaged” wording was an invalid blanket exemption and is removed.
+
+**F3 receipts.** Both templates parse as TOML and every task dependency names an existing task.
+Local one-off check: materialized Rust and polyglot fixtures each passed mise-contract: 0 hard, 0 warn.
+The ignored fixtures live under `.agent-state/skill-rust-20260923/fixtures/{rust,polyglot}/mise.toml`.
+Each prepends `[tools]` to the corresponding template: rust `1.85.0`, bun `1.3.14`, plus Julia `1.12.0` for polyglot.
+Command: `mise exec -- bun agents/skills/wiring-mise-tasks/scripts/mise-contract.ts <rust-fixture-dir> <polyglot-fixture-dir>`.
+These fixtures are not checked-in CI regression coverage; versions are parser inputs, not tool recommendations.
+No Rust/Julia build or toolchain install was performed.
+Existing mise-contract suite: 14 tests pass, 0 fail, 39 assertions.
+Edited-file Markdown and shared skill floor pass.
+The four paired response probes are recorded in the writing-rust ledger; this is a qualitative comparison.
+
+**PROSE-DEBT waiver, 2026-09-23.** Remaining: 14 long reference sentences and 11 body sentences.
+Baseline was 18 / 13 plus a 9-line header; header debt is removed.
+Queue: next full recipes/body reforge. No new checker or skill was added.
+
+**Gate startup repair.** This commit's hook exposed Node shebangs in the oxlint/oxfmt/tsgo wrappers.
+Plain `bunx` reached an unconfigured Node shim although this repository declares Bun.
+The root mise tasks now use `bunx --bun` for those three Bun-compatible wrappers.
+Their local version commands, lint and typecheck passed; no global runtime configuration was added.

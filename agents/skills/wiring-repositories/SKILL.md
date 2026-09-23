@@ -21,7 +21,7 @@ description: >-
 
 # Scaffolding repositories — the SET, the ORDER, and the JOINT
 
-> **Version**: v2609.1.0 (2026-09-22) — gate hooks call contract verbs only (HOOK-1/3); HOOK-2 retired. Receipts, calibration, and the F3
+> **Version**: v2609.2.0 (2026-09-23) — explicit polyglot manifest boundaries. Receipts, calibration, and the F3
 > desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
 > per-language recipe is load-bearing here; dated facts live in `references/layers.md`.
 
@@ -176,6 +176,7 @@ FIRES:
 |---|---|
 | 「新しいリポジトリ立ち上げたいんだけど、一式そろえて」 | core territory — the SET and the ORDER |
 | "set up a new repo for this project, Julia plus a Rust harness" | polyglot admission and order; manifests route to their owners |
+| "Set up a Tauri-like repo with Cargo and pnpm manifests at root" | Declare both manager scopes; layers.md §3 permits coexisting roots |
 | 「この repo、hook が効いてない気がする。配線見て」 | S2 rows 2–3, machine-detectable |
 | 「qoed に同じ配線を入れたい」 (existing repo, wiring named by comparison) | S1 audit — which layers are missing, which accreted |
 | "why does semantic search never find anything in .claude/?" | S2 row 4 — the ordering, owned here even though `ccc init` is not |
@@ -191,6 +192,7 @@ MUST NOT fire (with route):
 | 「hook が発火しない」 with `.claude/` already wired | `operating-the-harness` — matcher and event mechanics |
 | "make this repo searchable" (wiring already settled) | `driving-cocoindex` ALONE — registration is theirs |
 | `uv init` / `cargo new` / `bun init` for one package | that language's own skill — one manifest is theirs |
+| "Choose Rust crate/module boundaries inside an existing repository" | `writing-rust` RG5; co-fire `refactoring-code` for structural implementation |
 | "write a CLAUDE.md for this codebase" | the built-in `init` — one file, not a wiring set |
 | a scratch dir for one throwaway script | no skill — `git init` if even that, and stop |
 | 「この SKILL.md を直して」 | `forging-skills` — skill craft, not repo wiring |
@@ -204,7 +206,7 @@ MUST NOT fire (with route):
 | `wiring-mise-tasks` (hook seam) | The `hook:<event>` task NAME, the templates' `hook:pre-commit`, and the mise facts behind HOOK-3 are theirs (grammar rule 6, recipes §8). The hook SHAPE (HOOK-1/1a/1b) is here. Reciprocal, 2026-09-22 |
 | `operating-the-harness` | **PURPOSE, on two seams.** *Hooks*: theirs are Claude Code's (events, matchers, `settings.json`); **git** hooks are HOOK-1/HOOK-2 above, here. *`.claude/`*: standing it up and the inheritance rule → here; its contents and rule scoping → theirs, **MANDATORY co-fire once content is written** |
 | `driving-cocoindex` | **PURPOSE** — "Is there already a `cd`-able directory?" Registration, indexing, freshness, query shapes, and every daemon resource rule → theirs, **never restated**. Whether this repo admits an index, and the two orderings around it, → here |
-| `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` / `running-python-tools` | **DECISIVE by artifact** — a language's manifest, lockfile and idiom → theirs; each already owns its own `init`. Which languages this repo declares, and how several coexist without a root manifest that lies about the layout, → here |
+| `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` / `running-python-tools` | **DECISIVE by artifact:** manifest semantics and language idiom → their owner. Layer admission and cross-language manifest placement → here. Cargo package/workspace/target boundaries belong to `writing-rust` RG5. Root manifests may coexist. Agree in substance; do not diff for byte identity. |
 | `governing-research-documentation` | **CARDINALITY** — the governance config is ONE admissible layer here. Its schema, document lifecycle, authority and retirement → theirs |
 | `forging-skills` | **PURPOSE** — a repo-local `.claude/skills/` is a layer this skill may admit; the craft of any SKILL.md → theirs |
 | the built-in `init` | **DECISIVE by cardinality** — it produces exactly one file. One file → it; a wiring set → here. This skill may invoke it for that layer |
@@ -215,6 +217,6 @@ MUST NOT fire (with route):
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/layers.md` | Per-layer detail: the file each layer is, its owner's entry point, global-vs-repo-local, the exact-patch exception, the polyglot-root rule, the ccc cost, and dated facts | laying any layer; any "which version / which file" question |
+| `references/layers.md` | Per-layer detail: artifact and owner, inheritance, pins, polyglot manifest boundaries, index admission, dated facts | laying any layer; choosing manifest roots; any "which version / which file" question |
 | `scripts/wiring-check.ts` | The deterministic floor: five silent orderings plus laid-but-inert detection. Run it, never read it into context | S2 and S3; every audit of an existing repo |
 | `tests/forge-verification-ledger.md` | Provenance grades, the calibration inversion, measured receipts, the F3 desk-check, proof-of-fire, and the F4 budget answer | reforging; auditing this skill; disputing any measured claim |

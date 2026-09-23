@@ -1,14 +1,20 @@
-# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# <repo> — mise task runner。未完成の TEMPLATE fragment: そのまま実行用に配らない。
+# 文法と動詞契約の正本は
 # wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
 # 多言語合成の裁定 = wiring-mise-tasks/references/recipes.md §6 (qoed 前例)。
 # 各セルの中身は単言語 template から移植し、TeX は compiling-latex の
 # latex:* template に委ねて check が latex:check を集約する。
 # 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
+# コピー時に runtime を [tools] に宣言し、各 manifest と cwd を実際の配置へ合わせる。
+# Cargo と JS の root が同じ場合も、manager ごとの leaf task は分ける。
 
 [tasks.setup]
 alias = "i"
-description = "dev 一括セットアップ (言語別 setup:* を集約してから主言語を instantiate)"
-depends = ["setup:tools"]
+description = "dev 一括セットアップ (setup:* を集約)"
+depends = ["setup:tools", "setup:julia"]
+
+[tasks."setup:julia"]
+description = "Julia 依存を instantiate"
 run = "julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'"
 
 [tasks."setup:tools"]
@@ -29,7 +35,7 @@ run = "julia --project=. -m Runic --inplace ."
 
 [tasks."fmt:rust"]
 description = "Rust (サブ crate) を rustfmt で整形"
-run = "cargo fmt --manifest-path harness/Cargo.toml"
+run = "cargo fmt --manifest-path harness/Cargo.toml --all"
 
 [tasks."fmt:md"]
 description = "Markdownをrumdlで整形 (config = .rumdl.toml)"
@@ -37,11 +43,19 @@ run = "rumdl fmt"
 
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): 全言語ぶんを一括"
-run = '''
-julia --project=. -m Runic --check .
-cargo fmt --manifest-path harness/Cargo.toml --check
-rumdl check .
-'''
+depends = ["fmt:julia:check", "fmt:rust:check", "fmt:md:check"]
+
+[tasks."fmt:julia:check"]
+description = "Julia 整形チェック"
+run = "julia --project=. -m Runic --check ."
+
+[tasks."fmt:rust:check"]
+description = "Rust 整形チェック"
+run = "cargo fmt --manifest-path harness/Cargo.toml --all -- --check"
+
+[tasks."fmt:md:check"]
+description = "Markdown 整形チェック"
+run = "rumdl check ."
 
 # lint:julia/lint:rust は未配線 — 明記された先送り (recipes.md §1 の tier 裁定:
 # 無言の starter はドリフト)。package 化した言語から lint:<lang> を足して集約へ。
@@ -56,12 +70,20 @@ run = "rumdl check"
 
 [tasks.test]
 alias = "t"
-description = "主言語テスト。重くなったら qoed 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
+description = "test:* を集約 (この例では Julia のみ。必要な他言語検査を追加する)"
+depends = ["test:julia"]
+
+[tasks."test:julia"]
+description = "Julia tests"
 run = "julia --project=. -e 'using Pkg; Pkg.test()'"
 
 [tasks.up]
 alias = "u"
-description = "主言語の依存を一括更新。他言語ぶん (cargo upgrade / bun update) は up:* に分ける"
+description = "up:* を集約 (この例では Julia のみ。manager ごとの更新も個別に呼べる)"
+depends = ["up:julia"]
+
+[tasks."up:julia"]
+description = "Julia 依存更新"
 run = "julia --project=. -e 'using Pkg; Pkg.update()'"
 
 [tasks.check]

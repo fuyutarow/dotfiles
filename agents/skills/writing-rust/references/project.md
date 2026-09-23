@@ -1,7 +1,8 @@
-# Project setup, dependency hygiene & tooling (RG1)
+# Manifest policy, dependency hygiene & tooling (RG1)
 
-> SOLE home of RG1 (dependency hygiene) plus the modern project scaffold: edition, workspace,
-> lints, supply chain, build profiles, tooling. Crate/tool versions → `references/selection.md`.
+> SOLE home of RG1: edition/MSRV, dependency and lint inheritance, supply chain, profiles, tooling.
+> Package/workspace layout and command coverage → `references/layout.md` (RG5).
+> Crate/tool versions → `references/selection.md`.
 > The governing rule: **a dependency is a liability paid at every build, audit, and MSRV bump** —
 > so keep the set minimal, the features trimmed, and the hygiene machine-checked, not eyeballed.
 
@@ -23,6 +24,9 @@ model must account for:
 Set `rust-version = "1.NN"` (your real MSRV) so resolver v3 and `cargo` can honor it; a leaf app
 that always runs on the latest stable can omit it.
 
+A virtual workspace has no root package edition to infer a resolver from; set its resolver explicitly.
+Preserve an existing project's edition/resolver contract unless migration is part of the task.
+
 ## Dependency hygiene (RG1) — the machine-checked floor
 
 - **No declared-but-unused deps.** `cargo machete` flags them (fast, heuristic). Treat hits as
@@ -32,9 +36,9 @@ that always runs on the latest stable can omit it.
 - **Trim features.** Many crates pull heavy transitive trees through default features. Set
   `default-features = false` and enable only what you use (`features = ["derive"]` for clap,
   `features = ["toml"]` for config, etc.) — this is where most "why is my build 400 crates" comes from.
-- **Inherit versions in a workspace.** Declare each dependency once in the root
-  `[workspace.dependencies]` (since Rust 1.64) and reference it per-member with `dep.workspace =
-  true`. One version, one update point — no per-member drift.
+- **Inherit intentionally shared dependencies.** Put a shared version in root `[workspace.dependencies]`.
+  Each consuming member opts in with `dep.workspace = true`; member-only dependencies may remain local.
+  Declaring a workspace dependency does not add it to every member.
 
 ## The manifest's own facts — read them, never re-type them (RG1)
 
@@ -115,6 +119,9 @@ For a **library**, add `unwrap_used`/`expect_used` (RG3 — no panicking on fall
   resolution.
 
 ## Testing & build tooling → crate table in `references/selection.md`
+
+Choose packages, targets, features and test modes through RG5 before wiring a runner.
+Runner choice here does not establish repository-wide coverage.
 
 - **`cargo nextest run`** — fast parallel runner, better output. **It cannot run doctests** — CI must
   also run `cargo test --doc` (a silent coverage gap otherwise).

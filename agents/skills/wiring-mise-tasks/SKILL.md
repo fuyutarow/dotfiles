@@ -13,23 +13,25 @@ description: >-
   ドリフト監査, タスク体系を揃える. Cuts: WHICH tool is right for language L → writing-<lang> (a
   language merely NAMED while scaffolding stays here); TeX task wiring → compiling-latex co-fires
   FIRST and owns the latex:* bodies, while a bare latexmk/chktex problem with no task-graph ask
-  stays there alone; hook/settings enforcement → operating-the-harness; [tools] runtime pinning
-  (mise use/install) → model-native. Workflow-native: one repo's mise.toml stays SOLO (zero
+  stays there alone; hook/settings enforcement → operating-the-harness. Language owners choose
+  tool requirements; this skill declares task runtimes in [tools]. Workflow-native: one repo's mise.toml stays SOLO (zero
   agents); only multi-repo drift audits fan out one read-only gate-runner per repo. English
   skill; respond in the user's language (default Japanese).
 ---
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2607.1.0 (2026-07-17)
-> **Scope**: the cross-repo mise task GRAPH — verb contract, naming grammar, templates, the
-> resolution gate. Per-language tool CHOICE is cited from its owner skill, never re-argued here;
-> tool VERSIONS, provenance grades, and rulings live ONLY in the dated `references/recipes.md` —
-> the body matrix is a synced working summary (agrees in substance; re-sync on reforge, do not
-> diff for byte-identity).
-> **Build order (atomic).** SKILL.md, the reference, 5 templates, the gate, and the ledger ship
-> in ONE commit. Verify:
-> `test -f references/recipes.md || echo MISSING recipes; for t in julia rust python typescript polyglot; do test -f templates/$t.mise.toml || echo MISSING $t; done; test -f scripts/mise-contract.ts || echo MISSING gate; test -f tests/forge-verification-ledger.md || echo MISSING ledger`
+> **Version**: v2609.1.0 (2026-09-23)
+> Owns the task graph, naming, template fragments and resolution gate.
+> Dated tool facts, provenance and rulings live in `references/recipes.md`.
+
+Language owners choose tools and coverage; the matrix below summarizes their current task wiring.
+Keep matrix and recipes consistent in substance; do not compare wording for byte identity.
+Ship referenced files together. Verify from this skill directory:
+
+```sh
+test -f references/recipes.md || echo MISSING recipes; for t in julia rust python typescript polyglot; do test -f templates/$t.mise.toml || echo MISSING $t; done; test -f scripts/mise-contract.ts || echo MISSING gate; test -f tests/forge-verification-ledger.md || echo MISSING ledger
+```
 
 ## Language & stable tokens
 
@@ -101,12 +103,16 @@ deviating from a cell; the matrix here is the working summary.
 | setup | `Pkg.instantiate(); Pkg.precompile()` | *(waived)* | `uv sync` | `bun install --frozen-lockfile` |
 | fmt | `-m Runic --inplace .` | `cargo fmt --all` | `uv run ruff format` | `bunx biome format --write .` |
 | fmt:check | `-m Runic --check .` | `cargo fmt --all -- --check` | `uv run ruff format --check` | `bunx biome format .` |
-| lint | tiered: fmt:check reuse → Aqua+ExplicitImports+JET | `cargo clippy --all-targets --all-features -- -D warnings` | `uv run ruff check` | `bunx biome lint .` |
-| test | `Pkg.test()` | `cargo test` | `uv run pytest` | `bun test` |
+| lint | tiered: fmt:check reuse → Aqua+ExplicitImports+JET | `cargo clippy --workspace --all-targets -- -D warnings` | `uv run ruff check` | `bunx biome lint .` |
+| test | `Pkg.test()` | `cargo test --workspace` | `uv run pytest` | `bun test` |
 | up | `Pkg.update()` | cargo-edit: `cargo upgrade --incompatible allow` + `cargo update` | `uv lock --upgrade && uv sync` | `bun update` |
 
 TeX: leaf tasks (`latex:*`) are owned by `compiling-latex`; the repo-level `check` aggregates
 `latex:check`. That skill's template instantiates THIS grammar for TeX.
+
+Rust cells cover one Cargo workspace with default features.
+Before instantiating them, obtain package, feature and test-mode scope from `writing-rust` RG5.
+Additional workspaces and supported feature combinations need named leaf tasks, composed here.
 
 ## Two rules the task graph cannot be sound without (2026-07-25, measured)
 
@@ -132,8 +138,9 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
 
 ## Templates and the gate
 
-- **Scaffold**: copy the nearest `templates/<lang>.mise.toml` (or `polyglot`), adapt bodies, keep
-  verbs + aliases.
+- **Scaffold**: templates are fragments, not ready-to-run repositories.
+  Copy the nearest one, select runtime versions in `[tools]`, and fill the actual roots and coverage.
+  Preserve verbs and aliases; verify the materialized configuration before calling it ready.
 - **Verify — after EVERY mise.toml edit**:
   `bun ${CLAUDE_SKILL_DIR}/scripts/mise-contract.ts [repo-dir ...]`
   Exit 0 = contract holds (WARNs allowed) · 1 = HARD violation · 2 = environment error. The gate
@@ -175,6 +182,7 @@ Co-fire:
 |---|---|
 | 「papers リポに mise タスク組んで」 | `compiling-latex` FIRST (TeX bodies, `latex:*` template); this skill for the repo-level verbs |
 | 「Julia の新リポ、lint どこまで入れる？」 | `writing-julia` (JG2/JG3 substance) + this skill (the two-tier wiring, recipes §1) |
+| "Wire tests for a root Cargo package with helper members and a separate examples workspace" | `writing-rust` RG5 defines coverage → this skill wires the declared scopes |
 
 MUST NOT fire (route):
 
@@ -201,6 +209,6 @@ MUST NOT fire (route):
 | File | Covers | Read when |
 |---|---|---|
 | `references/recipes.md` | per-cell provenance grades, the lint-tier / test-blocked / clippy-location / biome-config rulings, polyglot composition, known corpus deviations, dated tool versions | before deviating from a matrix cell; before an audit; any "why this body?" question |
-| `templates/*.mise.toml` | copy-out scaffolds (julia, rust, python, typescript, polyglot) — views of this contract | scaffolding a repo |
+| `templates/*.mise.toml` | copy-out fragments; runtime versions and project scopes must be filled | scaffolding a repo, before materialization and verification |
 | `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

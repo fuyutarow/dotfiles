@@ -48,11 +48,11 @@ task instead is a contract violation the gate will catch.
 
 | Verb | Body | Grade |
 |---|---|---|
-| setup | *(deliberately none — waive it)* | corpus-observed (correo header: cargo/rustup は mise 管理外) |
+| setup | *(may be waived when Cargo resolves dependencies at build)* | the waiver does not exempt task runtimes from RUNTIME-DECLARED |
 | fmt | `cargo fmt --all` | skill-endorsed ("fmt is not negotiable") + corpus |
 | fmt:check | `cargo fmt --all -- --check` | skill-endorsed + corpus |
-| lint | `cargo clippy --all-targets --all-features -- -D warnings` | corpus-observed (correo); see RULING |
-| test | `cargo test` | corpus-observed (correo); see RULING |
+| lint | `cargo clippy --workspace --all-targets -- -D warnings` | scope-corrected 2026-09-23; default features; see RULING |
+| test | `cargo test --workspace` | scope-corrected 2026-09-23; see RULING |
 | up | `command -v cargo-upgrade \|\| cargo install cargo-edit; cargo upgrade --incompatible allow; cargo update` | corpus-observed (correo; skill silent — cargo standard `update` moves only Cargo.lock, cargo-edit moves the Cargo.toml requirements) |
 
 **RULING — clippy denial location.** writing-rust prefers `[workspace.lints.clippy]` in
@@ -60,9 +60,13 @@ Cargo.toml (CLI/env denial "doesn't compose across a workspace"). The task keeps
 until the repo adopts the table; on adoption, drop the flag from the task in the same edit —
 carrying both is redundancy, not safety.
 
-**RULING — test runner.** Corpus default is plain `cargo test` (runs doctests itself). Upgrading
-to `cargo nextest run` REQUIRES the companion `cargo test --doc` in the same task — nextest skips
-doctests, a silent coverage gap (writing-rust, verbatim warning).
+**RULING — scope and runner.** `writing-rust` RG5 owns package, target, feature and test-mode coverage.
+This starter covers one workspace with default features, including members beside a root package.
+Keep a narrower existing scope when intentional; label it and wire the remaining required scopes separately.
+Add valid feature combinations and separate workspace/simulator tasks from the RG5 scope table.
+The template does not assume `--all-features` is a valid or complete matrix.
+With nextest, wire the companion doctest command over the same package/feature scope.
+Tool requirements and native prerequisites also precede any setup waiver.
 
 **RULING — mise vs xtask.** writing-rust's project reference names `xtask` "the Rust-native
 pattern" for repo dev tasks, with mise as one alternative. House repos standardize on mise — the
@@ -120,17 +124,23 @@ TeX leaf tasks are owned wholesale by `compiling-latex` (its `assets/mise-latex.
 `latex:clean` / `latex:distclean`). Repo-level wiring of `latex:check` into `check` follows
 SKILL.md's TeX line — leaf graph theirs, repo verb ours.
 
-## §6 Polyglot composition (qoed exemplar)
+## §6 Polyglot composition
 
-1. `fmt` and `lint` are depends-only aggregates; their language bodies live in `<verb>:<lang>`
-   subtasks. `setup`/`test`/`up` may carry the PRIMARY language's body directly (qoed's own
-   `setup` does: depends on `setup:tools` AND instantiates Julia) — secondary ecosystems get
-   `<verb>:<lang>` siblings rather than one task mutating three lockfiles blind.
-2. Gate-adoption rule: SKILL.md grammar rule 3. The polyglot-specific fact: qoed's `check`
-   aggregates 34 tasks and its blocked `test` is NOT among them — the aggregate substitutes the
-   focused `test:bounds`/`test:provenance`.
-3. Cross-cutting hygiene gates keep single clean names (`banned`, `records`, `claims`, `taxonomy`)
-   — reserved namespace, per the grammar (SKILL.md).
+Obtain manifest roots and manager scopes from `wiring-repositories` before writing task bodies.
+Repository verbs are depends-only aggregates; each leaf selects its manager and working directory.
+Keep a manager-specific update independently invocable so users can choose which lockfile changes.
+
+| Repository topology | Task wiring |
+|---|---|
+| Julia root, Rust subtree | Julia leaves use its project root; Rust leaves select the subtree manifest/cwd |
+| Peer Cargo and pnpm roots, as in Tauri | Rust and JS leaves may both use repository root; each invokes its own manager |
+| Multiple Cargo workspaces | One named leaf per required workspace/mode; aggregate the declared coverage |
+
+For formatting, pair `fmt:rust` with `fmt:rust:check` and `fmt:ts` with `fmt:ts:check`.
+Repository `fmt` and `fmt:check` depend on their respective leaves, with no command bodies.
+The copy-out polyglot template illustrates a Julia/Rust subtree layout; its paths are not universal.
+Apply grammar rule 3 when adopting gates; it owns inclusion in `check`.
+Keep cross-cutting hygiene names under the existing reserved namespace.
 
 ## §7 Known corpus deviations left standing (2026-07-17)
 

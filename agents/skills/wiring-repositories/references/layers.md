@@ -16,7 +16,7 @@ The SKILL.md body carries none of this. A version number or a path detail there 
 | verb contract | `mise.toml` `[tasks]` + aliases | `wiring-mise-tasks` → its `templates/<lang>.mise.toml`, gate `scripts/mise-contract.ts` |
 | language manifest | `Project.toml`+`Manifest.toml` / `pyproject.toml`+`uv.lock` / `Cargo.toml`+`Cargo.lock` / `package.json`+`bun.lock` | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
 | agent harness | `.claude/settings.json`, `.claude/hooks/` | `operating-the-harness` |
-| commit enforcement | `.githooks/pre-commit` + `core.hooksPath` | `operating-the-harness` (the rule) + `wiring-mise-tasks` (the task) |
+| commit enforcement | `.githooks/pre-commit` + `core.hooksPath` | `wiring-repositories` (Git-hook shape) + `wiring-mise-tasks` (task) |
 | semantic index | `.cocoindex_code/` | `driving-cocoindex` |
 | research governance | the governance config + declared document scopes | `governing-research-documentation` |
 | repo-local skills | `.claude/skills/` | `forging-skills` |
@@ -40,23 +40,28 @@ duplicate.
 **Require the reason in a comment.** An exact pin with no stated reason cannot be told apart from
 a copy-paste. It will never be relaxed.
 
-## 3. Polyglot repos — the root manifest must not lie
+## 3. Polyglot repos — declare each manifest's scope
 
-Measured: one five-language repo puts Julia at the root. Rust sits under `harness/Cargo.toml`,
-not the root. Python is `scripts/` plus `ruff.toml`. TypeScript is `package.json` plus `bun.lock`.
-LaTeX lives under `slides/` and `papers/`.
+Record `manager | manifest/root | governed packages | command cwd | lockfile | owner skill`.
+Use a short table in the scaffold plan; no extra document is required.
 
-**Rule**: exactly one language owns the repo root. Every other language's manifest lives under the
-subtree it governs. Its mise task body names that path explicitly, e.g.
-`--manifest-path harness/Cargo.toml`.
+| Actual layout | Decision | Verification |
+|---|---|---|
+| Independent component in a subtree | Keep its manifest there | Tasks select that root explicitly |
+| Two managers govern graphs from the repository root | Root manifests may coexist | Inspect both membership declarations and both command scopes |
+| Nested/excluded workspace | Name its separate build/test/release boundary | Run its own checks; parent success does not cover it |
 
-**Why.** A root manifest for a language whose source is not at the root is a claim about the
-layout. The layout does not honour it. Every tool that discovers by walking up will resolve to the
-wrong project, and none of them will say so.
+Source location alone does not decide manifest placement; a root workspace can govern subdirectories.
+Cargo membership, target paths and package selection belong to `writing-rust`.
+Other language owners validate their own manifests.
+`wiring-mise-tasks` turns the declared scopes into leaf tasks and repository aggregates.
+Check each leaf from its declared cwd; pass-through manifest paths do not override every tool's config lookup.
 
-**Composition across languages is not this skill's call.** `wiring-mise-tasks` ships
-`templates/polyglot.mise.toml` and argues the composition in its own reference. Call it. Do not
-re-derive the aggregation here.
+Counterexample `[dated:2026-09-23]`:
+[Tauri Cargo workspace](https://github.com/tauri-apps/tauri/blob/8265c982f0a38832ec80c57ac3a857f22a7ad66b/Cargo.toml)
+coexists with a root
+[pnpm workspace](https://github.com/tauri-apps/tauri/blob/8265c982f0a38832ec80c57ac3a857f22a7ad66b/pnpm-workspace.yaml).
+Do not relocate either solely to enforce one language at root.
 
 ## 4. The ccc layer — what registration actually costs
 
@@ -107,15 +112,14 @@ SKILL.md S2 gives the constraints. This sequence satisfies all five:
 
 1. `git init`; write `.gitignore` **first**. Every later layer is measured against it.
 2. `mise.toml`: `[tools]` pins, then the verb contract. Call `wiring-mise-tasks`.
-3. Language manifests. One root owner (§3), each other under the subtree it governs.
-4. Install and lock. The repo's own `setup` verb must succeed before anything binds to it.
+3. Language manifests. Declare each manager's scope and invocation root (§3).
+4. Install and lock. Run `setup` when adopted; otherwise validate its waiver and selected build/check entrypoint.
 5. `.claude/`, only if a repo-specific rule exists that the global set does not cover (§2).
 6. The pre-commit **task and its script**. Then, last, `git config core.hooksPath .githooks`.
 7. `ccc` registration, after the exclude set is decided (§4). Per clone, not per repo.
 8. Research governance, if multiple uncoordinated writers produce documents.
 
-Steps 5–8 are each conditional on their S1 question. Steps 1–4 are unconditional for anything
-that will be cloned.
+Steps 5–8 depend on their S1 questions. Apply steps 1–4 to each admitted language and respect a valid setup waiver.
 
 ## 7. Dated facts
 

@@ -16,7 +16,7 @@ description: >-
 
 # Refactoring — behavior-preserving structural change, on purpose
 
-> **Version**: v2609.2.0 (2026-09-22) — re-distilled from the canonical general-refactoring and
+> **Version**: v2609.3.0 (2026-09-23) — re-distilled from the canonical general-refactoring and
 > LLM existing-code-modification positions; claim provenance lives in the forge ledger.
 > **Scope**: change HOW code is structured without changing WHAT it observably does.
 
@@ -155,6 +155,7 @@ claim says 全面 is a G5 violation — either narrow the claim or finish the in
 | `structuring-documents` | **PURPOSE cut = object**: that skill localizes information in a DOCUMENT/prose (MECE one-home, single-source-of-truth, backward-only reference DAG). This skill localizes responsibility in CODE. Same 認識体系 (Parnas's uses-DAG = its reference DAG; Martin's CCP = its single-update-point), different artifact — never run one on the other's object. |
 | `implementing-and-debugging` (again, on `raising-resolution`) | Inspecting the actual code + callers + git co-change before restructuring is `raising-resolution` running as a **silent sub-step** inside G3/G4 — not a separate fire. |
 | `writing-typescript`, `writing-julia`, `writing-python`, `writing-rust`, `writing-bun-scripts`, `linting-sui-move` | **Co-fire**: they own language idiom & language-specific safe transforms; this owns language-agnostic behavior-preservation + architecture. Follow the language skill for idiom, this for the two hats / oracle / deny-gate. |
+| `operating-the-harness` / `driving-git` (concurrency) | **PURPOSE cut — one question each.** Isolation tier and how to launch it → `operating-the-harness`. What a session checks and announces when another may write the repo → `driving-git` shared-checkouts. **What shape the CODE needs so N editors do not collide → HERE** (`architecture.md` §8). |
 | `driving-git` | **DECISIVE — what vs how it enters history.** This skill owns WHAT changes and the oracle; how the change becomes commits (scope, message, rewrite, publish) and the `git stash`-not-`checkout .` discipline's owner is `driving-git`. Co-fire at commit time. Seam agrees in substance; do not byte-diff (2026-09-21) |
 | `acting-on-hypotheses` | A rewrite-vs-refactor call is *mostly* here (reachability by behavior-preserving steps is inspectable). Only an expensive/irreversible uncertain-payoff rebuild bet → AOH; a cheap deterministic reversible probe → domain/plain executor. |
 
@@ -180,7 +181,7 @@ from-scratch greenfield build with no existing code to preserve.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/architecture.md` | 責務分界 + 局所化 as checkable predicates: Parnas information-hiding + the `|modules touched by change|=1` locality test + uses-DAG; Constantine one-sentence cohesion test + coupling spectrum; SRP-actor + CCP (+ the structuring-documents isomorphism); DDD/Conway/vertical-slice next-change test; connascence spectrum (§5, SOLE home); the deny-gate (§6, SOLE owner of the wording); the YAGNI reconciliation (§7) incl. the 3-slot MANDATORY test | applying G3; deciding where a responsibility belongs; judging a decomposition; is this architecture or churn |
+| `references/architecture.md` | 責務分界 + 局所化 as checkable predicates: Parnas information-hiding + the `|modules touched by change|=1` locality test + uses-DAG; Constantine one-sentence cohesion test + coupling spectrum; SRP-actor + CCP (+ the structuring-documents isomorphism); DDD/Conway/vertical-slice next-change test; connascence spectrum (§5, SOLE home); the deny-gate (§6, SOLE owner of the wording); the YAGNI reconciliation (§7); **parallel-edit capacity (§8)** incl. the 3-slot MANDATORY test | applying G3; deciding where a responsibility belongs; judging a decomposition; is this architecture or churn |
 | `references/catalog.md` | Smells as triggers (the ~24, read as coupling/cohesion failures); the named refactorings' mechanics + common shape; the depth test for extraction; Remove Flag Argument / narrow-signature / encapsulate-global by coupling class; Kerievsky refactor-to/away-from patterns | picking the transform for a smell; the mechanics of a named move; when to extract vs inline |
 | `references/safety-net.md` | Claim-specific oracle stack (behavior/structure/absence/scope); tool/test/characterization regimes; deletion negative contract; seams; mutation/golden-master/property-based oracles; non-static references; observable-surface boundary; AST-vs-text gap | applying G2; refactoring untested code; any rename/move/delete; deciding whether the requested transformation is both safe and complete |
 | `references/strategy.md` | WHETHER/WHEN: two hats, preparatory, Rule of Three, tidy first/after/never, DRY-vs-AHA, rewrite-vs-refactor decision, hotspot prioritization (churn×complexity), when NOT to refactor, epistemic status (Design-Stamina/DCF are hypotheses). HOW-BIG: Strangler / Branch by Abstraction / Parallel Change / Mikado / keystone / codemods at scale | deciding whether/when to refactor at all; sequencing a large change; a rewrite proposal |

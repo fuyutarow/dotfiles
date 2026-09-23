@@ -191,3 +191,42 @@ sentences, a 7-line version block, and two long table cells. This reforge leaves
 the version-header class; no debt class increased. The previous queue is partially discharged, not
 silently retired. Queue the remaining mature-body atomization as a dedicated prose-only reforge
 before another broad architecture/catalog revision; do not mix it into a source-fidelity change.
+
+
+## 2026-09-23: parallel-edit capacity (architecture.md §8) — distilled from one day of live fan-out
+
+Source: a Rust CLI (~104k lines) with ~15 subagent arms dispatched against it in one day, each in
+its own worktree off a moving trunk, integrated by a single director. Every row of §8's table is a
+collision that actually cost time that day. The narratives live here; the rules there stay LOOKUP.
+
+**Why it is not a new property.** The first draft framed parallel-friendliness as a fourth thing to
+trade against cohesion and coupling. That was wrong and would have justified churn: it let any
+extraction claim a benefit no one had measured. The correct framing is Parnas §1's own predicate
+with the quantifier changed — one change touching one module becomes N concurrent changes touching
+disjoint modules. Nothing new is traded; the same locality is being spent by more consumers at once.
+
+**The observed collisions.**
+
+| Shape | What happened |
+|---|---|
+| long function | one 1,488-line function inside a 4,357-line file; 24 commits touched that file in 24 h for unrelated reasons, so every task "in that area" queued on it |
+| shared struct | two arms extended the same payload struct in parallel — a 21-hunk merge conflict, entirely self-inflicted by the dispatch |
+| hand-maintained mirror | a hand-kept list of payload member names drifted from its type four separate times before a mechanical check was added |
+| global snapshot | one insta golden file covering the whole CLI surface; every arm changing observable output rewrites it. The working technique: regenerate twice against an intermediate tree state so each commit's snapshot diff contains only that commit's lines |
+| privileged region | frozen schema bundles an arm may not edit. A staging directory existed, but the drift test gated on the frozen copy, so the unprivileged half of the task could not complete — the arm stopped and reported rather than guessing |
+| append-only beside mutable | an arm cut from an older trunk edited an already-accepted, digest-chained spec revision, because "which revision is current" was guessable from the directory listing |
+
+**The two brief rules.** The scope oracle (G4) caught two stray edits that day, but only because it
+was run against the integrator's tip rather than the arm's own base — those had diverged by four
+commits. The green-and-blocked rule comes from two arms that stopped rather than fabricate: one
+found a genuine circularity (a duration cannot be written into the payload of the call it measures),
+and one corrected the director's own premise. The counterexample was reported the same day from a
+neighbouring project: a subagent reported "zero deletions" on a diff that had deleted seven lines.
+
+**Floor.** `skill-check.ts` run with and without the edit: identical WARN counts (references 119
+long sentences, SKILL.md 26, 2 table cells >400). The first draft scored 122 and 4 and was rewritten
+rather than waived. Pre-existing debt untouched and still queued.
+
+**Deliberately not included.** Dispatch mechanics (which isolation tier, worktree flags, resource
+envelopes) stay with `operating-the-harness`; what a session must check and announce when another
+may write the same repo stays with `driving-git`'s shared-checkouts. §8 owns only the code's shape.

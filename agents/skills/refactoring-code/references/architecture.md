@@ -237,3 +237,44 @@ lands (a future axis turned present). A→B when a new caller needs a flag/branc
 abstraction (it was coincidental — inline it back), or the pass spills past the change surface, or
 you're about to touch structure with no oracle. **Never justify a demarcation by volume — line
 count, number of abstractions, or "more SOLID". Run the depth test.**
+## 8. Parallel-edit capacity — 局所化 with the quantifier changed `[dated:2026-09]`
+
+§1's predicate asks, for ONE anticipated change `c`: `|modules touched by c| = 1`.
+Concurrent editors ask the same thing of a SET of changes `C` arriving at once:
+
+> **`∀ cᵢ ≠ cⱼ ∈ C : modules(cᵢ) ∩ modules(cⱼ) = ∅`**
+
+Same predicate, different quantifier.
+**Parallel-edit capacity is not a new property to trade against cohesion — it IS 局所化.**
+Measure it as: how many concurrent tasks can run before two must open one file.
+Two consequences the single-editor framing hides:
+
+- An extraction that raises capacity **earns the PURPOSE gate on locality grounds alone**. It is
+  throughput, not taste — cite the collision, not the line count.
+- Capacity is bounded by the WORST file, not the average. One 1,500-line function in the hot path
+  caps the whole fan-out, however clean the rest is.
+
+**Fire this section** when work is about to fan out to concurrent editors, or when merge
+conflicts recur in one file. Not for a solo change.
+
+### The shapes that serialize concurrent editors
+
+Each row is an observed collision class; the incidents are in the forge ledger, not here.
+
+| Shape | Why it serializes | The move |
+|---|---|---|
+| A function long enough to hold unrelated concerns | every task "in that area" opens that one file | extract the seam BEFORE fanning out; the extraction is capacity |
+| One struct that many features extend | two editors adding members collide in one hunk region | split by lifecycle, or serialize those tasks and say so |
+| A hand-maintained mirror of a list that lives elsewhere | conflict AND drift, from the same cause | derive it from the data; if you cannot, add a check that fails on drift |
+| One global snapshot / golden file | a mutex: any change to observable output rewrites it | keep the refactor diff byte-identical; when it must change, regenerate against an intermediate state so each commit's diff stays separable |
+| A privileged region (frozen, generated, append-only) with no staging area | the editor discovers the wall mid-task and cannot finish | pair every frozen region with a staging area the unprivileged actor may write; make the boundary a test, not a comment |
+| Append-only artifacts beside mutable code | an editor cut from an older base edits an already-sealed version | separate directories; "which one is current" is computed, never guessed |
+
+### Two rules for the briefs
+
+- **Declare intended loci per task; check the actual diff against them.** G4 already requires the
+  check — concurrency is what makes it load-bearing. Run it against the base the INTEGRATOR will
+  merge onto. The editor's own base diverges while the work runs.
+- **A blocked editor returns green-and-blocked — never red, never a fabricated value.**
+  Classify the blocker: *privilege* (only the integrator may do it) or *design* (as specified,
+  impossible). Both are results. A plausible number invented to finish is what this rule prevents.

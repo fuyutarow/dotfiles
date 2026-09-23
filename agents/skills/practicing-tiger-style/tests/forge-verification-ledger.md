@@ -1,5 +1,115 @@
 # Forge verification ledger — `practicing-tiger-style`
 
+## 2026-09-23 — architecture through implementation, v2609.1.0
+
+This section governs the current reforge. Earlier PASS records below are historical only.
+Incumbent: dotfiles commit `d2caa63142818c80c98c74c58827864a34c2ecb1`.
+Editor: root Codex session. Read-only reviewers use separate Terra contexts.
+
+### Signed function map and file treatments
+
+```text
+workload + current/proposed design
+  → select consequential architecture constraints
+  → one Tiger conformance ledger with design-to-check links
+  → implementation handoff or scoped review findings
+```
+
+The editor owns this map, wording, fixes, and acceptance.
+Delegated review cannot edit files, choose architecture, or certify empirical effects.
+
+| File | Treatment / sole responsibility |
+|---|---|
+| SKILL.md | Rewrite around entry points and T0–T4; keep phase-sensitive sibling cuts |
+| architecture-decisions.md | New T0 decision map and constructed paid-job example |
+| ledger-and-calibration.md | T1–T4; link design IDs, separate planned checks from observed results |
+| source-ledger.md | SoK identity/commit, source grades, preserved official-rule output contract |
+| evidence-and-limits.md | Bounded evidence interpretation; retire unverified adjacent LLM claims as active premises |
+| rd-and-language-translation.md | Stage transition and owner handoff; remove duplicated language/tool guidance |
+| execution-model.md | Solo design and acceptance, optional read-only fact returns |
+| agents/openai.yaml | Architecture-and-code display description and default prompt |
+| tests/triggers.md | Current routing and behavioral regression cases |
+
+### Calibration and provenance
+
+| Dimension | Source audience | Agent consumer / corrective rule |
+|---|---|---|
+| Failure direction | Systems engineers must anticipate capacity and failure paths | Same omission: inspect whole-path state, resources, and recovery before assertions |
+| Overcorrection | Database choices fit a particular workload | Inverse risk: avoid transplanting single-threading or startup allocation universally |
+| Timing | Design choices precede code | Permit estimated T0, while keeping implementation checks unrun |
+| Acceptance | System behavior needs evidence | Distinguish DESIGN-READY from PASS; command text is not an observation |
+
+Scientific synthesis stays in the SoK identified in `references/source-ledger.md`.
+T0 and its schema are skill-supplied operationalization, not newly discovered scientific results.
+This reforge uses the existing corpus; it performs no new external-primary-source survey.
+The earlier corpus's draft status and reading-depth claims are not promoted to independent certification.
+
+### Incumbent comparison — textual inspection
+
+| Cases | Incumbent affordance | Revised affordance |
+|---|---|---|
+| B1 | Consequence gate precedes obligations; no explicit pre-code architecture output | T0 accepts estimates; DESIGN-READY carries planned checks |
+| B2 | Per-row bounds, no explicit cross-component retry trace | Follow admission through recovery; account for displaced queues |
+| B3 | Source-local portability guard | Explicit distinction between ordered state updates and concurrent I/O |
+| B5 | Generic duplicate-apply negatives | Concrete external-effect boundary beyond lease fencing |
+| B6 | Inline eight-column source claim gate | Same gate in a mandatory-on-claim reference |
+| B9 | Command/result language could be read as accepting a runnable command alone | Explicit check status; command alone remains planned |
+
+These are differences in instructions, not measured improvement in model performance.
+
+### Findings and current verification
+
+| Check / finding | Result | Evidence or clearing condition |
+|---|---|---|
+| Target floor | PASS | `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/practicing-tiger-style`; exit 0, no warnings |
+| F1 prose debt | CLEARED | Baseline: 23 long core sentences and 40 in references; current floor emits none |
+| Collection F4 | PASS with unrelated warnings | `mise run lint:skills-floor`; exit 0, 71 skills / 65,130 listing chars, 111 warnings across 59 other skills |
+| Whitespace | PASS | `git diff --check`; exit 0 |
+| Reviewer: acceptance ledger retained old epoch | FIXED | This section supersedes historical acceptance; new trigger and behavior cases recorded separately |
+| Reviewer: EOF blank lines | FIXED | Whitespace check above |
+| Initial architecture review | SCOPE-LIMITED PASS | `/root/tiger_review`: T0, portability, source gate, planned-check boundaries inspected |
+| Final routing/content review | SCOPE-LIMITED PASS | `/root/tiger_review`: F1–F8, N1–N9, C1–C5 agree after N1/N9 repair; final F1/F6/C1 rechecked |
+| Fresh-context exercise | SCOPE-LIMITED PASS | `/root/tiger_forward`; B1/B2/B3/B5/B9 observed in one combined design exercise |
+| Installed file links | PASS | `mise run link:skills`; Claude and Codex skill paths resolve to this directory |
+| Live installed trigger benchmark | NOT-RUN | Desk-check and explicit invocation do not establish automatic trigger reliability |
+
+The old source-interface live tests below do not certify the moved interface on this version.
+No causal effectiveness or exhaustive architecture-coverage claim is made.
+
+### Fresh-context design exercise — raw prompt and observations
+
+The worker read the current skill and relevant references, but not the tests or this ledger.
+It had no prior conversation and performed no file writes or external research.
+
+> Tiger Styleで永続課金job queueのアーキテクチャを設計して。コードはまだなく、ピーク到着率も未計測。
+> workerが外部providerへ課金を送った直後に落ちることがある。providerは冪等キーを保証しない。
+> 並行I/Oで速くしたい。各workerのqueueは100件上限だが、失敗分はAPI側の無制限listに戻している。
+> 今わかる範囲で設計と検証の次の一手まで出して。
+
+The returned artifact contained a durable job owner, lease generation, provider adapter, and reconciliation path.
+Its five obligation rows were all marked `planned`.
+It separated state-update ordering from bounded parallel provider I/O.
+
+Selected verbatim answer excerpts:
+
+> 失敗を API の無制限 list に戻す現状は、上限を上流へ移しただけでメモリ・DB・再試行嵐を無制限化する。
+
+> provider に冪等キーがない以上、この状態を自動再送してはならない。再送は二重課金になり得る。
+
+> 現段階の判定は **DESIGN-READY** であり、実装・信頼性・容量の **PASS ではありません**。
+
+This single exercise supports the intended output distinctions only.
+It does not verify a payment implementation, compare against an executed baseline, or test B6's source interface.
+B6 remains a textual contract check on this version, not a new live-interface PASS.
+
+### Accepted candidate
+
+Editor accepted the bounded skill revision after the final read-only review.
+Current core SHA-256: `4c3a5261daf9bc4fc7574ca8e1035d143a0342aaba223132a7a3586eaf2d9c62`.
+T0 reference SHA-256: `47da78b857981ac459bdb544be19b8b1d5376dfefa6d12e9fcec0ab0f0c8a376`.
+The old F1 prose-debt waivers are retired for this candidate: target floor has no warnings.
+An installed path check is not evidence of fresh-session automatic invocation.
+
 ## 2026-09-10 — reciprocal configuration seam / PROSE-DEBT waiver
 
 One routing row names the seam between risk-ledger decisions and configuration representation.

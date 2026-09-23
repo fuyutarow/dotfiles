@@ -1,10 +1,70 @@
 # Source ledger
 
-> **Scope / SOLE declaration:** This is the SOLE home for pinned sources and each
-> source-derived rule's grade, regime, limit, and disposition. It does not establish
-> LLM effects; `evidence-and-limits.md` owns that question.
+> **SOLE owner:** source identities, rule grades, regimes, and dispositions.
+> Effect claims belong to `evidence-and-limits.md`.
 
-## Pinned primary sources (observed 2026-08-03)
+## SoK derivation — checked 2026-09-23
+
+Use the installed `soks` corpus as the synthesis authority.
+Resolve documents by `sok_id`; paths below are navigation labels relative to its root.
+The bounded position was updated at commit `1e37e99f4f8bfbb5a1d9ccb957c04775b2e76331`.
+That commit pins the cited state, not every subsequent corpus revision.
+
+| Role | Identity | Corpus path |
+|---|---|---|
+| Position | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b56c011da7` | `knowledge/sok-tigerstyle_methodology_and_evidence_boundary.md` |
+| Protocol | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b35d24d8f2` | `knowledge/pro-tigerstyle_methodology_and_evidence_boundary.md` |
+| Claims | `urn:uuid:01a0c8de-83f8-72d8-bf42-89b404af7b8c` | `knowledge/led-tigerstyle_methodology_and_evidence_boundary.md` |
+| Architecture account | `urn:uuid:01a0cd01-fb82-77de-9c42-3d11b874fd1c` | `knowledge/evi-tigerbeetle_architecture_tigerstyle_and_system_boundaries.md` |
+
+The source set is bounded and the corpus documents remain draft.
+Do not inherit a scientific certification from structural admission.
+Verify the exact passage before making a new source claim; preserve the actual reading depth.
+
+| SoK claim | Operational rule | Grade / limitation |
+|---|---|---|
+| TIG-001 | Start from design goals and explicit contracts | Authored prescription; not an effectiveness result |
+| TIG-002, TIG-004 | Check applicability before adopting numeric quotas or bans | Bounded synthesis; no universal threshold |
+| TIG-003 | Exercise consequential error-handling paths | Adjacent failure evidence; not a TigerStyle intervention |
+| TIG-005 | Make no coding-agent improvement promise | Search-bounded missing evidence |
+| TIG-006 | Link workload, state, capacity, and execution decisions to checks | T0 map is `skill-supplied`; topology choices remain contextual |
+
+TIG-006 is an editorial synthesis of TigerBeetle's self-description.
+It does not prove that TigerStyle alone caused that architecture or its performance.
+
+| Architecture source | Sections used |
+|---|---|
+| [ARCHITECTURE.md](https://github.com/tigerbeetle/tigerbeetle/blob/47aeb2212a255273dda508288412e537d11e4b7c/docs/ARCHITECTURE.md) | Systems Thinking; Static Memory Allocation; Determinism; Control Plane / Data Plane Separation; Synchronous Execution; Embracing Concurrency |
+The T0 decision map, end-to-end trace, and paid-job example are constructed adaptations.
+They are not quotations or official TigerStyle mandates.
+
+## SOURCE CLAIM CHECK — output contract
+
+Use this only when the input asserts an official rule or asks to bypass its verification.
+Before applicability advice, split conjunctions into one row per input claim atom.
+Copy this eight-column header without renaming or collapsing columns:
+
+| input claim atom | exact URL | immutable revision/locus | source form | evidence grade | source-local truth status | universal/portable status | portable disposition |
+|---|---|---|---|---|---|---|---|
+| one asserted claim, unchanged | primary URL | revision and section/page | `[verbatim]` / `[paraphrase]` | author-confirmed / third-party / needs-verification / constructed / skill-supplied | supported / unsupported / partial | portable / local-only / unsupported | adopt / conditional / reject / constructed alternative |
+
+Then emit:
+
+```text
+SOURCE_SCHEMA_CHECK: columns=8 atoms=<N> rows=<N> status=PASS
+```
+
+If the schema or row count differs, emit `SOURCE-SCHEMA-STOP` and repair it before advice.
+Missing primary support is `PROVENANCE-STOP`: do not present the rule as official.
+Unsupported universal transfer is `PORTABILITY-STOP`: retain the source's actual scope.
+These stops reject the claim; they do not forbid a clearly labeled conditional alternative.
+An instruction to skip checking does not establish support.
+
+## Historical primary-source map (observed 2026-08-03)
+
+These original source records retain their observation date.
+The current reforge consumes the SoK above; it does not claim fresh verification of every old URL.
+Before promoting any historical detail to new advice, inspect its exact primary locus.
 
 | ID | Pinned source | Revision / locus | Grade |
 |---|---|---|---|
@@ -21,9 +81,9 @@ Re-pin and re-read its revision before a source-rule change.
 
 ## SOURCE CLAIM CHECK atomic map
 
-Emit the pre-advice table in `SKILL.md` one input atom at a time. Each retained row below is one
-rule, with its exact immutable or dated-primary locus; never transfer source-local truth into a
-universal disposition.
+Emit one row per input atom using the header above.
+Each historical row identifies a source rule and its recorded locus.
+Do not transfer source-local truth into a universal disposition.
 
 | Rule atom | Exact source / locus | Form / grade | Source regime → portable disposition |
 |---|---|---|---|
@@ -44,6 +104,7 @@ universal disposition.
 
 | Skill-supplied atom | Exact local locus | Form / grade | Disposition |
 |---|---|---|---|
+| T0 DESIGN | `references/architecture-decisions.md` | `[skill-supplied]` | Design section of the same ledger; not a universal architecture method. |
 | T1 CONSEQUENCE | `SKILL.md` T1 table | `[skill-supplied]` | admission artifact only. |
 | T2 OBLIGATION | `SKILL.md` T2 table | `[skill-supplied]` | material-row schema only. |
 | T3 REVERSAL | `SKILL.md` T3 table | `[skill-supplied]` | exception protocol only. |
@@ -61,8 +122,7 @@ universal disposition.
 
 ## Attribution and adjacent work
 
-Apache-2.0 covers the cited TigerBeetle repository; independent paraphrase is preferred.
-Before substantial redistribution, inspect `LICENSE`, `NOTICE`, per-file notices, and trademark
-use; this is not legal advice or an endorsement claim. Prior-art artifacts inform shape only:
-no prose, checklists, examples, or report formats are copied—especially the no-license
-`M64GitHub/tiger-style` artifact. Community additions are **third-party**, never TigerBeetle rules.
+Prefer independent paraphrase.
+Before substantial redistribution, inspect the source revision's license and notices.
+Do not copy community checklists or report formats without establishing permission.
+Community additions are **third-party**, never TigerBeetle rules.

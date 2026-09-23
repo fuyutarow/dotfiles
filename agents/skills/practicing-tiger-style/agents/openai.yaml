@@ -1,4 +1,4 @@
 interface:
   display_name: "Practicing Tiger Style"
-  short_description: "Risk-calibrated Tiger Style for code"
-  default_prompt: "Use $practicing-tiger-style to harden this code with risk-calibrated bounds, contracts, and negative cases."
+  short_description: "Tiger Style for architecture and code"
+  default_prompt: "Use $practicing-tiger-style to connect workload, state ownership, and resource limits to architecture decisions, code contracts, and checks."

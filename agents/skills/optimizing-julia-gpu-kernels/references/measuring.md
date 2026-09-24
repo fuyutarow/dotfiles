@@ -243,3 +243,18 @@ NVTX.@annotate function foo() ... end
 
 Ranges appear as labeled, filterable brackets in the Nsight Systems timeline and as a
 filterable region in `CUDA.@profile`'s own `.nvtx` trace field (§5).
+
+## §11 A bottleneck claim names a counted quantity
+
+A diagnosis by analogy to an earlier incident is not a diagnosis. Each claim needs its count:
+
+| Claim | Required count | Holds only if |
+|---|---|---|
+| "launch-overhead-bound" | launches per batch from `CUDA.@profile trace=true`, times the measured µs per empty launch | launches × µs ≥ half the measured time |
+| "memory-bound" | bytes read plus written per batch (GKB) | bytes ÷ peak B/s ≥ half the measured time, or the §8 roofline says so |
+| "compute-bound" | ops per batch (GKB) | ops ÷ peak ops/s ≥ half the measured time |
+| "host-bound" / "sync-bound" | host-side time between device calls, and device→host copies per batch | host time ≥ half the wall time |
+| none of the above holds | — | the stage is far from every bound: re-read its algorithm against GKB before tuning |
+
+Per-stage split: time each stage once under `CUDA.@sync` and print, per stage, measured time,
+its own GKB bound, and the ratio. Fix the stage with the largest ratio first.

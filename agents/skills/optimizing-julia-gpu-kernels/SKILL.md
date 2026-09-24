@@ -16,7 +16,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.1.0 (2026-09-12) — GK4 gains the reduced-precision `PRECISION CONTRACT`.
+> **Version**: v2609.2.0 (2026-09-24) — GKB work budget precedes GK0; bottleneck claims need counts.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -35,14 +35,16 @@ Re-check sooner when the target or toolchain differs.
 
 ## THE LAW
 
+> Derive the work budget on paper first (GKB); code far from its bound is wrong, not slow.
 > Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
 > synchronously (GK2), and checked against an oracle (GK3). Training paths also need an rrule
 > (GK3-AD). Reduced precision needs a complete representation-to-execution contract (GK4).
 
-## The gates — GK0–GK4, each with a checkable artifact
+## The gates — GKB, GK0–GK4, each with a checkable artifact
 
 | Gate | Rule | Artifact |
 |---|---|---|
+| **GKB WORK BUDGET** (§0) | Before code, a target, or a dispatch: count ops and bytes per output unit for the lowest-complexity algorithm; derive the device bound. | A `WORK BUDGET` block in the source or ticket, plus a test asserting device time ≤ a stated multiple of the bound. |
 | **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Match the dispatch table before any `@cuda` or `@kernel`; a matching primitive stops the hand kernel. | One source comment names the checked and rejected alternative. |
 | **GK1 DEVICE LEGALITY** (`writing-kernels.md`) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures. | Kernel compiles; `@device_code_warntype` is clean on hot paths. |
 | **GK2 MEASUREMENT** (`measuring.md`) | After P7, warm once and time under `CUDA.@sync`; profiles decide the limiting regime. | Runner verdict plus profile and the metric used by the claim. |
@@ -78,6 +80,28 @@ The full near-miss set is `tests/trigger-set.md` — desk-check it after any des
 
 ---
 
+## §0 GKB — the work budget (before GK0, before any target number)
+
+Write this block before choosing primitives, setting a speed target, or dispatching a GPU ticket.
+
+| Field | Content |
+|---|---|
+| Output unit | What one unit of useful work is: a token, a row, a cell. |
+| Dependency factoring | For each output, list the inputs it actually depends on. Compute once per distinct dependency tuple, not once per conceptual unit. Record the distinct-tuple count. |
+| Algorithm | The lowest-complexity formulation, e.g. an O(n) causal scan with a last-occurrence table, not an O(n²) pairwise mask. |
+| Ops / unit | Integer or FLOP count per output unit for that algorithm. |
+| Bytes / unit | Global-memory reads plus writes per output unit at the narrowest exact element type. |
+| Device bound | max(ops ÷ peak ops/s, bytes ÷ peak B/s), per unit and per batch. Peaks come from the device (`measuring.md` §8). |
+| Gate | A test asserting measured device time per batch ≤ k × bound. State k; add launch cost as launches × measured µs per launch. |
+
+| If… | Then |
+|---|---|
+| A speed target is written without this block | Reject the target; derive the block first. |
+| A target is a multiple of the previous implementation | Replace it with a fraction of the bound. |
+| Measured time is more than 10× the bound | The implementation is not accepted; find the stage furthest from its own bound before any other work. |
+| A reference model is to be benchmarked | Derive its bound the same way first; measure only if the two bounds do not already answer the question. |
+| A shared-library function is published on a device path | Its docstring states ops and bytes per unit, and its tests include the budget assertion. |
+
 ## §1 GK0 — the deny-gate dispatch table (read FIRST)
 
 Vendor primitives avoid the most expensive unnecessary kernel work. cuBLAS GEMM is tuned per
@@ -101,9 +125,20 @@ GK0 can pass for these shapes:
 - fused operations that broadcast cannot express, such as a data-dependent scan.
 - stencils with real shared-memory reuse.
 - custom sampling or argmin-with-payload logic.
-- many small calls that a profile shows are launch-overhead-bound.
+- many small calls whose counted launches explain the time (`measuring.md` §11).
 
-For the last case, try CUDA Graph capture before hand fusion `[dated:2026-07]`. One measured
+**COMPLEXITY-PRESERVING**: a table row passes GK0 only if its formulation keeps the GKB
+algorithm's ops and bytes. Reject a primitive or broadcast that raises them:
+
+| Formulation | Verdict |
+|---|---|
+| Pairwise `[n, n, …]` mask plus `maximum(dims=…)` where an O(n) scan answers the question | Fails GK0. Use `accumulate` with a custom associative op, or a scan kernel. |
+| Any intermediate larger than inputs plus outputs, materialized by a broadcast | Fails GK0 unless GKB counted its bytes and the bound still holds. |
+| One call per conceptual unit when outputs depend on fewer distinct tuples | Fails GKB. Deduplicate by tuple, then gather. |
+| Named broadcast temporaries in a hot path | Fails fusion (`host-performance.md` §2). Write one dotted statement or one kernel. |
+| `Int` (Int64) intermediates for values that fit in 8 or 16 bits | Fails GKB bytes. Use the narrowest exact type. |
+
+For the last case in the list above, try CUDA Graph capture before hand fusion `[dated:2026-07]`. One measured
 precedent used 60 launches per call at a 30.9 µs mean. A graph removed launches without kernel
 rewrites. Graphs require stable shapes and preallocated addresses.
 
@@ -147,6 +182,8 @@ The five classes, each with its literal error string, live in `references/writin
 
 ## §9 Checklist — run before claiming a kernel is done
 
+- [ ] GKB `WORK BUDGET` block exists; the budget test (device time ≤ k × bound) passes.
+- [ ] Every bottleneck claim names its counted quantity (`references/measuring.md` §11).
 - [ ] GK0 comment names the checked and rejected vendor/broadcast alternative.
 - [ ] Kernel ends in `return nothing`; arguments are isbits; no allocation occurs inside.
 - [ ] Index formula is 1-based; bounds guard precedes access; block count uses `cld`.

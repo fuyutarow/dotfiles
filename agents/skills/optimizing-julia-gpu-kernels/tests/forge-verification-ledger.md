@@ -201,3 +201,37 @@ reforge; that queue was missed. This edit pays down SKILL.md debt from 25 to 0 l
 41 to 0 version-header lines beyond the limit, and 3 to 0 oversized cells. The new reference adds
 0 long prose sentences. Untouched legacy references still contain 208 long sentences; queue them
 for a dedicated prose reforge before another feature addition. This waiver does not excuse new debt.
+
+## Reforge v2609.2.0 (2026-09-24) — firedancer FireOps work-budget incident
+
+**Incident.** A superposed-rounds learner's GPU path passed every correctness gate (prediction
+equality, CPU/GPU bit identity, value bound, causality) while running about four orders of
+magnitude below its derived device bound. Paper count: ≈4e4 integer ops and 6–8 KB per token on an
+RTX 3060 (360 GB/s) → ceiling ≈4.5e7 tokens/s; measured 6.8e3 (T-GPU3, finding2609_2420xz798).
+Three consecutive tickets optimized symptoms. One of them fused launches 130× with no speedup,
+because the cause had been named by analogy to an old launch-overhead record.
+
+**Root causes → rules.**
+
+| Cause | Rule |
+|---|---|
+| No ops/bytes budget before code or dispatch; targets anchored to the slow predecessor (10× CPU, then ≥1e4 tokens/s) | GKB §0 block and its "if… then" table |
+| GK0's broadcast preference produced an O(L²) pairwise mask with Int64 `[L,L,B,I]` intermediates where an O(L) last-occurrence scan answers the question (`FireOps.causal_latest`, firedancer `packages/FireOps.jl/src/FireOps.jl:704-764`) | COMPLEXITY-PRESERVING predicate in §1 |
+| The conceptual unit (1,312 instances) was the computation unit; the match depends on ~72 distinct (Q, K, δ, ε) tuples | GKB "dependency factoring" row |
+| Named broadcast temporaries, Int64 small indices, `similar` inside the chunk loop | existing `host-performance.md` §2, plus rows in the §1 predicate table |
+| "launch-overhead-bound" asserted without counting launches | `measuring.md` §11 |
+| No cost assertion in tests; shared-library function published without a complexity contract | GKB gate artifact and the shared-library row |
+
+**Recurrence during this reforge.** The successor ticket (T-CANON, finding2609_2421sw21h) reached
+16.7k tokens/s and failed its budget gate at 97 ms per 1,600-token batch. Its report again called
+the cause "kernel-launch count" without a launch count: the 16-instance round-1 accumulate took
+55 ms. §11 exists for exactly that sentence.
+
+**Calibration.** The model and the source fail in the same direction: they accept green
+correctness tests as completion and read relative speedups ("14× faster") as progress. The budget
+therefore sits in THE LAW and as the first gate, ahead of GK0.
+
+**Verification.** Editor solo; a rule-level reforge of an audited skill, below the fleet threshold
+(`forging-skills` references/verifying.md §7). Floor: see the skill-check receipt in the commit
+message. No GPU run was performed for this documentation change. The rules come from the incident's
+arithmetic and code, not from a benchmark of the rules themselves.

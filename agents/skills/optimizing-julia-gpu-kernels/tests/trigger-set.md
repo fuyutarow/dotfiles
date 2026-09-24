@@ -12,6 +12,8 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 |---|---|
 | 「CUDA.jl でカーネル書いて速くしたい」 | core territory — GK0 walk first, then writing-kernels.md |
 | "my `@cuda` kernel is slower than the broadcast version" | GK2 measurement + GK0 re-check (broadcast may simply be right) |
+| 「CuArray の実装のスループットが遅い。なぜ？ 理論上限と比べて」 | GKB §0 work budget first, then measuring.md §11 counted diagnosis |
+| "set a tokens/s target for this CUDA.jl GPU ticket" | GKB — a target is a fraction of the derived bound, never a multiple of the previous version |
 | 「occupancy を上げたい / threads と blocks どう決める?」 | launch-config (occupancy API, not hand-picked numbers) |
 | "shared memory でタイルすれば速くなる?" | memory-and-warps.md + GK0 (GEMM-shaped → cuBLAS, not hand tiling) |
 | `InvalidIRError: unsupported dynamic function invocation` の意味 | §2 error classes / debugging.md bottom-up decode |

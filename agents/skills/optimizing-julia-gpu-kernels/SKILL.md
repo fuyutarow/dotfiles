@@ -201,3 +201,5 @@ The five classes, each with its literal error string, live in `references/writin
       (CAPTURE-PINS-ADDRESSES, §1) — a state-separation test AND a permanent in-body
       consistency assert both pass (`references/debugging.md` §11).
 - [ ] A GPU-path change gets a real GPU parity run; CPU-only green does not clear it.
+- [ ] Device-specific methods dispatch on `CUDA.AnyCuArray`, not `CuArray`; a `@view` or reshape of
+      a `CuArray` otherwise falls to the CPU method. Tests cover a partial (tail) batch as well.

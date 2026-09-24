@@ -203,3 +203,7 @@ The five classes, each with its literal error string, live in `references/writin
 - [ ] A GPU-path change gets a real GPU parity run; CPU-only green does not clear it.
 - [ ] Device-specific methods dispatch on `CUDA.AnyCuArray`, not `CuArray`; a `@view` or reshape of
       a `CuArray` otherwise falls to the CPU method. Tests cover a partial (tail) batch as well.
+- [ ] Graph-captured path: `CUDA.@allocated(step(...)) == 0` is asserted before capture. One
+      leftover allocation (a range slice `a[i:i]` instead of `@view`, a cuBLAS wrapper's per-call
+      `CuRef`, a reduction to a scalar) records an unfreed alloc node, and launch then fails
+      depending on pool state. Find it by bisecting unbroken prefixes, not per-function calls.

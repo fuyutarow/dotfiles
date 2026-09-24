@@ -259,3 +259,7 @@ A diagnosis by analogy to an earlier incident is not a diagnosis. Each claim nee
 
 Per-stage split: time each stage once under `CUDA.@sync` and print, per stage, measured time,
 its own GKB bound, and the ratio. Fix the stage with the largest ratio first.
+
+| Observation | Rule |
+|---|---|
+| The first call right after a `CUDA.@profile` block reads far slower (observed 34.2 ms, then 0.52–0.75 ms for the same call) | Never time a call next to a profile block. Profile and time in separate phases; report the minimum of ≥5 synchronized calls. |

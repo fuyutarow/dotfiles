@@ -111,6 +111,7 @@ table. If a row matches, use it and stop.
 | Shape of the computation | Use — NOT a hand kernel |
 |---|---|
 | Dense matmul / GEMM | `A * B`, `mul!(C, A, B)` → cuBLAS; select supported tensor-core precision through the library path |
+| Exact integer GEMM, Int8 × Int8 → Int32 `[dated:2026-09]` | `mul!` and a `gemmEx!('N','N')` on [rows, K] Int8 return `CUBLAS_STATUS_NOT_SUPPORTED`. Store A as [K, rows] and call `CUBLAS.gemmEx!('T', 'N', Int32(1), A, B, Int32(0), C)`; this reached the INT8 tensor-core path on sm_86 (CUDA.jl 6, cuBLAS 13.8). A generic fallback runs ~13× slower. |
 | Repeated small GEMM `[dated:2026-07]` | Profile `mul!`'s per-call `CuRef(α,β)` upload; use persistent refs with the cuBLAS wrapper when it dominates |
 | Linear solve / factorization (`\`, `qr`, `svd`, `eigen`, `lu`) | LinearAlgebra verbs on CuArray → cuSOLVER |
 | FFT | `fft`/`ifft`/`plan_fft` (AbstractFFTs) → cuFFT |

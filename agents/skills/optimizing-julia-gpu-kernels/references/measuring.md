@@ -250,7 +250,8 @@ A diagnosis by analogy to an earlier incident is not a diagnosis. Each claim nee
 
 | Claim | Required count | Holds only if |
 |---|---|---|
-| "launch-overhead-bound" | launches per batch from `CUDA.@profile trace=true`, times the measured µs per empty launch | launches × µs ≥ half the measured time |
+| "launch-overhead-bound" | device rows per batch from `CUDA.@profile trace=true`, times the HOST wall µs per launch (enqueue plus CUDA.jl bookkeeping; measure it with 200 empty launches under `CUDA.@sync`, never use the device-busy µs) | rows × host µs ≥ half the measured time |
+| "host-API-bound" | host rows per device row in the same trace | the host rows dominate the trace even where rows × µs falls short; the fix is fewer calls (fusion, graph capture), not faster kernels |
 | "memory-bound" | bytes read plus written per batch (GKB) | bytes ÷ peak B/s ≥ half the measured time, or the §8 roofline says so |
 | "compute-bound" | ops per batch (GKB) | ops ÷ peak ops/s ≥ half the measured time |
 | "host-bound" / "sync-bound" | host-side time between device calls, and device→host copies per batch | host time ≥ half the wall time |

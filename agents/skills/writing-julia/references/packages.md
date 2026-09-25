@@ -32,9 +32,9 @@ These references own backend choices; declare selected dependencies through `pac
 - `ExplicitImports` — strict namespace-hygiene suite. This skill runs every check with internal
   imports/accesses enabled for scrutiny and no ignores (architecture.md §10.5.1).
 - `Chairmarks` — fast repeated benchmarking (`@b`); `BenchmarkTools` only for `BenchmarkGroup`.
-- `Runic` — code formatter. Zero-configuration by design (formatting is fixed, not tunable),
-  which is exactly why it is the SciML-standard formatter — uniformity across a codebase over
-  per-author preference. Run it on any package you produce rather than hand-aligning code.
+- `Runic` — code formatter. Zero-configuration by design (formatting is fixed, not tunable).
+  Run it on any package you produce; review BlueStyle naming separately under architecture.md
+  §10.1.1 because formatting does not rename identifiers.
 
 ## Data structures & parallelism (toolchain.md §2.9)
 - `StaticArrays` — small fixed-size `SVector`/`SMatrix` (state vectors, rotations).

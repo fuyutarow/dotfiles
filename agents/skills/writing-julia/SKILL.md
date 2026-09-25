@@ -1,8 +1,8 @@
 ---
 name: writing-julia
 description: >-
-  Write modern Julia for research packages. Use for Julia code/runs, experiments, AD,
-  hot paths, layout/naming, Pkg metadata, deps/compat/sources/workspaces,
+  Write Julia for research packages. Use for Julia code/runs, experiments, AD,
+  hot paths, BlueStyle names and Runic formatting, layout, Pkg metadata, deps/compat/sources/workspaces,
   API/release, TTFX, AOT, or `-O`/`--optimize`. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
   type stability/型安定, DI, JET/Aqua, DrWatson, JSON/TOML, include order, submodules,
   export禁止, no exports, public API, 名前空間, and `.jl` suffix. ZERO-EXPORTS is mandatory:
@@ -17,7 +17,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.6.0 (2026-09-23) — runtime upgrade boundaries, explicit numeric syntax, and scoped diagnostics.
+> **Version**: v2609.6.1 (2026-09-24) — BlueStyle naming with Runic formatting.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -96,7 +96,7 @@ reference file that matches the task.
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
 | `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
 | `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT, output, REPL | runs and deployment |
-| `references/architecture.md` | topology, ZERO-EXPORTS, explicit imports, traits, API, hygiene | implementation structure |
+| `references/architecture.md` | topology, naming, ZERO-EXPORTS, explicit imports, traits, API, hygiene | implementation structure or naming |
 
 ---
 

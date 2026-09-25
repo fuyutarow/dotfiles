@@ -29,6 +29,8 @@ asks — Rust/TS/C++ — which test nothing). Expanded v2609.1.0 with JG6 packag
 
 | Ask | Why |
 |---|---|
+| 「Julia の関数名を BlueStyle にして、整形は Runic のままにしたい」 | §10.1.1 separates naming from formatting; §10.5 still forbids exports |
+| 「Julia の内部ファイル名はどう付ける?」 | §10.1.1 role-file house convention; PK1 keeps the package entry point |
 | 「Julia パッケージの `include` の順番でエラーが出る / UndefVarError」 | §10.1 boss-file include order |
 | 「struct A が B を参照して B も A を参照する — 循環依存どう解く?」 | §10.2 hoist abstract types to interfaces.jl |
 | 「パッケージが大きくなってきた。submodule に分けるべき?」 | §10.3 ownership/lifecycle lookup |
@@ -113,6 +115,7 @@ The expected decisions are evaluated against `references/nn-stack.md`.
 | 「JuMP と Gurobi のライセンス形態は?」 | ecosystem question, no code to write — plain answer |
 | 「Julia という言語の歴史と設計思想を教えて」 | encyclopedia ask, no code — plain answer |
 | 「Julia の `export` / `public` の歴史と仕様だけ説明して」 | descriptive language fact, no artifact decision — plain answer |
+| 「Runic と BlueStyle の歴史を教えて」 | descriptive comparison, no code or package decision — plain answer |
 | 「この Julia リポジトリを git subtree で分割したい」 | VCS surgery, not Julia structure — plain task (refactoring-code if code moves) |
 | 「Project.toml を署名・canonicalize する仕様を決めたい」 | trust/integrity contract → `governing-configuration-systems`; Julia parsing may co-fire |
 | 「GitHub 上の repo 名だけ変更したい。package metadata は変えない」 | VCS/hosting operation; JG6 fires only if package identity or registered URL changes |

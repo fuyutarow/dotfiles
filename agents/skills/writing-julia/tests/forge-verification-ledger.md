@@ -515,3 +515,47 @@ and 64,707 listing characters. The review is scoped to the changed decision surf
 **PROSE-DEBT waiver [dated:2026-09-23].** Target floor reports 157 long reference sentences and
 10 long core sentences; the prior revision reported 153 and 10. Remaining debt stays in the
 whole-skill prose-reforge queue. These checks validate document structure, not technical truth.
+
+## 2026-09-24 — v2609.6.1: BlueStyle naming, Runic formatting
+
+**Input and correction.** The supplied AI search summary conflated function and file names,
+claimed Julia's official guide favors squashed function names, and treated BlueStyle and Runic as
+exclusive choices. Current Julia docs recommend snake case for package functions and call Base's
+squashed names exceptions. Runic describes itself as a zero-configuration formatter; its
+formatting specification contains no identifier renaming. BlueStyle recommends one or two
+lowercase words separated by underscores for functions, but also recommends exports, which
+conflicts with this skill's ZERO-EXPORTS policy.
+
+**Function map.** New Julia code or package file → choose names and format → named source files
+plus a Runic check. `architecture.md` owns naming and file topology; `packages.md` owns the
+formatter catalog; PK1 retains the package entry point. No new skill or formatter migration.
+
+| Retained rule | Grade and boundary |
+|---|---|
+| New function names use short lowercase snake case | author-confirmed BlueStyle; also current Julia official style guide |
+| New variable names use lowercase snake case, except math notation | skill-supplied house convention |
+| Mutating functions end in `!`; types/modules use CamelCase; constants use uppercase | author-confirmed Julia official style guide; consistent with BlueStyle |
+| Internal role files use lowercase snake case | skill-supplied house convention; BlueStyle does not state a general file-naming rule |
+| Runic formats, names receive separate review | author-confirmed Runic scope plus skill-supplied workflow |
+| Existing public names require a migration; ZERO-EXPORTS remains | inherited house contract, not attributed to BlueStyle |
+
+Primary sources checked 2026-09-24:
+- https://docs.julialang.org/en/v1/manual/style-guide/
+- https://github.com/JuliaDiff/BlueStyle
+- https://github.com/fredrikekre/Runic.jl
+
+**Calibration and scope.** The search summary's dominant failure was a false either/or between
+formatting and naming. The agent's likely failure is to replace the formatter or rename an
+existing API to satisfy the user's naming preference. The new decision table separates these
+operations and limits naming guidance to new authored code. It deliberately does not import
+BlueStyle's export or import policy, or claim BlueStyle mandates file spelling.
+
+**Verification.** Two new fire cases and one near-miss case were added to the trigger set.
+Target skill floor, collection floor, link check, and diff check were run after the edit;
+their command receipts are reported in the task response. Existing prose-debt waiver remains
+scoped to older text and this change adds no warning-class debt.
+
+**2026-09-25 commit cleanup.** The description was shortened from a failing
+1,028-character validation to the accepted cap while keeping both BlueStyle and
+Runic trigger terms. `quick_validate.py` now passes. The existing 157-reference /
+10-core prose-debt waiver is unchanged; no Julia runtime claim was added.

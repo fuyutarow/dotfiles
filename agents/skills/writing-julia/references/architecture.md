@@ -48,6 +48,25 @@ public Solver, solve               # public API; ZERO EXPORTS (§10.5)
 end
 ```
 
+### §10.1.1 Naming and formatting are separate decisions
+
+For new authored code, use BlueStyle's naming preference. Keep Runic as the formatter
+(`packages.md`); it does not rename identifiers. Review names separately from `runic --check`.
+
+| Locus | Name to write | Check |
+|---|---|---|
+| New function | lowercase `snake_case`; prefer one or two clear words, e.g. `count_zeros` | inspect the authored names |
+| New variable | lowercase `snake_case`, except conventional math symbols | inspect the authored names |
+| Function that mutates an argument | the same name with `!`, e.g. `sort_values!` | confirm the mutation contract |
+| New type or module | `UpperCamelCase`, e.g. `MyPackage` | compare with the declared type/module |
+| New constant | `UPPER_SNAKE_CASE`, e.g. `DEFAULT_LIMIT` | inspect the binding |
+| Internal role file | lowercase `snake_case.jl`, e.g. `solver_utils.jl` | compare each `include` path |
+| Package entry point or test runner | keep `src/MyPackage.jl` and `test/runtests.jl` | match PK1 and Pkg's test entry point |
+
+The variable and role-file rules are house conventions, not claims from BlueStyle. Preserve established
+external API names and Base methods when extending them; renaming an existing public name needs
+an API migration under `packaging.md` §PK7. BlueStyle's export advice does not override §10.5.
+
 ## §10.2 Circular type dependency → hoist abstract types to an interface file loaded first
 
 `include` is linear, so "A needs B's type and B needs A's type" cannot be solved by reordering.

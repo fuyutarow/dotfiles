@@ -3,7 +3,8 @@ name: optimizing-julia-gpu-kernels
 description: >-
   Optimizes CUDA.jl kernels and CuArray paths; GK0 rejects
   cuBLAS/cuFFT/cuDNN/broadcast/mapreduce work. MANDATORY before @cuda, KernelAbstractions @kernel,
-  or Julia device storage/decode/performance edits. Use for GPU カーネル/最適化, occupancy,
+  or Julia device storage/decode/performance edits, and for any GPU-first model/learner step
+  (host round-trips, Array() pulls, GPU first). Use for GPU カーネル/最適化, occupancy,
   coalescing/shared memory/warps/atomics, InvalidIRError, profiling/roofline, tensor cores,
   reduced precision/低精度, FP8/6/4, MXFP/NVFP4, microscaling/マイクロスケーリング/ブロック浮動小数点,
   packed/パック済み storage, Microfloats/cuTile, GPU rrule, scan, or SSM/Mamba—only with a
@@ -16,7 +17,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.2.0 (2026-09-24) — GKB work budget precedes GK0; bottleneck claims need counts.
+> **Version**: v2609.3.0 (2026-09-25) — GKR: a GPU-first step keeps every stage on the device; no host-pull fixes.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -36,7 +37,8 @@ Re-check sooner when the target or toolchain differs.
 ## THE LAW
 
 > Derive the work budget on paper first (GKB); code far from its bound is wrong, not slow.
-> Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
+> A step declared GPU-first keeps every stage on the device (GKR); a GPU error is fixed on the
+> device, never by moving the work to the host. Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
 > synchronously (GK2), and checked against an oracle (GK3). Training paths also need an rrule
 > (GK3-AD). Reduced precision needs a complete representation-to-execution contract (GK4).
 
@@ -45,6 +47,7 @@ Re-check sooner when the target or toolchain differs.
 | Gate | Rule | Artifact |
 |---|---|---|
 | **GKB WORK BUDGET** (§0) | Before code, a target, or a dispatch: count ops and bytes per output unit for the lowest-complexity algorithm; derive the device bound. | A `WORK BUDGET` block in the source or ticket, plus a test asserting device time ≤ a stated multiple of the bound. |
+| **GKR DEVICE RESIDENCY** (§0b) | A GPU-first step (model forward/learn step, runner inner loop) gets a STAGE MAP before code; after warmup the step makes zero host↔device transfers. | `STAGE MAP` block in the ticket or source, plus a test that profiles one step and asserts 0 memcpy HtoD/DtoH. |
 | **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Match the dispatch table before any `@cuda` or `@kernel`; a matching primitive stops the hand kernel. | One source comment names the checked and rejected alternative. |
 | **GK1 DEVICE LEGALITY** (`writing-kernels.md`) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures. | Kernel compiles; `@device_code_warntype` is clean on hot paths. |
 | **GK2 MEASUREMENT** (`measuring.md`) | After P7, warm once and time under `CUDA.@sync`; profiles decide the limiting regime. | Runner verdict plus profile and the metric used by the claim. |
@@ -101,6 +104,28 @@ Write this block before choosing primitives, setting a speed target, or dispatch
 | Measured time is more than 10× the bound | The implementation is not accepted; find the stage furthest from its own bound before any other work. |
 | A reference model is to be benchmarked | Derive its bound the same way first; measure only if the two bounds do not already answer the question. |
 | A shared-library function is published on a device path | Its docstring states ops and bytes per unit, and its tests include the budget assertion. |
+
+## §0b GKR — device residency for a whole step
+
+This gate fires on the STEP, not on a kernel. A step can be written entirely in host-looking Julia
+with no `@cuda` in sight and still be required to run on the GPU. Write the stage map before code.
+
+| Field | Content |
+|---|---|
+| Stage | Each stage of one step, in order, e.g. ingress, decode, match, insert, write, egress, credit. |
+| Where | device or host. Every row reads `device` for a GPU-first step. |
+| Primitive | The vendor call, broadcast, or kernel that runs it (walk GK0 per stage). |
+| Launches | Launch count per step; batched primitives count once. |
+| Transfers | Host↔device copies per step; the target is 0 after warmup. |
+
+| If… | Then |
+|---|---|
+| A GPU error (scalar indexing, non-isbits argument, missing method) appears | Fix it on the device: a broadcast, a gather, a batched primitive, or a kernel. `Array(x)`, `collect(x)`, or a host copy to silence it is rejected. |
+| The first implementation is a CPU reference | Keep it as the test oracle only. The production step is generic `AbstractArray` code from the first commit, not a later "GPU port". |
+| A stage loops over positions or instances in host Julia (`for t in 1:L`, `Dict` updates) | Replace it with a batched array operation or one kernel over that axis. |
+| A stage decodes or scores every candidate when only the top-ranked ones are used | Restructure to the lowest-complexity form first (GKB): walk the ranking, or score all at once with one GEMM. |
+| A step's measured time is dominated by host stages | Report the per-stage table (share of time, device or host) before any tuning; the host stages are the fix. |
+| A known violation "CPU-only" survives more than one revision | It blocks the next functional revision until it is removed. |
 
 ## §1 GK0 — the deny-gate dispatch table (read FIRST)
 
@@ -184,6 +209,8 @@ The five classes, each with its literal error string, live in `references/writin
 ## §9 Checklist — run before claiming a kernel is done
 
 - [ ] GKB `WORK BUDGET` block exists; the budget test (device time ≤ k × bound) passes.
+- [ ] GPU-first step: `STAGE MAP` exists, every stage reads `device`, and a profiled step shows
+      0 host↔device memcpy after warmup (GKR, §0b). No `Array(...)` was used to silence a GPU error.
 - [ ] Every bottleneck claim names its counted quantity (`references/measuring.md` §11).
 - [ ] GK0 comment names the checked and rejected vendor/broadcast alternative.
 - [ ] Kernel ends in `return nothing`; arguments are isbits; no allocation occurs inside.

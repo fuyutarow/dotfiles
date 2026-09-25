@@ -26,6 +26,8 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「`cumsum` より速い scan カーネル自作できる?」 | GK0 tension: cumsum IS a Blelloch kernel — deny-gate walk |
 | 「`sm_90` 向けにコンパイルしたい / `cap=` が deprecated と言われた」 | api-changes.md (`arch=sm"90"`) |
 | "CUDA Graph でキャッシュしてる評価パスが、2回目以降ずっと同じ値を返す" / "graph capture のキャッシュが古い結果を返す" | CAPTURE-PINS-ADDRESSES (SKILL.md §1) — cache key missed a closed-over device array; debugging.md §11 for the state-separation + permanent-assert fix |
+| 「学習器の 1 step が GPU なのに SSM の 900 分の 1。GPU first で直して」(`@cuda` 無し、host の Julia に見える model step) | GKR §0b — step-level device residency; the STAGE MAP and 0-transfer test, even with no kernel in play |
+| "the GPU test fails with scalar indexing — can I just wrap it in Array()?" | GKR if/then — rejected; fix on the device |
 | 「CPU RAM が払底してGPUが空いている。CuArrayのKrylov基底へ移すべきか、VRAM上限込みで測って」 | GPU placement/performance fires here; `orchestrating-agents` P7 must admit RAM/VRAM before warmup, then GK0/GK2 decide the implementation |
 
 ### Reduced precision / microscaling

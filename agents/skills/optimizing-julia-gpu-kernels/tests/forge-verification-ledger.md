@@ -235,3 +235,35 @@ therefore sits in THE LAW and as the first gate, ahead of GK0.
 (`forging-skills` references/verifying.md §7). Floor: see the skill-check receipt in the commit
 message. No GPU run was performed for this documentation change. The rules come from the incident's
 arithmetic and code, not from a benchmark of the rules themselves.
+
+## 2026-09-25 — GKR: step-level device residency (v2609.3.0)
+
+**Incident.** firedancer's firefly edition block
+(`ModelRegistry.Firefly_SuperposedRounds`, revisions 3–9) ran an online learning step at
+1,703 tokens/s: 0.049% of its 3.46M tokens/s paper bound (finding2609_2521bj7rk, run2609_2521z63qp).
+The per-stage profile:
+- egress decode, host: 67.6%
+- field decode, host: 19.7%
+- residual add, host: 4.4%
+- channel_mix match and insert: 0.26%, the only stage on the GPU.
+
+FireOps' GPU kernels for decode and residual add existed and were not called. The same day, SSM
+comparators given an explicit performance contract reached 213× (Mamba-2 SSD) and 20× (GDN)
+speedups, so neither the Julia GPU ecosystem nor the kernel craft was the limit.
+
+**Root causes → rules.**
+
+| Cause | Rule |
+|---|---|
+| The skill fired on `@cuda`/`@kernel`/CuArray edits. A model step written as host Julia on `Array`s never looked like GPU work, so no gate ran. | Description and §0b: the gate fires on a GPU-first STEP, with or without a kernel. |
+| A GPU scalar-indexing failure was "fixed" by `Array(FB)`, moving the stage to the host. | §0b if/then: host-pull fixes are rejected. |
+| The CPU reference was the base of every revision; "CPU-only" was carried as a known violation for eight revisions. | §0b if/then: the reference is an oracle only, and a CPU-only violation blocks the next functional revision. |
+| The egress decoded all ~500 candidates per token when one ranked walk suffices. | §0b if/then: complexity first (GKB), then placement. |
+| Tickets stated correctness and theme conformance only. | GKR artifact: STAGE MAP plus a zero-transfer test. |
+
+**Calibration.** The model's default direction matches the failure: it keeps correctness green by
+taking the cheapest change, and moving work to the host is cheapest. The rule therefore sits in
+THE LAW and in the gates table, not only in a reference.
+
+**Verification.** Editor solo, a rule-level reforge, below the fleet threshold. The floor receipt is
+in the commit message. No GPU run was performed for this documentation change.

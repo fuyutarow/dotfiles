@@ -28,14 +28,14 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readStdinJson } from "./lib.ts";
+import { MAX_QUOTE_TURNS as MAX_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
 const TURN_SEPARATOR = "\n\n---\n\n";
-// Matches capture-last-response.ts's KEEP — that file only ever HAS this many turns to give,
-// so validating against a different number here would let a request past this check just to
-// fail confusingly later. Keep the two in step if either changes.
-const MAX_TURNS = 20;
+// MAX_TURNS comes from quote.config.ts, shared with capture-last-response.ts's KEEP — that
+// file only ever HAS this many turns to give, so validating against a different number here
+// would let a request past this check just to fail confusingly later.
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));

@@ -13,9 +13,10 @@
 // turn over a clipboard convenience feature.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
-const KEEP = 20; // deepest `/quote N` worth supporting; bounds the file for a long session
+const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session
 
 function recordResponse(sid: unknown, text: unknown): void {
   if (!(typeof sid === "string" && sid && typeof text === "string")) return;

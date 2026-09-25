@@ -37,6 +37,11 @@
           {
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
+          },
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+            "timeout": 15
           }
         ]
       },
@@ -124,6 +129,11 @@
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh assign-command.ts",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+            "timeout": 15
           }
         ]
       }

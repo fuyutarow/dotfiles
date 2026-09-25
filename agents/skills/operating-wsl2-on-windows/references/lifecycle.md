@@ -13,6 +13,7 @@ stay up → there; it went down anyway → here.
 | idle-terminate | WSL stops a distro with no live Windows-side attachment ~seconds after the last one detaches; work INSIDE the guest does not count as "in use" | host ssh works, `wsl -l -v` shows Stopped |
 | logon-screen reboot | Windows Update reboots overnight and parks at the logon screen; the recovery scheduled tasks are `onlogon`, so they never fire | the box is unreachable over the tailnet, was rebooted |
 | C: exhaustion | a full host drive wedges the guest with no guest-side error | everything hangs; wsl:audit shows C: near zero |
+| boot blocked on a systemd job | systemd holds `sysinit.target` until one running job ends; ssh and tailscaled wait behind it | distro Running, `systemctl is-system-running` = `initializing` for minutes, guest ssh down |
 | VM death / crash-loop | the whole WSL VM dies, not a graceful stop — a crash-looping in-VM subsystem (e.g. a GUI/weston component) can take it down even with zero GUI users | `wsl -l -v` shows Stopped, but it re-dies right after a wake; host event log shows repeated service terminations |
 
 **Wake vs revive.** `wsl:wake` attaches a Stopped-but-healthy VM once. A VM that keeps dying needs
@@ -39,6 +40,46 @@ The distro can be Running while `ssh <guest>` still times out. Measured: distro 
 inside WSL never started, `systemctl start ssh` fixed it. Tailscale-in-WSL is a userspace service;
 it comes up on its own regardless of Windows logon. So the guest's tailnet node is what to verify. A
 wake that stops at "Running" is only half done.
+
+**`initializing` that does not end is a job, not a slow boot.** Find the one job in state `running`:
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -u root --exec systemctl list-jobs --no-pager   # the row whose STATE is "running"
+wsl.exe -d Ubuntu-24.04 -u root --exec systemctl kill --signal=SIGKILL <that-unit>
+```
+
+Killing it lets boot finish; ssh and tailscaled then start. Polling `is-system-running` changes nothing.
+
+| Running job | Why it blocks | Safe to kill? |
+|---|---|---|
+| `systemd-tmpfiles-setup.service` | Ubuntu's `D /tmp` rule deletes `/tmp` at boot; `/tmp` is ext4 here, not tmpfs | yes — the rest is removed next boot |
+| anything else | read `systemctl status <unit>` first | decide per unit |
+
+## Before any restart — measure, in this order
+
+1. **C: free.** A nearly full host drive explains a hung guest, hung `wsl.exe`, and a stuck boot at once.
+2. **`wsl -l -v`**, with a timeout. Stopped → `wsl:wake`. Running → step 3.
+3. **`systemctl is-system-running`** via `wsl.exe -u root`. `initializing` → the job table above.
+
+Bound every `wsl.exe` call over ssh and send ONE at a time. Retrying a hung call stacks processes.
+Measured: eight `wsl.exe` piled up on r99 while an agent kept retrying.
+
+## Never keep state in the guest's /tmp
+
+`/tmp` survives a restart on disk, then boot deletes all of it (`D /tmp` in `tmpfiles.d/tmp.conf`).
+Two costs follow. Everything there is gone, and deleting it can block boot for many minutes.
+Claude Code's per-session scratchpad lives under `/tmp/claude-<uid>/` on Linux.
+So worktrees or run state created there are lost at the next restart; put them under `$HOME`.
+
+## Passing a script from the host into the guest
+
+Quotes do not survive ssh → PowerShell → `wsl.exe` → `sh`. Base64 the script instead:
+
+```bash
+G=$(base64 < script.sh | tr -d '\n')
+printf '%s' "wsl.exe -d Ubuntu-24.04 -u root --exec /bin/sh -c 'echo $G | base64 -d | sh'" > run.ps1
+ssh <host> "powershell -NoProfile -EncodedCommand $(iconv -f UTF-8 -t UTF-16LE run.ps1 | base64 | tr -d '\n')"
+```
 
 ## The two routes to the host
 

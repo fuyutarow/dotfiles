@@ -86,11 +86,13 @@ needs an idle box. The full order, the Home-vs-Pro method split, and the winget/
 ## Recover — the box is unreachable, decide which layer is down
 
 `ssh <guest>` failing is usually NOT the network. Locate the layer before touching anything.
+Measure C: free FIRST, before any restart: a nearly full host drive explains every row below at once.
 
 | Symptom | Layer that is down | Fix |
 |---|---|---|
 | host ssh works, `wsl -l -v` shows **Stopped** | distro idle-terminated | `mise run wsl:wake` |
 | distro **Running** but `ssh <guest>` times out | ssh.service inside WSL never started | `wsl:wake` (it starts sshd via the host) |
+| Running, `systemctl is-system-running` stays `initializing` | boot blocked on one running systemd job | find it with `systemctl list-jobs`, kill it; polling does nothing |
 | host itself unreachable, box was rebooted | Windows at the logon screen, Tailscale (a GUI client) down | reach host over the **LAN** alias; `wsl:wake` tries it first |
 | LAN alias won't resolve | you are off the box's subnet | tailnet alias; unattended Tailscale removes this whole row |
 | C: was full, everything wedged | HOST disk exhaustion, not a WSL bug | reclaim C: first (above), then `wsl:wake` |

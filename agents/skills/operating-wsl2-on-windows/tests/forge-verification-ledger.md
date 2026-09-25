@@ -86,3 +86,25 @@ Seam edit to the Recover table; both rows were observed on r99 the same day.
   minutes while C: was full. The same shape appeared 2026-09-09 (7 processes, 3 days). The
   reaper (`scripts/wsl-reap.ts`, task `wsl:reap`) selects structurally and is unit-tested; its
   first draft was blind on OpenSSH 10.0 until `sshd-session.exe` was probed too.
+
+## 2026-09-26 — postmortem: a restart that never finished booting
+
+What happened on r99, in order:
+1. Guest writes (a 38-worktree build fleet plus julia run output) took C: from 80.6 GB to 51.1 GB
+   in about 4 h. At the same time the guest held ~29 GB of page cache under constant load, so the
+   host fell to 0.7 GB available and paged at ~1,900 hard reads/s.
+2. The guest stopped answering. Another agent ran `wsl --shutdown` and restarted it, but never
+   measured C: (24.3 GB, 2.6% by then) nor asked systemd what it was waiting for.
+3. Boot then hung in `initializing`. The one running job was `systemd-tmpfiles-setup.service`:
+   `systemd-tmpfiles --create --remove --boot` applying Ubuntu's `D /tmp 1777 root root 30d`.
+   `/tmp` is ext4 on this box and held the fleet's worktrees in Claude Code's scratchpad
+   (`/tmp/claude-1002/...`, 48 GB). The job had run 8 min at 6.9 GB RSS; ssh and tailscaled
+   waited behind `sysinit.target`.
+4. The agent polled `initializing` and retried `wsl.exe` over ssh; eight `wsl.exe` piled up.
+5. `systemctl kill --signal=SIGKILL systemd-tmpfiles-setup.service` let boot finish within
+   20 s: state `degraded`, ssh and tailscaled active, `ssh r99-wsl` connected.
+6. Loss: uncommitted work in the 38 worktrees. Committed branches survive in the main repo.
+
+Distilled: a cause row, the `initializing` job table, the measure-first order, the /tmp rule,
+and the base64 host→guest recipe (lifecycle.md); a Recover row and the C:-first line (SKILL.md).
+Why the page cache was never returned (automatic reclaim waits for an idle guest) is UNVERIFIED.

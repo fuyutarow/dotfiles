@@ -2,22 +2,23 @@
 name: orchestrating-agents
 description: >-
   署名済みtask/function mapへ委任・並列化・独立検収を載せるcontrol plane。明示的dispatch、配役、
-  visibility、dependency、veto、verification、acceptance、GPU/CPU/RAM/VRAM resource admissionで使う。裸の「研究を進めて」では発火せず、
+  visibility、dependency、veto、verification、acceptance、GPU/CPU/RAM/VRAM resource admission、
+  signed-map multi-arm比較土俵/基準線/生成系列長の検収で使う。裸の「研究を進めて」では発火せず、
   programme設計→supervising-research-programmes、grant済みsection→directing-research-sections、
-  凍結terminal audit→auditing-research-processesへrouteする。directing-researchはroute-only shim。
-  Postmortemはdispatch/pacing/delegation/visibility/acceptance/control-plane failureだけ;
-  software incident→implementing-and-debugging。Durable co-fire: continuity record → orchestration overlay → writer
+  凍結terminal audit→auditing-research-processesへrouteする。
+  Control-plane postmortem→here; software incident→implementing-and-debugging。
+  Durable co-fire: continuity record → orchestration overlay → writer
   checkpoint; continuing-long-running-tasksがrecord/writer semanticsを持ち、ここはlocusだけを運ぶ。
   Cuts: research meaning→上記domain owner; document lifecycle→governing-research-documentation;
   present fact→raising-resolution; thesis→forging-novel-theses; premise→surfacing-blind-spots; costly
-  one-bet→acting-on-hypotheses; cheap probe→plain executor。Domain content/skill craftは各owner。
+  one-bet→acting-on-hypotheses; cheap probe→plain executor。
   Scope/brief/synthesis/acceptanceはsolo、独立生成/盲検検証はfan-out。Japanese skill; responds in
   the user's language.
 ---
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2608.3.0 (2026-08-04) — cross-section learning-bus ownership seam.
+> **Version**: v2609.1.0 (2026-09-25) — generated-stream coverage in P8 footing.
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -284,7 +285,7 @@ P5はP2へ吸収済みであり、この番号を別のgateへ再利用しない
 | P4 ROUND-TRIP ECONOMY | briefを自己完結させ、全指摘に修復経路を求める。同型指摘が二巡続けば成果物でなく仕様へ戻す。 | `references/delegation-contracts.md` が SOLE home。brief id、round log、spec差分。 |
 | P6 VERIFY-NOT-TRUST | 載荷claimは自前計算、一次資料、独立再計算のいずれかで確定する。達成級の語もclaimであり、独立audit前は前進の報告とする。 | claim→evidence表、blind audit、scope付きverdict。不一致claimは裁定まで公表停止。 |
 | P7 DEVICE-BUDGET | pilotも含め、数値計算・parallel test・resident serviceは算術memory boundとaggregate資源envelopeのadmission後にだけ発射する。互換で空いたGPUがあればCPUを拒否し、auto parallelismを使わない。CARVE-OUT: host/systemd所有の常駐daemon（例 `ccc-daemon.service`）はdispatchが所有せず、ceilingはそのunitに一度だけ宣言される — per-call envelopeを被せない。所有と検証は`driving-cocoindex` LAW(e)/CC7。 | `references/measurement-and-resources.md` P7がSOLE home。dispatch marker、envelope、`agent-resource-run` verdict、高水位。 |
-| P8 FOOTING | 数値は比較軸が一致した土俵だけで差として読み、凍結基準の到達可能性を本走前に検算する。 | 同 reference P8。全軸差分表、到達可能性の式、独立再計算。 |
+| P8 FOOTING | 比較軸を揃え、生成済み入力の実長と評価範囲を照合し、凍結基準の到達可能性を本走前に検算する。 | 同 reference P8。全軸差分表、系列末尾の被覆、到達可能性の式、独立再計算。 |
 | P9 CONFOUND-TABLE | 一変数の効果を問う前に交絡表を書く。機構の効果を主張するなら、機構を外した対照を同一条件で置く。 | 同 reference P9が SOLE home。交絡表、「機構なし」行、条件差が対象機構だけの照合。 |
 | P10 ARTIFACT-REUSE | 分単位以上の中間生成物は初回に保存し、指紋一致時だけ再利用する。更新・仕様変更・破損で失効させる。 | 同 reference P10。manifest、digest、input fingerprint、再構築理由。 |
 
@@ -381,6 +382,8 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | 凍結したterminal research episodeのframe、candidate、test、portfolio processを監査する。 | `NO-FIRE` | `auditing-research-processes`がintegrity auditと非enacting recommendationを所有する。live programme/section reviewは各domain ownerへ戻す。 | frozen audit packetへのpointer。 |
 | 「検収試験を設計」「完成宣言が監査に落ちる」。 | `FIRE` | P6とacceptance境界はここ。 | falsifying test、blind audit、verdict。 |
 | 「中間生成物を再利用」「cacheを作り直している」。 | `FIRE` | 発火はここ、詳細はmeasurement reference。 | P10 manifest pointer。 |
+| 署名済みmapまたは明示dispatchがあり、複数armのstream実長・採点末尾・基準線を揃える。 | `CO-FIRE` | P8の土俵だけを所有する。課題の意味、arm選択、run登録、receiptはdomain/section owner。mapが無ければdomain ownerがP8 referenceを使い、本skillは発火しない。 | measurement packetの生成物digest、実長、最終採点位置、再測locus。 |
+| 単発の使い捨てbenchmarkを実行する。 | `NO-FIRE` | domain/plain executor。比較claimやfleetのadmissionを作らない。 | raw timingと条件。 |
 | codeまたは実験のresource boundを問う。 | `NO-FIRE / CO-FIRE` | “Is the resource question aggregate agent CPU/RAM/VRAM/GPU admission rather than the code or experiment’s own resource bound?” **Yes** → P7 alone owns dispatch resources. **No** → `practicing-tiger-style` owns the code/experiment ledger; co-fire only when both bounds matter. | P7 envelope/`agent-resource-run` verdict、またはTiger ledger pointer。 |
 | 個別 CLI のflag、slug、呼び出し構文。 | `NO-FIRE` | `driving-*` が一回の呼び出しを所有する。 | routing先だけ。委任体制を起動しない。 |
 | 文献群の台帳、確度、矛盾調停、体系化。 | `NO-FIRE` | `systematizing-knowledge` が内容を所有する。 | routing先。並べ方を問う場合だけco-fire。 |

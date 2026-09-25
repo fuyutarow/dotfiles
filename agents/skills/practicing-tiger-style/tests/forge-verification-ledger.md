@@ -216,3 +216,37 @@ Re-audit before revision if a source fact ages beyond its verification date, Tig
 language/tool guidance changes, a sibling cut changes, harness capabilities change, an observed
 failure escapes this skill, an exception/risk regime changes, or prose-debt warnings grow. Re-run
 the affected F1/F2/F3 rows; never promote `NOT-RUN` to PASS without its raw observed artifact.
+
+## Reforge v2609.2.0 (2026-09-25) — performance cost and semantic preservation
+
+**Function and cut.** Consequential workload/design plus a material performance objective
+`→` T0 cost model and two T2 obligations `→` T4 observed speed and semantic checks
+`→` scoped acceptance or STOP. The platform owner derives device-specific work and
+measures it. `implementing-and-debugging` owns the change; Tiger owns the consequential
+contract linking design, bound, oracle, and acceptance.
+
+**Source grade.** The user-supplied Firefly postmortem reports that revisions were ordered
+for correctness without a work estimate or throughput gate. Its later GPU revision
+predeclared a speed floor and bitwise prediction agreement. This is a dated source report,
+not a reproduced runtime result here. The T0/T4 linkage is skill-supplied generalization.
+No Firefly speed target or exact bitwise requirement becomes a universal rule.
+
+**Calibration.** The observed model failure was to accept correct output as completion
+while the consequential speed objective remained untested. T0 now requires a scoped cost
+model when performance is material, and T4 keeps speed and semantics as separate checks.
+
+**F2/F3 desk-check.** F9 and B11 exercise a costly performance revision; N10 keeps a
+throwaway benchmark with the domain executor. Existing F2 and C1–C4 cuts remain: root
+cause first with `implementing-and-debugging`, GPU mechanics with the platform skill.
+Fresh-context task success and runtime gains are NOT-RUN for this documentation reforge.
+
+**Comparative judge.** Against HEAD, the old T2/T4 shape could close a material
+performance revision after a throughput observation if output preservation was not
+explicitly registered. The revised T0 cost row and paired T2/T4 checks require both
+speed and declared semantics on the same workload. The throwaway benchmark remains
+outside this ledger. The judge found no route regression for the consequential case.
+
+**Verification receipt.** `quick_validate.py`: PASS. Target `skill-check.ts`: exit 0,
+0 FAIL, 0 prose WARN. `git diff --check`: PASS. Collection floor passed at
+72 skills and 64,564 listing characters. `mise run link:skills` passed; the
+Claude skill link resolves to this source directory.

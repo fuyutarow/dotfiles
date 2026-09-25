@@ -26,8 +26,11 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「`cumsum` より速い scan カーネル自作できる?」 | GK0 tension: cumsum IS a Blelloch kernel — deny-gate walk |
 | 「`sm_90` 向けにコンパイルしたい / `cap=` が deprecated と言われた」 | api-changes.md (`arch=sm"90"`) |
 | "CUDA Graph でキャッシュしてる評価パスが、2回目以降ずっと同じ値を返す" / "graph capture のキャッシュが古い結果を返す" | CAPTURE-PINS-ADDRESSES (SKILL.md §1) — cache key missed a closed-over device array; debugging.md §11 for the state-separation + permanent-assert fix |
-| 「学習器の 1 step が GPU なのに SSM の 900 分の 1。GPU first で直して」(`@cuda` 無し、host の Julia に見える model step) | GKR §0b — step-level device residency; the STAGE MAP and 0-transfer test, even with no kernel in play |
+| 「学習器の 1 step が GPU のはずなのに SSM の 900 分の 1。GPU first で直して」(`@cuda` 無し、host の Julia に見える model step) | GKR fires on the GPU performance objective and creates the STAGE MAP even when no residency contract was written |
 | "the GPU test fails with scalar indexing — can I just wrap it in Array()?" | GKR if/then — rejected; fix on the device |
+| 「top-K に絞ったのに、全候補の出力を計算して最後に mask している。GPU step が遅い」 | GKB selection cardinality + GKR gather-before-materialization check |
+| "Lux uses stock layers, but my Julia GPU-first training step still runs CPU decode and host loops" | GKR fires on the whole step even without a custom kernel |
+| "P7 admitted a GPU, and now this Julia learner must meet a GPU throughput target though its step is written as host code" | GKR fires on the performance objective, not the existing device syntax |
 | 「CPU RAM が払底してGPUが空いている。CuArrayのKrylov基底へ移すべきか、VRAM上限込みで測って」 | GPU placement/performance fires here; `orchestrating-agents` P7 must admit RAM/VRAM before warmup, then GK0/GK2 decide the implementation |
 
 ### Reduced precision / microscaling
@@ -58,7 +61,8 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「nvidia-smi が見つからない / WSL で GPU が見えない」 | environment plumbing (shell/dotfiles), not kernel craft |
 | "PyTorch の学習が GPU で遅い" | not Julia — plain answer |
 | 「Julia の型安定を直したい」(CPU のみ、GPU 不在) | `writing-julia` alone — device cut answers NO |
-| "Flux でモデルに層を足したい"(stock layers のみ) | `writing-julia` packages.md — custom kernel が現れた瞬間にこちらへ |
+| "Flux でモデルに層を足したい"(stock layers のみ、GPU step の性能相談なし) | `writing-julia` packages.md; a GPU-first step question changes the route |
+| "P7 says this GPU is available; reserve it for a run" (GPU step performance not requested) | `orchestrating-agents` P7 only; admission alone does not fire GKR |
 | 「RTX 5090 と 4090 どっち買うべき?」 | hardware shopping — plain answer |
 | "AMDGPU.jl の `@roc` カーネルを書きたい"(KA 不在) | out of scope (NVIDIA-first; SKILL.md scope line says so) — clean no-fire; the KA route (portable-kernels.md) fires only if KernelAbstractions enters the ask |
 | "Reactant / XLA で Lux モデルをコンパイルしたい"(手書きカーネル不在) | `writing-julia` toolchain.md §2.9.5 — Reactant-vs-CUDA.jl framing is ITS home; this skill enters only when a hand kernel or CuArray perf appears |
@@ -91,3 +95,6 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 - 2026-09-12 v2609.1.0: added five reduced-precision fire rows and five true near misses.
   Device tokens distinguish this skill from terminology, surveys, PyTorch, hardware shopping,
   and host-only Microfloats work. Source: `urn:uuid:01a0946e-e4ee-71da-a275-8438973dfb4b`.
+- 2026-09-25 v2609.4.0: selected-work and steady-state boundary rows added after the
+  Firefly follow-up. The stock-layer near miss remains no-fire only for layer selection;
+  whole-step GPU performance routes to GKB/GKR regardless of kernel syntax.

@@ -1220,3 +1220,42 @@ Section-owned admission with authority/grounding fence, satisfied dependencies, 
 required receipt-linked scale release before checking resource feasibility. Free capacity and low
 utilization cannot create or escalate scientific work. This changes dispatch behavior without
 duplicating Section semantics: `directing-research-sections` remains their sole owner.
+
+## 2026-09-25: P8 generated-stream coverage and intact-system comparison
+
+**Function and cut.** A multi-arm comparison with a generated input artifact
+`→` P8 verifies the realized input length, scoring tail, and matched baseline
+`→` comparable measurement packet or corrected rerun. P9 keeps a mechanism-off
+control as a diagnostic row beside the unchanged full-path row. The section owner
+still chooses the experiment and registers its run; this skill owns only footing.
+
+**Source grade.** In the user-supplied SimpleLogic report, two hand-derived `n`
+values disagreed with the generated sequence. One dropped the last question.
+The corrected runs and baseline table were declared authoritative over an immutable
+question. A later Firefly report withdrew a separate channel-only edition:
+an unchanged block with length-one ingress was the intended main arm, while a
+filtered family remained diagnostic. These are dated source reports, not runs
+reproduced by this dotfiles reforge. P8/P9 are skill-supplied generalizations.
+
+**Decision change.** P8 now compares each run with the generated artifact's actual
+length and final scoring position before accepting a number. A cross-evaluation
+baseline is joined to its test stream. P9 retains the original system's row when
+a mechanism-off arm is introduced. None of the incident's `n`, baseline values,
+model names, or exact resource limits became a universal rule.
+
+**F3 desk-check.** A multi-arm stream-footing request co-fires P8 only after the
+signed-map or explicit-dispatch entry gate. Without that gate, the domain owner may
+use the P8 reference. A single disposable benchmark no-fires to the domain executor.
+No numerical run, source-repo checkout,
+or installed-skill trigger evaluation was performed for this documentation change.
+
+**Comparative judge.** HEAD's P8 already required a matched range but did not tell
+the executor to read generated length and final scored position before choosing `n`.
+The revised P8 adds that pre-run assertion, the test-side baseline join, and a
+correction→remeasurement link. The signed-map/explicit-dispatch entry gate remains
+unchanged in meaning; the new row is CO-FIRE only within it.
+
+**Verification receipt.** `quick_validate.py`: PASS. Target `skill-check.ts`: exit 0,
+0 structural FAIL, 13 legacy reference sentence WARNs (unchanged from pre-edit).
+`git diff --check`: PASS. Collection floor passed at 72 skills and 64,564 listing
+characters. `mise run link:skills` passed; the Claude skill link resolves here.

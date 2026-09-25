@@ -15,6 +15,7 @@ Record only the workload facts that change a decision:
 |---|---|---|
 | Workload | Operation mix, contention, burst size, payload size | Label estimates; name a measurement or contract to resolve them |
 | Quality goals | Required correctness, durability, throughput, latency | Name the trade-off and who can settle it |
+| Performance cost | For a material speed claim, output unit, algorithmic order, and relevant ops/bytes, I/O, calls, launches, or transfers | Mark estimates and assign measurements; the platform skill owns device-specific bounds |
 | State | Mutation owner, ordering rule, durability/acknowledgment boundary | Keep the affected decision open |
 | Runtime | Scheduling, allocation, I/O and dependency constraints | Inspect the actual target, not the source database's runtime |
 | Failure scope | Crash, timeout, overload, cancellation, duplicate, corrupt data | Select cases that threaten the declared consequence |
@@ -50,6 +51,7 @@ Add a design entry to the existing ledger:
 design_id:
 scope / current_design_locus:
 workload: observed facts | estimates | unknowns
+cost_model_or_NA: output unit; order; dominant cost terms; estimate or bound; assumptions
 components_and_flow:
 state_owner_and_transition:
 resource_and_failure_boundaries:

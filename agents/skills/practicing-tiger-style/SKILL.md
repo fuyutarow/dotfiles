@@ -4,7 +4,7 @@ description: >-
   Applies Tiger Style to consequential architecture, code, and review.
   Use for Tigerレビュー, architecture/アーキテクチャ設計 with resource limits/資源上限,
   state ownership/状態所有権, concurrency/並行処理, durable state/永続化, failure recovery,
-  costly R&D, or prototype-to-production/試作から本番化. Links design decisions to
+  costly R&D, consequential performance contracts/性能要件, or prototype-to-production/試作から本番化. Links design decisions to
   contracts, negative cases, checks, and exceptions in one ledger.
   Explicit Tiger design starts before code; low-risk sketches need no release ledger.
   PURPOSE: constraints here; general decomposition stays with the task owner.
@@ -17,7 +17,7 @@ description: >-
 
 # Practicing Tiger Style
 
-> **Version**: v2609.1.0 (2026-09-23) — architecture decisions through implementation checks.
+> **Version**: v2609.2.0 (2026-09-25) — performance cost and preservation contracts.
 > Source synthesis and derivation: `references/source-ledger.md`.
 
 Run from this skill directory:
@@ -72,11 +72,11 @@ Keep read-only reviews read-only unless changes were requested.
 
 | Gate | Required result | What remains open if absent |
 |---|---|---|
-| **T0 DESIGN** | Workload, affected components/state, boundaries, selected trade-offs | Design recommendation is provisional |
+| **T0 DESIGN** | Workload, affected components/state, boundaries, selected trade-offs; a cost model when performance is material | Design recommendation is provisional |
 | **T1 CONSEQUENCE** | Risk tier, concrete failure mode, why it matters now | No trusted-use assessment |
 | **T2 OBLIGATION** | Invariant, negative case, bound, handling, evidence plan, owner | Affected contract is incomplete |
 | **T3 REVERSAL** | Specific exception, compensating measure, owner, expiry/reversal | No acceptance of that exception |
-| **T4 EXTERNAL CHECK** | Observed result at a relevant implementation or consumer boundary | Planned checks cannot become PASS |
+| **T4 EXTERNAL CHECK** | Observed result at a relevant boundary; for performance revisions, check speed and declared output semantics | Planned checks cannot become PASS |
 
 T0 is proportional: one existing component can need only a sentence and its code locus.
 Cross-component state, capacity, or failure paths require

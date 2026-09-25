@@ -63,6 +63,12 @@ per-iteration `Array(gpu_result)` or a stray CPU-resident argument silently rein
 PCIe round trip (1-2 orders of magnitude below on-device HBM) on every call, with no line of
 code to point at until you profile. Full profiling workflow → measuring.md.
 
+For a GPU-first step, profile only the warmed boundary declared by GKR (`SKILL.md` §0b).
+Zero `cuMemcpy*` rows is necessary but does not establish device execution.
+A stage can compute on CPU-resident arrays throughout that window. Join the trace to each
+stage's execution row and output residency check. Keep planned ingress and result export
+outside the inner-step count and report their costs separately.
+
 ## §5 Async timing law — one line, full law lives in measuring.md
 
 GPU calls return to the CPU before the kernel finishes; plain `@elapsed`/wall-clock deltas

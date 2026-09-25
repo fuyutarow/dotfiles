@@ -267,3 +267,58 @@ THE LAW and in the gates table, not only in a reference.
 
 **Verification.** Editor solo, a rule-level reforge, below the fleet threshold. The floor receipt is
 in the commit message. No GPU run was performed for this documentation change.
+
+## Reforge v2609.4.0 (2026-09-25) — selected work and the whole-step boundary
+
+**Source grade.** The user supplied a dated Firefly status/postmortem transcript. Its
+revision 11 follow-up reports that top-K outputs were selected with a mask after all
+candidate outputs had been computed, so the write work still scaled with candidate count.
+This is a source report, not a GPU run independently reproduced in this dotfiles checkout.
+The K-of-C accounting rule is skill-supplied generalization; it does not fix K=3 or any
+Firefly-specific throughput target as a universal threshold.
+
+**Additional primary-source check (2026-09-25).** The
+[CUDA.jl workflow](https://cuda.juliagpu.org/stable/usage/workflow/) describes generic CPU
+development followed by CuArray porting and a scalar-indexing check. It does not claim that
+generic array syntax alone guarantees GPU execution. The
+[Nsight Systems guide](https://docs.nvidia.com/nsight-systems/UserGuide/) states that CUDA
+workload traces include host/device memory operations and kernel activity. Neither source
+establishes that a copy-free trace proves every stage ran on the device; the joined GKR
+stage/output check is skill-supplied.
+
+| Observed failure or audit finding | Operational correction | Owner |
+|---|---|---|
+| All C outputs materialized, then K kept by a mask | Count materialized/written outputs; gather selected work before the expensive stage or charge its C-cost | GKB/GKR in this skill |
+| Zero-copy check could pass while CPU-resident stages execute entirely on host | Join the trace to stage execution and output residency, within a declared warmed inner-step boundary | GKR; transfer technique in `host-performance.md` §4 |
+| `Array(...)` ban appeared to forbid the CPU oracle too | Ban host pulls only on the production hot path; retain CPU oracle comparison | GKR/GK3 |
+| A generic `AbstractArray` path was described as a GPU guarantee | Require a demonstrated device production path before promotion under a device-resident contract | GKR |
+| Stock-layer choice and a GPU-first step were conflated in a no-fire row | Keep layer selection in `writing-julia`; route whole-step device performance here | description cut and trigger set |
+| P7 placement and whole-step device residency used the same GPU-first phrase | P7 chooses resources; a model-step GPU performance objective triggers GKR and its stage-map contract | reciprocal scope cut in this skill |
+
+The test is a future target-repo profile and complexity check. No speedup, parity, or
+installed-skill triggering is claimed from this documentation edit.
+
+**PROSE-DEBT waiver (2026-09-25).** This reforge clears all SKILL.md sentence warnings
+and adds no net warning to references. The 208 long sentences in nine older technical
+references remain queued for a dedicated prose reforge, after semantic verification of
+this incident's rules. The previous 2026-09-12 queue date was missed; do not treat this
+waiver as a claim that those references were reorganized.
+
+**Adversarial verification amendment.** Two read-only verifiers found that requiring a
+predeclared residency contract would reproduce the original no-fire failure. GKR now
+fires on the GPU performance objective and creates that contract. They also found a
+necessary C-wide ranking exception: all-candidate matching/scoring may be required,
+while downstream output materialization can still be K-only. The final predicate
+charges C where required and compacts before the downstream expensive stage where possible.
+
+**Comparative judge.** Against HEAD, the old skill already caught host loops and
+all-candidate decode. The new skill additionally counts C/K/materialized writes and
+rejects a mask that leaves C-wide downstream work intact. It also rejects a copy-free
+trace as sufficient when a host stage remains. No regression was found for the
+GPU-first Firefly-shaped ask; the P7-only no-fire row protects the placement seam.
+
+**Verification receipt.** `quick_validate.py`: PASS. Target `skill-check.ts`: exit 0,
+0 structural FAIL, 0 SKILL.md prose warnings, 208 legacy reference sentence warnings
+(unchanged from pre-edit). `git diff --check`: PASS. Collection floor:
+72 skills, 64,564 listing characters, within the declared budget. `mise run
+link:skills` passed; the Codex skill link resolves to this source directory.

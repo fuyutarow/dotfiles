@@ -3,13 +3,12 @@ name: optimizing-julia-gpu-kernels
 description: >-
   Optimizes CUDA.jl kernels and CuArray paths; GK0 rejects
   cuBLAS/cuFFT/cuDNN/broadcast/mapreduce work. MANDATORY before @cuda, KernelAbstractions @kernel,
-  or Julia device storage/decode/performance edits, and for any GPU-first model/learner step
+  or Julia device storage/decode/performance edits, and for GPU-first model/learner step performance
   (host round-trips, Array() pulls, GPU first). Use for GPU カーネル/最適化, occupancy,
   coalescing/shared memory/warps/atomics, InvalidIRError, profiling/roofline, tensor cores,
   reduced precision/低精度, FP8/6/4, MXFP/NVFP4, microscaling/マイクロスケーリング/ブロック浮動小数点,
   packed/パック済み storage, Microfloats/cuTile, GPU rrule, scan, or SSM/Mamba—only with a
-  Julia/CUDA.jl/CuArray device path. Device LAW: isbits/type-stable, allocation-free, return
-  nothing; speed claims need CUDA.@sync plus a CPU oracle; training kernels need an rrule. Cuts:
+  Julia/CUDA.jl/CuArray device path. Cuts:
   host Julia → writing-julia; terminology/surveys/shopping/PyTorch-JAX → plain or
   systematizing-knowledge; behavior change → implementing-and-debugging first. Cheap benchmark →
   GK2; costly bet → acting-on-hypotheses. English skill; answer in the user's language.
@@ -17,7 +16,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.3.0 (2026-09-25) — GKR: a GPU-first step keeps every stage on the device; no host-pull fixes.
+> **Version**: v2609.4.0 (2026-09-25) — whole-step boundary and selected-work accounting.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -36,9 +35,9 @@ Re-check sooner when the target or toolchain differs.
 
 ## THE LAW
 
-> Derive the work budget on paper first (GKB); code far from its bound is wrong, not slow.
-> A step declared GPU-first keeps every stage on the device (GKR); a GPU error is fixed on the
-> device, never by moving the work to the host. Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
+> Derive the work budget on paper first (GKB); a measured gap from that bound requires a stage diagnosis before acceptance.
+> A model step expected to perform on GPU keeps its data-dependent hot path on the device (GKR).
+> Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
 > synchronously (GK2), and checked against an oracle (GK3). Training paths also need an rrule
 > (GK3-AD). Reduced precision needs a complete representation-to-execution contract (GK4).
 
@@ -46,8 +45,8 @@ Re-check sooner when the target or toolchain differs.
 
 | Gate | Rule | Artifact |
 |---|---|---|
-| **GKB WORK BUDGET** (§0) | Before code, a target, or a dispatch: count ops and bytes per output unit for the lowest-complexity algorithm; derive the device bound. | A `WORK BUDGET` block in the source or ticket, plus a test asserting device time ≤ a stated multiple of the bound. |
-| **GKR DEVICE RESIDENCY** (§0b) | A GPU-first step (model forward/learn step, runner inner loop) gets a STAGE MAP before code; after warmup the step makes zero host↔device transfers. | `STAGE MAP` block in the ticket or source, plus a test that profiles one step and asserts 0 memcpy HtoD/DtoH. |
+| **GKB WORK BUDGET** (§0) | Before code, a target, or a dispatch: count ops and bytes per output unit for the lowest-complexity algorithm, including selected work; derive the device bound. | A `WORK BUDGET` block in the source or ticket, plus a test asserting device time ≤ a stated multiple of the bound. |
+| **GKR DEVICE RESIDENCY** (§0b) | A model step with a GPU performance objective gets a STAGE MAP before code, even if written as host Julia. Profile its steady-state hot path for device execution and zero host↔device transfers. | `STAGE MAP`, device-output checks, and a trace showing zero HtoD/DtoH copies inside the boundary. |
 | **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Match the dispatch table before any `@cuda` or `@kernel`; a matching primitive stops the hand kernel. | One source comment names the checked and rejected alternative. |
 | **GK1 DEVICE LEGALITY** (`writing-kernels.md`) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures. | Kernel compiles; `@device_code_warntype` is clean on hot paths. |
 | **GK2 MEASUREMENT** (`measuring.md`) | After P7, warm once and time under `CUDA.@sync`; profiles decide the limiting regime. | Runner verdict plus profile and the metric used by the claim. |
@@ -59,11 +58,12 @@ Re-check sooner when the target or toolchain differs.
 
 | Sibling | Cut |
 |---|---|
-| `writing-julia` | DECISIVE: does code run on or manage the device? Device storage, decode, kernels, profiling → HERE. Host types, packages, AD frontend, CPU → there. Co-fire in that order; JG0 methodology remains active and JG2 precedes GK1. |
+| `writing-julia` | DECISIVE: is a GPU-first step or device path being designed, edited, or measured? GPU path → HERE, even if host Julia currently implements it. Host-only types, packages, AD frontend, CPU work → there. Co-fire; JG0 remains active and JG2 precedes GK1. |
 | `implementing-and-debugging` | Co-fire first for behavior change or bugfix. It owns change safety; this skill owns device legality and GPU evidence. |
 | `refactoring-code` | Co-fire for behavior-preserving restructuring. It owns the oracle bracket; GK2/GK3 supply GPU checks. |
 | `raising-resolution` | Inspect `CUDA.functional()`, `CUDA.versioninfo()`, `Pkg.status`, and a profile before a present-state claim. |
 | `acting-on-hypotheses` | Cheap reversible benchmarks stay in GK2. Use AOH only when costly downstream exposure depends on one untested result. |
+| `orchestrating-agents` | P7 selects and admits device resources. P7 placement alone does not trigger GKR; a model-step GPU performance objective does, even without an explicit residency declaration. |
 | `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Workflow-native fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE
@@ -75,7 +75,7 @@ Re-check sooner when the target or toolchain differs.
 | PyTorch/JAX GPU performance | not Julia — plain answer |
 | Julia CPU performance, no GPU in play | `writing-julia` alone |
 | "which GPU should I buy" / hardware shopping | plain answer |
-| Flux/Lux model architecture choice (layers, optimizer) with stock layers | `writing-julia` (packages.md) — this skill enters only when a CUSTOM kernel/op appears on the path |
+| Flux/Lux layer or optimizer choice with stock layers, with no GPU-step performance question | `writing-julia` (packages.md); a GPU-first step or device-path performance question fires GKB/GKR even without a custom kernel |
 | reduced-precision terminology with no Julia/device decision | plain answer; no specialist procedure needed |
 | literature survey of FP4/MX/adaptive formats | `systematizing-knowledge`, then distill only if a device rule is requested |
 
@@ -91,6 +91,7 @@ Write this block before choosing primitives, setting a speed target, or dispatch
 |---|---|
 | Output unit | What one unit of useful work is: a token, a row, a cell. |
 | Dependency factoring | For each output, list the inputs it actually depends on. Compute once per distinct dependency tuple, not once per conceptual unit. Record the distinct-tuple count. |
+| Selection cardinality | If only K of C candidates feed an expensive stage, record C, K, and how many outputs that stage actually materializes and writes. Charge ops and bytes for the implemented count, not the intended mask. |
 | Algorithm | The lowest-complexity formulation, e.g. an O(n) causal scan with a last-occurrence table, not an O(n²) pairwise mask. |
 | Ops / unit | Integer or FLOP count per output unit for that algorithm. |
 | Bytes / unit | Global-memory reads plus writes per output unit at the narrowest exact element type. |
@@ -101,29 +102,35 @@ Write this block before choosing primitives, setting a speed target, or dispatch
 |---|---|
 | A speed target is written without this block | Reject the target; derive the block first. |
 | A target is a multiple of the previous implementation | Replace it with a fraction of the bound. |
-| Measured time is more than 10× the bound | The implementation is not accepted; find the stage furthest from its own bound before any other work. |
+| Measured time is more than 10× the bound | STOP acceptance under the performance contract. Check the bound's assumptions and diagnose the worst stage. Fix the path or revise an unattainable bound with evidence before the next functional revision. |
 | A reference model is to be benchmarked | Derive its bound the same way first; measure only if the two bounds do not already answer the question. |
 | A shared-library function is published on a device path | Its docstring states ops and bytes per unit, and its tests include the budget assertion. |
 
 ## §0b GKR — device residency for a whole step
 
-This gate fires on the STEP, not on a kernel. A step can be written entirely in host-looking Julia
-with no `@cuda` in sight and still be required to run on the GPU. Write the stage map before code.
+This gate fires when a model step is expected to perform on GPU. The stage map creates the
+residency contract; its absence cannot excuse the work. P7 admission alone does not fire GKR.
+A step can be written entirely in host-looking Julia
+with no `@cuda` in sight and still be required to run on the GPU. Start the timed inner-step
+boundary after staging the batch. End it before logging, checkpointing, or output export.
+Write the stage map before code. Do not hide a data-dependent stage outside that boundary.
 
 | Field | Content |
 |---|---|
 | Stage | Each stage of one step, in order, e.g. ingress, decode, match, insert, write, egress, credit. |
-| Where | device or host. Every row reads `device` for a GPU-first step. |
+| Where | Record where each data-dependent stage executes and where its outputs reside. Every stage and output inside the declared hot path is device-resident. |
 | Primitive | The vendor call, broadcast, or kernel that runs it (walk GK0 per stage). |
 | Launches | Launch count per step; batched primitives count once. |
-| Transfers | Host↔device copies per step; the target is 0 after warmup. |
+| Transfers | HtoD/DtoH copies inside the declared, warmed hot-path boundary; the target is 0. Report legitimate ingress/export separately. |
 
 | If… | Then |
 |---|---|
-| A GPU error (scalar indexing, non-isbits argument, missing method) appears | Fix it on the device: a broadcast, a gather, a batched primitive, or a kernel. `Array(x)`, `collect(x)`, or a host copy to silence it is rejected. |
-| The first implementation is a CPU reference | Keep it as the test oracle only. The production step is generic `AbstractArray` code from the first commit, not a later "GPU port". |
-| A stage loops over positions or instances in host Julia (`for t in 1:L`, `Dict` updates) | Replace it with a batched array operation or one kernel over that axis. |
-| A stage decodes or scores every candidate when only the top-ranked ones are used | Restructure to the lowest-complexity form first (GKB): walk the ranking, or score all at once with one GEMM. |
+| A GPU error (scalar indexing, non-isbits argument, missing method) appears | Fix the production hot path on the device: a broadcast, gather, batched primitive, or kernel. `Array(x)`, `collect(x)`, or a host copy to silence it is rejected there; the CPU oracle may still copy results for comparison. |
+| The first implementation is a CPU reference | Keep it as the test oracle. Do not promote it as the production path under a device-resident contract. Build and verify an explicit device path; generic `AbstractArray` syntax alone proves nothing. |
+| A hot stage loops over positions or instances in host Julia (`for t in 1:L`, `Dict` updates) | Batch or fuse that data-dependent axis on the device. A small fixed host loop that only launches device work must still meet the counted launch budget. |
+| A stage decodes every candidate when the first ranked answer suffices | Walk the ranking to that answer. C-wide match/scoring is allowed when it establishes the ranking; count its C-cost in GKB. |
+| Only K of C candidates may write, but C costly outputs are computed and masked afterward | If K is known before output construction, gather its IDs or cheap match results on device, then compute/write K outputs. If ranking needs C outputs, charge C and prove the bound; a final mask itself saves no work. |
+| A trace shows zero copies but a stage or output inside the hot-path boundary remains on the host | GKR still fails. Verify device execution and output residency per stage; zero memcpy is necessary, not sufficient. |
 | A step's measured time is dominated by host stages | Report the per-stage table (share of time, device or host) before any tuning; the host stages are the fix. |
 | A known violation "CPU-only" survives more than one revision | It blocks the next functional revision until it is removed. |
 
@@ -161,6 +168,7 @@ algorithm's ops and bytes. Reject a primitive or broadcast that raises them:
 | Pairwise `[n, n, …]` mask plus `maximum(dims=…)` where an O(n) scan answers the question | Fails GK0. Use `accumulate` with a custom associative op, or a scan kernel. |
 | Any intermediate larger than inputs plus outputs, materialized by a broadcast | Fails GK0 unless GKB counted its bytes and the bound still holds. |
 | One call per conceptual unit when outputs depend on fewer distinct tuples | Fails GKB. Deduplicate by tuple, then gather. |
+| Materialize C candidate outputs, then mask all but K before an expensive write | Fails GKB if that stage's C-cost exceeds the budget. Apply §0b's selected-ID gather before the costly stage. |
 | Named broadcast temporaries in a hot path | Fails fusion (`host-performance.md` §2). Write one dotted statement or one kernel. |
 | `Int` (Int64) intermediates for values that fit in 8 or 16 bits | Fails GKB bytes. Use the narrowest exact type. |
 
@@ -209,15 +217,16 @@ The five classes, each with its literal error string, live in `references/writin
 ## §9 Checklist — run before claiming a kernel is done
 
 - [ ] GKB `WORK BUDGET` block exists; the budget test (device time ≤ k × bound) passes.
-- [ ] GPU-first step: `STAGE MAP` exists, every stage reads `device`, and a profiled step shows
-      0 host↔device memcpy after warmup (GKR, §0b). No `Array(...)` was used to silence a GPU error.
+- [ ] GPU-performance step: `STAGE MAP` names the hot-path boundary. Each data stage and output inside it is
+      device-resident. Its warmed trace has zero HtoD/DtoH copies inside that boundary (GKR).
+- [ ] A selected K-of-C stage materializes and writes K outputs, or its C-cost is charged and passes GKB.
 - [ ] Every bottleneck claim names its counted quantity (`references/measuring.md` §11).
 - [ ] GK0 comment names the checked and rejected vendor/broadcast alternative.
 - [ ] Kernel ends in `return nothing`; arguments are isbits; no allocation occurs inside.
 - [ ] Index formula is 1-based; bounds guard precedes access; block count uses `cld`.
 - [ ] `CUDA.allowscalar(false)` is active; logs contain no scalar-indexing warnings.
 - [ ] Device code has no bare Float64 literals; hot index arithmetic uses Int32.
-- [ ] Reduced precision: `PRECISION CONTRACT` is complete; storage, target, compute, and outcome
+- [ ] Reduced precision: `PRECISION CONTRACT` is complete. Storage, target, compute, and outcome
       claims each have their own oracle (`references/reduced-precision-formats.md`).
 - [ ] CPU-reference test compares the whole `Array(result)` and runs in `Pkg.test()`.
 - [ ] `compute-sanitizer` is clean if shared memory or atomics are used.
@@ -225,12 +234,12 @@ The five classes, each with its literal error string, live in `references/writin
 - [ ] Training paths define an `rrule` and pass a gradient test (GK3-AD).
 - [ ] `@inbounds` appears only after the oracle passes.
 - [ ] Cached/graph-capture path: cache key fingerprints EVERY closed-over device array
-      (CAPTURE-PINS-ADDRESSES, §1) — a state-separation test AND a permanent in-body
+      (CAPTURE-PINS-ADDRESSES, §1). The state-separation test and permanent in-body
       consistency assert both pass (`references/debugging.md` §11).
 - [ ] A GPU-path change gets a real GPU parity run; CPU-only green does not clear it.
 - [ ] Device-specific methods dispatch on `CUDA.AnyCuArray`, not `CuArray`; a `@view` or reshape of
       a `CuArray` otherwise falls to the CPU method. Tests cover a partial (tail) batch as well.
-- [ ] Graph-captured path: `CUDA.@allocated(step(...)) == 0` is asserted before capture. One
-      leftover allocation (a range slice `a[i:i]` instead of `@view`, a cuBLAS wrapper's per-call
-      `CuRef`, a reduction to a scalar) records an unfreed alloc node, and launch then fails
-      depending on pool state. Find it by bisecting unbroken prefixes, not per-function calls.
+- [ ] Graph-captured path: `CUDA.@allocated(step(...)) == 0` is asserted before capture.
+      One leftover allocation can record an unfreed alloc node and make launch fail.
+      Check range slices, cuBLAS `CuRef` creation, and scalar reductions.
+      Find the allocation by bisecting unbroken prefixes, not per-function calls.

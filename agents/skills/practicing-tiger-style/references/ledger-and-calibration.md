@@ -66,6 +66,13 @@ One check can support several rows only if it actually exercises each stated pro
 Link both the enforcement locus and the check where a property crosses component boundaries.
 A test of one handler does not close an untested acknowledgment or replay path.
 
+For a material performance revision accepted through this ledger, create separate T2 rows
+for speed and semantics.
+State what output must be preserved. State the comparison workload, metric, unit,
+threshold, and oracle before changing code. A previous implementation's speed is context,
+not a cost bound. The language or device skill derives the platform-specific work budget.
+This ledger links to that budget; it does not copy the method.
+
 ## Choose handling by error class
 
 | Class | Example | Disposition |
@@ -101,6 +108,10 @@ Do not silently turn an experiment's provisional choice into a production guaran
 
 A command alone is a test plan.
 Close a row with an observed result or inspected locus that establishes the claimed property.
+For that material performance revision, T4 observes speed and semantics on the same workload.
+Use the predeclared speed floor and semantic oracle. Use an exact oracle for a bit-preserving
+change. Otherwise freeze a justified tolerance or behavior relation before the run.
+Do not trade a semantic failure for a speed PASS, or count unchanged output as a speed PASS.
 For High-tier boundaries, seek a check independent of the authoring path or context.
 Examples include consumer validation, replay, fault injection, or an independently specified oracle.
 Record any missing independent check as an open row or explicitly accepted exception.

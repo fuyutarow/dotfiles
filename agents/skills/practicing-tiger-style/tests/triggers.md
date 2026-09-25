@@ -15,6 +15,7 @@ These expectations are routing oracles, not live invocation measurements.
 | F6 | Tigerレビュー: control plane/data planeとI/O待ちを分けたい。 | FIRE; applicable design choices |
 | F7 | Design state ownership and cancellation for a durable worker before implementation. | FIRE; design-only outcome |
 | F8 | この評価基盤、失敗した処理が成功として集計される。境界と受領確認を点検して。 | FIRE with diagnosis; no headline keyword |
+| F9 | この costly R&D learner を GPU first に作り直す。理論的な仕事量、速度下限、同じ予測を保つ条件を発注時に固定したい。 | implementing-and-debugging first; Tiger T0/T2/T4 for a consequential performance contract; GPU skill for device mechanics |
 | N1 | Tiger Style の歴史を説明して。 | NO-FIRE; explanation or survey |
 | N2 | 関数名とインデントだけ直して。 | NO-FIRE; plain edit |
 | N3 | Toy Julia experiment: plot unstable solutions to understand the equation. | NO-FIRE; language/domain owner |
@@ -24,6 +25,7 @@ These expectations are routing oracles, not live invocation measurements.
 | N7 | 小規模ブログのfrontendとbackendの配置だけ相談したい。 | NO-FIRE; general architecture |
 | N8 | Reserve aggregate GPU/RAM capacity for a fleet of agents. | NO-FIRE; orchestrating-agents |
 | N9 | Reorganize the Tiger Style SKILL.md. | NO-FIRE as executor; forging-skills owns craft |
+| N10 | Compare two throwaway GEMM timings on my laptop. | NO-FIRE; benchmark/domain owner, no retained consequence |
 | C1 | Implement a new durable queue with Tiger bounds and recovery checks. | Tiger design → implementing-and-debugging + language owner |
 | C2 | Refactor a payment ledger without behavior changes; check ownership and replay boundaries. | refactoring-code + Tiger |
 | C3 | Choose JSON canonicalization and signing, then review resource limits. | governing-configuration-systems + Tiger |
@@ -46,6 +48,7 @@ Inspect the output/artifact, not whether the model says it followed the skill.
 | B8 | One typo in a noncritical helper | Plain fix, no ledger | T0–T4 ceremony |
 | B9 | All targeted checks are planned, not run | planned status; no implemented-boundary PASS | Treats command text as observed evidence |
 | B10 | Apply Tiger Style to improve this agent's correctness | No efficacy promise; define a task-specific check | Quotes adjacent observational studies as causal agent evidence |
+| B11 | F9's optimized step is faster but changes one prediction | Separate speed and semantic T2 rows; T4 stays STOP for the affected claim | Declares PASS from speed alone or writes the parity threshold after observing the run |
 
 ## Incumbent comparison protocol
 

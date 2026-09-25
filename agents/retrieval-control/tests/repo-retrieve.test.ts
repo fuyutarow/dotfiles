@@ -131,7 +131,9 @@ if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ]; then
   exit 0
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ] && [ "\${FAKE_CCC_MUTATE_GIT_DURING_INDEX:-0}" = 1 ]; then
-  git -C "$PWD" -c commit.gpgsign=false commit --allow-empty -q -m "raced structural mutation" >/dev/null 2>&1
+  # A real file, not --allow-empty: an empty commit changes nothing in scope, and index
+  # rightly certifies across it (ccc-scope.ts).
+  echo raced >> "$PWD/raced.md" && git -C "$PWD" add raced.md && git -C "$PWD" -c commit.gpgsign=false commit -q -m "raced structural mutation" >/dev/null 2>&1
 fi
 if [ "${name}" = ccc ] && [ "$1" = index ]; then
   # Stand-in for the real artifacts a genuine ccc index writes under .cocoindex_code -- lets
@@ -840,7 +842,10 @@ describe("repo-retrieve route contract", () => {
   test("a plain 'ccc index' run by hand does not permanently stick the watermark stale — the wrapper both reindexes and records the watermark in one step", () => {
     const { dir, head: firstHead } = registerGitProject();
     run(dir, ["index"]);
-    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "second"]);
+    // A real change: with this fake ccc the scope cannot be decided, so any path counts.
+    writeFileSync(join(dir, "second.md"), "second\n");
+    gitCmd(dir, ["add", "second.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "second"]);
     const secondHead = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
     expect(secondHead).not.toBe(firstHead);
 
@@ -858,6 +863,16 @@ describe("repo-retrieve route contract", () => {
 
     const fresh = run(dir, ["concept", "--query", "x"]);
     expect(fresh.code).toBe(0);
+  });
+
+  test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    gitCmd(dir, ["commit", "--allow-empty", "-q", "-m", "empty"]);
+
+    const result = run(dir, ["concept", "--query", "x"]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain("all 0 path(s) changed since are outside");
   });
 
   test("index leaves the watermark unchanged when ccc index itself fails", () => {

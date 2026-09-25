@@ -24,6 +24,7 @@ import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { resolveDbDir } from "./ccc-db-dir.ts";
+import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 
 export function findRegisteredProject(start: string): string | null {
@@ -102,6 +103,7 @@ type Watermark = {
 };
 
 const WATERMARK_BASENAME = "INDEXED_AT";
+const INDEX_ATTEMPTS = 3;
 
 // The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
 // whenever COCOINDEX_CODE_DB_PATH_MAPPING relocates it (see ccc-db-dir.ts).
@@ -245,6 +247,16 @@ async function isWorkingTreeDirty(project: string): Promise<boolean> {
   return result.exitCode === 0 && result.stdout.trim() !== "";
 }
 
+function scopeLine(drift: ScopeDrift | null): string {
+  if (drift === null) return "";
+  const shown = drift.inScope.slice(0, 5).join(", ");
+  const more = drift.inScope.length > 5 ? ", …" : "";
+  return (
+    `${drift.inScope.length} of ${drift.changed} path(s) changed since are in index scope ` +
+    `(${shown}${more}). `
+  );
+}
+
 function remedy(project: string): string {
   return `run 'repo-retrieve index' in ${project} to build a fresh, verified watermark`;
 }
@@ -302,7 +314,30 @@ export async function checkIndexFreshness(
         `Remedy: ${remedy(project)}\n`,
     };
   }
-  if (watermark.value.head !== currentHead) {
+  // A HEAD mismatch is stale only if something the index covers changed. When every path
+  // changed since the watermark is outside ccc's scope (its own matcher decides — ccc-scope.ts),
+  // a re-index at currentHead would reproduce this index exactly, so it is served as current.
+  // This is not "serving stale with a warning": the index IS current. When the scope cannot be
+  // decided, or any in-scope path changed, the refusal below stands (owner ruling 2026-09-25:
+  // never serve stale results).
+  const drift =
+    watermark.value.head !== currentHead &&
+    watermark.value.head !== null &&
+    currentHead !== null
+      ? await inScopeChanges(
+          project,
+          requireExecutable("ccc"),
+          watermark.value.head,
+          currentHead,
+        )
+      : null;
+  if (drift !== null && drift.inScope.length === 0) {
+    process.stderr.write(
+      `NOTE: index built at HEAD=${headLabel(watermark.value.head)}; HEAD is now ` +
+        `${headLabel(currentHead)}, but all ${drift.changed} path(s) changed since are outside ` +
+        "the index scope (ccc's own matcher), so the index is current\n",
+    );
+  } else if (watermark.value.head !== currentHead) {
     return {
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
@@ -319,6 +354,7 @@ export async function checkIndexFreshness(
         `but the working tree is now at HEAD=${headLabel(currentHead)}; that drift is exactly what this ` +
         `gate exists to refuse serving. cite=${citationToken(watermark.value)} names the index's own ` +
         `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
+        scopeLine(drift) +
         `Remedy: ${remedy(project)}\n`,
     };
   }
@@ -367,29 +403,63 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
   // watermark at all (there is no longer any command that will write a watermark without itself
   // observing the indexing run), so that case surfaces as an ordinary missing/stale watermark on
   // the next search, not as a false certification.
-  const headBefore = await gitHead(project);
+  //
+  // A HEAD that moved mid-scan is not always a mixed tree: when every path the intervening
+  // commits touched is outside the index scope (ccc-scope.ts), the index is exactly what a scan
+  // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
+  // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
+  // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
+  let head: string | null = null;
+  let certified = false;
+  for (let attempt = 1; attempt <= INDEX_ATTEMPTS && !certified; attempt++) {
+    const headBefore = await gitHead(project);
 
-  process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
-  const exitCode = await runChild([ccc, "index"], timeoutMs);
-  if (exitCode !== 0) {
+    process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
+    const exitCode = await runChild([ccc, "index"], timeoutMs);
+    if (exitCode !== 0) {
+      process.stderr.write(
+        `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
+          "honest rather than reporting a failed reindex as fresh\n",
+      );
+      return exitCode;
+    }
+
+    const headAfter = await gitHead(project);
+    head = headAfter;
+    if (headBefore === headAfter) {
+      certified = true; // confirmed stable across the whole run: safe to certify
+      break;
+    }
+    const drift =
+      headBefore !== null && headAfter !== null
+        ? await inScopeChanges(project, ccc, headBefore, headAfter)
+        : null;
+    if (drift !== null && drift.inScope.length === 0) {
+      process.stderr.write(
+        `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)}), ` +
+          `but all ${drift.changed} changed path(s) are outside the index scope; certifying ` +
+          `HEAD=${headLabel(headAfter)}\n`,
+      );
+      certified = true;
+      break;
+    }
     process.stderr.write(
-      `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
-        "honest rather than reporting a failed reindex as fresh\n",
+      `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)})` +
+        (drift === null
+          ? "; index scope could not be decided"
+          : `; ${drift.inScope.length} in-scope path(s) changed`) +
+        ` — attempt ${attempt}/${INDEX_ATTEMPTS}\n`,
     );
-    return exitCode;
   }
-
-  const headAfter = await gitHead(project);
-  if (headBefore !== headAfter) {
+  if (!certified) {
     process.stderr.write(
-      `FATAL: HEAD moved during 'ccc index' (was ${headLabel(headBefore)}, now ` +
-        `${headLabel(headAfter)}); a structural git mutation landed mid-scan, so the resulting ` +
-        "index cannot be honestly certified against either HEAD. Watermark left unwritten -- " +
-        "re-run 'repo-retrieve index' now that the tree is stable\n",
+      `FATAL: HEAD moved during 'ccc index' on all ${INDEX_ATTEMPTS} attempts through in-scope ` +
+        "(or undecidable) changes, so no scan can be honestly certified against a single HEAD. " +
+        "Watermark left unwritten -- re-run 'repo-retrieve index' once commits to indexed paths " +
+        "pause\n",
     );
     return 2;
   }
-  const head = headAfter; // === headBefore, confirmed stable across the whole run: safe to certify
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
   // resolves the DB dir from its own. If the two disagree (a daemon started before the mapping

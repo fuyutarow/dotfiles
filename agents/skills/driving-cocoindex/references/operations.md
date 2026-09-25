@@ -60,7 +60,13 @@
   `settings.yml` + the `.gitignore` hunk, nothing else; full undo = `ccc reset --all` (drops
   DBs + settings + the gitignore entry) then `git checkout -- .gitignore` if a conflict
   remains.
-- Creates `.cocoindex_code/{settings.yml, cocoindex.db/, target_sqlite.db}` in the project root.
+- Creates `.cocoindex_code/{settings.yml, cocoindex.db/, target_sqlite.db}` in the project root —
+  **on house hosts only `settings.yml` lands there** (2026-09-23): zsh/zshenv and the WSL unit
+  export `COCOINDEX_CODE_DB_PATH_MAPPING=$HOME=$HOME/.cache/cocoindex-code/db`, so the DBs and
+  repo-retrieve's `INDEXED_AT` live at `~/.cache/cocoindex-code/db/<path under $HOME>/`. Reason:
+  an in-repo DB is rewritten on every commit, and every tool that walks the repo pays for it
+  (firedancer: polysearch landing 21–36 s vs 0.65–0.88 s). Client and daemon MUST carry the same
+  value — `mise run doctor` (`ccc-db-map`) compares them; `ccc-swap.ts relocate` moves old DBs.
 - Appends a self-`.gitignore` block that un-ignores its own settings file, so only `settings.yml`
   is ever committed and the DB artifacts stay untracked:
   ```

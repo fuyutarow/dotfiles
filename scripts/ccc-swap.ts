@@ -8,6 +8,18 @@
 // per-project DB redirect) while the live indexes keep serving searches untouched, then swaps
 // the new indexes in with a directory rename (near-instant) and a single daemon restart.
 //
+// RELOCATED LAYOUT (2026-09-23, `agents/retrieval-control/ccc-db-dir.ts`): when
+// COCOINDEX_CODE_DB_PATH_MAPPING is set host-wide, a project's DB artifacts
+// (cocoindex.db/target_sqlite.db/INDEXED_AT — DB_ARTIFACTS) live OUTSIDE the project, under the
+// mapped target; only settings.yml stays in `<root>/.cocoindex_code/`. `resolveDbDir(root, env)`
+// (imported, mirrors ccc's own resolve_db_dir) is the ONE place that computes where a project's
+// DB artifacts actually live — discover/build/cutover/rollback/gc/relocate all call it instead
+// of assuming `<root>/.cocoindex_code`. NESTED-PROJECT HAZARD: prefix mapping puts a nested
+// project's (e.g. a git worktree under `.claude/worktrees/`) DB dir INSIDE its parent's DB dir —
+// so every op here moves/sizes/snapshots DB_ARTIFACTS BY NAME, never the DB dir as a whole
+// (no recursive size/rename/delete of a whole DB dir), or it would sweep up a nested project's
+// live index. `relocate` is the one-time migration from the old in-repo layout to the mapped one.
+//
 // Verified against the installed cocoindex-code 0.2.39
 // (~/.local/share/uv/tools/cocoindex-code/lib/python3.12/site-packages/cocoindex_code/
 // {settings,client,cli,daemon,indexer}.py, read 2026-07-30 — the stale 0.1.10 copy under
@@ -47,39 +59,37 @@
 //     ground truth.
 //
 // Consumer: human/agent running this by hand. Output is verdict-style lines (PROJECT:/PLAN:/
-// RESULT:/REFUSE:/BUILD:/CUTOVER:/ROLLBACK:/GC:), not a machine envelope.
+// RESULT:/REFUSE:/BUILD:/CUTOVER:/ROLLBACK:/GC:/RELOCATE:/NOTE:), not a machine envelope.
 //
 // Exit: 0 clean (dry run with nothing to flag, or a mutating run that fully succeeded) /
-// 1 findings (discover mismatch, a build/cutover/rollback partial failure, or a cutover refusal)
+// 1 findings (discover mismatch, a build/cutover/rollback/relocate partial failure or refusal)
 // and Cleye's native ordinary-unknown-flag refusal / 2 environment-FATAL (prototype-sensitive or
 // invalid flag input, ccc missing, malformed global_settings.yml, or a live index changed during
 // build — that last one should never happen and is a bug).
 
 import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
-import {
-  copyFile,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { match } from "ts-pattern";
+import {
+  DB_ARTIFACTS,
+  MAPPING_ENV,
+  parseMapping,
+  resolveDbDir,
+  SETTINGS_DIR_NAME,
+} from "../agents/retrieval-control/ccc-db-dir";
 
 // ---------------------------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------------------------
 
-const SETTINGS_DIR_NAME = ".cocoindex_code";
 const PROJECT_SETTINGS_FILE = "settings.yml";
 const GLOBAL_SETTINGS_FILE = "global_settings.yml";
 const TARGET_SQLITE_DB = "target_sqlite.db";
-const PREV_DIR_RE = /^\.cocoindex_code\.prev-(\d+)$/;
 
 // Cleye 2.6.0's strictFlags misses --__proto__; this prototype-only pre-assignment guard must
 // be installed on both the root CLI and every command boundary. Ordinary unknowns stay native.
@@ -226,6 +236,28 @@ export function dirSizeBytes(dir: string): number {
     for (const entry of entriesResult.value) {
       total += accumulateDirEntry(current, entry, stack);
     }
+  }
+  return total;
+}
+
+/** Size of a file, or the recursive size of a directory (e.g. `cocoindex.db`). Missing -> 0. */
+export function pathSizeBytes(path: string): number {
+  const statResult = fromThrowable(() => statSync(path))();
+  if (statResult.isErr()) return 0;
+  return statResult.value.isDirectory()
+    ? dirSizeBytes(path)
+    : statResult.value.size;
+}
+
+/**
+ * Sums the size of every {@link DB_ARTIFACTS} entry PRESENT in `dbDir`, by name — never the size
+ * of `dbDir` as a whole. A mapped DB dir can hold a NESTED project's DB dir (worktree hazard, see
+ * file header); a whole-directory size would silently fold that project's bytes into this one's.
+ */
+export function dbArtifactsSizeBytes(dbDir: string): number {
+  let total = 0;
+  for (const name of DB_ARTIFACTS) {
+    total += pathSizeBytes(join(dbDir, name));
   }
   return total;
 }
@@ -440,30 +472,92 @@ export function diffSnapshots(
   return changed.sort();
 }
 
+/**
+ * Same shape as {@link snapshotDir}, but bounded to {@link DB_ARTIFACTS} entries of `dbDir` BY
+ * NAME (recursing only inside a matched artifact, e.g. the `cocoindex.db` directory) — never a
+ * whole-`dbDir` walk, which would also snapshot a nested project's DB dir underneath it.
+ */
+export function snapshotDbArtifacts(dbDir: string): Map<string, FileSnapshot> {
+  const snap = new Map<string, FileSnapshot>();
+  for (const name of DB_ARTIFACTS) {
+    const full = join(dbDir, name);
+    const statResult = fromThrowable(() => statSync(full))();
+    if (statResult.isErr()) continue;
+    if (statResult.value.isDirectory()) {
+      for (const [rel, s] of snapshotDir(full)) snap.set(join(name, rel), s);
+      continue;
+    }
+    snap.set(name, {
+      size: statResult.value.size,
+      mtimeMs: statResult.value.mtimeMs,
+    });
+  }
+  return snap;
+}
+
 export interface PrevGeneration {
   dirName: string;
   timestamp: number;
   path: string;
 }
 
-/** `.cocoindex_code.prev-<ts>` siblings of a project root, newest first. */
-export function listPrevGenerations(projectRoot: string): PrevGeneration[] {
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** `<basename(dbDir)>.prev-<digits>` siblings of `dbDir`, newest first.
+ *
+ * `dbDir` is a project's LIVE DB dir (`resolveDbDir(root, env)`), not necessarily the project
+ * root — under a path mapping a generation is parked next to the MAPPED dir, which can sit far
+ * outside the project tree. Unmapped, `dbDir` is `<root>/.cocoindex_code` and this reduces to the
+ * historical shape (`.cocoindex_code.prev-<ts>` next to the project's own settings dir).
+ */
+export function listPrevGenerations(dbDir: string): PrevGeneration[] {
+  const parent = dirname(dbDir);
+  const re = new RegExp(`^${escapeRegExp(basename(dbDir))}\\.prev-(\\d+)$`);
   const entriesResult = fromThrowable(() =>
-    readdirSync(projectRoot, { withFileTypes: true }),
+    readdirSync(parent, { withFileTypes: true }),
   )();
   if (entriesResult.isErr()) return [];
   const gens: PrevGeneration[] = [];
   for (const entry of entriesResult.value) {
     if (!entry.isDirectory()) continue;
-    const match = entry.name.match(PREV_DIR_RE);
+    const match = entry.name.match(re);
     if (!match?.[1]) continue;
     gens.push({
       dirName: entry.name,
       timestamp: Number(match[1]),
-      path: join(projectRoot, entry.name),
+      path: join(parent, entry.name),
     });
   }
   return gens.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * The live daemon's Unix socket path (mirrors cocoindex_code's `_daemon_paths.daemon_socket_path`
+ * for the non-Windows, non-overlong-path case — this repo never hits the AF_UNIX length fallback).
+ * `COCOINDEX_CODE_RUNTIME_DIR` overrides where daemon.sock/pid/log live, same as the real client.
+ */
+export function daemonSocketPath(
+  liveSettingsDir: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const runtimeDir = env.COCOINDEX_CODE_RUNTIME_DIR ?? liveSettingsDir;
+  return join(runtimeDir, "daemon.sock");
+}
+
+/**
+ * Whether the LIVE ccc daemon is up — a bare socket-file existence check, deliberately NOT a
+ * `ccc daemon status` shell-out: that command's own client auto-starts a daemon on a cold socket
+ * (cli.py `daemon_status` -> `_connect_and_handshake` -> `start_daemon`, verified against the
+ * installed 0.2.41), so using it to ask "is it running" could itself spawn one. This mirrors
+ * client.py's own `is_daemon_running()`, which is exactly this same file check.
+ */
+export function isLiveDaemonRunning(
+  liveSettingsDir: string,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return existsSync(daemonSocketPath(liveSettingsDir, env));
 }
 
 function baseEnv(): Record<string, string> {
@@ -539,6 +633,56 @@ export async function removeDir(
   }
 }
 
+export interface MoveResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Moves one DB_ARTIFACTS entry `src` -> `dst` (a file or, for `cocoindex.db`, a directory).
+ * `rename` first (near-instant, same-filesystem); on EXDEV (dst on a different filesystem — a
+ * fresh COCOINDEX_CODE_DB_PATH_MAPPING target commonly is) falls back to a recursive copy,
+ * verifies the byte totals match, then deletes the source — never deletes before the copy is
+ * verified.
+ */
+export async function moveDbArtifact(
+  src: string,
+  dst: string,
+): Promise<MoveResult> {
+  const renameResult = await fromAsyncThrowable(() => rename(src, dst))();
+  if (renameResult.isOk()) return { ok: true };
+  const error = renameResult.error;
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? (error as NodeJS.ErrnoException).code
+      : undefined;
+  if (code !== "EXDEV") {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  const srcBytes = pathSizeBytes(src);
+  const copyResult = await fromAsyncThrowable(async () => {
+    await cp(src, dst, { recursive: true, errorOnExist: true });
+    const dstBytes = pathSizeBytes(dst);
+    if (dstBytes !== srcBytes) {
+      throw new Error(
+        `byte mismatch after cross-device copy: src=${srcBytes} dst=${dstBytes}`,
+      );
+    }
+    await removeDir(src);
+  })();
+  if (copyResult.isErr()) {
+    const copyError = copyResult.error;
+    return {
+      ok: false,
+      error: copyError instanceof Error ? copyError.message : String(copyError),
+    };
+  }
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------------------------
@@ -555,10 +699,10 @@ interface Ctx {
   excludePaths: string[];
   cccBin: string | null;
   timeoutMs: number;
-}
-
-function projectDbPath(root: string): string {
-  return join(root, SETTINGS_DIR_NAME, TARGET_SQLITE_DB);
+  // Injected rather than read ad hoc from `process.env` at every call site, so a CLI-level test
+  // (which fully replaces the subprocess's env — see ccc-swap.test.ts's `runScript`) is the same
+  // code path as production, never a separate branch that could drift.
+  env: Record<string, string | undefined>;
 }
 
 async function cmdDiscover(ctx: Ctx): Promise<number> {
@@ -575,12 +719,13 @@ async function cmdDiscover(ctx: Ctx): Promise<number> {
   }
 
   const rows = projects.map((root) => {
-    const dbPath = projectDbPath(root);
+    const dbDir = resolveDbDir(root, ctx.env);
+    const dbPath = join(dbDir, TARGET_SQLITE_DB);
     return {
       root,
       dim: computeIndexDimension(dbPath),
       chunks: countIndexedRows(dbPath),
-      size: dirSizeBytes(join(root, SETTINGS_DIR_NAME)),
+      size: dbArtifactsSizeBytes(dbDir),
     };
   });
 
@@ -691,10 +836,15 @@ async function cmdBuild(
   }
   const cccBin = ctx.cccBin;
 
-  // Snapshot every discovered project's LIVE .cocoindex_code BEFORE touching anything, so the
-  // safety property (build never writes to a live index) is PROVEN below, not asserted.
+  // Snapshot every discovered project's LIVE DB_ARTIFACTS BEFORE touching anything, so the
+  // safety property (build never writes to a live index) is PROVEN below, not asserted. Bounded
+  // to DB_ARTIFACTS by name (never the whole live DB dir) — see the file header's nested-project
+  // hazard.
   const liveSnapshots = new Map(
-    projects.map((root) => [root, snapshotDir(join(root, SETTINGS_DIR_NAME))]),
+    projects.map((root) => [
+      root,
+      snapshotDbArtifacts(resolveDbDir(root, ctx.env)),
+    ]),
   );
 
   await mkdir(ctx.shadowDir, { recursive: true });
@@ -752,36 +902,14 @@ async function cmdBuild(
       continue;
     }
     const { chunks, files } = parseChunksAndFiles(result.stdout);
-    const copyResult = await fromAsyncThrowable(async () => {
-      await mkdir(p.shadowDbDir, { recursive: true });
-      await copyFile(
-        join(p.root, SETTINGS_DIR_NAME, PROJECT_SETTINGS_FILE),
-        join(p.shadowDbDir, PROJECT_SETTINGS_FILE),
-      );
-    })();
-    if (copyResult.isErr()) {
-      const error = copyResult.error;
-      process.stdout.write(
-        `BUILD ${p.root}: WARN settings.yml copy failed: ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-    }
     built += 1;
     process.stdout.write(
       `BUILD ${p.root}: chunks=${chunks ?? "—"} files=${files ?? "—"} elapsed=${elapsedS}s\n`,
     );
   }
-  // Best-effort refresh for skipped (already-built) projects too, so their settings.yml copy
-  // never goes stale across separate build runs — read-only on the live side either way.
-  for (const p of skipped) {
-    // best effort
-    await fromAsyncThrowable(async () => {
-      await mkdir(p.shadowDbDir, { recursive: true });
-      await copyFile(
-        join(p.root, SETTINGS_DIR_NAME, PROJECT_SETTINGS_FILE),
-        join(p.shadowDbDir, PROJECT_SETTINGS_FILE),
-      );
-    })();
-  }
+  // settings.yml is never copied into the shadow tree: `ccc index` reads it straight from the
+  // LIVE project root (never the shadow), and cutover no longer moves or duplicates it either
+  // (it stays put in `<root>/.cocoindex_code/` — see the file header).
 
   const liveTouched: string[] = [];
   for (const root of projects) {
@@ -789,7 +917,7 @@ async function cmdBuild(
     if (!before) continue;
     const diff = diffSnapshots(
       before,
-      snapshotDir(join(root, SETTINGS_DIR_NAME)),
+      snapshotDbArtifacts(resolveDbDir(root, ctx.env)),
     );
     if (diff.length > 0) liveTouched.push(`${root}: ${diff.join(", ")}`);
   }
@@ -800,7 +928,7 @@ async function cmdBuild(
     return 2;
   }
   process.stdout.write(
-    `SAFETY: verified — live .cocoindex_code untouched for all ${projects.length} discovered project(s) (size+mtime snapshot before/after)\n`,
+    `SAFETY: verified — live DB artifacts untouched for all ${projects.length} discovered project(s) (size+mtime snapshot before/after)\n`,
   );
   process.stdout.write(
     `RESULT: build ${failed === 0 ? "succeeded" : "had failures"} — ${built} built, ${skipped.length} skipped, ${failed} failed\n`,
@@ -854,10 +982,9 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     const shadowDb = join(shadowDbDir, TARGET_SQLITE_DB);
     const dim = computeIndexDimension(shadowDb);
     const rows = countIndexedRows(shadowDb);
-    const hasSettings = existsSync(join(shadowDbDir, PROJECT_SETTINGS_FILE));
-    const ready =
-      existsSync(shadowDb) && dim !== null && (rows ?? 0) > 0 && hasSettings;
-    return { root, shadowDbDir, shadowDb, dim, rows, hasSettings, ready };
+    const liveDbDir = resolveDbDir(root, ctx.env);
+    const ready = existsSync(shadowDb) && dim !== null && (rows ?? 0) > 0;
+    return { root, shadowDbDir, shadowDb, liveDbDir, dim, rows, ready };
   });
 
   const problems: string[] = [];
@@ -871,10 +998,6 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
       .when(
         (x) => (x.rows ?? 0) === 0,
         () => "shadow index is empty (0 rows)",
-      )
-      .with(
-        { hasSettings: false },
-        () => "shadow index has no settings.yml copy",
       )
       .otherwise(() => "shadow index dimension unreadable");
     problems.push(`${c.root}: ${reason}`);
@@ -899,7 +1022,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   const ts = Date.now();
   for (const c of checks) {
     process.stdout.write(
-      `PLAN ${c.root}: rename .cocoindex_code -> .cocoindex_code.prev-${ts}, then shadow -> .cocoindex_code\n`,
+      `PLAN ${c.root}: move live DB artifacts ${c.liveDbDir} -> ${c.liveDbDir}.prev-${ts}, then shadow artifacts -> ${c.liveDbDir}\n`,
     );
   }
   process.stdout.write(
@@ -936,14 +1059,36 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   // a crash mid-loop leaves some projects on the new index waiting for the final model flip
   // (still functionally serving the OLD model/OLD index everywhere the loop hasn't reached),
   // never the whole fleet mismatched at once the way a global-first flip would leave it.
+  const cutoverFailures: string[] = [];
   for (const c of checks) {
-    const liveDir = join(c.root, SETTINGS_DIR_NAME);
-    const prevDir = `${liveDir}.prev-${ts}`;
-    await rename(liveDir, prevDir);
-    await rename(c.shadowDbDir, liveDir);
+    const prevDir = `${c.liveDbDir}.prev-${ts}`;
+    await mkdir(prevDir, { recursive: true });
+    for (const name of DB_ARTIFACTS) {
+      const src = join(c.liveDbDir, name);
+      if (!existsSync(src)) continue;
+      const moved = await moveDbArtifact(src, join(prevDir, name));
+      if (!moved.ok) {
+        cutoverFailures.push(`${c.root}: parking ${name}: ${moved.error}`);
+      }
+    }
+    await mkdir(c.liveDbDir, { recursive: true });
+    for (const name of DB_ARTIFACTS) {
+      const src = join(c.shadowDbDir, name);
+      if (!existsSync(src)) continue;
+      const moved = await moveDbArtifact(src, join(c.liveDbDir, name));
+      if (!moved.ok) {
+        cutoverFailures.push(`${c.root}: promoting ${name}: ${moved.error}`);
+      }
+    }
     process.stdout.write(
-      `CUTOVER ${c.root}: live -> ${prevDir}, shadow -> live\n`,
+      `CUTOVER ${c.root}: live artifacts -> ${prevDir}, shadow artifacts -> ${c.liveDbDir}\n`,
     );
+  }
+  if (cutoverFailures.length > 0) {
+    process.stderr.write(
+      `FATAL: cutover artifact move failed:\n${cutoverFailures.map((f) => `  - ${f}`).join("\n")}\n`,
+    );
+    return 2;
   }
 
   await writeFile(
@@ -988,10 +1133,10 @@ async function cmdRollback(
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
-  const perProject = projects.map((root) => ({
-    root,
-    gens: listPrevGenerations(root),
-  }));
+  const perProject = projects.map((root) => {
+    const liveDbDir = resolveDbDir(root, ctx.env);
+    return { root, liveDbDir, gens: listPrevGenerations(liveDbDir) };
+  });
   const withGens = perProject.filter((p) => p.gens.length > 0);
   if (withGens.length === 0) {
     process.stdout.write(
@@ -1019,10 +1164,12 @@ async function cmdRollback(
   const usable = withGens
     .map((p) => ({
       root: p.root,
+      liveDbDir: p.liveDbDir,
       gen: p.gens.find((g) => g.timestamp === targetTs),
     }))
     .filter(
-      (p): p is { root: string; gen: PrevGeneration } => p.gen !== undefined,
+      (p): p is { root: string; liveDbDir: string; gen: PrevGeneration } =>
+        p.gen !== undefined,
     );
   const missing = withGens.filter(
     (p) => !p.gens.some((g) => g.timestamp === targetTs),
@@ -1041,7 +1188,7 @@ async function cmdRollback(
   }
   for (const u of usable) {
     process.stdout.write(
-      `PLAN ${u.root}: current .cocoindex_code -> new .prev- generation, ${u.gen.dirName} -> .cocoindex_code\n`,
+      `PLAN ${u.root}: current live artifacts -> new .prev- generation, ${u.gen.dirName} artifacts -> live (${u.liveDbDir})\n`,
     );
   }
 
@@ -1082,14 +1229,47 @@ async function cmdRollback(
   const cccBin = ctx.cccBin;
 
   const newTs = Date.now();
+  const rollbackFailures: string[] = [];
   for (const u of usable) {
-    const liveDir = join(u.root, SETTINGS_DIR_NAME);
-    const parkedDir = `${liveDir}.prev-${newTs}`;
-    await rename(liveDir, parkedDir);
-    await rename(u.gen.path, liveDir);
+    const parkedDir = `${u.liveDbDir}.prev-${newTs}`;
+    await mkdir(parkedDir, { recursive: true });
+    for (const name of DB_ARTIFACTS) {
+      const src = join(u.liveDbDir, name);
+      if (!existsSync(src)) continue;
+      const moved = await moveDbArtifact(src, join(parkedDir, name));
+      if (!moved.ok) {
+        rollbackFailures.push(`${u.root}: parking ${name}: ${moved.error}`);
+      }
+    }
+    await mkdir(u.liveDbDir, { recursive: true });
+    // `u.gen.path` may be an OLD-FORMAT generation (a whole renamed `.cocoindex_code`, still
+    // carrying its own settings.yml copy) — move only DB_ARTIFACTS by name and leave any
+    // settings.yml inside `u.gen.path` untouched, orphaned in the now-consumed generation dir.
+    for (const name of DB_ARTIFACTS) {
+      const src = join(u.gen.path, name);
+      if (!existsSync(src)) continue;
+      const moved = await moveDbArtifact(src, join(u.liveDbDir, name));
+      if (!moved.ok) {
+        rollbackFailures.push(`${u.root}: restoring ${name}: ${moved.error}`);
+      }
+    }
+    // A generation is CONSUMED, not merely drained: reclaim its now-empty husk so the net
+    // `.prev-*` count stays flat (park one, consume one) the way the old whole-dir rename did.
+    // An OLD-FORMAT generation that still holds a leftover settings.yml is left as-is — its
+    // settings.yml is never touched, so the dir is never actually empty in that case.
+    const remaining = fromThrowable(() => readdirSync(u.gen.path))();
+    if (remaining.isOk() && remaining.value.length === 0) {
+      await removeDir(u.gen.path);
+    }
     process.stdout.write(
-      `ROLLBACK ${u.root}: current -> ${parkedDir}, ${u.gen.dirName} -> .cocoindex_code\n`,
+      `ROLLBACK ${u.root}: current artifacts -> ${parkedDir}, ${u.gen.dirName} artifacts -> ${u.liveDbDir}\n`,
     );
+  }
+  if (rollbackFailures.length > 0) {
+    process.stderr.write(
+      `FATAL: rollback artifact move failed:\n${rollbackFailures.map((f) => `  - ${f}`).join("\n")}\n`,
+    );
+    return 2;
   }
 
   if (previousModel && existsSync(liveGlobalSettingsPath)) {
@@ -1128,7 +1308,7 @@ async function cmdGc(
   });
   const perProject = projects.map((root) => ({
     root,
-    gens: listPrevGenerations(root),
+    gens: listPrevGenerations(resolveDbDir(root, ctx.env)),
   }));
 
   const toDelete: PrevGeneration[] = [];
@@ -1187,11 +1367,149 @@ async function cmdGc(
   return 0;
 }
 
+/**
+ * One-time migration off the old in-repo `<root>/.cocoindex_code/` DB layout onto a
+ * COCOINDEX_CODE_DB_PATH_MAPPING target. For each discovered project: `from` is always
+ * `<root>/.cocoindex_code`, `to` is `resolveDbDir(root, env)`. Unmapped (`from === to`) is a
+ * per-project SKIP, not a refusal — a fleet migrating gradually is expected to have both. Moves
+ * DB_ARTIFACTS by name only (never `from`/`to` as whole directories — see the file header);
+ * settings.yml is never touched, so `from` (`<root>/.cocoindex_code/`) ends up holding only it.
+ */
+async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
+  const mappings = parseMapping(ctx.env[MAPPING_ENV]);
+  if (mappings.length === 0) {
+    process.stdout.write(
+      `NOTE: ${MAPPING_ENV} is unset or maps nothing — nothing to relocate\n`,
+    );
+    return 0;
+  }
+
+  const projects = discoverProjects(ctx.home, {
+    excludeDirNames: ctx.excludeDirNames,
+    excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
+  });
+  if (projects.length === 0) {
+    process.stdout.write(
+      `RESULT: relocate found 0 projects under ${ctx.home} — nothing to do\n`,
+    );
+    return 0;
+  }
+
+  const plans = projects.map((root) => ({
+    root,
+    from: join(root, SETTINGS_DIR_NAME),
+    to: resolveDbDir(root, ctx.env),
+  }));
+
+  const conflicts: string[] = [];
+  const work: Array<{
+    root: string;
+    from: string;
+    to: string;
+    artifacts: readonly string[];
+  }> = [];
+  let skipped = 0;
+  for (const p of plans) {
+    if (p.from === p.to) {
+      process.stdout.write(`PLAN ${p.root}: SKIP (unmapped)\n`);
+      skipped += 1;
+      continue;
+    }
+    const present = DB_ARTIFACTS.filter((name) =>
+      existsSync(join(p.from, name)),
+    );
+    if (present.length === 0) {
+      process.stdout.write(
+        `PLAN ${p.root}: SKIP (no DB artifacts at ${p.from})\n`,
+      );
+      skipped += 1;
+      continue;
+    }
+    const conflicting = present.filter((name) => existsSync(join(p.to, name)));
+    if (conflicting.length > 0) {
+      conflicts.push(
+        `${p.root}: ${conflicting.join(", ")} present at BOTH ${p.from} and ${p.to} — refusing to overwrite`,
+      );
+      continue;
+    }
+    process.stdout.write(
+      `PLAN ${p.root}: RELOCATE ${present.join(", ")} ${p.from} -> ${p.to}\n`,
+    );
+    work.push({ root: p.root, from: p.from, to: p.to, artifacts: present });
+  }
+
+  if (conflicts.length > 0) {
+    process.stdout.write(
+      `REFUSE: relocate blocked for ${conflicts.length} project(s):\n${conflicts.map((c) => `  - ${c}`).join("\n")}\n`,
+    );
+    process.stdout.write(
+      "RESULT: relocate refused — resolve every conflict by hand, nothing is auto-overwritten\n",
+    );
+    return 1;
+  }
+
+  if (work.length === 0) {
+    process.stdout.write(
+      `RESULT: relocate found nothing to move (${skipped} project(s) skipped)\n`,
+    );
+    return 0;
+  }
+
+  if (!flags.yes) {
+    process.stdout.write(
+      `RESULT: dry run — ${work.length} project(s) would be relocated, ${skipped} skipped. Re-run with --yes.\n`,
+    );
+    return 0;
+  }
+
+  if (isLiveDaemonRunning(ctx.liveSettingsDir, ctx.env)) {
+    process.stdout.write(
+      `REFUSE: the live ccc daemon is running (${daemonSocketPath(ctx.liveSettingsDir, ctx.env)}) — stop it first (the host's supervision regime decides how: e.g. \`systemctl --user stop ccc-daemon\`, or \`ccc daemon stop\` unsupervised), then re-run relocate\n`,
+    );
+    process.stdout.write("RESULT: relocate refused — daemon is live\n");
+    return 1;
+  }
+
+  let moved = 0;
+  let failed = 0;
+  for (const w of work) {
+    await mkdir(w.to, { recursive: true });
+    const errors: string[] = [];
+    for (const name of w.artifacts) {
+      const result = await moveDbArtifact(join(w.from, name), join(w.to, name));
+      if (!result.ok) errors.push(`${name}: ${result.error}`);
+    }
+    if (errors.length > 0) {
+      failed += 1;
+      process.stdout.write(
+        `RELOCATE ${w.root}: FAILED — ${errors.join("; ")}\n`,
+      );
+      continue;
+    }
+    moved += 1;
+    process.stdout.write(
+      `RELOCATE ${w.root}: moved ${w.artifacts.join(", ")} -> ${w.to}\n`,
+    );
+  }
+
+  process.stdout.write(
+    `RESULT: relocate moved ${moved} project(s), ${skipped} skipped, ${failed} failed\n`,
+  );
+  return failed > 0 ? 1 : 0;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Entry
 // ---------------------------------------------------------------------------------------------
 
-const VERBS = ["discover", "build", "cutover", "rollback", "gc"] as const;
+const VERBS = [
+  "discover",
+  "build",
+  "cutover",
+  "rollback",
+  "gc",
+  "relocate",
+] as const;
 type Verb = (typeof VERBS)[number];
 
 const SWAP_FLAGS = {
@@ -1257,6 +1575,7 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
     excludePaths,
     cccBin,
     timeoutMs,
+    env: process.env,
   };
   return match(verb)
     .with("discover", () => cmdDiscover(ctx))
@@ -1273,6 +1592,7 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
       cmdRollback(ctx, { yes: flags.yes, generation: flags.generation }),
     )
     .with("gc", () => cmdGc(ctx, { yes: flags.yes, keep }))
+    .with("relocate", () => cmdRelocate(ctx, { yes: flags.yes }))
     .exhaustive();
 }
 

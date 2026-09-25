@@ -1,13 +1,13 @@
 // ccc index adapter for repo-retrieve: registration lookup, the freshness watermark
-// (.cocoindex_code/INDEXED_AT), the NO_INDEX gate that concept/battery run before serving, and
-// the `index` action that is the watermark's only writer. Moved verbatim out of
+// (INDEXED_AT in ccc's DB dir — ccc-db-dir.ts), the NO_INDEX gate that concept/battery run
+// before serving, and the `index` action that is the watermark's only writer. Moved verbatim out of
 // repo-retrieve.ts on 2026-09-22 so routing and ccc index freshness each have one home; the
 // router imports this module and nothing here knows about routes beyond the label it prints.
 //
 // INDEX FRESHNESS: `ccc status` exposes chunk/file counts but no watermark — it cannot tell you
 // whether its own index matches the working tree (verified: `ccc status`/`ccc --help`, no
 // indexed-at or commit field anywhere in the output). So concept/battery (the only routes that
-// read the persisted vector index) compare a sidecar watermark (.cocoindex_code/INDEXED_AT,
+// read the persisted vector index) compare a sidecar watermark (INDEXED_AT beside the DB,
 // {head, indexedAt, source} — see the Watermark type below) against `git rev-parse HEAD` before
 // returning results. A mismatch, a missing/corrupt watermark, a legacy `source: "stamp"`
 // watermark, or a watermark whose project has no ccc index artifacts at all, is NO_INDEX
@@ -23,6 +23,7 @@
 import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { resolveDbDir } from "./ccc-db-dir.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 
 export function findRegisteredProject(start: string): string | null {
@@ -102,8 +103,10 @@ type Watermark = {
 
 const WATERMARK_BASENAME = "INDEXED_AT";
 
+// The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
+// whenever COCOINDEX_CODE_DB_PATH_MAPPING relocates it (see ccc-db-dir.ts).
 function watermarkPath(project: string): string {
-  return join(project, ".cocoindex_code", WATERMARK_BASENAME);
+  return join(resolveDbDir(project), WATERMARK_BASENAME);
 }
 
 type WatermarkRead =
@@ -156,13 +159,17 @@ async function writeWatermark(
 const SETTINGS_BASENAME = "settings.yml";
 
 // Cheap sanity check, explicitly NOT a security boundary (see the TRUST LAW note at the top of
-// this file): does .cocoindex_code contain anything besides its own settings.yml and our own
+// this file): does the project's DB dir contain anything besides settings.yml and our own
 // watermark file? A watermark's on-disk bytes can always be hand-written by anyone with
 // filesystem access, so this cannot stop a determined spoof -- it only catches the specific,
 // unintentional defect a verifier reproduced live: a watermark that matches currentHead sitting
 // in a directory `ccc index` never actually touched, describing an index that does not exist.
+//
+// Only TOP-LEVEL files count, plus the contents of ccc's `cocoindex.db/` directory. Under a DB
+// path mapping, a nested project's DB dir sits inside this one (ccc-db-dir.ts), and a recursive
+// walk would count that project's artifacts as this project's.
 async function hasIndexArtifacts(project: string): Promise<boolean> {
-  const dir = join(project, ".cocoindex_code");
+  const dir = resolveDbDir(project);
   // Wrapped in a plain (non-overloaded) local function so `ReturnType<typeof list>` resolves to
   // the type these exact arguments (default utf8 encoding, withFileTypes: true) actually select
   // -- Dirent<string>[]. `Awaited<ReturnType<typeof readdir>>` directly does not: readdir's LAST
@@ -175,8 +182,12 @@ async function hasIndexArtifacts(project: string): Promise<boolean> {
   } catch {
     return false;
   }
+  const cccStore = join(dir, "cocoindex.db");
   for (const entry of entries) {
     if (!entry.isFile()) continue;
+    const parent = resolve(entry.parentPath);
+    if (parent !== resolve(dir) && !`${parent}/`.startsWith(`${cccStore}/`))
+      continue;
     if (entry.name === SETTINGS_BASENAME) continue; // hand-authored by `ccc init`, not indexing
     if (
       entry.name === WATERMARK_BASENAME ||
@@ -321,14 +332,14 @@ export async function checkIndexFreshness(
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
         `watermark at ${watermarkPath(project)} matches HEAD=${headLabel(currentHead)}, but no ccc ` +
-        `index artifacts exist under ${join(project, ".cocoindex_code")}; a watermark describing ` +
+        `index artifacts exist under ${resolveDbDir(project)}; a watermark describing ` +
         `an index that was never built is refused. Remedy: ${remedy(project)}\n`,
     };
   }
   return { status: "fresh", watermark: watermark.value };
 }
 
-// Companion to the freshness gate, not a search route: writes .cocoindex_code/INDEXED_AT. This is
+// Companion to the freshness gate, not a search route: writes INDEXED_AT (ccc's DB dir). This is
 // now the ONLY thing that writes that file. A plain `ccc index` run by hand (bypassing this
 // wrapper entirely) still leaves the watermark stale or missing -- there is deliberately no
 // separate, faster, no-reindex path to recover it (that path used to be `stamp`; it asserted
@@ -379,6 +390,20 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
     return 2;
   }
   const head = headAfter; // === headBefore, confirmed stable across the whole run: safe to certify
+
+  // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
+  // resolves the DB dir from its own. If the two disagree (a daemon started before the mapping
+  // was set, a shell that never read zsh/zshenv), the index exists and this process cannot see
+  // it — certifying it here would put the watermark beside no DB. Refuse, and name the fix.
+  if (!(await hasIndexArtifacts(project))) {
+    process.stderr.write(
+      `FATAL: 'ccc index' succeeded but no index artifacts exist under ${resolveDbDir(project)}; ` +
+        "the daemon and this process resolve different DB dirs. Compare the 'DB path mappings' " +
+        `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
+        `(${process.env.COCOINDEX_CODE_DB_PATH_MAPPING ?? "unset"}). Watermark left unwritten\n`,
+    );
+    return 2;
+  }
 
   await writeWatermark(project, head, "index");
   if (head !== null && (await isWorkingTreeDirty(project))) {

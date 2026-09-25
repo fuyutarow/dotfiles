@@ -9,7 +9,7 @@ import { join } from "node:path";
 // .githooks/post-commit.
 //
 // It calls `repo-retrieve index`, never bare `ccc index`. A bare `ccc index` refreshes the index
-// CONTENT but writes no watermark (.cocoindex_code/INDEXED_AT) — only `repo-retrieve index` does —
+// CONTENT but writes no watermark (INDEXED_AT, beside the DB) — only `repo-retrieve index` does —
 // so every commit advanced HEAD past the watermark and concept/battery answered NO_INDEX while the
 // index itself was current. firedancer measured and fixed the same defect in its own hook on
 // 2026-09-02; this body had kept the old form until 2026-09-22.

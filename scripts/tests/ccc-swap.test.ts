@@ -19,6 +19,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   statSync,
@@ -27,14 +28,17 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
+import { MAPPING_ENV } from "../../agents/retrieval-control/ccc-db-dir";
 import {
   buildDbPathMappingEnv,
   computeIndexDimension,
   countIndexedRows,
+  dbArtifactsSizeBytes,
   diffSnapshots,
   discoverProjects,
   dirSizeBytes,
   humanSize,
+  isLiveDaemonRunning,
   listPrevGenerations,
   mirrorShadowDbDir,
   parseChunksAndFiles,
@@ -303,14 +307,26 @@ describe("dirSizeBytes / humanSize", () => {
 });
 
 describe("listPrevGenerations", () => {
-  test("finds .cocoindex_code.prev-<ts> siblings, newest first", () => {
+  test("finds .cocoindex_code.prev-<ts> siblings of the LIVE DB DIR, newest first", () => {
     const home = makeHome();
     const root = join(home, "p");
     mkdirSync(join(root, ".cocoindex_code.prev-100"), { recursive: true });
     mkdirSync(join(root, ".cocoindex_code.prev-200"), { recursive: true });
     mkdirSync(join(root, "not-a-generation"), { recursive: true });
-    const gens = listPrevGenerations(root);
+    // Unmapped default: the live DB dir IS `<root>/.cocoindex_code`, so its `.prev-<ts>`
+    // siblings sit directly under `root` — same fixture shape as before the signature change
+    // from projectRoot to liveDbDir (mapped mode parks a generation far outside the project).
+    const gens = listPrevGenerations(join(root, ".cocoindex_code"));
     expect(gens.map((g) => g.timestamp)).toEqual([200, 100]);
+  });
+
+  test("mapped: siblings of a DB dir that lives outside the project root entirely", () => {
+    const mapTarget = mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-"));
+    const mappedDbDir = join(mapTarget, "p");
+    mkdirSync(join(mapTarget, "p.prev-300"), { recursive: true });
+    mkdirSync(mappedDbDir, { recursive: true });
+    const gens = listPrevGenerations(mappedDbDir);
+    expect(gens.map((g) => g.timestamp)).toEqual([300]);
   });
 });
 
@@ -618,7 +634,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     expect(sha256(join(liveCcDir, "target_sqlite.db"))).not.toBe(
       preBuildLiveHash,
     );
-    const gens = listPrevGenerations(projectRoot);
+    const gens = listPrevGenerations(liveCcDir);
     expect(gens.length).toBe(1);
     // the parked prev generation IS the original live content, byte for byte
     const [firstGeneration] = gens;
@@ -633,7 +649,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     const rollbackDry = runScript(["rollback", "--home", home]);
     expect(rollbackDry.code).toBe(0);
     expect(rollbackDry.out).toContain("dry run");
-    expect(listPrevGenerations(projectRoot).length).toBe(1);
+    expect(listPrevGenerations(liveCcDir).length).toBe(1);
     expect(readEmbeddingModel(readFileSync(globalSettingsPath, "utf8"))).toBe(
       "new/model-b",
     );
@@ -655,7 +671,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     expect(sha256(join(liveCcDir, "target_sqlite.db"))).toBe(preBuildLiveHash);
     // rollback itself is undoable: it parked the (post-cutover) state as a new generation while
     // consuming the one it restored from — net count of .prev-* dirs for this project stays 1
-    const genAfterRollback = listPrevGenerations(projectRoot);
+    const genAfterRollback = listPrevGenerations(liveCcDir);
     expect(genAfterRollback.length).toBe(1);
     // and it is NOT the same generation any more — it is the just-parked post-cutover state
     const [parkedPostCutoverGeneration] = genAfterRollback;
@@ -671,12 +687,260 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     const gcDry = runScript(["gc", "--home", home, "--keep", "0"]);
     expect(gcDry.code).toBe(0);
     expect(gcDry.out).toContain("dry run");
-    expect(listPrevGenerations(projectRoot).length).toBe(1);
+    expect(listPrevGenerations(liveCcDir).length).toBe(1);
 
     // real gc, keep=0 — deletes the last remaining generation
     const gc = runScript(["gc", "--home", home, "--keep", "0", "--yes"]);
     expect(gc.code).toBe(0);
     expect(gc.out).toContain("RESULT: gc deleted 1 generation(s)");
-    expect(listPrevGenerations(projectRoot).length).toBe(0);
+    expect(listPrevGenerations(liveCcDir).length).toBe(0);
+  });
+});
+
+// ---- relocated layout (COCOINDEX_CODE_DB_PATH_MAPPING) --------------------------------------
+
+function makeMapTarget(): string {
+  return mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-"));
+}
+
+function mapEnvFor(home: string, target: string): Record<string, string> {
+  return { [MAPPING_ENV]: `${home}=${target}` };
+}
+
+describe("dbArtifactsSizeBytes", () => {
+  test("sums only DB_ARTIFACTS by name, recursing into cocoindex.db as a directory", () => {
+    const home = makeHome();
+    const dbDir = join(home, "db");
+    mkdirSync(dbDir, { recursive: true });
+    writeFileSync(join(dbDir, "target_sqlite.db"), "12345"); // 5 bytes
+    writeFileSync(join(dbDir, "INDEXED_AT"), "1234567890"); // 10 bytes
+    mkdirSync(join(dbDir, "cocoindex.db"), { recursive: true });
+    writeFileSync(join(dbDir, "cocoindex.db", "part"), "123"); // 3 bytes
+    // an unrelated file in the same dir must NOT be counted — never size the DB dir as a whole
+    writeFileSync(join(dbDir, "settings.yml"), "this is 20 bytes!!!");
+    expect(dbArtifactsSizeBytes(dbDir)).toBe(5 + 10 + 3);
+  });
+});
+
+describe("isLiveDaemonRunning", () => {
+  test("false with no socket file, true once one exists", () => {
+    const home = makeHome();
+    const liveSettingsDir = join(home, ".cocoindex_code");
+    mkdirSync(liveSettingsDir, { recursive: true });
+    expect(isLiveDaemonRunning(liveSettingsDir)).toBe(false);
+    writeFileSync(join(liveSettingsDir, "daemon.sock"), "");
+    expect(isLiveDaemonRunning(liveSettingsDir)).toBe(true);
+  });
+});
+
+describe("CLI: discover under a DB path mapping", () => {
+  test("reads dimension/chunks/size from the MAPPED dir, not the unmapped fallback", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const projectRoot = join(home, "proj-a");
+    mkdirSync(join(projectRoot, ".cocoindex_code"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, ".cocoindex_code", "settings.yml"),
+      "include_patterns: []\nexclude_patterns: []\n",
+    );
+    makeProjectIndex(join(mapTarget, "proj-a"), { dim: 512, chunks: 9 });
+
+    const { out, code } = runScript(
+      ["discover", "--home", home],
+      mapEnvFor(home, mapTarget),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain(`PROJECT ${projectRoot}`);
+    expect(out).toContain("dim=512");
+    expect(out).toContain("chunks=9");
+    expect(out).toContain("status=OK");
+    // never read from the unmapped fallback location — nothing was ever written there
+    expect(
+      existsSync(join(projectRoot, ".cocoindex_code", "target_sqlite.db")),
+    ).toBe(false);
+  });
+});
+
+describe("CLI: cutover under a mapping with a nested project (worktree hazard)", () => {
+  test("parent cutover never sweeps up the nested child's live artifacts", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const mapEnv = mapEnvFor(home, mapTarget);
+
+    const parentRoot = join(home, "proj-a");
+    const childRoot = join(parentRoot, ".claude", "worktrees", "agent-x");
+    for (const root of [parentRoot, childRoot]) {
+      mkdirSync(join(root, ".cocoindex_code"), { recursive: true });
+      writeFileSync(
+        join(root, ".cocoindex_code", "settings.yml"),
+        "include_patterns: []\nexclude_patterns: []\n",
+      );
+    }
+    makeGlobalSettings(join(home, ".cocoindex_code"), "old/model-a");
+
+    const parentLiveDbDir = join(mapTarget, "proj-a");
+    const childLiveDbDir = join(
+      mapTarget,
+      "proj-a",
+      ".claude",
+      "worktrees",
+      "agent-x",
+    );
+    makeProjectIndex(parentLiveDbDir, { dim: 768, chunks: 4 });
+    makeProjectIndex(childLiveDbDir, { dim: 768, chunks: 2 });
+    const parentPreHash = sha256(join(parentLiveDbDir, "target_sqlite.db"));
+    const childPreHash = sha256(join(childLiveDbDir, "target_sqlite.db"));
+
+    const build = runScript(
+      [
+        "build",
+        "--home",
+        home,
+        "--model",
+        "new/model-b",
+        "--ccc-bin",
+        FAKE_CCC,
+        "--yes",
+      ],
+      mapEnv,
+    );
+    expect(build.code).toBe(0);
+    expect(build.out).toContain("SAFETY: verified");
+    expect(build.out).toContain("2 built, 0 skipped, 0 failed");
+
+    const cutover = runScript(
+      ["cutover", "--home", home, "--yes", "--ccc-bin", FAKE_CCC],
+      mapEnv,
+    );
+    expect(cutover.code).toBe(0);
+    expect(cutover.out).toContain("RESULT: cutover complete for 2 project(s)");
+
+    // Both projects landed their OWN new (fake-ccc-built) index.
+    expect(sha256(join(parentLiveDbDir, "target_sqlite.db"))).not.toBe(
+      parentPreHash,
+    );
+    expect(sha256(join(childLiveDbDir, "target_sqlite.db"))).not.toBe(
+      childPreHash,
+    );
+
+    // Each project parked its OWN generation, holding ITS OWN pre-cutover bytes.
+    const parentGens = listPrevGenerations(parentLiveDbDir);
+    const childGens = listPrevGenerations(childLiveDbDir);
+    expect(parentGens.length).toBe(1);
+    expect(childGens.length).toBe(1);
+    const [parentGen] = parentGens;
+    const [childGen] = childGens;
+    if (parentGen === undefined || childGen === undefined) {
+      throw new Error("expected exactly one parked generation per project");
+    }
+    expect(sha256(join(parentGen.path, "target_sqlite.db"))).toBe(
+      parentPreHash,
+    );
+    expect(sha256(join(childGen.path, "target_sqlite.db"))).toBe(childPreHash);
+
+    // THE HAZARD CHECK: the parent's parked generation is a SIBLING of parentLiveDbDir
+    // (`<mapTarget>/proj-a.prev-<ts>`) and must NOT contain the nested child's subtree — a
+    // whole-directory rename/copy of the parent's DB dir would have swept it in.
+    expect(existsSync(join(parentGen.path, ".claude"))).toBe(false);
+
+    // And the child's live artifacts are still correctly nested inside the parent's live dir.
+    expect(childLiveDbDir.startsWith(`${parentLiveDbDir}/`)).toBe(true);
+    expect(existsSync(join(childLiveDbDir, "target_sqlite.db"))).toBe(true);
+  });
+});
+
+describe("CLI: relocate", () => {
+  test("prints a NOTE and exits 0 when the mapping is unset", () => {
+    const home = makeHome();
+    const { out, code } = runScript(["relocate", "--home", home]);
+    expect(code).toBe(0);
+    expect(out).toContain("NOTE:");
+  });
+
+  test("dry run: plans the move, mutates nothing", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const projectRoot = join(home, "proj-a");
+    makeProject(projectRoot, { dim: 768, chunks: 5 });
+    const to = join(mapTarget, "proj-a");
+
+    const { out, code } = runScript(
+      ["relocate", "--home", home],
+      mapEnvFor(home, mapTarget),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain("dry run");
+    expect(out).toContain(`PLAN ${projectRoot}: RELOCATE`);
+    expect(existsSync(to)).toBe(false);
+    expect(
+      existsSync(join(projectRoot, ".cocoindex_code", "target_sqlite.db")),
+    ).toBe(true);
+  });
+
+  test("apply: moves artifacts, settings.yml stays, .cocoindex_code/ ends with only settings.yml", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const projectRoot = join(home, "proj-a");
+    makeProject(projectRoot, { dim: 768, chunks: 5 });
+    const from = join(projectRoot, ".cocoindex_code");
+    const to = join(mapTarget, "proj-a");
+    const preHash = sha256(join(from, "target_sqlite.db"));
+
+    const { out, code } = runScript(
+      ["relocate", "--home", home, "--yes"],
+      mapEnvFor(home, mapTarget),
+    );
+    expect(code).toBe(0);
+    expect(out).toContain("RESULT: relocate moved 1 project(s)");
+    expect(existsSync(join(to, "target_sqlite.db"))).toBe(true);
+    expect(sha256(join(to, "target_sqlite.db"))).toBe(preHash);
+    expect(existsSync(join(from, "target_sqlite.db"))).toBe(false);
+    expect(existsSync(join(from, "settings.yml"))).toBe(true);
+    expect(readdirSync(from)).toEqual(["settings.yml"]);
+  });
+
+  test("conflict: refuses when an artifact exists at both ends, touches neither", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const projectRoot = join(home, "proj-a");
+    makeProject(projectRoot, { dim: 768, chunks: 5 });
+    const from = join(projectRoot, ".cocoindex_code");
+    const to = join(mapTarget, "proj-a");
+    makeProjectIndex(to, { dim: 768, chunks: 1 }); // already present at the target too
+    const fromHashBefore = sha256(join(from, "target_sqlite.db"));
+    const toHashBefore = sha256(join(to, "target_sqlite.db"));
+
+    const { out, code } = runScript(
+      ["relocate", "--home", home, "--yes"],
+      mapEnvFor(home, mapTarget),
+    );
+    expect(code).toBe(1);
+    expect(out).toContain("REFUSE");
+    expect(sha256(join(from, "target_sqlite.db"))).toBe(fromHashBefore);
+    expect(sha256(join(to, "target_sqlite.db"))).toBe(toHashBefore);
+  });
+
+  test("refuses when the live ccc daemon socket is present, moves nothing", () => {
+    const home = makeHome();
+    const mapTarget = makeMapTarget();
+    const projectRoot = join(home, "proj-a");
+    makeProject(projectRoot, { dim: 768, chunks: 5 });
+    const liveSettingsDir = join(home, ".cocoindex_code");
+    mkdirSync(liveSettingsDir, { recursive: true });
+    writeFileSync(join(liveSettingsDir, "daemon.sock"), "");
+
+    const { out, code } = runScript(
+      ["relocate", "--home", home, "--yes"],
+      mapEnvFor(home, mapTarget),
+    );
+    expect(code).toBe(1);
+    expect(out).toContain("REFUSE");
+    expect(out.toLowerCase()).toContain("daemon");
+    expect(existsSync(join(mapTarget, "proj-a", "target_sqlite.db"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(join(projectRoot, ".cocoindex_code", "target_sqlite.db")),
+    ).toBe(true);
   });
 });

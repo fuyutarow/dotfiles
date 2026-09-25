@@ -70,6 +70,12 @@ RestartSec=2
 # even if the user manager's environment happens to carry it.
 UnsetEnvironment=COCOINDEX_CODE_DAEMON_SUPERVISED
 
+# Index DBs live outside the repos (2026-09-23). MUST equal the value zsh/zshenv exports for
+# clients: the daemon writes the DB where THIS value points, while `ccc reset`, `ccc status` and
+# repo-retrieve's watermark look where the CLIENT's value points. `mise run doctor` compares the
+# two through `ccc doctor`'s "DB path mappings" line.
+Environment="COCOINDEX_CODE_DB_PATH_MAPPING=%h=%h/.cache/cocoindex-code/db"
+
 # --- hard ceilings (enforceable here: cgroup v2 controllers cpu/memory/pids) ---
 # TEMPORARY 2026-09-13: CPUQuota 300%→900%, TasksMax 256→768 — see "Priority history" above.
 CPUQuota=900%

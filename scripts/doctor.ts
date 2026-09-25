@@ -17,6 +17,8 @@
 //                                                (and Codex, when installed)
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   ccc-daemon  cocoindex unit      (WSL only)   ccc-daemon.service is active under systemd --user
+//   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
+//                                                this shell does (`ccc doctor` DB path mappings)
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
 //
 // NO FLAGS, NO DEPENDENCIES — deliberate, like render-claude-settings.ts: the machine being
@@ -45,6 +47,10 @@ import {
 } from "node:fs";
 import { homedir, release, tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
+import {
+  MAPPING_ENV,
+  parseMapping,
+} from "../agents/retrieval-control/ccc-db-dir.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -527,6 +533,58 @@ export async function checkCccDaemon(_ctx: Ctx): Promise<Finding> {
       );
 }
 
+// ccc resolves a project's DB dir in TWO processes: the daemon writes the index where its own
+// COCOINDEX_CODE_DB_PATH_MAPPING points, while `ccc reset`/`ccc status` and repo-retrieve's
+// watermark look where the client's points. zsh/zshenv declares the client value and
+// cocoindex/ccc-daemon.service.wsl the daemon's; a daemon started before either changed keeps
+// the old one until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
+export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
+  if (!Bun.which("ccc")) return skip("ccc-db-map", "ccc is not installed");
+  let client: string[];
+  try {
+    client = parseMapping(process.env[MAPPING_ENV]).map(
+      (m) => `${m.source}=${m.target}`,
+    );
+  } catch (e) {
+    return fail(
+      "ccc-db-map",
+      `${MAPPING_ENV} is malformed: ${e instanceof Error ? e.message : String(e)}`,
+      "fix the export in zsh/zshenv",
+    );
+  }
+  if (client.length === 0) {
+    return fail(
+      "ccc-db-map",
+      `${MAPPING_ENV} is unset in this shell — index DBs would be read from inside the repos`,
+      "open a new shell (zsh/zshenv exports it)",
+    );
+  }
+  const r = await run(["ccc", "doctor"], { ms: 60_000, cwd: ctx.home });
+  if (r.timedOut) return warn("ccc-db-map", "`ccc doctor` timed out after 60s");
+  const lines = r.out.split("\n");
+  const start = lines.findIndex((l) => l.trim() === "DB path mappings:");
+  const daemon: string[] = [];
+  for (const l of start < 0 ? [] : lines.slice(start + 1)) {
+    const m = l.match(/^ {4}(\S.*?) \u2192 (\S.*)$/);
+    if (!m) break;
+    daemon.push(`${m[1]}=${m[2]}`);
+  }
+  if (start < 0 && !r.out.includes("Loaded projects:")) {
+    return warn("ccc-db-map", "`ccc doctor` did not reach the daemon");
+  }
+  const same =
+    client.length === daemon.length && client.every((c, i) => c === daemon[i]);
+  return same
+    ? pass("ccc-db-map", `daemon and this shell both map ${client.join(",")}`)
+    : fail(
+        "ccc-db-map",
+        `daemon maps ${daemon.join(",") || "nothing"}, this shell maps ${client.join(",")}`,
+        ctx.isWsl
+          ? "systemctl --user daemon-reload && systemctl --user restart ccc-daemon"
+          : "ccc daemon restart (from a shell that exports the mapping)",
+      );
+}
+
 export async function checkIterm2(ctx: Ctx): Promise<Finding> {
   const r = await run(
     ["defaults", "read", "com.googlecode.iterm2", "PrefsCustomFolder"],
@@ -570,6 +628,7 @@ export const CHECKS: Check[] = [
     run: checkCccDaemon,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
+  { name: "ccc-db-map", run: checkCccDbMap, applies: always },
   {
     name: "iterm2",
     run: checkIterm2,

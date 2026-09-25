@@ -109,6 +109,10 @@ describe("enforce-search-route", () => {
       "repo-retrieve files --path src | xargs rg needle",
       "sh -c 'rg -n needle src'",
       'find src -iname "*needle*"',
+      "fd needle",
+      "tree",
+      "find .",
+      "/usr/bin/find -name x",
     ]) {
       const project = registerProject();
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
@@ -229,6 +233,46 @@ describe("enforce-search-route", () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout.trim()).toBe("");
+  });
+
+  test("Bash cwd pointing at a nonexistent directory still climbs to a registered project", () => {
+    // statSync(start) throws (ENOENT) inside registeredProject/governedRepo; the `catch`
+    // fallback (`current = start`) must let the ancestor walk still find the real project,
+    // not spuriously trip the outer try/main "failing closed" catch in this file.
+    const project = registerProject();
+    const missing = join(project, "does-not-exist", "deeper");
+    const result = runHook(HOOK, bashPayload(missing, "rg needle"), withCcc());
+    const decision = decisionOf(result.stdout);
+
+    expect(result.code).toBe(0);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).not.toContain("failing closed");
+  });
+
+  test("Grep tool_input.path pointing at a nonexistent directory still climbs to a registered project", () => {
+    const project = registerProject();
+    const missing = join(project, "does-not-exist");
+    const result = runHook(HOOK, grepPayload(missing), withCcc());
+    const decision = decisionOf(result.stdout);
+
+    expect(result.code).toBe(0);
+    expect(decision.permissionDecision).toBe("deny");
+    expect(decision.permissionDecisionReason).not.toContain("failing closed");
+  });
+
+  test("Grep tool_input.path resolves relative to cwd into a registered project", () => {
+    const project = registerProject();
+    const result = runHook(
+      HOOK,
+      {
+        tool_name: "Grep",
+        tool_input: { pattern: "needle", path: "src" },
+        cwd: project,
+      },
+      withCcc(),
+    );
+
+    expect(decisionOf(result.stdout).permissionDecision).toBe("deny");
   });
 
   test("malformed input fails closed", () => {

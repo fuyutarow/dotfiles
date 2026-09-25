@@ -18,8 +18,6 @@ const GIT_GREP =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*git(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?\s+grep\b/;
 const CCC_SEARCH =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?ccc\s+(search|grep)\b/;
-const FIND_SEARCH =
-  /(^|[|;&(]|&&|\|\|)\s*(sudo\s+)*find\b[^|;&]*\s-(i?name|i?path|i?regex)\b/;
 const FILE_ENUMERATION =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(sudo\s+|command\s+|time\s+)*(?:\S*\/)?(fd|fdfind|tree)\b|(^|[|;&(]|&&|\|\|)\s*(sudo\s+)*(?:\S*\/)?find\b/;
 const XARGS_SEARCH =
@@ -40,7 +38,6 @@ function isRawSearch(command: unknown): boolean {
     GREP_SEARCH.test(command) ||
     GIT_GREP.test(command) ||
     CCC_SEARCH.test(command) ||
-    FIND_SEARCH.test(command) ||
     FILE_ENUMERATION.test(command) ||
     XARGS_SEARCH.test(command) ||
     NESTED_SHELL_SEARCH.test(command) ||
@@ -89,11 +86,11 @@ function startPath(payload: any): string {
  * **Governed repos are exempt: judgment lives in one place, and here it is not that place.**
  *
  * WHY (2026-09-01, the commissioner's ruling, after arms were measurably stuck):
- *   This hook denies Grep/Bash and directs the arm to `repo-retrieve.ts` — 886 lines of judgment
- *   living in a repo that declares no governance, invisible to the governed repo's own gate,
- *   registered under no protocol verb. **A repo cannot govern what it cannot see.** The arm was
- *   caught between the two: the governance layer could not lift this denial, and the denial's
- *   own route was returning NO_INDEX in a loop.
+ *   This hook denies Grep/Bash and directs the arm to `repo-retrieve.ts` — a large body of
+ *   judgment living in a repo that declares no governance, invisible to the governed repo's
+ *   own gate, registered under no protocol verb. **A repo cannot govern what it cannot see.**
+ *   The arm was caught between the two: the governance layer could not lift this denial, and
+ *   the denial's own route was returning NO_INDEX in a loop.
  *
  *   Where a repo declares governance (`rnd.config.json`), that repo's gate owns which searches
  *   are allowed. This one steps aside — **not because raw search became safe there, but because
@@ -101,22 +98,20 @@ function startPath(payload: any): string {
  *   nothing changes: the ban stands exactly as before.
  */
 function governedRepo(start: string): string | null {
-  let current: string;
-  try {
-    current = statSync(start).isDirectory() ? start : dirname(start);
-  } catch {
-    current = start;
-  }
-  current = resolve(current);
-  while (true) {
-    if (existsSync(join(current, "rnd.config.json"))) return current;
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
+  return findAncestorContaining(start, "rnd.config.json");
 }
 
 function registeredProject(start: string): string | null {
+  return findAncestorContaining(start, ".cocoindex_code", "settings.yml");
+}
+
+// Shared ancestor walk for `governedRepo` and `registeredProject`: both look for a marker
+// file, differing only in which one. `start` may be a file or directory, and may not exist
+// (a `catch` falls back to treating `start` itself as the walk's starting point).
+function findAncestorContaining(
+  start: string,
+  ...marker: string[]
+): string | null {
   let current: string;
   try {
     current = statSync(start).isDirectory() ? start : dirname(start);
@@ -124,11 +119,8 @@ function registeredProject(start: string): string | null {
     current = start;
   }
   current = resolve(current);
-
   while (true) {
-    if (existsSync(join(current, ".cocoindex_code", "settings.yml"))) {
-      return current;
-    }
+    if (existsSync(join(current, ...marker))) return current;
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;

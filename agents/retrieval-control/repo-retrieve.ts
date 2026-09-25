@@ -74,9 +74,13 @@ const ROUTES = [
 
 type Route = (typeof ROUTES)[number];
 
+// The routes that delegate to rg -- shared by runRg (which dispatches on it) and lexicalMissLine
+// (which reports on the same set), so the two stay in lockstep instead of each declaring its own
+// copy of the literal union.
+type RgRoute = "literal" | "exhaustive" | "files";
+
 // Exact text `ccc grep` (v0.2.41) prints, and the ONLY thing it prints, on a genuine no-match.
-// See the structural case in runRoute for why exact-whole-output equality is used instead of a
-// substring test.
+// See runCccGrep for why exact-whole-output equality is used instead of a substring test.
 const CCC_GREP_NO_MATCH_TEXT = "No matches found.";
 
 function positiveInteger(name: string): (value: string) => number {
@@ -147,6 +151,12 @@ function exactlyOneQuery(route: string, queries: string[]): string {
     throw new Error(`${route} requires exactly one non-empty --query`);
   }
   return query;
+}
+
+function atMostOnePath(route: string, paths: string[]): void {
+  if (paths.length > 1) {
+    throw new Error(`${route} accepts at most one --path glob`);
+  }
 }
 
 function cccResultCount(stdout: string): number {
@@ -306,7 +316,7 @@ async function runCccSearch(
 }
 
 async function runRg(
-  route: "literal" | "exhaustive" | "files",
+  route: RgRoute,
   query: string | undefined,
   paths: string[],
   values: Parameters<typeof rgFlags>[0],
@@ -334,6 +344,51 @@ async function runRg(
     process.stderr.write(lexicalMissLine(route, query));
   }
   return exitCode;
+}
+
+async function runCccGrep(
+  query: string,
+  path: string | undefined,
+  timeoutMs: number,
+): Promise<number> {
+  const ccc = requireExecutable("ccc");
+  const command = [ccc, "grep", query];
+  if (path !== undefined) command.push("--path", path);
+  process.stderr.write("ROUTE: structural -> ccc grep\n");
+  const result = await runChildCaptured(command, timeoutMs);
+  if (result.exitCode !== 0) return result.exitCode;
+  // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
+  // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
+  // --count, or other machine-readable signal for this subcommand (search has --json; grep
+  // does not). A prior version of this check tested only `stdout.trim() === ""`, which real
+  // `ccc grep` never produces on a no-match (reproduced live: `ccc grep` on a guaranteed-absent
+  // pattern printed "No matches found." and exited 0, and the old check let it through as
+  // RESULT: PASS). A plain substring test on that sentence is itself spoofable: grepping a
+  // file whose OWN content contains the literal text "No matches found." returns that text as
+  // part of a REAL match's output (`path\nline| content`), so a substring match would
+  // misreport a genuine hit as NO_MATCH. Comparing the ENTIRE trimmed output for exact equality
+  // avoids that: ccc's match format always leads with a path/line block and can never collapse
+  // to just this one sentence. Accepted failure mode: if a future ccc version changes this
+  // exact wording, the check silently stops firing and structural again reports PASS on a
+  // genuine no-match -- the same defect this closes, not a new one it introduces, and worth
+  // re-verifying against `ccc grep --help`/CHANGELOG on any ccc upgrade.
+  if (result.stdout.trim() === CCC_GREP_NO_MATCH_TEXT) {
+    process.stderr.write(
+      "RESULT: NO_MATCH route=structural engine=ccc-grep; ccc reported no matches\n",
+    );
+    return 1;
+  }
+  if (result.stdout.trim() === "") {
+    // Not observed on the checked ccc version, but cheap defensive coverage in case a
+    // future version goes back to signalling no-match via empty output instead of the
+    // sentence above.
+    process.stderr.write(
+      "RESULT: NO_MATCH route=structural engine=ccc-grep; empty output is not PASS\n",
+    );
+    return 1;
+  }
+  process.stdout.write("RESULT: PASS route=structural engine=ccc-grep\n");
+  return 0;
 }
 
 /**
@@ -368,10 +423,7 @@ async function runRg(
  * ——実測: `--fixed-strings -U --multiline` の生の literal 文字列だけでは効かない
  * (2026-09-17 実測、rgFlags() のコメント参照)。
  */
-function lexicalMissLine(
-  route: "literal" | "exhaustive" | "files",
-  query: string | undefined,
-): string {
+function lexicalMissLine(route: RgRoute, query: string | undefined): string {
   const head = `RESULT: NO_MATCH route=${route} engine=rg`;
   if (route === "files") {
     return `${head}; glob に一致する path が無い(内容は見ていない)\n`;
@@ -491,9 +543,7 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
       ) {
         throw new Error("battery requires at least 3 non-empty --query values");
       }
-      if (paths.length > 1) {
-        throw new Error(`${rawRoute} accepts at most one --path glob`);
-      }
+      atMostOnePath(rawRoute, paths);
       return runCccSearch(
         rawRoute,
         queries,
@@ -505,47 +555,8 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
     }
     case "structural": {
       const query = exactlyOneQuery(rawRoute, queries);
-      if (paths.length > 1) {
-        throw new Error("structural accepts at most one --path glob");
-      }
-      const ccc = requireExecutable("ccc");
-      const command = [ccc, "grep", query];
-      if (paths[0] !== undefined) command.push("--path", paths[0]);
-      process.stderr.write("ROUTE: structural -> ccc grep\n");
-      const result = await runChildCaptured(command, timeoutMs);
-      if (result.exitCode !== 0) return result.exitCode;
-      // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
-      // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
-      // --count, or other machine-readable signal for this subcommand (search has --json; grep
-      // does not). A prior version of this check tested only `stdout.trim() === ""`, which real
-      // `ccc grep` never produces on a no-match (reproduced live: `ccc grep` on a guaranteed-absent
-      // pattern printed "No matches found." and exited 0, and the old check let it through as
-      // RESULT: PASS). A plain substring test on that sentence is itself spoofable: grepping a
-      // file whose OWN content contains the literal text "No matches found." returns that text as
-      // part of a REAL match's output (`path\nline| content`), so a substring match would
-      // misreport a genuine hit as NO_MATCH. Comparing the ENTIRE trimmed output for exact equality
-      // avoids that: ccc's match format always leads with a path/line block and can never collapse
-      // to just this one sentence. Accepted failure mode: if a future ccc version changes this
-      // exact wording, the check silently stops firing and structural again reports PASS on a
-      // genuine no-match -- the same defect this closes, not a new one it introduces, and worth
-      // re-verifying against `ccc grep --help`/CHANGELOG on any ccc upgrade.
-      if (result.stdout.trim() === CCC_GREP_NO_MATCH_TEXT) {
-        process.stderr.write(
-          "RESULT: NO_MATCH route=structural engine=ccc-grep; ccc reported no matches\n",
-        );
-        return 1;
-      }
-      if (result.stdout.trim() === "") {
-        // Not observed on the checked ccc version, but cheap defensive coverage in case a
-        // future version goes back to signalling no-match via empty output instead of the
-        // sentence above.
-        process.stderr.write(
-          "RESULT: NO_MATCH route=structural engine=ccc-grep; empty output is not PASS\n",
-        );
-        return 1;
-      }
-      process.stdout.write("RESULT: PASS route=structural engine=ccc-grep\n");
-      return 0;
+      atMostOnePath(rawRoute, paths);
+      return runCccGrep(query, paths[0], timeoutMs);
     }
     case "files": {
       return runRg(
@@ -579,6 +590,20 @@ function routeCommand(route: Route) {
       // literal at the point cleye's `Flags` (a string-index-signature type) checks it -- a
       // literal gets an implicit index signature synthesized here; a variable holding the same
       // value does not, and fails as "index signature missing".
+      //
+      // The ternary carries a SECOND load that the paragraph above does not name, measured
+      // 2026-09-23 by attempting the collapse and reverting it. Replacing these branches with a
+      // `Record<Route, Flags>` lookup table typechecks at the `flags:` property itself (the
+      // explicit annotation supplies the index signature) but breaks one call further down:
+      //   repo-retrieve.ts(639,46): error TS2559: Type '{ [x: string]: unknown; help: boolean |
+      //   undefined; }' has no properties in common with type 'SearchFlags'
+      // because cleye's `command()` infers a DIFFERENT flags shape per branch, and that per-branch
+      // inference is what makes `parsed.flags` below assignable to SearchFlags. One table collapses
+      // all seven routes to a single generic `Flags`, so the callback loses its narrowing. A
+      // `ts-pattern` `match(route).exhaustive()` is expected to fail for the same structural reason
+      // (its result is a call expression, not a per-branch literal) -- NOT separately measured.
+      // Do not "fix" the resulting error with `as` or `@ts-expect-error`: that trades a real
+      // guarantee for a cosmetic one. Collapsing this needs a cleye-side change first.
       flags:
         route === "concept" || route === "battery"
           ? {

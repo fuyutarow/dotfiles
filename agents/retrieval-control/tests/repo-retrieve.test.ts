@@ -1104,7 +1104,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("USAGE:");
     expect(result.stdout).toContain("concept");
     expect(result.stdout).toContain("battery");
     expect(result.stdout).toContain("structural");
@@ -1134,7 +1134,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "--help", "--wat"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("USAGE:");
     expect(result.log).toBe("");
   });
 
@@ -1142,7 +1142,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "extra", "--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).toContain("USAGE:");
     expect(result.log).toBe("");
   });
 
@@ -1164,7 +1164,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), [...args]);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("Usage:");
+      expect(result.stdout).toContain("USAGE:");
       expect(result.log).toBe("");
     });
   }
@@ -1234,7 +1234,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), args);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("Usage:");
+      expect(result.stdout).toContain("USAGE:");
       expect(result.log).toBe("");
     });
   }
@@ -1377,5 +1377,88 @@ describe("repo-retrieve route contract", () => {
 
     expect(result.code).toBe(0);
     expect(result.log).toContain("rg --fixed-strings");
+  });
+
+  // --- S0 characterization tests (2026-09-23): pin CURRENT behavior of branches that had zero
+  // coverage before the structural/arity refactor below, because every existing test that
+  // supplies the triggering input also passes --help, which short-circuits before the semantic
+  // check runs. These exist so the refactor can be verified against a pinned baseline instead of
+  // "still green" alone. ---
+
+  for (const [route, queryArgs] of [
+    ["concept", ["--query", "needle"]],
+    ["battery", ["--query", "a", "--query", "b", "--query", "c"]],
+    ["structural", ["--query", "needle"]],
+  ] as const) {
+    test(`${route} rejects more than one --path glob`, () => {
+      // Note: runRoute's concept/battery arm interpolates `${rawRoute}` into this message while
+      // the structural arm hardcodes the literal "structural" -- since rawRoute === "structural"
+      // at that call site, both produce the identical string today. Pinned per-route (not
+      // shared) so a later unification is provably message-preserving.
+      const result = run(registerProject(), [
+        route,
+        ...queryArgs,
+        "--path",
+        "src",
+        "--path",
+        "tests",
+      ]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        `${route} accepts at most one --path glob`,
+      );
+      expect(result.log).toBe("");
+    });
+  }
+
+  for (const route of ["literal", "structural"] as const) {
+    test(`${route} rejects zero --query values without --help`, () => {
+      const result = run(registerProject(), [route]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        `${route} requires exactly one non-empty --query`,
+      );
+      expect(result.log).toBe("");
+    });
+
+    test(`${route} rejects two --query values without --help`, () => {
+      const result = run(registerProject(), [
+        route,
+        "--query",
+        "first",
+        "--query",
+        "second",
+      ]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        `${route} requires exactly one non-empty --query`,
+      );
+      expect(result.log).toBe("");
+    });
+
+    test(`${route} rejects a whitespace-only --query without --help`, () => {
+      const result = run(registerProject(), [route, "--query", "   "]);
+
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain(
+        `${route} requires exactly one non-empty --query`,
+      );
+      expect(result.log).toBe("");
+    });
+  }
+
+  test("files route pins the exact glob-miss NO_MATCH line on a genuine rg exit 1", () => {
+    const result = run(registerProject(), ["files"], {
+      FAKE_SEARCH_EXIT: "1",
+    });
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).not.toContain("RESULT: PASS");
+    expect(result.stderr).toContain(
+      "RESULT: NO_MATCH route=files engine=rg; glob に一致する path が無い(内容は見ていない)\n",
+    );
   });
 });

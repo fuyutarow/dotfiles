@@ -99,3 +99,22 @@ proves the sequence; topology-only without persistence remains O-only.
 Receipts: description 959 characters; `quick_validate.py` valid; targeted `skill-check.ts` silent
 exit 0 (`FAIL=0 WARN=0`); `continuation.test.ts` 24 pass / 0 fail / 102 expectations; durable-order and
 topology-only desk-check 2/2 PASS.
+
+## 2026-09-25 — mandatory fire for orchestrating, compacted sessions (dispatch gate)
+
+Owner decision (relayed by firedancer-agt_eraw, 「やって」): a session that has dispatched at least
+one Agent/Task/Workflow AND passed at least one compaction must bind a valid record before its next
+dispatch. Trigger incident: a two-day firedancer session ran through 29 compactions with no record,
+lost handoff facts (arena contract strings, known refutations), and a subagent spent 50 minutes
+rediscovering them. One-shot work and sessions that never dispatch stay exempt, per C1.
+
+Mechanism: `scripts/dispatch-gate.ts` (adapter `agents/claude/hooks/enforce-continuation-binding.ts`,
+PreToolUse `Agent|Task|Workflow` + SessionStart `compact`). Per-session counts advance on the events
+themselves; the first sighting of a session seeds them once from the transcript (313 MB measured for
+the incident session, ~1 s), so sessions already running at install are judged by their history.
+Fails open with a visible systemMessage, like compact-hook.ts. The deny is SINGLE-AXIS.
+
+Receipts: `tests/dispatch-gate.test.ts` 8 pass (one-shot exempt; compaction-only exempt; deny with
+slot + bind command; valid binding admits; Workflow/Task counted; transcript seeding; quoted markers
+in tool results ignored; other tools/events untouched). Directory total 32 pass / 0 fail.
+`skill-check.ts` WARN set identical to HEAD (the only WARN is the pre-existing references one).

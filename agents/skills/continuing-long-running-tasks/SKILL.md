@@ -58,6 +58,16 @@ injected slot. Without a trusted injected slot, do not initialize or claim resum
 the harness or provide a clearly non-durable summary. Never invent a session or human writer token.
 Never create hidden state for a one-shot task or where storage authority is unclear.
 
+**Mandatory fire (owner decision 2026-09-25).** The rule is hook-enforced.
+
+| Session has dispatched Agent/Task/Workflow | Session has been compacted | Next dispatch |
+|---|---|---|
+| yes | yes | denied until a valid record is bound (`scripts/dispatch-gate.ts`) |
+| any other combination | | allowed; binding stays optional |
+
+Reason: one orchestrating session ran two days across 29 compactions without a record. It lost
+handoff facts, and a subagent spent 50 minutes rediscovering them.
+
 Exactly one writer may modify the canonical record. Encode its trusted slot basename as
 `session:<platform>-<hash>`. Other bound sessions are readers until an explicit, reconciled handoff changes
 `WRITER`. Concurrent domain workers route state changes through that writer. This Skill does not

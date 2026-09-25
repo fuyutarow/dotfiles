@@ -17,7 +17,7 @@ description: >-
 
 # Directing one research section
 
-> **Version**: v2608.5.0 (2026-08-04) — goal-grounded admission, scale releases, and measurement repair.
+> **Version**: v2609.1.0 (2026-09-25) — consume canonical experimental-evidence dispositions.
 > Durable operating guidance from a frontier model (2026-08). It encodes observed research-harness failures.
 > If a constraint here feels unnecessary, that feeling is the failure mode — follow the map.
 
@@ -120,7 +120,9 @@ importance, causal validity, novelty, or whether a method deserves admission.
    value class, and dominance release are mandatory. Admission immediately wakes BUILD.
 5. **Register and execute one test.** First run one minimal existence/discriminator test. Issue `RUN_INTENT v2`
    before the access boundary. Include the builder's
-   executable specification and a terminal deadline. The executor alone writes an immutable terminal
+   executable specification and a terminal deadline. For numerical claims, exact-join the
+   `validating-experimental-evidence` EV0 target-owned contract binding and prospective controls.
+   The executor alone writes an immutable terminal
    `RUN_RECEIPT v2` (or a typed exact blocker). Full sweep, scale, or GPU port requires a receipt-linked
    Director release inside a Programme-released mandate. When both blocks apply, require both releases.
    Fixed parameter/seed sweeps are execution, not SEARCH. Cite it; never author or edit it.
@@ -167,6 +169,8 @@ Programme construction/issue publication/global decisions → `supervising-resea
 Terminal integrity review → `auditing-research-processes`; it may recommend but not transition.
 Candidate genesis → `forging-novel-theses`; local admission remains HERE. An expensive local
 load-bearing bet → `acting-on-hypotheses`; preserve this section's mandate and charter boundary.
+Benchmark footing, leakage, causal controls, and historical-regression claim scope →
+`validating-experimental-evidence`. This section retains intent, receipt, and learning authority.
 Delegation topology and deterministic enforcement design → `orchestrating-agents`.
 
 ## Execution model

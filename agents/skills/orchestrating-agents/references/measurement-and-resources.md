@@ -1,36 +1,18 @@
-# Measurement and resources — 比較・交絡・再利用
+# Resources and reuse — admission and intermediate artifacts
 
-> **Ownership — SOLE home**: `P7 DEVICE-BUDGET`、`P8 FOOTING`、
-> `P9 CONFOUND-TABLE`、`P10 ARTIFACT-REUSE` の詳細手続き・schema・thresholdは
+> **Ownership — SOLE home**: `P7 DEVICE-BUDGET` と `P10 ARTIFACT-REUSE` の詳細手続きは
 > このファイルだけが所有する。`SKILL.md` はprecedence要約とpointerを持てる。
 
-**Read when**: 計算資源を割り当てるとき、費用未測定の本走を始める前、数値を比較するとき、
-一変数の効果や機構の効果を主張するとき、既存の中間生成物を再利用または再構築するとき。
+**Read when**: 計算資源を割り当てるとき、費用未測定の本走を始める前、既存の中間生成物を
+再利用または再構築するとき。数値比較と交絡の意味判断は`validating-experimental-evidence`。
 
 **Ledger pointer**: `tests/forge-verification-ledger.md` の
 `§第2次ポストモーテム`、`§GB110`、`§長走行の消失`、
 `§規則の不適用の反復`、`§数値の接合`、`§PoCの無効化`。
 事例、数値、変更履歴は ledger が正本であり、ここには再実行可能な規則だけを置く。
 
-測定の PASS は散文の印象でも腕の自己申告でもない。raw artifact、実行log、入力指紋、
-独立な参照量との一致を一つの measurement packet として残す。
-
-```yaml
-measurement:
-  claim_id: stable-id
-  input_fingerprint: digest
-  code_revision: revision
-  command_or_call: exact-invocation
-  environment: versions-and-resource
-  conditions: all-comparison-axes
-  raw_artifacts: [path-or-id]
-  artifact_digests: [digest]
-  tests: [independent-check-and-result]
-  result: value-with-unit
-```
-
-schema validation とdigest再計算が共通の floor test である。意味上の合否は各gateの
-`artifact/test` で別に判定する。
+数値claimの検収は`validating-experimental-evidence`の意味判定を正本findingで使う。
+ここに残るresource receiptやP10 manifestを科学的な結果のPASSと数えない。
 
 ## P7 DEVICE-BUDGET — 資源と費用
 
@@ -178,57 +160,19 @@ account / pilot cost / ETA / stop threshold` を置く。同じGPU、CPU set、h
 measurement packetへ保存する。Linux floorでenforcementを用意できないplatformではfail closedとし、
 unboundedな直接実行へfallbackしない。
 
-## P8 FOOTING — 同じ土俵
+runnerの終了前に、peak RSS/VRAM/process、実際の解放時刻、申告との差を永続receiptへ書く。
+次の同型runのenvelopeは、この高水位に安全余白を足して校正する。申告過大で拒否が続く場合、
+追加のticketを出す前に予約と同時枠のどちらが律速かを拒否理由で分ける。
+実測値を理由に走行中のhard capを緩めず、新しい形のjobは別に上限を見積もる。
+runnerが終了後の高水位を保存できない現行環境では、`RESOURCE_OBSERVABILITY_GAP`を記録し、
+測っていない値を推定として明記する。receiptの実装はresource-controlの修理であり、
+このskillの記述をもって実装済みと扱わない。
 
-数値は、比較を左右する全軸が一致したときだけ差として読む。最低限、次の軸を比較表へ置く。
+## Retired P8/P9 — one semantic home
 
-| 軸 | 記録するもの |
-|---|---|
-| 入力 | データ、分割、前処理、入力版、input fingerprint |
-| 実行体 | code revision、設定、依存版、実行コマンド |
-| 確率性 | 乱数seed、sampling規則、反復回数 |
-| 判定 | 指標、単位、しきい値、停止規則、多重比較の扱い |
-| 資源 | 装置、並列度、精度、時間/使用量の上限 |
-| 範囲 | 対象集合、除外、測定窓、欠測の扱い |
-
-生成した系列・streamを `n` または測定窓で切る場合、生成物の実長と評価対象の最終位置を
-生成物から読み取る。手計算した長さや設問の既定値だけで `n` を決めない。
-測定の前に、`n` が最終評価対象を含むことを assert し、生成物digest、実長、使用した `n`、
-最終採点位置を measurement packet に残す。既定値が誤っていたら、元の記載を黙って
-正本扱いせず、訂正と再測のlocusを結び、古い数値との比較を保留する。
-
-自明な基準線も同じ評価stream、ラベル化、採点範囲で計算する。交差評価では
-訓練側の基準線を転用せず、各試験側の基準線を比較行に結び付ける。
-
-比較表の脚注に土俵を逐語で書く。一軸でも違えば、同条件で再測するか、条件差を主張文に含めて
-因果比較を撤回する。artifact/test は全軸の差分表と、差分ゼロまたは再測記録である。
-
-凍結した成功条件を持つ実験は、本走前に到達可能性を算術で検算する。有限標本で得られる
-最小値としきい値、探索空間の上限と要求値、反復数と検出力など、構造上の上下限を先に比べる。
-到達不能なら仕様と実装の不一致として発射を止める。artifact/test は計算式、代入値、判定、
-独立な再計算である。
-
-条件の違う数値を同じ表へ載せる場合、セルまたは脚注に異なる軸を明示する。異なる測定から
-分子と分母を接合しない。測定されなかった量を、推定であるとの表示なしに数値へしない。
-
-## P9 CONFOUND-TABLE — 交絡と対照
-
-一変数を動かす前に、変数と同時に動く量を表へ出す。
-
-| 操作変数 | 同時に動く量 | 結果への経路 | 固定方法 | 正規化/対照 | 残る限界 |
-|---|---|---|---|---|---|
-| named-variable | coupled-quantity | causal-path | hold-constant | control-arm | disclosed-limit |
-
-交絡表を実験設計より先に保存し、各連動量について固定・層別・正規化・対応する対照のいずれかを
-選ぶ。打ち消せない交絡は限界として主張文に載せる。artifact/test は、実行時設定を表へ逆写像し、
-表にない連動量がないことを独立に再点検すること。
-
-**機構が効果を生んだと主張する実験には、その機構を外した対照を同一の条件で置く。**
-この対照は任意でない。データ、乱数、反復、しきい値、資源、評価を `P8` と同じ土俵に固定し、
-対象機構だけを外す。artifact/test は比較表の「機構なし」行と、全条件の差分が対象機構だけで
-あること。機構ありだけが自己検定を通っても、効果の証拠にはならない。
-機構なしの診断用armは、元の構成の実測を置き換えない。構成全体のclaimには、
-変更していない本来の経路の行を同じ表に残す。
+P8 FOOTINGとP9 CONFOUND-TABLEの番号は予約し、ここでは定義しない。両規則の詳細は
+`validating-experimental-evidence`のEV0–EV4へ移した。旧pointerから入った実行者は
+同skillを読み、ここから比較や因果の合否を再構築しない。
 
 ## P10 ARTIFACT-REUSE — 保存・指紋・失効
 
@@ -261,15 +205,9 @@ artifact/test は照合結果と、再利用側が保存先とdigestを名指し
 `delegation-contracts.md` の `C2` が SOLE owner、指紋と失効判定はここが SOLE owner である。
 両者は内容を重複させず、保存時に同じmanifestを参照する。
 
-## 再現性と昇格
+## 数値claimの昇格はここで判定しない
 
-探索段階の数値を設計・報告・正本へ昇格させる前に、次を満たす。
-
-1. exact invocation、入力、設定、環境、raw artifactが保存されている。
-2. digestを独立に再計算できる。
-3. 数値実行体に二つ以上の異なる自己検定があり、結果が保存されている。
-4. 主張を偽にする独立oracleまたは再計算がある。
-5. `P8` の土俵と `P9` の交絡/対照が記録されている。
-
-artifact/test はmeasurement packetの再実行で同じ離散結果、または宣言した許容差内の数値を
-得ること。再現不能な値は探索artifactに留め、完成・実証・確定の根拠へ昇格させない。
+保存物の再利用と、実験結果を知識へ昇格させることは別の遷移である。
+後者の再現性、土俵、対照、漏れ、claim scopeは
+`validating-experimental-evidence`のEV0–EV4が唯一の判断元である。
+本skillのP10 manifestだけで数値claimを昇格させない。

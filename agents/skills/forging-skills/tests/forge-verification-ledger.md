@@ -304,3 +304,39 @@ Independent Terra desk comparison (`skill_revision_verify`) checked the old/new 
 The old mandatory mechanism/magnitude rule failed the claim-type boundary; the revision preserved that boundary.
 Final recheck returned ACCEPT; no runtime or scientific-outcome improvement is claimed from this desk comparison.
 `mise run link:skills` succeeded, and the revised distilling reference byte-matched both deployed skill paths by SHA-256.
+
+## 2026-09-25 — collection mission and existence gate
+
+The user explicitly set the collection objective to maximizing the throughput of
+knowledge discovery from Experimental and Formal Methods. This is an
+**author-confirmed objective**, not an empirical effect claim. The reforge turns
+it into an F0 question: name the valid observation or checked proof reachable
+through the skill, the blocking failure it removes, and the expected decision-time
+delta. The causal path may be indirect through a named consumer. Extra cards,
+agents, reports, or runs alone do not qualify.
+
+The Firefly episode supplied the negative case: repeated six-minute status reports,
+parallel diagnostic tickets, and large resource declarations consumed attention
+while only one of seven active tickets built the learner. This is a user-supplied
+process report, not a controlled before/after test of the revised skills. The
+new `validating-experimental-evidence` skill replaces OA's P8/P9 semantic content
+in the same commit, so this mission does not authorize a second measurement owner.
+
+The first draft of the new skill included a Bun checker and JSON card. The user
+identified that as a second executable authority beside polysearch. The editor
+removed them before shipping; the skill now owns only semantic judgment and
+routes machine rejection to polysearch/Arena. This correction is part of F2's
+one-home proof, not a reason to add another plugin or schema.
+
+Target `skill-check.ts` exited 0 with no structural FAIL. The collection floor
+passes at 73 skills / 64,528 listing characters, below the unchanged
+65,242 ratchet. **PROSE-DEBT waiver (2026-09-25):** 85 long reference sentences,
+15 long core sentences, and two oversized table cells remain at the old baseline.
+The new mission text added no warning. A dedicated F1 prose pass starts with
+`architecture.md` (23 warnings), then the existing core debt.
+These checks do not establish a measured LEARN/hour improvement.
+
+The description was shortened while retaining SKILL.md, Japanese skill-craft,
+trigger, and collection-cost entry points. The official quick validator now
+accepts it under the platform description cap. F3 desk-check retained the
+existing fire/no-fire cases and added no domain-meaning claim.

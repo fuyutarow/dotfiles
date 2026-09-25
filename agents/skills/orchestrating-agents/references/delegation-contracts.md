@@ -24,7 +24,7 @@ No harness → same map, serial。並列の腕を、互いに出力を見ない�
 |---|---|---|
 | 1 | domain/craft ownerが署名した `input state → function verb → owned artifact → sole domain owner → next state` のmapをlocus/digestで受け取る。owner不在の一回限りのplain taskだけtask-local provisional mapを作る。 | `domain_function_map_locus`とdigestがあり、同じartifactに二ownerがいない。再利用可能なownership voidは`forging-skills`へ返す。 |
 | 2 | 各機能を小規模・大規模・長走行・読解/検証のどれかに型づける。 | 発注記録に形と選択理由がある。形の選択表に当て直す test で一致する。 |
-| 3 | 入出力の界面、所有範囲、依存、decision rightsを凍結する。非生成仕事は合否も発射前に凍結する。生成仕事はlaunch項目だけを第一freezeに置き、domain artifact / digest後にfinal acceptance criteriaを第二freezeする。仕様を書けない仕事は発射しない。 | 指示書の必須欄が全て埋まり、仕事型に対応するfreeze時点と、境界外または不可逆な判断の停止条件がある。 |
+| 3 | 入出力の界面、所有範囲、依存、decision rightsを凍結する。実行体を読む仕事はread-setとcode digest、書く仕事はwrite-setを宣言する。同じcheckoutでread/writeまたはwrite/writeが交差すれば直列化か隔離を先に決める。非生成仕事は合否も発射前に凍結する。生成仕事はlaunch項目だけを第一freezeに置き、domain artifact / digest後にfinal acceptance criteriaを第二freezeする。仕様を書けない仕事は発射しない。 | 指示書の必須欄、read/write依存表、freeze時点、境界外または不可逆な判断の停止条件がある。 |
 | 4 | 必要な工程だけを起動する。nontrivial成果物がある、載荷claimがある、または決定的machine oracleがない場合にindependent verifierを起動し、その場合だけauthorと分ける。 | verifierの起動理由、起動時のauthorとの分離、同じ観測が複数役へ重複計上されていないprovenance表。 |
 | 5 | 各dispatchへ資源classを一つだけ付け、pilotより前にadmissionする。依存仕事を pipeline、独立かつ予約が競合しない仕事だけcapacity-aware parallelにする。 | `RESOURCE-CLASS(NONCOMPUTE)` または絶対pathの `RESOURCE-ENVELOPE` がちょうど一つあり、後者は `measurement-and-resources.md` P7のrunner verdictを持つ。 |
 | 6 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。 | schema検査、証拠の照合、起動時のverdict、supervisorの採否と根拠がある。 |
@@ -41,7 +41,7 @@ formulation / evaluability artifactとdigestを要求する。
 | **機能遷移** | `domain_function_map_locus` / digestと、この発注が消費する署名済み行。OAが加えるのはagent、visibility、dependency、veto、verification、acceptanceのdispatch overlayだけ。 | mapの一行と一致し、隣接発注とのhandoff schemaが接続する。domain semanticsをoverlayが上書きしない。 |
 | **目的** | 解く問い、利用者、成果物が変える裁定。 | 一文の目的と、その成果物を消費する仕事が名指しされている。 |
 | **入力と根拠** | 読む正本、入力版、事実・数値の錨、対象 HEAD または同等の不変識別子。 | 各入力に locus と版があり、実在を read-only test で確認できる。 |
-| **境界** | 読み書き可能なファイル、禁止範囲、外部送信、依存、担当外。 | 許可対象が列挙され、所有の重複がない。 |
+| **境界** | read-set、write-set、checkout/worktree、対象code digest、禁止範囲、外部送信、依存、担当外。 | 同じcheckoutでwrite/writeまたはread/writeが交差する腕は同時に発射されず、別worktreeなら実行時digestを照合する。 |
 | **出力 schema** | 成果物、返却状態、主張、証拠、限界の機械可読な形。 | schema validation が通る。最終メッセージだけでも同じ情報を回収できる。 |
 | **完成の定義** | 非生成仕事は最終完成条件を発射前に凍結する。生成仕事はlaunch時のphase-exitとmaturity release condition、domain artifact / digest後のfinal acceptance criteriaを分ける。 | 各条件が成果物の locus または runnable test に結線され、生成仕事では二つのfreeze時点が記録されている。 |
 | **独立検収** | 主張が偽なら落ちる oracle、再計算、照合手順を成果物を見る前に設計し、lens / oracle / expected verdictを生成側からsealedにする。既知のhard constraintsとstage-exit criteriaは開示できる。 | 「主張が偽でもこの観測は出得るか」の答えが NO。YES なら test を無効とする。sealと開示範囲が記録されている。 |
@@ -113,6 +113,9 @@ limitations: []
 
 分解表は最低でも `component / owner / input / output / dependency / test / resource` を持つ。
 同じファイルや同じ状態を複数の腕が編集する計画は disjoint ownership を満たさず、発射しない。
+一方が読む実行体を他方が書く場合も、そのrunの測定窓では依存衝突である。
+別worktreeまたは不変snapshotに隔離するか、書き込み完了後にdigestを固定して発射する。
+worktreeの作成・Git操作は`driving-git`が所有する。本skillは発射可否と依存を所有する。
 土台は自己試験つきの一腕へ渡し、その通過後に依存部品を発射する。
 
 ### C2 — 長走行と control plane の分離
@@ -162,6 +165,9 @@ artifact/test は、逐次保存された複数chunk、PID/log、部分停止か
 全ての腕に、硬い期限、中間報告条件、中断条件を与える。時間予算には、期待する最小納品と
 超過時に残すartifactを含める。中間報告は前進、保存先、残作業、更新見積りを返す。
 監視待ちだけの報告は前進に数えない。
+中間報告条件は原則としてreceipt着地、期限超過、資源違反、依存解除、判断変更で起こす。
+人が周期報告を明示した場合だけその周期を守る。変化のない長文報告を作らせず、
+状態表はrun/ticketの正本から導く。人が書くのは次の裁定だけにする。
 
 capacity-aware parallelism は、独立性だけでなく資源と外部勘定の競合も検査する。同一資源の
 重い走行は `measurement-and-resources.md` の `P7` により直列化する。artifact/test は、
@@ -209,7 +215,8 @@ decision rightsへ差し戻す。
 | `deliverable defect` | production | executorへ欠陥locusと反例を付けて再発注する。 | 欠陥を再現してから落ちなくなる回帰test。 |
 | `spec-interface defect` | C1〜C3 / 完成定義 | supervisorがinterface、decision rights、完成定義を再凍結する。 | 新仕様から各自由選択・出力・合否への全写像。 |
 | `evidence-grounding defect` | P0 / P3 / P6の最初に欠けたgate | supervisorはgate再開とbriefだけを持ち、executor / verifierがsourceまたはmachine evidenceを再取得する。 | claim→evidence pointerと独立照合。 |
-| `resource / footing / confound / reuse defect` | P7 / P8 / P9 / P10の最初に欠けたgate | supervisorが資源割当と再開briefを持ち、executorが再計測・対照・再構築を行い、verifierが凍結後に独立再計算・照合する。 | 該当gateの対応packetがschema、digest、oracle testを通る。 |
+| `resource / reuse defect` | P7 / P10の最初に欠けたgate | supervisorが資源割当と再開briefを持ち、executorが再測・再構築を行う。 | resource receiptまたはP10 manifestがschema、digest、oracle testを通る。 |
+| `evidence / footing / confound defect` | `validating-experimental-evidence` EV0–EV4の最初に欠けたgate | domain ownerが測定契約を直し、executorが再測・対照を行い、supervisorは依存と配車だけを直す。 | 正本findingの判定locus/digestとtarget test。 |
 | `oracle false-positive` | verification design | oracleを無効化し、同じ誤観測を出さない別法へ差し替える。 | 既知の偽claimを落とすnegative control。 |
 
 artifactは `failure class → earliest reopened gate → owner → new test` のrouting表である。

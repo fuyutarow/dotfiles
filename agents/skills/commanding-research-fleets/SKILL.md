@@ -1,26 +1,21 @@
 ---
 name: commanding-research-fleets
 description: >-
-  Runs a Director/PI/Researcher research fleet under the agentic-RnD protocol: role charters +
-  prohibitions, Researcher archetypes, the eight-item launch checklist, order-form shape,
-  thin-Director reply form, stuck-question prompts, and the retrieve/search vocabulary split.
+  Runs a Director/PI/Researcher fleet under agentic-RnD: role charters, Researcher types,
+  launch checklist, order form, thin-Director replies, stuck prompts, Retrieve/Search vocabulary.
   Use for 艦隊運転, Director/PI/Researcher体制, 研究艦隊の立ち上げ, PI憲章, thin director,
   発注書の型, 行き詰まりの問い, or a stalled PI session. DECISIVE:
-  supervising-research-programmes/directing-research-sections own PROGRAMME/SECTION artifacts;
-  this skill owns only the mapped role vocabulary and launch procedure. PURPOSE:
-  orchestrating-agents owns generic dispatch/visibility/veto/acceptance; this skill owns
-  fleet-specific role content — CO-FIRE when dispatching a PI or Researcher. PURPOSE:
-  codifying-doctrine owns cross-actor tie-breaks; this is a named-executor manual, which its own
-  routing sends here. Workflow-native: charter/checklist/template/vocabulary content stays SOLO;
-  only in-lab verification (PI→verifier) delegates, never Director-launched. English skill;
+  programme/section artifacts→supervising-research-programmes/directing-research-sections;
+  role content here. PURPOSE: generic dispatch→orchestrating-agents, CO-FIRE on PI/Researcher
+  dispatch; cross-actor tie-breaks→codifying-doctrine. Workflow-native: charter/checklist
+  content stays SOLO; only PI-run in-lab verification delegates. English skill;
   respond in the user's language (default Japanese).
 ---
 
 # Commanding research fleets — the Director/PI/Researcher operating procedure
 
-> **Version**: v2609.1.0 (2026-09-03) — forged from four dated rulings (発注者裁定
-> 2026-09-02/09-03); full source grades and the solo verification pass are in
-> `tests/forge-verification-ledger.md`.
+> **Version**: v2609.1.1 (2026-09-25) — candidate-rule pointers follow the evidence-owner split.
+> Source grades and solo verification: `tests/forge-verification-ledger.md`.
 
 ```bash
 for f in charters researcher-types launch-and-order vocabulary-and-law; do
@@ -172,8 +167,9 @@ author-confirmed).
 Nine measurement-instrument breaks on 2026-09-02/03 produced candidate rules — pre-run checks,
 seed-count floors, a windowed-M-of-K replacement for an uncalibratable cumulative test, and a
 retain/no-retain split. These are CANDIDATES, not yet reconciled against
-`orchestrating-agents`' existing P7–P10 measurement discipline (`references/measurement-and-
-resources.md`) — a real overlap risk the ledger names explicitly. A separate, later
+`orchestrating-agents` P7/P10 resource/reuse rules and
+`validating-experimental-evidence` EV0–EV4 measurement semantics.
+The ledger names the overlap risk explicitly. A separate, later
 Director-proposed candidate (corpus-knowledge transfer between arms — identifier + limitations-
 column verbatim + named alternative, pairing with operating rule 7) sits alongside this table,
 not folded into its nine-item count. Full table: `references/vocabulary-and-law.md`; do not

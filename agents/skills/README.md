@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**59 authored** here, plus **13 vendored** upstream (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
+**60 authored** here, plus **13 vendored** upstream (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -14,6 +14,9 @@ Neighboring descriptions carry reciprocal typed cuts, and a broad entrypoint com
 without reimplementing them. Create a new skill only for a demonstrated ownership void. MECE applies
 to declared responsibilities and artifacts; open-world content keeps an explicit `OPEN` residual rather
 than pretending unknown unknowns are exhaustively enumerable.
+
+Collection mission: maximize valid knowledge discovery per unit time through Experimental and
+Formal Methods. `forging-skills` owns the admission test; activity counts alone do not meet it.
 
 ## Authored
 
@@ -41,6 +44,7 @@ than pretending unknown unknowns are exhaustively enumerable.
 - [`surfacing-blind-spots`](surfacing-blind-spots/) — Expose hidden premises and human tacit constraints in an existing plan/frame; emit a bounded blind-spot packet, not solutions.
 - [`forming-hypotheses-from-anomalies`](forming-hypotheses-from-anomalies/) — Build ONE explanatory hypothesis from an anomaly, with the record of what entitled it; explain inside the current vocabulary before introducing a term outside it.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
+- [`validating-experimental-evidence`](validating-experimental-evidence/) — Qualify numerical claims through registered contract, leakage, footing, and lineage checks; polysearch owns the executable schema and finding.
 - [`codifying-doctrine`](codifying-doctrine/) — Codify and audit the ordered trade-off rules that let distributed actors decide alike when nobody can confer; every rule names what it sacrifices, and agreement is measured, not asserted.
 - [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
@@ -91,6 +95,9 @@ signed corpus position → operationalizing-research-gaps: typed, test-bound, ex
 frozen bounded episode → auditing-research-processes: audit + non-enacting recommendation
 ```
 
+Numerical receipts pass through `validating-experimental-evidence` before claim or learning;
+formalized theorems pass through `proving-theorems`' kernel and faithfulness gates.
+
 | Function | State transition | Owned artifact | Skill |
 |---|---|---|---|
 | PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
@@ -103,6 +110,7 @@ frozen bounded episode → auditing-research-processes: audit + non-enacting rec
 | FORGE | selected frame → thesis batch | Candidate packets + coverage matrix | `forging-novel-theses` |
 | TEST / COMMIT | one expensive/irreversible selected tree → confidence/commit decision | Map / Loop table / Leap decision | `acting-on-hypotheses` |
 | RUN CHEAP PROBE | one deterministic/reversible selected tree → observed result | result with locus | domain/plain executor |
+| QUALIFY EXPERIMENT | raw numerical result → measurement validity and claim scope | `EVIDENCE DISPOSITION` in the canonical finding | `validating-experimental-evidence` |
 | AUDIT | frozen bounded episode → evidence-bounded process finding | `RESEARCH_PROCESS_AUDIT` / `AUDIT_RECOMMENDATION` | `auditing-research-processes` |
 | ARGUE | completed evidence → defensible paper claim | CLAIM SPEC | `arguing-research-papers` |
 

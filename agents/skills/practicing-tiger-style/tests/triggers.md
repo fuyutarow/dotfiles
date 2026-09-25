@@ -31,6 +31,7 @@ These expectations are routing oracles, not live invocation measurements.
 | C3 | Choose JSON canonicalization and signing, then review resource limits. | governing-configuration-systems + Tiger |
 | C4 | Test an unproven expensive architecture bet; decide whether to commit. | acting-on-hypotheses first; Tiger for experiment integrity |
 | C5 | Set organization-wide trade-off priorities under delegated authority. | codifying-doctrine; Tiger only for a separate system contract |
+| C6 | A consequential benchmark looks implausibly good and may leak the label. | validating-experimental-evidence determines validity; Tiger keeps the risk/acceptance row open until its disposition |
 
 ## Behavioral regressions
 

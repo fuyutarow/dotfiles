@@ -87,6 +87,21 @@ programme mutation, executor receipts, and terminal process audit.
   `NOVEL_GAP|REGISTERED_REPLICATION|KNOWN_DUPLICATE|RETRACTION_RISK`.
 - Build-order existence check, `skill-check.ts`, and scoped `git diff --check`: PASS with no FAIL/WARN.
 
+## 2026-09-25 — experimental evidence owner seam
+
+The user-supplied Firefly episode reported Arena contract bypass, label leakage,
+and confounded comparisons. This Section skill still owns prospective intent,
+executor-owned receipt, and distinct learning commit. For a numerical run, its
+builder-owned measurement contract cites the target-owned benchmark contract and
+the `validating-experimental-evidence` EV0/EV2 validation plan. The receipt's
+validity evidence cites the canonical polysearch finding when polysearch is used.
+No skill-local schema, runner, or validator was added. The section's `FAIL`/`UNKNOWN`
+instrumentation-repair rule remains the semantic stop for LEARN.
+
+Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
+(2026-09-25):** 80 long reference sentences across five older files remain;
+SKILL.md adds no warning. Queue a dedicated prose pass after this owner migration.
+
 ## 2026-08-04 — v2 wire and authority-chain alignment
 
 - Restored `SECTION_MANDATE -> SECTION_CHARTER -> GROUNDING_PACKET`; Charter no longer cites Grounding,

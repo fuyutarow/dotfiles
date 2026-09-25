@@ -750,3 +750,18 @@ Any ONE of these forces a reforge (`forging-skills/references/verifying.md` §6)
 smoke test (the new description appearing in the next session's skill listing) is deferred to
 the shipping commit's own verification — record the result here once run, per `verifying.md`
 §6's ship step.
+
+## 2026-09-25 — keep fleet measurement candidates nonbinding
+
+The nine candidate rules remain candidates. Their reconciliation target is now
+split: `orchestrating-agents` owns P7/P10 resource/reuse, and
+`validating-experimental-evidence` owns EV0–EV4 benchmark and causal-evidence
+meaning. This role manual gains no benchmark validator and no authority to
+promote those candidates. Target `skill-check.ts` exited 0 without structural
+failure. **PROSE-DEBT waiver (2026-09-25):** 76 long reference sentences and
+19 long core sentences are legacy debt; the pointer edit adds no new class.
+
+The description was shortened without changing the Director/PI/Researcher
+trigger surface or typed programme/section and dispatch cuts. The official
+quick validator now accepts it under the description cap; role and launch
+semantics are unchanged.

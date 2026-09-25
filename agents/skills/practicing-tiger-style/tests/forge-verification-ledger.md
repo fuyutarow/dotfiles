@@ -250,3 +250,16 @@ outside this ledger. The judge found no route regression for the consequential c
 0 FAIL, 0 prose WARN. `git diff --check`: PASS. Collection floor passed at
 72 skills and 64,564 listing characters. `mise run link:skills` passed; the
 Claude skill link resolves to this source directory.
+
+## Reforge v2609.3.0 (2026-09-25) — consume canonical benchmark evidence
+
+Tiger still owns a consequential design's cost, semantic-preservation,
+negative-case, and acceptance rows. Experimental-score validity, label leakage,
+footing, and historical regression now belong to
+`validating-experimental-evidence`. A T4 performance observation cites its
+canonical polysearch finding/disposition; a quarantined or incomparable score
+cannot close the row. No benchmark schema or alternative validator is authored
+here. This split follows the user's polysearch-only correction.
+
+Target `skill-check.ts` exited 0 with 0 FAIL/0 WARN. Its existing trigger set
+adds C6 for the ordered co-fire. No runtime effect is claimed from this edit.

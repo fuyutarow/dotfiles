@@ -14,7 +14,7 @@ description: >-
 
 # Supervising research programmes
 
-> **Version**: v2608.5.0 (2026-08-04) — signer-owned goals, dominance releases, and measurement-valid progress.
+> **Version**: v2609.1.0 (2026-09-25) — typed experimental and formal progress.
 
 No harness → same map, serial. Durable guidance from a frontier model (2026-08).
 
@@ -50,6 +50,8 @@ bounded aggregate propagation metrics, topic coverage gaps, and conflict alarms 
 The operational North Star maximizes goal-aligned and current-grounded LEARN/hour. It must be
 nonduplicate, minimally discriminating, measurement-valid, and receipt-linked. `learnPerHour` is primary;
 `searchPerHour` is a leading measure only when its receipt can become that LEARN.
+Experimental and Formal Methods both serve this objective. Allocate to the next
+decision-changing valid observation or checked proof, not to a fixed arm count.
 
 Prospective intent, evidence lineage, and immutable roles constrain both measures.
 Programme relevance, safety, and signed resource limits constrain them too.

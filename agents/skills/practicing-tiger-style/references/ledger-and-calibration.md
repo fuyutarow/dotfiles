@@ -112,6 +112,9 @@ For that material performance revision, T4 observes speed and semantics on the s
 Use the predeclared speed floor and semantic oracle. Use an exact oracle for a bit-preserving
 change. Otherwise freeze a justified tolerance or behavior relation before the run.
 Do not trade a semantic failure for a speed PASS, or count unchanged output as a speed PASS.
+When either observation is an experimental benchmark result, link its
+`validating-experimental-evidence` disposition. A quarantined or incomparable score
+cannot close the corresponding T4 obligation.
 For High-tier boundaries, seek a check independent of the authoring path or context.
 Examples include consumer validation, replay, fault injection, or an independently specified oracle.
 Record any missing independent check as an open row or explicitly accepted exception.

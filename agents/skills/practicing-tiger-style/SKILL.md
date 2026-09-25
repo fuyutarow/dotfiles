@@ -17,7 +17,7 @@ description: >-
 
 # Practicing Tiger Style
 
-> **Version**: v2609.2.0 (2026-09-25) — performance cost and preservation contracts.
+> **Version**: v2609.3.0 (2026-09-25) — consequential benchmark evidence is externally qualified.
 > Source synthesis and derivation: `references/source-ledger.md`.
 
 Run from this skill directory:
@@ -135,6 +135,7 @@ No harness → same map, serial.
 | Behavior-preserving structural change? | `refactoring-code`; co-fire for consequential boundary review only. |
 | Configuration authority, representation, or integrity? | `governing-configuration-systems`; this ledger links to its contract. |
 | Untested expensive or hard-to-reverse bet? | `acting-on-hypotheses` first; this skill guards experiment integrity afterward. |
+| Is an experimental score valid, comparable, or evidence of regression/leakage? | `validating-experimental-evidence` owns the disposition. This ledger consumes its locus and adds consequential obligations; it does not rejudge footing. |
 | Cross-actor priorities and delegated authority? | `codifying-doctrine`; do not turn one system's ledger into an organization-wide doctrine. |
 | Agent fleet CPU/RAM/VRAM admission? | `orchestrating-agents`; application capacity remains here. |
 | Language syntax, tooling, or type-system mechanism alone? | Language/platform owner; no Tiger ceremony. |

@@ -114,3 +114,17 @@ and the typed reopen request. Classified exhaustive scans found no exact legacy 
 SKILL, five-reference, or trigger files. This migration changes routing only: AOH retains sole ownership
 of one selected tree, its thresholds, its outcome table, and Commit/Pivot/Kill. It makes no activation
 or scientific SEARCH/LEARN claim.
+
+## 2026-09-25 — evidence-validity handoff before confidence write
+
+The Firefly report tried to reject H-load from a run that changed top-K and
+family size together. The selected-tree test and threshold remain HERE; the
+numerical contrast's validity and confound classification now come from
+`validating-experimental-evidence` EV0–EV4. Pre-run, freeze target binding and
+controls; after the raw receipt, a `FAIL`/`UNKNOWN` or confounded contrast
+moves no node confidence. Return the raw result to the Section owner for one
+matched repair. This is a PURPOSE cut, not a second hypothesis authority.
+
+Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
+(2026-09-25):** 84 long reference sentences remain from the older corpus;
+SKILL.md has no warning. The dedicated prose pass remains separate.

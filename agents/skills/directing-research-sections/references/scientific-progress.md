@@ -26,6 +26,11 @@ Replayed receipts, one observation split into several packets, nondiscriminating
 learning prose without a distinct Director commit count zero. Candidate, agent, document, prompt, token,
 verifier, smoke, sweep-point, and instrumentation counts are reported separately and never enter SEARCH or LEARN.
 Measurement validity `FAIL` or `UNKNOWN` is instrumentation repair, not scientific SEARCH or LEARN.
+For numerical claims, the executor's validity-evidence locus points to the canonical
+polysearch finding's `EVIDENCE DISPOSITION` when polysearch is the record system.
+Its target checks decide `PASS|FAIL|UNKNOWN`; a receipt's
+self-declared `PASS` cannot override a missing canonical benchmark binding, stale executed-code
+digest, or unrun information-flow control. This skill still owns the receipt join and learning commit.
 
 Cross-section transfer publication, delivery fan-out, replay, recipient admission, and recipient adoption
 are also separate propagation activity. One source receipt and Director commit contribute once; no transfer

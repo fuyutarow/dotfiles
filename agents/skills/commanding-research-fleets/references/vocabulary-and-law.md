@@ -88,9 +88,9 @@ never as a standing excuse; eventual parity with the mainstream (e.g. LLMs) rema
 
 Nine measurement-instrument breaks produced these candidates. They are explicitly labeled
 LAW候補 (candidates) by the orderer, not ruled — and they have not been reconciled against
-`orchestrating-agents`' existing P7–P10 measurement discipline
-(`orchestrating-agents/references/measurement-and-resources.md`), which already owns
-comparison/causal-claim/cache-reuse discipline generically across every dispatch. Treat this
+`orchestrating-agents`' P7/P10 resource/reuse discipline and
+`validating-experimental-evidence`'s EV0–EV4 comparison/causal-claim discipline.
+Treat this
 table as a dated proposal, not a rule this skill enforces on its own authority.
 
 The nine breaks (grade: author-confirmed as a list; the underlying incidents themselves are

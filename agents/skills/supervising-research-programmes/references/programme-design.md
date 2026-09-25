@@ -17,6 +17,7 @@ programme authorship of the sibling's work.
 | Stage | Evidence condition | Route / programme output |
 |---|---|---|
 | `corpus-unclear` | field position or target-agnostic donor relation is unbounded | `systematizing-knowledge`; receive bounded position |
+| `experimental-evidence-unqualified` | a numerical anomaly, benchmark contrast, or regression claim lacks valid contract/controls/footing | `validating-experimental-evidence`; receive a scoped disposition, not a programme verdict |
 | `anomaly-unverified` | observation may be noise, leakage, or artifact | `raising-resolution`; receive cited observation |
 | `assumptions-unexposed` | a dominant frame has unexamined premises | `surfacing-blind-spots`; receive blind-spot packet |
 | `problem-underconstructed` | topic/frame lacks target, comparator, horizon, distribution, tolerance, or residual | construct `PROBLEM_LANDSCAPE` here |
@@ -85,6 +86,14 @@ reopen. Neither enacts it; only a new `PROGRAMME_DECISION` does.
 The programme North Star is goal-aligned, current-grounded, nonduplicate, minimally discriminating,
 measurement-valid receipt-linked LEARN/hour. `learnPerHour` is primary and `searchPerHour` is a leading
 measure only when the receipt can become that LEARN. A growing receipt backlog is not success.
+
+Experimental and formal receipts have different evidence conditions. A numerical
+`RUN_RECEIPT` needs measurement validity `PASS` from
+`validating-experimental-evidence`. For theorem formalization, a `PROOF_RECEIPT`
+needs the proof assistant's kernel verdict and the human's statement-faithfulness
+decision (`proving-theorems`). One type cannot substitute for the other. Allocate
+between a live proof obligation and an experiment discriminator by expected
+decision-changing valid LEARN per resource, not by a fixed quota or arm count.
 
 At programme altitude, count SEARCH only from a declassified terminal `PROOF_RECEIPT`, `RUN_RECEIPT`,
 or `KILL_RECEIPT` backed by tracked, nonignored evidence. A discriminating null, falsification,

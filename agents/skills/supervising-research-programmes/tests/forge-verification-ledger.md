@@ -91,6 +91,21 @@ No waiver recorded at creation. The author self-check is not independent verific
   not release a Section's local scale; the trigger desk-check adds the corresponding regression rows.
 - Build-order existence check, `skill-check.ts`, and scoped `git diff --check`: PASS with no FAIL/WARN.
 
+## 2026-09-25 — experimental and formal receipt typing
+
+The user made valid knowledge-discovery throughput from Experimental and
+Formal Methods the collection objective. The programme's existing LEARN/hour
+rule now names the two evidence types: numerical runs need the experimental
+disposition, while theorem formalization needs kernel verification and human
+statement faithfulness under `proving-theorems`. An experimental score cannot
+prove a theorem, and a conditional theorem cannot certify a measured score.
+The Supervisor sees only declassified typed signals and allocates by expected
+decision-changing LEARN per resource, with no fixed arm quota.
+
+Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
+(2026-09-25):** 50 long reference sentences in older files remain; the core
+adds none. Queue prose repair apart from this typed-receipt seam.
+
 ## 2026-08-04 — v2 authority-chain alignment
 
 - Mandate semantics now state `Mandate -> Charter -> Grounding -> genesis/search/admission`; no mandate-time

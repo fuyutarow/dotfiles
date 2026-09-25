@@ -1259,3 +1259,40 @@ unchanged in meaning; the new row is CO-FIRE only within it.
 0 structural FAIL, 13 legacy reference sentence WARNs (unchanged from pre-edit).
 `git diff --check`: PASS. Collection floor passed at 72 skills and 64,564 listing
 characters. `mise run link:skills` passed; the Claude skill link resolves here.
+
+## 2026-09-25: separate evidence meaning from dispatch (v2609.2.0)
+
+The two user-supplied Firefly reports exposed one-home failure. The previous
+`P8 FOOTING` and `P9 CONFOUND-TABLE` required a signed dispatch map to trigger
+this control-plane skill, while benchmark scores were promoted outside that map.
+The detailed P8/P9 procedures now live only in `validating-experimental-evidence`
+EV0–EV4. Their numbers are reserved here so a later cleanup cannot silently reuse
+them. This skill consumes only the disposition locus/digest when dispatching a
+repair or arranging independent acceptance. The old P8/P9 rules were moved,
+not rephrased as a second authority.
+
+The same reports show 3 tickets blocked by concurrent edits to code their runs
+read. C1 already banned two writers for one file; it did not require a run's
+read-set to be disjoint from another arm's write-set. The dispatch brief now
+declares both sets, worktree, and target code digest. A crossing dependency
+serializes or isolates before launch. `driving-git` retains worktree mechanics.
+
+Repeated six-minute narrative reports and inflated reservations consumed work
+while only one of seven live tickets built the learner. C4 now makes status
+event-woken by default; P7 asks for durable high-water/release receipts and
+calibrated subsequent envelopes. The reported `agent-resource-run` did not yet
+persist those values after teardown. This is a named implementation gap, not a
+claim that the tool was repaired by editing this skill.
+
+These are user-supplied process observations, not a controlled measurement of
+the skill change's effect on LEARN/hour. The collection's Experimental/Formal
+knowledge-throughput objective is applied as a criterion for fewer blocked or
+invalid receipts, not a fixed quota of agents or periodic reports.
+
+The user rejected the first draft's skill-local Bun validator. Polysearch owns
+the executable evidence schema and target refusal; this skill reads only the
+canonical finding's locus/digest when an orchestration decision needs it.
+Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
+(2026-09-25):** 12 long reference sentences remain from older material; the
+new owner/dispatch cut adds no core warning. Runtime enforcement remains an
+open polysearch/resource-control implementation task, not a claimed skill effect.

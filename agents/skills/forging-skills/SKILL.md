@@ -1,24 +1,23 @@
 ---
 name: forging-skills
 description: >-
-  Forges and reforges Agent Skills to the house bar: durable operating manuals with LAW, gates,
-  grep-able artifacts, MUST-NOT-FIRE, sibling cuts, and adversarial verification. Owns the CRAFT:
-  function-first existence, source distillation into tool-changing rules, one-home architecture,
-  description/trigger engineering, MECE responsibility cuts, fire/no-fire tests, and the skill's own
-  verification. Use for creating, updating, or auditing SKILL.md; skill creator; reforging,
-  鍛え直す, 鍛錬, スキル作成, スキル作って, スキルを作って, スキル改善, description tuning, trigger
-  collisions, skill evals, 評価セット, or work under agents/skills/. Also owns the COLLECTION's
-  standing cost and retirement (F4): スキルが増えすぎ, 一覧が重い, listing budget, 引退させる,
-  which skills to retire, is this skill still worth its slot. MANDATORY before substantive skill
-  revision; generic skill-creator supplies packaging by pointer. Harness listing/firing
-  diagnostics belong to operating-the-harness; human-facing prose belongs to linting-prose. Novel thesis
-  → forging-novel-theses; corpus synthesis → systematizing-knowledge. Design/cuts stay solo; bounded
-  evidence harvest and verification may fan out. English skill; respond in the user's language.
+  Forges and reforges Agent Skills with LAW, gates, one-home artifacts, typed sibling cuts,
+  fire/no-fire tests, and adversarial verification. Owns the CRAFT:
+  source distillation, trigger/cut design, and skill verification.
+  Use for SKILL.md creation/update/audit, skill creator, reforge, reorganization/統廃合,
+  鍛錬, スキル作成/改善, description tuning, trigger collisions, skill evals/評価セット,
+  or work under agents/skills/. Owns collection
+  standing cost (F4): listing budget, retirement/merge, スキルが増えすぎ.
+  MANDATORY before substantive skill revision. Harness listing/firing mechanics
+  → operating-the-harness; packaging → skill-creator; human-facing prose → linting-prose;
+  thesis → forging-novel-theses; corpus → systematizing-knowledge. Workflow-native:
+  design/cuts stay SOLO; bounded evidence harvest and verification may fan out.
+  English skill; respond in the user's language.
 ---
 
 # Forging skills — the craft of making operating manuals that outlive their maker
 
-> **Version**: v2608.2.0 (2026-08-17) — F1 gains line shape; the floor now reads `references/` (80% of the corpus was unmeasured).
+> **Version**: v2609.1.0 (2026-09-25) — collection mission enters the existence gate.
 > History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
 
 Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:
@@ -49,6 +48,14 @@ translatable words: **LAW**, **gate** (F1–F4), **fire / no-fire**, **line shap
 > never assumed. A COLLECTION is not the sum of its admissions: every installed skill charges
 > its description on every turn thereafter, so standing cost is measured against a declared
 > ceiling and membership is re-justified — admission alone is never the whole gate.
+
+The collection objective is **valid knowledge discovery per unit time**.
+Experimental and Formal Methods supply the evidence. For each admission or reforge,
+name the observation, discriminating result, or checked proof it helps reach.
+The path may be indirect through a named consumer. Name the failure or delay removed.
+A skill whose only output is more agents,
+reports, runs, or rules fails the existence gate. This objective does not turn every
+routine task into an experiment; choose the smallest check that changes a decision.
 
 ## The four gates — F1 / F2 / F3 / F4
 
@@ -84,6 +91,9 @@ Both halves of F1 can pass independently. The incident proving it: ledger 2026-0
 0. **FUNCTION + EXISTENCE GATE** — decompose the requested behavior as
    `input state → function verb → owned artifact → next state`, then run
    `operating-the-harness`'s decision reflex (CLAUDE.md line / rule / hook / settings / skill).
+   Add `knowledge artifact / current blocking failure / expected decision-time delta`.
+   If that causal path cannot be named, reject the skill. Merge or retire an
+   overlapping member instead of adding another description to the collection.
    If an existing skill owns that transition or artifact, EXTEND it. Forge a sibling only for a
    reusable ownership void with a distinct stop condition. EXTEND is not the polite option — it
    is the one that does not charge the listing again (F4).

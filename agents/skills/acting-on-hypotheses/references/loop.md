@@ -147,9 +147,19 @@ When the signal arrives:
    the raw signal with each observable trigger. If one fires, do not convert the residual into a node
    or write a tree-local confidence from that signal. Emit the raw signal plus the `FRAME-BREAK`
    artifact below with `primary=OPEN`, and return to `directing-research-sections`.
-2. **WRITE the value.** When no Open-set trigger fired, update the node's 確信度 (0–100%, a gradation
+2. **CHECK experimental evidence.** For a numerical result, read the canonical
+   finding's disposition. `validating-experimental-evidence` owns its meaning.
+   Do not change confidence before it passes.
+   `measurement_validity=FAIL|UNKNOWN` or a confounded intervention is a raw observation,
+   not a test of the selected node. Preserve it and name the missing matched control
+   or instrument repair. End this Loop iteration without steps 3–5. Return the raw
+   observation and disposition to `directing-research-sections` under the current mandate.
+   Leave confidence unchanged. The disposition does not choose
+   the hypothesis or change the prewritten threshold; those remain HERE.
+3. **WRITE the value.** When no Open-set trigger fired and the evidence gate passed,
+   update the node's 確信度 (0–100%, a gradation
    — never 0/1). Record what the evidence was and which direction it moved the number.
-3. **If a missing node surfaced** — classify it before editing structure (`map.md` §6):
+4. **If a missing node surfaced** — classify it before editing structure (`map.md` §6):
    - if Map's cut says it preserves
      `OBJECT / RELATION / OBSERVATION / REGIME / VALUE / ACTION` and does not consume `OPEN`, **FLAG it
      and hand a cheap in-place Map pass the restructure**, emitting
@@ -169,7 +179,7 @@ When the signal arrives:
    **Loop (test) → Map (node-add)**; the artifact, not the wall-clock moment, is separable. The deck folds
    map-修正 into ループ; this skill re-partitions the edit to Map for MECE (`map.md` §6 honesty note).
    A structural surprise can also demote a planned Leap.
-4. **Otherwise, loop or stop** — apply §6. Carry the incoming Open-set residual unchanged in either
+5. **Otherwise, loop or stop** — apply §6. Carry the incoming Open-set residual unchanged in either
    output.
 
 ## §6 — STOP: decision-sufficiency, not certainty

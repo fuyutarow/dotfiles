@@ -216,7 +216,10 @@ Never skip Map → Leap before Loop retires the fatal risks on the load-bearing 
   Prefer an objective behavioral signal over self-reported enthusiasm.
   Valid examples include a passing test, real attention/payment/time, or a reproduced number.
   Build the minimum that yields the signal: sell-before-build, concierge, or a single spike.
-  WRITE the confidence value onto the node.
+  Before a numerical run, bind `validating-experimental-evidence` EV0 and the
+  prospective EV2 controls. After its raw terminal receipt, consume the canonical
+  finding's `EVIDENCE DISPOSITION`. `FAIL`, `UNKNOWN`, or a confounded contrast
+  moves no confidence. Only then WRITE the confidence value onto the node.
   If a missing node surfaced, FLAG it.
   Run a cheap in-place Map pass only when that node still fits the selected tree.
   A frame-breaking discovery emits `FRAME-BREAK`.

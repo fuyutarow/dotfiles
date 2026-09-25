@@ -45,12 +45,21 @@ function block(reason: string): never {
 let sid = "";
 let count = 1;
 let rawArgs = "";
+let cwd = process.cwd();
 try {
   const payload = readStdinJson();
   if (typeof payload?.session_id === "string") sid = payload.session_id;
+  if (typeof payload?.cwd === "string") cwd = payload.cwd;
   rawArgs = String(payload?.command_args ?? "").trim();
 } catch {
   block("/quote could not read its hook input.");
+}
+// zsh %~ / statusline-command.ts's shorten(): leading $HOME -> ~, for a header that reads well
+// pasted into another session's chat rather than showing a long absolute path.
+function shortenCwd(p: string): string {
+  if (p === HOME) return "~";
+  if (HOME && p.startsWith(`${HOME}/`)) return `~${p.slice(HOME.length)}`;
+  return p;
 }
 
 // No argument -> default to 1, the common case, and not an error. An argument that IS given
@@ -113,7 +122,14 @@ try {
   // leave the session id as the name
 }
 
-const payloadText = `from: ${name}\n${selected.join(TURN_SEPARATOR)}`;
+// Header carries everything the reader needs to place the quote without asking: which session
+// said it, where it was running, how many turns are included (the count actually captured,
+// not necessarily the count requested — see the `short` fallback below), and how much text
+// they're about to read.
+const body = selected.join(TURN_SEPARATOR);
+const bodyBytes = Buffer.byteLength(body, "utf8");
+const header = `from: ${name} | cwd: ${shortenCwd(cwd)} | turns: ${selected.length} | ${bodyBytes}B`;
+const payloadText = `${header}\n${body}`;
 
 // Claude Code cannot reach the clipboard from a process it spawns — see
 // hooks/copy-via-herdr-pane.ts's header for why, and what it does instead. The payload travels

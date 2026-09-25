@@ -376,7 +376,14 @@ function miseRuns(body: string): MiseRun[] {
   // wiring-mise-tasks contract, already resolved in every repo by its mise-contract gate.
   // (Supersedes HOOK-2's language-filter check: a filter only exists inside a bespoke body.)
   const GATE_HOOKS = ["pre-commit", "pre-push"];
-  const GATE_VERBS = new Set(["fmt:check", "lint", "test", "check"]);
+  // HOOK-1c: the commit gate judges only what is being committed. `fmt:staged` fixes the staged
+  // files in place (refusing any that also carry unstaged hunks); a whole-tree `fmt:check` there
+  // refused every session's commit on any session's WIP — firedancer 2026-09-25, four blocks
+  // across ~20 sessions, 10–20 min each. Whole-tree gates stay in `check` and pre-push.
+  const GATE_VERBS: Record<string, Set<string>> = {
+    "pre-commit": new Set(["fmt:staged", "lint"]),
+    "pre-push": new Set(["fmt:check", "lint", "test", "check"]),
+  };
   for (const hook of GATE_HOOKS) {
     // The gate is DECLARED in mise.toml as `hook:<event>` so one file answers "what runs at commit"
     // — and it is depends-only over contract verbs, so it cannot drift from them. A `run` body is
@@ -389,15 +396,37 @@ function miseRuns(body: string): MiseRun[] {
       const stdinGate = hook === "pre-push" && gateTask.raw;
       if (gateTask.hasRun && !stdinGate) {
         fail("HOOK-1", `\`hook:${hook}\` has a run body. A gate task is depends-only over contract ` +
-          `verbs (e.g. \`depends = ["fmt:check", "lint"]\`); a body is a second gate that drifts from them.`);
+          `verbs (e.g. \`depends = ["fmt:staged", "lint"]\`); a body is a second gate that drifts from them.`);
       }
-      const offVerb = gateTask.deps.filter((d) => !GATE_VERBS.has(d));
+      const allowed = GATE_VERBS[hook] ?? new Set<string>();
+      const offVerb = gateTask.deps.filter((d) => !allowed.has(d));
       if (offVerb.length > 0) {
-        fail("HOOK-1", `\`hook:${hook}\` depends on ${offVerb.map((d) => `\`${d}\``).join(", ")} — not a ` +
-          `contract verb. Put a repo-specific check in a \`lint:*\` subtask so \`mise run lint\` runs it too.`);
+        fail("HOOK-1", `\`hook:${hook}\` depends on ${offVerb.map((d) => `\`${d}\``).join(", ")} — not one of ` +
+          `its gate verbs (${[...allowed].map((v) => `\`${v}\``).join(", ")}). A repo-specific check goes in a ` +
+          `\`lint:*\` subtask so \`mise run lint\` runs it too.`);
       }
       if (gateTask.deps.length === 0 && !gateTask.hasRun && !stdinGate) {
         fail("HOOK-1", `\`hook:${hook}\` depends on nothing — the gate gates nothing.`);
+      }
+      if (hook === "pre-commit") {
+        if (!gateTask.deps.includes("fmt:staged")) {
+          fail("HOOK-1c", "`hook:pre-commit` does not depend on `fmt:staged` — the commit gate must fix " +
+            "the staged files in place (wiring-mise-tasks `fmt:staged`), not leave formatting to a " +
+            "whole-tree check.");
+        }
+        // Transitive: a Julia starter `lint` that reuses `fmt:check` re-opens the same wall.
+        const reached = new Set<string>();
+        const walk = (name: string): void => {
+          if (reached.has(name)) return;
+          reached.add(name);
+          for (const d of tasks.get(name)?.deps ?? []) walk(d);
+        };
+        for (const d of gateTask.deps) walk(d);
+        if (reached.has("fmt:check")) {
+          fail("HOOK-1c", "`hook:pre-commit` reaches `fmt:check`, which checks the WHOLE tree: in a " +
+            "shared checkout any session's unstaged or untracked work refuses every session's commit. " +
+            "`fmt:staged` already covers what is being committed; keep `fmt:check` in `check` and pre-push.");
+        }
       }
     }
     const raw = existsSync(hooksDir) ? await readIf(join(hooksDir, hook)) : undefined;

@@ -106,6 +106,10 @@ run = "bunx --bun oxfmt --check '**/*.ts' '!agents/skills/**'"
 
 # Umbrella format-check for the auto-formatted languages (Markdown check = lint:md via
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
+[tasks."fmt:staged"]
+description = "Format only the STAGED files in place and re-stage exactly them; refuses a file that also has unstaged hunks (wiring-mise-tasks fmt:staged)"
+run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts'"
+
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): bash (shfmt) + TypeScript (oxfmt)"
 depends = ["fmt:sh:check", "fmt:ts:check"]
@@ -306,8 +310,8 @@ run = "bunx textlint --config agents/skills/linting-prose/assets/textlintrc.json
 # lint せず、1 日で lint 違反 5 件が入った。整形後の whole-file `git add` は部分 stage の hunk も
 # 巻き込んでいた)。event の hook(post-commit / post-merge)は対応する verb が無いので run を持つ。
 [tasks."hook:pre-commit"]
-description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs, never a run body (wiring-repositories HOOK-1): a gate cannot drift from `mise run lint` if it IS lint. Widen to [\"check\"] to add the ~30 s test suite."
-depends = ["fmt:check", "lint"]
+description = "The commit gate — exactly what .githooks/pre-commit runs. Depends-only over contract verbs, never a run body (wiring-repositories HOOK-1). fmt:staged fixes only the staged files in place (HOOK-1c); the whole-tree fmt:check stays in check."
+depends = ["fmt:staged", "lint"]
 
 # 配線は tracked な core.hooksPath = .githooks(`git config core.hooksPath .githooks`)。
 [tasks."hook:post-commit"]

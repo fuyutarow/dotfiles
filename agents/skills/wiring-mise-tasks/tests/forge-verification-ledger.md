@@ -156,3 +156,23 @@ Queue: next full recipes/body reforge. No new checker or skill was added.
 Plain `bunx` reached an unconfigured Node shim although this repository declares Bun.
 The root mise tasks now use `bunx --bun` for those three Bun-compatible wrappers.
 Their local version commands, lint and typecheck passed; no global runtime configuration was added.
+
+## 2026-09-25 — `fmt:staged` (v2609.2.0)
+
+Owner request, relayed by firedancer-agt_eraw: the commit gate should fix formatting in place, not
+refuse on a lint check. Measured blocker: `hook:pre-commit = ["fmt:check", "lint"]` checked the
+whole tree, so in firedancer any session's WIP refused every session's commit (4 blocks across ~20
+sessions, 10–20 min each). The hook SHAPE rule is `wiring-repositories` HOOK-1c (its ledger §10).
+
+New SOFT verb `fmt:staged`, body `scripts/fmt-staged.ts`: formats only the staged files, refuses a
+file that also has unstaged hunks, re-adds exactly the changed files, and fails when a formatter
+changes anything outside the staged set. It re-stages through `git add` in the hook's environment,
+so `git commit -- <path>` (a temporary index) is honoured.
+
+Receipts: `tests/fmt-staged.test.ts` 12 pass (in-place + re-stage; partial refusal untouched;
+other sessions' unstaged and untracked files untouched; no-op; `--exclude`; formatter failure;
+stray write; deletion; usage; three real commits through a hook incl. the temporary index).
+`mise-contract.test.ts` updated for the new soft token (14 pass). Rust `--tool` pins `--edition`:
+bare `rustfmt` 1.9.0 parses as 2015 (`async fn` → E0670). Templates: all five gained `fmt:staged`;
+four gate on `["fmt:staged", "lint"]`, Julia on `["fmt:staged"]` because its starter `lint` reuses
+the whole-tree `fmt:check`. skill-check WARN counts equal HEAD (SKILL.md 11, references 14).

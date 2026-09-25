@@ -270,3 +270,34 @@ The paired old/new response probe rejected peer roots with old guidance and acce
 Added a peer-root fire case and a Cargo-layout-only no-fire case.
 Skill floor and edited-file Markdown check pass; this skill has zero prose-debt warnings.
 No new skill or listing budget increase was introduced.
+
+## 10. Reforge 2026-09-25 — HOOK-1c: the commit gate fixes staged files in place (v2609.3.0)
+
+**Trigger (owner, relayed by firedancer-agt_eraw).** 「pre commit hookでは Lint checkではなくin place
+fixをするべきなんですが Skillでの指導どうなってるの」. HOOK-1 prescribed
+`hook:pre-commit = ["fmt:check", "lint"]`. In firedancer `fmt:check` ran `Runic --check packages`
+over the whole tree. Any session's untracked or unstaged WIP there refused every session's commit:
+4 blocks on 2026-09-25, across ~20 agent sessions, 10–20 minutes each.
+
+**What §9 still rules out, and why the new verb respects it.** §9 retired in-place formatting
+because the old body re-staged whole files and swept unstaged hunks in. `fmt:staged`
+(wiring-mise-tasks `scripts/fmt-staged.ts`) formats only the staged set, refuses any staged file
+that also has unstaged changes, and re-adds exactly the files it changed.
+
+**Rejected alternative.** `hk` (jdx) fixes staged files with stash-based partial-staging support.
+It would move the hook definition into a second config file; §9's correction established mise.toml
+as the one place that says what a hook runs.
+
+| Proof | Receipt |
+|---|---|
+| Old shape `["fmt:check", "lint"]` | HOOK-1 (not a pre-commit gate verb) + HOOK-1c ×2 |
+| Julia-starter shape: `lint` depends on `fmt:check` | HOOK-1c (transitive reach) |
+| Good shape `["fmt:staged", "lint"]` | clean |
+| All five templates | 0 HOOK findings; mise-contract findings identical to HEAD apart from `fmt:staged` joining the undeclared-`bun` line |
+| dotfiles migrated | HOOK findings 0 (the ORDER-4 FAIL is pre-existing and unrelated) |
+| `fmt:staged` behaviour | 12 tests, incl. real commits through a hook and `git commit -- <path>` (temporary index) |
+
+**Remaining exposure, stated.** `lint` in the commit gate still reads the worktree where its tools
+do (rumdl, oxlint, typecheck). HOOK-1c forbids only the formatter check, the measured blocker. An
+index-scoped lint is each repo's `lint:*` design (firedancer's `polysearch hook pre-commit` already
+reads the index).

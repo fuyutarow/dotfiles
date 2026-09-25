@@ -2,7 +2,7 @@
 name: wiring-mise-tasks
 description: >-
   Wires per-language toolchains into the house-standard mise task graph — one muscle-memory verb
-  contract for every repo (setup/i, fmt/f, fmt:check, lint/l, test/t, up/u, check/c = all-gates
+  contract for every repo (setup/i, fmt/f, fmt:check, fmt:staged, lint/l, test/t, up/u, check/c = all-gates
   aggregate; tokens resolve via `mise run` / the `m` alias) with per-language template bodies
   (Julia Runic/Pkg, Rust cargo, Python uv/ruff, TypeScript bun/biome) and a machine gate
   (scripts/mise-contract.ts) proving the tokens resolve. MANDATORY — read before naming or adding
@@ -21,7 +21,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2609.1.0 (2026-09-23)
+> **Version**: v2609.2.0 (2026-09-25) — `fmt:staged`: the commit gate fixes staged files in place.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -60,6 +60,7 @@ skill now closes.
 |---|---|---|
 | `fmt` / `f` | HARD / HARD | format in place; >1 language → depends-only aggregate over `fmt:<lang>` |
 | `fmt:check` | HARD | non-mutating format verification (the CI form of fmt) |
+| `fmt:staged` | SOFT | format ONLY the staged files in place and re-stage exactly them; REFUSE a file that also has unstaged hunks. The commit-gate form of fmt; body = `scripts/fmt-staged.ts` (recipes §8) |
 | `lint` / `l` | HARD / SOFT | static analysis, report-only (fixes belong to fmt) |
 | `test` / `t` | HARD / SOFT | the test surface; blocked-with-pointer is legal (body may `exit 2` naming focused `test:*` — the TOKEN must still resolve) |
 | `up` / `u` | HARD / SOFT | dependency update — the lockfile-moving verb |
@@ -91,7 +92,8 @@ skill now closes.
    hook name verbatim — the one place a hyphen is allowed; `mise-contract` exempts exactly those.
    Its shape is `wiring-repositories` HOOK-1. It composes verbs already in `check`, so rule 3
    holds. The mise facts a hook depends on (`:::`, `--jobs 1`, `raw = true`) are
-   `references/recipes.md` §8. Every template ships `hook:pre-commit = ["fmt:check", "lint"]`.
+   `references/recipes.md` §8. Templates ship `hook:pre-commit = ["fmt:staged", "lint"]`.
+   Julia ships `["fmt:staged"]` alone. Its starter `lint` reuses the whole-tree `fmt:check`.
 
 ## Per-language bodies — the matrix
 
@@ -103,6 +105,7 @@ deviating from a cell; the matrix here is the working summary.
 | setup | `Pkg.instantiate(); Pkg.precompile()` | *(waived)* | `uv sync` | `bun install --frozen-lockfile` |
 | fmt | `-m Runic --inplace .` | `cargo fmt --all` | `uv run ruff format` | `bunx biome format --write .` |
 | fmt:check | `-m Runic --check .` | `cargo fmt --all -- --check` | `uv run ruff format --check` | `bunx biome format .` |
+| fmt:staged `--tool` | `jl=julia --project=. -m Runic --inplace` | `rs=rustfmt --edition <Cargo.toml edition>` | `py,pyi=uv run ruff format` | `ts,tsx,js,…=bunx biome format --write --no-errors-on-unmatched` |
 | lint | tiered: fmt:check reuse → Aqua+ExplicitImports+JET | `cargo clippy --workspace --all-targets -- -D warnings` | `uv run ruff check` | `bunx biome lint .` |
 | test | `Pkg.test()` | `cargo test --workspace` | `uv run pytest` | `bun test` |
 | up | `Pkg.update()` | cargo-edit: `cargo upgrade --incompatible allow` + `cargo update` | `uv lock --upgrade && uv sync` | `bun update` |
@@ -150,6 +153,10 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
   `~/.claude/skills/...` (not `${CLAUDE_SKILL_DIR}`, which exists only inside a live session —
   `mise run` must work without it). It stays OUT of `check.depends` by default (a machine without
   the skills deployment would break CI); wire it in where deployment is guaranteed.
+- **`fmt:staged` body**: `bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool
+  '<ext>[,<ext>]=<command>' [--exclude '<glob>']`. Give one `--tool` per formatter: the `fmt`
+  command without its path. Unlike `mise:contract`, it runs in the commit gate. The repo
+  therefore needs the skills deployment, and `bun` in `[tools]`.
 - **Prove the gate fires** after any gate edit: run it against a repo known to miss a token and
   watch it FAIL (xoria pre-fix was the forge's proof case). A gate never seen red is decoration.
 
@@ -174,6 +181,7 @@ FIRES:
 | 「タスク名 `fmt-md` と `fmt:md` どっち？」 | grammar rule 1 |
 | "add a test task to this repo's task runner" | verb contract, no "mise" keyword needed |
 | 「全リポで `mise run f` が効くか監査して」 | multi-repo audit — the fan-out case |
+| 「pre-commit で整形チェックに止められる。in place で直してほしい」 | `fmt:staged` + `hook:pre-commit` shape (with `wiring-repositories` HOOK-1c) |
 | 「このプロジェクトのタスク体系を qoed と揃えたい」 | contract adoption, no headline keyword |
 
 Co-fire:
@@ -211,4 +219,5 @@ MUST NOT fire (route):
 | `references/recipes.md` | per-cell provenance grades, the lint-tier / test-blocked / clippy-location / biome-config rulings, polyglot composition, known corpus deviations, dated tool versions | before deviating from a matrix cell; before an audit; any "why this body?" question |
 | `templates/*.mise.toml` | copy-out fragments; runtime versions and project scopes must be filled | scaffolding a repo, before materialization and verification |
 | `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
+| `scripts/fmt-staged.ts` | the `fmt:staged` body — run, never copied into a repo | wiring or debugging a commit gate |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

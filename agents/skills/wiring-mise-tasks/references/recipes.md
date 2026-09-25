@@ -165,5 +165,15 @@ contract verbs) is `wiring-repositories` HOOK-1; this section only says how mise
 | With the default parallel scheduler, an aggregate whose dependency fails can hang and ignores SIGTERM | a red gate freezes the commit instead of refusing it | `mise run lint` with failing deps: 3 of 6 runs hung (SIGKILL at 20 s); `--jobs 1`: 0 of 6, and 0 of 5 through the real hook |
 | `raw = true` connects the task to the caller's stdin | the only way git's pre-push ref list reaches the check through `mise run` | a raw task running `cat` echoed the piped ref line |
 
+### `fmt:staged` — the commit-time formatter (2026-09-25)
+
+| Fact | Consequence | Measured |
+|---|---|---|
+| A whole-tree `fmt:check` in the commit gate reads every session's worktree | any session's unstaged or untracked WIP refuses every session's commit | firedancer 2026-09-25: 4 blocks across ~20 sessions, 10–20 min each |
+| Re-adding a whole partially staged file commits its unstaged hunks | `fmt:staged` REFUSES such a file untouched | dotfiles 2026-09-22 (`wiring-repositories` ledger §9) |
+| `git commit -- <paths>` runs the hook against a temporary index (`GIT_INDEX_FILE`) | re-stage with `git add` from the hook's own environment | `tests/fmt-staged.test.ts`, real commit |
+| Bare `rustfmt` parses as edition 2015 | pass `--edition` = the Cargo.toml edition | `rustfmt 1.9.0`: `async fn` → E0670 without it |
+| `rustfmt` follows out-of-line `mod` children beyond the files it is given | `fmt:staged` FAILs naming any changed file outside the staged set, and stages none | by construction; the stray guard is tested |
+
 Naming: `hook:<event>` repeats git's hook file name verbatim (githooks(5)), hyphen included.
 `mise-contract.ts` exempts exactly those names from the hyphen WARN; `hook:my-thing` still warns.

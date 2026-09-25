@@ -10,7 +10,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 }
 
 const hard = ["fmt", "f", "fmt:check", "lint", "test", "up", "check"];
-const soft = ["setup", "i", "l", "t", "u", "c"];
+const soft = ["setup", "i", "fmt:staged", "l", "t", "u", "c"];
 
 type Task = Readonly<{
   name: string;

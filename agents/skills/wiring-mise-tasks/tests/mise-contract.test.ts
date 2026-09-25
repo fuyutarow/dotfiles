@@ -91,11 +91,12 @@ describe("mise-contract floor", () => {
         "FAIL  check — unresolved: mise run check would die with 'no task check found'\n" +
         "WARN  setup — unresolved (soft token)\n" +
         "WARN  i — unresolved (soft token)\n" +
+        "WARN  fmt:staged — unresolved (soft token)\n" +
         "WARN  l — unresolved (soft token)\n" +
         "WARN  t — unresolved (soft token)\n" +
         "WARN  u — unresolved (soft token)\n" +
         "WARN  c — unresolved (soft token)\n" +
-        `—     mise-contract: 7 hard, 6 warn (${dir})\n`,
+        `—     mise-contract: 7 hard, 7 warn (${dir})\n`,
     );
     expect(code).toBe(1);
     rmSync(dir, { recursive: true, force: true });
@@ -171,13 +172,14 @@ describe("mise-contract floor", () => {
         '[tasks.check]\nrun = "true"\ndepends = ["fmt", "lint"]\n' +
         '[tasks.c]\nrun = "true"\n' +
         '[tasks.setup]\nrun = "true"\n' +
-        '[tasks.i]\nrun = "true"\n',
+        '[tasks.i]\nrun = "true"\n' +
+        '[tasks."fmt:staged"]\nrun = "true"\n',
     );
     const { out, code } = run(dir);
     expect(out).toBe(
       "WARN  waiver names unknown token 'totally-unknown-token' — inert (not in the contract)\n" +
         "OK    fmt\nOK    f\nOK    fmt:check\nOK    lint\nOK    test\nOK    up\nOK    check\n" +
-        "OK    setup\nOK    i\nOK    l\nOK    t\nOK    u\nOK    c\n" +
+        "OK    setup\nOK    i\nOK    fmt:staged\nOK    l\nOK    t\nOK    u\nOK    c\n" +
         `—     mise-contract: 0 hard, 1 warn (${dir})\n`,
     );
     expect(code).toBe(0);
@@ -237,7 +239,7 @@ describe("mise-contract floor", () => {
     });
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(out).toContain("FAIL  fmt — unresolved");
-    expect(out).toContain(`—     mise-contract: 7 hard, 6 warn (${dir})\n`);
+    expect(out).toContain(`—     mise-contract: 7 hard, 7 warn (${dir})\n`);
     expect(proc.exitCode).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });

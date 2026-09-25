@@ -21,7 +21,7 @@ description: >-
 
 # Scaffolding repositories — the SET, the ORDER, and the JOINT
 
-> **Version**: v2609.2.0 (2026-09-23) — explicit polyglot manifest boundaries. Receipts, calibration, and the F3
+> **Version**: v2609.3.0 (2026-09-25) — HOOK-1c: the commit gate fixes staged files in place. Receipts, calibration, and the F3
 > desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
 > per-language recipe is load-bearing here; dated facts live in `references/layers.md`.
 
@@ -90,7 +90,7 @@ It is stated once, here.
 
 | Hook kind | Rule | Shim body |
 |---|---|---|
-| **Gate** — `pre-commit`, `pre-push` | **HOOK-1**: `hook:<event>` in mise.toml is **depends-only over contract verbs** (`wiring-mise-tasks`) — no `run` body, no direct tool call | shim: `exec mise run --jobs 1 hook:pre-commit` · task: `depends = ["fmt:check", "lint"]`, or `["check"]` when it fits the commit budget |
+| **Gate** — `pre-commit`, `pre-push` | **HOOK-1**: `hook:<event>` in mise.toml is **depends-only over contract verbs** (`wiring-mise-tasks`) — no `run` body, no direct tool call | shim: `exec mise run --jobs 1 hook:pre-commit` · task: `depends = ["fmt:staged", "lint"]`; `hook:pre-push` may also run `fmt:check`, `test`, `check` |
 | **Event** — `post-commit`, `post-merge`, `post-checkout` | the body lives in a `hook:<event>` task with a `run`, because no contract verb expresses it | `exec mise run hook:<event>` |
 
 Every hook is `.githooks/<event>` → `hook:<event>`. So **mise.toml alone says what each git hook
@@ -103,7 +103,7 @@ draws mise-contract's soft grammar WARN, accepted for that correspondence.
 | **HOOK-1a** | The one run-bearing gate: `hook:pre-push` with `raw = true` | git passes the refs being pushed on stdin. No verb can supply that input; `raw = true` passes stdin through `mise run` |
 | **HOOK-1b** | Every task in a commit gate can reach exit 0 in one commit | A task that reports accumulated debt (a whole-corpus ratchet) cannot pass in one commit, so it blocks every commit. It belongs in `check` |
 | **HOOK-3** | Separate tasks with `:::`; run with `--jobs 1` | `mise run a b` never runs `b`; a failing parallel aggregate can hang. Measurements: `wiring-mise-tasks` recipes §8 (SOLE home) |
-| **gate refuses, never rewrites** | `fmt:check`, not `fmt`, at commit time | A formatting gate that re-`git add`s whole files sweeps the unstaged hunks of a partially staged file into the commit |
+| **HOOK-1c** | The commit gate judges only what is committed. It depends on `fmt:staged` and never reaches `fmt:check` | A whole-tree check refuses every session's commit on any session's WIP (ledger §10). `fmt:staged` fixes staged files in place. It refuses a file with unstaged hunks, so none is swept in (ledger §9) |
 | *(HOOK-2 retired)* | — | It checked a language filter inside bespoke bodies. HOOK-1 forbids the bespoke body, so the filter cannot exist |
 
 A repo-specific check (governance, records, a version bump) becomes a `lint:*` subtask, so it
@@ -181,6 +181,7 @@ FIRES:
 | 「qoed に同じ配線を入れたい」 (existing repo, wiring named by comparison) | S1 audit — which layers are missing, which accreted |
 | "why does semantic search never find anything in .claude/?" | S2 row 4 — the ordering, owned here even though `ccc init` is not |
 | 「使ってない hook とか tool が溜まってる。棚卸しして」 | S1 ADMISSION run backwards |
+| 「他のセッションの作業中ファイルのせいで commit が通らない」 | HOOK-1c — the commit gate reads the whole tree |
 | "I cloned this repo and nothing works" | S3 — green-from-clone is the definition of done |
 
 MUST NOT fire (with route):

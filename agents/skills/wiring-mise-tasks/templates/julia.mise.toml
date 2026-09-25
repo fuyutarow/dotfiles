@@ -20,6 +20,10 @@ run = "julia --project=. -m Runic --inplace ."
 description = "Markdownをrumdlで整形 (config = .rumdl.toml)"
 run = "rumdl fmt"
 
+[tasks."fmt:staged"]
+description = "commit 用: staged の file だけを in-place 整形して再 stage。unstaged hunk を持つ file は拒否"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'jl=julia --project=. -m Runic --inplace' --tool 'md=rumdl fmt'"
+
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): Runic + rumdl"
 run = '''
@@ -61,6 +65,9 @@ run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"
 # git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
 # だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
 # recipes.md §8)。gate の task は契約 verb の depends のみで、run 本体を持たない。
+# commit gate は commit される中身だけを見る(HOOK-1c)。starter 期の lint は fmt:check
+# (木全体) の流用なので gate に入れない — 他 session の WIP で全員の commit が止まる。
+# lint を index を読む形に昇格したら depends に "lint" を足す。
 [tasks."hook:pre-commit"]
-description = "commit gate — .githooks/pre-commit が走らせるものそのもの。契約 verb の depends のみ"
-depends = ["fmt:check", "lint"]
+description = "commit gate — .githooks/pre-commit が走らせるものそのもの。staged だけを in-place 整形"
+depends = ["fmt:staged"]

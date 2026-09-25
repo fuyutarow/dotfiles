@@ -25,7 +25,11 @@
 //   3 <name> | Model | Effort[+WF] | 🔗|rc:off|rc:? | Ctx: <k> <pct>%  (agent + config +
 //     budget-now; Remote Control on / off / probe unverified — see rcState())
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
-//   5 Job: ... (conditional)                          (background work)
+//   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) [· VRAM <pct>% (<used>/<total>G)]  (host
+//     load; CPU/RAM are Linux-only for now — read from /proc, see cpuPct()/ramFrac() — and CPU
+//     needs a prior render to diff against, so it's absent on the very first render of a
+//     session; conditional row, appears once any one reading is available)
+//   6 Job: ... (conditional)                          (background work)
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
 // buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
@@ -121,7 +125,9 @@ interface Dataframe {
   wt?: string | undefined;
   jobs: Admitted[];
   orphans: number;
-  vram?: string | undefined;
+  vram?: MemReading | undefined;
+  cpuPct?: number | undefined;
+  ram?: MemReading | undefined;
 }
 
 const HOME = process.env.HOME ?? "";
@@ -573,8 +579,7 @@ function reset7(epoch: number): string {
 // --- Out-of-harness work: work running OUTSIDE the harness, the window Claude Code itself
 // cannot draw. A child started with setsid/nohup is reparented to PID 1, so the background-task
 // tracker never sees it: no TUI row, no TaskOutput, no exit notification, and it outlives the
-// session (even the project) that spawned it. ONE `ps` pass answers both halves below; nvidia-smi
-// is paid for only when something is admitted (see buildDataframe()'s call to vramFrac()). ---
+// session (even the project) that spawned it. ONE `ps` pass answers both halves below. ---
 interface Admitted {
   name: string;
   secs: number;
@@ -637,8 +642,27 @@ function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
   }
   return { jobs, orphans };
 }
-function vramFrac(): string | undefined {
-  return fromThrowable((): string | undefined => {
+// Shared shape for a "used/total" memory-style reading (RAM, VRAM): both the fraction string
+// AND the percentage, since render() needs the percentage to threshold-color the segment the
+// same way every other percentage in this file is colored (pctFmt) — a plain fraction alone
+// cannot drive that.
+interface MemReading {
+  frac: string; // e.g. "16.2/54.9G"
+  pct: number; // used/total*100, unrounded — pctFmt() rounds at render time
+}
+function memReading(usedG: number, totalG: number): MemReading | undefined {
+  if (!Number.isFinite(usedG) || !Number.isFinite(totalG) || totalG <= 0)
+    return undefined;
+  return {
+    frac: `${usedG.toFixed(1)}/${totalG.toFixed(1)}G`,
+    pct: (usedG / totalG) * 100,
+  };
+}
+
+// Called on EVERY render now (Sys row, below), not just while a job is admitted — the one
+// subprocess call among the three Sys readings, bounded like every other enrichment here.
+function vramFrac(): MemReading | undefined {
+  return fromThrowable((): MemReading | undefined => {
     const out = execFileSync(
       "nvidia-smi",
       ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
@@ -655,10 +679,77 @@ function vramFrac(): string | undefined {
     // Number("") already would, so this default changes no observable behavior.
     const used = usedRaw ?? NaN;
     const total = totalRaw ?? NaN;
-    if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0)
-      return undefined;
-    return `${(used / 1024).toFixed(1)}/${(total / 1024).toFixed(0)}G`;
-  })().unwrapOr(undefined); // no GPU / no driver -> just omit the fraction
+    return memReading(used / 1024, total / 1024);
+  })().unwrapOr(undefined); // no GPU / no driver -> just omit the reading
+}
+
+// Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
+// MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
+// which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
+// macOS has no /proc; this simply returns undefined there (sysctl+vm_stat parsing is real work
+// and untestable from this host, so it is left as a follow-up rather than shipped unverified —
+// see the module docstring's row-5 note).
+function ramFrac(): MemReading | undefined {
+  return fromThrowable((): MemReading | undefined => {
+    const raw = readFileSync("/proc/meminfo", "utf8");
+    let totalKb: number | undefined;
+    let availKb: number | undefined;
+    for (const line of raw.split("\n")) {
+      if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/)[1]);
+      else if (line.startsWith("MemAvailable:"))
+        availKb = Number(line.split(/\s+/)[1]);
+      if (totalKb != null && availKb != null) break;
+    }
+    if (totalKb == null || availKb == null) return undefined;
+    const usedKb = totalKb - availKb;
+    return memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
+  })().unwrapOr(undefined); // no /proc (mac) / malformed -> just omit the reading
+}
+
+// One /proc/stat snapshot alone cannot give a CPU percentage — its counters are cumulative
+// jiffies since boot, so a percentage needs the DELTA between two snapshots. Each statusline
+// render is a fresh process (see this file's header note), so that second snapshot has to be
+// the previous render's, kept on disk — same shape as AGENT_NAME_CACHE / RC_PROBE_CACHE above.
+const CPU_CACHE = `${HOME}/.cache/claude/statusline-cpu.json`;
+interface CpuSample {
+  total: number;
+  idle: number;
+}
+// Aggregate "cpu  ..." line (not a per-core "cpu0 ..." line): user+nice+system+idle+iowait+
+// irq+softirq+steal[+guest+guest_nice]. idle time is idle+iowait; total is the sum of every
+// field. Linux only, like ramFrac() above — no /proc on mac.
+function readCpuSample(): CpuSample | undefined {
+  return fromThrowable((): CpuSample | undefined => {
+    const raw = readFileSync("/proc/stat", "utf8");
+    const line = raw.split("\n").find((l) => l.startsWith("cpu "));
+    if (!line) return undefined;
+    const fields = line.trim().split(/\s+/).slice(1).map(Number);
+    const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
+    const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
+    return Number.isFinite(idle) && total > 0 ? { total, idle } : undefined;
+  })().unwrapOr(undefined);
+}
+function cpuPct(): number | undefined {
+  const sample = readCpuSample();
+  if (!sample) return undefined; // no /proc (mac) / malformed line -> no reading this render
+  const cacheResult = fromThrowable((): CpuSample =>
+    JSON.parse(readFileSync(CPU_CACHE, "utf8")),
+  )();
+  // Best-effort write of THIS render's sample for the NEXT render to diff against, unconditional
+  // on whether this render itself can show a value — same "write regardless, return what we
+  // have" shape as agentName()'s cache-miss path above.
+  fromThrowable(() => {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(CPU_CACHE, JSON.stringify(sample));
+  })();
+  if (cacheResult.isErr()) return undefined; // first render this session -> nothing to diff against yet
+  const prev = cacheResult.value;
+  const dTotal = sample.total - prev.total;
+  const dIdle = sample.idle - prev.idle;
+  // dTotal<=0 means no jiffies elapsed between two renders (or a counter reset) -> a division
+  // here would be by ~0 or negative, not a real rate; omit rather than show a bogus number.
+  if (dTotal <= 0) return undefined;
+  return Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100));
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
 const dur = (s: number) =>
@@ -743,8 +834,11 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const branch = branchResult.isOk() ? branchResult.value : undefined;
 
   const { jobs, orphans } = scanOutOfHarness();
-  // nvidia-smi is paid for only when something is admitted — see the header note above render().
-  const vram = jobs.length > 0 ? vramFrac() : undefined;
+  // Sys-row readings — always computed now, not gated on a job being admitted (see vramFrac()'s
+  // own header note for why paying nvidia-smi every render is fine).
+  const cpu = cpuPct();
+  const ram = ramFrac();
+  const vram = vramFrac();
 
   return {
     cwd,
@@ -769,6 +863,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     jobs,
     orphans,
     vram,
+    cpuPct: cpu,
+    ram,
   };
 }
 
@@ -797,9 +893,10 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // "these are two different sibling values", and a raw count next to its own derived percentage
 // is one fact shown twice, not two facts — a bare space reads as one unit. Line 4 is Rate,
 // where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
-// the middot between them — same role MID plays between a job's elapsed time and its vram
-// fraction in Job below. Line 5 (conditional) is Job, always its own row so nothing can ever
-// cause it to be silently dropped.
+// the middot between them — same role MID plays between Sys's CPU/RAM/VRAM readings below (each
+// an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (conditional)
+// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 (conditional) is Job;
+// each is always its own row so neither can ever be silently dropped by a missing sibling value.
 // Rate row, 5h-window half: "5h NN% [⟳reset]" — extracted out of render() only to keep its
 // nesting under max-depth; the formatting itself is unchanged from the inline version.
 function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
@@ -825,21 +922,41 @@ function rlModelSegment(m: ModelLimit): string {
   if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
-// Job row, admitted-work half: "<name>[+N] <elapsed> [· <vram>] [det×N]" — extracted out of
-// render() only to keep its nesting under max-depth; formatting unchanged from the inline version.
-function admittedJobSegment(
-  jobs: Admitted[],
-  vram: string | undefined,
-  orphans: number,
-): string {
+// Job row, admitted-work half: "<name>[+N] <elapsed> [det×N]" — extracted out of render() only
+// to keep its nesting under max-depth; formatting unchanged from the inline version. VRAM used
+// to ride this segment (only while a job was admitted); it now lives unconditionally on the Sys
+// row instead, so it is not repeated here.
+function admittedJobSegment(jobs: Admitted[], orphans: number): string {
   const first = jobs[0];
   const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
   // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
   let seg =
     first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
-  if (vram != null) seg += ` ${DIM}${MID} ${vram}${RST}`;
   if (orphans > 0) seg += ` ${DIM}det×${orphans}${RST}`;
   return seg;
+}
+// Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) [· VRAM NN% (X.X/Y.YG)]" — host resource usage, always
+// its own row like Job (never folded into Rate, which is API budget, not host load). All three
+// percentages share the same green/yellow/red pctFmt threshold as every other percentage in
+// this file; the fraction rides alongside each, dimmed, as supporting detail — same
+// percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
+function memSegment(label: string, m: MemReading): string {
+  const { pct, col } = pctFmt(m.pct);
+  return `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
+}
+function sysSegment(
+  cpu: number | undefined,
+  ram: MemReading | undefined,
+  vram: MemReading | undefined,
+): string {
+  const parts: string[] = [];
+  if (cpu != null) {
+    const { pct, col } = pctFmt(cpu);
+    parts.push(`CPU ${ESC}[${col}m${pct}%${RST}`);
+  }
+  if (ram != null) parts.push(memSegment("RAM", ram));
+  if (vram != null) parts.push(memSegment("VRAM", vram));
+  return parts.join(` ${DIM}${MID}${RST} `);
 }
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
@@ -902,11 +1019,15 @@ function render(df: Dataframe): string {
   repoLine = join(repoLine, `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`);
   if (df.wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 
+  let sysLine = "";
+  const sysSeg = sysSegment(df.cpuPct, df.ram, df.vram);
+  if (sysSeg) sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSeg}`;
+
   let jobLine: string | undefined;
   if (df.jobs.length > 0 || df.orphans > 0) {
     jobLine = `${ESC}[38;5;173mJob:${RST}`;
     if (df.jobs.length > 0) {
-      jobLine += admittedJobSegment(df.jobs, df.vram, df.orphans);
+      jobLine += admittedJobSegment(df.jobs, df.orphans);
     } else {
       // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
       // are states the harness reports as "idle", which is the failure this segment answers.
@@ -914,7 +1035,14 @@ function render(df: Dataframe): string {
     }
   }
 
-  return [join(line1, repoLine), identityLine, agentLine, rateLine, jobLine]
+  return [
+    join(line1, repoLine),
+    identityLine,
+    agentLine,
+    rateLine,
+    sysLine,
+    jobLine,
+  ]
     .filter((r): r is string => r != null && r !== "")
     .join("\n");
 }

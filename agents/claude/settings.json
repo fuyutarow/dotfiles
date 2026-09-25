@@ -10,10 +10,6 @@
           {
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"
-          },
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh enforce-continuation-binding.ts"
           }
         ]
       },
@@ -87,10 +83,6 @@
             "type": "command",
             "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh enforce-continuation-binding.ts"
           },
           {
             "type": "command",

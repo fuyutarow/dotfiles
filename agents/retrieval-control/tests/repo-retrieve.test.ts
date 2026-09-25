@@ -190,6 +190,9 @@ function run(
       ...process.env,
       PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
       FAKE_SEARCH_LOG: tools.log,
+      // These tests pin the freshness GATE; its automatic catch-up has its own tests below,
+      // which set this back to "1".
+      REPO_RETRIEVE_AUTO_INDEX: "0",
       ...env,
     },
   });
@@ -863,6 +866,51 @@ describe("repo-retrieve route contract", () => {
 
     const fresh = run(dir, ["concept", "--query", "x"]);
     expect(fresh.code).toBe(0);
+  });
+
+  test("in-scope drift is caught up automatically: re-indexed, then served fresh", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+    const head = gitCmd(dir, ["rev-parse", "HEAD"]).trim();
+
+    const result = run(dir, ["concept", "--query", "x"], {
+      REPO_RETRIEVE_AUTO_INDEX: "1",
+    });
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(`caught up in`);
+    expect(result.stderr).toContain(`HEAD=${head}`);
+    expect(result.stdout).not.toContain("INDEXED"); // stdout carries search results only
+    expect(readFileSync(watermarkFilePath(dir), "utf8")).toContain(head);
+  });
+
+  test("catch-up is skipped while the daemon indexes something else: NO_INDEX names why", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+
+    const result = run(dir, ["concept", "--query", "x"], {
+      REPO_RETRIEVE_AUTO_INDEX: "1",
+      FAKE_CCC_INDEXING: "1",
+    });
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain("Automatic catch-up skipped");
+  });
+
+  test("with catch-up disabled, drift stays NO_INDEX and says so", () => {
+    const { dir } = registerGitProject();
+    run(dir, ["index"]);
+    writeFileSync(join(dir, "later.md"), "later\n");
+    gitCmd(dir, ["add", "later.md"]);
+    gitCmd(dir, ["commit", "-q", "-m", "later"]);
+
+    const result = run(dir, ["concept", "--query", "x"]);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toContain("REPO_RETRIEVE_AUTO_INDEX=0");
   });
 
   test("a HEAD drift that changes no path is not staleness: served, with a NOTE", () => {

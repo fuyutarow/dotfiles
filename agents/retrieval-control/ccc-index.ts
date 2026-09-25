@@ -247,6 +247,57 @@ async function isWorkingTreeDirty(project: string): Promise<boolean> {
   return result.exitCode === 0 && result.stdout.trim() !== "";
 }
 
+const AUTO_INDEX_MS = 120_000;
+
+// The search routes' catch-up: re-index a project whose index exists but trails HEAD. Skipped when
+// disabled, when there is no index to update incrementally, or when the one shared daemon is
+// already indexing — a search would then wait out the whole bound behind another project.
+async function autoCatchUp(
+  project: string,
+): Promise<{ ok: boolean; why: string }> {
+  if (process.env.REPO_RETRIEVE_AUTO_INDEX === "0") {
+    return {
+      ok: false,
+      why: "Automatic catch-up is disabled (REPO_RETRIEVE_AUTO_INDEX=0).",
+    };
+  }
+  if (!(await hasIndexArtifacts(project))) {
+    return { ok: false, why: "No index exists to catch up incrementally." };
+  }
+  const ccc = requireExecutable("ccc");
+  const status = await runChildCaptured(
+    [ccc, "daemon", "status"],
+    10_000,
+    false,
+  );
+  const busy = status.stdout
+    .split("\n")
+    .filter((line) => line.includes("[indexing]"))
+    .map((line) => line.replace("[indexing]", "").trim());
+  if (busy.length > 0) {
+    return {
+      ok: false,
+      why: `Automatic catch-up skipped: the ccc daemon is indexing ${busy.join(", ")}.`,
+    };
+  }
+  const started = Date.now();
+  process.stderr.write(
+    `NOTE: index trails HEAD; catching up (bounded ${AUTO_INDEX_MS / 1000}s)\n`,
+  );
+  const run = await reindexCertified(project, ccc, AUTO_INDEX_MS, true);
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  if (run.code === 0) {
+    process.stderr.write(
+      `NOTE: caught up in ${seconds}s; index certified at HEAD=${headLabel(run.head)}\n`,
+    );
+    return { ok: true, why: "" };
+  }
+  return {
+    ok: false,
+    why: `Automatic catch-up did not certify the index (exit ${run.code} after ${seconds}s).`,
+  };
+}
+
 function scopeLine(drift: ScopeDrift | null): string {
   if (drift === null) return "";
   const shown = drift.inScope.slice(0, 5).join(", ");
@@ -276,6 +327,7 @@ type Freshness =
 export async function checkIndexFreshness(
   project: string,
   route: string,
+  allowCatchUp = true,
 ): Promise<Freshness> {
   const currentHead = await gitHead(project);
   const watermark = await readWatermark(project);
@@ -338,6 +390,13 @@ export async function checkIndexFreshness(
         "the index scope (ccc's own matcher), so the index is current\n",
     );
   } else if (watermark.value.head !== currentHead) {
+    // Behind through in-scope (or undecidable) changes. Catch up instead of refusing: a bounded,
+    // incremental re-index, then the same gate again — never a stale answer (owner ruling
+    // 2026-09-25). firedancer commits ~43 times an hour; the post-commit re-index skips whenever
+    // the shared daemon is busy and never retries, so searches there answered NO_INDEX for
+    // stretches, and a pipeline filtering for hits read that as "no hits" (2026-09-25).
+    const catchUp = allowCatchUp ? await autoCatchUp(project) : null;
+    if (catchUp?.ok) return checkIndexFreshness(project, route, false);
     return {
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
@@ -355,6 +414,7 @@ export async function checkIndexFreshness(
         `gate exists to refuse serving. cite=${citationToken(watermark.value)} names the index's own ` +
         `(now-superseded) state for a citation such as --hit NO_INDEX:${citationToken(watermark.value)}. ` +
         scopeLine(drift) +
+        (catchUp === null ? "" : `${catchUp.why} `) +
         `Remedy: ${remedy(project)}\n`,
     };
   }
@@ -375,53 +435,31 @@ export async function checkIndexFreshness(
   return { status: "fresh", watermark: watermark.value };
 }
 
-// Companion to the freshness gate, not a search route: writes INDEXED_AT (ccc's DB dir). This is
-// now the ONLY thing that writes that file. A plain `ccc index` run by hand (bypassing this
-// wrapper entirely) still leaves the watermark stale or missing -- there is deliberately no
-// separate, faster, no-reindex path to recover it (that path used to be `stamp`; it asserted
-// freshness without ever observing an indexer run, and was deleted because that assertion could
-// not be verified -- see the file header). The only way to make the watermark fresh again is to
-// run `repo-retrieve index`, which reindexes AND records the result in one step.
-export async function runIndexWrapper(timeoutMs: number): Promise<number> {
-  const project = findRegisteredProject(process.cwd());
-  if (!project) {
-    throw new Error(
-      `index requested, but ${process.cwd()} is not ccc-registered`,
-    );
-  }
-  const ccc = requireExecutable("ccc");
-
-  // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
-  // disagree, a structural git mutation (commit, checkout, rebase, branch switch) landed WHILE
-  // the indexer was scanning: the resulting on-disk index is some unknown mixture of the tree at
-  // headBefore and the tree at headAfter, and certifying it against EITHER HEAD would be a lie.
-  // This is the race the audit named: "a structural git mutation landing DURING an in-flight
-  // `ccc index` produces a watermark certifying a tree state that was never atomically scanned."
-  // Comparing before/after closes it for the one case this wrapper controls (a `ccc index` it
-  // launched itself) -- it cannot detect a mutation racing some OTHER, concurrently-running
-  // `ccc index` invoked by hand outside this tool. A hand-run `ccc index` never writes this
-  // watermark at all (there is no longer any command that will write a watermark without itself
-  // observing the indexing run), so that case surfaces as an ordinary missing/stale watermark on
-  // the next search, not as a false certification.
-  //
-  // A HEAD that moved mid-scan is not always a mixed tree: when every path the intervening
-  // commits touched is outside the index scope (ccc-scope.ts), the index is exactly what a scan
-  // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
-  // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
-  // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
+// The index run itself: `ccc index`, HEAD stability (retrying through in-scope drift), the
+// artifact check, and the watermark write. Shared by `repo-retrieve index` and by the search
+// routes' automatic catch-up (checkIndexFreshness), which sends ccc's own output to stderr so a
+// search's stdout carries only results. Logs go to stderr; the caller prints any RESULT line.
+async function reindexCertified(
+  project: string,
+  ccc: string,
+  timeoutMs: number,
+  childToStderr: boolean,
+): Promise<{ code: number; head: string | null }> {
   let head: string | null = null;
   let certified = false;
   for (let attempt = 1; attempt <= INDEX_ATTEMPTS && !certified; attempt++) {
     const headBefore = await gitHead(project);
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
-    const exitCode = await runChild([ccc, "index"], timeoutMs);
+    const exitCode = childToStderr
+      ? await runChildToStderr([ccc, "index"], timeoutMs)
+      : await runChild([ccc, "index"], timeoutMs);
     if (exitCode !== 0) {
       process.stderr.write(
         `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
           "honest rather than reporting a failed reindex as fresh\n",
       );
-      return exitCode;
+      return { code: exitCode, head: null };
     }
 
     const headAfter = await gitHead(project);
@@ -458,7 +496,7 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
         "Watermark left unwritten -- re-run 'repo-retrieve index' once commits to indexed paths " +
         "pause\n",
     );
-    return 2;
+    return { code: 2, head: null };
   }
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
@@ -472,10 +510,77 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
         `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
         `(${process.env.COCOINDEX_CODE_DB_PATH_MAPPING ?? "unset"}). Watermark left unwritten\n`,
     );
-    return 2;
+    return { code: 2, head: null };
   }
 
   await writeWatermark(project, head, "index");
+  return { code: 0, head };
+}
+
+async function runChildToStderr(
+  command: string[],
+  timeoutMs: number,
+): Promise<number> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const child = Bun.spawn({
+    cmd: command,
+    cwd: process.cwd(),
+    env: process.env,
+    stdout: "pipe",
+    stderr: "inherit",
+    signal,
+    killSignal: "SIGTERM",
+  });
+  const relay = (async () => {
+    for await (const chunk of child.stdout) process.stderr.write(chunk);
+  })();
+  const [exitCode] = await Promise.all([child.exited, relay]);
+  if (signal.aborted) {
+    process.stderr.write(
+      `NOTE: ccc index still running after ${timeoutMs}ms; left to the daemon\n`,
+    );
+    return 124;
+  }
+  return exitCode;
+}
+
+// Companion to the freshness gate, not a search route: writes INDEXED_AT (ccc's DB dir). This is
+// now the ONLY thing that writes that file. A plain `ccc index` run by hand (bypassing this
+// wrapper entirely) still leaves the watermark stale or missing -- there is deliberately no
+// separate, faster, no-reindex path to recover it (that path used to be `stamp`; it asserted
+// freshness without ever observing an indexer run, and was deleted because that assertion could
+// not be verified -- see the file header). The only way to make the watermark fresh again is to
+// run `repo-retrieve index`, which reindexes AND records the result in one step.
+export async function runIndexWrapper(timeoutMs: number): Promise<number> {
+  const project = findRegisteredProject(process.cwd());
+  if (!project) {
+    throw new Error(
+      `index requested, but ${process.cwd()} is not ccc-registered`,
+    );
+  }
+  const ccc = requireExecutable("ccc");
+
+  // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
+  // disagree, a structural git mutation (commit, checkout, rebase, branch switch) landed WHILE
+  // the indexer was scanning: the resulting on-disk index is some unknown mixture of the tree at
+  // headBefore and the tree at headAfter, and certifying it against EITHER HEAD would be a lie.
+  // This is the race the audit named: "a structural git mutation landing DURING an in-flight
+  // `ccc index` produces a watermark certifying a tree state that was never atomically scanned."
+  // Comparing before/after closes it for the one case this wrapper controls (a `ccc index` it
+  // launched itself) -- it cannot detect a mutation racing some OTHER, concurrently-running
+  // `ccc index` invoked by hand outside this tool. A hand-run `ccc index` never writes this
+  // watermark at all (there is no longer any command that will write a watermark without itself
+  // observing the indexing run), so that case surfaces as an ordinary missing/stale watermark on
+  // the next search, not as a false certification.
+  //
+  // A HEAD that moved mid-scan is not always a mixed tree: when every path the intervening
+  // commits touched is outside the index scope (ccc-scope.ts), the index is exactly what a scan
+  // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
+  // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
+  // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
+  const certifiedRun = await reindexCertified(project, ccc, timeoutMs, false);
+  if (certifiedRun.code !== 0) return certifiedRun.code;
+  const head = certifiedRun.head;
   if (head !== null && (await isWorkingTreeDirty(project))) {
     process.stderr.write(
       "NOTE: working tree has uncommitted changes; the index reflects those edits, but only " +

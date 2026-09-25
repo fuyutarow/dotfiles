@@ -281,6 +281,10 @@ describe("admission", () => {
     });
     const unmanaged = denied(decideAdmission(gpuManifest(), busy, []));
     expect(unmanaged.reason).toContain("97% utilization");
+    // The VRAM fits, so the reason must lead with the clause that refused, not read as a VRAM
+    // denial (2026-09-24: 4.3 GB asked, 8.4 GB free, reported as "VRAM request … exceeds").
+    expect(unmanaged.reason.startsWith("unmanaged load")).toBe(true);
+    expect(unmanaged.reason).not.toContain("exceeds");
     expect(decideAdmission(gpuManifest(), busy, [gpuReservation("a")]).ok).toBe(
       true,
     );
@@ -344,6 +348,8 @@ describe("admission", () => {
       ]),
     );
     expect(result.reason).toContain("concurrency cap");
+    expect(result.reason.startsWith("GPU 0 already holds")).toBe(true);
+    expect(result.reason).not.toContain("exceeds");
   });
 
   test("reservations on another device do not consume this device's ledger", () => {

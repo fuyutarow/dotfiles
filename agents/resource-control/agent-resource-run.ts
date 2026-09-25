@@ -668,20 +668,49 @@ function gpuLedger(gpu: GpuSnapshot, reservations: Reservation[]): GpuLedger {
   };
 }
 
+// The clause that refuses this GPU, worded as THAT clause, or null when the job fits. The
+// denial used to lead with "VRAM request … exceeds … available" whichever clause refused, and
+// append the real one as a suffix; 2026-09-24 a job asking 4.3 GB with 8.4 GB free was denied for
+// unmanaged utilization and read as a VRAM denial, so the operator stopped a service to free
+// VRAM that was never short. Checked in the same order the admission applies them.
+function gpuHeadroomDenial(
+  gpu: GpuSnapshot,
+  requiredBytes: number,
+  reservations: Reservation[],
+): string | null {
+  const ledger = gpuLedger(gpu, reservations);
+  const available =
+    `${ledger.available_bytes} available on GPU ${gpu.id} after ${ledger.jobs} live ` +
+    `reservation(s) (${ledger.reserved_bytes} bytes declared, ${gpu.used_bytes} bytes observed ` +
+    `in use) and ${GPU_SAFETY_BYTES} bytes of device safety headroom`;
+  const vram = `VRAM request ${requiredBytes} vs ${available}`;
+  if (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS) {
+    return `GPU ${gpu.id} already holds the ${GPU_MAX_CONCURRENT_JOBS}-job concurrency cap; ${vram}`;
+  }
+  // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
+  // this device makes an admitted job block the next admission with its own compute load, which
+  // silently degrades the ledger to one job per GPU.
+  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)) {
+    return (
+      `unmanaged load holds GPU ${gpu.id} at ${gpu.utilization_percent}% utilization` +
+      (gpu.power_watts === undefined
+        ? " (board power unknown)"
+        : ` and ${gpu.power_watts} W board power`) +
+      ` with no live reservation — retry once it drops; ${vram}`
+    );
+  }
+  if (ledger.available_bytes < requiredBytes) {
+    return `VRAM request ${requiredBytes} exceeds ${available}`;
+  }
+  return null;
+}
+
 function gpuHasHeadroom(
   gpu: GpuSnapshot,
   requiredBytes: number,
   reservations: Reservation[],
 ): boolean {
-  const ledger = gpuLedger(gpu, reservations);
-  if (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS) return false;
-  // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
-  // this device makes an admitted job block the next admission with its own compute load, which
-  // silently degrades the ledger to one job per GPU.
-  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)) {
-    return false;
-  }
-  return ledger.available_bytes >= requiredBytes;
+  return gpuHeadroomDenial(gpu, requiredBytes, reservations) === null;
 }
 
 export function decideAdmission(
@@ -792,26 +821,12 @@ export function decideAdmission(
       reason: `GPU ${manifest.device.gpu_id} is not visible to nvidia-smi`,
     };
   }
-  if (!gpuHasHeadroom(gpu, manifest.device.vram_peak_bytes, reservations)) {
-    const ledger = gpuLedger(gpu, reservations);
-    return {
-      ok: false,
-      reason:
-        `VRAM request ${manifest.device.vram_peak_bytes} exceeds ${ledger.available_bytes} ` +
-        `available on GPU ${gpu.id} after ${ledger.jobs} live reservation(s) ` +
-        `(${ledger.reserved_bytes} bytes declared, ${gpu.used_bytes} bytes observed in use) ` +
-        `and ${GPU_SAFETY_BYTES} bytes of device safety headroom` +
-        (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS
-          ? `; the device already holds the ${GPU_MAX_CONCURRENT_JOBS}-job concurrency cap`
-          : "") +
-        (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)
-          ? `; unmanaged load holds the device at ${gpu.utilization_percent}% utilization` +
-            (gpu.power_watts === undefined
-              ? " (board power unknown)"
-              : ` and ${gpu.power_watts} W board power`)
-          : ""),
-    };
-  }
+  const denial = gpuHeadroomDenial(
+    gpu,
+    manifest.device.vram_peak_bytes,
+    reservations,
+  );
+  if (denial !== null) return { ok: false, reason: denial };
   return {
     ok: true,
     cpu_ids: cpuIds,

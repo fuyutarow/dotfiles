@@ -29,14 +29,33 @@
 
 import { match } from "ts-pattern";
 
+// BLIND TIER. `mise run reclaim` promises "nothing interactive", and it runs this task after
+// clean/builds/toolchains. There, a precondition this task cannot meet (no passwordless sudo, not
+// WSL) is a SKIP with the human command, exit 0 — not a failure. On 2026-09-27 the exit 1 here
+// failed the whole `mise run reclaim` while the agent-safe siblings were mid-run, and C: never
+// moved. Run directly (`mise run reclaim:system`), the same conditions still exit 1: someone
+// asked for exactly this tier and it did not happen. An env var, not a flag: this file is
+// deliberately argv-free (BG1).
+const BLIND = process.env.RECLAIM_TIER === "blind";
+
+function unmet(reason: string, humanCommand?: string): never {
+  if (BLIND) {
+    console.log(`SKIP reclaim:system — ${reason}`);
+    if (humanCommand) console.log(`  human tier: ${humanCommand}`);
+    process.exit(0);
+  }
+  console.log(reason);
+  if (humanCommand) console.log(`  ${humanCommand}`);
+  process.exit(1);
+}
+
 const osrelease = await Bun.file("/proc/sys/kernel/osrelease")
   .text()
   .catch(() => "");
 if (!osrelease.toLowerCase().includes("microsoft")) {
-  console.log(
+  unmet(
     "not running inside WSL — this task is WSL-only (see: mise run reclaim:clean)",
   );
-  process.exit(1);
 }
 
 // --- bounded step runner -------------------------------------------------------------------
@@ -140,18 +159,17 @@ async function freeBytes(): Promise<number> {
 // The gate, now bounded like everything else. `sudo -n` is non-interactive on purpose: a task
 // runner may have no tty, and a password prompt there is indistinguishable from a hang.
 if (!Bun.which("sudo")) {
-  console.log("no sudo on PATH — this task needs root to reclaim system state");
-  process.exit(1);
+  unmet("no sudo on PATH — this task needs root to reclaim system state");
 }
 const probe = await run(["sudo", "-n", "true"], STEP_MS);
-if (probe.timedOut || probe.code !== 0) {
-  console.log(
-    probe.timedOut
-      ? `sudo did not answer within ${STEP_MS / 1000}s — refusing to start`
-      : "passwordless sudo unavailable — run this task from an interactive shell:",
+if (probe.timedOut) {
+  unmet(`sudo did not answer within ${STEP_MS / 1000}s — refusing to start`);
+}
+if (probe.code !== 0) {
+  unmet(
+    "passwordless sudo unavailable — run this task from an interactive shell:",
+    "sudo -v && mise --cd ~/dotfiles run reclaim:system",
   );
-  if (!probe.timedOut) console.log("  sudo -v && mise run reclaim:system");
-  process.exit(1);
 }
 
 const before = await freeBytes();

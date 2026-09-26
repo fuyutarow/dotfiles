@@ -156,9 +156,9 @@ async function run(
 }
 
 // A leg is "where do I run this": null = right here, a string = through ssh to that alias.
-type Leg = string | null;
+export type Leg = string | null;
 
-async function sh(leg: Leg, script: string, ms: number): Promise<Ran> {
+export async function sh(leg: Leg, script: string, ms: number): Promise<Ran> {
   const cmd =
     leg === null
       ? ["bash", "-c", script]
@@ -205,7 +205,7 @@ function usable(r: Ran): boolean {
   return !r.timedOut && r.code === 0 && r.out.trim() !== "";
 }
 
-async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
+export async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
   const enc = encodePs(script);
   if (leg !== null) {
     return run(

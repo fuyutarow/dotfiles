@@ -7,6 +7,7 @@ import {
   readdirSync,
   rmSync,
   utimesSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -16,6 +17,7 @@ import {
   createAdmissionReceipt,
   decideAdmission,
   hasUnmanagedGpuLoad,
+  parseNvidiaSmiComputeAppRow,
   parseNvidiaSmiGpuRow,
   checkJob,
   executeJob,
@@ -25,6 +27,7 @@ import {
   probeHostSnapshot,
   manifestSourceFromBytes,
   scopeUnitFor,
+  validateJobId,
   validateManifest,
   verifyAdmissionReceipt,
   type AdmissionFailure,
@@ -156,6 +159,20 @@ describe("resource manifest", () => {
 
   test("accepts a complete bounded CPU manifest", () => {
     expect(validateManifest(cpuManifest())).toEqual(cpuManifest());
+  });
+
+  test("validateJobId enforces the same rule for the manifest field and the --job-id override", () => {
+    expect(validateJobId("firedancer-ticket-42", "--job-id")).toBe(
+      "firedancer-ticket-42",
+    );
+    expect(() => validateJobId("", "--job-id")).toThrow(/--job-id/);
+    expect(() => validateJobId("has spaces", "--job-id")).toThrow(
+      /--job-id must contain only/,
+    );
+    expect(() => validateJobId("-leading-hyphen", "--job-id")).toThrow(
+      /--job-id must contain only/,
+    );
+    expect(() => validateJobId("a".repeat(81), "--job-id")).toThrow();
   });
 
   test("rejects an unbounded memory claim and nested agent fanout", () => {
@@ -336,6 +353,17 @@ describe("admission", () => {
     ).toBeUndefined();
     expect(() => parseNvidiaSmiGpuRow("0, 12288, 462, 39")).toThrow();
     expect(() => parseNvidiaSmiGpuRow("0, 12288, oops, 39, 16")).toThrow();
+  });
+
+  test("parses a nvidia-smi compute-apps row and rejects malformed ones", () => {
+    expect(parseNvidiaSmiComputeAppRow("12345, 2048")).toEqual({
+      pid: 12345,
+      usedBytes: 2048 * MiB,
+    });
+    expect(parseNvidiaSmiComputeAppRow("12345")).toBeNull();
+    expect(parseNvidiaSmiComputeAppRow("oops, 2048")).toBeNull();
+    expect(parseNvidiaSmiComputeAppRow("0, 2048")).toBeNull();
+    expect(parseNvidiaSmiComputeAppRow("-1, 2048")).toBeNull();
   });
 
   test("caps concurrent jobs on one device even when VRAM is abundant", () => {
@@ -952,6 +980,51 @@ describe("bounded execution", () => {
     );
     expect(result).toMatchObject({ ok: true, exitCode: 0 });
     expect(readdirSync(stateDirectory)).toEqual([]);
+  });
+
+  test("reports a measured RAM peak and persists it beside the manifest", async () => {
+    const stateDirectory = temporaryStateDirectory();
+    const manifestDirectory = temporaryStateDirectory();
+    const manifest = cpuManifest();
+    const manifestPath = join(manifestDirectory, "job.resource.json");
+    const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
+    writeFileSync(manifestPath, manifestBytes);
+    const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
+    const reports: string[] = [];
+    const result = await executeJob(
+      manifest,
+      [
+        process.execPath,
+        "-e",
+        "Buffer.alloc(4 * 1024 * 1024, 1); await Bun.sleep(300);",
+      ],
+      {
+        stateDirectory,
+        snapshot: probeHostSnapshot(process.cwd()),
+        monitorIntervalMs: 25,
+        manifestSource,
+        report: (line) => reports.push(line),
+      },
+    );
+    expect(result).toMatchObject({ ok: true, exitCode: 0 });
+
+    const release = reports.find((line) => line.startsWith("RELEASE "));
+    expect(release).toContain(`job=${manifest.job_id}`);
+    expect(release).toMatch(/ram_peak_measured_bytes=\d+/);
+    expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/);
+    expect(release).toContain("released_at=");
+    // A CPU-only manifest never samples VRAM — see executeJob's onSample.
+    expect(release).not.toContain("vram_peak_measured_bytes=");
+
+    const peakPath = `${manifestPath}.peak.json`;
+    const peak = JSON.parse(readFileSync(peakPath, "utf8"));
+    expect(peak).toMatchObject({
+      schema: 1,
+      job_id: manifest.job_id,
+      ram_peak_source: expect.stringMatching(/^(cgroup|sampled)$/),
+    });
+    expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
+    rmSync(peakPath);
   });
 
   test("terminates the whole process group at the walltime", async () => {

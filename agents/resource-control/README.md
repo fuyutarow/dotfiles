@@ -34,8 +34,24 @@ because the budget is pushed into the job: a GPU reservation exports
 `JULIA_CUDA_HARD_MEMORY_LIMIT`, `JULIA_CUDA_SOFT_MEMORY_LIMIT`, and `AGENT_RESOURCE_VRAM_BYTES`.
 That ceiling is a runtime check, not a cgroup cap — CUDA.jl honours it before every allocation;
 other runtimes must honour `AGENT_RESOURCE_VRAM_BYTES` themselves. Scratch remains an admission
-reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM, so compliance cannot be
-audited after admission.
+reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`--query-compute-apps` lists
+PIDs but its `used_memory` column reads literal `[N/A]`), so compliance cannot be audited after
+admission, and the measured `vram_peak_measured_bytes` below is simply absent there — not a bug
+in this runner, a WSL2 driver-passthrough limitation.
+
+## Measured peak, on release
+
+The manifest's `host_ram_peak_bytes`/`vram_peak_bytes` are what the job *declared*; a `RELEASE`
+line — printed once per run, whether the job passed or breached, right before the systemd scope
+is torn down — reports what it *measured*: `ram_peak_measured_bytes` (preferring the scope's own
+cgroup `MemoryPeak`, kernel-tracked and unaffected by the monitor's own polling interval; falling
+back to the highest `/proc` RSS the monitor sampled when cgroup accounting is unavailable —
+`ram_peak_source` says which) and, for a `gpu` job, `vram_peak_measured_bytes` sampled from
+`nvidia-smi --query-compute-apps` once a second and cross-referenced against the job's own PIDs
+(omitted on WSL2, see above, or on any host without `nvidia-smi`). The same fields are written as
+JSON to `<manifest path>.peak.json`, so a caller can read its own job's measured peak without
+capturing stdout at all; that file is overwritten per run, like every other piece of this
+runner's per-run state.
 
 ## Child admission receipt
 
@@ -86,6 +102,25 @@ agent-resource-run \
   --manifest "$HOME/dotfiles/agents/resource-control/examples/cpu-smoke.resource.json" \
   --check-only
 ```
+
+## Named resource classes, without copying the manifest per ticket
+
+`decideAdmission` refuses two live reservations under the same `job_id`, and `job_id` is a field
+*inside* the manifest — so running several concurrent tickets from one resource shape (say, a
+"cpu-8g" class) used to force a fresh copy of the file per ticket just to give each one a unique
+identity (reported live 2026-09-26: 20+ per-ticket copies of one template piling up under one
+fleet's envelope directory). `--job-id <id>` overrides the manifest's own `job_id` at invocation
+time — through `validateJobId`, the exact same filesystem-safety rule the manifest field itself is
+checked against — so one shared template file per class is enough:
+
+```bash
+agent-resource-run --manifest cpu-8g.resource.json --job-id firedancer-ticket-42 -- <command>
+```
+
+The manifest's own `job_id` still works unmodified when `--job-id` is omitted. The admission
+receipt's `manifest_sha256` is still the shared template's own bytes, unaffected by the override —
+it proves "this declared envelope shape," while the receipt's separate `job_id` field is what
+distinguishes concurrent tickets sharing that shape.
 
 `serena-foreground` uses the same controller for one pinned, project-scoped foreground HTTP
 service. It replaces user-global Serena stdio auto-start; it does not restore a global MCP entry.

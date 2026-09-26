@@ -50,6 +50,11 @@ const MIN_KERNEL_TASKS = 32;
 const RUNTIME_TASK_MARGIN_PER_PROCESS = 16;
 const MAX_KERNEL_TASKS = 65_535;
 const KERNEL_PROBE_MEMORY_BYTES = 16 * MiB;
+// Peak VRAM is sampled by shelling out to nvidia-smi, unlike RSS (a free /proc read every monitor
+// tick). At the monitor's own DEFAULT_MONITOR_INTERVAL_MS (200 ms) that would spawn nvidia-smi 5
+// times a second per GPU job; throttling it to once a second keeps a fleet of concurrent GPU jobs
+// from turning "measure the peak" into unmanaged load on the very device being measured.
+const GPU_VRAM_SAMPLE_INTERVAL_MS = 1_000;
 
 class UsageError extends Error {}
 class StateError extends Error {}
@@ -209,7 +214,25 @@ type Lease = {
   stateDirectory: string;
 };
 
-type GroupUsage = { processes: number; rssBytes: number };
+type GroupUsage = { processes: number; rssBytes: number; pids: number[] };
+
+/**
+ * What was actually observed, as opposed to what the manifest declared (`host_ram_peak_bytes`/
+ * `vram_peak_bytes` in the ADMIT line above). `ram_peak_source` is "cgroup" when the scope's own
+ * `MemoryPeak` accounting was readable (the authoritative number: kernel-tracked, immune to the
+ * monitor loop's own sampling gaps) and "sampled" when it was not (falls back to the highest
+ * `/proc` RSS reading the monitor loop itself took). VRAM has no such fallback — nvidia-smi is
+ * the only source, so its absence just omits the field, same as `power_watts` on GpuSnapshot.
+ */
+export type MeasuredPeak = {
+  schema: 1;
+  job_id: string;
+  ram_peak_measured_bytes: number;
+  ram_peak_source: "cgroup" | "sampled";
+  vram_peak_measured_bytes?: number;
+  vram_peak_source?: "nvidia-smi";
+  released_at: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -254,6 +277,20 @@ function nonEmpty(value: unknown, label: string, maximum = 2_000): string {
     throw new UsageError(`${label} must be a non-empty string`);
   }
   return value.trim();
+}
+
+// Shared by the manifest's own `job_id` field and the CLI's `--job-id` override (main(), below)
+// — one rule, so a caller cannot supply through the flag a value the manifest itself would have
+// rejected. Filesystem-safe (letters/digits/dot/underscore/hyphen only) because job_id ends up
+// in reservation/receipt filenames and systemd unit names elsewhere in this file.
+export function validateJobId(value: unknown, label: string): string {
+  const jobId = nonEmpty(value, label, 80);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(jobId)) {
+    throw new UsageError(
+      `${label} must contain only letters, digits, dot, underscore, or hyphen`,
+    );
+  }
+  return jobId;
 }
 
 function sha256Hex(bytes: Uint8Array): string {
@@ -336,12 +373,7 @@ export function validateManifest(value: unknown): ResourceManifest {
     "manifest",
   );
   if (value.schema !== 1) throw new UsageError("schema must be 1");
-  const jobId = nonEmpty(value.job_id, "job_id", 80);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(jobId)) {
-    throw new UsageError(
-      "job_id must contain only letters, digits, dot, underscore, or hyphen",
-    );
-  }
+  const jobId = validateJobId(value.job_id, "job_id");
 
   if (!isRecord(value.device)) {
     throw new UsageError("device must be an object");
@@ -1094,14 +1126,136 @@ function sampleProcessGroupMember(
 function processGroupUsage(pgid: number): GroupUsage {
   let processes = 0;
   let rssBytes = 0;
+  const pids: number[] = [];
   for (const entry of readdirSync("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
     const sample = sampleProcessGroupMember(entry, pgid);
     if (sample === null) continue;
     processes += 1;
     rssBytes += sample.rssBytes;
+    pids.push(Number(entry));
   }
-  return { processes, rssBytes };
+  return { processes, rssBytes, pids };
+}
+
+// One row of `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits`:
+// a PID currently holding a CUDA context and its VRAM, across every GPU and every process on
+// the host (not scoped to our job — the caller cross-references against its own process
+// group's pids). `used_memory` is MiB, same unit `parseNvidiaSmiGpuRow` above already assumes
+// for `memory.total`/`memory.used`. On WSL2, `used_memory` reads literal `[N/A]` for every row
+// (confirmed live 2026-09-26 on this host: PIDs list, memory does not) — see this package's
+// README, "On WSL2 nvidia-smi reports no per-process VRAM". `Number("[N/A]")` is `NaN`, which
+// the `Number.isFinite` check below already rejects, so this degrades the same way an absent
+// GPU does: `vram_peak_measured_bytes` is simply omitted, not a wrong zero.
+export function parseNvidiaSmiComputeAppRow(
+  line: string,
+): { pid: number; usedBytes: number } | null {
+  const fields = line.split(",").map((field) => Number(field.trim()));
+  if (fields.length !== 2 || fields.some((field) => !Number.isFinite(field))) {
+    return null;
+  }
+  const pid = fields[0] as number;
+  const usedMiB = fields[1] as number;
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+  return { pid, usedBytes: usedMiB * MiB };
+}
+
+function sampleGpuComputeApps(): Map<number, number> {
+  const usage = new Map<number, number>();
+  if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null) {
+    return usage;
+  }
+  try {
+    // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as
+    // probeGpus() above; throttled to once a second by GPU_VRAM_SAMPLE_INTERVAL_MS at the
+    // one call site (executeJob's onSample), not here — this function always samples once.
+    const result = Bun.spawnSync(
+      [
+        "timeout",
+        "5s",
+        "nvidia-smi",
+        "--query-compute-apps=pid,used_memory",
+        "--format=csv,noheader,nounits",
+      ],
+      { stdout: "pipe", stderr: "ignore" },
+    );
+    if (result.exitCode !== 0) return usage;
+    const rows = result.stdout
+      .toString()
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(parseNvidiaSmiComputeAppRow)
+      .filter((row): row is { pid: number; usedBytes: number } => row !== null);
+    for (const row of rows) usage.set(row.pid, row.usedBytes);
+  } catch {
+    // no GPU / no driver / transient nvidia-smi failure -> this sample contributes nothing;
+    // the running peak this job has already observed is unaffected.
+  }
+  return usage;
+}
+
+/**
+ * The scope's own cgroup `MemoryPeak` (cgroup v2 `memory.peak`) — the authoritative RAM peak
+ * for this job: kernel-tracked continuously, unlike the monitor loop's own 200ms-interval /proc
+ * sampling, which can miss a brief spike between polls. MUST be read before the scope is torn
+ * down: `systemctl --user stop` releases the cgroup, and `MemoryPeak` disappears with it
+ * (reported live 2026-09-26 by a fleet hitting exactly this gap — every run showed "peak
+ * unknown" because the caller only checked after cleanup). Absence — "[not set]" (no
+ * `MemoryAccounting=yes`) or a kernel too old for `memory.peak` — is not a bug; the monitor
+ * loop's own sampled peak is the fallback (see MeasuredPeak's `ram_peak_source`).
+ */
+function readScopeMemoryPeak(scopeUnit: string): number | undefined {
+  if (Bun.which("systemctl") === null || Bun.which("timeout") === null) {
+    return undefined;
+  }
+  // bounded: GNU timeout caps this user-manager property query at five seconds, same class as
+  // every other boundedSystemctl call in this file.
+  const result = Bun.spawnSync(
+    [
+      "timeout",
+      "5s",
+      "systemctl",
+      "--user",
+      "show",
+      scopeUnit,
+      "--property=MemoryPeak",
+      "--value",
+    ],
+    { stdout: "pipe", stderr: "ignore" },
+  );
+  if (result.exitCode !== 0) return undefined;
+  const bytes = Number(result.stdout.toString().trim());
+  return Number.isFinite(bytes) && bytes >= 0 ? bytes : undefined;
+}
+
+function releaseDescription(peak: MeasuredPeak): string {
+  const vram =
+    peak.vram_peak_measured_bytes === undefined
+      ? ""
+      : ` vram_peak_measured_bytes=${peak.vram_peak_measured_bytes} ` +
+        `vram_peak_source=${peak.vram_peak_source}`;
+  return (
+    `RELEASE job=${peak.job_id} ram_peak_measured_bytes=${peak.ram_peak_measured_bytes} ` +
+    `ram_peak_source=${peak.ram_peak_source}${vram} released_at=${peak.released_at}`
+  );
+}
+
+// Sibling to the manifest the caller already owns, so a ticket can find its own job's measured
+// peak after the run without parsing stdout — the RELEASE report line above carries the same
+// data; this is a machine-readable copy at a path the caller can predict without capturing
+// stdout at all. Overwritten per run (latest-run semantics), matching every other piece of this
+// runner's per-run state (reservations, receipts). Best-effort: a caller that put its manifest
+// somewhere unwritable (or, in a test fixture, somewhere that does not exist on disk at all)
+// still gets the same data from the RELEASE line, so a write failure here is silent, not fatal.
+function writePeakArtifact(manifestPath: string, peak: MeasuredPeak): void {
+  try {
+    writeFileSync(`${manifestPath}.peak.json`, `${JSON.stringify(peak)}\n`, {
+      mode: 0o600,
+    });
+  } catch {
+    // Best-effort — see the header comment above.
+  }
 }
 
 function signalProcessGroup(pgid: number, signal: NodeJS.Signals): void {
@@ -1520,7 +1674,9 @@ export async function checkJob(
 /**
  * Poll `pgid`'s usage until it breaches the manifest's declared limits or `isDone` reports the
  * job is no longer being monitored (exited/walltime/interrupt). Returns the breach reason, or
- * null when monitoring simply ended.
+ * null when monitoring simply ended. `onSample`, when given, sees every reading this loop
+ * already takes for free — the peak-tracking callers below ride the same poll rather than
+ * running a second one.
  */
 async function monitorProcessGroup(
   pgid: number,
@@ -1528,9 +1684,11 @@ async function monitorProcessGroup(
   exitedPromise: Promise<number>,
   intervalMs: number,
   isDone: () => boolean,
+  onSample?: (usage: GroupUsage) => void,
 ): Promise<"memory" | "processes" | null> {
   while (!isDone()) {
     const usage = processGroupUsage(pgid);
+    onSample?.(usage);
     if (usage.rssBytes > manifest.host_ram_peak_bytes) return "memory";
     if (usage.processes > manifest.processes) return "processes";
     await Promise.race([exitedPromise, Bun.sleep(intervalMs)]);
@@ -1588,6 +1746,25 @@ export async function executeJob(
   let interrupted = false;
   let pgid: number | null = null;
   let scopeUnit: string | null = null;
+  // Peak tracking rides the monitor loop's existing poll (see monitorProcessGroup's onSample) —
+  // declared out here, not inside the try block below, so the finally block can still report
+  // them after a breach return happens INSIDE that try block, before finally ever runs.
+  let peakRssBytes = 0;
+  let peakVramBytes: number | undefined;
+  let lastGpuSampleAtMs = 0;
+  const onSample = (usage: GroupUsage): void => {
+    peakRssBytes = Math.max(peakRssBytes, usage.rssBytes);
+    if (lease.reservation.device.kind !== "gpu") return;
+    const now = performance.now();
+    if (now - lastGpuSampleAtMs < GPU_VRAM_SAMPLE_INTERVAL_MS) return;
+    lastGpuSampleAtMs = now;
+    const gpuUsage = sampleGpuComputeApps();
+    const jobVramBytes = usage.pids.reduce(
+      (sum, pid) => sum + (gpuUsage.get(pid) ?? 0),
+      0,
+    );
+    peakVramBytes = Math.max(peakVramBytes ?? 0, jobVramBytes);
+  };
   const onTimeout = (): void => {
     walltimeFired = true;
     if (pgid !== null) signalProcessGroup(pgid, "SIGTERM");
@@ -1644,6 +1821,7 @@ export async function executeJob(
       exitedPromise,
       interval,
       () => exited || walltimeFired || interrupted,
+      onSample,
     );
 
     if (walltimeFired || interrupted || breach !== null) {
@@ -1682,6 +1860,25 @@ export async function executeJob(
     if (pgid !== null && processGroupUsage(pgid).processes > 0) {
       await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
     }
+    // Read BEFORE scope teardown: MemoryPeak lives in the scope's cgroup, and stopping the scope
+    // releases that cgroup — see readScopeMemoryPeak's header comment.
+    const cgroupPeakBytes =
+      scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
+    const measuredPeak: MeasuredPeak = {
+      schema: 1,
+      job_id: manifest.job_id,
+      ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
+      ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
+      ...(peakVramBytes === undefined
+        ? {}
+        : {
+            vram_peak_measured_bytes: peakVramBytes,
+            vram_peak_source: "nvidia-smi" as const,
+          }),
+      released_at: new Date().toISOString(),
+    };
+    report(releaseDescription(measuredPeak));
+    writePeakArtifact(options.manifestSource.path, measuredPeak);
     const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
     const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
     await releaseLease(lease);
@@ -1727,6 +1924,16 @@ async function main(): Promise<void> {
       },
       flags: {
         manifest: { type: nonEmptyString("--manifest") },
+        // Lets one shared manifest file stand in for a whole resource CLASS (e.g. a
+        // "cpu-8g.resource.json" template) rather than needing a fresh copy per invocation just
+        // to get a unique job_id — decideAdmission() refuses two live reservations under the
+        // same job_id, so without this a caller running several concurrent jobs from the same
+        // class had no way to give them distinct identities except copying the file (reported
+        // live 2026-09-26: 20+ per-ticket copies of one template under one fleet's envelope
+        // directory). The manifest's OWN embedded job_id still works unmodified when this flag
+        // is omitted; this only overrides it, and validateJobId() applies the exact same
+        // filesystem-safety rule the manifest field itself is checked against.
+        jobId: { type: nonEmptyString("--job-id") },
         checkOnly: { type: Boolean, default: false },
       },
     },
@@ -1749,8 +1956,18 @@ async function main(): Promise<void> {
       }`,
     );
   }
-  const manifest = validateManifest(raw);
+  const parsedManifest = validateManifest(raw);
+  // manifestSource hashes the TEMPLATE file's own bytes, unmodified by --job-id: the receipt
+  // then proves "this exact declared envelope shape" independent of which job identity a given
+  // invocation supplied, and the receipt's separate `job_id` field still distinguishes them.
   const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
+  const manifest =
+    parsed.flags.jobId === undefined
+      ? parsedManifest
+      : {
+          ...parsedManifest,
+          job_id: validateJobId(parsed.flags.jobId, "--job-id"),
+        };
   const command = parsed._.map(String);
   if (parsed.flags.checkOnly === true && command.length > 0) {
     throw new UsageError("--check-only does not accept a command");

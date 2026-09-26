@@ -98,6 +98,48 @@ describe("enforce-supervised-execution", () => {
     }
   });
 
+  // The Bash tool runs `<shell> -c '<command>'`, so `pgrep -f X` inside the command always
+  // matches that shell itself — the loop never ends (2026-09-26: shells up to 12.7 h old).
+  test("denies self-matching pgrep -f polling loops", () => {
+    for (const command of [
+      'while pgrep -f "runner2609-comparator-fixed.jl" > /dev/null; do sleep 30; done',
+      "until ! kill -0 $(pgrep -f buxb0ewku) 2>/dev/null; do sleep 10; done",
+      "while true; do pgrep -af sweep.jl || break; sleep 5; done",
+      "while ! pgrep -f server.jl; do sleep 1; done",
+      "cd /tmp\nwhile pgrep --full probe.jl; do\n  sleep 5\ndone",
+      'pid=$(pgrep -f job.jl | head -1); while kill -0 "$pid"; do sleep 5; done',
+    ]) {
+      const decision = denial(command);
+      expect(decision?.permissionDecision).toBe("deny");
+      expect(decision.permissionDecisionReason).toContain("pgrep -f");
+      expect(decision.permissionDecisionReason).toContain("run_in_background");
+    }
+  });
+
+  test("allows pgrep without -f, bracketed self-exclusion, loopless pgrep -f, and mentions", () => {
+    for (const command of [
+      "pgrep -f runner2609",
+      "while pgrep julia > /dev/null; do sleep 5; done",
+      "pid=$(pgrep -f '[j]ob.jl'); while kill -0 \"$pid\"; do sleep 5; done",
+      "while pgrep -f '[r]unner2609.jl' > /dev/null; do sleep 30; done",
+      "bun ~/.claude/hooks/repo-retrieve.ts literal --query 'while pgrep -f foo'",
+      'while read -r line; do echo "$line"; done < pids.txt',
+    ]) {
+      const result = runHook(HOOK, bash(command));
+      expect(result.code).toBe(0);
+      expect(result.stdout.trim()).toBe("");
+    }
+  });
+
+  test("reports a detacher and a self-matching poll together in ONE deny", () => {
+    const reason = denial(
+      "nohup ./sweep.sh & while pgrep -f sweep.sh; do sleep 5; done",
+    ).permissionDecisionReason;
+    expect(reason).toContain("2 independent problems");
+    expect(reason).toContain("nohup");
+    expect(reason).toContain("pgrep -f");
+  });
+
   test("ignores non-Bash tools", () => {
     const result = runHook(HOOK, {
       tool_name: "Read",

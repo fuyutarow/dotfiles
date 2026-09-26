@@ -113,3 +113,27 @@ adds none. Queue prose repair apart from this typed-receipt seam.
 - Verification pending this reforge's floor and build-order commands.
 
 - Build-order existence check, `skill-check.ts`, and scoped `git diff --check`: PASS with no FAIL/WARN.
+
+## 2026-09-26 — signed-invariant projection
+
+Source: user-supplied episode transcript, SHA-256
+`dbcf9ead3f15aeabb7b20a29b88e659fd3f382e123563ae21681a0aab3331bf3`,
+lines 53–95 and 1498–1531. The actor reported that required theme conditions fell out of
+acceptance while benchmark improvement drove revisions. The report is process testimony;
+the underlying repository and runs were not independently audited here.
+
+The earlier skill carried a Goal locator through issue and mandate but did not require a
+constraint-by-constraint projection. `pull-admission.md` now rejects a missing projection
+and preserves applicable constraints into a mandate. This is a skill-supplied rule, not
+proof that the episode's later repair succeeded. A signer-owned programme invariant cannot
+be waived as locally out of scope. The Supervisor still cannot select a section method.
+
+Desk-check: an issue omitting one applicable signed invariant blocks publication; a genuinely
+irrelevant issue records its exclusion reason; a programme-wide invariant requires signer
+amendment. A request to choose the implementation still routes to the Section Director.
+
+Verification: target `skill-check.ts` exited 0; 50 pre-existing reference prose WARNs remain.
+`mise run lint:skills-floor` exited 0; `mise run link:skills` exited 0; scoped
+`git diff --check` exited 0. **PROSE-DEBT waiver (2026-09-26):** the 50 older
+reference warnings are unchanged; queue a separate prose pass. F3 solo-tier waiver:
+the desk-check above was serial; no live model trigger or target runtime test ran.

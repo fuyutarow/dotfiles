@@ -17,6 +17,14 @@ or director identity. It also publishes lease constraints: allowed action classe
 lease expiry, first-intent deadline, and WIP budgets. These are budgets and evidence interfaces,
 never a method, candidate, protocol, or run instruction.
 
+Before publication, map each signed Goal invariant to an issue constraint or mark it out of scope
+with a reason. Cite the invariant's locus in the issue's constraint field. At mandate issuance,
+check each applicable issue constraint against the mandate. Preserve it by reference in the
+granted scope or resource/safety constraints. A missing row blocks publication or admission.
+This projection carries authority; it does not select a section method.
+A programme-wide invariant cannot be waived by an
+out-of-scope mark; changing it requires the signer's amendment.
+
 ## Bid admission
 
 Read a `SECTION_BID` only as a capability/coverage declaration against the issue. It must carry

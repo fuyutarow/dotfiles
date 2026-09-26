@@ -49,6 +49,15 @@ its exceptional purge and re-baseline process; an agent may not turn this row in
 - Stable concept IDs/paths and the one-to-one type-code registry.
 - The profile/schema and validator itself, under higher review than ordinary content.
 
+## Reverse lineage from evidence
+
+For a completeness claim, start from each admitted raw record. Find its domain interpretation,
+explicit exclusion, or still-open question. A forward-only check misses raw observations
+that never acquired an interpretation. Flag unmatched evidence as an open gap in the existing index.
+Do not invent a hypothesis or finding to make the join pass. Ask the domain owner for the
+correct disposition and retain the raw record. The domain owner judges scientific meaning;
+this check detects the missing link and prevents a false completeness claim.
+
 ## What should be retired or deleted
 
 - **Delete** generated summaries, graph caches, search answers, dashboards, and reviewer packets

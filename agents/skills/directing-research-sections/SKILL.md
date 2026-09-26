@@ -17,7 +17,7 @@ description: >-
 
 # Directing one research section
 
-> **Version**: v2609.1.0 (2026-09-25) — consume canonical experimental-evidence dispositions.
+> **Version**: v2609.1.1 (2026-09-26) — mandate conformance checked at charter and revision.
 > Durable operating guidance from a frontier model (2026-08). It encodes observed research-harness failures.
 > If a constraint here feels unnecessary, that feeling is the failure mode — follow the map.
 
@@ -111,6 +111,8 @@ importance, causal validity, novelty, or whether a method deserves admission.
    `GROUNDING_PACKET`. It is not resident and cannot search, build, execute, learn, or direct. Do not invoke
    `forging-novel-theses` or candidate search before current Charter+Grounding lineage exists. Refer to the
    mandate question, constraints, visibility policy, and current lease by locator/digest. Do not copy raw programme context.
+   Apply `references/section-loop.md`'s mandate-conformance check at chartering and each implementation
+   revision; an unverified hard constraint cannot be closed by a favorable score.
 3. **Quarantine inputs.** Record human method proposals as `HUMAN-METHOD-INPUT`. Include source, time,
    scope, and non-authority status. Use it only after independent local admission.
    Do not forward their raw wording to the Programme Supervisor.

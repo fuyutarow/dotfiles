@@ -27,7 +27,7 @@ No harness → same map, serial。並列の腕を、互いに出力を見ない�
 | 3 | 入出力の界面、所有範囲、依存、decision rightsを凍結する。実行体を読む仕事はread-setとcode digest、書く仕事はwrite-setを宣言する。同じcheckoutでread/writeまたはwrite/writeが交差すれば直列化か隔離を先に決める。非生成仕事は合否も発射前に凍結する。生成仕事はlaunch項目だけを第一freezeに置き、domain artifact / digest後にfinal acceptance criteriaを第二freezeする。仕様を書けない仕事は発射しない。 | 指示書の必須欄、read/write依存表、freeze時点、境界外または不可逆な判断の停止条件がある。 |
 | 4 | 必要な工程だけを起動する。nontrivial成果物がある、載荷claimがある、または決定的machine oracleがない場合にindependent verifierを起動し、その場合だけauthorと分ける。 | verifierの起動理由、起動時のauthorとの分離、同じ観測が複数役へ重複計上されていないprovenance表。 |
 | 5 | 各dispatchへ資源classを一つだけ付け、pilotより前にadmissionする。依存仕事を pipeline、独立かつ予約が競合しない仕事だけcapacity-aware parallelにする。 | `RESOURCE-CLASS(NONCOMPUTE)` または絶対pathの `RESOURCE-ENVELOPE` がちょうど一つあり、後者は `measurement-and-resources.md` P7のrunner verdictを持つ。 |
-| 6 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。 | schema検査、証拠の照合、起動時のverdict、supervisorの採否と根拠がある。 |
+| 6 | 返り値をschemaで受け、起動したindependent verifierのverdictを入力にsupervisorが採否を決める。domain正本への着地が完成条件なら、そのownerが発行したIDとdigestを正本から読み返す。 | schema検査、証拠の照合、正本のread-back、起動時のverdict、supervisorの採否と根拠がある。 |
 
 ## 2. 自己完結する指示書
 
@@ -42,7 +42,7 @@ formulation / evaluability artifactとdigestを要求する。
 | **目的** | 解く問い、利用者、成果物が変える裁定。 | 一文の目的と、その成果物を消費する仕事が名指しされている。 |
 | **入力と根拠** | 読む正本、入力版、事実・数値の錨、対象 HEAD または同等の不変識別子。 | 各入力に locus と版があり、実在を read-only test で確認できる。 |
 | **境界** | read-set、write-set、checkout/worktree、対象code digest、禁止範囲、外部送信、依存、担当外。 | 同じcheckoutでwrite/writeまたはread/writeが交差する腕は同時に発射されず、別worktreeなら実行時digestを照合する。 |
-| **出力 schema** | 成果物、返却状態、主張、証拠、限界の機械可読な形。 | schema validation が通る。最終メッセージだけでも同じ情報を回収できる。 |
+| **出力 schema** | 成果物、返却状態、主張、証拠、限界の機械可読な形。domain正本を要する成果物はそのlocus/digest、正本がIDを発行するならそのIDも含める。 | schema validation が通る。最終メッセージだけでも同じ情報を回収でき、正本を読み返せる。 |
 | **完成の定義** | 非生成仕事は最終完成条件を発射前に凍結する。生成仕事はlaunch時のphase-exitとmaturity release condition、domain artifact / digest後のfinal acceptance criteriaを分ける。 | 各条件が成果物の locus または runnable test に結線され、生成仕事では二つのfreeze時点が記録されている。 |
 | **独立検収** | 主張が偽なら落ちる oracle、再計算、照合手順を成果物を見る前に設計し、lens / oracle / expected verdictを生成側からsealedにする。既知のhard constraintsとstage-exit criteriaは開示できる。 | 「主張が偽でもこの観測は出得るか」の答えが NO。YES なら test を無効とする。sealと開示範囲が記録されている。 |
 | **時間予算** | 硬い期限、中間報告点、中断条件、部分納品の保存先。 | 発射時刻・期限・中間条件があり、超過時の処理を再現できる。 |
@@ -94,6 +94,9 @@ limitations: []
 `status: completed` という語だけでは完成にならない。各主張のevidence kindを指示書で決め、
 選んだ型の必須欄が欠けた主張は quarantine する。
 監督は返り値と実物の digest を再計算し、不一致なら受理しない。
+domain正本への着地が完成条件の仕事では、正本のlocus/digestと発行済みIDを照合する。
+必要な識別子が欠けた報告は`partial`として扱う。
+正本と異なる場所にある報告を監督の会話へ転記して代用しない。ownerへ着地を差し戻す。
 
 ## 3. 仕事の形と分解
 

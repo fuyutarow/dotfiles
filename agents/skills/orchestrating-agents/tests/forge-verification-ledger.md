@@ -1296,3 +1296,28 @@ Target `skill-check.ts` exited 0 with no structural failure. **PROSE-DEBT waiver
 (2026-09-25):** 12 long reference sentences remain from older material; the
 new owner/dispatch cut adds no core warning. Runtime enforcement remains an
 open polysearch/resource-control implementation task, not a claimed skill effect.
+
+## 2026-09-26 — canonical hand-back receipt
+
+Source: user-supplied episode transcript, SHA-256
+`dbcf9ead3f15aeabb7b20a29b88e659fd3f382e123563ae21681a0aab3331bf3`,
+lines 1408–1447. The actor reported four design hand-backs ending in chat and a survey
+sent to a worker outside its canonical owner. It also reported raw runs lacking findings.
+These are actor reports; this reforge did not query the target registries.
+
+The dispatch contract already required a function map and deliverable digest, but allowed
+`completed` without reading the domain record back. The new acceptance predicate requires
+the declared canonical locus/digest and an issued ID when that store uses IDs. Missing
+records return `partial` to the owner. It does not create a second store or decide
+research meaning. The model's failure direction was to accept a persuasive hand-back
+as completed work before checking where it landed.
+
+Desk-check: a chat-only survey with a required corpus ID is partial; a canonical artifact
+with matching locator/digest is eligible for acceptance; a one-off answer whose function
+map requires no durable record has no new ID obligation. Document lifecycle remains with
+`governing-research-documentation`.
+
+Verification: target `skill-check.ts` exited 0 with 12 pre-existing reference prose WARNs.
+`mise run lint:skills-floor` exited 0; `mise run link:skills` exited 0; scoped
+`git diff --check` exited 0. No new schema, tool, or runtime enforcement was added.
+F3 solo-tier waiver: the desk-check above was serial; no live model trigger ran.

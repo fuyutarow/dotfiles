@@ -241,3 +241,27 @@ Verification receipts:
 - `mise run lint:skills-index`, `git diff --check`, and both installed Skill symlink targets: pass;
 - `mise run check`: pass — 140 hook tests passed with 1 intentional skip, 39 repository-search
   tests passed, and 73 script-floor tests passed; 11 unrelated pre-existing Bun warnings remain.
+
+## 2026-09-26 — reverse evidence-lineage completeness
+
+Source: user-supplied episode transcript, SHA-256
+`dbcf9ead3f15aeabb7b20a29b88e659fd3f382e123563ae21681a0aab3331bf3`,
+lines 1408–1447. The actor reported runs with measurements but no finding. It reported
+that a target doctor checked unresolved predictions but did not catch runs lacking both
+prediction and finding. This forge did not inspect that target implementation.
+
+The existing governance checks started from admitted authorities or evidence preservation.
+The new reverse lineage check starts from raw records and flags unmatched observations
+in the existing index. It neither invents an interpretation nor adds a new role/status
+schema or a skill-local validator. `directing-research-sections` retains run and learning
+semantics; the target system owns executable orphan detection.
+
+Desk-check: an admitted raw record with an interpretation is linked; one with an explicit
+exclusion remains retained; one with no interpretation, exclusion, or open question is an
+open gap. A raw record's scientific meaning is never decided by this lifecycle check.
+
+Verification: target `skill-check.ts` exited 0; 45 pre-existing reference prose WARNs remain.
+`mise run lint:skills-floor` exited 0; `mise run link:skills` exited 0; scoped
+`git diff --check` exited 0. **PROSE-DEBT waiver (2026-09-26):** the 45 older
+reference warnings are unchanged; queue a separate prose pass. F3 solo-tier waiver:
+the desk-check above was serial; no live model trigger or target runtime test ran.

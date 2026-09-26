@@ -16,7 +16,7 @@ description: >-
 
 # Governing research documentation
 
-> **Version**: v2608.2.0 (2026-08-03) — stable document identity and naming floor.
+> **Version**: v2609.0.0 (2026-09-26) — reverse lineage for research-record completeness.
 
 **Atomic build.** Ship the authority contract, profile, templates, floor, regressions, trigger matrix,
 and forge ledger in one change. Run from this Skill directory; success prints nothing:
@@ -191,6 +191,10 @@ evidence, authority uniqueness, review shape, and expiry:
 bun ~/.agents/skills/governing-research-documentation/scripts/research-docs-check.ts \
   --root research/knowledge --raw-root research/raw --base origin/main
 ```
+
+For a completeness claim, apply `references/admission-and-lifecycle.md`'s reverse lineage check.
+An admitted observation with no domain interpretation, exclusion, or open-question status
+remains an indexed gap. A green validator does not close it.
 
 Use `~/.claude/skills/...` under Claude Code. Read `references/harness-integration.md` before wiring
 repo-local tasks, hooks, permissions, or CI. Do not add a global hook for one repository's policy.

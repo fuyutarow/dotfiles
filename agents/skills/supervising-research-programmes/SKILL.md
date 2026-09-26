@@ -14,7 +14,7 @@ description: >-
 
 # Supervising research programmes
 
-> **Version**: v2609.1.0 (2026-09-25) — typed experimental and formal progress.
+> **Version**: v2609.1.1 (2026-09-26) — signed invariants projected through issue and mandate.
 
 No harness → same map, serial. Durable guidance from a frontier model (2026-08).
 
@@ -115,6 +115,9 @@ It cannot decide relevance, creativity, causal validity, or surprise importance.
    choose a section method, candidate, protocol, or run.
 4. **Publish an issue.** Include exact goal lineage, eligibility, constraints, and evidence interface.
    Include the duplicate boundary and dependency/dominance state.
+
+   Use `references/pull-admission.md` to account for each signed Goal invariant before publication.
+   Preserve applicable constraints by reference in the resulting mandate.
 
    Include expiry, success/kill observables, and the lease budget/interface. Solicit independent
    `SECTION_BID`s, never a named Director.

@@ -29,6 +29,20 @@ programme decision may supersede/revoke a mandate; the Director records that eve
 Candidate genesis through `forging-novel-theses` and all candidate search require a current
 `SECTION_CHARTER` and a current `GROUNDING_PACKET` that exact-joins it; neither may run from a mandate alone.
 
+## Mandate conformance at charter and revision
+
+In `SECTION_CHARTER`, join each hard mandate constraint to a falsifying check in `TEST_PLAN`.
+Record `UNVERIFIED` when no check can yet run. A revised executable specification is conformant
+only when the rows join its implementation and check receipts. Recheck the rows before calling
+a section result complete. A score cannot close a failed or unverified row.
+Send the score to `validating-experimental-evidence` for its permitted claim scope.
+
+Classify each added design restriction by source: mandate, derived resource/technical bound,
+or reversible local choice. Record the bound's derivation, excluded cases, and a check in the Charter's
+`METHOD_BOUNDARY` and `TEST_PLAN`. If a local choice excludes a mandated case, remove it or seek
+the mandate owner's decision. Do not add repairs around it and call the mandate met.
+Do not promote a local choice or an inferred bound into a mandate constraint.
+
 ## Local admission record
 
 Each candidate or test gets one live `SECTION_STATE` row: `ADMIT | REJECT | DEFER`, charter criterion,

@@ -112,3 +112,30 @@ SKILL.md adds no warning. Queue a dedicated prose pass after this owner migratio
   measurement handling. Verification pending this reforge's floor and build-order commands.
 
 - Build-order existence check, `skill-check.ts`, and scoped `git diff --check`: PASS with no FAIL/WARN.
+
+## 2026-09-26 — local conformance before performance acceptance
+
+Source: user-supplied episode transcript, SHA-256
+`dbcf9ead3f15aeabb7b20a29b88e659fd3f382e123563ae21681a0aab3331bf3`,
+lines 53–95, 1255–1290, and 1498–1562. The actor reported arbitrary design restrictions,
+multiple concept-ineligible revisions, and a later plan to test conformance. The transcript
+ends at that plan; no passing conformance receipt is available in this source.
+
+The old Charter had `HARD_CONSTRAINTS` and `TEST_PLAN`, but no required join between them.
+The revised section loop requires each hard constraint to have a falsifying check or
+`UNVERIFIED` status, and rechecks implementation revisions before completion. Additional
+restrictions need provenance, derivation for claimed bounds, and excluded-case checks.
+This is skill-supplied procedure; benchmark eligibility remains with
+`validating-experimental-evidence` EV4. The model's observed failure direction was to
+optimize a plausible score and repair local symptoms before checking the governing design.
+
+Desk-check: a high-scoring revision with a failed structural check remains incomplete;
+an unmeasurable constraint stays `UNVERIFIED`; a reversible local choice that excludes
+a mandated case is removed or sent for authority. A numerical comparison question
+alone routes to `validating-experimental-evidence`.
+
+Verification: target `skill-check.ts` exited 0; 80 pre-existing reference prose WARNs remain.
+`mise run lint:skills-floor` exited 0; `mise run link:skills` exited 0; scoped
+`git diff --check` exited 0. **PROSE-DEBT waiver (2026-09-26):** the 80 older
+reference warnings are unchanged; queue a separate prose pass. F3 solo-tier waiver:
+the desk-check above was serial; no live model trigger or target runtime test ran.

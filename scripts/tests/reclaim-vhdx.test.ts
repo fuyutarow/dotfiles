@@ -6,7 +6,7 @@
 // vhdx.
 import { describe, expect, test } from "bun:test";
 
-import { pickMethod } from "../reclaim-vhdx";
+import { pickMethod, probeFailure } from "../reclaim-vhdx";
 
 const VHDX =
   "C:\\Users\\me\\AppData\\Local\\Packages\\x\\LocalState\\ext4.vhdx";
@@ -49,5 +49,39 @@ describe("pickMethod — one method per Windows edition", () => {
       expect(sparseIdx).toBeGreaterThan(-1);
       expect(compactIdx).toBeGreaterThan(sparseIdx); // clear sparse BEFORE compacting
     }
+  });
+});
+
+describe("probeFailure — the transport is judged before the output is parsed", () => {
+  test("a refused ssh names ssh and its error, not the vhdx lookup (2026-09-27)", () => {
+    const msg = probeFailure(
+      {
+        code: 255,
+        out: "ssh: connect to host r99 port 22: Connection refused\n",
+        timedOut: false,
+      },
+      "r99",
+    );
+    expect(msg).toContain("ssh r99 exited 255");
+    expect(msg).toContain("Connection refused");
+    expect(msg).not.toContain("vhdx");
+  });
+
+  test("the local leg is reported as interop powershell.exe", () => {
+    expect(
+      probeFailure({ code: 0, out: "", timedOut: true }, "local"),
+    ).toContain("interop powershell.exe timed out");
+  });
+
+  test("exit 0 with empty output is still a failure", () => {
+    expect(
+      probeFailure({ code: 0, out: "  \n", timedOut: false }, "r99"),
+    ).toContain("returned nothing");
+  });
+
+  test("exit 0 with output passes through to parsing", () => {
+    expect(
+      probeFailure({ code: 0, out: "c_free=1\n", timedOut: false }, "r99"),
+    ).toBeNull();
   });
 });

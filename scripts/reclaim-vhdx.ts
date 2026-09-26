@@ -1,5 +1,7 @@
 import { cli } from "cleye";
 
+import { type Leg, ps, sh, toMntPath } from "./wsl-audit.ts";
+
 // Plan the offline COMPACTION of a WSL2 ext4.vhdx — the single largest C: lever, and the one the
 // other reclaim tasks cannot touch. Consumer: human/agent running `mise run reclaim:vhdx`; output
 // is the reclaimable gap, the right method for this Windows edition, and the exact elevated
@@ -29,6 +31,8 @@ import { cli } from "cleye";
 //
 // ALIASES, NOT ADDRESSES. --host is an ssh ALIAS (default r99); HostName lives only in the
 // untracked ~/.ssh/config.local. Same rule as wsl-wake.ts / wsl-audit.ts / reclaim-host.ts.
+// `local` for either leg runs it HERE — the host leg through interop powershell.exe — on
+// wsl-audit.ts's own transport, so an agent inside the distro needs no ssh at all.
 
 const HOST_DEFAULT = "r99";
 const GUEST_DEFAULT = "r99-wsl";
@@ -45,41 +49,6 @@ function rejectPrototypeFlag(
   if (type === "unknown-flag" && flag === "__proto__") {
     throw new UsageError(`Unknown option '--${flag}'`);
   }
-}
-
-type Ran = { code: number; out: string; timedOut: boolean };
-
-async function run(cmd: string[], ms: number): Promise<Ran> {
-  const sig = AbortSignal.timeout(ms);
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe", signal: sig });
-  const work = Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]).then(([out, err, code]) => ({ code, out: `${out}${err}` }));
-  const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
-  });
-  const done = await Promise.race([work, aborted]);
-  if (done === null) return { code: -1, out: "", timedOut: true };
-  return { ...done, out: done.out.replace(/\r/g, ""), timedOut: false };
-}
-
-function encodePs(script: string): string {
-  return Buffer.from(script, "utf16le").toString("base64");
-}
-
-async function ps(host: string, script: string, ms: number): Promise<Ran> {
-  return run(
-    [
-      "ssh",
-      "-o",
-      "ConnectTimeout=10",
-      host,
-      `powershell.exe -NoProfile -EncodedCommand ${encodePs(script)}`,
-    ],
-    ms,
-  );
 }
 
 export type Method = {
@@ -162,20 +131,49 @@ function parseHost(out: string): Map<string, string> {
   return kv;
 }
 
-async function guestUsedBytes(guest: string): Promise<number | null> {
-  const r = await run(
-    [
-      "ssh",
-      "-o",
-      "ConnectTimeout=10",
-      guest,
-      "df -B1 --output=used / | awk 'NR==2{print $1}'",
-    ],
+async function guestUsedBytes(guest: Leg): Promise<number | null> {
+  const r = await sh(
+    guest,
+    "df -B1 --output=used / | awk 'NR==2{print $1}'",
     GUEST_MS,
   );
   if (r.timedOut || r.code !== 0) return null;
   const n = Number(r.out.trim());
   return Number.isFinite(n) ? n : null;
+}
+
+// ALLOCATED bytes of the vhdx, measured by the guest with `du` over /mnt/c — never the host's
+// Get-Item.Length, which on a sparse file is the logical high-water mark (653.9 GB apparent vs
+// 624.4 GB allocated on 2026-09-27). Compaction can only return what is allocated, so a gap taken
+// from Length overstates the win by the sparse holes. Null when the path cannot be mapped or read.
+async function allocatedBytes(
+  guest: Leg,
+  vhdxPath: string,
+): Promise<number | null> {
+  const mnt = toMntPath(vhdxPath);
+  if (mnt === null) return null;
+  const r = await sh(guest, `du -B1 -s "${mnt}" | awk '{print $1}'`, GUEST_MS);
+  if (r.timedOut || r.code !== 0) return null;
+  const n = Number(r.out.trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Why the host probe produced no usable answer, or null when it did. The exit code is read BEFORE
+// the output is parsed: on 2026-09-27 `ssh r99` was refused, the ssh error became the probe's
+// output, no key parsed, and the run reported "could not resolve the ext4.vhdx path" — blaming
+// the registry lookup for a transport that never connected. Pure, so that ordering is tested.
+export function probeFailure(
+  r: { code: number; out: string; timedOut: boolean },
+  host: string,
+): string | null {
+  const where = host === "local" ? "interop powershell.exe" : `ssh ${host}`;
+  if (r.timedOut) return `cannot reach the host: ${where} timed out`;
+  const said = r.out.trim().split("\n").slice(0, 5).join("\n  ");
+  if (r.code !== 0) {
+    return `cannot reach the host: ${where} exited ${r.code}${said ? `:\n  ${said}` : ""}`;
+  }
+  if (said === "") return `cannot reach the host: ${where} returned nothing`;
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -203,35 +201,51 @@ async function main(): Promise<void> {
   }
   const { host, guest, distro } = parsed.flags;
 
-  if (!Bun.which("ssh")) {
-    console.log("no ssh on PATH");
+  const hostLeg: Leg = host === "local" ? null : host;
+  const guestLeg: Leg = guest === "local" ? null : guest;
+
+  if ((hostLeg !== null || guestLeg !== null) && !Bun.which("ssh")) {
+    console.log(
+      "no ssh on PATH (inside the distro, use --host local --guest local)",
+    );
     process.exit(1);
   }
 
-  const probe = await ps(host, hostProbe(distro), HOST_MS);
-  if (probe.timedOut || probe.out.trim() === "") {
-    console.log(`cannot reach ${host} (ssh timed out or returned nothing)`);
+  const probe = await ps(hostLeg, hostProbe(distro), HOST_MS);
+  const failed = probeFailure(probe, host);
+  if (failed !== null) {
+    console.log(failed);
     process.exit(2);
   }
   const h = parseHost(probe.out);
   const vhdxPath = h.get("vhdx_path");
   if (vhdxPath === undefined) {
-    console.log(`could not resolve the ext4.vhdx path for ${distro}`);
+    console.log(
+      `the host answered, but no Lxss registry entry named ${distro} has a BasePath (list them: wsl.exe -l -v)`,
+    );
     process.exit(2);
   }
   const logical = h.has("vhdx_logical") ? Number(h.get("vhdx_logical")) : null;
-  const used = await guestUsedBytes(guest);
+  const [used, allocated] = await Promise.all([
+    guestUsedBytes(guestLeg),
+    allocatedBytes(guestLeg, vhdxPath),
+  ]);
   const method = pickMethod(h.get("optimize_vhd") === "True");
   const state = h.get("state") ?? "?";
 
   console.log(`distro:  ${state}`);
   console.log(`vhdx:    ${vhdxPath}`);
+  const gbOr = (n: number | null): string => (n === null ? "?" : gb(n));
   console.log(
-    `size:    logical ${logical === null ? "?" : gb(logical)}   guest-used ${used === null ? "?" : gb(used)}`,
+    `size:    allocated ${gbOr(allocated)}   logical ${gbOr(logical)}   guest-used ${gbOr(used)}`,
   );
-  if (logical !== null && used !== null) {
+  if (allocated !== null && used !== null) {
     console.log(
-      `gap:     ~${gb(Math.max(0, logical - used))} recoverable by compaction`,
+      `gap:     ~${gb(Math.max(0, allocated - used))} recoverable by compaction (allocated - guest-used)`,
+    );
+  } else {
+    console.log(
+      "gap:     ? — allocated size unmeasured; the logical size would overstate it",
     );
   }
   console.log(`method:  ${method.name} (this edition)`);

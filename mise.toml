@@ -355,13 +355,16 @@ exec mise run link:skills
 # safety is a genuine value judgment (which checkpoints matter, which clones still matter) belongs
 # in the interactive tier (reclaim:pick), never in a blind one.
 #
-# `reclaim` (bare) = the blind tier in one command. It is depends-only, like `check`: every member
-# is safe to run unattended, and nothing interactive or irreversible is reachable from it.
-# reclaim:system is included because it is also blind; on macOS it exits 1 with "WSL-only" and
-# mise reports that member as failed while the others still run — acceptable, and honest.
+# `reclaim` (bare) = the blind tier in one command: every member is safe to run unattended, and
+# nothing interactive or irreversible is reachable from it. The sudo tier (reclaim:system) is this
+# task's own `run`, NOT a sibling in `depends`: mise runs depends in parallel and a failed sibling
+# aborts the rest — on 2026-09-27 a missing passwordless sudo stopped the other three mid-run and
+# C: never moved. RECLAIM_TIER=blind turns an unmet precondition (no sudo, not WSL) into a SKIP
+# line with the human command, exit 0; `mise run reclaim:system` alone still fails loudly.
 [tasks.reclaim]
-description = "Reclaim disk, blind tier: clean + builds + toolchains + system (WSL). Nothing interactive, nothing irreversible. Human tiers: reclaim:pick, reclaim:purge."
-depends = ["reclaim:clean", "reclaim:builds", "reclaim:toolchains", "reclaim:system"]
+description = "Reclaim disk, blind tier: clean + builds + toolchains, then system (WSL) — which SKIPs with the human command when passwordless sudo is unavailable, so it can never abort the others. Nothing interactive, nothing irreversible. Human tiers: reclaim:system (sudo), reclaim:vhdx, reclaim:pick, reclaim:purge."
+depends = ["reclaim:clean", "reclaim:builds", "reclaim:toolchains"]
+run = 'RECLAIM_TIER=blind bun ~/dotfiles/scripts/reclaim-system.ts'
 
 [tasks."reclaim:clean"]
 description = "Reclaim disk: clear package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/go/docker/cargo/mise/julia) via each tool's OWN gc/prune command. Safe — only regenerable caches; topgrade --cleanup misses bun, this covers it."

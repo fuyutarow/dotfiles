@@ -1,4 +1,5 @@
-// PreToolUse gate (matcher: Bash) — ban work that RUNS AWAY FROM THE HARNESS.
+// PreToolUse gate (matcher: Bash) — ban work that RUNS AWAY FROM THE HARNESS, and polling that
+// can never see the work it waits on.
 //
 // Claude Code gates tool CALLS, not the processes they spawn. A child started under
 // setsid/nohup/disown is reparented to PID 1, which buys exactly one thing (surviving the
@@ -26,6 +27,20 @@
 //                           stoppable (`systemctl --user stop`), streamed (`journalctl -u`),
 //                           and exit-status-recorded (`Result=`) — a BREACH cannot be reported
 //                           as `done`. This is the sanctioned durable path; keep it open.
+//
+// SECOND AXIS — SELF-MATCHING POLLS. `pgrep -f` matches whole command lines, and the Bash tool
+// runs every command as `<shell> -c '<the whole command>'`, so a `pgrep -f <pattern>` issued from
+// that command always finds the very shell carrying the pattern in its own argv: `while pgrep -f
+// X` never ends, and `while ! pgrep -f X` ends at once. Observed 2026-09-26 in one fleet: six such
+// shells killed by hand, aged 3 min to 12.7 h, written by subagents despite a memory rule against
+// it — advisory text never reaches a subagent's tool call; a PreToolUse hook does. It lives in this
+// file, not its own, because it shares remedy route (1) below and costs no extra process per Bash
+// call. Deliberately narrow: a while/until at command position plus a `pgrep` carrying -f/--full.
+// The gate cannot tell whether that pgrep sits inside the loop or just before it, and does not
+// need to — resolving the PID with a self-matching pgrep can pick the shell's own PID, and then
+// `kill -0` on it never fails either. A bracketed pattern (`pgrep -f '[j]ob.jl'`) is the standard
+// self-exclusion idiom — the regex no longer matches its own text — so it passes. A command with
+// no while/until loop is NOT denied: a one-shot pgrep -f returns an extra PID, it does not hang.
 //
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
@@ -56,6 +71,12 @@ const MUX_DETACHED =
 // Handing work to a scheduler is the same escape with a timer in front of it.
 const SCHEDULED =
   /(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?(?:at|batch)\s+(?:-|now\b|\d|noon\b|midnight\b|teatime\b)|(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?crontab\s+(?!-l\b|-e\b)/;
+
+// Multiline: an agent-written loop usually starts on its own line after a `cd` or an assignment.
+const POLL_LOOP = new RegExp(`${POS}(?:while|until)\\b`, "m");
+// One pgrep invocation and its arguments, up to the next separator, `)`, backtick, or newline.
+const PGREP_CALL = /(?:^|[\s(`!])(?:\S*\/)?pgrep\b([^|;&)`\n]*)/g;
+const FULL_CMDLINE_FLAG = /\s(?:-[A-Za-z]*f[A-Za-z]*|--full)(?=\s|$)/;
 
 type Finding = { what: string; hint: string };
 
@@ -96,33 +117,65 @@ function detachmentIn(command: string): Finding | null {
   return null;
 }
 
+function selfMatchingPollIn(command: string): boolean {
+  if (!POLL_LOOP.test(command)) return false;
+  for (const m of command.matchAll(PGREP_CALL)) {
+    const args = m[1] ?? "";
+    if (FULL_CMDLINE_FLAG.test(args) && !args.includes("[")) return true;
+  }
+  return false;
+}
+
+function detachmentReason(found: Finding): string {
+  return (
+    `this command detaches work from the harness via ${found.what} ` +
+    `(${found.hint}). A process reparented to init has no TUI row, no TaskOutput, no ` +
+    `TaskStop, no exit notification and no recorded exit status — its only channel is a log ` +
+    `file you would then paraphrase, which is not evidence. Use instead, in order: ` +
+    `(1) Bash with run_in_background:true — for anything that must be WATCHED this session; ` +
+    `(2) compute/GPU work — agent-resource-run --manifest <abs>.resource.json, which admits ` +
+    `resources and registers a systemd unit the statusline can see; ` +
+    `(3) work that must OUTLIVE this session — a NAMED transient user unit ` +
+    `(systemd-run --user --unit=<name> …), which is manager-owned: stoppable via ` +
+    `systemctl --user stop, streamed via journalctl --user -u <name> -f, and exit-status ` +
+    `recorded, so a failure cannot be reported as success. ` +
+    `If none of those fit, STOP and say so in plain words — do not reach for at(1), cron, ` +
+    `a hand-rolled daemon, or another way around this gate. Running where nobody can look ` +
+    `is the failure mode being prevented, not an implementation detail.`
+  );
+}
+
+const SELF_MATCHING_POLL_REASON =
+  "this command polls with `pgrep -f` inside a while/until loop. `pgrep -f` matches whole " +
+  "command lines, and the Bash tool runs your command as `<shell> -c '<this whole command>'`, " +
+  "so the pattern always matches that shell's own argv: `while pgrep -f X` never ends, and " +
+  "`while ! pgrep -f X` ends at once. Launch the job with run_in_background:true and wait for " +
+  "its completion notification instead. For a process you did not launch, get its numeric PID " +
+  "once — from its launcher's output, or `pgrep -f '[j]ob.jl'` (the bracket stops the regex " +
+  "from matching its own text) — and poll `kill -0 <PID>`.";
+
 function main(): void {
   const payload = readStdinJson();
   if (payload?.tool_name !== "Bash") return;
   const command = payload?.tool_input?.command;
   if (typeof command !== "string" || command === "") return;
 
-  const found = detachmentIn(command);
-  if (!found) return;
+  const reasons: string[] = [];
+  const detached = detachmentIn(command);
+  if (detached) reasons.push(detachmentReason(detached));
+  if (selfMatchingPollIn(command)) reasons.push(SELF_MATCHING_POLL_REASON);
+  if (reasons.length === 0) return;
 
-  // SINGLE-AXIS: detachmentIn() classifies one command into one detachment form; the forms are
-  // alternatives, not independent axes, and every one of them gets the same three-route remedy.
+  // BATCHED(detachment, self-matching-poll): neither check consumes the other's result, so a
+  // command failing both hears about both in one decision. Within the detachment axis,
+  // detachmentIn() still returns a single form — those forms are alternatives sharing one remedy.
   decidePre(
     "deny",
-    `supervised-execution: this command detaches work from the harness via ${found.what} ` +
-      `(${found.hint}). A process reparented to init has no TUI row, no TaskOutput, no ` +
-      `TaskStop, no exit notification and no recorded exit status — its only channel is a log ` +
-      `file you would then paraphrase, which is not evidence. Use instead, in order: ` +
-      `(1) Bash with run_in_background:true — for anything that must be WATCHED this session; ` +
-      `(2) compute/GPU work — agent-resource-run --manifest <abs>.resource.json, which admits ` +
-      `resources and registers a systemd unit the statusline can see; ` +
-      `(3) work that must OUTLIVE this session — a NAMED transient user unit ` +
-      `(systemd-run --user --unit=<name> …), which is manager-owned: stoppable via ` +
-      `systemctl --user stop, streamed via journalctl --user -u <name> -f, and exit-status ` +
-      `recorded, so a failure cannot be reported as success. ` +
-      `If none of those fit, STOP and say so in plain words — do not reach for at(1), cron, ` +
-      `a hand-rolled daemon, or another way around this gate. Running where nobody can look ` +
-      `is the failure mode being prevented, not an implementation detail.`,
+    reasons.length === 1
+      ? `supervised-execution: ${reasons[0]}`
+      : `supervised-execution: ${reasons.length} independent problems — fix all of them ` +
+          `before retrying. ` +
+          reasons.map((reason, i) => `(${i + 1}) ${reason}`).join(" "),
   );
 }
 

@@ -1160,15 +1160,15 @@ export function parseNvidiaSmiComputeAppRow(
   return { pid, usedBytes: usedMiB * MiB };
 }
 
+// Always samples once; the once-a-second throttle lives at the one call site (executeJob's
+// onSample), via GPU_VRAM_SAMPLE_INTERVAL_MS — not in here.
 function sampleGpuComputeApps(): Map<number, number> {
   const usage = new Map<number, number>();
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null) {
     return usage;
   }
   try {
-    // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as
-    // probeGpus() above; throttled to once a second by GPU_VRAM_SAMPLE_INTERVAL_MS at the
-    // one call site (executeJob's onSample), not here — this function always samples once.
+    // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as probeGpus().
     const result = Bun.spawnSync(
       [
         "timeout",

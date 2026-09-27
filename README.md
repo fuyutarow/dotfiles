@@ -74,6 +74,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)
 ├── lazygit/     # config.yml + ai-commit.sh
 ├── cocoindex/   # cocoindex-code (ccc) settings + its capped daemon unit
+├── android/     # Pixel LINE vibration policy: ADB audit/apply script and one-time UI recipe
 ├── bottom/      # btm system monitor — groups same-named processes so swarm leaks are visible
 ├── topgrade/    # which update steps `mise run up` runs
 ├── karabiner/   # keyboard remap (macOS only)

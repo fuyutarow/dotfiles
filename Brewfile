@@ -66,6 +66,7 @@ brew "biber"        # BibLaTeX backend — brew `texlive` bundles bibtex but NOT
 
 # macOS-only GUI apps (skipped automatically on Linux/WSL)
 if OS.mac?
+  cask "android-platform-tools" # adb/fastboot for android:line policy reproduction
   cask "iterm2"
   cask "karabiner-elements"
   # The editor `e`/`ee` open (zsh/aliases.zsh `editor()`), so it is a hard dependency, not taste.

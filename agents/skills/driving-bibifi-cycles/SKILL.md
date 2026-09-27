@@ -15,11 +15,11 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.4.1 (2026-09-27) — explicit invocation resumes discovery work; reports do not close it.
+> **Version**: v2609.5.0 (2026-09-27) — compose specialist operations without surrendering the discovery loop.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
-  references/microticket-patterns.md references/scientific-loop.md \
+  references/microticket-patterns.md references/scientific-loop.md references/skill-composition.md \
   tests/triggers.md tests/decision-cases.md tests/scheduling-cases.md \
   tests/operational-rehearsal.md tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
 bun ../forging-skills/scripts/skill-check.ts .
@@ -77,6 +77,9 @@ Reuse unchanged valid receipts; do not rerun a readiness ceremony before every t
 ## Scientific direction before scheduling
 
 For a scientific anomaly or a Strong Inference request, use `references/scientific-loop.md` before choosing jobs.
+Use `references/skill-composition.md` when choosing between explanation, generation, testing, evidence and theory work.
+Skill boundaries separate decisions, not mandatory agents or pauses. Apply the needed operation in the current context when possible.
+Retain responsibility for consuming its return and taking the next authorized action; a packet or routing decision is not task completion.
 Join the current observation or failure to an observed-versus-expected contrast under matched conditions.
 Keep explicit rivals, auxiliary conditions and an open residual. Do not assume one cause or exhaustive candidates.
 Before measuring, derive rival-dependent predictions and the result-to-exclusion/next-action table.
@@ -205,7 +208,7 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Explanatory candidate generation | `forming-hypotheses-from-anomalies` for one contrast; `forging-novel-theses` for a seeded batch under its entry contract |
 | Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
-| Costly irreversible commitment | `acting-on-hypotheses`; a bounded probe grants no adoption authority |
+| Costly irreversible commitment | `acting-on-hypotheses` owns the discriminator, threshold, interpretation and Commit/Pivot/Kill; this loop may schedule its Build→Measure slice |
 | Concrete slices, dependencies and parallel examples | `references/microticket-patterns.md` |
 | Compact board, ticket, return and report | `assets/ITERATION-PLAN.md` |
 | Skill validation | `tests/triggers.md`, `tests/decision-cases.md`, `tests/scheduling-cases.md`, `tests/operational-rehearsal.md` |

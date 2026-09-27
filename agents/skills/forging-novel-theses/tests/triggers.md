@@ -14,6 +14,7 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | 「選択済みの問いには有力仮説がまだない。出典付き観測から grounded control と前提破壊 anti-default を含む候補バッチを作って」 | grounded-control batch from an honest entry state |
 | “Use this answered, attested Blind-spot packet as the seed for thesis candidates in the selected frame; no adequate thesis exists.” | a provenance-bearing human-tacit handoff enters genesis without elicitation |
 | “The batch is frozen and deduplicated. This coverage-gap packet names one missing cell; regenerate once, then return COVERAGE GAP if diversity still collapses.” | the sole post-freeze recovery attempt is part of genesis |
+| “Transform this located constraint into one candidate for the selected frame; no adequate thesis exists.” | one candidate is allowed; transformation decides the route |
 
 ## MUST NOT FIRE
 
@@ -28,6 +29,7 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | “I have a frozen DONOR SET but no selected target. Tell me which target to choose.” | `supervising-research-programmes` owns problem/frame choice; no selected-target mapping exists yet |
 | “Interview the operator to expose tacit knowledge and hidden assumptions.” | `surfacing-blind-spots` |
 | “Is the residual real?” | `raising-resolution` |
+| “The frame and donors are fixed; explain why the observed result contradicts the account.” | `forming-hypotheses-from-anomalies`; donor availability does not override the requested operation |
 | “Here is one expensive/irreversible thesis; precommit its cheapest kill experiment.” | `acting-on-hypotheses` |
 | “The first recovery still collapsed. Try three more missing cells until one works.” | stop with `COVERAGE GAP`; `directing-research-sections` decides the local stop or sends a reopen request |
 | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
@@ -37,6 +39,9 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 | “Reframe this finished paper's contribution.” | `arguing-research-papers` |
 
 ## Ordered co-fire
+
+Programme/section sequences below describe that formal profile only.
+For ordinary authorized R&D, the task owner consumes returned candidates through BIBIFI without creating a section.
 
 | Braided ask | Order |
 |---|---|
@@ -58,7 +63,7 @@ The description must expose all of these stage-1 predicates:
 
 - selected problem/frame and no adequate thesis;
 - provenance-bearing seed or frozen target-agnostic `DONOR SET`;
-- batch genesis and grounded control;
+- one-or-more candidate transformation; grounded control for batches;
 - one-shot recovery only after frozen/deduplicated collapse, ending in explicit `COVERAGE GAP` on failure;
 - selected-target mapping that returns `CANDIDATE` with `UNTESTED` evidence, or `MAPPING-BREAK`;
 - explicit refusal to rank, test, admit, adopt, or discover donors;
@@ -69,6 +74,15 @@ The description must expose all of these stage-1 predicates:
 
 Do not promote body-only packet fields, coordinate axes, tacit-seed checks, or orchestration details
 into stage-1 regression predicates unless the description itself exposes them.
+
+## Boundary regressions
+
+| Situation | Required behavior |
+|---|---|
+| No completed hypothesis, but a located observation and selected frame exist | The observation may seed generation; do not demand the output as input |
+| A HYPOTHESIS packet is not typed TRANSFER | It may still be an ACCOUNT seed; no unnecessary introduction requirement |
+| A packet is typed TRANSFER but no frozen donor set exists | The label does not satisfy the donor-bound transfer contract |
+| An ordinary engineering task has no programme/section | Return candidates to the authorized task owner/BIBIFI; no invented grant |
 
 The stage-only desk-check must reject donor discovery, problem formulation, ranking/admission/testing,
 mapping without a selected target, and a second recovery attempt. It must not read the body to rescue

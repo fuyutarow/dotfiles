@@ -254,3 +254,21 @@ sentences (worst `generation-engine.md`, 14), all PRE-EXISTING and untouched by 
 
 **Waived**, per `forging-skills` `references/architecture.md` §5: full atomization is explicitly
 NOT indicated for references' argued prose. Queue position: next reforge of this skill.
+
+## 2026-09-27 — transformation boundary, v2609.1.0
+
+Retain seed transformation as a reusable operation; replace BATCH-only description with one-or-more.
+Explaining an observed contrast belongs to forming-hypotheses-from-anomalies even with donors present.
+Located observations/accounts/constraints satisfy seed provenance without a successful hypothesis.
+The no-adequate-thesis gate and frozen donor requirement remain. Section admission applies under a
+current mandate; ordinary authorized R&D returns to its task owner/BIBIFI without inventing a programme.
+This adds no experiment or adoption authority and does not change the candidate schema/checker.
+
+Split/merge evidence and sources: driving-bibifi-cycles/tests/skill-boundaries-2026-09-27.md.
+Independent review checked generation cuts and section-profile authority. Root retained separate
+generation and experimental selection and fixed the reciprocal rows in the same change.
+
+PROSE-DEBT waiver, 2026-09-27: baseline d44de2f measured 32 long reference sentences across four files;
+current targeted revision measures 31, core zero. Remaining argued reference prose is retained for
+this boundary-only revision; no new warning is introduced. This does not close the wider prose debt.
+Verification here establishes specified routing and package consistency, not downstream discovery gain.

@@ -58,3 +58,8 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S51 | All inspected useful options need genuinely unavailable input or authority | Record the exact constraint and wait for its observed release while preserving valid running work | Invent filler, claim a discovery or interrupt a healthy job for activity credit |
 | S52 | User explicitly asks only for current status | Answer the factual status request within its scope | Treat activation as permission to launch unrelated new work |
 | S53 | Old finding appears in consecutive reports without new evidence | Preserve historical context but no new-cycle credit | Count reporting or reformatted plans as completed BIBIFI |
+| S54 | Raw anomaly with a selected frame and donor set; user asks why | Apply explanation/vocabulary work, then discriminate; donors alone do not redirect to transformation | Generate novelty instead of explaining the contrast |
+| S55 | Current useful rival set already exists | Select a bounded discriminator directly | Invoke every genesis skill or duplicate packets before testing |
+| S56 | Explanation attempt failed; located observation and selected frame remain | Preserve failure, use the observation as a transformation seed if justified, consume the return | Circularly require a successful hypothesis before hypothesis construction |
+| S57 | Ordinary authorized R&D has no formal section | Compose specialists inline or via useful independent microtickets under current authority | Require a new programme/section or stop at the first specialist return |
+| S58 | AOH supplies a costly-bet test table | Coordinate its Build→Measure slice and return evidence to its decision owner | Change its threshold or claim Commit/Pivot/Kill from scheduling authority |

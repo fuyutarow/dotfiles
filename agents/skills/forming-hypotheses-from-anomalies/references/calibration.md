@@ -16,7 +16,7 @@ is floor-green. Its claim ledger carries a judgement and a reversal condition pe
 |---|---|---|
 | dominant error | humans under-generate: they stay inside the obvious frame, stop at the first plausible cause, and need to be pushed to expand | **INVERSE**: a capable model over-generates fluently. It will produce a novel-sounding mechanism on demand, before the boring explanation has been tried |
 | corrective bias | the ideation literature pushes OUTWARD — break the frame, use the catalogue, force the analogy | this skill pushes INWARD FIRST: exhaust the closed route and record the failure before any new term is licensed |
-| what to make prominent | the generation technique (the 40 principles, the morphological box, the four operators) | **the gates and MUST-NOT-FIRE are first-class; no generation technique is taught at all** |
+| what to make prominent | the generation technique (the 40 principles, the morphological box, the four operators) | account for the contrast and supplied vocabulary first; use transformation recipes only for a named construction gap |
 
 The inversion is not a guess. Three measured results in the corpus describe the model's failure
 direction specifically:
@@ -30,8 +30,9 @@ direction specifically:
   stated defects, are reproduced significantly more often. The producer cannot see it happening
   (EFF-007).
 
-A skill teaching generation techniques to this consumer would push on the axis where it is already
-strong. It would be silent on the axis where it measurably fails.
+These studies do not establish that an executor always generates enough useful explanations.
+The recorded checks constrain claims of novelty; they do not justify refusing construction when no account exists.
+Transformation recipes remain with `forging-novel-theses`; the current explanation attempt stays here.
 
 ## 3. SUBSUMES vs NEW — the 既視感 kill, stated explicitly
 

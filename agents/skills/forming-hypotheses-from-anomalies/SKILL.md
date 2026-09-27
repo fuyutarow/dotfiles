@@ -8,9 +8,9 @@ description: >-
   仮説形成, 創造的仮説, 異常から仮説を立てる, 説明がつかない, 前提の外側, 語彙の外, 「なぜPでQでないのか」, 新しい概念を導入したい, or before writing a
   hypothesis for an observation the account does not predict. LAW: an anomaly does not license a new
   term — the RECORDED FAILURE of the cheap explanation does; a novelty judgment is a novelty
-  detector, not a quality detector. DECISIVE cut vs forging-novel-theses, in this order: frame
-  selected and a seed/DONOR SET frozen → there (an unranked BATCH of CANDIDATES); else an anomaly with no
-  explanation → HERE (exactly ONE hypothesis, never ranked), then hand off. Cuts: premise audit →
+  detector, not a quality detector. PURPOSE cut vs forging-novel-theses: explain an observed contrast
+  and account for its vocabulary → HERE; transform sourced seeds in a selected frame → there.
+  Candidate count and possession of a donor set do not decide the route. Cuts: premise audit →
   surfacing-blind-spots; is the anomaly real → raising-resolution FIRST; one selected costly bet →
   acting-on-hypotheses; literature corpus → systematizing-knowledge; obvious cause in code →
   implementing-and-debugging. Workflow-native: the closed-vocabulary attempt and adversarial
@@ -20,7 +20,7 @@ description: >-
 
 # Forming hypotheses from anomalies — build the explanation, and earn the vocabulary it needs
 
-> **Version**: v2609.2.1 (2026-09-27) — grounded packets feed bounded BIBIFI discrimination.
+> **Version**: v2609.3.0 (2026-09-27) — explanatory work and seed transformation compose without a handoff dead end.
 > Source position, grades and the calibration table:
 > `references/calibration.md`; forge findings and history: `tests/forge-verification-ledger.md`.
 
@@ -54,12 +54,14 @@ Japanese prose — they are identifiers, not translatable words:
 > Your sense that an idea is novel is a novelty detector, not a quality detector. Judged
 > creativity tracks novelty at r²=.80 and usefulness at r²=.16. Never use it as evidence.
 >
-> This skill produces ONE hypothesis and the grounds for it. It never ranks a batch and never
-> tests — the packet ends where the experiment begins.
+> This skill records one explanation per packet. Rivals may each have a packet; one packet is not an exhaustive candidate set.
+> It neither ranks nor tests them. BIBIFI consumes the result and continues the authorized discovery loop.
 >
-> It disciplines the hypothesis you can already reach. It teaches no generation technique, and
-> that is measured rather than missing (`references/calibration.md` §2). With no candidate at all
-> and a frame you can select, go to `forging-novel-theses` and come back with a seed.
+> Construct an account of the contrast using the supplied relations, then expose its discriminator.
+> If construction stalls, name the missing relation or evidence. Do not redirect merely because no hypothesis exists yet.
+> For transformation where no adequate thesis exists, pass the selected frame and a located seed to `forging-novel-theses`.
+> If an adequate explanation already exists, test its discriminator instead of generating alternatives as a ritual.
+> A seed is sourced input, not an already successful hypothesis. No recipe guarantees discovery.
 
 ## The four gates — A1 / A2 / A3 / A4
 
@@ -95,7 +97,9 @@ earned yet. Which repair applies is keyed on why the floor said so:
 
 ## The HYPOTHESIS packet
 
-Emit exactly one per anomaly. Run `bun scripts/hypothesis-check.ts <file>` before handing it off.
+Emit one per explanation; preserve rival IDs rather than force one cause per anomaly.
+Reuse unchanged contrast/supply records by locator. Run `bun scripts/hypothesis-check.ts <file>` before handing off a completed packet.
+If no explanation is available, return the failed attempt and next evidence need as unresolved work, never a fabricated completed packet.
 
 ```markdown
 ## HYPOTHESIS [ID]
@@ -113,7 +117,7 @@ Emit exactly one per anomaly. Run `bun scripts/hypothesis-check.ts <file>` befor
 - Kill condition: [the outcome that retires this hypothesis]
 - Minimality claim: [NONE | LOCAL — no element removable | GLOBAL — nothing smaller works; GLOBAL needs its own argument]
 - Status: [CLOSED-VOCABULARY | LICENSED | NO-LICENSE]
-- Handoff: [forging-novel-theses for a seeded candidate batch | driving-bibifi-cycles for a cheap discriminator | acting-on-hypotheses for one costly bet | none]
+- Handoff: [forging-novel-theses for a sourced transformation | driving-bibifi-cycles for a cheap discriminator | acting-on-hypotheses for one costly bet | none]
 ```
 
 ## Procedure
@@ -173,8 +177,8 @@ MUST NOT fire (with route):
 
 | Sibling | Cut |
 |---|---|
-| `forging-novel-theses` | **DECISIVE, sequential**: is a frame SELECTED and a provenance-bearing seed or frozen `DONOR SET` in hand? **Yes** → there; it owns GENESIS and emits an unranked BATCH. **No — an anomaly, no explanation** → HERE; exactly ONE hypothesis, never ranked. A finished packet seeds that skill's entry gate (`references/boundaries.md`). Reciprocal row lives in its routing table. |
-| `driving-bibifi-cycles` | A grounded hypothesis needs a cheap bounded discriminator and machine revision → there. This skill owns the explanatory packet, not ranking, experiments or causal confirmation. |
+| `forging-novel-theses` | **PURPOSE**: explain a contrast and justify its vocabulary → HERE. Transform a sourced observation/account/constraint in a selected frame → there, for one or several unranked candidates. A packet may be an ACCOUNT seed; TRANSFER still requires its frozen DONOR SET. |
+| `driving-bibifi-cycles` | Owns the ongoing discovery loop and consumes this explanatory work into bounded discrimination and candidate revision. The same responsible agent may apply both; packet completion is not completion of the user's R&D task. |
 | `raising-resolution` | **ORDER cut, co-fire**: that skill establishes THIS fact; this skill fires only once the fact is established AND conflicts with the account. Unverified surprising fact → there FIRST, always. |
 | `surfacing-blind-spots` | **PURPOSE cut**: input is an existing plan/frame/decision ARTIFACT to audit → there (Blind-spot packet). Input is an OBSERVATION the account does not predict → here. A Blind-spot packet may supply this skill's `Supplied:` row; it never supplies the contrast. |
 | `acting-on-hypotheses` | **LIFECYCLE/PURPOSE cut** (not cardinality — both sides hold exactly one): does a hypothesis already EXIST and is the question commit/pivot/kill on a costly, hard-to-reverse bet? **Yes** → there. **No, it has not been built yet** → here. This skill hands its packet over; it never decides the bet. |

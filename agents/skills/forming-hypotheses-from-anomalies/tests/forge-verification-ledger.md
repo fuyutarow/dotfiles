@@ -230,3 +230,18 @@ emits unranked candidates under its entry contract. Soks source/cut review and a
 exercises have one home in driving-bibifi-cycles ledger§14 and its scientific-loop reference.
 User requires domain-agnostic engineering/science operation; this handoff imposes no learner or
 machine requirement. Target floor zero warnings; collection passes without a new skill or schema.
+
+## 2026-09-27 — purpose boundary, v2609.3.0
+
+Supersedes the donor-first/cardinality routing in historical sections above. Current explanation
+ownership does not depend on whether a frame/donor set exists or how many candidates are requested.
+One packet per explanation preserves rivals. No-candidate input now leads to an actual construction
+attempt or located unresolved need, not a circular request for another skill to supply a seed.
+An observation can seed transformation; a completed account can seed ACCOUNT. Neither replaces the
+frozen DONOR SET required for TRANSFER. An adequate account goes to discrimination instead of ritual generation.
+
+The root's split/merge decision, source bindings and cross-skill review are recorded once in
+driving-bibifi-cycles/tests/skill-boundaries-2026-09-27.md. Two independent bounded reviewers checked
+the seams. Follow-up findings repaired the adequacy gate and stale batch-only Handoff field.
+Core/reference floor: zero warnings. Packet schema and validator are unchanged.
+This is a routing/operating correction, not empirical evidence of improved hypothesis quality.

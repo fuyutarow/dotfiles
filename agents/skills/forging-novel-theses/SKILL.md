@@ -1,22 +1,24 @@
 ---
 name: forging-novel-theses
 description: >-
-  Generates a BATCH of testable thesis CANDIDATES only when a problem/frame is selected, no adequate
-  thesis exists, and a provenance-bearing seed or frozen target-agnostic DONOR SET is supplied. Use for
+  Transforms sourced seeds into one or more testable thesis CANDIDATES when a problem/frame is selected, no adequate
+  thesis exists, and a sourced observation, account or constraint is supplied as seed. TRANSFER needs
+  a frozen target-agnostic DONOR SET. Use for
   新規仮説 / 新しい研究アイデア, premise breaking, grounded control, structural transfer, or one-shot
   coverage-gap recovery after a frozen/deduplicated batch collapses. Owns GENESIS and selected-target
   mapping: a transfer returns Status: CANDIDATE with target evidence UNTESTED, or MAPPING-BREAK.
   Recovery regenerates once in the supplied missing cell; if diversity cannot be restored, it returns
   explicit COVERAGE GAP. Never ranks, tests, admits, adopts, or discovers donors. Donor discovery →
   systematizing-knowledge; problem formulation → supervising-research-programmes; local freeze/dedup
-  and admission → directing-research-sections; an expensive selected tree → acting-on-hypotheses.
+  and admission in a granted section → directing-research-sections; other bounded discovery → driving-bibifi-cycles.
+  Explaining an observed contrast → forming-hypotheses-from-anomalies; an expensive selected tree → acting-on-hypotheses.
   Allocation and final packets stay SOLO. English skill;
   answer in the user's language (default Japanese).
 ---
 
 # Forging novel thesis candidates
 
-> **Version**: v2608.2.0 (2026-08-02) — honest stage-1 genesis and collapse-recovery surface.
+> **Version**: v2609.1.0 (2026-09-27) — purpose-based genesis and direct bounded-discovery consumption.
 > **Scope**: candidate construction only. Input is a selected problem/frame; output is one or more
 > candidate packets. Selection, testing, commitment, and program steering are intentionally elsewhere.
 
@@ -73,6 +75,12 @@ Fire only when all are true:
 If the problem itself is still being found, compared, or formulated, route to `supervising-research-programmes`.
 If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED`.
 Route that evidence work to `systematizing-knowledge`; do not invent a prior.
+
+A located observation, account or constraint is a seed; a completed hypothesis is not an entry requirement.
+Explaining why an observed contrast occurred belongs to `forming-hypotheses-from-anomalies` even when donors are available.
+Use this skill when the requested operation is transformation. Candidate count does not decide the route.
+Inherit the existing explanation attempt and exclusions when transforming an anomaly; do not erase them to claim novelty.
+One responsible agent may apply both operations; no new agent or separate session is required.
 
 ## Input brief
 
@@ -256,7 +264,7 @@ test during recovery.
 2. **Build the seed pool.** Label every seed's provenance. Enforce the human-tacit seam before admitting
    any `TACIT` seed.
 
-3. **Allocate coordinate cells before drafting.** Include the grounded control and anti-default.
+3. **Allocate coordinate cells before drafting.** For a batch, include the grounded control and anti-default.
    Choose premise, target, operation, and intended discriminator independently of recipe labels.
 
 4. **Apply useful recipes.** For `TRANSFER`, read the frozen `DONOR SET` and compare donors.
@@ -272,7 +280,9 @@ test during recovery.
 
 8. **Run the batch floor.** Reject coordinate collapse before return. Never substitute recipe-counting.
 
-9. **Return packets without ranking.** `directing-research-sections` freezes and semantically deduplicates them.
+9. **Return packets without ranking.** In a granted section, `directing-research-sections` freezes and semantically deduplicates them.
+   Otherwise return to the authorized task owner; `driving-bibifi-cycles` selects the next bounded discriminator.
+   Do not create a programme or section merely to consume an ordinary engineering/science candidate.
 
 10. **Honor at most one coverage-gap packet.** Regenerate once in its unoccupied cell or emit
     `COVERAGE GAP`. Do not loop.
@@ -321,11 +331,11 @@ These are **generation-completeness** failures, not comparative selection.
 | “Persist, review, supersede, or retire this frozen packet or transfer bundle.” | `governing-research-documentation` — govern durable locus, lineage, review, and lifecycle only; mapping and `MAPPING-BREAK` meaning stay HERE |
 | “What are we not seeing, and what does the practitioner know but not write down?” | `surfacing-blind-spots` |
 | “Is this residual real or an artifact?” | `raising-resolution` |
-| “There is an anomaly the current account does not predict, and no frame is selected yet.” | `forming-hypotheses-from-anomalies` — it fixes the contrast, explains inside the current vocabulary first, and builds exactly ONE `HYPOTHESIS` packet; one typed `TRANSFER` with a non-empty `Introduced terms` row is a provenance-bearing seed for entry-gate item 4. It never ranks a batch, and this skill never routes back to it (2026-09-05, reciprocal of that skill’s DECISIVE cut) |
+| “Explain this observed contrast, including whether new vocabulary is needed.” | `forming-hypotheses-from-anomalies`, regardless of candidate count or available donors. Its packet may supply an ACCOUNT seed here; a TRANSFER operation still requires a frozen DONOR SET. |
 | “Generate distinct thesis candidates for this selected frame.” | **HERE** |
 | “Which candidate is important/feasible enough to admit locally?” | `directing-research-sections` |
 | “Design a precommitted falsifying experiment for this expensive/irreversible chosen thesis.” | `acting-on-hypotheses` |
-| “Run this deterministic, bounded, reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
+| “Run this deterministic, bounded, reversible check.” | domain/plain executor, coordinated by `driving-bibifi-cycles` when part of a discovery loop; return to the task owner, or `directing-research-sections` under its mandate |
 | “Should we commit, pivot, or withdraw?” | `acting-on-hypotheses` for one gated expensive/irreversible tree; `supervising-research-programmes` for a portfolio |
 | “Who should generate, critique, and accept, and when?” | `orchestrating-agents` |
 | “Write the paper claim from completed evidence.” | `arguing-research-papers` |
@@ -340,7 +350,7 @@ The domain packet and coordinate cells are fixed here. If multiple generators ar
 
 - subgroup topology and evidence visibility;
 
-- generator blindness until `directing-research-sections` declares its local batch frozen;
+- generator blindness until the task's authorized freeze; `directing-research-sections` owns this under a section mandate;
 
 - critique visibility after that transition;
 

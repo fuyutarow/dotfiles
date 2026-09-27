@@ -17,7 +17,10 @@ Performance, correctness and requirement conformance are different explananda; o
 
 ## 2. Form candidates, then compare them
 
-Use the candidate owner for generation; this loop consumes its hypothesis and provenance.
+Use the candidate owner for the needed operation; `references/skill-composition.md` gives the boundary.
+Explain a raw contrast with `forming-hypotheses-from-anomalies`; transform sourced seeds with `forging-novel-theses`.
+Apply these inline when possible, then consume the result without ending the authorized loop at a handoff.
+Reuse an existing adequate rival set directly; generation is not a mandatory stage on every cycle.
 For each candidate, name the mechanism, explained contrast, scope and facts it leaves unexplained.
 Name supplied vocabulary/operators and the cheap existing explanation already checked.
 Retrieve prior mechanisms before inventing one, but treat transfer as a current hypothesis, not achieved capability.

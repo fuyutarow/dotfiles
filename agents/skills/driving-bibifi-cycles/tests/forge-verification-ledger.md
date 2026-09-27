@@ -716,3 +716,32 @@ finding credit. Target floor zero core/reference warnings. Collection floor pass
 64,439charged characters with unchanged ceiling and listing. `git diff --check` passes. No live
 Firedancer code, job, source corpus or runtime enforcement changed. This ships an instruction/
 acceptance correction with measured limits, not a claim that prose alone guarantees initiative.
+
+## 16. Related-skill composition — v2609.5.0
+
+Root-signed retain/consolidate/retire decision and source bindings:
+`tests/skill-boundaries-2026-09-27.md`. The current operator map lives only in
+`references/skill-composition.md`. Keep specialist judgments separate, consolidate rolling
+selection/consumption here, retire donor-first/cardinality routing and mandatory actor handoffs.
+No skill added or deleted; no validator schema or runtime-enforcement claim changed.
+
+Two independent Terra audits returned located genesis and evidence/proof/theory seams; root read
+and adjudicated the findings. Follow-up review found the new reference missing from the build
+inventory, a missing adequacy-gate qualification and a batch-only handoff; all three were repaired.
+The second reviewer confirmed the section-authority boundary and requested clarification that
+choosing a test does not adopt a candidate; the composition now says so explicitly.
+
+S54–S58 and reciprocal trigger cases cover the changed seams. Structural checks and semantic
+review are not a live R&D trial; no general throughput or initiative improvement is claimed.
+
+A fresh Terra worker read only the three descriptions for ten routing prompts. Nine had the
+expected owner; the observation-only seed case was ambiguous. Root made observation/account/
+constraint explicit in forging's description. The targeted repeat routed that case to forging
+when transformation was requested and retained forming for explanation; TRANSFER still required donors.
+This was a description-level check, not tool-backed execution of the research loop.
+
+Verification: hypothesis-check self-test passed (19 bad-packet findings, three good packets clean);
+existing candidate checker suite passed 35 tests/156 assertions. No checker changed.
+Collection floor passed 73 skills/64,628 charged characters under the unchanged ceiling.
+BIBIFI and forming core/reference warnings zero; forging reference debt 32→31 with scoped waiver
+in its ledger. `git diff --check` and the skills index passed.

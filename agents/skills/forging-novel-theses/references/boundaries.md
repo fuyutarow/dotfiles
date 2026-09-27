@@ -2,20 +2,33 @@
 
 ## Decisive predicate
 
-Ask:
+Choose by the requested operation, not by candidate count or donor availability.
 
-> Does a selected problem/frame already have a thesis candidate adequate for testing?
+| Operation | Owner |
+|---|---|
+| Explain an observed contrast and account for its vocabulary | `forming-hypotheses-from-anomalies` |
+| Transform sourced seeds in a selected frame with no adequate thesis | HERE, for one or several candidates |
+| Choose the next cheap discriminator for available rivals | `driving-bibifi-cycles` with the domain executor |
+| Admit a candidate under a current section mandate | `directing-research-sections` |
+| Gate expensive/irreversible work on a selected hypothesis | `acting-on-hypotheses` |
 
-- **No** -> `forging-novel-theses`.
-- **Yes; compare it with other candidates or decide whether it matters locally** -> `directing-research-sections`.
-- **Yes; earn evidence or commit/kill it** -> apply the downstream-exposure gate:
-  expensive/irreversible -> `acting-on-hypotheses`; cheap/deterministic/reversible -> domain/plain
-  executor, then return `EXECUTOR RESULT` to `directing-research-sections`.
+A located observation or account is sufficient seed provenance; no successful hypothesis is required.
+A HYPOTHESIS packet may enter as an ACCOUNT seed. Its TRANSFER label cannot replace a frozen DONOR SET.
+The same actor may apply explanation and transformation; preserve identity rather than duplicate the claim.
+
+## Generic work and the section profile
+
+The section/programme routes below apply when that formal research profile is active.
+Outside it, the authorized task owner receives the packets and BIBIFI selects bounded tests.
+Do not demand a new programme, mandate or section solely to consume a candidate from ordinary R&D.
+Generation never grants experiment, adoption or resource authority beyond the current task.
 
 ## Reciprocal owner table
 
 | Neighbor | Neighbor owns | This skill receives / returns |
 |---|---|---|
+| `forming-hypotheses-from-anomalies` | explaining a contrast and accounting for vocabulary | receives located observation/account seeds; generated explanations retain the same identity when checked there |
+| `driving-bibifi-cycles` | rolling bounded work selection and result consumption | receives unranked candidates outside the formal section profile; existing section admission stays intact |
 | `supervising-research-programmes` | programme problem construction/selection/formulation; why-now; portfolio and global transitions | the selected frame reaches a granted section through a mandate; receives only a frame-change/reopen request, not candidate packets |
 | `directing-research-sections` | local semantic dedup, candidate admission, transfer disposition, and coverage-gap recovery | sends the selected-frame brief; receives unranked packets; may send one coverage-gap packet and receive one targeted candidate or `COVERAGE GAP` |
 | `systematizing-knowledge` | bounded corpus position and novelty evidence | receives prior/novelty position; returns `UNVERIFIED` gaps for corpus work |

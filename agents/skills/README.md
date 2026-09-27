@@ -3,7 +3,7 @@
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
 Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
 
-**60 authored** here, plus **13 vendored** upstream (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
+The collection contains authored manuals and vendored upstream skills (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
 
 ## Collection design invariant
@@ -44,11 +44,12 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`surfacing-blind-spots`](surfacing-blind-spots/) — Expose hidden premises and human tacit constraints in an existing plan/frame; emit a bounded blind-spot packet, not solutions.
 - [`forming-hypotheses-from-anomalies`](forming-hypotheses-from-anomalies/) — Build ONE explanatory hypothesis from an anomaly, with the record of what entitled it; explain inside the current vocabulary before introducing a term outside it.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
-- [`planning-experiment-iterations`](planning-experiment-iterations/) — Plan and run ONE boxed crucial test between named rivals (~2 min, 600 s cap, no sweep, GPU first) and pick the next test from the refutation log.
+- [`planning-experiment-iterations`](planning-experiment-iterations/) — Plan one bounded, GPU-first test with valid prerequisites, scoped outcomes and a next decision.
 - [`validating-experimental-evidence`](validating-experimental-evidence/) — Qualify numerical claims through registered contract, leakage, footing, and lineage checks; polysearch owns the executable schema and finding.
 - [`codifying-doctrine`](codifying-doctrine/) — Codify and audit the ordered trade-off rules that let distributed actors decide alike when nobody can confer; every rule names what it sacrifices, and agreement is measured, not asserted.
 - [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
+- [`systematizing-theories`](systematizing-theories/) — Build one theory's axioms, definitions and results; update exact statements and dependent predictions as findings arrive.
 - [`operationalizing-research-gaps`](operationalizing-research-gaps/) — Turn a signed position's gaps into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring openings retired only by a pre-declared observation.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
@@ -99,10 +100,15 @@ frozen bounded episode → auditing-research-processes: audit + non-enacting rec
 Numerical receipts pass through `validating-experimental-evidence` before claim or learning;
 formalized theorems pass through `proving-theorems`' kernel and faithfulness gates.
 
+`systematizing-theories` connects source results and validated findings to one evolving theory map.
+It separates logical role, proof maturity, empirical support and target applicability.
+Its changesets feed exact prediction versions to experiment planning and obligations to proof work.
+
 | Function | State transition | Owned artifact | Skill |
 |---|---|---|---|
 | PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
 | CORPUS-GROUND | unsystematized corpus → evidence state | claim/evidence ledger | `systematizing-knowledge` |
+| SYSTEMATIZE THEORY | located statements/findings → versioned theory and affected consequences | `THEORY MAP` / `THEORY CHANGESET` | `systematizing-theories` |
 | OPERATIONALIZE | signed position's gaps → unselected, non-authoritative bill of work | `OPENINGS SHEET` / `RETIREMENT LEDGER` | `operationalizing-research-gaps` |
 | EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
 | FRAME / STEER | exposed premises/evidence → selected programme problem/state | `PROGRAMME_SNAPSHOT` / `OPEN_ISSUE` / `SECTION_MANDATE` / `PROGRAMME_DECISION` | `supervising-research-programmes` |
@@ -172,11 +178,9 @@ The pre-2026-08-14 Cloudflare entries predate that path and carry no ledger reco
 - [`wrangler`](wrangler/) — Correct syntax and best practices for the Wrangler CLI that deploys and manages Workers.
 - [`agents-sdk`](agents-sdk/) — Build stateful, durable AI agents on Cloudflare Workers with the Agents SDK.
 - [`durable-objects`](durable-objects/) — Build and review Cloudflare Durable Objects for stateful edge coordination.
-- [`sandbox-sdk`](sandbox-sdk/) — Run untrusted or AI-generated code in isolated Cloudflare sandboxes — for code interpreters.
 - [`cloudflare-one`](cloudflare-one/) — Design and configure Cloudflare One Zero Trust / SASE: Access, Gateway, WARP, Tunnel, DLP.
 - [`cloudflare-one-migrations`](cloudflare-one-migrations/) — Plan migrations from Zscaler, Palo Alto, or legacy VPN/SASE to Cloudflare One.
 - [`cloudflare-email-service`](cloudflare-email-service/) — Send and receive transactional email via Cloudflare Email Sending and Routing.
-- [`turnstile-spin`](turnstile-spin/) — Wire Cloudflare Turnstile CAPTCHA into a project end-to-end — to bot-protect a form.
 - [`web-perf`](web-perf/) — Audit page-load speed and Core Web Vitals with Chrome DevTools MCP.
 - [`mintlify`](mintlify/) — Build and maintain Mintlify documentation sites: pages, navigation, components, API references.
 - [`typesafe-ai`](typesafe-ai/) — Build AI-powered features with TypeSafe: typed judgment/probability primitives (System One models, Jev) composable into routing, ranking, extraction, and verification.

@@ -11,14 +11,14 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
+// Claude-only hooks keep importing everything from ./lib.ts.
+export { decidePre, readStdinJson } from "../../hooks/lib.ts";
+
 export type TranscriptEntry = {
   type?: string;
   message?: { content?: unknown };
 };
-
-export function readStdinJson(): any {
-  return JSON.parse(readFileSync(0, "utf8"));
-}
 
 // Transcript is JSONL; skip malformed lines rather than fail the whole read.
 export function readTranscript(path: string): TranscriptEntry[] {
@@ -86,26 +86,6 @@ export function stripCode(
     out.push(line.replace(/`[^`]*`/g, ""));
   }
   return out.join("\n");
-}
-
-// PreToolUse decision — print JSON and exit 0. `extra` merges into hookSpecificOutput
-// (e.g. updatedInput). This is the JSON channel: callers must not also exit 2.
-export function decidePre(
-  decision: "allow" | "deny" | "ask",
-  reason: string,
-  extra: Record<string, unknown> = {},
-): never {
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: decision,
-        permissionDecisionReason: reason,
-        ...extra,
-      },
-    }),
-  );
-  process.exit(0);
 }
 
 // Locate an executable: $PATH first, then fallback dirs (hooks may run with a narrow PATH).

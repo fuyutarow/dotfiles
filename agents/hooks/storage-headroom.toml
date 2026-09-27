@@ -23,15 +23,18 @@ label = "guest /"
 path = "/"
 deny_gib = 40
 
-# Appended to every deny: what to reclaim, and why deleting inside WSL is not enough.
+# Appended to every deny: what to reclaim, and how the freed space reaches the host.
+# Measured 2026-09-26 on r99: deleting a 145 GB target/ then `fstrim -v /` returned 148 GB to C:
+# at once; without the trim the return is lazy and partial (hours, a fraction). Compaction is the
+# last resort, not the only path.
 [deny]
 advice = """\
 A full host drive takes down WSL and Windows together. Reclaim first (unreferenced .jls/.bin \
 dumps under archives/*/artifacts, Rust target/ dirs, ~/.julia/compiled of old versions; \
-`mise run reclaim` for the blind tier), then have the human compact the vhdx (`mise run \
-reclaim:vhdx` prints the elevated procedure) — deleting inside WSL does not return space to the \
-host until that step. STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate for a \
-cleanup that must build."""
+`mise run reclaim` for the blind tier), then run `sudo fstrim -v /` so the sparse vhdx hands the \
+freed blocks back to the host now rather than lazily. If C: is still short after that, have the \
+human compact the vhdx (`mise run reclaim:vhdx` prints the elevated procedure). \
+STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate for a cleanup that must build."""
 
 # Commands that START work that writes bytes. A launch matches `command` at a command position
 # (after ; && || | ( then do, and through sudo/env/time/nice/timeout/VAR= prefixes), optionally

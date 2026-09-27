@@ -36,10 +36,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
-          },
-          {
-            "type": "command",
             "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
             "timeout": 15
           }
@@ -61,6 +57,15 @@
             "type": "command",
             "command": "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
           }
         ]
       }

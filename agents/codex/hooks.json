@@ -108,6 +108,15 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
+          }
+        ]
       }
     ],
     "PostToolUse": [

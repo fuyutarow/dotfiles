@@ -22,7 +22,11 @@
 // defaults would disarm the gate. STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses all
 // of it, visibly, for a cleanup that must build.
 //
-// FAIL CLOSED on hook errors (register with run.sh --fail-closed, matcher "Bash").
+// FAIL CLOSED on hook errors (run.sh --fail-closed, matcher "Bash"). VENDOR-NEUTRAL since 2026-09-27:
+// wired into Claude Code AND Codex from agents/hooks/hooks.toml (`mise run hooks:wire`). Codex
+// canonicalizes its shell tools to tool_name "Bash" + tool_input.command, so this file reads one
+// payload shape for both. The 2026-09-26 near-miss that forced it: a Codex session rebuilt 145 GB
+// of target/ with C: at 3% free because this gate was registered for Claude only.
 // Authored in the firedancer session 2026-09-21 (host C: at 96%), installed here by the dotfiles
 // owner the same night; config split out 2026-09-22.
 
@@ -415,7 +419,7 @@ function main(): void {
     decidePre(
       "deny",
       `storage-headroom: config ${CONFIG_PATH} is invalid, so the storage gate cannot judge any ` +
-        `launch — refusing rather than guessing: ${errors.join("; ")}. Fix it with the Edit tool; ` +
+        `launch — refusing rather than guessing: ${errors.join("; ")}. Fix the config; ` +
         `STORAGE_ASSERT_OVERRIDE=1 in the command text passes a command meanwhile.`,
     );
   }

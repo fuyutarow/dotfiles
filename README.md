@@ -81,6 +81,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
+│                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent tools (retrieval-control/ = repo-retrieve, resource-control/, …)
 ├── scripts/     # plumbing — link-dots.sh (all symlinks), check-tools.sh
 ├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)

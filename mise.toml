@@ -187,7 +187,7 @@ description = "Enforce the writing-bun-scripts floor over every tracked producti
 run = '''
 git ls-files -z -- \
   ':(glob)scripts/*.ts' ':(glob)agents/retrieval-control/*.ts' \
-  ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' \
+  ':(glob)agents/claude/*.ts' ':(glob)agents/claude/hooks/*.ts' ':(glob)agents/hooks/*.ts' \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
   'agents/resource-control/agent-resource-run.ts' \
@@ -239,8 +239,13 @@ depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "tes
 
 [tasks."test:hooks"]
 dir = "{{config_root}}"
-description = "Claude Code, Codex, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters)"
-run = "bun test agents/claude/hooks agents/codex/hooks agents/goal-kernel"
+description = "Claude Code, Codex, vendor-neutral, and Goal Kernel hook tests (bun test; synthetic payloads exercise real adapters) — includes the hooks.toml wiring drift check"
+run = "bun test agents/hooks agents/claude/hooks agents/codex/hooks agents/goal-kernel scripts/tests/wire-hooks.test.ts"
+
+[tasks."hooks:wire"]
+dir = "{{config_root}}"
+description = "Wire agents/hooks/hooks.toml (the vendor-neutral hooks, run via ~/.agents/hooks) into agents/claude/settings.json AND agents/codex/hooks.json — one registry, every agent CLI, like link:skills. Rewrites only the entries it owns; --check reports drift (exit 1). Then `mise run link:dots` to re-render ~/.claude/settings.json."
+run = "bun scripts/wire-hooks.ts"
 
 # Launcher, not a bare `bun test`: the receipt integration test must run INSIDE the runner's own
 # admission envelope, and deciding whether this machine can admit is control flow — which the

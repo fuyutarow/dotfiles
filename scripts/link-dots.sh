@@ -157,6 +157,12 @@ link agents/skills-lock.json "$HOME/.agents/.skill-lock.json"
 link agents/codex/hooks.json "$HOME/.codex/hooks.json"
 link agents/codex/hooks "$HOME/.codex/hooks"
 
+# --- vendor-neutral hooks (the hook analogue of ~/.agents/skills) ---
+# agents/hooks holds the hooks every agent CLI runs; hooks.toml there is wired into BOTH
+# agents/claude/settings.json and agents/codex/hooks.json by `mise run hooks:wire`, and both call
+# them through this one path. 1 source -> 1 destination, so it belongs here and not in link:skills.
+link agents/hooks "$HOME/.agents/hooks"
+
 # NOTE for every systemd unit linked below: `systemctl --user disable <unit>` DELETES the
 # symlink this script places in ~/.config/systemd/user/. systemd treats any symlink found in
 # the unit search path as an enablement link and removes it, not just the *.wants/ entry —

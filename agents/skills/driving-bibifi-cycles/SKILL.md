@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.6.0 (2026-09-27) — default discovery execution, separate from theory content and formal authority.
+> **Version**: v2609.7.0 (2026-09-28) — preserve experiment budgets and decision latency under contention.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -102,8 +102,8 @@ Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context
 | Question / consumer | Which live decision changes, or which discovery dependency is removed? |
 | Build → Break → Fix | Small artifact/witness; discriminating check; conditional repair/retain/reject action |
 | Binding / validity | Current premise, input/code or statement version; baseline/control/criterion before measurement |
-| Work / resources | Owner, read/write scope, agent work versus admitted compute; phase footprint and actual device reason |
-| Return / cancellation | First checkable result and deadline; invalidating result, safe stop/release and next consumer |
+| Work / resources | Owner, read/write scope, agent versus compute phase; footprint, actual device reason and critical-work headroom |
+| Return / cancellation | First decision-changing result and deadline; budget source, effective stop, invalidation, release and consumer |
 
 A whole component, inventory, port or multi-stage revision is a container, not an executable microticket.
 Slice by a consumed outcome, not an arbitrary function count. Preserve mechanism, power and claim scope when shrinking.
@@ -117,7 +117,14 @@ For formal work, pin the exact statement and proof status; a sketch cannot silen
 | Worker / queue | Finite return and lifetime, covering preparation, admission wait and recording as well as execution |
 
 Two minutes is a target, not a launch ban. Six minutes is feedback/report cadence, not a process kill boundary.
-Tests and profiling inside this loop use its experiment cap. For compute jobs, P7 installs and observes the stop mechanism.
+Bind the user/domain budget before dispatch. The operator compares the launch envelope against it before P7 admission.
+Record target duration separately from the hard cap. A two-minute target does not impose a two-minute hard limit.
+The effective experiment cap is the minimum of ten minutes, stricter user/domain limits and remaining ticket lifetime.
+Tests and profiling use that cap, including launched setup/compile; P7 owns stop/release enforcement.
+An ETA exceeding it is a rejected experiment design, not permission to lengthen the envelope or reclassify the same run.
+Choose a smaller discriminating witness, reuse valid setup/evidence, or report that no valid test fits this budget.
+Do not obtain a long run by relaunching timed-out work or chaining slices that return no independent decision.
+Keep real partial evidence and its limits; a short prefix cannot certify a full benchmark.
 Use GPU for GPU-capable experiments. Record a concrete CPU reason and obey stricter active device constraints.
 Prompt deadlines alone enforce nothing. Cleanup grace is not extra experiment time.
 No sweeps or large experiments; renaming their cells microtickets does not change their information value.
@@ -131,8 +138,9 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 | Critical dependency blocked | Assign its smallest unblocker and continue unaffected work | Exact missing input, owner and next check |
 | Partial result arrives | Check its boundary and pass it to its consumer immediately | Artifact plus consumer receipt, or explicit pending/blocker |
 | Result changes a premise | Reassess affected running/queued tickets; continue, shrink or stop | Version delta and observed owner action/release |
-| First return missed | Inspect actual phase/job/artifact; unblock, re-slice or cancel | C0 intervention; not another unchanged ETA |
+| First return missed | Inspect actual phase/job/artifact now; unblock, re-slice or cancel | C0 intervention; do not grant another long first-return window |
 | Priority work waits behind an owned side job | Reconsider that job at its declared safe stop point | Reservation and confirmed release; no unauthorized external kills |
+| Experiment cannot finish within its bound | Reject before launch, or stop through its owner; redesign the test | Preserved partial evidence, inherited cap and observed release; no larger retry envelope |
 | Resource/process cap exceeded | Stop through the owner and fix the stop path before reusing it | Partial evidence, effective cap, stop/cleanup receipt |
 | Launcher/setup failure | Repair and exercise one fixture; stop identical queue retries | Accepted/rejected invocation and record read-back |
 | No useful work fits | Challenge the claimed dependency and inspect independent evidence work before waiting | Checked alternatives, actual constraints and next changing event |
@@ -148,6 +156,17 @@ Parallelize distinct source, proof, counterexample and interface checks, plus is
 Use a single writer/integrator per live shared file; parallel thinkers return bounded proposals on frozen inputs.
 NONCOMPUTE means the declared workload, not zero host cost or permission for hidden tests/fanout.
 Actual platform, host, data-access and write constraints apply; a fixed small-team cap does not.
+
+Compute admission proves capacity eligibility, not that another job improves discovery throughput.
+Before adding a contender, inspect current progress/rate and the next critical return's resource needs.
+Use comparable retained timing evidence or one bounded probe; do not infer speed from utilization or load average alone.
+Keep the added job only if its useful return fits without delaying the critical return beyond its declared budget.
+On unexpected slowdown, stop adding contenders and inspect shared CPU, memory bandwidth, VRAM and device phases.
+Re-slice or stop the lowest-value conflicting owned job at its safe boundary; confirm release before replacement.
+Continue useful independent agent work within host limits. This is not a one-job-per-GPU rule.
+Throttle identified or plausible compute contention. Sharing a research goal does not make a source or proof task a contender.
+If an independent task's host fit is unknown, check that fit now. Do not park all thinking until compute ends.
+See `references/microticket-patterns.md` for contention and admission-wait decisions.
 
 Consume compact artifact returns and exception deltas rather than every transcript.
 Use deterministic joins for mechanical aggregation; domain owners retain scientific judgment and acceptance.

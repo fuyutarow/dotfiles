@@ -18,12 +18,13 @@
 
 ### RESOURCE-ADMISSION BEFORE PILOT
 
-P7 is a feasibility gate, never a scientific-value gate. Before P7 may inspect an envelope, a
-research job must carry a current Section-owned admission locator/digest, Goal/mandate/charter and
+P7 is a feasibility gate, never a scientific-value gate. Under a formal section mandate, a
+research job carries a current Section-owned admission locator/digest, Goal/mandate/charter and
 Grounding Packet digest/revision/fence, satisfied dependency locators, declared run scale, and—when the run is an
 escalated confirmation, full sweep, scale study, or port—the prior measurement-valid receipt plus
 Director release. Missing or stale scientific admission returns to `directing-research-sections`;
 P7 must not repair it by allocating a device.
+Outside that profile, use the authorized task's current question, budget and dependency records; do not create a section.
 
 Free CPU, RAM, or GPU capacity never creates a candidate, authorizes an objective/axis change,
 releases dominated work, or upgrades a minimal run to a sweep. Low utilization is diagnostic only.
@@ -41,6 +42,12 @@ BIBIFI内の実験・GPU test・profilingは、同じ実験上限を実行器へ
 発射前に有効なwalltimeと停止経路を確認し、job idと実行器のreceiptへ結び付ける。
 promptの期限、agentの寿命、queueの期限はprocessの強制停止を代替しない。
 下のwalltime値は例示であり、各jobでは現在のdomain/user上限以下に設定する。
+発射前に `budget source / effective cap / envelope walltime / queue deadline` を既存ticketで照合する。
+envelopeのwalltimeが上位の上限を超えたら、resource admissionへ進めず設計を差し戻す。
+ETAが収まらないこと、予約が空いたこと、上限内で終わらなかったことは上限変更の根拠にならない。
+同じ実験の再試行・再開も残予算を引き継ぐ。run idの変更で予算を更新しない。
+実行器が申告walltimeしか検査しない環境では、上位予算との照合を機械的に強制したとは報告しない。
+その制約を記録し、照合済みの短いenvelopeだけを発射する。照合や停止経路を確認できなければ発射しない。
 停止猶予はcleanup専用であり、その間の追加計算を予算内の結果として数えない。
 超過を観測したら、同じ停止設定を使う次の発射より先に停止経路を修復する。
 raw結果は保持し、運転違反と科学的妥当性を分ける。無関係な正常jobまで一律に止めない。
@@ -130,7 +137,7 @@ agent自身が次のsystem reserveを下げる欄はない。
 | CPU | allowed logical CPUのうち最低1個を予約外に残す。`-t auto`、`-n auto`、`n_jobs=-1`は禁止。 |
 | host RAM | `max(4 GiB, MemTotalの10%)`をsystem用に残し、live reservationを差し引く。 |
 | scratch | 1 GiBを残し、live reservationを差し引く。 |
-| NVIDIA GPU | 512 MiBを残す。同一GPUのlive reservationの宣言VRAMを**合算**し、`total − max(宣言合算, nvidia-smiのused) − 512 MiB ≥ 必要VRAM` を「空き」とする。utilization 20%の門は、そのGPUにlive reservationが一つも無いとき、すなわち負荷が管理外のときだけ適用する。同一GPU上のlive reservationは4本を上限とする。 |
+| NVIDIA GPU | 宣言VRAMを合算し、実測usedも考慮してheadroomを残す。実効のreserve・管理外負荷判定・同時job上限はresource-controlの有効なresource-policy.tomlから読む。固定の旧値をここから適用しない。 |
 
 実行器は `setsid` で新しいprocess groupを作り、user systemdの一時scopeへ
 `CPUQuota=cpu_threads×100% / MemoryMax=host_ram_peak_bytes / MemorySwapMax=0 /
@@ -171,8 +178,11 @@ agent-resource-run --manifest /absolute/path/job.resource.json -- julia --projec
 
 発射表には
 `job / dependency / envelope locus / device / CPU set / RAM / VRAM / process cap /
-account / pilot cost / ETA / stop threshold` を置く。同じGPU、CPU set、host headroom、scratch、外部勘定を
-競合する走行は直列化する。`ADMIT / DENY / BREACH / PASS` verdictと、pilot/本走の高水位を
+account / pilot cost / ETA / stop threshold` を置く。
+同じGPUを共有するだけで一律に直列化せず、同時適合とcritical returnの期限を併せて確認する。
+容量に収まっても、競合で期限を破るjobは減らすか直列化する。低utilizationを追加発射の根拠にしない。
+同時job上限は安全上限であり、埋める目標ではない。実測の遅延と予約待ちをdriverへ返す。
+`ADMIT / DENY / BREACH / PASS` verdictと、pilot/本走の高水位を
 measurement packetへ保存する。Linux floorでenforcementを用意できないplatformではfail closedとし、
 unboundedな直接実行へfallbackしない。
 

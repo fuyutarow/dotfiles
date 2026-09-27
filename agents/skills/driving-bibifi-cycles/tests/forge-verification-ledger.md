@@ -765,3 +765,38 @@ remains owned by proving-theorems; its name need not be repeated in every unrela
 The family lexical suite was red before the patch (three stale groups) and now passes ten tests.
 Description-size enforcement stays with the common floor and unchanged aggregate ceiling.
 The authored Markdown gate and skills index pass. No R&D throughput gain is claimed from these checks.
+
+## 18. Bound budgets and useful concurrency — v2609.7.0
+
+Source and bounded audit: `tests/postmortem-2026-09-28-contention.md` (801lines, source digest there).
+Root retained the discovery objective and replaced envelope inflation with cap provenance and
+pre-admission comparison. Targets, hard caps, launch allowances and absolute ticket deadlines are distinct.
+P7 retains stop/release ownership. Queued retries have an interval, finite attempts and the same
+absolute expiry; repeated admission failures cannot hold a worker indefinitely.
+Compute concurrency is selected by useful returns and critical headroom, not utilization or job-count targets.
+Independent agent reasoning remains available within actual host limits; no fixed single-GPU-job policy is introduced.
+
+Terra's bounded semantic review found an unspecified polling budget and a phrase implying automatic
+P7 comparison. Root fixed both. The proposal to extend runtime schema enforcement is not implemented
+in this skill-only revision; current runner limits and the missing upstream-budget check stay explicit.
+
+A fresh Terra worker inspected real isolated state/jobs/resources files and current skill files,
+then wrote a prelaunch decision. It rejected the177minute/21600second side job and protected the
+critical resource bundle, but incorrectly treated the120second target as a hard cap and withheld
+independent source work without an identified conflicting phase. Root read the artifact and marked
+the trial FAILED. The original artifact is preserved with SHA256
+b6315b429c44102083cac849be0f3fe83e17be6f450dd20ba61f6126b200e644.
+Root clarified those distinctions in the core and added S70–S71 before a targeted repeat.
+The repeat is informed by the failure, not a fresh blind comparison; no before/after throughput claim is valid.
+S61–S69 separately cover cap inflation, remaining allowance, contention, starvation and policy drift.
+
+Root read the targeted second artifact: it rejects the21600second envelope under the600second cap,
+protects4.5GiB of the4.8GiB available VRAM, keeps independent source work ready subject to actual
+host fit, and distinguishes estimated t+120return from t+180ticket expiry and the120second launch allowance.
+Second artifact SHA256e43c3f40dbe5b4fb6ae3cf57d1507f27df19a55c26512f53c0f7e3f6d7534468;
+fixture/returns are under /tmp/bibifi-contention-review.BZ6FD2. The corrected decision passed
+root read-back; neither pass is a real job admission/stop trial and the initial failure remains recorded.
+
+Verification: target BIBIFI core/reference warnings zero; P7's13existing reference warnings retained
+under its scoped waiver. Collection floor passes73skills/64,059charged characters, unchanged budget/listing.
+Index, diff whitespace and installed skill wiring pass. No runtime policy, launcher schema or live job was changed.

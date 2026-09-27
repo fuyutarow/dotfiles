@@ -49,6 +49,32 @@ One owner integrates changes to a shared live artifact. Other workers may prepar
 A shared premise can couple jobs even when their files, apparatus or personnel are separate.
 If its pending result may obsolete a whole assignment, request a reusable short slice or select another useful question.
 
+## Contention and admission waiting
+
+| Observed state | Next useful action | Not justified |
+|---|---|---|
+| Pilot/full-run ETA exceeds the inherited experiment cap | Preserve the question; find a bounded discriminator or name the infeasible requirement | Extend walltime, relabel as verification, or start the full workload anyway |
+| Low GPU utilization with slow host phases | Inspect current progress and shared CPU/memory/transfer costs; use a bounded matched check if needed | Add a job just to fill the device |
+| Reservations fit but critical decision latency worsens | Reduce/re-slice conflicting compute; retain useful independent work | Treat ADMIT, free bytes or agent slots as proof of throughput |
+| Priority work needs more RAM/VRAM than current headroom | Protect its simultaneous resource bundle and expected start window before admitting side work | Let repeated small jobs take the freed capacity first |
+| Physical RAM is free but admission says reserved | Reconcile live job ownership, declared bounds, observed peaks and release receipts | Call it physical exhaustion or lower a running hard cap to force admission |
+| No resource fit before the ticket's first-return deadline | Return the located blocker and bounded next event to the parent; expire/re-slice the wait | Keep an agent alive solely for repeated admission attempts |
+| A newer finding changes a queued job's value | Revalidate its question/version/priority before any retry | Resume an old queue because a slot opened |
+
+An admission retry uses the same absolute queue/lifetime deadline; rejection does not reset it.
+Name the next revalidation event. If no event interface exists, declare a retry interval and finite attempt budget.
+Stop retrying on either the attempt limit or absolute deadline; return the blocker to the parent for re-slicing.
+The parent coordinates priority across contenders rather than letting independent retry loops race for a slot.
+An unchanged wait is not a scientific result. Separate the blocker receipt from a completed microticket.
+Reserve headroom through the dispatcher when supported. Otherwise withhold conflicting launches and record that limitation.
+Do not claim a scheduler reservation merely because a planning card names it.
+
+Keep duration estimates, launch allowances and absolute ticket deadlines separate.
+For example: target120s, hard cap600s, ticket remaining180s, readiness wait30s, proposed envelope120s.
+After that wait,150s of ticket lifetime remains; the120s envelope fits. An expected90s run returns around t+120s.
+That expected return is not a new hard deadline at t+120s; the ticket still expires at t+180s.
+An independent source check is not that GPU job's contender merely because its result serves the same goal.
+
 ## A changed finding changes active work
 
 Suppose one ticket tests a necessary assumption while another proposes a complete design depending on it.

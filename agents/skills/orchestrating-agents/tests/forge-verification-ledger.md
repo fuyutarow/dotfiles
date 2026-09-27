@@ -1415,3 +1415,17 @@ A worker message or automatic-retry promise is not proof of a job start; parent 
 transition when its blocker clears. Result materialization/read-back is a separate boundary.
 Root-signed source/verification home: evidence result-states postmortem and v2609.1.4ledger.
 Static review PASS, existing13reference prose warnings unchanged. No new runtime schema or checker.
+
+## 2026-09-28 — inherited budgets and effective policy, v2609.3.3
+
+P7 now requires operator comparison of source budget, effective cap, launch walltime and queue expiry
+before admission. Same-experiment retries retain the remaining allowance; a new run ID is not authority
+to reset it. Capacity eligibility does not certify useful concurrency or critical-return latency.
+The stale hardcoded four-GPU-job value was replaced with the effective resource-policy.toml pointer;
+the current eight-job runtime setting is unchanged and is not an occupancy target.
+Formal-section records are required only under that active profile, preserving ordinary authorized work.
+
+Source and review are owned by driving-bibifi-cycles/tests/postmortem-2026-09-28-contention.md and
+its forge ledger section18. This revision changes instructions, not the runner or its schemas.
+The runner still enforces the supplied walltime; no automatic task-budget inheritance is claimed.
+PROSE-DEBT waiver: existing13reference warnings retained unchanged; no new core warning introduced.

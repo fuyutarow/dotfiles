@@ -26,12 +26,17 @@ QUESTION / CONSUMER: <one useful decision; checked result and who consumes it>
 BUILD -> BREAK -> FIX: <small artifact/witness; baseline/control/criterion; conditional next action>
 BINDING / VALIDITY: <premise + code/input/statement versions; known limits and owner records>
 OWNER / FIT: <read/write scope; agent phase vs admitted compute; actual device reason/resources>
-RETURN / STOP: <first checkable return deadline; invalidating result; installed stop/cleanup; next consumer>
+RETURN / STOP: <first decision-changing return; absolute queue/lifetime deadline; invalidation; consumer>
+BUDGET BINDING: <target duration separately; user/domain hard-cap source; effective cap; launch value; stop/cleanup receipt>
+CONTENTION: <current progress/rate; protected critical CPU/RAM/VRAM bundle and start window; add/hold/reduce decision>
 ```
 
 The first useful return fits the next six-minute window, earlier if another result may invalidate it.
 An experiment targets about two minutes and stops at ten maximum, including launched setup/compile.
 The worker/queue lifetime also bounds preparation, wait and hand-back; a prompt is not a process timer.
+Admission retries retain that deadline. A bound violation cannot be fixed by extending the envelope.
+If polling is needed, bind its interval and finite attempts to that same absolute deadline.
+Physical availability, live reservations and observed peaks are different measurements; record them separately.
 Launch useful independent agent work across fitting slots while compute waits; no small-team quota.
 For idle resources, identify the inspected useful slices and actual remaining constraint.
 

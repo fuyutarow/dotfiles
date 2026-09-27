@@ -111,3 +111,42 @@ now owns semantic predicates only and cites canonical polysearch hypothesis/run/
 records. Any missing field or refusal belongs to polysearch/Arena implementation,
 not a parallel validator inside dotfiles. The earlier ten Bun test passes were for
 the withdrawn code and are **not** acceptance evidence for the final skill.
+
+## Reforge v2609.1.1 — 2026-09-27 follow-up
+
+**Source.** User attachment `875d0044-b118-42bb-8ad6-af454d31e9d5`, digest
+`c43c7d5de6113824f645bcc2ab20943777d5270b556d23e37294e91a4c494bba`.
+The full bounded audit and episode overlap limits live with `planning-experiment-iterations`,
+`tests/postmortem-2026-09-27-followup.md`. It is a third-party report, not raw execution evidence.
+
+**Map signed by the current Codex author.** Proposed/corrected result → validate invocation and
+interpretation → canonical disposition and reconciled consumer views → scoped claim or quarantine.
+No new run store, schema, launcher, or deletion authority is introduced.
+
+| Distilled rule | Grade | Source / limit |
+|---|---|---|
+| Mandatory launcher cannot be replaced by constructor/resource wrapper | skill-supplied | L1136–1147; only when target policy declares that requirement |
+| Resolve historical identity/footing before novelty or absence | skill-supplied | L1023–1031; no requirement to treat incomparable old leaders as current regressions |
+| Propagate correction and read back consuming views | skill-supplied | L1029–1038; canonical target mechanisms and evidence owners remain authoritative |
+| Distinguish execution bug from post-hoc design revision | skill-supplied | L1116–1127, L1248–1256; the actual selector code and frozen intent were not inspected |
+| E01–E08 | constructed | Static behavior cases; no executor-performance measurement |
+
+**Calibration.** The model both promotes unqualified scores and verbally withdraws them without
+changing the data consumers later retrieve. The repair makes withdrawal observable while
+retaining raw negative evidence. It also prevents protecting a hypothesis by relabeling every
+faithful losing implementation as an unfair test.
+
+**F2.** Evidence disposition stays here; target record/view APIs stay with their existing owners.
+Planning selects the next test and consumes EV0. The no-fire test now explicitly routes bounded
+iteration selection to `planning-experiment-iterations`; it does not move section admission.
+
+**F3.** Fresh Terra review `/root/verify_pm2_planning_evidence`: PASS, no findings; author tests
+and ledger withheld. E01–E08 serially checked; no live trigger eval or target launcher/ledger test.
+Description unchanged. Re-verification of unrelated dated vendor sources was not needed for this
+incident-supplied delta; none of the new rules is attributed to those sources.
+
+**Mechanical receipt.** Target `skill-check.ts` over the three edited skills exited 0 with no
+FAIL/prose warnings. `mise run lint:skills-floor` in the isolated worktree: exit 0, 74 skills /
+65,104 listing characters; 109 existing prose warnings in 58 untouched skills. `git diff --check`
+passed. Worktree dependencies were restored from the frozen lockfile after an initial missing-cleye
+failure. Shared installation links are not repointed from a checkout containing peer conflicts.

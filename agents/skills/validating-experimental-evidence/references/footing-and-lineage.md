@@ -48,7 +48,19 @@ An accounting identity that telescopes stage losses does not establish that the
 stages are causally independent. Measure each stage on the same scored positions.
 Change one mechanism at a time before assigning a repair to one loss term.
 
+When a negative result is called an implementation mistake, compare the intended and executed intervention.
+Cite the frozen selector/algorithm and a witness of the mismatch before invalidating that test.
+If the implementation followed the plan, the negative remains evidence about that tested design.
+A revised selector is a new hypothesis/configuration, even if it seems more reasonable after seeing the score.
+Preserve the old result and limitation; “not a fair test” cannot erase it or indefinitely rescue the hypothesis.
+
 ## EV4: historical capability is a typed comparator
+
+Before claiming novelty, absence, or lost capability, join the relevant historical records.
+Keys: implementation/revision, contract, metric, scored length, information access, and evidence status.
+Use the canonical run/finding records behind the leaderboard; a top-ranked or unlabelled row is not a search result.
+Record missing identities and retrieval coverage. “Not found in this scope” does not mean “never achieved”.
+Reuse the domain's existing capability view; do not create a second authoritative inventory here.
 
 For each alleged prior achievement, record both implementation IDs and the
 benchmark contract. Check **both** artifacts against the domain's signed concept
@@ -77,3 +89,20 @@ The domain or programme owner decides which capabilities the new design is oblig
 to preserve. This skill only checks whether that obligation and both measurement
 receipts exist before allowing the word “regression”. `governing-research-documentation`
 owns capability-inventory admission and expiry. It does not own this classification.
+
+## Correct a disposition through its consumers
+
+The evidence owner records the semantic correction; the target's existing mechanisms store and propagate it.
+
+| Step | Required observation |
+|---|---|
+| Scope the defect | Enumerate affected runs by loaded code/path/config/data binding; keep unrelated runs separate. Uncertain membership stays under review |
+| Link the correction | Preserve raw output and original findings; append the target-supported retraction, supersession, or quarantine with its reason and replacement locus |
+| Reconcile dependents | Identify findings, promotions, leaderboard groups, and capability claims that consumed those runs; update or mark stale through their owners |
+| Read back | Query the affected views and verify invalidated rows are excluded or visibly qualified in current comparisons; retain them in history |
+| Handle unavailable propagation | Name the affected view and missing target operation; withhold a “cleaned” or current-achievement claim until verified |
+
+Group rankings by the declared comparison contract before choosing a winner.
+Do not mix oracle, trivial baseline, and learner roles or differing scored lengths into an unqualified ranking.
+A statement in chat that a score is invalid does not update its canonical evidence status.
+This procedure neither authorizes record deletion nor imposes a new skill-local schema or database.

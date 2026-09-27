@@ -120,7 +120,8 @@ importance, causal validity, novelty, or whether a method deserves admission.
    returns an executable specification. Neither can admit, write `SECTION_STATE`, change a charter, or author
    a learning proposal. Apply `references/local-admission-and-testing.md`. A known-result disposition,
    value class, and dominance release are mandatory. Admission immediately wakes BUILD.
-5. **Register and execute one test.** First run one minimal existence/discriminator test. Issue `RUN_INTENT v2`
+5. **Register and execute one test.** First run one minimal existence/discriminator test; its rivals,
+   box, scale basis, and device come from a `planning-experiment-iterations` row. Issue `RUN_INTENT v2`
    before the access boundary. Include the builder's
    executable specification and a terminal deadline. For numerical claims, exact-join the
    `validating-experimental-evidence` EV0 target-owned contract binding and prospective controls.

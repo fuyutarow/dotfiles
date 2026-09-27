@@ -1088,7 +1088,8 @@ process.stdout.write(render(df));
 // every session. Best-effort: a failed write only means the next hook firing finds it stale.
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
-const sysPlain = sysSegment(df.cpuPct, df.ram, df.vram).replace(ANSI, "");
+const sysColored = sysSegment(df.cpuPct, df.ram, df.vram);
+const sysPlain = sysColored.replace(ANSI, "");
 if (sysPlain !== "") {
   fromThrowable(() => {
     mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
@@ -1097,6 +1098,8 @@ if (sysPlain !== "") {
       JSON.stringify({
         at: Temporal.Now.instant().epochMilliseconds,
         line: `Sys: ${sysPlain}`,
+        // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
+        ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
       }),
     );
   })();

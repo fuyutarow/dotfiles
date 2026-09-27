@@ -39,8 +39,12 @@ async function main(): Promise<void> {
   const cached = JSON.parse(readFileSync(CACHE, "utf8")) as {
     at?: unknown;
     line?: unknown;
+    ansi?: unknown;
   };
   if (typeof cached.at !== "number" || typeof cached.line !== "string") return;
+  // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
+  // plain Ink text node), else the plain row.
+  const shown = typeof cached.ansi === "string" ? cached.ansi : cached.line;
   if (now - cached.at > STALE_MS) return;
 
   const statePath = `${STATE_DIR}/${sid.replace(/[^A-Za-z0-9_-]/g, "_")}.last`;
@@ -50,7 +54,7 @@ async function main(): Promise<void> {
 
   mkdirSync(STATE_DIR, { recursive: true });
   writeFileSync(statePath, `${now}\n`);
-  process.stdout.write(`${JSON.stringify({ systemMessage: cached.line })}\n`);
+  process.stdout.write(`${JSON.stringify({ systemMessage: shown })}\n`);
 }
 
 await attempt(main); // FAIL OPEN — a missing cache or state file just means no line this time

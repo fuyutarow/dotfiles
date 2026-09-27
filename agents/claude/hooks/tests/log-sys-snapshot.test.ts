@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runHook, tempHome } from "./helpers.ts";
 
@@ -46,5 +46,16 @@ describe("log-sys-snapshot", () => {
     const r = fire(tempHome(), "Stop");
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toBe("");
+  });
+  test("a cached colored row is preferred over the plain one", () => {
+    const home = homeWithCache(1_000);
+    const cache = join(home, ".cache", "claude", "statusline-sys.json");
+    const colored =
+      "\u001b[38;5;74mSys:\u001b[0m CPU \u001b[38;5;71m25%\u001b[0m";
+    const cur = JSON.parse(readFileSync(cache, "utf8"));
+    writeFileSync(cache, JSON.stringify({ ...cur, ansi: colored }));
+    expect(JSON.parse(fire(home, "Stop").stdout)).toEqual({
+      systemMessage: colored,
+    });
   });
 });

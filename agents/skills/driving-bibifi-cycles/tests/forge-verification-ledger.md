@@ -597,3 +597,71 @@ qualifies measurement and target achievement independently; low scores are not e
 cases and fresh tool-backed interpretation receipts live in evidence skill's result-states
 postmortem and ledger v2609.1.4. Static cross-owner review PASS. No new state store, queue or
 process mechanism is introduced. Core remains short and floor-clean; no real throughput gain claimed.
+
+## 14. Corpus-grounded scientific direction, v2609.4.0 — 2026-09-27
+
+**Authority and source.** User requested a practical retrospective revision grounded in the soks
+concepts behind anomaly→abduction→rivals→prediction→discrimination→exclusion→candidate revision,
+and then explicitly required domain-agnostic science/engineering use. The new bounded episode
+is recorded in `tests/postmortem-2026-09-27-scientific-loop.md` with its digest and limits.
+Reported Firedancer scores/causes are third-party evidence, not rerun or certified by this forge.
+Soks source commit4971082d182592ee9daafda885568d519b812126 and exact position/claim IDs are
+recorded once in `references/scientific-loop.md`. Root read positions, relevant ledgers and
+source-evidence captures; no newly fetched or otherwise unread primary source is claimed read.
+The corpus draft/depth/coverage limits remain. User's four-table form and operating decisions
+are skill-supplied, not attributed to Platt or treated as settled IBE theory.
+
+**Signed concept map and file treatment.** Keep BIBIFI's sole work-selection owner. Add its
+scientific bridge as a lazy reference plus one compact optional template. Hypothesis genesis
+stays with forming-hypotheses-from-anomalies/forging-novel-theses; validity/proof/theory and
+admission retain their owners. Fix forming's stale “ranked batch” claim to match forging's
+actual unranked candidate output, and add the cheap-test handoff. No new skill/database/runner.
+The core links situation/contrast to scoped predictions and a candidate revision before scheduling.
+Preserve the short event-driven loop, broad independent work and real execution boundaries.
+
+**Domain cut.** The operating objects are hypotheses, models, designs and procedures. No learner,
+architecture, code artifact or candidate machine is required. Machine-specific reconstructed
+examples move to the episode audit. The old microticket reference is preserved unchanged as
+`tests/microticket-patterns-v3-history.md`; its live replacement covers engineering, science,
+formal obligations and observation procedures. GPU/resource rules apply when the workload uses
+those resources. Source corpus titles are retained for identity, not as restrictions on consumers.
+
+**Static refutation.** Fresh Terra scientific_loop_review found that a noisy aggregate difference
+could update an account without its frozen uncertainty criterion; root fixed the table to preserve
+observations and require the criterion for an effect inference. Fresh soks_derivation_review found
+CONTRAST attributed too broadly to GEN; it is now explicitly a skill-supplied field, with the
+MS-L75 distinction scoped as the source records it. Both reviewers saw content/sources but no tests
+or ledger. Root retained design, edits and acceptance; all dispatches were bounded NONCOMPUTE.
+
+**Actual artifact exercises.** Fresh old/new workers read identical synthetic evidence and frozen
+old9cdafe6 versus draft-new manuals, then actually wrote four-table plans, a U/W finite logical
+countermodel and next-action proposals. Source digest08d1aab18dc2f810cc04d83b53d7bd02517587aefc6ac4c48adeeab7835867f3.
+Outputs: OLD34886952238a840f633843f3e4512a2d57d656815304009aa0795c8eab64f612;
+NEWdec6c908468ee932332b0f7dee516ff65e1d82cb760f1044907c692d90437631.
+Both rejected residual→favorite-cause and per-case→one-uniform-candidate inferences and selected
+a short trace before integration. No broad behavioral win is established. Root found their
+answer-informed arbitration probe ambiguous as a deployed repair; the method now explicitly
+separates privileged diagnostics from prospective rules and requires an actual decision rule,
+not only f(x,h). The first fresh bridge check still overclaimed causal localization from oracle
+success. Root added a constant-output counterexample and required independent localization evidence.
+A second actual artifact5454c1665db3ef2eba6d4b922a87d7049f210e024538dbb17e74ea815096578c
+correctly derived the fair-independent-label1/2limit and kept the perfect oracle diagnostic-only.
+This elementary countermodel was root-checked, not proof-assistant certified or a claim about Firedancer.
+
+After the user's domain correction, a fresh transfer worker read the generalized reference/template
+and produced an engineering coating-process and scientific biodiversity-monitoring plan. Artifact:
+b044654dca38ef4520ec93ea37b0a1cc2d4bed34407e05ab2bc623c590315f4e.
+Root read back its rival/auxiliary, confound, scope and revision decisions. It did not assume authority
+to stop production or conduct field observations. Its prepared observation plan is enabling work,
+not an actual field result despite loose “witness” phrasing. No engineering/scientific outcome,
+R&D throughput gain or general domain-transfer reliability is claimed from this narrow exercise.
+
+**Verification.** New audit carries ten frozen regression criteria; triggerF10 routes the full
+Strong Inference request without stealing standalone hypothesis generation/proof ownership.
+Target floor: both changed skills zero core/reference prose warnings. Collection floor passes:
+73skills/64,439charged characters, ceiling unchanged. Index and diff checks pass. Soks and live
+Firedancer repositories remain untouched. Commit, push and source-link verification close delivery,
+not scientific efficacy; source provenance and operational checks remain distinct.
+
+Deployment: `mise run link:skills` and `mise run lint:skills-wiring` pass. The canonical source
+updates the linked Codex/Claude skill directories; running sessions are not assumed reloaded.

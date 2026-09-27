@@ -220,3 +220,13 @@ most common outcome could not be written. Every mechanical gate passed. What cau
 the skill as a stranger and trying to USE it. That is the F3 adversarial half the forge waived —
 `forging-skills` `references/verifying.md` §2 is right that one lens per failure class is not
 optional, and the waiver bought exactly one day.
+
+## 2026-09-27 — bounded test handoff, v2609.2.1
+
+Root-signed reforge connects one grounded explanatory packet to BIBIFI's cheap discriminator and
+candidate-revision loop. Genesis remains here; test selection, evidence qualification and final
+causal judgments do not. Correct the stale ranked-batch description/pointer: forging-novel-theses
+emits unranked candidates under its entry contract. Soks source/cut review and actual artifact
+exercises have one home in driving-bibifi-cycles ledger§14 and its scientific-loop reference.
+User requires domain-agnostic engineering/science operation; this handoff imposes no learner or
+machine requirement. Target floor zero warnings; collection passes without a new skill or schema.

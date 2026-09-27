@@ -2,7 +2,8 @@
 name: driving-bibifi-cycles
 description: >-
   Maximizes knowledge discovery through Experimental and Formal Methods using short BIBIFI cycles.
-  Use for 実験計画, 6分イテレーション, マイクロチケット, massive parallelism, ETA/JST,
+  Use for Strong Inference, アノマリーからアブダクション, 競合仮説・予測表・排除表,
+  実験計画, 6分イテレーション, マイクロチケット, massive parallelism, ETA/JST,
   idle CPU/RAM/VRAM, and research execution that keeps stalling.
   Selects useful work, expands independent agent microtickets, consumes results and replans immediately.
   Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
@@ -14,10 +15,11 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.3.1 (2026-09-27) — observed execution and qualified results replace assumed batch progress.
+> **Version**: v2609.4.0 (2026-09-27) — contrast, rivals, discrimination and candidate revision drive each cycle.
 
 ```sh
-for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
+for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
+  references/microticket-patterns.md references/scientific-loop.md \
   tests/triggers.md tests/decision-cases.md tests/scheduling-cases.md \
   tests/operational-rehearsal.md tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
 bun ../forging-skills/scripts/skill-check.ts .
@@ -62,6 +64,19 @@ Missing capability becomes one bounded repair/probe. Unrelated useful work proce
 A skill installed on disk is not proof a live worker loaded it; bind important rules into the current brief.
 Reuse unchanged valid receipts; do not rerun a readiness ceremony before every ticket.
 
+## Scientific direction before scheduling
+
+For a scientific anomaly or a Strong Inference request, use `references/scientific-loop.md` before choosing jobs.
+Join the current observation or failure to an observed-versus-expected contrast under matched conditions.
+Keep explicit rivals, auxiliary conditions and an open residual. Do not assume one cause or exhaustive candidates.
+Before measuring, derive rival-dependent predictions and the result-to-exclusion/next-action table.
+Drop a prediction that cannot separate its named rivals. Do not drop the hypothesis by rhetoric.
+Parallelize independent discriminators and formal counterexamples. Consume each result at its own scope immediately.
+Return a candidate revision of the hypothesis, model, design or procedure: retain, change, predict and check first.
+A promising idealized construction or local repair does not certify the whole target or every operating condition.
+Use the four compact tables in `assets/STRONG-INFERENCE.md`; inherit existing evidence instead of duplicating it.
+Routine deterministic repairs need only their smallest failing witness, not an invented hypothesis portfolio.
+
 ## The microticket — one useful decision within reach
 
 Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context by exact locator.
@@ -86,7 +101,7 @@ For formal work, pin the exact statement and proof status; a sketch cannot silen
 | Worker / queue | Finite return and lifetime, covering preparation, admission wait and recording as well as execution |
 
 Two minutes is a target, not a launch ban. Six minutes is feedback/report cadence, not a process kill boundary.
-Tests and profiling inside this loop use its experiment cap. P7 installs and observes the real stop mechanism.
+Tests and profiling inside this loop use its experiment cap. For compute jobs, P7 installs and observes the stop mechanism.
 Use GPU for GPU-capable experiments. Record a concrete CPU reason and obey stricter active device constraints.
 Prompt deadlines alone enforce nothing. Cleanup grace is not extra experiment time.
 No sweeps or large experiments; renaming their cells microtickets does not change their information value.
@@ -128,8 +143,8 @@ Free capacity or an unsupported worker assertion is not a basis for inventing ne
 
 ## Integrate early; keep future work conditional
 
-Before scaling, run a tiny fixture through the actual changed input → component → update → scoring/consumer path.
-Exercise the changed branch and a relevant negative case; component-only tests cannot certify their integration.
+Before scaling, exercise the smallest valid path from the changed element to its actual observation or consumer.
+Include a relevant negative case; isolated component checks cannot certify their interaction.
 Execution prerequisites must hold. Interpretation/promotion gaps block those claims, not every useful scoped diagnostic.
 Use evidence EV1 for loaded code/input identity, including material imports, configuration and warm-worker state.
 Use supported immutable run inputs while development continues. Otherwise serialize only the required read/write window.
@@ -143,9 +158,9 @@ Reuse bounded warm workers and immutable references, resetting experimental stat
 
 ## Qualification and the six-minute report
 
-Evidence EV2/EV3 owns information access, batch-update semantics, effective interventions and comparison footing.
-A faster new learning protocol need not be equivalent. A historical score is not current evidence.
-The GPU skill owns stage budgets/profiles. Repair the largest recoverable whole-run cost, not an isolated ratio.
+Evidence EV2/EV3 owns information access, protocol equivalence, effective interventions and comparison footing.
+A changed procedure need not preserve the original behavior. Historical performance is not current evidence.
+For GPU work, its specialist owns stage budgets/profiles. Select by recoverable whole-run cost, not an isolated ratio.
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
@@ -169,6 +184,7 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Dispatch, receipt states, lifetime, admission, interruption and isolation | `orchestrating-agents` C0/C3a/P7; this skill chooses work |
 | Experimental validity, scope and comparisons | `validating-experimental-evidence` |
 | Exact proof and theory changes | `proving-theorems`, then `systematizing-theories` as applicable |
+| Explanatory candidate generation | `forming-hypotheses-from-anomalies` for one contrast; `forging-novel-theses` for a seeded batch under its entry contract |
 | Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
 | Costly irreversible commitment | `acting-on-hypotheses`; a bounded probe grants no adoption authority |

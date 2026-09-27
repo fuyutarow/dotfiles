@@ -5,6 +5,7 @@
 - Goal/completion; prior release ETA or initial baseline; next six-minute report (JST).
 - New knowledge sought; enabling repair and the discovery it unlocks; critical dependency.
 - Current code/input/statement/premise bindings and applicable validity/authority records.
+- For scientific diagnosis: contrast, live rivals, predictions/exclusions and candidate revision via STRONG-INFERENCE.md.
 - Available/reserved CPU/RAM/VRAM, actual GPU load and agent slots; UNKNOWN when unconfirmed.
 - Orchestration capability receipts relevant to this work; parent intervention point and write owners.
 

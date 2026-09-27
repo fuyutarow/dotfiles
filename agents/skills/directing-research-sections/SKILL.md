@@ -121,7 +121,10 @@ importance, causal validity, novelty, or whether a method deserves admission.
    a learning proposal. Apply `references/local-admission-and-testing.md`. A known-result disposition,
    value class, and dominance release are mandatory. Admission immediately wakes BUILD.
 5. **Register and execute one test.** First run one minimal existence/discriminator test; its rivals,
-   box, scale basis, and device come from a `planning-experiment-iterations` row. Issue `RUN_INTENT v2`
+   box, scale basis, and device come from a `driving-bibifi-cycles` microticket.
+   That driver keeps a rolling six-minute work/resource plan. This section still has only one candidate WIP slot.
+   Independent admitted work in other sections may use spare resources without waiting for this section.
+   Issue `RUN_INTENT v2`
    before the access boundary. Include the builder's
    executable specification and a terminal deadline. For numerical claims, exact-join the
    `validating-experimental-evidence` EV0 target-owned contract binding and prospective controls.

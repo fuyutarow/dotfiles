@@ -22,7 +22,7 @@ Desk-check name/description against actual sibling descriptions. A route is not 
 | N6 | Generate five new explanatory candidates | `forging-novel-theses` with its entry requirements |
 | N7 | Explain one anomalous observation; no explanation exists | `forming-hypotheses-from-anomalies` |
 | N8 | Is this benchmark result contaminated by labels? | `validating-experimental-evidence` |
-| N9 | Design the next GPU experiment and resource budget | `planning-experiment-iterations` with resource owner |
+| N9 | Drive short GPU experiment cycles and resource use | `driving-bibifi-cycles` with resource owner |
 | N10 | Retire an obsolete document and designate its successor; its meaning is settled | `governing-research-documentation` |
 | N11 | Write the final paper's contribution claim | `arguing-research-papers` |
 | N12 | What does the word corollary mean? | Plain explanation; no theory update ceremony |

@@ -80,7 +80,7 @@ Use existing canonical update/correction mechanisms; never create a parallel rec
 | Another writer changed the theory during the update | Re-read the new revision and reconcile; do not overwrite its changes |
 
 End with: what changed, what still follows, what no longer follows, and the next open obligation.
-These are findings about the theory. Run selection belongs to `planning-experiment-iterations`.
+These are findings about the theory. BIBIFI work selection belongs to `driving-bibifi-cycles`.
 Programme adoption and allocation stay with their existing owners.
 
 A coverage limit of `none` requires an enumerated source/dependency universe and a recorded reverse-reference check.

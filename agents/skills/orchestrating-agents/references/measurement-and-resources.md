@@ -30,6 +30,13 @@ releases dominated work, or upgrades a minimal run to a sweep. Low utilization i
 Unused capacity is the correct outcome when no scientifically admissible job is ready. Likewise,
 `RESOURCE-CLASS(NONCOMPUTE)` and a passing resource envelope grant no SEARCH/LEARN credit.
 
+Within the authorized work set, `driving-bibifi-cycles` prioritizes the critical path and fills spare capacity.
+An independent useful microticket is not rejected merely because it is outside that critical path.
+Reserve headroom for priority work and check CPU, host RAM, VRAM, device compute and shared-state contention together.
+If no job is ready, return the actual constraint so the driver can split, reuse or repair work.
+Do not invent capacity or accept an empty ready queue as proof that no useful work exists.
+The six-minute planning/report window does not replace a job's admitted stop conditions or finite worker lifetime.
+
 pilot、smoke、benchmark、test、本走、resident service のどれも「小さいから」を免除理由に
 しない。数値を生む subprocess、並列test、長走行、resident serviceを発射する前に、入力寸法から
 導いたmemory boundと一つの資源envelopeを凍結し、`agent-resource-run` の admission を通す。

@@ -248,3 +248,86 @@ are unchanged. No live trigger/old-vs-new execution test or shared-link deployme
 This skill still selects/bounds the test; validated findings return to the theory owner for content
 updates. A successful run cannot silently promote a conjecture to a theorem. Static reciprocal-cut
 review passed; no experiment admission or runtime schema changed.
+
+## 7. Full redesign v2609.2.0 — driving-bibifi-cycles, 2026-09-27
+
+**Authority and purpose.** The user rejected a planning/gate-first manual and requested a full
+redesign around microticket BIBIFI throughput. Their supplied original prompt specifies six-minute
+JST operation/report windows, experiments targeting two minutes with a ten-minute maximum,
+critical-path priority, useful work on spare resources, and bounded worker lifetimes. Their latest
+correction explicitly rejects resource-consuming filler and demands an active search for useful work.
+These current instructions supersede historical policy choices recorded above.
+
+**Signed transition (root author/acceptor).** Authorized goal + actual queue/resources/results →
+drive the smallest useful Build/Break/Fix loop → checked artifact and decision → immediate next
+allocation, until completion or a concrete remaining constraint. The existing plan/log owner is
+renamed, not duplicated. No new schema, admission authority, database or daemon is introduced.
+`planning-experiment-iterations` retires; historical references retain their original names.
+
+**Calibration correction.** The prior manual treated overproduction as the dominant risk and
+underweighted passive waiting, integration delay, and idle capacity. Both failures occur.
+The new LAW puts earliest critical dependency first, then actively searches useful independent
+work. Every ticket names a decision it can change or a delivery dependency it can remove.
+An empty ready queue requires examining blocker, successor and preparation slices. It does not
+authorize unchanged benchmarks, decorative artifacts or speculative batches. No utilization target
+or nominal ticket count substitutes for useful completed feedback cycles.
+
+| Rule/source | Grade | Locus and limit |
+|---|---|---|
+| Six-minute cadence, two-minute target, ten-minute cap, useful resource allocation and worker limits | author-confirmed | Current user's original prompt and subsequent corrections; an operating requirement, not an empirical optimum |
+| Critical-path breakthrough plus no filler | author-confirmed | Current user's “リソース遊休を赦さない姿勢 / クリティカルから突破していく姿勢” clarification |
+| Missing constructor, mismatched component interface and wrong-model runner | third-party | Attachment `56ad0d36-c191-4aa7-bb8b-69271d346577/Pasted text.txt`, L1010–1388; reported code state, not independently reproduced |
+| Rolling queue, execution/interpretation/promotion dependency distinction, compact inherited context | skill-supplied | Operational response to those failures; scientific validity/admission remain with existing owners |
+| Scheduling cases and worked window | constructed | Engineered cases, not measured GPU runs or performance gains |
+
+Source digest: `36d64c8605ab50aead69cc9774e04289e748849e28f3b13dbc7969c96ab7ff4d`.
+The user prompt is controlling; the episode author's claimed remedy is not proof that it worked.
+
+| File set | Signed treatment / acceptance |
+|---|---|
+| Core | Replace gate spine with action/result/replan loop, active capacity search and explicit two-clock semantics |
+| Template | Shared context plus compact microticket and completion record; reuse existing canonical records |
+| Microticket reference | Concrete integration, GPU slice, dependency and finite-worker examples |
+| Scheduling tests | 28 adversarial timing, usefulness, capacity and lifecycle cases |
+| Decision tests | Retain 33 evidence safeguards; reconcile D21 cap and D32 explicit device constraint |
+| Triggers/index/sibling pointers | Rename sole owner; preserve section WIP/admission and resource-owner mechanics |
+| Historical audits/ledger | Preserve, append this superseding policy; no rewritten incident history |
+
+**Verification and findings.** A bounded Terra boundary audit preceded the rewrite. A fresh Terra
+reviewer `/root/bibifi_final_review` inspected core/template/reference and actual section/resource
+boundaries without author cases/ledger. It found one overbroad demand for resource ceilings on
+NONCOMPUTE workers. The core/template now distinguish P7 compute envelopes from NONCOMPUTE
+declarations while retaining ticket, deadline, lifetime and hand-back requirements for both.
+
+Fresh Terra arms `/root/bibifi_forward_old` and `/root/bibifi_forward_new` received the same
+constructed scheduling prompt in the same turn. OLD read `cb4fcdb`'s manual; NEW read the draft.
+Neither saw expected answers, the other arm, or this ledger. Both selected critical repair plus
+useful independent GPU work, rejected filler, retained a lawful run across a report boundary,
+and continued an already authorized branch immediately. NEW unnecessarily blocked source work
+on a compute envelope and mislabeled initial schedule/delay statuses. These were regressions,
+not wins: the first overlapped the independent finding; explicit initial-baseline, run-vs-release
+ETA, and ontime/delta/pivot definitions fix the second. S27/S28 preserve the counterexamples.
+No claim of superiority or measured throughput improvement follows from this single paired case.
+Post-fix verification is a static recheck; a fresh behavioral rerun remains unmeasured.
+
+**Mechanical receipt.** Target skill-check exits 0 with zero core/reference prose warnings.
+`mise run lint:skills-floor` exits 0: 73 skills / 64,299 charged characters, unchanged ceiling.
+`mise exec -- bun scripts/lint-skills-index.ts` and `git diff --check` pass.
+Existing sibling prose debt is scoped out: section core 3/reference 80; orchestration reference 13.
+The orchestration edit adds no warning; the new driver has none. Collection has 107 warning
+groups across 57 other skills. Trigger routing was desk-checked against the named sibling owners;
+no live trigger-selection or runtime resource-enforcement claim is made.
+
+**Reconciliation.** RECONCILED_AT: 2026-09-27T05:46:03Z plus subsequent tool receipts.
+DRIFT: injected continuation record belongs to the closed theory task (WRITER none); current
+TASK_CONTINUATION_SLOT is absent. It remains read-only; no resumability or ownership is claimed.
+Current working scope reconciles with `cb4fcdb`, branch alpha, no paused operation/unmerged files,
+and only this redesign's enumerated skill/index edits. This ledger is a forge receipt, not a
+replacement continuation authority. Next authorized work is narrow final verification and linking.
+
+**Final fixes and deployment.** Independent recheck accepted the report-status definitions and
+found the compact template still demanding compute fields from NONCOMPUTE work. Both compact
+FIT/LIMITS and completion COST/RELEASE now branch explicitly by class. Root checked this exact
+repair against the queue and core; no new envelope or fictitious memory measurement is required.
+`mise run link:skills` and `mise run lint:skills-wiring` exited 0; the central linker removed the
+old Claude skill link and installed the new name. Fresh-session discovery remains unmeasured.

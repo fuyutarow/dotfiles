@@ -151,7 +151,7 @@ No harness → same map, serial. Certification comes from the appropriate proof/
 | `governing-research-documentation` | Where may a canonical theory and history live, and how are views retained? → there. Their mathematical/scientific content → here |
 | `forging-novel-theses` / `forming-hypotheses-from-anomalies` | Generate candidate explanations? → those owners. Integrate a selected candidate as explicitly unproved theory content → here |
 | `structuring-documents` | Meaning settled, only rearranging one document? → there. Concept/entailment changes → here |
-| `planning-experiment-iterations` | Choose and bound the next experiment? → there, with exact prediction IDs and open obligations from this map |
+| `driving-bibifi-cycles` | Drive the next microticket experiment loop? → there, with exact prediction IDs and open obligations from this map |
 | `directing-research-sections` / `supervising-research-programmes` | Admit work, commit learning or allocate programme resources? → there; this skill has no such authority |
 | `arguing-research-papers` | Make the finished result's publication argument? → there, consuming this scoped theory version |
 

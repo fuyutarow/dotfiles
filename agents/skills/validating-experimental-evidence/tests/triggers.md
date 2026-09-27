@@ -23,7 +23,7 @@ running or repairing the target is a co-fire or handoff.
 |---|---|
 | “Reserve another GPU job; the device is idle” | `orchestrating-agents` P7; no experimental evidence to assess. |
 | 「Arena.stream の関数を実装して」 | `implementing-and-debugging` and `writing-julia`; this skill supplies EV0 acceptance cases only. |
-| “Which hypothesis should we test next and what threshold should we precommit?” | `planning-experiment-iterations` for a bounded iteration; `acting-on-hypotheses` for a costly bet; section admission remains `directing-research-sections`. |
+| “Which hypothesis should we test next and what threshold should we precommit?” | `driving-bibifi-cycles` for bounded iterations; `acting-on-hypotheses` for a costly bet; section admission remains `directing-research-sections`. |
 | 「修了した研究 episode 全体の process audit を出して」 | `auditing-research-processes`; this skill may supply validity rows. |
 | “Write the paper's contribution claim from a finished result” | `arguing-research-papers`; this skill can qualify the cited result first. |
 | 「登録済み土俵の test を一回走らせて。結果の解釈はまだ不要」 | Domain executor uses EV0's registered binding and preserves the polysearch run; no disposition yet. |

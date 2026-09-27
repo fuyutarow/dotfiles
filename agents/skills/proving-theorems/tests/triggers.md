@@ -15,7 +15,7 @@ Description desk-check only; no live invocation or theorem certification claim.
 | Decide whether a numerical result is comparable to its baseline | `validating-experimental-evidence` |
 | Reorder a finished theory document without changing its mathematics | `structuring-documents` |
 | Pick next quarter's research programme | `supervising-research-programmes` |
-| Design the next bounded empirical discriminator | `planning-experiment-iterations` |
+| Drive the next bounded empirical discriminator cycle | `driving-bibifi-cycles` |
 
 Co-fire: theory owner emits an exact proof obligation → HERE checks statement/proof → theory owner
 records the exact result. A failed target premise changes an application; it need not refute the conditional theorem.

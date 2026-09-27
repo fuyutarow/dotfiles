@@ -232,6 +232,15 @@
             "command": "sh ~/.claude/hooks/run.sh capture-last-response.ts"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -241,6 +250,16 @@
           {
             "type": "command",
             "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
             "timeout": 5
           }
         ]

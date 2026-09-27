@@ -69,11 +69,27 @@ const AGENT_TYPE_FAMILY: Record<string, RegExp> = {
 };
 const AGENT_PAIR_HELP =
   'subagent_type:"sonnet-high", model:"sonnet" or subagent_type:"opus-medium", model:"opus"';
+// Which of the two to pick — the part a caller cannot infer from "not allowed" alone. Printed
+// once per deny, wherever the diagnostic leaves the choice open.
+const CHOOSE_PAIR =
+  "Choose by the task: sonnet-high when the brief fully specifies the result (mechanical edits, " +
+  "a named test run, bulk probes); opus-medium for multi-file refactors, root-cause debugging, " +
+  "long unattended coding, or an ambiguous spec.";
+const TYPE_FOR_FAMILY = { sonnet: "sonnet-high", opus: "opus-medium" } as const;
+function familyOf(model: string): "sonnet" | "opus" | null {
+  if (SONNET.test(model)) return "sonnet";
+  if (OPUS.test(model)) return "opus";
+  return null;
+}
 
 // Workflow scripts pass model/effort as literals directly, so the pair is checked in full.
 const WORKFLOW_ALLOWED_EFFORT: Record<string, string> = {
   sonnet: "high",
   opus: "medium",
+};
+const MODEL_FOR_EFFORT: Record<string, string> = {
+  high: "sonnet",
+  medium: "opus",
 };
 const WORKFLOW_PAIR_HELP =
   "model:'sonnet' with effort:'high', or model:'opus' with effort:'medium'";
@@ -94,18 +110,20 @@ const MAX_REPORTED_LINES = 20;
 
 const AXIS_HINT: Record<Axis, string> = {
   shape:
-    "shape    — every executor must be a direct, inspectable agent(prompt, {model:'sonnet'}) call. " +
+    "shape    — every executor must be a direct, inspectable agent(prompt, {model, effort}) call " +
+    `with literal values (${WORKFLOW_PAIR_HELP}). ` +
     "Remove aliases, computed access, and child workflow() calls, and inline the child's agents.",
   syntax:
     "syntax   — this agent( span never closes, so nothing about it can be verified. " +
     "Fix the parentheses first; its other axes were NOT checked.",
   model:
     "model    — exactly one literal model: property, top-level in the options object " +
-    `(no nesting, no spread, no computed key), naming the same family as effort: ${WORKFLOW_PAIR_HELP}.`,
+    `(no nesting, no spread, no computed key), naming the same family as effort: ${WORKFLOW_PAIR_HELP}. ` +
+    CHOOSE_PAIR,
   effort:
     "effort   — exactly one literal effort: property, top-level in the options object " +
     `(no nesting, no spread, no computed key), paired with model as one of: ${WORKFLOW_PAIR_HELP}. ` +
-    "Nothing is inherited any more — omitting effort is a violation, and 'low' is not an allowed value.",
+    "No default applies: an omitted effort is a violation, and 'low' is not an allowed value.",
   resource: `resource — ${RESOURCE_DECLARATION_HELP}, inside the SAME agent() call.`,
 };
 
@@ -441,6 +459,22 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   );
   const out: { axis: Axis; detail: string }[] = [];
 
+  if (model.kind === "missing" && effort.kind === "missing") {
+    // One cause (no pair chosen), one finding — the effort half would only repeat it.
+    out.push({
+      axis: "model",
+      detail: `no model and no effort — add one pair: ${WORKFLOW_PAIR_HELP}`,
+    });
+    return out;
+  }
+  if (model.kind === "missing" && effort.kind === "ok") {
+    const fit = effort.value === "high" ? "sonnet" : "opus";
+    out.push({
+      axis: "model",
+      detail: `missing model — effort:'${effort.value}' pairs only with model:'${fit}'; add model:'${fit}'`,
+    });
+    return out;
+  }
   if (model.kind === "missing") {
     out.push({
       axis: "model",
@@ -456,11 +490,17 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   } else if (model.kind === "invalid") {
     out.push({
       axis: "model",
-      detail: `model '${model.value}' is not allowed — ${WORKFLOW_PAIR_HELP}`,
+      detail: `model '${model.value}' is not allowed — only 'sonnet' (with effort:'high') or 'opus' (with effort:'medium')`,
     });
   }
 
-  if (effort.kind === "missing") {
+  if (effort.kind === "missing" && model.kind === "ok") {
+    const fit = WORKFLOW_ALLOWED_EFFORT[model.value];
+    out.push({
+      axis: "effort",
+      detail: `missing effort — model:'${model.value}' pairs only with effort:'${fit}'; add effort:'${fit}'`,
+    });
+  } else if (effort.kind === "missing") {
     out.push({
       axis: "effort",
       detail: `missing effort — ${WORKFLOW_PAIR_HELP}`,
@@ -475,7 +515,7 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   } else if (effort.kind === "invalid") {
     out.push({
       axis: "effort",
-      detail: `effort '${effort.value}' is not allowed — ${WORKFLOW_PAIR_HELP}`,
+      detail: `effort '${effort.value}' is not allowed — only 'high' (with model:'sonnet') or 'medium' (with model:'opus')`,
     });
   }
 
@@ -488,7 +528,8 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
       axis: "effort",
       detail:
         `model:'${model.value}' with effort:'${effort.value}' is not an allowed pair — ` +
-        WORKFLOW_PAIR_HELP,
+        `keep model:'${model.value}' and set effort:'${WORKFLOW_ALLOWED_EFFORT[model.value]}', ` +
+        `or keep effort:'${effort.value}' and set model:'${MODEL_FOR_EFFORT[effort.value]}'`,
     });
   }
 
@@ -626,15 +667,46 @@ async function main(): Promise<void> {
     // subagent_type must be exactly one of the two allowed names. Nothing is injected any
     // more: fork, Explore, general-purpose, Plan, claude-code-guide, and every other name
     // (including a missing key) are denied identically.
+    // subagent_type and model are ONE choice (which pair), so they yield at most one finding:
+    // the observed values plus the smallest exact edit when one of them already fixes the pair,
+    // and the choice criterion only when both are open. Nothing is injected: fork, Explore,
+    // general-purpose, Plan, claude-code-guide, and a missing key are all "not a pair".
     const subagentType =
       typeof ti.subagent_type === "string" ? ti.subagent_type : null;
+    const model = typeof ti.model === "string" ? ti.model : null;
     const typeFamily =
       subagentType === null ? null : (AGENT_TYPE_FAMILY[subagentType] ?? null);
-    if (subagentType === null) {
-      problems.push(`subagent_type is required — ${AGENT_PAIR_HELP}`);
+    const modelFamily = model === null ? null : familyOf(model);
+    const shownType = subagentType === null ? "missing" : `'${subagentType}'`;
+    const shownModel = model === null ? "missing" : `'${model}'`;
+
+    if (typeFamily !== null && model === null) {
+      problems.push(
+        `model is missing for subagent_type '${subagentType}' — add model:"${subagentType === "sonnet-high" ? "sonnet" : "opus"}"`,
+      );
+    } else if (
+      typeFamily !== null &&
+      model !== null &&
+      !typeFamily.test(model)
+    ) {
+      const fix = subagentType === "sonnet-high" ? "sonnet" : "opus";
+      problems.push(
+        `model '${model}' does not match subagent_type '${subagentType}' — set model:"${fix}"` +
+          (modelFamily === null
+            ? ""
+            : `, or switch to subagent_type:"${TYPE_FOR_FAMILY[modelFamily]}" if the task needs ${modelFamily}`),
+      );
+    } else if (typeFamily === null && modelFamily !== null) {
+      problems.push(
+        (subagentType === null
+          ? "subagent_type is missing"
+          : `subagent_type '${subagentType}' is not allowed`) +
+          ` — set subagent_type:"${TYPE_FOR_FAMILY[modelFamily]}" (matches model '${model}')`,
+      );
     } else if (typeFamily === null) {
       problems.push(
-        `subagent_type '${subagentType}' is not allowed — ${AGENT_PAIR_HELP}`,
+        `no allowed dispatch pair (subagent_type ${shownType}, model ${shownModel}) — use exactly one of: ` +
+          `${AGENT_PAIR_HELP}. ${CHOOSE_PAIR}`,
       );
     }
 
@@ -645,24 +717,13 @@ async function main(): Promise<void> {
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
-    // model must be present and must name the SAME family as subagent_type. When
-    // subagent_type itself was invalid there is no family to check against, so only presence
-    // is judged there — the type problem above already covers the rest of that case.
-    if (typeof ti.model !== "string") {
-      problems.push(`model is required — ${AGENT_PAIR_HELP}`);
-    } else if (typeFamily !== null && !typeFamily.test(ti.model)) {
-      problems.push(
-        `model '${ti.model}' does not match subagent_type '${subagentType}' — ${AGENT_PAIR_HELP}`,
-      );
-    }
-
-    // BATCHED(subagent_type, resource, model): the three are independent — a caller violating
+    // BATCHED(pair, resource): the pair and the resource class are independent — a caller violating
     // more than one of them is told about all of them at once, not denied once per axis.
     if (problems.length > 0) {
       decidePre(
         "deny",
         problems.length === 1
-          ? `dispatch-contract: ${problems[0]}.`
+          ? `dispatch-contract: ${(problems[0] ?? "").replace(/\.$/, "")}.`
           : `dispatch-contract: ${problems.length} violations — fix them all, then re-invoke.\n` +
               problems.map((p) => `  - ${p}`).join("\n"),
       );

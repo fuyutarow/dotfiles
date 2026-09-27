@@ -76,7 +76,9 @@ describe("Agent / Task — every other shape is denied", () => {
     const r = runHook(HOOK, pre("Agent", { prompt: "x", model: "sonnet" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("subagent_type is required");
+    expect(d.permissionDecisionReason).toContain(
+      'subagent_type is missing — set subagent_type:"sonnet-high" (matches model',
+    );
   });
 
   test("missing model -> deny", () => {
@@ -86,7 +88,9 @@ describe("Agent / Task — every other shape is denied", () => {
     );
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("model is required");
+    expect(d.permissionDecisionReason).toContain(
+      "model is missing for subagent_type 'sonnet-high' — add model:\"sonnet\"",
+    );
   });
 
   test("sonnet-high with model:opus -> deny (mismatch)", () => {
@@ -129,8 +133,12 @@ describe("Agent / Task — every other shape is denied", () => {
     const r = runHook(HOOK, pre("Agent", { prompt: "x" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("subagent_type is required");
-    expect(d.permissionDecisionReason).toContain("model is required");
+    expect(d.permissionDecisionReason).toContain(
+      "no allowed dispatch pair (subagent_type missing, model missing)",
+    );
+    expect(d.permissionDecisionReason).toContain(
+      "Choose by the task: sonnet-high when the brief fully specifies the result",
+    );
   });
 
   test("every deny states the two allowed forms", () => {
@@ -381,8 +389,10 @@ describe("batched diagnostics (2026-09-27)", () => {
     const r = runHook(HOOK, rawWf(`await agent('x', {schema: S})`));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("missing model");
-    expect(d.permissionDecisionReason).toContain("missing effort");
+    expect(d.permissionDecisionReason).toContain("no model and no effort");
+    expect(d.permissionDecisionReason).toContain(
+      "add one pair: model:'sonnet' with effort:'high'",
+    );
     expect(d.permissionDecisionReason).toContain("resource declaration");
   });
 
@@ -392,8 +402,8 @@ describe("batched diagnostics (2026-09-27)", () => {
       .permissionDecisionReason.split("\n")
       .filter((l: string) => l.startsWith("  line "));
     expect(entry).toContain("line 1:");
-    expect(entry).toContain("missing model");
-    expect(entry).toContain("missing effort");
+    expect(entry).toContain("no model and no effort");
+    expect(entry).toContain("add one pair");
     expect(entry).toContain("resource declaration");
   });
 
@@ -405,7 +415,7 @@ describe("batched diagnostics (2026-09-27)", () => {
       ),
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
-    expect(reason).toContain("line 1: missing model");
+    expect(reason).toContain("line 1: no model and no effort");
     expect(reason).toContain("line 2:");
     expect(reason).toContain("is not an allowed pair");
   });
@@ -449,7 +459,7 @@ describe("batched diagnostics (2026-09-27)", () => {
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("alias or indirection");
-    expect(reason).toContain("missing model");
+    expect(reason).toContain("no model and no effort");
     expect(reason).toContain("NOTE:");
   });
 
@@ -488,7 +498,9 @@ describe("batched diagnostics (2026-09-27)", () => {
       rawPre("Task", { subagent_type: "opus-medium", prompt: "x" }),
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
-    expect(reason).toContain("model is required");
+    expect(reason).toContain(
+      "model is missing for subagent_type 'opus-medium' — add model:\"opus\"",
+    );
     expect(reason).toContain("RESOURCE-CLASS(NONCOMPUTE)");
   });
 
@@ -535,7 +547,9 @@ describe("explicit model policy", () => {
     );
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("subagent_type is required");
+    expect(d.permissionDecisionReason).toContain(
+      "no allowed dispatch pair (subagent_type missing, model 'fable')",
+    );
   });
 
   test("full model id claude-fable-5 on opus-medium -> deny", () => {
@@ -557,6 +571,41 @@ describe("explicit model policy", () => {
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain(
       "model 'fable' is not allowed",
+    );
+  });
+});
+
+// A deny must carry the smallest exact repair, so one retry can succeed (designing-developer-
+// diagnostics D3). Positive cases for each repair; the valid neighbours above are the negatives.
+describe("deny text names the minimal exact repair", () => {
+  test("type/model mismatch -> keep the type, or switch the type to the model's family", () => {
+    const r = runHook(
+      HOOK,
+      pre("Agent", {
+        prompt: "x",
+        subagent_type: "sonnet-high",
+        model: "opus",
+      }),
+    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      `model 'opus' does not match subagent_type 'sonnet-high' — set model:"sonnet", or switch to subagent_type:"opus-medium" if the task needs opus`,
+    );
+  });
+
+  test("workflow pair mismatch -> keep the model or keep the effort", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('x', {model: 'opus', effort: 'high'})`),
+    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      "keep model:'opus' and set effort:'medium', or keep effort:'high' and set model:'sonnet'",
+    );
+  });
+
+  test("workflow missing effort beside a valid model -> the one effort that fits", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {model: 'sonnet'})`));
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      "missing effort — model:'sonnet' pairs only with effort:'high'; add effort:'high'",
     );
   });
 });

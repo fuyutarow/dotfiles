@@ -1,115 +1,177 @@
 ---
 name: planning-experiment-iterations
 description: >-
-  Plans ONE research experiment iteration as a boxed crucial test: rival hypotheses with differing
-  predictions, data-only oracle first, minimal test (~2 min, 600 s cap, no sweep), frozen
-  baseline/control/criterion, GPU first, planned/peak/release resources, deadlines, and a refutation
-  log that picks the next test. Use for 実験計画, 次の実験, 6分報告, 最小実験, 空き資源. Owns
-  ITERATION_PLAN/LOG. PURPOSE: admission/RUN_INTENT→directing-research-sections; costly bet→
-  acting-on-hypotheses; evidence validity→validating-experimental-evidence; envelopes→orchestrating-agents.
+  Plans ONE bounded research iteration: readiness, oracle scope, discriminating outcomes,
+  minimal scale, GPU-first phase costs, and the next decision. Use for 実験計画, 次の実験,
+  6分報告, 最小実験, 空き資源. Owns ITERATION_PLAN/LOG; diagnosis before dependent mechanism tests.
+  PURPOSE: admission→directing-research-sections; costly bet→acting-on-hypotheses;
+  evidence validity→validating-experimental-evidence; envelopes→orchestrating-agents.
+  Workflow-native: planning and interpretation stay solo; independent checks may fan out.
   English skill; respond in the user's language.
 ---
 
 # Planning experiment iterations
 
-> **Version**: v2609.1.0 (2026-09-27) — initial forge from a live research session and a nine-skill inventory.
+> **Version**: v2609.1.1 (2026-09-27) — readiness and scoped inference before experiment expansion.
 
 ```bash
 test -f assets/ITERATION-PLAN.md
 test -f tests/triggers.md
+test -f tests/decision-cases.md
+test -f tests/postmortem-2026-09-27.md
 test -f tests/forge-verification-ledger.md
 bun ../forging-skills/scripts/skill-check.ts .
 ```
 
-## LAW — maximize hypotheses eliminated per wall-minute and per reserved resource
+## LAW — maximize decision-changing valid learning per wall time
 
-> An iteration exists to kill a hypothesis. Its value is the discriminating receipts it yields,
-> divided by the wall time and the reservations it holds. A run that cannot change which named
-> hypothesis dies is waste at any size. Nothing launches without its ITERATION_PLAN row, and the row
-> is frozen at launch.
+> Name the decision a result can change, then test its earliest unresolved prerequisite.
+> Instrument repair, a narrowed cause, and an inconclusive result can all be useful outcomes.
+> Hypothesis counts, records, occupied slots, and GPU utilization are not the objective.
+> Freeze the plan before launch; accept only the conclusion its outcome table licenses.
+
+Keep `ITERATION_PLAN`, `ITERATION_LOG`, `READINESS`, `ORACLE`, and `OUTCOMES` as stable field names.
 
 ## Function map — SOLE owner
 
-| Input state | Verb | Owned artifact | Next state |
+| Input state | Verb | Owned artifact | Next state / stop |
 |---|---|---|---|
-| Evidence so far + ≥2 rival hypotheses + measured free resources | plan | `ITERATION_PLAN` row (`assets/ITERATION-PLAN.md`) | boxed test launched |
-| Terminal receipt, cap hit, or breach | record | `ITERATION_LOG` entry | next plan cites this entry |
+| Evidence + decision + unresolved prerequisite | plan | `ITERATION_PLAN` (`assets/ITERATION-PLAN.md`) | ready for domain admission, or prerequisite repair |
+| Terminal receipt, cap hit, or breach | record | `ITERATION_LOG` | next plan cites this entry |
 
-The receipt, admission, and evidence disposition stay with their owners (§ Routing). This skill owns
-the test's shape, size, box, device, resource line, and the choice of the next test.
+Use these as fields in the project's existing run intent and finding, not a second record store.
+This skill owns test selection and shape. Admission, raw receipts, and evidence validity retain their owners.
 
 ## Gates — each leaves a field in the row
 
 | Gate | Decision | Required field | Fail → |
 |---|---|---|---|
-| I1 RIVALS | Name ≥2 hypotheses and the value each predicts for the SAME observable | `RIVALS`, `PREDICTIONS` | A prediction every rival shares is dropped; with no differing prediction, do not launch |
-| I2 ORACLE | When a data-only ceiling or oracle is computable, compute it before the learner run | `ORACLE` (value + locator) or `ORACLE: NONE (<why>)` | A learner run without it cannot claim agreement with theory |
-| I3 BOX | Size the test by time and by the prediction gap, never by the registered battery | `SCALE_BASIS`, `TARGET_WALL_S`, `CAP_S=600` | Cut scale; never raise the cap |
-| I4 FREEZE | Baseline, control, pass/fail criterion, device, and planned RAM/VRAM written before launch | `BASELINE`, `CONTROL`, `CRITERION`, `DEVICE`, `DEVICE_REASON`, `PLANNED` | Changing any after launch voids the test |
-| I5 DISPATCH | Every delegated run gets owner, envelope, deadline, termination, and hand-back trigger | `OWNER`, `ENVELOPE`, `DEADLINE`, `STOP_IF` | An overdue or silent run is stopped and its resources released |
-| I6 RECORD | Result, refuted hypotheses, unexplained causes, peak and release | `ITERATION_LOG` entry | The next row must cite it in `FROM_EVIDENCE` |
+| I0 DECISION | Retrieve prior results; name the decision, test kind, and earliest blocking prerequisite | `FROM_EVIDENCE`, `DECISION`, `KIND`, `READINESS` | Missing validity prerequisite → diagnostic first |
+| I1 DISCRIMINATE | Predict the same observable under rivals and their auxiliary assumptions | `RIVALS`, `PREDICTIONS`, `OUTCOMES` | No decision-changing outcome → redesign |
+| I2 ORACLE | Compute an applicable cheap oracle before its dependent learner test | `ORACLE`: type, scope, assumptions, value and locator; or `NONE` with reason | Unmatched scope → oracle diagnosis, no theory verdict |
+| I3 BOX | Use the smallest scale that separates predictions with justified uncertainty | `SCALE_BASIS`, `PHASE_COSTS`, `TARGET_WALL_S`, `CAP_S` | No feasible discriminator within cap → report limit; do not shrink into a meaningless test |
+| I4 FREEZE | Pin executed inputs, baseline, controls, tolerances, and resource plan | `BINDING`, `BASELINE`, `CONTROL`, `CRITERION`, `DEVICE`, `PLANNED` | Change → new plan ID; retain old result and its scope |
+| I5 DISPATCH | Propose owner, deadline, stop action, and return condition; obtain required owner receipts | `OWNER`, `ADMISSION`, `ENVELOPE`, `DEADLINE`, `STOP_IF`, `HAND_BACK` | Missing authorization/admission → no launch; no launch receipt → not running |
+| I6 RECORD | Apply the frozen outcome table after evidence validation; record peak and release | `ITERATION_LOG` | Invalid or inconclusive → no scientific elimination; next row cites the limitation |
 
-## Decision tables
+## Readiness and oracle scope (I0–I2)
 
-**Scale (I3).**
+| Condition | Next action |
+|---|---|
+| Baseline, reference, adapter, or reveal order is suspect | `KIND: DIAGNOSTIC`. Name the failed/unknown check and the observation that closes it. Pause only tests depending on it |
+| A mechanism comparison is ready | `KIND: MECHANISM`. Cite passing prerequisite receipts for the exact binding; require a same-stream baseline |
+| Minimal valid evidence supports a registered claim | `KIND: CONFIRMATION`. Check the claim's required suite and controls through its domain owner; smoke does not establish suite coverage |
+| Proposed work repeats a historical result | Cite the old result and the changed contract or unresolved question before spending a run |
+
+`READINESS` cites `validating-experimental-evidence` checks; it does not duplicate their verdict store.
+A diagnostic may run on a broken path to locate the break. It cannot establish the downstream mechanism.
+For a retained implementation's consequential invariant or resource failure, hand repair to
+`practicing-tiger-style` and `implementing-and-debugging`; writing a ledger does not close a failed check.
+
+| `ORACLE` type | Permitted use |
+|---|---|
+| Exact expected output | Compare on the specified input, state, and scoring positions |
+| Achievable reference | Predict learner performance only with a matching hypothesis class and applicable learning/regret bound |
+| Upper/lower bound | Preserve the inequality direction; being below an upper bound is not a bug |
+| Heuristic prediction | Treat mismatch as an anomaly; no theorem refutation |
+
+Bind observable inputs, reveal order, episode reset, hypothesis family, depth, and scored window.
+A privileged oracle may establish possibility, not learnability from the learner's information.
+An oracle omitting gates, aggregation, or composition needs a transfer argument before bounding a richer learner.
+Derive the margin from a bound or uncertainty model; do not invent a universal tolerance or chance-floor assertion.
+
+## Outcome table (I1, I6)
+
+Before launch, map each result region to: assumptions needed → scoped exclusion → next action.
+Include overlap/inconclusive, failed validity control, and timeout/breach regions.
+Rivals may coexist; do not force mutually exclusive or exhaustive causes.
+
+| Observation | Inference limit |
+|---|---|
+| Another model succeeds through the runner | Excludes only a failure claimed to affect every model; model-specific paths remain open |
+| Direct and adapter outputs differ | Localizes a path/state difference; does not exclude additional round or egress defects |
+| A fix leaves output unchanged | Refutes that intervention as a sufficient repair on this witness; not every version of its cause |
+| A subset of perturbations passes | Covers tested positions and perturbations only; a future-label test does not cover the current label |
+| ON beats OFF but OFF fails its justified sanity check | Diagnose the baseline; no mechanism or scale promotion |
+| A control misses its frozen interval in either direction | Record the miss; a positive gain is not a pass for a two-sided no-effect criterion |
+
+Require absolute performance and mechanism-specific controls when the claim needs them.
+For example, a capacity-matched sham arm can separate added voting capacity from a proposed inference rule.
+
+## Scale and execution cost (I3–I5)
 
 | If… | Then |
 |---|---|
-| The rivals' predictions separate by more than the decision margin at scale n | Use the smallest such n, K, and family |
-| A pilot runs past ~2 min | Cut the scale before the next launch |
-| The run hits 600 s | TERM it; the partial receipt is the result |
-| A minimal receipt already points one way | One registered-scale confirmation may run; each job still capped at 600 s |
-| The plan needs a parameter or seed sweep, a scale study, or a port | It is not an iteration; the scale release belongs to `directing-research-sections` |
+| Predictions separate beyond the justified margin at scale n | Use the smallest such n, depth, and family |
+| No task budget is supplied | Default to about 120 s target and 600 s cap; include setup and teardown in planning |
+| The cheapest useful test cannot fit the default cap | Route a justified exception to the domain/resource owners before launch; freeze the approved cap. Never override an explicit task limit |
+| A pilot runs past the target | Locate the expensive phase before cutting scale or adding concurrency |
+| The run hits its cap | Stop through the resource owner; retain partial data as incomplete, not a scientific negative |
+| A minimal result meets all frozen controls and promotion criteria | Request registered-scale confirmation; freeze its scope and cap separately |
+| The plan needs a parameter or seed sweep, a scale study, or a port | Route scale release to `directing-research-sections`; do not hide a battery inside this iteration |
 
-**Device (I4).**
-
-| If… | Then |
+| Device / phase condition | Action |
 |---|---|
-| A conforming GPU path exists for the tested code | `DEVICE: GPU` |
-| No GPU path exists yet | `DEVICE: CPU`; `DEVICE_REASON` names the missing path; the GPU port is the next critical-path item |
-| The run computes data only, with no learner (an oracle or ceiling) | `DEVICE: CPU` with that reason |
-| The GPU path is unproven (bit identity or causality open) | Run its proof tests in parallel on the GPU (one arena per job, as many as VRAM admits); no claim rests on it until they pass |
+| A conforming GPU path exists for the tested code | Prefer GPU; apply the bounded diagnostic exception below only when task constraints permit |
+| The subject is a CPU reference or data-only oracle | CPU is allowed; name that subject and its bounded cost |
+| A bounded CPU diagnostic reaches the discriminator earlier, including queue/setup costs | Record phase-cost evidence and CPU-only inference scope; use it if the task permits. GPU performance/parity still requires GPU evidence |
+| No conforming GPU path exists | Compare a bounded CPU discriminator with the cost of enabling GPU; record the dependency and follow explicit task device constraints |
+| The GPU path is unproven | Run a minimal diagnostic witness; expand coverage only when additional cases change the next decision |
+| CPU preparation or compilation dominates | Separate reusable CPU references from GPU execution; consider bounded warm-process reuse before multiplying processes |
 
-**Free resources (after I6).**
+`PHASE_COSTS` covers queue/admission, CPU reference, compile, transfer, kernel, and record/teardown.
+Use measured timings or mark estimates unknown and run a bounded pilot.
+GPU-first selects the useful compute path; CPU exceptions never authorize an unbounded battery.
+Reuse references only with matching code/config/data fingerprints; reset learner state between cases.
+A warm process still needs per-case and whole-job caps, stop rules, and release receipts.
 
-| If… | Then |
+| Free-resource condition | Action |
 |---|---|
-| A test on the critical path is admissible and fits the free RAM and VRAM | Plan its row |
-| Nothing admissible is ready | Leave the capacity idle and state the reason in the report |
-| The only candidates are comparators, re-measurements, or side questions off the critical path | Idle is correct; do not launch them |
-| Launches are denied while actual use is low | Oversized reservations are the cause; right-size the envelope from the measured peak before adding work |
+| An admissible critical-path test fits RAM and VRAM | Plan its row |
+| Nothing admissible is ready, or only off-path work is available | Idle is correct; name the missing prerequisite |
+| Launches are denied while actual use is low | Inspect the denial: reservations, slots, locks, or gate state. Low utilization alone does not identify the cause |
 
-**Main thread while runs execute.** Ground the next row: read the primary source behind the
-next rival, compute its data-only oracle, or check the code path the evidence will rest on. Never
-start a second test on the same question, and never write a status line with no change in it.
+While a run executes, prepare the next conditional branch or inspect its source and oracle.
+Parallel arms require distinct discriminating contributions, fixed inputs, and independent mutable state.
+Before a main-thread takeover, reconcile job IDs and ownership to prevent duplicate launches.
+The planning row neither admits nor authorizes a run. `ADMISSION` cites the section/resource owners' required receipts.
 
 ## Report (when the human set a cadence)
 
-Order: artifacts and measured results → ticket states → next rows and the RAM/VRAM plan → ETA (JST).
-Each ETA is `ontime` (plan kept), `delta` (time moved), or `pivot` (goal or policy changed), with
-its reason. When nothing changed, say so in one line.
+Order: decision changed and evidence limits → actual job/phase states → next row and resources → ETA.
+Each ETA is `ontime`, `delta` (time moved), or `pivot` (goal/policy changed), with its reason and time zone.
+Separate dispatched, admitted, running, and terminal states. No progress is fabricated to meet a report cadence.
+When nothing changed, say so in one line.
 
 ## Deny-list
 
-- Launch a run whose row lacks any I1–I5 field, or edit a frozen field after launch.
-- Run a sweep, a scale study, or a battery inside an iteration.
-- Fill idle GPU or RAM with comparators, re-measurements, or questions off the critical path.
+- Launch without applicable I0–I5 fields, or overwrite a frozen plan.
+- Fill idle GPU or RAM with off-path work, or expand scale just to raise utilization.
 - Choose CPU for a learner run without `DEVICE_REASON`.
-- Raise a cap mid-run, or treat an OOM or breach as a result.
-- Count a run with no differing prediction as progress.
-- Choose the next test without citing an `ITERATION_LOG` entry.
-- Leave an agent dormant after its deadline, or resources reserved after its run ends.
+- Raise a cap mid-run, or treat an OOM, breach, or invalid comparison as scientific refutation.
+- Change a criterion after seeing its result, or broaden a scoped exclusion into a cause verdict.
+- Choose the next test without citing prior evidence.
+- Leave resources reserved after a run ends; miss a deadline without applying its stop/hand-back rule.
+
+## Execution model
+
+Planning and interpretation stay solo. The modal iteration needs no subagents.
+Independent checks may fan out under `orchestrating-agents`; return bindings, raw receipts, and phase timings.
+An agent's claimed PASS or root cause is not a substitute for those observations.
+No harness → same map, serial.
 
 ## Routing — sibling cuts
 
 | Sibling | Cut |
 |---|---|
-| `directing-research-sections` | PURPOSE: WHO may admit, register, and commit (mandate, `RUN_INTENT`, receipts) → there; WHAT test, how big, how long, on which device → here. Inside a section, the row fills `RUN_INTENT`'s scale and deadline fields. |
-| `acting-on-hypotheses` | DECISIVE: is the next action costly or hard to reverse? Yes → there (Commit/Pivot/Kill). No, a boxed reversible test → here. |
-| `forming-hypotheses-from-anomalies` | Sequential: an anomaly with no explanation → there, one hypothesis; that hypothesis plus its rivals → here. |
-| `validating-experimental-evidence` | PURPOSE: whether a result is valid evidence (registered path, leakage, footing) → there; this skill freezes the controls it will need. |
-| `orchestrating-agents` | Mechanics: envelope schema, admission, reservation reserves, TERM/KILL → there (P7, C4). A ticket deadline is a resource control, not the Director-content clock that `commanding-research-fleets` forbids. |
-| `optimizing-julia-gpu-kernels` | A GPU port or kernel's own correctness and speed → there; choosing the device for one test → here. |
+| `directing-research-sections` | PURPOSE: mandate, admission, `RUN_INTENT`, and learning commit → there; test selection and shape → here. The existing reciprocal handoff consumes this row |
+| `acting-on-hypotheses` | DECISIVE: costly or hard-to-reverse action → there; bounded reversible test → here |
+| `forming-hypotheses-from-anomalies` | Sequential: anomaly with no explanation → there; explanation plus alternatives → here |
+| `validating-experimental-evidence` | PURPOSE: measurement validity, footing, and claim scope → there; planning consumes its prerequisite checks and terminal disposition |
+| `orchestrating-agents` | Mechanics: envelopes, admission, reservations, stop/release, delegation → there. Deadline controls resources, not Director research content |
+| `optimizing-julia-gpu-kernels` | Kernel correctness and speed → there; device and phase plan for one test → here |
+
+Other owners keep their existing artifacts; this skill only consumes their results.
 
 ## MUST NOT FIRE
 
@@ -121,4 +183,12 @@ its reason. When nothing changed, say so in one line.
 | "Write the resource.json for this job" | `orchestrating-agents` |
 | "Why is this kernel slow?" | `optimizing-julia-gpu-kernels` |
 
-The full fire/no-fire set is `tests/triggers.md`.
+## Verification material
+
+| File | Covers | Read when |
+|---|---|---|
+| `assets/ITERATION-PLAN.md` | Plan and result fields in the canonical record | Planning a run |
+| `tests/triggers.md` | Fire/no-fire and ordered co-fire | Changing scope |
+| `tests/decision-cases.md` | Adversarial planning and interpretation cases | Verifying a reforge |
+| `tests/postmortem-2026-09-27.md` | Bounded episode audit and source limits | Auditing provenance |
+| `tests/forge-verification-ledger.md` | Source grades, design decisions, checks and waivers | Reforging |

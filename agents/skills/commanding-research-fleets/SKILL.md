@@ -3,7 +3,7 @@ name: commanding-research-fleets
 description: >-
   Defines explicit Director/PI/Researcher roles under the agentic-RnD fleet profile: charters, Researcher types,
   launch checklist, order form, thin-Director replies, stuck prompts, Retrieve/Search vocabulary.
-  Use for 艦隊運転, Director/PI/Researcher体制, 研究艦隊の立ち上げ, PI憲章, thin director,
+  Use for Director/PI/Researcher体制での艦隊運転, PI憲章, thin director,
   発注書の型, 行き詰まりの問い, or a stalled PI session. DECISIVE:
   programme/section artifacts→supervising-research-programmes/directing-research-sections;
   role content here; generic R&D execution→driving-bibifi-cycles. PURPOSE: dispatch→orchestrating-agents, CO-FIRE on PI/Researcher
@@ -14,7 +14,7 @@ description: >-
 
 # Commanding research fleets — the Director/PI/Researcher operating procedure
 
-> **Version**: v2609.2.0 (2026-09-27) — fleet roles do not replace local execution responsibility.
+> **Version**: v2609.2.1 (2026-09-27) — explicit role-profile trigger; generic dispatch stays external.
 > Source grades and solo verification: `tests/forge-verification-ledger.md`.
 
 ```bash

@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 // DETERMINISTIC LEXICAL DESCRIPTION CONTRACT.
 // Checks agreed text, polarity, and order. NOT a selector, trigger evaluation,
 // model-inference test, or proof of live routing behavior.
-const DESCRIPTION_BUDGET = 1024;
+// Description size is enforced by forging-skills/skill-check.ts and the collection budget.
+// Do not freeze a second, drifting platform cap in this semantic-routing fixture.
 const SKILLS_ROOT = resolve(import.meta.dir, "../..");
 
 const FAMILY = [
@@ -22,6 +23,11 @@ const FAMILY = [
   "acting-on-hypotheses",
   "governing-research-documentation",
   "continuing-long-running-tasks",
+  "driving-bibifi-cycles",
+  "systematizing-theories",
+  "proving-theorems",
+  "forming-hypotheses-from-anomalies",
+  "validating-experimental-evidence",
 ] as const;
 
 type FamilySkill = (typeof FAMILY)[number];
@@ -51,7 +57,7 @@ const CONTRACTS: readonly Contract[] = [
   [
     "legacy shim owns routing only",
     [
-      ["directing-research", /Routes legacy broad or ambiguous creative-research invocations/iu],
+      ["directing-research", /Routes explicitly requested legacy directing-research invocations/iu],
       ["directing-research", /emits a routing decision only/iu],
       ["directing-research", /owns no programme, section, candidate, admission, run, audit, retrospective, or transition semantics/iu],
     ],
@@ -100,9 +106,9 @@ const CONTRACTS: readonly Contract[] = [
     "worker specialists retain their own verbs",
     [
       ["raising-resolution", /Inspects ONE factual present-state row/iu],
-      ["systematizing-knowledge", /Systematizes a source CORPUS/iu],
+      ["systematizing-knowledge", /Synthesizes a source CORPUS/iu],
       ["surfacing-blind-spots", /Exposes blind spots in ONE existing plan, frame, or decision artifact/iu],
-      ["forging-novel-theses", /Generates a BATCH of testable thesis CANDIDATES/iu],
+      ["forging-novel-theses", /Transforms sourced seeds into one or more testable thesis CANDIDATES/iu],
       ["acting-on-hypotheses", /Acts on ONE SELECTED hypothesis tree/iu],
       ["arguing-research-papers", /Argues ONE FINISHED research CLAIM/iu],
     ],
@@ -111,18 +117,25 @@ const CONTRACTS: readonly Contract[] = [
     "orchestration is still an overlay rather than research meaning",
     [
       ["orchestrating-agents", /control plane/iu],
-      ["orchestrating-agents", /Domain content\/skill craftは各owner/iu],
+      ["orchestrating-agents", /research meaning→上記domain owner/iu],
     ],
   ],
 ];
 
 describe("DETERMINISTIC LEXICAL DESCRIPTION CONTRACT — not live routing proof", () => {
-  test(`all thirteen descriptions fit DESCRIPTION_BUDGET=${DESCRIPTION_BUDGET}`, () => {
-    for (const skill of FAMILY)
-      expect(
-        [...description(skill)].length,
-        `${skill}: Unicode length`,
-      ).toBeLessThanOrEqual(DESCRIPTION_BUDGET);
+  test("generic research no longer fires the legacy shim", () => {
+    expect(description("directing-research")).not.toMatch(/bare 「研究を進めて」|end-to-end 創造的研究/u);
+    expect(description("directing-research")).toMatch(/Use only for \/directing-research/iu);
+    expect(description("driving-bibifi-cycles")).toMatch(/authorized discovery loop/iu);
+  });
+  test("theory, proof, explanation and evidence keep distinct direct owners", () => {
+    expect(description("systematizing-theories")).toMatch(/THEORY MAP and THEORY CHANGESET/u);
+    expect(description("proving-theorems")).toMatch(/proof certification stay here/u);
+    expect(description("forming-hypotheses-from-anomalies")).toMatch(/PURPOSE cut vs forging-novel-theses/u);
+    expect(description("validating-experimental-evidence")).toMatch(/EVIDENCE DISPOSITION/u);
+    const compatibilityBody = readFileSync(resolve(SKILLS_ROOT, "directing-research/SKILL.md"), "utf8");
+    expect(compatibilityBody).toMatch(/systematizing-theories.*proving-theorems/u);
+    expect(compatibilityBody).not.toContain("INPUT CLASS: <legacy-broad");
   });
   for (const [name, assertions] of CONTRACTS)
     test(name, () => {

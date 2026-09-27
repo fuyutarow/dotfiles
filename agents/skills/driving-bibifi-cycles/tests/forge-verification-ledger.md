@@ -745,3 +745,23 @@ existing candidate checker suite passed 35 tests/156 assertions. No checker chan
 Collection floor passed 73 skills/64,628 charged characters under the unchanged ceiling.
 BIBIFI and forming core/reference warnings zero; forging reference debt 32→31 with scoped waiver
 in its ledger. `git diff --check` and the skills index passed.
+
+## 17. Family-level MECE consolidation — v2609.6.0
+
+Decision, coverage and scoped prose-debt waivers: `tests/research-family-mece-2026-09-27.md`.
+The collection map is agents/skills/README.md, Research responsibility map; composition links it
+instead of maintaining another table. This revision consolidates generic execution into BIBIFI,
+retires automatic use of the legacy router and separates local content from programme authority.
+It preserves theory, proof, corpus, evidence, candidate, commitment and control decisions as distinct owners.
+
+Two bounded reviewers checked the content and execution seams; root consumed findings before revising.
+A fresh reader checked fifteen task routes without reading the map, tests or ledgers. All reached
+the intended owner(s); formal-section resumption and next-lemma work were correctly conditional on
+existing authority and selection versus proof purpose. This is a semantic desk check, not live auto-trigger proof.
+A targeted openings-description recheck separated corpus specification from local work selection;
+root clarified that this skill writes the retiring observation of an unselected opening. Proof work
+remains owned by proving-theorems; its name need not be repeated in every unrelated description.
+
+The family lexical suite was red before the patch (three stale groups) and now passes ten tests.
+Description-size enforcement stays with the common floor and unchanged aggregate ceiling.
+The authored Markdown gate and skills index pass. No R&D throughput gain is claimed from these checks.

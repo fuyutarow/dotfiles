@@ -1,27 +1,20 @@
 ---
 name: operationalizing-research-gaps
 description: >-
-  Converts a SIGNED corpus position into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring
-  `OPENING` rows carrying `AUTHORITY: NONE`, each retired only by a pre-declared observation. Use for
-  turning a finished survey into next work — 研究の空白を次の一手にする, SoK の gap を操作可能にする,
-  未解決問題の棚卸し, research gap, open problem list, 生きている空白, 更新条件が受け身で使えない,
-  evidence gap map, 空白の型付け, 「調査は済んだが次に何をすべきか」, referee を切る, 反証観測を決める.
-  DECISIVE cut vs systematizing-knowledge: it owns what a gap IS — typology, claim ledger, `DONOR SET`
-  — and signs the position FIRST; HERE owns only what makes a gap OPERABLE (reason class,
-  discriminating observation, addressee, expiry, retirement). CARDINALITY cut vs
-  supervising-research-programmes: N unselected non-authoritative rows carrying no allocation here;
-  selection, ranking, `OPEN_ISSUE`, allocation there. PURPOSE cuts: target correspondence or thesis →
-  forging-novel-theses; running one selected costly test → acting-on-hypotheses; delivering a row to a
-  section that declared a need → NO OWNER TODAY, so this skill stops at addressing; durable authority
-  → governing-research-documentation. LAW: an `OPENING` is a bill of work, never a finding; it may never
-  create, upgrade, or soften a claim, and the sheet is measured by retirements only. Workflow-native:
-  typing and test-drafting may fan out per row; the burial declaration, the tail cap, and every
-  retirement stay SOLO. English skill; respond in the user's language (default Japanese).
+  Converts a SIGNED corpus position into a typed, test-bound OPENINGS SHEET with AUTHORITY: NONE.
+  Use for 研究の空白を次の一手にする, SoK gap, 未解決問題の棚卸し, research gap, open problem list,
+  evidence gap map, 空白の型付け, 反証観測, or 調査は済んだが次に何をすべきか.
+  Owns each unselected opening's reason, retiring observation, addressee, expiry and retirement; never creates findings.
+  Corpus synthesis/gap typology→systematizing-knowledge; programme allocation→supervising-research-programmes;
+  local work selection→driving-bibifi-cycles; candidate construction→forging-novel-theses;
+  costly selected test→acting-on-hypotheses; durable authority→governing-research-documentation.
+  Stops at addressing; no automatic delivery or admission. Workflow-native: typing/test drafting may
+  fan out; burial, tail cap and retirement stay SOLO. English skill; respond in the user's language.
 ---
 
 # Operationalizing research gaps — from a signed position to a bill of work
 
-> **Version**: v2608.1.0 (2026-08-05) — first forge; corpus position signed in
+> **Version**: v2609.1.0 (2026-09-27) — opening specification is separate from local work selection; source position in
 > `agents/research-control/GENERATIVE-SOK.md`. Findings and waivers: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -157,7 +150,8 @@ the sheet's shape; it is not a semantic check and says so in its own header.
 | "Classify what kind of gap this is" (coverage / evidence / inconsistency / comparability / …) | `systematizing-knowledge` `references/delivery.md` §5 — SOLE owner of the gap typology; this skill points at it and adds only the reason class and the test |
 | "Find target-agnostic source relations for this frame" | `systematizing-knowledge` K5 `DONOR SET` — relation seeds there; open questions here |
 | "Map this donor to my target / write the thesis / predict what follows" | `forging-novel-theses` — an opening is never a candidate |
-| "Which of these should we do first / allocate the budget / publish an `OPEN_ISSUE`" | `supervising-research-programmes` — CARDINALITY cut: selection and allocation over ≥2 directions there; N unselected, unranked rows here |
+| "Allocate across programme directions or publish an `OPEN_ISSUE`" | `supervising-research-programmes`; N unselected, unranked openings remain HERE |
+| "Choose the next bounded observation within this authorized task" | `driving-bibifi-cycles`; selecting local work does not require a programme |
 | "We picked this bet and it is expensive — commit, pivot, or kill?" | `acting-on-hypotheses` — one selected costly tree there; the unselected specification here |
 | "Run this cheap deterministic probe" | domain/plain executor — this skill writes the observation, it never performs it |
 | "Deliver this row to the section that asked about X" | **DECLARED RESIDUAL** — no skill owns delivery (consent, need-matching, offer, pull) in this collection today. Say so; address the row and stop. Never broadcast or push it (`references/circulation-and-accounting.md` §5) |

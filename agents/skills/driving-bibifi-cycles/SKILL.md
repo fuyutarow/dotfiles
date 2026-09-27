@@ -4,7 +4,7 @@ description: >-
   Maximizes knowledge discovery through Experimental and Formal Methods using short BIBIFI cycles.
   Use for Strong Inference, アノマリーからアブダクション, 競合仮説・予測表・排除表,
   実験計画, 6分イテレーション, マイクロチケット, massive parallelism, ETA/JST,
-  idle CPU/RAM/VRAM, and research execution that keeps stalling.
+  idle CPU/RAM/VRAM, 理論研究の実行, 研究を進めて, and an authorized discovery loop that is stalling.
   Selects useful work, expands independent agent microtickets, consumes results and replans immediately.
   Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
   Dispatch and enforceable limits→orchestrating-agents; evidence→validating-experimental-evidence;
@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.5.0 (2026-09-27) — compose specialist operations without surrendering the discovery loop.
+> **Version**: v2609.6.0 (2026-09-27) — default discovery execution, separate from theory content and formal authority.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -55,6 +55,9 @@ Stable tokens: `BIBIFI`, `MICROTICKET`, `ITERATION_PLAN`, `ITERATION_LOG`, `onti
 `authorized goal + current evidence/resources -> select -> execute -> consume -> reselect`.
 Own the rolling work selection and its plan/log inside the project's existing ticket/run/finding system.
 Do not create another database, launcher, authority hierarchy or blanket approval step.
+This is the default execution owner for ordinary authorized R&D, including theoretical research.
+Recover the bounded goal from the task before selecting work; a bare request grants no invented goal or mandate.
+Question clarification within that goal stays with the relevant content owner. Programme allocation is a different decision.
 One question per microticket does not mean one active question for the fleet.
 Under a formal section, preserve its admission, whole-cycle WIP and distinct learning-commit owners.
 Partial build returns can unblock authorized work but are not terminal run receipts or LEARN commits.

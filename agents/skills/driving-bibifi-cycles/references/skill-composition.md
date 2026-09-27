@@ -4,17 +4,14 @@ Use only the operation needed by the current evidence gap. This is not a checkli
 The responsible agent may apply multiple skills inline; a separate worker is useful only for independent bounded work.
 Reuse located claims, contrasts, predictions and evidence. Do not copy them into several competing records.
 
-| Needed change | Owner | Return consumed by this loop |
-|---|---|---|
-| Establish whether the surprising observation is real | `raising-resolution`; `validating-experimental-evidence` for measurement/comparison validity | Located fact or scoped evidence disposition |
-| Explain an observed-versus-expected contrast | `forming-hypotheses-from-anomalies` | Explanation, supplied vocabulary, attempted alternatives and discriminator; or unresolved evidence need |
-| Construct alternatives by transforming sourced seeds in a selected frame | `forging-novel-theses` | One or more unranked candidates with transformation provenance; or preserved mapping failure |
-| Select and run the next cheap informative check | HERE plus domain executor | Bound result, affected rivals/auxiliaries and next action |
-| Gate a costly or hard-to-reverse commitment | `acting-on-hypotheses` | Its precommitted test and scoped Commit/Pivot/Kill; HERE may coordinate Build→Measure without changing its judgment |
-| Qualify an empirical result | `validating-experimental-evidence` | What the measurement can and cannot support |
-| Certify an exact formal statement | `proving-theorems` | Exact statement/version, faithfulness and actual proof status |
-| Propagate a finding through axioms, lemmas, theorems and predictions | `systematizing-theories` | Bounded THEORY CHANGESET with affected predictions and open obligations |
-| Dispatch, interrupt, cap and release work | `orchestrating-agents` | Observed execution/resource state; it does not select scientific truth |
+Use the collection's [research responsibility map](../../README.md#research-responsibility-map) to select the content owner.
+This reference owns how BIBIFI consumes those operations continuously, not a second owner registry.
+
+For theoretical work, consume a bounded THEORY MAP obligation into a proof attempt or counterexample microticket.
+Return the exact statement/version and proof status, or qualified observation, to `systematizing-theories`.
+That owner updates the affected theoretical chain.
+Neither a corpus survey nor an OPENINGS SHEET is required for an existing theory obligation.
+For costly bets, coordinate AOH's Build→Measure slice; its threshold, interpretation and commitment decision stay there.
 
 ## Execution stays continuous
 

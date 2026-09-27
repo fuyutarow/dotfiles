@@ -42,7 +42,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 
 - [`raising-resolution`](raising-resolution/) — Inspect the actual code/data/source before asserting a fact — reach for it when tempted to guess.
 - [`surfacing-blind-spots`](surfacing-blind-spots/) — Expose hidden premises and human tacit constraints in an existing plan/frame; emit a bounded blind-spot packet, not solutions.
-- [`forming-hypotheses-from-anomalies`](forming-hypotheses-from-anomalies/) — Build ONE explanatory hypothesis from an anomaly, with the record of what entitled it; explain inside the current vocabulary before introducing a term outside it.
+- [`forming-hypotheses-from-anomalies`](forming-hypotheses-from-anomalies/) — Explain an observed contrast and record the vocabulary grounds; preserve distinct rival explanations.
 - [`acting-on-hypotheses`](acting-on-hypotheses/) — Test and commit an expensive/irreversible forward bet under uncertainty via Map-Loop-Leap; cheap deterministic reversible probes use the domain/plain executor.
 - [`driving-bibifi-cycles`](driving-bibifi-cycles/) — Maximize valid experimental and formal discovery through short BIBIFI loops, broad useful agent parallelism, critical-path priority and bounded compute.
 - [`validating-experimental-evidence`](validating-experimental-evidence/) — Qualify numerical claims through registered contract, leakage, footing, and lineage checks; polysearch owns the executable schema and finding.
@@ -53,76 +53,68 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`operationalizing-research-gaps`](operationalizing-research-gaps/) — Turn a signed position's gaps into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring openings retired only by a pre-declared observation.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
-- [`directing-research`](directing-research/) — Legacy route-only shim for broad or ambiguous creative-research invocations.
+- [`directing-research`](directing-research/) — Explicit legacy invocation and v1-record compatibility only; generic discovery execution belongs to BIBIFI.
 - [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.
 - [`directing-research-sections`](directing-research-sections/) — Direct one granted live section: local admission, run intent, receipt-linked learning, and declassified signal.
 - [`commanding-research-fleets`](commanding-research-fleets/) — Define explicit Director/PI/Researcher fleet roles and legacy certification; local execution follows BIBIFI, while formal sections retain their own admission and verification rules.
 - [`auditing-research-processes`](auditing-research-processes/) — Audit one frozen bounded research episode and return a non-enacting recommendation.
 - [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
 
-Research routing spine:
+#### Research responsibility map
 
-```text
-corpus ─ systematizing-knowledge ────────────────┐
-present artifact ─ raising-resolution ───────────┤
-existing plan/frame ─ surfacing-blind-spots ─────┤
-                                                 ▼
-supervising-research-programmes: frame / issue / mandate / portfolio
-                                                 │
-                                                 ▼
-directing-research-sections: charter one granted section
-                                                 │
-                                                 ▼
-forging-novel-theses: generate candidate packets
-                                                 │
-                                                 ▼
-directing-research-sections: freeze / deduplicate / admit locally
-                                                 │
-                                                 ▼
-[acting-on-hypotheses if expensive/irreversible; domain executor if cheap/reversible]: act on ONE tree
-                                                 │
-                            ┌────────────────────┴───────────────────┐
-                            ▼                                        ▼
-section receipt-linked learning → programme signal   arguing-research-papers: finished claim
-                            │
-                            ▼
-supervising-research-programmes: update/reopen portfolio
+Partition **decisions**, not people or subject areas. Each row owns one kind of result; a task may
+need several rows. Applying another skill does not require another agent, a new record, or a pause.
+This is the collection's responsibility map. Individual skills own the detailed contracts.
 
-anomaly the account did not predict → forming-hypotheses-from-anomalies: ONE HYPOTHESIS packet
-                       → forging-novel-theses for a ranked batch, or acting-on-hypotheses for one costly bet
+**Knowledge operations** change what can be claimed. Select by the requested result:
 
-signed corpus position → operationalizing-research-gaps: typed, test-bound, expiring openings
-                       → supervising-research-programmes selects/ranks them into the portfolio
+| Input → operation | Result | Sole owner |
+|---|---|---|
+| Existing artifact → inspect a factual row | Located observation | `raising-resolution` |
+| Source corpus → synthesize its evidence | Known/uncertain/disputed/missing position, or source-side DONOR SET | `systematizing-knowledge` |
+| Signed corpus gaps → specify observations that would resolve them | Non-authoritative OPENINGS SHEET | `operationalizing-research-gaps` |
+| Existing plan/frame → expose assumptions | Blind-spot packet; no proposed solution | `surfacing-blind-spots` |
+| Observed P versus expected Q → construct an explanation | HYPOTHESIS and vocabulary grounds | `forming-hypotheses-from-anomalies` |
+| Bounded local frame supplied/agreed in the task and sourced seed → transform | Unranked CANDIDATE or MAPPING-BREAK | `forging-novel-theses` |
+| Bounded statements/findings → construct or revise theoretical relations | THEORY MAP / THEORY CHANGESET | `systematizing-theories` |
+| Exact statement → prove or formalize | Statement/version and proof/faithfulness status | `proving-theorems` |
+| Measurement and contract → qualify validity/comparability | EVIDENCE DISPOSITION | `validating-experimental-evidence` |
+| Finished claim and evidence → argue or appraise | CLAIM SPEC or paper appraisal | `arguing-research-papers` |
+| Frozen research episode → audit evidence/process | Non-enacting process audit and recommendation | `auditing-research-processes` |
 
-frozen bounded episode → auditing-research-processes: audit + non-enacting recommendation
-```
+**Execution and commitment** determine what to do with current knowledge:
 
-Numerical receipts pass through `validating-experimental-evidence` before claim or learning;
-formalized theorems pass through `proving-theorems`' kernel and faithfulness gates.
+| Decision | Owned result | Sole owner |
+|---|---|---|
+| What useful bounded work runs next, and what changes after its return? | Rolling ITERATION_PLAN/LOG | `driving-bibifi-cycles` |
+| Does evidence justify one costly/hard-to-reverse bet? | Precommitted test table and Commit/Pivot/Kill | `acting-on-hypotheses` |
+| Who executes, sees, verifies or stops a ticket, under which resources? | Dispatch/visibility/lifetime/resource contract | `orchestrating-agents` |
 
-`systematizing-theories` connects source results and validated findings to one evolving theory map.
-It separates logical role, proof maturity, empirical support and target applicability.
-Its changesets feed exact prediction versions to experiment planning and obligations to proof work.
+Domain executors implement, measure or check proofs. BIBIFI selects and consumes their bounded work;
+it cannot manufacture a validity judgment, a proof certificate or adoption authority by scheduling it.
+Question clarification within an authorized local task stays with its content owner.
 
-| Function | State transition | Owned artifact | Skill |
-|---|---|---|---|
-| PRESENT-GROUND | uncited present claim → cited observation | observation with locus | `raising-resolution` |
-| CORPUS-GROUND | unsystematized corpus → evidence state | claim/evidence ledger | `systematizing-knowledge` |
-| SYSTEMATIZE THEORY | located statements/findings → versioned theory and affected consequences | `THEORY MAP` / `THEORY CHANGESET` | `systematizing-theories` |
-| OPERATIONALIZE | signed position's gaps → unselected, non-authoritative bill of work | `OPENINGS SHEET` / `RETIREMENT LEDGER` | `operationalizing-research-gaps` |
-| EXPOSE | implicit plan/frame → explicit premise surface | Blind-spot packet | `surfacing-blind-spots` |
-| FRAME / STEER | exposed premises/evidence → selected programme problem/state | `PROGRAMME_SNAPSHOT` / `OPEN_ISSUE` / `SECTION_MANDATE` / `PROGRAMME_DECISION` | `supervising-research-programmes` |
-| DIRECT SECTION | granted mandate → local admitted run/learning state | `SECTION_CHARTER` / `RUN_INTENT` / `SECTION_SIGNAL` | `directing-research-sections` |
-| ABDUCE | anomaly + an account that did not predict it → one grounded explanatory claim | `HYPOTHESIS` packet | `forming-hypotheses-from-anomalies` |
-| FORGE | selected frame → thesis batch | Candidate packets + coverage matrix | `forging-novel-theses` |
-| TEST / COMMIT | one expensive/irreversible selected tree → confidence/commit decision | Map / Loop table / Leap decision | `acting-on-hypotheses` |
-| RUN CHEAP PROBE | one deterministic/reversible selected tree → observed result | result with locus | domain/plain executor |
-| QUALIFY EXPERIMENT | raw numerical result → measurement validity and claim scope | `EVIDENCE DISPOSITION` in the canonical finding | `validating-experimental-evidence` |
-| AUDIT | frozen bounded episode → evidence-bounded process finding | `RESEARCH_PROCESS_AUDIT` / `AUDIT_RECOMMENDATION` | `auditing-research-processes` |
-| ARGUE | completed evidence → defensible paper claim | CLAIM SPEC | `arguing-research-papers` |
+**Governance** applies only to the state or profile being governed:
 
-`orchestrating-agents` is orthogonal: it owns who/when/visibility/veto/acceptance around this spine, not
-the research judgments themselves.
+| Decision | Owned result | Sole owner |
+|---|---|---|
+| Which programme problems receive allocation or mandates? | Programme state, OPEN_ISSUE and SECTION_MANDATE | `supervising-research-programmes` |
+| Which work/learning is admitted within an existing mandate? | Section charter, intent and learning state | `directing-research-sections` |
+| What do explicitly used Director/PI/Researcher roles mean? | Fleet role charters and order forms | `commanding-research-fleets` |
+| Which documents are authoritative, retained or retired? | Document admission/lifecycle | `governing-research-documentation` |
+| What task state survives handoff or compaction? | TASK-CONTINUATION | `continuing-long-running-tasks` |
+| Which trade-off wins when actors cannot confer? | Ordered doctrine | `codifying-doctrine` |
+
+Ordinary theoretical or experimental work does not require creating a programme, section or fleet.
+When that profile already applies, its authority and admission gates remain binding.
+`directing-research` is retained only for explicit legacy invocation and immutable v1 compatibility;
+its former generic entry role is consolidated into BIBIFI and the direct content owners above.
+
+For theory work, construct one bounded chain in `systematizing-theories`, send an exact proof
+obligation to `proving-theorems` or a discriminating check to BIBIFI, then incorporate the qualified
+return into the theory. Existing obligations go directly to work; no corpus survey or openings sheet
+is required. For an empirical anomaly, form/transform candidates only as needed, discriminate,
+qualify the result, and revise the affected theory. These are feedback loops, not a mandatory staircase.
 
 ### Agent harness
 

@@ -10,7 +10,7 @@ description: >-
   global ADOPT/RETIRE/REOPEN→supervising-research-programmes. Candidate genesis/mapping→forging-novel-theses;
   tacit premises→surfacing-blind-spots; present fact→raising-resolution; corpus→systematizing-knowledge;
   finished claim→arguing-research-papers. Cheap deterministic reversible no-exposure probe→domain/plain
-  executor. Post-selection experiment integrity only→practicing-tiger-style. English; respond in user
+  executor. Measurement validity→validating-experimental-evidence; risk bounds→practicing-tiger-style. English; respond in user
   language.
 ---
 
@@ -51,6 +51,8 @@ When a selected tree drives expensive or hard-to-reverse experiment work, keep t
 prewritten threshold, outcome table, and Commit/Pivot/Kill HERE first. Then
 `practicing-tiger-style` may add experiment-integrity bounds and negative cases; it does not
 choose, revise, or accept the hypothesis outcome.
+`validating-experimental-evidence` owns measurement validity and comparability; risk bounds do not certify either.
+Under a section mandate, return through its admission/learning path. Other authorized bets need no new section.
 
 ## CORE — read every time (precedence-setting)
 

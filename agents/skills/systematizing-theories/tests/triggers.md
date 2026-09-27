@@ -14,6 +14,7 @@ Desk-check name/description against actual sibling descriptions. A route is not 
 | F8 | 「予言を一つ外したら理論を全部捨てるべき？ 別の導出もある」 | HERE: scoped implication and alternative support |
 | F9 | Build one small chain from primitives to a testable consequence before inventorying the rest | HERE: bounded initialization |
 | F10 | One name hides two incompatible meanings; split the concept and map its uses | HERE: semantic split |
+| F11 | Here are three lemmas and a failing application; reconstruct the local question without a programme | HERE: bounded partial theory map and OPEN obligations |
 | N1 | Summarize what these 40 papers establish about the field | `systematizing-knowledge` |
 | N2 | Prove this fixed proposition in Lean | `proving-theorems` |
 | N3 | Reorder the sections; all mathematics and statuses are settled | `structuring-documents` |

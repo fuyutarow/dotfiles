@@ -13,7 +13,7 @@ description: >-
 
 # Systematizing theories
 
-> **Version**: v2609.1.1 (2026-09-27) — observed equivalence and revised predictions retain their scope.
+> **Version**: v2609.2.0 (2026-09-27) — bounded local theory questions need no programme grant.
 
 ```sh
 for f in references/statement-contract.md references/incremental-updates.md \
@@ -57,11 +57,15 @@ Evidence and proofs remain at their original loci; the map refers to them.
 | A new finding arrived | Locate its exact target statement/version and consume its evidence disposition |
 | A definition or assumption changed | Record the old/new meaning before inspecting dependent statements |
 | Theory is scattered across many records | Inventory the declared scope and start with the critical chain; list unreviewed records explicitly |
-| No selected theoretical question exists | Route framing to `supervising-research-programmes`; do not manufacture a unifying theory |
+| Bounded statements/findings exist but the local question is implicit | State the question those inputs can answer; build a partial map with explicit OPEN obligations |
+| Neither bounded inputs nor a goal are available | Obtain the missing scope; do not invent a unifying theory |
+| Choose or allocate among programme-level research questions | `supervising-research-programmes` |
 
 Do not postpone a bounded update until every historical theorem has been catalogued.
 Do not call an inventory complete without a declared source set and reverse check for omitted statements.
 A useful first result names one changed inference and the next unresolved obligation.
+Send a proof obligation to `proving-theorems`, or a discriminating observation/counterexample to BIBIFI.
+Theory obligations do not require a corpus review or an OPENINGS SHEET before work can begin.
 
 ## Gates
 

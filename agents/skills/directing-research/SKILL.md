@@ -1,9 +1,8 @@
 ---
 name: directing-research
 description: >-
-  Routes legacy broad or ambiguous creative-research invocations to the new sole owners and emits a
-  routing decision only. Use only for old directing-research requests, bare 「研究を進めて」,
-  end-to-end 創造的研究, or mixed programme/section/audit asks with no clear owner.
+  Routes explicitly requested legacy directing-research invocations and v1 records; emits a routing decision only.
+  Use only for /directing-research, old directing-research workflow, or legacy v1 compatibility.
   Programme/frame/portfolio→supervising-research-programmes; one granted
   section/candidate-test/run/learning→directing-research-sections; frozen episode/process
   postmortem→auditing-research-processes. Specific asks invoke those skills directly. It owns no
@@ -14,8 +13,8 @@ description: >-
 
 # Routing legacy research invocations
 
-> **Version**: v2608.3.0 (2026-08-03) — route-only compatibility shim after the v2 family split.
-> **Scope**: classify a legacy broad invocation, name the sole owner, and stop.
+> **Version**: v2609.1.0 (2026-09-27) — explicit compatibility only; generic execution belongs to BIBIFI.
+> **Scope**: preserve explicit legacy access and name the current owner.
 
 ```bash
 bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/directing-research && \
@@ -32,7 +31,7 @@ The routing artifact is:
 
 ```text
 ROUTING DECISION
-INPUT CLASS: <legacy-broad | programme | section | frozen-audit | external-owner | legacy-v1>
+INPUT CLASS: <explicit-legacy | programme | section | frozen-audit | external-owner | legacy-v1>
 SOLE OWNER: <one skill or compatibility reader>
 ORDERED ROUTE: <skill names in invocation order>
 COMPATIBILITY NOTE: <NONE or immutable-v1-record note>
@@ -46,17 +45,18 @@ this artifact. Those would turn the shim back into a semantic owner.
 
 | Input state | Route | Stop condition |
 |---|---|---|
-| Legacy broad or ambiguous creative-research ask | Classify the earliest explicit state below; for a genuinely mixed lifecycle, order the three new owners | `ROUTING DECISION`; no research content |
+| Explicit legacy invocation | Choose the requested operation below; ordinary work does not require a programme | `ROUTING DECISION`; invoke the current owner |
+| Authorized generic discovery loop, with no section mandate | `driving-bibifi-cycles` | Current work resumed; no invented grant |
+| Construct/revise one theory or prove one statement | `systematizing-theories` / `proving-theorems` by requested result | Theory or proof owner invoked |
 | Programme question, problem/frame construction, issue portfolio, cross-section allocation, or programme transition | `supervising-research-programmes` | Programme owner invoked |
 | Current `OPEN_ISSUE`, `SECTION_MANDATE`, or exactly one section's candidate/test, intent, receipt join, local learning, or signal | `directing-research-sections` | Section owner invoked |
 | One frozen terminal, stopped, failed, or bounded research episode requiring process review | `auditing-research-processes` | Process auditor invoked |
 | Existing v1 record or checker request | Preserve the record as immutable compatibility material; use its legacy structural floor only, then route any new semantic question to the applicable owner above | No schema rewrite and no shim verdict |
 
-Specific programme, section, and frozen-audit asks bypass this shim and invoke their owner directly.
-An explicit old `directing-research` request or a mixed ask may enter here only to obtain the routing
-decision.
+Specific asks bypass this shim. Mixed current work composes its actual owners directly.
+An explicit old `directing-research` request enters here only to obtain the compatibility route.
 
-For an end-to-end lifecycle, the maximum route is:
+For an explicitly requested formal programme lifecycle, the conditional route is:
 
 ```text
 supervising-research-programmes
@@ -71,6 +71,11 @@ Each skill retains its own entry gate. This route does not create an `OPEN_ISSUE
 
 | Ask | Sole owner |
 |---|---|
+| Generic authorized experimental/formal discovery loop | `driving-bibifi-cycles` |
+| One theory's definitions, axioms, results and finding-driven updates | `systematizing-theories` |
+| Exact statement formalization and proof verification | `proving-theorems` |
+| Explain an observed-versus-expected contrast | `forming-hypotheses-from-anomalies` |
+| Measurement validity and comparison footing | `validating-experimental-evidence` |
 | Corpus position or target-agnostic donor discovery | `systematizing-knowledge` |
 | A signed position's gaps turned into typed, test-bound, addressed, expiring openings | `operationalizing-research-gaps` |
 | One present fact, source, dataset, code path, or anomaly | `raising-resolution` |
@@ -125,6 +130,7 @@ instructions or treat them as an arguing home.
 
 | Specific ask | Direct route |
 |---|---|
+| Generic R&D, theoretical research or a Strong Inference cycle | `driving-bibifi-cycles`; specific theory/proof requests go directly to their owners |
 | Design or revise a research programme/problem/frame/portfolio | `supervising-research-programmes` |
 | Bid, charter, direct, register, learn, or signal inside one section | `directing-research-sections` |
 | Audit one frozen terminal research episode | `auditing-research-processes` |

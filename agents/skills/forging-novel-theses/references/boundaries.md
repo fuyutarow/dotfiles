@@ -43,7 +43,7 @@ Generation never grants experiment, adoption or resource authority beyond the cu
 
 | Ask | Ordered route |
 |---|---|
-| “How do I do creative research from topic to experiment?” | `directing-research` emits only a routing decision -> `supervising-research-programmes` selects/publishes the frame -> `directing-research-sections` charters a granted section -> HERE only at `thesis-missing` -> section admission -> [`acting-on-hypotheses` if hard-gated / domain executor if cheap-reversible] |
+| “Run ordinary authorized research from a bounded question to experiment.” | BIBIFI composes the needed content owners; HERE only for seed transformation when no adequate thesis exists |
 | “This controlled residual may imply a new theory.” | `raising-resolution` -> `supervising-research-programmes` frame decision -> granted `directing-research-sections` section -> HERE |
 | “Generate candidates and choose the best.” | HERE generates -> `directing-research-sections` freezes/deduplicates/selects locally |
 | “Generate candidates and design kill experiments.” | HERE generates -> `directing-research-sections` selects -> [`acting-on-hypotheses` if hard-gated / domain executor if cheap-reversible] |

@@ -14,7 +14,7 @@ description: >-
 
 # Supervising research programmes
 
-> **Version**: v2609.1.1 (2026-09-26) — signed invariants projected through issue and mandate.
+> **Version**: v2609.1.2 (2026-09-27) — programme allocation is separate from bounded local formulation.
 
 No harness → same map, serial. Durable guidance from a frontier model (2026-08).
 
@@ -38,6 +38,10 @@ Also stable: **SEARCH**, **LEARN**, **searchPerHour**, and **learnPerHour**.
 Also stable: **programme**, **section**, **fire/no-fire**, and **SOLO**. They are identifiers.
 
 ## THE LAW
+
+Use for programme-level question selection, portfolio allocation and mandates.
+Clarifying a bounded local question or constructing a theory stays with its content owner; it needs no programme grant.
+Ordinary authorized discovery execution belongs to `driving-bibifi-cycles`.
 
 > The Programme Supervisor owns programme problem and portfolio state. It never owns a live
 > section's work or the Goal Constitution.

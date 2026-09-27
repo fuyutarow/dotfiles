@@ -37,7 +37,7 @@ Read only skill names and descriptions. Any unresolved race is a description bug
 
 | Braided ask | Order |
 |---|---|
-| broad creative-research lifecycle with a blind-spot pass | `directing-research` emits only a routing decision → `supervising-research-programmes` fixes the programme artifact and decision → HERE returns a packet → programme owner resumes |
+| ordinary authorized research with a blind-spot pass | BIBIFI retains execution; HERE inspects the existing plan/frame and returns a packet; the content owner consumes it |
 | selected frame needs tacit seeds before thesis generation | HERE elicits real-human probes → `forging-novel-theses` consumes only HUMAN-provenanced answers named by `Handoff` |
 | hidden premise depends on a present claim | HERE identifies assumption + locator → `raising-resolution` inspects it → HERE integrates provenance if needed |
 | one expensive/irreversible forward bet needs premise audit and a kill test | HERE returns load-bearing premises → `acting-on-hypotheses` owns test/threshold/commit |

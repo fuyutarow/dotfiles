@@ -502,3 +502,13 @@ lines 42, 52, 58, 65, and 73. They still attribute stage diagnosis, programme/po
 candidate admission/disposition, result return, or retrospective meaning to `directing-research`.
 Clearing requires routing those live claims to the applicable v2 sole owner while preserving
 historical ledgers and v1 compatibility material.
+
+## 2026-09-27 — explicit compatibility, v2609.1.0
+
+Retire generic/bare research triggering; BIBIFI owns ordinary authorized execution. Explicit legacy
+requests retain the router and immutable v1 readers. Theory, proof, explanation and evidence now
+have direct body routes; generic task keywords are absent from the shim's trigger description.
+The current routing artifact uses explicit-legacy; no historical v1 schema is rewritten.
+Family audit and debt waiver: driving-bibifi-cycles/tests/research-family-mece-2026-09-27.md.
+The lexical family suite's stale wording/duplicate size cap was exposed red, then repaired to the
+current responsibility contract. Ten tests pass; this is neither live invocation nor throughput evidence.

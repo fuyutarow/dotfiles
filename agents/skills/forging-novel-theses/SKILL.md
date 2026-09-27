@@ -9,7 +9,7 @@ description: >-
   mapping: a transfer returns Status: CANDIDATE with target evidence UNTESTED, or MAPPING-BREAK.
   Recovery regenerates once in the supplied missing cell; if diversity cannot be restored, it returns
   explicit COVERAGE GAP. Never ranks, tests, admits, adopts, or discovers donors. Donor discovery →
-  systematizing-knowledge; problem formulation → supervising-research-programmes; local freeze/dedup
+  systematizing-knowledge; programme framing → supervising-research-programmes; local freeze/dedup
   and admission in a granted section → directing-research-sections; other bounded discovery → driving-bibifi-cycles.
   Explaining an observed contrast → forming-hypotheses-from-anomalies; an expensive selected tree → acting-on-hypotheses.
   Allocation and final packets stay SOLO. English skill;
@@ -18,7 +18,7 @@ description: >-
 
 # Forging novel thesis candidates
 
-> **Version**: v2609.1.0 (2026-09-27) — purpose-based genesis and direct bounded-discovery consumption.
+> **Version**: v2609.1.1 (2026-09-27) — bounded local framing is separate from programme allocation.
 > **Scope**: candidate construction only. Input is a selected problem/frame; output is one or more
 > candidate packets. Selection, testing, commitment, and program steering are intentionally elsewhere.
 
@@ -72,7 +72,9 @@ Fire only when all are true:
 4. a provenance-bearing seed is available, or `TRANSFER` has a frozen target-agnostic `DONOR SET`;
 5. the requested output is candidate generation, not selection or testing.
 
-If the problem itself is still being found, compared, or formulated, route to `supervising-research-programmes`.
+A bounded frame supplied or agreed in the authorized task satisfies selection; no programme grant is implied.
+Clarify a missing local object, contrast or constraint with the task owner before generation.
+Comparing research problems for programme allocation belongs to `supervising-research-programmes`.
 If novelty relative to a literature corpus is unknown, mark it `UNVERIFIED`.
 Route that evidence work to `systematizing-knowledge`; do not invent a prior.
 
@@ -276,7 +278,7 @@ test during recovery.
 6. **Name the nearest prior.** State the exact delta. Use `UNVERIFIED` when evidence is missing.
 
 7. **Flag frame changes.** A candidate may expose a needed change to the problem's object or relation.
-   Do not mutate the input. Let `supervising-research-programmes` decide from the flag.
+   Preserve the input. The task owner handles a local revision; programme changes require `supervising-research-programmes`.
 
 8. **Run the batch floor.** Reject coordinate collapse before return. Never substitute recipe-counting.
 
@@ -323,7 +325,7 @@ These are **generation-completeness** failures, not comparative selection.
 
 | Ask / state | Route |
 |---|---|
-| “Which research problem should I choose?” | `supervising-research-programmes` |
+| “Which programme research problems should receive allocation?” | `supervising-research-programmes`; bounded local frame clarification stays with the task owner |
 | “What does this literature establish, and is the idea actually novel?” | `systematizing-knowledge` |
 | “Find source-side relations across fields, without choosing target correspondences.” | `systematizing-knowledge` — it returns a frozen target-agnostic `DONOR SET` |
 | “Admit, test, or otherwise decide one local transfer attempt in a granted section.” | `directing-research-sections` — it owns local `TRANSFER DISPOSITION`; target evidence arrives through its downstream routes |

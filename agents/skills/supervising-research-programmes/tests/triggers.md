@@ -17,6 +17,8 @@ evidence of auto-invocation.
 | FIRE | "Use bounded transfer propagation, topic coverage gaps, and conflict alarms to revise the issue portfolio without opening packets." | this skill | programme-level aggregate propagation diagnostics |
 | FIRE | "The cheap upstream existence receipt is in; release this issue for independent bids, but do not choose its local scale." | this skill | Programme releases portfolio eligibility only |
 | NO-FIRE | "Choose the next method and protocol for Section 7." | `directing-research-sections` | local section direction |
+| NO-FIRE | "These three lemmas need a local theoretical question and a dependency map." | `systematizing-theories` | bounded theory content, no programme allocation |
+| NO-FIRE | "Resume our authorized discovery loop; choose the next counterexample check." | `driving-bibifi-cycles` | ordinary execution, no new mandate |
 | NO-FIRE | 「この候補三つのうち、どれを実装して次の run に出す？」 | `directing-research-sections` | candidate/run request |
 | NO-FIRE | "Here is the full section transcript and my method idea; update the programme." | quarantine then `directing-research-sections` | forbidden supervisor visibility |
 | NO-FIRE | "Postmortem this completed research episode's registration failures." | `auditing-research-processes` | terminal process audit |

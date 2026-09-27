@@ -63,3 +63,5 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S56 | Explanation attempt failed; located observation and selected frame remain | Preserve failure, use the observation as a transformation seed if justified, consume the return | Circularly require a successful hypothesis before hypothesis construction |
 | S57 | Ordinary authorized R&D has no formal section | Compose specialists inline or via useful independent microtickets under current authority | Require a new programme/section or stop at the first specialist return |
 | S58 | AOH supplies a costly-bet test table | Coordinate its Build→Measure slice and return evidence to its decision owner | Change its threshold or claim Commit/Pivot/Kill from scheduling authority |
+| S59 | Existing THEORY MAP has an unproved lemma and a possible counterexample | Select a bounded proof/counterexample task and return its exact status to the theory owner | Require a corpus survey, OPENINGS SHEET or new programme first |
+| S60 | User resumes ordinary authorized research without naming the old router | Apply BIBIFI and the needed content operation directly | Stop at a legacy ROUTING DECISION |

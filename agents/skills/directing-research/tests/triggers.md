@@ -1,18 +1,18 @@
-# Route-only compatibility-shim trigger desk-check
+# Explicit compatibility-shim trigger desk-check
 
 Read only the `name` and `description` of the research-family skills. `directing-research` (`D`) is
 a compatibility router, not a fourth semantic owner. Specific asks invoke their owner directly.
 
-## FIRE — legacy broad or ambiguous asks enter D only for a routing decision
+## FIRE — explicitly requested compatibility only
 
 | # | Realistic ask | Expected route | Why D fires |
 |---|---|---|---|
-| 1 | 「研究を進めて。何から始めるかも、実験後の振り返りもまだ決めていない」 | `D -> supervising-research-programmes`; later owners only when their entry state exists | bare legacy invocation has no explicit state |
+| 1 | 「/directing-research。今の理論の公理・補題を整理して」 | `D -> systematizing-theories` | explicit legacy invocation, direct theory owner |
 | 2 | “Use the old directing-research workflow for this new project, but route it to the current system.” | `D -> supervising-research-programmes` | explicitly requests the retired entrypoint and a compatibility route |
-| 3 | 「創造的研究を、問いづくりから局所実験、終了後の監査までどう運転する？」 | `D -> supervising-research-programmes -> directing-research-sections -> auditing-research-processes` | mixed end-to-end ask needs owner ordering; each later gate remains conditional |
-| 4 | “I have a programme question, a live section request, and a completed episode to inspect; who owns what?” | `D` emits one three-owner `ROUTING DECISION`, then stops | mixed ownership classification is the shim's sole artifact |
+| 3 | 「旧directing-research入口から、許可済みの実験を再開して」 | `D -> driving-bibifi-cycles` | explicit compatibility invocation does not invent a programme |
+| 4 | “Use directing-research to classify my programme, section and frozen-audit requests.” | `D` emits the scoped owner route | explicit compatibility classification |
 | 5 | 「旧 v1 の intent/receipt/judgment が残っている。読める状態を保ちつつ、今の担当に振り分けて」 | `D` preserves immutable v1 compatibility, then routes the new semantic question by state | explicit compatibility/readability request |
-| 6 | “Help plan and run this research effort; I don't know whether it is programme design, section work, or an audit yet.” | `D` classifies the earliest explicit state and routes once | genuinely ambiguous legacy broad ask |
+| 6 | “Use the legacy directing-research entry to prove this fixed statement.” | `D -> proving-theorems` | explicit legacy invocation, proof owner |
 
 ## NO-FIRE — specific asks bypass D
 
@@ -31,6 +31,10 @@ a compatibility router, not a fourth semantic owner. Specific asks invoke their 
 | 11 | “Keep this task resumable across compact and executor handoff.” | `continuing-long-running-tasks` | continuity transport |
 | 12 | “Choose bearers, visibility, vetoes, and acceptance for this signed research map.” | `orchestrating-agents` | control-plane overlay |
 | 13 | “Postmortem this generic production outage and fix its root cause.” | `implementing-and-debugging` | software incident, not research audit |
+| 14 | 「今の目的に沿って研究を進めて」 | `driving-bibifi-cycles` | ordinary authorized execution, not compatibility |
+| 15 | 「理論体系をfindingに応じて更新して」 | `systematizing-theories` | theory content |
+| 16 | “Formalize and prove this lemma.” | `proving-theorems` | exact proof task |
+| 17 | “Explain why P happened rather than Q.” | `forming-hypotheses-from-anomalies` | explanatory task |
 
 ## Co-fire and stop checks
 

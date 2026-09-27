@@ -124,3 +124,13 @@ already hosts one conditional branch with its own stop condition, output shape, 
 floor script. The honest state is that a separate skill is *defensible*, not *proven necessary*. The
 falsifiable condition stands: if this skill never wins an ask without `systematizing-knowledge`
 co-firing, it is a branch and should be folded into a K6 gate.
+
+## 2026-09-27 — local selection cut, v2609.1.0
+
+Keep signed-corpus opening specification here; local next-work selection goes to BIBIFI and
+programme allocation to its supervisor. Theory obligations already have a direct theory/proof/BIBIFI
+route, so widening this corpus contract was rejected. Shorten the description while retaining
+source, non-authority, retirement, delivery and specialist boundaries. Fresh description review
+prompted explicit unselected-opening wording. No opening schema or checker changed.
+Family decision/verification: driving-bibifi-cycles/tests/research-family-mece-2026-09-27.md.
+PROSE-DEBT waiver: retain 43 pre-existing long reference sentences; current core warnings zero.

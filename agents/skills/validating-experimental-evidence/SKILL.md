@@ -5,7 +5,8 @@ description: >-
   baseline/基準線, leakage/ラベル漏れ, prequential tests, implausible scores, confounded
   ablations/交絡, regression/退行, registry bypass, or stale executed code.
   Owns EVIDENCE DISPOSITION meaning; polysearch owns schema and promotion gates.
-  Prospective run→directing-research-sections; costly test threshold→acting-on-hypotheses;
+  Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
+  costly test threshold→acting-on-hypotheses;
   dispatch/resources→orchestrating-agents; risk ledger→practicing-tiger-style;
   code fix→implementing-and-debugging. Workflow-native: judgment SOLO; receipts may fan out.
   English skill; respond in the user's language.
@@ -13,7 +14,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.4 (2026-09-27) — execution, publication, validity and achievement are separate judgments.
+> **Version**: v2609.1.5 (2026-09-27) — measurement qualification requires no new section profile.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -53,8 +54,9 @@ Do not create a sidecar card, validator, or second result store in this skill.
 | Raw terminal run and exact contract | Join target receipts; test validity | `EVIDENCE DISPOSITION` in the canonical finding | `PASS`, `FAIL`, or `UNKNOWN` measurement validity |
 | Valid run plus comparator or historical result | Test footing, confound, and concept eligibility | comparison and claim scope in that finding | `RAW ONLY`, `SCOPED`, `COMPARABLE`, or temporal claim assessment |
 
-`directing-research-sections` owns `RUN_INTENT`, executor `RUN_RECEIPT`, and local learning
-commit. The builder-owned measurement contract cites this skill's validation plan.
+Under a section mandate, `directing-research-sections` owns run-intent/receipt meaning and local learning commit.
+Otherwise the authorized task uses its existing run/finding records; no section is created for validation.
+The builder-owned measurement contract cites this skill's validation plan.
 It also cites the target-owned effective benchmark contract. Its validity-evidence locus cites the
 canonical finding or domain evidence record. `orchestrating-agents` consumes that
 locus/digest only for dispatch, visibility, and acceptance topology.

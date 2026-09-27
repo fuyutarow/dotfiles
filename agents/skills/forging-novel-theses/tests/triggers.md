@@ -20,9 +20,9 @@ Read only sibling `name` + `description` fields. Any race is a description bug.
 
 | Ask | Route |
 |---|---|
-| “How should I do creative research end-to-end?” | `directing-research` emits only a routing decision; it owns no lifecycle stage |
-| “Here are three observations, but I have not selected or formulated the research problem yet.” | `supervising-research-programmes` formulates and selects the frame |
-| “This frame is selected, but there is no sourced seed or frozen donor set. Invent something anyway.” | `directing-research-sections` stops and requests admissible local input; genesis does not launder an unsourced seed |
+| “How should I do creative research end-to-end?” | BIBIFI recovers the authorized goal and composes content owners; programme requests use their explicit owner |
+| “Here are three observations, but the local question is unclear.” | Task/content owner clarifies the bounded question; programme supervision only for programme choice/allocation |
+| “This frame is selected, but there is no sourced seed or frozen donor set. Invent something anyway.” | Return the missing input to the task owner; do not launder an unsourced seed or invent a section |
 | “The frame, seed, and adequate thesis are already fixed; which thesis should we admit?” | `directing-research-sections` freezes, deduplicates, and decides local admission |
 | “Is this idea actually absent from the literature?” | `systematizing-knowledge` |
 | “Find analogies across fields for this target, but do not map them yet.” | `systematizing-knowledge` — target-agnostic donor discovery and `DONOR SET` |
@@ -45,7 +45,7 @@ For ordinary authorized R&D, the task owner consumes returned candidates through
 
 | Braided ask | Order |
 |---|---|
-| broad creative-research workflow | `directing-research` emits only a routing decision -> `supervising-research-programmes` selects/publishes the frame -> `directing-research-sections` charters a granted section -> HERE only at selected-frame + no-adequate-thesis + supplied-seed -> section freeze/dedup/admission |
+| explicit formal programme workflow | `supervising-research-programmes` selects/publishes the frame -> `directing-research-sections` charters a granted section -> HERE only at selected-frame + no-adequate-thesis + supplied-seed -> section freeze/dedup/admission |
 | anomaly to new thesis | `raising-resolution` -> `supervising-research-programmes` problem-frame decision -> granted `directing-research-sections` section -> HERE |
 | literature to candidates | `systematizing-knowledge` -> `supervising-research-programmes` selects/frame -> `directing-research-sections` charters -> HERE -> section freeze/dedup/admission |
 | donor discovery to transfer admission | `systematizing-knowledge` freezes target-agnostic `DONOR SET` -> HERE maps it to the selected target and emits `CANDIDATE` or `MAPPING-BREAK` -> `directing-research-sections` freezes the denominator and decides local admission |
@@ -68,7 +68,7 @@ The description must expose all of these stage-1 predicates:
 - selected-target mapping that returns `CANDIDATE` with `UNTESTED` evidence, or `MAPPING-BREAK`;
 - explicit refusal to rank, test, admit, adopt, or discover donors;
 - donor discovery -> `systematizing-knowledge`, formulation -> `supervising-research-programmes`,
-  local freeze/dedup/admission -> `directing-research-sections`, and expensive selected tree ->
+  local freeze/dedup/admission under a section mandate -> `directing-research-sections`, and expensive selected tree ->
   `acting-on-hypotheses`;
 - allocation and final packets stay `SOLO`.
 

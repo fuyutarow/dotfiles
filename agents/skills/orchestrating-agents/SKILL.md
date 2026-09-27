@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.3.1 (2026-09-27) — C0が発注・開始・終了・結果消費を同じ実行IDで区別する。
+> **Version**: v2609.3.2 (2026-09-27) — 通常の研究実行はBIBIFI、ここは委任・実行管理。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -47,7 +47,7 @@ fi
 創造的研究では、programme構成とportfolio判断は`supervising-research-programmes`が署名する。
 grant済み一sectionのlocal workは`directing-research-sections`が署名する。
 凍結terminal episodeのprocess auditは`auditing-research-processes`が署名する。
-`directing-research`は意味を変更しないroute-only shimである。
+`directing-research`は明示的な旧入口利用だけの互換shim。通常の研究実行は`driving-bibifi-cycles`。
 
 本skillは各domain artifactのlocus/digestを受けた後のdispatch overlayだけを所有する。
 
@@ -383,7 +383,7 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | Ask / signal | 判定 | PURPOSE cut と owner | Artifact |
 |---|---|---|---|
 | generic software incident/postmortemで原因、修復、再発防止を問う。 | `NO-FIRE` | `implementing-and-debugging`が挙動とroot causeを所有する。dispatch/pacing等のcontrol-plane failureが明示された場合だけ別行で本skillがco-fireする。 | implementation diagnosis/fixへのpointer。 |
-| 創造的研究の裸の「研究を進めて」「どんどん進めて」。署名済みmapもdispatch指定も無い。 | `NO-FIRE` | route-only `directing-research` shimがprogramme、section、terminal auditを分類し、意味変更なしで新ownerへ渡す。 | routing decisionだけ。 |
+| 「研究を進めて」。mapもdispatch指定も無い。 | `NO-FIRE` | `driving-bibifi-cycles`が既存の目的・証拠を確認し、必要なcontent ownerを適用する。programme配分要求はそのownerへ。 | 委任が必要になった時点でoverlay。 |
 | 署名済みmapがある。またはdispatch/control-planeを明示している。 | `FIRE / CO-FIRE` | mapの意味はdomain owner。本skillはagent、visibility、dependency、veto、verification、acceptanceだけを載せる。 | map locus/digestとdispatch overlay。 |
 | 「起草と査読を委任」「定理や文書を起草・査読」。 | `FIRE / CO-FIRE` | 運転はここ。数学の中身は `proving-theorems`。 | role分離とco-fire記録。 |
 | 「複数の模型で水平思考」「誰に任せる」「配役を決める」。 | `FIRE` | topologyと順序はここ。現在の担い手はmodel roster。 | portfolioまたはrole-selection record。 |

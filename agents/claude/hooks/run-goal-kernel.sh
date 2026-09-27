@@ -35,7 +35,7 @@ if [ -n "${GOAL_KERNEL_BUN:-}" ]; then
   fi
 else
   for candidate in bun "${HOME:-}/.bun/bin/bun" /opt/homebrew/bin/bun /home/linuxbrew/.linuxbrew/bin/bun; do
-    runtime=$(command -v "$candidate" 2> /dev/null) && "$runtime" --version > /dev/null 2>&1 && exec "$runtime" "$hook"
+    runtime=$(command -v "$candidate" 2> /dev/null) && case $("$runtime" --version 2> /dev/null) in 1.[4-9]* | 1.[1-9][0-9]* | [2-9]*) true ;; *) false ;; esac && exec "$runtime" "$hook"
   done
 fi
 

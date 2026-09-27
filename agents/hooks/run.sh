@@ -4,7 +4,9 @@
 # Locates a bun that RUNS — not merely exists: in a non-interactive shell the first `bun` on
 # PATH is mise's shim, which exits non-zero with no version declared for the cwd, and a
 # fail-closed gate then fails OPEN (r99 2026-09-27: storage gate let `cargo build` through
-# under Codex). Then execs the given .ts hook, stdin passed through untouched.
+# under Codex). It must also be >= 1.4: hooks use Temporal, and an older bun throws on the
+# first call — the same fail-OPEN by another route. Then execs the given .ts hook, stdin passed
+# through untouched.
 #   run.sh [--fail-closed] <hook>.ts
 # Fail direction when no bun runs:
 #   (default)     exit 0 silently              — Stop guards: never break a turn
@@ -22,13 +24,13 @@ hook="$dir/${1:?usage: run.sh [--fail-closed] <hook>.ts}"
 
 for c in bun "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun \
   /home/linuxbrew/.linuxbrew/bin/bun /usr/local/bin/bun; do
-  if p=$(command -v "$c" 2> /dev/null) && "$p" --version > /dev/null 2>&1; then
+  if p=$(command -v "$c" 2> /dev/null) && case $("$p" --version 2> /dev/null) in 1.[4-9]* | 1.[1-9][0-9]* | [2-9]*) true ;; *) false ;; esac then
     exec "$p" "$hook"
   fi
 done
 
 if [ "$mode" = "closed" ]; then
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"hook runner: no bun runtime found to run %s — install bun (brew install bun) and retry"}}\n' \
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"hook runner: no bun >= 1.4 found to run %s — install or upgrade bun (brew install bun), then mise run doctor"}}\n' \
     "$(basename "$hook")"
 fi
 exit 0

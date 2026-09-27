@@ -13,6 +13,7 @@
 //   git-hooks   .githooks                        core.hooksPath points at it
 //   login-shell zsh                              the account's login shell is zsh
 //   mise-scope  scripts/test-mise-scope.ts       INV-6: no implicit global toolchain
+//   bun-floor   mise installs + tracked pins     no bun < 1.4 (Temporal) installed or pinned
 //   mcp         .mcp.json                        every declared server registered in Claude Code
 //                                                (and Codex, when installed)
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
@@ -601,6 +602,81 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
       );
 }
 
+// Temporal is on by default only from bun 1.4, and this repo's TS uses it — so "which bun runs
+// a hook/statusline" is a correctness question, not a preference. That bun is NOT decided by
+// dotfiles' own mise.toml: a Claude session inherits the PATH of the directory it was launched
+// from, which can put an old mise install dir first; and mise auto_install re-creates an old
+// install the moment any repo still pinning it runs `bun`. Both halves are therefore checked:
+// the installs a frozen PATH could land on, and the tracked pins that would re-summon them.
+const BUN_FLOOR: readonly [number, number] = [1, 4];
+function belowFloor(v: string): boolean {
+  const m = /^(\d+)\.(\d+)/.exec(v);
+  if (!m) return false; // "latest", "1", a ref — not a sub-1.4 claim
+  const [maj, min] = [Number(m[1]), Number(m[2])];
+  return maj < BUN_FLOOR[0] || (maj === BUN_FLOOR[0] && min < BUN_FLOOR[1]);
+}
+function trackedBunPin(file: string): string | undefined {
+  let section = "";
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const header = /^\s*\[([^\]]+)\]/.exec(line);
+    if (header) section = header[1] ?? "";
+    const pin = /^\s*"?bun"?\s*=\s*"([^"]+)"/.exec(line);
+    if (section === "tools" && pin) return pin[1];
+  }
+  return undefined;
+}
+/** One tracked-config link -> "pinned: <file> (bun = ...)" when it pins below the floor. */
+function trackedOldPin(link: string): string | undefined {
+  let file: string;
+  let pin: string | undefined;
+  try {
+    file = realpathSync(link);
+    if (!file.endsWith(".toml")) return undefined;
+    pin = trackedBunPin(file);
+  } catch {
+    // config deleted since mise last saw it, or unreadable (e.g. an unmounted drive):
+    // neither can be a live pin on this machine
+    return undefined;
+  }
+  return pin !== undefined && belowFloor(pin)
+    ? `pinned: ${file} (bun = "${pin}")`
+    : undefined;
+}
+export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
+  const floor = BUN_FLOOR.join(".");
+  const installs = join(ctx.home, ".local/share/mise/installs/bun");
+  const tracked = join(ctx.home, ".local/state/mise/tracked-configs");
+  const old: string[] = [];
+  const oldVersions: string[] = [];
+  // mise's own alias links ("1", "latest") point at a real dir already listed.
+  const installed = existsSync(installs)
+    ? readdirSync(installs).filter(
+        (v) => !lstatSync(join(installs, v)).isSymbolicLink(),
+      )
+    : [];
+  oldVersions.push(...installed.filter(belowFloor));
+  old.push(...oldVersions.map((v) => `installed: bun ${v}`));
+  const links = existsSync(tracked) ? readdirSync(tracked) : [];
+  for (const link of links) {
+    const hit = trackedOldPin(join(tracked, link));
+    if (hit !== undefined) old.push(hit);
+  }
+  if (old.length === 0)
+    return pass("bun-floor", `no bun < ${floor} installed or pinned`);
+  const fix = [
+    `set each pin to bun = "${floor}"`,
+    ...(oldVersions.length > 0
+      ? [`mise uninstall ${oldVersions.map((v) => `bun@${v}`).join(" ")}`]
+      : []),
+  ].join(", then ");
+  return fail(
+    "bun-floor",
+    `${old.length} bun < ${floor} install(s)/pin(s); Temporal-using TS breaks under them`,
+    fix,
+    capped(old),
+  );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -617,6 +693,7 @@ export const CHECKS: Check[] = [
   { name: "git-hooks", run: checkGitHooks, applies: always },
   { name: "login-shell", run: checkLoginShell, applies: always },
   { name: "mise-scope", run: checkMiseScope, applies: always },
+  { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
   {
     name: "wslconfig",

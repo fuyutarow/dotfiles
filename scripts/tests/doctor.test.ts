@@ -25,7 +25,15 @@ function doctor(
   env: { HOME: string; DOTFILES: string },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync(["bun", SCRIPT], {
-    env: { ...process.env, ...env, DOCTOR_ONLY: only },
+    // bun >= 1.4 writes its runtime transpiler cache to $HOME/.bun/install/cache/@t@/*.pile
+    // (measured 2026-09-27; 1.3.14 did not). That is the runtime writing, not the doctor, so it
+    // is pointed outside the fixture HOME to keep the "writes nothing" assertions about doctor.
+    env: {
+      ...process.env,
+      ...env,
+      DOCTOR_ONLY: only,
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: tmp("doctor-bun-cache-"),
+    },
   });
   return {
     code: proc.exitCode ?? -1,
@@ -154,5 +162,38 @@ describe("doctor", () => {
     });
     expect(r.code).toBe(2);
     expect(r.out).toContain("FATAL: DOCTOR_ONLY names unknown check(s): nope");
+  });
+
+  /** A HOME with mise bun installs (real dirs + one alias link) and one tracked repo pin. */
+  function fixtureBunHome(installed: string[], pin: string): string {
+    const home = tmp("doctor-bun-");
+    const installs = join(home, ".local/share/mise/installs/bun");
+    mkdirSync(installs, { recursive: true });
+    for (const v of installed) mkdirSync(join(installs, v));
+    symlinkSync(`./${installed[0]}`, join(installs, "latest"));
+    const repo = join(home, "repo");
+    mkdirSync(repo);
+    writeFileSync(join(repo, "mise.toml"), `[tools]\nbun = "${pin}"\n`);
+    const tracked = join(home, ".local/state/mise/tracked-configs");
+    mkdirSync(tracked, { recursive: true });
+    symlinkSync(join(repo, "mise.toml"), join(tracked, "abc123"));
+    return home;
+  }
+
+  test("bun-floor: a sub-1.4 install and a sub-1.4 pin are both named", () => {
+    const home = fixtureBunHome(["1.4.2", "1.3.14"], "1.2.22");
+    const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/^FAIL {2}bun-floor {2}2 bun < 1\.4 /m);
+    expect(r.out).toContain("installed: bun 1.3.14");
+    expect(r.out).toContain('(bun = "1.2.22")');
+    expect(r.out).toContain("mise uninstall bun@1.3.14");
+  });
+
+  test("bun-floor: only >= 1.4 installs and a minor-line pin pass", () => {
+    const home = fixtureBunHome(["1.4.2", "1.4.0"], "1.4");
+    const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^PASS {2}bun-floor {2}no bun < 1\.4/m);
   });
 });

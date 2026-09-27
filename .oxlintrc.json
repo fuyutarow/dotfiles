@@ -8,7 +8,14 @@
   ],
   "ignorePatterns": ["node_modules", "agents/skills"],
   "rules": {
-    "max-depth": ["warn", 2]
+    "max-depth": ["warn", 2],
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "Date",
+        "message": "Date is banned: use Temporal (bun >= 1.4 ships it; mise.toml pins bun \"1.4\"; `mise run doctor` bun-floor guards the runtime)."
+      }
+    ]
   },
   "overrides": [
     {

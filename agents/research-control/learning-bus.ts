@@ -54,8 +54,12 @@ function text(value: unknown): value is string {
 }
 function timestamp(value: unknown): number | undefined {
   if (!text(value) || !RFC3339.test(value)) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over.
+  try {
+    return Temporal.Instant.from(value).epochMilliseconds;
+  } catch {
+    return undefined;
+  }
 }
 function digest(value: unknown): value is string {
   return typeof value === "string" && SHA.test(value);

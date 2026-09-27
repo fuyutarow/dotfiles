@@ -81,12 +81,16 @@ function warn(msg: string): void {
 
 function parseDay(s: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const t = Date.parse(`${s}T00:00:00Z`);
-  return Number.isNaN(t) ? null : t;
+  // UTC midnight of that day; an impossible date (02-30) is rejected, not rolled over.
+  try {
+    return Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds;
+  } catch {
+    return null;
+  }
 }
 
 function todayStamp(): string {
-  return requestedToday ?? new Date().toISOString().slice(0, 10);
+  return requestedToday ?? Temporal.Now.plainDateISO("UTC").toString();
 }
 
 function daysBetween(fromMs: number, toMs: number): number {

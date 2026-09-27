@@ -221,7 +221,7 @@ git ls-files -z -- \
 # "error" once that backlog is paid down — a warn that never becomes an error is theater.
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns everywhere; in scripts/*.ts switch/nested ternary -> ts-pattern and try/catch -> neverthrow are errors"
+description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; in scripts/*.ts switch/nested ternary -> ts-pattern and try/catch -> neverthrow are errors"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 run = "bunx --bun oxlint"
 

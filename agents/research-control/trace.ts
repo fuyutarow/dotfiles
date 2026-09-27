@@ -91,8 +91,12 @@ function nonempty(value: unknown): value is string {
 }
 function time(value: unknown): number | undefined {
   if (!nonempty(value) || !RFC3339.test(value)) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
+  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over.
+  try {
+    return Temporal.Instant.from(value).epochMilliseconds;
+  } catch {
+    return undefined;
+  }
 }
 function sha(value: unknown): value is string {
   return typeof value === "string" && SHA.test(value);

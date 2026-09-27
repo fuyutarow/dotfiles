@@ -198,6 +198,26 @@ function stringArray(
   );
 }
 
+// "ISO-compatible" = an ISO 8601 instant, local date-time, or date. Temporal parses exactly
+// those; Date.parse also took implementation-defined forms ("Sep 27 2026") and rolled
+// impossible dates (02-30) over instead of rejecting them.
+const ISO_PARSERS: ReadonlyArray<(s: string) => unknown> = [
+  (s) => Temporal.Instant.from(s),
+  (s) => Temporal.PlainDateTime.from(s),
+  (s) => Temporal.PlainDate.from(s),
+];
+function isIsoTimestamp(s: string): boolean {
+  for (const parse of ISO_PARSERS) {
+    try {
+      parse(s);
+      return true;
+    } catch {
+      // try the next shape
+    }
+  }
+  return false;
+}
+
 function parseAuthority(value: unknown, locus: string): GoalAuthority {
   if (!isRecord(value)) {
     throw new GoalKernelError("GK_SCHEMA", `${locus} must be an object`);
@@ -208,7 +228,7 @@ function parseAuthority(value: unknown, locus: string): GoalAuthority {
     `${locus}.approved_at`,
     64,
   );
-  if (Number.isNaN(Date.parse(approvedAt))) {
+  if (!isIsoTimestamp(approvedAt)) {
     throw new GoalKernelError(
       "GK_SCHEMA",
       `${locus}.approved_at must be an ISO-compatible timestamp`,
@@ -555,7 +575,9 @@ function withExclusiveStateLock<T>(
     writeJsonExclusive(path, {
       schema_version: STATE_SCHEMA,
       purpose,
-      created_at: new Date().toISOString(),
+      created_at: Temporal.Now.instant().toString({
+        fractionalSecondDigits: 3,
+      }),
       pid: process.pid,
     });
   } catch (error) {
@@ -793,7 +815,9 @@ export function activateGoal(
         writeJsonExclusive(snapshotPath, contract);
       }
       ensureConfig(paths);
-      const activatedAt = new Date().toISOString();
+      const activatedAt = Temporal.Now.instant().toString({
+        fractionalSecondDigits: 3,
+      });
       const active: ActiveGoal = {
         schema_version: STATE_SCHEMA,
         goal_id: contract.goal_id,
@@ -964,7 +988,7 @@ function ensureRunBinding(
     goal_snapshot_rel: relative(paths.state, snapshotPath),
     policy_version: POLICY_VERSION,
     policy_digest: POLICY_DIGEST,
-    bound_at: new Date().toISOString(),
+    bound_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
   };
   const binding: RunBinding = {
     ...bindingBody,
@@ -981,8 +1005,8 @@ function ensureRunBinding(
 }
 
 function eventIdentity(): Readonly<{ id: string; at: string }> {
-  const at = new Date().toISOString();
-  const id = `${Date.now().toString().padStart(13, "0")}-${randomUUID()}`;
+  const at = Temporal.Now.instant().toString({ fractionalSecondDigits: 3 });
+  const id = `${Temporal.Now.instant().epochMilliseconds.toString().padStart(13, "0")}-${randomUUID()}`;
   return { id, at };
 }
 

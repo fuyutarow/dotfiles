@@ -37,6 +37,15 @@ If no job is ready, return the actual constraint so the driver can split, reuse 
 Do not invent capacity or accept an empty ready queue as proof that no useful work exists.
 The six-minute planning/report window does not replace a job's admitted stop conditions or finite worker lifetime.
 
+BIBIFI内の実験・GPU test・profilingは、同じ実験上限を実行器へ渡す。testという名前で免除しない。
+発射前に有効なwalltimeと停止経路を確認し、job idと実行器のreceiptへ結び付ける。
+promptの期限、agentの寿命、queueの期限はprocessの強制停止を代替しない。
+下のwalltime値は例示であり、各jobでは現在のdomain/user上限以下に設定する。
+停止猶予はcleanup専用であり、その間の追加計算を予算内の結果として数えない。
+超過を観測したら、同じ停止設定を使う次の発射より先に停止経路を修復する。
+raw結果は保持し、運転違反と科学的妥当性を分ける。無関係な正常jobまで一律に止めない。
+大きなsuiteを流す前に変更testsetと必要な依存・負例へ絞る。広い検査には別の有用性と有限予算が要る。
+
 pilot、smoke、benchmark、test、本走、resident service のどれも「小さいから」を免除理由に
 しない。数値を生む subprocess、並列test、長走行、resident serviceを発射する前に、入力寸法から
 導いたmemory boundと一つの資源envelopeを凍結し、`agent-resource-run` の admission を通す。
@@ -78,7 +87,7 @@ admission不能である。
   },
   "scratch_bytes": 1073741824,
   "child_fanout": 0,
-  "walltime_seconds": 1800,
+  "walltime_seconds": 120,
   "cleanup": { "mode": "term-then-kill", "grace_seconds": 10 }
 }
 ```

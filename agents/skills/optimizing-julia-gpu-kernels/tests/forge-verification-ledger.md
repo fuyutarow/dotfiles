@@ -322,3 +322,18 @@ GPU-first Firefly-shaped ask; the P7-only no-fire row protects the placement sea
 (unchanged from pre-edit). `git diff --check`: PASS. Collection floor:
 72 skills, 64,564 listing characters, within the declared budget. `mise run
 link:skills` passed; the Codex skill link resolves to this source directory.
+
+## 2026-09-27 — scope the performance problem, v2609.4.1
+
+Root-signed delta consumes EV2 update semantics and EV3 workload/timing footing. GKB is an
+optimistic lower time bound, not a measured/guaranteed whole-run rate. GK2 selects recoverable
+whole-run cost, distinguishes device-share from wall-share and separates kernel/warm/cold gains.
+Historical primitive reuse is checked at current shapes and state lifetime. Global next-functional-
+revision freezes are replaced by affected-path performance acceptance plus BIBIFI work selection.
+Short targeted oracles do not waive required GK3 acceptance; broad tests still need finite budgets.
+Both prior and raised target numbers need justification. No current CUDA API facts or kernel code
+were changed. Source/audit and review findings live in sibling BIBIFI performance postmortem/ledger§11.
+Static review found and fixed GK3 ambiguity. A clarified fresh target event marked both unsupported
+thresholds pending; no actual performance gain is claimed. Archived804ac2c and current target
+floor each report208existing reference prose warnings, no core warnings; scoped debt waived with
+unchanged baseline. Collection and diff checks pass; no runtime instrumentation was introduced.

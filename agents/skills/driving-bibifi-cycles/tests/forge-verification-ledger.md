@@ -451,3 +451,55 @@ Firedancer run, hook enforcement, or runtime schema was changed.
 `mise run link:skills`, `mise run lint:skills-wiring`, index check and `git diff --check` pass.
 Codex source-directory and Claude fleet links resolve to this repository. Existing sessions and
 project-specific fleet_policy overrides are not claimed to have reloaded the new policy.
+
+## 11. Discovery throughput, parallelism and performance v2609.2.4 — 2026-09-27
+
+**Source and priority.** Both supplied packets, hashes, overlap limits and scoped observations
+live in `postmortem-2026-09-27-performance.md`. User instructions explicitly reaffirm broad
+parallel microtickets and “Maximizing the throughput of knowledge discovery from Experimental
+and Formal Methods”. These are author-confirmed objectives. Episode timing, kernels and scores
+remain third-party reports, not reproduced runs. Our parent-capacity language overcorrected toward
+small teams; the current delta replaces that default, preserving actual host/platform/write limits.
+
+**Root-signed treatment.** Core replaces proxy objectives with valid, relevant discovery per time.
+Separate agent-ready work from compute admission; launch useful independent work broadly, using
+compact returns and exception coordination. One question per ticket is not one question per fleet.
+Template/reference/cases consume that rule. C0 now repairs return routing before throttling only
+blocked branches. Single live-file writers coexist with isolated proposals. P7 binds real process
+caps for loop tests/profiling and preserves evidence on overruns; BIBIFI chooses the next useful
+repair instead of waiting for a queue to drain. EV2 owns batched shared-state update semantics;
+EV3 owns throughput units and timing. GPU GKB/GK2 consume those contracts, separate stage and
+whole-run gains, and stop only the affected performance acceptance rather than all development.
+No new skill, database, simulator, schema or execution hook is introduced.
+
+**Static review.** Fresh Terra `performance_semantics_review` found a possible waiver of required
+GK3 acceptance tests. Fixed: targeted microticket oracle does not waive required acceptance tests;
+broader tests retain finite coverage/budget. Fresh Terra `discovery_parallel_review` read core,
+template and actual orchestration deltas without cases/ledger and returned PASS. Root owns design
+and acceptance; reviewers performed bounded NONCOMPUTE tasks, no compute or nested fanout.
+
+**Sequential OLD/NEW.** Fresh Terra `perf_forward_old` loaded804ac2c and `perf_forward_new` loaded
+the current BIBIFI, EV2 and GPU manuals. Four separately delivered events tested process overrun,
+batching semantics, mismatched throughput and sixteen useful independent agent tickets whileGPU
+was full. Both stopped the overrun, rejected claimed sequential equivalence, and started all16
+when slots/host/scopes fit. Thus no new broad parallelism gain was demonstrated by this text case.
+Both rejected the inflated200k threshold yet retained the unsupported50k. Root added explicit
+old-target justification in GPU/EV3. Fresh `throughput_target_recheck` received the isolated event
+with self-set/underived threshold status clarified and correctly marked both pending. This is a
+narrow post-fix check with clarified input, not an isolated causal estimate of the skill change.
+Its additional “100x impossible” statement is accepted only under a nonoverlapping time model;
+the manual correctly requires a critical timeline when work overlaps. No live throughput gain,
+process killing, GPU behavior or target feasibility is certified by these symbolic exercises.
+
+**Verification.** S46–S49, revisedS36, orchestration cases, four sequential events and the
+additional static cases cover the delta. Target floor passes: BIBIFI/evidence zero prose warnings;
+measured archive of804ac2c GPU reference debt208 unchanged; orchestration reference13 unchanged.
+Those existing prose debts remain scoped cleanup work. `git diff --check` and collection floor
+pass:73skills/64,415charged characters, unchanged ceiling. The listing now carries separate agent
+scaling. Previous narrower skill versions and their recorded acceptance remain historical evidence.
+
+Deployment: central `link:skills` and `lint:skills-wiring` pass; Codex/Claude BIBIFI links resolve
+to the canonical source. Before commit, HEAD advanced to738eca7 through an unrelated host-snapshot
+hook commit. Its four files do not overlap this delta; shared index was empty and no operation was
+paused. Preserve it, stage only this task's enumerated skill files. No push or external deployment
+is performed by this task; fresh-session runtime compliance remains unmeasured.

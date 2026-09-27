@@ -13,7 +13,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.2 (2026-09-27) — observed interventions and claim-matched equivalence checks.
+> **Version**: v2609.1.3 (2026-09-27) — update-protocol equivalence and matched throughput evidence.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash

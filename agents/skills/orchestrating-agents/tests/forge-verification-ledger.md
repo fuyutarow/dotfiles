@@ -1385,3 +1385,15 @@ and owned lower-priority reservation reassessment. BIBIFI remains the work-selec
 The source/audit and static/sequential review receipts are in the sibling BIBIFI ledger section10
 and `tests/postmortem-2026-09-27-queues.md` there. Target floor passes; existing13 reference prose
 warnings unchanged. No resource-runner implementation or external job control changed.
+
+## 2026-09-27 — agent capacity is not GPU capacity
+
+User correction supersedes the default shrink-fan-out response. C0/core now scale compact returns,
+existing routing and deterministic joins; only actual contention/stale decisions throttle affected
+branches. Useful independent NONCOMPUTE work uses free agent slots/host capacity while GPU phases
+wait. Single live writer plus isolated proposals prevents shared-file coupling. P7 connects loop
+experiment/test/profiling limits to effective launcher caps and process-tree cleanup; example120s
+is illustrative, never a universal cap. Parent deadlines are not process enforcement.
+Root-signed source/verification home: sibling BIBIFI performance postmortem and forge ledger§11.
+Static parallel review PASS; sequential old/new both launched16eligible agents symbolically.
+Existing reference prose13 unchanged; target/collection checks pass. No runtime runner was modified.

@@ -22,6 +22,14 @@ model and a prequential learner have different estimands. So do a forward-only
 kernel and a training step. A margin over a broken comparator cannot establish
 capability when the candidate fails its own trivial baseline.
 
+For throughput, join the numerator's semantic unit and denominator's timed boundary explicitly.
+Distinguish frozen-model inference, predict-score-update work, warm device time, and end-to-end cold wall time.
+Internal positions/s is not input tokens/s without a workload-specific conversion and matching counted work.
+Shared device model alone does not match workload size, state updates, precision, batching or output semantics.
+Unmatched historical numbers may motivate investigation; do not derive a speedup factor or release threshold from them.
+An aspirational target stays labeled unvalidated until its workload, bound and acceptance rationale are fixed.
+Rejecting a new target does not validate the old one. Check both sources and retain their actual authority/status.
+
 Before a run, check whether a threshold is reachable. Use the finite sample,
 target distribution, scoring window, and known bounds. After a run,
 an observed value outside a credible bound reopens EV0–EV2 before it becomes evidence.

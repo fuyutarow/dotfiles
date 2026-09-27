@@ -4,7 +4,8 @@ description: >-
   Runs goal-directed R&D through microticket BIBIFI (Build → Break → Fix) cycles.
   Use for 実験計画, マイクロチケット, 6分イテレーション, BIBIFI最大化, ETA/JST,
   idle RAM/VRAM/CPU, and ticket/agent lifetimes. Prioritizes the critical path, fills spare
-  capacity with useful independent work, targets ~2-minute experiments and caps each at 10 minutes.
+  capacity with useful independent work, scales agent microtickets separately from compute jobs,
+  targets ~2-minute experiments and caps each at 10 minutes.
   Owns the rolling ITERATION_PLAN/LOG and scientific work selection within authorized scope.
   Admission→directing-research-sections; resource/dispatch mechanics→orchestrating-agents;
   evidence validity→validating-experimental-evidence; theory updates→systematizing-theories.
@@ -14,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.2.3 (2026-09-27) — short decisions survive queue, integration and resource contention.
+> **Version**: v2609.2.4 (2026-09-27) — executable time limits and performance repairs preserve the measured task.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
@@ -23,11 +24,21 @@ for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
 bun ../forging-skills/scripts/skill-check.ts .
 ```
 
+## Objective — maximize knowledge discovery throughput
+
+Maximize the throughput of knowledge discovery from Experimental and Formal Methods.
+Count new, valid, goal-relevant evidence, falsifications, counterexamples and checked proof results.
+Use `proving-theorems` for proof status and `validating-experimental-evidence` for empirical validity.
+Artifacts, completed tickets, GPU utilization and agent count are means, not discovery units.
+An enabling repair earns its value by shortening a named next discovery; report it separately from that discovery.
+Do not inflate throughput by splitting one result, repeating known findings or choosing trivial irrelevant questions.
+
 ## LAW — break through the critical path; leave no useful capacity idle
 
 > Produce a small verifiable artifact, test what could break it, then fix, retain or reject it from the evidence.
 > Attack the earliest blocking dependency on the critical path first. Keep its next useful action moving.
 > Actively turn spare capacity into goal-relevant progress; utilization alone earns no credit.
+> Expand useful independent agent work across available slots; serialize only the actual shared bottleneck.
 > Shorten the time from action to feedback to the next action. Do not end an execution request with a plan alone.
 > Each finding may obsolete other work already running. Commit only to a microticket, then select again.
 > Delegate a bounded action, never responsibility for keeping the critical path moving.
@@ -80,6 +91,10 @@ If it cannot, change the slice, reuse valid preparation or choose a different di
 No sweep or large experiment belongs in this loop. Do not disguise a separately authorized larger study as microtickets.
 Two minutes is a target, not an absolute launch gate. Choose a useful slice when runtime is longer; keep the ten-minute cap.
 Repeated near-cap runs reopen scale, setup and throughput before admitting another expensive batch.
+The selected process limit must be installed in the launcher, including diagnostic tests and profiling in this loop.
+Use orchestration P7 to verify the effective cap and process-tree cleanup; a deadline in a prompt is not enforcement.
+On an overrun, preserve the receipt, correct the stop path and reselect affected queued work before more launches.
+Do not call an overrun a compliant cycle merely because it returned a score; evidence validity is judged separately.
 
 ## Make the ticket a complete small loop
 
@@ -133,6 +148,25 @@ Do not cancel another owner's jobs without authority. Record the actual contenti
 Use actual load as well as memory: spare VRAM does not imply spare GPU compute or host RAM.
 Give each compute job its RAM/VRAM/CPU/slot footprint. P7 in `orchestrating-agents` owns admission and limits.
 
+### Scale agents and compute separately
+
+Maintain separate ready queues for agent work and resource-admitted compute phases in the existing board.
+A full GPU does not block source retrieval, counterexamples, interface analysis or isolated patch preparation.
+Start useful independent microtickets across available agent slots now; do not default to a small fixed worker count.
+Do not equate NONCOMPUTE with zero host cost or unlimited platform capacity; observe actual slot and host limits.
+
+| Available work | Parallel action |
+|---|---|
+| Several source records can change the current repair | One bounded located comparison per relevant record; return independently, not a long inventory ticket |
+| Several invariants or interface seams can fail independently | Parallel narrow counterexample/contract checks with named consumers |
+| Several fixes target the same file | One integration owner; separate authorized snapshots/patch proposals, never concurrent edits to that live file |
+| GPU is occupied but a useful patch is ready to prepare | Prepare the patch and minimal test input now; admit its compute phase only when resources fit |
+| One result invalidates several tickets | Notify affected owners and cancel stale branches; keep unaffected ready work running |
+
+Briefs carry disjoint questions, write scopes, consumers, invalidation conditions and short returns.
+No duplicate work, hidden numerical run under NONCOMPUTE, speculative sweep or new admission follows from free slots.
+Independent questions do not wait for every agent in a wave; consume each return when its own dependency is ready.
+
 ## Wait only for the dependency this action needs
 
 | Dependency | Treatment |
@@ -169,13 +203,18 @@ Cancelled work keeps its original evidence binding; report discarded effort with
 Owner-approved premise changes govern replanning; a worker's unsupported assertion grants no new authority.
 If updates cannot reach a worker promptly, shorten its assignment to the next hand-back instead of granting a long queue.
 
-**A queue is conditional, not a battery.** Select one next discriminating run from current evidence.
+**A queue is conditional, not a battery.** Select the next discriminating run per dependency chain from current evidence.
+Many independent microtickets may proceed concurrently; one question per ticket is not one active question for the fleet.
 Run fixed comparison arms together only when their joint result answers that one question.
 Do not automatically rerun every arena on each revision or protect a whole queue by freezing development until it drains.
 Before each queued launch, recheck premise, code/input binding, priority, resources and its remaining finite lifetime.
 Admission retries obey that lifetime and replan on evidence; an endless periodic retry is not progress.
 Prefer an immutable run snapshot while development continues under the existing isolation policy.
 If the required launcher cannot use one, serialize only the necessary read/write window or repair that blocker first.
+If a first launch fails in snapshot/configuration setup, stop identical retries and repair the launcher on one fixture.
+Do not run the rest of the queue as repeated launcher diagnostics or count prelaunch failures as experiments.
+When a measured bottleneck already changes the next repair, retain one necessary baseline and reassess the remainder now.
+The old queue's completion is not a prerequisite for applying a useful repair on a properly bound new revision.
 
 ## Device and lifecycle control
 
@@ -210,7 +249,10 @@ Do not merely move the deadline or send “hurry up” while leaving the same as
 After a decisive result, record which live assignments continue, shrink or stop and why.
 Use scoped change notifications; do not require a fleet-wide acknowledgement or repeat unchanged context.
 For blind verification, apply the orchestration owner's information boundary to these notifications.
-Keep fan-out within the parent's ability to consume results and intervene. Worker count is not progress.
+Scale coordination with fan-out: compact structured returns, deterministic joins and preauthorized unchanged branches.
+The parent owns priorities and exceptions; it need not reread every worker transcript or approve each local step.
+If returns backlog, repair routing/consumption first. Throttle only work affected by actual contention or stale decisions.
+Do not use parent overload as a standing small-team policy; expand useful ready work after fixing the bottleneck.
 One function per ticket and a fixed agent cap are not universal rules; use a checkable consumed outcome as the unit.
 Useful side findings never excuse an unattended critical dependency.
 
@@ -222,6 +264,8 @@ Do not promote a missing control, a failed instrument or a partial timeout to a 
 A diagnosed instrument failure can close its diagnostic question, with the observed failure and next repair recorded.
 Keep refuted hypotheses and unexplained causes. Repair/retest uses a new binding, not a rewritten old criterion.
 The next ticket comes from this result or a primary source; do not add work by guesswork or utilization alone.
+For a performance repair, evidence EV2/EV3 fixes update semantics and comparison footing before a speedup claim.
+Use the GPU skill for stage cost and kernel choice; historical fast code is a candidate, not proof of current speed.
 
 ## Six-minute report — outputs first
 
@@ -262,3 +306,4 @@ No harness → run the same ready queue serially with scoped receipts.
 | `tests/postmortem-2026-09-27-third.md` | Historical third audit |
 | `tests/postmortem-2026-09-27-coordination.md` | Parent delegation failure, source locators and repair responsibility |
 | `tests/postmortem-2026-09-27-queues.md` | Conditional queues, execution identity, role consolidation and sequential fixtures |
+| `tests/postmortem-2026-09-27-performance.md` | Process-cap failures, batching semantics and throughput-footing cases |

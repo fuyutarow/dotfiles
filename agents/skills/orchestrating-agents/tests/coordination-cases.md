@@ -8,7 +8,9 @@
 | Scope amendment sent but receipt unknown | Use C3a and report unknown state honestly | Assume the changed work is running |
 | Result changes shared premise | Parent records affected continuations/stops; independent work continues | Global barrier or no reassessment |
 | Parent missed an intervention but the worker eventually succeeded | Preserve valid result; coordination still fails retrospectively | Wash away failure using final success |
-| Parent cannot process current workers' returns | Reduce fan-out and process critical return first | Increase agents to meet a count target |
+| Parent cannot process current workers' returns | Repair structured return routing, consume critical result and throttle only affected branches | Fix a small team size or inflate agents solely to meet a count target |
 | A blind verifier's input becomes obsolete | Cancel or rebind its input without exposing other arms' reasoning | Leak competing conclusions in coordination notices |
 | BIBIFI process exceeds its cap | Stop through owner and preserve evidence | Invoke long-run C2 to background it |
 | Authorized long job receives a valid stop/invalidation | Stop and confirm child/resource release | Follow obsolete “stop only at final report” instruction |
+| GPU admission full, independent NONCOMPUTE microtickets fit actual slots and host limits | Launch useful agent work now; compute waits at its own admission | Treat GPU occupancy as a fleet-wide stop |
+| Two authors share a target live file | One live writer/integrator; other workers return isolated scoped proposals | Concurrent writes or serialized independent analysis |

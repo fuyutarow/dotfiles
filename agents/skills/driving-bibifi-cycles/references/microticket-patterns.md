@@ -89,3 +89,14 @@ If A rejects the representation, notify B and cancel affected running/queued wor
 Preserve partial evidence and reclaim resources. Do not wait for B's deadline or the next six-minute report.
 If A instead supports the representation, select B's next microticket using that result.
 An unrelated ticket with unchanged premises continues; every result does not stop the entire fleet.
+
+## Broad agent work while compute is scarce
+
+A long throughput-inventory assignment can become independent short returns from relevant historical records.
+Each worker returns the located primitive, matched workload/semantics and one current transfer obstacle.
+Other workers can construct a repeated-key batching counterexample, check reset boundaries or inspect a consumer seam.
+These are distinct questions with immediate consumers, not replicas of the same broad research prompt.
+Launch all useful ready slices that fit agent slots and host limits; do not hold them behind a GPU test.
+Where patches share a target file, use isolated proposals and one live integration owner.
+Admit each numerical check separately under P7 when it is ready; no hidden compute under a NONCOMPUTE declaration.
+Consume returns individually and invalidate only affected branches; do not wait for a complete inventory document.

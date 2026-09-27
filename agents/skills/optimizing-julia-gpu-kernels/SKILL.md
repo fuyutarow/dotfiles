@@ -16,7 +16,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.4.0 (2026-09-25) — whole-step boundary and selected-work accounting.
+> **Version**: v2609.4.1 (2026-09-27) — performance scope, update semantics and whole-run speedup accounting.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -29,6 +29,9 @@ AMDGPU implementation is deferred; the reduced-precision reference records only 
 
 Before allocation, warmup, profiling, or a pilot, obtain P7 resource admission through
 `agent-resource-run`. P7 owns capacity; this skill owns the admitted GPU work.
+Inside a BIBIFI loop, use its short experiment cap for GPU tests and profiling as well as benchmarks.
+A microticket may use a targeted oracle under its cap; it does not waive required GK3 acceptance tests.
+Schedule any broader release tests with explicit coverage and a separate finite budget, not an unbounded suite.
 
 Fast-moving facts are tagged `[dated:YYYY-MM]`. Re-check a row after two quarters.
 Re-check sooner when the target or toolchain differs.
@@ -64,6 +67,7 @@ Re-check sooner when the target or toolchain differs.
 | `raising-resolution` | Inspect `CUDA.functional()`, `CUDA.versioninfo()`, `Pkg.status`, and a profile before a present-state claim. |
 | `acting-on-hypotheses` | Cheap reversible benchmarks stay in GK2. Use AOH only when costly downstream exposure depends on one untested result. |
 | `orchestrating-agents` | P7 selects and admits device resources. P7 placement alone does not trigger GKR; a model-step GPU performance objective does, even without an explicit residency declaration. |
+| `validating-experimental-evidence` | EV2 owns update-order equivalence; EV3 owns throughput units and comparison footing. Consume those contracts before interpreting a faster kernel or batch. |
 | `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Workflow-native fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE
@@ -102,8 +106,8 @@ Write this block before choosing primitives, setting a speed target, or dispatch
 |---|---|
 | A speed target is written without this block | Reject the target; derive the block first. |
 | A target is a multiple of the previous implementation | Replace it with a fraction of the bound. |
-| Measured time is more than 10× the bound | STOP acceptance under the performance contract. Check the bound's assumptions and diagnose the worst stage. Fix the path or revise an unattainable bound with evidence before the next functional revision. |
-| A reference model is to be benchmarked | Derive its bound the same way first; measure only if the two bounds do not already answer the question. |
+| Measured time is more than 10× the bound | Stop performance acceptance for the affected path. Check bound scope and diagnose its dominant cost; do not freeze unrelated useful development. |
+| A reference model is to be benchmarked | Match the EV3 work unit/protocol/timing boundary and derive its budget. Bounds alone do not establish measured throughput superiority. |
 | A shared-library function is published on a device path | Its docstring states ops and bytes per unit, and its tests include the budget assertion. |
 
 ## §0b GKR — device residency for a whole step
@@ -132,7 +136,14 @@ Write the stage map before code. Do not hide a data-dependent stage outside that
 | Only K of C candidates may write, but C costly outputs are computed and masked afterward | If K is known before output construction, gather its IDs or cheap match results on device, then compute/write K outputs. If ranking needs C outputs, charge C and prove the bound; a final mask itself saves no work. |
 | A trace shows zero copies but a stage or output inside the hot-path boundary remains on the host | GKR still fails. Verify device execution and output residency per stage; zero memcpy is necessary, not sufficient. |
 | A step's measured time is dominated by host stages | Report the per-stage table (share of time, device or host) before any tuning; the host stages are the fix. |
-| A known violation "CPU-only" survives more than one revision | It blocks the next functional revision until it is removed. |
+| A known violation "CPU-only" survives more than one revision | Withhold the affected GPU-performance claim and prioritize its repair. BIBIFI owns the next useful work selection. |
+
+GKB's peak-based time is an optimistic lower bound, not a guaranteed attainable end-to-end runtime.
+State which stages and costs it covers before comparing it with measured time or setting a release threshold.
+Audit existing targets as well as proposed increases. An unsupported old number is not a validated fallback threshold.
+Preserve a user-mandated target as a goal with feasibility open; mark internal unvalidated thresholds pending justification.
+For batching or deferred credit, use evidence EV2's protocol test before claiming behavior-preserving acceleration.
+For causal scans, state whether episodes have isolated tables or share sequential state; these are different algorithms.
 
 ## §1 GK0 — the deny-gate dispatch table (read FIRST)
 

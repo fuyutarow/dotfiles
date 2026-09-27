@@ -258,7 +258,16 @@ A diagnosis by analogy to an earlier incident is not a diagnosis. Each claim nee
 | none of the above holds | — | the stage is far from every bound: re-read its algorithm against GKB before tuning |
 
 Per-stage split: time each stage once under `CUDA.@sync` and print, per stage, measured time,
-its own GKB bound, and the ratio. Fix the stage with the largest ratio first.
+its own GKB bound, and the ratio. Select a fix by recoverable whole-run time, not the largest ratio alone.
+
+Separate queue wait, process/JIT setup, warm host work, warm device work and export/cleanup.
+Within overlapping execution, use a critical timeline; do not sum overlapping stage durations as wall time.
+A kernel occupying 98% of device time need not occupy 98% of the whole run.
+For nonoverlapping costs, forecast `T_new = T_unchanged + T_changed / s + T_added` using measured stage shares.
+Label `s` and any unmeasured cost as assumptions; remeasure the same workload after the one-stage change.
+Kernel speedup, warm-step speedup and cold end-to-end speedup are separate claims.
+Reuse requires testing the predecessor primitive at current shapes, vocab, layout, device and state lifetime.
+A library name or old fast record cannot certify the current call path; hidden O(V) work may dominate it.
 
 | Observation | Rule |
 |---|---|

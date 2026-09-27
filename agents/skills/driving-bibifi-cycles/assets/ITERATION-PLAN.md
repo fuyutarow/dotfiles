@@ -7,12 +7,14 @@ Keep cross-arm coordination details outside blind workers' read sets under the e
 ## Shared context — establish once, refresh when changed
 
 - Goal and completion condition: <authorized target and exact acceptance question>
+- Knowledge gain: <new evidence/counterexample/proof decision; enabling work names the next discovery it accelerates>
 - Previous release ETA (JST): <schedule or initial baseline>
 - Current window: <start -> next six-minute report, JST>
 - Critical frontier: <first decision/deliverable that unlocks the goal>
 - Parent coordination: <current blocker; latest artifact; next intervention time/event and action>
 - Binding/validation context: <code, input, runner, controls and evidence-owner records; unresolved scope named>
 - Resources now: <available and reserved RAM/VRAM/CPU/slots, actual GPU load; UNKNOWN if unmeasured>
+- Agent capacity: <available slots; ready independent questions; compute-waiting phases kept separate>
 - Priority reservation: <resources needed by current/next critical ticket and when>
 - Worker/launcher policy: <existing authority, envelope and lifecycle references>
 
@@ -23,6 +25,8 @@ Keep cross-arm coordination details outside blind workers' read sets under the e
 | <id> | <decision changed or delivery dependency removed; critical or independent> | <artifact + informative check + fix decision> | <execution / interpretation / promotion; receipt> | <phase footprint/envelope or NONCOMPUTE> | <JST; finite stop/hand-back> | <result -> next ticket> |
 
 Independent tickets may use spare capacity even when they are not on the critical path.
+Fill available agent slots with useful independent microtickets even while compute phases await admission.
+If ready agent work is deferred, name its actual slot/host/write/dependency constraint; GPU busy alone is insufficient.
 For idle resources, record the blocker/successor/preparation slices inspected and the remaining limiting condition.
 If a row cannot produce useful feedback promptly, change the slice instead of merely extending its ETA.
 

@@ -206,3 +206,13 @@ exercise. Distinguish supplied oracle construction from learned acquisition/mode
 No schema or second validator is added. Source/cases and review provenance live in the sibling
 BIBIFI queue postmortem and forge ledger section10. Independent queue/evidence review PASS;
 mechanical floor zero prose warnings. Actor-reported scientific conclusions were not certified.
+
+## 2026-09-27 — protocol-preserving batching and throughput units
+
+EV2 now explicitly separates no-future-label leakage from sequential-equivalent updates. First
+batch-item parity cannot prove later-item/state equivalence; deliberate delayed learning gets a
+new protocol binding. EV3 separates cold/warm, frozen inference/predict-score-update and input
+units/internal positions. Neither an old nor a new self-set unsupported target is validated by
+rejecting the other. Source, counterexample and bounded static/sequential receipts live in sibling
+BIBIFI performance postmortem and forge ledger§11. Zero prose warnings. This semantic revision
+uses user-supplied reports and a constructed repeated-key witness, not a new vendor/API fact claim.

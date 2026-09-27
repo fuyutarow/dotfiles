@@ -26,6 +26,24 @@ If the invariant has no clear state/API boundary, ask `designing-type-contracts`
 to place it. The target code owner
 implements the test and fixes a violation.
 
+## Batching must preserve the declared update protocol
+
+No-future-label leakage and equivalence to sequential learning are separate checks.
+With shared state, predicting an entire batch before updating can omit earlier labels that sequential learning used.
+That may be a valid delayed-update protocol, but it is not automatically the same prequential experiment.
+
+| Intended change | Evidence required before claiming equivalence |
+|---|---|
+| Batch independent episodes | Show their state isolation/reset contract and preserve each episode's event order |
+| Batch a shared-state stream | Compare every required prediction and state transition, including later items in each batch |
+| Delay credit or label updates | Prove the change preserves the declared protocol, or version it as a new learning protocol |
+| Only first episode or B=1 agrees | Retain that narrow check; it cannot certify later batch items or cross-batch state |
+
+Use a tiny witness where an early revealed label changes a later prediction on the same key.
+Test different batch partitions, a short final batch and reset boundaries under the same stream/order.
+If the new protocol is intentional, retain both bindings and reassess accuracy/throughput under EV3.
+Do not call a protocol change a pure speedup because an earlier workload retained its aggregate accuracy.
+
 ## Verify the intervention before interpreting the control
 
 Trace each material control from authored settings through generated arguments/environment to the executing consumer.

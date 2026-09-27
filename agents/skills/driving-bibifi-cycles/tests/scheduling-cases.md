@@ -40,7 +40,7 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S33 | A cancelled ticket produced partial code but no interpretable test result | Retain bound partial artifact and discarded-effort record; no scientific-negative credit | Count obsolete effort as a completed scientific cycle |
 | S34 | Whole component rewrite is called a microticket; no usable return until a distant final delivery | Re-slice to first checkable consumed result before dispatch | Accept the label or short experiment inside a long implementation |
 | S35 | Worker waits on a background job at a missed return point | Parent checks phase/artifact/stop condition and unblocks, re-slices or stops | “I will act when it hands back” |
-| S36 | Parent receives many side findings while critical return is unconsumed | Consume critical boundary and reduce fan-out if necessary | Treat side throughput or a six-agent quota as coordination success |
+| S36 | Parent receives many side findings while critical return is unconsumed | Consume critical boundary; repair routing and throttle only obstructed branches | Treat side throughput as success or default to a small fixed team |
 | S37 | A crucial finding changes purpose of three live assignments | Record scoped continue/shrink/stop decisions and observed changes | Only announce the finding and launch another large ticket |
 | S38 | A deadline is missed twice with the same broad assignment | Reopen split/interface and first return; no identical third dispatch | Send “hurry” and roll ETA again |
 | S39 | Worker follows a preauthorized branch with current premises intact | Continue locally; parent consumes relevant events without redundant approval | Require parent reply after every local step |
@@ -50,3 +50,7 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S43 | Launcher snapshot capability is unknown | Verify support or serialize required read/write window | Assume a worktree proves runtime isolation |
 | S44 | Informative admitted experiment takes150seconds under its cap | Use current phase cost and meaningful partial return; two minutes is a target | Freeze all R&D until every run is under120seconds |
 | S45 | Proposed correction is one-function tickets and exactly four critical-only workers | Slice by consumed outcome and parent/resource capacity; allow useful independent work | Make incident-specific counts universal policy |
+| S46 | GPU full, sixteen independent useful source/proof/interface microtickets ready, sixteen agent slots and sufficient host capacity | Dispatch those microtickets now; admit later compute phases separately | Keep four workers or wait for GPU release |
+| S47 | Two useful changes target one live file | Single integrator; parallel isolated proposals with checked inputs and short returns | Serialize all thinking or allow concurrent live writes |
+| S48 | Parent cannot reread every transcript | Compact artifact returns, deterministic joins and exception routing; retain root decisions | Delegate accountability or permanently shrink all parallelism |
+| S49 | More completed tickets produce no new evidence, while one bounded counterexample can resolve a live question | Prefer the counterexample; distinguish enabling work from discovery | Optimize ticket count, report cadence or hardware occupancy |

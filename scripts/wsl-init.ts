@@ -11,6 +11,7 @@ await $`topgrade`;
 // After the tool installs: zsh/zshenv arms the no-self-spawn guard as soon as link-dots
 // places the unit, so leaving the unit un-enabled would make every ccc call wait 30s and fail.
 await $`mise run wsl:ccc-daemon`;
+await $`mise run wsl:capacity:enable`;
 await $`chsh -s $(which zsh)`;
 console.log("---");
 console.log("Setup complete. Run: exec zsh");

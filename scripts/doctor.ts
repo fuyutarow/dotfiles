@@ -18,6 +18,7 @@
 //                                                (and Codex, when installed)
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   ccc-daemon  cocoindex unit      (WSL only)   ccc-daemon.service is active under systemd --user
+//   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
@@ -534,6 +535,35 @@ export async function checkCccDaemon(_ctx: Ctx): Promise<Finding> {
       );
 }
 
+export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
+  const unit = "wsl-capacity-recover.timer";
+  const active = await run(["systemctl", "--user", "is-active", unit], {
+    ms: 10_000,
+  });
+  if (active.missing)
+    return skip("capacity-guard", "no systemctl on this host");
+  // A linked *.timer.wsl is reported as an "alias" by is-enabled even after enabling it.
+  // Check the actual timers.target.wants edge and its target instead.
+  const wants = join(
+    ctx.home,
+    ".config/systemd/user/timers.target.wants",
+    unit,
+  );
+  const source = join(ctx.dotfiles, "wsl/wsl-capacity-recover.timer.wsl");
+  const enabled =
+    existsSync(wants) &&
+    existsSync(source) &&
+    realpathSync(wants) === realpathSync(source);
+  if (enabled && active.out.trim() === "active") {
+    return pass("capacity-guard", `${unit} is enabled and active`);
+  }
+  return fail(
+    "capacity-guard",
+    `${unit} is ${enabled ? "enabled" : "not enabled"} / ${active.out.trim() || "not active"}`,
+    "mise run wsl:capacity:enable",
+  );
+}
+
 // ccc resolves a project's DB dir in TWO processes: the daemon writes the index where its own
 // COCOINDEX_CODE_DB_PATH_MAPPING points, while `ccc reset`/`ccc status` and repo-retrieve's
 // watermark look where the client's points. zsh/zshenv declares the client value and
@@ -703,6 +733,11 @@ export const CHECKS: Check[] = [
   {
     name: "ccc-daemon",
     run: checkCccDaemon,
+    applies: (c) => (c.isWsl ? null : "WSL only"),
+  },
+  {
+    name: "capacity-guard",
+    run: checkCapacityGuard,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
   { name: "ccc-db-map", run: checkCccDbMap, applies: always },

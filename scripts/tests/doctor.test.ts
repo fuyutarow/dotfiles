@@ -4,6 +4,7 @@
 // is caught (writing-bun-scripts BG4: prove the check fires).
 import { describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -22,7 +23,7 @@ function tmp(prefix: string): string {
 
 function doctor(
   only: string,
-  env: { HOME: string; DOTFILES: string },
+  env: { HOME: string; DOTFILES: string; PATH?: string },
 ): { code: number; out: string } {
   const proc = Bun.spawnSync(["bun", SCRIPT], {
     // bun >= 1.4 writes its runtime transpiler cache to $HOME/.bun/install/cache/@t@/*.pile
@@ -143,6 +144,37 @@ describe("doctor", () => {
     );
     Bun.spawnSync(["git", "-C", repo, "config", "core.hooksPath", ".githooks"]);
     expect(doctor("git-hooks", { HOME: home, DOTFILES: repo }).code).toBe(0);
+  });
+
+  test("capacity-guard: both timer enablement and liveness are required", () => {
+    const home = tmp("doctor-capacity-home-");
+    const bin = tmp("doctor-capacity-bin-");
+    const systemctl = join(bin, "systemctl");
+    writeFileSync(systemctl, "#!/bin/sh\nprintf 'active\\n'\n");
+    chmodSync(systemctl, 0o755);
+    const env = {
+      HOME: home,
+      DOTFILES: REPO,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+    };
+    const missing = doctor("capacity-guard", env);
+    expect(missing.code).toBe(1);
+    expect(missing.out).toContain("not enabled / active");
+
+    const wants = join(
+      home,
+      ".config/systemd/user/timers.target.wants/wsl-capacity-recover.timer",
+    );
+    mkdirSync(join(wants, ".."), { recursive: true });
+    symlinkSync(join(REPO, "wsl/wsl-capacity-recover.timer.wsl"), wants);
+    const enabled = doctor("capacity-guard", env);
+    expect(enabled.code).toBe(0);
+    expect(enabled.out).toContain("is enabled and active");
+
+    writeFileSync(systemctl, "#!/bin/sh\nprintf 'inactive\\n'\n");
+    const inactive = doctor("capacity-guard", env);
+    expect(inactive.code).toBe(1);
+    expect(inactive.out).toContain("enabled / inactive");
   });
 
   test("two independent FAILs come back in one run, with a summary line", () => {

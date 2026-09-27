@@ -11,6 +11,9 @@ the hook is the mechanism.
 - Signature / digest input: n/a
 - Canonicalization profile: n/a
 - Schema / version: `schema = 1`, validated field by field in `validate()` in the hook
+- Host recovery floor: `drive.host.stop_gib` is read by `scripts/wsl-capacity-recover.ts`; it must be below `drive.host.deny_gib`. The hook queues `wsl-capacity-recover.service` below the deny line, while its timer covers already-running work. The service first tries `reclaim:host`, `reclaim:builds`, and `reclaim:clean`; below `stop_gib` it stops recognized compute before cleanup, then runs `cargo clean` in the known polysearch workspace only after build processes exit. It also samples Windows available RAM and hard page reads, drops guest page cache through Windows `wsl.exe -u root` on severe pressure, and stops compute if pressure remains.
+- Task matching: `launcher.tasks` restricts `mise run` and its `m` alias to named build-producing tasks; `reclaim:*` remains available under denial.
+- Cargo target budget: the same target-directory measurement applies to direct Cargo and the `mise run` / `m` build tasks. At 30 GiB it adds cleanup advice; at 80 GiB it denies another build while leaving `cargo clean` and `reclaim:*` callable. The size cache expires after `measure.cache_minutes`.
 - Duplicate-key policy: reject — a TOML parse error, reported as "is not valid TOML" in a deny
 - Number / Unicode policy: every size and bound is a finite non-negative TOML number (GiB, seconds, minutes); strings are UTF-8 and must be non-empty; launcher commands must match `[A-Za-z0-9._-]+`
 - Precedence / merge: one file, no merge and no defaults; an unknown key, wrong type, or missing field makes the whole config invalid, and every error is reported in one deny

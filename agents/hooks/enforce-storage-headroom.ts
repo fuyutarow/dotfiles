@@ -35,6 +35,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   statfsSync,
   writeFileSync,
 } from "node:fs";
@@ -54,14 +55,16 @@ type Drive = {
   path: string;
   deny_gib: number;
   warn_gib?: number;
+  stop_gib?: number;
 };
-type Launcher = { command: string; subcommands?: string[] };
+type Launcher = { command: string; subcommands?: string[]; tasks?: string[] };
 type Budget = {
   name: string;
   launchers: string[];
   locate: "path" | "cargo-target";
   path?: string;
   warn_gib: number;
+  deny_gib?: number;
   incremental?: boolean;
   advice: string;
 };
@@ -118,13 +121,25 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
   if (!isObj(raw.drive) || Object.keys(raw.drive).length === 0) {
     errors.push("drive: expected at least one [drive.<name>] table");
   } else {
+    if (!isObj(raw.drive.host))
+      errors.push("drive.host: required Windows host drive table");
     const drive = (at: string, d: unknown) => {
       if (!isObj(d)) return void errors.push(`${at}: expected a table`);
-      only(d, ["label", "path", "deny_gib", "warn_gib"], at);
+      only(d, ["label", "path", "deny_gib", "warn_gib", "stop_gib"], at);
       str(d.label, `${at}.label`);
       str(d.path, `${at}.path`);
       num(d.deny_gib, `${at}.deny_gib`);
       if (d.warn_gib !== undefined) num(d.warn_gib, `${at}.warn_gib`);
+      if (d.stop_gib !== undefined) num(d.stop_gib, `${at}.stop_gib`);
+      if (
+        at === "drive.host" &&
+        typeof d.stop_gib === "number" &&
+        typeof d.deny_gib === "number" &&
+        d.deny_gib > 0 &&
+        d.stop_gib >= d.deny_gib
+      ) {
+        errors.push(`${at}.stop_gib: must be below deny_gib`);
+      }
     };
     for (const [name, d] of Object.entries(raw.drive))
       drive(`drive.${name}`, d);
@@ -143,7 +158,7 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
     launchers.forEach((l, i) => {
       const at = `launcher[${i}]`;
       if (!isObj(l)) return void errors.push(`${at}: expected a table`);
-      only(l, ["command", "subcommands"], at);
+      only(l, ["command", "subcommands", "tasks"], at);
       str(l.command, `${at}.command`);
       if (
         typeof l.command === "string" &&
@@ -152,6 +167,7 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
         errors.push(`${at}.command: '${l.command}' is not a bare command name`);
       }
       if (l.subcommands !== undefined) strs(l.subcommands, `${at}.subcommands`);
+      if (l.tasks !== undefined) strs(l.tasks, `${at}.tasks`);
     });
   }
 
@@ -173,6 +189,7 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
           "locate",
           "path",
           "warn_gib",
+          "deny_gib",
           "incremental",
           "advice",
         ],
@@ -189,6 +206,16 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
       }
       if (b.locate === "path") str(b.path, `${at}.path`);
       num(b.warn_gib, `${at}.warn_gib`);
+      if (b.deny_gib !== undefined) {
+        num(b.deny_gib, `${at}.deny_gib`);
+        if (
+          typeof b.deny_gib === "number" &&
+          typeof b.warn_gib === "number" &&
+          b.deny_gib <= b.warn_gib
+        ) {
+          errors.push(`${at}.deny_gib: must be above warn_gib`);
+        }
+      }
       if (b.incremental !== undefined && typeof b.incremental !== "boolean") {
         errors.push(`${at}.incremental: expected true or false`);
       }
@@ -243,15 +270,20 @@ function matchLauncher(
 ): { command: string; label: string } | null {
   for (const l of launchers) {
     const sub = l.subcommands
-      ? String.raw`\s+(${l.subcommands.map(esc).join("|")})\b`
+      ? String.raw`\s+(?<sub>${l.subcommands.map(esc).join("|")})\b`
+      : "";
+    const task = l.tasks
+      ? String.raw`\s+(?<task>${l.tasks.map(esc).join("|")})\b`
       : "";
     const m = new RegExp(
-      `${POS}${PREFIX}(?:\\S*\\/)?${esc(l.command)}\\b${sub}`,
+      `${POS}${PREFIX}(?:\\S*\\/)?${esc(l.command)}\\b${sub}${task}`,
     ).exec(command);
     if (m)
       return {
         command: l.command,
-        label: l.subcommands ? `${l.command} ${m[2]}` : l.command,
+        label: [l.command, m.groups?.sub, m.groups?.task]
+          .filter(Boolean)
+          .join(" "),
       };
   }
   return null;
@@ -266,6 +298,47 @@ function freeBytes(path: string): number | null {
   } catch {
     return null;
   }
+}
+
+// The hook only queues the bounded systemd recovery unit. A PreToolUse call must never wait for
+// multi-minute cache cleanup, and this service also runs from a timer while an agent is idle.
+function requestRecovery(): string {
+  // A fixture config must not start the real host service during hook tests.
+  if (process.env.STORAGE_HEADROOM_CONFIG !== undefined) return "";
+  const stamp = join(
+    homedir(),
+    ".local/state/wsl-capacity-recover/last-request",
+  );
+  try {
+    if (
+      Temporal.Now.instant().epochMilliseconds - statSync(stamp).mtimeMs <
+      60_000
+    )
+      return " Automatic recovery was recently queued.";
+  } catch {
+    // First request, or an unavailable stamp: still attempt to queue recovery.
+  }
+  try {
+    mkdirSync(dirname(stamp), { recursive: true });
+    writeFileSync(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
+  } catch {
+    // The drive may already be critically low. systemd still gets a chance below.
+  }
+  const result = Bun.spawnSync(
+    [
+      "timeout",
+      "3s",
+      "systemctl",
+      "--user",
+      "--no-block",
+      "start",
+      "wsl-capacity-recover.service",
+    ],
+    { stdout: "ignore", stderr: "ignore" },
+  );
+  return result.exitCode === 0
+    ? " Automatic recovery was queued."
+    : " Automatic recovery could not be queued; inspect wsl-capacity-recover.service.";
 }
 
 function gib(n: number | null): string {
@@ -385,30 +458,42 @@ function locate(b: Budget, command: string, cwd: string): string | null {
 // Drive thresholds fire only once the whole drive is nearly full; one build tree can grow far
 // faster than that. Measured 2026-09-22: polysearch-rs/target reached 104 GiB (59 GiB of it
 // target/debug/incremental) after one day of parallel agent builds across worktrees, while the
-// drive gate stayed quiet until C: had under 60 GiB left. Warn only: deciding what to delete in
-// a tree another session may be using is not this gate's call.
-function budgetWarning(
+// drive gate stayed quiet until C: had under 60 GiB left. A target over its deny budget blocks
+// another build; cleanup remains a separate operation because another session may be using it.
+function budgetStatus(
   b: Budget,
   command: string,
   cwd: string,
   m: Config["measure"],
-): string | null {
+): { warning?: string; denial?: string } | null {
   const path = locate(b, command, cwd);
   if (path === null || !existsSync(path)) return null;
   const size = measured(path, b.incremental === true, m);
   if (size === null) {
-    return (
+    const message =
       `storage-headroom: ${b.name} ${path} could not be sized within ${m.du_timeout_seconds}s — ` +
-      `a tree that slow to walk is usually very large; check it (du -sh ${path}) before building.`
-    );
+      `check it (du -sh ${path}) before building.`;
+    return b.deny_gib === undefined
+      ? { warning: message }
+      : {
+          denial: `${message} Another build is refused until its size is known.`,
+        };
   }
-  if (size.bytes < b.warn_gib * GiB) return null;
   const incr =
     size.incremental > 0 ? ` (incremental ${gib(size.incremental)})` : "";
-  return (
-    `storage-headroom: ${b.name} ${path} is ${gib(size.bytes)}${incr}, over the ` +
-    `${gib(b.warn_gib * GiB)} ${b.name} budget. Review before adding to it: ${b.advice}`
-  );
+  if (b.deny_gib !== undefined && size.bytes >= b.deny_gib * GiB) {
+    return {
+      denial:
+        `storage-headroom: refusing another build: ${b.name} ${path} is ${gib(size.bytes)}${incr}, ` +
+        `over the ${gib(b.deny_gib * GiB)} limit. ${b.advice}`,
+    };
+  }
+  if (size.bytes < b.warn_gib * GiB) return null;
+  return {
+    warning:
+      `storage-headroom: ${b.name} ${path} is ${gib(size.bytes)}${incr}, over the ` +
+      `${gib(b.warn_gib * GiB)} ${b.name} budget. Review before adding to it: ${b.advice}`,
+  };
 }
 
 // --- Decision ---------------------------------------------------------------------------------
@@ -442,7 +527,27 @@ function main(): void {
   const low = drives.filter(
     (d) => d.free !== null && d.free < d.deny_gib * GiB,
   );
-  if (low.length > 0) {
+  const wsl =
+    process.platform === "linux" &&
+    existsSync("/proc/sys/kernel/osrelease") &&
+    readFileSync("/proc/sys/kernel/osrelease", "utf8")
+      .toLowerCase()
+      .includes("microsoft");
+  const hostUnreadable =
+    wsl &&
+    config.drive.host !== undefined &&
+    freeBytes(config.drive.host.path) === null;
+  if (low.length > 0 || hostUnreadable) {
+    const hostDrive = config.drive.host;
+    const hostLow =
+      hostDrive !== undefined &&
+      drives.some(
+        (d) =>
+          d.label === hostDrive.label &&
+          d.free !== null &&
+          d.free < d.deny_gib * GiB,
+      );
+    const recovery = hostLow ? requestRecovery() : "";
     // BATCHED(drives): every drive is measured before this point and all of them are in the one
     // reason below, so a caller short on both learns it from a single denial.
     decidePre(
@@ -454,7 +559,7 @@ function main(): void {
               `${d.label} free ${gib(d.free)} (deny below ${gib(d.deny_gib * GiB)})`,
           )
           .join(", ") +
-        `. ${config.deny.advice}`,
+        `. ${hostUnreadable ? "Host C: could not be measured; refusing new compute until the host is visible. " : ""}${config.deny.advice}${recovery}`,
     );
   }
 
@@ -477,10 +582,16 @@ function main(): void {
     }
   }
   const cwd = typeof payload?.cwd === "string" ? payload.cwd : process.cwd();
+  const budgetDenials: string[] = [];
   for (const b of config.budget) {
     if (!b.launchers.includes(hit.command)) continue;
-    const w = budgetWarning(b, command, cwd, config.measure);
-    if (w !== null) warnings.push(w);
+    const status = budgetStatus(b, command, cwd, config.measure);
+    if (status?.denial !== undefined) budgetDenials.push(status.denial);
+    if (status?.warning !== undefined) warnings.push(status.warning);
+  }
+  if (budgetDenials.length > 0) {
+    // BATCHED(budgets): all matching artifact budgets are measured before this denial.
+    decidePre("deny", budgetDenials.join("; "));
   }
   if (warnings.length > 0) {
     process.stdout.write(

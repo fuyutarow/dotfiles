@@ -74,6 +74,11 @@ describe("enforce-storage-headroom", () => {
       "polysearch run --config x.toml",
       "time nice julia probe.jl",
       "FOO=1 env BAR=2 cargo bench",
+      "mise run test",
+      "mise run lint",
+      "mise run check",
+      "m t",
+      "m l",
     ]) {
       const r = runHook(HOOK, bash(command), FULL);
       expect(r.code).toBe(0);
@@ -91,6 +96,16 @@ describe("enforce-storage-headroom", () => {
     expect(d.permissionDecisionReason).toContain("guest /");
   });
 
+  test("an unreadable Windows drive denies compute on WSL", () => {
+    const cfg = config((c) => {
+      drives(0, 0, 0)(c);
+      c.drive.host.path = "/missing-wsl-host-drive";
+    });
+    const d = decisionOf(runHook(HOOK, bash("cargo build"), cfg).stdout);
+    expect(d?.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toContain("could not be measured");
+  });
+
   test("never blocks cleanup, reads, or git — even when full", () => {
     for (const command of [
       "df -h / /mnt/c",
@@ -99,6 +114,8 @@ describe("enforce-storage-headroom", () => {
       "cargo clean",
       "git status --short",
       "mise run reclaim",
+      "mise run reclaim:builds",
+      "mise run doctor",
       "ls -la",
     ]) {
       const r = runHook(HOOK, bash(command), FULL);
@@ -157,6 +174,7 @@ describe("enforce-storage-headroom", () => {
       config((c) => {
         drives(0, 0, hostWarn)(c);
         c.budget[0].warn_gib = warn;
+        c.budget[0].deny_gib = Math.max(warn + 1, 80);
       });
     const TINY = budget(0.001);
     const HUGE = budget(1000);
@@ -175,6 +193,50 @@ describe("enforce-storage-headroom", () => {
       );
       expect(d?.additionalContext).toContain("incremental");
       expect(d?.additionalContext).toContain("CARGO_INCREMENTAL=0");
+    });
+
+    test("a full target denies direct Cargo and mise tasks, while cleanup stays available", () => {
+      const { root, home } = workspace();
+      const full = config((c) => {
+        drives(0, 0, 0)(c);
+        c.budget[0].warn_gib = 0.0005;
+        c.budget[0].deny_gib = 0.001;
+      });
+      for (const command of ["cargo test", "mise run test", "m t"]) {
+        const r = runHook(
+          HOOK,
+          { ...bash(command), cwd: root },
+          { ...full, HOME: home },
+        );
+        const d = decisionOf(r.stdout);
+        expect(d?.permissionDecision).toBe("deny");
+        expect(d?.permissionDecisionReason).toContain(join(root, "target"));
+        expect(d?.permissionDecisionReason).toContain("incremental");
+      }
+      for (const command of ["cargo clean", "mise run reclaim:builds"]) {
+        const r = runHook(
+          HOOK,
+          { ...bash(command), cwd: root },
+          { ...full, HOME: home },
+        );
+        expect(decisionOf(r.stdout)).toBeNull();
+      }
+    });
+
+    test("an unsizeable target cannot bypass the build limit", () => {
+      const { root, home } = workspace();
+      const fakeBin = mkdtempSync(join(tmpdir(), "storage-fake-bin-"));
+      writeFileSync(join(fakeBin, "du"), "#!/bin/sh\nexit 1\n", {
+        mode: 0o755,
+      });
+      const r = runHook(
+        HOOK,
+        { ...bash("mise run test"), cwd: root },
+        { ...EMPTY, HOME: home, PATH: fakeBin },
+      );
+      const d = decisionOf(r.stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d?.permissionDecisionReason).toContain("could not be sized");
     });
 
     test("under budget: silent", () => {
@@ -242,6 +304,27 @@ describe("enforce-storage-headroom", () => {
         "launcher[0]: unknown key 'comand'",
       );
       expect(d.permissionDecisionReason).toContain("STORAGE_ASSERT_OVERRIDE=1");
+    });
+
+    test("omitting the Windows drive cannot silently disarm the gate", () => {
+      const bad = config((c) => {
+        delete c.drive.host;
+      });
+      const d = decisionOf(runHook(HOOK, bash("cargo build"), bad).stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d.permissionDecisionReason).toContain("drive.host: required");
+    });
+
+    test("the emergency floor must remain below the launch-denial line", () => {
+      const bad = config((c) => {
+        c.drive.host.deny_gib = 20;
+        c.drive.host.stop_gib = 30;
+      });
+      const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d.permissionDecisionReason).toContain(
+        "drive.host.stop_gib: must be below deny_gib",
+      );
     });
 
     test("unparseable TOML is reported as such", () => {

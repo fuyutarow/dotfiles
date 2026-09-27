@@ -625,6 +625,10 @@ description = "Hand the ccc daemon to systemd with CPU/RAM caps (link:dots must 
 # skipping this leaves the old uncapped process alive and orphaned from its socket.
 run = 'bun ~/dotfiles/scripts/wsl-ccc-daemon.ts'
 
+[tasks."wsl:capacity:enable"]
+description = "Enable the session-independent WSL C: recovery timer (link:dots must have run first)"
+run = 'systemctl --user daemon-reload && systemctl --user enable --now wsl-capacity-recover.timer'
+
 [tasks."wsl:fix-gitexe"]
 description = "Allow Windows git.exe to trust the WSL repo path"
 # Derive the UNC path (wslpath knows the distro AND the user); the old literal baked in a stale

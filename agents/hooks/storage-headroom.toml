@@ -15,26 +15,32 @@ schema = 1
 [drive.host]
 label = "host C: (WSL vhdx)"
 path = "/mnt/c"
-deny_gib = 30
-warn_gib = 60
+# 2026-09-26 00:3x JST, owner ruling: "閾値は20でいいよ". At deny 60 the gate refused every
+# experiment with C: at 52 GiB while the guest had 433 GiB free (vhdx blocks freed inside the
+# guest are reused before the vhdx grows). Deny new work at 20; stop_gib must stay below deny_gib.
+deny_gib = 20
+warn_gib = 40
+stop_gib = 10
 
 [drive.guest]
 label = "guest /"
 path = "/"
 deny_gib = 40
 
-# Appended to every deny: what to reclaim, and how the freed space reaches the host.
+# Appended to every deny. The agent owns further safe diagnosis if the automatic recovery unit
+# cannot restore the floor; neither global trash purge nor stopping WSL is delegated here.
 # Measured 2026-09-26 on r99: deleting a 145 GB target/ then `fstrim -v /` returned 148 GB to C:
-# at once; without the trim the return is lazy and partial (hours, a fraction). Compaction is the
-# last resort, not the only path.
+# at once; without the trim the return is lazy and partial.
 [deny]
 advice = """\
-A full host drive takes down WSL and Windows together. Reclaim first (unreferenced .jls/.bin \
-dumps under archives/*/artifacts, Rust target/ dirs, ~/.julia/compiled of old versions; \
-`mise run reclaim` for the blind tier), then run `sudo fstrim -v /` so the sparse vhdx hands the \
-freed blocks back to the host now rather than lazily. If C: is still short after that, have the \
-human compact the vhdx (`mise run reclaim:vhdx` prints the elevated procedure). \
-STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate for a cleanup that must build."""
+A full host drive takes down WSL and Windows together. The hook requests the automatic recovery \
+service. Inspect `mise run wsl:audit` and its journal, then continue safe, source-specific \
+reclaim yourself, and run `sudo fstrim -v /` after large deletes so the sparse vhdx hands the \
+freed blocks back to the host now rather than lazily; verify a positive C: free delta before \
+claiming recovery. Do not ask the human to run ordinary regenerable-cache cleanup. Never purge the \
+global Trash or remove research outputs without their retention rule. Offline vhdx compaction \
+requires an idle distro and host admin if live reclaim cannot free C:. \
+STORAGE_ASSERT_OVERRIDE=1 in the command text bypasses this gate only for a cleanup that must build."""
 
 # Commands that START work that writes bytes. A launch matches `command` at a command position
 # (after ; && || | ( then do, and through sudo/env/time/nice/timeout/VAR= prefixes), optionally
@@ -57,16 +63,28 @@ command = "julia"
 command = "cargo"
 subcommands = ["build", "test", "run", "bench", "install"]
 
+# mise hides the cargo/julia invocation from the Bash PreToolUse command string. Match only
+# build-producing task names; reclaim:* must remain callable when the drive is low.
+[[launcher]]
+command = "mise"
+subcommands = ["run"]
+tasks = ["test", "t", "lint", "l", "check", "c", "up", "u", "setup", "i"]
+
+[[launcher]]
+command = "m"
+tasks = ["test", "t", "lint", "l", "check", "c", "up", "u", "setup", "i"]
+
 # Per-language artifact budgets: when a launch of one of `launchers` is inspected, the artifact
-# it grows is sized and, above warn_gib, a warning with `advice` rides along. Warn only.
+# it grows is sized. `warn_gib` advises cleanup; `deny_gib` blocks another build until cleanup.
 # `locate` names how the artifact is found: "path" (the `path` key, ~ expanded) or
 # "cargo-target" (CARGO_TARGET_DIR, .cargo/config.toml target-dir, else <workspace>/target,
 # following a leading `cd` and --manifest-path — logic that lives in the hook).
 [[budget]]
 name = "cargo target"
-launchers = ["cargo"]
+launchers = ["cargo", "mise", "m"]
 locate = "cargo-target"
 warn_gib = 30
+deny_gib = 80
 incremental = true
 advice = """\
 `cargo clean` when no build is running in this tree; otherwise stale session dirs under \
@@ -90,4 +108,4 @@ current version, `using Pkg; Pkg.gc()` drops caches of packages no manifest refe
 # and agents launch builds many times an hour).
 [measure]
 du_timeout_seconds = 20
-cache_minutes = 20
+cache_minutes = 5

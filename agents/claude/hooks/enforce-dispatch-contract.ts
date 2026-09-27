@@ -19,9 +19,12 @@
 //                 experiments, benchmarks, resident services, parallel tests, and nested
 //                 fanout. Compute work points to an absolute admitted envelope and may run
 //                 commands only through agent-resource-run.
-//   - Workflow: every agent() call carries exactly one top-level literal model: AND exactly
-//               one top-level literal effort:, and that pair must be one of the two allowed
-//               pairs above — omitting either is now a violation, not an inheritance.
+//   - Workflow: every agent() call names its pair explicitly, either by a literal
+//               agentType:'sonnet-high' | 'opus-medium' (agent() then runs that agent
+//               definition, whose frontmatter carries model AND effort; a model/effort written
+//               beside it must state the same pair) or by exactly one top-level literal model:
+//               AND effort: forming one of the two allowed pairs. Omitting the choice is a
+//               violation, not an inheritance.
 //               Named/child/unreadable workflows are denied because they cannot be
 //               inspected.
 //   - The role binding lives in orchestrating-agents/references/model-roster.md; this hook
@@ -93,6 +96,18 @@ const MODEL_FOR_EFFORT: Record<string, string> = {
 };
 const WORKFLOW_PAIR_HELP =
   "model:'sonnet' with effort:'high', or model:'opus' with effort:'medium'";
+// The same two pairs by name: Workflow agent() takes agentType and then runs that agent
+// definition (sonnet-high.md / opus-medium.md), whose frontmatter carries model AND effort —
+// so a literal agentType alone is an explicit, complete choice, exactly like subagent_type on
+// the Agent tool.
+const WORKFLOW_AGENT_TYPES: Record<string, { model: string; effort: string }> =
+  {
+    "sonnet-high": { model: "sonnet", effort: "high" },
+    "opus-medium": { model: "opus", effort: "medium" },
+  };
+const WORKFLOW_CHOICE_HELP =
+  "agentType:'sonnet-high' or agentType:'opus-medium', or the literal pair " +
+  WORKFLOW_PAIR_HELP;
 
 // ---------------------------------------------------------------------------
 // Batched diagnostics
@@ -110,14 +125,15 @@ const MAX_REPORTED_LINES = 20;
 
 const AXIS_HINT: Record<Axis, string> = {
   shape:
-    "shape    — every executor must be a direct, inspectable agent(prompt, {model, effort}) call " +
-    `with literal values (${WORKFLOW_PAIR_HELP}). ` +
+    "shape    — every executor must be a direct, inspectable agent(prompt, {…}) call naming its " +
+    `pair with literal values (${WORKFLOW_CHOICE_HELP}). ` +
     "Remove aliases, computed access, and child workflow() calls, and inline the child's agents.",
   syntax:
     "syntax   — this agent( span never closes, so nothing about it can be verified. " +
     "Fix the parentheses first; its other axes were NOT checked.",
   model:
-    "model    — exactly one literal model: property, top-level in the options object " +
+    "model    — name the pair: agentType:'sonnet-high' or agentType:'opus-medium' alone, OR " +
+    "exactly one literal model: property, top-level in the options object " +
     `(no nesting, no spread, no computed key), naming the same family as effort: ${WORKFLOW_PAIR_HELP}. ` +
     CHOOSE_PAIR,
   effort:
@@ -357,6 +373,7 @@ type CallShape = {
   unsound: boolean;
   modelValues: (string | null)[];
   effortValues: (string | null)[];
+  agentTypeValues: (string | null)[];
 };
 
 function literalValue(src: string, valueStart: number): string | null {
@@ -373,7 +390,12 @@ function scanCallOptions(
   start: number,
   end: number,
 ): CallShape {
-  const fail: CallShape = { unsound: true, modelValues: [], effortValues: [] };
+  const fail: CallShape = {
+    unsound: true,
+    modelValues: [],
+    effortValues: [],
+    agentTypeValues: [],
+  };
   const args = directSegments(blanked, start, end);
   if (args === null || args.length !== 2) return fail;
 
@@ -400,6 +422,7 @@ function scanCallOptions(
   let unsound = false;
   const modelValues: (string | null)[] = [];
   const effortValues: (string | null)[] = [];
+  const agentTypeValues: (string | null)[] = [];
   for (const property of properties) {
     const text = blanked.slice(property.start, property.end);
     // Spread and computed keys can overwrite a preceding literal at runtime.
@@ -412,6 +435,13 @@ function scanCallOptions(
       modelValues.push(literalValue(src, property.start + modelKey[0].length));
       continue;
     }
+    const agentTypeKey = /^agentType\s*:\s*/.exec(text);
+    if (agentTypeKey !== null) {
+      agentTypeValues.push(
+        literalValue(src, property.start + agentTypeKey[0].length),
+      );
+      continue;
+    }
     const effortKey = /^effort\s*:\s*/.exec(text);
     if (effortKey !== null) {
       effortValues.push(
@@ -419,7 +449,7 @@ function scanCallOptions(
       );
     }
   }
-  return { unsound, modelValues, effortValues };
+  return { unsound, modelValues, effortValues, agentTypeValues };
 }
 
 type PropStatus =
@@ -447,6 +477,7 @@ function classifyProp(
 // so the HOW TO FIX block still points at the right property, plus a third when both
 // individual values are fine but the COMBINATION is not (sonnet+medium, opus+high, …).
 function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
+  if (shape.agentTypeValues.length > 0) return agentTypeFindings(shape);
   const model = classifyProp(
     shape.modelValues,
     ["sonnet", "opus"],
@@ -463,7 +494,7 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
     // One cause (no pair chosen), one finding — the effort half would only repeat it.
     out.push({
       axis: "model",
-      detail: `no model and no effort — add one pair: ${WORKFLOW_PAIR_HELP}`,
+      detail: `no agentType, model, or effort — add ${WORKFLOW_CHOICE_HELP}`,
     });
     return out;
   }
@@ -533,6 +564,59 @@ function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
     });
   }
 
+  return out;
+}
+
+// agentType names the pair; a model/effort written beside it is allowed only when it states
+// the same pair (it would override the definition's frontmatter otherwise).
+function agentTypeFindings(shape: CallShape): { axis: Axis; detail: string }[] {
+  const type = classifyProp(
+    shape.agentTypeValues,
+    Object.keys(WORKFLOW_AGENT_TYPES),
+    shape.unsound,
+  );
+  if (type.kind === "malformed") {
+    return [
+      {
+        axis: "model",
+        detail:
+          "agentType must be exactly one top-level literal (no nesting, spread, or computed key) — " +
+          WORKFLOW_CHOICE_HELP,
+      },
+    ];
+  }
+  if (type.kind !== "ok") {
+    const seen = type.kind === "invalid" ? `'${type.value}'` : "missing";
+    return [
+      {
+        axis: "model",
+        detail: `agentType ${seen} is not allowed — ${WORKFLOW_CHOICE_HELP}`,
+      },
+    ];
+  }
+  const pair = WORKFLOW_AGENT_TYPES[type.value];
+  if (pair === undefined) return [];
+  const out: { axis: Axis; detail: string }[] = [];
+  const model = classifyProp(shape.modelValues, ["sonnet", "opus"], false);
+  const effort = classifyProp(shape.effortValues, ["high", "medium"], false);
+  if (
+    model.kind !== "missing" &&
+    !(model.kind === "ok" && model.value === pair.model)
+  ) {
+    out.push({
+      axis: "model",
+      detail: `agentType:'${type.value}' runs on model:'${pair.model}' — drop model, or set model:'${pair.model}'`,
+    });
+  }
+  if (
+    effort.kind !== "missing" &&
+    !(effort.kind === "ok" && effort.value === pair.effort)
+  ) {
+    out.push({
+      axis: "effort",
+      detail: `agentType:'${type.value}' runs at effort:'${pair.effort}' — drop effort, or set effort:'${pair.effort}'`,
+    });
+  }
   return out;
 }
 

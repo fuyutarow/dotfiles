@@ -389,9 +389,11 @@ describe("batched diagnostics (2026-09-27)", () => {
     const r = runHook(HOOK, rawWf(`await agent('x', {schema: S})`));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("no model and no effort");
     expect(d.permissionDecisionReason).toContain(
-      "add one pair: model:'sonnet' with effort:'high'",
+      "no agentType, model, or effort",
+    );
+    expect(d.permissionDecisionReason).toContain(
+      "or the literal pair model:'sonnet' with effort:'high'",
     );
     expect(d.permissionDecisionReason).toContain("resource declaration");
   });
@@ -402,8 +404,8 @@ describe("batched diagnostics (2026-09-27)", () => {
       .permissionDecisionReason.split("\n")
       .filter((l: string) => l.startsWith("  line "));
     expect(entry).toContain("line 1:");
-    expect(entry).toContain("no model and no effort");
-    expect(entry).toContain("add one pair");
+    expect(entry).toContain("no agentType, model, or effort");
+    expect(entry).toContain("add agentType:'sonnet-high'");
     expect(entry).toContain("resource declaration");
   });
 
@@ -415,7 +417,7 @@ describe("batched diagnostics (2026-09-27)", () => {
       ),
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
-    expect(reason).toContain("line 1: no model and no effort");
+    expect(reason).toContain("line 1: no agentType, model, or effort");
     expect(reason).toContain("line 2:");
     expect(reason).toContain("is not an allowed pair");
   });
@@ -459,7 +461,7 @@ describe("batched diagnostics (2026-09-27)", () => {
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("alias or indirection");
-    expect(reason).toContain("no model and no effort");
+    expect(reason).toContain("no agentType, model, or effort");
     expect(reason).toContain("NOTE:");
   });
 
@@ -606,6 +608,41 @@ describe("deny text names the minimal exact repair", () => {
     const r = runHook(HOOK, wf(`await agent('x', {model: 'sonnet'})`));
     expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
       "missing effort — model:'sonnet' pairs only with effort:'high'; add effort:'high'",
+    );
+  });
+});
+
+// Workflow agent() may name the pair by agentType (the agent definition's frontmatter carries
+// model AND effort), the same two names the Agent tool takes as subagent_type.
+describe("Workflow agentType names the pair", () => {
+  test("agentType:'opus-medium' alone -> allow", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'opus-medium'})`));
+    expect(r.stdout.trim()).toBe("");
+  });
+  test("agentType:'sonnet-high' with its own model and effort -> allow", () => {
+    const r = runHook(
+      HOOK,
+      wf(
+        `await agent('x', {agentType: 'sonnet-high', model: 'sonnet', effort: 'high'})`,
+      ),
+    );
+    expect(r.stdout.trim()).toBe("");
+  });
+  test("agentType with a contradicting model -> deny with the exact fix", () => {
+    const r = runHook(
+      HOOK,
+      wf(`await agent('x', {agentType: 'sonnet-high', model: 'opus'})`),
+    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
+      "agentType:'sonnet-high' runs on model:'sonnet' — drop model, or set model:'sonnet'",
+    );
+  });
+  test("any other agentType -> deny naming both choices", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'Explore'})`));
+    const reason = decisionOf(r.stdout).permissionDecisionReason;
+    expect(reason).toContain("agentType 'Explore' is not allowed");
+    expect(reason).toContain(
+      "agentType:'sonnet-high' or agentType:'opus-medium'",
     );
   });
 });

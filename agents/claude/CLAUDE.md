@@ -8,8 +8,9 @@
   Agent/Task: `subagent_type:"sonnet-high", model:"sonnet"` or
   `subagent_type:"opus-medium", model:"opus"` (the two agent definitions carry the effort in
   frontmatter; every other type, including forks, Explore, and general-purpose, is denied).
-  Workflow: EVERY `agent()` call carries exactly one top-level direct literal `model:` AND
-  `effort:` forming one of the two pairs; aliases/indirection, nested options, spreads,
+  Workflow: EVERY `agent()` call names its pair — `agentType:'sonnet-high'` or
+  `agentType:'opus-medium'` alone, or one top-level literal `model:` AND `effort:` forming one
+  of the two pairs; aliases/indirection, nested options, spreads,
   computed keys, child workflows, named workflows, and unreadable scripts are denied.
   This is an enforcement rule, not a request: there is no bypass. The role binding is maintained
   in `orchestrating-agents/references/model-roster.md`.

@@ -19,8 +19,8 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 | delegated executor / verifier / outside observer | gpt-5.6-terra | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
 
 Claude側のdispatchはこの二組だけ(2026-09-27)。effortは暗黙継承しない:Agent/Taskは上の
-subagent_type+modelを必ず明示し、Workflowの`agent()`は`model`と`effort`を必ずliteralで書く
-(`sonnet`+`high` か `opus`+`medium`)。`enforce-dispatch-contract.ts`がそれ以外を拒否する。
+subagent_type+modelを必ず明示し、Workflowの`agent()`は`agentType:'sonnet-high'|'opus-medium'`
+か、`model`と`effort`のliteral(`sonnet`+`high` か `opus`+`medium`)で組を明示する。`enforce-dispatch-contract.ts`がそれ以外を拒否する。
 
 ## Availability gate — no silent fallback
 

@@ -1,6 +1,6 @@
 ---
-description: Copy this session's recent responses to the clipboard WITH their source attached — `from <session name> | <user>@<host>:<MM-DD HH:MM>|<cwd> | turns: <n> | <bytes>B` then the bodies. For pasting into a chat or another session where several Claude Code sessions are in flight and the reader needs to know which one said it, from where, how much, and how large. The built-in /copy copies one body alone. `/quote N` takes the last N turns (a quantity — unlike /copy N, which is an index).
-argument-hint: "[N] — how many recent turns to copy, 1-200 (default 1)"
+description: Quote this session's recent responses with their source attached — `from <session name> | <user>@<host>:<MM-DD HH:MM>|<cwd> | turns: <n> | <bytes>B` then the bodies. `/quote N` takes the last N turns (a quantity — unlike /copy N, which is an index). Requests of 1-50 turns copy the text to the clipboard; 51-1024 turns create a UTF-8 text file and copy an scp download command to the local clipboard, including in Herdr remote sessions.
+argument-hint: "[N] — recent turns, 1-50 copy; 51-1024 scp download (default 1)"
 disable-model-invocation: true
 ---
 
@@ -16,4 +16,4 @@ If the hook is ever removed, this command silently becomes a no-op — wire them
 restore a `!` block here.
 -->
 
-Copy this session's last response to the clipboard, prefixed with `from <session name> | <user>@<host>:<MM-DD HH:MM>|<cwd> | turns: <n> | <bytes>B`.
+Quote this session's recent responses, prefixed with `from <session name> | <user>@<host>:<MM-DD HH:MM>|<cwd> | turns: <n> | <bytes>B`.

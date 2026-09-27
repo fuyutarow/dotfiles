@@ -19,17 +19,21 @@
 // command is handing someone a readable excerpt of what a session just said, and for that
 // "the last two things" is the useful ask; "only the second-to-last, without the last" is not.
 //
-// Everything is best-effort: on any failure we still block (the user typed a clipboard
+// Everything is best-effort: on any failure we still block (the user typed an export
 // command, not a prompt for Claude — silently falling through to an inference turn would be
 // the worst outcome) and say what went wrong in `reason`.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { isIP } from "node:net";
+import { tmpdir, userInfo } from "node:os";
+import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 import { promptHead, promptParts } from "./prompt-stamp.ts";
-import { MAX_QUOTE_TURNS as MAX_TURNS } from "./quote.config.ts";
+import {
+  CLIPBOARD_TURN_LIMIT,
+  MAX_QUOTE_TURNS as MAX_TURNS,
+} from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
 const HOOKS = `${HOME}/.claude/hooks`;
@@ -41,6 +45,45 @@ const TURN_SEPARATOR = "\n\n---\n\n";
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
   process.exit(0);
+}
+
+function copyViaHerdr(text: string): string {
+  const file = join(mkdtempSync(join(tmpdir(), "quote-")), "payload.txt");
+  writeFileSync(file, text);
+  return execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
+    env: { ...process.env, COPY_PAYLOAD_FILE: file },
+    stdio: ["ignore", "pipe", "ignore"],
+    encoding: "utf8",
+    timeout: 15000,
+  }).trim();
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function downloadCommand(file: string): string | undefined {
+  const configuredTarget = process.env.QUOTE_DOWNLOAD_SSH_TARGET?.trim();
+  const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/);
+  const serverIp = connection?.[2];
+  const serverPort = connection?.[3];
+  const target =
+    configuredTarget ||
+    (serverIp && isIP(serverIp)
+      ? `${userInfo().username}@${isIP(serverIp) === 6 ? `[${serverIp}]` : serverIp}`
+      : undefined);
+  if (!target) return undefined;
+  const port =
+    process.env.QUOTE_DOWNLOAD_SSH_PORT?.trim() ||
+    (configuredTarget ? undefined : serverPort);
+  if (
+    port &&
+    (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+  ) {
+    return undefined;
+  }
+  const portFlag = port ? `-P ${port} ` : "";
+  return `scp ${portFlag}${shellQuote(`${target}:${file}`)} .`;
 }
 
 let sid = "";
@@ -125,6 +168,46 @@ const body = selected.join(TURN_SEPARATOR);
 const bodyBytes = Buffer.byteLength(body, "utf8");
 const header = `from ${name} | ${promptHead(promptParts(cwd))} | turns: ${selected.length} | ${bodyBytes}B`;
 const payloadText = `${header}\n${body}`;
+const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
+const short =
+  selected.length < count
+    ? ` — only ${selected.length} turn${selected.length === 1 ? "" : "s"} captured so far`
+    : "";
+
+// A request over 50 turns can be much larger than a useful clipboard payload. Save the
+// contents on this host and copy a small scp command through the SAME Herdr/OSC 52 route
+// used below. The human runs it on their current local machine, so a stale SSH_CONNECTION
+// inherited by a persistent Herdr server cannot cause an unsolicited push to an old client.
+if (count > CLIPBOARD_TURN_LIMIT) {
+  let file: string;
+  try {
+    const exportDir = join(HOME, ".cache", "claude", "quote-exports");
+    mkdirSync(exportDir, { recursive: true, mode: 0o700 });
+    const privateDir = mkdtempSync(join(exportDir, "quote-"));
+    file = join(privateDir, `${basename(privateDir)}.txt`);
+    writeFileSync(file, payloadText, { mode: 0o600 });
+  } catch {
+    block("Could not save the quote to a text file.");
+  }
+  const command = downloadCommand(file);
+  if (!command) {
+    block(
+      `Quote saved at ${file}${short}. No SSH download target is available. ` +
+        "If this is a remote Herdr session, set QUOTE_DOWNLOAD_SSH_TARGET to its SSH host alias and retry.",
+    );
+  }
+  try {
+    const paneId = copyViaHerdr(command);
+    block(
+      `Download command copied to your local clipboard for "from ${name}"${scope}${short}. ` +
+        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${paneId}]`,
+    );
+  } catch {
+    block(
+      `Quote saved on the remote host at ${file}${short}. Copy and run this command in a local terminal to download it:\n${command}`,
+    );
+  }
+}
 
 // Claude Code cannot reach the clipboard from a process it spawns — see
 // hooks/copy-via-herdr-pane.ts's header for why, and what it does instead. The payload travels
@@ -134,23 +217,11 @@ const payloadText = `${header}\n${body}`;
 // BG1 rules out hand-parsing process.argv in a file that cannot import Cleye.
 let paneId = "";
 try {
-  const file = join(mkdtempSync(join(tmpdir(), "quote-")), "payload.txt");
-  writeFileSync(file, payloadText);
-  paneId = execFileSync("bun", [`${HOOKS}/copy-via-herdr-pane.ts`], {
-    env: { ...process.env, COPY_PAYLOAD_FILE: file },
-    stdio: ["ignore", "pipe", "ignore"],
-    encoding: "utf8",
-    timeout: 15000,
-  }).trim();
+  paneId = copyViaHerdr(payloadText);
 } catch {
   block(
     `Could not reach an idle shell pane, so nothing was copied. Select this to copy it by hand:\n\n${payloadText}`,
   );
 }
 
-const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
-const short =
-  selected.length < count
-    ? ` — only ${selected.length} turn${selected.length === 1 ? "" : "s"} captured so far`
-    : "";
 block(`Copied to clipboard as "from ${name}"${scope}${short}. [${paneId}]`);

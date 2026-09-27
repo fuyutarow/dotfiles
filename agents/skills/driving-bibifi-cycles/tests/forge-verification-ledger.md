@@ -331,3 +331,27 @@ FIT/LIMITS and completion COST/RELEASE now branch explicitly by class. Root chec
 repair against the queue and core; no new envelope or fictitious memory measurement is required.
 `mise run link:skills` and `mise run lint:skills-wiring` exited 0; the central linker removed the
 old Claude skill link and installed the new name. Fresh-session discovery remains unmeasured.
+
+## 8. Premise invalidation v2609.2.1 — 2026-09-27
+
+**User correction / author-confirmed.** Faster BIBIFI results can make other workers' entire
+assignments pointless while they are still executing. Microtickets bound that exposure to changing
+conditions, not merely process duration. The user further emphasized continuously changing
+conditions and explicitly requested linking the revised skill.
+
+**Signed delta.** Root retains the existing owner and replaces deadline-only scheduling with
+premise-aware microticket commitments. Each ticket cites current premises and invalidating results.
+Changed findings revisit running as well as queued work; affected owners stop obsolete work and
+confirm release. Unaffected work continues. Preauthorized successors recheck current premises;
+warm-worker reuse never preserves obsolete assignments. Large milestones remain organizational
+containers, not executable long tickets. No new state schema or authority is introduced.
+
+**Verification.** S29–S33 are constructed counterexamples covering purpose independence,
+early cancellation, stale queues, unnecessary fleet barriers and false negative-result credit.
+Root desk-checked the core, compact template and concrete representation/optimizer example.
+F3 delta waiver: this narrow follow-up used serial contradiction, scope and trigger checks;
+no new independent or paired behavioral evaluation. The trigger description/owner is unchanged.
+`mise exec -- bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/driving-bibifi-cycles`
+exited 0 with no warnings; `git diff --check` passed. `mise run link:skills` and
+`mise run lint:skills-wiring` passed. Both Codex and Claude links resolve to the canonical directory;
+`cmp` confirms each linked SKILL.md matches the revised source. Live cancellation latency is unmeasured.

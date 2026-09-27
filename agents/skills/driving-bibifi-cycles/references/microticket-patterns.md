@@ -71,9 +71,21 @@ Example event response:
 
 ## Finite workers and reservation release
 
-A worker may run an already authorized finite queue without returning for permission after every loop.
+A worker may run an authorized finite queue while rechecking each next ticket against current findings.
+It need not return for permission after every loop, but must receive relevant invalidations promptly.
 The queue has a bounded lifetime and event hand-backs. Each experiment retains its own wall cap.
 At a cap/stall/deadline, the resource owner stops the process tree and reports peak/release evidence.
 An agent finishing its text response does not prove its subprocess or device allocation ended.
 Ready successors consume released resources only after that release is observed.
 For warm reuse, pin code/config/data and reset mutable experiment state; account for retained memory throughout.
+
+## A fast result can obsolete another worker's whole assignment
+
+Suppose A tests whether a representation can express the target, while B plans a full optimizer for it.
+Separate files and free GPU memory make the jobs executable together; they do not make B's purpose independent.
+If A will answer shortly, do not assign B the whole optimizer.
+Give B only a small useful interface/witness whose result survives either outcome, or select another useful task.
+If A rejects the representation, notify B and cancel affected running/queued work through its owner immediately.
+Preserve partial evidence and reclaim resources. Do not wait for B's deadline or the next six-minute report.
+If A instead supports the representation, select B's next microticket using that result.
+An unrelated ticket with unchanged premises continues; every result does not stop the entire fleet.

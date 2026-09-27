@@ -30,9 +30,9 @@ If a row cannot produce useful feedback promptly, change the slice instead of me
 ID / OWNER / CONTEXT: <ticket, sole executor, shared-context version/locators>
 QUESTION / DELIVERABLE: <one hypothesis or implementation question; smallest verifiable output>
 BUILD -> BREAK -> FIX: <minimal change/witness -> test with baseline/control/criterion -> repair/retain/reject branches>
-DEPENDENCIES: <needed to execute; needed only to interpret/promote; missing prerequisite becomes a separate small ticket>
+DEPENDENCIES: <execution/claim needs; premise versions; pending result that would make this work obsolete>
 FIT / LIMITS: <whole-cycle cost; compute: P7 envelope + device reason; NONCOMPUTE: declaration>
-RETURN / NEXT: <deadline and stall/stop/release condition; authorized conditional successor>
+RETURN / NEXT: <deadline; invalidation/stall stop and release; successor conditional on current premises>
 ```
 
 Before measurement, fix its baseline, control, criterion and tested binding, directly or by exact reference.
@@ -40,6 +40,8 @@ For a numerical prediction, cite its oracle scope and uncertainty through the ev
 Experiment target: about two minutes. Maximum: ten minutes or a tighter active cap, including launched setup/compile.
 The full microticket ETA also includes preparation, integration and recording. Six-minute windows aim for useful closures.
 Changed conditions get a new ticket/run revision; never retrofit the old criterion.
+On a premise-changing finding, revisit affected running tickets as well as the queue immediately.
+Choose hand-back and safe cancellation points before pending results could render the whole assignment useless.
 
 ## Completion in ITERATION_LOG
 
@@ -47,7 +49,7 @@ Changed conditions get a new ticket/run revision; never retrofit the old criteri
 TICKET / BINDING / RECEIPT: <exact IDs and executed version>
 OBSERVED / DECISION: <result + evidence disposition/scope -> fixed, retained, rejected, narrowed or blocked>
 ARTIFACT: <checked code/result/source locator; a status message alone is not a BIBIFI closure>
-COST / RELEASE: <actual phase times; compute: peaks + release receipt; NONCOMPUTE: N/A + worker hand-back>
+COST / RELEASE: <actual phase times + discarded effort; compute: peaks/release; NONCOMPUTE: N/A + hand-back>
 NEXT: <start authorized successor / re-slice blocker / stop; update the board now>
 ```
 

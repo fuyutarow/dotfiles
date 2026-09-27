@@ -14,7 +14,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.2.0 (2026-09-27) — microticket feedback and resource use govern the operating loop.
+> **Version**: v2609.2.1 (2026-09-27) — microtickets bound exposure to invalidated premises.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
@@ -29,6 +29,7 @@ bun ../forging-skills/scripts/skill-check.ts .
 > Attack the earliest blocking dependency on the critical path first. Keep its next useful action moving.
 > Actively turn spare capacity into goal-relevant progress; utilization alone earns no credit.
 > Shorten the time from action to feedback to the next action. Do not end an execution request with a plan alone.
+> Each finding may obsolete other work already running. Commit only to a microticket, then select again.
 
 A completed cycle has an observed result, a justified decision and a reusable artifact or evidence locator.
 A valid negative, a localized defect, or a retained implementation can close a cycle; a code change is not mandatory.
@@ -132,8 +133,29 @@ Give each compute job its RAM/VRAM/CPU/slot footprint. P7 in `orchestrating-agen
 An interpretation gap is not a blanket execution ban. It is also not permission for a blind battery.
 A provisional run must have a useful scoped interpretation and a prewritten next action even if the open check fails.
 Dependent successors wait for the actual required result; fixed comparison arms and independent questions may overlap.
-If a shared prerequisite fails or the code binding changes, reassess affected queued work and results.
 Never bypass a required project launcher, resource guard or explicit user constraint to keep a device busy.
+
+## Bound work that the next finding could invalidate
+
+Execution independence does not imply that a ticket's purpose survives another ticket's result.
+For each microticket, cite its current premise/version and the result that would make further work pointless.
+Choose a slice by time to useful feedback and time to safe cancellation, not only by its execution cap.
+If a pending result could obsolete it before hand-back, shorten to a reusable slice or defer that dependent work.
+Use the released capacity for another useful microticket; do not fill it with likely disposable work.
+Long milestones may organize the goal, but all executable commitments are microtickets.
+A ten-minute cap is a ceiling, not evidence that a ten-minute commitment is sensible.
+
+| Event | Immediate action |
+|---|---|
+| A finding or authorized decision changes a shared premise | Match its changed premise/version to queued and running tickets; notify their owners now |
+| A ticket loses its purpose or required premise | Cancel its remaining work through its owner, preserve partial evidence and confirm resource release |
+| A ticket still serves the goal under unchanged premises | Continue without waiting for unrelated workers or a global acknowledgement |
+| A microticket completes and has a preauthorized successor | Recheck the successor against current premises and priorities before starting it |
+
+Do not let sunk effort, an old assignment or an unexpired deadline justify obsolete work.
+Cancelled work keeps its original evidence binding; report discarded effort without inventing a scientific negative.
+Owner-approved premise changes govern replanning; a worker's unsupported assertion grants no new authority.
+If updates cannot reach a worker promptly, shorten its assignment to the next hand-back instead of granting a long queue.
 
 ## Device and lifecycle control
 
@@ -146,7 +168,8 @@ Charge resident memory and worker lifetime explicitly; reset experimental state 
 Each worker receives ticket(s), write-set, deadline, stop/hand-back conditions and authorized next branches.
 Compute workers receive P7 resource envelopes. Other workers carry the applicable `NONCOMPUTE` declaration.
 One short ticket normally needs one executor; keep it on an authorized finite queue when repeated setup would waste time.
-Do not require a parent reply after every successful cycle when the next branch is already authorized.
+Preauthorized branches still require the current-premise check above, but no redundant parent reply.
+Reusing a warm worker preserves setup, not a stale assignment or an unconditional sequence of future tasks.
 New scope, authority or compute needs go through the existing dispatch-amendment/resource contract.
 Track sent, accepted, running, blocked and terminal states from receipts; sending instructions is not starting work.
 At a deadline, stall or cap, inspect the phase and stop/cancel through the owner.

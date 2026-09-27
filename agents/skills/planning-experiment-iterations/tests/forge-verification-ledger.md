@@ -55,3 +55,95 @@ Gaps this skill fills:
 
 - Structural floor: `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/planning-experiment-iterations`.
 - F3 solo-tier waiver (2026-09-27): the trigger set was desk-checked serially; no live model trigger eval ran.
+
+## 4. Reforge v2609.1.1 — 2026-09-27
+
+### Scope, source, and acceptance
+
+- User request: postmortem the supplied firedancer reports and distill the lessons into skills.
+- Author/acceptor: codex-ac1c61c6aaf5c510. Audit: `postmortem-2026-09-27.md`.
+- Transition: bounded episode reports → inspect planning failures → revise the existing iteration
+  manual/template → check whether counterexamples still permit invalid planning or inference.
+- Knowledge artifact: a scoped decision from the next interpretable test, including a diagnostic
+  result. Removed delay: dependent runs and repeated compilation before the prerequisites are known.
+- Extend this owner, add no skill. Keep scientific evidence disposition, admission, and resource
+  execution with their existing owners. No research runs or programme transitions are authorized here.
+- Acceptance: stop the documented invalid inferences without blocking a bounded useful diagnostic;
+  template and gates agree; structural floor passes; no new listing charge exceeds the ceiling.
+- Target files had no pre-existing edits. Unrelated dirty files in the shared checkout are excluded.
+
+The report author wrote the initial skill during this same episode (attachment L855–866).
+Its later changes are therefore evidence about how a remedy was chosen, not independent proof
+that the remedy worked. In particular, “one arena per GPU job” was an incident reaction retained
+as a general rule; the later phase timing contradicts its unconditional use.
+
+### Source grading — sole home for this reforge
+
+| Rule / finding | Grade | Source claim / locus | Applicability and added convention |
+|---|---|---|---|
+| Baseline and no-effect-control failures | third-party | Supplied outward reports, L528–529, L1183–1197 | Scores are reported, not rerun; the logical criterion mismatch is inspectable |
+| Oracle scope and reference revisions | third-party | L1352–1367, L1528, L1686 | No independent validation of the project's theory or code |
+| Phase-cost and launch-ownership failures | third-party | L1382–1456 | Reported phase explanation; no independent profiler or scheduler trace |
+| Bounded exclusion rather than cause certainty | constructed | Compare L1602 with L1648–1650 | Logical audit of the proposition actually tested; no new root-cause claim |
+| I0 readiness; oracle type; outcome regions | skill-supplied | Repairs mapped in the postmortem | Prospective planning fields consuming evidence-owner verdicts |
+| Diagnostic/mechanism/confirmation kinds | skill-supplied | This reforge | Planning distinction, not a new admission state machine |
+| Phase plan and conditional warm-process reuse | skill-supplied | Phase-cost failure above | Conditional optimization; no promised speedup or mandatory resident service |
+| 120 s target / 600 s default cap | third-party | Existing skill and supplied report L520–546 | Bounded-iteration house default, not a universal law of experimental science |
+| Decision cases D01–D20 | constructed | `decision-cases.md` | Counterexamples and limiting cases; not measured executor reliability |
+
+### Calibration inversion
+
+| | Episode's corrective push | Agent-consumer failure and correction |
+|---|---|---|
+| Objective | More hypothesis eliminations and GPU work per report cycle | Overclaims exclusions and fills slots; prioritize valid decision changes |
+| Small tests | Reduce n/K to finish quickly | Can remove the required mechanism or power; preserve a discriminating scale or report infeasibility |
+| GPU first | Fill idle VRAM with verification runs | Repeats CPU/compile work; plan phases and reuse only fingerprint-matched artifacts |
+| Strong inference | List rivals and an elimination table | Treats causes as exclusive and assumes auxiliaries; require scoped result regions and inconclusive branches |
+
+### Signed file treatment
+
+| File | Treatment / acceptance oracle |
+|---|---|
+| `SKILL.md` | Replace objective, readiness, oracle, inference and phase rules; retain artifact ownership and minimal-first discipline |
+| `assets/ITERATION-PLAN.md` | Add binding, readiness, scoped outcome table, phase costs and execution receipts; embed in canonical records |
+| `tests/postmortem-2026-09-27.md` | Frozen bounded audit, line locators and source digest; no raw transcript copied |
+| `tests/decision-cases.md` | 20 adversarial cases, including overcorrection cases; distinguish desk check from live eval |
+| `tests/triggers.md` | Preserve existing routes; add diagnostic/phase-cost asks and audit/manual-edit no-fire cases |
+| This ledger | Preserve v2609.1.0 record; append provenance, limits, and verification |
+
+F2 boundary review: `directing-research-sections` already consumes the planning row.
+`validating-experimental-evidence` still owns validity/footing and its canonical disposition.
+The new fields consume those verdicts; they do not define a second evidence store or launcher.
+Owner-named deferral: broader reciprocal routing edits in evidence/resource/kernel skills are
+outside this single-skill repair; their existing ownership text takes precedence.
+
+### Verification record
+
+- `mise exec -- bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/planning-experiment-iterations`:
+  exit 0, no structural failures or prose-debt warnings in the changed skill.
+- `mise run lint:skills-floor`: exit 0; 74 skills, 65,104 charged characters.
+  Collection reports 109 existing prose warnings across 58 other skills; no ceiling change.
+- Trigger desk check: 8 fire, 8 no-fire, 4 ordered co-fire cases; serial review against actual
+  planning, evidence, section, audit and forge boundaries. No live trigger-selection eval.
+- Decision desk check: D01–D20 have explicit limiting actions in the revised manual.
+  Old-vs-new comparison is textual; no claim of experimentally measured performance improvement.
+- Independent semantic review: pending at this checkpoint; read-only Terra reviewer, no author
+  expected-answer file or conversation history supplied. Final receipt appended below.
+
+### Independent review and final acceptance
+
+- Reviewer: `/root/verify_planning`, requested `gpt-5.6-terra`, fresh context, read-only.
+  Read-set: manual/template and actual sibling boundaries. Expected-answer cases and this ledger
+  were withheld. Resource declaration: NONCOMPUTE. No nested fanout or numerical run.
+- Initial verdict: three medium findings. I5 could imply admission authority; the timing profile
+  lacked a justified exception; unconditional GPU selection could delay a cheap CPU diagnostic.
+- Accepted fixes: explicit owner receipts and no-authorization clause; prelaunch domain/resource
+  approval for a timing exception; cost-evidenced, scope-limited CPU diagnostics when task rules permit.
+- Recheck: PASS, no findings; static recheck only. D21–D23 capture the reviewer counterexamples.
+  Final decision-case set: 23 cases (the earlier 20-case count records the initial checkpoint).
+- Author acceptance: all three findings resolved; the owner map and canonical evidence store remain unchanged.
+- F3 limitation/waiver: one independent semantic reviewer plus serial architecture, sibling-cut,
+  trigger, and textual comparative passes. No blind OLD-vs-NEW execution or live trigger eval ran.
+  The manual is improved against explicit counterexamples; behavioral reliability is unmeasured.
+- `mise run link:skills`: exit 0. Existing skill links resolve to the edited repository directory.
+  This verifies deployment on disk, not an automatic reload into already-running agent contexts.

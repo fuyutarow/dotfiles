@@ -352,3 +352,14 @@ fix requires affected-event rerun before a behavioral-resolution claim; static r
 Applied exercise and limits have one home in driving-bibifi-cycles/tests/forge-verification-ledger.md
 section10; outcome did not establish broad superiority. Existing prose waiver core15/reference85,
 2 long cells remains unchanged. Collection floor passes with unchanged ceiling; no new eval engine.
+
+## 2026-09-27 — stop treating text answers as operational evidence, v2609.2.0
+
+User-authorized complete BIBIFI reforge follows repeated incidents and earlier old/new text ties.
+Verification now grades package/install checks, static/text decisions, actual tool-backed rehearsal,
+and matched real discovery/time separately. Runtime capability claims require actual scoped actions,
+read-back and failure receipts in an isolated environment; unavailable paths stay unverified.
+Use existing launchers/eval machinery, not a synthetic scheduler that merely asserts expected state.
+Root ran actual P7 timeout/child cleanup plus normal completion and completed-worker resume/versioned
+artifact consumption. Full receipts and limits live in BIBIFI ledger§12. No real R&D speedup claimed.
+Existing core15/reference85prose warnings and2long cells are unchanged scoped debt; floor passes.

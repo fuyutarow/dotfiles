@@ -12,6 +12,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | F6 | Experiments should take about two minutes, ten max; no sweeps | HERE: size useful discriminators and end-to-end cycle |
 | F7 | A new model waits for all components; get the first useful result sooner | HERE: smallest real executable path and BIBIFI slices |
 | F8 | Run one microticket, use its result to choose the next; don't end with a plan | HERE: execute through owners and close the loop |
+| F9 | GPU is occupied; advance independent formal counterexamples and source checks now | HERE selects parallel microtickets; proof/evidence owners qualify their results |
 | N1 | Is this benchmark score leaking? | `validating-experimental-evidence` |
 | N2 | Generate five new research theses with no selected candidate | `forging-novel-theses` with its entry requirements |
 | N3 | Reallocate next quarter's research programme | `supervising-research-programmes` |
@@ -21,6 +22,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | N7 | Update theorem dependencies after this validated finding | `systematizing-theories` |
 | N8 | Decide whether to commit to an expensive irreversible rewrite | `acting-on-hypotheses` |
 | N9 | Reforge this SKILL.md | `forging-skills` owns the edit |
+| N10 | Prove this one lemma, with no scheduling or execution-loop request | `proving-theorems` |
 
 Ordered handoffs: a granted section's admission → HERE's microticket plan → existing run/dispatch owners →
 validated receipt → immediate next selection and theory update where relevant. Respect local WIP slots;

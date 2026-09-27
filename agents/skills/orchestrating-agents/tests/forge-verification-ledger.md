@@ -1397,3 +1397,13 @@ is illustrative, never a universal cap. Parent deadlines are not process enforce
 Root-signed source/verification home: sibling BIBIFI performance postmortem and forge ledger§11.
 Static parallel review PASS; sequential old/new both launched16eligible agents symbolically.
 Existing reference prose13 unchanged; target/collection checks pass. No runtime runner was modified.
+
+## 2026-09-27 — observed capability contract, v2609.3.0
+
+C0 now owns reusable, environment/version-bound observations of worker delivery/stop, P7 process
+caps/release, execution identity and consumer hand-back. Missing capability repairs its dependent
+work only. Installed skill files do not prove live workers loaded them. No schema, scheduler or
+hook was added. Root's actual CPU process-tree timeout/normal completion and artifact-resume trial
+are recorded in sibling BIBIFI ledger§12; they do not establish GPU or all-platform enforcement.
+BIBIFI owns short work selection and event loop; existing section/evidence boundaries stay intact.
+Target floor passes with existing13reference prose warnings; scoped debt unchanged.

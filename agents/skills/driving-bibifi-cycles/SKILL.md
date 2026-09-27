@@ -1,309 +1,178 @@
 ---
 name: driving-bibifi-cycles
 description: >-
-  Runs goal-directed R&D through microticket BIBIFI (Build → Break → Fix) cycles.
-  Use for 実験計画, マイクロチケット, 6分イテレーション, BIBIFI最大化, ETA/JST,
-  idle RAM/VRAM/CPU, and ticket/agent lifetimes. Prioritizes the critical path, fills spare
-  capacity with useful independent work, scales agent microtickets separately from compute jobs,
-  targets ~2-minute experiments and caps each at 10 minutes.
-  Owns the rolling ITERATION_PLAN/LOG and scientific work selection within authorized scope.
-  Admission→directing-research-sections; resource/dispatch mechanics→orchestrating-agents;
-  evidence validity→validating-experimental-evidence; theory updates→systematizing-theories.
-  Workflow-native: priorities and replanning stay solo; independent microtickets may run concurrently.
+  Maximizes knowledge discovery through Experimental and Formal Methods using short BIBIFI cycles.
+  Use for 実験計画, 6分イテレーション, マイクロチケット, massive parallelism, ETA/JST,
+  idle CPU/RAM/VRAM, and research execution that keeps stalling.
+  Selects useful work, expands independent agent microtickets, consumes results and replans immediately.
+  Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
+  Dispatch and enforceable limits→orchestrating-agents; evidence→validating-experimental-evidence;
+  proof→proving-theorems; theory→systematizing-theories; section admission→directing-research-sections.
+  Workflow-native: selection and acceptance stay with their owner; independent work runs concurrently.
   English skill; respond in the user's language.
 ---
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.2.4 (2026-09-27) — executable time limits and performance repairs preserve the measured task.
+> **Version**: v2609.3.0 (2026-09-27) — one operating loop, observed execution, bounded commitments.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
   tests/triggers.md tests/decision-cases.md tests/scheduling-cases.md \
-  tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
+  tests/operational-rehearsal.md tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
 bun ../forging-skills/scripts/skill-check.ts .
 ```
 
-## Objective — maximize knowledge discovery throughput
+## LAW — maximize valid discovery per unit time
 
 Maximize the throughput of knowledge discovery from Experimental and Formal Methods.
-Count new, valid, goal-relevant evidence, falsifications, counterexamples and checked proof results.
-Use `proving-theorems` for proof status and `validating-experimental-evidence` for empirical validity.
-Artifacts, completed tickets, GPU utilization and agent count are means, not discovery units.
-An enabling repair earns its value by shortening a named next discovery; report it separately from that discovery.
-Do not inflate throughput by splitting one result, repeating known findings or choosing trivial irrelevant questions.
+Select new, valid, goal-relevant evidence, falsifications, counterexamples and checked proof results.
+A repair matters through the next discovery it enables. Report that enabling work separately.
+Ticket counts, code volume, reports, device utilization and agent count are not discovery units.
+Do not inflate progress with known results, duplicate observations or irrelevant easy questions.
 
-## LAW — break through the critical path; leave no useful capacity idle
+Attack the current critical dependency; use remaining capacity for useful independent questions.
+Expand across available agent slots. GPU scarcity does not serialize source, proof or isolated preparation work.
+Each result may obsolete work already running. Commit to a short return, then select again.
+The parent owns coordination even when the work is delegated. A plan or dispatch message is not execution.
 
-> Produce a small verifiable artifact, test what could break it, then fix, retain or reject it from the evidence.
-> Attack the earliest blocking dependency on the critical path first. Keep its next useful action moving.
-> Actively turn spare capacity into goal-relevant progress; utilization alone earns no credit.
-> Expand useful independent agent work across available slots; serialize only the actual shared bottleneck.
-> Shorten the time from action to feedback to the next action. Do not end an execution request with a plan alone.
-> Each finding may obsolete other work already running. Commit only to a microticket, then select again.
-> Delegate a bounded action, never responsibility for keeping the critical path moving.
+Stable tokens: `BIBIFI`, `MICROTICKET`, `ITERATION_PLAN`, `ITERATION_LOG`, `ontime`, `delta`, `pivot`.
 
-A completed cycle has an observed result, a justified decision and a reusable artifact or evidence locator.
-A valid negative, a localized defect, or a retained implementation can close a cycle; a code change is not mandatory.
-A ticket count, untested file, status message or restated blocker is not a completed cycle.
-Never split bookkeeping into fake cycles or keep an easy side stream busy while the critical path waits.
-Maximize completed cycles that change a decision or remove a delivery dependency, not raw cycle count.
+## Ownership — one loop, existing records
 
-Keep `BIBIFI`, `MICROTICKET`, `ITERATION_PLAN`, `ITERATION_LOG`, `ontime`, `delta` and `pivot` stable.
+`authorized goal + current evidence/resources -> select -> execute -> consume -> reselect`.
+Own the rolling work selection and its plan/log inside the project's existing ticket/run/finding system.
+Do not create another database, launcher, authority hierarchy or blanket approval step.
+One question per microticket does not mean one active question for the fleet.
+Under a formal section, preserve its admission, whole-cycle WIP and distinct learning-commit owners.
+Partial build returns can unblock authorized work but are not terminal run receipts or LEARN commits.
 
-## Function and ownership
+## Start with a checkable result, not a large plan
 
-| Input | Action | Owned artifact / result |
+Read the prior release ETA, completion criteria, open work and latest accepted evidence.
+Check available/reserved CPU, RAM, VRAM, GPU load, agent slots and live write ownership.
+Unknown values stay `未確認` / `UNKNOWN`; never infer execution or free capacity from a sent message.
+Choose the first result that can change the next decision and the dependency preventing it.
+Retrieve the relevant predecessor, interface and failure witness before replacing or reimplementing it.
+Record the transferable part and current mismatch; do not commission a whole-history survey to begin one repair.
+
+For the next action, consume orchestration C0's current capability receipts:
+launcher/identity, worker update/stop, resource cap/release, and consumer hand-back as applicable.
+Missing capability becomes one bounded repair/probe. Unrelated useful work proceeds immediately.
+A skill installed on disk is not proof a live worker loaded it; bind important rules into the current brief.
+Reuse unchanged valid receipts; do not rerun a readiness ceremony before every ticket.
+
+## The microticket — one useful decision within reach
+
+Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context by exact locator.
+
+| Field | Must determine |
+|---|---|
+| Question / consumer | Which live decision changes, or which discovery dependency is removed? |
+| Build → Break → Fix | Small artifact/witness; discriminating check; conditional repair/retain/reject action |
+| Binding / validity | Current premise, input/code or statement version; baseline/control/criterion before measurement |
+| Work / resources | Owner, read/write scope, agent work versus admitted compute; phase footprint and actual device reason |
+| Return / cancellation | First checkable result and deadline; invalidating result, safe stop/release and next consumer |
+
+A whole component, inventory, port or multi-stage revision is a container, not an executable microticket.
+Slice by a consumed outcome, not an arbitrary function count. Preserve mechanism, power and claim scope when shrinking.
+Use diagnostic expected-vs-observed checks for implementation work; do not invent scientific hypotheses for forms.
+For formal work, pin the exact statement and proof status; a sketch cannot silently become a checked theorem.
+
+| Clock | Rule |
+|---|---|
+| First useful return | Within the next six-minute window; earlier if pending evidence could invalidate the assignment |
+| Experiment | About two minutes target; ten minutes maximum or the tighter active cap, including launched setup/compile |
+| Worker / queue | Finite return and lifetime, covering preparation, admission wait and recording as well as execution |
+
+Two minutes is a target, not a launch ban. Six minutes is feedback/report cadence, not a process kill boundary.
+Tests and profiling inside this loop use its experiment cap. P7 installs and observes the real stop mechanism.
+Use GPU for GPU-capable experiments. Record a concrete CPU reason and obey stricter active device constraints.
+Prompt deadlines alone enforce nothing. Cleanup grace is not extra experiment time.
+No sweeps or large experiments; renaming their cells microtickets does not change their information value.
+
+## Execute continuously — decide on each event
+
+| Observed state/event | Action now | Evidence to consume |
 |---|---|---|
-| Authorized goal/work set, previous results and current resources | Slice and prioritize executable microtickets | Rolling `ITERATION_PLAN`: critical frontier, ready/blocked queue, resource use and ETA |
-| Each result, release or new blocker | Close its BIBIFI loop and choose the next useful action | `ITERATION_LOG` entry and immediately revised queue |
-| Six-minute boundary during the active session | Reconcile output, tickets, resources and schedule | Concise JST report in the required order |
+| Critical action ready | Reserve/admit its needed resources and launch the smallest real path | Actual start and execution binding |
+| Independent useful agent work ready | Launch across fitting slots/host capacity, even while GPU phases wait | Disjoint scope, short return, named consumer |
+| Critical dependency blocked | Assign its smallest unblocker and continue unaffected work | Exact missing input, owner and next check |
+| Partial result arrives | Check its boundary and pass it to its consumer immediately | Artifact plus consumer receipt, or explicit pending/blocker |
+| Result changes a premise | Reassess affected running/queued tickets; continue, shrink or stop | Version delta and observed owner action/release |
+| First return missed | Inspect actual phase/job/artifact; unblock, re-slice or cancel | C0 intervention; not another unchanged ETA |
+| Priority work waits behind an owned side job | Reconsider that job at its declared safe stop point | Reservation and confirmed release; no unauthorized external kills |
+| Resource/process cap exceeded | Stop through the owner and fix the stop path before reusing it | Partial evidence, effective cap, stop/cleanup receipt |
+| Launcher/setup failure | Repair and exercise one fixture; stop identical queue retries | Accepted/rejected invocation and record read-back |
+| No useful work fits | Inspect blocker, successor and reusable preparation slices | Actual remaining constraint and event that changes it |
 
-Use existing tickets, run intents and findings; these names do not introduce a second record store.
-Within a granted section, keep its admission, WIP and learning-commit rules. Other admitted work may run independently.
-Wake the required owner on each receipt; do not add a global barrier or repeated user approval.
-This skill chooses useful work and ordering; it does not grant new objectives, permissions or resource reservations.
+Act when the event arrives; never wait for the report tick or every worker in a wave.
+Do not require another parent reply for a preauthorized branch whose scope, premises and resources still hold.
+Preserve raw failures and falsifications. An operation failure is not a scientific negative and does not erase valid evidence.
 
-## Start from the current state
+## Parallelism without whole-component handoffs
 
-Check the previous release schedule, completion criteria, open tickets and actual available RAM/VRAM/CPU.
-Also inspect active jobs, reservations, GPU compute load and shared write/dependency conflicts.
-Unknown values stay `未確認` / `UNKNOWN`; do not invent free memory, completion or launch receipts.
-Use existing observations if still current, and refresh those that can change the next dispatch.
-Identify the first goal-relevant result to land and the current bottleneck, then start the smallest ready cycle.
-Before reimplementing a mechanism or performance repair, retrieve the named predecessor and its executable witness.
-Record what transfers and what differs in the current path; a historical score or function name alone is insufficient.
+Keep agent-ready work separate from compute-admission waits in the same board.
+Parallelize distinct source, proof, counterexample and interface checks, plus isolated patch proposals.
+Use a single writer/integrator per live shared file; parallel thinkers return bounded proposals on frozen inputs.
+NONCOMPUTE means the declared workload, not zero host cost or permission for hidden tests/fanout.
+Actual platform, host, data-access and write constraints apply; a fixed small-team cap does not.
 
-## Two clocks, one continuous loop
+Consume compact artifact returns and exception deltas rather than every transcript.
+Use deterministic joins for mechanical aggregation; domain owners retain scientific judgment and acceptance.
+If results backlog, repair routing/consumption first. Throttle only branches blocked by contention or stale decisions.
+Respect blind-review visibility; orchestration owns what may cross each role boundary.
+Never create duplicate work just to occupy slots or leave a useful ready question idle because another stream is slow.
+Tie each next ticket to consumed evidence or a cited primary source and its authorized question.
+Free capacity or an unsupported worker assertion is not a basis for inventing new work.
 
-| Clock | Operating rule |
+## Integrate early; keep future work conditional
+
+Before scaling, run a tiny fixture through the actual changed input → component → update → scoring/consumer path.
+Exercise the changed branch and a relevant negative case; component-only tests cannot certify their integration.
+Execution prerequisites must hold. Interpretation/promotion gaps block those claims, not every useful scoped diagnostic.
+Use evidence EV1 for loaded code/input identity, including material imports, configuration and warm-worker state.
+Use supported immutable run inputs while development continues. Otherwise serialize only the required read/write window.
+Do not freeze development until a long benchmark queue drains.
+
+Select the next discriminator per dependency chain; fixed comparison arms may run together for that one question.
+Recheck each queued launch against current evidence, binding, priority, capacity and remaining lifetime.
+Do not rerun every arena on every revision. A newly decisive result cancels obsolete successors now.
+Keep one necessary baseline if useful; sunk work and an old assignment do not justify finishing the rest.
+Reuse bounded warm workers and immutable references, resetting experimental state and charging retained resources.
+
+## Qualification and the six-minute report
+
+Evidence EV2/EV3 owns information access, batch-update semantics, effective interventions and comparison footing.
+A faster new learning protocol need not be equivalent. A historical score is not current evidence.
+The GPU skill owns stage budgets/profiles. Repair the largest recoverable whole-run cost, not an isolated ratio.
+The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
+Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
+
+Every six minutes while active, report briefly in JST:
+
+1. Checked artifacts, measured results or proof status, and the decisions they changed.
+2. Ticket changes, current blocker, parent intervention and worker/job stop/release state.
+3. Next agent microtickets and CPU/RAM/VRAM allocation, measured peaks/releases and any idle-capacity reason.
+4. Release ETA versus the previous schedule: `ontime` unchanged, `delta` date changed, `pivot` goal/approach changed.
+
+No previous schedule means initial baseline. Keep run-return ETA separate from release ETA; give the change rationale.
+If nothing landed, say so and state the intervention. Do not invent progress or replace the required report with silence.
+Stop at completion, user stop or a real authority boundary. Hand back accurate partial state and release owned resources.
+
+## Owners and supporting material
+
+| Need | Owner / reference |
 |---|---|
-| Six minutes | Work toward a verifiable deliverable and a fresh allocation decision each window; report in JST every six minutes while active |
-| One experiment | Target about two minutes; stop at ten minutes maximum, or a tighter task/resource cap |
-| One microticket/worker | Set an explicit return deadline, stall trigger and finite lifetime; account for preparation, execution, interpretation and recording |
+| Dispatch, receipt states, lifetime, admission, interruption and isolation | `orchestrating-agents` C0/C3a/P7; this skill chooses work |
+| Experimental validity, scope and comparisons | `validating-experimental-evidence` |
+| Exact proof and theory changes | `proving-theorems`, then `systematizing-theories` as applicable |
+| Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
+| Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
+| Costly irreversible commitment | `acting-on-hypotheses`; a bounded probe grants no adoption authority |
+| Concrete slices, dependencies and parallel examples | `references/microticket-patterns.md` |
+| Compact board, ticket, return and report | `assets/ITERATION-PLAN.md` |
+| Skill validation | `tests/triggers.md`, `tests/decision-cases.md`, `tests/scheduling-cases.md`, `tests/operational-rehearsal.md` |
+| Historical audits and measured verification limits | `tests/forge-verification-ledger.md` |
 
-Six minutes is not permission to wait until the next report. Close and continue as soon as a result arrives.
-A bounded experiment may cross a report boundary within its ten-minute cap; report it honestly and run independent work.
-The experiment's wall clock includes its launched process startup/compilation; do not hide these outside the cap.
-The microticket ETA includes preparation, queueing, integration, interpretation and record hand-back too.
-Size the work so ordinary cycles return useful feedback inside the six-minute window.
-If it cannot, change the slice, reuse valid preparation or choose a different discriminator before dispatch.
-No sweep or large experiment belongs in this loop. Do not disguise a separately authorized larger study as microtickets.
-Two minutes is a target, not an absolute launch gate. Choose a useful slice when runtime is longer; keep the ten-minute cap.
-Repeated near-cap runs reopen scale, setup and throughput before admitting another expensive batch.
-The selected process limit must be installed in the launcher, including diagnostic tests and profiling in this loop.
-Use orchestration P7 to verify the effective cap and process-tree cleanup; a deadline in a prompt is not enforcement.
-On an overrun, preserve the receipt, correct the stop path and reselect affected queued work before more launches.
-Do not call an overrun a compliant cycle merely because it returned a score; evidence validity is judged separately.
-
-## Make the ticket a complete small loop
-
-| Step | Required action |
-|---|---|
-| Build | Choose one hypothesis or implementation question; create/reuse the smallest executable change or witness |
-| Break | Before measurement, record baseline, control and criterion; run the smallest informative check, including relevant negative cases |
-| Fix | Use the result to repair, retain, reject or narrow; verify any repair and choose the next conditional ticket |
-
-Use a diagnostic expected-vs-observed contrast when there is no scientific rival; do not invent hypotheses for a form.
-Choose the smallest scale that preserves the mechanism and separates outcomes with a justified margin.
-An underpowered tiny run is not informative. An oversized registered suite is not the default unit of work.
-Freeze only this ticket's changing conditions; inherit unchanged binding, controls and resource policy by exact locator.
-Use the compact card in `assets/ITERATION-PLAN.md`. Add scientific detail only when it changes interpretation.
-`references/microticket-patterns.md` shows runnable slices and result branches.
-
-**Get a real path early.** Trace the intended input → named model/component → update → scoring/consumer.
-Use a tiny target-path fixture to expose wrong dispatch, missing constructors and interface mismatches early.
-Do not postpone first integration until every component, law layer or whole-suite gate is finished.
-A contract is delivered when its intended consumer can use the checked interface, not merely when a document is written.
-A diagnostic slice may establish routing or a boundary only; it is not evidence of full capability.
-Before scaling or queueing registered runs, execute one tiny fixture through the actual changed consumer path.
-Exercise the new branch and a relevant negative case; a CM-only unit test does not validate TM integration.
-Use the observed execution identity from `validating-experimental-evidence` EV1, not the revision label alone.
-
-## Prioritize, reserve, fill and replan
-
-For each dispatch decision, consult the ready queue and real resource/dependency state.
-
-| State | Action now |
-|---|---|
-| Critical-path microticket is ready | Reserve its required resources and launch it first |
-| Critical path is blocked | Give the smallest blocker-removal cycle an owner and deadline; continue useful independent ready work |
-| RAM/VRAM/CPU remain after critical-path reservations | Launch another authorized useful independent microticket that fits all resources and does not delay the priority work |
-| GPU waits on CPU preparation | Perform the preparation and use otherwise free GPU capacity for an independent informative check |
-| Independent work could overrun the next critical-path need | Shorten it, reserve headroom or use a predeclared safe cancellation point; do not rely on a hopeful ETA |
-| No useful admissible work fits | Inspect split/reuse/repair options; state the remaining reason for idleness and the next event that changes it |
-| A result, failure, cancellation or resource release arrives | Reconcile immediately, free reservations, update priorities and dispatch the next ready ticket |
-
-Not being on the critical path is not a reason to forbid useful independent work.
-Spare capacity alone does not justify a ticket.
-Before launch, name the decision it can change or the delivery dependency it can remove, with a checkable result.
-Reject repeat measurements, cosmetic artifacts and speculative batches that cannot name either contribution.
-If capacity is idle, search the current blocker, its successors and reusable preparation for another useful slice.
-“No ready ticket” is a queue defect to investigate, not a sufficient reason to stop searching.
-Do not manufacture work when none survives that check; record what was inspected and the actual limiting condition.
-Resource concentration means protecting the priority path, not silencing every independent CPU/GPU stream.
-When priority work becomes ready, reassess lower-priority reservations and stop at their declared safe points if needed.
-An owned GPU test occupying the device is not an external blocker; the parent must reconsider that allocation.
-Do not cancel another owner's jobs without authority. Record the actual contention and available alternatives.
-Use actual load as well as memory: spare VRAM does not imply spare GPU compute or host RAM.
-Give each compute job its RAM/VRAM/CPU/slot footprint. P7 in `orchestrating-agents` owns admission and limits.
-
-### Scale agents and compute separately
-
-Maintain separate ready queues for agent work and resource-admitted compute phases in the existing board.
-A full GPU does not block source retrieval, counterexamples, interface analysis or isolated patch preparation.
-Start useful independent microtickets across available agent slots now; do not default to a small fixed worker count.
-Do not equate NONCOMPUTE with zero host cost or unlimited platform capacity; observe actual slot and host limits.
-
-| Available work | Parallel action |
-|---|---|
-| Several source records can change the current repair | One bounded located comparison per relevant record; return independently, not a long inventory ticket |
-| Several invariants or interface seams can fail independently | Parallel narrow counterexample/contract checks with named consumers |
-| Several fixes target the same file | One integration owner; separate authorized snapshots/patch proposals, never concurrent edits to that live file |
-| GPU is occupied but a useful patch is ready to prepare | Prepare the patch and minimal test input now; admit its compute phase only when resources fit |
-| One result invalidates several tickets | Notify affected owners and cancel stale branches; keep unaffected ready work running |
-
-Briefs carry disjoint questions, write scopes, consumers, invalidation conditions and short returns.
-No duplicate work, hidden numerical run under NONCOMPUTE, speculative sweep or new admission follows from free slots.
-Independent questions do not wait for every agent in a wave; consume each return when its own dependency is ready.
-
-## Wait only for the dependency this action needs
-
-| Dependency | Treatment |
-|---|---|
-| Execution: callable interface, required input, authority, feasible envelope | Must hold for the proposed action; if missing, run a smaller authorized diagnostic/build cycle that supplies it |
-| Interpretation: oracle applicability, baseline validity, CPU/GPU parity for a capability claim | Required for that claim; can be tested by a bounded diagnostic before global acceptance is complete |
-| Promotion: whole-suite acceptance, broader generalization or release | Do not claim it early; it need not block a useful narrow BIBIFI experiment |
-
-An interpretation gap is not a blanket execution ban. It is also not permission for a blind battery.
-A provisional run must have a useful scoped interpretation and a prewritten next action even if the open check fails.
-Dependent successors wait for the actual required result; fixed comparison arms and independent questions may overlap.
-Never bypass a required project launcher, resource guard or explicit user constraint to keep a device busy.
-
-## Bound work that the next finding could invalidate
-
-Execution independence does not imply that a ticket's purpose survives another ticket's result.
-For each microticket, cite its current premise/version and the result that would make further work pointless.
-Choose a slice by time to useful feedback and time to safe cancellation, not only by its execution cap.
-If a pending result could obsolete it before hand-back, shorten to a reusable slice or defer that dependent work.
-Use the released capacity for another useful microticket; do not fill it with likely disposable work.
-Long milestones may organize the goal, but all executable commitments are microtickets.
-A ten-minute cap is a ceiling, not evidence that a ten-minute commitment is sensible.
-Renaming a whole component or multi-stage assignment “microticket” does not make it one.
-
-| Event | Immediate action |
-|---|---|
-| A finding or authorized decision changes a shared premise | Match its changed premise/version to queued and running tickets; notify their owners now |
-| A ticket loses its purpose or required premise | Cancel its remaining work through its owner, preserve partial evidence and confirm resource release |
-| A ticket still serves the goal under unchanged premises | Continue without waiting for unrelated workers or a global acknowledgement |
-| A microticket completes and has a preauthorized successor | Recheck the successor against current premises and priorities before starting it |
-
-Do not let sunk effort, an old assignment or an unexpired deadline justify obsolete work.
-Cancelled work keeps its original evidence binding; report discarded effort without inventing a scientific negative.
-Owner-approved premise changes govern replanning; a worker's unsupported assertion grants no new authority.
-If updates cannot reach a worker promptly, shorten its assignment to the next hand-back instead of granting a long queue.
-
-**A queue is conditional, not a battery.** Select the next discriminating run per dependency chain from current evidence.
-Many independent microtickets may proceed concurrently; one question per ticket is not one active question for the fleet.
-Run fixed comparison arms together only when their joint result answers that one question.
-Do not automatically rerun every arena on each revision or protect a whole queue by freezing development until it drains.
-Before each queued launch, recheck premise, code/input binding, priority, resources and its remaining finite lifetime.
-Admission retries obey that lifetime and replan on evidence; an endless periodic retry is not progress.
-Prefer an immutable run snapshot while development continues under the existing isolation policy.
-If the required launcher cannot use one, serialize only the necessary read/write window or repair that blocker first.
-If a first launch fails in snapshot/configuration setup, stop identical retries and repair the launcher on one fixture.
-Do not run the rest of the queue as repeated launcher diagnostics or count prelaunch failures as experiments.
-When a measured bottleneck already changes the next repair, retain one necessary baseline and reassess the remainder now.
-The old queue's completion is not a prerequisite for applying a useful repair on a properly bound new revision.
-
-## Device and lifecycle control
-
-Use GPU for GPU-capable experiments. Record a concrete workload/resource reason for CPU use and its inference scope.
-Honor stricter active user constraints; a ticket name such as “oracle” or “diagnostic” changes no executed workload.
-If the GPU path is missing, prioritize its smallest usable build/test slice. Do not wait for a full port.
-Reuse validated immutable references and bounded warm workers when they reduce time to feedback.
-Charge resident memory and worker lifetime explicitly; reset experimental state between cases.
-
-Each worker receives ticket(s), write-set, deadline, stop/hand-back conditions and authorized next branches.
-Compute workers receive P7 resource envelopes. Other workers carry the applicable `NONCOMPUTE` declaration.
-One short ticket normally needs one executor; keep it on an authorized finite queue when repeated setup would waste time.
-Preauthorized branches still require the current-premise check above, but no redundant parent reply.
-Reusing a warm worker preserves setup, not a stale assignment or an unconditional sequence of future tasks.
-New scope, authority or compute needs go through the existing dispatch-amendment/resource contract.
-Track sent, accepted, running, blocked and terminal states from receipts; sending instructions is not starting work.
-At a deadline, stall or cap, inspect the phase and stop/cancel through the owner.
-Preserve partial evidence and confirm release.
-Terminate or hand back idle workers when their finite work/lifetime ends; no orphan jobs or indefinite reservations.
-
-## The parent must coordinate, not wait for hand-back
-
-Before dispatch, name the first checkable return, its consumer and the parent's next intervention point.
-Set its deadline within the next six-minute feedback window, earlier if a pending result could invalidate the work.
-This is a partial-result deadline, not a new six-minute process cap or permission to send status alone.
-Use `orchestrating-agents` C0 for the coordination record, missed-return actions and dispatch failure criteria.
-The parent keeps the current critical blocker, latest observed artifact and next decision visible in the existing board.
-“Agent working” or “waiting for its run” supplies none of these and cannot justify an unchanged ETA.
-Consume each partial return at its checked boundary; dispatch the smallest integration/probe before whole-part completion.
-If a first return is missed, inspect the actual phase and re-slice, unblock or stop through the owner.
-Do not merely move the deadline or send “hurry up” while leaving the same assignment running.
-After a decisive result, record which live assignments continue, shrink or stop and why.
-Use scoped change notifications; do not require a fleet-wide acknowledgement or repeat unchanged context.
-For blind verification, apply the orchestration owner's information boundary to these notifications.
-Scale coordination with fan-out: compact structured returns, deterministic joins and preauthorized unchanged branches.
-The parent owns priorities and exceptions; it need not reread every worker transcript or approve each local step.
-If returns backlog, repair routing/consumption first. Throttle only work affected by actual contention or stale decisions.
-Do not use parent overload as a standing small-team policy; expand useful ready work after fixing the bottleneck.
-One function per ticket and a fixed agent cap are not universal rules; use a checkable consumed outcome as the unit.
-Useful side findings never excuse an unattended critical dependency.
-
-## Evidence closes the loop
-
-Use `validating-experimental-evidence` for measurement validity, realized controls, footing and allowed claim scope.
-Use `systematizing-theories` for the exact prediction version and changes warranted by the finding.
-Do not promote a missing control, a failed instrument or a partial timeout to a scientific conclusion.
-A diagnosed instrument failure can close its diagnostic question, with the observed failure and next repair recorded.
-Keep refuted hypotheses and unexplained causes. Repair/retest uses a new binding, not a rewritten old criterion.
-The next ticket comes from this result or a primary source; do not add work by guesswork or utilization alone.
-For a performance repair, evidence EV2/EV3 fixes update semantics and comparison footing before a speedup claim.
-Use the GPU skill for stage cost and kernel choice; historical fast code is a candidate, not proof of current speed.
-
-## Six-minute report — outputs first
-
-Report briefly in this order:
-
-1. Artifacts and measured results since the last report, with the decision each closed.
-2. Ticket states, actual blockers, parent coordination decisions and worker lifetime/stop actions.
-3. Next microtickets and RAM/VRAM/CPU allocations, peaks/releases and unused-capacity reasons.
-4. Release ETA in JST against the previous schedule: `ontime`, `delta` or `pivot`, each with its rationale.
-
-Use `ontime` when the release date is unchanged, `delta` when its date changes, and `pivot` when goal or approach changes.
-No previous schedule means initial baseline, not `ontime`. Distinguish experiment return ETA from release ETA.
-A delay alone is not a pivot. A missed return changes the plan; do not roll the ETA without intervention.
-If nothing landed, say so, name the blocking phase and change the slice/allocation now where possible.
-Do not fabricate output or relabel an old artifact to satisfy the cadence.
-
-## Routing and execution model
-
-Priorities, result interpretation and replanning stay SOLO; independent microtickets may run concurrently.
-Use `orchestrating-agents` for dispatch/resource mechanics and worker lifetimes, including shared-state ownership.
-Use `implementing-and-debugging` and the language owner to execute code changes.
-`directing-research-sections` retains section admission and learning commits; programme allocation stays with its owner.
-A costly irreversible commitment belongs to `acting-on-hypotheses`. This loop grants no adoption authority.
-No harness → run the same ready queue serially with scoped receipts.
-
-## Verification and history
-
-| File | Use |
-|---|---|
-| `assets/ITERATION-PLAN.md` | Rolling board, compact ticket and completion record in the canonical system |
-| `references/microticket-patterns.md` | Concrete BIBIFI slices, scheduling and anti-waiting examples |
-| `tests/triggers.md` | Fire/no-fire and sibling boundaries |
-| `tests/scheduling-cases.md` | Critical-path, spare-capacity, timing and lifetime regression cases |
-| `tests/decision-cases.md` | Retained scientific-interpretation safeguards; not a second gate manual |
-| `tests/forge-verification-ledger.md` | User correction, design replacement, review and verification receipts |
-| `tests/postmortem-2026-09-27.md` | Historical first audit |
-| `tests/postmortem-2026-09-27-followup.md` | Historical second audit |
-| `tests/postmortem-2026-09-27-third.md` | Historical third audit |
-| `tests/postmortem-2026-09-27-coordination.md` | Parent delegation failure, source locators and repair responsibility |
-| `tests/postmortem-2026-09-27-queues.md` | Conditional queues, execution identity, role consolidation and sequential fixtures |
-| `tests/postmortem-2026-09-27-performance.md` | Process-cap failures, batching semantics and throughput-footing cases |
+No harness → execute ready work serially with observed receipts; do not claim parallelism or enforced cancellation.

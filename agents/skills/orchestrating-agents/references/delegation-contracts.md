@@ -102,6 +102,21 @@ domain正本への着地が完成条件の仕事では、正本のlocus/digest�
 
 ### C0 — 親の調整責任は委任しない
 
+まず次の仕事に必要な実行能力を、現在のtool/launcherとその観測で照合する。
+これは既存board/briefの参照欄であり、新しいstate machineや起動ごとの全件検査ではない。
+
+| 能力 | 必要な観測 | 不明・不成立なら |
+|---|---|---|
+| workerへの発注/変更/停止 | toolが扱う実ID、受領/実行の観測、利用できるinterrupt経路 | 未受領をrunningとしない。短い一発の発注へ縮め、変更可能性を仮定しない。 |
+| processの時間/資源上限 | P7実行器の有効設定と停止/cleanupのreceipt | その計算の前にbounded probeで確認するか実行器を修復する。独立した非計算作業は続ける。 |
+| 実行版の隔離 | EV1が要求する入力/code範囲とlauncherが実際に読む不変対象 | snapshot対応を推測せず確認し、必要区間だけ直列化する。 |
+| 部分納品の消費 | artifactの版、consumer側の受領/実行、結果または明示pending | 提出を統合済みと呼ばない。次の接合probeを一件切る。 |
+
+観測のlocus、対象版/環境、成立する範囲を保持し、変更がその証拠を失効させたときだけ取り直す。
+skillの存在・更新・リンクは、そのworkerがその版を読んだ証拠にはならない。
+重要な規則は現在のbriefに渡し、長いsessionの既読contextを更新済みと推定しない。
+設計上の要求と、実行基盤が実証した能力を同じPASSで表さない。
+
 親は発注前に、最初の検証可能な部分納品と返却期限、その消費者、次の介入時刻または事象を決める。
 返却期限はdomainのfeedback周期と、前提を変える次の結果に間に合わせる。
 既存ticket/boardへ`event/time + artifact -> parent decision -> consumer/brief revision + action/receipt`を残す。

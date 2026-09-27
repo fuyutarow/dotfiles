@@ -17,7 +17,7 @@ description: >-
 
 # Forging skills — the craft of making operating manuals that outlive their maker
 
-> **Version**: v2609.1.0 (2026-09-25) — collection mission enters the existence gate.
+> **Version**: v2609.2.0 (2026-09-27) — execution-loop verification requires observed tool actions.
 > History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
 
 Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:

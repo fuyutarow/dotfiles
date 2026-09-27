@@ -503,3 +503,88 @@ to the canonical source. Before commit, HEAD advanced to738eca7 through an unrel
 hook commit. Its four files do not overlap this delta; shared index was empty and no operation was
 paused. Preserve it, stage only this task's enumerated skill files. No push or external deployment
 is performed by this task; fresh-session runtime compliance remains unmeasured.
+
+## 12. Full operating-manual rewrite v2609.3.0 — 2026-09-27
+
+**Root-signed mandate.** User asked for a complete revision after rejecting another wording-only
+postmortem. Control-plane source: attachment6b1fd301-c829-4dba-afad-72e3aee808cd,1278lines,
+SHA2561f7d95fa092e1c1934660f3800d60ef9832cbb46e1a0fb1d1e492f40d68758c0.
+The source includes an actor retrospective, not an independently verified single-cause account.
+Current local old-name absence contradicts treating the retired planning skill as presently installed;
+which version the historical executor loaded remains unknown. No live Firedancer files/jobs were changed.
+
+**Design replacement.** Replace the309-line accumulated core with a178-line operating loop:
+start from current goal/evidence, cut one consumed result, execute by observed event, scale useful
+independent work and qualify/consume it. Keep one question per ticket and many tickets per fleet.
+The compact template inherits context instead of accumulating gates. Supporting patterns and
+scientific regression cases remain; old audits are preserved as history, not loaded operating rules.
+No new skill, state database, launcher or runtime gate is added. The collection objective remains
+valid discovery/time from Experimental and Formal Methods, not task counts or release activity.
+
+**Typed boundaries.** BIBIFI selects work and consumes observations. C0 owns the current capability
+receipts for worker delivery/update, P7 caps/cleanup, evidence-bound execution and actual hand-back.
+Evidence/proof/theory owners retain qualification and formal section owners retain admission/WIP.
+A missing capability repairs only its dependent action, not all useful independent work. Capability
+receipts are reused while current, avoiding a universal startup barrier. Forging verification now
+separates package lint, text reasoning, tool-backed rehearsal and real throughput evidence.
+
+**Static review.** Fresh Terra v3_semantic_review compared old/new core/template and C0 without
+expected cases/ledger. It caught loss of the next-ticket provenance rule. Root restored source/
+consumed-evidence selection and separately restored explicit GPU-first/concrete CPU justification.
+Floor now reports zero BIBIFI core/reference warnings. Retained sibling debt remains orchestration
+reference13; forge core15/reference85 plus2long cells, unchanged. No assertion that skill prose
+itself enforces platform actions or proves a live session reloaded a file is allowed.
+
+### Actual capability trial, isolated from research work
+
+Fixture root: /tmp/bibifi-v3-rehearsal.yyI0PD. The scenario/criteria were written first in
+`tests/operational-rehearsal.md`. All agent tasks were declared NONCOMPUTE, no nested fanout or
+numeric jobs, with disjoint output files and60second hand-back requests. Parent/root consumed the
+actual files, not their self-reported success. These requested agent deadlines are not claimed
+as platform-enforced agent termination.
+
+- Independent interface and protocol workers produced actual artifacts. Interface v1 input hash:
+  c2c3268ee751cc9088dad7be87f0df805f27103d852bc8371a1adabcbb69e224.
+  Protocol hash:46c3ec531ac5a908106d6dd6f7686a3b18ad4db8d0ace55a12426464430e8f67.
+  Root checked the repeated-key witness: sequential UNKNOWN/RED differs from deferred UNKNOWN/UNKNOWN.
+- Root changed interface to v2 with hash6ce5d4a05f32eabd4ddac7c8156697555fe52d284ddeb89235a613e55349ce2a.
+  Actual followup_task resumed the completed worker. Old return stayed unchanged at
+  53d1d897e3986719af1cf0ebd0f9fd43f3f8c7e1b991f1c5864051efd43b25b8.
+  New return135d1fb471682e4e276239c9f5d3707759d816e6e63f629fbb0ff98614cec8ec bound v2.
+  Root's shell hash assertions rejected stale binding and wrote the current consumer wire.
+- Final core snapshot7af6a333968237ab5fb65e2c74ada5ad3c6e2e7a7833128153bd506947935af0
+  was given to a fresh consumer worker. Its actual receipt bound the same skill/input hashes and
+  published the v2 wire, rejecting v1. Final consumer hash:
+  66714c6072c38b7b823882763e7c4991b81706a6b8107dc902169e6e7957d3e9.
+  Its chat summary mistyped the skill hash; the stored receipt and independent read-back were correct.
+  This was a relay-summary defect caught by reading the artifact, not a failed binding silently accepted.
+- P7 lifecycle probe used a64MiB CPU envelope, one thread, four-process bound,2second wall cap,
+  one-second cleanup grace, and an owned shell/sleep child. Manifest hash:
+  2e25f30fc5f4574562006230f87443fb034492c51aff54b398fe9a9227b6b659.
+  `agent-resource-run --manifest .../resource.json --check-only` returned ADMIT.
+  Real run returned BREACH reason=walltime, exit124 and RELEASE at2026-09-27T09:21:20.568Z.
+  RAM sampled peak3985408bytes. ParentPID4003076 and childPID4003090 were absent on read-back;
+  scope agent-resource-4003046-930f271f-1d41-4db0-b5c6-34bf54c3e948.scope was inactive/dead.
+  A normal `true` run under the same released job/envelope then passed exit0 and released resources,
+  at09:23:31.074Z, proving the probe does not merely kill every invocation. No GPU was used.
+
+This proves only the observed local process cap/cleanup, completed-worker resume, artifact binding
+and consumer read-back. It does not prove mid-execution agent interruption, GPU cleanup, high-fan-out
+scaling, target launcher snapshots or actual knowledge-discovery throughput. Initial worker tests used
+the pre-lint v3 draft without a captured skill hash; the fresh final consumer used the pinned final core.
+
+### Paired operational comparison and final floor
+
+Fresh Terra v3_pair_old/new ran the same file-consumption task on identical inputs with separate
+outputs, launched in the same parent turn without expected answers. OLD read ba478fc core snapshot
+5b4382ed61f78cdabfa36842d9478042dca5c7c17cb53a9cc58bb053f737c9fd; NEW read the pinned
+7af6a333968237ab5fb65e2c74ada5ad3c6e2e7a7833128153bd506947935af0 candidate.
+Both actually read files, rejected the stale proposal and wrote the current wire. `cmp` passed;
+both output digests were e3d6302b858a2e5300b668ec5e02ababfd5f5bb9efcc290c62d0e80cfe3cd57f.
+Thus this narrow operational task ties; no superiority or general reliability claim is warranted.
+The manual shrank from309to178lines while preserving this tested outcome. The measured change is
+instruction size, not scientific throughput. Root read back both receipts and corrected its own
+protocol-hash transcription before commit; neither agent summaries nor this ledger bypass read-back.
+
+Target floor, full collection floor, index and diff checks pass. Collection remains73skills with
+64,388charged characters, below unchanged ceiling. No new runtime implementation was published.

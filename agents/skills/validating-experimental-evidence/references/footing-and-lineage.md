@@ -33,6 +33,19 @@ reopens both the bound's applicability and the run's validity. Do not infer a le
 or refute a theorem from an unmatched quantity. `proving-theorems` owns a formal
 proof and statement faithfulness; this skill checks only its use on this run.
 
+## EV3: match equivalence evidence to the claimed behavior
+
+| Claim | Required comparison |
+|---|---|
+| Same aggregate metric only | Compare the metric under matched footing; label the claim metric equality |
+| Same predictions or bit identity | Compare the per-item outputs at all positions required by the declared contract |
+| Adapter/chunk/state-machine equivalence | Also compare required state transitions across chunk, reset, warmup, and update boundaries |
+
+Equal scored counts and correct counts can hide different wrong answers; they do not establish path equivalence.
+An unscored mismatch may still affect later state. Prove irrelevance or keep that semantic obligation open.
+Representation changes must preserve semantic units: record symbols, bytes, events, and scored denominators separately.
+Equal numeric chunk lengths or `n` do not establish equal workloads across encodings.
+
 ## EV3: one intervention means one interpretable difference
 
 | Changed variable | Coupled change | Outcome path | Fixed by | Control | Remaining limit |

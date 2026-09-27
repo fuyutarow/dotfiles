@@ -20,6 +20,13 @@ Inspect that entrypoint's requirements for code, parameters, manifests, and hypo
 If it cannot launch the needed case, route instrument repair to its owner. Use a diagnostic path only
 when project policy permits it; keep its scope explicit and do not bypass a denial.
 
+Before relying on a repaired launcher, execute a small known fixture through its real path.
+Check terminal status, effective binding, and read-back of the intended record identity.
+Include rejected invalid input and failed execution: retain the failure record without success promotion.
+Control-injection repairs also need the consumer observation specified by EV2 in `controls-and-information-flow.md`.
+A novel scientific pilot is not independent proof that its new launcher is correct.
+Keep infrastructure readiness and scientific-hypothesis evidence distinct.
+
 The effective contract is the exact declaration the runtime consumed. If the
 registry itself is executable configuration, route its authority to
 `governing-configuration-systems`. Route its integrity design there too.
@@ -63,6 +70,12 @@ different bytes. Record the loaded implementation's digest or immutable snapshot
 Compare it with the intended executable specification. If that proof is
 unavailable, `EV1=UNKNOWN`. A mismatch is `EV1=FAIL` for a claim about the intended
 revision. Preserve the raw result under its actual code identity.
+
+A clean worktree or commit SHA does not freeze external datasets, dependency environments, caches, or loaded workers.
+Bind the material runtime dependencies and input content to this run; inspect their resolved locations.
+Ensure required artifacts remain available for the run's lifetime through the resource/storage owner.
+If an input disappears or changes, retain the failed/incomplete receipt; do not promote a partial score as success.
+Do not assign deletion to a cleanup tool or another actor without an observed causal record.
 
 For generated streams, obtain length and scoring positions from the generated
 artifact. Assert the chosen evaluation window contains the last expected scored

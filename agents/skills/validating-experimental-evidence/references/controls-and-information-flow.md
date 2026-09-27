@@ -26,6 +26,25 @@ If the invariant has no clear state/API boundary, ask `designing-type-contracts`
 to place it. The target code owner
 implements the test and fixes a violation.
 
+## Verify the intervention before interpreting the control
+
+Trace each material control from authored settings through generated arguments/environment to the executing consumer.
+Record the intended setting, observed effective setting, and realized transformation at that boundary.
+A flag, distinct job ID, stored params, or dry-run proves neither that labels changed nor that the consumer used them.
+
+| Control observation | Disposition / next check |
+|---|---|
+| Permutation requested | Retain the realized target ordering or reproducible mapping and input/output identities; verify required invariants and actual changes on a nondegenerate fixture |
+| Main/control predictions or scores are identical | Inspect transformed inputs and consumer behavior; equal outputs alone prove neither a dead control nor a valid null |
+| Intended and effective control differ, or transformation is absent | Reject this control as evidence; qualify dependent claims and repair the target path |
+| No consumer-side evidence exists | Keep control validity UNKNOWN; a configuration record cannot substitute for the observation |
+| A validity gate does not fire | Conclude only that its tested violation was not detected; do not infer that a proposed law is true |
+
+Use a known nondegenerate fixture to verify a repaired control-injection path at its actual consumer.
+Launcher execution and record read-back checks live in `registered-benchmarks.md` under EV0/EV1.
+Configuration authority/translation belongs to `governing-configuration-systems`.
+The target code owner implements that contract.
+
 ## Negative control and outlier triage
 
 | Observation | Required next action | Prohibited conclusion |

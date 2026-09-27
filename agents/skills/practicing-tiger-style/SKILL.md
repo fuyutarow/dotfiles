@@ -17,7 +17,7 @@ description: >-
 
 # Practicing Tiger Style
 
-> **Version**: v2609.3.1 (2026-09-27) — observed checks retain implementation identity and dependencies.
+> **Version**: v2609.3.2 (2026-09-27) — failure handling includes already-mutated derived state.
 > Source synthesis and derivation: `references/source-ledger.md`.
 
 Run from this skill directory:

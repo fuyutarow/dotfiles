@@ -12,7 +12,7 @@ description: >-
 
 # Planning experiment iterations
 
-> **Version**: v2609.1.2 (2026-09-27) — goal-linked repairs and dependency-aware launch queues.
+> **Version**: v2609.1.3 (2026-09-27) — executed controls and workload-based device policy.
 
 ```bash
 test -f assets/ITERATION-PLAN.md
@@ -20,6 +20,7 @@ test -f tests/triggers.md
 test -f tests/decision-cases.md
 test -f tests/postmortem-2026-09-27.md
 test -f tests/postmortem-2026-09-27-followup.md
+test -f tests/postmortem-2026-09-27-third.md
 test -f tests/forge-verification-ledger.md
 bun ../forging-skills/scripts/skill-check.ts .
 ```
@@ -120,9 +121,9 @@ For example, a capacity-matched sham arm can separate added voting capacity from
 
 | Device / phase condition | Action |
 |---|---|
-| A conforming GPU path exists for the tested code | Prefer GPU; apply the bounded diagnostic exception below only when task constraints permit |
-| The subject is a CPU reference or data-only oracle | CPU is allowed; name that subject and its bounded cost |
-| A bounded CPU diagnostic reaches the discriminator earlier, including queue/setup costs | Record phase-cost evidence and CPU-only inference scope; use it if the task permits. GPU performance/parity still requires GPU evidence |
+| A conforming GPU path exists for a learner run | Use GPU |
+| The subject is a CPU-specific reference invariant, or a data-only calculation without learner execution | CPU is allowed; name the check and bounded cost. A reference check does not authorize a CPU learner benchmark |
+| A bounded diagnostic does not execute a learner and finishes sooner on CPU | Record its phase-cost evidence and limited scope; follow explicit task constraints |
 | No conforming GPU path exists for a learner run | The GPU path becomes the critical-path prerequisite. Dispatch it, and write any new mechanism backend-generic from its first line. A learner run never falls back to CPU. "No GPU path" is not a `DEVICE_REASON` |
 | The GPU path is unproven | Run a minimal diagnostic witness; expand coverage only when additional cases change the next decision |
 | CPU preparation or compilation dominates | Separate reusable CPU references from GPU execution; consider bounded warm-process reuse before multiplying processes |
@@ -130,6 +131,7 @@ For example, a capacity-matched sham arm can separate added voting capacity from
 `PHASE_COSTS` covers queue/admission, CPU reference, compile, transfer, kernel, and record/teardown.
 Use measured timings or mark estimates unknown and run a bounded pilot.
 GPU-first selects the useful compute path; CPU exceptions never authorize an unbounded battery.
+Classify the executed workload, not its ticket name: calling a learner run a pilot, oracle, or diagnostic grants no exception.
 Reuse references only with matching code/config/data fingerprints; reset learner state between cases.
 A warm process still needs per-case and whole-job caps, stop rules, and release receipts.
 
@@ -169,7 +171,7 @@ When nothing changed, say so in one line.
 
 - Launch without applicable I0–I5 fields, or overwrite a frozen plan.
 - Fill idle GPU or RAM with off-path work, or expand scale just to raise utilization.
-- Choose CPU for a learner run without `DEVICE_REASON`.
+- Choose CPU for a learner run, even with `DEVICE_REASON`.
 - Raise a cap mid-run, or treat an OOM, breach, or invalid comparison as scientific refutation.
 - Change a criterion after seeing its result, or broaden a scoped exclusion into a cause verdict.
 - Choose the next test without citing prior evidence.
@@ -214,4 +216,5 @@ Other owners keep their existing artifacts; this skill only consumes their resul
 | `tests/decision-cases.md` | Adversarial planning and interpretation cases | Verifying a reforge |
 | `tests/postmortem-2026-09-27.md` | Bounded episode audit and source limits | Auditing provenance |
 | `tests/postmortem-2026-09-27-followup.md` | Overlapping follow-up audit and cross-skill repair map | Auditing later failures |
+| `tests/postmortem-2026-09-27-third.md` | Control execution, equivalence and recovery audit | Auditing the third supplied packet |
 | `tests/forge-verification-ledger.md` | Source grades, design decisions, checks and waivers | Reforging |

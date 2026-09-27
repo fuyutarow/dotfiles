@@ -91,6 +91,15 @@ This ledger links to that budget; it does not copy the method.
 Choose the class from the contract, not the exception's name.
 Do not crash on every operational failure or silently continue after an internal contradiction.
 
+If an operation can write derived or speculative state before detecting invalid input, name the recovery boundary.
+Stopping future writes does not remove prior writes or their dependent effects.
+Choose containment: staged publication, provenance-based invalidation, checkpoint/replay, or quarantine.
+Test a late-detected contradiction after at least one dependent write, then exercise subsequent reads or predictions.
+Preserve trusted observations or explain their reconstruction.
+Disabling a rule does not establish recovery of baseline state.
+Link invalidated claims to `validating-experimental-evidence`.
+This ledger owns state recovery, not result retraction.
+
 ## T3 — exceptions
 
 Use an exception only to weaken a specific material obligation.

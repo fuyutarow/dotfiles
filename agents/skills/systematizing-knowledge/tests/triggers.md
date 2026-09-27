@@ -37,6 +37,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | N7 | “Create a reusable skill from this already-reconciled operating manual.” | `forging-skills` — skill craft |
 | N8 | “Map these donor roles onto my selected target and derive the target prediction.” | `forging-novel-theses` — target correspondence and thesis genesis; this skill stops at `DONOR SET` |
 | N9 | “Freeze the current research note, retire its predecessor, and designate the surviving authority; the evidence position is already fixed.” | `governing-research-documentation` — document authority/lifecycle only |
+| N10 | 「新しい finding を受けて、私たちの公理・補題・系のどこを更新するか決めて」 | `systematizing-theories` — selected theory semantics and affected dependencies |
 
 ## CO-FIRE — order matters
 
@@ -49,6 +50,7 @@ Do not use body knowledge to rescue an ambiguous description.
 | C5 | “Turn a raw paper corpus into a durable synthesis skill.” | `systematizing-knowledge` reconciles the corpus first → `forging-skills` distills the settled operating knowledge |
 | C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research-sections` later disposes attempts |
 | C7 | “Synthesize this corpus into a calibrated position, then make the accepted result our canonical authority.” | `systematizing-knowledge` signs the corpus position first → `governing-research-documentation` decides DOC ADMISSION, authority, review, and lifecycle |
+| C8 | “Synthesize these papers, then integrate their results into our versioned theory.” | Corpus position here → `systematizing-theories`; source certainty does not certify the target derivation |
 
 ## Review-design regression scenarios
 

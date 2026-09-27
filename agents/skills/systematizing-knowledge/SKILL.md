@@ -1,17 +1,14 @@
 ---
 name: systematizing-knowledge
 description: >-
-  Systematizes a source CORPUS into a known/uncertain/disputed/missing position. Use for SoK,
-  survey / literature review / 文献レビュー, evidence maps, conflicting studies, and field-level
-  claims. Also compiles a target-agnostic `DONOR SET` from cross-domain source relations; target
-  correspondence/prediction/thesis → forging-novel-theses. Signed position's gaps → typed, test-bound,
-  expiring openings → operationalizing-research-gaps. Cuts: one fact → raising-resolution;
-  one-paper appraisal → arguing-research-papers; premise audit → surfacing-blind-spots; programme
-  judgment → supervising-research-programmes; expensive selected tree → acting-on-hypotheses; settled IA →
-  structuring-documents; agent dispatch → orchestrating-agents; document authority/lifecycle →
-  governing-research-documentation. If both are requested, this skill signs the corpus position first;
-  governing-research-documentation then decides admission and authority. Search/extraction may fan out;
-  adjudication and terminal artifact stay SOLO. English skill; answer in the user's language.
+  Synthesizes a source CORPUS into a known/uncertain/disputed/missing position.
+  Use for SoK, survey, systematic review/meta-analysis, 文献レビュー, evidence maps and conflicting studies.
+  Also owns target-agnostic DONOR SET; target mapping→forging-novel-theses.
+  PURPOSE: one theory's definitions/axioms/theorems and finding updates→systematizing-theories.
+  One-paper appraisal→arguing-research-papers. Actionable corpus gaps→operationalizing-research-gaps.
+  document admission→governing-research-documentation after corpus judgment.
+  Workflow-native: extraction may fan out; adjudication and final artifact stay SOLO.
+  English skill; answer in the user's language.
 ---
 
 # Systematizing knowledge — method-fit evidence synthesis
@@ -59,6 +56,9 @@ target-agnostic `DONOR SET`; it never smuggles in a target correspondence, predi
 support claim. Its certainty never exceeds the evidence; its scope never exceeds the `coverage
 contract`. Taxonomies, PRISMA diagrams, GRADE labels, meta-analysis, and hero figures are
 conditional instruments. They are not badges of rigor.
+
+Use `systematizing-theories` for a selected theory's statements, dependencies and finding-driven revisions.
+Pass the scoped corpus position. Its ledger does not certify target entailment.
 
 For that branch, a page number or bare DOI is not a donor locus. Retain `file:line`, or a DOI/URL
 paired with an exact page, section, table, figure, or fragment anchor. The mechanical floor rejects

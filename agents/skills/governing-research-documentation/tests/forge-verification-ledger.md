@@ -265,3 +265,13 @@ Verification: target `skill-check.ts` exited 0; 45 pre-existing reference prose 
 `git diff --check` exited 0. **PROSE-DEBT waiver (2026-09-26):** the 45 older
 reference warnings are unchanged; queue a separate prose pass. F3 solo-tier waiver:
 the desk-check above was serial; no live model trigger or target runtime test ran.
+
+## 2026-09-27 theory-content handoff
+
+Added one semantic-owner pointer: `systematizing-theories` owns statement meaning, dependencies and
+finding-driven theory changes. This skill still admits the canonical locus, retains evidence/history,
+and governs views. No theory or evidence store, role, profile field, or executable schema is added.
+Fresh Terra routing review found no collision. Static review only.
+
+**PROSE-DEBT waiver (2026-09-27):** the pre-existing 45 reference sentence warnings across six files
+remain queued for the separate governance prose pass. This handoff introduces no new prose warning.

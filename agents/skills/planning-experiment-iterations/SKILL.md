@@ -43,6 +43,8 @@ Keep `ITERATION_PLAN`, `ITERATION_LOG`, `READINESS`, `ORACLE`, and `OUTCOMES` as
 
 Use these as fields in the project's existing run intent and finding, not a second record store.
 This skill owns test selection and shape. Admission, raw receipts, and evidence validity retain their owners.
+Theory predictions arrive from `systematizing-theories` with exact statement revisions and open obligations.
+Return validated findings there for theory updates; a successful run does not silently promote a conjecture to a theorem.
 
 ## Gates — each leaves a field in the row
 

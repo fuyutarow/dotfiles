@@ -74,6 +74,8 @@ its raw receipt. When any required check is `FAIL` or `UNKNOWN`, preserve the nu
 write the exact repair or discriminating test. Do not silently discard negative results.
 When a verdict changes, reconcile affected findings and consumer views before reusing the result.
 The correction and historical-retrieval procedure lives in `footing-and-lineage.md`.
+For effects on axioms, definitions, theorem applications or dependent predictions, hand the scoped disposition
+to `systematizing-theories`. This skill qualifies the finding; it does not certify a theoretical derivation.
 
 ## Disposition lookup — no single vague PASS
 

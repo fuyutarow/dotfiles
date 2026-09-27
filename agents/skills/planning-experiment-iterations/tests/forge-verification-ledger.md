@@ -241,3 +241,10 @@ warnings. `mise run lint:skills-floor`: exit 0, 74 skills / 65,104 listing chara
 109 warnings in 58 other skills. `git diff --check`: exit 0. Added 16 constructed cases across
 the three skills; two older device-policy cases were reconciled with a1feb9e. Trigger descriptions
 are unchanged. No live trigger/old-vs-new execution test or shared-link deployment is claimed.
+
+## 2026-09-27 theory prediction handoff
+
+`systematizing-theories` now supplies exact prediction statement versions and open obligations.
+This skill still selects/bounds the test; validated findings return to the theory owner for content
+updates. A successful run cannot silently promote a conjecture to a theorem. Static reciprocal-cut
+review passed; no experiment admission or runtime schema changed.

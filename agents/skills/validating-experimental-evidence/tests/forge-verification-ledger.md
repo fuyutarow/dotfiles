@@ -190,3 +190,10 @@ No tests/ledgers or another reviewer's conclusions were shown to this reviewer.
 `mise run lint:skills-floor`: exit 0, 74 skills / 65,104 listing characters, unchanged ceiling.
 `git diff --check` passed. E09–E19 desk checks are semantic fixtures, not runtime enforcement.
 Shared installation remains pending main-checkout conflict resolution.
+
+## 2026-09-27 theory implication handoff
+
+Scoped evidence dispositions now explicitly hand off to `systematizing-theories` for changes to
+axioms, definitions, theorem applications and dependent predictions. Measurement validity stays here.
+The theory owner consumes rather than overrides that disposition. No second evidence database,
+proof authority or target runtime gate is introduced. Static reciprocal-cut review passed.

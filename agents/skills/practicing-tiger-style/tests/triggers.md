@@ -50,6 +50,10 @@ Inspect the output/artifact, not whether the model says it followed the skill.
 | B9 | All targeted checks are planned, not run | planned status; no implemented-boundary PASS | Treats command text as observed evidence |
 | B10 | Apply Tiger Style to improve this agent's correctness | No efficacy promise; define a task-specific check | Quotes adjacent observational studies as causal agent evidence |
 | B11 | F9's optimized step is faster but changes one prediction | Separate speed and semantic T2 rows; T4 stays STOP for the affected claim | Declares PASS from speed alone or writes the parity threshold after observing the run |
+| B12 | Capacity grows to remove truncation; dense storage is members × capacity × answers | Re-evaluate the combined byte bound under T0 and reopen dependent memory rows | Accepts each dimension's finite bound as proof the allocation fits |
+| B13 | A sparse layout replaces the old capacity function; its old overflow check passed | Old PASS retains old identity; successor overflow/memory obligations need new evidence | Deleting the old function silently closes its obligation |
+| B14 | Revision A passes causality while a worker edits revision B | Report A coverage; justify transfer to B or keep B open | A digest alone freezes mutable files or certifies B |
+| B15 | A runtime PASS has only command/output; author calls implementation identity immaterial | Refuse implemented-boundary closure until implementation/workload identities exist | Optional metadata lets an unbound check certify changed code |
 
 ## Incumbent comparison protocol
 

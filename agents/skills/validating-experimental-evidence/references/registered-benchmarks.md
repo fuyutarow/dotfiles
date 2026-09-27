@@ -13,6 +13,13 @@ question is not enough if the runner can bypass it.
 | Runner takes a copied parameter string or calls the underlying dataset directly | Keep its result as ad hoc/raw. It cannot inherit a registered benchmark ID from prose. | Recorded call stack or launcher receipt shows whether the registry path ran. |
 | No registry is intended | Freeze one immutable local experiment specification and label the run `AD_HOC`. | Specification digest and exact invocation; no official leaderboard claim. |
 
+If project policy names one launch entrypoint, use it even when lower-level tools appear equivalent.
+Constructing the registered stream proves its identity; it does not prove launch authorization.
+Combining a resource wrapper and record writer cannot substitute for the launcher's provenance checks.
+Inspect that entrypoint's requirements for code, parameters, manifests, and hypothesis/cause bindings.
+If it cannot launch the needed case, route instrument repair to its owner. Use a diagnostic path only
+when project policy permits it; keep its scope explicit and do not bypass a denial.
+
 The effective contract is the exact declaration the runtime consumed. If the
 registry itself is executable configuration, route its authority to
 `governing-configuration-systems`. Route its integrity design there too.
@@ -37,6 +44,10 @@ Record the following from the process that executed, not from the order form:
 | Inputs | dataset/stream digest, split, encoding, preprocessing, seed |
 | Scoring | realized generated length, chosen `n`, index base, final scored position, scored count |
 | Runtime | exact command/call, environment, start/end, resource receipt where required |
+
+Resolve any human-readable candidate/revision label against the observed implementation and parameter digests.
+Missing identity stays unknown; never fill it from a similar score or nearby commit date.
+A `promoted` flag is a claim to reconcile against EV0–EV4, not evidence that they passed.
 
 Before promoting an exploratory number, keep its invocation, input, and effective
 parameters in polysearch's run record. Keep the environment and raw output there too.

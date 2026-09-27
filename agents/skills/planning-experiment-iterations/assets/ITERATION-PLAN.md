@@ -7,6 +7,7 @@ Use `NOT-APPLICABLE (<reason>)` for conditional fields; an empty placeholder is 
 ```text
 ITERATION: <id>
 FROM_EVIDENCE: <prior log/record; first iteration: source + unresolved question>
+GOAL_LINK: <requested acceptance condition; next enabled check; repair exit/reconsideration condition>
 DECISION: <choice this result can change>
 KIND: DIAGNOSTIC | MECHANISM | CONFIRMATION
 READINESS: <prerequisite -> PASS/FAIL/UNKNOWN + receipt; diagnostic names what it can close>
@@ -28,6 +29,8 @@ DEVICE: GPU | CPU
 DEVICE_REASON: <cost/dependency; required for CPU; obey task device constraints>
 PLANNED: RAM <GiB>, VRAM <GiB>; <per-case and total caps for any warm process>
 OWNER: <main or agent; unique launch owner>
+LAUNCH_PATH: <project-authorized entrypoint + policy locus; EV0 binding receipt>
+LAUNCH_WHEN: <required predecessor verdicts, or independent/fixed arm + justification>
 ADMISSION: <required section/resource owner authorization receipts; a filled plan is not authorization>
 ENVELOPE: <resource-owner admission locator; N/A only for noncompute work>
 DEADLINE: <time + zone; launch/return deadline>

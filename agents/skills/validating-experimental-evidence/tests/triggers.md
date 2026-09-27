@@ -23,7 +23,7 @@ running or repairing the target is a co-fire or handoff.
 |---|---|
 | “Reserve another GPU job; the device is idle” | `orchestrating-agents` P7; no experimental evidence to assess. |
 | 「Arena.stream の関数を実装して」 | `implementing-and-debugging` and `writing-julia`; this skill supplies EV0 acceptance cases only. |
-| “Which hypothesis should we test next and what threshold should we precommit?” | `acting-on-hypotheses` or `directing-research-sections` under a mandate. |
+| “Which hypothesis should we test next and what threshold should we precommit?” | `planning-experiment-iterations` for a bounded iteration; `acting-on-hypotheses` for a costly bet; section admission remains `directing-research-sections`. |
 | 「修了した研究 episode 全体の process audit を出して」 | `auditing-research-processes`; this skill may supply validity rows. |
 | “Write the paper's contribution claim from a finished result” | `arguing-research-papers`; this skill can qualify the cited result first. |
 | 「登録済み土俵の test を一回走らせて。結果の解釈はまだ不要」 | Domain executor uses EV0's registered binding and preserves the polysearch run; no disposition yet. |
@@ -41,3 +41,16 @@ running or repairing the target is a co-fire or handoff.
 The lexical seam is **result validity and claim scope**. Generic words such as “test” or
 “benchmark” alone do not authorize this skill to run the test, choose a hypothesis, or
 allocate compute.
+
+## Follow-up postmortem decision cases
+
+| ID | Given / prompt | Required decision | Failure |
+|---|---|---|---|
+| E01 | Project mandates launcher L; registered stream plus resource wrapper and record CLI succeeds | Use L or its authorized diagnostic/repair route | Treat equivalent lower-level components as launch authority |
+| E02 | A chat correction withdraws a leaky score; leaderboard still promotes it | Link the canonical correction and read back affected views | Declare cleanup complete from the message |
+| E03 | One adapter revision fails; other editions and direct paths share the model name | Enumerate affected execution bindings; uncertain membership remains under review | Retract every score with that model name |
+| E04 | An old unlabelled row scores .96; current scores .70 at another n | Resolve identity, contract, concept and replacement obligation | Infer revision from score or declare regression immediately |
+| E05 | A fixed plan said select b=1; its negative result prompts a new b=6 rule | Preserve evidence about b=1; freeze a new design/test | Call the faithful b=1 execution a bug solely because it lost |
+| E06 | Frozen selector says finest admissible b; executed selector returns the coarsest | Cite an execution/spec witness; preserve limited raw result; repair and rerun | Reject the intended mechanism or erase the negative |
+| E07 | Record correction landed but a derived view cannot refresh | Name the stale view and limit current claims | Declare all consumers corrected without read-back |
+| E08 | Top-ranked entries mix privileged oracle, learner, and different scored lengths | Group by comparable contract and role; recover missing lineage | Read the top score as a historical learner achievement |

@@ -263,3 +263,38 @@ here. This split follows the user's polysearch-only correction.
 
 Target `skill-check.ts` exited 0 with 0 FAIL/0 WARN. Its existing trigger set
 adds C6 for the ordered co-fire. No runtime effect is claimed from this edit.
+
+## Reforge v2609.3.1 — 2026-09-27 dependent obligation checks
+
+**Source.** User-supplied firedancer report attachment `875d0044-b118-42bb-8ad6-af454d31e9d5`,
+L832–852 and L889–907. Full bounded audit/digest and overlap limits live in
+`planning-experiment-iterations`, `tests/postmortem-2026-09-27-followup.md`.
+The dense-allocation failure and later sparse-layout change are reported, not independently rerun.
+
+**Read-only boundary audit.** Terra `/root/audit_pm2_boundaries` found direct/adapter validity,
+end-to-end semantics, and combined resource accounting already covered. Those failures do not
+justify new Tiger rules. Launcher authority and experiment queues belong outside Tiger.
+One gap survived: observed checks did not explicitly bind implementation/layout identity or
+require dependent-row invalidation when a bound/enforcement path changed.
+
+**Signed map and change.** Changed consequential design → identify affected obligations →
+bound observations with dependencies → new evidence or a justified unchanged-property transfer.
+T2 adds material `depends_on`; observations add implementation/workload identity; T4 reopens
+affected rows and preserves old evidence's scope. No new ledger or fixed full-suite rerun is required.
+
+**Grade/calibration.** The dependency/invalidation policy is skill-supplied, not an official
+TigerBeetle rule. B12–B14 are constructed counterexamples. A single-row repair is not evidence
+that all coupled rows remain true; equally, a local change does not mandate rerunning unrelated checks.
+No efficacy claim about agents or assertion counts is added.
+
+**F2/F3.** T0 still owns combined resource estimates; evidence validation still owns benchmark
+validity; T4 alone owns whether this design's obligation is closed. Trigger description unchanged.
+B12–B14 exercise arithmetic coupling, obsolete enforcement, and old-revision scope. Static checks
+and independent review are recorded below; no GPU or empirical skill execution eval runs here.
+
+**Independent verification.** Fresh-context Terra reviewer `/root/verify_pm2_planning_evidence`
+reviewed the Tiger delta without its tests or this ledger. It found an identity-omission loophole:
+optional implementation identity allowed an unbound PASS to survive a code change. Fixed by making
+implementation/workload identities mandatory for implemented-boundary closure and requiring both
+old/new identities for carry-forward. B15 preserves this counterexample. Recheck: PASS, no findings;
+static review only. No runtime efficacy or implementation correctness claim follows.

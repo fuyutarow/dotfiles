@@ -147,3 +147,56 @@ outside this single-skill repair; their existing ownership text takes precedence
   The manual is improved against explicit counterexamples; behavioral reliability is unmeasured.
 - `mise run link:skills`: exit 0. Existing skill links resolve to the edited repository directory.
   This verifies deployment on disk, not an automatic reload into already-running agent contexts.
+
+## 5. Follow-up v2609.1.2 — 2026-09-27
+
+**Source and boundary.** `postmortem-2026-09-27-followup.md` owns the full bounded audit,
+source digest, overlap warning, and cross-skill repair map. The user explicitly requested a
+second postmortem and related skill distillation. Reports are third-party assertions; no raw
+scientific run or claimed launcher enforcement was reproduced.
+
+**Signed transition and scope.** Requested acceptance condition + historical evidence → select
+one useful diagnostic/mechanism/confirmation → plan its authorized, dependency-ready launch.
+This skill owns GOAL_LINK and LAUNCH_WHEN, not programme allocation or execution permission.
+LAUNCH_PATH consumes the evidence owner's EV0 rule. Extend existing skills, create none.
+
+**Calibration.** The report's proposed cure for idle GPUs was unconditional prelaunching of the
+next run. The consumer's failure is overproduction without result-dependent selection, not lack
+of a queue. Fixed comparison arms and separate independent questions remain parallelizable.
+A repair may yield valid knowledge while leaving the user's capability/conformance objective open.
+
+| Rule | Grade | Source / applicability |
+|---|---|---|
+| Dependency-aware queue | skill-supplied | Report L1377–1387; applies to successor selection/validity, not a universal serial barrier |
+| Goal-linked repairs and requested conformance | skill-supplied | L964–1019, L1307–1333; uses current user acceptance conditions, not the report author's inferred mandate |
+| Authorized launch locator | skill-supplied | L1136–1147; target-specific exclusivity belongs to EV0/project policy |
+| D24–D31 | constructed | Static adversarial cases; no measured fresh-executor reliability |
+
+**File treatment.** Core and template add goal/launch-dependency fields; decision cases test
+conditional vs fixed-arm execution, unrelated repair, conformance, launcher, and weakened claims.
+The new bounded audit retains one provenance home. Existing first-audit findings are not re-counted
+as new independent incidents. Descriptions and collection membership are unchanged.
+
+**Independent review.** Fresh Terra reviewer `/root/verify_pm2_planning_evidence` inspected
+core/template plus evidence-rule diffs against base `3ebbedb`, without author tests or ledger.
+Verdict PASS, no findings; static contract review only. Its remit included unnecessary serialization,
+invalidations, post-hoc rescue, and authority boundaries. Author retains final acceptance.
+The subsequent wording-only split in the evidence reference does not change that decision contract.
+
+**F3 scope.** Added D24–D31 desk-checked, including D25 (fixed arms) and D26 (unrelated valid path)
+as overblocking controls. No live trigger or blind old/new execution eval. Existing trigger surface
+is unchanged. No throughput gain or runtime enforcement is claimed.
+
+**Workspace.** Base checkout had two unrelated unmerged paths. Edits and checks use isolated
+worktree branch `codex/distill-research-postmortem-875d`, base `3ebbedb`. No conflict resolution,
+staging of peer changes, or repointing of shared skill links is part of this reforge.
+
+**Mechanical receipt.** Isolated worktree dependencies restored with
+`mise exec -- bun install --frozen-lockfile` (no global `bun link`). The first collection task had
+failed only because this fresh worktree lacked `cleye`; after the restore, `mise run lint:skills-floor`
+exited 0: 74 skills / 65,104 charged characters; unchanged ceiling and descriptions.
+Target skill-check for all three edited skills: exit 0, zero FAIL and zero prose warnings.
+Collection warnings remain 109 across 58 untouched skills. `git diff --check`: exit 0.
+The three skills add 20 constructed behavior cases in total (planning 8, evidence 8, Tiger 4).
+The final Tiger review found and closed one additional identity-binding loophole; all semantic
+reviews ended PASS. These receipts do not establish live invocation or downstream compliance.

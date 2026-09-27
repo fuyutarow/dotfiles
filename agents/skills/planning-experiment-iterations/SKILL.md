@@ -12,13 +12,14 @@ description: >-
 
 # Planning experiment iterations
 
-> **Version**: v2609.1.1 (2026-09-27) — readiness and scoped inference before experiment expansion.
+> **Version**: v2609.1.2 (2026-09-27) — goal-linked repairs and dependency-aware launch queues.
 
 ```bash
 test -f assets/ITERATION-PLAN.md
 test -f tests/triggers.md
 test -f tests/decision-cases.md
 test -f tests/postmortem-2026-09-27.md
+test -f tests/postmortem-2026-09-27-followup.md
 test -f tests/forge-verification-ledger.md
 bun ../forging-skills/scripts/skill-check.ts .
 ```
@@ -46,12 +47,12 @@ This skill owns test selection and shape. Admission, raw receipts, and evidence 
 
 | Gate | Decision | Required field | Fail → |
 |---|---|---|---|
-| I0 DECISION | Retrieve prior results; name the decision, test kind, and earliest blocking prerequisite | `FROM_EVIDENCE`, `DECISION`, `KIND`, `READINESS` | Missing validity prerequisite → diagnostic first |
+| I0 DECISION | Retrieve prior results; bind the requested acceptance condition, decision, and blocking prerequisite | `FROM_EVIDENCE`, `GOAL_LINK`, `DECISION`, `KIND`, `READINESS` | Missing validity prerequisite → diagnostic first; off-goal work → defer |
 | I1 DISCRIMINATE | Predict the same observable under rivals and their auxiliary assumptions | `RIVALS`, `PREDICTIONS`, `OUTCOMES` | No decision-changing outcome → redesign |
 | I2 ORACLE | Compute an applicable cheap oracle before its dependent learner test | `ORACLE`: type, scope, assumptions, value and locator; or `NONE` with reason | Unmatched scope → oracle diagnosis, no theory verdict |
 | I3 BOX | Use the smallest scale that separates predictions with justified uncertainty | `SCALE_BASIS`, `PHASE_COSTS`, `TARGET_WALL_S`, `CAP_S` | No feasible discriminator within cap → report limit; do not shrink into a meaningless test |
 | I4 FREEZE | Pin executed inputs, baseline, controls, tolerances, and resource plan | `BINDING`, `BASELINE`, `CONTROL`, `CRITERION`, `DEVICE`, `PLANNED` | Change → new plan ID; retain old result and its scope |
-| I5 DISPATCH | Propose owner, deadline, stop action, and return condition; obtain required owner receipts | `OWNER`, `ADMISSION`, `ENVELOPE`, `DEADLINE`, `STOP_IF`, `HAND_BACK` | Missing authorization/admission → no launch; no launch receipt → not running |
+| I5 DISPATCH | Resolve the project's launch path and dependency condition; obtain required owner receipts | `OWNER`, `LAUNCH_PATH`, `LAUNCH_WHEN`, `ADMISSION`, `ENVELOPE`, `DEADLINE`, `STOP_IF`, `HAND_BACK` | Missing authority or unmet dependency → no launch; no launch receipt → not running |
 | I6 RECORD | Apply the frozen outcome table after evidence validation; record peak and release | `ITERATION_LOG` | Invalid or inconclusive → no scientific elimination; next row cites the limitation |
 
 ## Readiness and oracle scope (I0–I2)
@@ -62,6 +63,13 @@ This skill owns test selection and shape. Admission, raw receipts, and evidence 
 | A mechanism comparison is ready | `KIND: MECHANISM`. Cite passing prerequisite receipts for the exact binding; require a same-stream baseline |
 | Minimal valid evidence supports a registered claim | `KIND: CONFIRMATION`. Check the claim's required suite and controls through its domain owner; smoke does not establish suite coverage |
 | Proposed work repeats a historical result | Cite the old result and the changed contract or unresolved question before spending a run |
+
+`GOAL_LINK` names the user's acceptance condition and the next check this iteration enables.
+For unresolved requested conformance, name an implementation owner, dependency, and acceptance test.
+A claim that compliance is possible does not close that requirement.
+Before extending a repair chain, compare its remaining cost with an already-valid path to the same goal.
+Record the repair's exit/reconsideration condition; do not make a full port an automatic prerequisite.
+Instrument learning remains useful, but does not count as measured capability or conformance improvement.
 
 `READINESS` cites `validating-experimental-evidence` checks; it does not duplicate their verdict store.
 A diagnostic may run on a broken path to locate the break. It cannot establish the downstream mechanism.
@@ -135,6 +143,20 @@ While a run executes, prepare the next conditional branch or inspect its source 
 Parallel arms require distinct discriminating contributions, fixed inputs, and independent mutable state.
 Before a main-thread takeover, reconcile job IDs and ownership to prevent duplicate launches.
 The planning row neither admits nor authorizes a run. `ADMISSION` cites the section/resource owners' required receipts.
+Resolve `LAUNCH_PATH` through `validating-experimental-evidence` EV0; a resource runner is not launch authority.
+
+## Queue the next experiment by dependency
+
+Record `LAUNCH_WHEN` before dispatch. Preregistration alone does not make a successor independent.
+
+| Successor relation | Allowed preparation / launch |
+|---|---|
+| Its choice, validity, or scale depends on a predecessor result | Prepare the conditional branch now; launch only after interpreting the required receipt |
+| Fixed arms of one admitted comparison, with shared valid prerequisites | Arms may run before cross-arm analysis; preserve the frozen comparison and stop conditions |
+| A separate useful question remains admissible under every predecessor outcome | May overlap within the resource budget; name that independent contribution |
+| A shared prerequisite fails or its binding changes | Suspend dependent queued launches and quarantine affected results through the evidence owner |
+
+An empty GPU queue never supplies the scientific reason for another run.
 
 ## Report (when the human set a cadence)
 
@@ -191,4 +213,5 @@ Other owners keep their existing artifacts; this skill only consumes their resul
 | `tests/triggers.md` | Fire/no-fire and ordered co-fire | Changing scope |
 | `tests/decision-cases.md` | Adversarial planning and interpretation cases | Verifying a reforge |
 | `tests/postmortem-2026-09-27.md` | Bounded episode audit and source limits | Auditing provenance |
+| `tests/postmortem-2026-09-27-followup.md` | Overlapping follow-up audit and cross-skill repair map | Auditing later failures |
 | `tests/forge-verification-ledger.md` | Source grades, design decisions, checks and waivers | Reforging |

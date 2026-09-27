@@ -13,6 +13,20 @@ question is not enough if the runner can bypass it.
 | Runner takes a copied parameter string or calls the underlying dataset directly | Keep its result as ad hoc/raw. It cannot inherit a registered benchmark ID from prose. | Recorded call stack or launcher receipt shows whether the registry path ran. |
 | No registry is intended | Freeze one immutable local experiment specification and label the run `AD_HOC`. | Specification digest and exact invocation; no official leaderboard claim. |
 
+If project policy names one launch entrypoint, use it even when lower-level tools appear equivalent.
+Constructing the registered stream proves its identity; it does not prove launch authorization.
+Combining a resource wrapper and record writer cannot substitute for the launcher's provenance checks.
+Inspect that entrypoint's requirements for code, parameters, manifests, and hypothesis/cause bindings.
+If it cannot launch the needed case, route instrument repair to its owner. Use a diagnostic path only
+when project policy permits it; keep its scope explicit and do not bypass a denial.
+
+Before relying on a repaired launcher, execute a small known fixture through its real path.
+Check terminal status, effective binding, and read-back of the intended record identity.
+Include rejected invalid input and failed execution: retain the failure record without success promotion.
+Control-injection repairs also need the consumer observation specified by EV2 in `controls-and-information-flow.md`.
+A novel scientific pilot is not independent proof that its new launcher is correct.
+Keep infrastructure readiness and scientific-hypothesis evidence distinct.
+
 The effective contract is the exact declaration the runtime consumed. If the
 registry itself is executable configuration, route its authority to
 `governing-configuration-systems`. Route its integrity design there too.
@@ -38,6 +52,10 @@ Record the following from the process that executed, not from the order form:
 | Scoring | realized generated length, chosen `n`, index base, final scored position, scored count |
 | Runtime | exact command/call, environment, start/end, resource receipt where required |
 
+Resolve any human-readable candidate/revision label against the observed implementation and parameter digests.
+Missing identity stays unknown; never fill it from a similar score or nearby commit date.
+A `promoted` flag is a claim to reconcile against EV0–EV4, not evidence that they passed.
+
 Before promoting an exploratory number, keep its invocation, input, and effective
 parameters in polysearch's run record. Keep the environment and raw output there too.
 Recompute its digest independently. Retain two different self-checks for a numerical
@@ -52,6 +70,12 @@ different bytes. Record the loaded implementation's digest or immutable snapshot
 Compare it with the intended executable specification. If that proof is
 unavailable, `EV1=UNKNOWN`. A mismatch is `EV1=FAIL` for a claim about the intended
 revision. Preserve the raw result under its actual code identity.
+
+A clean worktree or commit SHA does not freeze external datasets, dependency environments, caches, or loaded workers.
+Bind the material runtime dependencies and input content to this run; inspect their resolved locations.
+Ensure required artifacts remain available for the run's lifetime through the resource/storage owner.
+If an input disappears or changes, retain the failed/incomplete receipt; do not promote a partial score as success.
+Do not assign deletion to a cleanup tool or another actor without an observed causal record.
 
 For generated streams, obtain length and scoring positions from the generated
 artifact. Assert the chosen evaluation window contains the last expected scored

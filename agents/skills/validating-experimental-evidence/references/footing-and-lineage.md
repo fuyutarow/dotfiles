@@ -33,6 +33,19 @@ reopens both the bound's applicability and the run's validity. Do not infer a le
 or refute a theorem from an unmatched quantity. `proving-theorems` owns a formal
 proof and statement faithfulness; this skill checks only its use on this run.
 
+## EV3: match equivalence evidence to the claimed behavior
+
+| Claim | Required comparison |
+|---|---|
+| Same aggregate metric only | Compare the metric under matched footing; label the claim metric equality |
+| Same predictions or bit identity | Compare the per-item outputs at all positions required by the declared contract |
+| Adapter/chunk/state-machine equivalence | Also compare required state transitions across chunk, reset, warmup, and update boundaries |
+
+Equal scored counts and correct counts can hide different wrong answers; they do not establish path equivalence.
+An unscored mismatch may still affect later state. Prove irrelevance or keep that semantic obligation open.
+Representation changes must preserve semantic units: record symbols, bytes, events, and scored denominators separately.
+Equal numeric chunk lengths or `n` do not establish equal workloads across encodings.
+
 ## EV3: one intervention means one interpretable difference
 
 | Changed variable | Coupled change | Outcome path | Fixed by | Control | Remaining limit |
@@ -48,7 +61,19 @@ An accounting identity that telescopes stage losses does not establish that the
 stages are causally independent. Measure each stage on the same scored positions.
 Change one mechanism at a time before assigning a repair to one loss term.
 
+When a negative result is called an implementation mistake, compare the intended and executed intervention.
+Cite the frozen selector/algorithm and a witness of the mismatch before invalidating that test.
+If the implementation followed the plan, the negative remains evidence about that tested design.
+A revised selector is a new hypothesis/configuration, even if it seems more reasonable after seeing the score.
+Preserve the old result and limitation; “not a fair test” cannot erase it or indefinitely rescue the hypothesis.
+
 ## EV4: historical capability is a typed comparator
+
+Before claiming novelty, absence, or lost capability, join the relevant historical records.
+Keys: implementation/revision, contract, metric, scored length, information access, and evidence status.
+Use the canonical run/finding records behind the leaderboard; a top-ranked or unlabelled row is not a search result.
+Record missing identities and retrieval coverage. “Not found in this scope” does not mean “never achieved”.
+Reuse the domain's existing capability view; do not create a second authoritative inventory here.
 
 For each alleged prior achievement, record both implementation IDs and the
 benchmark contract. Check **both** artifacts against the domain's signed concept
@@ -77,3 +102,20 @@ The domain or programme owner decides which capabilities the new design is oblig
 to preserve. This skill only checks whether that obligation and both measurement
 receipts exist before allowing the word “regression”. `governing-research-documentation`
 owns capability-inventory admission and expiry. It does not own this classification.
+
+## Correct a disposition through its consumers
+
+The evidence owner records the semantic correction; the target's existing mechanisms store and propagate it.
+
+| Step | Required observation |
+|---|---|
+| Scope the defect | Enumerate affected runs by loaded code/path/config/data binding; keep unrelated runs separate. Uncertain membership stays under review |
+| Link the correction | Preserve raw output and original findings; append the target-supported retraction, supersession, or quarantine with its reason and replacement locus |
+| Reconcile dependents | Identify findings, promotions, leaderboard groups, and capability claims that consumed those runs; update or mark stale through their owners |
+| Read back | Query the affected views and verify invalidated rows are excluded or visibly qualified in current comparisons; retain them in history |
+| Handle unavailable propagation | Name the affected view and missing target operation; withhold a “cleaned” or current-achievement claim until verified |
+
+Group rankings by the declared comparison contract before choosing a winner.
+Do not mix oracle, trivial baseline, and learner roles or differing scored lengths into an unqualified ranking.
+A statement in chat that a score is invalid does not update its canonical evidence status.
+This procedure neither authorizes record deletion nor imposes a new skill-local schema or database.

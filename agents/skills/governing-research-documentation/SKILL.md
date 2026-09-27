@@ -135,6 +135,8 @@ After admission, route research meaning to the domain Skill. Send one document's
 architecture to `structuring-documents` and prose-in-place to `linting-prose`. Send corpus
 synthesis to `systematizing-knowledge` and manuscript claims to `arguing-research-papers`. This
 Skill returns after those edits to check authority, provenance, reviewability, and lifecycle.
+Theory-statement meaning, dependencies and finding-driven changes belong to `systematizing-theories`.
+Admit its map/changeset in the existing canonical record; do not create a second theorem or evidence authority.
 
 ### D3a · Govern transfer artifacts without owning their meaning
 

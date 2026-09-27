@@ -308,3 +308,18 @@ No new claim about live trigger accuracy or research outcomes is made.
 
 `mise run link:skills` completed successfully. SHA-256 matched the source and both deployed skill paths.
 The checks establish file deployment; no fresh-session auto-trigger or in-session reload guarantee was tested.
+
+## 2026-09-27 theory-maintenance cut
+
+The selected theory's statement graph and finding-driven updates move to the newly named owner
+`systematizing-theories`. Corpus synthesis, conceptual comparison of sources and the claim ledger
+stay here. `references/synthesis.md` §7 remains the source-relationship comparison home.
+The new skill consumes a bounded position; it does not certify target entailment from source certainty.
+
+Shortened the description to fund the new owner's listing while retaining review/SoK/meta-analysis,
+conceptual synthesis and donor-set triggers. Added N10/C8 in trigger tests. Fresh Terra routing
+review found no ownership collision. No live trigger eval ran.
+
+**PROSE-DEBT waiver (2026-09-27):** this scoped routing/description delta leaves 81 older reference
+sentence warnings across nine files. Queue: separate full
+synthesis prose pass. This edit does not revalidate dated methodology sources or change synthesis rules.

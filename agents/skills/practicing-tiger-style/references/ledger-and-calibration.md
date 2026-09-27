@@ -47,15 +47,22 @@ For a cross-component change, complete the relevant T0 map before adding detaile
 | `evidence` | Check plan or observed result, explicitly distinguished | Author confidence |
 | `check_status` | planned / observed-pass / observed-fail / unavailable | Green despite never running |
 | `owner` | Role responsible for interpreting failure and disposition | Nobody assigned |
+| `depends_on` | Material design/row dependencies, or none with reason | Treating coupled capacity and memory rows as independent |
 
 Use these fields for an observation:
 
 ```text
 command_or_locus:
+implementation_locus_or_digest: # Immutable revision, snapshot, or content digest
+workload_identity: # Inputs, shape, limits or contract that bound this observation
 raw_result:
 observed_at:
 independence_note:
 ```
+
+Both identities are required for an observed check closing an implemented-boundary row.
+For static inspection, cite the versioned source and inspected scope in those fields.
+A design-only plan may use an explicit N/A reason; it cannot close a runtime obligation.
 
 Positive space names accepted states, units, order, and ownership.
 Negative space names a distinct event that threatens the contract.
@@ -84,6 +91,15 @@ This ledger links to that budget; it does not copy the method.
 Choose the class from the contract, not the exception's name.
 Do not crash on every operational failure or silently continue after an internal contradiction.
 
+If an operation can write derived or speculative state before detecting invalid input, name the recovery boundary.
+Stopping future writes does not remove prior writes or their dependent effects.
+Choose containment: staged publication, provenance-based invalidation, checkpoint/replay, or quarantine.
+Test a late-detected contradiction after at least one dependent write, then exercise subsequent reads or predictions.
+Preserve trusted observations or explain their reconstruction.
+Disabling a rule does not establish recovery of baseline state.
+Link invalidated claims to `validating-experimental-evidence`.
+This ledger owns state recovery, not result retraction.
+
 ## T3 — exceptions
 
 Use an exception only to weaken a specific material obligation.
@@ -108,6 +124,12 @@ Do not silently turn an experiment's provisional choice into a production guaran
 
 A command alone is a test plan.
 Close a row with an observed result or inspected locus that establishes the claimed property.
+An observed PASS applies to its recorded implementation, enforcement boundary, and workload.
+When a decision, layout, bound, or code path changes, revisit the changed property and its material dependencies.
+Reopen affected rows before trusted use; preserve previous observations under their original identities.
+Carry an unaffected check forward only with old/new identities and an unchanged enforcement/assumption basis.
+This need not rerun every check, but “one row fixed” cannot certify dependent memory or semantic obligations.
+If an obligation is replaced, link its successor and observe the new enforcement boundary before closure.
 For that material performance revision, T4 observes speed and semantics on the same workload.
 Use the predeclared speed floor and semantic oracle. Use an exact oracle for a bit-preserving
 change. Otherwise freeze a justified tolerance or behavior relation before the run.

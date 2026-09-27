@@ -13,7 +13,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.0 (2026-09-25) — evidence judgment; polysearch owns the record and gate.
+> **Version**: v2609.1.2 (2026-09-27) — observed interventions and claim-matched equivalence checks.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -63,15 +63,19 @@ locus/digest only for dispatch, visibility, and acceptance topology.
 
 | Gate | Predicate and action | Checkable artifact |
 |---|---|---|
-| **EV0 CONTRACT** | Registered benchmark? Resolve its ID to the effective executable stream/metric contract and allowed overrides before launch. A copied parameter string is not authority. Missing target binding stops an official score; an ad hoc run may support only a clearly scoped local claim. | Registry ID, contract digest, target acceptance/rejection receipts; `registered-benchmarks.md` |
+| **EV0 CONTRACT** | Resolve the effective contract, allowed overrides, and project-authorized launcher before launch. A registry constructor or resource wrapper cannot replace a required entrypoint. Missing binding stops an official score; permitted ad hoc work retains local scope. | Registry ID, contract digest, target acceptance/rejection receipts; `registered-benchmarks.md` |
 | **EV1 EXECUTED INPUT** | Join observed code, input, parameters, realized length, and final scored position to the intended run. A stale worktree, unbound registry ID, or missing scored tail returns `FAIL`/`UNKNOWN`. | Exact invocation and post-launch attestation in the canonical run/finding; `registered-benchmarks.md` |
-| **EV2 INFORMATION FLOW** | If labels enter an online learner, freeze reveal order. Changing the current or future label must not change a prediction made before its reveal. Run a target-appropriate null when leakage is plausible or a score contradicts a bound. | Perturbation output and null-control locus; `controls-and-information-flow.md` |
+| **EV2 INFORMATION FLOW** | Freeze permitted information: reveal/update order online, train/test separation offline. Test forbidden dependencies and verify that required control interventions reached the executing consumer. | Perturbation, realized control and null-output loci; `controls-and-information-flow.md` |
 | **EV3 FOOTING** | Compare like metric, split, stream, scoring window, training protocol, and baseline. For mechanism ablation, change only that mechanism. A confounded contrast cannot update a causal hypothesis. | Axis and confound table, same-stream baseline, bound check; `footing-and-lineage.md` |
 | **EV4 LINEAGE** | Before “regression”, “recovery”, or “new ability”, classify prior and current artifacts against the concept contract, prior benchmark contract, and replacement obligation. Ineligible old leaders are oracle references; transferable mechanisms remain candidates. | Prior/current capability matrix and scoped claim; `footing-and-lineage.md` |
 
-Apply EV0 and prospective EV2 controls before a registered run. Apply EV1–EV4 on arrival of
+Apply EV0 and protocol-appropriate prospective EV2 checks before a registered run. Apply EV1–EV4 on arrival of
 its raw receipt. When any required check is `FAIL` or `UNKNOWN`, preserve the number and
 write the exact repair or discriminating test. Do not silently discard negative results.
+When a verdict changes, reconcile affected findings and consumer views before reusing the result.
+The correction and historical-retrieval procedure lives in `footing-and-lineage.md`.
+For effects on axioms, definitions, theorem applications or dependent predictions, hand the scoped disposition
+to `systematizing-theories`. This skill qualifies the finding; it does not certify a theoretical derivation.
 
 ## Disposition lookup — no single vague PASS
 

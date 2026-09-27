@@ -1,18 +1,13 @@
 ---
 name: proving-theorems
 description: >-
-  Runs mathematical proof as a human-governed loop where the proof assistant's kernel is the only
-  trust anchor, AI drafts proofs and statements at scale, and the human owns FAITHFULNESS (does the
-  formal statement mean the intended theorem). Use whenever the task involves formalizing a theorem,
-  autoformalizing a natural-language statement, checking whether a formal statement is faithful,
-  choosing or driving an AI theorem prover, running a blueprint-driven formalization, orchestrating
-  parallel proof/gate agents against a locked-statement blueprint, or deciding whether to formalize
-  at all vs. stay informal. Trigger on: Lean / Lean 4 / Mathlib, Rocq (Coq),
-  Isabelle/HOL, Metamath, theorem proving / 定理証明, formal proof / 形式証明, formal verification,
-  autoformalization / 自動形式化, faithfulness, statement drift / vacuous statement, blueprint
-  formalization, hammer / Sledgehammer / premise selection, AlphaProof, DeepSeek-Prover,
-  Goedel-Prover, miniF2F / PutnamBench, expert iteration / RL theorem proving, AI4S math. Assumes a
-  strong math/CS reader; teaches durable method, not what a kernel is.
+  Formalizes and checks mathematical statements/proofs, with human-owned faithfulness and
+  kernel-checked correctness. Use for 定理証明, 形式証明, formal verification, 自動形式化,
+  Lean/Mathlib, Rocq/Coq, Isabelle/HOL, Metamath, AI theorem provers, blueprint formalization,
+  premise selection, statement drift or vacuity, and formalize-vs-informal decisions.
+  PURPOSE: structuring axioms/lemmas and updating a theory from findings→systematizing-theories;
+  statement faithfulness and proof certification stay here. Return exact statement/version and proof status.
+  English skill; respond in the user's language.
 ---
 
 # proving-theorems — kernel-trusted, AI-drafted, human-owned faithfulness
@@ -48,6 +43,10 @@ Therefore:
 
 This single asymmetry — *kernel owns proof-correctness, human owns statement-faithfulness* — drives
 every decision below.
+
+`systematizing-theories` owns the surrounding theory map and finding-driven dependency updates.
+Return the exact statement version, premises, proof receipt and faithfulness status to that owner.
+A failed application premise does not refute a checked conditional theorem.
 
 ## Decision 1 — formalize, or stay informal?
 
@@ -212,10 +211,11 @@ and compiler-feedback self-correction.
 | Reading benchmarks/leaderboards adversarially (pass@k, contamination, end-to-end vs blessed-statement) | `references/benchmarks-and-trust.md` |
 | Epistemics: formal vs informal proof, the coverage/certifiability split, open problems | `references/epistemics.md` |
 | **What's true right now** (model names, contest outcomes, SOTA numbers, library counts) | `references/state-of-the-art.md` — **DATED, read the live sources it cites** |
+| Trigger and theory-maintenance handoff checks | `tests/triggers.md` |
+| Scoped reforge verification and existing prose debt | `tests/forge-verification-ledger.md` |
 
 > **Dated pointer.** "State of the art" — specific provers, benchmark scores, IMO outcomes, Mathlib
 > counts, funding — lives **only** in `references/state-of-the-art.md`, under a dated heading, with
 > instructions to read the live source (e.g. the auto-generated library stats page with its
 > generation date). It is stale within weeks by design; do not lift its numbers into durable prose or
 > answer from memory.
-

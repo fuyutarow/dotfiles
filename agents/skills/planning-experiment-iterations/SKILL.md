@@ -12,13 +12,15 @@ description: >-
 
 # Planning experiment iterations
 
-> **Version**: v2609.1.1 (2026-09-27) — readiness and scoped inference before experiment expansion.
+> **Version**: v2609.1.3 (2026-09-27) — executed controls and workload-based device policy.
 
 ```bash
 test -f assets/ITERATION-PLAN.md
 test -f tests/triggers.md
 test -f tests/decision-cases.md
 test -f tests/postmortem-2026-09-27.md
+test -f tests/postmortem-2026-09-27-followup.md
+test -f tests/postmortem-2026-09-27-third.md
 test -f tests/forge-verification-ledger.md
 bun ../forging-skills/scripts/skill-check.ts .
 ```
@@ -41,17 +43,19 @@ Keep `ITERATION_PLAN`, `ITERATION_LOG`, `READINESS`, `ORACLE`, and `OUTCOMES` as
 
 Use these as fields in the project's existing run intent and finding, not a second record store.
 This skill owns test selection and shape. Admission, raw receipts, and evidence validity retain their owners.
+Theory predictions arrive from `systematizing-theories` with exact statement revisions and open obligations.
+Return validated findings there for theory updates; a successful run does not silently promote a conjecture to a theorem.
 
 ## Gates — each leaves a field in the row
 
 | Gate | Decision | Required field | Fail → |
 |---|---|---|---|
-| I0 DECISION | Retrieve prior results; name the decision, test kind, and earliest blocking prerequisite | `FROM_EVIDENCE`, `DECISION`, `KIND`, `READINESS` | Missing validity prerequisite → diagnostic first |
+| I0 DECISION | Retrieve prior results; bind the requested acceptance condition, decision, and blocking prerequisite | `FROM_EVIDENCE`, `GOAL_LINK`, `DECISION`, `KIND`, `READINESS` | Missing validity prerequisite → diagnostic first; off-goal work → defer |
 | I1 DISCRIMINATE | Predict the same observable under rivals and their auxiliary assumptions | `RIVALS`, `PREDICTIONS`, `OUTCOMES` | No decision-changing outcome → redesign |
 | I2 ORACLE | Compute an applicable cheap oracle before its dependent learner test | `ORACLE`: type, scope, assumptions, value and locator; or `NONE` with reason | Unmatched scope → oracle diagnosis, no theory verdict |
 | I3 BOX | Use the smallest scale that separates predictions with justified uncertainty | `SCALE_BASIS`, `PHASE_COSTS`, `TARGET_WALL_S`, `CAP_S` | No feasible discriminator within cap → report limit; do not shrink into a meaningless test |
 | I4 FREEZE | Pin executed inputs, baseline, controls, tolerances, and resource plan | `BINDING`, `BASELINE`, `CONTROL`, `CRITERION`, `DEVICE`, `PLANNED` | Change → new plan ID; retain old result and its scope |
-| I5 DISPATCH | Propose owner, deadline, stop action, and return condition; obtain required owner receipts | `OWNER`, `ADMISSION`, `ENVELOPE`, `DEADLINE`, `STOP_IF`, `HAND_BACK` | Missing authorization/admission → no launch; no launch receipt → not running |
+| I5 DISPATCH | Resolve the project's launch path and dependency condition; obtain required owner receipts | `OWNER`, `LAUNCH_PATH`, `LAUNCH_WHEN`, `ADMISSION`, `ENVELOPE`, `DEADLINE`, `STOP_IF`, `HAND_BACK` | Missing authority or unmet dependency → no launch; no launch receipt → not running |
 | I6 RECORD | Apply the frozen outcome table after evidence validation; record peak and release | `ITERATION_LOG` | Invalid or inconclusive → no scientific elimination; next row cites the limitation |
 
 ## Readiness and oracle scope (I0–I2)
@@ -62,6 +66,13 @@ This skill owns test selection and shape. Admission, raw receipts, and evidence 
 | A mechanism comparison is ready | `KIND: MECHANISM`. Cite passing prerequisite receipts for the exact binding; require a same-stream baseline |
 | Minimal valid evidence supports a registered claim | `KIND: CONFIRMATION`. Check the claim's required suite and controls through its domain owner; smoke does not establish suite coverage |
 | Proposed work repeats a historical result | Cite the old result and the changed contract or unresolved question before spending a run |
+
+`GOAL_LINK` names the user's acceptance condition and the next check this iteration enables.
+For unresolved requested conformance, name an implementation owner, dependency, and acceptance test.
+A claim that compliance is possible does not close that requirement.
+Before extending a repair chain, compare its remaining cost with an already-valid path to the same goal.
+Record the repair's exit/reconsideration condition; do not make a full port an automatic prerequisite.
+Instrument learning remains useful, but does not count as measured capability or conformance improvement.
 
 `READINESS` cites `validating-experimental-evidence` checks; it does not duplicate their verdict store.
 A diagnostic may run on a broken path to locate the break. It cannot establish the downstream mechanism.
@@ -112,9 +123,9 @@ For example, a capacity-matched sham arm can separate added voting capacity from
 
 | Device / phase condition | Action |
 |---|---|
-| A conforming GPU path exists for the tested code | Prefer GPU; apply the bounded diagnostic exception below only when task constraints permit |
-| The subject is a CPU reference or data-only oracle | CPU is allowed; name that subject and its bounded cost |
-| A bounded CPU diagnostic reaches the discriminator earlier, including queue/setup costs | Record phase-cost evidence and CPU-only inference scope; use it if the task permits. GPU performance/parity still requires GPU evidence |
+| A conforming GPU path exists for a learner run | Use GPU |
+| The subject is a CPU-specific reference invariant, or a data-only calculation without learner execution | CPU is allowed; name the check and bounded cost. A reference check does not authorize a CPU learner benchmark |
+| A bounded diagnostic does not execute a learner and finishes sooner on CPU | Record its phase-cost evidence and limited scope; follow explicit task constraints |
 | No conforming GPU path exists for a learner run | The GPU path becomes the critical-path prerequisite. Dispatch it, and write any new mechanism backend-generic from its first line. A learner run never falls back to CPU. "No GPU path" is not a `DEVICE_REASON` |
 | The GPU path is unproven | Run a minimal diagnostic witness; expand coverage only when additional cases change the next decision |
 | CPU preparation or compilation dominates | Separate reusable CPU references from GPU execution; consider bounded warm-process reuse before multiplying processes |
@@ -122,6 +133,7 @@ For example, a capacity-matched sham arm can separate added voting capacity from
 `PHASE_COSTS` covers queue/admission, CPU reference, compile, transfer, kernel, and record/teardown.
 Use measured timings or mark estimates unknown and run a bounded pilot.
 GPU-first selects the useful compute path; CPU exceptions never authorize an unbounded battery.
+Classify the executed workload, not its ticket name: calling a learner run a pilot, oracle, or diagnostic grants no exception.
 Reuse references only with matching code/config/data fingerprints; reset learner state between cases.
 A warm process still needs per-case and whole-job caps, stop rules, and release receipts.
 
@@ -135,6 +147,20 @@ While a run executes, prepare the next conditional branch or inspect its source 
 Parallel arms require distinct discriminating contributions, fixed inputs, and independent mutable state.
 Before a main-thread takeover, reconcile job IDs and ownership to prevent duplicate launches.
 The planning row neither admits nor authorizes a run. `ADMISSION` cites the section/resource owners' required receipts.
+Resolve `LAUNCH_PATH` through `validating-experimental-evidence` EV0; a resource runner is not launch authority.
+
+## Queue the next experiment by dependency
+
+Record `LAUNCH_WHEN` before dispatch. Preregistration alone does not make a successor independent.
+
+| Successor relation | Allowed preparation / launch |
+|---|---|
+| Its choice, validity, or scale depends on a predecessor result | Prepare the conditional branch now; launch only after interpreting the required receipt |
+| Fixed arms of one admitted comparison, with shared valid prerequisites | Arms may run before cross-arm analysis; preserve the frozen comparison and stop conditions |
+| A separate useful question remains admissible under every predecessor outcome | May overlap within the resource budget; name that independent contribution |
+| A shared prerequisite fails or its binding changes | Suspend dependent queued launches and quarantine affected results through the evidence owner |
+
+An empty GPU queue never supplies the scientific reason for another run.
 
 ## Report (when the human set a cadence)
 
@@ -147,7 +173,7 @@ When nothing changed, say so in one line.
 
 - Launch without applicable I0–I5 fields, or overwrite a frozen plan.
 - Fill idle GPU or RAM with off-path work, or expand scale just to raise utilization.
-- Choose CPU for a learner run without `DEVICE_REASON`.
+- Choose CPU for a learner run, even with `DEVICE_REASON`.
 - Raise a cap mid-run, or treat an OOM, breach, or invalid comparison as scientific refutation.
 - Change a criterion after seeing its result, or broaden a scoped exclusion into a cause verdict.
 - Choose the next test without citing prior evidence.
@@ -191,4 +217,6 @@ Other owners keep their existing artifacts; this skill only consumes their resul
 | `tests/triggers.md` | Fire/no-fire and ordered co-fire | Changing scope |
 | `tests/decision-cases.md` | Adversarial planning and interpretation cases | Verifying a reforge |
 | `tests/postmortem-2026-09-27.md` | Bounded episode audit and source limits | Auditing provenance |
+| `tests/postmortem-2026-09-27-followup.md` | Overlapping follow-up audit and cross-skill repair map | Auditing later failures |
+| `tests/postmortem-2026-09-27-third.md` | Control execution, equivalence and recovery audit | Auditing the third supplied packet |
 | `tests/forge-verification-ledger.md` | Source grades, design decisions, checks and waivers | Reforging |

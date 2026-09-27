@@ -147,3 +147,104 @@ outside this single-skill repair; their existing ownership text takes precedence
   The manual is improved against explicit counterexamples; behavioral reliability is unmeasured.
 - `mise run link:skills`: exit 0. Existing skill links resolve to the edited repository directory.
   This verifies deployment on disk, not an automatic reload into already-running agent contexts.
+
+## 5. Follow-up v2609.1.2 — 2026-09-27
+
+**Source and boundary.** `postmortem-2026-09-27-followup.md` owns the full bounded audit,
+source digest, overlap warning, and cross-skill repair map. The user explicitly requested a
+second postmortem and related skill distillation. Reports are third-party assertions; no raw
+scientific run or claimed launcher enforcement was reproduced.
+
+**Signed transition and scope.** Requested acceptance condition + historical evidence → select
+one useful diagnostic/mechanism/confirmation → plan its authorized, dependency-ready launch.
+This skill owns GOAL_LINK and LAUNCH_WHEN, not programme allocation or execution permission.
+LAUNCH_PATH consumes the evidence owner's EV0 rule. Extend existing skills, create none.
+
+**Calibration.** The report's proposed cure for idle GPUs was unconditional prelaunching of the
+next run. The consumer's failure is overproduction without result-dependent selection, not lack
+of a queue. Fixed comparison arms and separate independent questions remain parallelizable.
+A repair may yield valid knowledge while leaving the user's capability/conformance objective open.
+
+| Rule | Grade | Source / applicability |
+|---|---|---|
+| Dependency-aware queue | skill-supplied | Report L1377–1387; applies to successor selection/validity, not a universal serial barrier |
+| Goal-linked repairs and requested conformance | skill-supplied | L964–1019, L1307–1333; uses current user acceptance conditions, not the report author's inferred mandate |
+| Authorized launch locator | skill-supplied | L1136–1147; target-specific exclusivity belongs to EV0/project policy |
+| D24–D31 | constructed | Static adversarial cases; no measured fresh-executor reliability |
+
+**File treatment.** Core and template add goal/launch-dependency fields; decision cases test
+conditional vs fixed-arm execution, unrelated repair, conformance, launcher, and weakened claims.
+The new bounded audit retains one provenance home. Existing first-audit findings are not re-counted
+as new independent incidents. Descriptions and collection membership are unchanged.
+
+**Independent review.** Fresh Terra reviewer `/root/verify_pm2_planning_evidence` inspected
+core/template plus evidence-rule diffs against base `3ebbedb`, without author tests or ledger.
+Verdict PASS, no findings; static contract review only. Its remit included unnecessary serialization,
+invalidations, post-hoc rescue, and authority boundaries. Author retains final acceptance.
+The subsequent wording-only split in the evidence reference does not change that decision contract.
+
+**F3 scope.** Added D24–D31 desk-checked, including D25 (fixed arms) and D26 (unrelated valid path)
+as overblocking controls. No live trigger or blind old/new execution eval. Existing trigger surface
+is unchanged. No throughput gain or runtime enforcement is claimed.
+
+**Workspace.** Base checkout had two unrelated unmerged paths. Edits and checks use isolated
+worktree branch `codex/distill-research-postmortem-875d`, base `3ebbedb`. No conflict resolution,
+staging of peer changes, or repointing of shared skill links is part of this reforge.
+
+**Mechanical receipt.** Isolated worktree dependencies restored with
+`mise exec -- bun install --frozen-lockfile` (no global `bun link`). The first collection task had
+failed only because this fresh worktree lacked `cleye`; after the restore, `mise run lint:skills-floor`
+exited 0: 74 skills / 65,104 charged characters; unchanged ceiling and descriptions.
+Target skill-check for all three edited skills: exit 0, zero FAIL and zero prose warnings.
+Collection warnings remain 109 across 58 untouched skills. `git diff --check`: exit 0.
+The three skills add 20 constructed behavior cases in total (planning 8, evidence 8, Tiger 4).
+The final Tiger review found and closed one additional identity-binding loophole; all semantic
+reviews ended PASS. These receipts do not establish live invocation or downstream compliance.
+
+## 6. Third packet v2609.1.3 — 2026-09-27
+
+**Audit/source.** `postmortem-2026-09-27-third.md` owns the bounded audit of attachment
+`98bfb11c-6e50-41df-8916-a72f40f2901d` and its digest. Reports remain third-party assertions;
+no scientific run, safety classifier, or source theorem is independently validated here.
+The control-state, equivalence and recovery changes are owned by the evidence/Tiger siblings.
+
+**Policy reconciliation.** The actual main-branch change `a1feb9e` removes missing-GPU-path
+fallback for learner runs. It was cherry-picked into the isolated integration branch as
+`ff708fc` before this delta. The existing CPU-exception table and D13/D22 examples were then
+narrowed to CPU-specific reference proofs and non-learner diagnostics. A run's ticket label
+cannot change its executed workload. This preserves the adopted house policy; it is not a
+universal scientific claim that CPU cannot execute learners, nor permission to override a
+future explicit user instruction.
+
+**Signed map and scope.** Evidence + adopted device constraint → classify actual workload →
+GPU learner run, GPU-path prerequisite, or narrowly justified non-learner/reference check.
+Existing budgets also apply to data-only oracles; no sweep exemption follows from the label.
+No new skill, resource admission mechanism, or launcher is introduced.
+
+| Delta | Grade | Evidence / limit |
+|---|---|---|
+| Workload-based device exceptions | skill-supplied | Actual repository policy a1feb9e; report L1–23, L240–287 illustrates relabeling risk |
+| D13/D22 alignment; D32/D33 | constructed | Static cases, not an empirical execution evaluation |
+| Third audit's episode findings | third-party / bounded logical inspection | Source locators and limitations live in the audit |
+
+**Independent review.** Fresh Terra `/root/verify_pm3_gpu_recovery`, no author tests/ledger,
+found that the old deny-list still permitted CPU learner runs given a DEVICE_REASON. The
+entry now forbids that exception; recheck PASS with no findings. This is static semantic
+verification, not evidence of compliance by a live research agent.
+
+**Workspace scope.** Continue the isolated branch from the previous reforge. Main checkout's
+unrelated conflicts remain outside scope. A pre-existing worktree mise.toml change from Bun
+1.3.14 to 1.4 is also excluded from staging and this commit.
+
+**Verification receipt.** Target skill-check over the three edited skills: exit 0, no FAIL/prose
+warnings. `mise run lint:skills-floor`: exit 0, 74 skills / 65,104 listing characters; unchanged
+109 warnings in 58 other skills. `git diff --check`: exit 0. Added 16 constructed cases across
+the three skills; two older device-policy cases were reconciled with a1feb9e. Trigger descriptions
+are unchanged. No live trigger/old-vs-new execution test or shared-link deployment is claimed.
+
+## 2026-09-27 theory prediction handoff
+
+`systematizing-theories` now supplies exact prediction statement versions and open obligations.
+This skill still selects/bounds the test; validated findings return to the theory owner for content
+updates. A successful run cannot silently promote a conjecture to a theorem. Static reciprocal-cut
+review passed; no experiment admission or runtime schema changed.

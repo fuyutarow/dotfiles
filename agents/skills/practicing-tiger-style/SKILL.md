@@ -17,7 +17,7 @@ description: >-
 
 # Practicing Tiger Style
 
-> **Version**: v2609.3.0 (2026-09-25) — consequential benchmark evidence is externally qualified.
+> **Version**: v2609.3.2 (2026-09-27) — failure handling includes already-mutated derived state.
 > Source synthesis and derivation: `references/source-ledger.md`.
 
 Run from this skill directory:
@@ -76,7 +76,7 @@ Keep read-only reviews read-only unless changes were requested.
 | **T1 CONSEQUENCE** | Risk tier, concrete failure mode, why it matters now | No trusted-use assessment |
 | **T2 OBLIGATION** | Invariant, negative case, bound, handling, evidence plan, owner | Affected contract is incomplete |
 | **T3 REVERSAL** | Specific exception, compensating measure, owner, expiry/reversal | No acceptance of that exception |
-| **T4 EXTERNAL CHECK** | Observed result at a relevant boundary; for performance revisions, check speed and declared output semantics | Planned checks cannot become PASS |
+| **T4 EXTERNAL CHECK** | Observed result bound to the implementation and workload; revisit affected dependent rows after changes | Planned or stale checks cannot become PASS |
 
 T0 is proportional: one existing component can need only a sentence and its code locus.
 Cross-component state, capacity, or failure paths require

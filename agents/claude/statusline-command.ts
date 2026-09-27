@@ -56,7 +56,6 @@
 // Static safety comes from the all-optional StatusInput shape + native `!= null` narrowing.
 // Input: JSON via stdin from Claude Code.
 
-import { hostname as osHostname, userInfo } from "node:os";
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -69,6 +68,14 @@ import {
 } from "node:fs";
 import { createConnection } from "node:net";
 import { fromThrowable } from "neverthrow";
+import {
+  clockHM,
+  localFromEpochSec,
+  nowEpochSec,
+  promptParts,
+  stampMDHM,
+  type PromptParts,
+} from "./hooks/prompt-stamp.ts";
 
 interface RateWindow {
   used_percentage?: number;
@@ -147,13 +154,6 @@ const ENRICHMENT_TIMEOUT_MS = 2000;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-// zsh %~ : leading $HOME -> ~
-function shorten(p: string): string {
-  if (p === HOME) return "~";
-  if (HOME && p.startsWith(`${HOME}/`)) return `~${p.slice(HOME.length)}`;
-  return p;
-}
-
 // Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
 // one parse of ~/.claude.json serves both, the same file `claude` itself writes on login and
 // keeps refreshing (via `cachedUsageUtilization`) whenever it fetches usage data.
@@ -204,13 +204,19 @@ function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
     if (l.kind !== "weekly_scoped" || l.percent == null) continue;
     const name = l.scope?.model?.display_name;
     if (!name) continue;
-    const epochMs = l.resets_at ? new Date(l.resets_at).getTime() : NaN;
+    // Instant.from demands an offset/`Z` (Date guessed local time for a bare one); a string it
+    // rejects drops just the reset countdown, like an unparseable one always has.
+    const resetsAt = l.resets_at;
+    const epochMs = resetsAt
+      ? fromThrowable(
+          () => Temporal.Instant.from(resetsAt).epochMilliseconds,
+        )().unwrapOr(undefined)
+      : undefined;
     out.push({
       name,
       pct: l.percent,
-      resetEpoch: Number.isFinite(epochMs)
-        ? Math.floor(epochMs / 1000)
-        : undefined,
+      resetEpoch:
+        epochMs !== undefined ? Math.floor(epochMs / 1000) : undefined,
     });
   }
   return out;
@@ -385,7 +391,11 @@ function agentName(sid: string): string | undefined {
       JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
   )().unwrapOr({});
   const hit = cache[sid];
-  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
+  if (
+    hit != null &&
+    Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
+  )
+    return hit.name;
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
   const outResult = fromThrowable(() =>
@@ -401,7 +411,7 @@ function agentName(sid: string): string | undefined {
       JSON.parse(outResult.value),
   )();
   if (listResult.isErr()) return undefined; // malformed JSON -> same as a missing `claude`
-  const now = Date.now();
+  const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.value, now);
   if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
   // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
@@ -509,7 +519,7 @@ async function reportToHerdr(
   const tabId = process.env.HERDR_TAB_ID;
   if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
 
-  const stamp = Date.now();
+  const stamp = Temporal.Now.instant().epochMilliseconds;
   const tokens: Record<string, string> = { model: m };
   // Rides the SAME request as model — one socket round-trip, not two (see the
   // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
@@ -549,13 +559,10 @@ function pctFmt(p: number): { pct: number; col: string } {
   return { pct, col: pctColor(pct) };
 }
 
-const nowSec = () => Math.floor(Date.now() / 1000);
-
 // 5h reset: epoch s -> "⟳HH:MM(<h>h<mm>m)" — local clock + time remaining.
 function reset5(epoch: number): string {
-  const d = new Date(epoch * 1000);
-  const clock = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const s = Math.max(0, epoch - nowSec());
+  const clock = clockHM(localFromEpochSec(epoch));
+  const s = Math.max(0, epoch - nowEpochSec());
   const rem = `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`;
   return `${RSET}${clock}(${rem})`;
 }
@@ -564,11 +571,8 @@ function reset5(epoch: number): string {
 // The 7d horizon spans days, so it carries a date (unlike 5h) and counts down in days+hours;
 // inside the final day it drops to the 5h-style hours+minutes.
 function reset7(epoch: number): string {
-  const d = new Date(epoch * 1000);
-  const clock =
-    `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
-    `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const s = Math.max(0, epoch - nowSec());
+  const clock = stampMDHM(localFromEpochSec(epoch));
+  const s = Math.max(0, epoch - nowEpochSec());
   const rem =
     s >= 86400
       ? `${Math.floor(s / 86400)}d${pad2(Math.floor((s % 86400) / 3600))}h`
@@ -958,16 +962,22 @@ function sysSegment(
   if (vram != null) parts.push(memSegment("VRAM", vram));
   return parts.join(` ${DIM}${MID}${RST} `);
 }
+// The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
+// uncolored shape has one home, hooks/prompt-stamp.ts, shared with the /quote header.
+// Its stamp is render time = "as of" for every value on screen. settings.json's
+// statusLine.refreshInterval (30s) re-renders an idle pane, so a stamp more than a minute
+// behind the clock means a stuck render. Minutes only, like PS1 — seconds were tried and
+// rejected as noise (2026-09-27).
+function coloredHead(p: PromptParts): string {
+  return (
+    `${ESC}[35m${p.user}${RST}@${ESC}[33m${p.host}${RST}:` +
+    `${ESC}[36m${p.stamp}${RST}|${ESC}[32m${p.cwd}${RST}`
+  );
+}
 function render(df: Dataframe): string {
   const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
 
-  const user = userInfo().username;
-  const host = osHostname().split(".")[0];
-  const d = new Date();
-  const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const line1 =
-    `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:` +
-    `${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(df.cwd)}${RST}`;
+  const line1 = coloredHead(promptParts(df.cwd));
 
   let identityLine = "";
   if (df.email != null)
@@ -1049,18 +1059,23 @@ function render(df: Dataframe): string {
 
 // --- entry: read stdin JSON, build the dataframe, render, write. Graceful: an invalid/missing
 // JSON payload still renders line 1 (from $PWD, no dataframe needed) plus a hint. ---
+// Runtime floor, checked before anything touches Temporal. Which bun runs this is NOT this
+// repo's choice — Claude Code inherits the PATH of the directory it was launched from, and mise
+// auto_install can re-create an old install there (see mise.toml / doctor's bun-floor). Without
+// this line a sub-1.4 bun throws a ReferenceError and the bar goes silently blank; with it the
+// bar names the cause.
+if (typeof Temporal === "undefined") {
+  process.stdout.write(
+    `${ESC}[38;5;167mstatusline: bun ${Bun.version} has no Temporal (needs >= 1.4)${RST} ` +
+      `${DIM}— which bun: ${Bun.which("bun") ?? "?"} · mise run doctor${RST}`,
+  );
+  process.exit(0);
+}
 const raw = await Bun.stdin.text();
 // any -> StatusInput at the trust boundary (no `as` cast).
 const parseResult = fromThrowable((): StatusInput => JSON.parse(raw))();
 if (parseResult.isErr()) {
-  const cwd = process.env.PWD ?? "";
-  const user = userInfo().username;
-  const host = osHostname().split(".")[0];
-  const d = new Date();
-  const dt = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  process.stdout.write(
-    `${ESC}[35m${user}${RST}@${ESC}[33m${host}${RST}:${ESC}[36m${dt}${RST}|${ESC}[32m${shorten(cwd)}${RST}\n`,
-  );
+  process.stdout.write(`${coloredHead(promptParts(process.env.PWD ?? ""))}\n`);
   process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
   process.exit(0);
 }

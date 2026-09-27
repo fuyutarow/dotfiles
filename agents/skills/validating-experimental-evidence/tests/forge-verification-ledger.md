@@ -150,3 +150,43 @@ FAIL/prose warnings. `mise run lint:skills-floor` in the isolated worktree: exit
 65,104 listing characters; 109 existing prose warnings in 58 untouched skills. `git diff --check`
 passed. Worktree dependencies were restored from the frozen lockfile after an initial missing-cleye
 failure. Shared installation links are not repointed from a checkout containing peer conflicts.
+
+## Reforge v2609.1.2 — 2026-09-27 realized controls and equivalence
+
+**Source/audit.** Attachment `98bfb11c-6e50-41df-8916-a72f40f2901d`, digest
+`6847afb2ec2d494e082eecb730d72bd184e1b977fbf0384d29784108102f95b1`.
+The full bounded audit lives with `planning-experiment-iterations` in
+`tests/postmortem-2026-09-27-third.md`. Reports are not raw receipts; repeated events in earlier
+packets are not independent replications.
+
+**Signed map.** Intended intervention + execution → observe effective consumer transformation
+and output/state relation → scoped evidence disposition. EV0/EV1 owns launcher/terminal-record
+validation. EV2 owns intervention and information availability. EV3 owns equivalence/footing.
+Configuration authority stays with `governing-configuration-systems`; target code/storage owners
+implement repairs and protect artifact lifetime. No new schema or launcher is added.
+
+| Delta | Grade | Source / operational limit |
+|---|---|---|
+| Realized-control witness, not flag presence or equal-score inference | skill-supplied | Report L219, L301–314; actual params/environment path was not inspected |
+| Known-fixture execution-to-record validation | skill-supplied | L95, L1207–1212; reject invalid calls, retain failed executions, never promote failure |
+| Claim-matched equivalence and encoding units | skill-supplied | L207–217, L734–741, L1181; metric ties do not establish per-item/state equality |
+| External runtime/input identity and lifetime | skill-supplied | L954–958, L1197–1205; no dataset-deletion culprit established |
+| Detector silence does not establish law truth | constructed logical limit | L1072–1078; scoped to what the detector actually observes |
+| E09–E19 | constructed | Static counterexamples, including offline-training and constant-output controls |
+
+**Existing coverage retained.** The formal-bound applicability rule already covers transferring
+random-graph guarantees without verifying target dependence assumptions. The oracle typing rule
+already forbids promoting an observed maximum to a universal ceiling. E14/E17 retain these
+counterexamples without duplicating theory or candidate-generation ownership.
+
+**Independent review.** Fresh Terra `/root/verify_pm3_evidence` read only the changed core and
+three references. It found (1) unconditional online reveal-order wording would wrongly block
+valid offline training, and (2) launcher validation duplicated EV0 under EV2. Fixed by explicitly
+separating online reveal/update from offline train/test boundaries and moving launcher validation
+to registered-benchmarks.md. Recheck PASS, no findings. E19 guards the offline case.
+No tests/ledgers or another reviewer's conclusions were shown to this reviewer.
+
+**Mechanical receipt.** Target three-skill floor: exit 0, zero FAIL/prose warnings. Collection
+`mise run lint:skills-floor`: exit 0, 74 skills / 65,104 listing characters, unchanged ceiling.
+`git diff --check` passed. E09–E19 desk checks are semantic fixtures, not runtime enforcement.
+Shared installation remains pending main-checkout conflict resolution.

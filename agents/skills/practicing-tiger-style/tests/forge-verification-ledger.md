@@ -298,3 +298,29 @@ optional implementation identity allowed an unbound PASS to survive a code chang
 implementation/workload identities mandatory for implemented-boundary closure and requiring both
 old/new identities for carry-forward. B15 preserves this counterexample. Recheck: PASS, no findings;
 static review only. No runtime efficacy or implementation correctness claim follows.
+
+## Reforge v2609.3.2 — 2026-09-27 late-detected derived-state corruption
+
+**Source.** User attachment `98bfb11c-6e50-41df-8916-a72f40f2901d`, L1017–1026 reports that
+stopping derivation left prior contamination. The bounded audit and source digest live with
+`planning-experiment-iterations`, `tests/postmortem-2026-09-27-third.md`. No state trace was
+independently inspected; the source is a relayed report, not a verified root-cause analysis.
+
+**Signed map.** A consequential operation may publish derived state before detecting an invalid
+premise → select containment/recovery boundary → exercise late failure followed by subsequent
+reads → recovered or explicitly quarantined scope. The repair links to the existing handling
+contract; it does not introduce a second ledger or demand universal rollback.
+
+**Grade/calibration.** Recovery and descendant-state checks are skill-supplied adaptations,
+not official TigerBeetle prescriptions. The agent's failure was equating a future-write guard
+with restoration of an earlier state. B16–B18 are constructed checks of contamination,
+whole-run quarantine, and preservation/reconstruction of trusted observations.
+Result/finding invalidation stays with `validating-experimental-evidence`.
+
+**Independent review.** Fresh Terra `/root/verify_pm3_gpu_recovery` inspected the changed manual
+and handling reference without tests or this ledger. No Tiger finding was raised; final recheck
+PASS. Static review only; no actual recovery implementation, GPU test, or throughput eval ran.
+
+**Mechanical receipt.** Target three-skill floor: exit 0, zero FAIL/prose warnings; collection
+floor: exit 0, 74 skills / 65,104 listing characters; `git diff --check` passed.
+B16–B18 are desk checks. Installed runtime behavior and downstream efficacy are unmeasured.

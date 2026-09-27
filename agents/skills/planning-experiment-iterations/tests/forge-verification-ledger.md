@@ -200,3 +200,44 @@ Collection warnings remain 109 across 58 untouched skills. `git diff --check`: e
 The three skills add 20 constructed behavior cases in total (planning 8, evidence 8, Tiger 4).
 The final Tiger review found and closed one additional identity-binding loophole; all semantic
 reviews ended PASS. These receipts do not establish live invocation or downstream compliance.
+
+## 6. Third packet v2609.1.3 — 2026-09-27
+
+**Audit/source.** `postmortem-2026-09-27-third.md` owns the bounded audit of attachment
+`98bfb11c-6e50-41df-8916-a72f40f2901d` and its digest. Reports remain third-party assertions;
+no scientific run, safety classifier, or source theorem is independently validated here.
+The control-state, equivalence and recovery changes are owned by the evidence/Tiger siblings.
+
+**Policy reconciliation.** The actual main-branch change `a1feb9e` removes missing-GPU-path
+fallback for learner runs. It was cherry-picked into the isolated integration branch as
+`ff708fc` before this delta. The existing CPU-exception table and D13/D22 examples were then
+narrowed to CPU-specific reference proofs and non-learner diagnostics. A run's ticket label
+cannot change its executed workload. This preserves the adopted house policy; it is not a
+universal scientific claim that CPU cannot execute learners, nor permission to override a
+future explicit user instruction.
+
+**Signed map and scope.** Evidence + adopted device constraint → classify actual workload →
+GPU learner run, GPU-path prerequisite, or narrowly justified non-learner/reference check.
+Existing budgets also apply to data-only oracles; no sweep exemption follows from the label.
+No new skill, resource admission mechanism, or launcher is introduced.
+
+| Delta | Grade | Evidence / limit |
+|---|---|---|
+| Workload-based device exceptions | skill-supplied | Actual repository policy a1feb9e; report L1–23, L240–287 illustrates relabeling risk |
+| D13/D22 alignment; D32/D33 | constructed | Static cases, not an empirical execution evaluation |
+| Third audit's episode findings | third-party / bounded logical inspection | Source locators and limitations live in the audit |
+
+**Independent review.** Fresh Terra `/root/verify_pm3_gpu_recovery`, no author tests/ledger,
+found that the old deny-list still permitted CPU learner runs given a DEVICE_REASON. The
+entry now forbids that exception; recheck PASS with no findings. This is static semantic
+verification, not evidence of compliance by a live research agent.
+
+**Workspace scope.** Continue the isolated branch from the previous reforge. Main checkout's
+unrelated conflicts remain outside scope. A pre-existing worktree mise.toml change from Bun
+1.3.14 to 1.4 is also excluded from staging and this commit.
+
+**Verification receipt.** Target skill-check over the three edited skills: exit 0, no FAIL/prose
+warnings. `mise run lint:skills-floor`: exit 0, 74 skills / 65,104 listing characters; unchanged
+109 warnings in 58 other skills. `git diff --check`: exit 0. Added 16 constructed cases across
+the three skills; two older device-policy cases were reconciled with a1feb9e. Trigger descriptions
+are unchanged. No live trigger/old-vs-new execution test or shared-link deployment is claimed.

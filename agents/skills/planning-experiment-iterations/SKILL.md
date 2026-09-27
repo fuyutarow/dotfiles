@@ -115,7 +115,7 @@ For example, a capacity-matched sham arm can separate added voting capacity from
 | A conforming GPU path exists for the tested code | Prefer GPU; apply the bounded diagnostic exception below only when task constraints permit |
 | The subject is a CPU reference or data-only oracle | CPU is allowed; name that subject and its bounded cost |
 | A bounded CPU diagnostic reaches the discriminator earlier, including queue/setup costs | Record phase-cost evidence and CPU-only inference scope; use it if the task permits. GPU performance/parity still requires GPU evidence |
-| No conforming GPU path exists | Compare a bounded CPU discriminator with the cost of enabling GPU; record the dependency and follow explicit task device constraints |
+| No conforming GPU path exists for a learner run | The GPU path becomes the critical-path prerequisite. Dispatch it, and write any new mechanism backend-generic from its first line. A learner run never falls back to CPU. "No GPU path" is not a `DEVICE_REASON` |
 | The GPU path is unproven | Run a minimal diagnostic witness; expand coverage only when additional cases change the next decision |
 | CPU preparation or compilation dominates | Separate reusable CPU references from GPU execution; consider bounded warm-process reuse before multiplying processes |
 

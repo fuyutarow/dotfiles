@@ -68,7 +68,7 @@ the test's shape, size, box, device, resource line, and the choice of the next t
 | A conforming GPU path exists for the tested code | `DEVICE: GPU` |
 | No GPU path exists yet | `DEVICE: CPU`; `DEVICE_REASON` names the missing path; the GPU port is the next critical-path item |
 | The run computes data only, with no learner (an oracle or ceiling) | `DEVICE: CPU` with that reason |
-| The GPU path is unproven (bit identity or causality open) | Do not stack new experiments on it; the proof test comes first |
+| The GPU path is unproven (bit identity or causality open) | Run its proof tests in parallel on the GPU (one arena per job, as many as VRAM admits); no claim rests on it until they pass |
 
 **Free resources (after I6).**
 

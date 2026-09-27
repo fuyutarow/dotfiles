@@ -591,11 +591,10 @@ async function withExclusiveStateLock<T>(
       `${purpose} is already in progress; inspect ${path} before recovering a stale lock`,
     );
   }
-  try {
-    return await operation();
-  } finally {
-    unlinkSync(path);
-  }
+  // Cleanup runs on return AND on throw, same as the prior try/finally: the lock file is
+  // unlinked once this block ends, in either case. The atomic 'wx' create above is unchanged.
+  using _lock = { [Symbol.dispose]: () => unlinkSync(path) };
+  return await operation();
 }
 
 async function readJson(path: string, locus: string): Promise<unknown> {

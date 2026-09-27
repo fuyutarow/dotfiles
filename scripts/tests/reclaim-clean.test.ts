@@ -244,13 +244,14 @@ describe("resolveHome", () => {
 
   test("falls back to process.env.HOME, matching the shell's bare $HOME default", () => {
     const prev = process.env.HOME;
+    using _restoreHome = {
+      [Symbol.dispose]: () => {
+        if (prev === undefined) delete process.env.HOME;
+        else process.env.HOME = prev;
+      },
+    };
     process.env.HOME = "/env/home";
-    try {
-      expect(resolveHome(undefined)).toBe("/env/home");
-    } finally {
-      if (prev === undefined) delete process.env.HOME;
-      else process.env.HOME = prev;
-    }
+    expect(resolveHome(undefined)).toBe("/env/home");
   });
 });
 
@@ -272,13 +273,14 @@ describe("runSimpleStep", () => {
   function captureLog(fn: () => void): string[] {
     const logs: string[] = [];
     const orig = console.log;
+    using _restoreLog = {
+      [Symbol.dispose]: () => {
+        console.log = orig;
+      },
+    };
     console.log = ((...a: unknown[]) =>
       logs.push(a.join(" "))) as typeof console.log;
-    try {
-      fn();
-    } finally {
-      console.log = orig;
-    }
+    fn();
     return logs;
   }
 
@@ -468,21 +470,20 @@ describe("reclaim-clean.ts CLI", () => {
 
   test("real run (no --dry-run) against fixture stubs: prints '• label' lines and swallows a failing tool", () => {
     const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-real-"));
-    try {
-      makeStub(stubDir, "brew", 0);
-      makeStub(stubDir, "npm", 1); // fake npm FAILS -- must not abort the rest of the pass
-      const { out, code } = runScript(["--home", fixtureHome], {
-        pathDirs: [stubDir],
-      });
-      expect(code).toBe(0); // `|| true` semantics preserved: one tool's failure != script failure
-      expect(out).toContain("• brew cleanup --prune=all");
-      expect(out).toContain("• npm cache clean");
-      expect(out).toContain(
-        "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
-      );
-    } finally {
-      rmSync(stubDir, { recursive: true, force: true });
-    }
+    using _cleanupStubDir = {
+      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+    };
+    makeStub(stubDir, "brew", 0);
+    makeStub(stubDir, "npm", 1); // fake npm FAILS -- must not abort the rest of the pass
+    const { out, code } = runScript(["--home", fixtureHome], {
+      pathDirs: [stubDir],
+    });
+    expect(code).toBe(0); // `|| true` semantics preserved: one tool's failure != script failure
+    expect(out).toContain("• brew cleanup --prune=all");
+    expect(out).toContain("• npm cache clean");
+    expect(out).toContain(
+      "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
+    );
   });
 
   // MAJOR regression guard: runBunStep's mkdtempSync/writeFileSync setup must never escape
@@ -496,40 +497,38 @@ describe("reclaim-clean.ts CLI", () => {
       tmpdir(),
       `cache-clean-does-not-exist-${Temporal.Now.instant().epochMilliseconds}`,
     );
-    try {
-      makeStub(stubDir, "bun", 0);
-      makeStub(stubDir, "npm", 0); // proves steps AFTER the failing bun step still run
-      const { out, err, code } = runScript(["--home", fixtureHome], {
-        pathDirs: [stubDir],
-        env: { TMPDIR: badTmpdir },
-      });
-      expect(code).toBe(0); // never escapes to the outer FATAL/exit-1 handler
-      expect(err).not.toContain("FATAL");
-      expect(out).toContain("• bun pm cache rm"); // header line still prints (mirrors the shell's unconditional echo)
-      expect(out).toContain("• npm cache clean"); // the rest of the pass still ran
-      expect(out).toContain(
-        "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
-      );
-    } finally {
-      rmSync(stubDir, { recursive: true, force: true });
-      // badTmpdir was never created — nothing to clean up
-    }
+    // badTmpdir was never created — nothing to clean up
+    using _cleanupStubDir = {
+      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+    };
+    makeStub(stubDir, "bun", 0);
+    makeStub(stubDir, "npm", 0); // proves steps AFTER the failing bun step still run
+    const { out, err, code } = runScript(["--home", fixtureHome], {
+      pathDirs: [stubDir],
+      env: { TMPDIR: badTmpdir },
+    });
+    expect(code).toBe(0); // never escapes to the outer FATAL/exit-1 handler
+    expect(err).not.toContain("FATAL");
+    expect(out).toContain("• bun pm cache rm"); // header line still prints (mirrors the shell's unconditional echo)
+    expect(out).toContain("• npm cache clean"); // the rest of the pass still ran
+    expect(out).toContain(
+      "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
+    );
   });
 
   test("cargo present without rip: guard requires BOTH, no cargo line at all", () => {
     const stubDir = mkdtempSync(
       join(tmpdir(), "cache-clean-stubs-cargo-only-"),
     );
-    try {
-      makeStub(stubDir, "cargo", 0);
-      const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
-        pathDirs: [stubDir],
-      });
-      expect(code).toBe(0);
-      expect(out).not.toContain("rip");
-    } finally {
-      rmSync(stubDir, { recursive: true, force: true });
-    }
+    using _cleanupStubDir = {
+      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+    };
+    makeStub(stubDir, "cargo", 0);
+    const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
+      pathDirs: [stubDir],
+    });
+    expect(code).toBe(0);
+    expect(out).not.toContain("rip");
   });
 
   // Isolated fixture PATH with only a stub "uv" — deliberately NOT added to stubAll (that set
@@ -546,35 +545,35 @@ describe("reclaim-clean.ts CLI", () => {
 
     test("dry-run prints the command and never invokes uv", () => {
       const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-dry-"));
-      try {
-        makeUvStub(stubDir, true);
-        const { out, err, code } = runScript(
-          ["--dry-run", "--home", fixtureHome],
-          { pathDirs: [stubDir] },
-        );
-        expect(code).toBe(0);
-        expect(out).toContain(
-          `[dry-run] would run: uv run ${HUGGINGFACE_SCRIPT}`,
-        );
-        expect(err).not.toContain("UV CALLED");
-      } finally {
-        rmSync(stubDir, { recursive: true, force: true });
-      }
+      using _cleanupStubDir = {
+        [Symbol.dispose]: () =>
+          rmSync(stubDir, { recursive: true, force: true }),
+      };
+      makeUvStub(stubDir, true);
+      const { out, err, code } = runScript(
+        ["--dry-run", "--home", fixtureHome],
+        { pathDirs: [stubDir] },
+      );
+      expect(code).toBe(0);
+      expect(out).toContain(
+        `[dry-run] would run: uv run ${HUGGINGFACE_SCRIPT}`,
+      );
+      expect(err).not.toContain("UV CALLED");
     });
 
     test("real run invokes `uv run <script>`", () => {
       const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-real-"));
-      try {
-        makeUvStub(stubDir, false);
-        const { out, code } = runScript(["--home", fixtureHome], {
-          pathDirs: [stubDir],
-        });
-        expect(code).toBe(0);
-        expect(out).toContain("• huggingface_hub gc (detached revisions)");
-        expect(out).toContain(`UV CALLED: run ${HUGGINGFACE_SCRIPT}`);
-      } finally {
-        rmSync(stubDir, { recursive: true, force: true });
-      }
+      using _cleanupStubDir = {
+        [Symbol.dispose]: () =>
+          rmSync(stubDir, { recursive: true, force: true }),
+      };
+      makeUvStub(stubDir, false);
+      const { out, code } = runScript(["--home", fixtureHome], {
+        pathDirs: [stubDir],
+      });
+      expect(code).toBe(0);
+      expect(out).toContain("• huggingface_hub gc (detached revisions)");
+      expect(out).toContain(`UV CALLED: run ${HUGGINGFACE_SCRIPT}`);
     });
 
     test("uv absent -> no huggingface line at all", () => {

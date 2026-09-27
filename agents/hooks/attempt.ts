@@ -1,4 +1,4 @@
-// A throw, as a value — with no try statement anywhere. `.oxlintrc.json` bans `try { } catch` in
+// A throw, as a value — with no try statement anywhere. `.oxlintrc.json` bans the `try` statement in
 // every audited *.ts with no exception, so the catching happens in Promise.try: it runs `fn`
 // synchronously and turns a synchronous throw (or a rejection) into a rejected promise, which
 // `.then(onOk, onErr)` maps to a value.

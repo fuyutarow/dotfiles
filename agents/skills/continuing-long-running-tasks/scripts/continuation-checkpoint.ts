@@ -94,28 +94,29 @@ function digest(text: string): string {
 }
 
 function readRegularText(path: string, code: string): string {
-	let descriptor: number | undefined;
-	try {
-		const result = fromThrowable((): string => {
-			descriptor = openSync(
-				path,
-				constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+	const box: { descriptor?: number } = {};
+	using _closeDescriptor = {
+		[Symbol.dispose]: () => {
+			if (box.descriptor !== undefined) closeSync(box.descriptor);
+		},
+	};
+	const result = fromThrowable((): string => {
+		box.descriptor = openSync(
+			path,
+			constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+		);
+		const stat = fstatSync(box.descriptor);
+		if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) {
+			throw new TransactionError(
+				code,
+				`file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
 			);
-			const stat = fstatSync(descriptor);
-			if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) {
-				throw new TransactionError(
-					code,
-					`file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
-				);
-			}
-			return readFileSync(descriptor, "utf8");
-		})();
-		if (result.isOk()) return result.value;
-		if (result.error instanceof TransactionError) throw result.error;
-		throw new TransactionError(code, "file could not be read safely");
-	} finally {
-		if (descriptor !== undefined) closeSync(descriptor);
-	}
+		}
+		return readFileSync(box.descriptor, "utf8");
+	})();
+	if (result.isOk()) return result.value;
+	if (result.error instanceof TransactionError) throw result.error;
+	throw new TransactionError(code, "file could not be read safely");
 }
 
 function workspaceRoot(recordPath: string, slot?: string): string {
@@ -292,93 +293,96 @@ function applyCheckpoint(args: {
 	let lockHeld = false;
 	let temporary: string | undefined;
 
-	try {
-		const lockWritten = fromThrowable(() =>
-			writeFileSync(
-				lock,
-				`${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
-				{ flag: "wx", mode: 0o600 },
-			),
-		)();
-		if (lockWritten.isErr()) {
-			throw new TransactionError(
-				"TCR40",
-				"checkpoint is locked; do not wait or reclaim automatically",
-			);
-		}
-		lockHeld = true;
-
-		const current = snapshot(path, root);
-		if (current.revision !== args.baseRevision) {
-			throw new TransactionError(
-				"TCR42",
-				`base revision is stale; current is ${current.revision}`,
-			);
-		}
-		if (current.sha256 !== args.baseSha256) {
-			throw new TransactionError("TCR43", "base digest is stale");
-		}
-		if (current.writer !== caller) {
-			throw new TransactionError(
-				"TCR44",
-				`caller is ${caller}, record writer is ${current.writer}`,
-			);
-		}
-
-		const candidateText = proposalText(args.proposal, path);
-		const candidate = validateProposal(
-			current,
-			candidateText,
-			root,
-			args.handoffSlot,
-		);
-
-		const rechecked = snapshot(path, root);
-		if (
-			rechecked.revision !== current.revision ||
-			rechecked.sha256 !== current.sha256
-		) {
-			throw new TransactionError(
-				"TCR43",
-				"record changed while the checkpoint was prepared",
-			);
-		}
-
-		temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-		const mode = lstatSync(path).mode & 0o777;
-		writeFileSync(temporary, candidateText, { flag: "wx", mode });
-		const descriptor = openSync(temporary, constants.O_RDONLY);
-		try {
-			fsyncSync(descriptor);
-		} finally {
-			closeSync(descriptor);
-		}
-		renameSync(temporary, path);
-		temporary = undefined;
-
-		const proposalRemoved = fromThrowable(() =>
-			unlinkSync(resolve(args.proposal)),
-		)().isOk();
-		process.stdout.write(
-			`${JSON.stringify({
-				path,
-				proposal_removed: proposalRemoved,
-				revision: candidate.revision,
-				sha256: digest(candidateText),
-				status: "applied",
-				writer: candidate.writer,
-			})}\n`,
-		);
-	} finally {
-		if (temporary !== undefined) {
-			// The randomized incomplete file is never a canonical record.
-			fromThrowable(() => unlinkSync(temporary as string))();
-		}
+	// Disposal runs in reverse registration order, so the lock disposer is
+	// registered first and fires second — matching the original finally's
+	// temporary-then-lock cleanup order.
+	using _cleanup = new DisposableStack();
+	_cleanup.defer(() => {
 		if (lockHeld) {
 			// Fail closed on the next update; stale locks require human inspection.
 			fromThrowable(() => unlinkSync(lock))();
 		}
+	});
+	_cleanup.defer(() => {
+		if (temporary !== undefined) {
+			// The randomized incomplete file is never a canonical record.
+			fromThrowable(() => unlinkSync(temporary as string))();
+		}
+	});
+
+	const lockWritten = fromThrowable(() =>
+		writeFileSync(
+			lock,
+			`${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
+			{ flag: "wx", mode: 0o600 },
+		),
+	)();
+	if (lockWritten.isErr()) {
+		throw new TransactionError(
+			"TCR40",
+			"checkpoint is locked; do not wait or reclaim automatically",
+		);
 	}
+	lockHeld = true;
+
+	const current = snapshot(path, root);
+	if (current.revision !== args.baseRevision) {
+		throw new TransactionError(
+			"TCR42",
+			`base revision is stale; current is ${current.revision}`,
+		);
+	}
+	if (current.sha256 !== args.baseSha256) {
+		throw new TransactionError("TCR43", "base digest is stale");
+	}
+	if (current.writer !== caller) {
+		throw new TransactionError(
+			"TCR44",
+			`caller is ${caller}, record writer is ${current.writer}`,
+		);
+	}
+
+	const candidateText = proposalText(args.proposal, path);
+	const candidate = validateProposal(
+		current,
+		candidateText,
+		root,
+		args.handoffSlot,
+	);
+
+	const rechecked = snapshot(path, root);
+	if (
+		rechecked.revision !== current.revision ||
+		rechecked.sha256 !== current.sha256
+	) {
+		throw new TransactionError(
+			"TCR43",
+			"record changed while the checkpoint was prepared",
+		);
+	}
+
+	temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
+	const mode = lstatSync(path).mode & 0o777;
+	writeFileSync(temporary, candidateText, { flag: "wx", mode });
+	const descriptor = openSync(temporary, constants.O_RDONLY);
+	using _closeDescriptor = { [Symbol.dispose]: () => closeSync(descriptor) };
+	fsyncSync(descriptor);
+	renameSync(temporary, path);
+	temporary = undefined;
+
+	const proposalRemoved = fromThrowable(() =>
+		unlinkSync(resolve(args.proposal)),
+	)().isOk();
+	process.stdout.write(
+		`${JSON.stringify({
+			path,
+			proposal_removed: proposalRemoved,
+			revision: candidate.revision,
+			sha256: digest(candidateText),
+			status: "applied",
+			writer: candidate.writer,
+		})}\n`,
+	);
 }
 
 function main(): void {

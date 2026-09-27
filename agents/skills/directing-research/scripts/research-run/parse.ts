@@ -124,7 +124,7 @@ export async function loadPacket(
   if (initialMetadata.isSymbolicLink() || canonicalPath !== resolved)
     throw new Error(`symlink inputs are refused: ${path}`);
   if (!initialMetadata.isFile()) throw new Error(`not a regular file: ${path}`);
-  const handle = await Promise.try(() =>
+  await using handle = await Promise.try(() =>
     open(resolved, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)),
   ).then(
     (value) => value,
@@ -134,28 +134,24 @@ export async function loadPacket(
       );
     },
   );
-  try {
-    const metadata = await handle.stat();
-    if (
-      metadata.dev !== initialMetadata.dev ||
-      metadata.ino !== initialMetadata.ino
-    )
-      throw new Error(`input changed during inspection: ${path}`);
-    if (!metadata.isFile()) throw new Error(`not a regular file: ${path}`);
-    if (metadata.size > MAX_PACKET_BYTES)
-      throw new Error(
-        `packet exceeds ${MAX_PACKET_BYTES} bytes: ${path} (${metadata.size})`,
-      );
-    const bytes = await readBounded(handle);
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return {
-      digest: sha256(bytes),
-      fields: parseFields(text, resolved, kind, findings),
-      kind,
-      path: resolved,
-      text,
-    };
-  } finally {
-    await handle.close();
-  }
+  const metadata = await handle.stat();
+  if (
+    metadata.dev !== initialMetadata.dev ||
+    metadata.ino !== initialMetadata.ino
+  )
+    throw new Error(`input changed during inspection: ${path}`);
+  if (!metadata.isFile()) throw new Error(`not a regular file: ${path}`);
+  if (metadata.size > MAX_PACKET_BYTES)
+    throw new Error(
+      `packet exceeds ${MAX_PACKET_BYTES} bytes: ${path} (${metadata.size})`,
+    );
+  const bytes = await readBounded(handle);
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return {
+    digest: sha256(bytes),
+    fields: parseFields(text, resolved, kind, findings),
+    kind,
+    path: resolved,
+    text,
+  };
 }

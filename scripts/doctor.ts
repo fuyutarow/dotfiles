@@ -179,53 +179,54 @@ export async function checkSettings(ctx: Ctx): Promise<Finding> {
     return skip("settings", "no agents/claude/settings.json in this checkout");
   }
   const scratch = mkdtempSync(join(tmpdir(), "doctor-settings-"));
-  try {
-    const r = await run(
-      ["bun", join(ctx.dotfiles, "scripts/render-claude-settings.ts")],
-      {
-        ms: 30_000,
-        env: {
-          HOME: scratch,
-          DOTFILES: ctx.dotfiles,
-          CLAUDE_SETTINGS_PRIVATE: join(
-            ctx.home,
-            ".claude",
-            "settings.private.json",
-          ),
-        },
+  // Cleanup runs on return AND on throw, same as the prior try/finally: the scratch directory is
+  // removed once this block ends, in either case.
+  using _scratch = {
+    [Symbol.dispose]: () => rmSync(scratch, { recursive: true, force: true }),
+  };
+  const r = await run(
+    ["bun", join(ctx.dotfiles, "scripts/render-claude-settings.ts")],
+    {
+      ms: 30_000,
+      env: {
+        HOME: scratch,
+        DOTFILES: ctx.dotfiles,
+        CLAUDE_SETTINGS_PRIVATE: join(
+          ctx.home,
+          ".claude",
+          "settings.private.json",
+        ),
       },
+    },
+  );
+  if (r.timedOut || r.code !== 0) {
+    return warn(
+      "settings",
+      `could not render a reference copy (exit ${r.code}): ${r.out.trim()}`,
     );
-    if (r.timedOut || r.code !== 0) {
-      return warn(
-        "settings",
-        `could not render a reference copy (exit ${r.code}): ${r.out.trim()}`,
-      );
-    }
-    const want = await readJson(join(scratch, ".claude", "settings.json"));
-    const have = await readJson(live);
-    if (have === null) {
-      return fail(
-        "settings",
-        `${live} is missing or not JSON`,
-        "mise run link:dots",
-      );
-    }
-    if (!Bun.deepEquals(want, have, true)) {
-      const keys = new Set([...Object.keys(want ?? {}), ...Object.keys(have)]);
-      const differing = [...keys].filter(
-        (k) => !Bun.deepEquals(want?.[k], have[k], true),
-      );
-      return fail(
-        "settings",
-        `${live} differs from a fresh render of the committed base + private overlay`,
-        "mise run link:dots",
-        differing.map((k) => `top-level key differs: ${k}`),
-      );
-    }
-    return pass("settings", "~/.claude/settings.json matches a fresh render");
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
   }
+  const want = await readJson(join(scratch, ".claude", "settings.json"));
+  const have = await readJson(live);
+  if (have === null) {
+    return fail(
+      "settings",
+      `${live} is missing or not JSON`,
+      "mise run link:dots",
+    );
+  }
+  if (!Bun.deepEquals(want, have, true)) {
+    const keys = new Set([...Object.keys(want ?? {}), ...Object.keys(have)]);
+    const differing = [...keys].filter(
+      (k) => !Bun.deepEquals(want?.[k], have[k], true),
+    );
+    return fail(
+      "settings",
+      `${live} differs from a fresh render of the committed base + private overlay`,
+      "mise run link:dots",
+      differing.map((k) => `top-level key differs: ${k}`),
+    );
+  }
+  return pass("settings", "~/.claude/settings.json matches a fresh render");
 }
 
 export async function checkSkills(ctx: Ctx): Promise<Finding> {

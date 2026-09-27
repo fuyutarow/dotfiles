@@ -60,6 +60,74 @@ async function jsonRecord(
     : undefined;
 }
 
+async function probeAll(models: readonly string[], grok: string): Promise<number> {
+  const probeDir = await mkdtemp(join(tmpdir(), "driving-grok-"));
+  // Disposal runs when this function returns or throws, before `main` calls
+  // process.exit — same order the old try/finally guaranteed.
+  await using _cleanupProbeDir = {
+    [Symbol.asyncDispose]: () => rm(probeDir, { recursive: true, force: true }),
+  };
+  let failures = 0;
+  for (const model of models) {
+    const result = await run(
+      [
+        grok,
+        "-p",
+        "Reply with exactly: OK",
+        "-m",
+        model,
+        "--output-format",
+        "json",
+        "--sandbox",
+        "read-only",
+      ],
+      probeDir,
+      120_000,
+    );
+    const envelope =
+      result.exitCode === 0 ? await jsonRecord(result.output) : undefined;
+    const text = envelope?.text;
+    const usage =
+      typeof envelope?.usage === "object" && envelope.usage !== null
+        ? envelope.usage
+        : undefined;
+    const tokens =
+      typeof usage === "object" && usage !== null && "total_tokens" in usage
+        ? String(usage.total_tokens)
+        : "?";
+    if (result.exitCode === 0 && text === "OK") {
+      process.stdout.write(
+        `RESULT: AVAILABLE ${model} (usage.total_tokens: ${tokens})\n`,
+      );
+      continue;
+    }
+    if (result.output.includes("unknown model id")) {
+      process.stdout.write(
+        `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env.GROK ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
+      );
+    } else {
+      let note: string;
+      if (result.timedOut) {
+        note = "timeout — not a catalog verdict";
+      } else if (result.exitCode === 0) {
+        note =
+          'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
+      } else {
+        note = `rc=${result.exitCode}`;
+      }
+      process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
+      for (const line of result.output
+        .split("\n")
+        .filter((entry) => /Error|error|denied|quota|auth/.test(entry))
+        .slice(0, 2)) {
+        process.stdout.write(`  ${line}\n`);
+      }
+    }
+    failures += 1;
+  }
+  return failures;
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -89,69 +157,7 @@ async function main(): Promise<void> {
     process.exit(version.exitCode === 0 && roster.exitCode === 0 ? 0 : 2);
   }
 
-  const probeDir = await mkdtemp(join(tmpdir(), "driving-grok-"));
-  let failures = 0;
-  try {
-    for (const model of models) {
-      const result = await run(
-        [
-          grok,
-          "-p",
-          "Reply with exactly: OK",
-          "-m",
-          model,
-          "--output-format",
-          "json",
-          "--sandbox",
-          "read-only",
-        ],
-        probeDir,
-        120_000,
-      );
-      const envelope =
-        result.exitCode === 0 ? await jsonRecord(result.output) : undefined;
-      const text = envelope?.text;
-      const usage =
-        typeof envelope?.usage === "object" && envelope.usage !== null
-          ? envelope.usage
-          : undefined;
-      const tokens =
-        typeof usage === "object" && usage !== null && "total_tokens" in usage
-          ? String(usage.total_tokens)
-          : "?";
-      if (result.exitCode === 0 && text === "OK") {
-        process.stdout.write(
-          `RESULT: AVAILABLE ${model} (usage.total_tokens: ${tokens})\n`,
-        );
-        continue;
-      }
-      if (result.output.includes("unknown model id")) {
-        process.stdout.write(
-          `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env.GROK ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
-        );
-      } else {
-        let note: string;
-        if (result.timedOut) {
-          note = "timeout — not a catalog verdict";
-        } else if (result.exitCode === 0) {
-          note =
-            'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
-        } else {
-          note = `rc=${result.exitCode}`;
-        }
-        process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
-        for (const line of result.output
-          .split("\n")
-          .filter((entry) => /Error|error|denied|quota|auth/.test(entry))
-          .slice(0, 2)) {
-          process.stdout.write(`  ${line}\n`);
-        }
-      }
-      failures += 1;
-    }
-  } finally {
-    await rm(probeDir, { recursive: true, force: true });
-  }
+  const failures = await probeAll(models, grok);
   process.exit(failures === 0 ? 0 : 1);
 }
 

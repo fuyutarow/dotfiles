@@ -72,26 +72,23 @@ describe("driving-jev runner", () => {
         });
       },
     });
-    try {
-      const file = await requestFile();
-      const result = await run([
-        file,
-        "--base-url",
-        `http://127.0.0.1:${server.port}`,
-        "--allow-custom-base-url",
-      ]);
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toEqual({
-        model: "jev-test",
-        answers: { asks_for_refund: { type: "noul", noul: 0.9 } },
-        usage: { input_tokens: 1, output_tokens: 1 },
-      });
-      expect(observedAuthorization).toBe("Bearer fixture-key");
-      expect(observedBody).toEqual(requestBody());
-    } finally {
-      server.stop(true);
-    }
+    using _stopServer = { [Symbol.dispose]: () => server.stop(true) };
+    const file = await requestFile();
+    const result = await run([
+      file,
+      "--base-url",
+      `http://127.0.0.1:${server.port}`,
+      "--allow-custom-base-url",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      model: "jev-test",
+      answers: { asks_for_refund: { type: "noul", noul: 0.9 } },
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    expect(observedAuthorization).toBe("Bearer fixture-key");
+    expect(observedBody).toEqual(requestBody());
   });
 
   test("accepts one request on stdin", async () => {
@@ -101,21 +98,18 @@ describe("driving-jev runner", () => {
         return Response.json({ model: "jev-test", answers: {}, usage: {} });
       },
     });
-    try {
-      const result = await run(
-        [
-          "-",
-          "--base-url",
-          `http://127.0.0.1:${server.port}`,
-          "--allow-custom-base-url",
-        ],
-        JSON.stringify(requestBody()),
-      );
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout).model).toBe("jev-test");
-    } finally {
-      server.stop(true);
-    }
+    using _stopServer = { [Symbol.dispose]: () => server.stop(true) };
+    const result = await run(
+      [
+        "-",
+        "--base-url",
+        `http://127.0.0.1:${server.port}`,
+        "--allow-custom-base-url",
+      ],
+      JSON.stringify(requestBody()),
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).model).toBe("jev-test");
   });
 
   test("rejects invalid local requests before the network", async () => {
@@ -150,22 +144,19 @@ describe("driving-jev runner", () => {
         return Response.json({ error: "fixture" }, { status });
       },
     });
-    try {
-      const file = await requestFile();
-      const common = [
-        file,
-        "--base-url",
-        `http://127.0.0.1:${server.port}`,
-        "--allow-custom-base-url",
-      ];
-      const auth = await run(common);
-      expect(auth.exitCode).toBe(3);
-      status = 429;
-      const retryable = await run(common);
-      expect(retryable.exitCode).toBe(4);
-    } finally {
-      server.stop(true);
-    }
+    using _stopServer = { [Symbol.dispose]: () => server.stop(true) };
+    const file = await requestFile();
+    const common = [
+      file,
+      "--base-url",
+      `http://127.0.0.1:${server.port}`,
+      "--allow-custom-base-url",
+    ];
+    const auth = await run(common);
+    expect(auth.exitCode).toBe(3);
+    status = 429;
+    const retryable = await run(common);
+    expect(retryable.exitCode).toBe(4);
   });
 
   test("keeps help, unknown flags, prototype flags, and extra operands distinct", async () => {

@@ -135,33 +135,32 @@ describe("WSL capacity recovery decisions", () => {
       stdout: "ignore",
       stderr: "ignore",
     });
-    try {
-      const ticks = startTicks(readFileSync(`/proc/${proc.pid}/stat`, "utf8"));
-      expect(ticks).not.toBeNull();
-      expect(readFileSync(`/proc/${proc.pid}/comm`, "utf8").trim()).toBe(
-        "julia",
-      );
-      await stopCompute([
-        {
-          kind: "pid",
-          pid: proc.pid,
-          startTicks: "wrong-generation",
-          comm: "julia",
-        },
-      ]);
-      expect(proc.exitCode).toBeNull();
-      await stopCompute([
-        {
-          kind: "pid",
-          pid: proc.pid,
-          startTicks: ticks ?? "",
-          comm: "julia",
-        },
-      ]);
-      expect(await proc.exited).not.toBe(0);
-    } finally {
-      if (proc.exitCode === null) proc.kill();
-      rmSync(dir, { recursive: true, force: true });
-    }
+    using _cleanup = {
+      [Symbol.dispose]: () => {
+        if (proc.exitCode === null) proc.kill();
+        rmSync(dir, { recursive: true, force: true });
+      },
+    };
+    const ticks = startTicks(readFileSync(`/proc/${proc.pid}/stat`, "utf8"));
+    expect(ticks).not.toBeNull();
+    expect(readFileSync(`/proc/${proc.pid}/comm`, "utf8").trim()).toBe("julia");
+    await stopCompute([
+      {
+        kind: "pid",
+        pid: proc.pid,
+        startTicks: "wrong-generation",
+        comm: "julia",
+      },
+    ]);
+    expect(proc.exitCode).toBeNull();
+    await stopCompute([
+      {
+        kind: "pid",
+        pid: proc.pid,
+        startTicks: ticks ?? "",
+        comm: "julia",
+      },
+    ]);
+    expect(await proc.exited).not.toBe(0);
   });
 });

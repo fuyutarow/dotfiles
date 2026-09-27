@@ -310,11 +310,10 @@ function scanFd(fd: number, pat: Buffer): boolean | undefined {
 function binaryContains(path: string, needle: string): boolean | undefined {
   const opened = fromThrowable(() => openSync(path, "r"))();
   if (opened.isErr()) return undefined;
-  try {
-    return scanFd(opened.value, Buffer.from(needle));
-  } finally {
-    closeSync(opened.value);
-  }
+  // Cleanup runs on return AND on throw, same as the prior try/finally: the fd closes once this
+  // block ends, in either case.
+  using _fd = { [Symbol.dispose]: () => closeSync(opened.value) };
+  return scanFd(opened.value, Buffer.from(needle));
 }
 
 /**

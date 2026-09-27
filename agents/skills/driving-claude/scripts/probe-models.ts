@@ -42,55 +42,54 @@ export async function probeModels(
   const records: ProbeRecord[] = [];
   for (const model of models) {
     const target = await mkdtemp(join(tmpdir(), "driving-claude-"));
-    try {
-      const config: RunConfig = {
-        target,
-        prompt: "Reply with exactly: OK",
-        model,
-        permissionMode: "plan",
-        maxTurns: 1,
-        timeoutMs: options.timeoutMs,
-        maxBudgetUsd: options.maxBudgetUsd,
-        safeMode: true,
-        bare: false,
-        claudeBin: options.claudeBin,
-      };
-      const run = await runClaude(config);
-      const envelope = run.claude;
-      const available =
-        run.exitCode === 0 &&
-        isRecord(envelope) &&
-        typeof envelope.result === "string" &&
-        typeof envelope.session_id === "string";
-      const cost =
-        available && isRecord(envelope)
-          ? String(envelope.total_cost_usd ?? "?")
-          : "?";
-      const session =
-        available && isRecord(envelope) ? String(envelope.session_id) : "?";
-      records.push(
-        available
-          ? {
-              model,
-              kind: "AVAILABLE",
-              exitCode: 0,
-              detail: `session=${session} cost=${cost}`,
-            }
-          : {
-              model,
-              kind: "INCONCLUSIVE",
-              exitCode: run.exitCode,
-              detail:
-                run.parseError ??
-                nonEmpty(
-                  run.stderr.slice(0, 500),
-                  "no parseable Claude JSON envelope",
-                ),
-            },
-      );
-    } finally {
-      await rm(target, { recursive: true, force: true });
-    }
+    await using _cleanupTarget = {
+      [Symbol.asyncDispose]: () => rm(target, { recursive: true, force: true }),
+    };
+    const config: RunConfig = {
+      target,
+      prompt: "Reply with exactly: OK",
+      model,
+      permissionMode: "plan",
+      maxTurns: 1,
+      timeoutMs: options.timeoutMs,
+      maxBudgetUsd: options.maxBudgetUsd,
+      safeMode: true,
+      bare: false,
+      claudeBin: options.claudeBin,
+    };
+    const run = await runClaude(config);
+    const envelope = run.claude;
+    const available =
+      run.exitCode === 0 &&
+      isRecord(envelope) &&
+      typeof envelope.result === "string" &&
+      typeof envelope.session_id === "string";
+    const cost =
+      available && isRecord(envelope)
+        ? String(envelope.total_cost_usd ?? "?")
+        : "?";
+    const session =
+      available && isRecord(envelope) ? String(envelope.session_id) : "?";
+    records.push(
+      available
+        ? {
+            model,
+            kind: "AVAILABLE",
+            exitCode: 0,
+            detail: `session=${session} cost=${cost}`,
+          }
+        : {
+            model,
+            kind: "INCONCLUSIVE",
+            exitCode: run.exitCode,
+            detail:
+              run.parseError ??
+              nonEmpty(
+                run.stderr.slice(0, 500),
+                "no parseable Claude JSON envelope",
+              ),
+          },
+    );
   }
   return records;
 }

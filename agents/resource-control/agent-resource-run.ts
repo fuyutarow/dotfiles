@@ -1038,47 +1038,40 @@ async function acquireLease(
     requestedStateDirectory ?? defaultStateDirectory(),
   );
   const unlock = await acquireStateLock(stateDirectory);
-  try {
-    const reservations = liveReservations(stateDirectory);
-    const admission = decideAdmission(manifest, snapshot, reservations);
-    if (!admission.ok) return admission;
-    const reservationId = `${process.pid}-${randomUUID()}`;
-    const reservation: Reservation = {
-      schema: 1,
-      reservation_id: reservationId,
-      job_id: manifest.job_id,
-      controller_pid: process.pid,
-      cpu_ids: admission.cpu_ids,
-      host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-      scratch_bytes: manifest.scratch_bytes,
-      device: admission.device,
-      started_at: Temporal.Now.instant().toString({
-        fractionalSecondDigits: 3,
-      }),
-    };
-    const reservationPath = join(
-      stateDirectory,
-      `${reservationId}.reservation.json`,
-    );
-    const fd = openSync(reservationPath, "wx", 0o600);
-    try {
-      writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
-    } finally {
-      closeSync(fd);
-    }
-    return { reservation, reservationPath, stateDirectory };
-  } finally {
-    unlock();
-  }
+  // Cleanup runs on return AND on throw, in the same order the prior try/finally gave: the lock
+  // release always fires last, once this function's own block is left.
+  using _lock = { [Symbol.dispose]: unlock };
+  const reservations = liveReservations(stateDirectory);
+  const admission = decideAdmission(manifest, snapshot, reservations);
+  if (!admission.ok) return admission;
+  const reservationId = `${process.pid}-${randomUUID()}`;
+  const reservation: Reservation = {
+    schema: 1,
+    reservation_id: reservationId,
+    job_id: manifest.job_id,
+    controller_pid: process.pid,
+    cpu_ids: admission.cpu_ids,
+    host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+    scratch_bytes: manifest.scratch_bytes,
+    device: admission.device,
+    started_at: Temporal.Now.instant().toString({
+      fractionalSecondDigits: 3,
+    }),
+  };
+  const reservationPath = join(
+    stateDirectory,
+    `${reservationId}.reservation.json`,
+  );
+  const fd = openSync(reservationPath, "wx", 0o600);
+  using _fd = { [Symbol.dispose]: () => closeSync(fd) };
+  writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
+  return { reservation, reservationPath, stateDirectory };
 }
 
 async function releaseLease(lease: Lease): Promise<void> {
   const unlock = await acquireStateLock(lease.stateDirectory);
-  try {
-    unlinkIgnoringMissing(lease.reservationPath);
-  } finally {
-    unlock();
-  }
+  using _lock = { [Symbol.dispose]: unlock };
+  unlinkIgnoringMissing(lease.reservationPath);
 }
 
 /**
@@ -1648,12 +1641,11 @@ export async function checkJob(
     report(`DENY job=${manifest.job_id} reason=${acquired.reason}`);
     return { ok: false, exitCode: 69, reason: "admission" };
   }
-  try {
-    report(`${admissionDescription(acquired)} check_only=true`);
-    return { ok: true, exitCode: 0 };
-  } finally {
-    await releaseLease(acquired);
-  }
+  // Cleanup runs on return AND on throw, in the same order the prior try/finally gave — releaseLease
+  // is async, so this is an AsyncDisposable rather than the sync `using` used above.
+  await using _lease = { [Symbol.asyncDispose]: () => releaseLease(acquired) };
+  report(`${admissionDescription(acquired)} check_only=true`);
+  return { ok: true, exitCode: 0 };
 }
 
 /**
@@ -1696,6 +1688,10 @@ export async function executeJob(
       "executeJob requires manifestSource from the exact manifest bytes read by the runner",
     );
   }
+  // Captured into its own binding: TypeScript's narrowing of `options.manifestSource` above does
+  // not survive into the async dispose closure below (a distinct function scope), so the closure
+  // reads this local instead of the possibly-undefined property.
+  const manifestSource = options.manifestSource;
   if (Bun.which("setsid") === null || Bun.which("taskset") === null) {
     report(
       `DENY job=${manifest.job_id} reason=setsid and taskset are required for enforcement`,
@@ -1851,44 +1847,53 @@ export async function executeJob(
 
   let jobResult: ExecutionResult | undefined;
   let cleanupFailed = false;
-  try {
-    jobResult = await runJob();
-  } finally {
-    timeoutSignal.removeEventListener("abort", onTimeout);
-    process.off("SIGINT", onInterrupt);
-    process.off("SIGTERM", onInterrupt);
-    if (pgid !== null && processGroupUsage(pgid).processes > 0) {
-      await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
-    }
-    // Read BEFORE scope teardown: MemoryPeak lives in the scope's cgroup, and stopping the scope
-    // releases that cgroup — see readScopeMemoryPeak's header comment.
-    const cgroupPeakBytes =
-      scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
-    const measuredPeak: MeasuredPeak = {
-      schema: 1,
-      job_id: manifest.job_id,
-      ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
-      ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
-      ...(peakVramBytes === undefined
-        ? {}
-        : {
-            vram_peak_measured_bytes: peakVramBytes,
-            vram_peak_source: "nvidia-smi" as const,
+  {
+    // Cleanup runs on return AND on throw, in the same order the prior try/finally gave: the
+    // block below is the sole scope `_cleanup` disposes at, so it fires exactly once, right after
+    // `runJob()` settles (normally or by throwing) and strictly before the `cleanupFailed` check
+    // that follows this block — never deferred to executeJob's own return, which would let that
+    // check run against a stale value.
+    await using _cleanup = {
+      [Symbol.asyncDispose]: async () => {
+        timeoutSignal.removeEventListener("abort", onTimeout);
+        process.off("SIGINT", onInterrupt);
+        process.off("SIGTERM", onInterrupt);
+        if (pgid !== null && processGroupUsage(pgid).processes > 0) {
+          await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
+        }
+        // Read BEFORE scope teardown: MemoryPeak lives in the scope's cgroup, and stopping the
+        // scope releases that cgroup — see readScopeMemoryPeak's header comment.
+        const cgroupPeakBytes =
+          scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
+        const measuredPeak: MeasuredPeak = {
+          schema: 1,
+          job_id: manifest.job_id,
+          ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
+          ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
+          ...(peakVramBytes === undefined
+            ? {}
+            : {
+                vram_peak_measured_bytes: peakVramBytes,
+                vram_peak_source: "nvidia-smi" as const,
+              }),
+          released_at: Temporal.Now.instant().toString({
+            fractionalSecondDigits: 3,
           }),
-      released_at: Temporal.Now.instant().toString({
-        fractionalSecondDigits: 3,
-      }),
+        };
+        report(releaseDescription(measuredPeak));
+        writePeakArtifact(manifestSource.path, measuredPeak);
+        const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
+        const scopeStopped =
+          scopeUnit === null ? true : scopeCleanup(scopeUnit);
+        await releaseLease(lease);
+        // Overriding the job body's result is the point: a job that PASSED but left its systemd
+        // scope alive must not report success — the cleanup failure outranks the job result.
+        // Recorded here (a plain assignment, not a control-flow statement) and acted on AFTER
+        // this block, so it can override `jobResult` without an unsafe throw-during-disposal.
+        cleanupFailed = !scopeStopped;
+      },
     };
-    report(releaseDescription(measuredPeak));
-    writePeakArtifact(options.manifestSource.path, measuredPeak);
-    const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
-    const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
-    await releaseLease(lease);
-    // Overriding the job body's result is the point: a job that PASSED but left its systemd
-    // scope alive must not report success — the cleanup failure outranks the job result.
-    // Recorded here (a plain assignment, not a control-flow statement) and acted on AFTER this
-    // finally block, so it can override `jobResult` without an unsafe throw-in-finally.
-    cleanupFailed = !scopeStopped;
+    jobResult = await runJob();
   }
   if (cleanupFailed) {
     throw new StateError(

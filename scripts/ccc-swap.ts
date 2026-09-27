@@ -284,21 +284,20 @@ export function computeIndexDimension(
   )();
   if (dbResult.isErr()) return null;
   const db = dbResult.value;
-  try {
-    return fromThrowable(() => {
-      const row = db
-        .query(
-          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
-        )
-        .get() as { sql: string } | null;
-      const match = row?.sql?.match(/embedding\s+float\[(\d+)\]/);
-      if (!match?.[1]) return null;
-      const dim = Number(match[1]);
-      return Number.isFinite(dim) ? dim : null;
-    })().unwrapOr(null);
-  } finally {
-    db.close();
-  }
+  // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
+  // once this block ends, in either case.
+  using _db = { [Symbol.dispose]: () => db.close() };
+  return fromThrowable(() => {
+    const row = db
+      .query(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
+      )
+      .get() as { sql: string } | null;
+    const match = row?.sql?.match(/embedding\s+float\[(\d+)\]/);
+    if (!match?.[1]) return null;
+    const dim = Number(match[1]);
+    return Number.isFinite(dim) ? dim : null;
+  })().unwrapOr(null);
 }
 
 /** Row count of `code_chunks_vec_rowids` — a plain table, queryable without the vec0 extension. */
@@ -309,18 +308,17 @@ export function countIndexedRows(targetSqliteDbPath: string): number | null {
   )();
   if (dbResult.isErr()) return null;
   const db = dbResult.value;
-  try {
-    return fromThrowable(() => {
-      const row = db
-        .query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids")
-        .get() as {
-        n: number;
-      } | null;
-      return row ? row.n : null;
-    })().unwrapOr(null);
-  } finally {
-    db.close();
-  }
+  // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
+  // once this block ends, in either case.
+  using _db = { [Symbol.dispose]: () => db.close() };
+  return fromThrowable(() => {
+    const row = db
+      .query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids")
+      .get() as {
+      n: number;
+    } | null;
+    return row ? row.n : null;
+  })().unwrapOr(null);
 }
 
 /** Majority-vote "expected" dimension across already-indexed projects; null-dim entries excluded. */

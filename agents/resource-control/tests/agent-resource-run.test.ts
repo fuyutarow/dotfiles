@@ -607,29 +607,32 @@ describe("kernel enforcement", () => {
     const inherited = new Map(
       reservedKeys.map((key) => [key, process.env[key]]),
     );
-    try {
-      for (const key of reservedKeys) process.env[key] = "caller-spoofed";
-      const environment = commandEnvironment(manifest, reserved, receipt);
-      expect(environment).toMatchObject({
-        AGENT_RESOURCE_JOB_ID: "test-job",
-        AGENT_RESOURCE_CPU_IDS: "2,5",
-        AGENT_RESOURCE_MAX_PROCESSES: "2",
-        AGENT_RESOURCE_HOST_RAM_BYTES: String(512 * MiB),
-        AGENT_RESOURCE_SCRATCH_BYTES: String(64 * MiB),
-        AGENT_RESOURCE_MANIFEST_SHA256: source.sha256,
-        AGENT_RESOURCE_MANIFEST_PATH: source.path,
-        AGENT_RESOURCE_ADMISSION_ID: "admission-456",
-        AGENT_RESOURCE_RESERVATION_ID: "reservation-123",
-        AGENT_RESOURCE_ADMISSION_RECEIPT: expectedPayload,
-        AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256: receipt.sha256,
-      });
-      expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
-      expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
-      expect(environment.JULIA_CUDA_SOFT_MEMORY_LIMIT).toBeUndefined();
-      expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
-    } finally {
-      for (const [key, value] of inherited) restoreEnvValue(key, value);
-    }
+    // Cleanup runs on return AND on throw, same as the prior try/finally: a `using` block whose
+    // only job is to restore every spoofed env var when this test's scope ends, in any manner.
+    using _restoreEnv = {
+      [Symbol.dispose]: () => {
+        for (const [key, value] of inherited) restoreEnvValue(key, value);
+      },
+    };
+    for (const key of reservedKeys) process.env[key] = "caller-spoofed";
+    const environment = commandEnvironment(manifest, reserved, receipt);
+    expect(environment).toMatchObject({
+      AGENT_RESOURCE_JOB_ID: "test-job",
+      AGENT_RESOURCE_CPU_IDS: "2,5",
+      AGENT_RESOURCE_MAX_PROCESSES: "2",
+      AGENT_RESOURCE_HOST_RAM_BYTES: String(512 * MiB),
+      AGENT_RESOURCE_SCRATCH_BYTES: String(64 * MiB),
+      AGENT_RESOURCE_MANIFEST_SHA256: source.sha256,
+      AGENT_RESOURCE_MANIFEST_PATH: source.path,
+      AGENT_RESOURCE_ADMISSION_ID: "admission-456",
+      AGENT_RESOURCE_RESERVATION_ID: "reservation-123",
+      AGENT_RESOURCE_ADMISSION_RECEIPT: expectedPayload,
+      AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256: receipt.sha256,
+    });
+    expect(environment.AGENT_RESOURCE_VRAM_BYTES).toBeUndefined();
+    expect(environment.JULIA_CUDA_HARD_MEMORY_LIMIT).toBeUndefined();
+    expect(environment.JULIA_CUDA_SOFT_MEMORY_LIMIT).toBeUndefined();
+    expect(environment.CUDA_VISIBLE_DEVICES).toBe("");
   });
 });
 

@@ -68,17 +68,16 @@ describe("lint-floor passthrough (no --fix)", () => {
       "#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(Bun.argv.slice(2)));\n",
     );
     chmodSync(fakeBunx, 0o755);
-    try {
-      const { out, err, code } = run(["--__proto__", "target.md"], {
-        PATH: `${dir}:${process.env.PATH ?? ""}`,
-      });
-      const relayed = JSON.parse(out) as string[];
-      expect(relayed.slice(-2)).toEqual(["--__proto__", "target.md"]);
-      expect(err).toBe("");
-      expect(code).toBe(0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    using _cleanupDir = {
+      [Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
+    };
+    const { out, err, code } = run(["--__proto__", "target.md"], {
+      PATH: `${dir}:${process.env.PATH ?? ""}`,
+    });
+    const relayed = JSON.parse(out) as string[];
+    expect(relayed.slice(-2)).toEqual(["--__proto__", "target.md"]);
+    expect(err).toBe("");
+    expect(code).toBe(0);
   });
 
   test("preserves a downstream -- separator and token order", () => {
@@ -89,23 +88,22 @@ describe("lint-floor passthrough (no --fix)", () => {
       "#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(Bun.argv.slice(2)));\n",
     );
     chmodSync(fakeBunx, 0o755);
-    try {
-      const { out, err, code } = run(
-        ["--version", "--", "--downstream-only", "target.md"],
-        { PATH: `${dir}:${process.env.PATH ?? ""}` },
-      );
-      const relayed = JSON.parse(out) as string[];
-      expect(relayed.slice(-4)).toEqual([
-        "--version",
-        "--",
-        "--downstream-only",
-        "target.md",
-      ]);
-      expect(err).toBe("");
-      expect(code).toBe(0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    using _cleanupDir = {
+      [Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
+    };
+    const { out, err, code } = run(
+      ["--version", "--", "--downstream-only", "target.md"],
+      { PATH: `${dir}:${process.env.PATH ?? ""}` },
+    );
+    const relayed = JSON.parse(out) as string[];
+    expect(relayed.slice(-4)).toEqual([
+      "--version",
+      "--",
+      "--downstream-only",
+      "target.md",
+    ]);
+    expect(err).toBe("");
+    expect(code).toBe(0);
   });
 
   test("exit code passes through cleanly: --version", () => {

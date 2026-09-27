@@ -294,13 +294,14 @@ describe("resolveHome", () => {
 
   test("falls back to process.env.HOME", () => {
     const prev = process.env.HOME;
+    using _restoreHome = {
+      [Symbol.dispose]: () => {
+        if (prev === undefined) delete process.env.HOME;
+        else process.env.HOME = prev;
+      },
+    };
     process.env.HOME = "/env/home";
-    try {
-      expect(resolveHome(undefined)).toBe("/env/home");
-    } finally {
-      if (prev === undefined) delete process.env.HOME;
-      else process.env.HOME = prev;
-    }
+    expect(resolveHome(undefined)).toBe("/env/home");
   });
 });
 
@@ -331,40 +332,39 @@ describe("reclaim-toolchains.ts CLI", () => {
     const emptyStubs = mkdtempSync(
       join(tmpdir(), "cache-toolchains-stubs-none-"),
     );
-    try {
-      const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
-        pathDirs: [emptyStubs],
-      });
-      expect(code).toBe(0);
-      expect(out).toContain("== rustup toolchains ==");
-      expect(out).toContain("rustup 不在");
-      expect(out).toContain("== vscode-server versions ==");
-      expect(out).toContain("無し — skip");
-      expect(out).toContain("✅ reclaim:toolchains done.");
-    } finally {
-      rmSync(emptyStubs, { recursive: true, force: true });
-    }
+    using _cleanupEmptyStubs = {
+      [Symbol.dispose]: () =>
+        rmSync(emptyStubs, { recursive: true, force: true }),
+    };
+    const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
+      pathDirs: [emptyStubs],
+    });
+    expect(code).toBe(0);
+    expect(out).toContain("== rustup toolchains ==");
+    expect(out).toContain("rustup 不在");
+    expect(out).toContain("== vscode-server versions ==");
+    expect(out).toContain("無し — skip");
+    expect(out).toContain("✅ reclaim:toolchains done.");
   });
 
   test("rustup present but fd absent -> rustup section refuses to guess, does nothing", () => {
     const stubs = mkdtempSync(
       join(tmpdir(), "cache-toolchains-stubs-rustup-only-"),
     );
-    try {
-      makeStub(
-        stubs,
-        "rustup",
-        '#!/bin/sh\necho "stable-x86_64-unknown-linux-gnu (active, default)"\necho "nightly-x86_64-unknown-linux-gnu"\n',
-      );
-      const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
-        pathDirs: [stubs],
-      });
-      expect(code).toBe(0);
-      expect(out).toContain("fd 不在");
-      expect(out).not.toContain("uninstall");
-    } finally {
-      rmSync(stubs, { recursive: true, force: true });
-    }
+    using _cleanupStubs = {
+      [Symbol.dispose]: () => rmSync(stubs, { recursive: true, force: true }),
+    };
+    makeStub(
+      stubs,
+      "rustup",
+      '#!/bin/sh\necho "stable-x86_64-unknown-linux-gnu (active, default)"\necho "nightly-x86_64-unknown-linux-gnu"\n',
+    );
+    const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
+      pathDirs: [stubs],
+    });
+    expect(code).toBe(0);
+    expect(out).toContain("fd 不在");
+    expect(out).not.toContain("uninstall");
   });
 
   test("vscode-server: dry-run removes the old idle version, keeps the newest", () => {
@@ -379,23 +379,22 @@ describe("reclaim-toolchains.ts CLI", () => {
     const longAgo =
       Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     utimesSync(oldDir, longAgo, longAgo);
-    try {
-      const emptyStubs = mkdtempSync(
-        join(tmpdir(), "cache-toolchains-stubs-vsc-"),
-      );
-      try {
-        const { out, code } = runScript(["--dry-run", "--home", home], {
-          pathDirs: [emptyStubs],
-        });
-        expect(code).toBe(0);
-        expect(out).toContain(`[dry-run] would run: rip ${oldDir}`);
-        expect(out).not.toContain(newDir);
-      } finally {
-        rmSync(emptyStubs, { recursive: true, force: true });
-      }
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
+    using _cleanupHome = {
+      [Symbol.dispose]: () => rmSync(home, { recursive: true, force: true }),
+    };
+    const emptyStubs = mkdtempSync(
+      join(tmpdir(), "cache-toolchains-stubs-vsc-"),
+    );
+    using _cleanupEmptyStubs = {
+      [Symbol.dispose]: () =>
+        rmSync(emptyStubs, { recursive: true, force: true }),
+    };
+    const { out, code } = runScript(["--dry-run", "--home", home], {
+      pathDirs: [emptyStubs],
+    });
+    expect(code).toBe(0);
+    expect(out).toContain(`[dry-run] would run: rip ${oldDir}`);
+    expect(out).not.toContain(newDir);
   });
 
   test("rejects --__proto__ before running any section", () => {

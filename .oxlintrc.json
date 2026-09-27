@@ -27,8 +27,8 @@
         "message": "nested ternaries are banned: one level max; beyond that ts-pattern's match(), an if/else chain, or early returns."
       },
       {
-        "selector": "TryStatement:has(> CatchClause)",
-        "message": "try/catch is banned: neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill. try/finally alone is fine."
+        "selector": "TryStatement",
+        "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
       }
     ]
   }

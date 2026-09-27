@@ -208,7 +208,9 @@ git ls-files -z -- \
 # else agents/hooks/attempt.ts (Promise.try, zero-dep — importable even from a hook or bootstrap
 # script that runs before `mise run deps` restores node_modules), or, inside a self-contained
 # agents/skills/** skill, an inline `Promise.try(fn).then(ok, err)` rather than crossing the
-# skill boundary (try/finally alone is fine). Same mechanism as Coral-dpp's .oxlintrc.json:
+# skill boundary. try/finally is banned too: cleanup goes through using / await using /
+# DisposableStack or promise.finally(), so the tree has no `try` at all.
+# Same mechanism as Coral-dpp's .oxlintrc.json:
 # oxlint's native rules cannot ban a syntax SHAPE, but the oxlint-plugin-eslint JS plugin carries
 # ESLint's no-restricted-syntax with esquery selectors. This replaced the hand-rolled oxc-parser
 # walker scripts/lint-no-try-catch.ts (2026-09-12), whose reason to exist was "oxlint cannot
@@ -227,7 +229,7 @@ git ls-files -z -- \
 # "error" once that backlog is paid down — a warn that never becomes an error is theater.
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; switch/nested ternary -> ts-pattern and try/catch -> neverthrow/agents/hooks/attempt.ts are errors everywhere, with no per-file opt-out or disable comment"
+description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; switch/nested ternary -> ts-pattern and every try (catch or finally) -> neverthrow/attempt.ts / using are errors everywhere, with no per-file opt-out or disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 depends = ["lint:ts-no-disable"]
 run = "bunx --bun oxlint"

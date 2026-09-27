@@ -1,5 +1,9 @@
 #!/bin/sh
 # shim: hook-entry
+# A bun that RUNS, not the first on PATH: mise's shim fails with no version for the cwd.
 set -eu
-command -v bun >/dev/null 2>&1 || { echo "dispatch-contract: bun is required" >&2; exit 2; }
-exec bun "$(dirname "$0")/enforce-terra-dispatch.ts"
+for c in bun "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /home/linuxbrew/.linuxbrew/bin/bun; do
+  p=$(command -v "$c" 2> /dev/null) && "$p" --version > /dev/null 2>&1 && exec "$p" "$(dirname "$0")/enforce-terra-dispatch.ts"
+done
+echo "dispatch-contract: bun is required" >&2
+exit 2

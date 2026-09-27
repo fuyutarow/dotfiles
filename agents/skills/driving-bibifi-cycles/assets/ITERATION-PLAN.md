@@ -1,5 +1,7 @@
 # ITERATION_PLAN / ITERATION_LOG — use the existing record system
 
+This is a work record, not a substitute for execution. A BIBIFI invocation must not end by filling its report alone.
+
 ## Shared context
 
 - Goal/completion; prior release ETA or initial baseline; next six-minute report (JST).
@@ -8,6 +10,7 @@
 - For scientific diagnosis: contrast, live rivals, predictions/exclusions and candidate revision via STRONG-INFERENCE.md.
 - Available/reserved CPU/RAM/VRAM, actual GPU load and agent slots; UNKNOWN when unconfirmed.
 - Orchestration capability receipts relevant to this work; parent intervention point and write owners.
+- If waiting: exact unavailable observation; current dependency receipt or plausible independent options checked.
 
 Refresh changed facts only. Keep cross-arm details outside blind workers' read sets.
 Separate agent-ready work from compute-admission waits; neither needs a new database.

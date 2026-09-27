@@ -14,6 +14,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | F8 | Run one microticket, use its result to choose the next; don't end with a plan | HERE: execute through owners and close the loop |
 | F9 | GPU is occupied; advance independent formal counterexamples and source checks now | HERE selects parallel microtickets; proof/evidence owners qualify their results |
 | F10 | 「状況掌握、競合仮説・予測表・識別実験・排除表から候補機械を再提案して」 | HERE owns the scientific loop; generation/evidence/proof owners supply their scoped outputs |
+| F11 | `/driving-bibifi-cycles` while a parent is repeating release-wait reports | HERE resumes actual authorized work; report-only response fails when a useful action is available |
 | N1 | Is this benchmark score leaking? | `validating-experimental-evidence` |
 | N2 | Generate five new research theses with no selected candidate | `forging-novel-theses` with its entry requirements |
 | N3 | Reallocate next quarter's research programme | `supervising-research-programmes` |

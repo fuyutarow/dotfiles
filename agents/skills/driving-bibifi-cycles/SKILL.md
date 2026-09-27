@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.4.0 (2026-09-27) — contrast, rivals, discrimination and candidate revision drive each cycle.
+> **Version**: v2609.4.1 (2026-09-27) — explicit invocation resumes discovery work; reports do not close it.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -24,6 +24,16 @@ for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
   tests/operational-rehearsal.md tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
 bun ../forging-skills/scripts/skill-check.ts .
 ```
+
+## On invocation — do the work
+
+`/driving-bibifi-cycles` means execute/resume the current authorized discovery loop, not print its report format.
+Unless the user explicitly requests status only, inspect the current evidence and take the next justified action now.
+Consume a result, perform a bounded check, start a ready microticket or intervene on a real blocker within your role.
+Then report what actually changed. A report is a checkpoint; continue the authorized work after it.
+If no action can advance the goal, establish why with the dependency search below.
+Do not invent activity to satisfy a quota.
+Repeated status or a later ETA, without new evidence or justified intervention, does not fulfill the invocation.
 
 ## LAW — maximize valid discovery per unit time
 
@@ -119,7 +129,7 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 | Priority work waits behind an owned side job | Reconsider that job at its declared safe stop point | Reservation and confirmed release; no unauthorized external kills |
 | Resource/process cap exceeded | Stop through the owner and fix the stop path before reusing it | Partial evidence, effective cap, stop/cleanup receipt |
 | Launcher/setup failure | Repair and exercise one fixture; stop identical queue retries | Accepted/rejected invocation and record read-back |
-| No useful work fits | Inspect blocker, successor and reusable preparation slices | Actual remaining constraint and event that changes it |
+| No useful work fits | Challenge the claimed dependency and inspect independent evidence work before waiting | Checked alternatives, actual constraints and next changing event |
 
 Act when the event arrives; never wait for the report tick or every worker in a wave.
 Do not require another parent reply for a preauthorized branch whose scope, premises and resources still hold.
@@ -140,6 +150,13 @@ Respect blind-review visibility; orchestration owns what may cross each role bou
 Never create duplicate work just to occupy slots or leave a useful ready question idle because another stream is slow.
 Tie each next ticket to consumed evidence or a cited primary source and its authorized question.
 Free capacity or an unsupported worker assertion is not a basis for inventing new work.
+
+Before declaring “waiting for X,” test which specific observation needs X and which can be obtained without it.
+Inspect plausible independent options in blocker evidence, reference/measurement checks or consumer prerequisites.
+Reuse current valid receipts. If they already establish the sole missing input and no useful independent option, wait.
+Use `references/microticket-patterns.md` for this dependency search; an empty prewritten queue proves nothing.
+A pending release does not block every check on stable predecessors, retained observations or separate proposals.
+Do not duplicate a worker's live edit or disturb valid ongoing work merely to appear active.
 
 ## Integrate early; keep future work conditional
 
@@ -164,7 +181,7 @@ For GPU work, its specialist owns stage budgets/profiles. Select by recoverable 
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
-Use evidence dispositions separately from goal acceptance: valid low scores remain evidence, published rows need qualification.
+Separate evidence dispositions from goal acceptance. Valid low scores remain evidence; published rows need qualification.
 
 Every six minutes while active, report briefly in JST:
 
@@ -175,6 +192,7 @@ Every six minutes while active, report briefly in JST:
 
 No previous schedule means initial baseline. Keep run-return ETA separate from release ETA; give the change rationale.
 If nothing landed, say so and state the intervention. Do not invent progress or replace the required report with silence.
+Do not repeat an old finding as a newly closed cycle. Reporting compliance cannot offset missed useful work.
 Stop at completion, user stop or a real authority boundary. Hand back accurate partial state and release owned resources.
 
 ## Owners and supporting material

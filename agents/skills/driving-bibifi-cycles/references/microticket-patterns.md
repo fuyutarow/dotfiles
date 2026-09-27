@@ -21,6 +21,25 @@ If no useful observation survives the missing premise, make that premise/instrum
 Preserve the phenomenon and meaningful discrimination when shrinking work; do not manufacture an underpowered null.
 Formal sections retain their admitted WIP unit; partial coordination does not admit another candidate.
 
+### When “everything waits for the release” is proposed
+
+Use current valid dependency evidence first. If it proves the sole missing input and no useful independent option, wait.
+Otherwise do the cheapest check on a plausible alternative, not another future-work list.
+
+| Search surface | Useful independent return | When it really must wait |
+|---|---|---|
+| Current blocker | Located counterexample, interface discrepancy or smaller consumed return | It needs the very artifact still being produced, and no stable witness exists |
+| Reference/evidence footing | Verify the predecessor's conditions, measurement validity or claimed acceptance against the current question | The comparison itself requires unavailable observations; record that exact missing input |
+| Next consumer | Prepare a negative fixture, proof obligation or interface check on a stable contract | The required contract is unresolved and the proposed preparation would be disposable |
+| Alternative authorized question | Source comparison, formal counterexample or isolated diagnostic with its own consumer | No distinct useful question fits the actual authority, slot, host or resource constraints |
+
+One genuine useful return is enough to act; no exhaustive survey or report quota is required.
+A historical predecessor remains usable when its evidence and comparison conditions match.
+Its age or different version alone does not justify rerunning it; qualify the actual transfer obligation.
+For a rejected option, name the blocking fact. “Commit pending,” “three agents busy” and “not on critical path” are not facts of dependence.
+If existing evidence or the needed checks establish that useful options are blocked, wait without fabricating filler.
+Observe that event through the supported tool and resume; another report does not substitute for the next action.
+
 ## Parallelism follows independence, not job titles
 
 Separate ready reasoning/preparation from execution that needs a shared resource.

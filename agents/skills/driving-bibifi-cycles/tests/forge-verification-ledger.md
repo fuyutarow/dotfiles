@@ -665,3 +665,54 @@ not scientific efficacy; source provenance and operational checks remain distinc
 
 Deployment: `mise run link:skills` and `mise run lint:skills-wiring` pass. The canonical source
 updates the linked Codex/Claude skill directories; running sessions are not assumed reloaded.
+
+## 15. Explicit activation is work, not report formatting — v2609.4.1
+
+Source: attachment49c8218a-6404-45ef-a4ed-4a1ac50d3566,1623lines,
+SHA256ae8f81d69be299d2a76a90f1a30423bdfaffa84f9f174afadaf75f03b3369d07.
+Bounded audit and frozen acceptance criteria live in `tests/postmortem-2026-09-27-report-only.md`.
+The user's report of prompting the skill is authoritative context; exact historical loaded version
+and every intervening tool call remain unverified. The audit describes passive behavior, not intent.
+Positive diagnostics in the episode remain evidence; they are not erased to portray uniform failure.
+
+**Root-signed treatment.** Put invocation semantics first: a direct BIBIFI invocation resumes the
+current authorized work unless the user requests status only. Reporting is a checkpoint, not task
+completion. A blanket release-wait claim requires current dependency evidence or a bounded check
+of plausible independent blocker/reference/consumer work. Genuine waiting remains valid; no action,
+agent or GPU-use quota is introduced. Existing valid dependency receipts are reused. Historical
+references remain usable under matching conditions; age alone does not create a rerun obligation.
+Existing scientific-method/source, evidence, orchestration and formal authority owners stay unchanged.
+
+**Static review.** Terra activation_rule_review found that requiring all three searches could
+create ceremony when a hard dependency was already established. Root narrowed it to plausible
+options/current valid receipts and adjusted the template. Other scope/status-only/authority cuts
+passed the review. No whole-workspace exhaustive search or new scheduler is required.
+
+**Tool-backed activation test.** Fresh Terra activation_old/new received the same current-state
+file and source artifacts, using old9f41899 or draft-new core/patterns, with isolated disjoint output
+prefixes and90second NONCOMPUTE assignments. The task instruction was the bare skill invocation;
+no desired independent task or expected finding was supplied. Both read actual files and wrote a
+reference-footing finding rather than only repeating the release ETA. State digest:
+3c04006ae8287e8b3594980dd9e9488e5005767557c3bc29ac5b024efd7deac6.
+OLD result219cae4520ec8f6c560a53e539dcf5b36da527febbceac39fab1a6d8ff049dc5;
+NEW result31140e37b314ee46a896df17a713c0bd78716901ebaceef1c88b872ef4384ad3.
+Root read back both. The final-quarter versus full-window mismatch was valid. Their additional
+emphasis that the result was historical did not itself disqualify it; root added the explicit
+matched-reference preservation clause. NEW identified a matched predecessor reference as an
+independent next branch; OLD kept acceptance waiting on the revision. Neither launched numerical work.
+This narrow case did not reproduce the production report-only failure and establishes no general
+initiative or R&D throughput gain. It does not show that the former wording was the sole cause.
+
+**True blocker.** Follow-up supplied a separate case with an already verified matching historical
+reference, exhausted independent scope, unavailable external sample and no running owned job.
+The worker correctly retained the reference and waited without filler. It incorrectly asserted
+ontime despite no previous schedule. Root caught this on artifact read-back and required a real
+file correction to UNKNOWN; current artifact0de75592829b3a58a07773ae9d46845053e13c05dffd1ed0c171214eaa60285f.
+The waiting decision passed; the initial schedule assertion failed and was corrected. Do not label
+this as an unqualified all-pass behavior trial. Existing ETA rules already covered that failure.
+
+**Verification.** F11 and S50–S53 cover invocation, true waiting, status-only requests and repeated
+finding credit. Target floor zero core/reference warnings. Collection floor passes73skills/
+64,439charged characters with unchanged ceiling and listing. `git diff --check` passes. No live
+Firedancer code, job, source corpus or runtime enforcement changed. This ships an instruction/
+acceptance correction with measured limits, not a claim that prose alone guarantees initiative.

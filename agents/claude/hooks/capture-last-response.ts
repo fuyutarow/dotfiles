@@ -31,7 +31,9 @@ function recordResponse(sid: unknown, text: unknown): void {
   } catch {
     // no history yet -> start one
   }
-  lines.push(JSON.stringify({ at: Date.now(), text }));
+  lines.push(
+    JSON.stringify({ at: Temporal.Now.instant().epochMilliseconds, text }),
+  );
 
   mkdirSync(dir, { recursive: true });
   writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);

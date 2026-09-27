@@ -91,7 +91,7 @@ async function attemptLookup(
       timeout: 3000,
     });
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
-    const now = Date.now();
+    const now = Temporal.Now.instant().epochMilliseconds;
     const next = buildEntryMap(list, now);
     if (sid in next) {
       persistFoundCache(next);

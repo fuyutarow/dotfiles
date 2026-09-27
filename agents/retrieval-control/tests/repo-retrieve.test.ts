@@ -79,7 +79,9 @@ function writeWatermarkFile(
     watermarkFilePath(dir),
     `${JSON.stringify(
       {
-        indexedAt: new Date().toISOString(),
+        indexedAt: Temporal.Now.instant().toString({
+          fractionalSecondDigits: 3,
+        }),
         source: "index",
         ...value,
       },

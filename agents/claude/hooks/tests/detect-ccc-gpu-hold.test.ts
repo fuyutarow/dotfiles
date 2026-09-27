@@ -56,7 +56,7 @@ function setup(opts: { apps: number[]; status?: string; state?: object }) {
 const streak = (minutes: number, extra: object = {}) => ({
   pid: daemon.pid,
   indexing: ["/w/qoed"],
-  indexingSinceMs: Date.now() - minutes * MIN,
+  indexingSinceMs: Temporal.Now.instant().epochMilliseconds - minutes * MIN,
   lastProbeMs: 0,
   alerted: {},
   ...extra,
@@ -89,7 +89,9 @@ describe("detect-ccc-gpu-hold", () => {
     const s = JSON.parse(readFileSync(state, "utf8"));
     expect(s.pid).toBe(daemon.pid);
     expect(s.indexing).toEqual(["/w/qoed"]);
-    expect(Date.now() - s.indexingSinceMs).toBeLessThan(MIN);
+    expect(
+      Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
+    ).toBeLessThan(MIN);
   });
 
   test("indexing past the threshold: alerts, labels util host-wide, never decides, never says stop", () => {
@@ -130,7 +132,9 @@ describe("detect-ccc-gpu-hold", () => {
   test("a session alerted recently is not re-alerted; another session is", () => {
     const { env } = setup({
       apps: [daemon.pid!],
-      state: streak(40, { alerted: { s1: Date.now() - 5 * MIN } }),
+      state: streak(40, {
+        alerted: { s1: Temporal.Now.instant().epochMilliseconds - 5 * MIN },
+      }),
     });
     expect(runHook(HOOK, payload("PreToolUse", "s1"), env).stdout).toBe("");
     expect(runHook(HOOK, payload("PreToolUse", "s2"), env).stdout).toContain(
@@ -146,7 +150,9 @@ describe("detect-ccc-gpu-hold", () => {
     expect(runHook(HOOK, payload(), env).stdout).toBe("");
     const s = JSON.parse(readFileSync(state, "utf8"));
     expect(s.pid).toBe(daemon.pid);
-    expect(Date.now() - s.indexingSinceMs).toBeLessThan(MIN);
+    expect(
+      Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
+    ).toBeLessThan(MIN);
   });
 
   test("a non-ccc compute app is not the daemon", () => {
@@ -161,7 +167,9 @@ describe("detect-ccc-gpu-hold", () => {
     const { env } = setup({
       apps: [],
       status: IDLE,
-      state: streak(20, { lastProbeMs: Date.now() - 10_000 }),
+      state: streak(20, {
+        lastProbeMs: Temporal.Now.instant().epochMilliseconds - 10_000,
+      }),
     });
     const r = runHook(HOOK, payload(), env);
     expect(r.stdout).toContain("CCC-GPU-INDEXING");

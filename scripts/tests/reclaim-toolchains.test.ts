@@ -375,7 +375,9 @@ describe("reclaim-toolchains.ts CLI", () => {
     const newDir = join(serversDir, "Stable-newhash");
     mkdirSync(oldDir);
     mkdirSync(newDir);
-    const longAgo = new Date(Date.now() - 100 * 86400 * 1000);
+    // utimes takes epoch SECONDS as a number.
+    const longAgo =
+      Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     utimesSync(oldDir, longAgo, longAgo);
     try {
       const emptyStubs = mkdtempSync(

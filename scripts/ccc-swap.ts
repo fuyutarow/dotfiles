@@ -1019,7 +1019,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     return 1;
   }
 
-  const ts = Date.now();
+  const ts = Temporal.Now.instant().epochMilliseconds;
   for (const c of checks) {
     process.stdout.write(
       `PLAN ${c.root}: move live DB artifacts ${c.liveDbDir} -> ${c.liveDbDir}.prev-${ts}, then shadow artifacts -> ${c.liveDbDir}\n`,
@@ -1228,7 +1228,7 @@ async function cmdRollback(
   }
   const cccBin = ctx.cccBin;
 
-  const newTs = Date.now();
+  const newTs = Temporal.Now.instant().epochMilliseconds;
   const rollbackFailures: string[] = [];
   for (const u of usable) {
     const parkedDir = `${u.liveDbDir}.prev-${newTs}`;

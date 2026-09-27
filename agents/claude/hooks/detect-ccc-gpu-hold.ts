@@ -152,7 +152,7 @@ function hostGpuLine(): string {
 }
 
 function clock(ms: number): string {
-  return new Date(ms).toLocaleTimeString("en-GB", {
+  return Temporal.Instant.fromEpochMilliseconds(ms).toLocaleString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -162,7 +162,7 @@ function main(): void {
   const payload = readStdinJson();
   const event: string = payload?.hook_event_name ?? "PreToolUse";
   const session: string = payload?.session_id ?? "unknown";
-  const now = Date.now();
+  const now = Temporal.Now.instant().epochMilliseconds;
   const state = readState();
 
   if (now - state.lastProbeMs >= PROBE_INTERVAL_MS) {

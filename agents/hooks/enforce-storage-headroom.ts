@@ -293,7 +293,11 @@ function measured(
   );
   try {
     const c = JSON.parse(readFileSync(cacheFile, "utf8")) as Size;
-    if (Date.now() - c.at < m.cache_minutes * 60_000) return c;
+    if (
+      Temporal.Now.instant().epochMilliseconds - c.at <
+      m.cache_minutes * 60_000
+    )
+      return c;
   } catch {
     /* no or unreadable cache: measure */
   }
@@ -305,7 +309,11 @@ function measured(
         .filter((p) => existsSync(p))
         .reduce((sum, p) => sum + (duBytes(p, m) ?? 0), 0)
     : 0;
-  const size: Size = { bytes, incremental, at: Date.now() };
+  const size: Size = {
+    bytes,
+    incremental,
+    at: Temporal.Now.instant().epochMilliseconds,
+  };
   try {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(cacheFile, JSON.stringify(size));

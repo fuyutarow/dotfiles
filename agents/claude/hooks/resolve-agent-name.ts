@@ -54,7 +54,11 @@ function agentName(sid: string): string | undefined {
     // missing / corrupt cache file -> treat as empty and refetch below
   }
   const hit = cache[sid];
-  if (hit != null && Date.now() - hit.at < AGENT_NAME_TTL_MS) return hit.name;
+  if (
+    hit != null &&
+    Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
+  )
+    return hit.name;
 
   try {
     const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
@@ -63,7 +67,7 @@ function agentName(sid: string): string | undefined {
       timeout: 3000,
     });
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
-    const now = Date.now();
+    const now = Temporal.Now.instant().epochMilliseconds;
     const next = buildEntries(list, sid, now);
     try {
       mkdirSync(`${HOME}/.cache/claude`, { recursive: true });

@@ -232,7 +232,7 @@ async function main(): Promise<number> {
     say(`cannot reach ${host} (ssh timed out or returned no probe)`);
     return 2;
   }
-  const now = Date.now();
+  const now = Temporal.Now.instant().epochMilliseconds;
   say(
     `${host}: ${before.procs.length} sshd process(es), service pid(s) ${[...before.servicePids].join(",") || "none"}`,
   );

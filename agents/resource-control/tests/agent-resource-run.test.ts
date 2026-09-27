@@ -92,7 +92,7 @@ function reservation(overrides: Partial<Reservation> = {}): Reservation {
     host_ram_peak_bytes: GiB,
     scratch_bytes: 0,
     device: { kind: "cpu" },
-    started_at: new Date().toISOString(),
+    started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
     ...overrides,
   };
 }
@@ -951,7 +951,8 @@ describe("bounded execution", () => {
     const stateDirectory = temporaryStateDirectory();
     const lockDirectory = join(stateDirectory, ".lock");
     mkdirSync(lockDirectory);
-    const old = new Date(Date.now() - 10_000);
+    // utimes takes epoch SECONDS as a number.
+    const old = (Temporal.Now.instant().epochMilliseconds - 10_000) / 1000;
     utimesSync(lockDirectory, old, old);
     const result = await checkJob(cpuManifest(), {
       stateDirectory,

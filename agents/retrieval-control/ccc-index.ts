@@ -149,7 +149,7 @@ async function writeWatermark(
 ): Promise<void> {
   const value: Watermark = {
     head,
-    indexedAt: new Date().toISOString(),
+    indexedAt: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
     source,
   };
   const path = watermarkPath(project);
@@ -280,12 +280,15 @@ async function autoCatchUp(
       why: `Automatic catch-up skipped: the ccc daemon is indexing ${busy.join(", ")}.`,
     };
   }
-  const started = Date.now();
+  const started = Temporal.Now.instant().epochMilliseconds;
   process.stderr.write(
     `NOTE: index trails HEAD; catching up (bounded ${AUTO_INDEX_MS / 1000}s)\n`,
   );
   const run = await reindexCertified(project, ccc, AUTO_INDEX_MS, true);
-  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  const seconds = (
+    (Temporal.Now.instant().epochMilliseconds - started) /
+    1000
+  ).toFixed(1);
   if (run.code === 0) {
     process.stderr.write(
       `NOTE: caught up in ${seconds}s; index certified at HEAD=${headLabel(run.head)}\n`,

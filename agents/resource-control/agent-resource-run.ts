@@ -950,7 +950,9 @@ function releaseIfStale(
 ): boolean {
   try {
     const oldEnough =
-      Date.now() - statSync(lockDirectory).mtimeMs >= LOCK_STALE_MS;
+      Temporal.Now.instant().epochMilliseconds -
+        statSync(lockDirectory).mtimeMs >=
+      LOCK_STALE_MS;
     if (!oldEnough || (ownerPid !== null && pidIsAlive(ownerPid))) return false;
     releaseLockDirectory(lockDirectory);
     return true;
@@ -968,7 +970,7 @@ async function acquireStateLock(stateDirectory: string): Promise<() => void> {
       mkdirSync(lockDirectory, { mode: 0o700 });
       writeFileSync(
         join(lockDirectory, "owner.json"),
-        `${JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() })}\n`,
+        `${JSON.stringify({ pid: process.pid, created_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }) })}\n`,
         { flag: "wx", mode: 0o600 },
       );
       return () => releaseLockDirectory(lockDirectory);
@@ -1064,7 +1066,9 @@ async function acquireLease(
       host_ram_peak_bytes: manifest.host_ram_peak_bytes,
       scratch_bytes: manifest.scratch_bytes,
       device: admission.device,
-      started_at: new Date().toISOString(),
+      started_at: Temporal.Now.instant().toString({
+        fractionalSecondDigits: 3,
+      }),
     };
     const reservationPath = join(
       stateDirectory,
@@ -1404,13 +1408,21 @@ function admissionReceiptPayloadFrom(
     !Array.isArray(value.cpu_ids) ||
     !isSafeIntegerInRange(value.host_ram_peak_bytes, 1) ||
     !isSafeIntegerInRange(value.scratch_bytes, 0) ||
-    !isNonEmptyText(value.started_at, 64) ||
-    Number.isNaN(Date.parse(value.started_at))
+    !isNonEmptyText(value.started_at, 64)
   ) {
     return null;
   }
-  if (new Date(value.started_at).toISOString() !== value.started_at)
+  // Canonical form only: exactly what the writer emits (ms precision, `Z`), round-tripped.
+  const startedAt = value.started_at;
+  let canonical: string | undefined;
+  try {
+    canonical = Temporal.Instant.from(startedAt).toString({
+      fractionalSecondDigits: 3,
+    });
+  } catch {
     return null;
+  }
+  if (canonical !== startedAt) return null;
 
   const cpuIds: number[] = [];
   for (const cpuId of value.cpu_ids) {
@@ -1875,7 +1887,9 @@ export async function executeJob(
             vram_peak_measured_bytes: peakVramBytes,
             vram_peak_source: "nvidia-smi" as const,
           }),
-      released_at: new Date().toISOString(),
+      released_at: Temporal.Now.instant().toString({
+        fractionalSecondDigits: 3,
+      }),
     };
     report(releaseDescription(measuredPeak));
     writePeakArtifact(options.manifestSource.path, measuredPeak);

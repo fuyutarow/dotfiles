@@ -10,7 +10,7 @@ import { existingGraveyards, graveyardCandidates } from "./graveyards";
 // and age. Deletes nothing; hand the table to whoever decides. STALE_DAYS=180 to retune.
 
 const staleDays = Number(process.env.STALE_DAYS ?? "180");
-const now = Math.floor(Date.now() / 1000);
+const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
 const home = homedir();
 
 // GNU then BSD

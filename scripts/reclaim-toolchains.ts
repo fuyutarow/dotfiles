@@ -246,7 +246,7 @@ function runVscodeServerSection(
 
   const toRemove = serverVersionsToRemove(versions, {
     isBusy: (hash) => isProcessRunning(hash),
-    nowSec: Math.floor(Date.now() / 1000),
+    nowSec: Math.floor(Temporal.Now.instant().epochMilliseconds / 1000),
     keepDays,
   });
   if (toRemove.length === 0) {

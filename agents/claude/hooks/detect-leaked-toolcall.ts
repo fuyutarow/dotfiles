@@ -32,7 +32,7 @@ function main(): void {
   try {
     appendFileSync(
       `${process.env.HOME ?? ""}/.claude/leaked-toolcall.log`,
-      `${new Date().toISOString()}  leaked-toolcall  ${transcript}\n`,
+      `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
     );
   } catch {
     /* best-effort */

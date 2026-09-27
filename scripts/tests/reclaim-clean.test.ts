@@ -494,7 +494,7 @@ describe("reclaim-clean.ts CLI", () => {
     const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-bunfail-"));
     const badTmpdir = join(
       tmpdir(),
-      `cache-clean-does-not-exist-${Date.now()}`,
+      `cache-clean-does-not-exist-${Temporal.Now.instant().epochMilliseconds}`,
     );
     try {
       makeStub(stubDir, "bun", 0);

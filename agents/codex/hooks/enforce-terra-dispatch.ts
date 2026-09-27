@@ -1,14 +1,60 @@
-// Consumer: Codex PreToolUse JSON envelope. Fail closed: malformed input exits 2.
+// Codex PreToolUse gate for spawn_agent (hook tool name "Agent"): every subagent names its model
+// AND reasoning_effort explicitly, as one of the owner's allowed pairs (ALLOWED below), and declares
+// exactly one resource class. Nothing is injected. Fail closed: malformed input exits 2.
 // The allowlist is mechanical only; role rationale belongs in orchestrating-agents.
 
 import { readFileSync } from "node:fs";
-import {
-  RESOURCE_DECLARATION_HELP,
-  resourceDeclarationResult,
-} from "../../resource-control/lib/dispatch-declaration.ts";
+import { resourceDeclarationResult } from "../../resource-control/lib/dispatch-declaration.ts";
 import { attempt } from "../../hooks/attempt.ts";
 
-const TERRA = "gpt-5.6-terra";
+// Codex spawn_agent (hooks see it as tool "Agent") takes per-call `model` and
+// `reasoning_effort` overrides — both keys observed in this machine's own session records
+// (2026-09-27: 132 of 628 spawn_agent calls carried reasoning_effort). Nothing is implicit: both
+// must be present and form an allowed pair, so Codex's default_subagent_model /
+// default_subagent_reasoning_effort never decide silently. The owner's allowlist (2026-09-27):
+const ALLOWED: Record<string, readonly string[] | "any"> = {
+  "gpt-5.6-terra": ["high"],
+  "gpt-6-sol": ["medium", "high"],
+  "gpt-6-luna": "any",
+};
+const ALLOWED_HELP =
+  "model:'gpt-5.6-terra' with reasoning_effort:'high', model:'gpt-6-sol' with " +
+  "reasoning_effort:'medium' or 'high', or model:'gpt-6-luna' with any reasoning_effort";
+
+function effortsFor(model: string): string {
+  const efforts = ALLOWED[model];
+  if (efforts === "any") return "any value";
+  return (efforts ?? []).map((e) => `'${e}'`).join(" or ");
+}
+
+// One finding for the (model, reasoning_effort) choice: the observed values plus the smallest
+// exact edit, or null when the pair is allowed.
+function pairProblem(
+  model: string | null,
+  effort: string | null,
+): string | null {
+  if (model === null && effort === null) {
+    return `no model and no reasoning_effort — add one of: ${ALLOWED_HELP}`;
+  }
+  if (model === null) {
+    const fits = Object.keys(ALLOWED).filter((m) => {
+      const efforts = ALLOWED[m];
+      return efforts === "any" || (efforts ?? []).includes(effort ?? "");
+    });
+    return `model is missing (reasoning_effort '${effort}') — add model: ${fits.map((m) => `'${m}'`).join(" or ")}`;
+  }
+  const efforts = ALLOWED[model];
+  if (efforts === undefined) {
+    return `model '${model}' is not allowed — ${ALLOWED_HELP}`;
+  }
+  if (effort === null) {
+    return `reasoning_effort is missing for model '${model}' — add reasoning_effort: ${effortsFor(model)}`;
+  }
+  if (efforts !== "any" && !efforts.includes(effort)) {
+    return `model '${model}' with reasoning_effort '${effort}' is not allowed — set reasoning_effort: ${effortsFor(model)}`;
+  }
+  return null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -19,18 +65,13 @@ function denyMalformed(reason: string): never {
   process.exit(2);
 }
 
-function output(
-  decision: "allow" | "deny",
-  reason: string,
-  updatedInput?: Record<string, unknown>,
-): void {
+function output(decision: "allow" | "deny", reason: string): void {
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: decision,
         permissionDecisionReason: reason,
-        ...(updatedInput === undefined ? {} : { updatedInput }),
       },
     })}\n`,
   );
@@ -55,26 +96,29 @@ async function main(): Promise<void> {
   else dispatchText = null;
   if (dispatchText === null)
     denyMalformed("Agent message/prompt must be a string");
+  if ("model" in input && typeof input.model !== "string")
+    denyMalformed("model must be a string");
+  if ("reasoning_effort" in input && typeof input.reasoning_effort !== "string")
+    denyMalformed("reasoning_effort must be a string");
+  const model = typeof input.model === "string" ? input.model : null;
+  const effort =
+    typeof input.reasoning_effort === "string" ? input.reasoning_effort : null;
+
+  const problems: string[] = [];
   const resource = resourceDeclarationResult(dispatchText);
   if (!resource.ok) {
-    output(
-      "deny",
-      `dispatch-contract: ${resource.reason}. Require ${RESOURCE_DECLARATION_HELP}.`,
-    );
-    return;
+    problems.push(resource.reason);
   }
-  if (!("model" in input)) {
-    output("allow", "dispatch-contract: injected model:'gpt-5.6-terra'", {
-      ...input,
-      model: TERRA,
-    });
-    return;
-  }
-  if (typeof input.model !== "string") denyMalformed("model must be a string");
-  if (input.model === TERRA) return;
+  const pair = pairProblem(model, effort);
+  if (pair !== null) problems.push(pair);
+  if (problems.length === 0) return;
+  // BATCHED(resource, pair): independent checks, reported together in one decision.
   output(
     "deny",
-    `dispatch-contract: model '${input.model}' is not allowed; omit model or use '${TERRA}'.`,
+    problems.length === 1
+      ? `dispatch-contract: ${problems[0]}.`
+      : `dispatch-contract: ${problems.length} violations — fix them all, then re-invoke.\n` +
+          problems.map((p) => `  - ${p}`).join("\n"),
   );
 }
 

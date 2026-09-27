@@ -24,37 +24,66 @@ function decision(stdout: string) {
 
 const pre = (tool_input: unknown) => ({ tool_name: "Agent", tool_input });
 
-describe("Codex Agent Terra guard", () => {
-  test("omitted model injects Terra and preserves every other argument", () => {
-    const input = {
-      message: resourceMessage("inspect"),
-      effort: "high",
-      metadata: { task: 1 },
-    };
-    const result = run(pre(input));
+describe("Codex spawn_agent model+effort guard", () => {
+  test("omitted model and reasoning_effort -> deny (nothing is injected)", () => {
+    const result = run(pre({ message: resourceMessage("inspect") }));
     expect(result.code).toBe(0);
-    expect(decision(result.stdout)).toMatchObject({
-      permissionDecision: "allow",
-      updatedInput: { ...input, model: "gpt-5.6-terra" },
-    });
+    const d = decision(result.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.updatedInput).toBeUndefined();
+    expect(d.permissionDecisionReason).toContain(
+      "no model and no reasoning_effort",
+    );
   });
 
-  test("explicit Terra passes silently", () => {
+  test.each([
+    ["gpt-5.6-terra", "high"],
+    ["gpt-6-sol", "medium"],
+    ["gpt-6-sol", "high"],
+    ["gpt-6-luna", "low"],
+    ["gpt-6-luna", "ultra"],
+  ])("allowed pair %p + %p passes silently", (model, reasoning_effort) => {
     const result = run(
-      pre({ message: resourceMessage("inspect"), model: "gpt-5.6-terra" }),
+      pre({ message: resourceMessage("inspect"), model, reasoning_effort }),
     );
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("");
   });
 
-  test.each(["gpt-5.6-sol", "gpt-4.1", "terra", ""])(
-    "other explicit model %p is denied",
-    (model) => {
-      const result = run(pre({ message: resourceMessage("inspect"), model }));
-      expect(result.code).toBe(0);
-      expect(decision(result.stdout).permissionDecision).toBe("deny");
+  test.each([
+    ["gpt-5.6-terra", "medium", "set reasoning_effort: 'high'"],
+    ["gpt-6-sol", "low", "set reasoning_effort: 'medium' or 'high'"],
+    ["gpt-5.6-sol", "high", "model 'gpt-5.6-sol' is not allowed"],
+    ["gpt-6-astra", "high", "model 'gpt-6-astra' is not allowed"],
+  ])(
+    "pair %p + %p is denied with the exact fix",
+    (model, reasoning_effort, fix) => {
+      const result = run(
+        pre({ message: resourceMessage("inspect"), model, reasoning_effort }),
+      );
+      const d = decision(result.stdout);
+      expect(d.permissionDecision).toBe("deny");
+      expect(d.permissionDecisionReason).toContain(fix);
     },
   );
+
+  test("model without reasoning_effort names the effort to add", () => {
+    const result = run(
+      pre({ message: resourceMessage("inspect"), model: "gpt-5.6-terra" }),
+    );
+    expect(decision(result.stdout).permissionDecisionReason).toContain(
+      "reasoning_effort is missing for model 'gpt-5.6-terra' — add reasoning_effort: 'high'",
+    );
+  });
+
+  test("reasoning_effort without model names the models that fit", () => {
+    const result = run(
+      pre({ message: resourceMessage("inspect"), reasoning_effort: "medium" }),
+    );
+    expect(decision(result.stdout).permissionDecisionReason).toContain(
+      "add model: 'gpt-6-sol' or 'gpt-6-luna'",
+    );
+  });
 
   test.each([
     "not json",
@@ -68,6 +97,11 @@ describe("Codex Agent Terra guard", () => {
       model: { name: "gpt-5.6-terra" },
     }),
     { tool_name: "spawn_agent", tool_input: {} },
+    pre({
+      message: resourceMessage("inspect"),
+      model: "gpt-5.6-terra",
+      reasoning_effort: 3,
+    }),
   ])("malformed or unverifiable payload exits 2", (payload) => {
     const result = run(payload);
     expect(result.code).toBe(2);
@@ -76,7 +110,13 @@ describe("Codex Agent Terra guard", () => {
   });
 
   test("missing resource declaration is denied", () => {
-    const result = run(pre({ message: "inspect", model: "gpt-5.6-terra" }));
+    const result = run(
+      pre({
+        message: "inspect",
+        model: "gpt-5.6-terra",
+        reasoning_effort: "high",
+      }),
+    );
     expect(result.code).toBe(0);
     expect(decision(result.stdout).permissionDecision).toBe("deny");
     expect(decision(result.stdout).permissionDecisionReason).toContain(
@@ -90,6 +130,7 @@ describe("Codex Agent Terra guard", () => {
         message:
           "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run only\nrun it",
         model: "gpt-5.6-terra",
+        reasoning_effort: "high",
       }),
     );
     expect(result.code).toBe(0);
@@ -103,6 +144,7 @@ describe("Codex Agent Terra guard", () => {
       pre({
         message: `${declaration}\n${declaration}\ninspect`,
         model: "gpt-5.6-terra",
+        reasoning_effort: "high",
       }),
     );
     expect(decision(result.stdout).permissionDecision).toBe("deny");

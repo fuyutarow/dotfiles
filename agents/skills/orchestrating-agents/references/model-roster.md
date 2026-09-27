@@ -16,11 +16,15 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 | supervisor / planning | gpt-5.6-sol | control plane only | executor、author、verifier、subagentへ配役しない。 |
 | delegated executor / verifier / outside observer | Sonnet 5 @ high (`subagent_type:"sonnet-high", model:"sonnet"`) | 仕様が明確な量産・定型の production、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
 | delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium", model:"opus"`) | 複数ファイルのリファクタ、デバッグ、長いagentic coding、仕様が曖昧な実装 | authorならverifierはgpt-5.6-terra。 |
-| delegated executor / verifier / outside observer | gpt-5.6-terra | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-sol @ medium or high (`model:"gpt-6-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-luna @ any effort (`model:"gpt-6-luna", reasoning_effort:<any>`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
 
 Claude側のdispatchはこの二組だけ(2026-09-27)。effortは暗黙継承しない:Agent/Taskは上の
 subagent_type+modelを必ず明示し、Workflowの`agent()`は`agentType:'sonnet-high'|'opus-medium'`
 か、`model`と`effort`のliteral(`sonnet`+`high` か `opus`+`medium`)で組を明示する。`enforce-dispatch-contract.ts`がそれ以外を拒否する。
+Codex側の`spawn_agent`も同様に`model`と`reasoning_effort`を必ず明示する(上の三組のみ、
+2026-09-27、`agents/codex/hooks/enforce-terra-dispatch.ts`が強制。gpt-6-sol / gpt-6-luna は同日 probe で PROBE_OK)。
 
 ## Availability gate — no silent fallback
 

@@ -17,6 +17,7 @@ import {
   commandEnvironment,
   createAdmissionReceipt,
   decideAdmission,
+  GPU_MAX_CONCURRENT_JOBS,
   hasUnmanagedGpuLoad,
   parseNvidiaSmiComputeAppRow,
   parseNvidiaSmiGpuRow,
@@ -369,12 +370,13 @@ describe("admission", () => {
 
   test("caps concurrent jobs on one device even when VRAM is abundant", () => {
     const result = denied(
-      decideAdmission(gpuManifest(), hostSnapshot(), [
-        gpuReservation("a", 128 * MiB),
-        gpuReservation("b", 128 * MiB),
-        gpuReservation("c", 128 * MiB),
-        gpuReservation("d", 128 * MiB),
-      ]),
+      decideAdmission(
+        gpuManifest(),
+        hostSnapshot(),
+        Array.from({ length: GPU_MAX_CONCURRENT_JOBS }, (_, i) =>
+          gpuReservation(`job${i}`, 128 * MiB),
+        ),
+      ),
     );
     expect(result.reason).toContain("concurrency cap");
     expect(result.reason.startsWith("GPU 0 already holds")).toBe(true);

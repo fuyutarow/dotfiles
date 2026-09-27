@@ -38,7 +38,10 @@ const GPU_IDLE_POWER_WATTS = 30;
 // VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
 // device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
 // ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
-const GPU_MAX_CONCURRENT_JOBS = 4;
+// Raised 4 -> 8 on 2026-09-27 at the owner's explicit instruction: the fleet's GPU jobs are
+// kernel-launch-bound (B=1) and left the card at 18-39% utilization with 3 GiB of 12 GiB VRAM
+// used while jobs queued on this cap.
+export const GPU_MAX_CONCURRENT_JOBS = 8;
 // CUDA.jl releases cached pool blocks at the soft limit and refuses allocation at the hard one.
 // Leaving the soft limit below the hard limit turns pool fragmentation into a reclaim instead of
 // an out-of-memory error. Ref: CUDA.jl docs/src/usage/memory.md "Memory limits".

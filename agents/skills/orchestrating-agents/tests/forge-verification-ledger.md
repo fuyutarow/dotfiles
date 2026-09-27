@@ -1353,3 +1353,26 @@ orchestration-reference prose pass. Description and semantic trigger surface rem
 
 Mechanical receipt: target skill-check exit 0 with only the measured baseline warnings; collection
 floor exit 0, 73 skills / 64,122 listing characters; `git diff --check` passed. No runtime hook changed.
+
+## 2026-09-27 — C0 parent coordination, v2609.2.2
+
+User-authorized control-plane postmortem: the parent must not delegate whole R&D components and
+wait for hand-back. Full source evidence/digest and design responsibility are in
+`../driving-bibifi-cycles/tests/postmortem-2026-09-27-coordination.md` relative to this skill directory.
+The reported actor repeatedly rolled critical-path ETAs and called distant component returns microtickets.
+Our under-twenty-minute single-worker rule and final-report-only stop instruction permitted that posture.
+
+Root signs C0 as the sole owner of parent coordination mechanics. First return has an explicit
+deadline/consumer; meaningful events join artifact to parent decision and consumer/brief receipt.
+Missing applicable decisions fail operation even if the worker eventually succeeds. Correction is
+consume returns, shrink scope and limit fan-out to parent capacity, not punish valid evidence.
+BIBIFI owns its short feedback requirement. C1 size thresholds are alarms, not blanket permission;
+C2 belongs to separately authorized long runs and cannot evade BIBIFI caps. Blind updates disclose
+no result rationale, and compromised arms do not earn independent verification credit.
+
+Ten constructed cases in `tests/coordination-cases.md` were root desk-checked. A fresh Terra
+read-only reviewer found four holes across C0/C2 and the consumer template; root fixed them.
+Detailed review/verification provenance has one home in the BIBIFI forge ledger, section 9.
+Description and trigger surface remain unchanged; the already firing control-plane postmortem route applies.
+PROSE-DEBT waiver: existing 13 reference sentence warnings retained, zero delta; existing prose pass owns cleanup.
+Target and collection floor pass; 73 skills / 64,299 listing characters. No runtime enforcement is claimed.

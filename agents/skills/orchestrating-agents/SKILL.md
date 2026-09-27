@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.2.1 (2026-09-27) — 発注変更と隠れた共有書き込みを再照合する。
+> **Version**: v2609.2.2 (2026-09-27) — 丸投げを不合格とし、親の継続調整を検証する。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -55,6 +55,8 @@ grant済み一sectionのlocal workは`directing-research-sections`が署名す�
 明示的なdispatch/control-plane依頼だけは、既存mapの所在確認から開始できる。
 
 監督は成果物の作者ではなく、仕事の境界、証拠の境界、採否の境界を所有する。
+実装を委任しても、critical pathの把握、部分納品の消費、割込み、再配分の責任は親に残る。
+発注して完了を待つだけの運転は不合格とする。詳細と是正は`references/delegation-contracts.md` C0が所有する。
 
 各 rule は、観測できる artifact または一つの reference pointer を持つ。
 
@@ -332,6 +334,7 @@ P7/P10 の詳細をこの core へ複製しない。
 ## 委任形の選択
 
 固定四役や固定本数を既定にしない。
+並列数は、親が返却を消費し、次の変化までに介入できる範囲に抑える。
 
 仕事の形、失敗様式、capacityで最小の構成を選ぶ。
 
@@ -420,3 +423,4 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | `references/reasoning-portfolios.md` | topology、failure mode、candidate packet、normalization、synthesis、pruning。 | 複数の有力経路があり、異質な候補を比較するとき。 |
 | `tests/forge-verification-ledger.md` | 履歴、出自、実測、採否、fire/no-fire、F3検証。 | reforge、postmortem、規則の根拠を監査するとき。 |
 | `tests/brief-change-cases.md` | 発注変更、受領、共有書き込みの反例。 | C3a を変更するとき。 |
+| `tests/coordination-cases.md` | 丸投げ、未消費の返却、長期ticket、停止命令の反例。 | C0や委任形を変更するとき。 |

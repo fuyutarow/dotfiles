@@ -14,7 +14,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.2.1 (2026-09-27) — microtickets bound exposure to invalidated premises.
+> **Version**: v2609.2.2 (2026-09-27) — the parent owns continuous microticket coordination.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
@@ -30,6 +30,7 @@ bun ../forging-skills/scripts/skill-check.ts .
 > Actively turn spare capacity into goal-relevant progress; utilization alone earns no credit.
 > Shorten the time from action to feedback to the next action. Do not end an execution request with a plan alone.
 > Each finding may obsolete other work already running. Commit only to a microticket, then select again.
+> Delegate a bounded action, never responsibility for keeping the critical path moving.
 
 A completed cycle has an observed result, a justified decision and a reusable artifact or evidence locator.
 A valid negative, a localized defect, or a retained implementation can close a cycle; a code change is not mandatory.
@@ -144,6 +145,7 @@ If a pending result could obsolete it before hand-back, shorten to a reusable sl
 Use the released capacity for another useful microticket; do not fill it with likely disposable work.
 Long milestones may organize the goal, but all executable commitments are microtickets.
 A ten-minute cap is a ceiling, not evidence that a ten-minute commitment is sensible.
+Renaming a whole component or multi-stage assignment “microticket” does not make it one.
 
 | Event | Immediate action |
 |---|---|
@@ -176,6 +178,23 @@ At a deadline, stall or cap, inspect the phase and stop/cancel through the owner
 Preserve partial evidence and confirm release.
 Terminate or hand back idle workers when their finite work/lifetime ends; no orphan jobs or indefinite reservations.
 
+## The parent must coordinate, not wait for hand-back
+
+Before dispatch, name the first checkable return, its consumer and the parent's next intervention point.
+Set its deadline within the next six-minute feedback window, earlier if a pending result could invalidate the work.
+This is a partial-result deadline, not a new six-minute process cap or permission to send status alone.
+Use `orchestrating-agents` C0 for the coordination record, missed-return actions and dispatch failure criteria.
+The parent keeps the current critical blocker, latest observed artifact and next decision visible in the existing board.
+“Agent working” or “waiting for its run” supplies none of these and cannot justify an unchanged ETA.
+Consume each partial return at its checked boundary; dispatch the smallest integration/probe before whole-part completion.
+If a first return is missed, inspect the actual phase and re-slice, unblock or stop through the owner.
+Do not merely move the deadline or send “hurry up” while leaving the same assignment running.
+After a decisive result, record which live assignments continue, shrink or stop and why.
+Use scoped change notifications; do not require a fleet-wide acknowledgement or repeat unchanged context.
+For blind verification, apply the orchestration owner's information boundary to these notifications.
+Keep fan-out within the parent's ability to consume results and intervene. Worker count is not progress.
+Useful side findings never excuse an unattended critical dependency.
+
 ## Evidence closes the loop
 
 Use `validating-experimental-evidence` for measurement validity, realized controls, footing and allowed claim scope.
@@ -190,7 +209,7 @@ The next ticket comes from this result or a primary source; do not add work by g
 Report briefly in this order:
 
 1. Artifacts and measured results since the last report, with the decision each closed.
-2. Ticket states, actual blockers and worker lifetime/stop actions.
+2. Ticket states, actual blockers, parent coordination decisions and worker lifetime/stop actions.
 3. Next microtickets and RAM/VRAM/CPU allocations, peaks/releases and unused-capacity reasons.
 4. Release ETA in JST against the previous schedule: `ontime`, `delta` or `pivot`, each with its rationale.
 
@@ -222,3 +241,4 @@ No harness → run the same ready queue serially with scoped receipts.
 | `tests/postmortem-2026-09-27.md` | Historical first audit |
 | `tests/postmortem-2026-09-27-followup.md` | Historical second audit |
 | `tests/postmortem-2026-09-27-third.md` | Historical third audit |
+| `tests/postmortem-2026-09-27-coordination.md` | Parent delegation failure, source locators and repair responsibility |

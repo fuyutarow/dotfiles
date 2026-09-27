@@ -355,3 +355,45 @@ no new independent or paired behavioral evaluation. The trigger description/owne
 exited 0 with no warnings; `git diff --check` passed. `mise run link:skills` and
 `mise run lint:skills-wiring` passed. Both Codex and Claude links resolve to the canonical directory;
 `cmp` confirms each linked SKILL.md matches the revised source. Live cancellation latency is unmeasured.
+
+## 9. Parent coordination v2609.2.2 — 2026-09-27
+
+**Source and design responsibility.** The user supplied the 15:14 packet and explicitly demanded
+a postmortem and strict rejection of wholesale delegation. Source digest, line evidence and limits
+live in `postmortem-2026-09-27-coordination.md`. Outward reports are third-party evidence of the
+reported operation, not independently reproduced runs. The user's required parent responsibility
+is author-confirmed. First partial return, consumer and intervention records are skill-supplied.
+
+**Signed map/root acceptance scope.** Current findings and authorized work → parent slices,
+dispatches and consumes short returns → critical dependency advances or gets explicitly re-sliced.
+The parent owns coordination even when implementation is delegated. This skill owns scientific work
+selection and the six-minute first-return requirement; orchestration C0 owns dispatch accountability.
+The first return is a checkable partial result, not a whole experiment six-minute kill rule.
+Long-run C2 cannot override this loop's experiment cap or authorize whole-component delegation.
+
+**File treatment.** Core/template expose parent blocker, observed artifact, intervention deadline
+and consumer join. S34–S39 cover relabeling, waiting, quantity substitution, invalidation and autonomy.
+The new postmortem records design fault and a concrete replacement for the final reported situation.
+Orchestration core/reference remove under-twenty-minute permission and stop-only-at-final-report
+wording, define observable coordination failure and its correction, and preserve blind boundaries.
+No new schema, process monitor, agent quota or approval flow is introduced.
+
+**Verification.** Root authored the audit and patch; Terra `/root/parent_coordination_review`
+received only a 90-second read-only diff review, first-return/consumer/stop conditions and NONCOMPUTE.
+It found four holes: residual child polling to completion, unbounded first-return time, ungrounded
+coordination records, and potentially revealing blind updates. All were repaired in core/reference
+and template. Root rejected no substantive finding; stopping a compromised blind arm is not proof
+of preserved independence. The independent recheck is recorded below when returned.
+Root desk-checked six new scheduling cases and ten orchestration cases against actual sibling cuts.
+F3 scope: narrow static delta review and textual old/new comparison; no fresh paired behavior run.
+Static improvements do not prove deployed agents comply or that actual interruption latency improves.
+
+`skill-check.ts` for both changed skills exits 0. Driver core/references have zero prose warnings.
+Orchestration retains exactly its baseline 13 reference warnings; no new prose debt was added.
+`mise run lint:skills-floor` passes: 73 skills / 64,299 listing characters; ceiling unchanged.
+`git diff --check` passes. Parent coordination criteria are semantic instructions, not a new runtime hook.
+
+Independent recheck found one remaining visibility hole: the board itself could expose cross-arm
+artifact/consumer links. C0 and the template now keep those details in existing parent-only visibility;
+blind arms receive neutral control instructions, not the shared record. Root checked the exact fix.
+`mise run link:skills` and `mise run lint:skills-wiring` passed; source-linked files are updated.

@@ -38,3 +38,9 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S31 | A warm worker has preauthorized successors based on a superseded premise | Recheck every successor and discard/reselect invalidated branches | Treat finite queue authorization as unconditional execution permission |
 | S32 | A finding changes one premise but another ticket's purpose and binding remain valid | Continue unaffected work without a fleet-wide barrier | Stop all agents on every result |
 | S33 | A cancelled ticket produced partial code but no interpretable test result | Retain bound partial artifact and discarded-effort record; no scientific-negative credit | Count obsolete effort as a completed scientific cycle |
+| S34 | Whole component rewrite is called a microticket; no usable return until a distant final delivery | Re-slice to first checkable consumed result before dispatch | Accept the label or short experiment inside a long implementation |
+| S35 | Worker waits on a background job at a missed return point | Parent checks phase/artifact/stop condition and unblocks, re-slices or stops | “I will act when it hands back” |
+| S36 | Parent receives many side findings while critical return is unconsumed | Consume critical boundary and reduce fan-out if necessary | Treat side throughput or a six-agent quota as coordination success |
+| S37 | A crucial finding changes purpose of three live assignments | Record scoped continue/shrink/stop decisions and observed changes | Only announce the finding and launch another large ticket |
+| S38 | A deadline is missed twice with the same broad assignment | Reopen split/interface and first return; no identical third dispatch | Send “hurry” and roll ETA again |
+| S39 | Worker follows a preauthorized branch with current premises intact | Continue locally; parent consumes relevant events without redundant approval | Require parent reply after every local step |

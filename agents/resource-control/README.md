@@ -27,7 +27,8 @@ dispatch — see that test's own comment for the incident history.
 
 Several declared GPU jobs may share one device: the controller aggregates the declared
 `vram_peak_bytes` of the live reservations on that GPU and admits against
-`total - max(declared, observed) - safety`, capped at four concurrent jobs per device. The
+`total - max(declared, observed) - safety`, capped at `gpu_max_concurrent_jobs` concurrent jobs
+per device (see "Operator policy" below). The
 utilization gate screens unmanaged load only — it is skipped once a reservation is held there, so
 an admitted job cannot block the next admission with its own compute. Sharing is only sound
 because the budget is pushed into the job: a GPU reservation exports
@@ -38,6 +39,24 @@ reservation only. On WSL2 `nvidia-smi` reports no per-process VRAM (`--query-com
 PIDs but its `used_memory` column reads literal `[N/A]`), so compliance cannot be audited after
 admission, and the measured `vram_peak_measured_bytes` below is simply absent there — not a bug
 in this runner, a WSL2 driver-passthrough limitation.
+
+## Operator policy: `resource-policy.toml`
+
+CONFIG vs MECHANISM, as in `agents/hooks/storage-headroom.toml`. Every operator-tunable threshold
+lives in `resource-policy.toml` next to the script, each with the reason for its value: the CPU,
+host-RAM, scratch, and VRAM safety headroom, the GPU idle rules (utilization and board power), the
+per-device GPU concurrency cap, the CUDA.jl soft-limit fraction, and the RSS/VRAM sampling
+intervals. `agent-resource-run.ts` keeps only implementation invariants (unit sizes, lock timing,
+kernel task bounds). To change policy, edit the one key in the TOML — for example
+`gpu_max_concurrent_jobs = 8` — and update its comment with the measurement that justified it; no
+code edit, and the cap test derives its reservations from the loaded value.
+
+The file is resolved next to the script's real path, so the `bun link` bin reads the repo copy.
+`AGENT_RESOURCE_POLICY=/absolute/path.toml` points one process at another file (the tests use it).
+Every key is required, typed, and range-checked, and an unknown key is an error; any violation
+refuses every admission with `USAGE:` exit 2, naming the file, the key, the bad value, and the
+expected type. There is no fallback default: a silently wrong admission limit is worse than a
+refusal.
 
 ## Measured peak, on release
 

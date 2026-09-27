@@ -17,14 +17,16 @@ import {
   commandEnvironment,
   createAdmissionReceipt,
   decideAdmission,
-  GPU_MAX_CONCURRENT_JOBS,
   hasUnmanagedGpuLoad,
   parseNvidiaSmiComputeAppRow,
   parseNvidiaSmiGpuRow,
   checkJob,
   executeJob,
   kernelTasksMax,
+  loadResourcePolicy,
   parseCpuList,
+  resourcePolicy,
+  resourcePolicyPath,
   probeKernelEnforcement,
   probeHostSnapshot,
   manifestSourceFromBytes,
@@ -369,15 +371,15 @@ describe("admission", () => {
   });
 
   test("caps concurrent jobs on one device even when VRAM is abundant", () => {
-    const result = denied(
-      decideAdmission(
-        gpuManifest(),
-        hostSnapshot(),
-        Array.from({ length: GPU_MAX_CONCURRENT_JOBS }, (_, i) =>
-          gpuReservation(`job${i}`, 128 * MiB),
-        ),
-      ),
+    // Derived from the live policy, so moving the cap in resource-policy.toml needs no test edit.
+    const cap = resourcePolicy().gpu_max_concurrent_jobs;
+    const held = Array.from({ length: cap }, (_, index) =>
+      gpuReservation(`held-${index}`, 128 * MiB),
     );
+    expect(
+      decideAdmission(gpuManifest(), hostSnapshot(), held.slice(1)).ok,
+    ).toBe(true);
+    const result = denied(decideAdmission(gpuManifest(), hostSnapshot(), held));
     expect(result.reason).toContain("concurrency cap");
     expect(result.reason.startsWith("GPU 0 already holds")).toBe(true);
     expect(result.reason).not.toContain("exceeds");
@@ -403,6 +405,158 @@ describe("admission", () => {
       ]),
     );
     expect(result.reason).toContain("already reserved");
+  });
+});
+
+describe("resource policy", () => {
+  const shippedPolicyPath = resolve(
+    import.meta.dir,
+    "..",
+    "resource-policy.toml",
+  );
+  const scriptPath = resolve(import.meta.dir, "..", "agent-resource-run.ts");
+
+  /** Writes the shipped policy with `edit` applied to its text; returns the fixture path. */
+  function policyFixture(edit: (text: string) => string): string {
+    const path = join(temporaryStateDirectory(), "resource-policy.toml");
+    writeFileSync(path, edit(readFileSync(shippedPolicyPath, "utf8")));
+    return path;
+  }
+
+  function withKey(key: string, value: string): (text: string) => string {
+    return (text) => {
+      const pattern = new RegExp(`^${key} = .*$`, "m");
+      expect(pattern.test(text)).toBe(true);
+      return text.replace(pattern, `${key} = ${value}`);
+    };
+  }
+
+  test("the shipped TOML carries exactly the former hardcoded thresholds", () => {
+    const expected = {
+      cpu_safety_count: 1,
+      min_host_ram_safety_bytes: 4 * GiB,
+      host_ram_safety_fraction: 0.1,
+      scratch_safety_bytes: GiB,
+      gpu_safety_bytes: 512 * MiB,
+      gpu_idle_utilization_percent: 20,
+      gpu_idle_power_watts: 30,
+      gpu_max_concurrent_jobs: 8,
+      gpu_soft_limit_fraction: 0.9,
+      default_monitor_interval_ms: 200,
+      gpu_vram_sample_interval_ms: 1_000,
+    };
+    expect(loadResourcePolicy(shippedPolicyPath)).toEqual(expected);
+    expect(resourcePolicyPath()).toBe(shippedPolicyPath);
+    expect(resourcePolicy()).toEqual(expected);
+  });
+
+  test("AGENT_RESOURCE_POLICY moves the GPU cap without a code edit", () => {
+    const fixture = policyFixture(withKey("gpu_max_concurrent_jobs", "2"));
+    const saved = process.env.AGENT_RESOURCE_POLICY;
+    process.env.AGENT_RESOURCE_POLICY = fixture;
+    const policy = loadResourcePolicy();
+    restoreEnvValue("AGENT_RESOURCE_POLICY", saved);
+    expect(policy.gpu_max_concurrent_jobs).toBe(2);
+    const one = [gpuReservation("a", 128 * MiB)];
+    const two = [...one, gpuReservation("b", 128 * MiB)];
+    expect(decideAdmission(gpuManifest(), hostSnapshot(), one, policy).ok).toBe(
+      true,
+    );
+    expect(
+      denied(decideAdmission(gpuManifest(), hostSnapshot(), two, policy))
+        .reason,
+    ).toContain("2-job concurrency cap");
+    // The module-level startup load honours the variable too, in a fresh process.
+    const probe = Bun.spawnSync(
+      [
+        process.execPath,
+        "-e",
+        `import { resourcePolicy } from ${JSON.stringify(scriptPath)};` +
+          "console.log(resourcePolicy().gpu_max_concurrent_jobs);",
+      ],
+      {
+        env: { ...process.env, AGENT_RESOURCE_POLICY: fixture },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    expect(probe.stdout.toString().trim()).toBe("2");
+  });
+
+  test("a relative AGENT_RESOURCE_POLICY is refused", () => {
+    const saved = process.env.AGENT_RESOURCE_POLICY;
+    process.env.AGENT_RESOURCE_POLICY = "resource-policy.toml";
+    const result = fromThrowable(() => resourcePolicyPath())();
+    restoreEnvValue("AGENT_RESOURCE_POLICY", saved);
+    expect(result.isErr()).toBe(true);
+    expect(String(result._unsafeUnwrapErr())).toContain("absolute path");
+  });
+
+  test("a missing key fails closed and names the key and file", () => {
+    const fixture = policyFixture((text) =>
+      text.replace(/^gpu_max_concurrent_jobs = .*$/m, ""),
+    );
+    expect(() => loadResourcePolicy(fixture)).toThrow(
+      "gpu_max_concurrent_jobs: required key is missing (expected a positive integer)",
+    );
+    expect(() => loadResourcePolicy(fixture)).toThrow(fixture);
+  });
+
+  test("an unknown key fails closed and names the key", () => {
+    const fixture = policyFixture(
+      (text) => `${text}\ngpu_max_concurent_jobs = 8\n`,
+    );
+    expect(() => loadResourcePolicy(fixture)).toThrow(
+      "gpu_max_concurent_jobs: unknown key",
+    );
+  });
+
+  test("out-of-range and mistyped values fail closed with the key and value named", () => {
+    const cases: [string, string, string][] = [
+      ["gpu_max_concurrent_jobs", "0", "expected a positive integer, got 0"],
+      [
+        "gpu_max_concurrent_jobs",
+        "2.5",
+        "expected a positive integer, got 2.5",
+      ],
+      [
+        "gpu_soft_limit_fraction",
+        "1.5",
+        "expected a fraction in (0, 1], got 1.5",
+      ],
+      [
+        "host_ram_safety_fraction",
+        '"0.1"',
+        'expected a fraction in (0, 1], got "0.1"',
+      ],
+      ["gpu_safety_mib", "-512", "expected a positive integer (MiB), got -512"],
+      [
+        "gpu_idle_power_watts",
+        "nan",
+        "expected a positive number (W), got null",
+      ],
+    ];
+    for (const [key, value, message] of cases) {
+      const fixture = policyFixture(withKey(key, value));
+      expect(() => loadResourcePolicy(fixture)).toThrow(`${key}: ${message}`);
+    }
+  });
+
+  test("the CLI refuses with USAGE exit 2 when the policy is invalid", () => {
+    const fixture = policyFixture((text) =>
+      text.replace(/^gpu_max_concurrent_jobs = .*$/m, ""),
+    );
+    const run = Bun.spawnSync(
+      [process.execPath, scriptPath, "--manifest", "/nonexistent.json"],
+      {
+        env: { ...process.env, AGENT_RESOURCE_POLICY: fixture },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    expect(run.exitCode).toBe(2);
+    expect(run.stderr.toString()).toContain("USAGE: resource policy");
+    expect(run.stderr.toString()).toContain("gpu_max_concurrent_jobs");
   });
 });
 

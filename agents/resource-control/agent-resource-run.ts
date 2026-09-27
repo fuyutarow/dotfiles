@@ -25,43 +25,213 @@ import { fromThrowable } from "neverthrow";
 const KiB = 1024;
 const MiB = 1024 ** 2;
 const GiB = 1024 ** 3;
-const CPU_SAFETY_COUNT = 1;
-const MIN_HOST_RAM_SAFETY_BYTES = 4 * GiB;
-const HOST_RAM_SAFETY_FRACTION = 0.1;
-const GPU_SAFETY_BYTES = 512 * MiB;
-const GPU_IDLE_UTILIZATION_PERCENT = 20;
-// On a WSL2 host `utilization.gpu` also counts the Windows desktop compositor (observed
-// 2026-09-24: 33-40 % at P8 / 16 W, no compute process, 462 MiB used), so utilization alone
-// misreads an idle card as busy and denies every GPU job. Board power separates the two: any
-// compute kernel on an RTX 3060-class card draws well above this floor, display load does not.
-const GPU_IDLE_POWER_WATTS = 30;
-// VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
-// device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
-// ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
-// Raised 4 -> 8 on 2026-09-27 at the owner's explicit instruction: the fleet's GPU jobs are
-// kernel-launch-bound (B=1) and left the card at 18-39% utilization with 3 GiB of 12 GiB VRAM
-// used while jobs queued on this cap.
-export const GPU_MAX_CONCURRENT_JOBS = 8;
-// CUDA.jl releases cached pool blocks at the soft limit and refuses allocation at the hard one.
-// Leaving the soft limit below the hard limit turns pool fragmentation into a reclaim instead of
-// an out-of-memory error. Ref: CUDA.jl docs/src/usage/memory.md "Memory limits".
-const GPU_SOFT_LIMIT_FRACTION = 0.9;
-const SCRATCH_SAFETY_BYTES = GiB;
-const DEFAULT_MONITOR_INTERVAL_MS = 200;
+// Implementation invariants, not operator policy. Every operator-tunable threshold (CPU/RAM/
+// scratch/VRAM safety headroom, GPU idle rules and concurrency cap, sampling intervals) and the
+// reason for its value lives in resource-policy.toml next to this file — see loadResourcePolicy.
 const LOCK_WAIT_MS = 2_000;
 const LOCK_STALE_MS = 5_000;
 const MIN_KERNEL_TASKS = 32;
 const RUNTIME_TASK_MARGIN_PER_PROCESS = 16;
 const MAX_KERNEL_TASKS = 65_535;
 const KERNEL_PROBE_MEMORY_BYTES = 16 * MiB;
-// Peak VRAM is sampled by shelling out to nvidia-smi, unlike RSS (a free /proc read every monitor
-// tick). At the monitor's own DEFAULT_MONITOR_INTERVAL_MS (200 ms) that would spawn nvidia-smi 5
-// times a second per GPU job; throttling it to once a second keeps a fleet of concurrent GPU jobs
-// from turning "measure the peak" into unmanaged load on the very device being measured.
-const GPU_VRAM_SAMPLE_INTERVAL_MS = 1_000;
 
 class UsageError extends Error {}
 class StateError extends Error {}
+
+// --- Policy: CONFIG vs MECHANISM ----------------------------------------------------------------
+// resource-policy.toml says HOW MUCH is held back; this file says HOW. The TOML is resolved next
+// to this script's real path (import.meta.dir, so the `bun link` bin finds it), or at the
+// absolute path in AGENT_RESOURCE_POLICY (tests). Every key is required, typed, and range-checked;
+// any violation refuses admission with the file and key named — never a guessed default.
+
+/** The validated operator policy, in the units the mechanism uses (bytes, ms). */
+export type ResourcePolicy = {
+  cpu_safety_count: number;
+  min_host_ram_safety_bytes: number;
+  host_ram_safety_fraction: number;
+  scratch_safety_bytes: number;
+  gpu_safety_bytes: number;
+  gpu_idle_utilization_percent: number;
+  gpu_idle_power_watts: number;
+  gpu_max_concurrent_jobs: number;
+  gpu_soft_limit_fraction: number;
+  default_monitor_interval_ms: number;
+  gpu_vram_sample_interval_ms: number;
+};
+
+type PolicyRule = {
+  field: keyof ResourcePolicy;
+  expected: string;
+  valid: (value: number) => boolean;
+  scale: number;
+};
+
+const positiveInteger = (value: number): boolean =>
+  Number.isSafeInteger(value) && value > 0;
+const fraction = (value: number): boolean => value > 0 && value <= 1;
+
+// TOML key -> typed field. Sizes are whole MiB/GiB so the byte values stay exact integers.
+const POLICY_RULES: Record<string, PolicyRule> = {
+  cpu_safety_count: {
+    field: "cpu_safety_count",
+    expected: "a positive integer",
+    valid: positiveInteger,
+    scale: 1,
+  },
+  min_host_ram_safety_gib: {
+    field: "min_host_ram_safety_bytes",
+    expected: "a positive integer (GiB)",
+    valid: positiveInteger,
+    scale: GiB,
+  },
+  host_ram_safety_fraction: {
+    field: "host_ram_safety_fraction",
+    expected: "a fraction in (0, 1]",
+    valid: fraction,
+    scale: 1,
+  },
+  scratch_safety_gib: {
+    field: "scratch_safety_bytes",
+    expected: "a positive integer (GiB)",
+    valid: positiveInteger,
+    scale: GiB,
+  },
+  gpu_safety_mib: {
+    field: "gpu_safety_bytes",
+    expected: "a positive integer (MiB)",
+    valid: positiveInteger,
+    scale: MiB,
+  },
+  gpu_idle_utilization_percent: {
+    field: "gpu_idle_utilization_percent",
+    expected: "a percentage in (0, 100]",
+    valid: (value) => value > 0 && value <= 100,
+    scale: 1,
+  },
+  gpu_idle_power_watts: {
+    field: "gpu_idle_power_watts",
+    expected: "a positive number (W)",
+    valid: (value) => value > 0,
+    scale: 1,
+  },
+  gpu_max_concurrent_jobs: {
+    field: "gpu_max_concurrent_jobs",
+    expected: "a positive integer",
+    valid: positiveInteger,
+    scale: 1,
+  },
+  gpu_soft_limit_fraction: {
+    field: "gpu_soft_limit_fraction",
+    expected: "a fraction in (0, 1]",
+    valid: fraction,
+    scale: 1,
+  },
+  default_monitor_interval_ms: {
+    field: "default_monitor_interval_ms",
+    expected: "a positive integer (ms)",
+    valid: positiveInteger,
+    scale: 1,
+  },
+  gpu_vram_sample_interval_ms: {
+    field: "gpu_vram_sample_interval_ms",
+    expected: "a positive integer (ms)",
+    valid: positiveInteger,
+    scale: 1,
+  },
+};
+
+const DEFAULT_POLICY_PATH = join(import.meta.dir, "resource-policy.toml");
+
+/** The policy file this process reads: AGENT_RESOURCE_POLICY (absolute) or the shipped TOML. */
+export function resourcePolicyPath(): string {
+  const override = process.env.AGENT_RESOURCE_POLICY;
+  if (override === undefined || override === "") return DEFAULT_POLICY_PATH;
+  if (!isAbsolute(override)) {
+    throw new UsageError(
+      `AGENT_RESOURCE_POLICY must be an absolute path, got '${override}'`,
+    );
+  }
+  return override;
+}
+
+function policyKeyErrors(raw: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  if (raw.schema !== 1) {
+    errors.push(`schema: expected 1, got ${JSON.stringify(raw.schema)}`);
+  }
+  for (const key of Object.keys(raw)) {
+    if (key !== "schema" && !Object.hasOwn(POLICY_RULES, key)) {
+      errors.push(`${key}: unknown key`);
+    }
+  }
+  for (const [key, rule] of Object.entries(POLICY_RULES)) {
+    const value = raw[key];
+    if (value === undefined) {
+      errors.push(
+        `${key}: required key is missing (expected ${rule.expected})`,
+      );
+    } else if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      !rule.valid(value)
+    ) {
+      errors.push(
+        `${key}: expected ${rule.expected}, got ${JSON.stringify(value)}`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Read and validate one policy file. Throws UsageError naming the file and every bad key; there
+ * is no default for any key.
+ */
+export function loadResourcePolicy(
+  path: string = resourcePolicyPath(),
+): ResourcePolicy {
+  const parsed = fromThrowable(
+    () => Bun.TOML.parse(readFileSync(path, "utf8")) as unknown,
+  )();
+  if (parsed.isErr()) {
+    throw new UsageError(
+      `cannot read resource policy '${path}': ${
+        parsed.error instanceof Error
+          ? parsed.error.message
+          : String(parsed.error)
+      }`,
+    );
+  }
+  const raw = parsed.value;
+  if (!isRecord(raw)) {
+    throw new UsageError(`resource policy '${path}' must be a TOML table`);
+  }
+  const errors = policyKeyErrors(raw);
+  if (errors.length > 0) {
+    throw new UsageError(
+      `resource policy '${path}' is invalid (admission refused, no defaults): ${errors.join("; ")}`,
+    );
+  }
+  const policy: Partial<ResourcePolicy> = {};
+  for (const [key, rule] of Object.entries(POLICY_RULES)) {
+    policy[rule.field] = (raw[key] as number) * rule.scale;
+  }
+  return policy as ResourcePolicy;
+}
+
+// Loaded once at startup. A broken policy does not crash the import: it is re-thrown as the
+// UsageError from the first call that needs a threshold, which main() reports as `USAGE:` exit 2.
+const startupPolicy = fromThrowable(
+  () => loadResourcePolicy(),
+  (error) =>
+    error instanceof UsageError ? error : new UsageError(String(error)),
+)();
+
+/** The policy this process started with; throws its UsageError when the file was invalid. */
+export function resourcePolicy(): ResourcePolicy {
+  if (startupPolicy.isErr()) throw startupPolicy.error;
+  return startupPolicy.value;
+}
 
 type RunClass = "pilot" | "full" | "test" | "service";
 type CpuGpuStatus = "compatible" | "incompatible" | "not-beneficial";
@@ -542,9 +712,16 @@ export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
 // Unmanaged load: utilization above the idle threshold, unless the board draws idle power
 // (display-only load, e.g. a WSL2 host's desktop compositor). Unknown power keeps the
 // conservative utilization-only rule.
-export function hasUnmanagedGpuLoad(gpu: GpuSnapshot): boolean {
-  if (gpu.utilization_percent <= GPU_IDLE_UTILIZATION_PERCENT) return false;
-  if (gpu.power_watts !== undefined && gpu.power_watts < GPU_IDLE_POWER_WATTS)
+export function hasUnmanagedGpuLoad(
+  gpu: GpuSnapshot,
+  policy: ResourcePolicy = resourcePolicy(),
+): boolean {
+  if (gpu.utilization_percent <= policy.gpu_idle_utilization_percent)
+    return false;
+  if (
+    gpu.power_watts !== undefined &&
+    gpu.power_watts < policy.gpu_idle_power_watts
+  )
     return false;
   return true;
 }
@@ -652,10 +829,10 @@ export function probeKernelEnforcement(): KernelEnforcement {
   return { available: true };
 }
 
-function hostRamSafety(snapshot: HostSnapshot): number {
+function hostRamSafety(snapshot: HostSnapshot, policy: ResourcePolicy): number {
   return Math.max(
-    MIN_HOST_RAM_SAFETY_BYTES,
-    Math.ceil(snapshot.mem_total_bytes * HOST_RAM_SAFETY_FRACTION),
+    policy.min_host_ram_safety_bytes,
+    Math.ceil(snapshot.mem_total_bytes * policy.host_ram_safety_fraction),
   );
 }
 
@@ -678,7 +855,11 @@ type GpuLedger = {
  * The `max` form is conservative in both regimes — before our jobs allocate, `reserved`
  * dominates; when an unmanaged process holds the card, `used_bytes` does.
  */
-function gpuLedger(gpu: GpuSnapshot, reservations: Reservation[]): GpuLedger {
+function gpuLedger(
+  gpu: GpuSnapshot,
+  reservations: Reservation[],
+  policy: ResourcePolicy,
+): GpuLedger {
   const held = reservations.filter(
     (reservation) =>
       reservation.device.kind === "gpu" && reservation.device.gpu_id === gpu.id,
@@ -697,7 +878,7 @@ function gpuLedger(gpu: GpuSnapshot, reservations: Reservation[]): GpuLedger {
     reserved_bytes: reserved,
     available_bytes: Math.max(
       0,
-      gpu.total_bytes - committed - GPU_SAFETY_BYTES,
+      gpu.total_bytes - committed - policy.gpu_safety_bytes,
     ),
   };
 }
@@ -711,20 +892,21 @@ function gpuHeadroomDenial(
   gpu: GpuSnapshot,
   requiredBytes: number,
   reservations: Reservation[],
+  policy: ResourcePolicy,
 ): string | null {
-  const ledger = gpuLedger(gpu, reservations);
+  const ledger = gpuLedger(gpu, reservations, policy);
   const available =
     `${ledger.available_bytes} available on GPU ${gpu.id} after ${ledger.jobs} live ` +
     `reservation(s) (${ledger.reserved_bytes} bytes declared, ${gpu.used_bytes} bytes observed ` +
-    `in use) and ${GPU_SAFETY_BYTES} bytes of device safety headroom`;
+    `in use) and ${policy.gpu_safety_bytes} bytes of device safety headroom`;
   const vram = `VRAM request ${requiredBytes} vs ${available}`;
-  if (ledger.jobs >= GPU_MAX_CONCURRENT_JOBS) {
-    return `GPU ${gpu.id} already holds the ${GPU_MAX_CONCURRENT_JOBS}-job concurrency cap; ${vram}`;
+  if (ledger.jobs >= policy.gpu_max_concurrent_jobs) {
+    return `GPU ${gpu.id} already holds the ${policy.gpu_max_concurrent_jobs}-job concurrency cap; ${vram}`;
   }
   // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
   // this device makes an admitted job block the next admission with its own compute load, which
   // silently degrades the ledger to one job per GPU.
-  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu)) {
+  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu, policy)) {
     return (
       `unmanaged load holds GPU ${gpu.id} at ${gpu.utilization_percent}% utilization` +
       (gpu.power_watts === undefined
@@ -743,14 +925,16 @@ function gpuHasHeadroom(
   gpu: GpuSnapshot,
   requiredBytes: number,
   reservations: Reservation[],
+  policy: ResourcePolicy,
 ): boolean {
-  return gpuHeadroomDenial(gpu, requiredBytes, reservations) === null;
+  return gpuHeadroomDenial(gpu, requiredBytes, reservations, policy) === null;
 }
 
 export function decideAdmission(
   manifest: ResourceManifest,
   snapshot: HostSnapshot,
   reservations: Reservation[],
+  policy: ResourcePolicy = resourcePolicy(),
 ): AdmissionResult {
   if (reservations.some((item) => item.job_id === manifest.job_id)) {
     return {
@@ -768,21 +952,23 @@ export function decideAdmission(
   ).length;
   const reservableCpuCount = Math.max(
     0,
-    snapshot.allowed_cpu_ids.length - CPU_SAFETY_COUNT - reservedAllowedCount,
+    snapshot.allowed_cpu_ids.length -
+      policy.cpu_safety_count -
+      reservedAllowedCount,
   );
   if (manifest.cpu_threads > reservableCpuCount) {
     return {
       ok: false,
       reason:
         `CPU request ${manifest.cpu_threads} exceeds ${reservableCpuCount} currently ` +
-        `reservable thread(s); ${CPU_SAFETY_COUNT} CPU remains outside reservations`,
+        `reservable thread(s); ${policy.cpu_safety_count} CPU remains outside reservations`,
     };
   }
   const cpuIds = snapshot.allowed_cpu_ids
     .filter((cpu) => !reservedCpuIds.has(cpu))
     .slice(0, manifest.cpu_threads);
 
-  const ramSafety = hostRamSafety(snapshot);
+  const ramSafety = hostRamSafety(snapshot, policy);
   const reservedRam = reservations.reduce(
     (sum, item) => sum + item.host_ram_peak_bytes,
     0,
@@ -806,7 +992,9 @@ export function decideAdmission(
   );
   const scratchForNew = Math.max(
     0,
-    snapshot.scratch_available_bytes - SCRATCH_SAFETY_BYTES - reservedScratch,
+    snapshot.scratch_available_bytes -
+      policy.scratch_safety_bytes -
+      reservedScratch,
   );
   if (manifest.scratch_bytes > scratchForNew) {
     return {
@@ -827,6 +1015,7 @@ export function decideAdmission(
             ? (manifest.device.gpu_vram_peak_bytes ?? Number.MAX_SAFE_INTEGER)
             : Number.MAX_SAFE_INTEGER,
           reservations,
+          policy,
         ),
       )
     ) {
@@ -859,6 +1048,7 @@ export function decideAdmission(
     gpu,
     manifest.device.vram_peak_bytes,
     reservations,
+    policy,
   );
   if (denial !== null) return { ok: false, reason: denial };
   return {
@@ -1294,7 +1484,7 @@ function gpuBudgetEnvironment(
     AGENT_RESOURCE_VRAM_BYTES: String(hard),
     JULIA_CUDA_HARD_MEMORY_LIMIT: String(hard),
     JULIA_CUDA_SOFT_MEMORY_LIMIT: String(
-      Math.floor(hard * GPU_SOFT_LIMIT_FRACTION),
+      Math.floor(hard * resourcePolicy().gpu_soft_limit_fraction),
     ),
   };
 }
@@ -1740,7 +1930,8 @@ export async function executeJob(
     peakRssBytes = Math.max(peakRssBytes, usage.rssBytes);
     if (lease.reservation.device.kind !== "gpu") return;
     const now = performance.now();
-    if (now - lastGpuSampleAtMs < GPU_VRAM_SAMPLE_INTERVAL_MS) return;
+    if (now - lastGpuSampleAtMs < resourcePolicy().gpu_vram_sample_interval_ms)
+      return;
     lastGpuSampleAtMs = now;
     const gpuUsage = sampleGpuComputeApps();
     const jobVramBytes = usage.pids.reduce(
@@ -1805,7 +1996,7 @@ export async function executeJob(
     });
     const interval = Math.max(
       10,
-      options.monitorIntervalMs ?? DEFAULT_MONITOR_INTERVAL_MS,
+      options.monitorIntervalMs ?? resourcePolicy().default_monitor_interval_ms,
     );
 
     const breach = await monitorProcessGroup(
@@ -1953,6 +2144,9 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
+  // Fail closed before any manifest work: an invalid policy refuses every admission (after
+  // cli() so --help still answers).
+  resourcePolicy();
   if (parsed.flags.manifest === undefined) {
     throw new UsageError("--manifest is required");
   }

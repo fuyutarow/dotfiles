@@ -1,0 +1,69 @@
+# resource-policy — the declarative half of agent-resource-run.ts.
+#
+# This file says HOW MUCH the admission controller holds back and how often it samples; the
+# script says HOW (probing the host, pricing reservations, launching the systemd scope). Moving a
+# threshold is an edit here — no code edit. The script validates this file on every start: a
+# missing key, an unknown key, a wrong type, or an out-of-range value REFUSES every admission
+# (exit 2, the key named) rather than falling back to a guessed default — a silently wrong
+# admission limit is worse than a refusal. AGENT_RESOURCE_POLICY=/absolute/path.toml points the
+# script at another policy (the test suite's fixtures).
+#
+# Units are in the key name. Sizes are whole MiB/GiB; intervals are whole milliseconds.
+
+schema = 1
+
+# --- CPU -----------------------------------------------------------------------------------------
+
+# Allowed CPUs kept outside every reservation, so the host (and this controller) always has one.
+cpu_safety_count = 1
+
+# --- Host RAM ------------------------------------------------------------------------------------
+
+# System RAM headroom = max(min_host_ram_safety_gib, host_ram_safety_fraction * MemTotal).
+min_host_ram_safety_gib = 4
+host_ram_safety_fraction = 0.1
+
+# --- Scratch -------------------------------------------------------------------------------------
+
+# Free space on the working directory's filesystem kept outside every scratch reservation.
+scratch_safety_gib = 1
+
+# --- GPU -----------------------------------------------------------------------------------------
+
+# Device VRAM kept outside every reservation (driver/context overhead, display).
+gpu_safety_mib = 512
+
+# Utilization at or below this is idle; above it, the device holds unmanaged load unless the
+# board-power rule below says otherwise.
+gpu_idle_utilization_percent = 20
+
+# On a WSL2 host `utilization.gpu` also counts the Windows desktop compositor (observed
+# 2026-09-24: 33-40 % at P8 / 16 W, no compute process, 462 MiB used), so utilization alone
+# misreads an idle card as busy and denies every GPU job. Board power separates the two: any
+# compute kernel on an RTX 3060-class card draws well above this floor, display load does not.
+gpu_idle_power_watts = 30
+
+# VRAM is a divisible reservation like RAM and scratch, so several declared jobs may share one
+# device. This backstop bounds SM/PCIe contention and per-context overhead, which the VRAM
+# ledger does not price: a manifest declaring a tiny peak must not admit an unbounded fleet.
+# Raised 4 -> 8 on 2026-09-27 at the owner's explicit instruction: the fleet's GPU jobs are
+# kernel-launch-bound (B=1) and left the card at 18-39% utilization with 3 GiB of 12 GiB VRAM
+# used while jobs queued on this cap.
+gpu_max_concurrent_jobs = 8
+
+# CUDA.jl releases cached pool blocks at the soft limit and refuses allocation at the hard one.
+# Leaving the soft limit below the hard limit turns pool fragmentation into a reclaim instead of
+# an out-of-memory error. Ref: CUDA.jl docs/src/usage/memory.md "Memory limits".
+# JULIA_CUDA_SOFT_MEMORY_LIMIT = floor(declared vram_peak_bytes * this fraction).
+gpu_soft_limit_fraction = 0.9
+
+# --- Monitoring ----------------------------------------------------------------------------------
+
+# How often a running job's RSS and process count are sampled (a free /proc read).
+default_monitor_interval_ms = 200
+
+# Peak VRAM is sampled by shelling out to nvidia-smi, unlike RSS (a free /proc read every monitor
+# tick). At the monitor's own default_monitor_interval_ms (200 ms) that would spawn nvidia-smi 5
+# times a second per GPU job; throttling it to once a second keeps a fleet of concurrent GPU jobs
+# from turning "measure the peak" into unmanaged load on the very device being measured.
+gpu_vram_sample_interval_ms = 1000

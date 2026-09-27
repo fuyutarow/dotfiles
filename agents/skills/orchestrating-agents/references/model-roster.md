@@ -1,4 +1,4 @@
-# Model roster — dated snapshot 2026-07-31
+# Model roster — dated snapshot 2026-09-27
 
 > **Snapshot verified**: 2026-07-31。**2026-08-26 に availability gate が一度失敗している**(下の記録)。model 名と現在のavailabilityはこの file の SOLE home。
 > 役の恒久規則は `SKILL.md`、過去の配役と根拠は `../tests/forge-verification-ledger.md` が持つ。
@@ -6,15 +6,21 @@
 ## SOLE owner — current bearers
 
 この snapshot は現在のdispatchだけに使う。supervisor bearerは実務・成果物作成・独立検証・
-subagentを担わない。非supervisory roleは下の二bearerだけが担う。productionとverificationでは
+subagentを担わない。非supervisory roleは下のexecutor行のbearerだけが担う(supervisorと同じOpus 5.5でも、
+subagentとして別contextで動くopus-mediumはexecutor行に属する)。productionとverificationでは
 authorとverifierを同じbearerにしない。outside observerはtechnical truthの根拠やverifierにならない。
 
 | Slot | Current bearer | Allowed work | Dispatch constraint |
 |---|---|---|---|
 | supervisor / planning | Opus 5 | control plane only | executor、author、verifier、subagentへ配役しない。 |
 | supervisor / planning | gpt-5.6-sol | control plane only | executor、author、verifier、subagentへ配役しない。 |
-| delegated executor / verifier / outside observer | Sonnet 5 | production、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | Sonnet 5 @ high (`subagent_type:"sonnet-high", model:"sonnet"`) | 仕様が明確な量産・定型の production、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium", model:"opus"`) | 複数ファイルのリファクタ、デバッグ、長いagentic coding、仕様が曖昧な実装 | authorならverifierはgpt-5.6-terra。 |
 | delegated executor / verifier / outside observer | gpt-5.6-terra | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
+
+Claude側のdispatchはこの二組だけ(2026-09-27)。effortは暗黙継承しない:Agent/Taskは上の
+subagent_type+modelを必ず明示し、Workflowの`agent()`は`model`と`effort`を必ずliteralで書く
+(`sonnet`+`high` か `opus`+`medium`)。`enforce-dispatch-contract.ts`がそれ以外を拒否する。
 
 ## Availability gate — no silent fallback
 

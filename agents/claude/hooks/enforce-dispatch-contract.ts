@@ -1,34 +1,42 @@
-// PreToolUse gate — every executor runs on Sonnet.
+// PreToolUse gate — every dispatch names one of exactly two model+effort pairs, explicitly.
 // matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
+// ALLOWED PAIRS (the only two — nothing is implicit, nothing is injected):
+//   (subagent_type "sonnet-high", model "sonnet",  effort "high")
+//   (subagent_type "opus-medium", model "opus",    effort "medium")
+//
 // Policy:
-//   - Agent/Task: omitted model -> inject model:'sonnet'; only an explicit Sonnet passes.
-//                 Forks and every other model are denied.
+//   - Agent/Task: subagent_type must be present and be exactly "sonnet-high" or
+//                 "opus-medium"; model must be present and name the same family as the
+//                 chosen type (an alias like "sonnet"/"opus", or a full model id matching
+//                 that family). Missing subagent_type, any other subagent_type (fork,
+//                 Explore, general-purpose, Plan, claude-code-guide, …), missing model, or a
+//                 model/type mismatch are all denied. Effort is not a parameter of this
+//                 tool — it comes from the agent definition's frontmatter
+//                 (agents/claude/agents/sonnet-high.md, opus-medium.md), which is what
+//                 subagent_type is really selecting.
 //   - Every dispatch declares exactly one resource class. NONCOMPUTE excludes numerical
 //                 experiments, benchmarks, resident services, parallel tests, and nested
 //                 fanout. Compute work points to an absolute admitted envelope and may run
 //                 commands only through agent-resource-run.
-//   - Workflow: every agent() call has exactly one literal model:'sonnet'. Named/child/
-//               unreadable workflows are denied because they cannot be inspected.
+//   - Workflow: every agent() call carries exactly one top-level literal model: AND exactly
+//               one top-level literal effort:, and that pair must be one of the two allowed
+//               pairs above — omitting either is now a violation, not an inheritance.
+//               Named/child/unreadable workflows are denied because they cannot be
+//               inspected.
 //   - The role binding lives in orchestrating-agents/references/model-roster.md; this hook
-//     enforces it without a bypass.
-//   - Workflow effort: a literal effort:'low' needs a same-call declaration:
-//                 A LITERAL effort:'low' on an agent() call also needs a same-call
-//                 declaration (see orchestrating-agents/SKILL.md, "Durable role topology"):
-//                   LOW-EFFORT(<stage>): <why this stage is not intelligence-sensitive>
-//                 Two non-empty fields required. medium/high/xhigh/max and an ABSENT effort
-//                 key all pass with no declaration — absence inherits the session default,
-//                 which is normal and never denied.
+//     enforces it without a bypass. There is no low-effort escape hatch: 'low' is simply not
+//     an allowed value, so no declaration mechanism exists for it any more.
 //
 // The verifier blanks strings/templates/comments length-preservingly, then walks agent()
-// call spans by paren depth; model values are matched against the ORIGINAL source, so a
-// "model:'sonnet'" inside a prompt string cannot fake a pass.
+// call spans by paren depth; model/effort values are matched against the ORIGINAL source, so
+// a "model:'sonnet'" inside a prompt string cannot fake a pass.
 //
-// DIAGNOSTICS — batched, not first-error-wins. The three per-call axes (model, effort,
-// resource) are INDEPENDENT: none of them consumes another's output, so there is nothing to
-// "recover" into and every violation in a script is collected and emitted in ONE deny,
-// grouped by the agent() call that owns it. A caller therefore sees the whole fix list once
-// instead of being denied N times in a row. Two borrowings from compiler diagnostics:
+// DIAGNOSTICS — batched, not first-error-wins. The per-call axes (model, effort, resource)
+// are INDEPENDENT: none of them consumes another's output, so there is nothing to "recover"
+// into and every violation in a script is collected and emitted in ONE deny, grouped by the
+// agent() call that owns it. A caller therefore sees the whole fix list once instead of
+// being denied N times in a row. Two borrowings from compiler diagnostics:
 //   - POISONING: an agent() span whose parens never close cannot be parsed, so its other
 //     axes are NOT reported — a cascade off one syntax error is noise, not information.
 //   - CAP: at most MAX_REPORTED_LINES lines are listed, and the remainder is stated out
@@ -49,6 +57,26 @@ import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /(?:^|[-_])sonnet(?:$|[-_])/i;
+const OPUS = /(?:^|[-_])opus(?:$|[-_])/i;
+
+// The Agent/Task tool has no `effort` parameter — effort comes from the chosen agent
+// definition's frontmatter (sonnet-high.md / opus-medium.md), so subagent_type IS the
+// effort selector for that tool. model still has to name the matching family, so a caller
+// cannot dispatch subagent_type:"sonnet-high" with model:"opus" and get away with it.
+const AGENT_TYPE_FAMILY: Record<string, RegExp> = {
+  "sonnet-high": SONNET,
+  "opus-medium": OPUS,
+};
+const AGENT_PAIR_HELP =
+  'subagent_type:"sonnet-high", model:"sonnet" or subagent_type:"opus-medium", model:"opus"';
+
+// Workflow scripts pass model/effort as literals directly, so the pair is checked in full.
+const WORKFLOW_ALLOWED_EFFORT: Record<string, string> = {
+  sonnet: "high",
+  opus: "medium",
+};
+const WORKFLOW_PAIR_HELP =
+  "model:'sonnet' with effort:'high', or model:'opus' with effort:'medium'";
 
 // ---------------------------------------------------------------------------
 // Batched diagnostics
@@ -72,12 +100,12 @@ const AXIS_HINT: Record<Axis, string> = {
     "syntax   — this agent( span never closes, so nothing about it can be verified. " +
     "Fix the parentheses first; its other axes were NOT checked.",
   model:
-    "model    — exactly one literal {model:'sonnet'} property, top-level in the options object " +
-    "(no nesting, no spread, no computed key).",
+    "model    — exactly one literal model: property, top-level in the options object " +
+    `(no nesting, no spread, no computed key), naming the same family as effort: ${WORKFLOW_PAIR_HELP}.`,
   effort:
-    "effort   — omit effort to inherit the session default, or declare inside the SAME agent() call " +
-    "(a prompt string or a comment both count): " +
-    '"LOW-EFFORT(<stage>): <why this stage is not intelligence-sensitive>" (two non-empty fields).',
+    "effort   — exactly one literal effort: property, top-level in the options object " +
+    `(no nesting, no spread, no computed key), paired with model as one of: ${WORKFLOW_PAIR_HELP}. ` +
+    "Nothing is inherited any more — omitting effort is a violation, and 'low' is not an allowed value.",
   resource: `resource — ${RESOURCE_DECLARATION_HELP}, inside the SAME agent() call.`,
 };
 
@@ -151,24 +179,6 @@ function denyFindings(findings: Finding[], totalCalls: number): void {
         .map((a) => `  ${AXIS_HINT[a]}`)
         .join("\n"),
   );
-}
-
-// LOW-EFFORT(<stage>): <reason>
-// Two fields, not three — modeled on hasEscalationDeclaration() above. Both the stage
-// (inside the parens) and the reason (after the colon) must be non-empty; a bare marker
-// is not a declaration. Searched line-by-line against whatever text is handed in — callers
-// pass the ORIGINAL (un-blanked) text of a single agent() call span, so a declaration
-// living in a prompt string or a comment counts, but one outside that span does not.
-function hasLowEffortDeclaration(text: string): boolean {
-  for (const line of text.split("\n")) {
-    const m = /LOW-EFFORT\s*\(([^)]*)\)\s*:(.*)$/i.exec(line);
-    if (m === null) continue;
-    const stage = m[1];
-    const reason = m[2];
-    if (stage === undefined || reason === undefined) continue;
-    if (stage.trim() !== "" && reason.trim() !== "") return true;
-  }
-  return false;
 }
 
 type LexState = "code" | "s1" | "s2" | "tpl" | "line" | "block";
@@ -319,18 +329,39 @@ function directSegments(
   return spans;
 }
 
-function directWorkflowModel(
+// One agent() call's top-level {model:…, effort:…} shape, extracted from the OPTIONS object.
+// `unsound` means a spread or computed key was seen among the properties, so NEITHER model
+// nor effort can be trusted even if a literal with the right name also appears — either could
+// be overwritten at runtime. Values are captured as `null` when the property exists but its
+// value is not a simple quoted-string literal (a variable, a computed expression, a template
+// interpolation): that is reported the same as "malformed", not silently ignored.
+type CallShape = {
+  unsound: boolean;
+  modelValues: (string | null)[];
+  effortValues: (string | null)[];
+};
+
+function literalValue(src: string, valueStart: number): string | null {
+  const m = /^(['"])([^'"]*)\1/.exec(src.slice(valueStart));
+  return m === null ? null : (m[2] ?? null);
+}
+
+// Parsing failure (no options object, unbalanced braces, trailing junk) is folded into
+// `unsound: true` with empty value lists rather than a separate null case — the caller
+// treats "can't be trusted" and "can't be found" identically: both mean the pair is denied.
+function scanCallOptions(
   src: string,
   blanked: string,
   start: number,
   end: number,
-): boolean {
+): CallShape {
+  const fail: CallShape = { unsound: true, modelValues: [], effortValues: [] };
   const args = directSegments(blanked, start, end);
-  if (args === null || args.length !== 2) return false;
+  if (args === null || args.length !== 2) return fail;
 
   const options = args[1];
-  if (options === undefined) return false;
-  if (blanked[options.start] !== "{") return false;
+  if (options === undefined) return fail;
+  if (blanked[options.start] !== "{") return fail;
   let close = options.start + 1;
   let depth = 1;
   while (close < options.end && depth > 0) {
@@ -341,24 +372,127 @@ function directWorkflowModel(
   if (
     depth !== 0 ||
     trimSpan(blanked, close, options.end).start !== options.end
-  )
-    return false;
+  ) {
+    return fail;
+  }
 
   const properties = directSegments(blanked, options.start + 1, close - 1);
-  if (properties === null) return false;
-  let models = 0;
-  let sonnetLiteral = false;
+  if (properties === null) return fail;
+
+  let unsound = false;
+  const modelValues: (string | null)[] = [];
+  const effortValues: (string | null)[] = [];
   for (const property of properties) {
     const text = blanked.slice(property.start, property.end);
-    // Spread and computed keys can overwrite a preceding literal model at runtime.
-    if (text.startsWith("...") || text.startsWith("[")) return false;
-    const key = /^model\s*:\s*/.exec(text);
-    if (key === null) continue;
-    models++;
-    const valueStart = property.start + key[0].length;
-    sonnetLiteral = /^(['"])sonnet\1/.test(src.slice(valueStart));
+    // Spread and computed keys can overwrite a preceding literal at runtime.
+    if (text.startsWith("...") || text.startsWith("[")) {
+      unsound = true;
+      continue;
+    }
+    const modelKey = /^model\s*:\s*/.exec(text);
+    if (modelKey !== null) {
+      modelValues.push(literalValue(src, property.start + modelKey[0].length));
+      continue;
+    }
+    const effortKey = /^effort\s*:\s*/.exec(text);
+    if (effortKey !== null) {
+      effortValues.push(
+        literalValue(src, property.start + effortKey[0].length),
+      );
+    }
   }
-  return models === 1 && sonnetLiteral;
+  return { unsound, modelValues, effortValues };
+}
+
+type PropStatus =
+  | { kind: "missing" }
+  | { kind: "malformed" }
+  | { kind: "invalid"; value: string }
+  | { kind: "ok"; value: string };
+
+function classifyProp(
+  values: (string | null)[],
+  allowed: string[],
+  unsound: boolean,
+): PropStatus {
+  if (unsound) return { kind: "malformed" };
+  if (values.length === 0) return { kind: "missing" };
+  if (values.length > 1) return { kind: "malformed" };
+  const v = values[0];
+  if (v === null || v === undefined) return { kind: "malformed" };
+  if (!allowed.includes(v)) return { kind: "invalid", value: v };
+  return { kind: "ok", value: v };
+}
+
+// Both model and effort must be present, each a single top-level literal, and the two values
+// must form one of the two allowed pairs. Reported as (up to) two findings — one per axis —
+// so the HOW TO FIX block still points at the right property, plus a third when both
+// individual values are fine but the COMBINATION is not (sonnet+medium, opus+high, …).
+function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
+  const model = classifyProp(
+    shape.modelValues,
+    ["sonnet", "opus"],
+    shape.unsound,
+  );
+  const effort = classifyProp(
+    shape.effortValues,
+    ["high", "medium"],
+    shape.unsound,
+  );
+  const out: { axis: Axis; detail: string }[] = [];
+
+  if (model.kind === "missing") {
+    out.push({
+      axis: "model",
+      detail: `missing model — ${WORKFLOW_PAIR_HELP}`,
+    });
+  } else if (model.kind === "malformed") {
+    out.push({
+      axis: "model",
+      detail:
+        "model must be exactly one top-level literal 'sonnet' or 'opus' " +
+        `(no nesting, spread, or computed key) — ${WORKFLOW_PAIR_HELP}`,
+    });
+  } else if (model.kind === "invalid") {
+    out.push({
+      axis: "model",
+      detail: `model '${model.value}' is not allowed — ${WORKFLOW_PAIR_HELP}`,
+    });
+  }
+
+  if (effort.kind === "missing") {
+    out.push({
+      axis: "effort",
+      detail: `missing effort — ${WORKFLOW_PAIR_HELP}`,
+    });
+  } else if (effort.kind === "malformed") {
+    out.push({
+      axis: "effort",
+      detail:
+        "effort must be exactly one top-level literal 'high' or 'medium' " +
+        `(no nesting, spread, or computed key) — ${WORKFLOW_PAIR_HELP}`,
+    });
+  } else if (effort.kind === "invalid") {
+    out.push({
+      axis: "effort",
+      detail: `effort '${effort.value}' is not allowed — ${WORKFLOW_PAIR_HELP}`,
+    });
+  }
+
+  if (
+    model.kind === "ok" &&
+    effort.kind === "ok" &&
+    WORKFLOW_ALLOWED_EFFORT[model.value] !== effort.value
+  ) {
+    out.push({
+      axis: "effort",
+      detail:
+        `model:'${model.value}' with effort:'${effort.value}' is not an allowed pair — ` +
+        WORKFLOW_PAIR_HELP,
+    });
+  }
+
+  return out;
 }
 
 // Scan forward from `open` (just past "agent(") to find where this call's parens balance.
@@ -441,11 +575,13 @@ function checkWorkflowScript(src: string): void {
       });
       continue;
     }
-    const span = blanked.slice(open, i);
     const originalSpan = src.slice(open, i);
 
-    if (!directWorkflowModel(src, blanked, open, i - 1)) {
-      findings.push({ line, axis: "model", detail: "missing model:'sonnet'" });
+    // BATCHED(model, effort): each property is checked independently of the other, so a call
+    // missing/mismatching both is told about both at once rather than one axis at a time.
+    const shape = scanCallOptions(src, blanked, open, i - 1);
+    for (const finding of pairFindings(shape)) {
+      findings.push({ line, ...finding });
     }
 
     const resource = resourceDeclarationResult(originalSpan);
@@ -454,25 +590,6 @@ function checkWorkflowScript(src: string): void {
         line,
         axis: "resource",
         detail: shortResourceReason(resource.reason),
-      });
-    }
-
-    // A literal effort:'low' on this call needs a same-span LOW-EFFORT(<stage>): <reason>
-    // declaration (see orchestrating-agents/SKILL.md, "Durable role topology"). FAIL-OPEN
-    // BY DESIGN: if the effort value is not a quoted literal — a variable, a computed
-    // expression, a template interpolation — this loop does not evaluate it and the call
-    // passes with no declaration. This gate targets careless literals, not obfuscation.
-    const ere = /\beffort\s*:\s*/g;
-    const low = [...span.matchAll(ere)].some((em) => {
-      const vpos = open + em.index + em[0].length;
-      return /^['"`]low['"`]/.test(src.slice(vpos, vpos + 5));
-    });
-    if (low && !hasLowEffortDeclaration(originalSpan)) {
-      findings.push({
-        line,
-        axis: "effort",
-        detail:
-          "literal effort:'low' with no LOW-EFFORT declaration in this call",
       });
     }
   }
@@ -506,9 +623,18 @@ async function main(): Promise<void> {
     }
     const problems: string[] = [];
 
-    if (ti.subagent_type === "fork") {
+    // subagent_type must be exactly one of the two allowed names. Nothing is injected any
+    // more: fork, Explore, general-purpose, Plan, claude-code-guide, and every other name
+    // (including a missing key) are denied identically.
+    const subagentType =
+      typeof ti.subagent_type === "string" ? ti.subagent_type : null;
+    const typeFamily =
+      subagentType === null ? null : (AGENT_TYPE_FAMILY[subagentType] ?? null);
+    if (subagentType === null) {
+      problems.push(`subagent_type is required — ${AGENT_PAIR_HELP}`);
+    } else if (typeFamily === null) {
       problems.push(
-        "subagent_type 'fork' is not allowed — dispatch an Agent or Task on Sonnet",
+        `subagent_type '${subagentType}' is not allowed — ${AGENT_PAIR_HELP}`,
       );
     }
 
@@ -519,19 +645,19 @@ async function main(): Promise<void> {
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
-    // An ABSENT model is not a violation — it is injected below. Only an explicit one is judged.
-    if (
-      "model" in ti &&
-      (typeof ti.model !== "string" || !SONNET.test(ti.model))
-    ) {
+    // model must be present and must name the SAME family as subagent_type. When
+    // subagent_type itself was invalid there is no family to check against, so only presence
+    // is judged there — the type problem above already covers the rest of that case.
+    if (typeof ti.model !== "string") {
+      problems.push(`model is required — ${AGENT_PAIR_HELP}`);
+    } else if (typeFamily !== null && !typeFamily.test(ti.model)) {
       problems.push(
-        `model '${String(ti.model)}' is not allowed — every executor runs on Sonnet; ` +
-          "re-issue with model:'sonnet' or omit model",
+        `model '${ti.model}' does not match subagent_type '${subagentType}' — ${AGENT_PAIR_HELP}`,
       );
     }
 
-    // BATCHED(fork, resource, model): subagent shape, resource class and model are independent
-    // of one another, so a caller violating two of them is told both at once, not denied twice.
+    // BATCHED(subagent_type, resource, model): the three are independent — a caller violating
+    // more than one of them is told about all of them at once, not denied once per axis.
     if (problems.length > 0) {
       decidePre(
         "deny",
@@ -540,12 +666,6 @@ async function main(): Promise<void> {
           : `dispatch-contract: ${problems.length} violations — fix them all, then re-invoke.\n` +
               problems.map((p) => `  - ${p}`).join("\n"),
       );
-    }
-
-    if (!("model" in ti)) {
-      decidePre("allow", "dispatch-contract: injected model:'sonnet'", {
-        updatedInput: { ...ti, model: "sonnet" },
-      });
     }
     return;
   }
@@ -594,8 +714,9 @@ if (!r.ok) {
     "deny",
     `dispatch-contract: hook error while verifying ` +
       `(${errorMessage(r.error)}) — failing closed. ` +
-      `Fix ~/.claude/hooks/enforce-dispatch-contract.ts, or re-issue the call so it satisfies ` +
-      `the contract on BOTH axes: model:'sonnet' (executor) and no undeclared effort:'low' (effort).`,
+      `Fix ~/.claude/hooks/enforce-dispatch-contract.ts, or re-issue the call so it names one ` +
+      `of the two allowed pairs explicitly: ${AGENT_PAIR_HELP} (Agent/Task), or ` +
+      `${WORKFLOW_PAIR_HELP} (Workflow).`,
   );
 }
 process.exit(0);

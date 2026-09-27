@@ -1,18 +1,18 @@
 # User-global policy
 
-- **Opus supervises; Sonnet executes.** The dispatch hook injects `model:'sonnet'` for an
-  Agent/Task call with no model and denies every other explicit model, including Fable and
-  forks. In a Workflow script, EVERY `agent()` call must contain exactly one top-level direct
-  literal `model:'sonnet'`; aliases/indirection, nested models, spreads,
+- **Every dispatch names one of exactly two model+effort pairs, explicitly.** Allowed:
+  **Sonnet 5 at `high`** (well-specified, bulk, cheap execution) and **Opus 5.5 at `medium`**
+  (multi-file refactors, debugging, long agentic coding, ambiguous specs — per task it is often
+  no dearer than Sonnet high, because it spends far fewer tokens and retries). Nothing is
+  implicit: the dispatch hook injects nothing and denies a missing or mismatched value.
+  Agent/Task: `subagent_type:"sonnet-high", model:"sonnet"` or
+  `subagent_type:"opus-medium", model:"opus"` (the two agent definitions carry the effort in
+  frontmatter; every other type, including forks, Explore, and general-purpose, is denied).
+  Workflow: EVERY `agent()` call carries exactly one top-level direct literal `model:` AND
+  `effort:` forming one of the two pairs; aliases/indirection, nested options, spreads,
   computed keys, child workflows, named workflows, and unreadable scripts are denied.
   This is an enforcement rule, not a request: there is no bypass. The role binding is maintained
   in `orchestrating-agents/references/model-roster.md`.
-- **Effort belongs to the role, not the session.** Leave `effort` off an `agent()` call to
-  inherit the default. The same hook denies a Workflow `agent()` that passes a literal
-  `effort: 'low'` unless that same call declares `LOW-EFFORT(<stage>): <why this stage is not
-  intelligence-sensitive>`. Raising effort needs no declaration — only lowering does, because
-  Anthropic documents Sonnet 5's `low` as reserved for work that is *not* intelligence-sensitive,
-  and almost everything we fan out is.
 - **Every dispatch declares its resource class exactly once.** Use
   `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,
   benchmark, resident service, parallel test, or nested fanout. Otherwise use

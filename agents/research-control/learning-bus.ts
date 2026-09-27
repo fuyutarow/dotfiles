@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fromThrowable } from "neverthrow";
 import { checkTrace, type Finding, type TraceResult } from "./trace.ts";
 
 /** A deliberately small, closed V0 wire for checking lateral transfer records. */
@@ -52,14 +53,14 @@ function record(value: unknown): value is RecordValue {
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
+const instantMs = fromThrowable(
+  (value: string) => Temporal.Instant.from(value).epochMilliseconds,
+);
 function timestamp(value: unknown): number | undefined {
   if (!text(value) || !RFC3339.test(value)) return undefined;
-  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over.
-  try {
-    return Temporal.Instant.from(value).epochMilliseconds;
-  } catch {
-    return undefined;
-  }
+  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over; that
+  // rejection is exactly the "not a timestamp" answer.
+  return instantMs(value).unwrapOr(undefined);
 }
 function digest(value: unknown): value is string {
   return typeof value === "string" && SHA.test(value);

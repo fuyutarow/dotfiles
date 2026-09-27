@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 import {
 	continuationProjectRoot,
 	continuationWorkspaceRootFromSlot,
@@ -95,20 +96,22 @@ function digest(text: string): string {
 function readRegularText(path: string, code: string): string {
 	let descriptor: number | undefined;
 	try {
-		descriptor = openSync(
-			path,
-			constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
-		);
-		const stat = fstatSync(descriptor);
-		if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) {
-			throw new TransactionError(
-				code,
-				`file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
+		const result = fromThrowable((): string => {
+			descriptor = openSync(
+				path,
+				constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
 			);
-		}
-		return readFileSync(descriptor, "utf8");
-	} catch (error) {
-		if (error instanceof TransactionError) throw error;
+			const stat = fstatSync(descriptor);
+			if (!stat.isFile() || stat.size > MAX_RECORD_BYTES) {
+				throw new TransactionError(
+					code,
+					`file must be regular and at most ${MAX_RECORD_BYTES} bytes`,
+				);
+			}
+			return readFileSync(descriptor, "utf8");
+		})();
+		if (result.isOk()) return result.value;
+		if (result.error instanceof TransactionError) throw result.error;
 		throw new TransactionError(code, "file could not be read safely");
 	} finally {
 		if (descriptor !== undefined) closeSync(descriptor);
@@ -179,7 +182,7 @@ function proposalText(proposalPath: string, recordPath: string): string {
 			"proposal must be a distinct regular file beside the canonical record",
 		);
 	}
-	try {
+	const statResult = fromThrowable((): void => {
 		const stat = lstatSync(proposal);
 		if (stat.isSymbolicLink() || !stat.isFile()) {
 			throw new TransactionError(
@@ -187,8 +190,9 @@ function proposalText(proposalPath: string, recordPath: string): string {
 				"proposal must be a regular file, never a symlink",
 			);
 		}
-	} catch (error) {
-		if (error instanceof TransactionError) throw error;
+	})();
+	if (statResult.isErr()) {
+		if (statResult.error instanceof TransactionError) throw statResult.error;
 		throw new TransactionError("TCR49", "proposal does not exist");
 	}
 	return readRegularText(proposal, "TCR49");
@@ -261,9 +265,10 @@ function createProposal(path: string, output: string, text: string): string {
 			"proposal must be a distinct file beside the canonical record",
 		);
 	}
-	try {
-		writeFileSync(proposal, text, { flag: "wx", mode: 0o600 });
-	} catch {
+	const written = fromThrowable(() =>
+		writeFileSync(proposal, text, { flag: "wx", mode: 0o600 }),
+	)();
+	if (written.isErr()) {
 		throw new TransactionError(
 			"TCR49",
 			"proposal already exists or could not be created",
@@ -275,7 +280,7 @@ function createProposal(path: string, output: string, text: string): string {
 function applyCheckpoint(args: {
 	baseRevision: number;
 	baseSha256: string;
-	handoffSlot?: string;
+	handoffSlot?: string | undefined;
 	path: string;
 	proposal: string;
 	writerSlot: string;
@@ -288,19 +293,20 @@ function applyCheckpoint(args: {
 	let temporary: string | undefined;
 
 	try {
-		try {
+		const lockWritten = fromThrowable(() =>
 			writeFileSync(
 				lock,
-				`${JSON.stringify({ pid: process.pid, started_at: new Date().toISOString(), transaction: randomUUID() })}\n`,
+				`${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
 				{ flag: "wx", mode: 0o600 },
-			);
-			lockHeld = true;
-		} catch {
+			),
+		)();
+		if (lockWritten.isErr()) {
 			throw new TransactionError(
 				"TCR40",
 				"checkpoint is locked; do not wait or reclaim automatically",
 			);
 		}
+		lockHeld = true;
 
 		const current = snapshot(path, root);
 		if (current.revision !== args.baseRevision) {
@@ -350,12 +356,9 @@ function applyCheckpoint(args: {
 		renameSync(temporary, path);
 		temporary = undefined;
 
-		let proposalRemoved = true;
-		try {
-			unlinkSync(resolve(args.proposal));
-		} catch {
-			proposalRemoved = false;
-		}
+		const proposalRemoved = fromThrowable(() =>
+			unlinkSync(resolve(args.proposal)),
+		)().isOk();
 		process.stdout.write(
 			`${JSON.stringify({
 				path,
@@ -368,18 +371,12 @@ function applyCheckpoint(args: {
 		);
 	} finally {
 		if (temporary !== undefined) {
-			try {
-				unlinkSync(temporary);
-			} catch {
-				// The randomized incomplete file is never a canonical record.
-			}
+			// The randomized incomplete file is never a canonical record.
+			fromThrowable(() => unlinkSync(temporary as string))();
 		}
 		if (lockHeld) {
-			try {
-				unlinkSync(lock);
-			} catch {
-				// Fail closed on the next update; stale locks require human inspection.
-			}
+			// Fail closed on the next update; stale locks require human inspection.
+			fromThrowable(() => unlinkSync(lock))();
 		}
 	}
 }
@@ -465,9 +462,9 @@ function main(): void {
 	});
 }
 
-try {
-	main();
-} catch (error) {
+const mainResult = fromThrowable(main)();
+if (mainResult.isErr()) {
+	const error = mainResult.error;
 	const transactionError =
 		error instanceof TransactionError
 			? error

@@ -22,6 +22,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 import releases from "./releases.toml";
 
 class UsageError extends Error {}
@@ -82,11 +83,9 @@ function warn(msg: string): void {
 function parseDay(s: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   // UTC midnight of that day; an impossible date (02-30) is rejected, not rolled over.
-  try {
-    return Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds;
-  } catch {
-    return null;
-  }
+  return fromThrowable(
+    () => Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds,
+  )().unwrapOr(null);
 }
 
 function todayStamp(): string {
@@ -99,12 +98,8 @@ function daysBetween(fromMs: number, toMs: number): number {
 
 // Read one guidance file's body; unreadable is not a finding.
 function readGuidanceFile(p: string): string | undefined {
-  try {
-    return readFileSync(p, "utf8");
-  } catch {
-    /* unreadable file is not a finding */
-    return undefined;
-  }
+  /* unreadable file is not a finding */
+  return fromThrowable(() => readFileSync(p, "utf8"))().unwrapOr(undefined);
 }
 
 // Walk the skills tree once, returning [path, text] for every markdown body a reader
@@ -112,20 +107,14 @@ function readGuidanceFile(p: string): string | undefined {
 function guidanceFiles(): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   const walk = (dir: string): void => {
-    let entries: string[];
-    try {
-      entries = readdirSync(dir);
-    } catch {
-      return;
-    }
+    const listed = fromThrowable(() => readdirSync(dir))();
+    if (listed.isErr()) return;
+    const entries = listed.value;
     for (const name of entries) {
       const p = join(dir, name);
-      let st: ReturnType<typeof statSync>;
-      try {
-        st = statSync(p);
-      } catch {
-        continue;
-      }
+      const stat = fromThrowable(() => statSync(p))();
+      if (stat.isErr()) continue;
+      const st = stat.value;
       if (st.isDirectory() && (name === "tests" || name === "node_modules"))
         continue;
       if (st.isDirectory()) {
@@ -271,9 +260,9 @@ function main(): void {
   }
 }
 
-try {
-  main();
-} catch (e) {
+const run = fromThrowable(main)();
+if (run.isErr()) {
+  const e = run.error;
   if (e instanceof UsageError) {
     fail(`check-releases crashed: ${e.message}`);
     process.exit(2);

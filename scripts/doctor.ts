@@ -36,7 +36,6 @@
 // so a green run can never be mistaken for one that checked something).
 // Exit: 0 no FAIL · 1 at least one FAIL · 2 FATAL (the doctor itself broke).
 
-/* oxlint-disable eslint-js/no-restricted-syntax -- zero-dep by design (see header): try/catch stays, neverthrow is a graduation import */
 import {
   existsSync,
   lstatSync,
@@ -53,6 +52,7 @@ import {
   MAPPING_ENV,
   parseMapping,
 } from "../agents/retrieval-control/ccc-db-dir.ts";
+import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -138,12 +138,8 @@ const fail = (
   lines: capped(lines),
 });
 
-function readJson(path: string): any {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    return null;
-  }
+function readJson(path: string): Promise<any> {
+  return attemptOr(() => JSON.parse(readFileSync(path, "utf8")), null);
 }
 
 export async function checkLinks(ctx: Ctx): Promise<Finding> {
@@ -205,8 +201,8 @@ export async function checkSettings(ctx: Ctx): Promise<Finding> {
         `could not render a reference copy (exit ${r.code}): ${r.out.trim()}`,
       );
     }
-    const want = readJson(join(scratch, ".claude", "settings.json"));
-    const have = readJson(live);
+    const want = await readJson(join(scratch, ".claude", "settings.json"));
+    const have = await readJson(live);
     if (have === null) {
       return fail(
         "settings",
@@ -289,7 +285,7 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkDeps(ctx: Ctx): Promise<Finding> {
-  const pkg = readJson(join(ctx.dotfiles, "package.json"));
+  const pkg = await readJson(join(ctx.dotfiles, "package.json"));
   if (pkg === null) return skip("deps", "no package.json in this checkout");
   const pins: Record<string, string> = {
     ...pkg.dependencies,
@@ -297,7 +293,7 @@ export async function checkDeps(ctx: Ctx): Promise<Finding> {
   };
   const off: string[] = [];
   for (const [name, want] of Object.entries(pins)) {
-    const installed = readJson(
+    const installed = await readJson(
       join(ctx.dotfiles, "node_modules", name, "package.json"),
     );
     if (installed === null) off.push(`${name}: not installed (pinned ${want})`);
@@ -318,17 +314,14 @@ export async function checkDeps(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkBins(ctx: Ctx): Promise<Finding> {
-  const pkg = readJson(join(ctx.dotfiles, "package.json"));
+  const pkg = await readJson(join(ctx.dotfiles, "package.json"));
   if (pkg === null) return skip("bins", "no package.json in this checkout");
   const binDir = join(ctx.home, ".bun", "bin");
   const problems: string[] = [];
-  const resolved = (p: string): string | null => {
-    try {
-      return realpathSync(p);
-    } catch {
-      return null;
-    }
-  };
+  // existsSync already swallows every stat failure (missing path, dangling symlink target,
+  // permission error) and reports false, so a prior real path is safe to resolve unconditionally.
+  const resolved = (p: string): string | null =>
+    existsSync(p) ? realpathSync(p) : null;
   for (const [name, rel] of Object.entries<string>(pkg.bin ?? {})) {
     const link = join(binDir, name);
     const have = resolved(link);
@@ -340,15 +333,13 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   }
   // A renamed or removed bin leaves bun's old link behind: it points through bun's global
   // node_modules/dotfiles link, so link-dots.sh's "$DOTFILES/*" prune never sees it.
-  let stale: string[] = [];
-  try {
-    stale = readdirSync(binDir)
-      .map((n) => join(binDir, n))
-      .filter((p) => lstatSync(p).isSymbolicLink() && !existsSync(p))
-      .filter((p) => readlinkSync(p).includes("node_modules/dotfiles/"));
-  } catch {
-    /* no bin dir: the per-bin loop above already reported every declared command */
-  }
+  // No bin dir at all: the per-bin loop above already reported every declared command.
+  const stale: string[] = existsSync(binDir)
+    ? readdirSync(binDir)
+        .map((n) => join(binDir, n))
+        .filter((p) => lstatSync(p).isSymbolicLink() && !existsSync(p))
+        .filter((p) => readlinkSync(p).includes("node_modules/dotfiles/"))
+    : [];
   problems.push(
     ...stale.map(
       (p) => `${p} is a dangling link left by a renamed/removed bin — rip ${p}`,
@@ -373,11 +364,12 @@ export async function checkGitHooks(ctx: Ctx): Promise<Finding> {
     { ms: 10_000 },
   );
   const have = r.out.trim();
+  const haveLabel = have === "" ? "unset" : `'${have}'`;
   return have === ".githooks"
     ? pass("git-hooks", "core.hooksPath = .githooks")
     : fail(
         "git-hooks",
-        `core.hooksPath is ${have === "" ? "unset" : `'${have}'`}, not .githooks — post-merge relink and pre-commit fmt never run`,
+        `core.hooksPath is ${haveLabel}, not .githooks — post-merge relink and pre-commit fmt never run`,
         `git -C ${ctx.dotfiles} config core.hooksPath .githooks`,
       );
 }
@@ -426,7 +418,7 @@ export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
 
 export async function checkMcp(ctx: Ctx): Promise<Finding> {
   const declared = Object.keys(
-    readJson(join(ctx.dotfiles, ".mcp.json"))?.mcpServers ?? {},
+    (await readJson(join(ctx.dotfiles, ".mcp.json")))?.mcpServers ?? {},
   );
   if (declared.length === 0)
     return skip("mcp", ".mcp.json declares no servers");
@@ -458,10 +450,13 @@ export async function checkMcp(ctx: Ctx): Promise<Finding> {
         .map((n) => `${n}: not registered in Codex`),
     );
   }
+  const codexNote = codex.missing
+    ? " (Codex not installed)"
+    : " in Claude Code and Codex";
   return missing.length === 0
     ? pass(
         "mcp",
-        `${declared.length} declared server(s) registered${codex.missing ? " (Codex not installed)" : " in Claude Code and Codex"}`,
+        `${declared.length} declared server(s) registered${codexNote}`,
       )
     : fail(
         "mcp",
@@ -571,18 +566,19 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
 // the old one until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
 export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
   if (!Bun.which("ccc")) return skip("ccc-db-map", "ccc is not installed");
-  let client: string[];
-  try {
-    client = parseMapping(process.env[MAPPING_ENV]).map(
+  const parsed = await attempt(() =>
+    parseMapping(process.env[MAPPING_ENV]).map(
       (m) => `${m.source}=${m.target}`,
-    );
-  } catch (e) {
+    ),
+  );
+  if (!parsed.ok) {
     return fail(
       "ccc-db-map",
-      `${MAPPING_ENV} is malformed: ${e instanceof Error ? e.message : String(e)}`,
+      `${MAPPING_ENV} is malformed: ${errorMessage(parsed.error)}`,
       "fix the export in zsh/zshenv",
     );
   }
+  const client = parsed.value;
   if (client.length === 0) {
     return fail(
       "ccc-db-map",
@@ -605,14 +601,15 @@ export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
   }
   const same =
     client.length === daemon.length && client.every((c, i) => c === daemon[i]);
+  const restartFix = ctx.isWsl
+    ? "systemctl --user daemon-reload && systemctl --user restart ccc-daemon"
+    : "ccc daemon restart (from a shell that exports the mapping)";
   return same
     ? pass("ccc-db-map", `daemon and this shell both map ${client.join(",")}`)
     : fail(
         "ccc-db-map",
         `daemon maps ${daemon.join(",") || "nothing"}, this shell maps ${client.join(",")}`,
-        ctx.isWsl
-          ? "systemctl --user daemon-reload && systemctl --user restart ccc-daemon"
-          : "ccc daemon restart (from a shell that exports the mapping)",
+        restartFix,
       );
 }
 
@@ -656,18 +653,17 @@ function trackedBunPin(file: string): string | undefined {
   return undefined;
 }
 /** One tracked-config link -> "pinned: <file> (bun = ...)" when it pins below the floor. */
-function trackedOldPin(link: string): string | undefined {
-  let file: string;
-  let pin: string | undefined;
-  try {
-    file = realpathSync(link);
+async function trackedOldPin(link: string): Promise<string | undefined> {
+  // config deleted since mise last saw it, or unreadable (e.g. an unmounted drive): neither
+  // can be a live pin on this machine, so a failure anywhere in this read is just "no pin here".
+  const read = await attempt(() => {
+    const file = realpathSync(link);
     if (!file.endsWith(".toml")) return undefined;
-    pin = trackedBunPin(file);
-  } catch {
-    // config deleted since mise last saw it, or unreadable (e.g. an unmounted drive):
-    // neither can be a live pin on this machine
-    return undefined;
-  }
+    const pin = trackedBunPin(file);
+    return { file, pin };
+  });
+  if (!read.ok || read.value === undefined) return undefined;
+  const { file, pin } = read.value;
   return pin !== undefined && belowFloor(pin)
     ? `pinned: ${file} (bun = "${pin}")`
     : undefined;
@@ -688,7 +684,7 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
   old.push(...oldVersions.map((v) => `installed: bun ${v}`));
   const links = existsSync(tracked) ? readdirSync(tracked) : [];
   for (const link of links) {
-    const hit = trackedOldPin(join(tracked, link));
+    const hit = await trackedOldPin(join(tracked, link));
     if (hit !== undefined) old.push(hit);
   }
   if (old.length === 0)
@@ -790,10 +786,7 @@ async function main(): Promise<void> {
         ? c
             .run(ctx)
             .catch((e: unknown) =>
-              warn(
-                c.name,
-                `check crashed: ${e instanceof Error ? e.message : String(e)}`,
-              ),
+              warn(c.name, `check crashed: ${errorMessage(e)}`),
             )
         : Promise.resolve(skip(c.name, why));
     }),

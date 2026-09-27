@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { attemptOr } from "../../agents/hooks/attempt.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "link-skills.ts");
 
@@ -50,12 +51,10 @@ function makeHome(): string {
   return mkdtempSync(join(tmpdir(), "link-skills-home-"));
 }
 
-function isSymlink(p: string): boolean {
-  try {
-    return lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
-  }
+// A dangling symlink still exists as a symlink (lstat succeeds on the link itself); only a
+// wholly absent path should read as "not a symlink" — attemptOr's fallback covers exactly that.
+function isSymlink(p: string): Promise<boolean> {
+  return attemptOr(() => lstatSync(p).isSymbolicLink(), false);
 }
 
 function cleanup(...dirs: string[]): void {
@@ -151,7 +150,7 @@ describe("link-skills: fresh run", () => {
     cleanup(dotfiles, home);
   });
 
-  test("missing agents/skills prints skip(missing) TWICE and runs no prune pass", () => {
+  test("missing agents/skills prints skip(missing) TWICE and runs no prune pass", async () => {
     const dotfiles = makeDotfiles([]);
     rmSync(join(dotfiles, "agents", "skills"), {
       recursive: true,
@@ -171,13 +170,13 @@ describe("link-skills: fresh run", () => {
     const occurrences = out.split(skipMissing).length - 1;
     expect(occurrences).toBe(2); // once from the explicit else, once from link_path's own check
     expect(out).not.toContain("pruned");
-    expect(isSymlink(`${home}/.claude/skills/ghost`)).toBe(true); // untouched
+    expect(await isSymlink(`${home}/.claude/skills/ghost`)).toBe(true); // untouched
     cleanup(dotfiles, home);
   });
 });
 
 describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
-  test("an existing whole-dir symlink at ~/.claude/skills is unlinked and replaced by a real dir", () => {
+  test("an existing whole-dir symlink at ~/.claude/skills is unlinked and replaced by a real dir", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     const legacyTarget = mkdtempSync(join(tmpdir(), "link-skills-legacy-"));
@@ -191,7 +190,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
     expect(out).toContain(
       `removed whole-dir symlink: ~/.claude/skills -> ${legacyTarget}`,
     );
-    expect(isSymlink(`${home}/.claude/skills`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills`)).toBe(false);
     expect(lstatSync(`${home}/.claude/skills`).isDirectory()).toBe(true);
     cleanup(dotfiles, home, legacyTarget);
   });
@@ -207,7 +206,7 @@ describe("link-skills: PRUNE (a) whole-dir legacy symlink", () => {
 });
 
 describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
-  test("a dangling symlink into dotfiles for a renamed/deleted skill is pruned", () => {
+  test("a dangling symlink into dotfiles for a renamed/deleted skill is pruned", async () => {
     const dotfiles = makeDotfiles(["kept-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
@@ -219,11 +218,11 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
     expect(out).toContain(
       `pruned (renamed/deleted): ${home}/.claude/skills/renamed-away`,
     );
-    expect(isSymlink(`${home}/.claude/skills/renamed-away`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills/renamed-away`)).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("a dangling symlink pointing OUTSIDE dotfiles is left alone", () => {
+  test("a dangling symlink pointing OUTSIDE dotfiles is left alone", async () => {
     const dotfiles = makeDotfiles(["kept-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
@@ -235,7 +234,7 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
     expect(code).toBe(0);
     expect(out).not.toContain("foreign");
-    expect(isSymlink(`${home}/.claude/skills/foreign`)).toBe(true); // untouched
+    expect(await isSymlink(`${home}/.claude/skills/foreign`)).toBe(true); // untouched
     cleanup(dotfiles, home);
   });
 
@@ -255,7 +254,7 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
     cleanup(dotfiles, home);
   });
 
-  test("a real (non-symlink) plugin-installed skill directory is never touched", () => {
+  test("a real (non-symlink) plugin-installed skill directory is never touched", async () => {
     const dotfiles = makeDotfiles(["kept-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills/real-plugin-skill`, { recursive: true });
@@ -270,13 +269,15 @@ describe("link-skills: PRUNE (b) dangling per-skill symlinks", () => {
     expect(
       lstatSync(`${home}/.claude/skills/real-plugin-skill`).isDirectory(),
     ).toBe(true);
-    expect(isSymlink(`${home}/.claude/skills/real-plugin-skill`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills/real-plugin-skill`)).toBe(
+      false,
+    );
     cleanup(dotfiles, home);
   });
 });
 
 describe("link-skills: SHADOW report", () => {
-  test("a real dir occupying a name this repo OWNS is named, not folded into the generic skip", () => {
+  test("a real dir occupying a name this repo OWNS is named, not folded into the generic skip", async () => {
     const dotfiles = makeDotfiles(["cloudflare"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills/cloudflare`, { recursive: true });
@@ -295,7 +296,7 @@ describe("link-skills: SHADOW report", () => {
       `skip (exists, not symlink): ${home}/.claude/skills/cloudflare`,
     );
     // And it still refuses to touch what it found.
-    expect(isSymlink(`${home}/.claude/skills/cloudflare`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills/cloudflare`)).toBe(false);
     expect(lstatSync(`${home}/.claude/skills/cloudflare`).isDirectory()).toBe(
       true,
     );
@@ -321,7 +322,7 @@ describe("link-skills: SHADOW report", () => {
 });
 
 describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
-  test("an existing matching symlink at driving-claude is unlinked, never relinked", () => {
+  test("an existing matching symlink at driving-claude is unlinked, never relinked", async () => {
     const dotfiles = makeDotfiles(["driving-claude", "other-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
@@ -335,13 +336,15 @@ describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
     expect(out).toContain(
       `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
     );
-    expect(isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(
+      false,
+    );
     // The generic linker never runs for it (no "linked: …driving-claude" line).
     expect(out).not.toContain(`linked: ${home}/.claude/skills/driving-claude`);
     cleanup(dotfiles, home);
   });
 
-  test("no prior symlink: still prints excluded, performs no unlink (nothing to unlink)", () => {
+  test("no prior symlink: still prints excluded, performs no unlink (nothing to unlink)", async () => {
     const dotfiles = makeDotfiles(["driving-claude"]);
     const home = makeHome();
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
@@ -349,11 +352,13 @@ describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
     expect(out).toContain(
       `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
     );
-    expect(isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(
+      false,
+    );
     cleanup(dotfiles, home);
   });
 
-  test("a driving-claude symlink pointing elsewhere is left untouched but still reported excluded", () => {
+  test("a driving-claude symlink pointing elsewhere is left untouched but still reported excluded", async () => {
     const dotfiles = makeDotfiles(["driving-claude"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
@@ -364,7 +369,7 @@ describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
     expect(out).toContain(
       `excluded (Codex-only): ${home}/.claude/skills/driving-claude`,
     );
-    expect(isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
+    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
     expect(readlinkSync(`${home}/.claude/skills/driving-claude`)).toBe(
       "/some/other/target",
     );
@@ -373,7 +378,7 @@ describe("link-skills: PRUNE (c) driving-claude Codex-only exclusion", () => {
 });
 
 describe("link-skills: PRUNE (d) stale ~/.codex/skills", () => {
-  test("a symlink to agents/commands (the historical misconfiguration) is removed", () => {
+  test("a symlink to agents/commands (the historical misconfiguration) is removed", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.codex`, { recursive: true });
@@ -385,11 +390,11 @@ describe("link-skills: PRUNE (d) stale ~/.codex/skills", () => {
     expect(out).toContain(
       `removed stale: ~/.codex/skills -> ${dotfiles}/agents/commands`,
     );
-    expect(isSymlink(`${home}/.codex/skills`)).toBe(false);
+    expect(await isSymlink(`${home}/.codex/skills`)).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("a ~/.codex/skills symlink to anything else is left alone", () => {
+  test("a ~/.codex/skills symlink to anything else is left alone", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.codex`, { recursive: true });
@@ -398,13 +403,13 @@ describe("link-skills: PRUNE (d) stale ~/.codex/skills", () => {
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
     expect(code).toBe(0);
     expect(out).not.toContain("removed stale");
-    expect(isSymlink(`${home}/.codex/skills`)).toBe(true);
+    expect(await isSymlink(`${home}/.codex/skills`)).toBe(true);
     cleanup(dotfiles, home);
   });
 });
 
 describe("link-skills: link_path guard", () => {
-  test("refuses to overwrite a REAL (non-symlink) file/dir at the destination", () => {
+  test("refuses to overwrite a REAL (non-symlink) file/dir at the destination", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude`, { recursive: true });
@@ -416,11 +421,11 @@ describe("link-skills: link_path guard", () => {
     expect(out).toContain(
       `skip (exists, not symlink): ${home}/.claude/commands`,
     );
-    expect(isSymlink(`${home}/.claude/commands`)).toBe(false);
+    expect(await isSymlink(`${home}/.claude/commands`)).toBe(false);
     cleanup(dotfiles, home);
   });
 
-  test("relinks a dangling pre-existing symlink at the destination (ln -sfn semantics)", () => {
+  test("relinks a dangling pre-existing symlink at the destination (ln -sfn semantics)", async () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude`, { recursive: true });
@@ -476,7 +481,7 @@ describe("link-skills: --dry-run", () => {
     cleanup(dotfiles, home);
   });
 
-  test("dry-run still reports what an existing prune/exclusion WOULD do, without doing it", () => {
+  test("dry-run still reports what an existing prune/exclusion WOULD do, without doing it", async () => {
     const dotfiles = makeDotfiles(["driving-claude"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude/skills`, { recursive: true });
@@ -502,8 +507,8 @@ describe("link-skills: --dry-run", () => {
       `[dry-run] would prune (renamed/deleted): ${home}/.claude/skills/gone`,
     );
     // Neither was actually touched.
-    expect(isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
-    expect(isSymlink(`${home}/.claude/skills/gone`)).toBe(true);
+    expect(await isSymlink(`${home}/.claude/skills/driving-claude`)).toBe(true);
+    expect(await isSymlink(`${home}/.claude/skills/gone`)).toBe(true);
     cleanup(dotfiles, home);
   });
 });

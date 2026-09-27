@@ -528,9 +528,13 @@ function miseRuns(body: string): MiseRun[] {
 
   // JOINT — a repo-local hook file must be registered somewhere.
   if (settingsRaw !== undefined) {
-    try {
-      JSON.parse(settingsRaw) as unknown;
-    } catch {
+    // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
+    // `.then` maps to the same FAIL as the old catch branch.
+    const parsesClean = await Promise.try(() => JSON.parse(settingsRaw)).then(
+      () => true,
+      () => false,
+    );
+    if (!parsesClean) {
       fail("JOINT", `.claude/settings.json is not valid JSON — the whole repo-local hook set is inert.`);
     }
   }

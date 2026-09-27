@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { cli } from "cleye";
+import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { checkTrace } from "./trace.ts";
 
 class UsageError extends Error {}
@@ -22,15 +23,15 @@ async function main(): Promise<void> {
     throw new UsageError(
       "research-section-trace accepts exactly one trace path",
     );
-  let input: unknown;
-  try {
-    input = await Bun.file(resolve(parsed._.trace)).json();
-  } catch (error) {
+  const parsedTrace = await attempt(() =>
+    Bun.file(resolve(parsed._.trace)).json(),
+  );
+  if (!parsedTrace.ok) {
     throw new UsageError(
-      `trace is unreadable JSON: ${error instanceof Error ? error.message : String(error)}`,
+      `trace is unreadable JSON: ${errorMessage(parsedTrace.error)}`,
     );
   }
-  const result = checkTrace(input);
+  const result = checkTrace(parsedTrace.value);
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.ok) process.exitCode = 1;
 }

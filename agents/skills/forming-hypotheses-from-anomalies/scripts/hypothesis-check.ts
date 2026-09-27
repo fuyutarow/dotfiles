@@ -277,9 +277,11 @@ function rejectPrototypeFlag(
 
 // A usage error is not a packet defect, so it exits 2: a caller can tell "you invoked me wrong"
 // from "the packet failed the floor" (exit 1).
-function parseArgv() {
-  try {
-    return cli(
+// No try/catch (audited *.ts ban): Promise.try turns cli()'s throw into a rejection this `.then`
+// maps to the same stderr message + exit(2) the old catch branch produced.
+async function parseArgv() {
+  return Promise.try(() =>
+    cli(
       {
         name: "hypothesis-check.ts",
         strictFlags: true,
@@ -299,11 +301,14 @@ function parseArgv() {
       },
       undefined,
       Bun.argv.slice(2),
-    );
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(2);
-  }
+    ),
+  ).then(
+    (ok) => ok,
+    (error: unknown) => {
+      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(2);
+    },
+  );
 }
 
 // A license claimed over nothing: EXHAUSTED route, Introduction type NONE, Status LICENSED. This
@@ -345,7 +350,7 @@ const GOOD_PLAIN = `## HYPOTHESIS G3
 `;
 
 async function main(): Promise<void> {
-  const argv = parseArgv();
+  const argv = await parseArgv();
   if (argv.flags.selfTest) {
     let failed = false;
     const badBranch = checkPacket("<bad-branch>", BAD_BRANCH);

@@ -45,6 +45,7 @@ import {
   RESOURCE_DECLARATION_HELP,
   resourceDeclarationResult,
 } from "../../resource-control/lib/dispatch-declaration.ts";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /(?:^|[-_])sonnet(?:$|[-_])/i;
@@ -203,7 +204,10 @@ function blankQuotedChar(
   n: string | undefined,
   st: "s1" | "s2" | "tpl",
 ): { st: LexState; skip: number } {
-  const q = st === "s1" ? "'" : st === "s2" ? '"' : "`";
+  let q: string;
+  if (st === "s1") q = "'";
+  else if (st === "s2") q = '"';
+  else q = "`";
   if (c === "\\") {
     chars[i] = " ";
     if (n !== undefined && n !== "\n") {
@@ -487,7 +491,7 @@ function promptResourceProblem(prompt: string | null): string | null {
   return resource.ok ? null : resource.reason;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = readStdinJson();
   const tool: string = payload?.tool_name ?? "";
   const ti = payload?.tool_input;
@@ -508,12 +512,10 @@ function main(): void {
       );
     }
 
-    const prompt =
-      typeof ti.prompt === "string"
-        ? ti.prompt
-        : typeof ti.message === "string"
-          ? ti.message
-          : null;
+    let prompt: string | null;
+    if (typeof ti.prompt === "string") prompt = ti.prompt;
+    else if (typeof ti.message === "string") prompt = ti.message;
+    else prompt = null;
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
@@ -560,16 +562,16 @@ function main(): void {
 
   let src: string | null = typeof ti.script === "string" ? ti.script : null;
   if (src === null && ti.scriptPath) {
-    try {
-      src = readFileSync(ti.scriptPath, "utf8");
-    } catch (e) {
+    const r = await attempt(() => readFileSync(ti.scriptPath, "utf8"));
+    if (!r.ok) {
       // FATAL: the script never loaded, so there are no agent() calls to collect findings from.
       decidePre(
         "deny",
         `dispatch-contract: cannot read scriptPath '${ti.scriptPath}' ` +
-          `(${e instanceof Error ? e.message : String(e)}) — agent models unverified.`,
+          `(${errorMessage(r.error)}) — agent models unverified.`,
       );
     }
+    src = r.value;
   }
   if (src === null) {
     // FATAL: a named workflow has no inspectable source, so every axis is unknowable here.
@@ -583,16 +585,17 @@ function main(): void {
   checkWorkflowScript(src);
 }
 
-try {
-  main();
-  process.exit(0);
-} catch (e) {
+const r = await attempt(main);
+if (!r.ok) {
+  // FATAL: the hook itself failed, so no axis could be evaluated; fail closed with the one fix
+  // (report the error) rather than guessing which checks would have fired.
   // FAIL CLOSED — an unverifiable dispatch is denied.
   decidePre(
     "deny",
     `dispatch-contract: hook error while verifying ` +
-      `(${e instanceof Error ? e.message : String(e)}) — failing closed. ` +
+      `(${errorMessage(r.error)}) — failing closed. ` +
       `Fix ~/.claude/hooks/enforce-dispatch-contract.ts, or re-issue the call so it satisfies ` +
       `the contract on BOTH axes: model:'sonnet' (executor) and no undeclared effort:'low' (effort).`,
   );
 }
+process.exit(0);

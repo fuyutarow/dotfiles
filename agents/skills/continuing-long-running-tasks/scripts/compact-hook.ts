@@ -5,6 +5,7 @@
  */
 
 import { readSync } from "node:fs";
+import { fromThrowable } from "neverthrow";
 import {
   continuationProjectRoot,
   inspectContinuationRecord,
@@ -128,12 +129,11 @@ export function handleCompactHook(
 }
 
 export function runCompactHook(platform: Platform): void {
-  try {
+  // Explicit fail-open: auto-compaction must remain able to recover a full context window.
+  fromThrowable((): void => {
     const raw = readBoundedStdin();
     if (raw === undefined) return;
     const output = handleCompactHook(platform, JSON.parse(raw));
     if (output !== undefined) process.stdout.write(`${output}\n`);
-  } catch {
-    // Explicit fail-open: auto-compaction must remain able to recover a full context window.
-  }
+  })();
 }

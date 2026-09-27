@@ -110,30 +110,30 @@ export async function loadPacket(
   findings: Finding[],
 ): Promise<LoadedPacket> {
   const resolved = resolve(path);
-  let initialMetadata: ReturnType<typeof lstatSync>;
-  let canonicalPath: string;
-  try {
-    initialMetadata = lstatSync(resolved);
-    canonicalPath = realpathSync(resolved);
-  } catch (error) {
-    throw new Error(
-      `cannot inspect ${path}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const { canonicalPath, initialMetadata } = await Promise.try(() => {
+    const metadata = lstatSync(resolved);
+    return { canonicalPath: realpathSync(resolved), initialMetadata: metadata };
+  }).then(
+    (value) => value,
+    (error: unknown) => {
+      throw new Error(
+        `cannot inspect ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  );
   if (initialMetadata.isSymbolicLink() || canonicalPath !== resolved)
     throw new Error(`symlink inputs are refused: ${path}`);
   if (!initialMetadata.isFile()) throw new Error(`not a regular file: ${path}`);
-  let handle: Awaited<ReturnType<typeof open>>;
-  try {
-    handle = await open(
-      resolved,
-      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
-    );
-  } catch (error) {
-    throw new Error(
-      `cannot open ${path}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const handle = await Promise.try(() =>
+    open(resolved, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)),
+  ).then(
+    (value) => value,
+    (error: unknown) => {
+      throw new Error(
+        `cannot open ${path}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    },
+  );
   try {
     const metadata = await handle.stat();
     if (

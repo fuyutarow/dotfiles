@@ -1,6 +1,7 @@
 /** Read-only postmortem reconstruction from one Goal Kernel run id. */
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { attempt, errorMessage } from "../hooks/attempt.ts";
 import {
   assertReadableRegularFile,
   type GoalAuthority,
@@ -77,7 +78,7 @@ export type PostmortemReport = Readonly<{
     policy_version: string;
     policy_digest: string;
   }>;
-  goal: ReturnType<typeof readBoundGoal>;
+  goal: Awaited<ReturnType<typeof readBoundGoal>>;
   decisions: readonly PostmortemDecision[];
   tools: readonly ToolTrace[];
   prompts: readonly Readonly<{
@@ -301,7 +302,17 @@ function parseTranscriptEntry(
   };
 }
 
-function parseTranscript(path: string): TranscriptReadout {
+function transcriptFormat(
+  claudeMessages: number,
+  codexMessages: number,
+): "claude-jsonl" | "codex-jsonl" | "mixed-jsonl" | "unknown-jsonl" {
+  if (claudeMessages > 0 && codexMessages > 0) return "mixed-jsonl";
+  if (claudeMessages > 0) return "claude-jsonl";
+  if (codexMessages > 0) return "codex-jsonl";
+  return "unknown-jsonl";
+}
+
+async function parseTranscript(path: string): Promise<TranscriptReadout> {
   if (!existsSync(path)) {
     return {
       available: false,
@@ -314,11 +325,12 @@ function parseTranscript(path: string): TranscriptReadout {
       finding: "GK_TRANSCRIPT_MISSING",
     };
   }
-  let realPath: string;
-  try {
-    realPath = realpathSync(path);
+  const opened = await attempt(() => {
+    const realPath = realpathSync(path);
     assertReadableRegularFile(realPath, MAX_TRANSCRIPT_BYTES);
-  } catch (error) {
+    return realPath;
+  });
+  if (!opened.ok) {
     return {
       available: false,
       path,
@@ -327,9 +339,10 @@ function parseTranscript(path: string): TranscriptReadout {
       redactions: 0,
       parse_errors: 0,
       truncated: false,
-      finding: `GK_TRANSCRIPT_UNREADABLE: ${error instanceof Error ? error.message : String(error)}`,
+      finding: `GK_TRANSCRIPT_UNREADABLE: ${errorMessage(opened.error)}`,
     };
   }
+  const realPath = opened.value;
 
   const messages: TranscriptMessage[] = [];
   const toolCalls: TranscriptToolCall[] = [];
@@ -343,13 +356,12 @@ function parseTranscript(path: string): TranscriptReadout {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (line === undefined || line.trim() === "") continue;
-    let entry: unknown;
-    try {
-      entry = JSON.parse(line);
-    } catch {
+    const parsedLine = await attempt(() => JSON.parse(line));
+    if (!parsedLine.ok) {
       parseErrors += 1;
       continue;
     }
+    const entry: unknown = parsedLine.value;
     if (!isRecord(entry)) continue;
 
     const parsed = parseTranscriptEntry(entry, index + 1, toolCalls, textBytes);
@@ -376,14 +388,7 @@ function parseTranscript(path: string): TranscriptReadout {
     textBytes += bytes;
   }
 
-  const format =
-    claudeMessages > 0 && codexMessages > 0
-      ? "mixed-jsonl"
-      : claudeMessages > 0
-        ? "claude-jsonl"
-        : codexMessages > 0
-          ? "codex-jsonl"
-          : "unknown-jsonl";
+  const format = transcriptFormat(claudeMessages, codexMessages);
   return {
     available: true,
     path: realPath,
@@ -490,14 +495,14 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
   );
 }
 
-export function buildPostmortem(
+export async function buildPostmortem(
   workspaceRoot: string,
   runId: string,
   options: Readonly<{ include_transcript?: boolean }> = {},
-): PostmortemReport {
-  const binding = readRunBinding(workspaceRoot, runId);
-  const goal = readBoundGoal(workspaceRoot, binding);
-  const events = listRunEvents(workspaceRoot, runId);
+): Promise<PostmortemReport> {
+  const binding = await readRunBinding(workspaceRoot, runId);
+  const goal = await readBoundGoal(workspaceRoot, binding);
+  const events = await listRunEvents(workspaceRoot, runId);
   const findings: string[] = [];
 
   for (const event of events) {
@@ -511,9 +516,14 @@ export function buildPostmortem(
     }
   }
 
-  const runDecisions = events
-    .filter((event) => event.event_type === "decision.recorded")
-    .map((event) => ({ event, decision: parseRunDecision(event.decision) }));
+  const runDecisions = await Promise.all(
+    events
+      .filter((event) => event.event_type === "decision.recorded")
+      .map(async (event) => ({
+        event,
+        decision: await parseRunDecision(event.decision),
+      })),
+  );
   const decisions: PostmortemDecision[] = [
     ...goal.decisions.map((decision) => ({
       ...decision,
@@ -568,7 +578,7 @@ export function buildPostmortem(
             truncated: false,
             finding: "GK_TRANSCRIPT_LOCATOR_MISSING",
           }
-        : parseTranscript(locator);
+        : await parseTranscript(locator);
     if (transcript.finding !== undefined) findings.push(transcript.finding);
     if (transcript.parse_errors > 0) {
       findings.push(`GK_TRANSCRIPT_PARSE_ERRORS:${transcript.parse_errors}`);

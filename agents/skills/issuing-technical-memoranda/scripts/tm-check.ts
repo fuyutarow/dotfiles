@@ -22,20 +22,25 @@ type Front = Record<string, unknown>;
 const asRecord = (v: unknown): Front | null =>
   typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Front) : null;
 
-const splitFrontmatter = (text: string): [Front | null, string] => {
+// No try/catch (audited *.ts ban): Promise.try turns a YAML.parse throw into a rejection this
+// `.then` maps to `null`, same outward result as the old catch branch.
+const splitFrontmatter = async (text: string): Promise<[Front | null, string]> => {
   if (!text.startsWith("---\n")) return [null, text];
   const end = text.indexOf("\n---", 3);
   if (end === -1) return [null, text];
   const body = text.slice(text.indexOf("\n", end + 1) + 1);
-  try {
-    return [asRecord(Bun.YAML.parse(text.slice(4, end + 1))), body];
-  } catch {
-    return [null, body];
-  }
+  const front = await Promise.try(() => Bun.YAML.parse(text.slice(4, end + 1))).then(
+    (ok) => asRecord(ok),
+    () => null,
+  );
+  return [front, body];
 };
 
-const nonEmpty = (v: unknown): boolean =>
-  Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim().length > 0 : v != null;
+const nonEmpty = (v: unknown): boolean => {
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === "string") return v.trim().length > 0;
+  return v != null;
+};
 
 /**
  * The fabrication guard, in greppable form (SKILL.md "NEVER"). A draft that calls some body
@@ -80,9 +85,11 @@ function rejectPrototypeFlag(
 // Only argv parsing can throw here, and a usage error is not a memorandum defect: it exits 2, so
 // a caller can tell "you invoked me wrong" from "the document failed the floor" (exit 1).
 // Cleye handles an ordinary unknown flag itself, exiting 1 from inside the framework.
-function parseArgv() {
-  try {
-    return cli(
+// No try/catch (audited *.ts ban): Promise.try turns cli()'s throw into a rejection this `.then`
+// maps to the same stderr message + exit(2) the old catch branch produced.
+async function parseArgv() {
+  return Promise.try(() =>
+    cli(
       {
         name: "tm-check.ts",
         strictFlags: true,
@@ -95,16 +102,19 @@ function parseArgv() {
       },
       undefined,
       Bun.argv.slice(2),
-    );
-  } catch (error) {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    process.exit(2);
-  }
+    ),
+  ).then(
+    (ok) => ok,
+    (error: unknown) => {
+      process.stderr.write(
+        `${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      process.exit(2);
+    },
+  );
 }
 
-const files: string[] = parseArgv()._.files;
+const files: string[] = (await parseArgv())._.files;
 if (!files.length) {
   console.error("usage: bun scripts/tm-check.ts <file.md> [...]");
   process.exit(2);
@@ -125,7 +135,7 @@ for (const path of files) {
     continue;
   }
   const text = await file.text();
-  const [front, body] = splitFrontmatter(text);
+  const [front, body] = await splitFrontmatter(text);
 
   // ---------------------------------------------------------------- T1 COVER
   if (!front) {

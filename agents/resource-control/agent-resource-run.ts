@@ -20,6 +20,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -548,9 +549,9 @@ export function hasUnmanagedGpuLoad(gpu: GpuSnapshot): boolean {
 function probeGpus(): GpuSnapshot[] {
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
     return [];
-  try {
-    // bounded: GNU timeout caps the local nvidia-smi probe at five seconds.
-    const result = Bun.spawnSync(
+  // bounded: GNU timeout caps the local nvidia-smi probe at five seconds.
+  const spawned = fromThrowable(() =>
+    Bun.spawnSync(
       [
         "timeout",
         "5s",
@@ -559,17 +560,15 @@ function probeGpus(): GpuSnapshot[] {
         "--format=csv,noheader,nounits",
       ],
       { stdout: "pipe", stderr: "ignore" },
-    );
-    if (result.exitCode !== 0) return [];
-    return result.stdout
-      .toString()
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map(parseNvidiaSmiGpuRow);
-  } catch {
-    return [];
-  }
+    ),
+  )();
+  if (spawned.isErr() || spawned.value.exitCode !== 0) return [];
+  return spawned.value.stdout
+    .toString()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(parseNvidiaSmiGpuRow);
 }
 
 export function probeHostSnapshot(cwd: string): HostSnapshot {
@@ -895,25 +894,19 @@ function errorCode(error: unknown): string | undefined {
 
 function pidIsAlive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return errorCode(error) === "EPERM";
-  }
+  const result = fromThrowable(() => process.kill(pid, 0))();
+  return result.isOk() || errorCode(result.error) === "EPERM";
 }
 
 function releaseLockDirectory(lockDirectory: string): void {
   const owner = join(lockDirectory, "owner.json");
-  try {
-    unlinkSync(owner);
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+  const unlinkResult = fromThrowable(() => unlinkSync(owner))();
+  if (unlinkResult.isErr() && errorCode(unlinkResult.error) !== "ENOENT") {
+    throw unlinkResult.error;
   }
-  try {
-    rmdirSync(lockDirectory);
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+  const rmdirResult = fromThrowable(() => rmdirSync(lockDirectory))();
+  if (rmdirResult.isErr() && errorCode(rmdirResult.error) !== "ENOENT") {
+    throw rmdirResult.error;
   }
 }
 
@@ -922,33 +915,29 @@ function handleLockAcquisitionError(
   lockDirectory: string,
 ): void {
   if (errorCode(error) === "EEXIST") return;
-  try {
-    releaseLockDirectory(lockDirectory);
-  } catch {
-    // Preserve the original lock/setup error.
-  }
+  // Preserve the original lock/setup error: discard whatever releaseLockDirectory reports.
+  fromThrowable(() => releaseLockDirectory(lockDirectory))();
   throw new StateError(
     `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
   );
 }
 
 function readOwnerPid(lockDirectory: string): number | null {
-  try {
+  const result = fromThrowable(() => {
     const owner = JSON.parse(
       readFileSync(join(lockDirectory, "owner.json"), "utf8"),
     ) as { pid?: unknown };
     return typeof owner.pid === "number" ? owner.pid : null;
-  } catch {
-    // The owner may still be writing. Age decides whether this becomes stale.
-    return null;
-  }
+  })();
+  // The owner may still be writing. Age decides whether this becomes stale.
+  return result.isOk() ? result.value : null;
 }
 
 function releaseIfStale(
   lockDirectory: string,
   ownerPid: number | null,
 ): boolean {
-  try {
+  const result = fromThrowable(() => {
     const oldEnough =
       Temporal.Now.instant().epochMilliseconds -
         statSync(lockDirectory).mtimeMs >=
@@ -956,27 +945,27 @@ function releaseIfStale(
     if (!oldEnough || (ownerPid !== null && pidIsAlive(ownerPid))) return false;
     releaseLockDirectory(lockDirectory);
     return true;
-  } catch {
-    // A concurrent owner can release/recreate the bounded lock; retry.
-    return false;
-  }
+  })();
+  // A concurrent owner can release/recreate the bounded lock; retry.
+  return result.isOk() ? result.value : false;
 }
 
 async function acquireStateLock(stateDirectory: string): Promise<() => void> {
   const lockDirectory = join(stateDirectory, ".lock");
   const deadline = performance.now() + LOCK_WAIT_MS;
   while (performance.now() < deadline) {
-    try {
+    const created = fromThrowable(() => {
       mkdirSync(lockDirectory, { mode: 0o700 });
       writeFileSync(
         join(lockDirectory, "owner.json"),
         `${JSON.stringify({ pid: process.pid, created_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }) })}\n`,
         { flag: "wx", mode: 0o600 },
       );
+    })();
+    if (created.isOk()) {
       return () => releaseLockDirectory(lockDirectory);
-    } catch (error) {
-      handleLockAcquisitionError(error, lockDirectory);
     }
+    handleLockAcquisitionError(created.error, lockDirectory);
 
     const ownerPid = readOwnerPid(lockDirectory);
     if (releaseIfStale(lockDirectory, ownerPid)) {
@@ -1016,10 +1005,9 @@ function reservationFrom(value: unknown): Reservation | null {
 }
 
 function unlinkIgnoringMissing(path: string): void {
-  try {
-    unlinkSync(path);
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+  const result = fromThrowable(() => unlinkSync(path))();
+  if (result.isErr() && errorCode(result.error) !== "ENOENT") {
+    throw result.error;
   }
 }
 
@@ -1028,12 +1016,10 @@ function liveReservations(stateDirectory: string): Reservation[] {
   for (const name of readdirSync(stateDirectory)) {
     if (!name.endsWith(".reservation.json")) continue;
     const path = join(stateDirectory, name);
-    let reservation: Reservation | null = null;
-    try {
-      reservation = reservationFrom(JSON.parse(readFileSync(path, "utf8")));
-    } catch {
-      reservation = null;
-    }
+    const parsed = fromThrowable(() =>
+      reservationFrom(JSON.parse(readFileSync(path, "utf8"))),
+    )();
+    const reservation = parsed.isOk() ? parsed.value : null;
     if (reservation !== null && pidIsAlive(reservation.controller_pid)) {
       result.push(reservation);
       continue;
@@ -1105,26 +1091,24 @@ function sampleProcessGroupMember(
   entry: string,
   pgid: number,
 ): { rssBytes: number } | null {
-  let stat: string;
-  try {
-    stat = readFileSync(join("/proc", entry, "stat"), "utf8");
-  } catch {
-    // A process can exit between /proc enumeration and either read.
-    return null;
-  }
+  // A process can exit between /proc enumeration and either read.
+  const statResult = fromThrowable(() =>
+    readFileSync(join("/proc", entry, "stat"), "utf8"),
+  )();
+  if (statResult.isErr()) return null;
+  const stat = statResult.value;
   const close = stat.lastIndexOf(")");
   if (close === -1) return null;
   const fields = stat.slice(close + 2).split(" ");
   const processGroup = Number(fields[2]);
   if (processGroup !== pgid) return null;
-  try {
-    const status = readFileSync(join("/proc", entry, "status"), "utf8");
-    const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status)?.[1];
-    return { rssBytes: rss !== undefined ? Number(rss) * KiB : 0 };
-  } catch {
-    // A process can exit between /proc enumeration and either read.
-    return { rssBytes: 0 };
-  }
+  // A process can exit between /proc enumeration and either read.
+  const statusResult = fromThrowable(() =>
+    readFileSync(join("/proc", entry, "status"), "utf8"),
+  )();
+  if (statusResult.isErr()) return { rssBytes: 0 };
+  const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(statusResult.value)?.[1];
+  return { rssBytes: rss !== undefined ? Number(rss) * KiB : 0 };
 }
 
 function processGroupUsage(pgid: number): GroupUsage {
@@ -1171,9 +1155,11 @@ function sampleGpuComputeApps(): Map<number, number> {
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null) {
     return usage;
   }
-  try {
-    // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as probeGpus().
-    const result = Bun.spawnSync(
+  // bounded: GNU timeout caps this nvidia-smi probe at five seconds, same class as probeGpus().
+  // no GPU / no driver / transient nvidia-smi failure -> this sample contributes nothing; the
+  // running peak this job has already observed is unaffected.
+  const spawned = fromThrowable(() =>
+    Bun.spawnSync(
       [
         "timeout",
         "5s",
@@ -1182,20 +1168,17 @@ function sampleGpuComputeApps(): Map<number, number> {
         "--format=csv,noheader,nounits",
       ],
       { stdout: "pipe", stderr: "ignore" },
-    );
-    if (result.exitCode !== 0) return usage;
-    const rows = result.stdout
-      .toString()
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map(parseNvidiaSmiComputeAppRow)
-      .filter((row): row is { pid: number; usedBytes: number } => row !== null);
-    for (const row of rows) usage.set(row.pid, row.usedBytes);
-  } catch {
-    // no GPU / no driver / transient nvidia-smi failure -> this sample contributes nothing;
-    // the running peak this job has already observed is unaffected.
-  }
+    ),
+  )();
+  if (spawned.isErr() || spawned.value.exitCode !== 0) return usage;
+  const rows = spawned.value.stdout
+    .toString()
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(parseNvidiaSmiComputeAppRow)
+    .filter((row): row is { pid: number; usedBytes: number } => row !== null);
+  for (const row of rows) usage.set(row.pid, row.usedBytes);
   return usage;
 }
 
@@ -1253,20 +1236,18 @@ function releaseDescription(peak: MeasuredPeak): string {
 // somewhere unwritable (or, in a test fixture, somewhere that does not exist on disk at all)
 // still gets the same data from the RELEASE line, so a write failure here is silent, not fatal.
 function writePeakArtifact(manifestPath: string, peak: MeasuredPeak): void {
-  try {
+  // Best-effort — see the header comment above: discard any write failure.
+  fromThrowable(() =>
     writeFileSync(`${manifestPath}.peak.json`, `${JSON.stringify(peak)}\n`, {
       mode: 0o600,
-    });
-  } catch {
-    // Best-effort — see the header comment above.
-  }
+    }),
+  )();
 }
 
 function signalProcessGroup(pgid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(-pgid, signal);
-  } catch (error) {
-    if (errorCode(error) !== "ESRCH") throw error;
+  const result = fromThrowable(() => process.kill(-pgid, signal))();
+  if (result.isErr() && errorCode(result.error) !== "ESRCH") {
+    throw result.error;
   }
 }
 
@@ -1414,15 +1395,11 @@ function admissionReceiptPayloadFrom(
   }
   // Canonical form only: exactly what the writer emits (ms precision, `Z`), round-tripped.
   const startedAt = value.started_at;
-  let canonical: string | undefined;
-  try {
-    canonical = Temporal.Instant.from(startedAt).toString({
-      fractionalSecondDigits: 3,
-    });
-  } catch {
-    return null;
-  }
-  if (canonical !== startedAt) return null;
+  const canonicalResult = fromThrowable(() =>
+    Temporal.Instant.from(startedAt).toString({ fractionalSecondDigits: 3 }),
+  )();
+  if (canonicalResult.isErr()) return null;
+  if (canonicalResult.value !== startedAt) return null;
 
   const cpuIds: number[] = [];
   for (const cpuId of value.cpu_ids) {
@@ -1465,13 +1442,9 @@ export function verifyAdmissionReceipt(
 ): boolean {
   if (!isSha256Hex(expectedSha256)) return false;
   if (sha256Hex(Buffer.from(payload, "utf8")) !== expectedSha256) return false;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return false;
-  }
-  const receipt = admissionReceiptPayloadFrom(parsed);
+  const parsedResult = fromThrowable(() => JSON.parse(payload) as unknown)();
+  if (parsedResult.isErr()) return false;
+  const receipt = admissionReceiptPayloadFrom(parsedResult.value);
   if (receipt === null || JSON.stringify(receipt) !== payload) return false;
   return cgroupText.split("\n").some((line) => {
     const cgroupPath = line.split(":", 3)[2];
@@ -1759,8 +1732,8 @@ export async function executeJob(
   let pgid: number | null = null;
   let scopeUnit: string | null = null;
   // Peak tracking rides the monitor loop's existing poll (see monitorProcessGroup's onSample) —
-  // declared out here, not inside the try block below, so the finally block can still report
-  // them after a breach return happens INSIDE that try block, before finally ever runs.
+  // declared out here, not inside the job body below, so the cleanup step can still report
+  // them after a breach return happens INSIDE that body, before cleanup ever runs.
   let peakRssBytes = 0;
   let peakVramBytes: number | undefined;
   let lastGpuSampleAtMs = 0;
@@ -1789,15 +1762,19 @@ export async function executeJob(
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onInterrupt);
 
-  try {
-    let child: ReturnType<typeof Bun.spawn>;
-    try {
+  // Runs the launched command and returns its result, or `undefined` when nothing broke and the
+  // caller should report PASS. Kept as one nested closure (rather than executeJob's own early
+  // returns) so the cleanup step below can run in a plain `finally` with no control-flow
+  // statement in it: a pending job result here must still be overridable by a cleanup failure —
+  // see `cleanupFailed` below.
+  const runJob = async (): Promise<ExecutionResult | undefined> => {
+    const launched = fromThrowable(() => {
       const launch = buildSystemdLaunch(manifest, lease.reservation, command);
       scopeUnit = launch.scopeUnit;
       // bounded: AbortSignal enforces manifest.walltime_seconds; the monitor additionally
       // terminates the entire new session/process group for exact process-count breaches.
       // systemd independently enforces CPU, RAM, zero job swap, and a coarse task ceiling.
-      child = Bun.spawn(launch.argv, {
+      return Bun.spawn(launch.argv, {
         cwd,
         env: commandEnvironment(manifest, lease.reservation, receipt),
         stdin: "inherit",
@@ -1805,15 +1782,20 @@ export async function executeJob(
         stderr: "inherit",
         signal: timeoutSignal,
       });
-      pgid = child.pid;
-    } catch (error) {
+    })();
+    if (launched.isErr()) {
       report(
         `ERROR job=${manifest.job_id} reason=launch detail=${
-          error instanceof Error ? error.message : String(error)
+          launched.error instanceof Error
+            ? launched.error.message
+            : String(launched.error)
         }`,
       );
       return { ok: false, exitCode: 70, reason: "launch" };
     }
+    const child = launched.value;
+    const groupPid = child.pid;
+    pgid = groupPid;
 
     let exited = false;
     let commandExitCode = 70;
@@ -1828,7 +1810,7 @@ export async function executeJob(
     );
 
     const breach = await monitorProcessGroup(
-      pgid,
+      groupPid,
       manifest,
       exitedPromise,
       interval,
@@ -1837,21 +1819,20 @@ export async function executeJob(
     );
 
     if (walltimeFired || interrupted || breach !== null) {
-      await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
+      await terminateProcessGroup(groupPid, manifest.cleanup.grace_seconds);
       await exitedPromise.catch(() => 70);
-      const reason = walltimeFired
-        ? "walltime"
-        : interrupted
-          ? "interrupt"
-          : (breach as "memory" | "processes");
+      let reason: "walltime" | "interrupt" | "memory" | "processes";
+      if (walltimeFired) reason = "walltime";
+      else if (interrupted) reason = "interrupt";
+      else reason = breach as "memory" | "processes";
       const exitCode = reason === "walltime" ? 124 : 137;
       report(`BREACH job=${manifest.job_id} reason=${reason}`);
       return { ok: false, exitCode, reason };
     }
 
     await exitedPromise;
-    if (processGroupUsage(pgid).processes > 0) {
-      await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
+    if (processGroupUsage(groupPid).processes > 0) {
+      await terminateProcessGroup(groupPid, manifest.cleanup.grace_seconds);
       report(`BREACH job=${manifest.job_id} reason=cleanup`);
       return { ok: false, exitCode: 137, reason: "cleanup" };
     }
@@ -1865,6 +1846,13 @@ export async function executeJob(
         reason: "command-exit",
       };
     }
+    return undefined;
+  };
+
+  let jobResult: ExecutionResult | undefined;
+  let cleanupFailed = false;
+  try {
+    jobResult = await runJob();
   } finally {
     timeoutSignal.removeEventListener("abort", onTimeout);
     process.off("SIGINT", onInterrupt);
@@ -1896,15 +1884,18 @@ export async function executeJob(
     const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
     const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
     await releaseLease(lease);
-    // Overriding the try block's `return` is the point: a job that PASSED but left its systemd
+    // Overriding the job body's result is the point: a job that PASSED but left its systemd
     // scope alive must not report success — the cleanup failure outranks the job result.
-    if (!scopeStopped) {
-      // oxlint-disable-next-line no-unsafe-finally -- deliberate: cleanup failure overrides the job's own return
-      throw new StateError(
-        `failed to verify cleanup of systemd scope '${scopeUnit}'`,
-      );
-    }
+    // Recorded here (a plain assignment, not a control-flow statement) and acted on AFTER this
+    // finally block, so it can override `jobResult` without an unsafe throw-in-finally.
+    cleanupFailed = !scopeStopped;
   }
+  if (cleanupFailed) {
+    throw new StateError(
+      `failed to verify cleanup of systemd scope '${scopeUnit}'`,
+    );
+  }
+  if (jobResult !== undefined) return jobResult;
   report(`PASS job=${manifest.job_id} code=0`);
   return { ok: true, exitCode: 0 };
 }
@@ -1958,18 +1949,21 @@ async function main(): Promise<void> {
     throw new UsageError("--manifest is required");
   }
   const manifestPath = resolve(parsed.flags.manifest);
-  let manifestBytes: Uint8Array;
-  let raw: unknown;
-  try {
-    manifestBytes = readFileSync(manifestPath);
-    raw = JSON.parse(manifestBytes.toString());
-  } catch (error) {
+  const readResult = fromThrowable(() => {
+    const bytes = readFileSync(manifestPath);
+    return { bytes, raw: JSON.parse(bytes.toString()) as unknown };
+  })();
+  if (readResult.isErr()) {
     throw new UsageError(
       `cannot read manifest '${manifestPath}': ${
-        error instanceof Error ? error.message : String(error)
+        readResult.error instanceof Error
+          ? readResult.error.message
+          : String(readResult.error)
       }`,
     );
   }
+  const manifestBytes = readResult.value.bytes;
+  const raw = readResult.value.raw;
   const parsedManifest = validateManifest(raw);
   // manifestSource hashes the TEMPLATE file's own bytes, unmodified by --job-id: the receipt
   // then proves "this exact declared envelope shape" independent of which job identity a given

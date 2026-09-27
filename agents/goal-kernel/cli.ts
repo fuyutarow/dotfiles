@@ -5,6 +5,7 @@
 
 import { resolve } from "node:path";
 import { cli, command } from "cleye";
+import { attempt, errorMessage } from "../hooks/attempt.ts";
 import {
   activateGoal,
   readGoalStatus,
@@ -31,27 +32,27 @@ const commonFlags = {
   json: Boolean,
 };
 
-function workspaceRoot(explicit: string | undefined): string {
+function workspaceRoot(explicit: string | undefined): Promise<string> {
   return explicit === undefined
     ? resolveWorkspaceRoot(process.cwd())
-    : resolve(explicit);
+    : Promise.resolve(resolve(explicit));
 }
 
 async function readJsonFile(path: string, locus: string): Promise<unknown> {
-  try {
-    return await Bun.file(resolve(path)).json();
-  } catch (error) {
+  const result = await attempt(() => Bun.file(resolve(path)).json());
+  if (!result.ok) {
     throw new UsageError(
-      `${locus} is unreadable JSON: ${error instanceof Error ? error.message : String(error)}`,
+      `${locus} is unreadable JSON: ${errorMessage(result.error)}`,
     );
   }
+  return result.value;
 }
 
 function jsonLine(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-function printStatus(status: ReturnType<typeof readGoalStatus>): void {
+function printStatus(status: Awaited<ReturnType<typeof readGoalStatus>>): void {
   if (!status.configured || status.active === undefined) {
     process.stdout.write(
       `FAIL root=${status.workspace_root} code=GK_NOT_CONFIGURED Goal Kernel is not active\nFAIL=1\n`,
@@ -122,12 +123,12 @@ async function main(): Promise<void> {
             if (parsed._.length > 1) {
               throw new UsageError(`unexpected argument '${parsed._[1]}'`);
             }
-            const root = workspaceRoot(parsed.flags.root);
+            const root = await workspaceRoot(parsed.flags.root);
             const contract = await readJsonFile(
               parsed._.contract,
               "Goal contract",
             );
-            const result = activateGoal(root, contract);
+            const result = await activateGoal(root, contract);
             if (parsed.flags.json) {
               jsonLine({ ok: true, command: "activate", ...result });
             } else {
@@ -148,11 +149,13 @@ async function main(): Promise<void> {
               description: "Show active Goal authority and recent bound runs.",
             },
           },
-          (parsed) => {
+          async (parsed) => {
             if (parsed._.length > 0) {
               throw new UsageError(`unexpected argument '${parsed._[0]}'`);
             }
-            const status = readGoalStatus(workspaceRoot(parsed.flags.root));
+            const status = await readGoalStatus(
+              await workspaceRoot(parsed.flags.root),
+            );
             if (parsed.flags.json) {
               jsonLine({ ok: status.configured, command: "status", ...status });
             } else {
@@ -181,8 +184,8 @@ async function main(): Promise<void> {
               parsed._.decision,
               "Run decision",
             );
-            const event = recordRunDecision(
-              workspaceRoot(parsed.flags.root),
+            const event = await recordRunDecision(
+              await workspaceRoot(parsed.flags.root),
               parsed._.runId,
               decision,
             );
@@ -208,12 +211,12 @@ async function main(): Promise<void> {
                 "Join Goal, decision, prompt-hash, tool-outcome, and optional native transcript evidence.",
             },
           },
-          (parsed) => {
+          async (parsed) => {
             if (parsed._.length > 1) {
               throw new UsageError(`unexpected argument '${parsed._[1]}'`);
             }
-            const report = buildPostmortem(
-              workspaceRoot(parsed.flags.root),
+            const report = await buildPostmortem(
+              await workspaceRoot(parsed.flags.root),
               parsed._.runId,
               // exactOptionalPropertyTypes: omit the key rather than pass an explicit
               // undefined when the flag was not given.

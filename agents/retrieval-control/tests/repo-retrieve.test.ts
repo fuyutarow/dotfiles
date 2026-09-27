@@ -204,12 +204,8 @@ function run(
       ...env,
     },
   });
-  let log = "";
-  try {
-    log = readFileSync(tools.log, "utf8");
-  } catch {
-    // A rejected invocation need not create the child log.
-  }
+  // A rejected invocation need not create the child log.
+  const log = existsSync(tools.log) ? readFileSync(tools.log, "utf8") : "";
   return {
     code: result.status,
     stdout: result.stdout ?? "",

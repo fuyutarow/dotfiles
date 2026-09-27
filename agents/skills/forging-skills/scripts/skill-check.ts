@@ -155,12 +155,15 @@ async function reportReferenceProse(directory: string): Promise<void> {
   for (const entry of await readdir(dir, { recursive: true })) {
     if (!entry.endsWith(".md")) continue;
     const path = join(dir, entry);
-    let text: string;
-    try {
-      text = await Bun.file(path).text();
-    } catch {
-      continue; // a directory entry or unreadable file — the mention check already covers absence
-    }
+    // No try/catch (audited *.ts ban): Promise.try turns an unreadable-file throw into a
+    // rejection this `.then` maps to `undefined`, same as the old catch's `continue`.
+    const text: string | undefined = await Promise.try(() =>
+      Bun.file(path).text(),
+    ).then(
+      (ok) => ok,
+      () => undefined,
+    );
+    if (text === undefined) continue; // a directory entry or unreadable file — the mention check already covers absence
     files += 1;
     const count = countLongProseSentences(text.split("\n"));
     total += count;
@@ -366,16 +369,23 @@ async function reportListingBudget(budgetPath: string | undefined): Promise<void
     failures += 1;
     return;
   }
-  let max: unknown;
-  try {
-    max = JSON.parse(await Bun.file(budgetPath).text())?.maxListingChars;
-  } catch (error) {
+  // No try/catch (audited *.ts ban): Promise.try turns a read/parse throw into a rejection this
+  // `.then` maps to a tagged error, so the FAIL message below is byte-identical to before.
+  const parsed = await Promise.try(async () => {
+    const text = await Bun.file(budgetPath).text();
+    return { ok: true as const, value: (JSON.parse(text) as { maxListingChars?: unknown } | null)?.maxListingChars };
+  }).then(
+    (ok) => ok,
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  if (!parsed.ok) {
     process.stdout.write(
-      `FAIL listing budget: ${budgetPath} is not readable JSON — ${error instanceof Error ? error.message : String(error)}\n`,
+      `FAIL listing budget: ${budgetPath} is not readable JSON — ${parsed.error instanceof Error ? parsed.error.message : String(parsed.error)}\n`,
     );
     failures += 1;
     return;
   }
+  const max: unknown = parsed.value;
   if (typeof max !== "number") {
     process.stdout.write(
       `FAIL listing budget: ${budgetPath} has no numeric maxListingChars\n`,

@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fromThrowable } from "neverthrow";
 import {
   buildSystemdLaunch,
   commandEnvironment,
@@ -1131,11 +1132,14 @@ describe("bounded execution", () => {
     const escapedPid = Number(readFileSync(pidFile, "utf8").trim());
     let escapedProcessIsLive = true;
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      try {
-        const stat = readFileSync(`/proc/${escapedPid}/stat`, "utf8");
+      const statResult = fromThrowable(() =>
+        readFileSync(`/proc/${escapedPid}/stat`, "utf8"),
+      )();
+      if (statResult.isOk()) {
+        const stat = statResult.value;
         const close = stat.lastIndexOf(")");
         escapedProcessIsLive = close !== -1 && stat.slice(close + 2)[0] !== "Z";
-      } catch {
+      } else {
         escapedProcessIsLive = false;
       }
       if (!escapedProcessIsLive) break;

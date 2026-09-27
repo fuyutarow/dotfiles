@@ -35,6 +35,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { readStdinJson } from "./lib.ts";
 
 const INDEXING_ALERT_MS = 15 * 60_000;
@@ -56,20 +57,12 @@ type State = {
   alerted: Record<string, number>; // session_id -> last alert time
 };
 
-function readState(): State {
-  try {
-    const s = JSON.parse(readFileSync(STATE_PATH, "utf8"));
-    return {
-      pid: typeof s.pid === "number" ? s.pid : null,
-      indexing: Array.isArray(s.indexing)
-        ? s.indexing.filter((p: unknown) => typeof p === "string")
-        : [],
-      indexingSinceMs:
-        typeof s.indexingSinceMs === "number" ? s.indexingSinceMs : 0,
-      lastProbeMs: typeof s.lastProbeMs === "number" ? s.lastProbeMs : 0,
-      alerted: s.alerted && typeof s.alerted === "object" ? s.alerted : {},
-    };
-  } catch {
+async function readState(): Promise<State> {
+  const s = await attemptOr(
+    () => JSON.parse(readFileSync(STATE_PATH, "utf8")),
+    null,
+  );
+  if (s === null) {
     return {
       pid: null,
       indexing: [],
@@ -78,6 +71,16 @@ function readState(): State {
       alerted: {},
     };
   }
+  return {
+    pid: typeof s.pid === "number" ? s.pid : null,
+    indexing: Array.isArray(s.indexing)
+      ? s.indexing.filter((p: unknown) => typeof p === "string")
+      : [],
+    indexingSinceMs:
+      typeof s.indexingSinceMs === "number" ? s.indexingSinceMs : 0,
+    lastProbeMs: typeof s.lastProbeMs === "number" ? s.lastProbeMs : 0,
+    alerted: s.alerted && typeof s.alerted === "object" ? s.alerted : {},
+  };
 }
 
 // Concurrent sessions share this file; rename keeps every read whole. A lost update costs at
@@ -98,19 +101,16 @@ function run(cmd: string[], timeoutMs: number): string | null {
   return r.status === 0 ? r.stdout : null;
 }
 
-function isCccDaemon(pid: number): boolean {
-  try {
-    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf8")
-      .split("\0")
-      .join(" ");
-    return /\bccc run-daemon\b/.test(cmdline);
-  } catch {
-    return false;
-  }
+async function isCccDaemon(pid: number): Promise<boolean> {
+  const cmdline = await attemptOr(
+    () => readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").join(" "),
+    null,
+  );
+  return cmdline !== null && /\bccc run-daemon\b/.test(cmdline);
 }
 
 // undefined = no GPU probe available on this host; null = no ccc daemon on the GPU.
-function probeDaemonOnGpu(): number | null | undefined {
+async function probeDaemonOnGpu(): Promise<number | null | undefined> {
   const out = run(
     [NVIDIA_SMI, "--query-compute-apps=pid", "--format=csv,noheader"],
     5_000,
@@ -118,7 +118,8 @@ function probeDaemonOnGpu(): number | null | undefined {
   if (out === null) return undefined;
   for (const line of out.split("\n")) {
     const pid = Number.parseInt(line.trim(), 10);
-    if (Number.isInteger(pid) && pid > 0 && isCccDaemon(pid)) return pid;
+    if (Number.isInteger(pid) && pid > 0 && (await isCccDaemon(pid)))
+      return pid;
   }
   return null;
 }
@@ -158,21 +159,21 @@ function clock(ms: number): string {
   });
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = readStdinJson();
   const event: string = payload?.hook_event_name ?? "PreToolUse";
   const session: string = payload?.session_id ?? "unknown";
   const now = Temporal.Now.instant().epochMilliseconds;
-  const state = readState();
+  const state = await readState();
 
   if (now - state.lastProbeMs >= PROBE_INTERVAL_MS) {
-    const pid = probeDaemonOnGpu();
+    const pid = await probeDaemonOnGpu();
     if (pid === undefined) return;
     const indexing = pid === null ? [] : indexingProjects();
     const streak =
       pid !== null && pid === state.pid && state.indexingSinceMs > 0;
-    state.indexingSinceMs =
-      indexing.length === 0 ? 0 : streak ? state.indexingSinceMs : now;
+    if (indexing.length === 0) state.indexingSinceMs = 0;
+    else if (!streak) state.indexingSinceMs = now;
     state.pid = pid;
     state.indexing = indexing;
     state.lastProbeMs = now;
@@ -212,9 +213,6 @@ function main(): void {
   );
 }
 
-try {
-  main();
-} catch {
-  // Advisory only: a broken probe must never cost the session a tool call or a prompt.
-}
+// Advisory only: a broken probe must never cost the session a tool call or a prompt.
+await attempt(main);
 process.exit(0);

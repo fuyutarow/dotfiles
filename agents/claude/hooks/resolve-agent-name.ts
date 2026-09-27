@@ -15,6 +15,7 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { attempt, attemptOr } from "../../hooks/attempt.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
@@ -46,13 +47,12 @@ function buildEntries(
   return next;
 }
 
-function agentName(sid: string): string | undefined {
-  let cache: Record<string, Entry> = {};
-  try {
-    cache = JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8"));
-  } catch {
-    // missing / corrupt cache file -> treat as empty and refetch below
-  }
+async function agentName(sid: string): Promise<string | undefined> {
+  // missing / corrupt cache file -> treat as empty and refetch below
+  const cache: Record<string, Entry> = await attemptOr(
+    () => JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
+    {},
+  );
   const hit = cache[sid];
   if (
     hit != null &&
@@ -60,7 +60,7 @@ function agentName(sid: string): string | undefined {
   )
     return hit.name;
 
-  try {
+  const fetched = await attempt(() => {
     const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
@@ -68,21 +68,20 @@ function agentName(sid: string): string | undefined {
     });
     const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
     const now = Temporal.Now.instant().epochMilliseconds;
-    const next = buildEntries(list, sid, now);
-    try {
-      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-      writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
-    } catch {
-      // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
-    }
-    return next[sid]?.name;
-  } catch {
-    return undefined; // `claude` missing/slow/errored -> caller falls back
-  }
+    return buildEntries(list, sid, now);
+  });
+  if (!fetched.ok) return undefined; // `claude` missing/slow/errored -> caller falls back
+  const next = fetched.value;
+  // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
+  await attemptOr(() => {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
+  }, undefined);
+  return next[sid]?.name;
 }
 
 const sid = process.env.AGENT_NAME_SESSION_ID;
 if (sid) {
-  const name = agentName(sid);
+  const name = await agentName(sid);
   if (name) process.stdout.write(name);
 }

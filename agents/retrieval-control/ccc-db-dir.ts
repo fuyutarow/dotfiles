@@ -19,7 +19,7 @@
 // project's DB dir as a whole — recursive size, whole-directory rename — therefore sweeps up the
 // nested project's DB. Operate on DB_ARTIFACTS by name instead.
 
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import {
   basename,
   dirname,
@@ -50,14 +50,13 @@ function resolveLikePython(path: string): string {
   let head = absolute;
   const tail: string[] = [];
   while (true) {
-    try {
+    if (existsSync(head)) {
       return join(realpathSync(head), ...tail.reverse());
-    } catch {
-      const parent = dirname(head);
-      if (parent === head) return absolute;
-      tail.push(basename(head));
-      head = parent;
     }
+    const parent = dirname(head);
+    if (parent === head) return absolute;
+    tail.push(basename(head));
+    head = parent;
   }
 }
 

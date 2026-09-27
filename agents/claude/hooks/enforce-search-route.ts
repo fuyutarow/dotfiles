@@ -10,6 +10,7 @@
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { decidePre, findExe, readStdinJson } from "./lib.ts";
 
 const GREP_SEARCH =
@@ -112,18 +113,16 @@ function registeredProject(start: string): string | null {
 }
 
 // Shared ancestor walk for `governedRepo` and `registeredProject`: both look for a marker
-// file, differing only in which one. `start` may be a file or directory, and may not exist
-// (a `catch` falls back to treating `start` itself as the walk's starting point).
+// file, differing only in which one. `start` may be a file or directory, and may not exist —
+// throwIfNoEntry:false then reports no stat, and the walk falls back to treating `start`
+// itself as the starting point.
 function findAncestorContaining(
   start: string,
   ...marker: string[]
 ): string | null {
-  let current: string;
-  try {
-    current = statSync(start).isDirectory() ? start : dirname(start);
-  } catch {
-    current = start;
-  }
+  const st = statSync(start, { throwIfNoEntry: false });
+  let current = start;
+  if (st !== undefined && !st.isDirectory()) current = dirname(start);
   current = resolve(current);
   while (true) {
     if (existsSync(join(current, ...marker))) return current;
@@ -192,14 +191,15 @@ function main(): void {
   );
 }
 
-try {
-  main();
-  process.exit(0);
-} catch (error) {
+const r = await attempt(main);
+if (!r.ok) {
+  // FATAL: the hook itself failed, so no axis could be evaluated; fail closed with the one fix
+  // (report the error) rather than guessing which checks would have fired.
   decidePre(
     "deny",
     `search-route: hook error while classifying search ` +
-      `(${error instanceof Error ? error.message : String(error)}) — failing closed. ` +
+      `(${errorMessage(r.error)}) — failing closed. ` +
       `Fix ~/.claude/hooks/enforce-search-route.ts before retrying raw search.`,
   );
 }
+process.exit(0);

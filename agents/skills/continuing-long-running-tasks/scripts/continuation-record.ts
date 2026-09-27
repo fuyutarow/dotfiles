@@ -24,8 +24,30 @@ import {
 	resolve,
 	sep,
 } from "node:path";
+import { fromThrowable } from "neverthrow";
 
 export const MAX_RECORD_BYTES = 65_536;
+
+/** `.code` of a caught Node error, if it has one (ENOENT, EEXIST, ...). */
+function errorCode(error: unknown): string | undefined {
+	return typeof error === "object" && error !== null && "code" in error
+		? String((error as { code: unknown }).code)
+		: undefined;
+}
+
+const parseInstant = fromThrowable((value: string) =>
+	Temporal.Instant.from(value),
+);
+
+const statPath = fromThrowable(
+	(path: string) => lstatSync(path),
+	(error) => errorCode(error),
+);
+
+const readPath = fromThrowable(
+	(path: string) => readFileSync(path, "utf8"),
+	(error) => errorCode(error),
+);
 
 export type Platform = "claude" | "codex";
 
@@ -93,7 +115,7 @@ function isoTimestamp(value: string): boolean {
 	return (
 		match?.[1] !== undefined &&
 		match[2]?.trim() !== "" &&
-		!Number.isNaN(Date.parse(match[1]))
+		parseInstant(match[1]).isOk()
 	);
 }
 
@@ -224,21 +246,22 @@ export function validateContinuationRecord(
 
 	const recordPath = oneMetadata(findings, text, "PATH");
 	if (recordPath !== undefined && expectedPath !== undefined) {
-		try {
+		const mismatch = fromThrowable((): boolean => {
 			const claimedPath = resolve(
 				workspaceRoot ?? dirname(expectedPath),
 				recordPath,
 			);
-			if (recordPath.includes("\0") || claimedPath !== resolve(expectedPath)) {
-				findings.push({
-					code: "TCR29",
-					message: "PATH must resolve to the record being validated",
-				});
-			}
-		} catch {
+			return recordPath.includes("\0") || claimedPath !== resolve(expectedPath);
+		})();
+		if (mismatch.isErr()) {
 			findings.push({
 				code: "TCR29",
 				message: "PATH must be a valid canonical record locus",
+			});
+		} else if (mismatch.value) {
+			findings.push({
+				code: "TCR29",
+				message: "PATH must resolve to the record being validated",
 			});
 		}
 	}
@@ -412,24 +435,19 @@ function unsafeAncestor(
 	let current = root;
 	for (const component of relative(root, parent).split(sep)) {
 		current = join(current, component);
-		try {
-			const stat = lstatSync(current);
-			if (stat.isSymbolicLink() || !stat.isDirectory()) {
-				return {
-					code: "TCR27",
-					message:
-						"continuation path ancestors must be real directories, never symlinks",
-				};
-			}
-		} catch (error) {
-			const code =
-				typeof error === "object" && error !== null && "code" in error
-					? String(error.code)
-					: undefined;
-			if (code === "ENOENT" && !requireExisting) return undefined;
+		const result = statPath(current);
+		if (result.isErr()) {
+			if (result.error === "ENOENT" && !requireExisting) return undefined;
 			return {
 				code: "TCR28",
 				message: "continuation path ancestors could not be inspected safely",
+			};
+		}
+		if (result.value.isSymbolicLink() || !result.value.isDirectory()) {
+			return {
+				code: "TCR27",
+				message:
+					"continuation path ancestors must be real directories, never symlinks",
 			};
 		}
 	}
@@ -465,79 +483,80 @@ export function readContinuationBindingAtSlot(
 			findings: [unsafeSlotAncestor],
 		};
 	}
-	try {
-		const stat = lstatSync(slot);
-		if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 4_096) {
-			return {
-				status: "invalid",
-				slot,
-				findings: [
-					{
-						code: "TCR21",
-						message:
-							"continuation slot must be a small regular file, never a symlink",
-					},
-				],
-			};
-		}
-		const match = readFileSync(slot, "utf8").match(/^TCR_PATH:\s*(\S+)\s*$/);
-		const relativeRecord = match?.[1];
-		if (
-			relativeRecord === undefined ||
-			isAbsolute(relativeRecord) ||
-			relativeRecord.includes("\0")
-		) {
-			return {
-				status: "invalid",
-				slot,
-				findings: [
-					{
-						code: "TCR22",
-						message: "continuation slot has an invalid TCR_PATH",
-					},
-				],
-			};
-		}
-		const record = resolve(root, relativeRecord);
-		if (!pathInside(root, record)) {
-			return {
-				status: "invalid",
-				slot,
-				findings: [
-					{
-						code: "TCR23",
-						message:
-							"continuation slot may bind only to a record inside the workspace root",
-					},
-				],
-			};
-		}
-		const unsafeRecordAncestor = unsafeAncestor(root, record, false);
-		if (unsafeRecordAncestor !== undefined) {
-			return {
-				status: "invalid",
-				slot,
-				findings: [unsafeRecordAncestor],
-			};
-		}
-		return { status: "bound", slot, record };
-	} catch (error) {
-		const code =
-			typeof error === "object" && error !== null && "code" in error
-				? String(error.code)
-				: undefined;
-		if (code === "ENOENT") return { status: "unbound", slot };
+	function fatalBinding(code: string | undefined): ContinuationBinding {
+		return code === "ENOENT"
+			? { status: "unbound", slot }
+			: {
+					status: "invalid",
+					slot,
+					findings: [
+						{
+							code: "TCR24",
+							message: "continuation slot could not be inspected safely",
+						},
+					],
+				};
+	}
+
+	const statResult = statPath(slot);
+	if (statResult.isErr()) return fatalBinding(statResult.error);
+	const stat = statResult.value;
+	if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 4_096) {
 		return {
 			status: "invalid",
 			slot,
 			findings: [
 				{
-					code: "TCR24",
-					message: "continuation slot could not be inspected safely",
+					code: "TCR21",
+					message:
+						"continuation slot must be a small regular file, never a symlink",
 				},
 			],
 		};
 	}
+	const readResult = readPath(slot);
+	if (readResult.isErr()) return fatalBinding(readResult.error);
+	const match = readResult.value.match(/^TCR_PATH:\s*(\S+)\s*$/);
+	const relativeRecord = match?.[1];
+	if (
+		relativeRecord === undefined ||
+		isAbsolute(relativeRecord) ||
+		relativeRecord.includes("\0")
+	) {
+		return {
+			status: "invalid",
+			slot,
+			findings: [
+				{
+					code: "TCR22",
+					message: "continuation slot has an invalid TCR_PATH",
+				},
+			],
+		};
+	}
+	const record = resolve(root, relativeRecord);
+	if (!pathInside(root, record)) {
+		return {
+			status: "invalid",
+			slot,
+			findings: [
+				{
+					code: "TCR23",
+					message:
+						"continuation slot may bind only to a record inside the workspace root",
+				},
+			],
+		};
+	}
+	const unsafeRecordAncestor = unsafeAncestor(root, record, false);
+	if (unsafeRecordAncestor !== undefined) {
+		return {
+			status: "invalid",
+			slot,
+			findings: [unsafeRecordAncestor],
+		};
+	}
+	return { status: "bound", slot, record };
 }
 
 export function readContinuationBinding(
@@ -587,7 +606,7 @@ export function bindContinuationSlot(
 	}
 
 	let temporary: string | undefined;
-	try {
+	const write = fromThrowable((): readonly Finding[] => {
 		if (existsSync(slot) && lstatSync(slot).isSymbolicLink()) {
 			return [
 				{
@@ -610,84 +629,77 @@ export function bindContinuationSlot(
 		renameSync(temporary, slot);
 		temporary = undefined;
 		return [];
-	} catch {
-		if (temporary !== undefined) {
-			try {
-				unlinkSync(temporary);
-			} catch {
-				// Best effort: the exact randomized temporary path is never a binding.
-			}
-		}
-		return [
-			{
-				code: "TCR26",
-				message: "continuation slot could not be written safely",
-			},
-		];
-	}
+	});
+	const result = write();
+	if (result.isOk()) return result.value;
+	// Best effort: the exact randomized temporary path is never a binding.
+	if (temporary !== undefined) fromThrowable(() => unlinkSync(temporary as string))();
+	return [
+		{
+			code: "TCR26",
+			message: "continuation slot could not be written safely",
+		},
+	];
 }
 
 export function inspectContinuationRecord(
 	path: string,
 	workspaceRoot?: string,
 ): RecordInspection {
-	try {
-		const absolutePath = resolve(path);
-		const validationRoot =
-			workspaceRoot ?? continuationProjectRoot(dirname(absolutePath));
-		if (validationRoot !== undefined) {
-			const ancestorFinding = unsafeAncestor(
-				validationRoot,
-				absolutePath,
-				false,
-			);
-			if (ancestorFinding !== undefined) {
-				return { status: "invalid", findings: [ancestorFinding] };
-			}
+	function fatalInspection(code: string | undefined): RecordInspection {
+		return code === "ENOENT"
+			? { status: "absent" }
+			: {
+					status: "invalid",
+					findings: [
+						{ code: "TCR20", message: "record could not be inspected safely" },
+					],
+				};
+	}
+
+	const absolutePath = resolve(path);
+	const validationRoot =
+		workspaceRoot ?? continuationProjectRoot(dirname(absolutePath));
+	if (validationRoot !== undefined) {
+		const ancestorFinding = unsafeAncestor(validationRoot, absolutePath, false);
+		if (ancestorFinding !== undefined) {
+			return { status: "invalid", findings: [ancestorFinding] };
 		}
-		const stat = lstatSync(path);
-		if (stat.isSymbolicLink() || !stat.isFile()) {
-			return {
-				status: "invalid",
-				findings: [
-					{
-						code: "TCR19",
-						message:
-							"record must be a regular file, never a symlink or special file",
-					},
-				],
-			};
-		}
-		if (stat.size > MAX_RECORD_BYTES) {
-			return {
-				status: "invalid",
-				findings: [
-					{
-						code: "TCR01",
-						message: `record exceeds ${MAX_RECORD_BYTES} bytes; compact narrative to evidence locators`,
-					},
-				],
-			};
-		}
-		const findings = validateContinuationRecord(
-			readFileSync(path, "utf8"),
-			absolutePath,
-			validationRoot,
-		);
-		return findings.length === 0
-			? { status: "valid" }
-			: { status: "invalid", findings };
-	} catch (error) {
-		const code =
-			typeof error === "object" && error !== null && "code" in error
-				? String(error.code)
-				: undefined;
-		if (code === "ENOENT") return { status: "absent" };
+	}
+	const statResult = statPath(path);
+	if (statResult.isErr()) return fatalInspection(statResult.error);
+	const stat = statResult.value;
+	if (stat.isSymbolicLink() || !stat.isFile()) {
 		return {
 			status: "invalid",
 			findings: [
-				{ code: "TCR20", message: "record could not be inspected safely" },
+				{
+					code: "TCR19",
+					message:
+						"record must be a regular file, never a symlink or special file",
+				},
 			],
 		};
 	}
+	if (stat.size > MAX_RECORD_BYTES) {
+		return {
+			status: "invalid",
+			findings: [
+				{
+					code: "TCR01",
+					message: `record exceeds ${MAX_RECORD_BYTES} bytes; compact narrative to evidence locators`,
+				},
+			],
+		};
+	}
+	const readResult = readPath(path);
+	if (readResult.isErr()) return fatalInspection(readResult.error);
+	const findings = validateContinuationRecord(
+		readResult.value,
+		absolutePath,
+		validationRoot,
+	);
+	return findings.length === 0
+		? { status: "valid" }
+		: { status: "invalid", findings };
 }

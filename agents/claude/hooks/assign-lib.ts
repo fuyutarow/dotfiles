@@ -14,6 +14,7 @@
 
 import { basename, dirname, join } from "node:path";
 import { realpathSync } from "node:fs";
+import { attempt } from "../../hooks/attempt.ts";
 
 // Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
 // role token seen live so far (obs, dtr, pi, gpu, ...) without accepting something that would
@@ -80,13 +81,10 @@ function defaultPolicyPath(): string {
 async function readPolicyFile(
   path: string,
 ): Promise<Record<string, RoleConfig> | null> {
-  try {
-    const mod = await import(path);
-    const table = (mod as { default?: unknown }).default ?? mod;
-    return table as Record<string, RoleConfig>;
-  } catch {
-    return null;
-  }
+  const r = await attempt(() => import(path));
+  if (!r.ok) return null;
+  const table = (r.value as { default?: unknown }).default ?? r.value;
+  return table as Record<string, RoleConfig>;
 }
 
 // Resolution order: a `fleet_policy.toml` at the PROJECT ROOT (cwd) wins when the project

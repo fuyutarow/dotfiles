@@ -53,4 +53,6 @@ disable = [
 # their residual issues (MD051/MD057/MD055 link fragments) are upstream, not ours.
 exclude = [
   "agents/skills/**",
+  # Retired skills, kept verbatim (see archives/skills/README.md); nothing renders or runs them.
+  "archives/**",
 ]

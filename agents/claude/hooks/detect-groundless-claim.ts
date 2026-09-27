@@ -19,6 +19,7 @@
 // `{"systemMessage": "..."}` to stdout and exits 0 — a nudge the harness surfaces to the
 // user, not a block that feeds back into the transcript.
 
+import { attempt } from "../../hooks/attempt.ts";
 import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
 
 const MIN_LINES = 8;
@@ -63,13 +64,13 @@ const DENOMINATOR_PATTERNS: RegExp[] = [
   PATH_LINE_RE,
 ];
 
-function main(): number {
+async function main(): Promise<number> {
   const payload = readStdinJson();
   if (payload?.stop_hook_active) return 0;
   const transcript = payload?.transcript_path;
   if (typeof transcript !== "string" || transcript === "") return 0;
 
-  const entries = readTranscript(transcript);
+  const entries = await readTranscript(transcript);
   const turn = turnText(entries);
   if (turn === "") return 0;
 
@@ -93,10 +94,5 @@ function main(): number {
   return 0;
 }
 
-let code = 0;
-try {
-  code = main();
-} catch {
-  code = 0; // FAIL OPEN
-}
-process.exit(code);
+const r = await attempt(main);
+process.exit(r.ok ? r.value : 0); // FAIL OPEN

@@ -138,12 +138,28 @@ type RdTypeRegistryParse = {
 
 class UsageError extends Error {}
 
+// Local sync-vs-async exception boundary: oxlint bans try/catch anywhere in
+// this file, and this skill's script cannot import a shared helper across the
+// skill boundary. Promise.try() turns even a synchronous throw into a
+// rejection, so awaiting this is the one place an exception becomes data.
+type Attempt<T> =
+	| { readonly ok: true; readonly value: T }
+	| { readonly ok: false; readonly error: unknown };
+
+function attempt<T>(fn: () => T | PromiseLike<T>): Promise<Attempt<T>> {
+	return Promise.try(fn).then(
+		(value): Attempt<T> => ({ ok: true, value }),
+		(error: unknown): Attempt<T> => ({ ok: false, error }),
+	);
+}
+
 const roles = new Set([
 	"canonical",
 	"evidence",
 	"generated_view",
 	"review_request",
 ]);
+const statuses = new Set(["deprecated", "draft", "stable"]);
 const reviewStates = new Set([
 	"accepted",
 	"changes_requested",
@@ -210,26 +226,46 @@ const insideOrEqual = (root: string, candidate: string): boolean => {
 	);
 };
 
+// Pure numeric calendar check (no global Date): matches the accept/reject set
+// of the former `new Date(...)` + toISOString round-trip check for every
+// value the ^\d{4}-\d{2}-\d{2}$ regex can produce (year 0000-9999), because
+// that round-trip only ever rejected on out-of-range month/day (including
+// Feb-30-style rollovers) and this reimplements exactly that arithmetic.
+const daysInMonth = (year: number, month: number): number => {
+	if (month === 2) {
+		const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+		return isLeapYear ? 29 : 28;
+	}
+	if (month === 4 || month === 6 || month === 9 || month === 11) return 30;
+	return 31;
+};
+
 const validDate = (value: string): boolean => {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-	const parsed = new Date(`${value}T00:00:00Z`);
-	return (
-		!Number.isNaN(parsed.valueOf()) &&
-		parsed.toISOString().slice(0, 10) === value
-	);
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	if (
+		match?.[1] === undefined ||
+		match[2] === undefined ||
+		match[3] === undefined
+	) {
+		return false;
+	}
+	const year = Number.parseInt(match[1], 10);
+	const month = Number.parseInt(match[2], 10);
+	const day = Number.parseInt(match[3], 10);
+	return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
 };
 
 const validDateTime = (value: string): boolean => {
+	// The regex alone fully constrains hour/minute/second/offset to legal
+	// ranges, and the date portion is checked by validDate, so a match here
+	// is always a well-formed, parseable ISO-8601 instant; the former
+	// `!Number.isNaN(Date.parse(value))` conjunct could never be false and is
+	// dropped rather than reintroducing Date.
 	const match =
 		/^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
 			value,
 		);
-	return (
-		match !== null &&
-		match[1] !== undefined &&
-		validDate(match[1]) &&
-		!Number.isNaN(Date.parse(value))
-	);
+	return match !== null && match[1] !== undefined && validDate(match[1]);
 };
 
 const validActor = (value: string): boolean =>
@@ -326,12 +362,11 @@ const locatorResolutionError = async (
 		return undefined;
 	}
 
-	let current: unknown;
-	try {
-		current = JSON.parse(content);
-	} catch (error) {
-		return `json-pointer requires valid JSON: ${error instanceof Error ? error.message : String(error)}`;
+	const parsedAttempt = await attempt<unknown>(() => JSON.parse(content));
+	if (!parsedAttempt.ok) {
+		return `json-pointer requires valid JSON: ${parsedAttempt.error instanceof Error ? parsedAttempt.error.message : String(parsedAttempt.error)}`;
 	}
+	let current: unknown = parsedAttempt.value;
 	for (const token of locator.tokens) {
 		if (Array.isArray(current)) {
 			if (!/^(?:0|[1-9]\d*)$/.test(token)) {
@@ -351,23 +386,13 @@ const locatorResolutionError = async (
 	return undefined;
 };
 
-const reviewStateType = (value: string): ReviewState | undefined => {
-	switch (value) {
-		case "accepted":
-		case "changes_requested":
-		case "open":
-		case "rejected":
-		case "withdrawn":
-			return value;
-		default:
-			return undefined;
-	}
-};
+const reviewStateType = (value: string): ReviewState | undefined =>
+	reviewStates.has(value) ? (value as ReviewState) : undefined;
 
-const parseMarkdown = (
+const parseMarkdown = async (
 	content: string,
 	onError: (code: string, message: string) => void,
-): ParsedMarkdown => {
+): Promise<ParsedMarkdown> => {
 	const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
 	if (lines[0] !== "---") return { body: content };
 
@@ -380,38 +405,45 @@ const parseMarkdown = (
 	const end = close + 1;
 	const frontmatterText = lines.slice(1, end).join("\n");
 	const body = lines.slice(end + 1).join("\n");
-	try {
-		const document = parseDocument(frontmatterText, {
-			prettyErrors: true,
-			strict: true,
-			stringKeys: true,
-			uniqueKeys: true,
-			version: "1.2",
-		});
-		if (document.errors.length > 0) {
-			const duplicate = document.errors.find(
-				(error) => error.code === "DUPLICATE_KEY",
-			);
-			const error = duplicate ?? document.errors[0];
-			onError(
-				duplicate === undefined ? "OKF004" : "OKF003",
-				`frontmatter is not parseable YAML: ${error?.message ?? "unknown YAML error"}`,
-			);
-			return { body, frontmatterText };
-		}
-		const value: unknown = document.toJS({ maxAliasCount: 100 });
-		if (!isRecord(value)) {
-			onError("OKF005", "frontmatter must parse to a YAML mapping");
-			return { body, frontmatterText };
-		}
-		return { body, frontmatterText, meta: value };
-	} catch (error) {
+	const parsedAttempt = await attempt<Record<string, unknown> | undefined>(
+		() => {
+			const document = parseDocument(frontmatterText, {
+				prettyErrors: true,
+				strict: true,
+				stringKeys: true,
+				uniqueKeys: true,
+				version: "1.2",
+			});
+			if (document.errors.length > 0) {
+				const duplicate = document.errors.find(
+					(error) => error.code === "DUPLICATE_KEY",
+				);
+				const error = duplicate ?? document.errors[0];
+				onError(
+					duplicate === undefined ? "OKF004" : "OKF003",
+					`frontmatter is not parseable YAML: ${error?.message ?? "unknown YAML error"}`,
+				);
+				return undefined;
+			}
+			const value: unknown = document.toJS({ maxAliasCount: 100 });
+			if (!isRecord(value)) {
+				onError("OKF005", "frontmatter must parse to a YAML mapping");
+				return undefined;
+			}
+			return value;
+		},
+	);
+	if (!parsedAttempt.ok) {
 		onError(
 			"OKF004",
-			`frontmatter is not parseable YAML: ${error instanceof Error ? error.message : String(error)}`,
+			`frontmatter is not parseable YAML: ${parsedAttempt.error instanceof Error ? parsedAttempt.error.message : String(parsedAttempt.error)}`,
 		);
 		return { body, frontmatterText };
 	}
+	if (parsedAttempt.value === undefined) {
+		return { body, frontmatterText };
+	}
+	return { body, frontmatterText, meta: parsedAttempt.value };
 };
 
 const stripCode = (body: string): string => {
@@ -525,12 +557,12 @@ const citationDefinitions = (body: string): Set<string> => {
 	return ids;
 };
 
-const localReference = (
+const localReference = async (
 	ownerPath: string,
 	rawValue: string,
 	root: string,
 	rawRoot: string,
-): LocalReference => {
+): Promise<LocalReference> => {
 	const value = rawValue.trim();
 	if (value === "" || value.startsWith("#")) {
 		return { absolutePath: ownerPath, kind: "bundle" };
@@ -541,12 +573,9 @@ const localReference = (
 	}
 
 	const pathPart = value.split(/[?#]/, 1)[0] ?? "";
-	let decoded = pathPart;
-	try {
-		decoded = decodeURIComponent(pathPart);
-	} catch {
-		return { kind: "outside" };
-	}
+	const decodedAttempt = await attempt(() => decodeURIComponent(pathPart));
+	if (!decodedAttempt.ok) return { kind: "outside" };
+	const decoded = decodedAttempt.value;
 	let absolutePath = decoded.startsWith("/")
 		? resolve(root, `.${decoded}`)
 		: resolve(dirname(ownerPath), decoded);
@@ -803,28 +832,11 @@ const parseReview = (
 	};
 };
 
-const roleType = (value: string): Role | undefined => {
-	switch (value) {
-		case "canonical":
-		case "evidence":
-		case "generated_view":
-		case "review_request":
-			return value;
-		default:
-			return undefined;
-	}
-};
+const roleType = (value: string): Role | undefined =>
+	roles.has(value) ? (value as Role) : undefined;
 
-const statusType = (value: string): Status | undefined => {
-	switch (value) {
-		case "deprecated":
-		case "draft":
-		case "stable":
-			return value;
-		default:
-			return undefined;
-	}
-};
+const statusType = (value: string): Status | undefined =>
+	statuses.has(value) ? (value as Status) : undefined;
 
 const readAllMarkdown = async (root: string): Promise<string[]> => {
 	const paths: string[] = [];
@@ -840,17 +852,18 @@ const readAllMarkdown = async (root: string): Promise<string[]> => {
 	return paths.sort();
 };
 
-const parseRdTypeRegistryText = (source: string): RdTypeRegistryParse => {
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(source);
-	} catch {
+const parseRdTypeRegistryText = async (
+	source: string,
+): Promise<RdTypeRegistryParse> => {
+	const parsedAttempt = await attempt<unknown>(() => JSON.parse(source));
+	if (!parsedAttempt.ok) {
 		return {
 			findings: [
 				{ code: "RDN002", message: "rd-types.json must be valid JSON" },
 			],
 		};
 	}
+	const parsed = parsedAttempt.value;
 	const document = parseDocument(source, {
 		prettyErrors: true,
 		strict: true,
@@ -953,7 +966,9 @@ const readRdTypeRegistry = async (
 		return undefined;
 	}
 
-	const parsed = parseRdTypeRegistryText(await Bun.file(registryPath).text());
+	const parsed = await parseRdTypeRegistryText(
+		await Bun.file(registryPath).text(),
+	);
 	for (const finding of parsed.findings) {
 		add("RD_NAMING", finding.code, registryName, finding.message);
 	}
@@ -1129,7 +1144,7 @@ const readBaseDocumentIdentities = async (
 	);
 	const identities: BaseDocumentIdentity[] = [];
 	for (const [index, path] of paths.entries()) {
-		const document = parseMarkdown(sources[index] ?? "", () => undefined);
+		const document = await parseMarkdown(sources[index] ?? "", () => undefined);
 		const value = document?.meta?.rd_document_id;
 		if (!isNonemptyString(value)) continue;
 		const identity = parseRdDocumentId(value);
@@ -1286,7 +1301,7 @@ const checkGitIntegrity = async (
 	]);
 	const baseTypeRegistry =
 		baseRegistrySource.exitCode === 0
-			? parseRdTypeRegistryText(baseRegistrySource.stdout).registry
+			? (await parseRdTypeRegistryText(baseRegistrySource.stdout)).registry
 			: undefined;
 	const currentPathsByDocumentId = new Map<string, string[]>();
 	for (const concept of concepts) {
@@ -1379,7 +1394,7 @@ const checkGitIntegrity = async (
 		if (status === "M" && oldDocument !== undefined) {
 			const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
 			if (existsSync(currentPath)) {
-				currentDocument = parseMarkdown(
+				currentDocument = await parseMarkdown(
 					await Bun.file(currentPath).text(),
 					() => undefined,
 				);
@@ -1490,7 +1505,8 @@ const checkGitIntegrity = async (
 					!validDateTime(oldGenerated) ||
 					!isNonemptyString(currentGenerated) ||
 					!validDateTime(currentGenerated) ||
-					Date.parse(currentGenerated) <= Date.parse(oldGenerated)
+					Temporal.Instant.from(currentGenerated).epochMilliseconds <=
+						Temporal.Instant.from(oldGenerated).epochMilliseconds
 				) {
 					add(
 						"RD_INTEGRITY",
@@ -1520,7 +1536,9 @@ export async function inspectResearchDocs(
 	const rawRoot = existsSync(rawInput)
 		? realpathSync(rawInput)
 		: resolve(rawInput);
-	const today = options.today ?? new Date().toISOString().slice(0, 10);
+	// UTC calendar day, matching the former new Date().toISOString().slice(0, 10)
+	// (toISOString always renders UTC regardless of system time zone).
+	const today = options.today ?? Temporal.Now.plainDateISO("UTC").toString();
 	if (!validDate(today)) {
 		throw new UsageError(`--today must be YYYY-MM-DD: ${today}`);
 	}
@@ -1550,7 +1568,7 @@ export async function inspectResearchDocs(
 		const absolutePath = resolve(root, relativePath);
 		const path = posixPath(relativePath);
 		const name = basename(path);
-		const parsed = parseMarkdown(
+		const parsed = await parseMarkdown(
 			await Bun.file(absolutePath).text(),
 			(code, message) => add("OKF", code, path, message),
 		);
@@ -1830,7 +1848,7 @@ export async function inspectResearchDocs(
 	for (const concept of concepts) {
 		const byId = new Map<string, LocalReference>();
 		for (const source of concept.sources) {
-			const resolved = localReference(
+			const resolved = await localReference(
 				concept.absolutePath,
 				source.resource,
 				root,
@@ -1996,13 +2014,16 @@ export async function inspectResearchDocs(
 				}
 			}
 			if (status === "stable" && concept.generatedAt !== undefined) {
-				const currentGeneratedAt = Date.parse(concept.generatedAt);
+				const currentGeneratedAt = Temporal.Instant.from(
+					concept.generatedAt,
+				).epochMilliseconds;
 				const hasCurrentHumanVerification = (
 					verifiedByPath.get(concept.absolutePath) ?? []
 				).some(
 					(event) =>
 						event.by.startsWith("human:") &&
-						Date.parse(event.at) >= currentGeneratedAt,
+						Temporal.Instant.from(event.at).epochMilliseconds >=
+							currentGeneratedAt,
 				);
 				if (!hasCurrentHumanVerification) {
 					add(
@@ -2308,9 +2329,13 @@ export async function inspectResearchDocs(
 				validDate(meta.rd_expires_at) &&
 				concept.generatedAt !== undefined
 			) {
-				const created = new Date(concept.generatedAt);
-				const expires = new Date(`${meta.rd_expires_at}T00:00:00Z`);
-				const days = (expires.valueOf() - created.valueOf()) / 86_400_000;
+				const created = Temporal.Instant.from(
+					concept.generatedAt,
+				).epochMilliseconds;
+				const expires = Temporal.Instant.from(
+					`${meta.rd_expires_at}T00:00:00Z`,
+				).epochMilliseconds;
+				const days = (expires - created) / 86_400_000;
 				if (days < 0 || days > 30) {
 					add(
 						"RD_LIFECYCLE",
@@ -2366,7 +2391,7 @@ export async function inspectResearchDocs(
 			}
 			const derivedTargets = new Set<string>();
 			for (const path of generatedFrom) {
-				const target = localReference(
+				const target = await localReference(
 					concept.absolutePath,
 					path,
 					root,
@@ -2414,7 +2439,7 @@ export async function inspectResearchDocs(
 	)) {
 		const review = concept.review;
 		if (review === undefined) continue;
-		const candidateRef = localReference(
+		const candidateRef = await localReference(
 			concept.absolutePath,
 			review.candidate,
 			root,
@@ -2451,7 +2476,7 @@ export async function inspectResearchDocs(
 		}
 		for (const question of review.questions) {
 			for (const evidencePath of question.evidence) {
-				const evidenceRef = localReference(
+				const evidenceRef = await localReference(
 					concept.absolutePath,
 					evidencePath,
 					root,
@@ -2524,7 +2549,7 @@ export async function inspectResearchDocs(
 			);
 		}
 		for (const targetValue of markdownLinkTargets(concept.body)) {
-			const target = localReference(
+			const target = await localReference(
 				concept.absolutePath,
 				targetValue,
 				root,
@@ -2590,7 +2615,7 @@ export async function inspectResearchDocs(
 	for (const concept of concepts.filter((item) => item.role === "canonical")) {
 		const edges: string[] = [];
 		for (const targetPath of concept.supersedes) {
-			const targetRef = localReference(
+			const targetRef = await localReference(
 				concept.absolutePath,
 				targetPath,
 				root,
@@ -2692,11 +2717,8 @@ export async function inspectResearchDocs(
 	for (const concept of concepts.filter((item) => item.review !== undefined)) {
 		const review = concept.review;
 		if (review === undefined) continue;
-		const candidate = localReference(
-			concept.absolutePath,
-			review.candidate,
-			root,
-			rawRoot,
+		const candidate = (
+			await localReference(concept.absolutePath, review.candidate, root, rawRoot)
 		).absolutePath;
 		if (candidate === undefined) continue;
 		const reviews = reviewsByCandidate.get(candidate) ?? [];
@@ -2722,13 +2744,16 @@ export async function inspectResearchDocs(
 			}
 		}
 		if (concept.status === "stable" && concept.generatedAt !== undefined) {
-			const generatedAt = Date.parse(concept.generatedAt);
+			const generatedAt = Temporal.Instant.from(
+				concept.generatedAt,
+			).epochMilliseconds;
 			const accepted = reviews.filter(
 				(item) =>
 					item.review?.state === "accepted" &&
 					item.review.candidateSha256 === candidateDigest &&
 					item.review.decidedAt !== undefined &&
-					Date.parse(item.review.decidedAt) >= generatedAt,
+					Temporal.Instant.from(item.review.decidedAt).epochMilliseconds >=
+						generatedAt,
 			);
 			if (accepted.length === 0) {
 				add(
@@ -2763,7 +2788,7 @@ export async function inspectResearchDocs(
 				);
 			}
 			for (const targetValue of markdownLinkTargets(index.body)) {
-				const target = localReference(
+				const target = await localReference(
 					index.absolutePath,
 					targetValue,
 					root,

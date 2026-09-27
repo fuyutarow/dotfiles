@@ -30,9 +30,9 @@
  * stopping a daemon drops every session on it, which is not an unattended updater's call.
  */
 
-// Script-scoped, not a library: this makes it a module so the top-level `await` calls
-// below are legal under tsgo.
-export {};
+// Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
+// scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
+import { attempt } from "../hooks/attempt.ts";
 
 const CODEX = "codex";
 
@@ -69,11 +69,8 @@ async function daemonVersion(): Promise<DaemonVersion | null> {
   });
   const out = await new Response(proc.stdout).text();
   if ((await proc.exited) !== 0) return null;
-  try {
-    return JSON.parse(out) as DaemonVersion;
-  } catch {
-    return null;
-  }
+  const parsed = await attempt(() => JSON.parse(out) as DaemonVersion);
+  return parsed.ok ? parsed.value : null;
 }
 
 // Shared with macOS, where codex may simply be absent: skip, never fail the topgrade run.

@@ -40,6 +40,7 @@ import {
   rolePrompt,
   sessionName,
 } from "./assign-lib.ts";
+import { attempt } from "../../hooks/attempt.ts";
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
@@ -57,7 +58,8 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
   process.exit(0);
 }
 
-try {
+// FAIL OPEN — see the header: a bug here must never block an ordinary prompt.
+const r = await attempt(async () => {
   const payload = readStdinJson();
   const prompt = typeof payload?.prompt === "string" ? payload.prompt : "";
   const cwd = typeof payload?.cwd === "string" ? payload.cwd : process.cwd();
@@ -79,7 +81,5 @@ try {
   const policy = await loadFleetPolicy(cwd);
   const context = rolePrompt(role, policy);
   allow(name, context);
-} catch {
-  // FAIL OPEN — see the header: a bug here must never block an ordinary prompt.
-  process.exit(0);
-}
+});
+if (!r.ok) process.exit(0);

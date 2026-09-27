@@ -76,10 +76,15 @@ function findRuleTable(lines: string[]): RuleTable | undefined {
 }
 
 async function checkFile(file: string): Promise<void> {
-  let text: string;
-  try {
-    text = await Bun.file(file).text();
-  } catch {
+  // No try/catch (audited *.ts ban): Promise.try turns an unreadable-file throw into a
+  // rejection this `.then` maps to `undefined`, same outward result as the old catch branch.
+  const text: string | undefined = await Promise.try(() =>
+    Bun.file(file).text(),
+  ).then(
+    (ok) => ok,
+    () => undefined,
+  );
+  if (text === undefined) {
     fail(file, "cannot read file");
     return;
   }

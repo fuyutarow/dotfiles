@@ -20,13 +20,12 @@
 // NO FLAGS, NO DEPENDENCIES — deliberate. This runs from link-dots.sh, which on a fresh machine
 // executes BEFORE `mise run deps` restores node_modules, so importing cleye would break bootstrap.
 // With no argv read there is no Cleye boundary to owe (writing-bun-scripts BG1). The same
-// constraint is why this file opts out of the try/catch ban (`lint:ts` in mise.toml, via the
-// oxlint-disable directive below): the ban's replacement, neverthrow, is a graduation-project
-// import too — this file cannot take on ANY dependency that isn't already resolvable before
-// `mise run deps` has run, so its try/catch below stay try/catch, not fromThrowable. The opt-out
-// lives HERE rather than in .oxlintrc.json because oxlint 1.82's overrides.files has no working
-// exclusion glob (`!path` matches every OTHER file instead). Inputs come from the environment so
-// tests can point it at fixtures:
+// constraint is why this file's throw sites go through agents/hooks/attempt.ts rather than
+// neverthrow (`lint:ts` in mise.toml bans try/catch outright, with no per-file opt-out and no
+// disable comment): neverthrow is a graduation-project import too — this file cannot take on ANY
+// dependency that isn't already resolvable before `mise run deps` has run — but attempt.ts is
+// zero-dep (not even node:), so it is resolvable at the same bootstrap moment this file itself
+// is. Inputs come from the environment so tests can point it at fixtures:
 //   DOTFILES                  repo root            (default: $HOME/dotfiles)
 //   HOME                      destination root     (default: os.homedir())
 //   CLAUDE_SETTINGS_PRIVATE   overlay path         (default: $HOME/.claude/settings.private.json)
@@ -38,7 +37,6 @@
 // Exit: 0 rendered or already current · 1 the base is missing/unreadable, or an overlay exists but
 // is not readable JSON (a typo in the overlay must never silently drop private rules).
 
-/* oxlint-disable eslint-js/no-restricted-syntax -- bootstrap: runs before `mise run deps`, cannot import neverthrow (see header) */
 import {
   existsSync,
   lstatSync,
@@ -47,6 +45,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { homedir } from "node:os";
+import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -72,32 +71,31 @@ async function readJson(path: string): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
-let base: Record<string, unknown>;
-try {
-  base = await readJson(basePath);
-} catch (error) {
+const baseRead = await attempt(() => readJson(basePath));
+if (!baseRead.ok) {
   fail(
-    `FATAL: cannot read base settings ${basePath} — ${error instanceof Error ? error.message : String(error)}`,
+    `FATAL: cannot read base settings ${basePath} — ${errorMessage(baseRead.error)}`,
   );
   process.exit(1);
 }
+const base = baseRead.value;
 
 let overlay: Record<string, unknown> = {};
 let overlayKeys: string[] = [];
 if (existsSync(overlayPath)) {
-  try {
-    overlay = await readJson(overlayPath);
-  } catch (error) {
+  const overlayRead = await attempt(() => readJson(overlayPath));
+  if (!overlayRead.ok) {
     // Hard failure, not a skip: a malformed overlay means the private rules (which include
     // soft_deny entries protecting a court-of-record file) would vanish without a word.
     fail(
-      `FATAL: private overlay ${overlayPath} is not readable JSON — ${error instanceof Error ? error.message : String(error)}`,
+      `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(overlayRead.error)}`,
     );
     fail(
       "  refusing to render settings that would silently drop the private rules",
     );
     process.exit(1);
   }
+  overlay = overlayRead.value;
   overlayKeys = Object.keys(overlay).sort();
 }
 
@@ -124,14 +122,12 @@ await Bun.write(tmpPath, rendered);
 // The pre-2026-08-17 layout had a SYMLINK here pointing into the repo. rename() would replace the
 // link itself, but unlink first so the transition is explicit and reported.
 let replaced = "";
-try {
-  if (lstatSync(destPath).isSymbolicLink()) {
-    replaced = " (replaced the old symlink into the repo)";
-    unlinkSync(destPath);
-  }
-} catch {
-  // no destination yet — nothing to replace
+const destStat = await attempt(() => lstatSync(destPath));
+if (destStat.ok && destStat.value.isSymbolicLink()) {
+  replaced = " (replaced the old symlink into the repo)";
+  unlinkSync(destPath);
 }
+// destStat not ok — no destination yet, nothing to replace.
 renameSync(tmpPath, destPath);
 
 print(

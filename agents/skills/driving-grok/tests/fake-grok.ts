@@ -22,44 +22,36 @@ if (args[0] === "models") {
 const modelIndex = args.indexOf("-m");
 const model = modelIndex === -1 ? "" : args[modelIndex + 1];
 
-switch (model) {
-  case "good-model":
-    process.stdout.write(
-      `${JSON.stringify({ text: "OK", usage: { total_tokens: 123 } })}\n`,
-    );
-    process.exit(0);
-    break;
-  case "no-usage-model":
-    process.stdout.write(`${JSON.stringify({ text: "OK" })}\n`);
-    process.exit(0);
-    break;
-  case "unknown-model":
-    process.stdout.write(
-      "Error: unknown model id 'unknown-model' — run `grok models`\n",
-    );
-    process.exit(1);
-    break;
-  case "malformed-model":
-    process.stdout.write("not json at all\n");
-    process.exit(0);
-    break;
-  case "wrong-text-model":
-    process.stdout.write(`${JSON.stringify({ text: "NOPE" })}\n`);
-    process.exit(0);
-    break;
-  case "array-json-model":
-    process.stdout.write(`${JSON.stringify([1, 2, 3])}\n`);
-    process.exit(0);
-    break;
-  case "denied-model":
-    process.stderr.write("Starting probe...\n");
-    process.stderr.write("Error: permission denied for model\n");
-    process.stderr.write("Error: quota exceeded this month\n");
-    process.stderr.write("auth failed as well\n");
-    process.stderr.write("done\n");
-    process.exit(2);
-    break;
-  default:
-    process.stdout.write(`unrecognized fake-grok invocation: ${model}\n`);
-    process.exit(9);
+if (model === "good-model") {
+  process.stdout.write(
+    `${JSON.stringify({ text: "OK", usage: { total_tokens: 123 } })}\n`,
+  );
+  process.exit(0);
+} else if (model === "no-usage-model") {
+  process.stdout.write(`${JSON.stringify({ text: "OK" })}\n`);
+  process.exit(0);
+} else if (model === "unknown-model") {
+  process.stdout.write(
+    "Error: unknown model id 'unknown-model' — run `grok models`\n",
+  );
+  process.exit(1);
+} else if (model === "malformed-model") {
+  process.stdout.write("not json at all\n");
+  process.exit(0);
+} else if (model === "wrong-text-model") {
+  process.stdout.write(`${JSON.stringify({ text: "NOPE" })}\n`);
+  process.exit(0);
+} else if (model === "array-json-model") {
+  process.stdout.write(`${JSON.stringify([1, 2, 3])}\n`);
+  process.exit(0);
+} else if (model === "denied-model") {
+  process.stderr.write("Starting probe...\n");
+  process.stderr.write("Error: permission denied for model\n");
+  process.stderr.write("Error: quota exceeded this month\n");
+  process.stderr.write("auth failed as well\n");
+  process.stderr.write("done\n");
+  process.exit(2);
+} else {
+  process.stdout.write(`unrecognized fake-grok invocation: ${model}\n`);
+  process.exit(9);
 }

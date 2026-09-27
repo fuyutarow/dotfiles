@@ -117,7 +117,10 @@ export function parseTimestamp(
   const second = Number(match[6] ?? "");
   const offsetHour = Number(match[10] ?? "0");
   const offsetMinute = Number(match[11] ?? "0");
-  const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const maxDay = Temporal.PlainYearMonth.from(
+    { year, month },
+    { overflow: "constrain" },
+  ).daysInMonth;
   if (
     year < 1 ||
     month < 1 ||
@@ -134,12 +137,15 @@ export function parseTimestamp(
   const fractionNanoseconds = (match[7] ?? "").padEnd(9, "0");
   const safeSecond = Math.min(second, 59).toString().padStart(2, "0");
   const normalized = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${safeSecond}${match[8]}`;
-  const epochMilliseconds = Date.parse(normalized);
-  if (!Number.isFinite(epochMilliseconds)) return { kind: "invalid" };
+  // All fields above are already bounds-checked (year>=1, month 1-12, day<=maxDay,
+  // hour<=23, minute<=59, second clamped to <=59 via safeSecond, offset<=23:59), so
+  // `normalized` is always a well-formed RFC3339 instant string with an explicit
+  // offset; Temporal.Instant.from does not reject it the way it would a date-only
+  // or offset-less string.
   const leapSecondNanoseconds = second === 60 ? 1_000_000_000n : 0n;
   return {
     epochNanoseconds:
-      BigInt(epochMilliseconds) * 1_000_000n +
+      Temporal.Instant.from(normalized).epochNanoseconds +
       BigInt(fractionNanoseconds) +
       leapSecondNanoseconds,
     kind: "value",

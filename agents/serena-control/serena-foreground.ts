@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 import {
   executeJob,
   validateManifest,
@@ -120,16 +121,17 @@ function integerFlag(
 }
 
 function existingProject(path: string): string {
-  let project: string;
-  try {
-    project = realpathSync(resolve(path));
-  } catch (error) {
+  const resolved = fromThrowable(() => realpathSync(resolve(path)))();
+  if (resolved.isErr()) {
     throw new UsageError(
       `cannot resolve project '${path}': ${
-        error instanceof Error ? error.message : String(error)
+        resolved.error instanceof Error
+          ? resolved.error.message
+          : String(resolved.error)
       }`,
     );
   }
+  const project = resolved.value;
   if (!statSync(project).isDirectory()) {
     throw new UsageError(`project is not a directory: ${project}`);
   }

@@ -41,6 +41,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { attempt, attemptOr, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const GiB = 1024 ** 3;
@@ -235,24 +236,27 @@ function validate(raw: any): { config: Config | null; errors: string[] } {
     : { config: { ...raw, budget: budgets } as Config, errors };
 }
 
-function loadConfig(): { config: Config | null; errors: string[] } {
-  let text: string;
-  try {
-    text = readFileSync(CONFIG_PATH, "utf8");
-  } catch (e) {
+async function loadConfig(): Promise<{
+  config: Config | null;
+  errors: string[];
+}> {
+  const read = await attempt(() => readFileSync(CONFIG_PATH, "utf8"));
+  if (!read.ok) {
     return {
       config: null,
-      errors: [`cannot read ${CONFIG_PATH}: ${(e as Error).message}`],
+      errors: [`cannot read ${CONFIG_PATH}: ${errorMessage(read.error)}`],
     };
   }
-  try {
-    return validate(Bun.TOML.parse(text));
-  } catch (e) {
+  const parsed = await attempt(() => Bun.TOML.parse(read.value));
+  if (!parsed.ok) {
     return {
       config: null,
-      errors: [`${CONFIG_PATH} is not valid TOML: ${(e as Error).message}`],
+      errors: [
+        `${CONFIG_PATH} is not valid TOML: ${errorMessage(parsed.error)}`,
+      ],
     };
   }
+  return validate(parsed.value);
 }
 
 // --- Launch matching --------------------------------------------------------------------------
@@ -291,39 +295,34 @@ function matchLauncher(
 
 // --- Measuring --------------------------------------------------------------------------------
 
-function freeBytes(path: string): number | null {
-  try {
+async function freeBytes(path: string): Promise<number | null> {
+  return attemptOr(() => {
     const s = statfsSync(path);
     return Number(s.bavail) * Number(s.bsize);
-  } catch {
-    return null;
-  }
+  }, null);
 }
 
 // The hook only queues the bounded systemd recovery unit. A PreToolUse call must never wait for
 // multi-minute cache cleanup, and this service also runs from a timer while an agent is idle.
-function requestRecovery(): string {
+async function requestRecovery(): Promise<string> {
   // A fixture config must not start the real host service during hook tests.
   if (process.env.STORAGE_HEADROOM_CONFIG !== undefined) return "";
   const stamp = join(
     homedir(),
     ".local/state/wsl-capacity-recover/last-request",
   );
-  try {
-    if (
-      Temporal.Now.instant().epochMilliseconds - statSync(stamp).mtimeMs <
-      60_000
-    )
-      return " Automatic recovery was recently queued.";
-  } catch {
-    // First request, or an unavailable stamp: still attempt to queue recovery.
-  }
-  try {
+  // First request, or an unavailable stamp: still attempt to queue recovery.
+  const mtimeMs = await attemptOr(() => statSync(stamp).mtimeMs, null);
+  if (
+    mtimeMs !== null &&
+    Temporal.Now.instant().epochMilliseconds - mtimeMs < 60_000
+  )
+    return " Automatic recovery was recently queued.";
+  // The drive may already be critically low. systemd still gets a chance below.
+  await attempt(() => {
     mkdirSync(dirname(stamp), { recursive: true });
     writeFileSync(stamp, `${Temporal.Now.instant().epochMilliseconds}\n`);
-  } catch {
-    // The drive may already be critically low. systemd still gets a chance below.
-  }
+  });
   const result = Bun.spawnSync(
     [
       "timeout",
@@ -349,11 +348,11 @@ type Size = { bytes: number; incremental: number; at: number };
 
 // Cached per artifact path: a 100 GiB tree takes seconds to walk, and agents launch builds many
 // times an hour.
-function measured(
+async function measured(
   path: string,
   withIncremental: boolean,
   m: Config["measure"],
-): Size | null {
+): Promise<Size | null> {
   const cacheDir = join(
     homedir(),
     ".cache",
@@ -364,16 +363,17 @@ function measured(
     cacheDir,
     `${createHash("sha1").update(path).digest("hex")}.json`,
   );
-  try {
-    const c = JSON.parse(readFileSync(cacheFile, "utf8")) as Size;
-    if (
-      Temporal.Now.instant().epochMilliseconds - c.at <
+  // no or unreadable cache: measure
+  const cached = await attemptOr(
+    () => JSON.parse(readFileSync(cacheFile, "utf8")) as Size,
+    null,
+  );
+  if (
+    cached !== null &&
+    Temporal.Now.instant().epochMilliseconds - cached.at <
       m.cache_minutes * 60_000
-    )
-      return c;
-  } catch {
-    /* no or unreadable cache: measure */
-  }
+  )
+    return cached;
   const bytes = duBytes(path, m);
   if (bytes === null) return null;
   const incremental = withIncremental
@@ -387,12 +387,11 @@ function measured(
     incremental,
     at: Temporal.Now.instant().epochMilliseconds,
   };
-  try {
+  // an unwritable cache only costs a re-measure next time
+  await attempt(() => {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(cacheFile, JSON.stringify(size));
-  } catch {
-    /* an unwritable cache only costs a re-measure next time */
-  }
+  });
   return size;
 }
 
@@ -460,15 +459,15 @@ function locate(b: Budget, command: string, cwd: string): string | null {
 // target/debug/incremental) after one day of parallel agent builds across worktrees, while the
 // drive gate stayed quiet until C: had under 60 GiB left. A target over its deny budget blocks
 // another build; cleanup remains a separate operation because another session may be using it.
-function budgetStatus(
+async function budgetStatus(
   b: Budget,
   command: string,
   cwd: string,
   m: Config["measure"],
-): { warning?: string; denial?: string } | null {
+): Promise<{ warning?: string; denial?: string } | null> {
   const path = locate(b, command, cwd);
   if (path === null || !existsSync(path)) return null;
-  const size = measured(path, b.incremental === true, m);
+  const size = await measured(path, b.incremental === true, m);
   if (size === null) {
     const message =
       `storage-headroom: ${b.name} ${path} could not be sized within ${m.du_timeout_seconds}s — ` +
@@ -498,14 +497,14 @@ function budgetStatus(
 
 // --- Decision ---------------------------------------------------------------------------------
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = readStdinJson();
   if (payload?.tool_name !== "Bash") return;
   const command = payload?.tool_input?.command;
   if (typeof command !== "string" || command === "") return;
   if (/\bSTORAGE_ASSERT_OVERRIDE=1\b/.test(command)) return;
 
-  const { config, errors } = loadConfig();
+  const { config, errors } = await loadConfig();
   if (config === null) {
     // BATCHED(config fields): validate() collects every error before this point, so one denial
     // lists them all.
@@ -520,10 +519,12 @@ function main(): void {
   const hit = matchLauncher(command, config.launcher);
   if (!hit) return;
 
-  const drives = Object.values(config.drive).map((d) => ({
-    ...d,
-    free: freeBytes(d.path),
-  }));
+  const drives = await Promise.all(
+    Object.values(config.drive).map(async (d) => ({
+      ...d,
+      free: await freeBytes(d.path),
+    })),
+  );
   const low = drives.filter(
     (d) => d.free !== null && d.free < d.deny_gib * GiB,
   );
@@ -536,7 +537,7 @@ function main(): void {
   const hostUnreadable =
     wsl &&
     config.drive.host !== undefined &&
-    freeBytes(config.drive.host.path) === null;
+    (await freeBytes(config.drive.host.path)) === null;
   if (low.length > 0 || hostUnreadable) {
     const hostDrive = config.drive.host;
     const hostLow =
@@ -547,7 +548,7 @@ function main(): void {
           d.free !== null &&
           d.free < d.deny_gib * GiB,
       );
-    const recovery = hostLow ? requestRecovery() : "";
+    const recovery = hostLow ? await requestRecovery() : "";
     // BATCHED(drives): every drive is measured before this point and all of them are in the one
     // reason below, so a caller short on both learns it from a single denial.
     decidePre(
@@ -585,7 +586,7 @@ function main(): void {
   const budgetDenials: string[] = [];
   for (const b of config.budget) {
     if (!b.launchers.includes(hit.command)) continue;
-    const status = budgetStatus(b, command, cwd, config.measure);
+    const status = await budgetStatus(b, command, cwd, config.measure);
     if (status?.denial !== undefined) budgetDenials.push(status.denial);
     if (status?.warning !== undefined) warnings.push(status.warning);
   }
@@ -605,4 +606,4 @@ function main(): void {
   }
 }
 
-main();
+await main();

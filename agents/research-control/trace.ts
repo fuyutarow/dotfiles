@@ -1,3 +1,5 @@
+import { fromThrowable } from "neverthrow";
+
 export const SCHEMA = "research-section-trace/v2";
 export type Finding = { code: string; eventId?: string; message: string };
 type R = Record<string, unknown>;
@@ -89,14 +91,14 @@ function record(value: unknown): value is R {
 function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
+const instantMs = fromThrowable(
+  (value: string) => Temporal.Instant.from(value).epochMilliseconds,
+);
 function time(value: unknown): number | undefined {
   if (!nonempty(value) || !RFC3339.test(value)) return undefined;
-  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over.
-  try {
-    return Temporal.Instant.from(value).epochMilliseconds;
-  } catch {
-    return undefined;
-  }
+  // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over; that
+  // rejection is exactly the "not a timestamp" answer.
+  return instantMs(value).unwrapOr(undefined);
 }
 function sha(value: unknown): value is string {
   return typeof value === "string" && SHA.test(value);

@@ -6,6 +6,7 @@ import {
   RESOURCE_DECLARATION_HELP,
   resourceDeclarationResult,
 } from "../../resource-control/lib/dispatch-declaration.ts";
+import { attempt } from "../../hooks/attempt.ts";
 
 const TERRA = "gpt-5.6-terra";
 
@@ -35,13 +36,10 @@ function output(
   );
 }
 
-function main(): void {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(readFileSync(0, "utf8"));
-  } catch {
-    denyMalformed("invalid JSON payload");
-  }
+async function main(): Promise<void> {
+  const parsed = await attempt(() => JSON.parse(readFileSync(0, "utf8")));
+  if (!parsed.ok) denyMalformed("invalid JSON payload");
+  const payload: unknown = parsed.value;
   if (
     !isRecord(payload) ||
     payload.tool_name !== "Agent" ||
@@ -51,12 +49,10 @@ function main(): void {
   }
 
   const input = payload.tool_input;
-  const dispatchText =
-    typeof input.message === "string"
-      ? input.message
-      : typeof input.prompt === "string"
-        ? input.prompt
-        : null;
+  let dispatchText: string | null;
+  if (typeof input.message === "string") dispatchText = input.message;
+  else if (typeof input.prompt === "string") dispatchText = input.prompt;
+  else dispatchText = null;
   if (dispatchText === null)
     denyMalformed("Agent message/prompt must be a string");
   const resource = resourceDeclarationResult(dispatchText);
@@ -82,4 +78,4 @@ function main(): void {
   );
 }
 
-main();
+await main();

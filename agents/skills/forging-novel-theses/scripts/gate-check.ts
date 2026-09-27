@@ -1350,6 +1350,20 @@ async function input(): Promise<Input> {
 	};
 }
 
+function choosePacketLabel(
+	batch: boolean,
+	mappingBreaks: readonly MappingBreakData[],
+	candidates: readonly CandidateData[],
+): string {
+	if (batch) return "candidate batch";
+	if (mappingBreaks.length > 0 && candidates.length > 0) return "transfer bundle";
+	if (mappingBreaks.length > 0) return "mapping-break packet";
+	const hasTransfer = candidates.some(
+		(candidate) => normalizedCoordinate(candidate.operation) === "TRANSFER",
+	);
+	return hasTransfer ? "transfer candidate packet" : "candidate packet";
+}
+
 async function main(): Promise<void> {
 	const { donorSetPath, legacyV1, text } = await input();
 	const sections = artifactSections(text);
@@ -1404,18 +1418,7 @@ async function main(): Promise<void> {
 		readField(text.split("\n"), "Requested candidate count") !== undefined;
 	if (batch) validateBatch(text, candidates, report);
 
-	const packetLabel = batch
-		? "candidate batch"
-		: mappingBreaks.length > 0 && candidates.length > 0
-			? "transfer bundle"
-			: mappingBreaks.length > 0
-				? "mapping-break packet"
-				: candidates.some(
-							(candidate) =>
-								normalizedCoordinate(candidate.operation) === "TRANSFER",
-						)
-					? "transfer candidate packet"
-					: "candidate packet";
+	const packetLabel = choosePacketLabel(batch, mappingBreaks, candidates);
 
 	process.stdout.write("----\n");
 	process.stdout.write(

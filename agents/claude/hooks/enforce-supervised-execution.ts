@@ -44,6 +44,7 @@
 //
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
+import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Command position: start of line, or after a shell separator / then / do. Keeps the gate off
@@ -179,14 +180,15 @@ function main(): void {
   );
 }
 
-try {
-  main();
-  process.exit(0);
-} catch (error) {
+const r = await attempt(main);
+if (!r.ok) {
+  // FATAL: the hook itself failed, so no axis could be evaluated; fail closed with the one fix
+  // (report the error) rather than guessing which checks would have fired.
   decidePre(
     "deny",
     `supervised-execution: hook error while classifying the command ` +
-      `(${error instanceof Error ? error.message : String(error)}) — failing closed. ` +
+      `(${errorMessage(r.error)}) — failing closed. ` +
       `Fix ~/.claude/hooks/enforce-supervised-execution.ts before retrying.`,
   );
 }
+process.exit(0);

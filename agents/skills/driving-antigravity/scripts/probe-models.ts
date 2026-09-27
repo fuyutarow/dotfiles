@@ -109,11 +109,15 @@ async function main(): Promise<void> {
         `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an EXACT \`agy models\` display name; copy it verbatim incl. spaces/parens/capitalization\n`,
       );
     } else {
-      const note = result.timedOut
-        ? "timeout — not a catalog verdict"
-        : result.exitCode === 0
-          ? "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)"
-          : `rc=${result.exitCode}`;
+      let note: string;
+      if (result.timedOut) {
+        note = "timeout — not a catalog verdict";
+      } else if (result.exitCode === 0) {
+        note =
+          "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)";
+      } else {
+        note = `rc=${result.exitCode}`;
+      }
       process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
       for (const line of result.output
         .split("\n")

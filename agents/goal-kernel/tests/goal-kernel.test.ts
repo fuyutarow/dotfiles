@@ -80,10 +80,10 @@ function hookPayload(
 }
 
 describe("immutable Goal authority", () => {
-  test("activation snapshots an exact version and rejects an ambiguous rewrite", () => {
+  test("activation snapshots an exact version and rejects an ambiguous rewrite", async () => {
     const root = workspace();
     const original = { ...goal() };
-    const first = activateGoal(root, original);
+    const first = await activateGoal(root, original);
 
     original.north_star = "mutated source object";
     const snapshot = JSON.parse(readFileSync(first.snapshot_path, "utf8"));
@@ -91,30 +91,30 @@ describe("immutable Goal authority", () => {
     expect(snapshot.north_star).not.toContain("mutated");
     expect(first.goal_digest).toMatch(/^[a-f0-9]{64}$/);
 
-    expect(() => activateGoal(root, goal({ north_star: "conflict" }))).toThrow(
-      "already has a different digest",
-    );
+    await expect(
+      activateGoal(root, goal({ north_star: "conflict" })),
+    ).rejects.toThrow("already has a different digest");
   });
 
-  test("a run keeps its bound version when the active pointer changes", () => {
+  test("a run keeps its bound version when the active pointer changes", async () => {
     const root = workspace();
-    const v1 = activateGoal(root, goal());
+    const v1 = await activateGoal(root, goal());
     const v2Contract = goal({
       goal_version: 2,
       supersedes_goal_digest: v1.goal_digest,
       north_star: "Version two is the future-session North Star.",
     });
-    const v2 = activateGoal(root, v2Contract);
+    const v2 = await activateGoal(root, v2Contract);
 
-    const start = processHookEvent(
+    const start = await processHookEvent(
       "claude",
       hookPayload(root, "session-old", "SessionStart", { source: "startup" }),
     );
     expect(start.exit_code).toBe(0);
     expect(start.stdout).toContain("Version two");
 
-    activateGoal(root, goal());
-    processHookEvent(
+    await activateGoal(root, goal());
+    await processHookEvent(
       "claude",
       hookPayload(root, "session-old", "PreToolUse", {
         tool_name: "Edit",
@@ -122,33 +122,33 @@ describe("immutable Goal authority", () => {
         tool_input: { file_path: "x", new_string: "changed" },
       }),
     );
-    const oldEvents = listRunEvents(root, requiredRunId(start));
+    const oldEvents = await listRunEvents(root, requiredRunId(start));
     expect(oldEvents.at(-1)?.goal_digest).toBe(v2.goal_digest);
 
-    const fresh = processHookEvent(
+    const fresh = await processHookEvent(
       "claude",
       hookPayload(root, "session-new", "SessionStart", { source: "startup" }),
     );
     expect(fresh.goal_digest).toBe(v1.goal_digest);
   });
 
-  test("an activation lock interlocks concurrent writers instead of racing the version check", () => {
+  test("an activation lock interlocks concurrent writers instead of racing the version check", async () => {
     const root = workspace();
     const state = goalKernelPaths(root).state;
     mkdirSync(state, { recursive: true, mode: 0o700 });
     const lock = join(state, ".activation.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    expect(() => activateGoal(root, goal())).toThrow("GK_BUSY");
+    await expect(activateGoal(root, goal())).rejects.toThrow("GK_BUSY");
     unlinkSync(lock);
-    expect(activateGoal(root, goal()).goal_version).toBe(1);
+    expect((await activateGoal(root, goal())).goal_version).toBe(1);
   });
 });
 
 describe("hook enforcement and privacy", () => {
   test.each(["claude", "codex"] as const)(
     "%s silently ignores an unconfigured workspace",
-    (provider) => {
-      const result = processHookEvent(
+    async (provider) => {
+      const result = await processHookEvent(
         provider,
         hookPayload(workspace(), "unconfigured", "PreToolUse", {
           tool_name: "Bash",
@@ -162,16 +162,16 @@ describe("hook enforcement and privacy", () => {
 
   test.each(["Stop", "SubagentStop"])(
     "Codex %s always returns the JSON required by its protocol",
-    (event) => {
-      const unconfigured = processHookEvent(
+    async (event) => {
+      const unconfigured = await processHookEvent(
         "codex",
         hookPayload(workspace(), "codex-neutral", event),
       );
       expect(JSON.parse(unconfigured.stdout)).toEqual({});
 
       const root = workspace();
-      activateGoal(root, goal());
-      const configured = processHookEvent(
+      await activateGoal(root, goal());
+      const configured = await processHookEvent(
         "codex",
         hookPayload(root, "codex-neutral", event),
       );
@@ -179,12 +179,12 @@ describe("hook enforcement and privacy", () => {
     },
   );
 
-  test("a configured parent does not govern an unconfigured nested git workspace", () => {
+  test("a configured parent does not govern an unconfigured nested git workspace", async () => {
     const parent = workspace();
-    activateGoal(parent, goal());
+    await activateGoal(parent, goal());
     const nested = join(parent, "nested");
     mkdirSync(join(nested, ".git"), { recursive: true });
-    const result = processHookEvent(
+    const result = await processHookEvent(
       "codex",
       hookPayload(nested, "nested-session", "PreToolUse", {
         tool_name: "Bash",
@@ -195,9 +195,9 @@ describe("hook enforcement and privacy", () => {
     expect(result).toMatchObject({ exit_code: 0, stdout: "" });
   });
 
-  test("a checkout-style world-readable config cannot inject Goal context", () => {
+  test("a checkout-style world-readable config cannot inject Goal context", async () => {
     const trusted = workspace();
-    activateGoal(trusted, goal());
+    await activateGoal(trusted, goal());
     const target = workspace();
     const targetState = goalKernelPaths(target).state;
     mkdirSync(targetState, { recursive: true });
@@ -207,7 +207,7 @@ describe("hook enforcement and privacy", () => {
     );
     chmodSync(targetState, 0o755);
     chmodSync(goalKernelPaths(target).config, 0o644);
-    const result = processHookEvent(
+    const result = await processHookEvent(
       "claude",
       hookPayload(target, "untrusted-config", "SessionStart", {
         source: "startup",
@@ -217,7 +217,7 @@ describe("hook enforcement and privacy", () => {
     expect(result.stdout).toContain("GK_CONFIG_UNTRUSTED");
     expect(result.stdout).not.toContain("harness-postmortem");
 
-    const preTool = processHookEvent(
+    const preTool = await processHookEvent(
       "claude",
       hookPayload(target, "untrusted-config", "PreToolUse", {
         tool_name: "Bash",
@@ -233,11 +233,11 @@ describe("hook enforcement and privacy", () => {
 
   test.each(["claude", "codex"] as const)(
     "%s denies tools when configured authority is missing",
-    (provider) => {
+    async (provider) => {
       const root = workspace();
-      activateGoal(root, goal());
+      await activateGoal(root, goal());
       unlinkSync(goalKernelPaths(root).active);
-      const result = processHookEvent(
+      const result = await processHookEvent(
         provider,
         hookPayload(root, `${provider}-broken`, "PreToolUse", {
           tool_name: "Bash",
@@ -254,18 +254,18 @@ describe("hook enforcement and privacy", () => {
     },
   );
 
-  test("the ledger hashes prompts, tool inputs, and responses without copying them", () => {
+  test("the ledger hashes prompts, tool inputs, and responses without copying them", async () => {
     const root = workspace();
-    activateGoal(root, goal());
+    await activateGoal(root, goal());
     const secret = "super-secret-value";
-    const prompt = processHookEvent(
+    const prompt = await processHookEvent(
       "codex",
       hookPayload(root, "privacy", "UserPromptSubmit", {
         turn_id: "turn-1",
         prompt: `password=${secret}`,
       }),
     );
-    processHookEvent(
+    await processHookEvent(
       "codex",
       hookPayload(root, "privacy", "PreToolUse", {
         turn_id: "turn-1",
@@ -276,7 +276,7 @@ describe("hook enforcement and privacy", () => {
         },
       }),
     );
-    processHookEvent(
+    await processHookEvent(
       "codex",
       hookPayload(root, "privacy", "PostToolUse", {
         turn_id: "turn-1",
@@ -288,24 +288,26 @@ describe("hook enforcement and privacy", () => {
         tool_response: { output: secret, exit_code: 0 },
       }),
     );
-    processHookEvent(
+    await processHookEvent(
       "codex",
       hookPayload(root, "privacy", "SessionEnd", {
         reason: `provider reason contains ${secret}`,
       }),
     );
 
-    const encoded = JSON.stringify(listRunEvents(root, requiredRunId(prompt)));
+    const encoded = JSON.stringify(
+      await listRunEvents(root, requiredRunId(prompt)),
+    );
     expect(encoded).not.toContain(secret);
     expect(encoded).not.toContain("password=");
     expect(encoded).not.toContain("Authorization");
     expect(encoded.match(/[a-f0-9]{64}/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("post-hoc event edits fail content-digest verification", () => {
+  test("post-hoc event edits fail content-digest verification", async () => {
     const root = workspace();
-    activateGoal(root, goal());
-    const start = processHookEvent(
+    await activateGoal(root, goal());
+    const start = await processHookEvent(
       "claude",
       hookPayload(root, "tamper", "SessionStart", { source: "startup" }),
     );
@@ -320,16 +322,16 @@ describe("hook enforcement and privacy", () => {
     const event = JSON.parse(readFileSync(eventPath, "utf8"));
     event.event_type = "tampered";
     writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
-    expect(() => listRunEvents(root, requiredRunId(start))).toThrow(
+    await expect(listRunEvents(root, requiredRunId(start))).rejects.toThrow(
       "digest mismatch",
     );
   });
 });
 
 describe("decision lineage and postmortem reconstruction", () => {
-  test("one run id joins Goal, decisions, tool outcome, and a redacted Claude transcript", () => {
+  test("one run id joins Goal, decisions, tool outcome, and a redacted Claude transcript", async () => {
     const root = workspace();
-    activateGoal(root, goal());
+    await activateGoal(root, goal());
     const transcript = join(root, "claude-transcript.jsonl");
     writeFileSync(
       transcript,
@@ -368,7 +370,7 @@ describe("decision lineage and postmortem reconstruction", () => {
         .map((entry) => JSON.stringify(entry))
         .join("\n")}\n`,
     );
-    const start = processHookEvent(
+    const start = await processHookEvent(
       "claude",
       hookPayload(root, "postmortem", "SessionStart", {
         source: "startup",
@@ -376,7 +378,7 @@ describe("decision lineage and postmortem reconstruction", () => {
       }),
     );
     const runId = requiredRunId(start);
-    recordRunDecision(root, runId, {
+    await recordRunDecision(root, runId, {
       schema_version: 1,
       decision_id: "D-002",
       summary: "Keep transcript ingestion read-only and on demand.",
@@ -388,7 +390,7 @@ describe("decision lineage and postmortem reconstruction", () => {
         source: "fixture",
       },
     });
-    processHookEvent(
+    await processHookEvent(
       "claude",
       hookPayload(root, "postmortem", "PreToolUse", {
         tool_name: "Edit",
@@ -396,7 +398,7 @@ describe("decision lineage and postmortem reconstruction", () => {
         tool_input: { file_path: "README.md", new_string: "x" },
       }),
     );
-    processHookEvent(
+    await processHookEvent(
       "claude",
       hookPayload(root, "postmortem", "PostToolUse", {
         tool_name: "Edit",
@@ -406,7 +408,7 @@ describe("decision lineage and postmortem reconstruction", () => {
       }),
     );
 
-    const report = buildPostmortem(root, runId, {
+    const report = await buildPostmortem(root, runId, {
       include_transcript: true,
     });
     expect(report.goal.goal_id).toBe("harness-postmortem");
@@ -428,10 +430,10 @@ describe("decision lineage and postmortem reconstruction", () => {
     );
   });
 
-  test("decision recording is serialized and a duplicate id cannot be appended", () => {
+  test("decision recording is serialized and a duplicate id cannot be appended", async () => {
     const root = workspace();
-    activateGoal(root, goal());
-    const start = processHookEvent(
+    await activateGoal(root, goal());
+    const start = await processHookEvent(
       "claude",
       hookPayload(root, "decision-lock", "SessionStart", { source: "startup" }),
     );
@@ -450,23 +452,25 @@ describe("decision lineage and postmortem reconstruction", () => {
     };
     const lock = join(goalKernelPaths(root).runs, runId, ".decision.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    expect(() => recordRunDecision(root, runId, decision)).toThrow("GK_BUSY");
+    await expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
+      "GK_BUSY",
+    );
     unlinkSync(lock);
 
-    recordRunDecision(root, runId, decision);
-    expect(() => recordRunDecision(root, runId, decision)).toThrow(
+    await recordRunDecision(root, runId, decision);
+    await expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
       "already exists",
     );
     expect(
-      listRunEvents(root, runId).filter(
+      (await listRunEvents(root, runId)).filter(
         (event) => event.event_type === "decision.recorded",
       ),
     ).toHaveLength(1);
   });
 
-  test("Codex response_item messages are readable without chat copy/paste", () => {
+  test("Codex response_item messages are readable without chat copy/paste", async () => {
     const root = workspace();
-    activateGoal(root, goal());
+    await activateGoal(root, goal());
     const transcript = join(root, "codex-transcript.jsonl");
     writeFileSync(
       transcript,
@@ -503,14 +507,14 @@ describe("decision lineage and postmortem reconstruction", () => {
         .map((entry) => JSON.stringify(entry))
         .join("\n")}\n`,
     );
-    const start = processHookEvent(
+    const start = await processHookEvent(
       "codex",
       hookPayload(root, "codex-transcript", "SessionStart", {
         source: "startup",
         transcript_path: transcript,
       }),
     );
-    const report = buildPostmortem(root, requiredRunId(start), {
+    const report = await buildPostmortem(root, requiredRunId(start), {
       include_transcript: true,
     });
     expect(report.transcript?.format).toBe("codex-jsonl");
@@ -531,9 +535,9 @@ describe("real protocol adapters", () => {
     ["codex", join(import.meta.dir, "../../codex/hooks/goal-kernel.ts")],
   ] as const)(
     "%s emits provider-compatible SessionStart JSON",
-    (provider, hook) => {
+    async (provider, hook) => {
       const root = workspace();
-      activateGoal(root, goal());
+      await activateGoal(root, goal());
       const result = spawnSync(process.execPath, [hook], {
         input: JSON.stringify(
           hookPayload(root, `${provider}-adapter`, "SessionStart", {
@@ -571,9 +575,9 @@ describe("real protocol adapters", () => {
     ["codex", join(import.meta.dir, "../../codex/hooks/run-goal-kernel.sh")],
   ] as const)(
     "%s runner blocks enforcement but not observation when Bun is unavailable",
-    (provider, runner) => {
+    async (provider, runner) => {
       const root = workspace();
-      activateGoal(root, goal());
+      await activateGoal(root, goal());
       const payload = JSON.stringify(
         hookPayload(root, `${provider}-runner`, "PreToolUse", {
           tool_name: "Bash",
@@ -617,9 +621,9 @@ describe("real protocol adapters", () => {
     ["codex", join(import.meta.dir, "../../codex/hooks/run-goal-kernel.sh")],
   ] as const)(
     "%s no-Bun runner silently passes unconfigured and nested Git workspaces",
-    (provider, runner) => {
+    async (provider, runner) => {
       const parent = workspace();
-      activateGoal(parent, goal());
+      await activateGoal(parent, goal());
       const nested = join(parent, "nested");
       mkdirSync(join(nested, ".git"), { recursive: true });
       const roots = [workspace(), nested];
@@ -697,10 +701,10 @@ describe("Cleye command boundary", () => {
     expect(extra.stderr).toContain("unexpected argument 'unexpected'");
   });
 
-  test("decide and postmortem join one run through the public CLI", () => {
+  test("decide and postmortem join one run through the public CLI", async () => {
     const root = workspace();
-    activateGoal(root, goal());
-    const start = processHookEvent(
+    await activateGoal(root, goal());
+    const start = await processHookEvent(
       "codex",
       hookPayload(root, "cli-postmortem", "SessionStart", {
         source: "startup",

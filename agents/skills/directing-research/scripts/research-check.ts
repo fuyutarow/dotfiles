@@ -178,6 +178,14 @@ function stableIds(value: string): readonly string[] | undefined {
 	return ids;
 }
 
+function resolvePreservedIds(
+	value: string | undefined,
+): readonly string[] | undefined {
+	if (value === undefined) return undefined;
+	if (/^NONE\s*(?:—|–|:|\s-\s)/.test(value)) return [];
+	return stableIds(value);
+}
+
 function placeholder(value: string): boolean {
 	return (
 		value === "" ||
@@ -1072,12 +1080,7 @@ async function validateTransferDisposition(
 		.filter((attempt) => attempt.kind === "MAPPING-BREAK")
 		.map((attempt) => attempt.id);
 	const preservedValue = readField(lines, "Preserved MAPPING-BREAK IDs");
-	const preserved =
-		preservedValue === undefined
-			? undefined
-			: /^NONE\s*(?:—|–|:|\s-\s)/.test(preservedValue)
-				? []
-				: stableIds(preservedValue);
+	const preserved = resolvePreservedIds(preservedValue);
 	if (preserved === undefined) {
 		transferReport(
 			"Preserved MAPPING-BREAK IDs must be a stable ID list or precise NONE",

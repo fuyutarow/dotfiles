@@ -61,6 +61,7 @@ import {
   runIndexWrapper,
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
+import { attempt } from "../hooks/attempt.ts";
 
 const ROUTES = [
   "concept",
@@ -122,10 +123,12 @@ const GLOB_MAGIC = /[*?[\]{}]/;
 // symlink to an outside directory from accidentally widening the search scope.
 // This is accidental-scope normalization, not a hostile TOCTOU security boundary: the filesystem
 // may change after these checks and before ccc consumes the resulting glob.
-function cccSearchPath(project: string, path: string): string {
+async function cccSearchPath(project: string, path: string): Promise<string> {
   if (GLOB_MAGIC.test(path)) return path;
 
-  try {
+  // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
+  // recursive scope for it.
+  const r = await attempt(() => {
     const projectPath = realpathSync(project);
     const candidate = realpathSync(resolve(projectPath, path));
     const insideProject = relative(projectPath, candidate);
@@ -138,11 +141,8 @@ function cccSearchPath(project: string, path: string): string {
       return path;
     }
     return `${insideProject || "."}/**`;
-  } catch {
-    // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
-    // recursive scope for it.
-    return path;
-  }
+  });
+  return r.ok ? r.value : path;
 }
 
 function exactlyOneQuery(route: string, queries: string[]): string {
@@ -298,7 +298,8 @@ async function runCccSearch(
     );
     return 75;
   }
-  const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
+  const cccPath =
+    path === undefined ? undefined : await cccSearchPath(project, path);
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
@@ -338,18 +339,21 @@ async function runRg(
   cwd: string,
 ): Promise<number> {
   const rg = requireExecutable("rg");
-  const command =
-    route === "files"
-      ? [rg, "--files", ...rgFlags(values), ...paths]
-      : [
-          rg,
-          ...(route === "literal" ? ["--fixed-strings"] : []),
-          "--line-number",
-          ...rgFlags(values),
-          "--",
-          query ?? "",
-          ...paths,
-        ];
+  let command: string[];
+  if (route === "files") {
+    command = [rg, "--files", ...rgFlags(values), ...paths];
+  } else {
+    const fixedStrings = route === "literal" ? ["--fixed-strings"] : [];
+    command = [
+      rg,
+      ...fixedStrings,
+      "--line-number",
+      ...rgFlags(values),
+      "--",
+      query ?? "",
+      ...paths,
+    ];
+  }
 
   process.stderr.write(`ROUTE: ${route} -> rg project=${cwd}\n`);
   const exitCode = await runChild(command, timeoutMs, cwd);
@@ -546,138 +550,176 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
   const cwd = targetProject(values.project);
-  switch (rawRoute) {
-    case "symbol": {
-      const symbol = exactlyOneQuery(rawRoute, queries);
-      process.stderr.write(
-        `FATAL: route=symbol belongs to Serena, not shell search; ` +
-          `use Serena definitions/references for '${symbol}'\n`,
-      );
-      return 2;
-    }
-    case "concept":
-    case "battery": {
-      if (rawRoute === "concept") {
-        exactlyOneQuery(rawRoute, queries);
-      } else if (
-        queries.length < 3 ||
-        queries.some((query) => query.trim() === "")
-      ) {
-        throw new Error("battery requires at least 3 non-empty --query values");
-      }
-      atMostOnePath(rawRoute, paths);
-      return runCccSearch(
-        rawRoute,
-        queries,
-        paths[0],
-        values.limit ?? 8,
-        timeoutMs,
-        values.refresh ?? false,
-        cwd,
-        values.project !== undefined,
-      );
-    }
-    case "structural": {
-      const query = exactlyOneQuery(rawRoute, queries);
-      atMostOnePath(rawRoute, paths);
-      return runCccGrep(query, paths[0], timeoutMs, cwd);
-    }
-    case "files": {
-      return runRg(
-        rawRoute,
-        undefined,
-        paths.length > 0 ? paths : ["."],
-        values,
-        timeoutMs,
-        cwd,
-      );
-    }
-    case "literal":
-    case "exhaustive": {
-      const query = exactlyOneQuery(rawRoute, queries);
-      return runRg(
-        rawRoute,
-        query,
-        paths.length > 0 ? paths : ["."],
-        values,
-        timeoutMs,
-        cwd,
-      );
-    }
+  if (rawRoute === "symbol") {
+    const symbol = exactlyOneQuery(rawRoute, queries);
+    process.stderr.write(
+      `FATAL: route=symbol belongs to Serena, not shell search; ` +
+        `use Serena definitions/references for '${symbol}'\n`,
+    );
+    return 2;
   }
+  if (rawRoute === "concept" || rawRoute === "battery") {
+    if (rawRoute === "concept") {
+      exactlyOneQuery(rawRoute, queries);
+    } else if (
+      queries.length < 3 ||
+      queries.some((query) => query.trim() === "")
+    ) {
+      throw new Error("battery requires at least 3 non-empty --query values");
+    }
+    atMostOnePath(rawRoute, paths);
+    return runCccSearch(
+      rawRoute,
+      queries,
+      paths[0],
+      values.limit ?? 8,
+      timeoutMs,
+      values.refresh ?? false,
+      cwd,
+      values.project !== undefined,
+    );
+  }
+  if (rawRoute === "structural") {
+    const query = exactlyOneQuery(rawRoute, queries);
+    atMostOnePath(rawRoute, paths);
+    return runCccGrep(query, paths[0], timeoutMs, cwd);
+  }
+  if (rawRoute === "files") {
+    return runRg(
+      rawRoute,
+      undefined,
+      paths.length > 0 ? paths : ["."],
+      values,
+      timeoutMs,
+      cwd,
+    );
+  }
+  // rawRoute is now narrowed to "literal" | "exhaustive" — the two remaining Route members.
+  const query = exactlyOneQuery(rawRoute, queries);
+  return runRg(
+    rawRoute,
+    query,
+    paths.length > 0 ? paths : ["."],
+    values,
+    timeoutMs,
+    cwd,
+  );
 }
 
+async function runRouteCommand(
+  route: Route,
+  positionals: readonly string[],
+  flags: SearchFlags,
+): Promise<void> {
+  if (positionals.length > 0) {
+    throw new Error(
+      `unexpected positional arguments: ${positionals.join(" ")}`,
+    );
+  }
+  process.exitCode = await runRoute(route, flags);
+}
+
+// One `command()` call per flag shape, each with its flags as a fresh object literal written
+// inside that call. Both halves are load-bearing, measured 2026-09-23 by attempting collapses:
+//   - a literal gets an implicit index signature synthesized where cleye's `Flags` (a
+//     string-index-signature type) checks it; a variable holding the same value does not
+//     ("index signature missing");
+//   - cleye infers a DIFFERENT flags type per call, and that per-call inference is what makes
+//     `parsed.flags` assignable to SearchFlags. One `Record<Route, Flags>` table, or one variable
+//     assigned from branches, collapses every route to a generic `Flags` and fails at the
+//     callback: TS2559 "Type '{ [x: string]: unknown; help: boolean | undefined; }' has no
+//     properties in common with type 'SearchFlags'".
+// A single command() whose `flags:` picked a branch by nested ternary satisfied both, but nested
+// ternaries are banned repo-wide; separate calls satisfy both without one. Do not "fix" a type
+// error here with `as` or `@ts-expect-error`: that trades a real guarantee for a cosmetic one.
 function routeCommand(route: Route) {
+  if (route === "concept" || route === "battery") {
+    return command(
+      {
+        name: route,
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        help: { description: `Run the ${route} repository-search route.` },
+        flags: {
+          ...queryFlag(),
+          ...pathFlag(),
+          ...projectFlag(),
+          limit: positiveInteger("limit"),
+          ...timeoutFlag(),
+          refresh: Boolean,
+        },
+      },
+      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+    );
+  }
+  if (route === "literal" || route === "exhaustive") {
+    return command(
+      {
+        name: route,
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        help: { description: `Run the ${route} repository-search route.` },
+        flags: {
+          ...queryFlag(),
+          ...pathFlag(),
+          ...projectFlag(),
+          ...globFlag(),
+          ...timeoutFlag(),
+          ...rgSearchFlags(),
+        },
+      },
+      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+    );
+  }
+  if (route === "files") {
+    return command(
+      {
+        name: route,
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        help: { description: `Run the ${route} repository-search route.` },
+        flags: {
+          ...pathFlag(),
+          ...projectFlag(),
+          ...globFlag(),
+          ...timeoutFlag(),
+          hidden: Boolean,
+        },
+      },
+      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+    );
+  }
+  if (route === "structural") {
+    return command(
+      {
+        name: route,
+        parameters: [],
+        strictFlags: true,
+        ignoreArgv: rejectPrototypeFlag,
+        help: { description: `Run the ${route} repository-search route.` },
+        flags: {
+          ...queryFlag(),
+          ...pathFlag(),
+          ...projectFlag(),
+          ...timeoutFlag(),
+        },
+      },
+      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+    );
+  }
   return command(
     {
       name: route,
       parameters: [],
-      // Inlined (not hoisted to a `const flags = ...` above) so each branch stays a fresh object
-      // literal at the point cleye's `Flags` (a string-index-signature type) checks it -- a
-      // literal gets an implicit index signature synthesized here; a variable holding the same
-      // value does not, and fails as "index signature missing".
-      //
-      // The ternary carries a SECOND load that the paragraph above does not name, measured
-      // 2026-09-23 by attempting the collapse and reverting it. Replacing these branches with a
-      // `Record<Route, Flags>` lookup table typechecks at the `flags:` property itself (the
-      // explicit annotation supplies the index signature) but breaks one call further down:
-      //   repo-retrieve.ts(639,46): error TS2559: Type '{ [x: string]: unknown; help: boolean |
-      //   undefined; }' has no properties in common with type 'SearchFlags'
-      // because cleye's `command()` infers a DIFFERENT flags shape per branch, and that per-branch
-      // inference is what makes `parsed.flags` below assignable to SearchFlags. One table collapses
-      // all seven routes to a single generic `Flags`, so the callback loses its narrowing. A
-      // `ts-pattern` `match(route).exhaustive()` is expected to fail for the same structural reason
-      // (its result is a call expression, not a per-branch literal) -- NOT separately measured.
-      // Do not "fix" the resulting error with `as` or `@ts-expect-error`: that trades a real
-      // guarantee for a cosmetic one. Collapsing this needs a cleye-side change first.
-      flags:
-        route === "concept" || route === "battery"
-          ? {
-              ...queryFlag(),
-              ...pathFlag(),
-              ...projectFlag(),
-              limit: positiveInteger("limit"),
-              ...timeoutFlag(),
-              refresh: Boolean,
-            }
-          : route === "literal" || route === "exhaustive"
-            ? {
-                ...queryFlag(),
-                ...pathFlag(),
-                ...projectFlag(),
-                ...globFlag(),
-                ...timeoutFlag(),
-                ...rgSearchFlags(),
-              }
-            : route === "files"
-              ? {
-                  ...pathFlag(),
-                  ...projectFlag(),
-                  ...globFlag(),
-                  ...timeoutFlag(),
-                  hidden: Boolean,
-                }
-              : route === "structural"
-                ? {
-                    ...queryFlag(),
-                    ...pathFlag(),
-                    ...projectFlag(),
-                    ...timeoutFlag(),
-                  }
-                : { ...queryFlag(), ...timeoutFlag() },
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       help: { description: `Run the ${route} repository-search route.` },
+      flags: { ...queryFlag(), ...timeoutFlag() },
     },
-    async (parsed) => {
-      if (parsed._.length > 0) {
-        throw new Error(
-          `unexpected positional arguments: ${parsed._.join(" ")}`,
-        );
-      }
-      const exitCode = await runRoute(route, parsed.flags);
-      process.exitCode = exitCode;
-    },
+    (parsed) => runRouteCommand(route, parsed._, parsed.flags),
   );
 }
 

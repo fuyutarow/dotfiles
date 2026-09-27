@@ -65,11 +65,12 @@ async function miseTasks(
     child.exited,
   ]);
   if (exitCode !== 0) return { tasks: [], error: stderr };
-  try {
-    return { tasks: tasks(JSON.parse(stdout)) };
-  } catch {
-    return { tasks: [], error: "mise returned invalid JSON" };
-  }
+  // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
+  // `.then` maps to the same error tag as the old catch branch.
+  return Promise.try(() => tasks(JSON.parse(stdout))).then(
+    (ok) => ({ tasks: ok }),
+    () => ({ tasks: [], error: "mise returned invalid JSON" }),
+  );
 }
 
 function topLevelToml(source: string): string[] {
@@ -481,7 +482,11 @@ async function main(): Promise<void> {
     failures += result.failures;
     environmentFailure ||= result.environmentFailure;
   }
-  process.exit(environmentFailure ? 2 : failures === 0 ? 0 : 1);
+  let code: number;
+  if (environmentFailure) code = 2;
+  else if (failures === 0) code = 0;
+  else code = 1;
+  process.exit(code);
 }
 
 main().catch((error) => {

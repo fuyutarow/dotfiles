@@ -134,12 +134,10 @@ function validateRequest(value: unknown): Record<string, unknown> {
 }
 
 function validateBaseUrl(raw: string, allowCustom: boolean): URL {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
+  if (!URL.canParse(raw)) {
     throw new JevCliError(2, "--base-url must be a valid absolute URL");
   }
+  const url = new URL(raw);
   const normalized = url.origin;
   if (normalized !== officialBaseUrl && !allowCustom) {
     throw new JevCliError(
@@ -165,21 +163,23 @@ async function readRequest(path: string): Promise<Record<string, unknown>> {
     if (process.stdin.isTTY)
       throw new JevCliError(2, "request '-' requires non-interactive stdin");
     const text = await new Response(Bun.stdin.stream()).text();
-    return parseRequestJson(text);
+    return await parseRequestJson(text);
   }
   if (!existsSync(path))
     throw new JevCliError(2, `request file not found: ${path}`);
-  return parseRequestJson(await Bun.file(path).text());
+  return await parseRequestJson(await Bun.file(path).text());
 }
 
-function parseRequestJson(text: string): Record<string, unknown> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new JevCliError(2, `request is not valid JSON: ${message}`);
-  }
+async function parseRequestJson(
+  text: string,
+): Promise<Record<string, unknown>> {
+  const parsed = await Promise.try(() => JSON.parse(text)).then(
+    (value) => value,
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new JevCliError(2, `request is not valid JSON: ${message}`);
+    },
+  );
   return validateRequest(parsed);
 }
 
@@ -233,9 +233,8 @@ async function main(): Promise<void> {
   const endpoint = new URL("/v1/systemone", baseUrl);
   const signal = AbortSignal.timeout(timeoutMs);
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
+  const response = await Promise.try(() =>
+    fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -243,13 +242,17 @@ async function main(): Promise<void> {
       },
       body: JSON.stringify(request),
       signal,
-    });
-  } catch (error) {
-    const message = signal.aborted
-      ? `request timed out after ${timeoutMs} ms`
-      : `network request failed: ${error instanceof Error ? error.message : String(error)}`;
-    throw new JevCliError(4, message);
-  }
+    }),
+  ).then(
+    (value) => value,
+    (error: unknown) => {
+      if (signal.aborted) {
+        throw new JevCliError(4, `request timed out after ${timeoutMs} ms`);
+      }
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new JevCliError(4, `network request failed: ${detail}`);
+    },
+  );
 
   const body = await response.text();
   if (!response.ok) {
@@ -259,13 +262,13 @@ async function main(): Promise<void> {
     );
   }
 
-  let result: unknown;
-  try {
-    result = JSON.parse(body);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
-  }
+  const result = await Promise.try(() => JSON.parse(body)).then(
+    (value) => value,
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
+    },
+  );
   if (
     !isRecord(result) ||
     typeof result.model !== "string" ||

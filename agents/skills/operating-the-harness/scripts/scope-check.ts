@@ -19,7 +19,8 @@
 // never wanders into `~/.claude/skills` (a symlink farm into the dotfiles repo) and never
 // scans itself.
 
-import { readdir, readFile, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 // Bare specifier, not pinned inline: this tree is NOT zero-dep. It is symlinked (never
@@ -42,30 +43,31 @@ const HOME_ABS = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"'`)\]}]+/g;
 
 type Finding = { file: string; line: number; path: string };
 
+// existsSync never throws for a plain missing-path check (unlike `stat`), so there is no
+// throw to catch here.
 async function exists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
+  return existsSync(p);
 }
 
 // Files whose realpath lands inside the user-scope root are that root's OWN plumbing —
 // `~/.claude` is commonly a symlink into a dotfiles repo, so its realpath is legitimate.
+// No try/catch (audited *.ts ban): Promise.try turns a realpath throw into a rejection this
+// `.then` maps to `[]`, so the fallback stays "the literal root only" as before.
 async function allowedPrefixes(root: string): Promise<string[]> {
   const prefixes = [root];
-  try {
+  const extra = await Promise.try(async () => {
     const { realpath } = await import("node:fs/promises");
-    prefixes.push(await realpath(root));
+    const collected = [await realpath(root)];
     for (const sub of ["hooks", "settings.json"]) {
       const p = join(root, sub);
-      if (await exists(p)) prefixes.push(await realpath(p));
+      if (await exists(p)) collected.push(await realpath(p));
     }
-  } catch {
-    // realpath failure is not fatal: fall back to the literal root only.
-  }
-  return prefixes;
+    return collected;
+  }).then(
+    (ok) => ok,
+    () => [] as string[],
+  );
+  return [...prefixes, ...extra];
 }
 
 async function collect(root: string): Promise<string[]> {

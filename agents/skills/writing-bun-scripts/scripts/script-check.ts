@@ -127,7 +127,10 @@ function classifySpecifier(
 type Graduation = { root: string; deps: Map<string, string>; bins: Set<string> };
 const graduationCache = new Map<string, Graduation | null>();
 
-function findGraduation(fromFile: string): Graduation | null {
+// No try/catch (audited *.ts ban): Promise.try turns a manifest-parsing throw into a rejection
+// this `.then` maps to empty deps/bins, same outward result as the old catch's `deps = new
+// Map()`. That forces this helper (and its two call sites below) async.
+async function findGraduation(fromFile: string): Promise<Graduation | null> {
   let directory = dirname(realpathSync(fromFile));
   const seen: string[] = [];
   for (;;) {
@@ -139,29 +142,30 @@ function findGraduation(fromFile: string): Graduation | null {
     seen.push(directory);
     const manifest = join(directory, "package.json");
     if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
-      let deps = new Map<string, string>();
-      const bins = new Set<string>();
-      try {
+      const { deps, bins } = await Promise.try((): { deps: Map<string, string>; bins: Set<string> } => {
         const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
           name?: string;
           bin?: string | Record<string, string>;
           dependencies?: Record<string, string>;
           devDependencies?: Record<string, string>;
         };
-        deps = new Map(
+        const parsedDeps = new Map(
           Object.entries({ ...parsed.dependencies, ...parsed.devDependencies }),
         );
+        const parsedBins = new Set<string>();
         const binEntries =
           typeof parsed.bin === "string"
             ? [parsed.bin]
             : Object.values(parsed.bin ?? {});
         for (const target of binEntries) {
           const abs = join(directory, target);
-          if (existsSync(abs)) bins.add(realpathSync(abs));
+          if (existsSync(abs)) parsedBins.add(realpathSync(abs));
         }
-      } catch {
-        deps = new Map();
-      }
+        return { deps: parsedDeps, bins: parsedBins };
+      }).then(
+        (ok) => ok,
+        () => ({ deps: new Map<string, string>(), bins: new Set<string>() }),
+      );
       const found: Graduation = { root: directory, deps, bins };
       for (const d of seen) graduationCache.set(d, found);
       return found;
@@ -385,7 +389,7 @@ async function checkFile(file: string): Promise<void> {
   // it. Everywhere else a shebang is a smell: ordinary scripts are invoked `bun <path>`.
   const shebang = lines[0]?.startsWith("#!") ? lines[0] : undefined;
   const realFile = realpathSync(file);
-  const isPackageBin = findGraduation(file)?.bins.has(realFile) ?? false;
+  const isPackageBin = (await findGraduation(file))?.bins.has(realFile) ?? false;
   if (shebang?.includes("node")) {
     fail(
       file,
@@ -426,7 +430,7 @@ async function checkFile(file: string): Promise<void> {
     const kind = classifySpecifier(spec);
     if (kind === "bare") {
       const zeroDep = zeroDepReason(file);
-      const graduation = zeroDep === null ? findGraduation(file) : null;
+      const graduation = zeroDep === null ? await findGraduation(file) : null;
       const declared = graduation?.deps.get(spec);
       if (zeroDep !== null) {
         fail(

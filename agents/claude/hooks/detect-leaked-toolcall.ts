@@ -16,36 +16,31 @@
 
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
+import { attempt } from "../../hooks/attempt.ts";
 import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
 
-function main(): void {
+async function main(): Promise<void> {
   const payload = readStdinJson();
   const transcript = payload?.transcript_path;
   if (typeof transcript !== "string" || transcript === "") return;
 
-  const turn = turnText(readTranscript(transcript));
+  const turn = turnText(await readTranscript(transcript));
   if (turn === "") return;
 
   const stripped = stripCode(turn);
   if (!/<(antml:)?invoke name=|<(antml:)?function_calls/.test(stripped)) return;
 
-  try {
+  await attempt(() =>
     appendFileSync(
       `${process.env.HOME ?? ""}/.claude/leaked-toolcall.log`,
       `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
-    );
-  } catch {
-    /* best-effort */
-  }
+    ),
+  ); // best-effort
 
   if (process.env.CLAUDE_HOOK_QUIET) return; // tests: skip bell + desktop notification
-  try {
-    writeFileSync("/dev/tty", "\u0007"); // terminal bell (best-effort)
-  } catch {
-    /* no tty */
-  }
+  await attempt(() => writeFileSync("/dev/tty", "\u0007")); // terminal bell (best-effort; no tty)
   const msg = "tool-call が漏れました — Esc Esc で /rewind を";
-  try {
+  await attempt(() => {
     if (process.platform === "darwin") {
       spawnSync(
         "osascript",
@@ -58,14 +53,8 @@ function main(): void {
       // Linux / WSL2
       spawnSync("notify-send", ["Claude Code", msg], { stdio: "ignore" });
     }
-  } catch {
-    /* best-effort */
-  }
+  }); // best-effort
 }
 
-try {
-  main();
-} catch {
-  /* FAIL OPEN */
-}
+await attempt(main); // FAIL OPEN
 process.exit(0);

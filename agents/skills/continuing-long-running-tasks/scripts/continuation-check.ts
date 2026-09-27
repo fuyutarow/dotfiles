@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
 import {
 	bindContinuationSlot,
 	continuationProjectRoot,
@@ -59,12 +60,14 @@ function main(): void {
 	const bindSlot = parsed.flags.bindSlot;
 	const cwdRoot = continuationProjectRoot(process.cwd());
 	const recordRoot = continuationProjectRoot(dirname(absolutePath));
-	const inferredRoot =
-		recordRoot !== undefined && existsSync(join(recordRoot, ".git"))
-			? recordRoot
-			: cwdRoot !== undefined && inside(cwdRoot, absolutePath)
-				? cwdRoot
-				: recordRoot;
+	function inferRoot(): string | undefined {
+		if (recordRoot !== undefined && existsSync(join(recordRoot, ".git"))) {
+			return recordRoot;
+		}
+		if (cwdRoot !== undefined && inside(cwdRoot, absolutePath)) return cwdRoot;
+		return recordRoot;
+	}
+	const inferredRoot = inferRoot();
 	const workspaceRoot =
 		bindSlot === undefined
 			? inferredRoot
@@ -106,9 +109,9 @@ function main(): void {
 	process.exitCode = 1;
 }
 
-try {
-	main();
-} catch (error) {
+const mainResult = fromThrowable(main)();
+if (mainResult.isErr()) {
+	const error = mainResult.error;
 	process.stderr.write(
 		`FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
 			"usage: bun continuation-check.ts --path <TASK-CONTINUATION.md> [--bind-slot <ACTIVE>]\n",

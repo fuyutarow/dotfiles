@@ -46,17 +46,18 @@ async function run(
   };
 }
 
-function jsonRecord(value: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(value);
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      !Array.isArray(parsed)
-      ? parsed
-      : undefined;
-  } catch {
-    return undefined;
-  }
+// No try/catch (audited *.ts ban); Promise.try turns the JSON.parse throw into a rejection this
+// `.then` maps to `undefined`, same as the old catch branch.
+async function jsonRecord(
+  value: string,
+): Promise<Record<string, unknown> | undefined> {
+  const parsed: unknown = await Promise.try(() => JSON.parse(value)).then(
+    (ok) => ok,
+    () => undefined,
+  );
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : undefined;
 }
 
 async function main(): Promise<void> {
@@ -108,7 +109,7 @@ async function main(): Promise<void> {
         120_000,
       );
       const envelope =
-        result.exitCode === 0 ? jsonRecord(result.output) : undefined;
+        result.exitCode === 0 ? await jsonRecord(result.output) : undefined;
       const text = envelope?.text;
       const usage =
         typeof envelope?.usage === "object" && envelope.usage !== null
@@ -129,11 +130,15 @@ async function main(): Promise<void> {
           `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env.GROK ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
         );
       } else {
-        const note = result.timedOut
-          ? "timeout — not a catalog verdict"
-          : result.exitCode === 0
-            ? 'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE'
-            : `rc=${result.exitCode}`;
+        let note: string;
+        if (result.timedOut) {
+          note = "timeout — not a catalog verdict";
+        } else if (result.exitCode === 0) {
+          note =
+            'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
+        } else {
+          note = `rc=${result.exitCode}`;
+        }
         process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
         for (const line of result.output
           .split("\n")

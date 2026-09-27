@@ -8,8 +8,9 @@
 //   - PreToolUse decision = exit 0 + JSON on stdout (decidePre)
 //   - Stop guard block    = exit 2 + stderr; never mix the two channels
 
-import { accessSync, constants, readFileSync } from "node:fs";
+import { constants, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { attempt } from "../../hooks/attempt.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
@@ -20,16 +21,14 @@ export type TranscriptEntry = {
   message?: { content?: unknown };
 };
 
-// Transcript is JSONL; skip malformed lines rather than fail the whole read.
-export function readTranscript(path: string): TranscriptEntry[] {
+// Transcript is JSONL; skip malformed lines rather than fail the whole read. An unreadable
+// file still throws (rejects), exactly as the synchronous read did.
+export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
   const entries: TranscriptEntry[] = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    try {
-      entries.push(JSON.parse(line));
-    } catch {
-      /* skip */
-    }
+    const parsed = await attempt((): TranscriptEntry => JSON.parse(line));
+    if (parsed.ok) entries.push(parsed.value);
   }
   return entries;
 }
@@ -88,6 +87,23 @@ export function stripCode(
   return out.join("\n");
 }
 
+// Any-execute-bit check without throwing: statSync(throwIfNoEntry: false) returns undefined for
+// a missing path instead of throwing, so the X_OK check below never needs a catch to "keep
+// looking" past a missing or non-executable candidate.
+// Non-throwing stand-in for accessSync(p, X_OK), so findExe stays synchronous for its callers.
+// Two deliberate differences: a directory no longer counts (X_OK passed for a searchable dir of
+// the same name), and any x bit counts rather than the one for this process's uid/gid — for a
+// PATH lookup of a named binary neither case is a real executable.
+function isExecutable(p: string): boolean {
+  const st = statSync(p, { throwIfNoEntry: false });
+  if (!st || !st.isFile()) return false;
+  return (
+    (st.mode & constants.S_IXUSR) !== 0 ||
+    (st.mode & constants.S_IXGRP) !== 0 ||
+    (st.mode & constants.S_IXOTH) !== 0
+  );
+}
+
 // Locate an executable: $PATH first, then fallback dirs (hooks may run with a narrow PATH).
 export function findExe(
   name: string,
@@ -99,12 +115,7 @@ export function findExe(
     .concat(fallbackDirs);
   for (const dir of dirs) {
     const p = join(dir, name);
-    try {
-      accessSync(p, constants.X_OK);
-      return p;
-    } catch {
-      /* keep looking */
-    }
+    if (isExecutable(p)) return p;
   }
   return null;
 }

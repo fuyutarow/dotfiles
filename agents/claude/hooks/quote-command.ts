@@ -29,6 +29,7 @@ import { isIP } from "node:net";
 import { tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
+import { attempt } from "../../hooks/attempt.ts";
 import { promptHead, promptParts } from "./prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
@@ -67,11 +68,12 @@ function downloadCommand(file: string): string | undefined {
   const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/);
   const serverIp = connection?.[2];
   const serverPort = connection?.[3];
-  const target =
-    configuredTarget ||
-    (serverIp && isIP(serverIp)
-      ? `${userInfo().username}@${isIP(serverIp) === 6 ? `[${serverIp}]` : serverIp}`
-      : undefined);
+  let inferredTarget: string | undefined;
+  if (serverIp && isIP(serverIp)) {
+    const host = isIP(serverIp) === 6 ? `[${serverIp}]` : serverIp;
+    inferredTarget = `${userInfo().username}@${host}`;
+  }
+  const target = configuredTarget || inferredTarget;
   if (!target) return undefined;
   const port =
     process.env.QUOTE_DOWNLOAD_SSH_PORT?.trim() ||
@@ -90,13 +92,14 @@ let sid = "";
 let count = 1;
 let rawArgs = "";
 let cwd = process.cwd();
-try {
-  const payload = readStdinJson();
+const stdinRead = await attempt(() => readStdinJson());
+if (!stdinRead.ok) {
+  block("/quote could not read its hook input.");
+} else {
+  const payload = stdinRead.value;
   if (typeof payload?.session_id === "string") sid = payload.session_id;
   if (typeof payload?.cwd === "string") cwd = payload.cwd;
   rawArgs = String(payload?.command_args ?? "").trim();
-} catch {
-  block("/quote could not read its hook input.");
 }
 // No argument -> default to 1, the common case, and not an error. An argument that IS given
 // but isn't a clean positive whole number is rejected rather than coerced: a mistyped count
@@ -120,19 +123,15 @@ if (rawArgs !== "") {
 }
 
 // Written every turn by capture-last-response.ts (Stop hook); newest last.
-let turns: string[] = [];
-try {
-  turns = readFileSync(
-    `${HOME}/.cache/claude/last-response/${sid}.jsonl`,
-    "utf8",
-  )
+// no history file -> handled as "nothing captured" below
+const turnsRead = await attempt(() =>
+  readFileSync(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
     .split("\n")
     .filter((l) => l.trim() !== "")
     .map((l) => JSON.parse(l)?.text)
-    .filter((t): t is string => typeof t === "string");
-} catch {
-  // no history file -> handled as "nothing captured" below
-}
+    .filter((t): t is string => typeof t === "string"),
+);
+const turns: string[] = turnsRead.ok ? turnsRead.value : [];
 
 if (turns.length === 0) {
   block(
@@ -146,17 +145,16 @@ const selected = turns.slice(-count);
 // The cross-session addressable name ("firedancer-fe"), not the AI-generated title — that
 // distinction is the whole point of the from header. Falls back to the raw session id.
 let name = sid;
-try {
-  const resolved = execFileSync("bun", [`${HOOKS}/resolve-agent-name.ts`], {
+// leave the session id as the name on failure
+const resolvedName = await attempt(() =>
+  execFileSync("bun", [`${HOOKS}/resolve-agent-name.ts`], {
     env: { ...process.env, AGENT_NAME_SESSION_ID: sid },
     stdio: ["ignore", "pipe", "ignore"],
     encoding: "utf8",
     timeout: 5000,
-  }).trim();
-  if (resolved) name = resolved;
-} catch {
-  // leave the session id as the name
-}
+  }).trim(),
+);
+if (resolvedName.ok && resolvedName.value) name = resolvedName.value;
 
 // Header carries everything the reader needs to place the quote without asking: which session
 // said it; the PS1 head `user@host:MM-DD HH:MM|~/cwd` — who, on which machine, when it was
@@ -169,26 +167,29 @@ const bodyBytes = Buffer.byteLength(body, "utf8");
 const header = `from ${name} | ${promptHead(promptParts(cwd))} | turns: ${selected.length} | ${bodyBytes}B`;
 const payloadText = `${header}\n${body}`;
 const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
-const short =
-  selected.length < count
-    ? ` — only ${selected.length} turn${selected.length === 1 ? "" : "s"} captured so far`
-    : "";
+let short = "";
+if (selected.length < count) {
+  const plural = selected.length === 1 ? "" : "s";
+  short = ` — only ${selected.length} turn${plural} captured so far`;
+}
 
 // A request over 50 turns can be much larger than a useful clipboard payload. Save the
 // contents on this host and copy a small scp command through the SAME Herdr/OSC 52 route
 // used below. The human runs it on their current local machine, so a stale SSH_CONNECTION
 // inherited by a persistent Herdr server cannot cause an unsolicited push to an old client.
 if (count > CLIPBOARD_TURN_LIMIT) {
-  let file: string;
-  try {
+  const saved = await attempt(() => {
     const exportDir = join(HOME, ".cache", "claude", "quote-exports");
     mkdirSync(exportDir, { recursive: true, mode: 0o700 });
     const privateDir = mkdtempSync(join(exportDir, "quote-"));
-    file = join(privateDir, `${basename(privateDir)}.txt`);
-    writeFileSync(file, payloadText, { mode: 0o600 });
-  } catch {
+    const savedFile = join(privateDir, `${basename(privateDir)}.txt`);
+    writeFileSync(savedFile, payloadText, { mode: 0o600 });
+    return savedFile;
+  });
+  if (!saved.ok) {
     block("Could not save the quote to a text file.");
   }
+  const file = saved.value;
   const command = downloadCommand(file);
   if (!command) {
     block(
@@ -196,13 +197,13 @@ if (count > CLIPBOARD_TURN_LIMIT) {
         "If this is a remote Herdr session, set QUOTE_DOWNLOAD_SSH_TARGET to its SSH host alias and retry.",
     );
   }
-  try {
-    const paneId = copyViaHerdr(command);
+  const copied = await attempt(() => copyViaHerdr(command));
+  if (copied.ok) {
     block(
       `Download command copied to your local clipboard for "from ${name}"${scope}${short}. ` +
-        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${paneId}]`,
+        `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${copied.value}]`,
     );
-  } catch {
+  } else {
     block(
       `Quote saved on the remote host at ${file}${short}. Copy and run this command in a local terminal to download it:\n${command}`,
     );
@@ -215,13 +216,13 @@ if (count > CLIPBOARD_TURN_LIMIT) {
 // shell-quoting it into a command line would be a needless injection surface. Both helper
 // hooks take their one input from the environment rather than argv — hooks are zero-dep, and
 // BG1 rules out hand-parsing process.argv in a file that cannot import Cleye.
-let paneId = "";
-try {
-  paneId = copyViaHerdr(payloadText);
-} catch {
+const paneCopy = await attempt(() => copyViaHerdr(payloadText));
+if (!paneCopy.ok) {
   block(
     `Could not reach an idle shell pane, so nothing was copied. Select this to copy it by hand:\n\n${payloadText}`,
   );
 }
 
-block(`Copied to clipboard as "from ${name}"${scope}${short}. [${paneId}]`);
+block(
+  `Copied to clipboard as "from ${name}"${scope}${short}. [${paneCopy.value}]`,
+);

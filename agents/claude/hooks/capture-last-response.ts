@@ -13,24 +13,25 @@
 // turn over a clipboard convenience feature.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
 const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session
 
-function recordResponse(sid: unknown, text: unknown): void {
+async function recordResponse(sid: unknown, text: unknown): Promise<void> {
   if (!(typeof sid === "string" && sid && typeof text === "string")) return;
   const dir = `${HOME}/.cache/claude/last-response`;
   const file = `${dir}/${sid}.jsonl`;
 
-  let lines: string[] = [];
-  try {
-    lines = readFileSync(file, "utf8")
-      .split("\n")
-      .filter((l) => l.trim() !== "");
-  } catch {
-    // no history yet -> start one
-  }
+  // no (readable) history yet -> start one
+  const lines = await attemptOr(
+    () =>
+      readFileSync(file, "utf8")
+        .split("\n")
+        .filter((l) => l.trim() !== ""),
+    [] as string[],
+  );
   lines.push(
     JSON.stringify({ at: Temporal.Now.instant().epochMilliseconds, text }),
   );
@@ -39,12 +40,9 @@ function recordResponse(sid: unknown, text: unknown): void {
   writeFileSync(file, `${lines.slice(-KEEP).join("\n")}\n`);
 }
 
-try {
+// best-effort snapshot -> never fail Stop over this (a bad payload OR a failed write)
+await attempt(async () => {
   const payload = JSON.parse(readFileSync(0, "utf8"));
-  const sid = payload?.session_id;
-  const text = payload?.last_assistant_message;
-  recordResponse(sid, text);
-} catch {
-  // best-effort snapshot -> never fail Stop over this
-}
+  await recordResponse(payload?.session_id, payload?.last_assistant_message);
+});
 process.exit(0);

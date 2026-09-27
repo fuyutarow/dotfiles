@@ -112,7 +112,7 @@ run = "bunx --bun oxfmt --check '**/*.ts' '!agents/skills/**'"
 # rumdl, kept there since rumdl check is a structural lint not a format-verify).
 [tasks."fmt:staged"]
 description = "Format only the STAGED files in place and re-stage exactly them; refuses a file that also has unstaged hunks (wiring-mise-tasks fmt:staged)"
-run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts'"
+run = "bun agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts=bunx --bun oxfmt' --tool 'sh=shfmt -w -ln bash -i 2 -ci -sr -bn -s' --tool 'md=rumdl fmt' --exclude 'agents/skills/**/*.ts' --exclude 'archives/**'"
 
 [tasks."fmt:check"]
 description = "整形チェック (CI用・非破壊): bash (shfmt) + TypeScript (oxfmt)"
@@ -201,29 +201,44 @@ git ls-files -z -- \
 '''
 
 # oxlint over the repo's own TS (config: .oxlintrc.json). Default correctness rules everywhere
-# tracked except agents/skills/** (vendored templates), plus the house syntax ban on
-# scripts/*.ts ONLY: `switch` and nested ternaries -> ts-pattern, try/catch -> neverthrow
-# (try/finally alone is fine). Same mechanism as Coral-dpp's .oxlintrc.json: oxlint's native
-# rules cannot ban a syntax SHAPE, but the oxlint-plugin-eslint JS plugin carries ESLint's
-# no-restricted-syntax with esquery selectors. This replaced the hand-rolled oxc-parser
+# tracked except agents/skills/** (vendored templates), plus the house syntax ban on EVERY
+# audited *.ts, with NO per-file opt-out and NO disable comment of any kind: `switch` and nested
+# ternaries -> ts-pattern (where the file may import it) or an if/else chain/lookup table;
+# try/catch -> neverthrow's fromThrowable/fromAsyncThrowable where the file already imports it,
+# else agents/hooks/attempt.ts (Promise.try, zero-dep — importable even from a hook or bootstrap
+# script that runs before `mise run deps` restores node_modules), or, inside a self-contained
+# agents/skills/** skill, an inline `Promise.try(fn).then(ok, err)` rather than crossing the
+# skill boundary (try/finally alone is fine). Same mechanism as Coral-dpp's .oxlintrc.json:
+# oxlint's native rules cannot ban a syntax SHAPE, but the oxlint-plugin-eslint JS plugin carries
+# ESLint's no-restricted-syntax with esquery selectors. This replaced the hand-rolled oxc-parser
 # walker scripts/lint-no-try-catch.ts (2026-09-12), whose reason to exist was "oxlint cannot
 # express this" — true of the native rules, false once jsPlugins landed.
-# WHY scripts/*.ts only: that is where the graduation project (package.json) makes ts-pattern
-# and neverthrow importable. NOT hooks (BG3 zero-dep — they run before `mise run deps`) and NOT
-# agents/skills/**/scripts/** (a skill's own floor is writing-bun-scripts' script-check.ts).
-# render-claude-settings.ts opts out IN-FILE (`/* oxlint-disable ... */` with its bootstrap
-# reason) because oxlint 1.82's overrides.files has no working exclusion glob — a `!path` entry
-# matches every OTHER file instead (verified 2026-09-12).
-# Escape hatch, declared not silent: `// oxlint-disable-next-line eslint-js/no-restricted-syntax -- <reason>`.
+# NO OVERRIDES, NO OPT-OUT: an earlier draft scoped the try/catch ban to scripts/*.ts only (the
+# one place the graduation project, package.json, made neverthrow importable) and let
+# render-claude-settings.ts opt out IN-FILE via `/* oxlint-disable ... */`, since oxlint 1.82's
+# overrides.files has no working exclusion glob (a `!path` entry matches every OTHER file
+# instead, verified 2026-09-12). agents/hooks/attempt.ts closed that gap — every audited file now
+# has a dependency-free route to the ban's replacement — so both the scoping and the opt-out are
+# retired: audit targets get no exception rules, and there is no escape hatch
+# (`oxlint-disable`/`oxlint-disable-next-line`, in any form) anywhere in this repo's TS.
 # ALSO repo-wide (hooks included — nesting needs no import): `max-depth` 2, oxlint-native.
 # The `if { if { if } }` shape a ts-pattern ban cannot reach. WARN, not error, because the
 # measured backlog on 2026-09-12 was 103 sites in 16 house files (26 at depth 3); ratchet to
 # "error" once that backlog is paid down — a warn that never becomes an error is theater.
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; in scripts/*.ts switch/nested ternary -> ts-pattern and try/catch -> neverthrow are errors"
+description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; switch/nested ternary -> ts-pattern and try/catch -> neverthrow/agents/hooks/attempt.ts are errors everywhere, with no per-file opt-out or disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
+depends = ["lint:ts-no-disable"]
 run = "bunx --bun oxlint"
+
+# oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable
+# or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not
+# promised). A hit prints its file:line.
+[tasks."lint:ts-no-disable"]
+dir = "{{config_root}}"
+description = "Fail on any oxlint-disable / eslint-disable comment in tracked TS (no lint exceptions)"
+run = "! git grep -n -E \"(oxlint|eslint)-disable\" -- \"*.ts\" \"*.tsx\""
 
 # Type-check (tsconfig.json). Bun transpiles and never type-checks, so this task is the ONLY
 # place the strict flags bite. Same command and name as Coral-dpp's task. In `lint`'s depends

@@ -20,12 +20,11 @@ const REAL = join(import.meta.dir, "..", "storage-headroom.toml");
 
 // A minimal TOML writer for this schema (Bun parses TOML but does not emit it).
 function toToml(obj: Record<string, any>): string {
-  const scalar = (v: unknown): string =>
-    Array.isArray(v)
-      ? `[${v.map(scalar).join(", ")}]`
-      : typeof v === "string"
-        ? JSON.stringify(v)
-        : String(v);
+  const scalar = (v: unknown): string => {
+    if (Array.isArray(v)) return `[${v.map(scalar).join(", ")}]`;
+    if (typeof v === "string") return JSON.stringify(v);
+    return String(v);
+  };
   const isTable = (v: unknown) =>
     typeof v === "object" && v !== null && !Array.isArray(v);
   const body = (o: Record<string, any>) =>

@@ -218,8 +218,12 @@ async function main(): Promise<void> {
   );
 
   if (parsed.flags.json ?? false) {
+    let status: "fail" | "warn" | "ok";
+    if (findings.some((f) => f.level === "FAIL")) status = "fail";
+    else if (findings.length > 0) status = "warn";
+    else status = "ok";
     process.stdout.write(
-      `${JSON.stringify({ status: findings.some((f) => f.level === "FAIL") ? "fail" : findings.length > 0 ? "warn" : "ok", command, exit_code: exitCode, timed_out: timedOut, findings })}\n`,
+      `${JSON.stringify({ status, command, exit_code: exitCode, timed_out: timedOut, findings })}\n`,
     );
   } else {
     for (const finding of findings) {

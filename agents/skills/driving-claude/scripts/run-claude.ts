@@ -108,13 +108,17 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   ]);
   const timedOut = signal.aborted;
 
-  let claude: unknown | undefined;
-  let parseError: string | undefined;
-  try {
-    claude = JSON.parse(stdout);
-  } catch (error) {
-    parseError = error instanceof Error ? error.message : String(error);
-  }
+  // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
+  // `.then` maps to the same `parseError` message, leaving `claude` undefined as before.
+  const parsed = await Promise.try(() => JSON.parse(stdout)).then(
+    (ok) => ({ claude: ok as unknown, parseError: undefined as string | undefined }),
+    (error: unknown) => ({
+      claude: undefined as unknown,
+      parseError: error instanceof Error ? error.message : String(error),
+    }),
+  );
+  const claude = parsed.claude;
+  const parseError = parsed.parseError;
 
   return {
     exitCode: timedOut ? 124 : exitCode,

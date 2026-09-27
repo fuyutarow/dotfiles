@@ -10,20 +10,21 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { attempt } from "../hooks/attempt.ts";
 
 // The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
 // cocoindex_code.
-function cccPython(ccc: string): string | null {
-  try {
-    const first =
-      readFileSync(realpathSync(ccc), "utf8").split("\n", 1)[0] ?? "";
-    const interpreter = first.startsWith("#!/") ? first.slice(2).trim() : "";
-    // Only a Python interpreter can import cocoindex_code; anything else (a test double, a
-    // wrapper script) cannot answer, and running ccc_scope.py under it would be meaningless.
-    return /\/python[0-9.]*$/.test(interpreter) ? interpreter : null;
-  } catch {
-    return null;
-  }
+async function cccPython(ccc: string): Promise<string | null> {
+  const read = await attempt(
+    () => readFileSync(realpathSync(ccc), "utf8").split("\n", 1)[0] ?? "",
+  );
+  if (!read.ok) return null;
+  const interpreter = read.value.startsWith("#!/")
+    ? read.value.slice(2).trim()
+    : "";
+  // Only a Python interpreter can import cocoindex_code; anything else (a test double, a
+  // wrapper script) cannot answer, and running ccc_scope.py under it would be meaningless.
+  return /\/python[0-9.]*$/.test(interpreter) ? interpreter : null;
 }
 
 async function capture(
@@ -63,7 +64,7 @@ export async function inScopeChanges(
   if (diff === null) return null;
   const changed = diff.split("\0").filter((p) => p !== "");
   if (changed.length === 0) return { changed: 0, inScope: [] };
-  const python = cccPython(ccc);
+  const python = await cccPython(ccc);
   if (python === null) return null;
   const out = await capture(
     [python, join(import.meta.dir, "ccc_scope.py"), project],
@@ -71,13 +72,11 @@ export async function inScopeChanges(
     JSON.stringify(changed),
   );
   if (out === null) return null;
-  try {
-    const inScope: unknown = JSON.parse(out);
-    return Array.isArray(inScope) &&
-      inScope.every((p): p is string => typeof p === "string")
-      ? { changed: changed.length, inScope }
-      : null;
-  } catch {
-    return null;
-  }
+  const parsed = await attempt(() => JSON.parse(out));
+  if (!parsed.ok) return null;
+  const inScope: unknown = parsed.value;
+  return Array.isArray(inScope) &&
+    inScope.every((p): p is string => typeof p === "string")
+    ? { changed: changed.length, inScope }
+    : null;
 }

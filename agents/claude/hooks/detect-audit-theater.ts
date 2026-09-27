@@ -16,6 +16,7 @@
 // Detection: specific phrases fire directly; PASS/GREEN fire only when the text carries
 // NO "what was checked / what is unchecked" clause (the skill's bounded-PASS rule).
 
+import { attempt } from "../../hooks/attempt.ts";
 import {
   lastUserText,
   readStdinJson,
@@ -24,13 +25,13 @@ import {
   turnText,
 } from "./lib.ts";
 
-function main(): number {
+async function main(): Promise<number> {
   const payload = readStdinJson();
   if (payload?.stop_hook_active) return 0;
   const transcript = payload?.transcript_path;
   if (typeof transcript !== "string" || transcript === "") return 0;
 
-  const entries = readTranscript(transcript);
+  const entries = await readTranscript(transcript);
   const turn = turnText(entries);
   if (turn === "") return 0;
 
@@ -66,10 +67,5 @@ function main(): number {
   return 2;
 }
 
-let code = 0;
-try {
-  code = main();
-} catch {
-  code = 0; // FAIL OPEN
-}
-process.exit(code);
+const r = await attempt(main);
+process.exit(r.ok ? r.value : 0); // FAIL OPEN

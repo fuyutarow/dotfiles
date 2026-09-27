@@ -26,6 +26,7 @@ import { dirname, join, resolve } from "node:path";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
+import { attempt } from "../hooks/attempt.ts";
 
 export function findRegisteredProject(start: string): string | null {
   let current = resolve(start);
@@ -119,23 +120,22 @@ type WatermarkRead =
 async function readWatermark(project: string): Promise<WatermarkRead> {
   const file = Bun.file(watermarkPath(project));
   if (!(await file.exists())) return { kind: "missing" };
-  try {
-    const parsed = JSON.parse(await file.text());
+  const parsed = await attempt(async () => {
+    const value = JSON.parse(await file.text());
     if (
-      parsed &&
-      typeof parsed === "object" &&
-      (parsed.head === null ||
-        (typeof parsed.head === "string" &&
-          /^[0-9a-f]{40}$/i.test(parsed.head))) &&
-      (parsed.source === "index" || parsed.source === "stamp") &&
-      typeof parsed.indexedAt === "string"
+      value &&
+      typeof value === "object" &&
+      (value.head === null ||
+        (typeof value.head === "string" &&
+          /^[0-9a-f]{40}$/i.test(value.head))) &&
+      (value.source === "index" || value.source === "stamp") &&
+      typeof value.indexedAt === "string"
     ) {
-      return { kind: "ok", value: parsed as Watermark };
+      return value as Watermark;
     }
-    return { kind: "invalid" };
-  } catch {
-    return { kind: "invalid" };
-  }
+    throw new Error("invalid watermark shape");
+  });
+  return parsed.ok ? { kind: "ok", value: parsed.value } : { kind: "invalid" };
 }
 
 async function writeWatermark(
@@ -178,12 +178,9 @@ async function hasIndexArtifacts(project: string): Promise<boolean> {
   // overload signature returns Dirent<Buffer>[], and ReturnType on an overloaded function always
   // picks that last signature, never the one these arguments select.
   const list = () => readdir(dir, { recursive: true, withFileTypes: true });
-  let entries: Awaited<ReturnType<typeof list>>;
-  try {
-    entries = await list();
-  } catch {
-    return false;
-  }
+  const listed = await attempt(list);
+  if (!listed.ok) return false;
+  const entries = listed.value;
   const cccStore = join(dir, "cocoindex.db");
   for (const entry of entries) {
     if (!entry.isFile()) continue;

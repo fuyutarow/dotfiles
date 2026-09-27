@@ -102,11 +102,14 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const note = result.timedOut
-      ? " — timeout, not a catalog verdict"
-      : result.exitCode === 127
-        ? " — codex not runnable, environment problem"
-        : "";
+    let note: string;
+    if (result.timedOut) {
+      note = " — timeout, not a catalog verdict";
+    } else if (result.exitCode === 127) {
+      note = " — codex not runnable, environment problem";
+    } else {
+      note = "";
+    }
     process.stdout.write(
       `RESULT: UNAVAILABLE ${model} (exit ${result.exitCode})${note}\n`,
     );

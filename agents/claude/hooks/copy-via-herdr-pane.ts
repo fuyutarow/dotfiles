@@ -36,6 +36,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { attempt } from "../../hooks/attempt.ts";
 
 const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
 const DOTFILES = process.env.DOTFILES || `${process.env.HOME}/dotfiles`;
@@ -52,32 +53,30 @@ function herdr(args: string[]): any {
   return JSON.parse(out);
 }
 
-function closeQuietly(paneId: string): void {
-  try {
+// a stray small leftover pane is cosmetic, not a delivery failure -> never throw from here
+async function closeQuietly(paneId: string): Promise<void> {
+  await attempt(() =>
     execFileSync(HERDR_BIN, ["pane", "close", paneId], {
       stdio: ["ignore", "ignore", "ignore"],
       timeout: 5000,
-    });
-  } catch {
-    // a stray small leftover pane is cosmetic, not a delivery failure -> never throw from here
-  }
+    }),
+  );
 }
 
 // `pane read` prints the pane's visible text RAW — the one herdr subcommand here that does
 // not answer in JSON, so this deliberately does not go through herdr().
-function isBarePrompt(paneId: string): boolean {
-  try {
-    const text = execFileSync(HERDR_BIN, ["pane", "read", paneId], {
+async function isBarePrompt(paneId: string): Promise<boolean> {
+  const r = await attempt(() =>
+    execFileSync(HERDR_BIN, ["pane", "read", paneId], {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
       timeout: 5000,
-    });
-    const lines = text.replace(/\s+$/, "").split("\n");
-    const last = (lines[lines.length - 1] ?? "").trim();
-    return /^[$%#>]$/.test(last);
-  } catch {
-    return false;
-  }
+    }),
+  );
+  if (!r.ok) return false;
+  const lines = r.value.replace(/\s+$/, "").split("\n");
+  const last = (lines[lines.length - 1] ?? "").trim();
+  return /^[$%#>]$/.test(last);
 }
 
 const payloadFile = process.env.COPY_PAYLOAD_FILE;
@@ -92,9 +91,8 @@ if (process.env.HERDR_ENV !== "1" || !existsSync(CLIP_SCRIPT)) process.exit(3);
 const selfPane = process.env.HERDR_PANE_ID;
 if (!selfPane) process.exit(3);
 
-let paneId: string | undefined;
-try {
-  const split = herdr([
+const split = await attempt(() =>
+  herdr([
     "pane",
     "split",
     selfPane,
@@ -103,34 +101,35 @@ try {
     "--ratio",
     "0.05",
     "--no-focus",
-  ]);
-  paneId = split?.result?.pane?.pane_id;
-} catch {
-  process.exit(4); // split itself failed (e.g. too small to split) -> caller falls back
-}
+  ]),
+);
+// split itself failed (e.g. too small to split) -> caller falls back
+if (!split.ok) process.exit(4);
+const paneId: string | undefined = split.value?.result?.pane?.pane_id;
 if (!paneId) process.exit(4);
 
 let ready = false;
-for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-  if (isBarePrompt(paneId)) {
+for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
+  if (await isBarePrompt(paneId)) {
     ready = true;
     break;
   }
   await Bun.sleep(POLL_DELAY_MS);
 }
 if (!ready) {
-  closeQuietly(paneId);
+  await closeQuietly(paneId);
   process.exit(5);
 }
 
-try {
+const run = await attempt(() =>
   execFileSync(
     HERDR_BIN,
     ["pane", "run", paneId, `'${CLIP_SCRIPT}' < '${payloadFile}'`],
     { stdio: ["ignore", "ignore", "ignore"], timeout: 5000 },
-  );
-} catch {
-  closeQuietly(paneId);
+  ),
+);
+if (!run.ok) {
+  await closeQuietly(paneId);
   process.exit(6);
 }
 
@@ -138,11 +137,11 @@ try {
 // executing them — closing immediately could kill the copy mid-flight. Poll for the prompt
 // to reappear (confirming the script actually completed) before tearing the pane down; give
 // up and close anyway after the same budget used above, rather than leaving it open forever.
-for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {
   await Bun.sleep(POLL_DELAY_MS);
-  if (isBarePrompt(paneId)) break;
+  if (await isBarePrompt(paneId)) break;
 }
 
-closeQuietly(paneId);
+await closeQuietly(paneId);
 console.log(paneId);
 process.exit(0);

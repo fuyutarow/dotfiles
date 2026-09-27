@@ -117,6 +117,14 @@ skillの存在・更新・リンクは、そのworkerがその版を読んだ証
 重要な規則は現在のbriefに渡し、長いsessionの既読contextを更新済みと推定しない。
 設計上の要求と、実行基盤が実証した能力を同じPASSで表さない。
 
+実行依頼は既存IDで`発注/受領 -> admission待ち/実開始 -> 終了 -> 結果の消費`を照合する。
+これは報告上の区別であり、新しいschema/state名をprojectへ強制しない。
+実開始にはjob/PIDまたは実行器の開始receipt、終了にはterminal receiptを使う。
+結果行が必要な仕事は、その受入れとread-backまで別に確認する。未観測はUNKNOWNとする。
+解除条件が成立した時点で親が開始を確認する。「再試行loopが自動で始めるはず」で放置しない。
+start receiptの期限を短いbriefに置き、未開始・compile中・admission待ちを混同しない。
+一覧の各件へ状態と根拠を結び付け、予定件数を実行中/掲載済みの件数として報告しない。
+
 親は発注前に、最初の検証可能な部分納品と返却期限、その消費者、次の介入時刻または事象を決める。
 返却期限はdomainのfeedback周期と、前提を変える次の結果に間に合わせる。
 既存ticket/boardへ`event/time + artifact -> parent decision -> consumer/brief revision + action/receipt`を残す。

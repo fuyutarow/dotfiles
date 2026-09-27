@@ -216,3 +216,47 @@ units/internal positions. Neither an old nor a new self-set unsupported target i
 rejecting the other. Source, counterexample and bounded static/sequential receipts live in sibling
 BIBIFI performance postmortem and forge ledger§11. Zero prose warnings. This semantic revision
 uses user-supplied reports and a constructed repeated-key witness, not a new vendor/API fact claim.
+
+## 2026-09-27 — result states and target-copy controls, v2609.1.4
+
+Root-signed source/audit and frozen cases live in
+`tests/postmortem-2026-09-27-result-states.md` (attachment f8e7b9b0-a667-4a68-aa2e-bbd15a60ade1).
+This packet is evidence of reported behavior, not an independent run replay. Actual loaded skill
+versions and the B64measurement validity are not established by the outward report.
+
+**Concept split.** Execution, authoritative row acceptance, measurement validity, quality target
+and concept conformance require separate observations. A valid zero score remains a negative
+result; its sound timing is the cost of the failed configuration, not useful-throughput success.
+An accepted row does not validate the experiment. Full-path EV0 includes materialization and
+read-back; failed ingestion is repaired without fabricating metadata or blindly recomputing.
+EV2 explicitly inspects forbidden target copies/encodings, while permitting copying when the
+declared task permits it. This changes no schema and grants no permission to bypass launch gates.
+
+**Owner cuts.** C0 joins actual starts/terminals/consumption on attempt IDs and verifies starts
+when a blocker clears. BIBIFI chooses the next bounded action using those observations. Section
+conformance owns semantic obligations and negative witnesses, not evidence EV's row status.
+Root retains design/acceptance. No source directive to increase batches or invalidate bad scores
+was adopted merely because the episode author proposed it.
+
+**Verification.** Static Terra states_boundary_review inspected seven changed content artifacts
+without tests/ledger and returned PASS. Fresh Terra states_old/new loaded frozen OLD23c80bb or
+NEW skill+EV2/EV3references and identical cases, with disjoint output paths, NONCOMPUTE and90second
+return requests. They wrote actual JSON verdict files, read back by root. Case input digest:
+c73e6ff61e10db191c6a63962bb4fdd0d45184ee620b6c226ebbf150d0895464.
+Draft NEW core digest0a529a69a459cba1753468830494402e1e86c272745aa28c2a2173e1a3d468ba;
+a later reference-index row only links the audit and does not change tested semantics.
+OLD result90cd74677e4710abc3b82b949498c6e11f2b8ec70615c2e020f4529be6d3db10;
+NEW result5ecf3f7d816ce4cdad04ea7d8866b83128ee187b4a8f506f4cccb9011033d645.
+Both preserved the valid zero-score case, rejected the forbidden-copy control and withheld
+semantic conformance from type equality. NEW distinguished unstarted/publication states more
+explicitly; OLD mixed SCOPED with publication vocabulary but its substantive explanations mostly
+agreed. No broad improvement, production-ingestion enforcement or R&D throughput gain is claimed.
+The fixture tests actual artifact-producing interpretation, not the target launcher executing jobs.
+
+Target floor passes with zero evidence/BIBIFI prose warnings. Section existing core3/reference80
+and orchestration reference13remain unchanged scoped debt. Collection stays73skills/64,388chars;
+no listing increase. `git diff --check` passes. No live Firedancer code, jobs or records were modified.
+
+Deployment checks: central link:skills and lint:skills-wiring pass; existing source-linked Codex
+and Claude skill paths now expose this revision. No claim that a running Firedancer worker reloaded
+it follows from those checks. Commit/push are part of this user-authorized delivery.

@@ -3,6 +3,23 @@
 This reference owns whether a valid run may be compared, and what a historical
 score can say about a current design. It does not choose a model or a portfolio.
 
+## Separate validity, achieved quality and recorded status
+
+| Observation | Honest judgment | Prohibited shortcut |
+|---|---|---|
+| Correctly bound, valid experiment scores zero | Valid negative/failed target result; preserve raw score and timing | Invalidate or hide it because the model performed badly |
+| Required update, output or scored work was skipped | Timing describes the executed path; claimed training/task workload is not established | Promote no-op speed as successful training throughput |
+| Faster batch violates the required update protocol | Version changed protocol or repair it; equivalence claim fails | Treat equal first-item accuracy as preservation of learning |
+| Row is accepted into a leaderboard | Publication succeeded; EV0–EV4 still decide scientific scope | Assume published means valid or goal achieved |
+| Process completed but required row fields are missing | Execution occurred; materialization/acceptance failed | Count a published result or repeatedly rerun expensive computation without diagnosing ingestion |
+| Tests pass but a hard concept requirement is unmapped | Scoped tested properties pass; overall conformance remains unverified | Infer whole-concept compliance from a pass count or shared type name |
+
+Give each claim its own disposition: measured runtime, prediction quality, preserved protocol and accepted publication.
+If quality fails but timing is sound, retain timing as the cost of that failed configuration.
+It cannot establish useful throughput at a quality target it misses; this does not erase the negative observation.
+Reuse intact execution output for ingestion repair when the authoritative system supports it and binding remains valid.
+Do not retrofit a changed criterion, fabricate metadata or bypass an acceptance gate to recover a row.
+
 ## EV3: compare the same target quantity
 
 Put every axis that can change the claim into a comparison table.

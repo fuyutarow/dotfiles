@@ -588,3 +588,12 @@ protocol-hash transcription before commit; neither agent summaries nor this ledg
 
 Target floor, full collection floor, index and diff checks pass. Collection remains73skills with
 64,388charged characters, below unchanged ceiling. No new runtime implementation was published.
+
+## 13. Observed batch progress, v2609.3.1 — 2026-09-27
+
+Root-signed narrow correction after packet f8e7b9b0: blocker release is followed by observed start,
+not an assumed retry. Requested, executed and consumed counts stay separate. Evidence owner
+qualifies measurement and target achievement independently; low scores are not erased. Source,
+cases and fresh tool-backed interpretation receipts live in evidence skill's result-states
+postmortem and ledger v2609.1.4. Static cross-owner review PASS. No new state store, queue or
+process mechanism is introduced. Core remains short and floor-clean; no real throughput gain claimed.

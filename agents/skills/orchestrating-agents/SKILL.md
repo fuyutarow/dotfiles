@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.3.0 (2026-09-27) — C0が実行能力と観測された受領・停止・消費を照合する。
+> **Version**: v2609.3.1 (2026-09-27) — C0が発注・開始・終了・結果消費を同じ実行IDで区別する。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に

@@ -43,6 +43,13 @@ only when the rows join its implementation and check receipts. Recheck the rows 
 a section result complete. A score cannot close a failed or unverified row.
 Send the score to `validating-experimental-evidence` for its permitted claim scope.
 
+The requirement owner defines the semantic property; a type name or test count is only a possible proxy.
+For each load-bearing check, name a concrete violating implementation it would reject.
+One shared generic type can still dispatch to different update rules. Type equality alone cannot settle that claim.
+Keep unmapped, placeholder and non-exercised obligations UNVERIFIED even when every implemented test is green.
+Repair a wrong checker against the unchanged requirement and a negative witness.
+Do not weaken it to fit current code.
+
 Classify each added design restriction by source: mandate, derived resource/technical bound,
 or reversible local choice. Record the bound's derivation, excluded cases, and a check in the Charter's
 `METHOD_BOUNDARY` and `TEST_PLAN`. If a local choice excludes a mandated case, remove it or seek

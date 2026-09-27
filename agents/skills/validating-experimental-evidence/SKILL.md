@@ -13,7 +13,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.3 (2026-09-27) — update-protocol equivalence and matched throughput evidence.
+> **Version**: v2609.1.4 (2026-09-27) — execution, publication, validity and achievement are separate judgments.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -94,6 +94,11 @@ The claim still needs actual values, uncertainty, margin, and evidence loci.
 Beating a weak comparator does not establish capability if the candidate misses
 its trivial baseline. A forward-only implementation is not a training-speed comparator.
 
+Do not collapse execution, row acceptance, measurement validity and goal achievement into one PASS.
+A leaderboard row proves ingestion, not scientific validity. A low score alone does not invalidate a measurement.
+Keep valid failed results and timings. Unproved correctness or protocol blocks useful-training and speedup claims.
+Use `references/footing-and-lineage.md` for these separate judgments. Add no new record schema.
+
 ## Canonical recording and verification
 
 Record the disposition in the existing polysearch finding and its joined run,
@@ -128,3 +133,4 @@ target's accepted and rejected invocations plus raw output, not a parallel Bun s
 | `references/footing-and-lineage.md` | EV3/EV4 comparison axes, confound table, same-stream baselines, historical capability classes | Comparing runs, mechanism ablations, regression/recovery claims |
 | `tests/triggers.md` | Fire/no-fire and co-fire desk-check | Editing description or sibling cuts |
 | `tests/forge-verification-ledger.md` | Source grades, bounded postmortem, verification and waiver | Reforge or audit |
+| `tests/postmortem-2026-09-27-result-states.md` | Execution/publication/validity/quality distinctions and counterexamples | Inspecting this failure family |

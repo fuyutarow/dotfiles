@@ -17,7 +17,7 @@ description: >-
 
 # Directing one research section
 
-> **Version**: v2609.1.1 (2026-09-26) — mandate conformance checked at charter and revision.
+> **Version**: v2609.1.2 (2026-09-27) — semantic conformance cannot be inferred from proxy checks.
 > Durable operating guidance from a frontier model (2026-08). It encodes observed research-harness failures.
 > If a constraint here feels unnecessary, that feeling is the failure mode — follow the map.
 

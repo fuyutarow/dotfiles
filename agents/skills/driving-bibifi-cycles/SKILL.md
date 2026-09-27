@@ -14,7 +14,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.3.0 (2026-09-27) — one operating loop, observed execution, bounded commitments.
+> **Version**: v2609.3.1 (2026-09-27) — observed execution and qualified results replace assumed batch progress.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
@@ -95,7 +95,7 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 
 | Observed state/event | Action now | Evidence to consume |
 |---|---|---|
-| Critical action ready | Reserve/admit its needed resources and launch the smallest real path | Actual start and execution binding |
+| Critical action ready or blocker cleared | Launch the smallest real path and confirm it actually starts through C0 | Start receipt or explicit admission wait/blocker, not an assumed retry |
 | Independent useful agent work ready | Launch across fitting slots/host capacity, even while GPU phases wait | Disjoint scope, short return, named consumer |
 | Critical dependency blocked | Assign its smallest unblocker and continue unaffected work | Exact missing input, owner and next check |
 | Partial result arrives | Check its boundary and pass it to its consumer immediately | Artifact plus consumer receipt, or explicit pending/blocker |
@@ -148,6 +148,8 @@ A faster new learning protocol need not be equivalent. A historical score is not
 The GPU skill owns stage budgets/profiles. Repair the largest recoverable whole-run cost, not an isolated ratio.
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
+Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
+Use evidence dispositions separately from goal acceptance: valid low scores remain evidence, published rows need qualification.
 
 Every six minutes while active, report briefly in JST:
 

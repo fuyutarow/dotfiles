@@ -1407,3 +1407,11 @@ hook was added. Root's actual CPU process-tree timeout/normal completion and art
 are recorded in sibling BIBIFI ledger§12; they do not establish GPU or all-platform enforcement.
 BIBIFI owns short work selection and event loop; existing section/evidence boundaries stay intact.
 Target floor passes with existing13reference prose warnings; scoped debt unchanged.
+
+## 2026-09-27 — actual start after unblock, v2609.3.1
+
+C0 joins assignment/admission/start/terminal/consumer observations on existing attempt IDs.
+A worker message or automatic-retry promise is not proof of a job start; parent confirms the
+transition when its blocker clears. Result materialization/read-back is a separate boundary.
+Root-signed source/verification home: evidence result-states postmortem and v2609.1.4ledger.
+Static review PASS, existing13reference prose warnings unchanged. No new runtime schema or checker.

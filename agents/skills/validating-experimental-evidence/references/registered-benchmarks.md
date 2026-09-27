@@ -23,6 +23,11 @@ when project policy permits it; keep its scope explicit and do not bypass a deni
 Before relying on a repaired launcher, execute a small known fixture through its real path.
 Check terminal status, effective binding, and read-back of the intended record identity.
 Include rejected invalid input and failed execution: retain the failure record without success promotion.
+Exercise the complete tiny path through row validation and read-back of its intended result destination before fan-out.
+Dry-run, process exit zero and a local rows file certify different boundaries; none substitutes for accepted read-back.
+Record required row fields and postprocessing needs from the target contract; detect missing ones before costly work.
+If outputs are rejected, stop identical retries and repair that boundary on one fixture.
+Preserve completed raw evidence.
 Control-injection repairs also need the consumer observation specified by EV2 in `controls-and-information-flow.md`.
 A novel scientific pilot is not independent proof that its new launcher is correct.
 Keep infrastructure readiness and scientific-hypothesis evidence distinct.

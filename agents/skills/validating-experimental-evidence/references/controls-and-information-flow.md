@@ -20,6 +20,13 @@ Then construct this metamorphic test:
 4. Verify the model *can* change after the intended reveal/update, so a constant
    predictor cannot pass the test vacuously.
 
+Inventory unrevealed-target copies and encodings at the executing input boundary, not only the variable named `y`.
+The fixed features above mean permitted features, not a copied current answer hidden inside `x`, a key or a cache.
+Test each forbidden path while preserving allowed inputs; changing `y` alone can leave a copied answer untouched.
+A low shuffled-label score can therefore coexist with leakage on the original task.
+Value equality or correlation alone is not proof of leakage: the declared task may legitimately permit copying.
+Judge access against prediction-time information permissions and perturb the actual prohibited consumer path.
+
 The exact invariant is conditional on the registered protocol. A protocol that permits
 other examples' labels before a given prediction must name that reveal order explicitly.
 If the invariant has no clear state/API boundary, ask `designing-type-contracts`

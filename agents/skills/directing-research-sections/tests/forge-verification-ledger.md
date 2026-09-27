@@ -147,3 +147,12 @@ returns and C0 intervention proceed before a terminal receipt. Partial work is n
 candidate admission nor LEARN. Source and cross-owner case are in the sibling BIBIFI queue
 postmortem; independent review PASS, provenance in its forge ledger section10. Existing prose
 waiver remains core3/reference80; zero added debt. No state schema or programme authority changed.
+
+## 2026-09-27 — semantic requirement versus proxy, v2609.1.2
+
+Root-signed conformance clarification: a shared type or passing count cannot prove an untested
+semantic requirement. Name a violating implementation per load-bearing check; unmapped or
+non-exercised obligations remain UNVERIFIED. Repair a wrong checker under unchanged requirements
+and a negative witness, not by adapting the requirement to current code. Source/case F and static
+review live in evidence result-states postmortem/ledger. No section state schema or authority change.
+Existing core3/reference80prose waiver unchanged; target floor passes.

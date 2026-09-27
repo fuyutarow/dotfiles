@@ -40,3 +40,7 @@ karabiner/automatic_backups/
 # Bun graduation project (writing-bun-scripts BG3) — package.json + bun.lock are COMMITTED
 # (they carry the pin); the installed tree is not. `mise run deps` restores it.
 node_modules/
+
+# agent-resource-run writes each job's measured peak beside its manifest (<manifest>.peak.json);
+# a runtime receipt, not source.
+*.resource.json.peak.json

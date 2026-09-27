@@ -28,6 +28,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readStdinJson } from "./lib.ts";
+import { promptHead, promptParts } from "./prompt-stamp.ts";
 import { MAX_QUOTE_TURNS as MAX_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
@@ -54,14 +55,6 @@ try {
 } catch {
   block("/quote could not read its hook input.");
 }
-// zsh %~ / statusline-command.ts's shorten(): leading $HOME -> ~, for a header that reads well
-// pasted into another session's chat rather than showing a long absolute path.
-function shortenCwd(p: string): string {
-  if (p === HOME) return "~";
-  if (HOME && p.startsWith(`${HOME}/`)) return `~${p.slice(HOME.length)}`;
-  return p;
-}
-
 // No argument -> default to 1, the common case, and not an error. An argument that IS given
 // but isn't a clean positive whole number is rejected rather than coerced: a mistyped count
 // should say so, not silently copy something the user didn't ask for.
@@ -108,7 +101,7 @@ if (turns.length === 0) {
 const selected = turns.slice(-count);
 
 // The cross-session addressable name ("firedancer-fe"), not the AI-generated title — that
-// distinction is the whole point of the from: header. Falls back to the raw session id.
+// distinction is the whole point of the from header. Falls back to the raw session id.
 let name = sid;
 try {
   const resolved = execFileSync("bun", [`${HOOKS}/resolve-agent-name.ts`], {
@@ -123,12 +116,14 @@ try {
 }
 
 // Header carries everything the reader needs to place the quote without asking: which session
-// said it, where it was running, how many turns are included (the count actually captured,
-// not necessarily the count requested — see the `short` fallback below), and how much text
-// they're about to read.
+// said it; the PS1 head `user@host:MM-DD HH:MM|~/cwd` — who, on which machine, when it was
+// quoted, where it was running — in the same shape as the prompt and the statusline's row 1
+// (one home: prompt-stamp.ts); how many turns are included (the count actually captured, not
+// necessarily the count requested — see the `short` fallback below); and how much text they're
+// about to read.
 const body = selected.join(TURN_SEPARATOR);
 const bodyBytes = Buffer.byteLength(body, "utf8");
-const header = `from: ${name} | cwd: ${shortenCwd(cwd)} | turns: ${selected.length} | ${bodyBytes}B`;
+const header = `from ${name} | ${promptHead(promptParts(cwd))} | turns: ${selected.length} | ${bodyBytes}B`;
 const payloadText = `${header}\n${body}`;
 
 // Claude Code cannot reach the clipboard from a process it spawns — see
@@ -158,4 +153,4 @@ const short =
   selected.length < count
     ? ` — only ${selected.length} turn${selected.length === 1 ? "" : "s"} captured so far`
     : "";
-block(`Copied to clipboard as "from: ${name}"${scope}${short}. [${paneId}]`);
+block(`Copied to clipboard as "from ${name}"${scope}${short}. [${paneId}]`);

@@ -159,6 +159,17 @@ function atMostOnePath(route: string, paths: string[]): void {
   }
 }
 
+// --project selects the working directory for the backend. --path remains a filter INSIDE it.
+// Keep the default cwd behavior for callers that do not select another project.
+function targetProject(path: string | undefined): string {
+  if (path === undefined) return process.cwd();
+  const target = realpathSync(resolve(path));
+  if (!statSync(target).isDirectory()) {
+    throw new Error(`--project must name a directory: ${path}`);
+  }
+  return target;
+}
+
 function cccResultCount(stdout: string): number {
   return stdout.match(/^--- Result \d+ \(/gm)?.length ?? 0;
 }
@@ -221,11 +232,13 @@ async function runCccSearch(
   limit: number,
   timeoutMs: number,
   refresh: boolean,
+  cwd: string,
+  explicitProject: boolean,
 ): Promise<number> {
-  const project = findRegisteredProject(process.cwd());
-  if (!project) {
+  const project = findRegisteredProject(cwd);
+  if (!project || (explicitProject && project !== cwd)) {
     throw new Error(
-      `${route} requested, but ${process.cwd()} is not ccc-registered; ` +
+      `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
         "run ccc init/index or use an explicitly lexical route",
     );
   }
@@ -270,6 +283,7 @@ async function runCccSearch(
     [ccc, "daemon", "status"],
     statusTimeoutMs,
     false,
+    project,
   );
   if (status.exitCode !== 0) {
     process.stderr.write(
@@ -295,7 +309,7 @@ async function runCccSearch(
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
-    const result = await runChildCaptured(command, timeoutMs);
+    const result = await runChildCaptured(command, timeoutMs, true, project);
     if (result.exitCode !== 0) return result.exitCode;
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
@@ -321,6 +335,7 @@ async function runRg(
   paths: string[],
   values: Parameters<typeof rgFlags>[0],
   timeoutMs: number,
+  cwd: string,
 ): Promise<number> {
   const rg = requireExecutable("rg");
   const command =
@@ -336,8 +351,8 @@ async function runRg(
           ...paths,
         ];
 
-  process.stderr.write(`ROUTE: ${route} -> rg\n`);
-  const exitCode = await runChild(command, timeoutMs);
+  process.stderr.write(`ROUTE: ${route} -> rg project=${cwd}\n`);
+  const exitCode = await runChild(command, timeoutMs, cwd);
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
   } else if (exitCode === 1) {
@@ -350,12 +365,13 @@ async function runCccGrep(
   query: string,
   path: string | undefined,
   timeoutMs: number,
+  cwd: string,
 ): Promise<number> {
   const ccc = requireExecutable("ccc");
   const command = [ccc, "grep", query];
   if (path !== undefined) command.push("--path", path);
-  process.stderr.write("ROUTE: structural -> ccc grep\n");
-  const result = await runChildCaptured(command, timeoutMs);
+  process.stderr.write(`ROUTE: structural -> ccc grep project=${cwd}\n`);
+  const result = await runChildCaptured(command, timeoutMs, true, cwd);
   if (result.exitCode !== 0) return result.exitCode;
   // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
   // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
@@ -455,6 +471,7 @@ function lexicalMissLine(route: RgRoute, query: string | undefined): string {
 type SearchFlags = {
   query?: string[] | undefined;
   path?: string[] | undefined;
+  project?: string | undefined;
   glob?: string[] | undefined;
   limit?: number | undefined;
   timeoutMs?: number | undefined;
@@ -491,6 +508,10 @@ function pathFlag() {
   };
 }
 
+function projectFlag() {
+  return { project: nonEmptyString("project") };
+}
+
 function globFlag() {
   return {
     glob: {
@@ -524,6 +545,7 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
   const queries = values.query ?? [];
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
+  const cwd = targetProject(values.project);
   switch (rawRoute) {
     case "symbol": {
       const symbol = exactlyOneQuery(rawRoute, queries);
@@ -551,12 +573,14 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
         values.limit ?? 8,
         timeoutMs,
         values.refresh ?? false,
+        cwd,
+        values.project !== undefined,
       );
     }
     case "structural": {
       const query = exactlyOneQuery(rawRoute, queries);
       atMostOnePath(rawRoute, paths);
-      return runCccGrep(query, paths[0], timeoutMs);
+      return runCccGrep(query, paths[0], timeoutMs, cwd);
     }
     case "files": {
       return runRg(
@@ -565,6 +589,7 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
         paths.length > 0 ? paths : ["."],
         values,
         timeoutMs,
+        cwd,
       );
     }
     case "literal":
@@ -576,6 +601,7 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
         paths.length > 0 ? paths : ["."],
         values,
         timeoutMs,
+        cwd,
       );
     }
   }
@@ -609,6 +635,7 @@ function routeCommand(route: Route) {
           ? {
               ...queryFlag(),
               ...pathFlag(),
+              ...projectFlag(),
               limit: positiveInteger("limit"),
               ...timeoutFlag(),
               refresh: Boolean,
@@ -617,6 +644,7 @@ function routeCommand(route: Route) {
             ? {
                 ...queryFlag(),
                 ...pathFlag(),
+                ...projectFlag(),
                 ...globFlag(),
                 ...timeoutFlag(),
                 ...rgSearchFlags(),
@@ -624,12 +652,18 @@ function routeCommand(route: Route) {
             : route === "files"
               ? {
                   ...pathFlag(),
+                  ...projectFlag(),
                   ...globFlag(),
                   ...timeoutFlag(),
                   hidden: Boolean,
                 }
               : route === "structural"
-                ? { ...queryFlag(), ...pathFlag(), ...timeoutFlag() }
+                ? {
+                    ...queryFlag(),
+                    ...pathFlag(),
+                    ...projectFlag(),
+                    ...timeoutFlag(),
+                  }
                 : { ...queryFlag(), ...timeoutFlag() },
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
@@ -695,6 +729,13 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
+  // Bun reports a closed stdout pipe as a stream error after write() returns, so a
+  // try/catch around the RESULT write cannot catch `repo-retrieve files | head -3`.
+  // The consumer chose to stop reading; no further result can be delivered.
+  process.stdout.on("error", (error) => {
+    if ("code" in error && error.code === "EPIPE") process.exit(0);
+    throw error;
+  });
   main().catch((error) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +

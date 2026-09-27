@@ -11,11 +11,12 @@ export function requireExecutable(name: string): string {
 export async function runChild(
   command: string[],
   timeoutMs: number,
+  cwd = process.cwd(),
 ): Promise<number> {
   const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn({
     cmd: command,
-    cwd: process.cwd(),
+    cwd,
     env: process.env,
     stdout: "inherit",
     stderr: "inherit",
@@ -36,11 +37,12 @@ export async function runChildCaptured(
   command: string[],
   timeoutMs: number,
   relay = true,
+  cwd = process.cwd(),
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn({
     cmd: command,
-    cwd: process.cwd(),
+    cwd,
     env: process.env,
     stdout: "pipe",
     stderr: "pipe",

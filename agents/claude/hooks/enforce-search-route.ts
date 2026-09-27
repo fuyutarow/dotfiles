@@ -29,11 +29,17 @@ const INLINE_RUNTIME =
 const FILE_SCAN_PRIMITIVE =
   /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/;
 const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
+// A single grep/rg over an already classified router stream is display filtering, not a
+// second repository search. Require one pattern and no file operand; reject shell chaining,
+// substitution, redirection, and a second pipe so the exception cannot hide a raw search.
+const ROUTED_STREAM_FILTER =
+  /^\s*(?:repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))\s+(?:concept|battery|literal|exhaustive|files|structural)\b[^|;&\n`$<>]*\|\s*(?:grep|rg)\s+(?:-F\s+)?--\s+(?:'[^'\n]*'|"[^"`$\n]*"|[^\s|;&<>`$]+)\s*$/;
 const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
 const ROUTER_COMMAND = "bun ~/.claude/hooks/repo-retrieve.ts";
 
 function isRawSearch(command: unknown): boolean {
   if (typeof command !== "string" || command === "") return false;
+  if (ROUTED_STREAM_FILTER.test(command)) return false;
   return (
     GREP_SEARCH.test(command) ||
     GIT_GREP.test(command) ||
@@ -177,6 +183,9 @@ function main(): void {
       `${ROUTER_COMMAND} exhaustive --query '<regex>'; ` +
       `${ROUTER_COMMAND} structural --query '<by-example pattern>'; ` +
       `${ROUTER_COMMAND} files --glob '<glob>'. ` +
+      `To filter displayed router output, use one stream-only stage such as ` +
+      `repo-retrieve literal --query '<text>' | grep -F -- '<filter>'; ` +
+      `do not pass grep a file path or treat filtered output as an absence check. ` +
       `Known-symbol definitions/references go to Serena. The router may choose rg; ` +
       `the forbidden act is unclassified search, not lexical search. This is a policy ` +
       `boundary: do not bypass it with Python, Node, shell loops, or another tool.`,

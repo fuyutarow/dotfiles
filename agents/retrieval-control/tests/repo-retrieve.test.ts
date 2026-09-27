@@ -124,6 +124,7 @@ function fakeTools(): { bin: string; log: string } {
       path,
       `#!/bin/sh
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
+if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$PWD" != "$FAKE_SEARCH_EXPECT_CWD" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
 if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ]; then
     printf 'Projects:\\n%s [indexing]\\n' "$PWD"
@@ -143,6 +144,11 @@ if [ "${name}" = ccc ] && [ "$1" = index ]; then
   touch "$PWD/.cocoindex_code/fake_target.db" 2>/dev/null || true
 fi
 if [ "${name}" = ccc ] && [ "\${FAKE_CCC_SLEEP:-0}" = 1 ]; then exec sleep 2; fi
+if [ "${name}" = rg ] && [ "\${FAKE_RG_THREE_LINES:-0}" = 1 ]; then
+  printf '%s\\n' first second third
+  sleep 0.1
+  exit 0
+fi
 if [ "${name}" = ccc ] && [ "\${FAKE_SEARCH_NOISE:-0}" = 1 ]; then printf '%s\\n' 'Indexing: 10 files listed | error: 0'; fi
 if [ "${name}" = ccc ] && [ "$1" = grep ]; then
   if [ "\${FAKE_SEARCH_EMPTY:-0}" = 1 ]; then
@@ -237,6 +243,105 @@ describe("repo-retrieve route contract", () => {
     expect(result.log).toContain("--path src/**/*.ts");
     expect(result.log).not.toContain("--refresh");
     expect(result.stdout).toContain("RESULT: PASS route=concept engine=ccc");
+  });
+
+  test("--project searches another registered corpus while --path stays inside it", () => {
+    const caller = registerFreshGitProject().dir;
+    const corpus = registerFreshGitProject().dir;
+    mkdirSync(join(corpus, "knowledge"));
+    const result = run(
+      caller,
+      [
+        "concept",
+        "--project",
+        corpus,
+        "--path",
+        "knowledge",
+        "--query",
+        "known reduction",
+      ],
+      { FAKE_SEARCH_EXPECT_CWD: corpus },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toContain(`project=${corpus}`);
+    expect(result.log).toContain("--path knowledge/**");
+    expect(result.log).not.toContain("--refresh");
+  });
+
+  test("--project also selects the cwd for lexical and structural routes", () => {
+    const caller = registerProject();
+    const corpus = registerProject();
+    for (const route of ["literal", "exhaustive", "files", "structural"]) {
+      const args = [route, "--project", corpus, "--path", "knowledge"];
+      if (route !== "files") args.push("--query", "needle");
+      const result = run(caller, args, { FAKE_SEARCH_EXPECT_CWD: corpus });
+      expect(result.code).toBe(0);
+      expect(result.stderr).toContain(`project=${corpus}`);
+    }
+  });
+
+  test("semantic --project requires a registered root and refuses an unregistered corpus", () => {
+    const caller = registerFreshGitProject().dir;
+    const unregistered = tempDir("repo-retrieve-unregistered-");
+    const result = run(caller, [
+      "concept",
+      "--project",
+      unregistered,
+      "--query",
+      "known reduction",
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("not ccc-registered at that project root");
+    expect(result.log).toBe("");
+  });
+
+  test("automatic catch-up indexes the selected corpus, not the caller", () => {
+    const caller = registerFreshGitProject().dir;
+    const { dir: corpus, head } = registerGitProject();
+    plantIndexArtifact(corpus);
+    writeWatermarkFile(corpus, { head: "a".repeat(40) });
+    const result = run(
+      caller,
+      ["concept", "--project", corpus, "--query", "known reduction"],
+      { FAKE_SEARCH_EXPECT_CWD: corpus, REPO_RETRIEVE_AUTO_INDEX: "1" },
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.log).toContain("ccc index");
+    expect(result.log).toContain("ccc search known reduction");
+    expect(readFileSync(watermarkFilePath(corpus), "utf8")).toContain(head);
+  });
+
+  test("a downstream head that closes stdout does not produce an EPIPE stack trace", () => {
+    const tools = fakeTools();
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        'set -o pipefail; "$1" "$2" files | head -3',
+        "--",
+        process.execPath,
+        ROUTER,
+      ],
+      {
+        cwd: registerProject(),
+        encoding: "utf8",
+        timeout: 5_000,
+        env: {
+          ...process.env,
+          PATH: `${tools.bin}:${process.env.PATH ?? ""}`,
+          FAKE_SEARCH_LOG: tools.log,
+          FAKE_RG_THREE_LINES: "1",
+        },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("first\nsecond\nthird\n");
+    expect(result.stderr).not.toContain("EPIPE");
+    expect(result.stderr).not.toContain("at runRg");
   });
 
   test("a directory path is passed to ccc as a recursive file glob", () => {

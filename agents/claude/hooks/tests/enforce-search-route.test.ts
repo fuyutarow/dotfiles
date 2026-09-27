@@ -148,6 +148,37 @@ describe("enforce-search-route", () => {
     }
   });
 
+  test("allows one stream-only grep after a classified route", () => {
+    const project = registerProject();
+    for (const command of [
+      "repo-retrieve literal --query needle | grep -F -- 'wanted line'",
+      "repo-retrieve concept --project /tmp/corpus --query needle | rg -- 'wanted'",
+      "bun ~/.claude/hooks/repo-retrieve.ts files --glob '*.md' | grep -- 'README'",
+    ]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+        ),
+      ).toBeNull();
+    }
+  });
+
+  test("a stream filter cannot search a file or hide a second raw search", () => {
+    const project = registerProject();
+    for (const command of [
+      "repo-retrieve literal --query needle | grep -F -- wanted file.txt",
+      "repo-retrieve files | grep -- wanted | rg raw",
+      "repo-retrieve literal --query needle ; grep -- wanted file.txt",
+      "repo-retrieve literal --query needle | grep -- wanted < file.txt",
+    ]) {
+      expect(
+        decisionOf(
+          runHook(HOOK, bashPayload(project, command), withCcc()).stdout,
+        )?.permissionDecision,
+      ).toBe("deny");
+    }
+  });
+
   test("denies direct ccc search and grep because they bypass router guards", () => {
     const project = registerProject();
     for (const command of [

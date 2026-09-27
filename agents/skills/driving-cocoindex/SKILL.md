@@ -108,6 +108,12 @@ canonical router is missing, STOP and repair the harness; never replace search w
 or shell loops. Exit-zero ccc output without result blocks is NO_MATCH, not PASS. Ccc-absent or
 unregistered environments retain lexical fallback.
 
+From another repo, select the target with `--project <registered-root>`; `--path` / `-p` only
+filters inside that root. Example: `repo-retrieve concept --project ~/Workspace/soks --path
+knowledge --query '<concept>'`. A single `| grep -F -- '<pattern>'` may filter router output for
+display; no file operand or second pipeline is allowed, and filtered output is not an absence
+check. For a stale target, `cd <target> && repo-retrieve index` records its freshness watermark.
+
 ```bash
 # PROJECT-REGISTER — once per repo
 cd <repo> && ccc init && ccc index

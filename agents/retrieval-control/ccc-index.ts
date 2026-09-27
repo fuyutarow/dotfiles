@@ -269,6 +269,7 @@ async function autoCatchUp(
     [ccc, "daemon", "status"],
     10_000,
     false,
+    project,
   );
   const busy = status.stdout
     .split("\n")
@@ -455,8 +456,8 @@ async function reindexCertified(
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
     const exitCode = childToStderr
-      ? await runChildToStderr([ccc, "index"], timeoutMs)
-      : await runChild([ccc, "index"], timeoutMs);
+      ? await runChildToStderr([ccc, "index"], timeoutMs, project)
+      : await runChild([ccc, "index"], timeoutMs, project);
     if (exitCode !== 0) {
       process.stderr.write(
         `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
@@ -523,11 +524,12 @@ async function reindexCertified(
 async function runChildToStderr(
   command: string[],
   timeoutMs: number,
+  cwd: string,
 ): Promise<number> {
   const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn({
     cmd: command,
-    cwd: process.cwd(),
+    cwd,
     env: process.env,
     stdout: "pipe",
     stderr: "inherit",

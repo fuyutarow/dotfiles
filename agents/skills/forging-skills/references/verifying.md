@@ -79,6 +79,14 @@ Two absorbed disciplines, credited:
 
 ## §4 Live eval machinery — invoke, never rebuild
 
+For a coordination or execution-loop reforge, a one-shot plan answer is insufficient content verification.
+Give fresh OLD/NEW arms the same event sequence, one event at a time, without expected answers.
+Include a missed partial return, a premise-changing result, resource contention and an execution-binding change.
+Judge next actions against actual sibling rules. Check cancellation, useful work, binding and consumption of returns.
+Freeze the fixture and criteria before the exercise. Record failures even if the final plan reads well.
+If a behavioral failure changes the patch, rerun the affected event before claiming it resolved behaviorally.
+Static-only repair remains labeled static-only. No inference of live runtime compliance follows from a text exercise.
+
 External machinery, marketplace-managed, treat read-only (paths defined once in SKILL.md's
 routing table; this is the synced working copy — re-sync on reforge, do not diff for identity):
 `PLUGIN=~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator` ·

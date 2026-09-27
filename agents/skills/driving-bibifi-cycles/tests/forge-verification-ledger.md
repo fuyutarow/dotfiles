@@ -397,3 +397,57 @@ Independent recheck found one remaining visibility hole: the board itself could 
 artifact/consumer links. C0 and the template now keep those details in existing parent-only visibility;
 blind arms receive neutral control instructions, not the shared record. Root checked the exact fix.
 `mise run link:skills` and `mise run lint:skills-wiring` passed; source-linked files are updated.
+
+## 10. Queue and ownership reforge v2609.2.3 — 2026-09-27
+
+**Signed design/root acceptance.** User requested a new postmortem and practical concept
+split/merge. Source digest, exact report locators and bounded findings are in
+`postmortem-2026-09-27-queues.md`. Reported execution is third-party evidence; current user
+requirements are author-confirmed. The actor's claims that skill defects are small, that every
+experiment must finish under two minutes, and that four workers/one function is the right unit
+are not adopted as policy. Runtime enforcement is not inferred from a manual or self-report.
+
+**One-home treatment.** Keep seven existing semantic owners; add no skill. BIBIFI owns conditional
+next-work selection, predecessor retrieval and short actual-consumer integration. Orchestration
+owns finite admission retries, reservations and supported read/write isolation. Evidence EV1 owns
+material loaded dependencies and GPU claim scope; EV3 owns effective ablations/model classes.
+Section WIP admits partial coordination without invented terminal receipts. Theory changes hand
+versioned impact to live work selection. Fleet roles are narrowed to explicit profiles; local PI
+coordination is preserved and legacy benchmark/E4 rules no longer gate formal v2. The shipped
+fleet prompt now points to those same rules; project-specific overrides are untouched. Forging
+verification now requires sequential event exercises for loop/control-plane revisions.
+
+**Static review.** Terra `queue_evidence_review` inspected queue/evidence/section/theory deltas
+without cases/ledger and returned PASS. Terra `fleet_scope_review` found role wording ambiguity,
+legacy E4/launch conditions leaking into v2 and PI-birth policy ambiguity. Root repaired the
+profile, detailed references and shipped policy together. The reviewer’s claim that an actor's
+responsibility and a skill's semantic ownership must be mutually exclusive was not adopted:
+PI still coordinates dispatch using C0. Wording now distinguishes execution from coordination.
+A recheck exposed remaining unconditional checklist text, now explicitly legacy-only. The
+suggested E4 reference qualification was already present; root reread and confirmed it.
+
+**Forward exercise.** Fresh Terra `queue_forward_old` and `queue_forward_new` received the
+same four events separately, with bounded returns and no expected-answer files. OLD read the
+6a8582b BIBIFI/core delegation manuals; NEW read the revised pair. Both prioritized the short
+consumer repair, stopped an owned lower-priority test at a safe point, rejected a five-arena replay,
+withheld launch under incomplete identity, and accepted a properly bound 150-second follow-up.
+NEW explicitly offered narrow serialization if snapshot support is absent; OLD stopped at the
+capability/binding check. Both preserved the scoped null and declined global mechanism conclusions.
+Outcome: no demonstrated broad behavioral win; clearer explicit fallback in this one case only.
+No numerical jobs were run, and real scheduling latency/throughput remains unmeasured.
+The changed evidence/fleet content was statically reviewed, not loaded into those two forward arms.
+
+**Verification.** S40–S45 plus the four-event fixture and six cross-owner cases cover the changed
+paths. Fleet fire/no-fire cases now exclude generic R&D from the thin-Director profile. Target
+skill floor and fleet structural checker pass. Collection floor passes: 73 skills / 64,359 listing
+characters, unchanged ceiling. `git diff --check` passes. Driver, evidence and theory remain zero
+prose warnings. Scoped existing debt: fleet core18/reference70 (down from19/76), section core3/
+reference80, forge core15/reference85 plus2 long cells, orchestration reference13. These existing
+prose-cleanup scopes are deferred; the delta adds no warning. No package, proof, GPU kernel, actual
+Firedancer run, hook enforcement, or runtime schema was changed.
+
+**Deployment receipt.** `mise exec -- bun test agents/claude/hooks/tests/assign-lib.test.ts`:
+17 pass / 0 fail, including project override and shipped fleet-policy fallback loading.
+`mise run link:skills`, `mise run lint:skills-wiring`, index check and `git diff --check` pass.
+Codex source-directory and Claude fleet links resolve to this repository. Existing sessions and
+project-specific fleet_policy overrides are not claimed to have reloaded the new policy.

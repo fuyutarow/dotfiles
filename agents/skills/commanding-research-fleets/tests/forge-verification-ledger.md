@@ -765,3 +765,20 @@ The description was shortened without changing the Director/PI/Researcher
 trigger surface or typed programme/section and dispatch cuts. The official
 quick validator now accepts it under the description cap; role and launch
 semantics are unchanged.
+
+## 2026-09-27 — profile consolidation v2609.2.0
+
+Current user-authorized reforge narrows this skill to explicit fleet roles. The legacy checklist,
+learner milestone and E4 do not gate formal v2 sections or generic BIBIFI diagnostics. PI owns
+local coordination using BIBIFI/C0; programme thinness is no excuse for passive local waiting.
+Retired live rules: clockless local work, final-only stopping, every-partial E4, unconditional
+BENCH-ROW for v2, model hardcoding and the old bulk/pathspec-free Git convention. Historical
+entries above retain their original claims; current Git and resource owners govern operation.
+Shipped fleet_policy.toml is updated; project-root overrides are not modified by this task.
+
+Source/audit, root-signed concept map and comparative limits have one home in
+`../driving-bibifi-cycles/tests/postmortem-2026-09-27-queues.md` and its forge ledger section10
+(paths relative to this skill directory). Independent Terra review found and closed scope leaks
+in both core and detailed checklist/E4 references. Structural checker and collection floor pass.
+PROSE-DEBT waiver: core18/reference70, reduced from19/76; broader historical prose cleanup remains
+separate. No runtime role-grant enforcement or fresh-session dispatch compliance is claimed.

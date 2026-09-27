@@ -67,6 +67,15 @@ If the implementation followed the plan, the negative remains evidence about tha
 A revised selector is a new hypothesis/configuration, even if it seems more reasonable after seeing the score.
 Preserve the old result and limitation; “not a fair test” cannot erase it or indefinitely rescue the hypothesis.
 
+Before a null ablation excludes a mechanism, verify that the exercised task and operator can express its effect.
+If both arms use fixed votes that never consume the changed workspace, the null tests that fixture only.
+A later operator-rich contrast is a new scoped test; do not flip a global verdict while erasing the earlier binding.
+
+Distinguish an observed construction, an information bound and a learned implementation.
+A hand-supplied grammar scoring 1.0 is a witness under that grammar, not proof a learner can acquire it.
+Failure of whole-command lookup cannot bound all token-compositional designs.
+State the allowed model class and supplied knowledge before calling an oracle score a ceiling or impossibility result.
+
 ## EV4: historical capability is a typed comparator
 
 Before claiming novelty, absence, or lost capability, join the relevant historical records.

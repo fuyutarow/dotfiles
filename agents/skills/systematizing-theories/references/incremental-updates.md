@@ -82,6 +82,9 @@ Use existing canonical update/correction mechanisms; never create a parallel rec
 End with: what changed, what still follows, what no longer follows, and the next open obligation.
 These are findings about the theory. BIBIFI work selection belongs to `driving-bibifi-cycles`.
 Programme adoption and allocation stay with their existing owners.
+For a changed premise or prediction, hand its exact old/new version and affected uses to that work-selection owner.
+Identify inspected live consumers and unknown coverage; that owner reassesses queued and running tickets immediately.
+Theory changesets do not themselves cancel jobs, authorize experiments or wait for every worker to acknowledge.
 
 A coverage limit of `none` requires an enumerated source/dependency universe and a recorded reverse-reference check.
 Otherwise state the inspected boundary and incomplete/unknown coverage, even if every visible card was updated.

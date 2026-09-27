@@ -139,3 +139,11 @@ Verification: target `skill-check.ts` exited 0; 80 pre-existing reference prose 
 `git diff --check` exited 0. **PROSE-DEBT waiver (2026-09-26):** the 80 older
 reference warnings are unchanged; queue a separate prose pass. F3 solo-tier waiver:
 the desk-check above was serial; no live model trigger or target runtime test ran.
+
+## 2026-09-27 — microticket coordination inside one admitted item
+
+Root-signed clarification: WIP=1 retains candidate/admission/learning semantics while short build
+returns and C0 intervention proceed before a terminal receipt. Partial work is neither a second
+candidate admission nor LEARN. Source and cross-owner case are in the sibling BIBIFI queue
+postmortem; independent review PASS, provenance in its forge ledger section10. Existing prose
+waiver remains core3/reference80; zero added debt. No state schema or programme authority changed.

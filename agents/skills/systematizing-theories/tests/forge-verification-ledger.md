@@ -185,3 +185,11 @@ Mechanical receipt for this delta: target skill-check exit 0; theory/Tiger zero 
 orchestration 13 baseline reference warnings unchanged. Collection `mise run lint:skills-floor`
 exit 0, 73 skills / 64,122 listing characters; `git diff --check` exit 0. The three skills add
 21 constructed cases. Both independent static reviews passed after corrections. No runtime efficacy claim.
+
+## 2026-09-27 — theory change to live work handoff
+
+Root-signed clarification: send exact old/new premise versions and inspected/unknown consumer
+scope to BIBIFI work selection. The theory owner does not cancel jobs or await a global worker
+acknowledgement. Source/case and independent review provenance live in the sibling BIBIFI queue
+postmortem and forge ledger section10. Target floor remains zero warnings; no theory or proof
+claim was certified in this task.

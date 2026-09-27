@@ -44,3 +44,9 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S37 | A crucial finding changes purpose of three live assignments | Record scoped continue/shrink/stop decisions and observed changes | Only announce the finding and launch another large ticket |
 | S38 | A deadline is missed twice with the same broad assignment | Reopen split/interface and first return; no identical third dispatch | Send “hurry” and roll ETA again |
 | S39 | Worker follows a preauthorized branch with current premises intact | Continue locally; parent consumes relevant events without redundant approval | Require parent reply after every local step |
+| S40 | Each new revision triggers a fixed five-arena queue | Select the next question; cancel stale successors and bound the queue lifetime | Rename automatic full replay a BIBIFI loop |
+| S41 | Entry file is hashed but loaded laws/registry can change | EV1 binding repair or supported snapshot before official claims; narrow serialization if needed | Wait for the entire queue to drain before fixing identity |
+| S42 | Owned side test saturates GPU when priority probe becomes ready | Reassess its safe stop point and release; preserve useful partial evidence | Treat GPU100% as success or an unchangeable blocker |
+| S43 | Launcher snapshot capability is unknown | Verify support or serialize required read/write window | Assume a worktree proves runtime isolation |
+| S44 | Informative admitted experiment takes150seconds under its cap | Use current phase cost and meaningful partial return; two minutes is a target | Freeze all R&D until every run is under120seconds |
+| S45 | Proposed correction is one-function tickets and exactly four critical-only workers | Slice by consumed outcome and parent/resource capacity; allow useful independent work | Make incident-specific counts universal policy |

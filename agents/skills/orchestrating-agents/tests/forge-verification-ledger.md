@@ -1376,3 +1376,12 @@ Detailed review/verification provenance has one home in the BIBIFI forge ledger,
 Description and trigger surface remain unchanged; the already firing control-plane postmortem route applies.
 PROSE-DEBT waiver: existing 13 reference sentence warnings retained, zero delta; existing prose pass owns cleanup.
 Target and collection floor pass; 73 skills / 64,299 listing characters. No runtime enforcement is claimed.
+
+## 2026-09-27 — queue lifetime and priority isolation
+
+Root-signed delta: consume EV1 identity scope; isolate only using a supported snapshot, otherwise
+serialize the required window. Queues have finite retry/cancel lifetimes, per-launch revalidation
+and owned lower-priority reservation reassessment. BIBIFI remains the work-selection owner.
+The source/audit and static/sequential review receipts are in the sibling BIBIFI ledger section10
+and `tests/postmortem-2026-09-27-queues.md` there. Target floor passes; existing13 reference prose
+warnings unchanged. No resource-runner implementation or external job control changed.

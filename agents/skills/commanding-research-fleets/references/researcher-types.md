@@ -7,8 +7,8 @@
 
 A Researcher is the executor-equivalent role (`orchestrating-agents`' generic executor,
 role-specialized for this fleet). Every Researcher dispatch declares exactly one archetype —
-never a blend — and runs on `model:'sonnet'` with one `RESOURCE-CLASS`/`RESOURCE-ENVELOPE`
-declaration, per `orchestrating-agents`' generic dispatch contract.
+never a blend. Use the current project model policy and orchestration roster rather than a model fixed in this charter.
+Include one `RESOURCE-CLASS`/`RESOURCE-ENVELOPE` declaration under the orchestration dispatch contract.
 
 | Archetype | Function |
 |---|---|
@@ -24,8 +24,10 @@ same session happens to fill more than one.
 
 ## In-lab verification — the full procedure (E4)
 
+This procedure applies only to the legacy claim-certification profile.
+Formal v2 section work uses V0–V3; E4 adds no local learning or promotion gate there.
 Verification is never queued through the Director. It happens inside the reporting PI's own
-lab, dispatched by that PI, before the PI reports or promotes anything.
+lab before a legacy certified claim is reported or promoted. Partial artifacts and honest blockers need no E4 ceremony.
 
 1. The PI has a claim ready to report or promote.
 2. The PI dispatches a Researcher under the **verifier** archetype, in the same lab, with the

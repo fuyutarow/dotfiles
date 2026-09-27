@@ -71,6 +71,17 @@ Compare it with the intended executable specification. If that proof is
 unavailable, `EV1=UNKNOWN`. A mismatch is `EV1=FAIL` for a claim about the intended
 revision. Preserve the raw result under its actual code identity.
 
+The executed identity covers material imported modules, registry/config and shared primitives, not just the entry file.
+If an unhashed dependency can change behavior, an unchanged top-file digest cannot certify the old revision.
+Repair that binding through its owner before relying on queued official results; do not defer it until the queue ends.
+Use the launcher's supported immutable snapshot and attest what the process loaded, including warm-worker state.
+Isolation and write ownership belong to orchestration/Git; EV1 owns the evidence scope, not a project memory exception.
+
+For a GPU claim, distinguish requested device, resident state, executed hot-path operations and host transfers.
+A CuArray input alone proves neither GPU execution nor device-resident learning.
+A sampled zero VRAM peak alone also proves neither CPU execution nor zero allocation; inspect process-linked evidence.
+Accuracy and device/performance claims receive separate dispositions; preserve whichever claim is actually supported.
+
 A clean worktree or commit SHA does not freeze external datasets, dependency environments, caches, or loaded workers.
 Bind the material runtime dependencies and input content to this run; inspect their resolved locations.
 Ensure required artifacts remain available for the run's lifetime through the resource/storage owner.

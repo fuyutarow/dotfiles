@@ -197,3 +197,12 @@ Scoped evidence dispositions now explicitly hand off to `systematizing-theories`
 axioms, definitions, theorem applications and dependent predictions. Measurement validity stays here.
 The theory owner consumes rather than overrides that disposition. No second evidence database,
 proof authority or target runtime gate is introduced. Static reciprocal-cut review passed.
+
+## 2026-09-27 — loaded closure, device and effective intervention
+
+Root-signed EV1/EV3 delta: bind material imported code/registry/shared primitives, distinguish GPU
+request/state/computation/telemetry, and scope null ablations to mechanisms their fixtures can
+exercise. Distinguish supplied oracle construction from learned acquisition/model-class bounds.
+No schema or second validator is added. Source/cases and review provenance live in the sibling
+BIBIFI queue postmortem and forge ledger section10. Independent queue/evidence review PASS;
+mechanical floor zero prose warnings. Actor-reported scientific conclusions were not certified.

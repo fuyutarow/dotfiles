@@ -340,3 +340,15 @@ The description was shortened while retaining SKILL.md, Japanese skill-craft,
 trigger, and collection-cost entry points. The official quick validator now
 accepts it under the platform description cap. F3 desk-check retained the
 existing fire/no-fire cases and added no domain-meaning claim.
+
+## 2026-09-27 — sequential verification for execution-loop skills
+
+Observed source: user supplied a later Firedancer report after repeated BIBIFI reforges; actor
+reports still showed long component tickets, repeated admission queues, development freezes and
+incomplete code binding. Root-signed change to verifying.md: a one-shot plan answer cannot verify
+an event-driven coordination manual. Freeze a multi-event fixture, deliver events separately to
+fresh OLD/NEW arms, and record subsequent actions plus cross-skill contradictions. A behavioral
+fix requires affected-event rerun before a behavioral-resolution claim; static repair is labeled.
+Applied exercise and limits have one home in driving-bibifi-cycles/tests/forge-verification-ledger.md
+section10; outcome did not establish broad superiority. Existing prose waiver core15/reference85,
+2 long cells remains unchanged. Collection floor passes with unchanged ceiling; no new eval engine.

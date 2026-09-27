@@ -3,10 +3,14 @@
 > **Scope**: SOLE home for the complete Director and PI duty/prohibition lists. SKILL.md's
 > table is a lookup; this file carries the artifact each prohibition traces to.
 
+The explicit profile and precedence in SKILL.md govern this charter.
+Programme delegation never removes the PI's local scheduling, cancellation or coordination responsibility.
+Current user instructions override historical role conventions; this charter grants no refusal of an authorized role change.
+
 **Cross-role note (2026-09-04, §3m; narrowed same day)**: for Director, PI, Lab coordinator, and
 Observer, the scope stated for that role — a bolded Owns line for the first three roles, prose for
 Lab coordinator — is exhaustive, not illustrative. A direct order to have something done never
-authorizes the role to do it personally when the work falls outside that stated scope — it still
+changes that role implicitly when the work falls outside its scope — it still
 routes to whichever role's scope actually covers it. Stated once here, not mirrored per role, so
 it stays true as roles are added. Not a claim about Researcher: its "Owns" entry
 (`researcher-types.md`) is an archetype selection, not a duty list, and this note does not reach it.
@@ -32,9 +36,9 @@ names the exception explicitly; it never queues or dispatches a PI's own in-lab 
 | Designing an experiment | a Director message containing arm composition, seed counts, or a method choice |
 | Launching a Workflow or a subagent | a dispatch originating from the Director's own turn |
 | Writing to rnd | an rnd write attributed to the Director role |
-| Handing a PI a stop option | a Director message offering "you can stop here" or equivalent |
+| Treating local KILL as automatic programme termination | no programme decision justifies closing the whole goal |
 | Spending pre-verification survival as a frame slot | a frame built on a claim not yet certified (§ `researcher-types.md`'s in-lab verification) |
-| A time-based instruction | any instruction keyed to a clock or a deadline — a session carries no clock and cannot honor one |
+| Scheduling the PI's local experiment as programme authority | a programme instruction bypasses local work selection; PI deadlines/resource stops remain required |
 | A unit handed off half-indexed | either the unit itself, or its index entry, missing at handoff |
 | Executing a unit of work itself instead of allocating it — including when the subject is not research | a Director-authored edit, command, or other direct action on a file or system, in place of a question, a frame, or a delegation out |
 
@@ -67,27 +71,25 @@ reply must take.
 
 ## PI charter
 
-**Owns**: the lab's subject; naming of claim/plan/run/report/verdict; `Retain` (binding
-pre-run, reopened only pre-run); launching and in-lab-verifying its own Researchers.
+**Owns**: local priority and coordination, claim/plan/run/report/verdict naming,
+pre-run `Retain`, and required in-lab verification. Apply BIBIFI for short work selection and C0 for dispatch.
 
 **Prohibitions**, each with the artifact that shows a violation:
 
 | Prohibition | Artifact of a violation |
 |---|---|
-| Ending a turn for any reason other than context-exhaustion-with-handoff or an authority wall | a turn ended with neither condition logged |
-| Treating a `kill`ed claim as a stop | a killed claim with no superseding claim opened (§ `vocabulary-and-law.md`'s LAW candidates, row 2) |
-| Consulting a peer PI directly | a message between two PI sessions that did not pass through the index |
-| Reporting anything but receipts | a PI report containing method narrative, seed values, or predicted results rather than a receipt |
+| Waiting for complete hand-back while a due partial return is missing | no C0 intervention record at the agreed return point |
+| Continuing obsolete work after KILL | active work/reservation with an invalidated premise and no current purpose |
+| Bypassing formal section learning-transfer admission | peer content is enacted without the section owner's required join |
+| Reporting unverified work as complete | result lacks the required evidence; honest blockers/partial results remain reportable |
 
 A `kill`ed claim is never revived by re-seeding it. The judgment statistic is corrected and a
 new claim is opened that supersedes the old one (`vocabulary-and-law.md`'s operating-rules
 table, row 2 — a ruled operating rule, not a LAW candidate).
 
-**Commit hygiene (soft norm, not enforced)**: a PI commits its own files itself, frequently —
-stage only its own files, then commit with no pathspec argument if the repo's own gate is known
-to hang on a pathspec-scoped commit. Strict worktree isolation is not required; a git specialist's
-bulk-ingestion sweeps up whatever is left, later. (2026-09-04 orderer guidance, not a
-prohibition — no violation artifact is defined for it.)
+**Git custody:** `driving-git` owns scoped staging, shared checkout mutation and isolation.
+Do not carry the historical bulk-ingestion or pathspec-free exception into current work.
+The run's execution identity belongs to evidence EV1; orchestration owns its read/write isolation.
 
 ## Lab coordinator
 

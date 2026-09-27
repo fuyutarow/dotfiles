@@ -25,6 +25,11 @@ after any description edit.
 | 4 | 「うちのチームの行動指針を作りたい。優先順位でよく揉める」 — no named executor role, a cross-actor tie-break | `codifying-doctrine` | NO-FIRE |
 | 5 | "Add a rule that force-pushing to main is never allowed in this session" | `operating-the-harness` (a guardrail, not a role charter) | NO-FIRE |
 | 6 | 「終わった実験のprocess auditをして」 | `auditing-research-processes` | NO-FIRE |
+| 7 | 「実行責任者として6分周期でR&Dを進めて」 without an explicit fleet profile | `driving-bibifi-cycles`, orchestration for delegation | NO-FIRE; calling the parent Director does not install thin-Director restrictions |
+
+Profile checks: a local PI keeps deadlines and cancellation; formal v2 verification uses V0–V3.
+A legacy certified learner milestone still uses E4 and its declared standard task/metric.
+Neither profile forbids an authorized, bounded diagnostic partial return.
 
 ## Co-fire
 

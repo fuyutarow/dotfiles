@@ -14,7 +14,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.2.2 (2026-09-27) — the parent owns continuous microticket coordination.
+> **Version**: v2609.2.3 (2026-09-27) — short decisions survive queue, integration and resource contention.
 
 ```sh
 for f in assets/ITERATION-PLAN.md references/microticket-patterns.md \
@@ -60,6 +60,8 @@ Also inspect active jobs, reservations, GPU compute load and shared write/depend
 Unknown values stay `未確認` / `UNKNOWN`; do not invent free memory, completion or launch receipts.
 Use existing observations if still current, and refresh those that can change the next dispatch.
 Identify the first goal-relevant result to land and the current bottleneck, then start the smallest ready cycle.
+Before reimplementing a mechanism or performance repair, retrieve the named predecessor and its executable witness.
+Record what transfers and what differs in the current path; a historical score or function name alone is insufficient.
 
 ## Two clocks, one continuous loop
 
@@ -76,6 +78,8 @@ The microticket ETA includes preparation, queueing, integration, interpretation 
 Size the work so ordinary cycles return useful feedback inside the six-minute window.
 If it cannot, change the slice, reuse valid preparation or choose a different discriminator before dispatch.
 No sweep or large experiment belongs in this loop. Do not disguise a separately authorized larger study as microtickets.
+Two minutes is a target, not an absolute launch gate. Choose a useful slice when runtime is longer; keep the ten-minute cap.
+Repeated near-cap runs reopen scale, setup and throughput before admitting another expensive batch.
 
 ## Make the ticket a complete small loop
 
@@ -97,6 +101,9 @@ Use a tiny target-path fixture to expose wrong dispatch, missing constructors an
 Do not postpone first integration until every component, law layer or whole-suite gate is finished.
 A contract is delivered when its intended consumer can use the checked interface, not merely when a document is written.
 A diagnostic slice may establish routing or a boundary only; it is not evidence of full capability.
+Before scaling or queueing registered runs, execute one tiny fixture through the actual changed consumer path.
+Exercise the new branch and a relevant negative case; a CM-only unit test does not validate TM integration.
+Use the observed execution identity from `validating-experimental-evidence` EV1, not the revision label alone.
 
 ## Prioritize, reserve, fill and replan
 
@@ -120,6 +127,9 @@ If capacity is idle, search the current blocker, its successors and reusable pre
 “No ready ticket” is a queue defect to investigate, not a sufficient reason to stop searching.
 Do not manufacture work when none survives that check; record what was inspected and the actual limiting condition.
 Resource concentration means protecting the priority path, not silencing every independent CPU/GPU stream.
+When priority work becomes ready, reassess lower-priority reservations and stop at their declared safe points if needed.
+An owned GPU test occupying the device is not an external blocker; the parent must reconsider that allocation.
+Do not cancel another owner's jobs without authority. Record the actual contention and available alternatives.
 Use actual load as well as memory: spare VRAM does not imply spare GPU compute or host RAM.
 Give each compute job its RAM/VRAM/CPU/slot footprint. P7 in `orchestrating-agents` owns admission and limits.
 
@@ -159,6 +169,14 @@ Cancelled work keeps its original evidence binding; report discarded effort with
 Owner-approved premise changes govern replanning; a worker's unsupported assertion grants no new authority.
 If updates cannot reach a worker promptly, shorten its assignment to the next hand-back instead of granting a long queue.
 
+**A queue is conditional, not a battery.** Select one next discriminating run from current evidence.
+Run fixed comparison arms together only when their joint result answers that one question.
+Do not automatically rerun every arena on each revision or protect a whole queue by freezing development until it drains.
+Before each queued launch, recheck premise, code/input binding, priority, resources and its remaining finite lifetime.
+Admission retries obey that lifetime and replan on evidence; an endless periodic retry is not progress.
+Prefer an immutable run snapshot while development continues under the existing isolation policy.
+If the required launcher cannot use one, serialize only the necessary read/write window or repair that blocker first.
+
 ## Device and lifecycle control
 
 Use GPU for GPU-capable experiments. Record a concrete workload/resource reason for CPU use and its inference scope.
@@ -193,6 +211,7 @@ After a decisive result, record which live assignments continue, shrink or stop 
 Use scoped change notifications; do not require a fleet-wide acknowledgement or repeat unchanged context.
 For blind verification, apply the orchestration owner's information boundary to these notifications.
 Keep fan-out within the parent's ability to consume results and intervene. Worker count is not progress.
+One function per ticket and a fixed agent cap are not universal rules; use a checkable consumed outcome as the unit.
 Useful side findings never excuse an unattended critical dependency.
 
 ## Evidence closes the loop
@@ -242,3 +261,4 @@ No harness → run the same ready queue serially with scoped receipts.
 | `tests/postmortem-2026-09-27-followup.md` | Historical second audit |
 | `tests/postmortem-2026-09-27-third.md` | Historical third audit |
 | `tests/postmortem-2026-09-27-coordination.md` | Parent delegation failure, source locators and repair responsibility |
+| `tests/postmortem-2026-09-27-queues.md` | Conditional queues, execution identity, role consolidation and sequential fixtures |

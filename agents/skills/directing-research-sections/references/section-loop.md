@@ -13,6 +13,12 @@ unrelated sections proceed concurrently. `WAIT_FOR_OTHER_SECTION`, `WAIT_FOR_WAV
 `WAIT_FOR_ALL_DESIGNS`, `SUPERVISOR_REVIEW`, and `MODEL_VERIFICATION` are invalid waits on this loop.
 When transitions are ready together, drain `DIRECTOR_COMMIT > LEARNING > EXECUTION > BUILD > SEARCH`.
 
+Whole-cycle WIP=1 does not require one opaque whole-component assignment.
+Within the admitted item, use `driving-bibifi-cycles` for short build/consumer-probe returns.
+Use orchestration C0 for parent intervention and changed assignments; do not wait for a terminal run to inspect a stall.
+Partial artifacts may unblock the next authorized build step but are not a new terminal receipt or LEARN commit.
+Do not admit a second candidate through this distinction or add a programme-level approval to local coordination.
+
 After `DIRECTOR_COMMITTED`, an eligible source commit may append one `SECTION_TRANSFER_PACKET` as a
 nonblocking side transition. The local loop returns to `CANDIDATE_READY` without waiting for delivery.
 Recipients process deliveries independently through

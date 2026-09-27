@@ -39,12 +39,14 @@ Record a supplied bias as an assumption if the available data cannot challenge i
 | A source theorem's applicability bridge fails | Withdraw the target application; keep the source theorem with its original scope |
 | One deductive justification is invalidated | Reassess its dependents; retain other complete valid deductive paths. An empirical link cannot substitute for proof |
 | A derivation is repaired or claim narrowed | Create a new statement/justification revision; link the old counterexample to its original target |
+| A failed prediction is replaced by a weaker or differently scored one after seeing the result | Preserve the original failed criterion; version and label the revision post-hoc, with its own tested quantity and evidence |
 | No relevant statement or consequence changes | Record no semantic change with reason; no invented theorem or follow-up run |
 
 “Challenged” or “unsupported” is not “false”. An empirical fit is not a proof.
 When the last deductive path fails without a valid counterexample, set `STATE: challenged`.
 Set `WARRANT_SUMMARY` to no live proof path, retain historical J records, and name the open proof obligation.
 “Unsupported” describes that reason; it is not an additional STATE value.
+Qualitative agreement with a revised story cannot turn a missed frozen criterion into a successful confirmation.
 If only a condition was violated, do not retract all conditional descendants as false.
 If an independent justification survives, state which path still supports the unchanged claim.
 A semantic change may require broad review; an evidence annotation alone need not rebuild the whole theory.

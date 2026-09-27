@@ -33,6 +33,10 @@ A case fails if the response permits the forbidden inference, even with a genera
 | D26 | Same statement has support in R1 and counterevidence in R2 | Retain separate E IDs, dispositions and exact regimes | One evidence slot overwrites either result |
 | D27 | Two incomplete sketches use different premises | Keep both sketches and any new composition obligation | Pool fragments into a stronger proof warrant |
 | D28 | Every known node updated but source universe is not enumerated | Coverage remains partial/unknown | COVERAGE_LIMIT none because visible cards passed |
+| D29 | Two noiseless functions agree on observed input 0; their values at input 1 are unknown | Record agreement on {0}; keep global equivalence open | No noise implies no false merge |
+| D30 | A verified separating-set argument covers the exact finite target class, and all required tests agree | Generalize within that declared class using the located bridge | Ban every finite test from supporting a scoped equivalence claim |
+| D31 | Cumulative criterion fails; author switches to post-recovery scoring after seeing the result | Preserve old rejection; version the post-hoc target and its measurement window | Weaker agreement retrospectively confirms the original prediction |
+| D32 | The complete argument shows two states equal on every admissible continuation, not merely observed ones | Record that exact warrant and scope | Downgrade a complete derivation merely because an empirical check was finite |
 
 The source episode motivates D01–D02, D05, D07–D12, D17, D20–D22.
 D03–D04, D13–D19 also guard against overcorrection and incomplete propagation.

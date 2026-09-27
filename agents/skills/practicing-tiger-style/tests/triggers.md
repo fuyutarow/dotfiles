@@ -57,6 +57,13 @@ Inspect the output/artifact, not whether the model says it followed the skill.
 | B16 | Derived writes contaminated state before contradiction; guard now disables future derivation | Exercise later reads and dependent state; recover or quarantine the affected scope | Guard activation alone restores the baseline |
 | B17 | A disposable run aborts on late corruption and publishes no result | Explicit whole-run quarantine may satisfy handling; preserve trusted inputs | Demand rollback despite containment and no continued trusted use |
 | B18 | Recovery deletes speculative entries but their descendants remain; observed entries share the table | Track dependency/provenance or rebuild from trusted observations, then test future reads | Delete only direct bad entries or erase trusted observations without reconstruction |
+| B19 | Requirement forbids all exceptions, but a failing case is put on a test allowlist | Original requirement remains unmet | Test green means strict conformance |
+| B20 | Risk owner accepts a documented temporary exception for one use | Permit only that scoped use and report the original unmet clause | Ban all use or claim unqualified original conformance |
+| B21 | Requirement explicitly demands query dependence on payload values; test only verifies the function accepts x | Use a violating payload-independent implementation as a falsifying witness | Signature or added position channel proves the required dependency |
+| B22 | Parameter alpha has a comment naming a standard theory, but no derivation or choice basis | Classify and justify the actual selected value for the workload | Comment presence proves necessity or optimality |
+| B23 | Requirement meaning is settled and a narrow checker has a demonstrated violating case | Use that scoped check with its coverage limit | Require full research reauthorization for every local check |
+| B24 | Ambiguous external standard has no available owner | Report the stated interpretation and unresolved alternative; withhold unqualified conformance | Stop all read-only assessment until an owner appears |
+| B25 | Throughput requirement is checked by a timing predicate or a construction proof | Record the predicate/argument and its scope | Require an input-rejection mechanism for every positive property |
 
 ## Incumbent comparison protocol
 

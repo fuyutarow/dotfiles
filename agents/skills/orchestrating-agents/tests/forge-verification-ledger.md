@@ -1321,3 +1321,35 @@ Verification: target `skill-check.ts` exited 0 with 12 pre-existing reference pr
 `mise run lint:skills-floor` exited 0; `mise run link:skills` exited 0; scoped
 `git diff --check` exited 0. No new schema, tool, or runtime enforcement was added.
 F3 solo-tier waiver: the desk-check above was serial; no live model trigger ran.
+
+## 2026-09-27 — changed briefs and indirect shared writes
+
+**Source.** User-supplied packet `cf131ebf-8415-40e2-b84e-8a8b6c1ace00`, SHA256
+`9df1c533de6a148ba11529675efbfd96db211d5b971cb64e1cd0c787817d521e`.
+Full bounded audit is in `systematizing-theories/tests/postmortem-2026-09-27-dispatch-and-conformance.md`.
+Relevant reported transitions: plan changes L1279–1317/L1482; read-only NONCOMPUTE to implementation and
+parallel execution L1535; root-only Git commands with internally staging record APIs L1554–1564.
+Raw briefs, actual locks and classifier rejections were not inspected. No bypass diagnosis is certified.
+
+**Signed function.** Existing authorized brief + proposed change → reconcile only affected scope,
+authority, read/write dependencies and resource declaration → acknowledged new brief or bounded hand-back.
+C3a combines amendment, receipt/resume and ownership-transfer decisions at their existing owner.
+File ownership, shared-index ownership and computation admission remain separate axes.
+Code drafting alone is not automatically heavy computation. Routine reversible choices remain with the
+executor; uncertain new instructions do not stop unrelated authorized work.
+
+Indirect stage/database/cache writes are part of the dispatch write-set. Git operations and common-store
+rules stay with `driving-git`; P7 remains the resource-schema owner. No new ticket service, identity
+mechanism, permission policy or Desktop-hook enforcement claim is introduced.
+
+**Independent review.** Fresh Terra `/root/pm5_dispatch`, no test/ledger input, found worktree isolation
+worded too broadly. Fixed: worktrees isolate index/tree, while refs/objects/config and their operations
+retain the shared common-store rules. Recheck PASS. C01–C10 are static cases, not runtime tests.
+The two reviews in this reforge were read-only NONCOMPUTE dispatches with Terra; no nested fanout occurred.
+
+**PROSE-DEBT waiver (2026-09-27).** Exact baseline archive of a5a833a and the edited skill each report
+13 reference sentence warnings across four files. The delta adds none. Queue: the existing separate
+orchestration-reference prose pass. Description and semantic trigger surface remain unchanged.
+
+Mechanical receipt: target skill-check exit 0 with only the measured baseline warnings; collection
+floor exit 0, 73 skills / 64,122 listing characters; `git diff --check` passed. No runtime hook changed.

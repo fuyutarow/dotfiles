@@ -73,6 +73,18 @@ One check can support several rows only if it actually exercises each stated pro
 Link both the enforcement locus and the check where a property crosses component boundaries.
 A test of one handler does not close an untested acknowledgment or replay path.
 
+For conformance, cite the governing requirement/version separately from the test that checks it.
+Record a predicate/oracle distinguishing satisfaction from violation, using a bounded test or checkable argument.
+At a reject/accept boundary, also record a known violating case and its expected rejection.
+Name untested clauses. A static name/type scan cannot close an unrelated behavioral or scaling obligation.
+Resolve meaning from the governing requirement. If ambiguity remains, state competing readings and a scoped interpretation.
+Withhold unqualified strict conformance; seek an owner's decision only when an authoritative choice is needed.
+Authorized bounded investigation and scoped assessment may continue while the ambiguity is open.
+
+An origin citation for a parameter does not justify its chosen value in this workload.
+Record whether that value is mandated, derived with assumptions, empirically selected, or an explicit design choice.
+A comment naming a theory is not a derivation, and moving a literal into configuration does not establish necessity.
+
 For a material performance revision accepted through this ledger, create separate T2 rows
 for speed and semantics.
 State what output must be preserved. State the comparison workload, metric, unit,
@@ -119,6 +131,11 @@ Reject ownerless or perpetual exceptions.
 At expiry, stop the affected trusted use or renew with fresh evidence.
 A changed workload, shared API, durable output, or larger budget reopens the affected rows.
 Do not silently turn an experiment's provisional choice into a production guarantee.
+
+A test allowlist, expected-failure annotation or waiver does not amend the governing requirement by itself.
+An accepted exception may permit a scoped use; still report the original unmet clause and exception locus.
+Do not claim strict conformance to the original requirement from checks of a relaxed contract.
+If the requirement explicitly permits no exceptions, the evaluator cannot create one to make its test green.
 
 ## T4 — acceptance
 

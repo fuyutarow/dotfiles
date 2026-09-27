@@ -113,3 +113,18 @@ Before an external theorem supports a target claim, fill the bridge:
 Missing correspondence means applicability is unknown; it does not refute the source theorem.
 A structurally similar graph or an agreement at one point does not supply the bridge.
 A prediction records both the target statement revision and its extra measurement/implementation assumptions.
+
+## Observed agreement and identification
+
+For an equivalence, identifiability or safe-merge claim, distinguish the observed context set from the target universe.
+
+| Basis | Permitted scope |
+|---|---|
+| No distinguishing context was observed | Agreement on the inspected contexts; unseen contexts remain open |
+| Data are noiseless but incomplete | Truth of observed labels; not completeness of distinguishing contexts |
+| A completeness/separating-set argument is established | Generalize only to the universe that argument covers |
+| A merge rule preserves agreement on the sample | A consistent candidate quotient; do not call it the target's true equivalence without the bridge |
+
+Attach the completeness/separation premise to the relevant J or A record; do not hide it in a theorem's name.
+If the bridge is missing, record an open obligation or conjectural application.
+Zero contradictions cannot by itself prove that a merge is correct outside the tested set.

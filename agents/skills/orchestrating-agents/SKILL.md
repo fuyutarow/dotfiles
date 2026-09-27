@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.2.0 (2026-09-25) — P8/P9 evidence semantics move to their sole owner.
+> **Version**: v2609.2.1 (2026-09-27) — 発注変更と隠れた共有書き込みを再照合する。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -128,6 +128,9 @@ artifact は、反証可能性への回答と採用した oracle の locus で�
 artifact は、decision log の可逆性、戻し方、裁定者である。
 
 ## Durable role topology
+
+進行中の指示で仕事の範囲を変える場合は、`references/delegation-contracts.md` の C3a を通す。
+ファイルが別でも、共有 index や記録 API の内部 stage は同じ書き込み資源として扱う。
 
 現在の担い手、model 名、availability と probe 状態は
 `references/model-roster.md` が SOLE home である。
@@ -416,3 +419,4 @@ artifact は、loaded skills と `domain / craft` のowner記録である。
 | `references/measurement-and-resources.md` | P7資源admissionとP10中間生成物の再利用。旧P8/P9は退役pointer。 | 計算資源またはcacheの保存・失効。 |
 | `references/reasoning-portfolios.md` | topology、failure mode、candidate packet、normalization、synthesis、pruning。 | 複数の有力経路があり、異質な候補を比較するとき。 |
 | `tests/forge-verification-ledger.md` | 履歴、出自、実測、採否、fire/no-fire、F3検証。 | reforge、postmortem、規則の根拠を監査するとき。 |
+| `tests/brief-change-cases.md` | 発注変更、受領、共有書き込みの反例。 | C3a を変更するとき。 |

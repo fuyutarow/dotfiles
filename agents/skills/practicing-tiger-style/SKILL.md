@@ -17,7 +17,7 @@ description: >-
 
 # Practicing Tiger Style
 
-> **Version**: v2609.3.2 (2026-09-27) — failure handling includes already-mutated derived state.
+> **Version**: v2609.3.3 (2026-09-27) — conformance checks trace back to the governing requirement.
 > Source synthesis and derivation: `references/source-ledger.md`.
 
 Run from this skill directory:
@@ -84,6 +84,7 @@ Cross-component state, capacity, or failure paths require
 
 Read [ledger-and-calibration.md](references/ledger-and-calibration.md) to fill and close T1–T4.
 It owns the schema, risk tiers, error classes, exception policy, and acceptance conditions.
+Its conformance rules distinguish the governing requirement, the test's coverage and any accepted exception.
 
 ## Architecture to implementation
 

@@ -13,14 +13,15 @@ description: >-
 
 # Systematizing theories
 
-> **Version**: v2609.1.0 (2026-09-27) — theory structure and finding-driven maintenance.
+> **Version**: v2609.1.1 (2026-09-27) — observed equivalence and revised predictions retain their scope.
 
 ```sh
 for f in references/statement-contract.md references/incremental-updates.md \
   assets/THEORY-MAP.md assets/THEORY-CHANGESET.md \
   tests/triggers.md tests/decision-cases.md tests/worked-update.md \
-  tests/postmortem-2026-09-27.md tests/forge-verification-ledger.md; do
-  test -f "$f" || exit 1
+  tests/postmortem-2026-09-27.md tests/postmortem-2026-09-27-dispatch-and-conformance.md \
+  tests/forge-verification-ledger.md; do
+test -f "$f" || exit 1
 done
 bun ../forging-skills/scripts/skill-check.ts .
 ```
@@ -118,6 +119,7 @@ A cycle cannot justify itself; a legitimate recursive construction needs its own
 | Retire | Show replacement or unresolved disposition for every live consumer; keep the historical claim and failures |
 
 Similar names, equal scores, or one shared implementation do not establish equivalence.
+A merge justified only on observed contexts remains provisional outside those contexts.
 A finite ablation cannot establish universal minimality. Record its tested family and leave the stronger claim open.
 Concept operations that only move prose belong to `structuring-documents`.
 
@@ -165,4 +167,5 @@ No harness → same map, serial. Certification comes from the appropriate proof/
 | `tests/triggers.md` | Fire/no-fire and sibling boundaries | Changing scope or description |
 | `tests/decision-cases.md` | Adversarial semantic cases | Verifying changes |
 | `tests/postmortem-2026-09-27.md` | Fourth packet's bounded audit and repair map | Inspecting provenance |
+| `tests/postmortem-2026-09-27-dispatch-and-conformance.md` | Fifth packet: observation scope, conformance and changed work | Inspecting the follow-up audit |
 | `tests/forge-verification-ledger.md` | Source grades, existence decision and verification | Reforging |

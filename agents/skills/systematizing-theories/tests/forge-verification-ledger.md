@@ -157,3 +157,31 @@ The shape checker does not enforce theory semantics at runtime. There is no new 
 proof engine, or hidden assumption that these files automatically update a project's research records.
 Integration uses only enumerated skill paths; other sessions' source/toolchain/archival changes are excluded.
 Installation and final task closure are verified after commit and recorded in the task continuation receipt.
+
+## 7. Follow-up v2609.1.1 — 2026-09-27
+
+**Source.** User attachment `cf131ebf-8415-40e2-b84e-8a8b6c1ace00`, SHA256
+`9df1c533de6a148ba11529675efbfd96db211d5b971cb64e1cd0c787817d521e`.
+The bounded audit, overlap limits and three-owner repair map are in
+`postmortem-2026-09-27-dispatch-and-conformance.md`. It is not a runtime evaluation of the newly installed skill.
+
+**Signed delta.** Existing theory map + an observed-consistency claim or revised prediction →
+check the quantified universe and exact target → scoped application/change history. No new owner.
+Source L454–474 generalizes observed indistinguishability under noiseless data; L870–876 explicitly
+preserves a failed cumulative criterion while narrowing the next prediction to post-recovery time.
+The latter is a useful correction, not grounds to retroactively mark the old criterion passed.
+
+**Grades.** Report assertions are third-party. The observation-universe/completeness bridge and
+post-hoc revision rules are skill-supplied operational safeguards. D29–D32 are constructed cases,
+including a positive finite separating-set case and a complete-derivation case to prevent overblocking.
+No source theorem or reported number was independently proved here.
+
+**Verification.** Fresh Terra `/root/pm5_theory_conformance` reviewed changed core/references without
+cases or ledger, found no theory issue, and passed the final combined scope. Descriptions and existing
+routing remain unchanged. D29–D32 desk-check only; no live trigger or research-throughput evaluation.
+Final mechanical and integration receipts are reported with the scoped Git commit.
+
+Mechanical receipt for this delta: target skill-check exit 0; theory/Tiger zero prose warnings,
+orchestration 13 baseline reference warnings unchanged. Collection `mise run lint:skills-floor`
+exit 0, 73 skills / 64,122 listing characters; `git diff --check` exit 0. The three skills add
+21 constructed cases. Both independent static reviews passed after corrections. No runtime efficacy claim.

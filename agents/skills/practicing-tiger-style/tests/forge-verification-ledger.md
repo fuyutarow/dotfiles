@@ -324,3 +324,25 @@ PASS. Static review only; no actual recovery implementation, GPU test, or throug
 **Mechanical receipt.** Target three-skill floor: exit 0, zero FAIL/prose warnings; collection
 floor: exit 0, 74 skills / 65,104 listing characters; `git diff --check` passed.
 B16–B18 are desk checks. Installed runtime behavior and downstream efficacy are unmeasured.
+
+## Reforge v2609.3.3 — 2026-09-27 conformance authority and evidence
+
+**Source.** Attachment `cf131ebf-8415-40e2-b84e-8a8b6c1ace00`, L637–650, L1007–1017,
+L1340 and L1511–1521. Full bounded audit/digest lives in `systematizing-theories`,
+`tests/postmortem-2026-09-27-dispatch-and-conformance.md`. The report openly names its exceptions;
+this reforge does not assert hidden waivers or independently judge its test implementation.
+
+**Signed delta.** Governing requirement/version → scoped predicate/oracle and coverage → observation
+plus any separately authorized exception → qualified acceptance. Tests and allowlists do not silently
+amend the requirement. A parameter's actual value needs a choice basis; a theory-name comment is not enough.
+These are skill-supplied acceptance rules, not new claims about official TigerBeetle practice.
+
+**Independent review.** Fresh Terra `/root/pm5_theory_conformance` identified two overconstraints:
+a nonexistent requirement owner could block a scoped interpretation, and input rejection was wrongly
+required for every positive property. Fixed by allowing explicit scoped interpretations with unresolved
+alternatives, and requiring a rejecting example only at an accept/reject boundary. Recheck PASS.
+B19–B25 are constructed counterexamples, including legitimate exception use, ambiguous-standard assessment
+and proof/measurement predicates. No runtime theorem/conformance certification or live trigger eval ran.
+
+Mechanical receipt: target skill-check exit 0 with zero Tiger prose warnings; collection floor
+exit 0 at 73 skills / 64,122 listing characters; `git diff --check` passed. No new description charge.

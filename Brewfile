@@ -41,6 +41,7 @@ brew "btop"         # system monitor (tmux prefix+G popup)
 if OS.linux?
   brew "xclip"        # X11 clipboard
   brew "wl-clipboard" # Wayland clipboard (wl-copy/wl-paste)
+  brew "bubblewrap"   # bwrap: grok --sandbox needs it on Linux (refuses to start without it)
 end
 brew "tldr"         # better man (h)
 brew "yq"

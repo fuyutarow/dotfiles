@@ -17,6 +17,10 @@ TOOLS=(
   # BibLaTeX backend (`compiling-latex`); system monitor (tmux prefix+shift+B popup)
   biber btop
 )
+# Linux-only entries mirror the Brewfile's `if OS.linux?` block.
+if [[ "$(uname -s)" == Linux ]]; then
+  TOOLS+=(bwrap) # bubblewrap: grok --sandbox refuses to start without it
+fi
 
 missing=0
 for tool in "${TOOLS[@]}"; do

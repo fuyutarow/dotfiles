@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.3.3 (2026-09-28) — P7で上位時間予算・実効policy・競合下の期限を照合する。
+> **Version**: v2609.4.0 (2026-09-30) — 親が現物を観測し、部分返却ごとに消費・再分割・開始確認を閉じる。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に
@@ -89,7 +89,7 @@ artifact が無い規則は、実行済みとして数えない。
 | LAW | 規則 | Artifact |
 |---|---|---|
 | 公表門 | 許可済み・可逆・隔離済みの生産は、検証の完了待ちで止めない。同じ巡に並べるのは verification design、oracle、brief の準備までとし、成果物依存の blind audit は凍結後に行う。検証は公表と acceptance を止める。 | 同じ巡の production と verification-design dispatch、scope 三条件、audit入力の凍結digest。 |
-| Control plane | supervisor は設計、brief、dispatch、interrupt/status、裁定、acceptance、対話を持つ。supervisor bearerはexecutor、deliverable author、independent verifier、subagentにならない。成果物の実装、起草、探索、計測、独立検証はdelegated bearerへ渡す。 | 全 tool 行為の級。supervisorとauthor / verifierが分離し、authorとverifierも異なるbearerであるprovenance。 |
+| Control plane | 親はscope、brief、現物観測、dispatch、interrupt、接合、裁定、acceptanceを持つ。成果物の制作と独立検収は担当へ渡すが、実行状態の確認は親自身の仕事である。 | C0の観測→判断→操作→消費receipt。制作・独立検収のprovenanceは分離する。 |
 | 認知的異質性 | ensemble は agent 数でなく、狙う failure mode と reasoning topology を異質化する。固定人格の複製を多様性と数えない。 | 各腕の `topology / failure_mode_attacked` を持つ portfolio manifest。 |
 
 未許可、不可逆、隔離不能な変更は第一の LAW の scope 外である。
@@ -104,14 +104,17 @@ supervisor が tool を使う前に行為級を宣言する。
 
 | 級 | 許されること | 禁止 | Artifact |
 |---|---|---|---|
-| 検分 | 裁定を養う読み取り専用の現物確認を一〜二操作行う。 | 編集、生成、計測、広い探索。 | `検分: <養う裁定>` の札と read-only log。 |
+| 検分 | 一つの介入判断に必要なjob、phase、ログ、部分差分、版、資源、受領先を直接読む。操作回数ではなく対象と判断で範囲を限定する。 | 成果物の代作、独立検収を行ったとの主張。 | 対象ID、観測locus、未確認点、次の判断。 |
 | 委任 | 自己完結した brief を作る。非生成仕事は完成定義と検収試験を発射前に凍結する。生成仕事はstage mapの二段freezeを使う。 | 成果物を代作すること。 | brief、owner、期限、仕事型に応じたfreeze、試験。 |
-| 運転 | 事前指定jobを launch、poll、interrupt し、差分statusを報告する。 | job の仕様変更、成果物の生成・修復。 | job id、操作、状態差分、次の判定時点。 |
-| 検収 | delegated verifierの凍結した試験結果だけを受け、採否と観測を記録する。 | 試験の実行、新規実装、起草、試験に合わせた修復。 | `検収: <claim>` の札、独立oracle、verdict、PASS/FAIL。 |
+| 運転 | launch、poll、interrupt、read-back、許可済みの起動前確認を行う。変更はC3aで再briefし、同じ対象の停止・受領・開始を確かめる。 | 現物を確認しない状態推測、live writerとの競合、運転確認を科学的な独立検収と呼ぶこと。 | job id、有効brief、操作receipt、次の介入点。 |
+| 検収 | 契約したoracleと必要な独立verdictを、実際の対象版へ結び付けて採否を決める。 | 作者の自己試験を独立検収として数えること、採否に合わせた基準変更。 | 対象版、oracle/verdict、採否と根拠。 |
 
 運転中は、完了待ちだけの空のstatusを作らない。
 
 artifact は、前回から変わった状態、裁定、または新しい阻害要因である。
+起動引数・実行ID・既存receiptの照合は運転確認であり、独立verifier待ちにしない。
+確認が数値計算やGPU testを起動するならP7の予算を適用する。制作・科学的検証の代用にしない。
+この確認が示すのは起動遷移・対象版・receiptの接続だけで、意味上の正しさや科学的妥当性は保証しない。
 
 検収試験は「主張が偽でも同じ観測が出るか」を先に問う。
 

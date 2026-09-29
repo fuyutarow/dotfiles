@@ -14,3 +14,9 @@
 | Authorized long job receives a valid stop/invalidation | Stop and confirm child/resource release | Follow obsolete “stop only at final report” instruction |
 | GPU admission full, independent NONCOMPUTE microtickets fit actual slots and host limits | Launch useful agent work now; compute waits at its own admission | Treat GPU occupancy as a fleet-wide stop |
 | Two authors share a target live file | One live writer/integrator; other workers return isolated scoped proposals | Concurrent writes or serialized independent analysis |
+| Parent needs more than two reads to identify a blocked job | Inspect the named decision's log/phase/partial artifact/binding directly | Obey a read-count quota and guess the phase |
+| Worker returns a usable repair while unrelated tests run | Consume the required regression/readiness evidence; retain mandatory release gates | Wait for everything or skip a required oracle |
+| Five research stages are queued behind one builder | Keep future branches conditional; consume the current slice before choosing dependent work | Treat a long private queue as five active microtickets |
+| New critical interface waits behind an old-edition cleanup | Verify the dependency, freeze or reassign safely, and confirm the new slice starts | Delay solely because the same worker owns both |
+| Requested batch of four is rejected before launch | Report zero starts, preserve rejection and repair invocation | Report four running then retract after a result never arrives |
+| Parent runs an authorized deterministic readiness check | Treat it as operational evidence under applicable resource bounds | Count it as independent scientific verification or prohibit all parent observation |

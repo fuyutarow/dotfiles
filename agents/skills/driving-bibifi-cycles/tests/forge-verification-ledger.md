@@ -800,3 +800,41 @@ root read-back; neither pass is a real job admission/stop trial and the initial 
 Verification: target BIBIFI core/reference warnings zero; P7's13existing reference warnings retained
 under its scoped waiver. Collection floor passes73skills/64,059charged characters, unchanged budget/listing.
 Index, diff whitespace and installed skill wiring pass. No runtime policy, launcher schema or live job was changed.
+
+## 19. Parent intervention rather than private queues — v2609.8.0
+
+Root-signed source audit, scope and frozen criteria: `tests/postmortem-2026-09-30-parent-loop.md`.
+Baseline97f2ab7 already required C0 intervention. This reforge removes the contradictory inspection
+quota, separates operational readiness from independent verification, and replaces arbitrary
+component-size thresholds with consumed first-return units across theory/build/integration/launch.
+Future evidence-dependent work stays in a conditional parent backlog; guarded preauthorized
+branches still self-run after checking current evidence, priority, capacity and remaining lifetime.
+
+Independent Terra review found three boundary risks: readiness interpreted as semantic verification,
+an incomplete self-run predicate, and narrow regressions overstated as final release. Root corrected
+all three in C0/core. No role/model policy, scheduler, runtime schema or research source corpus changed.
+
+**Actual OLD/NEW coordination.** Snapshot OLD from97f2ab7 before edits. Two fresh Terra coordinators
+received separate same-shape fixture directories and actual preassigned file workers. Each read v1
+and wrote an initial inspection before root delivered v2. Both observed the old worker's bounded
+return, rebriefed it through the real follow-up tool, read the new artifact and accepted its actual hash.
+The original declaration/payload and hash remain in initial-inspection.md; the worker then rewrote its current file to v2.
+Final artifacts in both arms have SHA2566cc8d2215e70e9c6ecd69b4fa93552b0113b4f0626e6949cca3458f986f4b08d.
+Root read both actual acceptance files: OLD c7b085d1e2253fed46467871557fe5e5137948291b2706b17583808880f4bf2b,
+NEW72e4d3c299ea613b2f45e21c741825cc90d76d4ffa2530f6be3559fd6d6384bf.
+This is a tie on current-artifact consumption, not evidence that NEW generally improves initiative.
+Both classified the rejected readiness input as failed, not running; NEW also reported an allowed
+readiness command exiting0. Root separately observed invalid env arguments exit125 and env/true exit0.
+
+The initial workers returned after their60second bounded waits, before the contract revision was
+consumed; no active interruption was needed for that comparison. Root separately resumed NEW's
+worker for a45second file-only interruption probe, waited for a real partial witness, called
+interrupt_agent (previous_status running), and observed agent_status interrupted via list_agents.
+The v2 artifact hash remained unchanged. There was no child process or compute reservation;
+this cannot certify GPU cleanup or P7 timeout enforcement. Fixture: /tmp/parent-loop-rehearsal.UgNiJ2.
+
+The NEW arm read the initial revised core/C0; later review clarifications tightened scientific
+scope and preauthorized-branch guards. Those final clauses were statically reviewed, not replayed
+as new scientific tasks. S72–S76 and coordination-cases cover their required decisions.
+No live Firedancer change or real discovery/time measurement was made. Runtime automatic
+enforcement of parent intervention remains unverified; a written rule is not a runtime guard.

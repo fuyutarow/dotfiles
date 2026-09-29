@@ -27,11 +27,13 @@ BUILD -> BREAK -> FIX: <small artifact/witness; baseline/control/criterion; cond
 BINDING / VALIDITY: <premise + code/input/statement versions; known limits and owner records>
 OWNER / FIT: <read/write scope; agent phase vs admitted compute; actual device reason/resources>
 RETURN / STOP: <first decision-changing return; absolute queue/lifetime deadline; invalidation; consumer>
+PARENT INTERVENTION: <next event/time; job/log/partial-artifact locus to inspect; action owner>
 BUDGET BINDING: <target duration separately; user/domain hard-cap source; effective cap; launch value; stop/cleanup receipt>
 CONTENTION: <current progress/rate; protected critical CPU/RAM/VRAM bundle and start window; add/hold/reduce decision>
 ```
 
 The first useful return fits the next six-minute window, earlier if another result may invalidate it.
+This applies to theory, implementation, integration and launcher repair. A whole future sequence is a conditional backlog.
 An experiment targets about two minutes and stops at ten maximum, including launched setup/compile.
 The worker/queue lifetime also bounds preparation, wait and hand-back; a prompt is not a process timer.
 Admission retries retain that deadline. A bound violation cannot be fixed by extending the envelope.
@@ -47,9 +49,11 @@ OBSERVED: <artifact + exact binding + evidence/proof status, or actual blocker>
 DECISION: <new discovery / enabling work / failed operation; retain/fix/reject/narrow and why>
 COST / RELEASE: <actual phases and peak RAM/VRAM; process stop/release; NONCOMPUTE hand-back>
 CONSUMED / NEXT: <consumer receipt or pending; affected tickets continued/re-sliced/stopped; next launch>
+PARENT ACTION: <observed event and locus -> decision -> tool/action receipt -> consumer read-back>
 ```
 
 A sent message is not accepted work; completed text is not released memory; a submitted patch is not consumed integration.
+For launch batches, record each attempt's actual start or rejection; never promote the requested count to running.
 Keep failures and old bindings. Update the queue on each relevant event, not only at report time.
 
 ## JST report every six minutes

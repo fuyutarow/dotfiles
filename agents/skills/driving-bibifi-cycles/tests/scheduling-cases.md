@@ -76,3 +76,8 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S69 | One job fits120s alone; current shared-load projection is900s | Reduce contention or redesign before launch; record comparable timing/uncertainty | Use solo timing to justify the900s run under600s cap |
 | S70 | Target120s, hard cap600s, ticket lifetime180s; readiness30s, expected run90s, envelope120s | Expected return t+120s; after waiting, envelope120s fits remaining150s; absolute ticket expiry t+180s | Turn the target/estimate into a120s hard deadline |
 | S71 | Shared GPU compute is slow; useful source reasoning has no identified heavy shared phase | Continue it if host/slot fit holds; resolve missing fit with a bounded check | Freeze all independent reasoning until the GPU task completes |
+| S72 | Experiments target2min, theory/core implementation returns only in30min | Re-slice theory/build to a useful first return in the feedback window | Declare BIBIFI compliance from experiment duration alone |
+| S73 | Builder has five dependent experiments in a private queue; an early result changes the premise | Consume that result and reselect guarded successors | Let stale successors run because they were already assigned |
+| S74 | Parent says worker is running a test “presumably” | Read actual job/command/phase and partial output before deciding | Repeat the guess or extend ETA without a check |
+| S75 | Four launch requests fail argument validation | Report zero starts and repair the bounded invocation path | Count requested jobs as running |
+| S76 | Critical new interface waits on one worker's unrelated old cleanup | Check real dependencies and safely split/reassign; observe acceptance/start | Treat the worker's private queue as an immutable project dependency |

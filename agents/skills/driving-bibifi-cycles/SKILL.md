@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.7.0 (2026-09-28) — preserve experiment budgets and decision latency under contention.
+> **Version**: v2609.8.0 (2026-09-30) — parent-consumed microtickets across theory, build, verification and launch.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -46,7 +46,8 @@ Do not inflate progress with known results, duplicate observations or irrelevant
 Attack the current critical dependency; use remaining capacity for useful independent questions.
 Expand across available agent slots. GPU scarcity does not serialize source, proof or isolated preparation work.
 Each result may obsolete work already running. Commit to a short return, then select again.
-The parent owns coordination even when the work is delegated. A plan or dispatch message is not execution.
+The parent owns observation, intervention and result consumption after dispatch. C0 owns that operational contract.
+A plan, sent instruction or worker's private queue is not execution.
 
 Stable tokens: `BIBIFI`, `MICROTICKET`, `ITERATION_PLAN`, `ITERATION_LOG`, `ontime`, `delta`, `pivot`.
 
@@ -107,6 +108,10 @@ Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context
 
 A whole component, inventory, port or multi-stage revision is a container, not an executable microticket.
 Slice by a consumed outcome, not an arbitrary function count. Preserve mechanism, power and claim scope when shrinking.
+Apply the first-return bound to theory, implementation, integration and launcher repair, not just experiments.
+Keep future evidence-dependent work in the parent's conditional backlog, not an unconditional builder queue.
+After each decisive return, select again. Preauthorized branches may proceed only while their bindings and guards still hold.
+Examples: one lemma/counterexample; one working interface path; one launcher regression with a start receipt.
 Use diagnostic expected-vs-observed checks for implementation work; do not invent scientific hypotheses for forms.
 For formal work, pin the exact statement and proof status; a sketch cannot silently become a checked theorem.
 
@@ -138,7 +143,8 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 | Critical dependency blocked | Assign its smallest unblocker and continue unaffected work | Exact missing input, owner and next check |
 | Partial result arrives | Check its boundary and pass it to its consumer immediately | Artifact plus consumer receipt, or explicit pending/blocker |
 | Result changes a premise | Reassess affected running/queued tickets; continue, shrink or stop | Version delta and observed owner action/release |
-| First return missed | Inspect actual phase/job/artifact now; unblock, re-slice or cancel | C0 intervention; do not grant another long first-return window |
+| First return missed | Parent reads actual phase/log/partial artifact now; unblock, re-slice, cancel or justify bounded continuation | C0 observation and action; no guessed phase or automatic ETA extension |
+| Critical work waits behind a worker's older assignment | Distinguish artifact dependency from worker queue; freeze/reassign a safe slice or split an independent interface | Accepted brief/ownership change and first consumer return, not merely a new agent |
 | Priority work waits behind an owned side job | Reconsider that job at its declared safe stop point | Reservation and confirmed release; no unauthorized external kills |
 | Experiment cannot finish within its bound | Reject before launch, or stop through its owner; redesign the test | Preserved partial evidence, inherited cap and observed release; no larger retry envelope |
 | Resource/process cap exceeded | Stop through the owner and fix the stop path before reusing it | Partial evidence, effective cap, stop/cleanup receipt |
@@ -147,6 +153,8 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 
 Act when the event arrives; never wait for the report tick or every worker in a wave.
 Do not require another parent reply for a preauthorized branch whose scope, premises and resources still hold.
+For a launcher repair, distinguish required regression/readiness checks from unrelated suite completion.
+Consume the smallest sufficient check; retain required release gates. Confirm an actual start after the blocker clears.
 Preserve raw failures and falsifications. An operation failure is not a scientific negative and does not erase valid evidence.
 
 ## Parallelism without whole-component handoffs
@@ -206,6 +214,7 @@ For GPU work, its specialist owns stage budgets/profiles. Select by recoverable 
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
+Report a batch per attempt: requested, admitted, started, terminal and consumed may have different counts.
 Separate evidence dispositions from goal acceptance. Valid low scores remain evidence; published rows need qualification.
 
 Every six minutes while active, report briefly in JST:

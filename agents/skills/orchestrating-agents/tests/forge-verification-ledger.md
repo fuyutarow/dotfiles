@@ -1429,3 +1429,18 @@ Source and review are owned by driving-bibifi-cycles/tests/postmortem-2026-09-28
 its forge ledger section18. This revision changes instructions, not the runner or its schemas.
 The runner still enforces the supplied walltime; no automatic task-budget inheritance is claimed.
 PROSE-DEBT waiver: existing13reference warnings retained unchanged; no new core warning introduced.
+
+## 2026-09-30 — active parent loop, v2609.4.0
+
+Replace the one-to-two-read inspection ceiling with one-decision/named-job scope. Parent observations,
+identity/readiness and consumer read-back are control-plane work; they do not confer scientific
+validity or independent verification. Actual deliverable author and required verifier remain distinct.
+C0 joins observation→decision→action→consumer receipt, cuts private future queues and distinguishes
+artifact dependencies from a shared worker's availability. C1 now splits by first useful return,
+not300lines/20minutes/token counts. Mandatory acceptance/release gates remain intact.
+
+Root-signed incident, review and actual OLD/NEW worker coordination have one evidence home:
+driving-bibifi-cycles/tests/postmortem-2026-09-30-parent-loop.md and forge-ledger section19.
+Both arms consumed v2 correctly: no measured improvement over OLD. A separate real active-worker
+interrupt reached interrupted state and retained the artifact. No numeric job or resource cleanup was simulated as PASS.
+PROSE-DEBT waiver:13existing reference warnings retained unchanged; revised core/C0 adds none.

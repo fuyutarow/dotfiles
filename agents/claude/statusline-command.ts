@@ -964,15 +964,22 @@ const STORAGE_CONFIG = join(
   "storage-headroom.toml",
 );
 interface DiskReading {
-  label: string; // "C:" for a WSL /mnt/<letter>, else the path
+  label: string; // "Disk C:", "Disk WSL", or "Disk <path>" — see diskLabel
   usedG: number;
   totalG: number;
   freeG: number;
   col: string; // green / yellow (below warn_gib) / red (below deny_gib)
 }
+// "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
+// "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
+const IS_WSL = fromThrowable(() =>
+  /microsoft/i.test(readFileSync("/proc/version", "utf8")),
+)().unwrapOr(false);
 function diskLabel(path: string): string {
   const m = path.match(/^\/mnt\/([a-z])$/); // String.match: this file imports child_process (BG floor F4)
-  return m?.[1] ? `${m[1].toUpperCase()}:` : path;
+  if (m?.[1]) return `Disk ${m[1].toUpperCase()}:`;
+  if (path === "/" && IS_WSL) return "Disk WSL";
+  return `Disk ${path}`;
 }
 function diskReadings(): DiskReading[] {
   const drives = fromThrowable(() => {

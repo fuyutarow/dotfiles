@@ -838,3 +838,40 @@ scope and preauthorized-branch guards. Those final clauses were statically revie
 as new scientific tasks. S72–S76 and coordination-cases cover their required decisions.
 No live Firedancer change or real discovery/time measurement was made. Runtime automatic
 enforcement of parent intervention remains unverified; a written rule is not a runtime guard.
+
+## 20. Reorganize useful-work selection — v2609.9.0
+
+Source and scoped audit: `tests/postmortem-2026-09-30-ready-work.md`; baseline002d66d.
+Replace scattered parallelism/idle-search prose with one core six-step loop before microticket construction.
+Microticket patterns retain concrete dependency cuts and queue mechanics; scientific-loop owns the
+intervention-to-observable check; P7 receives proposed slices and returns actual resource constraints.
+Execution, claim, writer, optional-feature and worker-queue dependencies are explicitly distinguished.
+Independent useful work and critical headroom are evaluated together; neither idle filling nor blanket throttling wins.
+
+Terra audit identified duplicate scheduling homes and circular/serializing risks. Final review found
+the explicit evidence binding and P7 admission could be lost during consolidation; root restored both.
+The suggested closed candidate-list restriction was not adopted: current authorized open questions
+may yield new grounded slices, but free capacity cannot invent an objective or replace evidence.
+Reachability is not a prove-success gate. An unbuilt mechanism gets an intended path/first witness;
+a valid experiment may return a genuine null. Scientific interpretation retains its evidence owner.
+
+**File-backed staged trial.** Snapshot OLD before editing; fresh OLD/NEW Terra workers receive the
+same task/path/release/capacity files and disjoint output directories, without expected answers.
+Both inspect the files and produce a current scoped finding: C changes B while f reads only A,
+so this preserved path cannot identify C's effect on f. Neither waits for full integration or launches filler.
+After capacity changes from spare to fully reserved by critical work, both read the updated resource
+file and write a revised decision that defers extra compute while retaining useful file-only work.
+Root reads both stages back. This is a tie on the checked choices, not a demonstrated throughput gain.
+The trial permits no actual GPU/numerical launch; admission and real contention performance are not tested.
+Root's later provenance/admission wording clarifications are statically checked, not a new blind trial.
+
+Fixture: /tmp/bibifi-work-selection.DFWsyn. Artifact SHA256:
+- OLD initial b96017e4e55e92ce823e61c1a348866c978a1b09199186f0f70306110f9c804c;
+- OLD update956204d3aa239b39b4fb81b53fa8f3f7d837730b242bf7a4d7475b900e1bc1b1;
+- NEW initial a2d63e7e5e1f094ef681780b5e5b643aa56a9d6f791d7c25d33ac5ff43e193eb;
+- NEW update aa395e895cb07346f503ea8fe36dbb7b365fa88e41b09e70d6df0d2f6119cbfd.
+
+S77–S83 cover spare capacity, real blockers, contention, masked effects, honest nulls, feature
+authority and unexplained fixed concurrency. Core243lines versus248; microticket reference79 versus95.
+Target core/reference prose warnings zero; collection membership/listing/ceiling unchanged.
+No new skill, scheduler, runtime schema or production job mutation is included.

@@ -30,6 +30,7 @@ Contrast: <why P rather than Q>; supplied vocabulary/operators: <locators>.
 | <id> | <one interpretable contrast on exact binding> | <existing receipt locators> | <next decision; resource owner; short deadline> |
 
 Follow BIBIFI's time/resource rules; do not turn all rows into a precommitted battery.
+Bind how the intervention can reach the selected observable. An inactive or masked path cannot identify its effect.
 
 ## 4. Exclusion and next-branch table — before results
 

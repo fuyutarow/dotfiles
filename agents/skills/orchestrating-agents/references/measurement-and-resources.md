@@ -31,8 +31,8 @@ releases dominated work, or upgrades a minimal run to a sweep. Low utilization i
 Unused capacity is the correct outcome when no scientifically admissible job is ready. Likewise,
 `RESOURCE-CLASS(NONCOMPUTE)` and a passing resource envelope grant no SEARCH/LEARN credit.
 
-Within the authorized work set, `driving-bibifi-cycles` prioritizes the critical path and fills spare capacity.
-An independent useful microticket is not rejected merely because it is outside that critical path.
+Within the authorized work set, use `driving-bibifi-cycles`' work-selection loop for both spare capacity and contention.
+Return the binding resource constraint per proposed slice, not a blanket “GPU busy” or “integration waiting” verdict.
 Reserve headroom for priority work and check CPU, host RAM, VRAM, device compute and shared-state contention together.
 If no job is ready, return the actual constraint so the driver can split, reuse or repair work.
 Do not invent capacity or accept an empty ready queue as proof that no useful work exists.

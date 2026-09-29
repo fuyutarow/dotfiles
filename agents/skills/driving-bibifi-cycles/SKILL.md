@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.8.0 (2026-09-30) — parent-consumed microtickets across theory, build, verification and launch.
+> **Version**: v2609.9.0 (2026-09-30) — one work-selection loop for spare capacity and contention.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -94,6 +94,35 @@ A promising idealized construction or local repair does not certify the whole ta
 Use the four compact tables in `assets/STRONG-INFERENCE.md`; inherit existing evidence instead of duplicating it.
 Routine deterministic repairs need only their smallest failing witness, not an invented hypothesis portfolio.
 
+## Select useful ready work; size concurrency from current evidence
+
+Run this loop at startup, a result/phase/resource change, or a missed return. Reuse unchanged receipts.
+
+| Step | Decision now | Observable output |
+|---|---|---|
+| 1. Name the decision | Which unresolved question or prerequisite most affects the goal? | Evidence/obligation and the consumer it can change |
+| 2. Test the dependency | Is the wait for missing evidence/apparatus, a claim gate, a live writer, or merely someone's queue? | Exact missing input and the observations still possible without it |
+| 3. Find independent returns | Inspect relevant residuals, controls, proof obligations, stable interfaces and prepared inputs | Useful bounded slices, not a new inventory or filler |
+| 4. Check information value | Can the proposed intervention affect the selected observable? Would its return change the next action? | Existing trace/control or a bounded reachability check; scientific-loop owns interpretation |
+| 5. Admit a useful set | Fit CPU/RAM/VRAM, agent slots, ownership and critical headroom; apply C0/P7 and required domain admission | Launch fitting admitted slices with verified stop paths; pending rows name their actual constraint |
+| 6. Consume and resize | Did results, slowdown or released capacity change that set? | Read-back, revised priorities, starts or safe stops through C0/P7 |
+
+Protect the critical return without serializing independent reasoning, preparation or isolated proposals.
+Every ticket needs a current authorized question and an evidence/source binding.
+Free capacity supplies no evidence or authority.
+A single live writer still permits analysis on pinned inputs and proposals in separate files.
+Keep agent work and admitted compute separate; NONCOMPUTE still has host cost and forbids hidden compute/fanout.
+Use comparable timing or a bounded probe for shared compute. Resource fit alone does not prove throughput fit.
+On contention, reduce only conflicting work. On spare capacity, select useful ready work now; do not wait for a report.
+Repeat for further useful candidates that fit; revisit authorized open questions with current evidence.
+No useful bounded return: record why and leave capacity idle. Do not invent filler.
+No fixed small-team, two-run wave or one-job-per-GPU rule replaces the actual fit decision.
+Do not delay independently valid observations until a full release or an unrelated user decision.
+Respect authority, blind visibility and required evidence gates. Narrow the claim instead of bypassing them.
+If no useful slice fits, record the inspected candidate and blocking fact, then the next event that changes it.
+An empty queue or “integration is busy” does not justify waiting. Low utilization does not itself establish useful work.
+Use `references/microticket-patterns.md` for concrete dependency cuts and queue mechanics.
+
 ## The microticket — one useful decision within reach
 
 Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context by exact locator.
@@ -156,40 +185,6 @@ Do not require another parent reply for a preauthorized branch whose scope, prem
 For a launcher repair, distinguish required regression/readiness checks from unrelated suite completion.
 Consume the smallest sufficient check; retain required release gates. Confirm an actual start after the blocker clears.
 Preserve raw failures and falsifications. An operation failure is not a scientific negative and does not erase valid evidence.
-
-## Parallelism without whole-component handoffs
-
-Keep agent-ready work separate from compute-admission waits in the same board.
-Parallelize distinct source, proof, counterexample and interface checks, plus isolated patch proposals.
-Use a single writer/integrator per live shared file; parallel thinkers return bounded proposals on frozen inputs.
-NONCOMPUTE means the declared workload, not zero host cost or permission for hidden tests/fanout.
-Actual platform, host, data-access and write constraints apply; a fixed small-team cap does not.
-
-Compute admission proves capacity eligibility, not that another job improves discovery throughput.
-Before adding a contender, inspect current progress/rate and the next critical return's resource needs.
-Use comparable retained timing evidence or one bounded probe; do not infer speed from utilization or load average alone.
-Keep the added job only if its useful return fits without delaying the critical return beyond its declared budget.
-On unexpected slowdown, stop adding contenders and inspect shared CPU, memory bandwidth, VRAM and device phases.
-Re-slice or stop the lowest-value conflicting owned job at its safe boundary; confirm release before replacement.
-Continue useful independent agent work within host limits. This is not a one-job-per-GPU rule.
-Throttle identified or plausible compute contention. Sharing a research goal does not make a source or proof task a contender.
-If an independent task's host fit is unknown, check that fit now. Do not park all thinking until compute ends.
-See `references/microticket-patterns.md` for contention and admission-wait decisions.
-
-Consume compact artifact returns and exception deltas rather than every transcript.
-Use deterministic joins for mechanical aggregation; domain owners retain scientific judgment and acceptance.
-If results backlog, repair routing/consumption first. Throttle only branches blocked by contention or stale decisions.
-Respect blind-review visibility; orchestration owns what may cross each role boundary.
-Never create duplicate work just to occupy slots or leave a useful ready question idle because another stream is slow.
-Tie each next ticket to consumed evidence or a cited primary source and its authorized question.
-Free capacity or an unsupported worker assertion is not a basis for inventing new work.
-
-Before declaring “waiting for X,” test which specific observation needs X and which can be obtained without it.
-Inspect plausible independent options in blocker evidence, reference/measurement checks or consumer prerequisites.
-Reuse current valid receipts. If they already establish the sole missing input and no useful independent option, wait.
-Use `references/microticket-patterns.md` for this dependency search; an empty prewritten queue proves nothing.
-A pending release does not block every check on stable predecessors, retained observations or separate proposals.
-Do not duplicate a worker's live edit or disturb valid ongoing work merely to appear active.
 
 ## Integrate early; keep future work conditional
 

@@ -11,6 +11,7 @@ This is a work record, not a substitute for execution. A BIBIFI invocation must 
 - Available/reserved CPU/RAM/VRAM, actual GPU load and agent slots; UNKNOWN when unconfirmed.
 - Orchestration capability receipts relevant to this work; parent intervention point and write owners.
 - If waiting: exact unavailable observation; current dependency receipt or plausible independent options checked.
+- Ready work: critical return plus independent useful slices; each held slice names its actual missing input or resource.
 
 Refresh changed facts only. Keep cross-arm details outside blind workers' read sets.
 Separate agent-ready work from compute-admission waits; neither needs a new database.
@@ -25,6 +26,7 @@ Separate agent-ready work from compute-admission waits; neither needs a new data
 QUESTION / CONSUMER: <one useful decision; checked result and who consumes it>
 BUILD -> BREAK -> FIX: <small artifact/witness; baseline/control/criterion; conditional next action>
 BINDING / VALIDITY: <premise + code/input/statement versions; known limits and owner records>
+DEPENDENCY / SENSITIVITY: <execution prerequisite vs claim/writer/queue gate; path from intervention to observable>
 OWNER / FIT: <read/write scope; agent phase vs admitted compute; actual device reason/resources>
 RETURN / STOP: <first decision-changing return; absolute queue/lifetime deadline; invalidation; consumer>
 PARENT INTERVENTION: <next event/time; job/log/partial-artifact locus to inspect; action owner>

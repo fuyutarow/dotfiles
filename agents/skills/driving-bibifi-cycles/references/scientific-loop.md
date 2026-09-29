@@ -37,6 +37,11 @@ For noisy observations, specify differing distributions/margins and an inconclus
 If hypothesis H and auxiliaries A imply P, not-P challenges the conjunction; inspect A before excluding H alone.
 Name auxiliary failures: inactive intervention, changed task, binding, state or oracle mismatch.
 Check realized interventions through the evidence owner; a flag or an attractive predicted score proves nothing.
+Before building a new mechanism or its full comparison, trace its path to the chosen observable.
+For an unbuilt mechanism, state the intended path and first witness; missing implementation alone is not insensitivity.
+Reuse a valid trace/control, or make the missing reachability check the first bounded experiment.
+If a selector, decoder, aggregation or protocol masks the intervention, isolate it or choose another observable.
+Do not require a proved hypothesis before testing. A valid null still counts when the assay can expose an effect.
 Do not redefine the predictor, threshold or scope after seeing a miss; a repaired experiment gets a new binding.
 
 ## 4. Choose the cheapest decisive next observation

@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.4.0 (2026-09-30) — 親が現物を観測し、部分返却ごとに消費・再分割・開始確認を閉じる。
+> **Version**: v2609.4.1 (2026-09-30) — 資源の制約は仕事単位で返し、BIBIFIの仕事選択へ接続する。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に

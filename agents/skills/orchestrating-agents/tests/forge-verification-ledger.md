@@ -1444,3 +1444,12 @@ driving-bibifi-cycles/tests/postmortem-2026-09-30-parent-loop.md and forge-ledge
 Both arms consumed v2 correctly: no measured improvement over OLD. A separate real active-worker
 interrupt reached interrupted state and retained the artifact. No numeric job or resource cleanup was simulated as PASS.
 PROSE-DEBT waiver:13existing reference warnings retained unchanged; revised core/C0 adds none.
+
+## 2026-09-30 — per-slice resource feedback, v2609.4.1
+
+P7 points to BIBIFI's unified work-selection loop for both spare capacity and contention.
+Return each proposed slice's actual binding resource constraint; do not turn one GPU/integration
+blocker into a blanket fleet verdict. Feasibility, authority and stop/release semantics are unchanged.
+Audit and staged file-only OLD/NEW trial: driving-bibifi-cycles/tests/postmortem-2026-09-30-ready-work.md
+and its forge ledger section20. The decision trial tied; it did not measure real GPU admission or throughput.
+PROSE-DEBT waiver:13existing reference warnings retained unchanged; core adds no warning.

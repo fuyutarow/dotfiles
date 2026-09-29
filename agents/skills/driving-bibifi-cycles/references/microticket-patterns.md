@@ -15,41 +15,25 @@ Use the same structure for an experiment, formal argument, engineering change or
 | Reuse a historical result | One predecessor and a transfer-obligation map | Current conditions against original assumptions and consumer | Reuse the supported part; test the missing bridge |
 | Survey everything while waiting | One relevant source comparison per independent question | Located claim, applicability and strongest contradiction | Hand back each changed premise immediately; no all-inventory barrier |
 
-## Dependency and evidence scope
+## Cut the dependency, not the question
 
-Before waiting, state: “Without X, action Y cannot produce interpretable observation Z because …”.
-If X is needed only for a broader claim, a useful scoped diagnostic can proceed.
-If no useful observation survives the missing premise, make that premise/instrument repair the next microticket.
-Preserve the phenomenon and meaningful discrimination when shrinking work; do not manufacture an underpowered null.
-Formal sections retain their admitted WIP unit; partial coordination does not admit another candidate.
+The core's work-selection loop owns scheduling. Use these cases to locate one useful return.
 
-### When “everything waits for the release” is proposed
-
-Use current valid dependency evidence first. If it proves the sole missing input and no useful independent option, wait.
-Otherwise do the cheapest check on a plausible alternative, not another future-work list.
-
-| Search surface | Useful independent return | When it really must wait |
+| Claimed dependency | What can proceed now | What remains blocked |
 |---|---|---|
-| Current blocker | Located counterexample, interface discrepancy or smaller consumed return | It needs the very artifact still being produced, and no stable witness exists |
-| Reference/evidence footing | Verify the predecessor's conditions, measurement validity or claimed acceptance against the current question | The comparison itself requires unavailable observations; record that exact missing input |
-| Next consumer | Prepare a negative fixture, proof obligation or interface check on a stable contract | The required contract is unresolved and the proposed preparation would be disposable |
-| Alternative authorized question | Source comparison, formal counterexample or isolated diagnostic with its own consumer | No distinct useful question fits the actual authority, slot, host or resource constraints |
+| Unfinished component or apparatus | Located failure witness, stable-interface fixture, independent source/proof check | An observation that actually requires its unavailable output |
+| Full release or whole-suite acceptance | Authorized scoped diagnostic on pinned usable inputs | The stronger release/completeness claim |
+| One live writer is busy | Read-only diagnosis, isolated patch proposal, consumer/test preparation against an agreed interface | Concurrent writes to that same live state |
+| User decision concerns one optional feature | In-scope existing configuration, invariant analysis or unaffected branch | Adoption or execution that needs the missing authority |
+| One worker has a private queue | Safely reassign or split a disjoint slice after checking actual data dependencies | Shared-state work until ownership is transferred |
+| Measurement cannot expose the proposed effect | Trace/control that localizes the masking stage, or a different scoped observable | Interpreting that insensitive measurement as an effect test |
+| Only a historical reference exists | Reuse it under matching conditions; check the actual transfer gap | Unsupported comparison across mismatched conditions |
 
-One genuine useful return is enough to act; no exhaustive survey or report quota is required.
-A historical predecessor remains usable when its evidence and comparison conditions match.
-Its age or different version alone does not justify rerunning it; qualify the actual transfer obligation.
-For a rejected option, name the blocking fact. “Commit pending,” “three agents busy” and “not on critical path” are not facts of dependence.
-If existing evidence or the needed checks establish that useful options are blocked, wait without fabricating filler.
-Observe that event through the supported tool and resume; another report does not substitute for the next action.
-
-## Parallelism follows independence, not job titles
-
-Separate ready reasoning/preparation from execution that needs a shared resource.
-Source comparisons, counterexamples, proof obligations and isolated proposals can return independently.
-Reserve the next critical action's resource requirements; do not occupy them with work that cannot release in time.
-One owner integrates changes to a shared live artifact. Other workers may prepare isolated proposals in parallel.
-A shared premise can couple jobs even when their files, apparatus or personnel are separate.
-If its pending result may obsolete a whole assignment, request a reusable short slice or select another useful question.
+State: “Without X, action Y cannot produce interpretable observation Z because …”.
+Use current valid receipts. One useful candidate is enough to act; no exhaustive survey or candidate quota is required.
+Preserve meaningful discrimination when shrinking; do not manufacture an underpowered null.
+An uncertain premise may invalidate work in separate files. Keep only reusable bounded preparation until it resolves.
+Formal sections retain their admission/WIP rules; a partial return does not admit another candidate.
 
 ## Contention and admission waiting
 

@@ -63,9 +63,11 @@ import {
   openSync,
   readFileSync,
   readSync,
+  statfsSync,
   statSync,
   writeFileSync,
 } from "node:fs";
+import { join } from "node:path";
 import { createConnection } from "node:net";
 import { fromThrowable } from "neverthrow";
 import {
@@ -133,6 +135,7 @@ interface Dataframe {
   jobs: Admitted[];
   orphans: number;
   vram?: MemReading | undefined;
+  disks: DiskReading[];
   cpuPct?: number | undefined;
   ram?: MemReading | undefined;
 }
@@ -842,6 +845,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const cpu = cpuPct();
   const ram = ramFrac();
   const vram = vramFrac();
+  const disks = diskReadings();
 
   return {
     cwd,
@@ -866,6 +870,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     jobs,
     orphans,
     vram,
+    disks,
     cpuPct: cpu,
     ram,
   };
@@ -947,10 +952,64 @@ function memSegment(label: string, m: MemReading): string {
   const { pct, col } = pctFmt(m.pct);
   return `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
 }
+// Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
+// they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
+// the same file the storage gate enforces, so the bar and the gate can never disagree about a
+// threshold. statfs is a syscall (no subprocess), cheap enough for every render. A drive whose
+// path does not exist here (/mnt/c on macOS) is skipped, as the gate skips it.
+const STORAGE_CONFIG = join(
+  import.meta.dir,
+  "..",
+  "hooks",
+  "storage-headroom.toml",
+);
+interface DiskReading {
+  label: string; // "C:" for a WSL /mnt/<letter>, else the path
+  usedG: number;
+  totalG: number;
+  freeG: number;
+  col: string; // green / yellow (below warn_gib) / red (below deny_gib)
+}
+function diskLabel(path: string): string {
+  const m = path.match(/^\/mnt\/([a-z])$/); // String.match: this file imports child_process (BG floor F4)
+  return m?.[1] ? `${m[1].toUpperCase()}:` : path;
+}
+function diskReadings(): DiskReading[] {
+  const drives = fromThrowable(() => {
+    const cfg = Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")) as {
+      drive?: Record<
+        string,
+        { path?: unknown; deny_gib?: unknown; warn_gib?: unknown }
+      >;
+    };
+    return Object.values(cfg.drive ?? {});
+  })().unwrapOr([]);
+  const out: DiskReading[] = [];
+  for (const d of drives) {
+    if (typeof d.path !== "string") continue;
+    const path = d.path;
+    const st = fromThrowable(() => statfsSync(path))();
+    if (st.isErr()) continue;
+    const { bsize, blocks, bfree, bavail } = st.value;
+    const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
+    const freeG = (bavail * bsize) / 1024 ** 3;
+    const totalG = usedG + freeG; // df's Use% denominator (reserved blocks excluded)
+    let col = "38;5;71";
+    if (typeof d.warn_gib === "number" && freeG < d.warn_gib) col = "38;5;178";
+    if (typeof d.deny_gib === "number" && freeG < d.deny_gib) col = "38;5;167";
+    out.push({ label: diskLabel(path), usedG, totalG, freeG, col });
+  }
+  return out;
+}
+function diskSegment(d: DiskReading): string {
+  const pct = Math.round((d.usedG / d.totalG) * 100);
+  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${Math.round(d.usedG)}/${Math.round(d.totalG)}G)${RST}`;
+}
 function sysSegment(
   cpu: number | undefined,
   ram: MemReading | undefined,
   vram: MemReading | undefined,
+  disks: DiskReading[] = [],
 ): string {
   const parts: string[] = [];
   if (cpu != null) {
@@ -959,6 +1018,7 @@ function sysSegment(
   }
   if (ram != null) parts.push(memSegment("RAM", ram));
   if (vram != null) parts.push(memSegment("VRAM", vram));
+  for (const d of disks) parts.push(diskSegment(d));
   return parts.join(` ${DIM}${MID}${RST} `);
 }
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
@@ -1029,7 +1089,7 @@ function render(df: Dataframe): string {
   if (df.wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 
   let sysLine = "";
-  const sysSeg = sysSegment(df.cpuPct, df.ram, df.vram);
+  const sysSeg = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
   if (sysSeg) sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSeg}`;
 
   let jobLine: string | undefined;
@@ -1088,7 +1148,7 @@ process.stdout.write(render(df));
 // every session. Best-effort: a failed write only means the next hook firing finds it stale.
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
-const sysColored = sysSegment(df.cpuPct, df.ram, df.vram);
+const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replace(ANSI, "");
 if (sysPlain !== "") {
   fromThrowable(() => {

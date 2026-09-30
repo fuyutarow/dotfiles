@@ -30,7 +30,7 @@ DEPENDENCY / SENSITIVITY: <execution prerequisite vs claim/writer/queue gate; pa
 OWNER / FIT: <read/write scope; agent phase vs admitted compute; actual device reason/resources>
 RETURN / STOP: <first decision-changing return; absolute queue/lifetime deadline; invalidation; consumer>
 PARENT INTERVENTION: <next event/time; job/log/partial-artifact locus to inspect; action owner>
-BUDGET BINDING: <target duration separately; user/domain hard-cap source; effective cap; launch value; stop/cleanup receipt>
+BUDGET BINDING: <executed workload; target duration; user/domain cap source and any explicit exception; effective cap; launch value; stop/cleanup receipt>
 CONTENTION: <current progress/rate; protected critical CPU/RAM/VRAM bundle and start window; add/hold/reduce decision>
 ```
 
@@ -48,7 +48,7 @@ For idle resources, identify the inspected useful slices and actual remaining co
 
 ```text
 OBSERVED: <artifact + exact binding + evidence/proof status, or actual blocker>
-DECISION: <new discovery / enabling work / failed operation; retain/fix/reject/narrow and why>
+DECISION: <new discovery / enabling work / failed operation; obligation actually closed with matching path/receipt, or still-open consumer check; retain/fix/reject/narrow>
 COST / RELEASE: <actual phases and peak RAM/VRAM; process stop/release; NONCOMPUTE hand-back>
 CONSUMED / NEXT: <consumer receipt or pending; affected tickets continued/re-sliced/stopped; next launch>
 PARENT ACTION: <observed event and locus -> decision -> tool/action receipt -> consumer read-back>

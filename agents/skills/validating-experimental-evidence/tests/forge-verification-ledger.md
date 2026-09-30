@@ -270,3 +270,47 @@ Small frozen-threshold misses remain misses. GPU craft retains collection/profil
 Source and bounded verification: optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md
 and its forge ledger. MFR/DTM corpus positions remain draft; the skill does not silently upgrade them.
 Core/reference floor zero warnings. No benchmark data, admission mechanism or runtime schema changed.
+
+## 2026-09-30 — obligation and authority boundaries, v2609.2.0
+
+Root-owned reforge from the 986-line supplied report; source grade and exact incident loci are in
+`tests/postmortem-2026-09-30-boundaries.md`. Extend existing owners, no new member or result store.
+Three-query JA/EN repo-retrieve battery located prior closure, admission and observability rules.
+Current files, not index excerpts, supplied the baseline. Existing rule violations remain distinguished
+from missing decision branches; loaded skill versions in the original live session are unknown.
+
+EV0 joins authorized policy, evidence need and actual gate; EV3 binds closure to its consumer and
+separates literature/sampling/structural claims. EV2 repairs probe boundary coverage. BIBIFI consumes
+these predicates in its existing work card. P7 owns budget feasibility and peak-scope calibration.
+Root rejected a review suggestion to require official publication for every default repair.
+It also rejected treating allocator-only peak plus margin as a complete bound, and a blanket scientific
+invalidation of otherwise valid raw results merely for an operational budget violation.
+
+Independent Terra source and resource audits plus semantic reviews returned actual boundary findings.
+Fixes preserve old criteria during retrospective correction, distinguish descriptive references from
+paired inference, and keep active user caps above domain exceptions. Shared-index misconduct remains
+a driving-git violation; no duplicate commit checker or generic rule is introduced here.
+
+Frozen paired OLD=`8fd47ec`, NEW=draft manuals; independent Terra arms with identical fixture,
+NONCOMPUTE declarations and disjoint outputs. Actual files and real resource check-only calls were used.
+Eight substantive decisions matched; no measured improvement claimed. Both read-only long-manifest
+checks returned ADMIT, while both withheld launch under the governing cap. No payload was started.
+This is not a stop-path, GPU-calibration or research-throughput test. Later review clarifications
+were inspected separately; they are not silently substituted for the tested draft.
+
+| Artifact | SHA-256 |
+|---|---|
+| `/tmp/skill-boundary.ALQuJn/events.md` | `00377cd6456e5ac99975ff12f32a78187c2bf3277a754d2721a76b8a821c0468` |
+| OLD decisions | `b191f606370e3289f96689cf04c3ed091b84e6416460037b2e192aa1e5b5748e` |
+| NEW decisions | `53e9d373cab36eea5786ef435cd5d9d66efd7ddc7eb033a59bf205bfa7bd1d94` |
+| NEW EV core | `f9bbdedafbda0098378a247b2a7e378fc897598f8a5c7829eea89af77cd3b0a6` |
+| NEW BIBIFI core | `f9b570189ce75179e426379f0fa12391c9158ac02b1afff860cdd90074133e0f` |
+| NEW P7 reference | `f04af4101b23c6627645dd2a17843104ff241cdc03ac01576d5e31fdd90884f6` |
+
+Final independent semantic/routing review found no remaining blocker.
+`skill-check.ts` passes for all three owners; EV/BIBIFI add no prose warnings.
+PROSE-DEBT waiver: P7 retains the same13reference warnings as baseline, with no new core warning.
+`mise run lint:skills-floor` passes:73skills/64107listing characters, unchanged ceiling/membership,
+107existing collection warning groups. `lint-skills-index.ts` and `git diff --check` pass.
+`mise run link:skills` and `mise run lint:skills-wiring` pass; readlink resolves all three edited
+owners to canonical files. Installation does not prove running workers reloaded these versions.

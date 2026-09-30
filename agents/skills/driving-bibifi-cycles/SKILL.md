@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.9.1 (2026-09-30) — optimization slices consume complete train/infer path accounting.
+> **Version**: v2609.10.0 (2026-09-30) — classify work by its executed workload and close exact obligations.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -147,15 +147,19 @@ For formal work, pin the exact statement and proof status; a sketch cannot silen
 | Clock | Rule |
 |---|---|
 | First useful return | Within the next six-minute window; earlier if pending evidence could invalidate the assignment |
-| Experiment | About two minutes target; ten minutes maximum or the tighter active cap, including launched setup/compile |
+| Numerical run in this loop | About two minutes target; ten minutes maximum or the tighter active cap, including launched setup/compile; official confirmation, tests and profiling are included |
 | Worker / queue | Finite return and lifetime, covering preparation, admission wait and recording as well as execution |
 
 Two minutes is a target, not a launch ban. Six minutes is feedback/report cadence, not a process kill boundary.
 Bind the user/domain budget before dispatch. The operator compares the launch envelope against it before P7 admission.
 Record target duration separately from the hard cap. A two-minute target does not impose a two-minute hard limit.
-The effective experiment cap is the minimum of ten minutes, stricter user/domain limits and remaining ticket lifetime.
-Tests and profiling use that cap, including launched setup/compile; P7 owns stop/release enforcement.
-An ETA exceeding it is a rejected experiment design, not permission to lengthen the envelope or reclassify the same run.
+Bind the workload before its label: official numerical confirmation uses the same active budget.
+The default cap is the minimum of ten minutes, stricter active limits and remaining ticket lifetime.
+An explicit user instruction or authorized domain policy may change the default.
+Domain exceptions cannot relax an active user cap.
+Record any exception's source and exact scope; the operator cannot invent that authority.
+Labels such as official, production or validation do not create an exception.
+P7 owns stop/release enforcement. An ETA exceeding the cap rejects that run design before admission.
 Choose a smaller discriminating witness, reuse valid setup/evidence, or report that no valid test fits this budget.
 Do not obtain a long run by relaunching timed-out work or chaining slices that return no independent decision.
 Keep real partial evidence and its limits; a short prefix cannot certify a full benchmark.
@@ -190,6 +194,9 @@ Preserve raw failures and falsifications. An operation failure is not a scientif
 
 Before scaling, exercise the smallest valid path from the changed element to its actual observation or consumer.
 Include a relevant negative case; isolated component checks cannot certify their interaction.
+Use EV3's obligation-closure table when consuming the result.
+A scratch success opens an integration candidate; the default-path defect remains open.
+Keep the remaining consumer check in the current ticket.
 Execution prerequisites must hold. Interpretation/promotion gaps block those claims, not every useful scoped diagnostic.
 Use evidence EV1 for loaded code/input identity, including material imports, configuration and warm-worker state.
 Use supported immutable run inputs while development continues. Otherwise serialize only the required read/write window.

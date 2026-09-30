@@ -883,3 +883,17 @@ speed slice. A normalized ratio increase or inference-only gain cannot close a l
 GPU craft owns work/span, design and profiling; EV3 owns comparison meaning. Their full revision
 and file-backed verification live in optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md
 and its forge ledger. This pointer adds no new scheduling rule, runtime gate or scientific result.
+
+## 22. Workload budgets and exact closure — v2609.10.0
+
+The clock now explicitly covers official numerical confirmation, with exceptions bound to actual authority.
+Labels cannot change budgets; authorized domain policy cannot relax an active user cap.
+The existing work card carries workload/exception source and the obligation closed or consumer check still open.
+EV3 owns closure meaning; P7 owns resource feasibility and observation. No duplicate result store is added.
+S84–S88 cover relabeling, scoped explicit authorization, incomplete VRAM telemetry and check-only ADMIT.
+
+Source/audit and paired file/check-only rehearsal:
+validating-experimental-evidence/tests/postmortem-2026-09-30-boundaries.md and its forge ledger.
+OLD and NEW made the same eight substantive decisions. Both withheld the over-budget launch even though
+the real runner's check-only accepted its envelope. No throughput or runtime-enforcement improvement is claimed.
+Descriptions/listing budget are unchanged. Scoped floor adds no core/reference warning.

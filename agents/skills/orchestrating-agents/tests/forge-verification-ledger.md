@@ -1453,3 +1453,20 @@ blocker into a blanket fleet verdict. Feasibility, authority and stop/release se
 Audit and staged file-only OLD/NEW trial: driving-bibifi-cycles/tests/postmortem-2026-09-30-ready-work.md
 and its forge ledger section20. The decision trial tied; it did not measure real GPU admission or throughput.
 PROSE-DEBT waiver:13existing reference warnings retained unchanged; core adds no warning.
+
+## 2026-09-30 — budget identity and peak scope, v2609.5.0
+
+P7 now binds workload and exception provenance before feasibility. BIBIFI owns its budget meaning;
+other domains retain their own bounds. Peak calibration is rewritten as a lookup over missingness,
+live reservation ownership, allocator coverage and whole-job bounds. No fixed concurrency target is admitted.
+An observed peak plus margin alone is not a worst-case bound. Future envelopes retain missing components.
+
+The supplied log's printed zero is not attributed to the current runner: its parser rejects `[N/A]`
+and omits unavailable VRAM. This is a corrected source inference, not an implemented collector repair.
+The actual resource checker accepts an over-task-budget manifest because it lacks that trusted task input.
+The manual does not claim mechanical enforcement of the upper-budget join.
+
+Source/audit, independent reviews and real check-only paired rehearsal:
+validating-experimental-evidence/tests/postmortem-2026-09-30-boundaries.md and its forge ledger.
+No live reservation, production job or runner schema was changed. No demonstrated OLD/NEW decision improvement.
+PROSE-DEBT waiver: the13existing reference warnings remain unchanged; core adds none.

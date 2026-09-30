@@ -15,7 +15,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.6 (2026-09-30) — normalized efficiency retains work, peak and operating-point scope.
+> **Version**: v2609.2.0 (2026-09-30) — resolve gate authority and bind closure to the actual obligation.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -67,7 +67,7 @@ locus/digest only for dispatch, visibility, and acceptance topology.
 
 | Gate | Predicate and action | Checkable artifact |
 |---|---|---|
-| **EV0 CONTRACT** | Resolve the effective contract, allowed overrides, and project-authorized launcher before launch. A registry constructor or resource wrapper cannot replace a required entrypoint. Missing binding stops an official score; permitted ad hoc work retains local scope. | Registry ID, contract digest, target acceptance/rejection receipts; `registered-benchmarks.md` |
+| **EV0 CONTRACT** | For official claims, reconcile authorized policy, evidence needs and the implemented gate. Repair a conflicting gate through its owner; do not bypass it. Resolve the effective contract and launcher. Permitted diagnostics bind their local criterion and retain local scope. | Authority/claim/gate reconciliation, registry binding and acceptance/rejection receipts; `registered-benchmarks.md` |
 | **EV1 EXECUTED INPUT** | Join observed code, input, parameters, realized length, and final scored position to the intended run. A stale worktree, unbound registry ID, or missing scored tail returns `FAIL`/`UNKNOWN`. | Exact invocation and post-launch attestation in the canonical run/finding; `registered-benchmarks.md` |
 | **EV2 INFORMATION FLOW** | Freeze permitted information: reveal/update order online, train/test separation offline. Test forbidden dependencies and verify that required control interventions reached the executing consumer. | Perturbation, realized control and null-output loci; `controls-and-information-flow.md` |
 | **EV3 FOOTING** | Compare like metric, split, stream, scoring window, training protocol, and baseline. For mechanism ablation, change only that mechanism. A confounded contrast cannot update a causal hypothesis. | Axis and confound table, same-stream baseline, bound check; `footing-and-lineage.md` |
@@ -98,10 +98,11 @@ The claim still needs actual values, uncertainty, margin, and evidence loci.
 Beating a weak comparator does not establish capability if the candidate misses
 its trivial baseline. A forward-only implementation is not a training-speed comparator.
 
-Do not collapse execution, row acceptance, measurement validity and goal achievement into one PASS.
-A leaderboard row proves ingestion, not scientific validity. A low score alone does not invalidate a measurement.
-Keep valid failed results and timings. Unproved correctness or protocol blocks useful-training and speedup claims.
-Use `references/footing-and-lineage.md` for these separate judgments. Add no new record schema.
+Close each obligation against its actual implementation path, configuration and required evidence.
+Use the closure table in `references/footing-and-lineage.md`.
+Scratch, default integration, publication and robustness are distinct claims. None automatically promotes the next.
+Keep valid failed results and timings. A leaderboard row proves ingestion. Low scores alone do not invalidate measurement.
+Add no new record schema.
 
 ## Canonical recording and verification
 
@@ -136,5 +137,7 @@ target's accepted and rejected invocations plus raw output, not a parallel Bun s
 | `references/controls-and-information-flow.md` | EV2 reveal order, prequential perturbation, restricted-label null, outlier quarantine | Labels/feedback touch prediction, or a score exceeds a credible bound |
 | `references/footing-and-lineage.md` | EV3/EV4 comparison axes, confound table, same-stream baselines, historical capability classes | Comparing runs, mechanism ablations, regression/recovery claims |
 | `tests/triggers.md` | Fire/no-fire and co-fire desk-check | Editing description or sibling cuts |
+| `tests/boundary-cases.md` | Completion, gate authority, sampling and conformance counterexamples | Changing claim admission or closure |
 | `tests/forge-verification-ledger.md` | Source grades, bounded postmortem, verification and waiver | Reforge or audit |
 | `tests/postmortem-2026-09-27-result-states.md` | Execution/publication/validity/quality distinctions and counterexamples | Inspecting this failure family |
+| `tests/postmortem-2026-09-30-boundaries.md` | Repeated boundary failures, scoped fixes and runtime limits | Auditing the supplied follow-on episode |

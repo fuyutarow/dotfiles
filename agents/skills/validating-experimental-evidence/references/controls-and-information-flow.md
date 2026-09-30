@@ -70,6 +70,12 @@ Launcher execution and record read-back checks live in `registered-benchmarks.md
 Configuration authority/translation belongs to `governing-configuration-systems`.
 The target code owner implements that contract.
 
+Before making a probe mandatory across modes, test each materially different protocol boundary.
+Use a tiny valid case and a forbidden-dependency witness. Preserve required training prefixes, reset and reveal order.
+A truncated prefix that cannot reach prediction tests adapter readiness, not leakage.
+A shared probe implementation may be reused when those boundaries are shown equivalent.
+Record tested calls/positions and untested paths. Finite detector success does not certify all information flow.
+
 ## Negative control and outlier triage
 
 | Observation | Required next action | Prohibited conclusion |

@@ -38,11 +38,14 @@ If no job is ready, return the actual constraint so the driver can split, reuse 
 Do not invent capacity or accept an empty ready queue as proof that no useful work exists.
 The six-minute planning/report window does not replace a job's admitted stop conditions or finite worker lifetime.
 
-BIBIFI内の実験・GPU test・profilingは、同じ実験上限を実行器へ渡す。testという名前で免除しない。
+BIBIFI内の数値runは、同じ有効上限を実行器へ渡す。公式測定・確認・GPU test・profilingも含む。
+BIBIFIの上限と例外は`driving-bibifi-cycles`が所有する。他の仕事はそのdomain/user上限を使う。
+分類名は例外の根拠にならない。
 発射前に有効なwalltimeと停止経路を確認し、job idと実行器のreceiptへ結び付ける。
 promptの期限、agentの寿命、queueの期限はprocessの強制停止を代替しない。
 下のwalltime値は例示であり、各jobでは現在のdomain/user上限以下に設定する。
-発射前に `budget source / effective cap / envelope walltime / queue deadline` を既存ticketで照合する。
+発射前に既存ticketで仕事の実体、予算の出典、明示例外の有無を照合する。
+その有効上限、envelope walltime、queue deadlineの値も照合する。
 envelopeのwalltimeが上位の上限を超えたら、resource admissionへ進めず設計を差し戻す。
 ETAが収まらないこと、予約が空いたこと、上限内で終わらなかったことは上限変更の根拠にならない。
 同じ実験の再試行・再開も残予算を引き継ぐ。run idの変更で予算を更新しない。
@@ -186,13 +189,23 @@ account / pilot cost / ETA / stop threshold` を置く。
 measurement packetへ保存する。Linux floorでenforcementを用意できないplatformではfail closedとし、
 unboundedな直接実行へfallbackしない。
 
-runnerの終了前に、peak RSS/VRAM/process、実際の解放時刻、申告との差を永続receiptへ書く。
-次の同型runのenvelopeは、この高水位に安全余白を足して校正する。申告過大で拒否が続く場合、
-追加のticketを出す前に予約と同時枠のどちらが律速かを拒否理由で分ける。
-実測値を理由に走行中のhard capを緩めず、新しい形のjobは別に上限を見積もる。
-runnerが終了後の高水位を保存できない現行環境では、`RESOURCE_OBSERVABILITY_GAP`を記録し、
-測っていない値を推定として明記する。receiptの実装はresource-controlの修理であり、
-このskillの記述をもって実装済みと扱わない。
+runner終了時に、peak RSS/VRAM/process、観測元・対象・期間、実際の解放時刻を永続receiptへ書く。
+欠測は`UNKNOWN`とする。非対応のcollectorが返した0を、測定済みのpeakとして扱わない。
+
+| 拒否または観測 | 次の操作と必要なreceipt |
+|---|---|
+| 予約で満杯、実使用は少ない | jobごとの予約・PID/phase・終了/解放を照合する。次の空きイベントを特定し、同じ拒否のpollだけで済ませない |
+| 終了したjobの予約が残る | ownerのcleanup経路で回収し、解放をread-backする。生存不明の予約を削除しない |
+| process peakが欠測、device全体の使用量だけ分かる | `RESOURCE_OBSERVABILITY_GAP`を記録する。全体値をjob数で割らず、0から予約を縮めない |
+| runtime内のallocator/pool peakだけ分かる | その範囲を明記する。context、workspace、pool外allocation、子process、未観測phaseの上限を別に含める |
+| 同じ形・全phaseを測ったjob receiptがある | 入力寸法の上限と観測範囲を照合し、未計測領域と余白を含むboundから次のenvelopeを校正する。観測peakだけはworst-case boundにならない |
+| 必要な観測が得られない | 保守的な解析boundを維持するか、admittedな計器修理を行う。優先jobを通すなら所有する低優先jobの安全な停止・解放を使う |
+
+再見積りは将来のenvelopeへ適用する。live予約の縮小は実行器の対応と安全条件が確認できる場合だけ行う。
+allocator/pool peakに余白を足すだけで、job全体のboundを置き換えない。
+新しい入力形は再び上限を導く。実測を理由に走行中のhard capを緩めない。
+同時本数は期限・資源・競合から決め、低utilizationや固定の本数目標から逆算しない。
+receiptやcollectorの実装はresource-control/runtime ownerの修理であり、この記述をもって実装済みと扱わない。
 
 ## Retired P8/P9 — one semantic home
 

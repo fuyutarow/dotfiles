@@ -20,6 +20,22 @@ It cannot establish useful throughput at a quality target it misses; this does n
 Reuse intact execution output for ingestion repair when the authoritative system supports it and binding remains valid.
 Do not retrofit a changed criterion, fabricate metadata or bypass an acceptance gate to recover a row.
 
+### Close the named obligation, not its nearest successful example
+
+Use the existing issue/finding's completion predicate and evidence locators. No new status store is needed.
+
+| Obligation | Sufficient scope of the receipt | What stays open |
+|---|---|---|
+| A construction or scratch repair works | Exact supplied assumptions, code, inputs and observed outputs | Transfer into another implementation/path |
+| The default path now learns | Actual default dispatch consumes the changed mechanism; a positive witness and relevant negative/control reach that consumer | Untested tasks, settings and robustness |
+| A registered result is available | Bound execution plus accepted read-back and EV0–EV4 disposition | Any broader concept or performance obligation |
+| A family is robust across seeds/lengths | Predeclared family coverage and aggregation, including failed cells | Unmeasured members; one good seed cannot close the family |
+| Structural or performance conformance survived a revision | Recheck the affected requirement against the new structure or measurement | Output/state bit equality alone cannot preserve parallel span, task independence, memory or speed claims |
+
+For each closing statement, name the obligation and receipt that satisfies it. If the binding differs,
+record the enabling result and the smallest missing consumer check; leave that obligation open.
+Do not require registered publication for an obligation whose predicate is only a local construction.
+
 ## EV3: compare the same target quantity
 
 Put every axis that can change the claim into a comparison table.
@@ -31,7 +47,25 @@ Put every axis that can change the claim into a comparison table.
 | Learning | Online reveal order, offline/prequential protocol, update budget, trainability |
 | Runtime | Loaded code digest, dependencies, device, precision, parallelism, resource limits |
 | Randomness | Seed, sampling, repetitions, uncertainty summary |
-| Baseline | Trivial predictor and applicable reference on the **same test stream** and scoring set |
+| Baseline | Trivial predictor on the **same test stream** and scoring set; external reference's protocol, aggregation and evidence scope |
+
+Changing only test sample count still changes uncertainty and may change aggregation/selection behavior.
+Before reducing a benchmark, bind its sampling frame, independent unit and per-cell coverage.
+Also bind aggregation, selection and precision criteria. Classify comparability under that protocol.
+A registry label cannot prove it.
+Literature accuracy used to plan sample size is an assumption, not the new model's variance.
+At accuracy zero or one, a plug-in zero variance cannot justify zero uncertainty or a tiny definitive test.
+Use a justified conservative bound or predeclared interval procedure and retain the achieved uncertainty.
+Outcome-dependent sample sizes require a valid sequential rule or a new exploratory scope.
+
+| External comparison | Permitted interpretation |
+|---|---|
+| Same declared protocol and aggregation, with justified sampling and uncertainty | Compare numerical results at the supported resolution; separate this from a paired or causal experiment |
+| Changed or unverified sample counts, selection, protocol or aggregation | `SCOPED`: report both values and differences; withhold a comparable win/tie/loss verdict until footing is established |
+| Published aggregate lacks paired observations | No paired test, regardless of whether the aggregate is usable as a descriptive reference |
+
+The same-stream requirement applies to local baselines and matched interventions.
+It does not require retraining every published reference. Numerical comparison alone cannot identify a learning-rule effect.
 
 If an axis differs, report both results with that difference. Do not subtract them
 as a causal or regression delta until a matched rerun exists. An offline trained

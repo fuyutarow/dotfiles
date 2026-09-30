@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.4.1 (2026-09-30) — 資源の制約は仕事単位で返し、BIBIFIの仕事選択へ接続する。
+> **Version**: v2609.5.0 (2026-09-30) — 予算は仕事の実体へ結び、欠測の高水位から予約を縮めない。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に

@@ -6,6 +6,26 @@ question is not enough if the runner can bypass it.
 
 ## EV0 before launch: resolve, do not transcribe
 
+First join the authorized claim, its scientific evidence needs and the gate's actual requirements.
+A function name or PASS does not supply scientific authority.
+
+| Reconciliation | Action before launch or promotion |
+|---|---|
+| Gate implements the current authorized contract | Satisfy it through the required path |
+| Gate contradicts an explicit applicable user decision | Record the exact conflicting clauses; repair the gate through its code owner within authorized scope, then test and read back. Do not ask the user to repeat the settled decision |
+| Gate is stricter than the evidence needed for the requested claim, with no authority conflict established | Identify the additional policy requirement and its owner; keep the gate binding until an authorized change. A scientific preference alone cannot waive it |
+| Requested claim exceeds available evidence even after a policy repair | Narrow the claim and preserve the missing evidence; policy cannot make a comparison scientifically valid |
+| Authority or scope is genuinely unresolved | Ask only for the missing decision; continue independent authorized work |
+
+Before commissioning new baselines, inspect the cited result's protocol, selection, aggregation and uncertainty.
+Printed values can support a scoped numerical comparison when footing permits.
+They do not supply paired seeds, a significance test or causal attribution to a learning rule.
+Do not demand new training merely to satisfy a stale validator. Do not remove evidence requirements to obtain PASS.
+Version authorized gate changes and reconcile affected claims.
+Freeze new comparison rules before new outcomes. A retrospective correction must retain the old criterion and disposition.
+Name the prior authority/error that warrants re-evaluation.
+Do not choose a fixture or aggregation because the result wins.
+
 | Condition | Action | Target check |
 |---|---|---|
 | Benchmark ID is registered | Call the registry's supported constructor or launcher. Resolve the effective stream, preprocessing, metric, scoring window, and permitted overrides from that ID. | One accepted invocation and one rejected forbidden override through the **actual launch path**. |

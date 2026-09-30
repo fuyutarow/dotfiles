@@ -154,7 +154,7 @@ Protocol: read ONLY `name:` + `description:`; answer fire / no-fire / co-fire. R
 | N3 | 「この関数、振る舞い変えずに整理して」 | NO-FIRE (co-fire at commit) → refactoring-code | ✓ |
 | N4 | 「semver と calver どっち?」 | NO-FIRE → designing-version-schemes | ✓ |
 | N5 | "generate an ssh key for GitHub" | NO-FIRE → securing-remote-access | ✓ — re-run after V5: "gh auth login fails" moved to FIRES (gh auth is now in the description) |
-| N6 | 「jj に乗り換えたい」 | NO-FIRE → none | ✓ (jj absent from description; no token matches) |
+| N6 | 「jj に乗り換えたい」 | NO-FIRE → `driving-jujutsu` | ✓ (jj remains outside Git command ownership; sibling added 2026-09-30) |
 | N7 | "explain merge vs rebase" | NO-FIRE (conceptual) | △ — "rebase"/"merge" tokens match; the triggering LAW says a trivial ask no-fires anyway; if it fires, the pipeline's read-exemption makes it cost nothing |
 | C1 | 「バグ直してコミットして」 | CO-FIRE: implementing-and-debugging first, this at the commit | ✓ (the DECISIVE cut states the order) |
 | C2 | "run codex on this in a worktree and merge what's good" | CO-FIRE: driving-codex (containment), this (worktree, range-diff, integrate) | ✓ |

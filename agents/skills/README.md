@@ -148,6 +148,7 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 - [`wiring-mise-tasks`](wiring-mise-tasks/) — One mise verb contract for every repo (fmt/f, lint, test, up, check…): naming grammar, per-language templates, and a resolution gate that catches drift.
 - [`wiring-repositories`](wiring-repositories/) — Which wiring layers a repo admits, the order whose violations are silent, the git-hook shape, and a floor that audits the joint for life.
 - [`driving-git`](driving-git/) — Operate git by job: unambiguous verbs (switch/restore), enumerated commits, ceremony sized by blast radius, a receipt closing every operation, and a shared-checkout protocol.
+- [`driving-jujutsu`](driving-jujutsu/) — Operate jj changes, bookmarks, Git colocation, remote publishing, and operation-log recovery with checkable receipts.
 
 ### Systems & security
 

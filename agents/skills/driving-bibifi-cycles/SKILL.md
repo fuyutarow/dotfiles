@@ -15,7 +15,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.9.0 (2026-09-30) — one work-selection loop for spare capacity and contention.
+> **Version**: v2609.9.1 (2026-09-30) — optimization slices consume complete train/infer path accounting.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -206,6 +206,8 @@ Reuse bounded warm workers and immutable references, resetting experimental stat
 Evidence EV2/EV3 owns information access, protocol equivalence, effective interventions and comparison footing.
 A changed procedure need not preserve the original behavior. Historical performance is not current evidence.
 For GPU work, its specialist owns stage budgets/profiles. Select by recoverable whole-run cost, not an isolated ratio.
+Consume the GPU owner's complete train/infer accounting before choosing the next optimization slice.
+An efficiency-ratio increase or inference-only gain cannot close a learning-throughput target.
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.

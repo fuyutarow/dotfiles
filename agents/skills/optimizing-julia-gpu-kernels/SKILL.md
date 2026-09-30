@@ -1,8 +1,8 @@
 ---
 name: optimizing-julia-gpu-kernels
 description: >-
-  Optimizes CUDA.jl kernels and CuArray paths; GK0 rejects
-  cuBLAS/cuFFT/cuDNN/broadcast/mapreduce work. MANDATORY before @cuda, KernelAbstractions @kernel,
+  Designs and optimizes parallel CUDA.jl kernels and CuArray paths; prefers suitable library primitives.
+  MANDATORY before @cuda, KernelAbstractions @kernel,
   or Julia device storage/decode/performance edits, and for GPU-first model/learner step performance
   (host round-trips, Array() pulls, GPU first). Use for GPU カーネル/最適化, occupancy,
   coalescing/shared memory/warps/atomics, InvalidIRError, profiling/roofline, tensor cores,
@@ -16,11 +16,12 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.4.1 (2026-09-27) — performance scope, update semantics and whole-run speedup accounting.
+> **Version**: v2609.5.0 (2026-09-30) — parallel execution design, complete path accounting and qualified performance evidence.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
 ```bash
+test -f references/execution-design.md || exit 1
 for f in writing-kernels memory-and-warps host-performance reduced-precision-formats measuring debugging portable-kernels differentiating-kernels api-changes; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f tests/trigger-set.md || echo "MISSING trigger-set"; test -f tests/forge-verification-ledger.md || echo "MISSING ledger"
 ```
 
@@ -38,23 +39,31 @@ Re-check sooner when the target or toolchain differs.
 
 ## THE LAW
 
-> Derive the work budget on paper first (GKB); a measured gap from that bound requires a stage diagnosis before acceptance.
-> A model step expected to perform on GPU keeps its data-dependent hot path on the device (GKR).
+> Define the path and work budget first (GKB), then map independent work and serial dependencies onto execution (GKD).
+> Device residency (GKR) alone is not parallel execution. Account for every stage in the claimed train/infer path.
 > Reject unnecessary kernels through GK0. A justified kernel must be device-legal (GK1), measured
-> synchronously (GK2), and checked against an oracle (GK3). Training paths also need an rrule
-> (GK3-AD). Reduced precision needs a complete representation-to-execution contract (GK4).
+> synchronously (GK2), and checked against an oracle (GK3). A path differentiated by AD also needs GK3-AD.
+> Non-gradient learning still needs update-state equivalence; training alone does not require an rrule.
+> Reduced precision needs a complete representation-to-execution contract (GK4).
 
 ## The gates — GKB, GK0–GK4, each with a checkable artifact
 
+Before code: bind the path/budget, map dependencies and ownership, then choose the primitive (GKB/GKD/GK0).
+For the first implementation slice: compile it (GK1), check its scoped oracle (GK3), then measure it (GK2).
+Final acceptance needs the full claimed path's evidence, plus AD/precision gates only where applicable.
+Do not require a compiled-kernel receipt before permitting its implementation.
+An unknown stage blocks unsupported whole-path forecasts, not a separately justified local repair.
+
 | Gate | Rule | Artifact |
 |---|---|---|
-| **GKB WORK BUDGET** (§0) | Before code, a target, or a dispatch: count ops and bytes per output unit for the lowest-complexity algorithm, including selected work; derive the device bound. | A `WORK BUDGET` block in the source or ticket, plus a test asserting device time ≤ a stated multiple of the bound. |
+| **GKB WORK BUDGET** (§0) | Bind the useful output, workload, ops/bytes and complete path before code or a target. Distinguish optimistic bounds from forecasts and acceptance. | WORK BUDGET plus a predeclared, justified performance criterion on the measured boundary |
+| **GKD EXECUTION DESIGN** (`execution-design.md`) | Map work, serial span, independent axes, ownership, communication and launch boundaries before a kernel rewrite. | Per-stage execution map; serialized work is justified or marked a repair, not hidden behind CUDA syntax |
 | **GKR DEVICE RESIDENCY** (§0b) | A model step with a GPU performance objective gets a STAGE MAP before code, even if written as host Julia. Profile its steady-state hot path for device execution and zero host↔device transfers. | `STAGE MAP`, device-output checks, and a trace showing zero HtoD/DtoH copies inside the boundary. |
-| **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Match the dispatch table before any `@cuda` or `@kernel`; a matching primitive stops the hand kernel. | One source comment names the checked and rejected alternative. |
+| **GK0 SHOULD-THIS-KERNEL-EXIST** (§1) | Prefer a primitive preserving semantics and whole-path cost; justify custom mapping/fusion against that alternative. | Checked alternative and the measured or derived reason for departing from it |
 | **GK1 DEVICE LEGALITY** (`writing-kernels.md`) | Use isbits arguments, no GC allocation, `return nothing`, specialized helpers, and no boxed captures. | Kernel compiles; `@device_code_warntype` is clean on hot paths. |
-| **GK2 MEASUREMENT** (`measuring.md`) | After P7, warm once and time under `CUDA.@sync`; profiles decide the limiting regime. | Runner verdict plus profile and the metric used by the claim. |
-| **GK3 CORRECTNESS ORACLE** (`debugging.md`) | Compare the whole GPU result to the same-algorithm reference; check shared-state races. | `Pkg.test()` comparison; sanitizer where needed; cached paths pass §11. |
-| **GK3-AD DIFFERENTIABILITY** (`differentiating-kernels.md`) | A training-path kernel or mutating op needs an rrule/Enzyme route and gradient test. | `rrule` plus `test_rrule`, or the documented alternative. |
+| **GK2 MEASUREMENT** (`measuring.md`) | After P7, separate warmup/profile/timing; synchronize inside the timer and bind workload, state reset and statistics. | Measurement receipt, complete stage accounting and actual profile; normalized metrics retain their scope |
+| **GK3 CORRECTNESS ORACLE** (`debugging.md`) | Compare required outputs and mutable state across the claimed update sequence; check actual device dispatch and races. | Real GPU oracle/negative cases; SKIP is unverified, not pass; cached paths pass §11 |
+| **GK3-AD DIFFERENTIABILITY** (`differentiating-kernels.md`) | Only when derivatives through this op are required: provide the AD route and gradient oracle. | `rrule`/Enzyme or supported composable AD path; non-AD state update uses GK3 instead |
 | **GK4 PRECISION CONTRACT** (`reduced-precision-formats.md`) | Separate payload, scale/block, storage, policy, decode, target compute, accumulator, and outcomes. | Completed `PRECISION CONTRACT`; every claimed rung has its own oracle. |
 
 ## Routing — sibling cuts (typed, runtime-answerable)
@@ -68,6 +77,7 @@ Re-check sooner when the target or toolchain differs.
 | `acting-on-hypotheses` | Cheap reversible benchmarks stay in GK2. Use AOH only when costly downstream exposure depends on one untested result. |
 | `orchestrating-agents` | P7 selects and admits device resources. P7 placement alone does not trigger GKR; a model-step GPU performance objective does, even without an explicit residency declaration. |
 | `validating-experimental-evidence` | EV2 owns update-order equivalence; EV3 owns throughput units and comparison footing. Consume those contracts before interpreting a faster kernel or batch. |
+| `driving-bibifi-cycles` | Chooses the next bounded experiment and allocates useful work; HERE specifies GPU design, timing and oracle obligations for that slice. |
 | `prompting-llms` / `driving-*` | Not adjacent — no overlap; listed only because Workflow-native fan-out language sounds similar. Fleet mechanics live in the harness, not here. |
 
 ## MUST NOT FIRE
@@ -94,21 +104,25 @@ Write this block before choosing primitives, setting a speed target, or dispatch
 | Field | Content |
 |---|---|
 | Output unit | What one unit of useful work is: a token, a row, a cell. |
+| Path / operating point | Inference, non-gradient update or AD training; shapes, dtype, state/reveal/update order and exact timed boundary. |
 | Dependency factoring | For each output, list the inputs it actually depends on. Compute once per distinct dependency tuple, not once per conceptual unit. Record the distinct-tuple count. |
 | Selection cardinality | If only K of C candidates feed an expensive stage, record C, K, and how many outputs that stage actually materializes and writes. Charge ops and bytes for the implemented count, not the intended mask. |
-| Algorithm | The lowest-complexity formulation, e.g. an O(n) causal scan with a last-occurrence table, not an O(n²) pairwise mask. |
+| Algorithm / span | Choose a justified work-efficient formulation; name serial dependencies and independent work through GKD. Minimum work alone does not imply minimum GPU latency. |
 | Ops / unit | Integer or FLOP count per output unit for that algorithm. |
 | Bytes / unit | Global-memory reads plus writes per output unit at the narrowest exact element type. |
-| Device bound | max(ops ÷ peak ops/s, bytes ÷ peak B/s), per unit and per batch. Peaks come from the device (`measuring.md` §8). |
-| Gate | A test asserting measured device time per batch ≤ k × bound. State k; add launch cost as launches × measured µs per launch. |
+| Device bound | max(ops ÷ applicable peak ops/s, bytes ÷ applicable bandwidth), with operation type, memory level and provenance. It omits dependency latency unless modeled separately. |
+| Forecast / criterion | Account for all affected and unchanged stages, launches and unattributed intervals. Freeze the workload, estimator, tolerance and justified target before measurement. |
 
 | If… | Then |
 |---|---|
 | A speed target is written without this block | Reject the target; derive the block first. |
-| A target is a multiple of the previous implementation | Replace it with a fraction of the bound. |
-| Measured time is more than 10× the bound | Stop performance acceptance for the affected path. Check bound scope and diagnose its dominant cost; do not freeze unrelated useful development. |
+| A target is only a multiple of the previous implementation or hardware peak | Keep it a goal until complete-path accounting and matched measurements justify feasibility. |
+| Measured time misses its criterion or reveals an unexplained dominant stage | Diagnose that stage and bound applicability; do not widen a multiplier after seeing the result or freeze unrelated work. |
 | A reference model is to be benchmarked | Match the EV3 work unit/protocol/timing boundary and derive its budget. Bounds alone do not establish measured throughput superiority. |
-| A shared-library function is published on a device path | Its docstring states ops and bytes per unit, and its tests include the budget assertion. |
+| A shared-library function enters the measured critical path | Document the counted work and state contract; bind its benchmark to the justified criterion instead of timing every function by default. |
+
+Read `references/execution-design.md` before mapping a stage to kernels. Record serial span as well as total work.
+A correct device-resident implementation can still leave most parallelism unused.
 
 ## §0b GKR — device residency for a whole step
 
@@ -121,9 +135,9 @@ Write the stage map before code. Do not hide a data-dependent stage outside that
 
 | Field | Content |
 |---|---|
-| Stage | Each stage of one step, in order, e.g. ingress, decode, match, insert, write, egress, credit. |
+| Stage | Every stage in the claimed path, including forward, selection/recruit, credit/update, reductions and export where included. Mark unmeasured stages rather than assigning zero cost. |
 | Where | Record where each data-dependent stage executes and where its outputs reside. Every stage and output inside the declared hot path is device-resident. |
-| Primitive | The vendor call, broadcast, or kernel that runs it (walk GK0 per stage). |
+| Primitive / mapping | The vendor call, broadcast or kernel; GKD records independent lanes, serial axes, ownership and synchronization. |
 | Launches | Launch count per step; batched primitives count once. |
 | Transfers | HtoD/DtoH copies inside the declared, warmed hot-path boundary; the target is 0. Report legitimate ingress/export separately. |
 
@@ -147,9 +161,9 @@ For causal scans, state whether episodes have isolated tables or share sequentia
 
 ## §1 GK0 — the deny-gate dispatch table (read FIRST)
 
-Vendor primitives avoid the most expensive unnecessary kernel work. cuBLAS GEMM is tuned per
-architecture. `mapreduce` on CuArray is already shuffle-optimized. Before any `@cuda`, walk this
-table. If a row matches, use it and stop.
+Before any hand kernel, walk this table. Prefer a matching primitive when it preserves semantics,
+work/memory complexity and the measured whole-path cost. A matching name alone does not justify a slow call chain.
+If launches or intermediates dominate, compare one bounded batching/fusion alternative through GKD/GK2.
 
 | Shape of the computation | Use — NOT a hand kernel |
 |---|---|
@@ -215,19 +229,21 @@ The five classes, each with its literal error string, live in `references/writin
 
 | File | Covers | Read when |
 |---|---|---|
+| `references/execution-design.md` | GKD work/span, parallel axes, deterministic updates, stage cost coverage and fusion tradeoffs | Before kernel implementation or a speed target |
 | `references/writing-kernels.md` | GK1 device legality — the 5 compile-error classes with literal error strings + fixes; launch configuration (occupancy API, 1-based index formula, bounds guard, `cld`, warp-multiple block sizes, grid-stride loops, `shmem=`) | writing or first-compiling ANY kernel |
-| `references/memory-and-warps.md` | the optimization ladder — coalescing under Julia's COLUMN-MAJOR layout (threadIdx().x → FIRST dimension; C tutorials transposed), shared memory + `sync_threads` discipline, bank-conflict padding, register pressure (Int32 indices, `maxregs`), warp shuffle reductions, atomics contention + nondeterminism, divergence | a kernel compiles + oracle passes, and now must get FAST |
+| `references/memory-and-warps.md` | Coalescing, shared-memory/barrier scope, registers, shuffle and atomics | During GKD layout/ownership design, then targeted tuning |
 | `references/host-performance.md` | CuArray fusion, views, transfers, allocation, streams, and wide-type precision (`Float32`, `BFloat16`, literals, indices) | any CuArray performance work, even with no hand kernel |
 | `references/reduced-precision-formats.md` | GK4 `PRECISION CONTRACT`: FP8/6/4, MXFP/NVFP4, scale/block, packed storage, target support, decode/compute, accumulator, validation ladder | any sub-16-bit storage, microscaling, or narrow Tensor Core decision |
 | `references/measuring.md` | GK2 — `CUDA.@sync` timing law, `CUDA.@profile`/`@bprofile` (ProfileResults are NamedTuples, not DataFrames `[dated:2026-07]`), nsys→ncu order, `.nsys-rep` not `.qdrep`, roofline verdict for memory-vs-compute-bound, `ncu --query-metrics` before hardcoding metric names, NVTX ranges | BEFORE optimizing anything; before ANY perf claim |
 | `references/debugging.md` | GK3 — `InvalidIRError` decode order, `@device_code_*` by compilation stage, `compute-sanitizer` (cuda-memcheck is GONE `[dated:2026-07]`), scalar-indexing triage, `@inbounds` only after the oracle passes, `sync_threads` divergence races, the CPU-reference oracle pattern, `CUDA.functional()` gating, cached/graph-capture path acceptance — state-separation test + permanent consistency assert (§11) | a kernel miscompiles, crashes, or returns wrong numbers |
 | `references/portable-kernels.md` | KernelAbstractions 0.9.42 — `@kernel`/`@index`/`@localmem`/`@uniform`/`@synchronize` verified API, the `@uniform`-after-`@synchronize` trap, `unsafe_indices` + unguarded index footgun, ndrange idiom, KA-vs-raw-CUDA decision rule, pre-1.0 deprecations (`cpu=`, `KA.GPU`, conditional `@synchronize`) `[dated:2026-07]` | portability (CPU oracle / AMD future) is in play, or KA syntax questions |
-| `references/differentiating-kernels.md` | GK3-AD — why Zygote breaks on kernels/mutation, `ChainRulesCore.rrule` for a kernel-backed op (complete example), Enzyme device-side AD state, differentiable scan / SSM route, `test_rrule` + FD-vs-CPU gradient checks | the kernel sits on a training path (Flux/Lux/Zygote/Enzyme anywhere in the project) |
+| `references/differentiating-kernels.md` | GK3-AD routes, mutating AD paths and gradient oracles | This operation must participate in differentiation; package presence alone is insufficient |
 | `references/api-changes.md` | CUDA.jl v6 split, changed signatures, target flags, fast features, vendor naming, and the KernelIntrinsics negative `[dated:2026-07]` | version confusion, deprecation, or source/docs conflict |
 
 ## §9 Checklist — run before claiming a kernel is done
 
-- [ ] GKB `WORK BUDGET` block exists; the budget test (device time ≤ k × bound) passes.
+- [ ] GKB binds the complete claimed path; the predeclared measured criterion passes or its miss is explicit.
+- [ ] GKD maps independent work and serial span; unexplained one-thread bulk work remains a performance defect.
 - [ ] GPU-performance step: `STAGE MAP` names the hot-path boundary. Each data stage and output inside it is
       device-resident. Its warmed trace has zero HtoD/DtoH copies inside that boundary (GKR).
 - [ ] A selected K-of-C stage materializes and writes K outputs, or its C-cost is charged and passes GKB.
@@ -239,10 +255,10 @@ The five classes, each with its literal error string, live in `references/writin
 - [ ] Device code has no bare Float64 literals; hot index arithmetic uses Int32.
 - [ ] Reduced precision: `PRECISION CONTRACT` is complete. Storage, target, compute, and outcome
       claims each have their own oracle (`references/reduced-precision-formats.md`).
-- [ ] CPU-reference test compares the whole `Array(result)` and runs in `Pkg.test()`.
+- [ ] The oracle covers required output/state, repeated updates, ties, resets and relevant tail batches.
 - [ ] `compute-sanitizer` is clean if shared memory or atomics are used.
 - [ ] Timing uses `CUDA.@sync` after warmup; every performance claim cites a profile.
-- [ ] Training paths define an `rrule` and pass a gradient test (GK3-AD).
+- [ ] Derivative paths pass GK3-AD. Non-gradient learning passes its update-state oracle.
 - [ ] `@inbounds` appears only after the oracle passes.
 - [ ] Cached/graph-capture path: cache key fingerprints EVERY closed-over device array
       (CAPTURE-PINS-ADDRESSES, §1). The state-separation test and permanent in-body

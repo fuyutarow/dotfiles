@@ -559,3 +559,11 @@ scoped to older text and this change adds no warning-class debt.
 1,028-character validation to the accepted cap while keeping both BlueStyle and
 Runic trigger terms. `quick_validate.py` now passes. The existing 157-reference /
 10-core prose-debt waiver is unchanged; no Julia runtime claim was added.
+
+## 2026-09-30 — execution-design cut, v2609.6.2
+
+Reciprocal GPU route now names work/span mapping, timing and state oracle, not just device syntax.
+Kernel craft and its admission/measurement rules stay in optimizing-julia-gpu-kernels; host types,
+packages and numerical-method discipline remain here. No Julia production code or dependencies changed.
+Family evidence: optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md.
+Existing157reference/10core prose warnings are unchanged and waived for this reciprocal-row edit.

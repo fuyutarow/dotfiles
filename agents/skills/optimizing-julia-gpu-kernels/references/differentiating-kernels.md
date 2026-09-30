@@ -1,7 +1,7 @@
 # GK3-AD — differentiating a kernel or a mutating CuArray op
 
-> Read when: a kernel or an in-place CuArray op sits on a training path (Flux/Lux/Zygote/Enzyme
-> anywhere in the project) — before assuming Zygote "just handles it". Verified live 2026-07 on
+> Read when: derivatives through this kernel or mutating CuArray op are required by the actual AD path.
+> Integer/local non-gradient state updates use GK3, not an invented rrule. Verified live 2026-07 on
 > CUDA.jl 6.2.1 / Zygote 0.7.11 / ChainRulesCore 1.26.1 / Julia 1.12.6 (RTX 3060); every error
 > string below is quoted from that run, not from memory.
 

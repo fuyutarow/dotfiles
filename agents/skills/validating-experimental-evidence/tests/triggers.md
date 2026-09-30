@@ -8,6 +8,8 @@ running or repairing the target is a co-fire or handoff.
 
 | Ask | Expected action |
 |---|---|
+| 「INT32 の η が FP32 モデルより高い。速い学習器だと主張してよい？」 | EV3 binds work/peak/precision and absolute task performance; normalized ratios alone do not establish superiority. |
+| "MFU rose after changing batch size; did the algorithm improve?" | EV3 separates operating-point change from algorithm improvement and keeps the matched timing/quality requirement. |
 | 「electricity の正答率が上限を超えた。ラベル漏れか、成功と言えるか」 | Quarantine; EV0–EV2 bound and information-flow checks; neither conclusion yet. |
 | “Our runner says arena=null and used bits=3 when the registered benchmark says bits=8” | EV0 rejects an official registered score; retain ad hoc raw run. |
 | 「前の版の首位 0.99 に今の版が届かない。退行と書いてよい？」 | EV3/EV4 contract, concept, replacement, and current-row matrix. |

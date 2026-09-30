@@ -517,13 +517,18 @@ run = [
   { task = "link:skills" },
   { task = "tmux:plugins" },
   { task = "mac:defaults" },
+  { task = "mac:obsidian" },
   { task = "mac:iterm2" },
   "echo '---'; echo 'Setup complete. Run: exec zsh'",
 ]
 
 [tasks."mac:defaults"]
-description = "Apply declarative macOS system defaults (single source: macos/defaults.sh)"
-run = 'bash ~/dotfiles/macos/defaults.sh'
+description = "Apply declarative macOS system defaults (single source: macos/defaults.ts)"
+run = 'bun ~/dotfiles/macos/defaults.ts'
+
+[tasks."mac:obsidian"]
+description = "Merge obsidian/app.json into every registered Obsidian vault (single source: obsidian/app.json)"
+run = 'bun ~/dotfiles/obsidian/apply.ts'
 
 [tasks."mac:iterm2"]
 description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"

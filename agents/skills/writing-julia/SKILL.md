@@ -17,7 +17,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.6.1 (2026-09-24) — BlueStyle naming with Runic formatting.
+> **Version**: v2609.6.2 (2026-09-30) — host Julia discipline yields GPU execution design to its specialist.
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -62,7 +62,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
 | `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
-| `optimizing-julia-gpu-kernels` | **DEVICE:** kernel/CuArray work → there. Host types/packages → HERE. |
+| `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages → HERE. |
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
 | `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |

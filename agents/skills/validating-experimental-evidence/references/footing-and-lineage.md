@@ -47,6 +47,22 @@ Unmatched historical numbers may motivate investigation; do not derive a speedup
 An aspirational target stays labeled unvalidated until its workload, bound and acceptance rationale are fixed.
 Rejecting a new target does not validate the old one. Check both sources and retain their actual authority/status.
 
+## Normalized performance is not task superiority
+
+| Metric claim | Required binding / permitted inference |
+|---|---|
+| Raw throughput or latency | Same useful unit, workload/quality target, timed path and operating point; preserve absolute time/rate |
+| Utilization/efficiency proxy such as rate × work / peak | Define work as useful model operations or issued operations, included stages, operation class/precision and peak source |
+| Forward-normalized training rate | Label excluded update/backward work; do not call it complete training compute utilization |
+| Cross-model normalized comparison | Different operation counts/peaks do not establish which model is faster or solves the task more efficiently |
+| Batch/length trend | Report tested points, state/memory and latency constraints; a single point does not establish saturation or a general characteristic curve |
+| Changed bandwidth/launch calibration | Preserve calibration workload, counting convention, statistic, contention/clock state and old binding; qualify dependent claims |
+| Threshold nearly met | Keep the frozen threshold and record the miss; uncertainty may make it inconclusive only under the predeclared rule |
+
+A dimensionless ratio still depends on its denominator and operating point.
+Adding useless operations can raise an issued-operation utilization metric without improving useful throughput.
+GPU craft owns counter/timer collection; this skill owns the resulting comparison claim. Do not introduce a second metric registry.
+
 Before a run, check whether a threshold is reachable. Use the finite sample,
 target distribution, scoring window, and known bounds. After a run,
 an observed value outside a credible bound reopens EV0–EV2 before it becomes evidence.

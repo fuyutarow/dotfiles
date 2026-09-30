@@ -2,6 +2,9 @@
 
 > Read when: writing or first-compiling ANY `@cuda` kernel, or assembling its launch configuration (`threads=`/`blocks=`/`shmem=`).
 
+Before this legality check, complete GKD in `execution-design.md`: parallel axes, serial span and write ownership.
+A kernel that compiles and returns correct values has not thereby demonstrated useful parallel execution.
+
 Contents: §1 the 5 device-compiler error classes · §2 kernel I/O + control-flow bans · §3 Float32/Float64-only math intrinsics · §4 StaticArrays in kernels · §5 launch config idiom.
 
 Not here: GK0 vendor-dispatch deny-gate (SKILL.md §1); coalescing/shared memory/register pressure/warp shuffles/atomics (`memory-and-warps.md`); Float32-literal precision (GK4, `host-performance.md`); `InvalidIRError` triage workflow, `compute-sanitizer` (`debugging.md`).

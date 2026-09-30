@@ -1,20 +1,15 @@
 # Memory & warps — the optimization ladder
 
-> Read when: a kernel already compiles (GK1) and passes its CPU-reference oracle (GK3) — now
-> it must get FAST. THE LAW's clause "the memory hierarchy dominates the arithmetic — coalesce
-> before you tune" is this file's territory: coalescing, shared memory + barriers, bank
-> conflicts, register pressure, the read-only cache, warp shuffles, atomics, divergence. Climb
-> in this order — a lower rung still broken wastes effort on the ones above it.
+> Read during GKD layout/ownership design, then for a measured kernel bottleneck.
+> This file owns coalescing, shared memory/barriers, registers, shuffles, atomics and divergence.
+> The measured path decides which cost to fix; memory tuning is not always the first intervention.
 
 ## §1 Coalescing — Julia is COLUMN-MAJOR, `threadIdx().x` is the FIRST dimension
 
-Julia arrays are column-major (dim 1 contiguous) — the mirror image of the row-major C/CUDA
-tutorials most training data comes from, where `threadIdx.x` conventionally maps to the LAST
-(contiguous) dimension. Map `threadIdx().x` (the fastest-varying lane in a warp) to the FIRST
-dimension of every `CuArray`/`CuDeviceArray` — never the last. Porting `A[row][col]`,
-`col=threadIdx.x`, literally into `A[row, col]` (dim 2, not 1) turns one coalesced transaction
-into 32 uncoalesced ones — a 10-30x slowdown with **no error and no wrong output**, invisible
-until profiled.
+Dense Julia arrays are column-major: the first dimension is contiguous.
+Map neighboring active lanes to nearby addresses in the actual layout, normally dimension1 for a dense Julia array.
+For views, permutations, packed storage or gathers, inspect physical strides and access patterns rather than the index's name.
+Measure transactions/bytes used; a source-level index rule does not establish coalescing for every layout.
 
 ```julia
 # WRONG — ported straight from a C row-major tutorial
@@ -25,9 +20,9 @@ i = threadIdx().x; j = threadIdx().y
 @inbounds A[i, j] += 1f0   # stride-1 across the warp: coalesced
 ```
 
-**Artifact**: grep every `CuDeviceArray` index driven by `threadIdx().x` — must be leftmost.
-Confirm with Nsight Compute Memory Workload Analysis: `sectors per request` near 1 (coalesced)
-vs near 32 (`measuring.md` owns the general profiling workflow; this metric is the readout).
+**Artifact**: lane-to-address map and the applicable memory-workload counters.
+An aligned full warp accessing consecutive4-byte words spans four32-byte sectors, not one.
+Interpret sectors/request using the named memory level, active lanes, access width and alignment; no universal threshold1.
 
 ## §2 Shared memory — allocation + the unconditional-barrier rule
 

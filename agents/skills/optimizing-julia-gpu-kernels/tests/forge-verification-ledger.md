@@ -337,3 +337,47 @@ Static review found and fixed GK3 ambiguity. A clarified fresh target event mark
 thresholds pending; no actual performance gain is claimed. Archived804ac2c and current target
 floor each report208existing reference prose warnings, no core warnings; scoped debt waived with
 unchanged baseline. Collection and diff checks pass; no runtime instrumentation was introduced.
+
+## 2026-09-30 — parallel design and measurement contracts, v2609.5.0
+
+Source, primary/corpus locators and structural owner map: `tests/postmortem-2026-09-30-design.md`.
+Baseline6774b7b. GKD occupies the previously missing work/span→execution-map step inside the existing
+stage map. It neither creates another skill nor treats all single-thread work as forbidden.
+GKB now separates optimistic bounds, complete-path forecasts and justified frozen acceptance criteria.
+GK3 covers the actual required output/state relation; GK3-AD applies only to differentiated operations.
+GK2 fixes the outer-sync/inner-timer example, separates warmup/profile/timing, preserves sample/state
+conditions and replaces roofline/occupancy shortcuts with counters and timeline-based interpretation.
+EV3 owns normalized comparisons; Julia owns host language discipline; BIBIFI selects useful bounded slices.
+
+Two bounded Terra audits harvested the episode and GPU contracts. Root rejected a suggested
+all-training-state-updates→rrule rule as precisely the category error being repaired.
+Final semantic review found exact versus tolerance/stochastic oracle ambiguity; root bound the
+oracle relation to the target contract and prohibited post-hoc weakening.
+
+**File-backed OLD/NEW review.** Fresh workers inspected the same constructed workload/profile/proposal
+and wrote actual review artifacts under /tmp/kernel-skill-reforge.QU9BKW. Neither saw the root criteria.
+Both retained all20ms of stage accounting, rejected4x training gain from forward-only10x, rejected
+invalid static top-k, and kept skipped GPU verification unverified. Both correctly waived irrelevant AD.
+OLD incorrectly said the outer CUDA.@sync made the inner @time adequate. NEW identified and fixed
+that ordering. This is one observed review distinction, not a speed or general reasoning improvement.
+NEW also over-blocked a known score-update repair on fully attributing an independent8ms host interval
+and on preexisting compilation evidence. Root marked that sequencing wrong, separated pre-code
+design from post-code validation, then requested a targeted informed repeat with unchanged inputs.
+The repeat permits the local repair while retaining8ms as unknown; root read the actual corrected artifact.
+
+Artifacts (SHA256): OLD085f4732396d6436b2cbe32b8c7db6e9a3924dfc33caa6222be5e4878f05634d;
+NEW-first686be92512528a99d74045fa2ee060260882f348008cd5181e4e4894f587bcf1;
+NEW-repeat84c72c5e4260922f8442f7d67e6de1c9f99d16d268a963a9bbc838a90199af5b.
+The repeat is not a fresh blind success. No CUDA code was executed, no performance gain measured,
+and no Firedancer implementation/launch policy changed. Documentation snippets are not GPU-runtime receipts.
+
+PROSE-DEBT waiver,2026-09-30: core warnings zero; reference long-sentence count208→204 over the
+scoped edit, including the new design reference. Retain older detailed reference prose and dated
+API caveats outside this repair; the revision does not claim a full current-toolchain revalidation.
+`design-cases.md` covers serial bookkeeping, dependent selection, non-AD learning, timer placement,
+missing stages, normalized comparisons, GPU skip, state tolerances and greenfield/local-repair sequencing.
+
+Final description desk-check routes all six boundary prompts to GPU craft, host Julia or EV3 as intended.
+It exposed a weak EV3 trigger for normalized-only comparisons; MFU/η/無次元効率 terms were added there.
+This is description consistency, not measured automatic activation. Broad references keep their dated
+limits; this revision does not assert every inherited API/example was re-executed on today's toolchain.

@@ -13,7 +13,7 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「CUDA.jl でカーネル書いて速くしたい」 | core territory — GK0 walk first, then writing-kernels.md |
 | "my `@cuda` kernel is slower than the broadcast version" | GK2 measurement + GK0 re-check (broadcast may simply be right) |
 | 「CuArray の実装のスループットが遅い。なぜ？ 理論上限と比べて」 | GKB §0 work budget first, then measuring.md §11 counted diagnosis |
-| "set a tokens/s target for this CUDA.jl GPU ticket" | GKB — a target is a fraction of the derived bound, never a multiple of the previous version |
+| "set a tokens/s target for this CUDA.jl GPU ticket" | GKB/GKD — keep user goals, justify feasibility from a complete path and matched workload; a peak fraction is not a guarantee |
 | 「occupancy を上げたい / threads と blocks どう決める?」 | launch-config (occupancy API, not hand-picked numbers) |
 | "shared memory でタイルすれば速くなる?" | memory-and-warps.md + GK0 (GEMM-shaped → cuBLAS, not hand tiling) |
 | `InvalidIRError: unsupported dynamic function invocation` の意味 | §2 error classes / debugging.md bottom-up decode |
@@ -32,6 +32,9 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | "Lux uses stock layers, but my Julia GPU-first training step still runs CPU decode and host loops" | GKR fires on the whole step even without a custom kernel |
 | "P7 admitted a GPU, and now this Julia learner must meet a GPU throughput target though its step is written as host code" | GKR fires on the performance objective, not the existing device syntax |
 | 「CPU RAM が払底してGPUが空いている。CuArrayのKrylov基底へ移すべきか、VRAM上限込みで測って」 | GPU placement/performance fires here; `orchestrating-agents` P7 must admit RAM/VRAM before warmup, then GK0/GK2 decide the implementation |
+| "The whole step is device-resident but one thread performs all credit updates." | GKD work/span and update ownership; zero copies do not establish parallel execution |
+| "Integer local learning uses no AD. Must this state-update kernel have an rrule?" | GK3 state/update oracle applies; GK3-AD does not fire without a derivative requirement |
+| "Inference improved8x but training missed its target; two update kernels were omitted from the estimate." | Complete path accounting and matched train timing before another forecast |
 
 ### Reduced precision / microscaling
 

@@ -3,7 +3,8 @@ name: validating-experimental-evidence
 description: >-
   Validates benchmark evidence for claims. Use for comparison footing/比較土俵,
   baseline/基準線, leakage/ラベル漏れ, prequential tests, implausible scores, confounded
-  ablations/交絡, regression/退行, registry bypass, or stale executed code.
+  ablations/交絡, regression/退行, normalized efficiency/MFU/η comparisons/無次元効率,
+  registry bypass, or stale executed code.
   Owns EVIDENCE DISPOSITION meaning; polysearch owns schema and promotion gates.
   Work selection→driving-bibifi-cycles; section run admission→directing-research-sections;
   costly test threshold→acting-on-hypotheses;
@@ -14,7 +15,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.1.5 (2026-09-27) — measurement qualification requires no new section profile.
+> **Version**: v2609.1.6 (2026-09-30) — normalized efficiency retains work, peak and operating-point scope.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -42,6 +43,7 @@ specific repair. It does not block unrelated exploratory work.
 
 This skill owns the *meaning* of measurement validity and comparability. It does not launch
 the run, choose a research bet, allocate resources, or implement the target's gate.
+GPU design/profiling belongs to `optimizing-julia-gpu-kernels`; EV3 qualifies what those measurements can compare.
 In polysearch-backed research, **polysearch owns the question/hypothesis/run/finding
 schema and promotion gates**. Arena owns its registered stream and scoring contract.
 Do not create a sidecar card, validator, or second result store in this skill.

@@ -3,6 +3,22 @@
 > Read when: BEFORE optimizing anything, and before ANY perf claim ("faster", "memory-bound",
 > "compute-bound", "beats cuBLAS") — this is GK2 in SKILL.md.
 
+## Measurement contract — one receipt before interpretation
+
+| Field | Record |
+|---|---|
+| Path / identity | Exact code/environment, device, shape/batch/length, dtype, inference/non-gradient update/AD training |
+| Timed boundary | Kernel device interval, synchronized warm whole step, or cold end-to-end; included/excluded stages |
+| State | Warmup and measured inputs; reset per sample or explicitly advancing stream; training state changes must match baseline |
+| Sampling | Repetitions, evaluations per sample, preselected statistic and spread; retain raw samples and contention state |
+| Instrument | Timer expression with completion inside it; profile mode, clock/cache/replay conditions recorded separately |
+| Acceptance | Frozen criterion and tolerance; report each miss separately, including marginal misses |
+
+Minimum time may estimate a best-case lower envelope; it is not automatically representative runtime.
+Do not switch estimator after seeing noise or select a favorable bandwidth/clock calibration for the desired ratio.
+Separate unprofiled timing from profiling. Profile replay, clock/cache control and serialization can change observed duration.
+Derive a bottleneck from the path timeline and relevant counters, not from a normalized score alone.
+
 ## §1 THE SYNC LAW — async kernel launches lie to naive timers
 
 CUDA kernel launches are asynchronous: `@cuda` (or any CuArray op) returns control to the host
@@ -52,17 +68,17 @@ way by orders of magnitude.
 @time my_kernel!(y, x)
 @time mul!(y, A, x)
 
-# RIGHT
-CUDA.@sync @time my_kernel!(y, x)
+# RIGHT — timer contains the completion wait
+@time CUDA.@sync my_kernel!(y, x)
 @benchmark CUDA.@sync my_kernel!($y, $x)
 @benchmark CUDA.@sync mul!($y, $A, $x)
 ```
 
 ## §2 Warm-up run before profiling — JIT is not the kernel
 
-Run the kernel once, unmeasured, before profiling with `ncu`, `nsys`, or `CUDA.@profile`/
-`CUDA.@time`. Skipping this profiles Julia's JIT compilation, not the kernel — hundreds of ms
-of TTFX get misattributed to the kernel body, and a phantom bottleneck gets "optimized".
+Warm the exact path, including update/backward branches and relevant shapes, before steady-state measurement.
+Confirm compilation/setup has settled; one forward warmup does not warm every branch.
+Record cold setup separately. Do not remove setup from the BIBIFI launch budget merely to report warm timing.
 
 ```julia
 a = CUDA.rand(1024, 1024, 1024)
@@ -72,9 +88,8 @@ CUDA.@profile sin.(a)      # now measures steady-state execution only
 
 - Under `ncu --mode=launch julia`, ensure every involved CUDA.jl package is already
   precompiled BEFORE attaching — otherwise the profiler captures precompilation, not the run.
-- Even after warm-up, the first call immediately after `nsys launch` can still read
-  anomalously slow. For short kernels, call twice (separated by `CUDA.@sync`) and trust the
-  second number, not the first post-launch measurement.
+- If short runs near profiler startup look anomalous, separate profiling from timing and repeat the declared protocol.
+  Retain the distribution; do not automatically discard the first sample or trust the second.
 
 ## §3 `CUDA.@profile` — the first measurement step
 
@@ -168,18 +183,19 @@ A post-processing script that globs `*.qdrep` silently matches zero files and "s
 having processed nothing. Verify the actual extension/binary on the installed toolkit before
 hardcoding either name.
 
-## §8 The roofline verdict — the ONLY legitimate memory-vs-compute-bound call
+## §8 Roofline is a resource model, not a bottleneck verdict by itself
 
-Never eyeball memory-bound vs. compute-bound from `CUDA.@profile`'s time-share table (§3) — it
-has no bandwidth or FLOP concept, so any classification from it has no quantitative basis. The
-authoritative call is Nsight Compute's roofline section:
+Time-share tables alone cannot identify a bandwidth or arithmetic ceiling.
+Use applicable operation/memory counters and the timeline; a floating-point roofline may not describe an integer kernel.
+An applicable Nsight Compute roofline section is one diagnostic:
 
 ```
 $ ncu --section SpeedOfLight_RooflineChart --kernel-name regex:"my_kernel" -- julia myscript.jl
 ```
 
-Left of the Ridge Point on the chart = memory-bound; right = compute-bound; far below both
-boundaries = a latency/occupancy problem, not a bandwidth or FLOP ceiling.
+Arithmetic intensity selects the limiting roof in that model, not necessarily the workload's actual limiting cost.
+Far below the roof, inspect exposed parallelism, serial dependencies, latency, synchronization and instruction mix.
+Device busy time, occupancy, achieved instruction throughput and useful task throughput are different quantities.
 
 For a same-session, no-`ncu`-needed estimate, compute effective bandwidth analytically —
 `(bytes_read+bytes_written)/1e9/measured_seconds` — against the device's OWN theoretical peak
@@ -246,19 +262,19 @@ filterable region in `CUDA.@profile`'s own `.nvtx` trace field (§5).
 
 ## §11 A bottleneck claim names a counted quantity
 
-A diagnosis by analogy to an earlier incident is not a diagnosis. Each claim needs its count:
+A diagnosis by analogy to an earlier incident is not a diagnosis. Bind the counted quantity to the timeline:
 
 | Claim | Required count | Holds only if |
 |---|---|---|
-| "launch-overhead-bound" | device rows per batch from `CUDA.@profile trace=true`, times the HOST wall µs per launch (enqueue plus CUDA.jl bookkeeping; measure it with 200 empty launches under `CUDA.@sync`, never use the device-busy µs) | rows × host µs ≥ half the measured time |
-| "host-API-bound" | host rows per device row in the same trace | the host rows dominate the trace even where rows × µs falls short; the fix is fewer calls (fusion, graph capture), not faster kernels |
-| "memory-bound" | bytes read plus written per batch (GKB) | bytes ÷ peak B/s ≥ half the measured time, or the §8 roofline says so |
-| "compute-bound" | ops per batch (GKB) | ops ÷ peak ops/s ≥ half the measured time |
-| "host-bound" / "sync-bound" | host-side time between device calls, and device→host copies per batch | host time ≥ half the wall time |
-| none of the above holds | — | the stage is far from every bound: re-read its algorithm against GKB before tuning |
+| Launch overhead | Launches per claimed step, enqueue intervals and a bounded calibration | These intervals constrain the critical timeline; empty-launch latency is not an additive law for overlapped execution |
+| Host/API work | Actual host work between launches, allocation/copies and API events | Distinguish useful CPU work from a synchronization call waiting for device work |
+| Memory throughput | Bytes at a declared memory level and achieved bandwidth at matched conditions | Access counters and traffic support saturation; intensity alone is insufficient |
+| Arithmetic throughput | Applicable instruction/operation classes and achieved rates | The relevant execution units are limiting; an FP peak is not an integer-pipeline measurement |
+| Serialized device work | Grid/block dimensions, independent lanes, serial loops and stage time | Low exposed parallelism explains the stage; device residency/zero copies do not refute it |
+| Unattributed interval | Located wall interval not explained by the above | Keep UNKNOWN and inspect it; do not forecast that batching/fusion will necessarily remove it |
 
-Per-stage split: time each stage once under `CUDA.@sync` and print, per stage, measured time,
-its own GKB bound, and the ratio. Select a fix by recoverable whole-run time, not the largest ratio alone.
+Print the complete stage accounting and its unmeasured intervals. Select by recoverable whole-run time.
+An isolated synchronized stage timing perturbs overlap; do not substitute its sum for the original timeline.
 
 Separate queue wait, process/JIT setup, warm host work, warm device work and export/cleanup.
 Within overlapping execution, use a critical timeline; do not sum overlapping stage durations as wall time.
@@ -271,4 +287,4 @@ A library name or old fast record cannot certify the current call path; hidden O
 
 | Observation | Rule |
 |---|---|
-| The first call right after a `CUDA.@profile` block reads far slower (observed 34.2 ms, then 0.52–0.75 ms for the same call) | Never time a call next to a profile block. Profile and time in separate phases; report the minimum of ≥5 synchronized calls. |
+| A call next to profiling is anomalously slow | Separate profile and timing, repeat the frozen sampling protocol, and report its statistic/spread; no post-hoc best-sample selection |

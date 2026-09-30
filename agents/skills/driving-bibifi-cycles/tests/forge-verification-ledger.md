@@ -875,3 +875,11 @@ S77–S83 cover spare capacity, real blockers, contention, masked effects, hones
 authority and unexplained fixed concurrency. Core243lines versus248; microticket reference79 versus95.
 Target core/reference prose warnings zero; collection membership/listing/ceiling unchanged.
 No new skill, scheduler, runtime schema or production job mutation is included.
+
+## 21. Consume complete GPU path cost — v2609.9.1
+
+GPU optimization tickets return complete train/infer accounting before this loop selects the next
+speed slice. A normalized ratio increase or inference-only gain cannot close a learning-throughput target.
+GPU craft owns work/span, design and profiling; EV3 owns comparison meaning. Their full revision
+and file-backed verification live in optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md
+and its forge ledger. This pointer adds no new scheduling rule, runtime gate or scientific result.

@@ -260,3 +260,13 @@ no listing increase. `git diff --check` passes. No live Firedancer code, jobs or
 Deployment checks: central link:skills and lint:skills-wiring pass; existing source-linked Codex
 and Claude skill paths now expose this revision. No claim that a running Firedancer worker reloaded
 it follows from those checks. Commit/push are part of this user-authorized delivery.
+
+## 2026-09-30 — normalized performance footing, v2609.1.6
+
+EV3 now binds useful/issued operation counts, included path, precision/peak, calibration and
+operating point for efficiency ratios. These do not replace absolute time/quality or matched
+throughput evidence. A forward-normalized train proxy is not complete-training utilization.
+Small frozen-threshold misses remain misses. GPU craft retains collection/profiling; no new metric registry.
+Source and bounded verification: optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md
+and its forge ledger. MFR/DTM corpus positions remain draft; the skill does not silently upgrade them.
+Core/reference floor zero warnings. No benchmark data, admission mechanism or runtime schema changed.

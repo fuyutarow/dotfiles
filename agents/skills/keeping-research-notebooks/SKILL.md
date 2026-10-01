@@ -56,7 +56,7 @@ Read each binding from the repo before the first act. A missing binding is a fin
 | Write gate and path classes | the gate config's `declared.*` keys | `polysearch doctor`; read `polysearch.json` |
 | Commit verb | the repo's `commit` task | `mise tasks`; body per `wiring-mise-tasks` |
 | Launch verb | the repo's single launcher task | `mise tasks`; then its `--dry-run` |
-| Edition ledgers | catalog file, per-edition versions ledger, digest checker CLI | `repo-retrieve concept` where ccc is wired; else read the task list and the registry dir |
+| Edition ledgers | catalog file, per-edition versions ledger, digest checker CLI | `rr about` where ccc is wired; else read the task list and the registry dir |
 | Retention homes | gate config, records store, knowledge repo, memory index | `references/homes-and-layout.md` §1–§2 |
 
 ## Gates N1–N5

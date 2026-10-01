@@ -38,12 +38,12 @@ const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
 // substitution, no other redirection, no further stage. A trailing head/tail only shortens what is
 // shown. Widened 2026-10-01 (firedancer report): the deny message recommended this form while the
 // gate rejected `2>&1`, `-e`, and `| head` — three denials in one day for following the advice.
-const ROUTER_INVOCATION = String.raw`(?:repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))`;
+const ROUTER_INVOCATION = String.raw`(?:rr|repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))`;
 const FILTER_PATTERN = String.raw`(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s|;&<>\`$'"-][^\s|;&<>\`$'"]*)`;
 const ROUTED_STREAM_FILTER = new RegExp(
   String.raw`^\s*(?:cd\s+(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s;&|\`$]+)\s*&&\s*)?` +
     ROUTER_INVOCATION +
-    String.raw`\s+(?:concept|battery|literal|exhaustive|files|structural|definition)\b[^|;&\n\`$<>]*` +
+    String.raw`\s+(?:about|absent|text|regex|files|shape|exists|concept|battery|literal|exhaustive|structural|definition)\b[^|;&\n\`$<>]*` +
     String.raw`(?:\s2>(?:&1|\/dev\/null))?\s*` +
     String.raw`\|\s*(?:grep|rg)(?:\s+-[Fivwnc]+)*\s+(?:--|-e)\s+` +
     FILTER_PATTERN +
@@ -55,12 +55,13 @@ const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
 // used to print the long form, so agents copied `bun ~/.claude/hooks/repo-retrieve.ts …` forever
 // although `repo-retrieve` was installed (2026-10-01, owner: 「ずっとこれに耐えるしかないの？？」).
 const ROUTER_COMMAND = ((): string => {
-  const onPath = Bun.which("repo-retrieve");
-  const same =
-    onPath !== null &&
-    existsSync(ROUTER) &&
-    realpathSync(onPath) === realpathSync(ROUTER);
-  return same ? "repo-retrieve" : "bun ~/.claude/hooks/repo-retrieve.ts";
+  const isThisRouter = (name: string) => {
+    const onPath = Bun.which(name);
+    return onPath !== null && existsSync(ROUTER) && realpathSync(onPath) === realpathSync(ROUTER);
+  };
+  if (isThisRouter("rr")) return "rr";
+  if (isThisRouter("repo-retrieve")) return "repo-retrieve";
+  return "bun ~/.claude/hooks/repo-retrieve.ts";
 })();
 
 function isRawSearch(command: unknown): boolean {
@@ -200,17 +201,16 @@ function main(): void {
     "deny",
     `search-route: raw ${tool} search is disabled in operational ccc project ${project}. ` +
       `Declare the query shape through ${ROUTER_COMMAND}: ` +
-      `${ROUTER_COMMAND} concept --query '<unknown-name concept>'; ` +
-      `${ROUTER_COMMAND} battery --query '<q1>' --query '<q2>' --query '<q3>' ` +
-      `(absence/new implementation); ` +
-      `${ROUTER_COMMAND} literal --query '<exact text>'; ` +
-      `${ROUTER_COMMAND} exhaustive --query '<regex>'; ` +
-      `${ROUTER_COMMAND} structural --query '<by-example pattern>'; ` +
-      `${ROUTER_COMMAND} files --glob '<glob>'; ` +
-      `${ROUTER_COMMAND} definition --query '<what it does>' (before writing a new function: does one exist?). ` +
+      `${ROUTER_COMMAND} text '<exact text>'; ` +
+      `${ROUTER_COMMAND} regex '<regex>'; ` +
+      `${ROUTER_COMMAND} files '<glob>'; ` +
+      `${ROUTER_COMMAND} about '<meaning, JA or EN>'; ` +
+      `${ROUTER_COMMAND} absent -q '<p1>' -q '<p2>' -q '<p3>' (before claiming something does not exist); ` +
+      `${ROUTER_COMMAND} exists '<what it does>' (before writing a new function); ` +
+      `${ROUTER_COMMAND} shape '<code pattern by example>'. ` +
       `To filter displayed router output, pipe it to ONE grep/rg with one pattern (-e PAT or -- PAT) ` +
       `and no file operand, optionally followed by one head/tail, e.g. ` +
-      `repo-retrieve literal --query '<text>' 2>&1 | grep -F -e '<filter>' | head; ` +
+      `${ROUTER_COMMAND} text '<text>' 2>&1 | grep -F -e '<filter>' | head; ` +
       `filtered output is never an absence check. ` +
       `Known-symbol definitions/references go to Serena. The router may choose rg; ` +
       `the forbidden act is unclassified search, not lexical search. This is a policy ` +

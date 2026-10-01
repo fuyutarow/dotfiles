@@ -283,9 +283,9 @@ cosine matrices → `catalog.md` §Markdown-corpus trial) actually measured:
    - **No EN↔JA bridging** in either direction.
    - Exact-token misses are NOT wall evidence: an EN control token unique to one file was
      missed just as completely as the JA one — that is CC3's general top-k limitation;
-     route exact-token lookups to `repo-retrieve literal` in any language.
+     route exact-token lookups to `rr text` in any language.
    A pure-Japanese notes vault gets no dependable semantic search from the default model —
-   route literal lookups to `repo-retrieve literal` and gate any semantic promise on the model
+   route literal lookups to `rr text` and gate any semantic promise on the model
    swap below.
 3. **The fix, chosen and END-TO-END VERIFIED.** The measured recommendation is
    `ibm-granite/granite-embedding-311m-multilingual-r2` (dim 768) — chosen 2026-07-17 by a

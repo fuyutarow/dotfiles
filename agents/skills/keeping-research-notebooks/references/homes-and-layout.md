@@ -72,7 +72,7 @@ Do not create a directory to fill the gap.
 | Store health | gate health checks | `polysearch doctor` | a check fails on a path you touch |
 | Commit verb | `commit` task | `mise tasks` | absent: route to `wiring-mise-tasks` |
 | Launch verb | the one launcher task | `mise tasks`; its `--help` | two launch paths exist |
-| Edition registries | catalog, versions ledger, model registry, checker | `repo-retrieve concept` on "edition catalog", "code digest checker" where ccc is wired; else the task list and registry dir | a registry has no checker |
+| Edition registries | catalog, versions ledger, model registry, checker | `rr about` on "edition catalog", "code digest checker" where ccc is wired; else the task list and registry dir | a registry has no checker |
 | Rulings | memory index | read the memory index | a ruling sits only in a report |
 | Records store root | the gate config's protocol directory | `polysearch doctor` | no store and none being adopted: this skill does not apply (a repo being scaffolded to adopt one takes §0) |
 | Knowledge repo | the repo's knowledge-distillation hook or memory index | read `.claude/settings.json` hooks; the memory index | a primary source read with no distillation entry |

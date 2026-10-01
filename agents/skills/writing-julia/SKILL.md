@@ -17,7 +17,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2609.6.2 (2026-09-30) — host Julia discipline yields GPU execution design to its specialist.
+> **Version**: v2610.1.0 (2026-10-01) — a notebook repo's workspace root lives in `packages/`, never at the repo root (PK0).
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -66,7 +66,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
 | `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |
-| `keeping-research-notebooks` | **BY ARTIFACT:** Julia module and package mechanics → HERE. Model edition/revision lifecycle, registration, and acceptance rows → there. |
+| `keeping-research-notebooks` | **BY ARTIFACT:** Julia module and package mechanics, and the notebook workspace root (`packaging.md` PK0 notebook row) → HERE. Repo top-level layout (homes §0), model edition/revision lifecycle, registration, and acceptance rows → there. |
 
 ## MUST NOT FIRE
 

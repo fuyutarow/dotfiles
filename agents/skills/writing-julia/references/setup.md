@@ -76,6 +76,12 @@ A reusable library must also test a fresh resolution from `Project.toml` and `[c
 
 ## 3.4 Experiment management — `DrWatson` (the layer above environment reproducibility)
 
+**Precedence — check first.** The repo has a records store (`polysearch.json`)? Then the store
+IS the experiment layer, and this section does not apply. Runs go through the repo's launcher. Runners become apparatus records,
+and results become run artifacts. Layout follows `keeping-research-notebooks` homes §0:
+no root `src/`, `scripts/` or `_research/`, and no DrWatson `datadir`/`@tagsave` alongside the store.
+Use this section only in a repo with no records store.
+
 Reproducibility has **two layers**; §3.3 is only the lower one. For research that runs many
 parameterized experiments, **`DrWatson.jl` is the default** for the upper (experiment) layer — do
 not hand-roll path strings, ad-hoc filenames, or "did I already run this?" logic.
@@ -405,7 +411,7 @@ the evolution of the theory reads as a history rather than a pile of overwritten
 - **`Documenter.jl`** builds the documentation site from docstrings; pair it with the `docs/`
   folder DrWatson scaffolds.
 
-The practical answer to *"which formula is current?"*: current logic lives in `src/` (architecture.md
+In a repo with no records store (§3.4 precedence), the practical answer to *"which formula is current?"*: current logic lives in `src/` (architecture.md
 §10), its **evolution** lives as Git-tracked Pluto/Quarto notebooks in `notebooks/`, and every
 saved result is bound to its code version via DrWatson `@tagsave` (§3.4). No artifact is orphaned
 from the theory state that produced it.

@@ -8,6 +8,9 @@
 //   files           -> rg --files
 //   structural      -> ccc grep
 //   symbol          -> exit 2 with a Serena route
+//   definition      -> "does something that does X already exist?" — a catalog of definitions
+//                      (functions, types) searched by meaning and reranked; a few cards, or
+//                      NO_DEFINITION. Owned by definitions.ts.
 //   index           -> `ccc index`, then record the freshness watermark on success -- the ONLY
 //                      writer of that watermark. There used to be a second, faster `stamp`
 //                      command that recorded the watermark without reindexing; it was deleted
@@ -61,6 +64,7 @@ import {
   runIndexWrapper,
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
+import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
 import { attempt } from "../hooks/attempt.ts";
 
 const ROUTES = [
@@ -723,6 +727,75 @@ function routeCommand(route: Route) {
   );
 }
 
+// Exit 0 = at least one definition matches (strong or likely); 1 = NO_DEFINITION (the nearest
+// candidates are printed, labelled as non-matches); 2 = usage / not a ccc project.
+async function runDefinition(query: string, limit: number, cwd: string, json: boolean): Promise<number> {
+  const project = findRegisteredProject(cwd);
+  if (!project) {
+    throw new Error(`definition requested, but ${cwd} is not inside a ccc-registered project`);
+  }
+  const a = await findDefinitions(project, query, limit);
+  for (const n of a.notes) process.stderr.write(`NOTE: ${n}\n`);
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ ...a, cards: a.cards.map(({ body: _b, ...c }) => c) })}\n`);
+    return a.strength === "none" ? 1 : 0;
+  }
+  process.stderr.write(
+    `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? " + rerank" : ""} project=${project}\n`,
+  );
+  if (a.cards.length > 0) process.stdout.write(`${renderCards(a)}\n`);
+  if (a.strength === "unranked") {
+    process.stdout.write(
+      "RESULT: UNRANKED route=definition; the reranker was unavailable (see NOTE), so the cards are in " +
+        "embedding order and NOTHING is judged a match or an absence. Read the cards yourself, or retry.\n",
+    );
+    return 0;
+  }
+  if (a.strength === "none") {
+    process.stdout.write(
+      `RESULT: NO_DEFINITION route=definition best=${a.best.toFixed(2)}; the candidates above are the nearest, ` +
+        "NOT matches. Searched definitions (functions, types) only: an inline snippet or a script body " +
+        "is not covered — `concept` searches everything.\n",
+    );
+    return 1;
+  }
+  process.stdout.write(
+    `RESULT: PASS route=definition strength=${a.strength} best=${a.best.toFixed(2)} ` +
+      `(strong >= 4: same function; likely: read it before writing a new one)\n`,
+  );
+  return 0;
+}
+
+function definitionCommand() {
+  return command(
+    {
+      name: "definition",
+      parameters: [],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      help: {
+        description:
+          "Before writing a function: does a definition that does this already exist? Describe the " +
+          "behaviour in English or Japanese (not the name). Prints a few cards (name, signature, " +
+          "location, first doc line) or NO_DEFINITION.",
+      },
+      flags: { ...queryFlag(), ...projectFlag(), limit: positiveInteger("limit"), json: Boolean },
+    },
+    async (parsed) => {
+      if (parsed._.length > 0) {
+        throw new Error(`unexpected positional arguments: ${parsed._.join(" ")}`);
+      }
+      const query = exactlyOneQuery("definition", parsed.flags.query ?? []);
+      process.exitCode = await runDefinition(
+        query,
+        parsed.flags.limit ?? 5,
+        targetProject(parsed.flags.project),
+        parsed.flags.json ?? false,
+      );
+    },
+  );
+}
+
 function indexCommand() {
   return command(
     {
@@ -745,6 +818,15 @@ function indexCommand() {
       process.exitCode = await runIndexWrapper(
         parsed.flags.timeoutMs ?? 600_000,
       );
+      // Warm the definition catalog too, so the first `definition` query after an index does not
+      // pay the build. Its failure is reported, never turned into an index failure.
+      const project = findRegisteredProject(process.cwd());
+      if (process.exitCode === 0 && project) {
+        const notes: string[] = [];
+        const warmed = await attempt(() => refreshCatalog(project, notes));
+        for (const n of notes) process.stderr.write(`NOTE: ${n}\n`);
+        if (!warmed.ok) process.stderr.write(`NOTE: definition catalog not refreshed: ${String(warmed.error)}\n`);
+      }
     },
   );
 }
@@ -760,7 +842,7 @@ async function main(): Promise<void> {
         description:
           "Declare a repository-search shape and route it to ccc, rg, or Serena.",
       },
-      commands: [...ROUTES.map(routeCommand), indexCommand()],
+      commands: [...ROUTES.map(routeCommand), definitionCommand(), indexCommand()],
     },
     (parsed) => {
       if (parsed._.route === undefined) throw new Error("missing route");

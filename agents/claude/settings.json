@@ -263,6 +263,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh suggest-existing-definition.ts",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUseFailure": [

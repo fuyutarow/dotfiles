@@ -4,7 +4,7 @@ description: >-
   Maximizes knowledge discovery through Experimental and Formal Methods using short BIBIFI cycles.
   Use for Strong Inference, アノマリーからアブダクション, 競合仮説・予測表・排除表,
   実験計画, 6分イテレーション, マイクロチケット, benchmark突破 / ベンチマーク未測,
-  massive parallelism, ETA/JST,
+  massive parallelism, ETA/JST, planning poker / スクラムポーカー,
   idle CPU/RAM/VRAM, 理論研究の実行, 研究を進めて, and an authorized discovery loop that is stalling.
   Admits outcome-linked, constraint-preserving short returns before allocating agents or compute.
   Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.3.0 (2026-10-01) — outcome, constraints and first return precede resource allocation.
+> **Version**: v2610.4.0 (2026-10-01) — distinguish relative size, elapsed-time forecast and return deadline.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -74,12 +74,13 @@ Do these checks in order; resource availability cannot waive an earlier failure.
 |---|---|---|
 | 1. Outcome and constraints | Bind the requested result and hard requirements: concept, target path, device, information access and budget. Read current-version evidence. | Retrieve the missing source or obtain the genuinely missing decision; do not invent an easier target. |
 | 2. Purpose | Name the observed obstacle, current consuming task/test, and what distinct results would change next. A repair names the exact blocked call. | Defer work justified only by “might help later”, taxonomy, general cleanup or spare capacity. |
-| 3. First return | Name a checkable output due within six minutes of dispatch and the parent's inspection time. Preserve step 1 while shrinking. | Split before dispatch. A named multi-hour container, CPU-first port or more permissive fixture does not pass. |
+| 3. First return | Bind a checkable output, evidence-based duration estimate, six-minute due time and parent inspection. Preserve step 1 while shrinking. | Split or measure the unknown before dispatch. Low points cannot authorize an overlong or constraint-changing slice. |
 | 4. Reuse and path | If a predecessor exists, locate reusable parts and declared carryover obligations. Bind the smallest consumer check to current requirements. | Retrieve or repair the missing interface. An authorized new frame may retire old obligations; document that change. |
 | 5. Resource fit | Only now check CPU/RAM/VRAM, agent slots, ownership, critical headroom and C0/P7 admission. | Hold/re-slice conflicting work; retain other purpose-qualified independent work. |
 | 6. Consume | Read the result, apply its scoped implication and re-evaluate dependent work now. | An unconsumed report or sent message does not close the ticket. |
 
 For a benchmark goal, use current registry/EV evidence and the outcome table in `references/microticket-patterns.md`.
+For uncertain task size or ETA, use that reference's estimation lookup; poker is optional, not launch authority.
 For an anomaly, use `references/scientific-loop.md` to construct a discriminating return, not a mandatory study phase.
 Use `references/skill-composition.md` for content ownership; routine repairs need only a failing witness.
 
@@ -208,6 +209,7 @@ Use a periodic update only when explicitly requested. Do not install a status cr
 | Other authorized discovery | New accepted learning or checked proof and the decision it changed | Enabling repair, next return, blocker, release ETA |
 
 Keep run-return ETA separate from release ETA.
+Use measured comparable phase costs and observed capacity for elapsed-time ranges; points are a separate size unit.
 No prior release date means an initial baseline, not `ontime`.
 Use `ontime` only when observed progress supports the unchanged release date.
 Use `delta` for a changed date and `pivot` for a changed goal or approach.
@@ -230,7 +232,7 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
 | Costly irreversible commitment | `acting-on-hypotheses` owns the discriminator, threshold, interpretation and Commit/Pivot/Kill; this loop may schedule its Build→Measure slice |
-| Concrete slices, dependencies, benchmark outcome selection and predecessor transfer | `references/microticket-patterns.md` |
+| Slices, estimate/poker choice, dependencies, outcome selection and predecessor transfer | `references/microticket-patterns.md` |
 | Compact board, ticket, return and report | `assets/ITERATION-PLAN.md` |
 | Skill validation | `tests/triggers.md`, `tests/decision-cases.md`, `tests/scheduling-cases.md`, `tests/operational-rehearsal.md` |
 | Historical audits and measured verification limits | `tests/forge-verification-ledger.md` |

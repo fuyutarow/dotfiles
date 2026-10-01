@@ -15,6 +15,43 @@ Use the same structure for an experiment, formal argument, engineering change or
 | Reuse a historical result | One predecessor and a transfer-obligation map | Current conditions against original assumptions and consumer | Reuse the supported part; test the missing bridge |
 | Survey everything while waiting | One relevant source comparison per independent question | Located claim, applicability and strongest contradiction | Hand back each changed premise immediately; no all-inventory barrier |
 
+## Estimation — choose the method before assigning a number
+
+Keep relative size, predicted elapsed time and the dispatch deadline separate.
+Use the existing work record; each estimate names scope, evidence, assumptions and its expiry event.
+
+| What is uncertain? | Method | Decision it supports |
+|---|---|---|
+| Duration of known repeatable work | Comparable completed runs, phase costs and current admitted concurrency; include setup, checks, recording and waits | A duration range and whether the first return fits |
+| Implementation scope or hidden work; informed participants see different approaches | Optional Planning Poker below | Clarify scope, reuse, integration risk or a useful split |
+| Whether the mechanism can work at all | Bounded discriminator with retain/revise/reject outcomes | Estimate the investigation; successful implementation stays UNKNOWN |
+
+### Optional Planning Poker
+
+Use a shared acceptance scope and reference items. People doing the work estimate
+privately, then reveal together. Discuss the high/low assumptions before re-estimating.
+Retain disagreement if a missing fact remains; select a bounded probe or split.
+A lone estimate table is not poker. Points have no fixed conversion to minutes.
+
+For agents, independent first estimates need separate observations or expertise;
+agreement is not measured accuracy. Do not invent several votes inside one answer.
+Use already authorized participants when helpful; no automatic estimation fleet.
+Bound the discussion within the first-return budget. A solo executor uses an
+evidence-based range without claiming independent consensus.
+
+An 8/13-point item is not inherently invalid, and `?` may honestly mark unknown feasibility.
+Split by a consumable outcome when the return cannot fit, not until labels become 1/2 points.
+Repeated inconclusive voting returns the missing question, not a forced mean or optimistic date.
+
+### Turn the estimate into a forecast
+
+Use the dependency chain and observed execution/admission capacity, not a physical resource quotient.
+Mark success-dependent branches conditional. Changes in code, workload, scope or contention expire an estimate.
+An estimated range is not a calibrated probability interval; do not invent confidence percentages.
+Record actual first-return and completion times beside the original prediction.
+On a miss, identify scope, setup, execution, validation, queue or rework cost and update the next comparable estimate.
+A test-only rate cannot estimate a complete learning/validation job without a matched phase breakdown; EV3 owns footing.
+
 ## When the authorized outcome is a registered benchmark
 
 Use the existing registry and `validating-experimental-evidence` EV0–EV4.
@@ -71,11 +108,8 @@ An unchanged wait is not a scientific result. Separate the blocker receipt from 
 Reserve headroom through the dispatcher when supported. Otherwise withhold conflicting launches and record that limitation.
 Do not claim a scheduler reservation merely because a planning card names it.
 
-Keep duration estimates, launch allowances and absolute ticket deadlines separate.
-For example: target120s, hard cap600s, ticket remaining180s, readiness wait30s, proposed envelope120s.
-After that wait,150s of ticket lifetime remains; the120s envelope fits. An expected90s run returns around t+120s.
-That expected return is not a new hard deadline at t+120s; the ticket still expires at t+180s.
-An independent source check is not that GPU job's contender merely because its result serves the same goal.
+The estimation lookup above owns forecasts; admission waiting still consumes the absolute ticket lifetime.
+Independent source work is not a compute contender merely because it serves the same goal.
 
 ## A changed finding changes active work
 

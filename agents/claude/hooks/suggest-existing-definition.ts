@@ -19,6 +19,7 @@ import { relative } from "node:path";
 import {
   findDefinitions,
   isTest,
+  loadRetrievalConfig,
   type Definition,
 } from "../../retrieval-control/definitions.ts";
 import { findRegisteredProject } from "../../retrieval-control/ccc-index.ts";
@@ -26,8 +27,6 @@ import { attempt } from "../../hooks/attempt.ts";
 import { readStdinJson } from "./lib.ts";
 
 const MAX_CHECKS = 2;
-// Log-odds, per judge. Local: the duplicate probe scored 8.0, the unrelated helper 6.3. Jev: p>=0.97.
-const HOOK_MIN = { local: 7.5, jev: 3.5 } as const;
 const BUDGET_MS = 8_000; // the catalog is read as is (no rebuild inside an edit); recall + rerank ~1-3 s
 
 // Definition headers by language: name in group 1. Line-start anchored so calls do not match.
@@ -115,6 +114,9 @@ async function main(): Promise<void> {
   const findings: string[] = [];
   // One budget for the whole check: past it, say nothing rather than stall the edit.
   const deadline = Temporal.Now.instant().epochMilliseconds + BUDGET_MS;
+  // Per judge, retrieval.toml thresholds.<judge>.hook (stricter than the route's "strong").
+  const { thresholds } = loadRetrievalConfig();
+  const hookMin = { jev: thresholds.jev.hook, local: thresholds.local.hook };
   for (const d of fresh) {
     if (Temporal.Now.instant().epochMilliseconds > deadline) break;
     // Its own file is skipped: the catalog may already hold the new text, and sibling helpers
@@ -128,7 +130,7 @@ async function main(): Promise<void> {
     if (
       !top ||
       !a.reranked ||
-      top.score < HOOK_MIN[a.judge === "jev" ? "jev" : "local"]
+      top.score < hookMin[a.judge === "jev" ? "jev" : "local"]
     )
       continue;
     findings.push(

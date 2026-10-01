@@ -3,8 +3,9 @@ pays ~1-2 s, not a 5 s model load.
 
 Run under ccc's OWN interpreter (it already carries torch + transformers + the HF cache), started
 on demand by systemd socket activation (cocoindex/repo-retrieve-rerank.{socket,service}.wsl):
-systemd owns the listening socket and passes it as fd 3; this process exits after IDLE_SECONDS
-without a request, which hands the VRAM back, and the next request starts it again.
+systemd owns the listening socket and passes it as fd 3; this process exits after
+[definition.local] idle_seconds (retrieval.toml) without a request, which hands the VRAM back,
+and the next request starts it again.
 Run by hand (tests, macOS): `python rerank_server.py --socket <path>` binds the path itself.
 
 Protocol: one JSON line {"query": str, "docs": [str, ...]} in, one JSON line out:
@@ -13,7 +14,7 @@ Protocol: one JSON line {"query": str, "docs": [str, ...]} in, one JSON line out
 Why log-odds, not probability: measured 2026-10-01, the probabilities of the top candidates all
 saturate at 0.99x and stop separating; the logits keep a usable gap (ledger in README).
 
-Model: Qwen/Qwen3-Reranker-0.6B (Apache-2.0, multilingual incl. Japanese, trained on code). On the
+Model ([definition.local] model): Qwen/Qwen3-Reranker-0.6B (Apache-2.0, multilingual incl. Japanese, trained on code). On the
 firedancer FireOps 24-query set it moved the correct definition into the top 3 for 21/24, from 16/24
 with embeddings alone (README, "Measurements").
 """
@@ -24,10 +25,24 @@ import socket
 import sys
 import threading
 import time
+import tomllib
 from pathlib import Path
 
-MODEL = os.environ.get("REPO_RETRIEVE_RERANK_MODEL", "Qwen/Qwen3-Reranker-0.6B")
-IDLE_SECONDS = int(os.environ.get("REPO_RETRIEVE_RERANK_IDLE", "300"))
+
+
+def local_config() -> tuple[str, int]:
+    """[definition.local] of retrieval.toml: the model and the idle exit. A bad value stops here."""
+    path = Path(__file__).with_name("retrieval.toml")
+    local = tomllib.loads(path.read_text()).get("definition", {}).get("local", {})
+    model, idle = local.get("model"), local.get("idle_seconds")
+    if not isinstance(model, str) or not model:
+        sys.exit(f"{path}: definition.local.model must be a model id")
+    if not isinstance(idle, int) or isinstance(idle, bool) or not 30 <= idle <= 86400:
+        sys.exit(f"{path}: definition.local.idle_seconds must be an integer in 30..86400")
+    return model, idle
+
+
+MODEL, IDLE_SECONDS = local_config()
 MAX_TOKENS = 384
 BATCH = 4
 # GPU budget: a fixed partition, `gpu_partition_rerank_mib` in agents/resource-control/

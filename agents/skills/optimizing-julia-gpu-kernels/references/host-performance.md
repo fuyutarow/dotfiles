@@ -69,6 +69,17 @@ A stage can compute on CPU-resident arrays throughout that window. Join the trac
 stage's execution row and output residency check. Keep planned ingress and result export
 outside the inner-step count and report their costs separately.
 
+### 4.1 In-loop transfer budget — 0 unless declared
+
+| If a host read inside the round / pass loop is… | Then |
+|---|---|
+| A blocking `copyto!` / `Array()` of a device flag after a reduction kernel, every N rounds | Pipeline it: launch the reduction into a device slot, read the slot one check late (the flag read at check i is the one written at check i-1); the loop tolerates N extra rounds |
+| Needed for control flow that cannot tolerate a late read | Declare it in the device contract with its count per step; undeclared in-loop transfers are budget 0 |
+| Waiting on completion | `CUDA.synchronize` adds worker-thread wake-up latency; prefer a pipelined slot read over a per-check sync |
+
+A test counts transfers in the warmed loop. Counter: the typed device contract, or CUPTI memcpy rows.
+Assert count ≤ the declared budget. A counted contract that no loop calls is unwired: wire it first.
+
 ## §5 Async timing law — one line, full law lives in measuring.md
 
 GPU calls return to the CPU before the kernel finishes; plain `@elapsed`/wall-clock deltas

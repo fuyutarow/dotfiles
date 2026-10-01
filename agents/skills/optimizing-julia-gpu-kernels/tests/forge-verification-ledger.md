@@ -397,3 +397,21 @@ contradicted §0b's in-loop transfer target 0. It now reads: device-side reducti
 boundary count fails a boundary called per round. Open, owner here: incident 4 of the JG8 forge
 (Int32 value atomics in a kernel) has no rule in `memory-and-warps.md` §7; writing-julia's near-miss row
 now says so instead of claiming the rule exists.
+
+## 2026-10-02 — launch contract: typed shape, in-loop transfer budget, typed stage outcome, v2610.2.0
+
+Incidents (firedancer, RTX 3060, 2026-10-02): (1) finding2610_0201z2dy4: a per-pass decide kernel launched
+with `ndrange = 1` (`_one(be)`) in the learning-pass loop scanned frontier cells x live names x coordinates
+serially, ~1e9 ops at ~100 ns = 92% of a train call; no code declared a work bound, so no test caught it.
+(2) finding2610_02010tndj: a blocking `copyto!` of a device flag every 4 rounds cost 16-23% of round time,
+and CUDA.jl's default synchronize adds worker-thread wake-up latency; a typed device contract with a counted
+host-transfer budget existed but was not wired. (3) finding2610_0201z2dy4: a fill stage whose capacity
+constant was exceeded did nothing and was reported as 0 fills, not as skipped.
+EXTEND, not a new skill: GKD already allowed a one-thread kernel for "bounded serial bookkeeping" but gave no
+way to check the bound. Homes: `execution-design.md` § Launch contract (shape type + stage outcome),
+`host-performance.md` §4.1 (in-loop transfer budget), SKILL.md §0b If-rows and §9 checklist, three design
+cases. No description edit, no new reference file. The skill's script floor owns no check of these rules; they
+are enforced by the consumer's tests (bound/time/transfer-count/outcome), not by skill-check.
+Not verified here: no CUDA code was run and no speedup is claimed; the three incidents are cited from the
+firedancer records, not re-measured.
+skill-check 2026-10-02: 0 FAIL, 2 WARN (references long-sentence debt 205; 4 long sentences in core). PROSE-DEBT waiver 2026-10-02: reference count was 204 at 2026-09-30 and later edits were not re-baselined; the new rules are tables plus short paragraphs. Whether the 4 core long sentences predate this edit was not checked against HEAD. Older reference prose stays out of scope.

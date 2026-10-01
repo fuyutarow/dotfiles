@@ -118,3 +118,67 @@ Open items (owner-named deferrals):
 | `mise -C /home/fuyu/dotfiles run link:skills` | exit 0 |
 | `~/.claude/skills/keeping-research-notebooks` | symlink to the dotfiles dir; `SKILL.md` resolves |
 | Commit | not made by the forger; the editor commits after verification |
+
+## §7 2026-10-01 — v2610.2.0: top-level layout (homes §0) and paper homes
+
+**Incident.** The executor was asked to start a Julia project with polysearch in an empty dir.
+It fired `wiring-repositories` and `writing-julia` but not this skill. Following `writing-julia` PK2, it put
+one package at the repo root (`Project.toml`, `Manifest.toml`, `src/`, `test/`). The owner said the repo
+will hold several projects and papers. Neither the reference notebook (root workspace manifest only, no
+`src/`) nor any skill allows a root package. The first forge assigned this skill void 4, "the repo-level directory
+convention", but never wrote it.
+
+**Changes.**
+- homes §0: one class predicate (a records store is held or being adopted), one root-deny list, a layout table
+  with owners, and predicates for scaffolding, DrWatson and the recorded-run env.
+- homes §1: rows for paper source and paper figures. A figure is a run artifact, versioned with the run dir.
+- Applicability now covers a repo being scaffolded (MUST-NOT-FIRE row 1, §2 store row).
+- The description gains 「ディレクトリ構成 (新規リポ含む), 論文の置き場と図の出所」.
+- Sibling edits cite §0 instead of restating it:
+  - `writing-julia`: PK0 notebook row, PK2, PK5 snippet, setup §3.4/§8.1, checklist.
+  - `wiring-repositories`: CLASSIFY, layers §3, routing.
+  - `wiring-mise-tasks`: recipes §1 NOTEBOOK-JULIA.
+  - `compiling-latex`: the paper dir's parent.
+
+**Verification.** Workflow `wf_d7608669-493` ran four read-only lenses:
+- facts (sonnet-high), which ran Pkg 1.12.6 and 1.13.0;
+- one-home (opus-medium);
+- a trigger desk-check (sonnet-high);
+- a forward test by a context-free executor (sonnet-high).
+
+The lenses returned 46 findings. Fixed:
+- an applicability contradiction;
+- the class predicate stated in four homes;
+- the root-deny list stated in four homes;
+- DrWatson: relocate vs refuse;
+- paper figures vs §5 large bytes;
+- the archive owner (`governing-research-documentation` has no archive role);
+- `envs/` with no owner;
+- layers.md §3 "root manifests may coexist";
+- Runic unresolved under `--project=packages`, now `@runic` plus `setup:runic`;
+- the `test` task's run-vs-depends shape;
+- the `projects = []` TypeError, which also occurs on 1.12.6;
+- an unlisted member writing a second Manifest;
+- bare `Pkg.test()` failing at the nameless root;
+- PK5 `[sources]` without `[deps]`, which Pkg refuses;
+- the checklist's `--project=.`;
+- compiling-latex's paper-dir parent.
+
+Verified in code: `polysearch run --reproduce` restores a workspace root only from the repo root's `HEAD:Project.toml`.
+The code is `materialize_workspace_root` in polysearch-rs `src/adapters/cli/run_cli/reproduce.rs`.
+A recorded run must therefore use `--project=packages`.
+Floor: prose-debt WARN counts equal the pre-edit copies for all five skills.
+
+| Deferred | Owner |
+|---|---|
+| `run --reproduce` should find the nearest enclosing workspace root, not only the repo root | polysearch-rs |
+| `driving-polysearch` documents no `polysearch init` / gate-config setup act | polysearch-rs session |
+| No skill scaffolds the one launcher N3 requires; the first-run state is undefined | next reforge here + `wiring-mise-tasks` |
+| Runner file home: §1 denies a runner under `packages`, yet `run --exec --code` needs a repo-relative file | next reforge here |
+| Paper-figure build recipe (artifact path, figure task, receipt format) | next reforge here |
+| `compiling-latex/assets/mise-latex.toml` fails `mise-contract.ts` (3 HARD) and hardcodes one paper | `compiling-latex` owner |
+| Id grammars disagree (`{yymm}_{seq}` / `{type}{YYMM}-` / no YYMM) | collection editor |
+| Members' `[compat] julia = "1.11"` vs `[workspace]` needing 1.12 | `writing-julia` next reforge |
+| `wiring-check.ts` cannot detect a root manifest in a notebook repo | `wiring-repositories` next reforge |
+| Records store as an S1 layer row (order after VCS init; polysearch not in `[tools]`; `research_record/.agent-state` ignore rule) | `wiring-repositories` next reforge |
+| No-fire rows for paper naming and design reports may co-fire here through 置き場 tokens | next description edit |

@@ -3,6 +3,40 @@
 > Scope: where each artifact kind lives, how to read a repo's own bindings, and the identifier scheme.
 > Record operation is `driving-polysearch`'s. Layer wiring is `wiring-repositories`'.
 
+## §0 Top-level layout — the house layout of a notebook repo
+
+| Class predicate (the ONE definition; siblings cite this row) | Class |
+|---|---|
+| the repo holds, or is being scaffolded to adopt, a records store (`polysearch.json`) | notebook |
+| otherwise | plain: the language owner's default layout; this § does not apply |
+
+In a notebook, a research project is a set of member packages plus its papers; it is not a dir of its own.
+All members share one resolution. A project gets `envs/<slug>/` only when it needs a resolution the shared workspace cannot hold.
+The tables below are the layout for a NEW notebook repo.
+In an existing repo, the gate config's declared paths (§2) list what exists; the root predicate below is never outranked.
+
+| Path | HOME of | Create it when | Contents owner |
+|---|---|---|---|
+| repo root | tool, VCS and harness config files only; no source, no manifest | at scaffold | `wiring-repositories` |
+| `packages/` | language packages; a Julia workspace root is `packages/Project.toml` (no `name`) plus `packages/Manifest.toml` | at scaffold | `writing-julia` PK0 (notebook row) |
+| `packages/<Name>.jl/` | one package: `Project.toml`, `src/`, `test/` | its first module | `writing-julia` |
+| `envs/<slug>/` | an execution env with its own lock, for a resolution the workspace cannot share | the first such env | `writing-julia` PK0 notebook row |
+| `deliverables/papers/<dir>/` | one paper's source and build dir | the first paper | dir name: `compiling-latex`; argument: `arguing-research-papers` |
+| `deliverables/slides/<dir>/` | one deck's source | the first deck | dir name: `compiling-latex`; deck: `designing-presentations` |
+| records-store root | records and run dirs (tracked; landed by N4) | at scaffold, after VCS init (`polysearch init --help`; no skill documents init yet) | records: `driving-polysearch` |
+| document portfolio root | governed research documents | the first admitted document | `governing-research-documentation` |
+| `data/` (ignored) | large bytes (§5) | the first large file | — |
+| archive path | frozen retired material (§1 row) | the first retirement | — |
+
+| Predicate | Action |
+|---|---|
+| a `Project.toml`, `Manifest.toml`, `src/`, `test/`, `scripts/` or `_research/` is planned at the repo root (the ONE root-deny list) | refuse; the target is `packages/` or `packages/<Name>.jl/`. A gate config that declares one of them is a finding for the owner |
+| a top-level dir in the table above gets its first artifact | the owner adds it to the gate config's declared paths in the same landing |
+| a dir is declared but holds nothing | do not declare it yet; an empty dir does not survive a clone, so the gate reports it absent there |
+| `Pkg.generate` would write to the repo root | generate at `packages/<Name>.jl/` instead (`writing-julia` PK2 notebook row) |
+| a DrWatson project is proposed | refuse; the records store is the experiment layer (`writing-julia` setup.md §3.4) |
+| a recorded run selects a Julia env | `--project=packages`, never a member path: `polysearch run --reproduce` restores a workspace root only from the repo root's or the named dir's tracked files |
+
 ## §1 Homes, expanded
 
 | Kind | HOME | ENTRY | Deny | Receipt |
@@ -10,7 +44,7 @@
 | claim, measurement, hypothesis, finding | RECORDS STORE | the store's typed record command | a markdown note, a report, a memory line | record id |
 | run | RECORDS STORE run record plus its run dir | the launcher only (§ N3) | a hand-run `run --exec`; a run dir written by hand | run id; run record file |
 | route tried, negative numbers, discarded paths | a finding per iteration | typed finding command | the agent's report alone | record id |
-| library or model code | a package under a declared project path | working-copy edit; COMMITTER lands it | scratchpad; `probes/`; an external code dir | `jj diff --stat` |
+| library or model code | a package under `packages/` (§0) | working-copy edit; COMMITTER lands it | scratchpad; `probes/`; an external code dir | `jj diff --stat` |
 | model change | a REVISION of an edition | `references/editions.md` §3 | a new edition for a fix; an overwrite | ledger digest |
 | shared device primitive | the shared-primitive library | new public name plus oracle test | a copy inside an edition | test log |
 | experiment runner | an apparatus record | the store's apparatus command | a runner file under packages; scratchpad | apparatus id |
@@ -20,6 +54,8 @@
 | primary-source knowledge | the knowledge repo | its distillation entry | a summary in the notebook | unit id |
 | task state | TASK-CONTINUATION where the repo declares a locus; else "no declared home" | `continuing-long-running-tasks` | `.agent-state`; scratchpad notes; an invented `tasks/` | record locus, or the stated gap |
 | research document, report, plan | the document portfolio | `governing-research-documentation` DOC ADMISSION | a loose markdown file | admission record |
+| paper or slide source | `deliverables/papers/<dir>/`, `deliverables/slides/<dir>/` (§0) | working-copy edit; COMMITTER lands it | a paper at the repo root; a built PDF outside the paper's build dir | `jj diff --stat` |
+| a number, figure or table in a paper | a run artifact in the RECORDS STORE, cited by run id; versioned with its run dir, so §5 does not apply | the paper's build reads the run's artifact | a figure saved by hand into the paper dir; a number typed with no run id | run id beside the figure source |
 | frozen retired material | the archive path | write once | edits after freeze | — |
 | large bytes (serialized models, caches, datasets) | an ignored path inside the repo | write there; record its digest | committing them | digest |
 
@@ -38,7 +74,7 @@ Do not create a directory to fill the gap.
 | Launch verb | the one launcher task | `mise tasks`; its `--help` | two launch paths exist |
 | Edition registries | catalog, versions ledger, model registry, checker | `repo-retrieve concept` on "edition catalog", "code digest checker" where ccc is wired; else the task list and registry dir | a registry has no checker |
 | Rulings | memory index | read the memory index | a ruling sits only in a report |
-| Records store root | the gate config's protocol directory | `polysearch doctor` | no store: this skill does not apply |
+| Records store root | the gate config's protocol directory | `polysearch doctor` | no store and none being adopted: this skill does not apply (a repo being scaffolded to adopt one takes §0) |
 | Knowledge repo | the repo's knowledge-distillation hook or memory index | read `.claude/settings.json` hooks; the memory index | a primary source read with no distillation entry |
 
 Repo instruction files can be stale.
@@ -72,7 +108,7 @@ Move the code to its HOME, land it, and rerun.
 
 | Predicate | Action |
 |---|---|
-| file is generated, large, or binary | write under an ignored path; record its digest in the run's artifacts |
+| file is generated, large, or binary, and no paper build reads it | write under an ignored path; record its digest in the run's artifacts |
 | the snapshot refuses a file for size | prefer ignoring the path; raise the size cap only for a file that must be versioned |
 
 ## §6 Identifiers

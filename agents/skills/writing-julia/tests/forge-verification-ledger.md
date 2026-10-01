@@ -573,3 +573,11 @@ Existing157reference/10core prose warnings are unchanged and waived for this rec
 Added one routing row: Julia module and package mechanics stay HERE; model edition/revision lifecycle,
 registration and acceptance rows go to `keeping-research-notebooks` (BY ARTIFACT). No rule changed.
 **PROSE-DEBT waiver (2026-10-01):** the 157 reference / 10 core warnings are unchanged and remain queued.
+
+## 2026-10-01 — notebook repo layout (cross-skill revision)
+
+A research notebook repo (`keeping-research-notebooks` homes §0 predicate) keeps no manifest at the root.
+This skill now cites that predicate instead of restating it.
+The full record is in `keeping-research-notebooks` tests/forge-verification-ledger.md §7: the incident, the findings
+(workflow `wf_d7608669-493`, 46 findings across four lenses), the fixes, and owner-named deferrals.
+Prose-debt WARN counts equal the pre-edit copy (standing debt, not added).

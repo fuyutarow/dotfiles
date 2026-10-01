@@ -23,6 +23,28 @@ Three decisions control the rest. Record all three in the package plan.
 
 Do not infer any row from the folder name. Inspect `Project.toml` and `src/`.
 
+**Notebook row.** The repo class is `keeping-research-notebooks` homes §0's class predicate.
+In a notebook, this topology is fixed before any manifest is written:
+
+| Artifact | Path |
+|---|---|
+| workspace root | `packages/Project.toml` with no `name`/`uuid`, plus the one `packages/Manifest.toml` (commit it, PK4) |
+| member package | `packages/<Name>.jl/` with its own `Project.toml`, `src/`, `test/`; listed in the root's `[workspace] projects` |
+| member test project | `packages/<Name>.jl/test/Project.toml`, the member's own `[workspace] projects = ["test"]` (PK5) |
+| separately locked env | `envs/<slug>/Project.toml` + its own `Manifest.toml`, outside the workspace; members via `[sources]` paths; `--project=envs/<slug>` |
+| interactive or task command | `--project=packages`, or `--project=packages/<Name>.jl` for one member |
+| recorded run (launcher argv) | `--project=packages` only: `polysearch run --reproduce` restores a workspace root only from the repo root or the named dir |
+| test | through a member: `--project=packages/<Name>.jl` with `Pkg.test()`, or `Pkg.test("<Name>")` at `packages`; bare `Pkg.test()` at the nameless root fails |
+| repo root | nothing Julia; the root-deny list is homes §0's |
+
+| Check after any member change | Pass |
+|---|---|
+| Manifests under `packages/` | exactly one, `packages/Manifest.toml`; an unlisted member silently writes its own |
+| root `[workspace] projects` | equals the set of `packages/*.jl` dirs; a listed but missing dir is silently ignored |
+
+Until the first member exists, omit `projects` (or the whole `[workspace]` table).
+Pkg throws a `TypeError` on `projects = []` on Julia 1.12.6 and 1.13.0 `[dated:2026-10]`.
+
 ## PK1. Identity and naming — choose by locus
 
 | Locus | Contract | Example |
@@ -48,6 +70,7 @@ Those checks include identifier shape, collision distance, and repository URL ru
 |---|---|
 | New maintained package | use `PkgTemplates.jl` for repeatable tests, CI, docs, and license setup |
 | Minimal or throwaway package | `Pkg.generate("MyPackage")` is the two-file floor |
+| New package inside a notebook repo (PK0 notebook row) | `Pkg.generate` at `packages/<Name>.jl/`; it writes only `Project.toml` and `src/`. Add by hand `[compat]`, `test/runtests.jl`, `test/Project.toml` (PK5), and the member's `[workspace] projects = ["test"]`; then list `"<Name>.jl"` in `packages/Project.toml` |
 | Existing package | reconcile its contract; do not scaffold over it |
 
 PkgTemplates takes the bare package name. Its Git plugin adds `.jl` to the remote URL by default
@@ -147,9 +170,13 @@ projects = ["test", "docs", "benchmark"]
 ```
 
 Each child owns its direct dependencies. It does not inherit the root package's `[deps]`.
-Reference the parent package from the child explicitly:
+Reference the parent package from the child explicitly; `[sources]` alone is refused by Pkg:
 
 ```toml
+[deps]
+MyPackage = "<the parent's uuid>"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
 [sources]
 MyPackage = { path = ".." }
 ```

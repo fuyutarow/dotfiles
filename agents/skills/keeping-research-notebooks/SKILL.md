@@ -3,7 +3,7 @@ name: keeping-research-notebooks
 description: >-
   Routes each artifact of a research notebook repo to its ONE home and ONE entry point,
   and gates when a model change may be measured. Use for 研究リポジトリ, ノートブック,
-  置き場所, どこに置く, 一元的な入口, launcher dry-run, 単一コミッタ, agents committing
+  置き場所, どこに置く, ディレクトリ構成 (新規リポ含む), 論文の置き場と図の出所, 一元的な入口, launcher dry-run, 単一コミッタ, agents committing
   to a shared checkout, run dir landing, edition / revision, conformance / acceptance
   rows, 系譜, 劣後, 登録漏れ, scratchpad 禁止. Cuts: store CLI → driving-polysearch;
   jj/git commands → driving-jujutsu / driving-git; task bodies → wiring-mise-tasks;
@@ -15,7 +15,7 @@ description: >-
 
 # Keeping research notebooks — one home, one entry, one landing
 
-> **Version**: v2610.1.0 (2026-10-01) — first forge; incidents, sources and grades in `tests/forge-verification-ledger.md`.
+> **Version**: v2610.2.0 (2026-10-01) — top-level layout (homes §0) and paper homes; incidents, sources and grades in `tests/forge-verification-ledger.md`.
 > **Durability**: this file names no repo, package, branch or edition. Bindings are discovered per repo (§ Bindings).
 
 ```bash
@@ -63,7 +63,7 @@ Read each binding from the repo before the first act. A missing binding is a fin
 
 | Gate | Predicate (before acting) | Artifact | Deny |
 |---|---|---|---|
-| **N1 HOME** | Look up the kind in § Homes. Code → inside a declared project path. Records → typed command only. Ruling or knowledge → that home's entry. Large bytes → an ignored path. | The path or record id, and the key or command that admits it. | Scratchpad code; `.agent-state`; `probes/`; a worktree where the gate assumes the main checkout. |
+| **N1 HOME** | Look up the kind in § Homes; a new top-level dir and the root follow homes §0. Code → inside a declared project path. Records → typed command only. Ruling or knowledge → that home's entry. Large bytes → an ignored path. | The path or record id, and the key or command that admits it. | Scratchpad code; `.agent-state`; `probes/`; a worktree where the gate assumes the main checkout; anything on homes §0's root-deny list. |
 | **N2 RETRIEVE BEFORE CREATE** | Before a kernel, mechanism, record or benchmark, run a concept query over the repo index and the shared-primitive library. | The hit, or a ≥3-paraphrase battery line, pasted in the ticket. | Re-implementing a shared primitive; claiming absence from one query. |
 | **N3 ONE LAUNCH** | Inputs are committed as-is. `--dry-run` runs first. The cause is a hypothesis with frozen predictions. | Dry-run JSON with the model slug and code revision resolved. | `modelCode:null` or an unresolved revision, even at exit 0; hand-assembled runner commands; uncommitted code. |
 | **N4 ONE LANDING** | One COMMITTER per shared checkout. It commits named paths plus finished run dirs only, on a cadence (batch per event), after inspecting the selected diff. | Commit receipt plus the `bookmark list --all-remotes` line. | Any agent running jj/git writes; `-- <paths>` before flags; in-flight run dirs. |
@@ -76,11 +76,13 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 | Artifact kind | HOME | ENTRY | Semantics owner |
 |---|---|---|---|
 | claim, run, measurement, hypothesis, finding | RECORDS STORE | its typed commands; runs only through the launcher | `driving-polysearch`; meaning `validating-experimental-evidence` |
-| library or model code | a package, as an EDITION REVISION | working-copy edit, landed by the COMMITTER | the language skill |
+| library or model code | a package under `packages/`, as an EDITION REVISION | working-copy edit, landed by the COMMITTER | the language skill |
 | shared device primitive | the shared-primitive library, additive only | new public name plus oracle test | language skill; device design `optimizing-julia-gpu-kernels` |
 | experiment runner code | an apparatus record | the store's apparatus command | `driving-polysearch` |
 | benchmark semantics, literature values | the benchmark package | schema-validated data plus its tests | `validating-experimental-evidence` |
 | research document, report, plan | the document portfolio | DOC ADMISSION | `governing-research-documentation` |
+| paper or slide source | `deliverables/papers/<dir>/`, `deliverables/slides/<dir>/` | working-copy edit, landed by the COMMITTER | dir name `compiling-latex`; argument `arguing-research-papers`; deck `designing-presentations` |
+| number, figure or table in a paper | a run artifact, cited by run id | the paper's build reads it | home here; evidence anchor `arguing-research-papers` |
 | ruling, owner feedback | memory; never a claim (a claim needs a record) | memory file plus index line | `operating-the-harness` |
 | primary-source knowledge | the knowledge repo | that repo's distillation entry | `systematizing-knowledge` |
 | task or work state | TASK-CONTINUATION if the repo declares a locus, else "no declared home" | `continuing-long-running-tasks` | there |
@@ -103,7 +105,7 @@ N3 and N4 detail: `references/launch-and-land.md`. N5 detail: `references/editio
 
 | Ask | Route |
 |---|---|
-| A repo with no write gate, no records store and no launcher | `driving-jujutsu` or `driving-git` alone |
+| A repo with no write gate, no records store and no launcher, and none being adopted | `driving-jujutsu` or `driving-git` alone |
 | Records-store flags, record schema, cause roles | `driving-polysearch` alone |
 | A jj conflict, rebase or op-log recovery with no multi-writer question | `driving-jujutsu` alone |
 | Write or rename the commit or launch task body | `wiring-mise-tasks` |
@@ -121,13 +123,14 @@ The full fire/no-fire set is `tests/triggers.md`; desk-check it after any descri
 | `driving-jujutsu` | **PURPOSE:** jj commands → there. WHO commits WHAT, WHEN in a multi-writer notebook → here. |
 | `driving-git` | **PURPOSE:** git commands and the git-only shared-checkout protocol → there. Notebook landing and the single COMMITTER → here. A repo whose gate validates one tree takes no worktree. |
 | `wiring-mise-tasks` | **CARDINALITY:** the commit verb and any task's naming and body shape → there. Their use as the only ENTRY, and launcher preconditions → here. |
-| `wiring-repositories` | **PURPOSE:** which layers a repo admits and their wiring → there. Operating a wired notebook repo → here. |
-| `writing-julia` | **BY ARTIFACT:** Julia module and package mechanics → there. EDITION/REVISION lifecycle and acceptance → here. |
+| `wiring-repositories` | **PURPOSE:** which layers a repo admits and their wiring order → there. The notebook class predicate and top-level layout (homes §0), and operating a wired notebook repo → here. |
+| `writing-julia` | **BY ARTIFACT:** Julia module and package mechanics, and the workspace-root manifest mechanics (PK0 notebook row) → there. Where `packages/` sits (homes §0), EDITION/REVISION lifecycle and acceptance → here. |
 | `validating-experimental-evidence` | **PURPOSE:** what a number means, and what the rows must assert about validity (EV0, EV2) → there. Where the record goes, and whether rows exist and are green before measuring → here. |
 | `governing-research-documentation` | **PURPOSE:** documents, their retention, freezing and retirement → there. Typed records (negative results included), code and run artifacts → here. |
 | `continuing-long-running-tasks` | Task state → there. Here only routes to it. |
 | `orchestrating-agents` | Dispatch and resources → there. Here: an agent never writes VCS and hands back paths. |
 | `driving-bibifi-cycles` | Which experiment next → there. |
+| `compiling-latex` | **BY ARTIFACT:** a paper dir's name, TeX build and `latex:*` tasks → there. Where papers live in a notebook repo (homes §0) → here. |
 
 ## Execution model
 
@@ -144,7 +147,7 @@ No harness → the same gates, serially.
 
 | File | Covers | Read when |
 |---|---|---|
-| `references/homes-and-layout.md` | Homes expanded (§1), binding discovery (§2), path classes (§3), scratchpad ban (§4), large bytes (§5), identifiers (§6) | N1; any "where does this go"; minting an id |
+| `references/homes-and-layout.md` | Top-level layout (§0), homes expanded (§1), binding discovery (§2), path classes (§3), scratchpad ban (§4), large bytes (§5), identifiers (§6) | N1; scaffolding a notebook repo; any "where does this go"; minting an id |
 | `references/launch-and-land.md` | Launcher preconditions (§1), dry-run checks (§2), COMMITTER protocol (§3), pre-commit diff (§4), failure → recovery (§5) | N3, N4; any launch or commit failure |
 | `references/editions.md` | Revise-or-new (§1), registration (§2), revision bump (§3), acceptance rows (§4), shared-primitive library (§5) | N5; any model code change |
 | `tests/triggers.md` | Fire, near-miss no-fire, co-fire rows | Any description or cut edit |

@@ -21,8 +21,8 @@ description: >-
 
 # Scaffolding repositories — the SET, the ORDER, and the JOINT
 
-> **Version**: v2610.1.0 (2026-10-01) — a new repo is colocated jj (JJ-1..3). Receipts, calibration, and the F3
-> desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
+> **Version**: v2610.2.0 (2026-10-01) — CLASSIFY splits notebook repos: layout from `keeping-research-notebooks` homes §0 before any manifest.
+> Receipts, calibration, and the F3 desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
 > per-language recipe is load-bearing here; dated facts live in `references/layers.md`.
 
 ```bash
@@ -143,7 +143,7 @@ answer.
 | VCS: **colocated jj** (`jj git init --colocate`) + `.gitignore` | always — the house suite for a new repo (2026-10-01). Plain git only for a repo whose named consumer cannot coexist with `.jj/`; say which | `driving-jujutsu` (operating); JJ-1..3 below (wiring) |
 | mise `[tools]` pins | the repo runs any tool whose version changes its output | `wiring-mise-tasks` |
 | mise `[tasks]` verb contract | always — the contract is repo-invariant | `wiring-mise-tasks` |
-| language manifest | the repo holds that language's source | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
+| language manifest | the repo holds that language's source; a notebook repo places it per `keeping-research-notebooks` homes §0, never at the root | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
 | `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce — a jj repo always has one (JJ-2) | `operating-the-harness` |
 | `.githooks/` + hooksPath | a check must run at commit time, not only on demand | **this skill** owns the hook's SHAPE (below); `wiring-mise-tasks` owns the task it calls |
 | `.cocoindex_code/` | unknown-name search will happen, and the corpus is too big to read | `driving-cocoindex` |
@@ -160,8 +160,13 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
 
 ## The pipeline
 
-1. **CLASSIFY** — repo, or scratch directory. A scratch directory is never cloned, shared, or
-   written by a second session. It takes `jj git init --colocate` and nothing else. Say so and stop.
+1. **CLASSIFY** — scratch directory, plain repo, or research notebook repo.
+
+   | Class | Predicate | Then |
+   |---|---|---|
+   | scratch | never cloned, shared, or written by a second session | `jj git init --colocate` and nothing else. Say so and stop |
+   | notebook | `keeping-research-notebooks` homes §0 class predicate (holds, or is to adopt, a polysearch records store) | read homes §0 BEFORE laying any manifest; its root-deny list and `packages/` layout bind every later layer |
+   | plain | otherwise | the language owner's default package layout applies |
 2. **ADMIT (S1)** — walk the layer table. For each YES, write the failure it prevents. That list
    is the scaffold plan, and it goes in the commit message.
 3. **LAY (S2)** — in the order above, calling each layer's owner skill for its contents. This
@@ -223,13 +228,13 @@ MUST NOT fire (with route):
 | `wiring-mise-tasks` (hook seam) | The `hook:<event>` task NAME, the templates' `hook:pre-commit`, and the mise facts behind HOOK-3 are theirs (grammar rule 6, recipes §8). The hook SHAPE (HOOK-1/1a/1b) is here. Reciprocal, 2026-09-22 |
 | `operating-the-harness` | **PURPOSE, on two seams.** *Hooks*: theirs are Claude Code's (events, matchers, `settings.json`); **git** hooks are HOOK-1/HOOK-2 above, here. *`.claude/`*: standing it up and the inheritance rule → here; its contents and rule scoping → theirs, **MANDATORY co-fire once content is written** |
 | `driving-cocoindex` | **PURPOSE** — "Is there already a `cd`-able directory?" Registration, indexing, freshness, query shapes, and every daemon resource rule → theirs, **never restated**. Whether this repo admits an index, and the two orderings around it, → here |
-| `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` / `running-python-tools` | **DECISIVE by artifact:** manifest semantics and language idiom → their owner. Layer admission and cross-language manifest placement → here. Cargo package/workspace/target boundaries belong to `writing-rust` RG5. Root manifests may coexist. Agree in substance; do not diff for byte identity. |
+| `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` / `running-python-tools` | **DECISIVE by artifact:** manifest semantics and language idiom → their owner. Layer admission and cross-language manifest placement in a plain repo → here; in a notebook repo, placement is `keeping-research-notebooks` homes §0. Cargo package/workspace/target boundaries belong to `writing-rust` RG5. Root manifests may coexist in a plain repo. Agree in substance; do not diff for byte identity. |
 | `governing-research-documentation` | **CARDINALITY** — the governance config is ONE admissible layer here. Its schema, document lifecycle, authority and retirement → theirs |
 | `forging-skills` | **PURPOSE** — a repo-local `.claude/skills/` is a layer this skill may admit; the craft of any SKILL.md → theirs |
 | the built-in `init` | **DECISIVE by cardinality** — it produces exactly one file. One file → it; a wiring set → here. This skill may invoke it for that layer |
 | `compiling-latex` / `wrangler` | **DECISIVE** — a per-technology setup is theirs. This skill names the layer and calls them |
 | `driving-jujutsu` | **PURPOSE** — the jj layer's WIRING (colocated init, JJ-1..3) → here; operating it afterwards (changes, bookmarks, push, recovery) → theirs |
-| `keeping-research-notebooks` | **PURPOSE** — which layers a repo admits and their wiring → here; operating a wired research notebook repo (artifact homes, the one launch and landing entry, edition acceptance) → theirs. Reciprocal, 2026-10-01 |
+| `keeping-research-notebooks` | **PURPOSE** — which layers a repo admits and their wiring order → here; the notebook class predicate and top-level layout (homes §0), and operating a wired research notebook repo (artifact homes, the one launch and landing entry, edition acceptance) → theirs. Reciprocal, 2026-10-01 |
 | `driving-git` | **PURPOSE** — the `git` layer's WIRING (`.gitignore`, `core.hooksPath`, the git-hook shape) → here; OPERATING the repo afterwards (commit scope, rebase, push receipts, rewrites, shared checkouts) → theirs. Reciprocal row landed 2026-09-21 |
 
 ## Reference index

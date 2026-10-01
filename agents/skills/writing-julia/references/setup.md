@@ -76,6 +76,13 @@ A reusable library must also test a fresh resolution from `Project.toml` and `[c
 
 ## 3.4 Experiment management — `DrWatson` (the layer above environment reproducibility)
 
+**Precedence — check first.**
+
+| Repo class (`keeping-research-notebooks` homes §0 predicate) | Experiment layer | Layout |
+|---|---|---|
+| notebook | the store: runs via the repo launcher, runners as apparatus records, results as run artifacts | `keeping-research-notebooks` homes §0 (its root-deny list); no DrWatson |
+| plain | DrWatson, as below | §3.4 four-layer boundary |
+
 Reproducibility has **two layers**; §3.3 is only the lower one. For research that runs many
 parameterized experiments, **`DrWatson.jl` is the default** for the upper (experiment) layer — do
 not hand-roll path strings, ad-hoc filenames, or "did I already run this?" logic.
@@ -379,8 +386,8 @@ but separate workflow; the tools below shine when a JIT-warm REPL is preserved a
 
 ## 8.1 Notebooks, literate reports & documentation — one first choice each
 
-Three distinct jobs. These are where the DrWatson `notebooks/` / `papers/` / `docs/` folders
-(§3.4) get filled, and they are how a research project keeps **"which formula / which
+Three distinct jobs. In a plain repo these are where the DrWatson `notebooks/` / `papers/` / `docs/` folders
+(§3.4) get filled (a notebook repo places them per `keeping-research-notebooks` homes §0), and they are how a research project keeps **"which formula / which
 generalization is the current theory"** from going missing: the artifacts are Git-tracked text, so
 the evolution of the theory reads as a history rather than a pile of overwritten files.
 
@@ -405,7 +412,7 @@ the evolution of the theory reads as a history rather than a pile of overwritten
 - **`Documenter.jl`** builds the documentation site from docstrings; pair it with the `docs/`
   folder DrWatson scaffolds.
 
-The practical answer to *"which formula is current?"*: current logic lives in `src/` (architecture.md
+In a repo with no records store (§3.4 precedence), the practical answer to *"which formula is current?"*: current logic lives in `src/` (architecture.md
 §10), its **evolution** lives as Git-tracked Pluto/Quarto notebooks in `notebooks/`, and every
 saved result is bound to its code version via DrWatson `@tagsave` (§3.4). No artifact is orphaned
 from the theory state that produced it.

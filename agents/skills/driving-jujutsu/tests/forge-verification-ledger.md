@@ -68,3 +68,8 @@ characters. After admission and the reciprocal `driving-git` cut, it measured 74
 skills and 64,818 characters under the existing 65,242-character ceiling.
 The ceiling did not bind; no raise or retirement is needed. The final gate and
 symlink receipt are recorded in the implementation turn.
+
+## 2026-10-01 — house jj repos record via `mise run commit` (v2610.1.0)
+
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+Added the decision-table row and the deny-list row (a bare `jj commit` runs no gate); repo wiring JJ-1..3 routes to `wiring-repositories`. skill-check: clean.

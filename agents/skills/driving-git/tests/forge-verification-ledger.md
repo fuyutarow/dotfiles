@@ -299,3 +299,8 @@ No real remote rewrite, hosted purge, scheduler registration, or LFS deletion wa
 The fixture proves measurement/ref behavior, not a production cleanup's recovered capacity.
 Live installed-skill auto-triggering requires a fresh session; a description desk-check is not that experiment.
 The original semantic existence-battery residual remains; this revision extends the established owner.
+
+## 8. 2026-10-01 — jj repos deny agents git (v2609.2.2)
+
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+Routing only: the `driving-jujutsu` row states that a house jj repo denies agents git, so every agent job there is theirs; the jj-migration fire row also points at `wiring-repositories` JJ-1..3. skill-check: clean.

@@ -176,3 +176,13 @@ stray write; deletion; usage; three real commits through a hook incl. the tempor
 bare `rustfmt` 1.9.0 parses as 2015 (`async fn` → E0670). Templates: all five gained `fmt:staged`;
 four gate on `["fmt:staged", "lint"]`, Julia on `["fmt:staged"]` because its starter `lint` reuses
 the whole-tree `fmt:check`. skill-check WARN counts equal HEAD (SKILL.md 11, references 14).
+
+## 2026-10-01 — jj verbs `commit` / `pull` (v2610.1.0)
+
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+
+- `commit` / `pull` are HARD only where `.jj/` exists; a git-only repo is not asked (no WARN flood across the existing repos).
+- Test added: `a jj repo (.jj/ present) must resolve commit and pull; a git-only repo is not asked` — red on a fixture without the tasks, green with them; 15/15 pass. dotfiles: `OK commit (jj repo)`, `OK pull (jj repo)`, 0 hard.
+- All five templates carry the block and parse as TOML. `pull` rebases onto `trunk()`, which the shared jj config resolves.
+- `scripts/jj-commit.ts` (argv via cleye since 2026-10-01) is now indexed in the reference table.
+- skill-check: prose-debt unchanged from the pre-edit version (SKILL.md 11, recipes.md 14 — standing debt, not added here).

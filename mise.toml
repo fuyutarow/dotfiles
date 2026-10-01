@@ -377,11 +377,11 @@ description = "jj gated commit: stage exactly the named paths, run hook:pre-comm
 run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
 
 [tasks.pull]
-description = "jj pull: fetch origin, rebase the working-copy branch onto alpha, then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
+description = "jj pull: fetch origin, rebase the working-copy branch onto trunk() (= alpha@origin, jj/config.toml), then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
 run = '''
 set -e
 jj git fetch --remote origin
-jj rebase -b @ -d alpha
+jj rebase -b @ -d 'trunk()'
 mise run hook:post-merge
 '''
 

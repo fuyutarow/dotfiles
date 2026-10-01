@@ -68,8 +68,10 @@ export type DefinitionAnswer = {
 
 export type Judge = "jev" | "local";
 type Thresholds = { strong: number; likely: number };
+type JevProvider = "typesafe" | "jevtypesafeai";
 type RetrievalConfig = {
   judge: Judge;
+  jevProvider: JevProvider;
   noEgress: string[];
   thresholds: Record<Judge, Thresholds>;
 };
@@ -78,7 +80,11 @@ const RECALL = 40; // embedding hits pulled from the catalog
 const RERANK_POOL = 40; // candidates the judge scores: 40 (the bench size)
 const PRIOR = { public: 1, documented: 0.5, private: -1.5, test: -1.5 };
 const CONFIG = join(import.meta.dir, "retrieval.toml");
-const JEV_URL = "https://api.typesafe.ai/v1/systemone";
+// Same request shape at both (retrieval.toml jev_provider); the reseller takes no `model` field.
+const JEV_ENDPOINTS: Record<JevProvider, { url: string; model?: string }> = {
+  typesafe: { url: "https://api.typesafe.ai/v1/systemone", model: "jev-latest" },
+  jevtypesafeai: { url: "https://jevtypesafeai.com/api/v1/decide" },
+};
 const JEV_TIMEOUT_MS = 20_000;
 const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
 
@@ -87,6 +93,7 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
   const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as {
     definition?: {
       judge?: unknown;
+      jev_provider?: unknown;
       no_egress?: unknown;
       thresholds?: Record<string, Partial<Thresholds>>;
     };
@@ -94,6 +101,10 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
   const d = raw.definition ?? {};
   if (d.judge !== "jev" && d.judge !== "local")
     throw new Error(`${path}: definition.judge must be "jev" or "local"`);
+  if (d.jev_provider !== "typesafe" && d.jev_provider !== "jevtypesafeai")
+    throw new Error(
+      `${path}: definition.jev_provider must be "typesafe" or "jevtypesafeai"`,
+    );
   if (
     !Array.isArray(d.no_egress) ||
     !d.no_egress.every((p) => typeof p === "string")
@@ -112,6 +123,7 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
   return {
     judge: d.judge,
+    jevProvider: d.jev_provider,
     noEgress: (d.no_egress as string[]).map(expand),
     thresholds,
   };
@@ -540,7 +552,7 @@ async function judgeCandidates(
 ): Promise<{ judge: Judge; result: RerankResult }> {
   if (docs.length === 0) return { judge: preferred, result: { scores: [] } };
   if (preferred === "jev") {
-    const jev = await judgeJev(query, docs);
+    const jev = await judgeJev(query, docs, loadRetrievalConfig().jevProvider);
     if ("scores" in jev) return { judge: "jev", result: jev };
     notes.push(`Jev unavailable (${jev.reason}); local reranker instead`);
   }
@@ -563,13 +575,15 @@ function jevKey(): string | null {
 export async function judgeJev(
   query: string,
   docs: string[],
+  provider: JevProvider,
 ): Promise<RerankResult> {
   const apiKey = jevKey();
   if (apiKey === null)
     return { reason: "no TYPESAFE_API_KEY (env or ~/.config/typesafe/.env)" };
+  const endpoint = JEV_ENDPOINTS[provider];
   const id = (i: number) => `C${String(i).padStart(2, "0")}`;
   const body = JSON.stringify({
-    model: "jev-latest",
+    ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
     state: Object.fromEntries(docs.map((d, i) => [id(i), d])),
     questions: Object.fromEntries(
       docs.map((_, i) => [
@@ -583,7 +597,7 @@ export async function judgeJev(
   });
   for (let attempt_ = 0; attempt_ <= JEV_RETRIES; attempt_ += 1) {
     const res = await attempt(() =>
-      fetch(JEV_URL, {
+      fetch(endpoint.url, {
         method: "POST",
         headers: {
           authorization: `Bearer ${apiKey}`,
@@ -599,7 +613,9 @@ export async function judgeJev(
       await Bun.sleep(500 * 2 ** attempt_);
       continue;
     }
-    if (status !== 200) return { reason: `HTTP ${status}` };
+    if (status === 401) return { reason: `HTTP 401 at ${provider}: the key is not this provider's (retrieval.toml jev_provider)` };
+    if (status === 402) return { reason: `HTTP 402 at ${provider}: no credit left — top up` };
+    if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
     const json = await attemptOr(
       async () =>
         (await res.value.json()) as {

@@ -700,3 +700,7 @@ run = 'bun ~/dotfiles/scripts/link-skills.ts'
 dir = "{{config_root}}"
 description = "Vendor a third-party skill into agents/skills/. Usage: mise run skills:add -- <owner/repo> --skill <name> [--skill <name>…] [--dry-run]"
 run = 'bun ~/dotfiles/scripts/vendor-skill.ts'
+
+[tasks."codex:remote-control"]
+description = "Converge the Codex app-server daemon's remote control (how the ChatGPT mobile app reaches this machine) to agents/codex/app-server.toml. Idempotent; on drift it persists the setting and restarts a running daemon. `mise run doctor` (codex-remote) reports the drift."
+run = "bun agents/codex/codex-remote-control.ts"

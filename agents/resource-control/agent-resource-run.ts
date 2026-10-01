@@ -57,6 +57,9 @@ export type ResourcePolicy = {
   gpu_soft_limit_fraction: number;
   default_monitor_interval_ms: number;
   gpu_vram_sample_interval_ms: number;
+  gpu_partition_device: number;
+  gpu_partition_ccc_bytes: number;
+  gpu_partition_rerank_bytes: number;
 };
 
 type PolicyRule = {
@@ -69,6 +72,8 @@ type PolicyRule = {
 const positiveInteger = (value: number): boolean =>
   Number.isSafeInteger(value) && value > 0;
 const fraction = (value: number): boolean => value > 0 && value <= 1;
+const nonNegativeInteger = (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= 0;
 
 // TOML key -> typed field. Sizes are whole MiB/GiB so the byte values stay exact integers.
 const POLICY_RULES: Record<string, PolicyRule> = {
@@ -137,6 +142,24 @@ const POLICY_RULES: Record<string, PolicyRule> = {
     expected: "a positive integer (ms)",
     valid: positiveInteger,
     scale: 1,
+  },
+  gpu_partition_device: {
+    field: "gpu_partition_device",
+    expected: "a non-negative integer (GPU index)",
+    valid: nonNegativeInteger,
+    scale: 1,
+  },
+  gpu_partition_ccc_mib: {
+    field: "gpu_partition_ccc_bytes",
+    expected: "a non-negative integer (MiB; 0 = no partition)",
+    valid: nonNegativeInteger,
+    scale: MiB,
+  },
+  gpu_partition_rerank_mib: {
+    field: "gpu_partition_rerank_bytes",
+    expected: "a non-negative integer (MiB; 0 = no partition)",
+    valid: nonNegativeInteger,
+    scale: MiB,
   },
 };
 
@@ -854,7 +877,23 @@ type GpuLedger = {
  *
  * The `max` form is conservative in both regimes — before our jobs allocate, `reserved`
  * dominates; when an unmanaged process holds the card, `used_bytes` does.
+ *
+ * STANDING PARTITIONS (owner ruling 2026-10-01: 「VRAM は ccc と分けて使うべきです。はじめから
+ * 隔壁しておけよ」). The resident services — the ccc embedder daemon and the repo-retrieve
+ * reranker — each own a fixed VRAM partition, hard-capped inside their own process
+ * (agents/resource-control/gpu_partition.py, sized here in resource-policy.toml). Their partitions
+ * count as reserved from the start, used or not: a job never meets a card "mysteriously full" when
+ * a service wakes up, and a service never grows into job memory.
+ *
+ *   committed = max(reserved + standing, used_bytes)
  */
+/** VRAM the resident services own on this device, whether or not they hold it right now. */
+export function standingPartitionBytes(gpu: GpuSnapshot, policy: ResourcePolicy): number {
+  return gpu.id === policy.gpu_partition_device
+    ? policy.gpu_partition_ccc_bytes + policy.gpu_partition_rerank_bytes
+    : 0;
+}
+
 function gpuLedger(
   gpu: GpuSnapshot,
   reservations: Reservation[],
@@ -872,7 +911,7 @@ function gpuLedger(
         : 0),
     0,
   );
-  const committed = Math.max(reserved, gpu.used_bytes);
+  const committed = Math.max(reserved + standingPartitionBytes(gpu, policy), gpu.used_bytes);
   return {
     jobs: held.length,
     reserved_bytes: reserved,
@@ -898,7 +937,8 @@ function gpuHeadroomDenial(
   const available =
     `${ledger.available_bytes} available on GPU ${gpu.id} after ${ledger.jobs} live ` +
     `reservation(s) (${ledger.reserved_bytes} bytes declared, ${gpu.used_bytes} bytes observed ` +
-    `in use) and ${policy.gpu_safety_bytes} bytes of device safety headroom`;
+    `in use), ${standingPartitionBytes(gpu, policy)} bytes of standing service partitions ` +
+    `(ccc + reranker, resource-policy.toml) and ${policy.gpu_safety_bytes} bytes of device safety headroom`;
   const vram = `VRAM request ${requiredBytes} vs ${available}`;
   if (ledger.jobs >= policy.gpu_max_concurrent_jobs) {
     return `GPU ${gpu.id} already holds the ${policy.gpu_max_concurrent_jobs}-job concurrency cap; ${vram}`;

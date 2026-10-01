@@ -470,3 +470,11 @@ string-form `bin`). `mise run lint:bun`: shebang WARNs 3 → 0; one WARN remains
 exits clean with exactly the pre-existing, already-waived prose debt (12 sentences >120 chars,
 11-line version header, 4 table cells >400 chars, 34 in `bun-facts.md`) — identical counts at
 HEAD before this change; no new debt.
+
+
+## 2026-10-01 — description routes a new repo/project to wiring-repositories first
+
+Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a session loaded only the language skill and
+never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
+description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
+this skill then owns the language manifest. skill-check clean; listing within budget.

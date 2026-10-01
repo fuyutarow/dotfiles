@@ -21,3 +21,18 @@ event = "PreToolUse"
 matcher = "Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
+
+[[hook]]
+script = "enforce-search-route.ts"
+event = "PreToolUse"
+matcher = "Grep|Bash"
+fail_closed = true
+vendors = ["claude", "codex"]
+
+# Codex only: Claude Code enforces .claude/settings.json permissions.deny itself.
+[[hook]]
+script = "enforce-repo-bash-deny.ts"
+event = "PreToolUse"
+matcher = "Bash"
+fail_closed = true
+vendors = ["codex"]

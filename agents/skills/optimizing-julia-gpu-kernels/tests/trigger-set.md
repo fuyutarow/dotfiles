@@ -56,6 +56,13 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 | 「Zygote が `Mutating arrays is not supported` で死ぬ」(GPU コード) | `writing-julia` legitimately matches (Zygote is its keyword) — it diagnoses the error class; the moment CuArray/kernel context is confirmed, this skill's GK3-AD owns the rrule fix (differentiating-kernels.md) |
 | "`accumulate` の gradient が ChainRules 未対応エラーで落ちる" | ask carries no GPU token — `writing-julia` (AD keywords) fires first; on a CuArray/GPU shape the mechanical hand-write trigger routes here (differentiating-kernels.md §5) |
 
+### Device ownership seam (v2610.1.0)
+
+| Ask | Route |
+|---|---|
+| 「edition の device を型で持たせて、caller が選ぶ形に」 | CO-FIRE: writing-julia JG8 (§10.10) owns the state/API rule; HERE only GKR for the chosen device |
+| "The model goes to GPU because `vram_bytes > 0`" | writing-julia JG8 first; then GKR profiles the explicitly chosen device |
+
 ## MUST NOT FIRE (true near-misses)
 
 | Ask | Route |
@@ -101,3 +108,5 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
 - 2026-09-25 v2609.4.0: selected-work and steady-state boundary rows added after the
   Firefly follow-up. The stock-layer near miss remains no-fire only for layer selection;
   whole-step GPU performance routes to GKB/GKR regardless of kernel syntax.
+- 2026-10-01 v2610.1.0: device-ownership seam rows added. No description edit: device tokens already fire
+  here, and the routing row hands the state/API rule to writing-julia JG8 (§10.10).

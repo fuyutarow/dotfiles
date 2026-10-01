@@ -19,6 +19,7 @@
 import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
+import { summaryPaths } from "./jj-summary.ts";
 
 const die = (m: string, code = 2): never => {
   console.error(`jj-commit: ${m}`);
@@ -62,7 +63,9 @@ if (!msg.trim()) die("-m <message> or -F <file> is required");
 const snap = await $`jj status`.quiet().nothrow();
 if (snap.stderr.toString().includes("Refused to snapshot"))
   die(`jj refused to snapshot some files (size limit); raise snapshot.max-new-file-size or ignore them:\n${snap.stderr.toString().trim()}`);
-const changed = (await $`jj diff -r @ --name-only`.text()).split("\n").filter(Boolean);
+// Both sides of a rename: `--name-only` prints only the destination, so a moved file's deletion was
+// never staged or committed — the gate then linted the vanished source (2026-10-01).
+const changed = summaryPaths(await $`jj diff -r @ --summary`.text());
 
 const wanted = new Set<string>();
 if (records) {

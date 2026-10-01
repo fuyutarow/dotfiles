@@ -8,13 +8,12 @@
 //   - PreToolUse decision = exit 0 + JSON on stdout (decidePre)
 //   - Stop guard block    = exit 2 + stderr; never mix the two channels
 
-import { constants, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
-export { decidePre, readStdinJson } from "../../hooks/lib.ts";
+export { decidePre, findExe, readStdinJson } from "../../hooks/lib.ts";
 
 export type TranscriptEntry = {
   type?: string;
@@ -85,37 +84,4 @@ export function stripCode(
     out.push(line.replace(/`[^`]*`/g, ""));
   }
   return out.join("\n");
-}
-
-// Any-execute-bit check without throwing: statSync(throwIfNoEntry: false) returns undefined for
-// a missing path instead of throwing, so the X_OK check below never needs a catch to "keep
-// looking" past a missing or non-executable candidate.
-// Non-throwing stand-in for accessSync(p, X_OK), so findExe stays synchronous for its callers.
-// Two deliberate differences: a directory no longer counts (X_OK passed for a searchable dir of
-// the same name), and any x bit counts rather than the one for this process's uid/gid — for a
-// PATH lookup of a named binary neither case is a real executable.
-function isExecutable(p: string): boolean {
-  const st = statSync(p, { throwIfNoEntry: false });
-  if (!st || !st.isFile()) return false;
-  return (
-    (st.mode & constants.S_IXUSR) !== 0 ||
-    (st.mode & constants.S_IXGRP) !== 0 ||
-    (st.mode & constants.S_IXOTH) !== 0
-  );
-}
-
-// Locate an executable: $PATH first, then fallback dirs (hooks may run with a narrow PATH).
-export function findExe(
-  name: string,
-  fallbackDirs: string[] = [],
-): string | null {
-  const dirs = (process.env.PATH ?? "")
-    .split(":")
-    .filter(Boolean)
-    .concat(fallbackDirs);
-  for (const dir of dirs) {
-    const p = join(dir, name);
-    if (isExecutable(p)) return p;
-  }
-  return null;
 }

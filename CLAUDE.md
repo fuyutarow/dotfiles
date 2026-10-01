@@ -27,7 +27,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
-`zsh git tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` (mac), `wsl` (WSL).
+`zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` (mac), `wsl` (WSL).
 Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
@@ -122,6 +122,9 @@ All repo tasks go through **mise** (`mise tasks` to list):
   `mise run commit -- -m "<msg>" [--push] -- <path>...` (stages exactly those paths, runs
   `hook:pre-commit`, `jj commit`s them, moves `alpha` to `@-`) and `mise run pull` (fetch, rebase
   onto `alpha`, then `hook:post-merge`). mise tasks may still call git internally.
+- jj settings shared by every repo live in `jj/config.toml` (linked to `~/.config/jj/config.toml`);
+  `jj config set --repo` writes outside the checkout (`~/.config/jj/repos/`), so it is for a
+  genuinely repo-specific value only.
 - Default branch / bookmark: **`alpha`** (not main/master)
 - **Commit messages are ENGLISH — subject and body.** This repo has older Japanese commits;
   they are history, not a template. Do not imitate them (2026-08-23).

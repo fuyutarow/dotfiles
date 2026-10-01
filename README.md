@@ -69,6 +69,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ~/dotfiles/
 ├── zsh/         # zshenv (tiny, SSH-safe), zshrc, aliases.zsh (+ IS_MAC/IS_WSL), mac.zsh / wsl.zsh
 ├── git/         # gitconfig + local.mac / local.wsl (per-OS include)
+├── jj/          # config.toml — Jujutsu user config for every repo (identity, trunk() = alpha, snapshot cap)
 ├── tmux/        # tmux.conf, clipboard.conf, scripts/ (status bar, layouts)
 ├── herdr/       # config.toml (agent multiplexer; tmux muscle-memory port)
 ├── sheldon/     # zsh plugin manager (sources only zsh/aliases.zsh)

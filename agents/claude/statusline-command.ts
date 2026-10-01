@@ -682,7 +682,33 @@ function memReading(usedG: number, totalG: number): MemReading | undefined {
 
 // Called on EVERY render now (Sys row, below), not just while a job is admitted — the one
 // subprocess call among the three Sys readings, bounded like every other enrichment here.
+// nvidia-smi is ~170 ms of a ~200 ms render (measured 2026-10-01) and its answer is host-wide, so
+// one sample is shared by every session for GPU_SAMPLE_TTL_MS. That is what lets settings.json run
+// the bar every 5 s (statusLine.refreshInterval) — the cadence a Remote Control connect needs to
+// show up promptly, since the bridge attaches after the command's own render.
+const GPU_CACHE = `${HOME}/.cache/claude/statusline-gpu.json`;
+const GPU_SAMPLE_TTL_MS = 5_000;
+type GpuCache = { at?: unknown; reading?: MemReading | null };
 function vramFrac(): MemReading | undefined {
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const none: GpuCache = {};
+  const cached = fromThrowable((): GpuCache =>
+    JSON.parse(readFileSync(GPU_CACHE, "utf8")),
+  )().unwrapOr(none);
+  if (typeof cached.at === "number" && now - cached.at < GPU_SAMPLE_TTL_MS) {
+    return cached.reading ?? undefined; // null = "no GPU" is cached too
+  }
+  const reading = sampleVram();
+  fromThrowable(() => {
+    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+    writeFileSync(
+      GPU_CACHE,
+      JSON.stringify({ at: now, reading: reading ?? null }),
+    );
+  })();
+  return reading;
+}
+function sampleVram(): MemReading | undefined {
   return fromThrowable((): MemReading | undefined => {
     const out = execFileSync(
       "nvidia-smi",
@@ -1047,7 +1073,7 @@ function sysSegment(
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
 // uncolored shape has one home, hooks/prompt-stamp.ts, shared with the /quote header.
 // Its stamp is render time = "as of" for every value on screen. settings.json's
-// statusLine.refreshInterval (30s) re-renders an idle pane, so a stamp more than a minute
+// statusLine.refreshInterval (5s) re-renders an idle pane, so a stamp more than a minute
 // behind the clock means a stuck render. Minutes only, like PS1 — seconds were tried and
 // rejected as noise (2026-09-27).
 function coloredHead(p: PromptParts): string {

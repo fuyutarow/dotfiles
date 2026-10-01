@@ -31,10 +31,24 @@ const FILE_SCAN_PRIMITIVE =
   /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/;
 const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
 // A single grep/rg over an already classified router stream is display filtering, not a
-// second repository search. Require one pattern and no file operand; reject shell chaining,
-// substitution, redirection, and a second pipe so the exception cannot hide a raw search.
-const ROUTED_STREAM_FILTER =
-  /^\s*(?:repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))\s+(?:concept|battery|literal|exhaustive|files|structural)\b[^|;&\n`$<>]*\|\s*(?:grep|rg)\s+(?:-F\s+)?--\s+(?:'[^'\n]*'|"[^"`$\n]*"|[^\s|;&<>`$]+)\s*$/;
+// second repository search. The accepted shape, every part optional except the router and the
+// filter:
+//   [cd <dir> &&] <router> <route> <args> [2>&1 | 2>/dev/null] | grep|rg [-F -i -v -w -n …] (-e PAT | -- PAT) [| head|tail [-n N | -N]]
+// One pattern and NO file operand (the filter reads the router's stream, never the tree); no
+// substitution, no other redirection, no further stage. A trailing head/tail only shortens what is
+// shown. Widened 2026-10-01 (firedancer report): the deny message recommended this form while the
+// gate rejected `2>&1`, `-e`, and `| head` — three denials in one day for following the advice.
+const ROUTER_INVOCATION = String.raw`(?:repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))`;
+const FILTER_PATTERN = String.raw`(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s|;&<>\`$'"-][^\s|;&<>\`$'"]*)`;
+const ROUTED_STREAM_FILTER = new RegExp(
+  String.raw`^\s*(?:cd\s+(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s;&|\`$]+)\s*&&\s*)?` +
+    ROUTER_INVOCATION +
+    String.raw`\s+(?:concept|battery|literal|exhaustive|files|structural|definition)\b[^|;&\n\`$<>]*` +
+    String.raw`(?:\s2>(?:&1|\/dev\/null))?\s*` +
+    String.raw`\|\s*(?:grep|rg)(?:\s+-[Fivwnc]+)*\s+(?:--|-e)\s+` +
+    FILTER_PATTERN +
+    String.raw`(?:\s*\|\s*(?:head|tail)(?:\s+-n\s*\d+|\s+-\d+)?)?\s*$`,
+);
 const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
 const ROUTER_COMMAND = "bun ~/.claude/hooks/repo-retrieve.ts";
 
@@ -181,10 +195,12 @@ function main(): void {
       `${ROUTER_COMMAND} literal --query '<exact text>'; ` +
       `${ROUTER_COMMAND} exhaustive --query '<regex>'; ` +
       `${ROUTER_COMMAND} structural --query '<by-example pattern>'; ` +
-      `${ROUTER_COMMAND} files --glob '<glob>'. ` +
-      `To filter displayed router output, use one stream-only stage such as ` +
-      `repo-retrieve literal --query '<text>' | grep -F -- '<filter>'; ` +
-      `do not pass grep a file path or treat filtered output as an absence check. ` +
+      `${ROUTER_COMMAND} files --glob '<glob>'; ` +
+      `${ROUTER_COMMAND} definition --query '<what it does>' (before writing a new function: does one exist?). ` +
+      `To filter displayed router output, pipe it to ONE grep/rg with one pattern (-e PAT or -- PAT) ` +
+      `and no file operand, optionally followed by one head/tail, e.g. ` +
+      `repo-retrieve literal --query '<text>' 2>&1 | grep -F -e '<filter>' | head; ` +
+      `filtered output is never an absence check. ` +
       `Known-symbol definitions/references go to Serena. The router may choose rg; ` +
       `the forbidden act is unclassified search, not lexical search. This is a policy ` +
       `boundary: do not bypass it with Python, Node, shell loops, or another tool.`,

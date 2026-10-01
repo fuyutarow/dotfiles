@@ -1,5 +1,5 @@
-// Stop / PostToolUse hook — attach the host's "Sys: CPU … · RAM … · VRAM …" reading to the
-// thread at this moment, so a transcript shows what the machine looked like WHEN something
+// Stop / PostToolUse hook — attach the statusline's "Rate: 5h … · 7d …" (API budget) and
+// "Sys: CPU … · RAM … · VRAM …" (host) rows to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
 // Channel: a top-level `systemMessage`. Claude Code records a hook's stdout in the transcript
@@ -40,11 +40,18 @@ async function main(): Promise<void> {
     at?: unknown;
     line?: unknown;
     ansi?: unknown;
+    rate?: unknown;
+    rate_ansi?: unknown;
   };
   if (typeof cached.at !== "number" || typeof cached.line !== "string") return;
   // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
   // plain Ink text node), else the plain row.
-  const shown = typeof cached.ansi === "string" ? cached.ansi : cached.line;
+  const sys = typeof cached.ansi === "string" ? cached.ansi : cached.line;
+  const rate =
+    typeof cached.rate_ansi === "string" ? cached.rate_ansi : cached.rate;
+  // Rate first, as on the bar; a payload without rate_limits leaves the Sys row alone.
+  const shown =
+    typeof rate === "string" && rate !== "" ? `${rate}\n${sys}` : sys;
   if (now - cached.at > STALE_MS) return;
 
   const statePath = `${STATE_DIR}/${sid.replace(/[^A-Za-z0-9_-]/g, "_")}.last`;

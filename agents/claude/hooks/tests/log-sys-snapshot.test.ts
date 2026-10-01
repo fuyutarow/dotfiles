@@ -58,4 +58,23 @@ describe("log-sys-snapshot", () => {
       systemMessage: colored,
     });
   });
+  test("the Rate row, when cached, comes first on its own line", () => {
+    const home = homeWithCache(1_000);
+    const cache = join(home, ".cache", "claude", "statusline-sys.json");
+    const rate = "Rate: 5h 40% ⟳2h · 7d 12% ⟳5d";
+    const cur = JSON.parse(readFileSync(cache, "utf8"));
+    writeFileSync(cache, JSON.stringify({ ...cur, rate }));
+    expect(JSON.parse(fire(home, "Stop").stdout)).toEqual({
+      systemMessage: `${rate}\n${LINE}`,
+    });
+  });
+  test("an empty Rate row (no rate_limits) leaves only the Sys row", () => {
+    const home = homeWithCache(1_000);
+    const cache = join(home, ".cache", "claude", "statusline-sys.json");
+    const cur = JSON.parse(readFileSync(cache, "utf8"));
+    writeFileSync(cache, JSON.stringify({ ...cur, rate: "" }));
+    expect(JSON.parse(fire(home, "Stop").stdout)).toEqual({
+      systemMessage: LINE,
+    });
+  });
 });

@@ -972,6 +972,18 @@ function rlModelSegment(m: ModelLimit): string {
   if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
+// Rate row: "Rate: 5h NN% ⟳… · 7d NN% ⟳… [· <Model> NN% ⟳…]", or "" when the payload carries no
+// rate_limits. One builder for the bar and for the snapshot log-sys-snapshot.ts attaches.
+function rateRow(
+  df: Pick<Dataframe, "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel">,
+): string {
+  if (df.rl5 == null && df.rl7 == null && df.rlModel.length === 0) return "";
+  let row = `${ESC}[38;5;108mRate:${RST}`;
+  if (df.rl5 != null) row += rl5Segment(df.rl5, df.rl5Reset);
+  if (df.rl7 != null) row += rl7Segment(df.rl7, df.rl7Reset);
+  for (const m of df.rlModel) row += rlModelSegment(m);
+  return row;
+}
 // Job row, admitted-work half: "<name>[+N] <elapsed> [det×N]" — extracted out of render() only
 // to keep its nesting under max-depth; formatting unchanged from the inline version. VRAM used
 // to ride this segment (only while a job was admitted); it now lives unconditionally on the Sys
@@ -1123,13 +1135,7 @@ function render(df: Dataframe): string {
   }
   agentLine = join(agentLine, ctxSeg);
 
-  let rateLine = "";
-  if (df.rl5 != null || df.rl7 != null || df.rlModel.length > 0) {
-    rateLine = `${ESC}[38;5;108mRate:${RST}`;
-    if (df.rl5 != null) rateLine += rl5Segment(df.rl5, df.rl5Reset);
-    if (df.rl7 != null) rateLine += rl7Segment(df.rl7, df.rl7Reset);
-    for (const m of df.rlModel) rateLine += rlModelSegment(m);
-  }
+  const rateLine = rateRow(df);
 
   let repoLine = "";
   if (df.branch)
@@ -1199,6 +1205,8 @@ const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replace(ANSI, "");
+// The Rate row rides along (API budget, account-wide like the host values); "" when absent.
+const rateColored = rateRow(df);
 if (sysPlain !== "") {
   fromThrowable(() => {
     mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
@@ -1209,6 +1217,8 @@ if (sysPlain !== "") {
         line: `Sys: ${sysPlain}`,
         // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
         ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
+        rate: rateColored.replace(ANSI, ""),
+        rate_ansi: rateColored,
       }),
     );
   })();

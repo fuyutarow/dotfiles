@@ -1,10 +1,11 @@
 ---
 name: opus-medium
 description: >-
-  Use for multi-file refactors, debugging that requires tracing a root cause across a
-  codebase, long unattended agentic coding runs, or specs that are ambiguous enough to need
-  judgment calls along the way. Runs on Opus at medium effort. Not for bulk, well-specified,
-  cheap execution — dispatch sonnet-high for that instead.
+  Escalation only — the prompt must carry one `ESCALATE(OPUS): <reason>` line (the dispatch
+  hook denies it otherwise). Use when Sonnet 5.5 high is not enough: an ambiguous spec, a
+  multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high already
+  stuck on the same task. Runs on Opus at medium effort. Everything else — clear-spec
+  implementation, bug fixes, tests, terminal work — goes to sonnet-high, the default.
 model: opus
 effort: medium
 ---

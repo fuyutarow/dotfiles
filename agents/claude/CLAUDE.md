@@ -1,9 +1,11 @@
 # User-global policy
 
-- **Every dispatch names one of exactly two model+effort pairs, explicitly.** Allowed:
-  **Sonnet 5 at `high`** (well-specified, bulk, cheap execution) and **Opus 5.5 at `medium`**
-  (multi-file refactors, debugging, long agentic coding, ambiguous specs — per task it is often
-  no dearer than Sonnet high, because it spends far fewer tokens and retries). Nothing is
+- **Every dispatch names one of exactly two model+effort pairs, explicitly; Opus is
+  escalation-only.** **Sonnet 5.5 at `high`** is the default (clear-spec implementation, bug
+  fixes, tests, terminal work, bulk coding — within a few points of Opus medium, cheaper per
+  task). **Opus 5.5 at `medium`** only with exactly one `ESCALATE(OPUS): <reason>` line in the
+  prompt (Workflow: inside the same `agent()` call): ambiguous spec, multi-repo or large
+  refactor, design judgment, factual accuracy, or Sonnet already stuck on the task. Nothing is
   implicit: the dispatch hook injects nothing and denies a missing or mismatched value.
   Agent/Task: `subagent_type:"sonnet-high", model:"sonnet"` or
   `subagent_type:"opus-medium", model:"opus"` (the two agent definitions carry the effort in

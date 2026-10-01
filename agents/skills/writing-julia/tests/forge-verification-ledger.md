@@ -567,3 +567,9 @@ Kernel craft and its admission/measurement rules stay in optimizing-julia-gpu-ke
 packages and numerical-method discipline remain here. No Julia production code or dependencies changed.
 Family evidence: optimizing-julia-gpu-kernels/tests/postmortem-2026-09-30-design.md.
 Existing157reference/10core prose warnings are unchanged and waived for this reciprocal-row edit.
+
+## 2026-10-01 — reciprocal row for keeping-research-notebooks
+
+Added one routing row: Julia module and package mechanics stay HERE; model edition/revision lifecycle,
+registration and acceptance rows go to `keeping-research-notebooks` (BY ARTIFACT). No rule changed.
+**PROSE-DEBT waiver (2026-10-01):** the 157 reference / 10 core warnings are unchanged and remain queued.

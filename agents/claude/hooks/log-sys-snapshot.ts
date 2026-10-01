@@ -26,6 +26,9 @@ import { readStdinJson } from "./lib.ts";
 const HOME = process.env.HOME ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const STATE_DIR = `${HOME}/.cache/claude/sys-log`;
+// Per session: each session's payload carries the rate_limits IT last received, so a shared file
+// let another session's older reading show here (2026-10-01: 7d 60% then 51%, same reset).
+const RATE_DIR = `${HOME}/.cache/claude/statusline-rate`;
 const STALE_MS = 120_000;
 const MIN_GAP_MS = 60_000;
 
@@ -40,21 +43,32 @@ async function main(): Promise<void> {
     at?: unknown;
     line?: unknown;
     ansi?: unknown;
-    rate?: unknown;
-    rate_ansi?: unknown;
   };
   if (typeof cached.at !== "number" || typeof cached.line !== "string") return;
   // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
   // plain Ink text node), else the plain row.
   const sys = typeof cached.ansi === "string" ? cached.ansi : cached.line;
-  const rate =
-    typeof cached.rate_ansi === "string" ? cached.rate_ansi : cached.rate;
-  // Rate first, as on the bar; a payload without rate_limits leaves the Sys row alone.
-  const shown =
-    typeof rate === "string" && rate !== "" ? `${rate}\n${sys}` : sys;
   if (now - cached.at > STALE_MS) return;
 
-  const statePath = `${STATE_DIR}/${sid.replace(/[^A-Za-z0-9_-]/g, "_")}.last`;
+  const key = sid.replace(/[^A-Za-z0-9_-]/g, "_");
+  // Rate first, as on the bar. Missing, stale, or empty (no rate_limits) -> the Sys row alone.
+  const rateRead = await attempt(
+    () =>
+      JSON.parse(readFileSync(`${RATE_DIR}/${key}.json`, "utf8")) as {
+        at?: unknown;
+        line?: unknown;
+        ansi?: unknown;
+      },
+  );
+  const r = rateRead.ok ? rateRead.value : {};
+  const rate = typeof r.ansi === "string" ? r.ansi : r.line;
+  const rateFresh = typeof r.at === "number" && now - r.at <= STALE_MS;
+  const shown =
+    rateFresh && typeof rate === "string" && rate !== ""
+      ? `${rate}\n${sys}`
+      : sys;
+
+  const statePath = `${STATE_DIR}/${key}.last`;
   const last = await attempt(() => Number(readFileSync(statePath, "utf8")));
   const lastAt = last.ok && Number.isFinite(last.value) ? last.value : 0;
   if (event === "PostToolUse" && now - lastAt < MIN_GAP_MS) return;

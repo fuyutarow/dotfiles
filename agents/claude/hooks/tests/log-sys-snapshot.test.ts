@@ -58,22 +58,41 @@ describe("log-sys-snapshot", () => {
       systemMessage: colored,
     });
   });
-  test("the Rate row, when cached, comes first on its own line", () => {
+  const writeRate = (home: string, sid: string, line: string, ageMs = 1_000) => {
+    const dir = join(home, ".cache", "claude", "statusline-rate");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, `${sid}.json`),
+      JSON.stringify({
+        at: Temporal.Now.instant().epochMilliseconds - ageMs,
+        line,
+      }),
+    );
+  };
+  const RATE = "Rate: 5h 40% ⟳2h · 7d 60% ⟳5d";
+  test("this session's Rate row comes first on its own line", () => {
     const home = homeWithCache(1_000);
-    const cache = join(home, ".cache", "claude", "statusline-sys.json");
-    const rate = "Rate: 5h 40% ⟳2h · 7d 12% ⟳5d";
-    const cur = JSON.parse(readFileSync(cache, "utf8"));
-    writeFileSync(cache, JSON.stringify({ ...cur, rate }));
+    writeRate(home, "s1", RATE);
     expect(JSON.parse(fire(home, "Stop").stdout)).toEqual({
-      systemMessage: `${rate}\n${LINE}`,
+      systemMessage: `${RATE}\n${LINE}`,
     });
   });
-  test("an empty Rate row (no rate_limits) leaves only the Sys row", () => {
+  test("another session's Rate row is never shown here", () => {
     const home = homeWithCache(1_000);
-    const cache = join(home, ".cache", "claude", "statusline-sys.json");
-    const cur = JSON.parse(readFileSync(cache, "utf8"));
-    writeFileSync(cache, JSON.stringify({ ...cur, rate: "" }));
+    writeRate(home, "other", "Rate: 7d 51% ⟳5d");
     expect(JSON.parse(fire(home, "Stop").stdout)).toEqual({
+      systemMessage: LINE,
+    });
+  });
+  test("a stale or empty Rate row leaves only the Sys row", () => {
+    const stale = homeWithCache(1_000);
+    writeRate(stale, "s1", RATE, 10 * 60_000);
+    expect(JSON.parse(fire(stale, "Stop").stdout)).toEqual({
+      systemMessage: LINE,
+    });
+    const empty = homeWithCache(1_000);
+    writeRate(empty, "s1", "");
+    expect(JSON.parse(fire(empty, "Stop").stdout)).toEqual({
       systemMessage: LINE,
     });
   });

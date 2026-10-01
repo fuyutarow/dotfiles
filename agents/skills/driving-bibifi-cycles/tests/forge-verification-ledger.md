@@ -898,32 +898,45 @@ OLD and NEW made the same eight substantive decisions. Both withheld the over-bu
 the real runner's check-only accepted its envelope. No throughput or runtime-enforcement improvement is claimed.
 Descriptions/listing budget are unchanged. Scoped floor adds no core/reference warning.
 
-## 23. Reorganized outcome selection and release updates — v2610.2.0
+## 23. Outcome admission before allocation — v2610.3.0
 
-Source and limits: `tests/postmortem-2026-10-01-target-drift.md` now joins two
+Source and limits: `tests/postmortem-2026-10-01-target-drift.md` now joins three
 user-supplied report snapshots. The episode was active and the source was one-sided.
 The target-specific function remains authorized outcome + current evidence →
 select → execute → consume. Its artifact remains the existing iteration plan/log.
 EV0–EV4 retain claim meaning; C1/C3a retain dispatch and writer identity.
 
-This revision retires `references/target-benchmark-loop.md`. Its work-selection
+The preceding v2610.2.0 retired `references/target-benchmark-loop.md`. Its work-selection
 rows now live in the core decision loop and `references/microticket-patterns.md`;
 its evidence-meaning prose was removed in favor of the EV owner. The core and
 asset no longer require six-minute status reports. Six minutes still bounds the
 first useful return, while external updates follow results, blockers or user
 requests. No cron, second score store or new skill is admitted (F2/F4).
 
-The new source showed two further misses: a toy conformance suite missed the
+The earlier source showed two further misses: a toy conformance suite missed the
 registered adapter path, and a blank replacement lost a prior working mechanism.
 The predecessor rule and microticket pattern now demand a same-path carryover
 witness before optimization. This is an engineering transfer obligation; an
 ineligible predecessor does not become a current-concept achievement.
 
-Static desk-check: F1/F5/F12/N11, D34/D35 and S05. The cases separate
-first-return timing from reporting cadence and accepted wins from useful precursors.
-No live OLD/NEW run or measured discovery/time comparison was performed.
-Operational compliance and benefit remain unverified. The target core and
-references have zero prose warnings. `mise run lint:skills-floor` measured
-74 skills and 64,906 listing characters below the 65,242 ceiling; OA retained
-13 previously waived reference prose warnings and EV had zero. Link and commit
-receipts are recorded by the implementation turn.
+The follow-on source exposed a remaining design defect: independent work was
+enumerated before its purpose and first return were admitted. “Useful” was an
+unchecked adjective, and the six-minute rule appeared later in the manual.
+v2610.3.0 replaces startup, scientific-direction and allocation prose with one
+ordered admission table: outcome/constraints → purpose → first return → reuse/path
+→ resource fit → consumption. The compact card now follows that same order.
+The parent inspection is absolute, and a missed return blocks dependent successors.
+A speculative success no longer supplies an unconditional release ETA.
+
+Domain review found overgeneralization in unconditional predecessor preservation,
+GPU selection and no-update controls. Device policy is inherited from the task;
+carryover needs a declared obligation; no-update applies to learning claims.
+CPU-only benchmarks, theorem work and explicitly changed designs retain their own
+success conditions. No framework, precision, benchmark name or fixed model design
+from the source becomes a shared operating requirement.
+
+Static checks: revised S14/S28/S34/S72 and D13/D35–D39, plus F1/F5/F12/N11.
+They test long-container relabeling, purpose-free side work, device substitution,
+conditional ETA and domain near misses. No live OLD/NEW execution was performed.
+Operational improvement and runtime enforcement remain unverified; current floor,
+budget and installation receipts are recorded in the implementation turn.

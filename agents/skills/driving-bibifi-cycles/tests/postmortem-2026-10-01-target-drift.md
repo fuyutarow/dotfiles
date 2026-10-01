@@ -1,60 +1,75 @@
-# Bounded retrospective — target drift and late component retrieval
+# Bounded retrospective — target drift, lost transfer, dormant gates
 
-This is a retrospective of a user-supplied, assistant-authored report transcript,
-not a formal `RESEARCH_PROCESS_AUDIT`. The research and its current implementation
-were still active at the transcript boundary. The account is one-sided; quoted
-outcomes below are reported observations, not independent acceptance of raw runs.
+This is a retrospective of two user-supplied, assistant-authored report transcripts.
+The research and new implementation were still running at both boundaries. The
+accounts are one-sided: they locate reported actions and retractions, but they
+are not independent certification of raw benchmark runs or a terminal audit.
 
-Source: the 1,390-line attachment supplied on 2026-10-01, SHA-256
-`d074fe5741aea59da06461b65e3ecc537492de8e5af1ba591613e54929e5f878`.
-Line numbers refer to that frozen attachment. A read-only inspection on 2026-10-01
-found the target repository's working copy active above `alpha` at `49adb526`;
-it did not certify the transcript's benchmark counts or causal explanations.
-
-## Observed sequence and scope
-
-| Transcript locus | Reported event | Bounded inference |
+| Frozen source | SHA-256 | Relevant lines |
 |---|---|---|
-| 186–249 | Only 6 of 27 suite members had current-edition formal rows while 21 remained unmeasured; host variants, audits and theory work continued. | The selection loop did not put current-path coverage ahead of proxy results for this user goal. |
-| 356–379, 457–479, 637–665 | Suite rows exposed an observation-tree cap; raising it about 15-fold closed no additional member. | Measuring the suite changed the bottleneck diagnosis; capacity expansion itself was a valid negative test, not a breakthrough. |
-| 597–628, 671–694, 836–859 | A host construction solved some cases, but its method and the then-current edition missed core concept requirements. Earlier “concept-conformant” achievement wording was retracted. | A score and a forward-path shape test did not establish the learning-path requirement. The earlier score remains a reference. |
-| 137–155, 1241–1258 | Literature comparison and protocol descriptions were corrected; by the late report the new eligible edition had zero accepted benchmark wins. | EV0–EV4 already govern claim qualification. The planning loop must consume their disposition before counting target progress. |
-| 1358–1382 | A shared component library and live concept index existed, while a builder wrote many fresh kernels; the parent says its brief omitted pre-write retrieval. | The relevant control failure is the brief/acceptance boundary. A search appended after implementation cannot prevent duplication. |
+| Earlier 1,390-line attachment, supplied 2026-10-01 | `d074fe5741aea59da06461b65e3ecc537492de8e5af1ba591613e54929e5f878` | 186–249, 356–379, 597–665, 836–859, 1358–1382 |
+| Later 1,375-line attachment, supplied 2026-10-01 | `90290617741c7f546507462ea27e563d74878c26154ffac889b5b6646dface0f` | 760–875, 950–1198, 1217–1375 |
 
-The transcript also shows corrective work: suite registration, the concept-path
-audit, a failing acceptance test before the new implementation, corrected literature
-footing, and a search instruction added to later briefs. Those are actions reported
-in the source, not proof that the target outcome had been reached.
+A read-only target-workspace inspection during the earlier review found active
+uncommitted work above `alpha` at `49adb526`. It did not establish the reported
+scores, causes, or current target status at the later boundary.
 
-## Failure mechanism and cuts
+## Sequence: what helped and what failed
 
-The dominant process failure was substituting available proxy work for the user's
-accepted outcome: a concept-eligible current-edition result on a registered standard
-benchmark. A helper theorem, host score, audit or scheduled milestone could be
-useful, but none satisfied that predicate by itself.
+| Source locus | Reported observation | Retrospective judgment |
+|---|---|---|
+| Early 186–249 | Only 6 of 27 suite members had current-edition formal rows while host variants and theory work accumulated. | The selection loop privileged available proxy evidence over the authorized benchmark outcome. |
+| Early 356–379, 637–665 | Registered rows exposed a capacity stop; a roughly 15-fold capacity increase closed no new member. | The suite measurement changed the diagnosis. The negative capacity test remains useful evidence. |
+| Early 836–859; later 1–36 | Old scores were retracted as current-concept wins because learning happened outside the required path; a host prototype still gave transferable mechanisms. | Concept eligibility and useful local mechanism must be recorded separately. |
+| Later 760–771, 1084–1138 | An indexed component library existed; a builder had reimplemented related kernels. Later reuse improved a measured round path. | Search quality was not the reported first failure. Retrieval timing and actual consumer transfer were missing from the brief. The reported speedup is path-scoped. |
+| Later 875–950, 1335–1345 | A six-minute status cron was added, then removed; a six-minute release grid kept being revised after launch and test failures. | Frequent schedule prose did not produce an accepted result. First-return bounds remain useful; external updates should follow results and changed blockers. |
+| Later 950–1084, 1140–1198 | A model registration omission blocked launch; nominal sequence length missed framing bytes; toy conformance tests passed while the official adapter scored at chance. | Local tests covered different inputs and consumers. The claim-bearing path needed boundary and nontrivial positive/negative witnesses. |
+| Later 1217–1252 | A new edition lost a working predecessor's symbol and evidence mechanisms; matched lite rows fell from 1.0 to chance-level results. | The first carryover check belonged before throughput optimization. The old edition was an engineering oracle, not a concept-eligible win. |
+| Later 1296–1332 | The report says a message to an active agent resumed another writer, and several bold memory rules were repeatedly missed. | Treat actor identity and write ownership as observed tool state. Move must-happen rules to target tests, hooks, schema, or briefs; adding memory prose is insufficient. |
 
-The conformance and literature mistakes had existing owners in
-`validating-experimental-evidence` EV0–EV4. This reforge does not duplicate those
-rules or infer that they were absent. The missing planning decision was to select
-work from qualified current-path coverage and report the accepted numerator first.
+The reports also describe useful conduct: frozen predictions, fast falsification,
+independent source review, fail-fast launch checks, and reusable component work.
+Those practices are retained when they change a live decision. Their reported
+success does not erase the missed benchmark or consumer-path acceptance.
 
-The component reuse failure belongs to `orchestrating-agents`' dispatch contract.
-`driving-cocoindex` already defined search and absence checks; this change moves
-the retrieval receipt before new code and requires the actual consumer mapping.
+## Function map and disposition
 
-No claim is made that the new text will improve research throughput. The next
-recurrence should be tested at dispatch and return time: does a benchmark-driven
-parent choose the actual-path row, and does an implementation brief produce
-before-write component hits and a checked reuse decision?
+| Failure boundary | Existing owner | Reorganization |
+|---|---|---|
+| Choose next work under an authorized benchmark goal | `driving-bibifi-cycles` | Fold the prior standalone benchmark reference into the core selection loop and microticket patterns; delete its duplicate evidence/reporting prose. |
+| Determine what a score or conformance test proves | `validating-experimental-evidence` EV0–EV4 | Make the actual registered launcher, adapter, model interface, boundary length and nontrivial control the claim-bearing acceptance path. Keep toy tests scoped. |
+| Retrieve and transfer an existing component before new code | `orchestrating-agents` C1 plus `driving-cocoindex` search semantics | Move the before-write return from a late prose paragraph into the C1 brief and consumer read-back. |
+| Modify an active worker's task | `orchestrating-agents` C3a | Bind changed briefs to observed actor identity and exclusive write ownership; do not infer same-instance delivery from a message. |
+| Report progress and ETA | `driving-bibifi-cycles` | Retain short first useful returns, retire default periodic reporting; update a release plan on evidence or dependency events. |
 
-## Source grade and limitations
+No new skill is admitted. The earlier standalone `target-benchmark-loop.md` is
+retired because its work-selection part belongs in the existing loop and its
+claim-meaning part belongs to EV. This is a reduction in arguing homes, not a
+second benchmark doctrine.
+
+## Decisions not promoted into shared skill rules
+
+The later report proposes one generated edition manifest, a single acceptance
+suite, and changes to a research-record CLI. Those are target-repository design
+candidates. Their schemas, runtime cost, ownership and failure cases were not
+verified here. A local unit test remains useful; only a claim about the official
+path requires an official-path witness. Do not make every code commit wait for a
+full benchmark suite by copying this proposal into a global skill.
+
+The reported commit-script failure, search-router denials, actor duplication, and
+research-record lifecycle defects require domain implementation or harness
+repair with reproducing cases. The skill changes identify the correct boundary;
+they do not repair those executables. A user-supplied transcript is not a fresh
+runtime probe of any present tool.
+
+## Source grades and verification limit
 
 | Item | Grade | Permitted use |
 |---|---|---|
-| Assistant report and corrections in the attachment | user-supplied session account | Locate reported order, repeated mistakes and explicit retractions; no raw-run certification. |
-| Current target workspace observation | direct read-only command | Establish only that work was active at inspection time. |
-| Outcome-first selection table and before-write mapping gate | skill-supplied construction | Candidate prevention rules; efficacy remains unmeasured until a live, matched trial. |
+| Two assistant-authored report transcripts | user-supplied session account | Reported sequence, explicit corrections, local failure witnesses; not certified experimental truth. |
+| Read-only target workspace inspection | direct observation, earlier boundary only | Active-work status at that inspection; not the later run outcomes. |
+| Selection, retrieval, actual-path and writer-identity rules | skill-supplied construction | Candidate prevention mechanisms; not measured improvement. |
 
-No raw transcripts, private source files or experimental outputs are copied into
-the shared skill repository. The formal terminal-episode audit protocol does not
-apply to this still-running work.
+Static cases and package checks can prove routing and file integrity. No matched
+OLD/NEW research execution or live duplicate-writer failure injection was run.
+Operational compliance and improvement remain unverified.

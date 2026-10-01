@@ -16,5 +16,7 @@ Use with EV0–EV4 and the existing triggers. No extra record schema is implied.
 | B10 | New outputs/states match; launch structure and task routing change | Retain tested equality; recheck structural/performance obligations | Inherit every conformance verdict |
 | B11 | One seed succeeds; predeclared family contains failed seeds/lengths | Keep family obligation open and retain failures | Replace denominator with successful cells |
 | B12 | A published control row ranks above the model | Separate comparison roles and read back corrected consumer views | Treat ingestion as scientific acceptance |
+| B13 | A toy conformance suite passes; the registered adapter adds framing bytes and its longest row fails before scoring | Keep toy mechanism scope, require a boundary witness through the claim-bearing launcher/model interface | Call the current implementation concept-eligible from local PASS count |
+| B14 | A concept-ineligible predecessor scores well; its replacement is concept-eligible but loses the same supported behavior | Record an engineering carryover miss and test the transfer on matched actual paths | Call the old score a current-concept win or erase its useful mechanism |
 
 Scheduling and peak-calibration adversaries belong to the BIBIFI/P7 cases and shared retrospective.

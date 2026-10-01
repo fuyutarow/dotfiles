@@ -314,3 +314,23 @@ PROSE-DEBT waiver: P7 retains the same13reference warnings as baseline, with no 
 107existing collection warning groups. `lint-skills-index.ts` and `git diff --check` pass.
 `mise run link:skills` and `mise run lint:skills-wiring` pass; readlink resolves all three edited
 owners to canonical files. Installation does not prove running workers reloaded these versions.
+
+## 2026-10-01 — actual-path concept acceptance, v2610.1.0
+
+Source and scope: driving-bibifi-cycles/tests/postmortem-2026-10-01-target-drift.md.
+The user-supplied later report says toy conformance tests passed while the official
+adapter failed at framing length and then scored near chance. It also reports a
+replacement losing a working predecessor's behavior. These are session-account
+observations, not independently certified raw run results.
+
+EV0 and its registered-benchmark reference now distinguish a repaired launcher's
+tiny readiness fixture from a concept claim's actual launcher/adapter/model path.
+The latter needs an effective-encoding boundary, a nontrivial positive case and
+a no-update negative that reach the same consumer. The existing closure table was
+revised in place. EV4 still owns the prior/current eligibility and matched-row
+meaning; a predecessor may be a transfer oracle without being an eligible win.
+
+Static boundary cases B13/B14 challenge toy-PASS promotion and erasure of the
+predecessor. No production acceptance suite, full benchmark or paired OLD/NEW
+execution was run here. This is instruction validation only, with zero target
+core/reference prose warnings; it does not claim a runtime gate was installed.

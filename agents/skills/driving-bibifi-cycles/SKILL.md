@@ -16,15 +16,15 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.1.0 (2026-10-01) — keep registered benchmark outcomes ahead of proxy work.
+> **Version**: v2610.2.0 (2026-10-01) — reorganize goal selection and replace periodic reporting with event updates.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
   references/microticket-patterns.md references/scientific-loop.md references/skill-composition.md \
-  references/target-benchmark-loop.md \
   tests/triggers.md tests/decision-cases.md tests/scheduling-cases.md \
   tests/operational-rehearsal.md tests/forge-verification-ledger.md \
   tests/postmortem-2026-10-01-target-drift.md; do test -f "$f" || exit 1; done
+test ! -f references/target-benchmark-loop.md || exit 1
 bun ../forging-skills/scripts/skill-check.ts .
 ```
 
@@ -40,9 +40,10 @@ Repeated status or a later ETA, without new evidence or justified intervention, 
 
 ## LAW — maximize valid discovery per unit time
 
-Maximize the throughput of knowledge discovery from Experimental and Formal Methods.
+Maximize valid discovery toward the authorized outcome through Experimental and Formal Methods.
 Select new, valid, goal-relevant evidence, falsifications, counterexamples and checked proof results.
 A repair matters through the next discovery it enables. Report that enabling work separately.
+An informative precursor is not an accepted target result; keep both counts distinct.
 Ticket counts, code volume, reports, device utilization and agent count are not discovery units.
 Do not inflate progress with known results, duplicate observations or irrelevant easy questions.
 
@@ -69,16 +70,17 @@ Partial build returns can unblock authorized work but are not terminal run recei
 ## Start with a checkable result, not a large plan
 
 Read the prior release ETA, completion criteria, open work and latest accepted evidence.
-If the goal is a registered benchmark result, use `references/target-benchmark-loop.md`
-to choose the next result from actual-path coverage and qualified outcome state.
+For a registered benchmark goal, read the existing result registry and EV disposition.
+Use the outcome table in `references/microticket-patterns.md`.
+Select the first missing actual-path witness; host scores and old-edition rows stay precursors.
 Check available/reserved CPU, RAM, VRAM, GPU load, agent slots and live write ownership.
 Unknown values stay `未確認` / `UNKNOWN`; never infer execution or free capacity from a sent message.
 Choose the first result that can change the next decision and the dependency preventing it.
-Retrieve the relevant predecessor, interface and failure witness before replacing or reimplementing it.
-Record the transferable part and current mismatch; do not commission a whole-history survey to begin one repair.
+Before replacing a working path, locate its useful mechanism, actual consumer and failure witness.
+Map what transfers and the first same-path carryover check through EV4; do not start from a blank design.
 
-For the next action, consume orchestration C0's current capability receipts:
-launcher/identity, worker update/stop, resource cap/release, and consumer hand-back as applicable.
+For the next action, read orchestration C0's current capability receipts.
+Check launcher/identity, worker update/stop, resource cap/release and consumer hand-back as applicable.
 Missing capability becomes one bounded repair/probe. Unrelated useful work proceeds immediately.
 A skill installed on disk is not proof a live worker loaded it; bind important rules into the current brief.
 Reuse unchanged valid receipts; do not rerun a readiness ceremony before every ticket.
@@ -88,7 +90,7 @@ Reuse unchanged valid receipts; do not rerun a readiness ceremony before every t
 For a scientific anomaly or a Strong Inference request, use `references/scientific-loop.md` before choosing jobs.
 Use `references/skill-composition.md` when choosing between explanation, generation, testing, evidence and theory work.
 Skill boundaries separate decisions, not mandatory agents or pauses. Apply the needed operation in the current context when possible.
-Retain responsibility for consuming its return and taking the next authorized action; a packet or routing decision is not task completion.
+Consume the return and take the next authorized action. A packet or routing decision is not task completion.
 Join the current observation or failure to an observed-versus-expected contrast under matched conditions.
 Keep explicit rivals, auxiliary conditions and an open residual. Do not assume one cause or exhaustive candidates.
 Before measuring, derive rival-dependent predictions and the result-to-exclusion/next-action table.
@@ -105,10 +107,10 @@ Run this loop at startup, a result/phase/resource change, or a missed return. Re
 
 | Step | Decision now | Observable output |
 |---|---|---|
-| 1. Name the decision | Which unresolved question or prerequisite most affects the goal? | Evidence/obligation and the consumer it can change |
+| 1. Name the decision | Which authorized acceptance predicate remains open? For a benchmark, is the first gap concept eligibility, actual-path execution, or a qualified row? | Target obligation, current evidence and its consumer |
 | 2. Test the dependency | Is the wait for missing evidence/apparatus, a claim gate, a live writer, or merely someone's queue? | Exact missing input and the observations still possible without it |
 | 3. Find independent returns | Inspect relevant residuals, controls, proof obligations, stable interfaces and prepared inputs | Useful bounded slices, not a new inventory or filler |
-| 4. Check information value | Can the proposed intervention affect the selected observable? Would its return change the next action? | Existing trace/control or a bounded reachability check; scientific-loop owns interpretation |
+| 4. Check information value | Can the intervention reach the target consumer? Would either outcome change the next action? | Existing trace/control or bounded reachability check; scientific-loop owns interpretation |
 | 5. Admit a useful set | Fit CPU/RAM/VRAM, agent slots, ownership and critical headroom; apply C0/P7 and required domain admission | Launch fitting admitted slices with verified stop paths; pending rows name their actual constraint |
 | 6. Consume and resize | Did results, slowdown or released capacity change that set? | Read-back, revised priorities, starts or safe stops through C0/P7 |
 
@@ -155,7 +157,7 @@ For formal work, pin the exact statement and proof status; a sketch cannot silen
 | Numerical run in this loop | About two minutes target; ten minutes maximum or the tighter active cap, including launched setup/compile; official confirmation, tests and profiling are included |
 | Worker / queue | Finite return and lifetime, covering preparation, admission wait and recording as well as execution |
 
-Two minutes is a target, not a launch ban. Six minutes is feedback/report cadence, not a process kill boundary.
+Two minutes is a target, not a launch ban. Six minutes bounds the first useful return, not a reporting cron or process kill.
 Bind the user/domain budget before dispatch. The operator compares the launch envelope against it before P7 admission.
 Record target duration separately from the hard cap. A two-minute target does not impose a two-minute hard limit.
 Bind the workload before its label: official numerical confirmation uses the same active budget.
@@ -213,7 +215,7 @@ Do not rerun every arena on every revision. A newly decisive result cancels obso
 Keep one necessary baseline if useful; sunk work and an old assignment do not justify finishing the rest.
 Reuse bounded warm workers and immutable references, resetting experimental state and charging retained resources.
 
-## Qualification and the six-minute report
+## Qualification and release updates
 
 Evidence EV2/EV3 owns information access, protocol equivalence, effective interventions and comparison footing.
 A changed procedure need not preserve the original behavior. Historical performance is not current evidence.
@@ -222,21 +224,25 @@ Consume the GPU owner's complete train/infer accounting before choosing the next
 An efficiency-ratio increase or inference-only gain cannot close a learning-throughput target.
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
-For a benchmark target, start with accepted goal results and current eligible-suite coverage.
-Use `references/target-benchmark-loop.md`; a host construction or ineligible edition stays a precursor.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
 Report a batch per attempt: requested, admitted, started, terminal and consumed may have different counts.
 Separate evidence dispositions from goal acceptance. Valid low scores remain evidence; published rows need qualification.
 
-Every six minutes while active, report briefly in JST:
+Update the release plan on a result, missed return, changed blocker or ETA.
+Also update when a premise or resource binding changes, or the user asks.
+Use a periodic update only when explicitly requested. Do not install a status cron.
 
-1. Checked artifacts, measured results or proof status, and the decisions they changed.
-2. Ticket changes, current blocker, parent intervention and worker/job stop/release state.
-3. Next agent microtickets and CPU/RAM/VRAM allocation, measured peaks/releases and any idle-capacity reason.
-4. Release ETA versus the previous schedule: `ontime` unchanged, `delta` date changed, `pivot` goal/approach changed.
+| Goal | First line of the update | Then report |
+|---|---|---|
+| Registered benchmark outcome | Accepted wins and eligible current-path members measured out of registered members; `UNKNOWN` for any unverified denominator | New qualified evidence, actual-path next return, blocker, release ETA |
+| Other authorized discovery | New accepted learning or checked proof and the decision it changed | Enabling repair, next return, blocker, release ETA |
 
-No previous schedule means initial baseline. Keep run-return ETA separate from release ETA; give the change rationale.
-If nothing landed, say so and state the intervention. Do not invent progress or replace the required report with silence.
+Keep run-return ETA separate from release ETA.
+Use `ontime` only when observed progress supports the unchanged release date.
+Use `delta` for a changed date and `pivot` for a changed goal or approach.
+If the date lacks a basis, report `UNKNOWN` and the next
+observable that can bound it. Use the clock for timestamped reports, never memory.
+If nothing landed, state the intervention and the unchanged accepted-result count.
 Do not repeat an old finding as a newly closed cycle. Reporting compliance cannot offset missed useful work.
 Stop at completion, user stop or a real authority boundary. Hand back accurate partial state and release owned resources.
 
@@ -251,8 +257,7 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Code repair or GPU path | `implementing-and-debugging` plus language/GPU owner |
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
 | Costly irreversible commitment | `acting-on-hypotheses` owns the discriminator, threshold, interpretation and Commit/Pivot/Kill; this loop may schedule its Build→Measure slice |
-| Concrete slices, dependencies and parallel examples | `references/microticket-patterns.md` |
-| Authorized benchmark target, current-edition coverage and outcome-first next work | `references/target-benchmark-loop.md` |
+| Concrete slices, dependencies, benchmark outcome selection and predecessor transfer | `references/microticket-patterns.md` |
 | Compact board, ticket, return and report | `assets/ITERATION-PLAN.md` |
 | Skill validation | `tests/triggers.md`, `tests/decision-cases.md`, `tests/scheduling-cases.md`, `tests/operational-rehearsal.md` |
 | Historical audits and measured verification limits | `tests/forge-verification-ledger.md` |

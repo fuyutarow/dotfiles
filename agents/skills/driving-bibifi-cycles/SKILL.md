@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.4.0 (2026-10-01) — distinguish relative size, elapsed-time forecast and return deadline.
+> **Version**: v2610.5.0 (2026-10-01) — choose execution by time to the next consumed result, including startup.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -76,7 +76,7 @@ Do these checks in order; resource availability cannot waive an earlier failure.
 | 2. Purpose | Name the observed obstacle, current consuming task/test, and what distinct results would change next. A repair names the exact blocked call. | Defer work justified only by “might help later”, taxonomy, general cleanup or spare capacity. |
 | 3. First return | Bind a checkable output, evidence-based duration estimate, six-minute due time and parent inspection. Preserve step 1 while shrinking. | Split or measure the unknown before dispatch. Low points cannot authorize an overlong or constraint-changing slice. |
 | 4. Reuse and path | If a predecessor exists, locate reusable parts and declared carryover obligations. Bind the smallest consumer check to current requirements. | Retrieve or repair the missing interface. An authorized new frame may retire old obligations; document that change. |
-| 5. Resource fit | Only now check CPU/RAM/VRAM, agent slots, ownership, critical headroom and C0/P7 admission. | Hold/re-slice conflicting work; retain other purpose-qualified independent work. |
+| 5. Execution and fit | Apply the execution lookup below, then check ownership, capacity, critical headroom and C0/P7 for the selected path. | Reuse/re-slice before starting another actor; hold only conflicting work. |
 | 6. Consume | Read the result, apply its scoped implication and re-evaluate dependent work now. | An unconsumed report or sent message does not close the ticket. |
 
 For a benchmark goal, use current registry/EV evidence and the outcome table in `references/microticket-patterns.md`.
@@ -100,6 +100,33 @@ Unknown capacity or capability stays UNKNOWN; repair only its dependent path.
 Admit all purpose-qualified work that fits without delaying the critical return; impose no fixed fleet size.
 If none fits, record the inspected options and next changing event. Do not invent filler.
 
+### Execution lookup — a workflow is not the unit of a cycle
+
+Default to the current context for one bounded decision. Reuse an available, correctly bound worker
+or execution environment when it shortens the return. A phase name, failed conformance check or
+`pivot` does not justify starting a design/review workflow.
+
+| Available path / reason | Action |
+|---|---|
+| Current context has the inputs and can perform the bounded check | Perform it now; do not dispatch merely to obtain a plan or restate the evidence. |
+| Existing worker/environment has valid context and an effective stop path | Reuse it, reset experimental state as required, and consume each return immediately. |
+| New worker/workflow could shorten the decision, or required isolation/independent verification needs it | Compare the total return cost below; dispatch only the bounded justified slice through C0. |
+| Startup cost or benefit is unknown and a valid direct path exists | Use the direct path. Unknown overhead is not zero and spare slots are not a launch reason. |
+| A required capability is unavailable locally | Bound its smallest setup/probe and return an actual capability receipt; do not launch a whole design phase. |
+
+Compare time to a **consumed** result: startup + context loading + queue/setup/compile + useful work
++ hand-back + parent inspection. Reuse observed comparable costs; mark unknowns explicitly.
+Charge dispatch preparation to the existing first-return window; launching or rebriefing does not reset it.
+Keep the comparison in the existing ticket, not a new planning artifact or estimation ceremony.
+Never queue evidence-dependent design/build/verify phases unconditionally or wait for all branches
+before acting on an independently valid return. Stable, bounded repeated work may amortize workflow
+startup; its admission still needs this comparison and the same event-driven consumption.
+
+When conformance fails, preserve the failed predicate and its witness. In the current context,
+derive/test one minimal constraint-preserving repair or counterexample; delegate only a justified
+independent slice. Do not weaken the test, promise feasibility, or replace the failed check with
+“a workflow to decide the design”. Stop only work whose purpose depended on the rejected design.
+
 ## The microticket — one useful decision within reach
 
 Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context by exact locator.
@@ -109,7 +136,7 @@ Use the compact card in `assets/ITERATION-PLAN.md`, inheriting unchanged context
 | Outcome / consumer | Which acceptance predicate, observed obstacle and current consumer justify this work? |
 | Build → Break → Fix | Small artifact/witness; discriminating check; conditional repair/retain/reject action |
 | Binding / validity | Inherited hard constraints, exact execution path and code/input versions; baseline/control/criterion |
-| Work / resources | Owner, read/write scope, agent versus compute phase; footprint, actual device reason and critical-work headroom |
+| Work / resources | Direct/reused/new execution path and total-return basis; owner, read/write scope, agent versus compute phase, footprint and headroom |
 | Return / cancellation | Checkable first output, absolute due time and parent inspection; budget source, effective stop and consumer |
 
 A whole component, inventory, port or multi-stage revision is a container, not an executable microticket.
@@ -149,8 +176,8 @@ No sweeps or large experiments; renaming their cells microtickets does not chang
 
 | Observed state/event | Action now | Evidence to consume |
 |---|---|---|
-| Critical action ready or blocker cleared | Launch the smallest real path and confirm it actually starts through C0 | Start receipt or explicit admission wait/blocker, not an assumed retry |
-| Independent useful agent work ready | Launch across fitting slots/host capacity, even while GPU phases wait | Disjoint scope, short return, named consumer |
+| Critical action ready or blocker cleared | Execute the smallest real path using the execution lookup; use C0 for an actual dispatch | Action/result receipt or explicit admission wait/blocker, not an assumed retry |
+| Independent useful agent work ready | Apply the execution lookup, then dispatch justified slices across fitting capacity, even while GPU phases wait | Disjoint scope, total-return basis, short return, named consumer |
 | Critical dependency blocked | Assign its smallest unblocker and continue unaffected work | Exact missing input, owner and next check |
 | Partial result arrives | Check its boundary and pass it to its consumer immediately | Artifact plus consumer receipt, or explicit pending/blocker |
 | Result changes a premise | Reassess affected running/queued tickets; continue, shrink or stop | Version delta and observed owner action/release |

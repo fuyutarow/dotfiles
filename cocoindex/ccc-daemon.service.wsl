@@ -62,7 +62,10 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/ccc run-daemon
+# Through the VRAM-partition launcher (owner ruling 2026-10-01): same `ccc run-daemon`, capped to
+# gpu_partition_ccc_mib in agents/resource-control/resource-policy.toml, or on CPU when that much
+# is not free. ccc's own interpreter, so cocoindex_code imports from the env `ccc` uses.
+ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/cocoindex/ccc-daemon-launch.py
 Restart=always
 RestartSec=2
 

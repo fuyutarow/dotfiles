@@ -44,9 +44,10 @@ Before relying on a repaired launcher, exercise a small known fixture through it
 Check terminal status, binding, row validation and read-back; include a rejected invalid input.
 Retain failed execution without success promotion. Dry-run and process exit zero are earlier boundaries.
 
-For a current-concept claim, test the registered launcher, adapter and model interface.
-Choose a nontrivial positive case and a negative/no-update control on that path.
-Cover effective encoding and a boundary length after framing or preprocessing.
+For a concept claim about a registered benchmark, test its launcher, adapter and model interface.
+Choose a nontrivial positive case and a falsifying control relevant to that claim.
+For a learning claim, a no-update control must reach the same consumer.
+Cover effective encoding and boundary lengths where framing or preprocessing changes them.
 The contract's nominal length may be smaller than the model's actual input.
 A private toy fixture proves only its scoped mechanism. Do not require the entire
 official evaluation before a local change whose obligation is only a bounded repair.

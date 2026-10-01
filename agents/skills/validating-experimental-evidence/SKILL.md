@@ -15,7 +15,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2610.1.0 (2026-10-01) — bind concept acceptance to the claim-bearing runner path.
+> **Version**: v2610.1.1 (2026-10-01) — scope runner, learning-control and carryover requirements to their claims.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash

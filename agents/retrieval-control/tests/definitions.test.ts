@@ -74,9 +74,9 @@ describe("retrieval.toml", () => {
     });
     expect(c.thresholds.local).toEqual({ strong: 4, likely: 1.5, hook: 7.5 });
     expect(c.thresholds.jev).toEqual({ strong: 2.2, likely: 0, hook: 3.5 });
-    expect(c.jevEndpoint).toEqual({
-      url: "https://jevtypesafeai.com/api/v1/decide",
-    });
+    expect(c.jevEndpoint.url).toBe("https://jevtypesafeai.com/api/v1/decide");
+    // Owner decision 2026-10-01: an exhausted reseller balance points to the official API.
+    expect(c.jevEndpoint.whenExhausted).toContain('jev_provider = "typesafe"');
     expect(
       load(
         shipped.replace(

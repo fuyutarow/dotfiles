@@ -105,6 +105,33 @@ The expected decisions are evaluated against `references/nn-stack.md`.
 | Turn on trim/BOLT for faster delivery | Route trimming to concrete artifact validation and BOLT to build-specific measurement | Promise generic trimming safety or universal speedup |
 | Redefine a struct in a warm REPL | Check old values/methods and verify in a fresh process | Assume old instances were migrated |
 
+## Device ownership cases — JG8 (v2610.3.0)
+
+Source incidents: firefly-stream-mp `select_exec(vram_bytes)`, run2610_0121sqxbq, finding2610_0122as8aq.
+
+FIRES (expected decision from `references/architecture.md` §10.10):
+
+| Ask | Expected decision | Reject |
+|---|---|---|
+| 「device を typesafe にしたい / デバイスを型で持たせて」 | `struct S{B<:KA.Backend}` with `device::B`; one checked builder; `device_ownership.jl` | A runtime `exec` flag field of abstract type |
+| "Pick GPU when the manifest declares VRAM, else CPU" | Refuse: the caller passes `device`; VRAM only admits and sizes | `vram_bytes > 0 ? GPUExec() : CPUExec()` |
+| 「この run が GPU で走ったか receipt から分からない」 | The receipt and registered rows write `device = string(nameof(typeof(state.device)))` | A 30-minute profile as the only residency proof |
+| "This part calls `Array(x)` to silence a scalar-indexing error" | Repair per GKR §0b; the source check fails a transfer outside a boundary | Host evacuation outside a boundary |
+| 「ラウンドのループ内で D2H が何回あるか test で固定したい」 | Declare each boundary's max per warmed step; `DEVICE_BOUNDARY_CALLS` gates it (0 inside the loop) |
+| 「Julia の run がなぜか CPU で走っていた / GPU のはずなのに」 | Device came from a budget or a default → caller passes `device` from P7's `device.kind`; the receipt records it. Desk-check: matches only through Julia context or `デバイスの型`; no description token for silent CPU runs (listing budget, 60 chars left) | Count by reading a profile once |
+| "A helper allocates scratch with `CuArray(zeros(...))`" | `similar(x)` or `KA.allocate(state.device, T, dims)` | A part choosing its own device |
+
+MUST NOT FIRE as JG8 (near-miss):
+
+| Ask | Route |
+|---|---|
+| 「この kernel を `get_backend(x)` で launch したい」 | kernel launch → `optimizing-julia-gpu-kernels` |
+| "Profile the step for HtoD/DtoH copies (GKR)" | step residency evidence → `optimizing-julia-gpu-kernels` GKR |
+| 「Lux モデルの ps/st を GPU に載せる書き方」 | Lux device object → `references/nn-stack.md`, not §10.10 |
+| "How much VRAM may this job reserve?" | resource admission → `orchestrating-agents` P7 |
+| 「Int32 の atomic をこの kernel で使ってよいか」 | kernel atomics → `optimizing-julia-gpu-kernels` (`memory-and-warps.md` §7 owns atomics; it has no Int32-value rule yet — open there) |
+| "A function already receives a CuArray; may a CUDA method be selected by its type?" | yes, dispatch on the array type is allowed; JG8 governs the policy choice only |
+
 ## MUST NOT FIRE (near-miss — same vocabulary, different owner)
 
 | Ask | Route |
@@ -142,3 +169,4 @@ The expected decisions are evaluated against `references/nn-stack.md`.
 | 「動かない Julia コードをデバッグして」 | `implementing-and-debugging` DEBUG gate first → this skill for Julia-specific diagnosis (`@code_warntype`, JET) |
 | 「Julia package を含む新しい repo を一式 scaffold して」 | `wiring-repositories` chooses layers/order → this skill owns JG6 package contents |
 | 「既存 Julia package の export を全廃して breaking release にして」 | `implementing-and-debugging` governs migration → JG7 + PK7 enforce zero exports |
+| 「edition の state を GPU 対応にして、device を引数で選ばせたい」 | this skill JG8 (state type, entry argument, receipt) → `optimizing-julia-gpu-kernels` GKR/GK for the step and kernels |

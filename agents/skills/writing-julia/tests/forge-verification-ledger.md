@@ -616,3 +616,80 @@ Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a s
 never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
 description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
 this skill then owns the language manifest. skill-check clean; listing within budget.
+
+## 2026-10-01 — JG8 device ownership, v2610.3.0
+
+**Practice (the reason).** firefly-stream-mp chose its device from a budget: `select_exec(vram_bytes)`,
+called by the io adapter's `init_model`, declared through `accepts_vram_bytes`. Registered run
+run2610_0121sqxbq could not be shown to be on the GPU from its receipts (`vram_peak_measured_bytes = 0`
+under WSL, no device field); finding2610_0122as8aq needed a 30-minute profile and listed 60 D2H reads per
+call. The house ruling (2026-09-24, item 5: device policy is an explicit API argument; parts never
+transfer on their own) lived only in the orchestrator's memory and reached no builder.
+
+**Function map.** device-array state or entry point → declare the device type parameter, caller argument,
+counted boundary, receipt field → `architecture.md` §10.10 + `assets/device_ownership.jl` → the package
+test fails on drift. Stop: kernel launch and step residency hand off to `optimizing-julia-gpu-kernels`.
+
+**Edits.** `references/architecture.md` §10.10 (SOLE home, LOOKUP table, each row cites its incident;
+§10.10.1 gate) and a §10.9 row; `assets/device_ownership.jl` (new); `SKILL.md` JG8 gate row, LAW clause,
+routing cut, reference-index row, §9 checklist block, verify one-liner, description token
+`device ownership/デバイスの型`, version; `references/nn-stack.md` one-line pointer (Lux stays there);
+`tests/trigger-set.md` six fire, six near-miss, one co-fire order row.
+
+**Gate seen red.** Fixture run (`mise exec julia@1.13`, `envs/gpu` of firedancer, CPU only): good state,
+source and receipts pass 5/5; negatives fail as intended (device not a type parameter, no device field,
+`select_exec(vram_bytes)`, `Array` in a round loop, receipts without device). On the real
+firefly-stream-mp sources the source check reports 6 hits: `select_exec` twice, `_fw_merge!`'s `collect`
+(host merge of learned tables), `Matrix` in `_step!`, and `_host`/`_to` (the boundary candidates to declare).
+First draft parsed with `begin … end` and failed on top-level `public`; it now uses `Meta.parseall`.
+
+**Not covered.** No CUDA run: the backend-mismatch branch of the state check was not exercised on a GPU.
+The source check is lexical; an unnamed indirection passes. Int32 value atomics are out of JG8 scope;
+no rule for them exists yet in either skill (corrected below).
+
+## 2026-10-01 — JG8 review objections applied, v2610.3.0 (same version, pre-commit)
+
+**Review.** One read-only reviewer over the JG8 forge. Accepted and applied:
+- HIGH, transfer count had no checker and a step function could be registered as a boundary.
+  `DEVICE_TRANSFER_BOUNDARIES` is now `Dict{Symbol,Int}` (max calls per warmed step); the new
+  `DEVICE_BOUNDARY_CALLS` reports the package counters for one warmed step and the gate fails an
+  undeclared or over-max boundary. A transfer inside a `for`/`while`/generator of a boundary fails the
+  source check, so `_step!` registered as a boundary no longer passes the 60-read incident.
+- HIGH (optimizing side), a design case allowed a counted boundary inside the round loop: now device-side
+  reduction only.
+- MED, P7 seam: new §10.10 row — the runner maps P7's envelope `device.kind` to the backend; CPU fallback is
+  P7's admission decision, never re-decided in the model.
+- MED, the GPU-error row duplicated GKR §0b: now a pointer to GKR.
+- MED, asset weaker than its table: `CuArray{T}(…)`/`Vector{T}(…)` are now seen (`:curly`); a state leaf
+  deeper than 16 levels is reported, not skipped; `collect(a:b)` is exempt; device-callee names match
+  segments (`select_exec`, `GPUExec`), not substrings (`execute_step`). Violations carry `file:line`.
+- MED, the Int32-atomic near-miss routed to a rule that does not exist: the row now says
+  `memory-and-warps.md` §7 owns atomics and has no Int32-value rule yet (open there).
+- MED, the inner-constructor requirement is unverified against `Adapt` rebuilding the struct: the rule now
+  asks for one checked builder (outer constructor or `build_state(device, …)`).
+- MED, no fire row for a silent CPU run: added; description unchanged (listing budget has 60 chars left),
+  so the row records that the match relies on Julia context.
+- LOW, receipt row scope: run receipt and registered rows only; per-step metric rows exempt.
+- LOW, two counters: the hot-path row says the package counter gates every test run and GKR's trace
+  confirms on hardware. LOW, description: "GPU device work" → "GPU kernel work" (0-char delta).
+- LOW, row 4 was ARGUMENT-shaped: rewritten as the observed behavior of `select_exec`.
+
+Rejected: the duplicated incident citations (one incident may ground two distinct rules; each row's If
+differs); the house ruling as row 5's source (a ruling is a valid source for a constraint, per the
+no-arbitrary-constraints rule); SKILL.md §9 checklist restating §10.10 (house checklist convention, as the
+reviewer noted).
+
+**Gate seen red, rerun** (`mise exec julia@1.13`, firedancer `envs/gpu`, CPU only). Good fixtures 6/6 pass
+(`collect(1:10)` and `execute_step(s, budget)` not flagged). Negatives all fail: `CuArray{Float32}(undef,n)`,
+`Vector{Int}(undef,n)`, `select_exec(vram_bytes)`, `GPUExec(budget.vram)`, `Array` in a boundary's loop,
+state device not a type parameter, 20-deep state, 60 calls vs max 1, undeclared `_step!`, receipts
+without device. Real firefly-stream-mp sources, no boundaries declared, 9 hits, triaged by reading each line:
+true positives 5 — `select_exec` (mp.jl:236, io.jl:177), host seed tables then device copy in
+`fold_spf!` (fold.jl:170) and `_fw_merge!` (fold.jl:851, which also merges on host), `_dzeros` picking
+`CuArray` from the exec type (io.jl:316); boundary candidates to declare 2 — `_to` (mp.jl:241),
+`_host` (mp.jl:243); bytes-edge host work 2 — `decode_code` output (mp.jl:774), `Matrix(view(rv,…))`
+on the reveal input (io.jl:228), which pass once declared as egress/ingress boundaries. The earlier
+`_fw_merge!` `collect` hit was `collect(1:nK)` (fold.jl:861), a false positive now exempt.
+
+**Still not covered.** No CUDA run: the backend-mismatch branch is unexercised on a GPU. Counters are package
+code; the gate trusts what they report.

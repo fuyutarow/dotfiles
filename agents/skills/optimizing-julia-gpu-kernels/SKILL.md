@@ -16,7 +16,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2609.5.0 (2026-09-30) — parallel execution design, complete path accounting and qualified performance evidence.
+> **Version**: v2610.1.0 (2026-10-01) — state/API device ownership points to writing-julia JG8 (§10.10); no copy here.
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -70,7 +70,7 @@ An unknown stage blocks unsupported whole-path forecasts, not a separately justi
 
 | Sibling | Cut |
 |---|---|
-| `writing-julia` | DECISIVE: is a GPU-first step or device path being designed, edited, or measured? GPU path → HERE, even if host Julia currently implements it. Host-only types, packages, AD frontend, CPU work → there. Co-fire; JG0 remains active and JG2 precedes GK1. |
+| `writing-julia` | DECISIVE: is a GPU-first step or device path being designed, edited, or measured? GPU path → HERE, even if host Julia currently implements it. Host-only types, packages, AD frontend, CPU work → there. Co-fire; JG0 remains active and JG2 precedes GK1. State/API device ownership → there (JG8, §10.10); launch `get_backend(x)` and GKR stay HERE. |
 | `implementing-and-debugging` | Co-fire first for behavior change or bugfix. It owns change safety; this skill owns device legality and GPU evidence. |
 | `refactoring-code` | Co-fire for behavior-preserving restructuring. It owns the oracle bracket; GK2/GK3 supply GPU checks. |
 | `raising-resolution` | Inspect `CUDA.functional()`, `CUDA.versioninfo()`, `Pkg.status`, and a profile before a present-state claim. |
@@ -150,6 +150,7 @@ Write the stage map before code. Do not hide a data-dependent stage outside that
 | Only K of C candidates may write, but C costly outputs are computed and masked afterward | If K is known before output construction, gather its IDs or cheap match results on device, then compute/write K outputs. If ranking needs C outputs, charge C and prove the bound; a final mask itself saves no work. |
 | A trace shows zero copies but a stage or output inside the hot-path boundary remains on the host | GKR still fails. Verify device execution and output residency per stage; zero memcpy is necessary, not sufficient. |
 | A step's measured time is dominated by host stages | Report the per-stage table (share of time, device or host) before any tuning; the host stages are the fix. |
+| The device follows a budget value, or result rows carry no `device` | Not a GKR repair: writing-julia JG8 (§10.10) owns it. GKR then profiles the explicitly chosen device. |
 | A known violation "CPU-only" survives more than one revision | Withhold the affected GPU-performance claim and prioritize its repair. BIBIFI owns the next useful work selection. |
 
 GKB's peak-based time is an optimistic lower bound, not a guaranteed attainable end-to-end runtime.

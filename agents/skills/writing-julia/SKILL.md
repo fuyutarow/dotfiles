@@ -5,7 +5,7 @@ description: >-
   hot paths, BlueStyle names and Runic formatting, layout, Pkg metadata, deps/compat/sources/workspaces,
   API/release, TTFX, AOT, or `-O`/`--optimize`. Trigger on Julia パッケージ, パッケージ化, 依存関係, 登録,
   type stability/型安定, DI, JET/Aqua, DrWatson, JSON/TOML, include order, submodules,
-  export禁止, no exports, public API, 名前空間, and `.jl` suffix. ZERO-EXPORTS is mandatory:
+  export禁止, no exports, public API, 名前空間, device ownership/デバイスの型, and `.jl` suffix. ZERO-EXPORTS is mandatory:
   every authored module forbids `export`/`@reexport`; stable API uses `public`; package source
   forbids implicit imports. MANDATORY before Julia code or a recordable run. §2.0 forbids FD
   derivatives, grid optimization, and lerp-as-evaluation.
@@ -18,12 +18,12 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2610.2.0 (2026-10-01) — `[compat] julia` is profile-keyed (pinned runtime line or tested minimum), 1.11 is only the gate floor (PK3).
+> **Version**: v2610.3.0 (2026-10-01) — JG8: the device is a type parameter of the owning state, chosen by the caller (§10.10).
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
 ```bash
-for f in performance compilation autodiff nn-stack numeric-syntax runtime-upgrades toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; test -f assets/no_exports.jl || echo "MISSING assets/no_exports.jl"; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
+for f in performance compilation autodiff nn-stack numeric-syntax runtime-upgrades toolchain packages setup architecture packaging; do test -f "references/$f.md" || echo "MISSING references/$f.md"; done; for a in no_exports device_ownership; do test -f "assets/$a.jl" || echo "MISSING assets/$a.jl"; done; test -f tests/trigger-set.md || echo "MISSING tests/trigger-set.md"; test -f tests/forge-verification-ledger.md || echo "MISSING tests/forge-verification-ledger.md"
 ```
 
 Fast-moving facts carry `[dated:YYYY-MM]` at their decision locus. Re-check stale tags against the
@@ -38,9 +38,9 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 > can still be a Python program in disguise. Precedence: **method before speed, types before
 > tuning, package contract before repository decoration, architecture before growth. Namespace
 > injection is forbidden: **zero exports, public-only API, explicit imports.** §2.0 and §1 outrank
-> the references. JG6 fires at package birth; JG7 fires on every module/API/import change.
+> the references. JG6 fires at package birth; JG7 fires on every module/API/import change; JG8 on any device-array state.
 
-## The gates — JG0–JG7, each with a checkable artifact
+## The gates — JG0–JG8, each with a checkable artifact
 
 | Gate | Rule | Artifact |
 |---|---|---|
@@ -52,6 +52,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | **JG5 provenance** (`setup.md`) | A run may enter a result record. | ID → runner + inputs + commit. |
 | **JG6 package** (`packaging.md`) | Identity, deps, workspace, registry, release. | PK0 + checklist + PK4/PK8 gate. |
 | **JG7 namespace** (`architecture.md` §10.5) | No exports; public API and dependency use are explicit. | `no_exports.jl` + strict ExplicitImports. |
+| **JG8 device** (`architecture.md` §10.10) | Device is a state type parameter; the caller passes it. | `device_ownership.jl` + boundary count. |
 
 ## Routing — sibling cuts (reciprocal; the sibling side landed 2026-07-04/05)
 
@@ -63,7 +64,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
 | `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
-| `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages → HERE. |
+| `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages and state/API device ownership (JG8) → HERE. |
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
 | `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |
@@ -98,7 +99,7 @@ reference file that matches the task.
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
 | `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
 | `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT, output, REPL | runs and deployment |
-| `references/architecture.md` | topology, naming, ZERO-EXPORTS, explicit imports, traits, API, hygiene | implementation structure or naming |
+| `references/architecture.md` | topology, naming, ZERO-EXPORTS, explicit imports, traits, API, hygiene, device ownership | implementation structure, naming, or a state/API holding device arrays |
 
 ---
 
@@ -406,3 +407,9 @@ Package architecture — `references/architecture.md`:
 - [ ] Namespace-only boundaries use submodules; independently reusable/versioned parts use packages (§10.3).
 - [ ] Optional integration code lives in its named `ext/` module (§10.4).
 - [ ] No non-const globals or piracy; public API uses `public` only (§10.5–§10.6).
+
+Device ownership — `references/architecture.md` §10.10 (JG8):
+- [ ] Device-array states carry `device::B` with `B` a type parameter; one checked constructor.
+- [ ] Entry points take `device` explicitly; no device is derived from a VRAM or memory budget.
+- [ ] Transfers occur only in named boundary functions; a hot-path test asserts their count.
+- [ ] Every receipt row records `device`; `device_ownership.jl` passes.

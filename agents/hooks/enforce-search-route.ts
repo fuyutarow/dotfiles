@@ -4,14 +4,18 @@
 // invokes them only after the caller declares the query shape.
 //
 // FAIL CLOSED on hook errors. Outside a registered project, or when ccc is unavailable, stay
-// silent: lexical search remains the only available local backend. The router lives beside this
-// hook, so the hook and its required entrypoint deploy as one linked directory.
+// silent: lexical search remains the only available local backend.
+//
+// VENDOR-NEUTRAL since 2026-10-01 (agents/hooks/hooks.toml → Claude Code AND Codex): it was
+// registered for Claude only, so a Codex session searched raw in the same repos. Codex sends its
+// shell calls as tool_name "Bash" + tool_input.command (lib.ts) and has no Grep tool, so the Bash
+// branch is the whole gate there.
 
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { attempt, errorMessage } from "../../hooks/attempt.ts";
-import { decidePre, findExe, readStdinJson } from "./lib.ts";
+import { attempt, errorMessage } from "./attempt.ts";
+import { bashCwd, decidePre, findExe, readStdinJson } from "./lib.ts";
 
 const GREP_SEARCH =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/;
@@ -29,7 +33,6 @@ const INLINE_RUNTIME =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:uv\s+run(?:\s+--[^\s]+(?:=\S+)?)*\s+)?(?:\S*\/)?(python(?:3(?:\.\d+)?)?|node|bun|ruby|perl)\b[^|;&]*(?:\s-(?:c|e)\b|\s-\s*(?:$|<<)|<<)/;
 const FILE_SCAN_PRIMITIVE =
   /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/;
-const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
 // A single grep/rg over an already classified router stream is display filtering, not a
 // second repository search. The accepted shape, every part optional except the router and the
 // filter:
@@ -49,7 +52,14 @@ const ROUTED_STREAM_FILTER = new RegExp(
     FILTER_PATTERN +
     String.raw`(?:\s*\|\s*(?:head|tail)(?:\s+-n\s*\d+|\s+-\d+)?)?\s*$`,
 );
-const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
+// Resolved through the real path: the hook runs from ~/.agents/hooks (a symlink to this dir), and
+// the router is a sibling package of this directory, not of the link.
+const ROUTER = join(
+  dirname(realpathSync(import.meta.path)),
+  "..",
+  "retrieval-control",
+  "repo-retrieve.ts",
+);
 // What to tell the caller to type: the short PATH command when it resolves to THIS router (the
 // package bin from `bun link`), else the long path that always exists beside this hook. Every deny
 // used to print the long form, so agents copied `bun ~/.claude/hooks/repo-retrieve.ts …` forever
@@ -65,7 +75,7 @@ const ROUTER_COMMAND = ((): string => {
   };
   if (isThisRouter("rr")) return "rr";
   if (isThisRouter("repo-retrieve")) return "repo-retrieve";
-  return "bun ~/.claude/hooks/repo-retrieve.ts";
+  return `bun ${ROUTER}`;
 })();
 
 function isRawSearch(command: unknown): boolean {
@@ -80,31 +90,6 @@ function isRawSearch(command: unknown): boolean {
     NESTED_SHELL_SEARCH.test(command) ||
     (INLINE_RUNTIME.test(command) && FILE_SCAN_PRIMITIVE.test(command))
   );
-}
-
-function expandHome(path: string): string {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
-  return path;
-}
-
-function bashCwd(payload: any): string {
-  const initial =
-    typeof payload?.cwd === "string" && payload.cwd !== ""
-      ? payload.cwd
-      : process.cwd();
-  const command =
-    typeof payload?.tool_input?.command === "string"
-      ? payload.tool_input.command
-      : "";
-
-  let current = resolve(initial);
-  for (const match of command.matchAll(SIMPLE_CD)) {
-    const raw = expandHome(match[1] ?? match[2] ?? match[3] ?? "");
-    if (raw === "") continue;
-    current = isAbsolute(raw) ? resolve(raw) : resolve(current, raw);
-  }
-  return current;
 }
 
 function startPath(payload: any): string {
@@ -195,7 +180,7 @@ function main(): void {
       "deny",
       `search-route: configuration fault — required router is missing at ${ROUTER}. ` +
         `Do not bypass this gate with Python, Node, shell loops, or another search ` +
-        `implementation. Restore/deploy ~/.claude/hooks/repo-retrieve.ts, then retry.`,
+        `implementation. Restore agents/retrieval-control/repo-retrieve.ts in dotfiles, then retry.`,
     );
   }
 
@@ -230,7 +215,7 @@ if (!r.ok) {
     "deny",
     `search-route: hook error while classifying search ` +
       `(${errorMessage(r.error)}) — failing closed. ` +
-      `Fix ~/.claude/hooks/enforce-search-route.ts before retrying raw search.`,
+      `Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search.`,
   );
 }
 process.exit(0);

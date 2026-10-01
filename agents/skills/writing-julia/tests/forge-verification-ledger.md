@@ -616,3 +616,32 @@ Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a s
 never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
 description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
 this skill then owns the language manifest. skill-check clean; listing within budget.
+
+## 2026-10-01 — JG8 device ownership, v2610.3.0
+
+**Practice (the reason).** firefly-stream-mp chose its device from a budget: `select_exec(vram_bytes)`,
+called by the io adapter's `init_model`, declared through `accepts_vram_bytes`. Registered run
+run2610_0121sqxbq could not be shown to be on the GPU from its receipts (`vram_peak_measured_bytes = 0`
+under WSL, no device field); finding2610_0122as8aq needed a 30-minute profile and listed 60 D2H reads per
+call. The house ruling (2026-09-24, item 5: device policy is an explicit API argument; parts never
+transfer on their own) lived only in the orchestrator's memory and reached no builder.
+
+**Function map.** device-array state or entry point → declare the device type parameter, caller argument,
+counted boundary, receipt field → `architecture.md` §10.10 + `assets/device_ownership.jl` → the package
+test fails on drift. Stop: kernel launch and step residency hand off to `optimizing-julia-gpu-kernels`.
+
+**Edits.** `references/architecture.md` §10.10 (SOLE home, LOOKUP table, each row cites its incident;
+§10.10.1 gate) and a §10.9 row; `assets/device_ownership.jl` (new); `SKILL.md` JG8 gate row, LAW clause,
+routing cut, reference-index row, §9 checklist block, verify one-liner, description token
+`device ownership/デバイスの型`, version; `references/nn-stack.md` one-line pointer (Lux stays there);
+`tests/trigger-set.md` six fire, six near-miss, one co-fire order row.
+
+**Gate seen red.** Fixture run (`mise exec julia@1.13`, `envs/gpu` of firedancer, CPU only): good state,
+source and receipts pass 5/5; negatives fail as intended (device not a type parameter, no device field,
+`select_exec(vram_bytes)`, `Array` in a round loop, receipts without device). On the real
+firefly-stream-mp sources the source check reports 6 hits: `select_exec` twice, `_fw_merge!`'s `collect`
+(host merge of learned tables), `Matrix` in `_step!`, and `_host`/`_to` (the boundary candidates to declare).
+First draft parsed with `begin … end` and failed on top-level `public`; it now uses `Meta.parseall`.
+
+**Not covered.** No CUDA run: the backend-mismatch branch of the state check was not exercised on a GPU.
+The source check is lexical; an unnamed indirection passes. Int32 value atomics stay a kernel rule there.

@@ -474,6 +474,14 @@ export async function findDefinitions(
   };
 }
 
+// The candidates the second stage would score, with the exact text it would read — for comparing
+// second-stage backends on the same input (bench, experiments).
+export async function candidatePool(project: string, query: string): Promise<{ name: string; text: string; def: Definition }[]> {
+  const { dir, defs, byFile } = await refreshCatalog(project, []);
+  const order = candidates(await recall(dir, query), byFile, ownersOf(defs)).slice(0, RERANK_POOL);
+  return order.map((def) => ({ name: def.name, text: rerankText(def), def }));
+}
+
 // private helper key -> the public definitions in its file whose body calls it.
 function ownersOf(defs: Definition[]): Map<string, Definition[]> {
   const publicByFile = new Map<string, Definition[]>();

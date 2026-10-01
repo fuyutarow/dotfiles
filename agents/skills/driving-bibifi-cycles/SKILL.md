@@ -3,7 +3,8 @@ name: driving-bibifi-cycles
 description: >-
   Maximizes knowledge discovery through Experimental and Formal Methods using short BIBIFI cycles.
   Use for Strong Inference, アノマリーからアブダクション, 競合仮説・予測表・排除表,
-  実験計画, 6分イテレーション, マイクロチケット, massive parallelism, ETA/JST,
+  実験計画, 6分イテレーション, マイクロチケット, benchmark突破 / ベンチマーク未測,
+  massive parallelism, ETA/JST,
   idle CPU/RAM/VRAM, 理論研究の実行, 研究を進めて, and an authorized discovery loop that is stalling.
   Selects useful work, expands independent agent microtickets, consumes results and replans immediately.
   Owns ITERATION_PLAN/LOG in existing records; targets ~2-minute experiments, maximum 10 minutes.
@@ -15,13 +16,15 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2609.10.0 (2026-09-30) — classify work by its executed workload and close exact obligations.
+> **Version**: v2610.1.0 (2026-10-01) — keep registered benchmark outcomes ahead of proxy work.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
   references/microticket-patterns.md references/scientific-loop.md references/skill-composition.md \
+  references/target-benchmark-loop.md \
   tests/triggers.md tests/decision-cases.md tests/scheduling-cases.md \
-  tests/operational-rehearsal.md tests/forge-verification-ledger.md; do test -f "$f" || exit 1; done
+  tests/operational-rehearsal.md tests/forge-verification-ledger.md \
+  tests/postmortem-2026-10-01-target-drift.md; do test -f "$f" || exit 1; done
 bun ../forging-skills/scripts/skill-check.ts .
 ```
 
@@ -66,6 +69,8 @@ Partial build returns can unblock authorized work but are not terminal run recei
 ## Start with a checkable result, not a large plan
 
 Read the prior release ETA, completion criteria, open work and latest accepted evidence.
+If the goal is a registered benchmark result, use `references/target-benchmark-loop.md`
+to choose the next result from actual-path coverage and qualified outcome state.
 Check available/reserved CPU, RAM, VRAM, GPU load, agent slots and live write ownership.
 Unknown values stay `未確認` / `UNKNOWN`; never infer execution or free capacity from a sent message.
 Choose the first result that can change the next decision and the dependency preventing it.
@@ -217,6 +222,8 @@ Consume the GPU owner's complete train/infer accounting before choosing the next
 An efficiency-ratio increase or inference-only gain cannot close a learning-throughput target.
 The theory owner consumes qualified findings and returns versioned premise/prediction changes to this loop.
 Report new discovery, enabling work, failure and open uncertainty separately; repeated status earns no cycle credit.
+For a benchmark target, start with accepted goal results and current eligible-suite coverage.
+Use `references/target-benchmark-loop.md`; a host construction or ineligible edition stays a precursor.
 Report only observed starts, completions and consumed results; a requested batch is not an executed batch.
 Report a batch per attempt: requested, admitted, started, terminal and consumed may have different counts.
 Separate evidence dispositions from goal acceptance. Valid low scores remain evidence; published rows need qualification.
@@ -245,8 +252,10 @@ Stop at completion, user stop or a real authority boundary. Hand back accurate p
 | Formal section admission or programme allocation | `directing-research-sections` / `supervising-research-programmes` |
 | Costly irreversible commitment | `acting-on-hypotheses` owns the discriminator, threshold, interpretation and Commit/Pivot/Kill; this loop may schedule its Build→Measure slice |
 | Concrete slices, dependencies and parallel examples | `references/microticket-patterns.md` |
+| Authorized benchmark target, current-edition coverage and outcome-first next work | `references/target-benchmark-loop.md` |
 | Compact board, ticket, return and report | `assets/ITERATION-PLAN.md` |
 | Skill validation | `tests/triggers.md`, `tests/decision-cases.md`, `tests/scheduling-cases.md`, `tests/operational-rehearsal.md` |
 | Historical audits and measured verification limits | `tests/forge-verification-ledger.md` |
+| Bounded source retrospective behind the benchmark-target rule | `tests/postmortem-2026-10-01-target-drift.md` |
 
 No harness → execute ready work serially with observed receipts; do not claim parallelism or enforced cancellation.

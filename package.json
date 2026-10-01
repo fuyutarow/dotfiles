@@ -6,7 +6,8 @@
   "bin": {
     "agent-resource-run": "agents/resource-control/agent-resource-run.ts",
     "serena-foreground": "agents/serena-control/serena-foreground.ts",
-    "repo-retrieve": "agents/retrieval-control/repo-retrieve.ts"
+    "repo-retrieve": "agents/retrieval-control/repo-retrieve.ts",
+    "smart-open": "open/smart-open.ts"
   },
   "dependencies": {
     "cleye": "2.6.0",

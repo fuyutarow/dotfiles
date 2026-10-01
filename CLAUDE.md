@@ -27,7 +27,7 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
-`zsh git jj tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` (mac), `wsl` (WSL).
+`zsh git jj open tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` (mac), `wsl` (WSL).
 Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
@@ -111,7 +111,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ### Daily commands
 - `lg` lazygit · `j` jj · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
-- `o` open · `oo` open current dir (Finder on mac / Explorer on WSL) · `s`/`start` launch app
+- `o` open · `oo` open current dir — both `smart-open` (`open/`): a URL opens on the client machine when attached over ssh/herdr, else here (Finder / Explorer) · `s`/`start` launch app
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)
 

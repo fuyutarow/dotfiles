@@ -50,6 +50,17 @@ Include ~/.ssh/config.local
 Host r99-wsl r99
     Compression yes
 
+# --- smart-open: open a URL on the machine you sit at, not on the box you drive ----------------
+# `o <url>` on r99-wsl (open/smart-open.ts) writes to /tmp/smart-open-$USER.sock there; this forward
+# carries it to the local receiver (open/receive.ts, started at login on macOS by
+# open/smart-open-receiver.plist.mac), which opens http(s) URLs only. herdr --remote reads this file
+# first, so its attach carries the forward too. With no receiver running locally the remote side
+# gets no `ok` and opens on Windows instead — the forward is harmless where nothing listens.
+# A second concurrent connection cannot re-bind the same path and prints a warning; the WSL sshd
+# drop-in (wsl/sshd-dotfiles.conf, StreamLocalBindUnlink yes) makes the NEWEST connection win.
+Host r99-wsl
+    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
+
 # r99-lan is the SAME Windows host as r99, over the LAN rather than the tailnet, and it exists
 # because Tailscale on Windows is a USER-SESSION GUI client: the tailnet address is unreachable
 # while the machine sits at a logon screen — precisely when you most need to get in. sshd is a

@@ -657,6 +657,10 @@ run = 'bun ~/dotfiles/scripts/wsl-winget.ts dump'
 description = "Install everything wsl/winget.win.json lists that is missing on the Windows host (winget import --no-upgrade --ignore-unavailable). --dry-run prints the command only."
 run = 'bun ~/dotfiles/scripts/wsl-winget.ts restore'
 
+[tasks."wsl:rerank"]
+description = "Enable the socket-activated reranker for `repo-retrieve definition` (link:dots places the units). Idempotent; the service itself starts on the first query and exits after 30 idle minutes."
+run = 'systemctl --user daemon-reload && systemctl --user enable --now repo-retrieve-rerank.socket && systemctl --user is-active repo-retrieve-rerank.socket'
+
 [tasks."wsl:ccc-daemon"]
 description = "Hand the ccc daemon to systemd with CPU/RAM caps (link:dots must have run first)"
 # Two-step by design, like cc:install-mcp: link:dots places the unit, this activates it.

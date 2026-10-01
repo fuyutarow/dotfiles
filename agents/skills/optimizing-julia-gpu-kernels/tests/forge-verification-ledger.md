@@ -381,3 +381,11 @@ Final description desk-check routes all six boundary prompts to GPU craft, host 
 It exposed a weak EV3 trigger for normalized-only comparisons; MFU/η/無次元効率 terms were added there.
 This is description consistency, not measured automatic activation. Broad references keep their dated
 limits; this revision does not assert every inherited API/example was re-executed on today's toolchain.
+
+## 2026-10-01 — reciprocal pointer for device ownership, v2610.1.0
+
+writing-julia v2610.3.0 took the state/API device-ownership rule (JG8, `architecture.md` §10.10) from
+firefly-stream-mp's `select_exec(vram_bytes)` and run2610_0121sqxbq's device-less receipts. This skill keeps
+launch-time `get_backend(x)` and GKR and copies none of the rule. Edits: routing row (cut + pointer),
+one §0b If-row routing budget-chosen devices and device-less rows to JG8, two design cases, two seam rows
+in `tests/trigger-set.md`, version header. No description edit.

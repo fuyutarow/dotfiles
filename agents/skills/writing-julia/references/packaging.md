@@ -34,6 +34,7 @@ In a notebook, this topology is fixed before any manifest is written:
 | separately locked env | `envs/<slug>/Project.toml` + its own `Manifest.toml`, outside the workspace; members via `[sources]` paths; `--project=envs/<slug>` |
 | interactive or task command | `--project=packages`, or `--project=packages/<Name>.jl` for one member |
 | recorded run (launcher argv) | `--project=packages` only: `polysearch run --reproduce` restores a workspace root only from the repo root or the named dir |
+| member `[compat] julia` | the runtime line pinned in `mise.toml` `[tools]` (PK3 profile table); never below `"1.12"` |
 | test | through a member: `--project=packages/<Name>.jl` with `Pkg.test()`, or `Pkg.test("<Name>")` at `packages`; bare `Pkg.test()` at the nameless root fails |
 | repo root | nothing Julia; the root-deny list is homes §0's |
 
@@ -116,11 +117,18 @@ Version-gate metadata against the package's declared Julia compatibility `[dated
 
 | Mechanism | Minimum / status |
 |---|---|
-| ZERO-EXPORTS + `public` API | canonical `[compat] julia = "1.11"`; gate-enforced |
+| ZERO-EXPORTS + `public` API | Julia 1.11; the gate enforces the floor only (lowest admitted line >= 1.11) |
 | `[weakdeps]` + `[extensions]` | Julia 1.9 |
 | `[sources]` | Julia 1.11 |
 | `[workspace]` | Julia 1.12 |
 | `[apps]` / `Pkg.Apps` | experimental; re-check before production use |
+
+`[compat] julia` by profile (the one home; the gate in `assets/no_exports.jl` enforces only the 1.11 floor):
+
+| Profile | `[compat] julia` |
+|---|---|
+| notebook member / application / research environment | the runtime line pinned in the repo's `mise.toml` `[tools]` (e.g. `"1.13"`); never lower than the line the workspace needs (`"1.12"`) |
+| reusable library | the lowest line CI actually tests, and >= `"1.11"` (the `public` keyword) |
 
 ### Dependency role lookup
 
@@ -251,7 +259,7 @@ Shipping a sysimage, executable, or shared library is owned by `setup.md` §3.5.
 - [ ] Every dependency has an explicit role.
 - [ ] Duplicate declarations exist only for documented version-gated compatibility.
 - [ ] `[compat]` covers Julia and all declared dependency roles.
-- [ ] `[compat] julia = "1.11"` exactly; no Compat fallback weakens `public` semantics.
+- [ ] `[compat] julia` matches the PK3 profile row and admits nothing below 1.11; no Compat fallback weakens `public` semantics.
 - [ ] Manifest handling matches the consumer profile.
 - [ ] Test/docs/benchmark deps do not inflate runtime `[deps]`.
 - [ ] Package code writes no state into its installed tree.

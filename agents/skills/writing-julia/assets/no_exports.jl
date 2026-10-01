@@ -11,6 +11,22 @@ using Test: @test, @testset
 import ExplicitImports
 import TOML
 
+# Floor only: the lowest Julia the compat spec admits must be >= 1.11 (`public`).
+# The line a profile declares above that floor is packaging.md PK3, not this gate.
+function _julia_compat_floor_ok(compatibility)
+    spec = get(compatibility, "julia", nothing)
+    spec isa AbstractString || return false
+    lowest = nothing
+    for range in split(spec, ",")
+        m = match(r"^\s*(?:\^|~|=|>=|≥)?\s*v?(\d+(?:\.\d+){0,2})", range)
+        m === nothing && return false
+        parts = vcat(split(m.captures[1], "."), ["0", "0"])
+        version = VersionNumber(join(parts[1:3], "."))
+        lowest = lowest === nothing ? version : min(lowest, version)
+    end
+    return lowest !== nothing && lowest >= v"1.11"
+end
+
 function _contains_reexport(node)
     node === Symbol("@reexport") && return true
     node isa QuoteNode && return _contains_reexport(node.value)
@@ -113,7 +129,7 @@ end
 
     project = TOML.parsefile(joinpath(pkgdir(ZERO_EXPORTS_PACKAGE), "Project.toml"))
     compatibility = get(project, "compat", Dict{String, Any}())
-    @test get(compatibility, "julia", nothing) == "1.11"
+    @test _julia_compat_floor_ok(compatibility)
 
     for section in ("deps", "weakdeps", "extras")
         dependencies = get(project, section, Dict{String, Any}())

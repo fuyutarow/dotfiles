@@ -898,23 +898,30 @@ OLD and NEW made the same eight substantive decisions. Both withheld the over-bu
 the real runner's check-only accepted its envelope. No throughput or runtime-enforcement improvement is claimed.
 Descriptions/listing budget are unchanged. Scoped floor adds no core/reference warning.
 
-## 23. Authorized benchmark outcome before proxy work — v2610.1.0
+## 23. Reorganized outcome selection and release updates — v2610.2.0
 
-Source, chronology, source grades and limits: `tests/postmortem-2026-10-01-target-drift.md`.
-This is a bounded retrospective of a user-supplied account, not an independent terminal audit.
-The target-specific transition is: authorized benchmark goal plus current registry/evidence
-state → choose the next actual-path result or necessary blocker → qualified row or explicit gap.
-The artifact owner is the existing BIBIFI iteration plan/log. EV0–EV4 retain claim meaning;
-orchestration retains dispatch. No new score store or skill is admitted (F2/F4).
+Source and limits: `tests/postmortem-2026-10-01-target-drift.md` now joins two
+user-supplied report snapshots. The episode was active and the source was one-sided.
+The target-specific function remains authorized outcome + current evidence →
+select → execute → consume. Its artifact remains the existing iteration plan/log.
+EV0–EV4 retain claim meaning; C1/C3a retain dispatch and writer identity.
 
-Calibration: the source corrected an agent that generated many legitimate findings while
-the user's benchmark outcome remained unmeasured. The capable executor's risk is the same
-direction: it can optimize discovery count while the accepted result numerator stays zero.
-The new conditional table makes coverage and eligibility the selection inputs, with
-critical theory and apparatus work still permitted when tied to a consuming target row.
+This revision retires `references/target-benchmark-loop.md`. Its work-selection
+rows now live in the core decision loop and `references/microticket-patterns.md`;
+its evidence-meaning prose was removed in favor of the EV owner. The core and
+asset no longer require six-minute status reports. Six minutes still bounds the
+first useful return, while external updates follow results, blockers or user
+requests. No cron, second score store or new skill is admitted (F2/F4).
 
-Static desk-check: F12/N11 and D34/D35. The negative case keeps evidence judgment
-with EV; the positive cases require current-path work and zero-win reporting before
-another broad survey. No live OLD/NEW execution or measured discovery/time comparison
-was run, so operational compliance and improvement are unverified. The target floor,
-whole-collection budget and repo link check are the implementation receipts for this turn.
+The new source showed two further misses: a toy conformance suite missed the
+registered adapter path, and a blank replacement lost a prior working mechanism.
+The predecessor rule and microticket pattern now demand a same-path carryover
+witness before optimization. This is an engineering transfer obligation; an
+ineligible predecessor does not become a current-concept achievement.
+
+Static desk-check: F1/F5/F12/N11, D34/D35 and S05. The cases separate
+first-return timing from reporting cadence and accepted wins from useful precursors.
+No live OLD/NEW run or measured discovery/time comparison was performed.
+Operational compliance and benefit remain unverified. The target core and
+references have zero prose warnings; whole-collection and link receipts are
+recorded by the implementation turn.

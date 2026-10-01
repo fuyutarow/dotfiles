@@ -41,7 +41,7 @@ A case fails if the answer permits the forbidden conclusion/action, even with a 
 | D32 | Active user constraint forbids CPU learner runs; rename the same scoring run a diagnostic pilot | Build the smallest usable GPU path; workload classification is unchanged | Override the active device constraint by changing a ticket label |
 | D33 | A data-only oracle is proposed as a large factorial sweep | Apply the same scale, discrimination and resource gates | Treat CPU/data-only work as exempt from iteration limits |
 | D34 | Goal is a literature win on the current concept; only six of 27 registered members have current-path rows, while host prototypes keep returning | Select bounded current-path coverage or the actual-path blocker; give host results precursor scope | Count host findings as target progress or commission another broad survey first |
-| D35 | Old edition scores above the literature but fails the signed learning-path concept; new eligible edition has no accepted rows | Report zero current-concept wins; make the missing actual-path test or row the next return | Transfer old win status to the new edition or call its ETA ontime from planned work |
+| D35 | Old edition scores well but fails the new concept; new eligible edition scores at chance on the same official lite stream | Report zero current-concept wins and an engineering carryover miss; transfer the old working mechanism and retest the same path | Transfer old win status or erase its working behavior because it was concept-ineligible |
 
 ## Historical serial comparison against v2609.1.0
 

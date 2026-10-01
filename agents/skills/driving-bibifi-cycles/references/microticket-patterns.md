@@ -10,10 +10,26 @@ Use the same structure for an experiment, formal argument, engineering change or
 | Change a measurement procedure | One bounded calibration/comparison record | Known positive/negative case and unchanged observation conditions | Preserve comparability or version the changed measurement contract |
 | Prove an entire theory | One load-bearing lemma or concrete counterexample | Exact statement, assumptions and proof/check status | Close that obligation, weaken it explicitly or revise its dependents |
 | Repair launcher and then run a batch | One faulty path, bounded regression and authorized readiness check | Rejected input stays rejected; intended input reaches the expected execution binding | Consume that repair, then observe each requested start; unrelated suites remain separate |
-| Build a new edition after finishing the old one | One agreed interface with a checked first consumer | Identify which old artifact is actually required | Freeze/reuse that artifact; split independent work instead of waiting on one worker's entire queue |
+| Replace a working edition | One transferred mechanism in the new actual consumer path | Match an old working case and a case the new design must newly handle | Preserve the old mechanism's supported behavior; investigate the first carryover miss before optimizing |
 | Improve an expensive process | One scoped cost/timing decomposition at the decision boundary | Matched units, conditions and protocol; check omitted costs | Repair the largest recoverable cost before commissioning a broad programme |
 | Reuse a historical result | One predecessor and a transfer-obligation map | Current conditions against original assumptions and consumer | Reuse the supported part; test the missing bridge |
 | Survey everything while waiting | One relevant source comparison per independent question | Located claim, applicability and strongest contradiction | Hand back each changed premise immediately; no all-inventory barrier |
+
+## When the authorized outcome is a registered benchmark
+
+Use the existing registry and `validating-experimental-evidence` EV0–EV4.
+This table selects work; EV owns each result's eligibility and comparison meaning.
+
+| Current state | First useful return | Work to defer |
+|---|---|---|
+| Concept eligibility or effective contract unknown | One actual-path test or binding that can settle the missing requirement | Literature-win language and whole-suite launch |
+| Current eligible path has unmeasured members | One registered run or bounded diagnostic through its real consumer | Host-only score collection without a target transfer |
+| Valid current result misses the target or prior working behavior | First divergent stage on a matched stream, then a minimal transfer or mechanism check | A blank rewrite or performance tuning ahead of correctness |
+| All authorized members lack comparison headroom | A scoped handoff to the domain owner for a new standard target | Moving the comparison point after observing a score |
+
+A host construction, old concept-ineligible edition or toy fixture may open a
+candidate. Its handoff is the next current-path check, not target completion.
+Preserve valid negative rows and their time; do not relabel them instrument errors.
 
 ## Cut the dependency, not the question
 

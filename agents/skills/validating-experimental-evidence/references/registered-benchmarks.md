@@ -40,11 +40,18 @@ Inspect that entrypoint's requirements for code, parameters, manifests, and hypo
 If it cannot launch the needed case, route instrument repair to its owner. Use a diagnostic path only
 when project policy permits it; keep its scope explicit and do not bypass a denial.
 
-Before relying on a repaired launcher, execute a small known fixture through its real path.
-Check terminal status, effective binding, and read-back of the intended record identity.
-Include rejected invalid input and failed execution: retain the failure record without success promotion.
-Exercise the complete tiny path through row validation and read-back of its intended result destination before fan-out.
-Dry-run, process exit zero and a local rows file certify different boundaries; none substitutes for accepted read-back.
+Before relying on a repaired launcher, exercise a small known fixture through its real path.
+Check terminal status, binding, row validation and read-back; include a rejected invalid input.
+Retain failed execution without success promotion. Dry-run and process exit zero are earlier boundaries.
+
+For a current-concept claim, test the registered launcher, adapter and model interface.
+Choose a nontrivial positive case and a negative/no-update control on that path.
+Cover effective encoding and a boundary length after framing or preprocessing.
+The contract's nominal length may be smaller than the model's actual input.
+A private toy fixture proves only its scoped mechanism. Do not require the entire
+official evaluation before a local change whose obligation is only a bounded repair.
+This witness is necessary for the path claim; check the other signed concept requirements separately.
+
 Record required row fields and postprocessing needs from the target contract; detect missing ones before costly work.
 If outputs are rejected, stop identical retries and repair that boundary on one fixture.
 Preserve completed raw evidence.

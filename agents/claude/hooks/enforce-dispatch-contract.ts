@@ -1,4 +1,5 @@
-// PreToolUse gate — every dispatch names one of exactly two model+effort pairs, explicitly.
+// PreToolUse gate — every dispatch names one of exactly two model+effort pairs, explicitly,
+// and the Opus pair is escalation-only.
 // matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
 // ALLOWED PAIRS (the only two — nothing is implicit, nothing is injected):
@@ -27,6 +28,11 @@
 //               violation, not an inheritance.
 //               Named/child/unreadable workflows are denied because they cannot be
 //               inspected.
+//   - ESCALATION: sonnet-high is the default (2026-10-01: Sonnet 5.5 high scores within a few
+//                 points of Opus 5.5 medium at lower cost per task). An opus-medium dispatch —
+//                 Agent/Task subagent_type "opus-medium" or a Workflow agent() on the opus pair —
+//                 must carry exactly one `ESCALATE(OPUS): <reason>` line in its prompt (Workflow:
+//                 inside the same agent() call), the reason naming why Sonnet is not enough.
 //   - The role binding lives in orchestrating-agents/references/model-roster.md; this hook
 //     enforces it without a bypass. There is no low-effort escape hatch: 'low' is simply not
 //     an allowed value, so no declaration mechanism exists for it any more.
@@ -75,9 +81,37 @@ const AGENT_PAIR_HELP =
 // Which of the two to pick — the part a caller cannot infer from "not allowed" alone. Printed
 // once per deny, wherever the diagnostic leaves the choice open.
 const CHOOSE_PAIR =
-  "Choose by the task: sonnet-high when the brief fully specifies the result (mechanical edits, " +
-  "a named test run, bulk probes); opus-medium for multi-file refactors, root-cause debugging, " +
-  "long unattended coding, or an ambiguous spec.";
+  "Default to sonnet-high: implementation from a clear spec, bug fixes, tests, terminal work, " +
+  "bulk coding. Use opus-medium only as an escalation, with an ESCALATE(OPUS) line: ambiguous " +
+  "spec, multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high " +
+  "already stuck on this task.";
+
+// Opus is escalation-only: exactly one ESCALATE(OPUS) line whose reason says why Sonnet is not
+// enough. Matched on the ORIGINAL text (a prompt string is where it lives), like the resource
+// declaration. A reason under MIN_ESCALATION_REASON non-space characters is a placeholder.
+const ESCALATION_TOKEN = /ESCALATE\(OPUS\):[ \t]*([^\n]*)/g;
+const MIN_ESCALATION_REASON = 12;
+const ESCALATION_HELP =
+  "one line `ESCALATE(OPUS): <why Sonnet 5.5 high is not enough — ambiguous spec, " +
+  "multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high already " +
+  "stuck on this task>`";
+function escalationProblem(text: string | null, sonnetFix: string): string | null {
+  if (text === null) {
+    return `opus-medium is escalation-only, but there is no inspectable prompt to carry ${ESCALATION_HELP} — ${sonnetFix}`;
+  }
+  const hits = [...text.matchAll(ESCALATION_TOKEN)];
+  if (hits.length === 0) {
+    return `opus-medium is escalation-only — add ${ESCALATION_HELP} to the prompt, or ${sonnetFix} (the default)`;
+  }
+  if (hits.length > 1) {
+    return `found ${hits.length} ESCALATE(OPUS) lines, need exactly 1 — keep one ${ESCALATION_HELP}`;
+  }
+  const reason = (hits[0]?.[1] ?? "").replace(/\s/g, "");
+  if (reason.length < MIN_ESCALATION_REASON) {
+    return `ESCALATE(OPUS) reason is empty or a placeholder (under ${MIN_ESCALATION_REASON} characters) — state why Sonnet is not enough, or ${sonnetFix}`;
+  }
+  return null;
+}
 const TYPE_FOR_FAMILY = { sonnet: "sonnet-high", opus: "opus-medium" } as const;
 function familyOf(model: string): "sonnet" | "opus" | null {
   if (SONNET.test(model)) return "sonnet";
@@ -100,25 +134,23 @@ const WORKFLOW_PAIR_HELP =
 // definition (sonnet-high.md / opus-medium.md), whose frontmatter carries model AND effort —
 // so a literal agentType alone is an explicit, complete choice, exactly like subagent_type on
 // the Agent tool.
-const WORKFLOW_AGENT_TYPES: Record<string, { model: string; effort: string }> =
-  {
-    "sonnet-high": { model: "sonnet", effort: "high" },
-    "opus-medium": { model: "opus", effort: "medium" },
-  };
+const WORKFLOW_AGENT_TYPES: Record<string, { model: string; effort: string }> = {
+  "sonnet-high": { model: "sonnet", effort: "high" },
+  "opus-medium": { model: "opus", effort: "medium" },
+};
 const WORKFLOW_CHOICE_HELP =
-  "agentType:'sonnet-high' or agentType:'opus-medium', or the literal pair " +
-  WORKFLOW_PAIR_HELP;
+  "agentType:'sonnet-high' or agentType:'opus-medium', or the literal pair " + WORKFLOW_PAIR_HELP;
 
 // ---------------------------------------------------------------------------
 // Batched diagnostics
 // ---------------------------------------------------------------------------
 
 // "shape" is script-level (the capability was not called directly); the rest are per-call.
-type Axis = "shape" | "syntax" | "model" | "effort" | "resource";
+type Axis = "shape" | "syntax" | "model" | "effort" | "escalation" | "resource";
 type Finding = { line: number; axis: Axis; detail: string };
 
 // Report order for the HOW TO FIX block: unsound-model first, then unparseable, then axes.
-const AXIS_ORDER: Axis[] = ["shape", "syntax", "model", "effort", "resource"];
+const AXIS_ORDER: Axis[] = ["shape", "syntax", "model", "effort", "escalation", "resource"];
 
 // A flood costs the reader more than it informs. Cap the listing and SAY it was capped.
 const MAX_REPORTED_LINES = 20;
@@ -140,6 +172,9 @@ const AXIS_HINT: Record<Axis, string> = {
     "effort   — exactly one literal effort: property, top-level in the options object " +
     `(no nesting, no spread, no computed key), paired with model as one of: ${WORKFLOW_PAIR_HELP}. ` +
     "No default applies: an omitted effort is a violation, and 'low' is not an allowed value.",
+  escalation:
+    `escalation — the opus pair is escalation-only: put ${ESCALATION_HELP} inside the SAME ` +
+    "agent() call (its prompt), or switch the call to agentType:'sonnet-high'.",
   resource: `resource — ${RESOURCE_DECLARATION_HELP}, inside the SAME agent() call.`,
 };
 
@@ -156,10 +191,7 @@ function shortResourceReason(reason: string): string {
     .replace(/;?\s*require\s+exactly one[\s\S]*$/i, "")
     .replace(/^resource declaration is /i, "")
     .replace(/^resource envelope /i, "envelope ")
-    .replace(
-      /^found (\d+) resource declaration token\(s\)$/i,
-      "found $1 token(s), need exactly 1",
-    )
+    .replace(/^found (\d+) resource declaration token\(s\)$/i, "found $1 token(s), need exactly 1")
     .trim();
   return `resource declaration: ${short === "" ? "invalid" : short}`;
 }
@@ -176,9 +208,7 @@ function denyFindings(findings: Finding[], totalCalls: number): void {
   const lines = [...byLine.keys()].sort((a, b) => a - b);
   const shown = lines.slice(0, MAX_REPORTED_LINES);
 
-  const body = shown.map(
-    (line) => `  line ${line}: ${[...new Set(byLine.get(line))].join("; ")}`,
-  );
+  const body = shown.map((line) => `  line ${line}: ${[...new Set(byLine.get(line))].join("; ")}`);
   if (lines.length > shown.length) {
     body.push(
       `  …and ${lines.length - shown.length} more line(s) with findings, not listed ` +
@@ -194,14 +224,10 @@ function denyFindings(findings: Finding[], totalCalls: number): void {
     );
   }
 
-  const scope =
-    lines.length === 1 ? "1 line violates" : `${lines.length} lines violate`;
-  const scanned =
-    totalCalls === 1
-      ? "1 direct agent() call"
-      : `${totalCalls} direct agent() calls`;
+  const scope = lines.length === 1 ? "1 line violates" : `${lines.length} lines violate`;
+  const scanned = totalCalls === 1 ? "1 direct agent() call" : `${totalCalls} direct agent() calls`;
 
-  // BATCHED(shape, syntax, model, effort, resource): none of these consumes another's output,
+  // BATCHED(shape, syntax, model, effort, escalation, resource): none of these consumes another's output,
   // so all of them are collected across the whole script and reported in this one decision.
   decidePre(
     "deny",
@@ -266,11 +292,7 @@ function blankQuotedChar(
 }
 
 // Handle one character inside a line comment.
-function blankLineChar(
-  chars: string[],
-  i: number,
-  c: string | undefined,
-): LexState {
+function blankLineChar(chars: string[], i: number, c: string | undefined): LexState {
   if (c === "\n") return "code";
   chars[i] = " ";
   return "line";
@@ -338,11 +360,7 @@ function trimSpan(src: string, start: number, end: number): Span {
 
 // Split a blanked source range on commas that are direct children of that range.
 // Strings and comments are already blanked, so their punctuation cannot affect nesting.
-function directSegments(
-  src: string,
-  start: number,
-  end: number,
-): Span[] | null {
+function directSegments(src: string, start: number, end: number): Span[] | null {
   const spans: Span[] = [];
   let segmentStart = start;
   let depth = 0;
@@ -384,12 +402,7 @@ function literalValue(src: string, valueStart: number): string | null {
 // Parsing failure (no options object, unbalanced braces, trailing junk) is folded into
 // `unsound: true` with empty value lists rather than a separate null case — the caller
 // treats "can't be trusted" and "can't be found" identically: both mean the pair is denied.
-function scanCallOptions(
-  src: string,
-  blanked: string,
-  start: number,
-  end: number,
-): CallShape {
+function scanCallOptions(src: string, blanked: string, start: number, end: number): CallShape {
   const fail: CallShape = {
     unsound: true,
     modelValues: [],
@@ -409,10 +422,7 @@ function scanCallOptions(
     else if (blanked[close] === "}") depth--;
     close++;
   }
-  if (
-    depth !== 0 ||
-    trimSpan(blanked, close, options.end).start !== options.end
-  ) {
+  if (depth !== 0 || trimSpan(blanked, close, options.end).start !== options.end) {
     return fail;
   }
 
@@ -437,16 +447,12 @@ function scanCallOptions(
     }
     const agentTypeKey = /^agentType\s*:\s*/.exec(text);
     if (agentTypeKey !== null) {
-      agentTypeValues.push(
-        literalValue(src, property.start + agentTypeKey[0].length),
-      );
+      agentTypeValues.push(literalValue(src, property.start + agentTypeKey[0].length));
       continue;
     }
     const effortKey = /^effort\s*:\s*/.exec(text);
     if (effortKey !== null) {
-      effortValues.push(
-        literalValue(src, property.start + effortKey[0].length),
-      );
+      effortValues.push(literalValue(src, property.start + effortKey[0].length));
     }
   }
   return { unsound, modelValues, effortValues, agentTypeValues };
@@ -458,11 +464,7 @@ type PropStatus =
   | { kind: "invalid"; value: string }
   | { kind: "ok"; value: string };
 
-function classifyProp(
-  values: (string | null)[],
-  allowed: string[],
-  unsound: boolean,
-): PropStatus {
+function classifyProp(values: (string | null)[], allowed: string[], unsound: boolean): PropStatus {
   if (unsound) return { kind: "malformed" };
   if (values.length === 0) return { kind: "missing" };
   if (values.length > 1) return { kind: "malformed" };
@@ -478,16 +480,8 @@ function classifyProp(
 // individual values are fine but the COMBINATION is not (sonnet+medium, opus+high, …).
 function pairFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   if (shape.agentTypeValues.length > 0) return agentTypeFindings(shape);
-  const model = classifyProp(
-    shape.modelValues,
-    ["sonnet", "opus"],
-    shape.unsound,
-  );
-  const effort = classifyProp(
-    shape.effortValues,
-    ["high", "medium"],
-    shape.unsound,
-  );
+  const model = classifyProp(shape.modelValues, ["sonnet", "opus"], shape.unsound);
+  const effort = classifyProp(shape.effortValues, ["high", "medium"], shape.unsound);
   const out: { axis: Axis; detail: string }[] = [];
 
   if (model.kind === "missing" && effort.kind === "missing") {
@@ -599,19 +593,13 @@ function agentTypeFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   const out: { axis: Axis; detail: string }[] = [];
   const model = classifyProp(shape.modelValues, ["sonnet", "opus"], false);
   const effort = classifyProp(shape.effortValues, ["high", "medium"], false);
-  if (
-    model.kind !== "missing" &&
-    !(model.kind === "ok" && model.value === pair.model)
-  ) {
+  if (model.kind !== "missing" && !(model.kind === "ok" && model.value === pair.model)) {
     out.push({
       axis: "model",
       detail: `agentType:'${type.value}' runs on model:'${pair.model}' — drop model, or set model:'${pair.model}'`,
     });
   }
-  if (
-    effort.kind !== "missing" &&
-    !(effort.kind === "ok" && effort.value === pair.effort)
-  ) {
+  if (effort.kind !== "missing" && !(effort.kind === "ok" && effort.value === pair.effort)) {
     out.push({
       axis: "effort",
       detail: `agentType:'${type.value}' runs at effort:'${pair.effort}' — drop effort, or set effort:'${pair.effort}'`,
@@ -620,14 +608,19 @@ function agentTypeFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   return out;
 }
 
+// The call resolves to the opus pair: agentType:'opus-medium', or (no agentType) model:'opus'.
+function isOpusCall(shape: CallShape): boolean {
+  if (shape.agentTypeValues.length > 0) {
+    return shape.agentTypeValues.length === 1 && shape.agentTypeValues[0] === "opus-medium";
+  }
+  return shape.modelValues.length === 1 && shape.modelValues[0] === "opus";
+}
+
 // Scan forward from `open` (just past "agent(") to find where this call's parens balance.
 // Returns the index right after the matching close paren, plus the depth the scan ended at
 // (0 means balanced) — mirrors the original inline scan exactly, including running to the end
 // of the string with depth still > 0 when the call is unbalanced.
-function scanBalancedParens(
-  blanked: string,
-  open: number,
-): { index: number; depth: number } {
+function scanBalancedParens(blanked: string, open: number): { index: number; depth: number } {
   let depth = 1;
   let i = open;
   while (i < blanked.length && depth > 0) {
@@ -649,8 +642,7 @@ function checkWorkflowScript(src: string): void {
     findings.push({
       line: lineAt(src, child.index),
       axis: "shape",
-      detail:
-        "calls workflow(); a child workflow's agents cannot be verified — inline them",
+      detail: "calls workflow(); a child workflow's agents cannot be verified — inline them",
     });
   }
 
@@ -708,6 +700,12 @@ function checkWorkflowScript(src: string): void {
     for (const finding of pairFindings(shape)) {
       findings.push({ line, ...finding });
     }
+    if (isOpusCall(shape)) {
+      const escalation = escalationProblem(originalSpan, "switch to agentType:'sonnet-high'");
+      if (escalation !== null) {
+        findings.push({ line, axis: "escalation", detail: escalation });
+      }
+    }
 
     const resource = resourceDeclarationResult(originalSpan);
     if (!resource.ok) {
@@ -741,10 +739,7 @@ async function main(): Promise<void> {
   if (tool === "Agent" || tool === "Task") {
     if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
       // FATAL: with no object there is no prompt and no model key, so no axis can be located.
-      decidePre(
-        "deny",
-        "dispatch-contract: Agent/Task input is malformed and cannot be verified.",
-      );
+      decidePre("deny", "dispatch-contract: Agent/Task input is malformed and cannot be verified.");
     }
     const problems: string[] = [];
 
@@ -755,11 +750,9 @@ async function main(): Promise<void> {
     // the observed values plus the smallest exact edit when one of them already fixes the pair,
     // and the choice criterion only when both are open. Nothing is injected: fork, Explore,
     // general-purpose, Plan, claude-code-guide, and a missing key are all "not a pair".
-    const subagentType =
-      typeof ti.subagent_type === "string" ? ti.subagent_type : null;
+    const subagentType = typeof ti.subagent_type === "string" ? ti.subagent_type : null;
     const model = typeof ti.model === "string" ? ti.model : null;
-    const typeFamily =
-      subagentType === null ? null : (AGENT_TYPE_FAMILY[subagentType] ?? null);
+    const typeFamily = subagentType === null ? null : (AGENT_TYPE_FAMILY[subagentType] ?? null);
     const modelFamily = model === null ? null : familyOf(model);
     const shownType = subagentType === null ? "missing" : `'${subagentType}'`;
     const shownModel = model === null ? "missing" : `'${model}'`;
@@ -768,11 +761,7 @@ async function main(): Promise<void> {
       problems.push(
         `model is missing for subagent_type '${subagentType}' — add model:"${subagentType === "sonnet-high" ? "sonnet" : "opus"}"`,
       );
-    } else if (
-      typeFamily !== null &&
-      model !== null &&
-      !typeFamily.test(model)
-    ) {
+    } else if (typeFamily !== null && model !== null && !typeFamily.test(model)) {
       const fix = subagentType === "sonnet-high" ? "sonnet" : "opus";
       problems.push(
         `model '${model}' does not match subagent_type '${subagentType}' — set model:"${fix}"` +
@@ -798,10 +787,17 @@ async function main(): Promise<void> {
     if (typeof ti.prompt === "string") prompt = ti.prompt;
     else if (typeof ti.message === "string") prompt = ti.message;
     else prompt = null;
+    if (subagentType === "opus-medium" || (typeFamily === null && modelFamily === "opus")) {
+      const escalation = escalationProblem(
+        prompt,
+        'dispatch subagent_type:"sonnet-high", model:"sonnet"',
+      );
+      if (escalation !== null) problems.push(escalation);
+    }
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
-    // BATCHED(pair, resource): the pair and the resource class are independent — a caller violating
+    // BATCHED(pair, escalation, resource): the pair, the escalation, and the resource class are independent — a caller violating
     // more than one of them is told about all of them at once, not denied once per axis.
     if (problems.length > 0) {
       decidePre(
@@ -819,10 +815,7 @@ async function main(): Promise<void> {
 
   if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
     // FATAL: with no object there is no script to scan, so no per-call axis exists yet.
-    decidePre(
-      "deny",
-      "dispatch-contract: Workflow input is malformed and cannot be verified.",
-    );
+    decidePre("deny", "dispatch-contract: Workflow input is malformed and cannot be verified.");
   }
 
   let src: string | null = typeof ti.script === "string" ? ti.script : null;

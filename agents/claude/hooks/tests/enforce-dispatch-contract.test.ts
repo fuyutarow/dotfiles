@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "enforce-dispatch-contract.ts";
-const RESOURCE_DECLARATION =
-  "RESOURCE-CLASS(NONCOMPUTE): hook fixture performs no numerical work";
+const RESOURCE_DECLARATION = "RESOURCE-CLASS(NONCOMPUTE): hook fixture performs no numerical work";
 const withResource = (prompt: string) => `${RESOURCE_DECLARATION}\n${prompt}`;
 const rawPre = (tool_name: string, tool_input: unknown) => ({
   tool_name,
@@ -29,20 +28,17 @@ const sonnetHigh = (extra: Record<string, unknown> = {}) =>
     model: "sonnet",
     ...extra,
   });
+const ESCALATION = "ESCALATE(OPUS): ambiguous spec spanning three repos needs design judgment";
 const opusMedium = (extra: Record<string, unknown> = {}) =>
   pre("Task", {
-    prompt: "x",
+    prompt: `${ESCALATION}\nx`,
     subagent_type: "opus-medium",
     model: "opus",
     ...extra,
   });
 const markWorkflowAgents = (script: string) =>
-  script.replace(
-    /\bagent\s*\(/g,
-    (call) => `${call}/* ${RESOURCE_DECLARATION} */ `,
-  );
-const wf = (script: string) =>
-  rawPre("Workflow", { script: markWorkflowAgents(script) });
+  script.replace(/\bagent\s*\(/g, (call) => `${call}/* ${RESOURCE_DECLARATION} */ `);
+const wf = (script: string) => rawPre("Workflow", { script: markWorkflowAgents(script) });
 const rawWf = (script: string) => rawPre("Workflow", { script });
 
 describe("Agent / Task — allowed pairs", () => {
@@ -82,10 +78,7 @@ describe("Agent / Task — every other shape is denied", () => {
   });
 
   test("missing model -> deny", () => {
-    const r = runHook(
-      HOOK,
-      pre("Agent", { prompt: "x", subagent_type: "sonnet-high" }),
-    );
+    const r = runHook(HOOK, pre("Agent", { prompt: "x", subagent_type: "sonnet-high" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain(
@@ -97,37 +90,27 @@ describe("Agent / Task — every other shape is denied", () => {
     const r = runHook(HOOK, sonnetHigh({ model: "opus" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      "does not match subagent_type",
-    );
+    expect(d.permissionDecisionReason).toContain("does not match subagent_type");
   });
 
   test("opus-medium with model:sonnet -> deny (mismatch)", () => {
     const r = runHook(HOOK, opusMedium({ model: "sonnet" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      "does not match subagent_type",
-    );
+    expect(d.permissionDecisionReason).toContain("does not match subagent_type");
   });
 
-  test.each([
-    "fork",
-    "Explore",
-    "general-purpose",
-    "Plan",
-    "claude-code-guide",
-  ])("subagent_type '%s' -> deny", (subagent_type) => {
-    const r = runHook(
-      HOOK,
-      pre("Agent", { prompt: "x", subagent_type, model: "sonnet" }),
-    );
-    const d = decisionOf(r.stdout);
-    expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      `subagent_type '${subagent_type}' is not allowed`,
-    );
-  });
+  test.each(["fork", "Explore", "general-purpose", "Plan", "claude-code-guide"])(
+    "subagent_type '%s' -> deny",
+    (subagent_type) => {
+      const r = runHook(HOOK, pre("Agent", { prompt: "x", subagent_type, model: "sonnet" }));
+      const d = decisionOf(r.stdout);
+      expect(d.permissionDecision).toBe("deny");
+      expect(d.permissionDecisionReason).toContain(
+        `subagent_type '${subagent_type}' is not allowed`,
+      );
+    },
+  );
 
   test("no model no type at all -> deny, both violations named", () => {
     const r = runHook(HOOK, pre("Agent", { prompt: "x" }));
@@ -136,9 +119,7 @@ describe("Agent / Task — every other shape is denied", () => {
     expect(d.permissionDecisionReason).toContain(
       "no allowed dispatch pair (subagent_type missing, model missing)",
     );
-    expect(d.permissionDecisionReason).toContain(
-      "Choose by the task: sonnet-high when the brief fully specifies the result",
-    );
+    expect(d.permissionDecisionReason).toContain("Default to sonnet-high");
   });
 
   test("every deny states the two allowed forms", () => {
@@ -157,17 +138,14 @@ describe("Agent / Task — every other shape is denied", () => {
         model: "sonnet",
       }),
     );
-    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
-      "RESOURCE-CLASS(NONCOMPUTE)",
-    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain("RESOURCE-CLASS(NONCOMPUTE)");
   });
 
   test("one absolute resource envelope declaration -> silent pass", () => {
     const r = runHook(
       HOOK,
       rawPre("Agent", {
-        prompt:
-          "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run only\nrun it",
+        prompt: "RESOURCE-ENVELOPE(/tmp/job.resource.json): agent-resource-run only\nrun it",
         subagent_type: "sonnet-high",
         model: "sonnet",
       }),
@@ -210,19 +188,13 @@ describe("Workflow — allowed pairs", () => {
   });
 
   test("all agent() calls literal opus/medium -> silent pass", () => {
-    const r = runHook(
-      HOOK,
-      wf(`await agent('x', {model: 'opus', effort: 'medium'})`),
-    );
+    const r = runHook(HOOK, wf(`await agent('${ESCALATION}', {model: 'opus', effort: 'medium'})`));
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
 
   test("agent() without model -> deny with line number", () => {
-    const r = runHook(
-      HOOK,
-      wf(`log('hi')\nconst a = await agent('find bugs', {effort: 'high'})`),
-    );
+    const r = runHook(HOOK, wf(`log('hi')\nconst a = await agent('find bugs', {effort: 'high'})`));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("line 2:");
@@ -244,34 +216,21 @@ describe("Workflow — allowed pairs", () => {
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("is not an allowed pair");
-    expect(d.permissionDecisionReason).toContain(
-      "model:'sonnet' with effort:'high'",
-    );
-    expect(d.permissionDecisionReason).toContain(
-      "model:'opus' with effort:'medium'",
-    );
+    expect(d.permissionDecisionReason).toContain("model:'sonnet' with effort:'high'");
+    expect(d.permissionDecisionReason).toContain("model:'opus' with effort:'medium'");
   });
 
   test.each([
-    [
-      "dynamic",
-      "const model = 'sonnet'\nawait agent('x', {model, effort: 'high'})",
-    ],
+    ["dynamic", "const model = 'sonnet'\nawait agent('x', {model, effort: 'high'})"],
     ["non-family", "await agent('x', {model: 'fable', effort: 'high'})"],
-    [
-      "duplicate",
-      "await agent('x', {model: 'sonnet', model: 'opus', effort: 'high'})",
-    ],
+    ["duplicate", "await agent('x', {model: 'sonnet', model: 'opus', effort: 'high'})"],
   ])("agent() with %s model property -> deny", (_case, script) => {
     const r = runHook(HOOK, wf(script));
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
   test("effort:'low' is simply not an allowed value -> deny", () => {
-    const r = runHook(
-      HOOK,
-      wf(`await agent('x', {model: 'sonnet', effort: 'low'})`),
-    );
+    const r = runHook(HOOK, wf(`await agent('x', {model: 'sonnet', effort: 'low'})`));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("effort 'low' is not allowed");
@@ -290,10 +249,7 @@ describe("Workflow — allowed pairs", () => {
   });
 
   test.each([
-    [
-      "nested model only",
-      "await agent('x', {schema: {model: 'sonnet'}, effort: 'high'})",
-    ],
+    ["nested model only", "await agent('x', {schema: {model: 'sonnet'}, effort: 'high'})"],
     [
       "spread after a literal model",
       "await agent('x', {model: 'sonnet', effort: 'high', ...overrides})",
@@ -306,10 +262,7 @@ describe("Workflow — allowed pairs", () => {
       "computed key after a literal model",
       "await agent('x', {model: 'sonnet', effort: 'high', [modelKey]: 'fable'})",
     ],
-    [
-      "computed model key",
-      "await agent('x', {['model']: 'sonnet', effort: 'high'})",
-    ],
+    ["computed model key", "await agent('x', {['model']: 'sonnet', effort: 'high'})"],
   ])("agent() with %s -> deny", (_case, script) => {
     const r = runHook(HOOK, wf(script));
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
@@ -326,9 +279,7 @@ describe("Workflow — allowed pairs", () => {
   test("agent( inside a comment is ignored", () => {
     const r = runHook(
       HOOK,
-      wf(
-        `// agent('not real')\nawait agent('real', {model: 'sonnet', effort: 'high'})`,
-      ),
+      wf(`// agent('not real')\nawait agent('real', {model: 'sonnet', effort: 'high'})`),
     );
     expect(r.stdout.trim()).toBe("");
   });
@@ -346,9 +297,7 @@ describe("Workflow — allowed pairs", () => {
   test("a computed global agent capability -> deny", () => {
     const r = runHook(
       HOOK,
-      wf(
-        `await globalThis["agent"]("do something", {model: "opus", effort: "medium"})`,
-      ),
+      wf(`await globalThis["agent"]("do something", {model: "opus", effort: "medium"})`),
     );
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
@@ -364,21 +313,13 @@ describe("Workflow — allowed pairs", () => {
   });
 
   test("unreadable scriptPath -> deny", () => {
-    const r = runHook(
-      HOOK,
-      rawPre("Workflow", { scriptPath: "/nonexistent/wf.js" }),
-    );
+    const r = runHook(HOOK, rawPre("Workflow", { scriptPath: "/nonexistent/wf.js" }));
     expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
   });
 
   test("agent() without a same-call resource declaration -> deny", () => {
-    const r = runHook(
-      HOOK,
-      rawWf(`await agent('x', {model: 'sonnet', effort: 'high'})`),
-    );
-    expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
-      "resource declaration",
-    );
+    const r = runHook(HOOK, rawWf(`await agent('x', {model: 'sonnet', effort: 'high'})`));
+    expect(decisionOf(r.stdout).permissionDecisionReason).toContain("resource declaration");
   });
 });
 
@@ -389,9 +330,7 @@ describe("batched diagnostics (2026-09-27)", () => {
     const r = runHook(HOOK, rawWf(`await agent('x', {schema: S})`));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      "no agentType, model, or effort",
-    );
+    expect(d.permissionDecisionReason).toContain("no agentType, model, or effort");
     expect(d.permissionDecisionReason).toContain(
       "or the literal pair model:'sonnet' with effort:'high'",
     );
@@ -412,9 +351,7 @@ describe("batched diagnostics (2026-09-27)", () => {
   test("two calls with different violations -> both lines in a single deny", () => {
     const r = runHook(
       HOOK,
-      wf(
-        `await agent('a', {schema: S})\nawait agent('b', {model: 'sonnet', effort: 'medium'})`,
-      ),
+      wf(`await agent('a', {schema: S})\nawait agent('b', {model: 'sonnet', effort: 'medium'})`),
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("line 1: no agentType, model, or effort");
@@ -425,9 +362,7 @@ describe("batched diagnostics (2026-09-27)", () => {
   test("a clean call alongside a violating one is not named", () => {
     const r = runHook(
       HOOK,
-      wf(
-        `await agent('a', {model: 'sonnet', effort: 'high'})\nawait agent('b', {schema: S})`,
-      ),
+      wf(`await agent('a', {model: 'sonnet', effort: 'high'})\nawait agent('b', {schema: S})`),
     );
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("line 2:");
@@ -443,10 +378,9 @@ describe("batched diagnostics (2026-09-27)", () => {
   });
 
   test("CAP: more offending lines than the cap -> the remainder is stated, not dropped", () => {
-    const script = Array.from(
-      { length: 25 },
-      (_, i) => `await agent('a${i}', {schema: S})`,
-    ).join("\n");
+    const script = Array.from({ length: 25 }, (_, i) => `await agent('a${i}', {schema: S})`).join(
+      "\n",
+    );
     const r = runHook(HOOK, wf(script));
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("line 20:");
@@ -455,10 +389,7 @@ describe("batched diagnostics (2026-09-27)", () => {
   });
 
   test("indirection plus a per-call violation -> both, with an incompleteness NOTE", () => {
-    const r = runHook(
-      HOOK,
-      wf(`const dispatch = agent\nawait agent('x', {schema: S})`),
-    );
+    const r = runHook(HOOK, wf(`const dispatch = agent\nawait agent('x', {schema: S})`));
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("alias or indirection");
     expect(reason).toContain("no agentType, model, or effort");
@@ -467,16 +398,11 @@ describe("batched diagnostics (2026-09-27)", () => {
 
   test("no shape finding -> no incompleteness NOTE", () => {
     const r = runHook(HOOK, wf(`await agent('x', {schema: S})`));
-    expect(decisionOf(r.stdout).permissionDecisionReason).not.toContain(
-      "NOTE:",
-    );
+    expect(decisionOf(r.stdout).permissionDecisionReason).not.toContain("NOTE:");
   });
 
   test("HOW TO FIX lists only the axes that actually fired", () => {
-    const r = runHook(
-      HOOK,
-      rawWf(`await agent('x', {model: 'sonnet', effort: 'high'})`),
-    );
+    const r = runHook(HOOK, rawWf(`await agent('x', {model: 'sonnet', effort: 'high'})`));
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("HOW TO FIX");
     expect(reason).toContain("resource —");
@@ -495,10 +421,7 @@ describe("batched diagnostics (2026-09-27)", () => {
   });
 
   test("Agent: a missing model AND a missing resource declaration -> ONE deny naming both", () => {
-    const r = runHook(
-      HOOK,
-      rawPre("Task", { subagent_type: "opus-medium", prompt: "x" }),
-    );
+    const r = runHook(HOOK, rawPre("Task", { subagent_type: "opus-medium", prompt: "x" }));
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain(
       "model is missing for subagent_type 'opus-medium' — add model:\"opus\"",
@@ -537,16 +460,11 @@ describe("explicit model policy", () => {
     const r = runHook(HOOK, sonnetHigh({ model: "fable" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      "does not match subagent_type",
-    );
+    expect(d.permissionDecisionReason).toContain("does not match subagent_type");
   });
 
   test("fable model with no subagent_type at all -> deny", () => {
-    const r = runHook(
-      HOOK,
-      pre("Agent", { prompt: "audit this", model: "fable" }),
-    );
+    const r = runHook(HOOK, pre("Agent", { prompt: "audit this", model: "fable" }));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain(
@@ -571,9 +489,7 @@ describe("explicit model policy", () => {
     const r = runHook(HOOK, wf(script));
     const d = decisionOf(r.stdout);
     expect(d.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain(
-      "model 'fable' is not allowed",
-    );
+    expect(d.permissionDecisionReason).toContain("model 'fable' is not allowed");
   });
 });
 
@@ -595,10 +511,7 @@ describe("deny text names the minimal exact repair", () => {
   });
 
   test("workflow pair mismatch -> keep the model or keep the effort", () => {
-    const r = runHook(
-      HOOK,
-      wf(`await agent('x', {model: 'opus', effort: 'high'})`),
-    );
+    const r = runHook(HOOK, wf(`await agent('x', {model: 'opus', effort: 'high'})`));
     expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
       "keep model:'opus' and set effort:'medium', or keep effort:'high' and set model:'sonnet'",
     );
@@ -616,23 +529,18 @@ describe("deny text names the minimal exact repair", () => {
 // model AND effort), the same two names the Agent tool takes as subagent_type.
 describe("Workflow agentType names the pair", () => {
   test("agentType:'opus-medium' alone -> allow", () => {
-    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'opus-medium'})`));
+    const r = runHook(HOOK, wf(`await agent('${ESCALATION}', {agentType: 'opus-medium'})`));
     expect(r.stdout.trim()).toBe("");
   });
   test("agentType:'sonnet-high' with its own model and effort -> allow", () => {
     const r = runHook(
       HOOK,
-      wf(
-        `await agent('x', {agentType: 'sonnet-high', model: 'sonnet', effort: 'high'})`,
-      ),
+      wf(`await agent('x', {agentType: 'sonnet-high', model: 'sonnet', effort: 'high'})`),
     );
     expect(r.stdout.trim()).toBe("");
   });
   test("agentType with a contradicting model -> deny with the exact fix", () => {
-    const r = runHook(
-      HOOK,
-      wf(`await agent('x', {agentType: 'sonnet-high', model: 'opus'})`),
-    );
+    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'sonnet-high', model: 'opus'})`));
     expect(decisionOf(r.stdout).permissionDecisionReason).toContain(
       "agentType:'sonnet-high' runs on model:'sonnet' — drop model, or set model:'sonnet'",
     );
@@ -641,8 +549,52 @@ describe("Workflow agentType names the pair", () => {
     const r = runHook(HOOK, wf(`await agent('x', {agentType: 'Explore'})`));
     const reason = decisionOf(r.stdout).permissionDecisionReason;
     expect(reason).toContain("agentType 'Explore' is not allowed");
-    expect(reason).toContain(
-      "agentType:'sonnet-high' or agentType:'opus-medium'",
+    expect(reason).toContain("agentType:'sonnet-high' or agentType:'opus-medium'");
+  });
+});
+
+describe("Opus is escalation-only", () => {
+  const denyReason = (input: unknown) => {
+    const d = decisionOf(runHook(HOOK, input).stdout);
+    expect(d.permissionDecision).toBe("deny");
+    return d.permissionDecisionReason as string;
+  };
+  test("Agent opus-medium without ESCALATE(OPUS) -> deny naming the token and the sonnet default", () => {
+    const why = denyReason(opusMedium({ prompt: "x" }));
+    expect(why).toContain("opus-medium is escalation-only");
+    expect(why).toContain("ESCALATE(OPUS):");
+    expect(why).toContain('subagent_type:"sonnet-high", model:"sonnet"');
+  });
+  test("Agent opus-medium with a placeholder reason -> deny", () => {
+    const why = denyReason(opusMedium({ prompt: "ESCALATE(OPUS): hard\nx" }));
+    expect(why).toContain("placeholder");
+  });
+  test("Agent opus-medium with two ESCALATE(OPUS) lines -> deny", () => {
+    const why = denyReason(opusMedium({ prompt: `${ESCALATION}\n${ESCALATION}\nx` }));
+    expect(why).toContain("found 2 ESCALATE(OPUS) lines");
+  });
+  test("Agent sonnet-high needs no escalation", () => {
+    expect(runHook(HOOK, sonnetHigh()).stdout.trim()).toBe("");
+  });
+  test("Workflow opus pair without ESCALATE(OPUS) in the call -> deny on the escalation axis", () => {
+    const why = denyReason(wf(`await agent('x', {model: 'opus', effort: 'medium'})`));
+    expect(why).toContain("opus-medium is escalation-only");
+    expect(why).toContain("escalation —");
+  });
+  test("Workflow agentType:'opus-medium' without ESCALATE(OPUS) -> deny", () => {
+    const why = denyReason(wf(`await agent('x', {agentType: 'opus-medium'})`));
+    expect(why).toContain("agentType:'sonnet-high'");
+  });
+  test("Workflow escalation in ANOTHER call does not cover this one", () => {
+    const why = denyReason(
+      wf(
+        `await agent('${ESCALATION}', {agentType: 'opus-medium'})\nawait agent('x', {agentType: 'opus-medium'})`,
+      ),
     );
+    expect(why).toContain("line 2");
+  });
+  test("Workflow sonnet pair needs no escalation", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'sonnet-high'})`));
+    expect(r.stdout.trim()).toBe("");
   });
 });

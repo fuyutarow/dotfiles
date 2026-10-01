@@ -482,8 +482,8 @@ alias lip='ip -4 addr show | grep inet'
 alias gip='curl -s ifconfig.me'
 
 # alias j='jobs'
-alias j='just'
-alias jl='just -l'
+alias j='jj'                 # Jujutsu (2026-10-01); subcommand aliases live in jj/config.toml, mirroring git/gitconfig
+alias jl='just -l'           # just stays reachable as `just`; jl kept for other projects' justfiles
 
 
 

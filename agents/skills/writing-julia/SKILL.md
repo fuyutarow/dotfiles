@@ -66,6 +66,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |
 | `raising-resolution` | Inspect `versioninfo()`, `Pkg.status`, or `@which` before a Julia fact. |
+| `keeping-research-notebooks` | **BY ARTIFACT:** Julia module and package mechanics → HERE. Model edition/revision lifecycle, registration, and acceptance rows → there. |
 
 ## MUST NOT FIRE
 

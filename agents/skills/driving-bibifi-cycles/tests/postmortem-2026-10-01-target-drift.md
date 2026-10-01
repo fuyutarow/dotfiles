@@ -1,7 +1,7 @@
 # Bounded retrospective — target drift, lost transfer, dormant gates
 
-This is a retrospective of two user-supplied, assistant-authored report transcripts.
-The research and new implementation were still running at both boundaries. The
+This is a retrospective of three user-supplied, assistant-authored report transcripts.
+The research and new implementation were still running at the reported boundaries. The
 accounts are one-sided: they locate reported actions and retractions, but they
 are not independent certification of raw benchmark runs or a terminal audit.
 
@@ -9,6 +9,7 @@ are not independent certification of raw benchmark runs or a terminal audit.
 |---|---|---|
 | Earlier 1,390-line attachment, supplied 2026-10-01 | `d074fe5741aea59da06461b65e3ecc537492de8e5af1ba591613e54929e5f878` | 186–249, 356–379, 597–665, 836–859, 1358–1382 |
 | Later 1,375-line attachment, supplied 2026-10-01 | `90290617741c7f546507462ea27e563d74878c26154ffac889b5b6646dface0f` | 760–875, 950–1198, 1217–1375 |
+| Follow-on 1,208-line attachment, supplied 2026-10-01 | `0ad983c4501551ecc3bdb8e658e7609dddcd37e40896bf9eeda5ac0af6ed6f06` | 969–993, 1086–1122, 1189 |
 
 A read-only target-workspace inspection during the earlier review found active
 uncommitted work above `alpha` at `49adb526`. It did not establish the reported
@@ -26,6 +27,8 @@ scores, causes, or current target status at the later boundary.
 | Later 950–1084, 1140–1198 | A model registration omission blocked launch; nominal sequence length missed framing bytes; toy conformance tests passed while the official adapter scored at chance. | Local tests covered different inputs and consumers. The claim-bearing path needed boundary and nontrivial positive/negative witnesses. |
 | Later 1217–1252 | A new edition lost a working predecessor's symbol and evidence mechanisms; matched lite rows fell from 1.0 to chance-level results. | The first carryover check belonged before throughput optimization. The old edition was an engineering oracle, not a concept-eligible win. |
 | Later 1296–1332 | The report says a message to an active agent resumed another writer, and several bold memory rules were repeatedly missed. | Treat actor identity and write ownership as observed tool state. Move must-happen rules to target tests, hooks, schema, or briefs; adding memory prose is insufficient. |
+| Follow-on 1086–1122 | A three-hour job was renamed MT1 at13:51 but its first return was14:10; GPU-first work was split into CPU implementation followed by a port. | The19min return still missed the6min policy. A valid slice must preserve the source task's device and implementation constraints. |
+| Follow-on 969–993, 1104–1113 | Release ETA was recalculated from an untested first-stage success. | A conditional branch duration is not an evidence-based promise of successful release. |
 
 The reports also describe useful conduct: frozen predictions, fast falsification,
 independent source review, fail-fast launch checks, and reusable component work.
@@ -66,7 +69,7 @@ runtime probe of any present tool.
 
 | Item | Grade | Permitted use |
 |---|---|---|
-| Two assistant-authored report transcripts | user-supplied session account | Reported sequence, explicit corrections, local failure witnesses; not certified experimental truth. |
+| Three assistant-authored report transcripts | user-supplied session account | Reported sequence, explicit corrections, local failure witnesses; not certified experimental truth. |
 | Read-only target workspace inspection | direct observation, earlier boundary only | Active-work status at that inspection; not the later run outcomes. |
 | Selection, retrieval, actual-path and writer-identity rules | skill-supplied construction | Candidate prevention mechanisms; not measured improvement. |
 

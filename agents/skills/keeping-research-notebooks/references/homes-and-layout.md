@@ -3,6 +3,31 @@
 > Scope: where each artifact kind lives, how to read a repo's own bindings, and the identifier scheme.
 > Record operation is `driving-polysearch`'s. Layer wiring is `wiring-repositories`'.
 
+## §0 Top-level layout — the house layout of a notebook repo
+
+A notebook repo holds several packages, their runs, and the papers built on them.
+So the repo root is never one package's root. This table is the layout for a NEW notebook repo.
+In an existing repo, the gate config's declared paths (§2) outrank it; a mismatch is a finding.
+
+| Path | HOME of | Create it when | Contents owner |
+|---|---|---|---|
+| repo root | config only: `README.md`, `mise.toml`, gate config, `.gitignore`, VCS and harness dirs | at scaffold | `wiring-repositories` |
+| `packages/` | language packages; a Julia workspace root is `packages/Project.toml` (no `name`) plus `packages/Manifest.toml` | at scaffold | `writing-julia` PK0 (notebook row) |
+| `packages/<Name>.jl/` | one package: `Project.toml`, `src/`, `test/` | its first module | `writing-julia` |
+| `envs/<slug>/` | an execution env with its own lock, for a resolution the workspace cannot share | the first such env | `writing-julia` |
+| `deliverables/papers/<dir>/` | one paper's source and build dir | the first paper | dir name: `compiling-latex`; argument: `arguing-research-papers` |
+| `deliverables/slides/<dir>/` | one deck's source | the first deck | dir name: `compiling-latex`; deck: `designing-presentations` |
+| records-store root | records and run dirs | at scaffold (`polysearch init`) | `driving-polysearch` |
+| `data/` (ignored) | large bytes (§5) | the first large file | — |
+| archive path | frozen retired material | the first retirement | `governing-research-documentation` |
+
+| Predicate | Action |
+|---|---|
+| a `Project.toml`, `Manifest.toml`, `src/`, `test/` or `scripts/` is planned at the repo root | refuse; the target is `packages/` or `packages/<Name>.jl/` |
+| a top-level dir in the table above gets its first artifact | the owner adds it to the gate config's declared paths in the same landing |
+| a dir is declared but holds nothing | do not declare it yet; an empty dir does not survive a clone, so the gate reports it absent there |
+| a language's default scaffold (`Pkg.generate`, a DrWatson project) would write to the repo root | generate inside `packages/` instead |
+
 ## §1 Homes, expanded
 
 | Kind | HOME | ENTRY | Deny | Receipt |
@@ -20,6 +45,8 @@
 | primary-source knowledge | the knowledge repo | its distillation entry | a summary in the notebook | unit id |
 | task state | TASK-CONTINUATION where the repo declares a locus; else "no declared home" | `continuing-long-running-tasks` | `.agent-state`; scratchpad notes; an invented `tasks/` | record locus, or the stated gap |
 | research document, report, plan | the document portfolio | `governing-research-documentation` DOC ADMISSION | a loose markdown file | admission record |
+| paper or slide source | `deliverables/papers/<dir>/`, `deliverables/slides/<dir>/` (§0) | working-copy edit; COMMITTER lands it | a paper at the repo root; a PDF outside the build dir | `jj diff --stat` |
+| a number, figure or table in a paper | a run artifact in the RECORDS STORE, cited by run id | the paper's build reads the run's artifact | a figure saved by hand into the paper dir; a number typed with no run id | run id beside the figure source |
 | frozen retired material | the archive path | write once | edits after freeze | — |
 | large bytes (serialized models, caches, datasets) | an ignored path inside the repo | write there; record its digest | committing them | digest |
 

@@ -2,6 +2,8 @@
 # wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
 # 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
+# notebook repo(keeping-research-notebooks homes §0)では Julia の根は packages/: 下の `--project=.` と
+# Runic の `.` を `packages` に替え、test は member ごとの test:<Name> の depends にする(recipes.md §1 RULING)。
 [tasks.setup]
 alias = "i"
 description = "Julia依存関係のインスタンス化 + precompile (Project.toml/Manifest.toml)"

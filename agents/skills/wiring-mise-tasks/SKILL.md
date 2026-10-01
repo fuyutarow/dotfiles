@@ -21,7 +21,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.1.0 (2026-10-01) — jj repos: `commit` / `pull` verbs, gated by `mise-contract`.
+> **Version**: v2610.2.0 (2026-10-01) — notebook repos root Julia bodies at `packages` (recipes §1 RULING).
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 

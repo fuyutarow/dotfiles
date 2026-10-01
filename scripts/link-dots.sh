@@ -182,6 +182,8 @@ link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"
 # `export COCOINDEX_CODE_DAEMON_SUPERVISED=1` can never drift apart. Activate: mise run wsl:ccc-daemon
 if $IS_WSL; then
   link cocoindex/ccc-daemon.service.wsl "$HOME/.config/systemd/user/ccc-daemon.service"
+  link cocoindex/repo-retrieve-rerank.socket.wsl "$HOME/.config/systemd/user/repo-retrieve-rerank.socket"
+  link cocoindex/repo-retrieve-rerank.service.wsl "$HOME/.config/systemd/user/repo-retrieve-rerank.service"
   link wsl/wsl-capacity-recover.service.wsl "$HOME/.config/systemd/user/wsl-capacity-recover.service"
   link wsl/wsl-capacity-recover.timer.wsl "$HOME/.config/systemd/user/wsl-capacity-recover.timer"
 fi

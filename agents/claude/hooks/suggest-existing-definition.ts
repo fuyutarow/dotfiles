@@ -2,7 +2,7 @@
 // the repository already has one that does the same thing, and say so to the model.
 //
 // WHY A HOOK. Re-implementation happens when nobody searched, not when the search was poor:
-// builders wrote kernels that already existed (firedancer, 2026-10-01). `repo-retrieve definition`
+// builders wrote kernels that already existed (firedancer, 2026-10-01). `rr exists`
 // answers the question well, but only if asked; this asks for them at the one moment it matters.
 //
 // What it does: finds definitions in the inserted text that were not in the replaced text (Write:
@@ -26,6 +26,8 @@ import { attempt } from "../../hooks/attempt.ts";
 import { readStdinJson } from "./lib.ts";
 
 const MAX_CHECKS = 2;
+// Log-odds, per judge. Local: the duplicate probe scored 8.0, the unrelated helper 6.3. Jev: p>=0.97.
+const HOOK_MIN = { local: 7.5, jev: 3.5 } as const;
 const BUDGET_MS = 8_000; // the catalog is read as is (no rebuild inside an edit); recall + rerank ~1-3 s
 
 // Definition headers by language: name in group 1. Line-start anchored so calls do not match.
@@ -120,8 +122,15 @@ async function main(): Promise<void> {
     const self = (x: Definition) => x.file === rel;
     const a = await findDefinitions(project, d.text, 3, self, false);
     const top = a.cards[0];
-    // The judge's own verdict, on its own scale (retrieval.toml thresholds): only "same function".
-    if (a.strength !== "strong" || !top) continue;
+    // Stricter than the route's "strong": here the query is the new CODE, not a described need, and
+    // the judge loosens on code-vs-code (2026-10-01: an argv helper "looked like" a directory
+    // lister at local 6.3). A wrong interruption costs more than a missed one inside an edit.
+    if (
+      !top ||
+      !a.reranked ||
+      top.score < HOOK_MIN[a.judge === "jev" ? "jev" : "local"]
+    )
+      continue;
     findings.push(
       `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, ${a.judge} score ${top.score.toFixed(1)}): ` +
         `${top.signature.slice(0, 140)}`,
@@ -133,7 +142,7 @@ async function main(): Promise<void> {
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
-          "existing-definition check (repo-retrieve definition): the definition you just wrote may duplicate one " +
+          "existing-definition check (rr exists): the definition you just wrote may duplicate one " +
           "that already exists.\n" +
           findings.join("\n") +
           "\nRead it. If it does what you need, use it and remove the new one; if not, keep yours and say in one " +

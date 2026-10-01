@@ -1255,11 +1255,19 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
-    expect(result.stdout).toContain("concept");
-    expect(result.stdout).toContain("battery");
-    expect(result.stdout).toContain("structural");
-    expect(result.stdout).toContain("index");
+    expect(result.stdout).toMatch(/usage:/i);
+    // Intent names (2026-10-01); the old engine names remain aliases (tested below).
+    for (const name of [
+      "about",
+      "absent",
+      "text",
+      "regex",
+      "files",
+      "shape",
+      "exists",
+      "index",
+    ])
+      expect(result.stdout).toContain(name);
     expect(result.stdout).not.toMatch(/\bstamp\b/);
     expect(result.log).toBe("");
   });
@@ -1285,7 +1293,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "--help", "--wat"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
+    expect(result.stdout).toMatch(/usage:/i);
     expect(result.log).toBe("");
   });
 
@@ -1293,7 +1301,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "extra", "--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("USAGE:");
+    expect(result.stdout).toMatch(/usage:/i);
     expect(result.log).toBe("");
   });
 
@@ -1315,7 +1323,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), [...args]);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("USAGE:");
+      expect(result.stdout).toMatch(/usage:/i);
       expect(result.log).toBe("");
     });
   }
@@ -1385,7 +1393,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), args);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain("USAGE:");
+      expect(result.stdout).toMatch(/usage:/i);
       expect(result.log).toBe("");
     });
   }
@@ -1504,17 +1512,34 @@ describe("repo-retrieve route contract", () => {
     });
   }
 
-  test("unexpected positionals are usage errors", () => {
-    const result = run(registerProject(), [
+  test("grep's order: first positional is the query, the rest are paths", () => {
+    const positional = run(registerProject(), ["text", "needle"]);
+    expect(positional.stderr).not.toContain("exactly one");
+    expect(positional.stderr).toContain("ROUTE: literal");
+
+    // With --query given, a positional is a path — not a second query.
+    const withPath = run(registerProject(), [
       "literal",
-      "extra",
+      "src",
       "--query",
       "needle",
     ]);
+    expect(withPath.stderr).not.toContain("exactly one");
 
-    expect(result.code).toBe(2);
-    expect(result.stderr).toContain("unexpected positional arguments: extra");
-    expect(result.log).toBe("");
+    // Two queries are still a usage error for a single-query route.
+    const two = run(registerProject(), ["literal", "-q", "a", "-q", "b"]);
+    expect(two.code).toBe(2);
+    expect(two.stderr).toContain("exactly one");
+  });
+
+  test("old engine names still route (aliases of the intent names)", () => {
+    for (const [oldName, label] of [
+      ["literal", "literal"],
+      ["exhaustive", "exhaustive"],
+    ] as const) {
+      const r = run(registerProject(), [oldName, "--query", "needle"]);
+      expect(r.stderr).toContain(`ROUTE: ${label}`);
+    }
   });
 
   test("camelCase schema keys keep the kebab-case CLI spelling", () => {

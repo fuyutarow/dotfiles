@@ -88,12 +88,13 @@ describe("enforce-search-route", () => {
 
     expect(result.code).toBe(0);
     expect(decision.permissionDecision).toBe("deny");
-    // The short PATH command when it is installed and resolves to this router, else the long path.
+    // The shortest installed name of this router (rr, repo-retrieve), else the long path; routes by
+    // intent name.
     expect(decision.permissionDecisionReason).toMatch(
-      /(?:^|[\s:;])(?:repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) concept --query/,
+      /(?:^|[\s:;])(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
     );
-    expect(decision.permissionDecisionReason).toContain("literal");
-    expect(decision.permissionDecisionReason).toContain("concept");
+    expect(decision.permissionDecisionReason).toContain(" text '");
+    expect(decision.permissionDecisionReason).toContain(" exists '");
     expect(decision.permissionDecisionReason).toContain("do not bypass");
   });
 
@@ -194,7 +195,7 @@ describe("enforce-search-route", () => {
 
       expect(decision.permissionDecision).toBe("deny");
       expect(decision.permissionDecisionReason).toMatch(
-        /(?:repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) concept --query/,
+        /(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
       );
     }
   });

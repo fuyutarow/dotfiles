@@ -750,7 +750,7 @@ async function runDefinition(
     return a.strength === "none" ? 1 : 0;
   }
   process.stderr.write(
-    `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? " + rerank" : ""} project=${project}\n`,
+    `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? ` + judge=${a.judge}` : ""} project=${project}\n`,
   );
   if (a.cards.length > 0) process.stdout.write(`${renderCards(a)}\n`);
   if (a.strength === "unranked") {
@@ -770,7 +770,7 @@ async function runDefinition(
   }
   process.stdout.write(
     `RESULT: PASS route=definition strength=${a.strength} best=${a.best.toFixed(2)} ` +
-      `(strong >= 4: same function; likely: read it before writing a new one)\n`,
+      `judge=${a.judge} (strong: the same function; likely: read it before writing a new one)\n`,
   );
   return 0;
 }

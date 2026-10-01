@@ -27,7 +27,6 @@ import { readStdinJson } from "./lib.ts";
 
 const MAX_CHECKS = 2;
 const BUDGET_MS = 8_000; // the catalog is read as is (no rebuild inside an edit); recall + rerank ~1-3 s
-const REPORT_AT = 5; // reranker log-odds (+ priors); bench: correct same-function hits score 5-10
 
 // Definition headers by language: name in group 1. Line-start anchored so calls do not match.
 // Top-level definitions only (no indentation): a closure or helper inside a function or a test
@@ -121,9 +120,10 @@ async function main(): Promise<void> {
     const self = (x: Definition) => x.file === rel;
     const a = await findDefinitions(project, d.text, 3, self, false);
     const top = a.cards[0];
-    if (!a.reranked || !top || top.score < REPORT_AT) continue;
+    // The judge's own verdict, on its own scale (retrieval.toml thresholds): only "same function".
+    if (a.strength !== "strong" || !top) continue;
     findings.push(
-      `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, score ${top.score.toFixed(1)}): ` +
+      `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, ${a.judge} score ${top.score.toFixed(1)}): ` +
         `${top.signature.slice(0, 140)}`,
     );
   }

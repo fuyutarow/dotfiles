@@ -62,6 +62,14 @@ formulation / evaluability artifactとdigestを要求する。
 意味検索が使える登録済みrepoでは、返り値 schema に
 `queries: [{query, hits: [file:line]}]` を必須化する。検索したという自己申告だけでは受理しない。
 
+既存の部品群に触れる実装では、supervisorがbriefの「入力と根拠」に部品群の所在と
+置換対象を置く。executorは新規実装の前に`driving-cocoindex`のquery-shapeで候補を引き、
+`再利用 / 拡張 / 新規`と既存部品が満たさない要件を、hitのlocusとともに返す。
+不在を根拠に新規実装する場合は、同skillのabsence batteryを使う。
+検索を実装後の報告欄だけで満たしても、重複実装の予防にはならない。
+supervisorはこの対応と実装先の実消費をread-backし、欠ければその部分を検収しない。
+可逆な方法の選択はexecutorが進め、毎部品の人間承認を追加しない。
+
 ### 返り値の最小 schema
 
 ```yaml

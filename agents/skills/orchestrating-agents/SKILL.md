@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2609.5.0 (2026-09-30) — 予算は仕事の実体へ結び、欠測の高水位から予約を縮めない。
+> **Version**: v2610.1.0 (2026-10-01) — 実装前の既存部品検索を発注と返却の境界に結ぶ。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に

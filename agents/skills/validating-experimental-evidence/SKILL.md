@@ -15,7 +15,7 @@ description: >-
 
 # Validating experimental evidence
 
-> **Version**: v2609.2.0 (2026-09-30) — resolve gate authority and bind closure to the actual obligation.
+> **Version**: v2610.1.0 (2026-10-01) — bind concept acceptance to the claim-bearing runner path.
 > **Source grades and incident limits**: `tests/forge-verification-ledger.md`.
 
 ```bash
@@ -67,7 +67,7 @@ locus/digest only for dispatch, visibility, and acceptance topology.
 
 | Gate | Predicate and action | Checkable artifact |
 |---|---|---|
-| **EV0 CONTRACT** | For official claims, reconcile authorized policy, evidence needs and the implemented gate. Repair a conflicting gate through its owner; do not bypass it. Resolve the effective contract and launcher. Permitted diagnostics bind their local criterion and retain local scope. | Authority/claim/gate reconciliation, registry binding and acceptance/rejection receipts; `registered-benchmarks.md` |
+| **EV0 CONTRACT** | For official claims, reconcile authorized policy, evidence needs and the implemented gate. Bind a claim-bearing test to the same launcher, adapter and model interface that will produce the score. Repair a conflicting gate through its owner; do not bypass it. Local diagnostics retain local scope. | Authority/claim/gate reconciliation, actual-path acceptance and rejection receipts; `registered-benchmarks.md` |
 | **EV1 EXECUTED INPUT** | Join observed code, input, parameters, realized length, and final scored position to the intended run. A stale worktree, unbound registry ID, or missing scored tail returns `FAIL`/`UNKNOWN`. | Exact invocation and post-launch attestation in the canonical run/finding; `registered-benchmarks.md` |
 | **EV2 INFORMATION FLOW** | Freeze permitted information: reveal/update order online, train/test separation offline. Test forbidden dependencies and verify that required control interventions reached the executing consumer. | Perturbation, realized control and null-output loci; `controls-and-information-flow.md` |
 | **EV3 FOOTING** | Compare like metric, split, stream, scoring window, training protocol, and baseline. For mechanism ablation, change only that mechanism. A confounded contrast cannot update a causal hypothesis. | Axis and confound table, same-stream baseline, bound check; `footing-and-lineage.md` |

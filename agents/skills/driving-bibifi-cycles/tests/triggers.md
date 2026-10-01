@@ -4,11 +4,11 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 
 | ID | Request | Route / expected work |
 |---|---|---|
-| F1 | 「6分周期で成果を出して。BIBIFIを最大化して」 | HERE: active rolling microticket loop |
+| F1 | 「最初の有用な返りを6分以内に取って、BIBIFIを回して」 | HERE: short first-return loop; no periodic status implied |
 | F2 | 「マイクロチケットに切って、空いたRAMとVRAMも使って」 | HERE: slice/priority/independent ready queue |
 | F3 | GPU is idle while the core is being built; what useful work can run now? | HERE: protect critical path and fill genuinely spare capacity |
 | F4 | Stop long-lived agents from holding reservations while waiting | HERE plans lifetime/returns; orchestration executes limits/release |
-| F5 | Give JST release ETA and ontime/delta/pivot changes every six minutes | HERE: outputs-first report and active replanning |
+| F5 | Give a JST release ETA when the milestone changes; no recurring status requested | HERE: event update from observed result and existing release plan; no cron |
 | F6 | Experiments should take about two minutes, ten max; no sweeps | HERE: size useful discriminators and end-to-end cycle |
 | F7 | A new model waits for all components; get the first useful result sooner | HERE: smallest real executable path and BIBIFI slices |
 | F8 | Run one microticket, use its result to choose the next; don't end with a plan | HERE: execute through owners and close the loop |

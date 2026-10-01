@@ -635,13 +635,16 @@ export async function judgeJev(
   const id = (i: number) => `C${String(i).padStart(2, "0")}`;
   const body = JSON.stringify({
     ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
-    state: Object.fromEntries(docs.map((d, i) => [id(i), d])),
+    state: {
+      NEED: query,
+      ...Object.fromEntries(docs.map((d, i) => [id(i), d])),
+    },
     questions: Object.fromEntries(
       docs.map((_, i) => [
         id(i),
         {
           type: "noul",
-          instructions: `Does the code definition ${id(i)} already implement what this developer needs: "${query}"?`,
+          instructions: `Does code definition ${id(i)} already implement NEED?`,
         },
       ]),
     ),

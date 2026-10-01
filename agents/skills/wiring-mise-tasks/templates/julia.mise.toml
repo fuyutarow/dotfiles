@@ -2,6 +2,8 @@
 # wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
 # 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
 
+# notebook repo(keeping-research-notebooks homes §0)では本体が違う: Julia の根は packages/、Runic は
+# @runic env(setup:runic が作る)、test は member ごとの test:<Name>。recipes.md §1 RULING NOTEBOOK-JULIA の表を写す。
 [tasks.setup]
 alias = "i"
 description = "Julia依存関係のインスタンス化 + precompile (Project.toml/Manifest.toml)"

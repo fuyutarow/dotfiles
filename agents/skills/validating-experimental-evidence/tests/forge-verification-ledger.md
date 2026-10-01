@@ -334,3 +334,10 @@ Static boundary cases B13/B14 challenge toy-PASS promotion and erasure of the
 predecessor. No production acceptance suite, full benchmark or paired OLD/NEW
 execution was run here. This is instruction validation only, with zero target
 core/reference prose warnings; it does not claim a runtime gate was installed.
+
+Domain correction v2610.1.1: the registered runner requirement is conditional on
+a registered benchmark claim; no-update controls apply to learning; predecessor
+preservation requires a declared carryover obligation. An unregistered production
+path or non-learning claim uses its own declared entry and falsifying control.
+This corrects overgeneralization in the preceding revision. B14 and BIBIFI
+D36–D39 are static counterexamples; no runtime enforcement claim is made.

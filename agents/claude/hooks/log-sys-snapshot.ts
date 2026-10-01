@@ -1,5 +1,5 @@
-// Stop / PostToolUse hook — attach one line "MM-DD HH:MM | Rate: 5h … · 7d … | Sys: CPU … · RAM …"
-// (time, API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
+// Stop / PostToolUse hook — attach one line "MM-DD HH:MM | Ctx: … | Rate: 5h … · 7d … | Sys: CPU …"
+// (time, this session's context and API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
 // Channel: a top-level `systemMessage`. Claude Code records a hook's stdout in the transcript
@@ -26,9 +26,10 @@ import { readStdinJson } from "./lib.ts";
 const HOME = process.env.HOME ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const STATE_DIR = `${HOME}/.cache/claude/sys-log`;
-// Per session: each session's payload carries the rate_limits IT last received, so a shared file
-// let another session's older reading show here (2026-10-01: 7d 60% then 51%, same reset).
-const RATE_DIR = `${HOME}/.cache/claude/statusline-rate`;
+// Per session: the statusline writes THIS session's rows (Ctx, Rate) here. Each payload carries
+// its own context and the rate_limits it last received, so a shared file let another session's
+// older Rate show here (2026-10-01: 7d 60% then 51%, same reset).
+const SESSION_DIR = `${HOME}/.cache/claude/statusline-session`;
 const STALE_MS = 120_000;
 const RST = "\x1b[0m";
 const DIM = "\x1b[2m";
@@ -54,27 +55,27 @@ async function main(): Promise<void> {
   if (now - cached.at > STALE_MS) return;
 
   const key = sid.replace(/[^A-Za-z0-9_-]/g, "_");
-  // Rate first, as on the bar. Missing, stale, or empty (no rate_limits) -> the Sys row alone.
-  const rateRead = await attempt(
+  // This session's rows, as the statusline ordered them. Missing or stale -> none.
+  const read = await attempt(
     () =>
-      JSON.parse(readFileSync(`${RATE_DIR}/${key}.json`, "utf8")) as {
+      JSON.parse(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")) as {
         at?: unknown;
-        line?: unknown;
-        ansi?: unknown;
+        rows?: unknown;
       },
   );
-  const r = rateRead.ok ? rateRead.value : {};
-  const rate = typeof r.ansi === "string" ? r.ansi : r.line;
-  const rateFresh = typeof r.at === "number" && now - r.at <= STALE_MS;
-  // One record per line: "MM-DD HH:MM | Rate: … | Sys: …" — the time is this event's (the mobile
-  // app shows none), the separator is the bar's SEP. No Rate (missing, stale, empty) -> no field.
+  const sess = read.ok ? read.value : {};
+  const fresh = typeof sess.at === "number" && now - sess.at <= STALE_MS;
+  const rows = (fresh && Array.isArray(sess.rows) ? sess.rows : [])
+    .map((r: { line?: unknown; ansi?: unknown }) =>
+      typeof r?.ansi === "string" ? r.ansi : r?.line,
+    )
+    .filter((r): r is string => typeof r === "string" && r !== "");
+  // One record per line: "MM-DD HH:MM | Ctx: … | Rate: … | Sys: …" — the time is this event's (the
+  // mobile app shows none), the separator is the bar's SEP.
   const t = Temporal.Now.plainDateTimeISO();
   const p2 = (n: number) => String(n).padStart(2, "0");
   const time = `${p2(t.month)}-${p2(t.day)} ${p2(t.hour)}:${p2(t.minute)}`;
-  const fields = [`${DIM}${time}${RST}`, sys];
-  if (rateFresh && typeof rate === "string" && rate !== "")
-    fields.splice(1, 0, rate);
-  const shown = fields.join(SEP);
+  const shown = [`${DIM}${time}${RST}`, ...rows, sys].join(SEP);
 
   const statePath = `${STATE_DIR}/${key}.last`;
   const last = await attempt(() => Number(readFileSync(statePath, "utf8")));

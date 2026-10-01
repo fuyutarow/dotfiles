@@ -970,6 +970,17 @@ function rlModelSegment(m: ModelLimit): string {
   if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
+// Ctx segment: "Ctx: <tokens> NN%". One builder for the bar's agent row and the snapshot.
+function ctxSegment(df: Pick<Dataframe, "ctx" | "ctxPct">): string {
+  let seg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
+  if (df.ctxPct != null) {
+    const { pct, col } = pctFmt(df.ctxPct);
+    // No MID here on purpose — see render()'s header note: this is one fact (context usage)
+    // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
+    seg += ` ${ESC}[${col}m${pct}%${RST}`;
+  }
+  return seg;
+}
 // Rate row: "Rate: 5h NN% ⟳… · 7d NN% ⟳… [· <Model> NN% ⟳…]", or "" when the payload carries no
 // rate_limits. One builder for the bar and for the snapshot log-sys-snapshot.ts attaches.
 function rateRow(
@@ -1125,14 +1136,7 @@ function render(df: Dataframe): string {
   else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
   else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
 
-  let ctxSeg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
-  if (df.ctxPct != null) {
-    const { pct, col } = pctFmt(df.ctxPct);
-    // No MID here on purpose — see render()'s header note: this is one fact (context usage)
-    // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
-    ctxSeg += ` ${ESC}[${col}m${pct}%${RST}`;
-  }
-  agentLine = join(agentLine, ctxSeg);
+  agentLine = join(agentLine, ctxSegment(df));
 
   const rateLine = rateRow(df);
 
@@ -1219,23 +1223,24 @@ if (sysPlain !== "") {
   })();
 }
 
-// The Rate row is NOT host-wide: each session's payload carries the rate_limits it last received,
-// so one shared file let an idle session's older reading overwrite a fresh one (observed
-// 2026-10-01: 7d 60% then 51% with the same reset). One file per session; the hook reads its own.
+// This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
+// each session's payload carries its own context and the rate_limits it last received, so one
+// shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
+// then 51% with the same reset). One file per session; the hook reads its own and inserts the
+// rows as given.
 const sid = (parseResult.value.session_id ?? "").replace(
   /[^A-Za-z0-9_-]/g,
   "_",
 );
 if (sid !== "") {
-  const rateColored = rateRow(df);
+  const rows = [ctxSegment(df), rateRow(df)].filter((r) => r !== "");
   fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude/statusline-rate`, { recursive: true });
+    mkdirSync(`${HOME}/.cache/claude/statusline-session`, { recursive: true });
     writeFileSync(
-      `${HOME}/.cache/claude/statusline-rate/${sid}.json`,
+      `${HOME}/.cache/claude/statusline-session/${sid}.json`,
       JSON.stringify({
         at: Temporal.Now.instant().epochMilliseconds,
-        line: rateColored.replace(ANSI, ""),
-        ansi: rateColored,
+        rows: rows.map((ansi) => ({ line: ansi.replace(ANSI, ""), ansi })),
       }),
     );
   })();

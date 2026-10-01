@@ -202,6 +202,15 @@ elif $IS_WSL; then
   link lazygit/config.yml "$HOME/.config/lazygit/config.yml"
 fi
 
+# --- smart-open receiver (macOS: the machine you sit at; opens URLs forwarded from remote `o`) ---
+if $IS_MAC; then
+  link open/smart-open-receiver.plist.mac "$HOME/Library/LaunchAgents/dotfiles.smart-open-receiver.plist"
+  if ! $CHECK && ! launchctl print "gui/$(id -u)/dotfiles.smart-open-receiver" > /dev/null 2>&1; then
+    launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dotfiles.smart-open-receiver.plist" \
+      && echo "loaded: dotfiles.smart-open-receiver (launchd)"
+  fi
+fi
+
 # --- karabiner (macOS only; whole-dir replace, so guard the rm against repeat runs) ---
 if $IS_MAC; then
   kdst="$HOME/.config/karabiner"
@@ -242,6 +251,19 @@ if $IS_WSL; then
     echo "linked: $sysctl_dst -> $DOTFILES/wsl/sysctl.conf (sudo) — apply: sudo sysctl --system"
   else
     echo "skip: $sysctl_dst needs root — run: sudo ln -sfn $DOTFILES/wsl/sysctl.conf $sysctl_dst"
+  fi
+
+  # sshd drop-in: lets the newest ssh connection re-bind smart-open's forwarded socket
+  # (wsl/sshd-dotfiles.conf). Same guarded-sudo shape; takes effect on `sudo systemctl reload ssh`.
+  sshd_dst=/etc/ssh/sshd_config.d/50-dotfiles.conf
+  if [[ "$(readlink "$sshd_dst" 2> /dev/null)" == "$DOTFILES/wsl/sshd-dotfiles.conf" ]]; then
+    : # already linked -> no sudo prompt
+  elif $CHECK; then
+    drift "$sshd_dst (want -> $DOTFILES/wsl/sshd-dotfiles.conf)"
+  elif sudo ln -sfn "$DOTFILES/wsl/sshd-dotfiles.conf" "$sshd_dst" 2> /dev/null; then
+    echo "linked: $sshd_dst -> $DOTFILES/wsl/sshd-dotfiles.conf (sudo) — apply: sudo systemctl reload ssh"
+  else
+    echo "skip: $sshd_dst needs root — run: sudo ln -sfn $DOTFILES/wsl/sshd-dotfiles.conf $sshd_dst && sudo systemctl reload ssh"
   fi
 
   # .wslconfig is NOT linked here on purpose: it is read by the Windows-side WSL service, which

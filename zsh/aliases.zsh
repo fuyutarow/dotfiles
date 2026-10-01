@@ -548,6 +548,12 @@ pp() {
 
 alias s='start'
 
+# o / oo — one implementation for mac, WSL and Linux: open/smart-open.ts (PATH command `smart-open`,
+# a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,
+# else here; a path always opens here (WSL: converted to a Windows path for explorer.exe).
+alias o='smart-open'
+alias oo='smart-open .'
+
 # alias sudo='sudo -E '
 
 # Quick source and edit

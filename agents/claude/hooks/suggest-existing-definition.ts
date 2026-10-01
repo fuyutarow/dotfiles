@@ -1,0 +1,115 @@
+// PostToolUse (Write|Edit|MultiEdit) — the moment a NEW function or type is written, check whether
+// the repository already has one that does the same thing, and say so to the model.
+//
+// WHY A HOOK. Re-implementation happens when nobody searched, not when the search was poor:
+// builders wrote kernels that already existed (firedancer, 2026-10-01). `repo-retrieve definition`
+// answers the question well, but only if asked; this asks for them at the one moment it matters.
+//
+// What it does: finds definitions in the inserted text that were not in the replaced text (Write:
+// the whole file is new text), describes each by its doc comment + signature + first body lines,
+// and runs the definition search (agents/retrieval-control/definitions.ts) excluding itself. Only a
+// STRONG match (the same function, by the reranker's log-odds) is reported — a "maybe" would be
+// noise on every edit. At most two new definitions per edit are checked.
+//
+// Channel: additionalContext (the model reads it; the edit already happened, so it is advice: use
+// the existing one, or say why not). Fail-open: no ccc project, no catalog, no reranker, a timeout —
+// any of these exits 0 silently. Never a gate.
+
+import { relative } from "node:path";
+import { findDefinitions, type Definition } from "../../retrieval-control/definitions.ts";
+import { findRegisteredProject } from "../../retrieval-control/ccc-index.ts";
+import { attempt } from "../../hooks/attempt.ts";
+import { readStdinJson } from "./lib.ts";
+
+const MAX_CHECKS = 2;
+const REPORT_AT = 5; // reranker log-odds (+ priors); bench: correct same-function hits score 5-10
+
+// Definition headers by language: name in group 1. Line-start anchored so calls do not match.
+const HEADERS: Record<string, RegExp[]> = {
+  jl: [/^\s*function\s+(?:[\w.]+\.)?([\p{L}_][\p{L}\p{N}_!]*)\s*[({]/gmu, /^([\p{L}_][\p{L}\p{N}_!]*)\(.*\)\s*(?:where\s.*)?=(?!=)/gmu],
+  py: [/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm],
+  ts: [
+    /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]/gm,
+    /^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/gm,
+  ],
+  rs: [/^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gm],
+};
+HEADERS.tsx = HEADERS.ts ?? [];
+HEADERS.js = HEADERS.ts ?? [];
+HEADERS.mjs = HEADERS.ts ?? [];
+
+type NewDef = { name: string; text: string };
+
+function definitionsIn(text: string, ext: string): NewDef[] {
+  const lines = text.split("\n");
+  const out: NewDef[] = [];
+  for (const re of HEADERS[ext] ?? []) {
+    for (const m of text.matchAll(re)) {
+      const name = m[1] ?? "";
+      const line = text.slice(0, m.index).split("\n").length - 1;
+      // The comment/docstring above, the header, and the first lines of the body: what a reader
+      // would use to say what this does.
+      const above = lines.slice(Math.max(0, line - 8), line).join("\n");
+      const head = lines.slice(line, line + 12).join("\n");
+      out.push({ name, text: `${above}\n${head}`.trim().slice(0, 900) });
+    }
+  }
+  return out;
+}
+
+function insertedAndReplaced(input: Record<string, unknown>): { added: string; removed: string } {
+  if (typeof input.content === "string") return { added: input.content, removed: "" };
+  const edits = Array.isArray(input.edits) ? (input.edits as Record<string, unknown>[]) : [input];
+  return {
+    added: edits.map((e) => (typeof e.new_string === "string" ? e.new_string : "")).join("\n"),
+    removed: edits.map((e) => (typeof e.old_string === "string" ? e.old_string : "")).join("\n"),
+  };
+}
+
+async function main(): Promise<void> {
+  const payload = readStdinJson();
+  if (payload?.hook_event_name !== "PostToolUse") return;
+  const input = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const file = typeof input.file_path === "string" ? input.file_path : "";
+  const ext = file.split(".").at(-1) ?? "";
+  if (!HEADERS[ext]) return;
+  const project = findRegisteredProject(file.slice(0, file.lastIndexOf("/")) || ".");
+  if (!project) return;
+
+  const { added, removed } = insertedAndReplaced(input);
+  const before = new Set(definitionsIn(removed, ext).map((d) => d.name));
+  const fresh = definitionsIn(added, ext).filter((d) => !before.has(d.name)).slice(0, MAX_CHECKS);
+  if (fresh.length === 0) return;
+
+  const rel = relative(project, file);
+  const findings: string[] = [];
+  for (const d of fresh) {
+    // Its own file is skipped: the catalog may already hold the new text, and sibling helpers
+    // written in the same edit are related by construction, not duplicates.
+    const self = (x: Definition) => x.file === rel;
+    const a = await findDefinitions(project, d.text, 3, self);
+    const top = a.cards[0];
+    if (!a.reranked || !top || top.score < REPORT_AT) continue;
+    findings.push(
+      `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, score ${top.score.toFixed(1)}): ` +
+        `${top.signature.slice(0, 140)}`,
+    );
+  }
+  if (findings.length === 0) return;
+  console.log(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext:
+          "existing-definition check (repo-retrieve definition): the definition you just wrote may duplicate one " +
+          "that already exists.\n" +
+          findings.join("\n") +
+          "\nRead it. If it does what you need, use it and remove the new one; if not, keep yours and say in one " +
+          "line what differs.",
+      },
+    }),
+  );
+}
+
+await attempt(main);
+process.exit(0);

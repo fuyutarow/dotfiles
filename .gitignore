@@ -44,3 +44,6 @@ node_modules/
 # agent-resource-run writes each job's measured peak beside its manifest (<manifest>.peak.json);
 # a runtime receipt, not source.
 *.resource.json.peak.json
+
+# Python bytecode (the ccc-interpreter helpers in agents/)
+__pycache__/

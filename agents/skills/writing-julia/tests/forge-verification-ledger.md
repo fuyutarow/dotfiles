@@ -608,3 +608,11 @@ and `tests/trigger-set.md` mention 1.11 as the `public` introduction/floor, whic
 (job `job2610-julia-compat-gate-test`, exit 0), the function extracted from the asset itself:
 `"1.13"` PASS, `"1.10"` FAIL, `"1.11, 1.13"` PASS, missing entry FAIL, all as expected.
 skill-check: prose-debt WARN counts equal the pre-edit copy (157 reference / 10 core, waiver unchanged).
+
+
+## 2026-10-01 — description routes a new repo/project to wiring-repositories first
+
+Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a session loaded only the language skill and
+never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
+description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
+this skill then owns the language manifest. skill-check clean; listing within budget.

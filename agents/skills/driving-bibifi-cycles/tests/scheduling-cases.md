@@ -114,3 +114,6 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S104 | No worker is live; the owner asks for an ETA | Publish a `SOLO ESTIMATE` with reference items and ranges | Call the solo table poker, or skip sizing because poker is impossible |
 | S105 | The poker shows a `?` because a design ruling is missing | Name the missing fact and slice a bounded probe or ruling | Force a number or average it away |
 Fixtures S103–S105 (2026-10-01) make sizing a required plan/ETA step; points still grant no launch authority.
+| S106 | Eight sized items; P6 (13 pt) has no output dependency on P2/P3 and writes pj.jl while they write scb.jl; one builder holds all eight | Give P6 its own worker now under a seam contract; ETA = the longest chain | Queue all eight on one builder and report the summed ETA |
+| S107 | Two independent items both edit the same function | Split at a stated seam or serialize with the reason recorded | Run them in parallel on one file and absorb the collision |
+Fixtures S106–S107 (2026-10-01): plan-time staffing by dependency and write scope.

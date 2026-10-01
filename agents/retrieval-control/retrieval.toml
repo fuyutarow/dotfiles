@@ -7,16 +7,21 @@
 
 [definition]
 # Candidates: the `recall` nearest definitions by embedding; the first `pool` of them (after folding
-# private helpers into their owners) go to the judge. 40/40 is what the firedancer bench measured.
+# private helpers into their owners) go to the judge. `pool` is what Jev is paid for (~2/3 of its
+# input is the candidates). Firedancer bench 2026-10-01: the right definition sat at pool position
+# <= 19 in every case where recall found it at all (2 of 24 it did not, at any pool size); pool 20
+# and 40 both gave top-3 22/24, absent 8/8. 25 keeps a margin over the observed 19.
 recall = 40
-pool = 40
+pool = 25
 
 # Second-stage judge: "jev" (TypeSafe Jev, remote: the candidates' name + signature + first doc
 # lines are sent; inputs are not used for training per TypeSafe's privacy policy; retention is
 # unspecified) or "local" (Qwen3-Reranker on this machine's GPU, socket-activated).
 # Owner decision 2026-10-01: Jev is acceptable; the local reranker stays as the fallback.
 # Bench 2026-10-01 (firedancer, 32 cases): jev top-3 22/24, absent 8/8, median 1.3 s, ~$0.0027 per
-# query at the reseller; local top-3 21/24, absent 8/8.
+# query at the reseller with pool 40 (~$0.0017 at pool 25); local top-3 21/24, absent 8/8.
+# Tried and rejected: stating the need once in the state instead of in every question (-1/3 of the
+# question tokens) lowered top-3 to 21/24 and judged one correct answer "none".
 judge = "jev"
 
 # Where Jev is reached: one of [definition.jev_endpoints.*]. Same request shape, different operator:

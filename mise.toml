@@ -544,7 +544,7 @@ description = "Apply declarative macOS system defaults (single source: macos/def
 run = 'bun ~/dotfiles/macos/defaults.ts'
 
 [tasks."mac:obsidian"]
-description = "Merge obsidian/app.json into every registered Obsidian vault (single source: obsidian/app.json)"
+description = "Bring every registered Obsidian vault in line with obsidian/: merge app.json keys, install + enable sha256-pinned plugins.json"
 run = 'bun ~/dotfiles/obsidian/apply.ts'
 
 [tasks."mac:iterm2"]

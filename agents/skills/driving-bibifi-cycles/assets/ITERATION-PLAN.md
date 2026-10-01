@@ -21,7 +21,7 @@ Keep cross-arm details outside blind workers' read sets. This is not a new datab
 ```text
 OUTCOME / CONSTRAINTS: <source locator; requirements retained by this slice>
 DECISION / CONSUMER: <observed obstacle; current consuming test/task; distinct returns -> next actions>
-FIRST RETURN: <checkable output on the required path; dispatch time -> due time; parent inspection>
+FIRST RETURN: <output; estimated duration range + evidence/assumptions; dispatch -> due time; parent inspection>
 BUILD -> BREAK -> FIX: <reuse/transfer; smallest change; relevant control; conditional correction>
 BINDING / OWNER: <code/input/statement version; actual entry/device; read/write scope and owner>
 FIT / STOP: <only after purpose/return checks; P7 resource and effective budget receipts; lifetime/invalidation>
@@ -37,7 +37,7 @@ Resource and lifetime rules remain in the core and P7; a prompt deadline does no
 ```text
 OBSERVED: <artifact + exact binding + evidence/proof status, or actual blocker>
 DECISION: <new discovery / enabling work / failed operation; obligation actually closed with matching path/receipt, or still-open consumer check; retain/fix/reject/narrow>
-COST / RELEASE: <actual phases and peak RAM/VRAM; process stop/release; NONCOMPUTE hand-back>
+COST / RELEASE: <predicted vs actual return/time and changed phase/assumption; peak resources; stop/release>
 CONSUMED / NEXT: <consumer receipt or pending; affected tickets continued/re-sliced/stopped; next launch>
 PARENT ACTION: <observed event and locus -> decision -> tool/action receipt -> consumer read-back>
 ```

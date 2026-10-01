@@ -4,17 +4,13 @@ This is a work record, not a substitute for execution. A BIBIFI invocation must 
 
 ## Shared context
 
-- Goal/completion; prior release ETA or initial baseline; next decision event or requested report (JST).
-- New knowledge sought; enabling repair and the discovery it unlocks; critical dependency.
-- Current code/input/statement/premise bindings and applicable validity/authority records.
-- For scientific diagnosis: contrast, live rivals, predictions/exclusions and candidate revision via STRONG-INFERENCE.md.
-- Available/reserved CPU/RAM/VRAM, actual GPU load and agent slots; UNKNOWN when unconfirmed.
-- Orchestration capability receipts relevant to this work; parent intervention point and write owners.
-- If waiting: exact unavailable observation; current dependency receipt or plausible independent options checked.
-- Ready work: critical return plus independent useful slices; each held slice names its actual missing input or resource.
+- Authorized outcome, hard constraints and their source; current accepted result.
+- Observed obstacle, live consumer and first decision that can change.
+- Existing evidence/code/statement bindings; predecessor and carryover obligation when applicable.
+- Prior release ETA and its evidence; unresolved success dependencies remain conditional.
 
-Refresh changed facts only. Keep cross-arm details outside blind workers' read sets.
-Separate agent-ready work from compute-admission waits; neither needs a new database.
+Apply the core admission order before adding work to this board. Reuse unchanged context.
+Keep cross-arm details outside blind workers' read sets. This is not a new database.
 
 | Ticket/owner | Question/consumer | State and latest artifact | Agent work / compute footprint | First return / lifetime | Invalidation / next branch |
 |---|---|---|---|---|---|
@@ -23,26 +19,18 @@ Separate agent-ready work from compute-admission waits; neither needs a new data
 ## MICROTICKET — inherit unchanged context by exact locator
 
 ```text
-QUESTION / CONSUMER: <one useful decision; checked result and who consumes it>
-BUILD -> BREAK -> FIX: <small artifact/witness; baseline/control/criterion; conditional next action>
-BINDING / VALIDITY: <premise + code/input/statement versions; known limits and owner records>
-DEPENDENCY / SENSITIVITY: <execution prerequisite vs claim/writer/queue gate; path from intervention to observable>
-OWNER / FIT: <read/write scope; agent phase vs admitted compute; actual device reason/resources>
-RETURN / STOP: <first decision-changing return; absolute queue/lifetime deadline; invalidation; consumer>
-PARENT INTERVENTION: <next event/time; job/log/partial-artifact locus to inspect; action owner>
-BUDGET BINDING: <executed workload; target duration; user/domain cap source and any explicit exception; effective cap; launch value; stop/cleanup receipt>
-CONTENTION: <current progress/rate; protected critical CPU/RAM/VRAM bundle and start window; add/hold/reduce decision>
+OUTCOME / CONSTRAINTS: <source locator; requirements retained by this slice>
+DECISION / CONSUMER: <observed obstacle; current consuming test/task; distinct returns -> next actions>
+FIRST RETURN: <checkable output on the required path; dispatch time -> due time; parent inspection>
+BUILD -> BREAK -> FIX: <reuse/transfer; smallest change; relevant control; conditional correction>
+BINDING / OWNER: <code/input/statement version; actual entry/device; read/write scope and owner>
+FIT / STOP: <only after purpose/return checks; P7 resource and effective budget receipts; lifetime/invalidation>
 ```
 
-The first useful return fits the next six-minute window, earlier if another result may invalidate it.
-This applies to theory, implementation, integration and launcher repair. A whole future sequence is a conditional backlog.
-An experiment targets about two minutes and stops at ten maximum, including launched setup/compile.
-The worker/queue lifetime also bounds preparation, wait and hand-back; a prompt is not a process timer.
-Admission retries retain that deadline. A bound violation cannot be fixed by extending the envelope.
-If polling is needed, bind its interval and finite attempts to that same absolute deadline.
-Physical availability, live reservations and observed peaks are different measurements; record them separately.
-Launch useful independent agent work across fitting slots while compute waits; no small-team quota.
-For idle resources, identify the inspected useful slices and actual remaining constraint.
+Check `due - dispatch <= six minutes` before dispatch, including implementation and theory.
+If a full result cannot fit, select one meaningful witness while retaining the hard constraints.
+Do not shorten the path by changing required device, model, evidence access or acceptance criteria.
+Resource and lifetime rules remain in the core and P7; a prompt deadline does not enforce a process cap.
 
 ## Return, consumption and next action
 

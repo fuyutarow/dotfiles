@@ -27,7 +27,7 @@ Use the existing issue/finding's completion predicate and evidence locators. No 
 | Obligation | Sufficient scope of the receipt | What stays open |
 |---|---|---|
 | A construction or scratch repair works | Exact supplied assumptions, code, inputs and observed outputs | Transfer into another implementation/path |
-| The claimed production path now learns | The registered launcher and actual adapter/model interface consume the update; a positive beyond trivial baseline and a no-update negative reach that same path | A local fixture, untested tasks, settings and robustness |
+| The claimed production path now learns | Its declared entry and adapter/model interface consume the update; a positive beyond trivial baseline and a no-update negative reach that path. Use the registry when the claim requires it | A local fixture, untested tasks, settings and robustness |
 | A registered result is available | Bound execution plus accepted read-back and EV0–EV4 disposition | Any broader concept or performance obligation |
 | A family is robust across seeds/lengths | Predeclared family coverage and aggregation, including failed cells | Unmeasured members; one good seed cannot close the family |
 | Structural or performance conformance survived a revision | Recheck the affected requirement against the new structure or measurement | Output/state bit equality alone cannot preserve parallel span, task independence, memory or speed claims |
@@ -36,8 +36,8 @@ For each closing statement, name the obligation and receipt that satisfies it. I
 record the enabling result and the smallest missing consumer check; leave that obligation open.
 Do not require registered publication for an obligation whose predicate is only a local construction.
 
-When a replacement loses a predecessor's working behavior on matched inputs,
-record the carryover miss. Keep it even if the predecessor fails the new concept.
+When a replacement misses a declared carryover obligation on matched inputs,
+record that miss. Keep it even if the predecessor fails the new concept.
 
 That predecessor is a transfer oracle, not an eligible prior achievement.
 Only eligible matched rows can support a concept-regression claim.

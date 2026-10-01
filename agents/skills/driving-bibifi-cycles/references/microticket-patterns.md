@@ -23,11 +23,14 @@ Use the existing work record; each estimate names scope, evidence, assumptions a
 | What is uncertain? | Method | Decision it supports |
 |---|---|---|
 | Duration of known repeatable work | Comparable completed runs, phase costs and current admitted concurrency; include setup, checks, recording and waits | A duration range and whether the first return fits |
-| Implementation scope or hidden work; informed participants see different approaches | Optional Planning Poker below | Clarify scope, reuse, integration risk or a useful split |
+| Implementation scope or hidden work; 2+ informed estimators exist | Planning Poker below (required) | Clarify scope, reuse, integration risk or a useful split |
+| Implementation scope or hidden work; parent alone | `SOLO ESTIMATE` with reference items and ranges | The same decisions, without a consensus claim |
 | Whether the mechanism can work at all | Bounded discriminator with retain/revise/reject outcomes | Estimate the investigation; successful implementation stays UNKNOWN |
 
-### Optional Planning Poker
+### Planning Poker
 
+Required before a plan of 2+ tickets or an ETA when 2+ informed estimators exist.
+The parent writes its own estimates to a sealed record before asking anyone.
 Use a shared acceptance scope and reference items. People doing the work estimate
 privately, then reveal together. Discuss the high/low assumptions before re-estimating.
 Retain disagreement if a missing fact remains; select a bounded probe or split.

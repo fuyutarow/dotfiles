@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.5.0 (2026-10-01) — choose execution by time to the next consumed result, including startup.
+> **Version**: v2610.6.0 (2026-10-01) — sizing is required before a multi-ticket plan or ETA; poker when 2+ estimators exist.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -80,7 +80,14 @@ Do these checks in order; resource availability cannot waive an earlier failure.
 | 6. Consume | Read the result, apply its scoped implication and re-evaluate dependent work now. | An unconsumed report or sent message does not close the ticket. |
 
 For a benchmark goal, use current registry/EV evidence and the outcome table in `references/microticket-patterns.md`.
-For uncertain task size or ETA, use that reference's estimation lookup; poker is optional, not launch authority.
+Size every item before publishing a plan of 2+ tickets or any release ETA; use that reference's estimation lookup.
+
+| Informed estimators available | Required method |
+|---|---|
+| Parent plus 1+ worker with its own code/run context | Planning Poker: parent seals its estimates first; workers estimate blind; reveal; discuss high/low |
+| Parent alone | Label the table `SOLO ESTIMATE` with reference items and ranges; never call it poker |
+
+Estimates never authorize a launch and never relax the six-minute first return.
 For an anomaly, use `references/scientific-loop.md` to construct a discriminating return, not a mandatory study phase.
 Use `references/skill-composition.md` for content ownership; routine repairs need only a failing witness.
 

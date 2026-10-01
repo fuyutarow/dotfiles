@@ -996,3 +996,13 @@ to the edited source. The pre-staging collection floor returned0 (75 skills,
 check alone does not verify an unstaged body. Description and sibling cuts are unchanged.
 Serial decision review retained S97/S98/S101 so the direct default cannot prohibit
 warm parallel reuse, required independent review or justified workflow amortization.
+
+## 2026-10-01 v2610.6.0 — sizing becomes a required plan/ETA step
+
+Failure: the owner asked for scrum poker repeatedly (15:2x and 18:0x JST, firedancer). The executor published lone point
+tables, which is the pseudo-poker failure already recorded in postmortem-2026-10-01 line 33, and skipped sizing otherwise.
+Structural cause: SKILL.md said "poker is optional", and no admission or report step required sizing, so the executor could
+always skip it. Change: SKILL.md now has a lookup keyed by the available estimators (poker vs labeled SOLO ESTIMATE), required
+before a plan of 2+ tickets or any release ETA. The reference heading drops "Optional", and the parent's estimates must be sealed
+before workers are asked. Fixtures S103–S105 were added. Unchanged: points never authorize launch; the six-minute first return
+stands. Description is unchanged ("planning poker / スクラムポーカー" already triggers). Verification: scoped skill-check below.

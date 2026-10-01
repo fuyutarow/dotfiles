@@ -86,10 +86,12 @@ interface RateWindow {
 interface StatusInput {
   cwd?: string;
   session_id?: string;
-  // stdin also carries a `session_name` field. Deliberately NOT read: it can independently hold
-  // an AI-generated conversation title instead of the real cross-session-addressable name
-  // (caught live 2026-08-28 — one session showed its title here while `claude agents --json`
-  // still had the real name "firedancer-1d"). See buildDataframe()'s sessionName lookup instead.
+  // NOT the displayed name: it can hold an AI-generated title instead of the real
+  // cross-session-addressable name (caught live 2026-08-28 — one session showed its title here
+  // while `claude agents --json` still had "firedancer-1d"). Read only as a CHANGE SIGNAL: it is
+  // the custom title (or AI title) and moves the instant /rename runs, so a new value bypasses
+  // the name cache's TTL (see agentName()).
+  session_name?: string;
   workspace?: { current_dir?: string };
   model?: { display_name?: string; id?: string };
   context_window?: {
@@ -367,7 +369,9 @@ const AGENT_NAME_TTL_MS = 30_000;
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
-type AgentNameEntry = { name?: string; at: number };
+// `hint`: the stdin session_name seen when this entry was fetched — a different value now means
+// the session was renamed, so the entry is stale regardless of age.
+type AgentNameEntry = { name?: string; at: number; hint?: string };
 // Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
 // entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
 // under max-depth; the exactOptionalPropertyTypes name-omission below is unchanged.
@@ -386,15 +390,21 @@ function agentNameEntries(
   }
   return next;
 }
-function agentName(sid: string): string | undefined {
+function agentName(sid: string, hint?: string): string | undefined {
   // missing / corrupt cache file -> treat as empty and refetch below
   const cache: Record<string, AgentNameEntry> = fromThrowable(
     (): Record<string, AgentNameEntry> =>
       JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
   )().unwrapOr({});
   const hit = cache[sid];
+  // A /rename shows up here first: the stdin session_name moves at once, while the cached name
+  // would lag up to the TTL (and the herdr tab with it). Only a KNOWN previous value can differ —
+  // an entry with no stored hint is not treated as renamed.
+  const renamed =
+    hit?.hint !== undefined && hint !== undefined && hit.hint !== hint;
   if (
     hit != null &&
+    !renamed &&
     Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
   )
     return hit.name;
@@ -416,6 +426,11 @@ function agentName(sid: string): string | undefined {
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.value, now);
   if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
+  // Keep every session's last-seen hint across this whole-file rewrite; record ours.
+  for (const [id, entry] of Object.entries(next)) {
+    const seen = id === sid ? hint : cache[id]?.hint;
+    if (seen !== undefined) entry.hint = seen;
+  }
   // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
   // value below still returned, just not persisted.
   fromThrowable(() => {
@@ -769,7 +784,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
   const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
   const sid = data.session_id || undefined; // "" is not an id either
-  const sessionName = sid != null ? agentName(sid) : undefined;
+  const sessionName =
+    sid != null ? agentName(sid, data.session_name || undefined) : undefined;
   const cj = readClaudeJson();
   const email = account(cj);
   const rlModel = modelWeeklyLimits(cj);

@@ -3,6 +3,7 @@
 **SOLE owner:** model API, NN primitives, execution mode, device, and AD selection at their intersection.
 General host-function differentiation belongs to `autodiff.md`; dependency declarations to `packaging.md`.
 Device-kernel implementation belongs to `optimizing-julia-gpu-kernels`.
+Device ownership of authored, non-framework states belongs to `architecture.md` §10.10.
 
 ## Select the execution contract first
 

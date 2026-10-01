@@ -965,3 +965,34 @@ and disagreement resolved by inspection. F13/N12 separate live planning from a
 plain explanation. These are static decision checks; no agent-panel or real
 delivery-accuracy improvement was measured. Domain-specific point ceilings,
 speed targets, device choices and benchmark identities were not adopted.
+
+## 25. Workflow startup must earn its latency — v2610.5.0
+
+Source: the user's2026-10-01 follow-up to the workflow-overhead rationale, with a supplied
+retrospective ending in “conformance0/8, next launch a workflow to decide the design”.
+This is user-reported behavior, not an independently rerun model audit. The defect in the
+incumbent was directly inspected: ordered admission checked resources but did not choose
+direct/reused/new execution, and event rows said to launch whenever work became ready.
+
+The incumbent owns work selection. The patch replaces that launch default with a bounded
+execution lookup and charges startup, context loading, waiting, compile, hand-back and
+parent consumption. C0 retains dispatch mechanics and P7 retains resource enforcement.
+No sibling, launcher, memory rule, reporting cron or new artifact store is added.
+Conformance failure now selects one preserved-predicate repair/counterexample; it cannot
+authorize a fresh whole-design phase or weaker acceptance test.
+
+Static fixtures S95–S102 cover direct execution, warm reuse, required independence,
+unknown overhead, clock reset, amortized workflow benefit and early branch invalidation.
+Two corresponding tool-backed rehearsal cases are specified in operational-rehearsal.md.
+Verification scope: scoped structural floor and serial adversarial decision review;
+F3 independent-agent comparison is waived for this bounded amendment. No fresh OLD/NEW
+operational trial or discovery-throughput improvement is claimed. The change is instruction
+and fixture repair, not proof that a previously running agent has reloaded the skill.
+
+Checks on2026-10-01: scoped `skill-check.ts` returned0 with no warnings after shortening
+five long sentences. `mise run link:skills` returned0; Claude and Codex links resolve
+to the edited source. The pre-staging collection floor returned0 (75 skills,
+65,813 listing characters;107 existing warnings across57 skills); that staged-index
+check alone does not verify an unstaged body. Description and sibling cuts are unchanged.
+Serial decision review retained S97/S98/S101 so the direct default cannot prohibit
+warm parallel reuse, required independent review or justified workflow amortization.

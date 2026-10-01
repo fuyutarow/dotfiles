@@ -262,7 +262,31 @@ describe("admission", () => {
       ]),
     );
     expect(result.reason).toContain("VRAM request");
-    expect(result.reason).toContain(`${1536 * MiB} available`);
+    // 12 GiB - (10 GiB declared + 5 GiB standing ccc/reranker partitions) - safety -> clamped to 0.
+    expect(result.reason).toContain("0 available");
+    expect(result.reason).toContain(`${5 * GiB} bytes of standing service partitions`);
+  });
+
+  test("standing service partitions are reserved before any job, used or not", () => {
+    // Shipped policy: ccc 3 GiB + reranker 2 GiB on GPU 0. The card reads 1 GiB used (services
+    // idle), yet a job sees 12 - 5 - 0.5 = 6.5 GiB, never the 10.5 GiB the instantaneous reading
+    // suggests.
+    const snapshot = hostSnapshot({
+      gpus: [{ id: 0, total_bytes: 12 * GiB, used_bytes: GiB, utilization_percent: 0 }],
+    });
+    const big = gpuManifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 7 * GiB } });
+    const fits = gpuManifest({ device: { kind: "gpu", gpu_id: 0, vram_peak_bytes: 6 * GiB } });
+    const refused = denied(decideAdmission(big, snapshot, []));
+    expect(refused.reason).toContain(`${6.5 * GiB} available`);
+    expect(refused.reason).toContain("standing service partitions");
+    expect(decideAdmission(fits, snapshot, []).ok).toBe(true);
+    // Another device carries no partition.
+    const gpu1 = hostSnapshot({
+      gpus: [{ id: 1, total_bytes: 12 * GiB, used_bytes: GiB, utilization_percent: 0 }],
+    });
+    expect(
+      decideAdmission(gpuManifest({ device: { kind: "gpu", gpu_id: 1, vram_peak_bytes: 10 * GiB } }), gpu1, []).ok,
+    ).toBe(true);
   });
 
   test("observed device usage still floors the ledger above the declarations", () => {
@@ -444,6 +468,9 @@ describe("resource policy", () => {
       gpu_soft_limit_fraction: 0.9,
       default_monitor_interval_ms: 200,
       gpu_vram_sample_interval_ms: 1_000,
+      gpu_partition_device: 0,
+      gpu_partition_ccc_bytes: 3072 * MiB,
+      gpu_partition_rerank_bytes: 2048 * MiB,
     };
     expect(loadResourcePolicy(shippedPolicyPath)).toEqual(expected);
     expect(resourcePolicyPath()).toBe(shippedPolicyPath);

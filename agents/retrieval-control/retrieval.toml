@@ -9,7 +9,7 @@
 # Candidates: the `recall` nearest definitions by embedding; the first `pool` of them (after folding
 # private helpers into their owners) go to the judge. 40/40 is what the firedancer bench measured.
 recall = 40
-pool = 40
+pool = 20
 
 # Second-stage judge: "jev" (TypeSafe Jev, remote: the candidates' name + signature + first doc
 # lines are sent; inputs are not used for training per TypeSafe's privacy policy; retention is

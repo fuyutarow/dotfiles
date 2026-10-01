@@ -82,6 +82,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── karabiner/   # keyboard remap (macOS only)
 ├── macos/       # declarative `defaults write` system settings (macOS only, defaults.ts)
 ├── iterm2/      # terminal prefs, synced via iTerm2's own custom-folder mechanism (macOS only)
+├── edge/        # Microsoft Edge managed policy (macOS only): blocklist + pinned default search; COPIED with sudo by `mise run edge:policy`, checked by doctor
 ├── wsl/         # /etc/wsl.conf system config (WSL only)
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),

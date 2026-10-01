@@ -22,6 +22,7 @@
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
+//   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
 //   smart-open  ssh/config + smart-open/sockets.ts
 //                                                r99-wsl's RemoteForward joins the two socket paths
 //                                                smart-open and its receiver actually use
@@ -737,6 +738,30 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
   );
 }
 
+// Delegates to scripts/edge-policy.ts --check, which owns the destination and the comparison.
+export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
+  if (!existsSync("/Applications/Microsoft Edge.app"))
+    return skip("edge-policy", "Microsoft Edge is not installed");
+  const r = await run(
+    ["bun", join(ctx.dotfiles, "scripts/edge-policy.ts"), "--check"],
+    { ms: 20_000 },
+  );
+  if (r.timedOut)
+    return warn("edge-policy", "edge-policy.ts --check timed out after 20s");
+  if (r.code === 0)
+    return pass(
+      "edge-policy",
+      "the live Edge policy matches edge/policy.plist.mac",
+    );
+  const detail =
+    r.out.split("\n").find((l) => l.startsWith("FAIL")) ?? `exit ${r.code}`;
+  return fail(
+    "edge-policy",
+    detail.replace(/^FAIL edge-policy: /, ""),
+    "mise run edge:policy (asks for sudo)",
+  );
+}
+
 // ssh/config's `Host r99-wsl` forwards the REMOTE's smart-open socket to THIS machine's receiver.
 // Both ends are code (smart-open/sockets.ts); the forward is ssh syntax (%r, %d) that cannot
 // import them, so the only guard against drift is to ask ssh what it RESOLVES and compare. A
@@ -806,6 +831,11 @@ export const CHECKS: Check[] = [
   { name: "mcp", run: checkMcp, applies: always },
   { name: "codex-remote", run: checkCodexRemote, applies: always },
   { name: "smart-open", run: checkSmartOpen, applies: always },
+  {
+    name: "edge-policy",
+    run: checkEdgePolicy,
+    applies: (c) => (c.isMac ? null : "macOS only"),
+  },
   {
     name: "wslconfig",
     run: checkWslconfig,

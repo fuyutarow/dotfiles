@@ -551,6 +551,10 @@ run = 'bun ~/dotfiles/obsidian/apply.ts'
 description = "Point iTerm2 at dotfiles/iterm2/ as its preferences folder (single source: iterm2/setup.sh)"
 run = 'bash ~/dotfiles/iterm2/setup.sh'
 
+[tasks."edge:policy"]
+description = "Deploy edge/policy.plist.mac as Microsoft Edge's managed policy (/Library/Managed Preferences, sudo): blocks the extension that hijacked the default search and pins the engine. --check compares only (no sudo). macOS only."
+run = 'bun ~/dotfiles/scripts/edge-policy.ts'
+
 [tasks."mac:rosetta"]
 description = "Install Rosetta 2 on Apple Silicon (idempotent no-op on Intel or if already installed)"
 run = 'bun ~/dotfiles/scripts/mac-rosetta.ts'
@@ -584,7 +588,7 @@ description = "Audit recommended tools against the Brewfile (single source: scri
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
 [tasks.doctor]
-description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
+description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, the Edge managed policy, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
 run = 'bun ~/dotfiles/scripts/doctor.ts'
 
 # FLAGGED 2026-09-09, not yet acted on: unlike check:tools (renamed to tools:audit, above),

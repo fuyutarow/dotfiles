@@ -5,8 +5,9 @@ description: >-
   formatting/linting, or LaTeX repository hygiene. Prefer modern repo-native task setup: mise
   tasks, tex-fmt formatting, ChkTeX linting, latexmk builds, Poppler visual PDF verification,
   and deliberate .gitignore rules. Trigger for “compile/build PDF”, “LaTeX error”, “Beamer”,
-  “format/lint TeX”, “tlmgr”, “tex-fmt”, “chktex”, “latexmk”, “papers directory”, or
-  “gitignore for LaTeX artifacts”.
+  “format/lint TeX”, “tlmgr”, “tex-fmt”, “chktex”, “latexmk”, “papers directory”,
+  “gitignore for LaTeX artifacts”, or a format-only manuscript cleanup (清書, マクロ整理/断捨離,
+  preamble cleanup) proven by output.
 ---
 
 # Modern LaTeX / Beamer Workflow
@@ -31,6 +32,21 @@ Use executable repo configuration over long natural-language procedures. For pro
 - Name each paper/slide directory `{yymm}_{seq}-{title_name}`, where `title_name` uses underscores.
   The parent is `papers/` in a plain repo. A research notebook repo uses `deliverables/papers/` or `deliverables/slides/`.
   That placement is owned by `keeping-research-notebooks` homes §0; the name stays here.
+
+## Manuscript cleanup (清書) — format only, proven by output
+
+A format-only cleanup changes the source (macros, preamble, engine, floats, markup), never the content.
+The typeset output is the proof, not the diff. Gates, stage table, traps and oracles:
+`references/manuscript-cleanup.md`; evidence tool: `scripts/tex-oracle.ts`.
+
+| Gate | Artifact |
+|---|---|
+| MC0 baseline | the current source rebuilt with its original engine (a shipped PDF may be stale) |
+| MC1 census | `bun scripts/tex-oracle.ts census main.tex <inputs>` read, REDEFINED and TRAP lines included |
+| MC2 stage 1 identical | `tex-oracle.ts boxes base.pdf stage1.pdf` → BOXES IDENTICAL |
+| MC3 packages | leave-one-out and pairwise bisect of every dropped package |
+| MC4 stage 2 listed | every visible change named first; `words` diff explained; `paras` equal |
+| MC5 content boundary | content defects reported, never fixed in a format task |
 
 ## Environment (toolchain install)
 

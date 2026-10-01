@@ -88,8 +88,9 @@ describe("enforce-search-route", () => {
 
     expect(result.code).toBe(0);
     expect(decision.permissionDecision).toBe("deny");
-    expect(decision.permissionDecisionReason).toContain(
-      "bun ~/.claude/hooks/repo-retrieve.ts",
+    // The short PATH command when it is installed and resolves to this router, else the long path.
+    expect(decision.permissionDecisionReason).toMatch(
+      /(?:^|[\s:;])(?:repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) concept --query/,
     );
     expect(decision.permissionDecisionReason).toContain("literal");
     expect(decision.permissionDecisionReason).toContain("concept");
@@ -192,8 +193,8 @@ describe("enforce-search-route", () => {
       const decision = decisionOf(result.stdout);
 
       expect(decision.permissionDecision).toBe("deny");
-      expect(decision.permissionDecisionReason).toContain(
-        "bun ~/.claude/hooks/repo-retrieve.ts",
+      expect(decision.permissionDecisionReason).toMatch(
+        /(?:repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) concept --query/,
       );
     }
   });

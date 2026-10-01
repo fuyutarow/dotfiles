@@ -16,6 +16,8 @@ The same declared scope and bounds apply to every worker; no numerical research 
 | Installed process cap | Use existing P7 runner on an owned, tiny non-compute lifecycle probe with a short deadline | Effective admission, real timeout, no surviving owned child/group and reservation released |
 | Unsupported runtime | If P7 or a needed tool is unavailable, retain exact failure | Report capability unverified/blocked; no fallback that bypasses the required runner |
 | Scope containment | After every trial, inspect only owned paths/process identities | No live project mutation, external message, orphan job or unbounded wait |
+| Avoid unnecessary startup | Supply one located failed predicate and a directly executable, bounded file-only check; offer an optional new workflow with greater or unknown overhead | Executor performs and consumes the direct check; no design-workflow launch or test weakening |
+| Charge hand-back and invalidate successors | Supply matched direct/reuse/new-path timing receipts, then a decisive result before other branches finish | Selected path includes preparation and consumption costs; parent acts without a barrier and cancels only invalidated successors |
 
 Record tool IDs, exact versions, input/output locators, elapsed/return times and failure receipts.
 Archive only small nonsensitive fixture artifacts with the evaluation receipt where appropriate.

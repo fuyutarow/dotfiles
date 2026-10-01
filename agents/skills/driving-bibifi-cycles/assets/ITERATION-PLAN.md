@@ -21,13 +21,15 @@ Keep cross-arm details outside blind workers' read sets. This is not a new datab
 ```text
 OUTCOME / CONSTRAINTS: <source locator; requirements retained by this slice>
 DECISION / CONSUMER: <observed obstacle; current consuming test/task; distinct returns -> next actions>
-FIRST RETURN: <output; estimated duration range + evidence/assumptions; dispatch -> due time; parent inspection>
+FIRST RETURN: <output; total duration range + evidence/assumptions; selection -> due time; parent inspection>
 BUILD -> BREAK -> FIX: <reuse/transfer; smallest change; relevant control; conditional correction>
 BINDING / OWNER: <code/input/statement version; actual entry/device; read/write scope and owner>
+EXECUTION: <direct / reuse / new; total time to consumed result; why a new actor is needed, if any>
 FIT / STOP: <only after purpose/return checks; P7 resource and effective budget receipts; lifetime/invalidation>
 ```
 
-Check `due - dispatch <= six minutes` before dispatch, including implementation and theory.
+Check the core first-return window before dispatch, including preparation, context loading and parent consumption.
+Starting/rebriefing a worker does not restart that window. Reuse the current ticket's bindings.
 If a full result cannot fit, select one meaningful witness while retaining the hard constraints.
 Do not shorten the path by changing required device, model, evidence access or acceptance criteria.
 Resource and lifetime rules remain in the core and P7; a prompt deadline does not enforce a process cap.

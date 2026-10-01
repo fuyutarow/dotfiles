@@ -31,6 +31,7 @@ brew "uv"           # Python tool runner/installer: `uvx` (ephemeral, preferred)
 # Productivity / TUI
 brew "atuin"        # shell history (Ctrl+R)
 brew "lazygit"      # git TUI (lg)
+brew "jj"           # Jujutsu VCS; colocated with git in dotfiles/firedancer (config: jj/)
 brew "direnv"
 brew "fzf"
 brew "dust"         # better du (du2)

@@ -18,6 +18,7 @@
 import { relative } from "node:path";
 import {
   findDefinitions,
+  isTest,
   type Definition,
 } from "../../retrieval-control/definitions.ts";
 import { findRegisteredProject } from "../../retrieval-control/ccc-index.ts";
@@ -29,18 +30,22 @@ const BUDGET_MS = 8_000; // the catalog is read as is (no rebuild inside an edit
 const REPORT_AT = 5; // reranker log-odds (+ priors); bench: correct same-function hits score 5-10
 
 // Definition headers by language: name in group 1. Line-start anchored so calls do not match.
+// Top-level definitions only (no indentation): a closure or helper inside a function or a test
+// body is local scaffolding, and flagging it was noise (2026-10-01: test helpers `card`/`want`
+// "looked like" HostSnapshot and decideAdmission). Rust methods sit one level inside `impl`, so
+// up to four spaces count there.
 const HEADERS: Record<string, RegExp[]> = {
   jl: [
-    /^\s*function\s+(?:[\w.]+\.)?([\p{L}_][\p{L}\p{N}_!]*)\s*[({]/gmu,
+    /^function\s+(?:[\w.]+\.)?([\p{L}_][\p{L}\p{N}_!]*)\s*[({]/gmu,
     /^([\p{L}_][\p{L}\p{N}_!]*)\(.*\)\s*(?:where\s.*)?=(?!=)/gmu,
   ],
-  py: [/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm],
+  py: [/^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm],
   ts: [
-    /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]/gm,
-    /^\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/gm,
+    /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]/gm,
+    /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/gm,
   ],
   rs: [
-    /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gm,
+    /^ {0,4}(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gm,
   ],
 };
 HEADERS.tsx = HEADERS.ts ?? [];
@@ -91,7 +96,8 @@ async function main(): Promise<void> {
   const input = (payload.tool_input ?? {}) as Record<string, unknown>;
   const file = typeof input.file_path === "string" ? input.file_path : "";
   const ext = file.split(".").at(-1) ?? "";
-  if (!HEADERS[ext]) return;
+  // A test file defines fixtures and helpers by design; reusing them is not the point.
+  if (!HEADERS[ext] || isTest({ file })) return;
   const project = findRegisteredProject(
     file.slice(0, file.lastIndexOf("/")) || ".",
   );

@@ -297,6 +297,9 @@ export type GpuSnapshot = {
   utilization_percent: number;
   // Board power draw in watts; undefined when nvidia-smi reports it as not available.
   power_watts?: number;
+  // The on-demand reranker (repo-retrieve-rerank.service) is running right now. Only then does its
+  // partition count as reserved; undefined = not running.
+  rerank_active?: boolean;
 };
 
 export type HostSnapshot = {
@@ -766,12 +769,29 @@ function probeGpus(): GpuSnapshot[] {
     ),
   )();
   if (spawned.isErr() || spawned.value.exitCode !== 0) return [];
+  const rerankActive = rerankServiceActive();
   return spawned.value.stdout
     .toString()
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map(parseNvidiaSmiGpuRow);
+    .map(parseNvidiaSmiGpuRow)
+    .map((gpu) => (rerankActive ? { ...gpu, rerank_active: true } : gpu));
+}
+
+// The reranker is socket-activated and idle-exits, so its partition is held only while it runs.
+// If it starts after a job took that room, its own start-up check (gpu_partition.py: free VRAM >=
+// partition) refuses, so the two never double-book. No systemd (macOS) → not running.
+function rerankServiceActive(): boolean {
+  if (Bun.which("systemctl") === null || Bun.which("timeout") === null) return false;
+  // bounded: GNU timeout caps the local systemctl query at five seconds.
+  const probe = fromThrowable(() =>
+    Bun.spawnSync(
+      ["timeout", "5s", "systemctl", "--user", "is-active", "--quiet", "repo-retrieve-rerank.service"],
+      { stdout: "ignore", stderr: "ignore" },
+    ),
+  )();
+  return probe.isOk() && probe.value.exitCode === 0;
 }
 
 export function probeHostSnapshot(cwd: string): HostSnapshot {
@@ -887,14 +907,17 @@ type GpuLedger = {
  *
  *   committed = max(reserved + standing, used_bytes)
  */
-/** VRAM the resident services own on this device, whether or not they hold it right now. */
+/**
+ * VRAM the resident services own on this device: the ccc daemon's partition always (it is
+ * resident, used or not), the reranker's only while it is running (it starts on demand and exits
+ * when idle — reserving it permanently took 2 GiB from jobs for a service that is mostly off).
+ */
 export function standingPartitionBytes(
   gpu: GpuSnapshot,
   policy: ResourcePolicy,
 ): number {
-  return gpu.id === policy.gpu_partition_device
-    ? policy.gpu_partition_ccc_bytes + policy.gpu_partition_rerank_bytes
-    : 0;
+  if (gpu.id !== policy.gpu_partition_device) return 0;
+  return policy.gpu_partition_ccc_bytes + (gpu.rerank_active === true ? policy.gpu_partition_rerank_bytes : 0);
 }
 
 function gpuLedger(

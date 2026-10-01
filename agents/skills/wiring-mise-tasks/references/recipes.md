@@ -37,6 +37,13 @@ task description (「JET/Aqua等の追加は依存最小方針により見送り
 repos; **full** (the three dedicated tasks) once `src/` is a real package. A silent starter — no
 written deferral — is drift, not a tier.
 
+**RULING — a notebook repo's Julia root is `packages`, not `.`.** The repo class comes from
+`keeping-research-notebooks` homes §0. In a notebook, every body above takes `--project=packages`.
+Runic takes the path `packages`. `test` is depends-only over one
+`test:<Name>` per member (`julia --project=packages/<Name>.jl -e 'import Pkg; Pkg.test()'`).
+Before the first member exists, `test` prints that the workspace has no member and exits 0;
+the TOKEN still resolves.
+
 **RULING — test's token must resolve even when the suite is blocked.** Three observed shapes:
 plain `Pkg.test()` (beateater, the default); direct smoke script (xoria's
 `julia --project=poc poc/test/smoke.jl`, legal for poc-shaped repos); blocked-with-pointer (qoed:

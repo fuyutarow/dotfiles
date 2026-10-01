@@ -21,8 +21,8 @@ description: >-
 
 # Scaffolding repositories — the SET, the ORDER, and the JOINT
 
-> **Version**: v2610.1.0 (2026-10-01) — a new repo is colocated jj (JJ-1..3). Receipts, calibration, and the F3
-> desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
+> **Version**: v2610.2.0 (2026-10-01) — CLASSIFY splits notebook repos: layout from `keeping-research-notebooks` homes §0 before any manifest.
+> Receipts, calibration, and the F3 desk-check: `tests/forge-verification-ledger.md`. **Durability**: no tool version or
 > per-language recipe is load-bearing here; dated facts live in `references/layers.md`.
 
 ```bash
@@ -143,7 +143,7 @@ answer.
 | VCS: **colocated jj** (`jj git init --colocate`) + `.gitignore` | always — the house suite for a new repo (2026-10-01). Plain git only for a repo whose named consumer cannot coexist with `.jj/`; say which | `driving-jujutsu` (operating); JJ-1..3 below (wiring) |
 | mise `[tools]` pins | the repo runs any tool whose version changes its output | `wiring-mise-tasks` |
 | mise `[tasks]` verb contract | always — the contract is repo-invariant | `wiring-mise-tasks` |
-| language manifest | the repo holds that language's source | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
+| language manifest | the repo holds that language's source; a notebook repo places it per `keeping-research-notebooks` homes §0, never at the root | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
 | `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce — a jj repo always has one (JJ-2) | `operating-the-harness` |
 | `.githooks/` + hooksPath | a check must run at commit time, not only on demand | **this skill** owns the hook's SHAPE (below); `wiring-mise-tasks` owns the task it calls |
 | `.cocoindex_code/` | unknown-name search will happen, and the corpus is too big to read | `driving-cocoindex` |
@@ -160,8 +160,13 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
 
 ## The pipeline
 
-1. **CLASSIFY** — repo, or scratch directory. A scratch directory is never cloned, shared, or
-   written by a second session. It takes `jj git init --colocate` and nothing else. Say so and stop.
+1. **CLASSIFY** — scratch directory, plain repo, or research notebook repo.
+
+   | Class | Predicate | Then |
+   |---|---|---|
+   | scratch | never cloned, shared, or written by a second session | `jj git init --colocate` and nothing else. Say so and stop |
+   | notebook | will hold a records store, several packages, or papers | read `keeping-research-notebooks` homes §0 BEFORE laying any manifest: the root holds config only, packages go under `packages/` |
+   | plain | otherwise | the language owner's default package layout applies |
 2. **ADMIT (S1)** — walk the layer table. For each YES, write the failure it prevents. That list
    is the scaffold plan, and it goes in the commit message.
 3. **LAY (S2)** — in the order above, calling each layer's owner skill for its contents. This

@@ -16,6 +16,9 @@ Rerun after any description or cut edit.
 | 「model を登録したのに最初の公式 run が落ちた。どこが登録漏れ？」 | FIRE: N5 registration table, all registries counted. `writing-julia` co-fires only for package mechanics. |
 | "The conformance rows pass on a fixture, but the official run uses another label layout" | FIRE: N5 (a); fixture-only conformance is red. CO-FIRE `validating-experimental-evidence` (EV0, EV2) for what the row must assert. |
 | 「これどこに置けばいい？ 一元的な入口は？」 (in a gated research repo) | FIRE: homes LOOKUP and Act → ENTRY. |
+| 「複数 project が同居して論文まで書く。ディレクトリ構成はどうあるべき？」 | FIRE: homes §0; packages under `packages/`, papers under `deliverables/papers/`, nothing package-shaped at the root. |
+| "Our notebook repo has Project.toml, src/ and test/ at the root — is that right?" | FIRE: homes §0 predicate; move the package under `packages/`. CO-FIRE `writing-julia` PK0 for the workspace root. |
+| 「論文の図は手元で作った PNG を papers に置いていい？」 | FIRE: homes §1 paper-figure row; the figure comes from a run artifact cited by run id. |
 
 ## Near-miss no-fire
 
@@ -31,6 +34,8 @@ Rerun after any description or cut edit.
 | "Commit my fix in this small personal repo" (no gate, no records store) | `driving-jujutsu` or `driving-git` alone. |
 | 「研究文書の正本はどれ？ 古い報告を廃止したい」 | `governing-research-documentation`. |
 | "Where does this design report go?" (a document, not code or a record) | `governing-research-documentation`; HERE's homes row only points there. |
+| 「単体の Julia ライブラリ。src/ と test/ はどう切る？」 (no records store, one package) | `writing-julia` PK2 alone. |
+| 「論文ディレクトリの名前の付け方と latexmk の設定」 | `compiling-latex` alone. |
 
 ## Co-fire
 

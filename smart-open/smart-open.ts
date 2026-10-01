@@ -9,10 +9,15 @@
 //      screen nobody is in front of — that was the old WSL `o` (explorer.exe, always).
 //   2. this machine: macOS `open`; WSL → explorer.exe (a path converted by `wslpath -w` first,
 //      because explorer.exe reads only Windows paths); other Linux → xdg-open.
-// A PATH never goes to the client: the file lives here, the client cannot see it.
+// A PATH lives here, so the client's Finder cannot show it. Over a live forward it goes to the client
+// as {path, kind, host}, and the receiver opens it as a VS Code Remote-SSH window on THIS box (`host`
+// is $SMART_OPEN_SSH_HOST — the client's own ssh alias for us, sent by ssh/config's SetEnv). When the
+// client cannot do that, the path is NOT opened here either: someone attached remotely is not
+// looking at this box's screen (on WSL, an unattended Windows desktop). --here opens it here anyway.
 //
 // The receiver must ANSWER `ok`. What else the socket can do, and what is said about it (stderr;
-// a missing socket is the everyday local case and stays silent):
+// a missing socket is the everyday local case and stays silent). The fall-throughs to "here" are for
+// a URL; a path stops at `no answer` and `refused` instead (exit 1), for the reason above:
 //   no socket    not attached over ssh, or no forward         → open here, silently
 //   dead bind    ECONNREFUSED: left by a dropped connection.  → open here. sshd re-binds over it where
 //                wsl/sshd-dotfiles.conf is installed; elsewhere it is removed here — but only if it is
@@ -24,14 +29,16 @@
 //   busy         the receiver's rate or connection limit → NOT opened anywhere, exit 1. The limit
 //                protects the screen you sit at; opening here would route around it. Run it again,
 //                or say --here.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
 import {
   ACK_MS,
+  editorHost,
   fileKey,
   remoteSocket,
+  SSH_HOST_ENV,
   unlinkIfSame,
   type FileKey,
 } from "./sockets.ts";
@@ -74,6 +81,7 @@ const argv = cli(
 
 const SOCKET =
   process.env.SMART_OPEN_SOCKET ?? remoteSocket(userInfo().username);
+const SSH_HOST = process.env[SSH_HOST_ENV] ?? "";
 const OPEN_MS = 15_000;
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^mailto:/i.test(t);
@@ -106,7 +114,7 @@ const classify = (reply: string): Outcome => {
 };
 
 // One line out, one line back. Resolves to the outcome; never throws.
-function toClient(url: string): Promise<Probe> {
+function toClient(request: Record<string, string>): Promise<Probe> {
   const seen = fileKey(SOCKET);
   if (seen === undefined || !seen.socket)
     return Promise.resolve({ outcome: "no-socket", reply: "", why: "", seen });
@@ -123,7 +131,7 @@ function toClient(url: string): Promise<Probe> {
   Bun.connect({
     unix: SOCKET,
     socket: {
-      open: (s) => void s.write(`${JSON.stringify({ url })}\n`),
+      open: (s) => void s.write(`${JSON.stringify(request)}\n`),
       data: (s, chunk) => {
         reply += chunk.toString();
         if (!reply.includes("\n")) return;
@@ -174,7 +182,7 @@ async function routeUrl(url: string): Promise<Route> {
     console.log(`${url} -> client if ${SOCKET} answers, else this machine`);
     return "client";
   }
-  const probe = await toClient(url);
+  const probe = await toClient({ url });
   if (probe.outcome === "client") {
     console.log(`opened on the client: ${url}`);
     return "client";
@@ -185,13 +193,7 @@ async function routeUrl(url: string): Promise<Route> {
     );
     return "stop";
   }
-  if (probe.outcome === "stale") {
-    const removed =
-      probe.seen !== undefined && (await unlinkIfSame(SOCKET, probe.seen));
-    console.error(
-      `smart-open: ${SOCKET} had no listener (a dropped ssh connection?)${removed ? "; removed it" : ""} — opening here`,
-    );
-  }
+  if (probe.outcome === "stale") await dropStale(probe);
   if (probe.outcome === "no-receiver")
     console.error(
       `smart-open: ${SOCKET} ${probe.why} (is the client's receiver running?) — opening here`,
@@ -201,6 +203,57 @@ async function routeUrl(url: string): Promise<Route> {
       `smart-open: the client receiver refused ${url} (${probe.reply}) — opening here`,
     );
   return "here";
+}
+
+// A dead bind means no client is attached any more: remove it (if it is still the file we probed)
+// and say so. Both kinds of target then open here.
+async function dropStale(probe: Probe): Promise<void> {
+  const removed =
+    probe.seen !== undefined && (await unlinkIfSame(SOCKET, probe.seen));
+  console.error(
+    `smart-open: ${SOCKET} had no listener (a dropped ssh connection?)${removed ? "; removed it" : ""} — opening here`,
+  );
+}
+
+// Where a path goes. Only "no client attached" (no socket, or a dead bind) opens it here.
+async function routePath(path: string): Promise<Route> {
+  const editor =
+    SSH_HOST === "" ? `<${SSH_HOST_ENV} unset: refused>` : editorHost(SSH_HOST);
+  if (argv.flags.dryRun) {
+    console.log(
+      `${path} -> the client's VS Code (ssh-remote+${editor}) if ${SOCKET} answers; ${localCommand(path).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`,
+    );
+    return "client";
+  }
+  const kind = statSync(path).isDirectory() ? "dir" : "file";
+  const probe = await toClient({ path, kind, host: SSH_HOST });
+  if (probe.outcome === "client") {
+    // `sent`, not `opened`: VS Code asks before opening a remote path, and a No is invisible here.
+    console.log(`sent to the client's VS Code (ssh-remote+${editor}): ${path}`);
+    return "client";
+  }
+  if (probe.outcome === "no-socket") return "here";
+  if (probe.outcome === "stale") {
+    await dropStale(probe);
+    return "here";
+  }
+  const why = probe.outcome === "no-receiver" ? probe.why : probe.reply;
+  console.error(
+    `smart-open: attached from a client, but it did not open ${path} (${why})${refusalHint(probe.reply)}. Not opened on this machine's screen either, which nobody attached remotely can see — use --here for that.`,
+  );
+  return "stop";
+}
+
+// The one repair step a known refusal implies, or nothing.
+function refusalHint(reply: string): string {
+  // A receiver from before path requests answers the URL-only refusal; restarting it loads this one.
+  if (reply.includes("only http(s) URLs"))
+    return " — the client's receiver predates folder support; on the Mac: launchctl kickstart -k gui/$(id -u)/dotfiles.smart-open-receiver";
+  if (reply.includes("without the smart-open forward"))
+    return " — on the Mac, give ~/.ssh/config.local's Host line for this box the -code alias too (e.g. `Host r99-wsl r99-wsl-code`)";
+  if (reply.includes(SSH_HOST_ENV))
+    return " — ssh/config sends it with SetEnv on attach; a herdr server started before that keeps its old environment, so restart it";
+  return "";
 }
 
 // This machine. Returns false on failure.
@@ -230,9 +283,13 @@ async function openOne(raw: string): Promise<boolean> {
     return route === "client" || openHere(raw);
   }
   const path = resolve(raw);
-  if (existsSync(path)) return openHere(path);
-  console.error(`smart-open: no such file or directory: ${raw}`);
-  return false;
+  if (!existsSync(path)) {
+    console.error(`smart-open: no such file or directory: ${raw}`);
+    return false;
+  }
+  const route = argv.flags.here ? "here" : await routePath(path);
+  if (route === "stop") return false;
+  return route === "client" || openHere(path);
 }
 
 const targets = argv._.targets.length > 0 ? argv._.targets : ["."];

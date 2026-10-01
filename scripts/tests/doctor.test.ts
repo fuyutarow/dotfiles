@@ -177,13 +177,30 @@ describe("doctor", () => {
     expect(inactive.out).toContain("enabled / inactive");
   });
 
-  /** A dotfiles fixture whose ssh/config gives `r99-wsl` one User and (optionally) one forward. */
-  function fixtureSshConfig(forward: string | null): string {
+  /**
+   * A dotfiles fixture whose ssh/config gives `r99-wsl` one User, (optionally) one forward, and the
+   * SetEnv that names the alias for path requests (unless `setEnv` is false).
+   */
+  function fixtureSshConfig(
+    forward: string | null,
+    setEnv = true,
+    editor: "same" | "absent" | "forwards" = "same",
+  ): string {
     const dir = tmp("doctor-ssh-");
     mkdirSync(join(dir, "ssh"));
+    const box = "    HostName r99.invalid\n    User tester\n";
+    const shared =
+      editor === "absent"
+        ? `Host r99-wsl\n${box}`
+        : `Host r99-wsl r99-wsl-code\n${box}`;
+    const fwd = forward === null ? "" : `    RemoteForward ${forward}\n`;
+    const leak =
+      editor === "forwards" && forward !== null
+        ? `Host r99-wsl-code\n${fwd}`
+        : "";
     writeFileSync(
       join(dir, "ssh", "config"),
-      `Host r99-wsl\n    User tester\n${forward === null ? "" : `    RemoteForward ${forward}\n`}`,
+      `${shared}${leak}Host r99-wsl\n${fwd}${setEnv ? "    SetEnv SMART_OPEN_SSH_HOST=r99-wsl\n" : ""}`,
     );
     return dir;
   }
@@ -212,6 +229,47 @@ describe("doctor", () => {
       expect(r.out).toContain(`have: ${forward}`);
       expect(r.out).toContain("fix: make the RemoteForward in ssh/config");
     }
+  });
+
+  test("smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix", () => {
+    const home = tmp("doctor-home-");
+    const forward = `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`;
+    const ok = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(forward),
+    });
+    expect(ok.code).toBe(0);
+    expect(ok.out).toContain(
+      "r99-wsl-code reaches the same box without the forward",
+    );
+    const absent = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(forward, true, "absent"),
+    });
+    expect(absent.code).toBe(1);
+    expect(absent.out).toContain("r99-wsl-code does not reach the same box");
+    expect(absent.out).toContain("Host r99-wsl r99-wsl-code");
+    const leaks = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(forward, true, "forwards"),
+    });
+    expect(leaks.code).toBe(1);
+    expect(leaks.out).toContain("r99-wsl-code carries the smart-open forward");
+  });
+
+  test("smart-open: a joined forward without the SetEnv FAILs, naming the missing variable", () => {
+    const home = tmp("doctor-home-");
+    const r = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(
+        `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`,
+        false,
+      ),
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("sends no SMART_OPEN_SSH_HOST=r99-wsl");
+    expect(r.out).toContain("want: setenv SMART_OPEN_SSH_HOST=r99-wsl");
+    expect(r.out).toContain("have: no SetEnv at all");
   });
 
   test("smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift", () => {

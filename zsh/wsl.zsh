@@ -78,8 +78,8 @@ link-win-exes() {
 }
 link-win-exes
 
-# `open` = smart-open (smart-open/smart-open.ts): explorer.exe with a Windows path for files, and a URL
-# goes to the machine you sit at when you are attached over ssh/herdr. `o` / `oo` live in
+# `open` = smart-open (smart-open/smart-open.ts): attached over ssh/herdr, a URL goes to the machine you
+# sit at and a path to its VS Code (Remote-SSH, back to here); otherwise explorer.exe with a Windows path. `o` / `oo` live in
 # zsh/aliases.zsh.
 alias open='smart-open'
 # winget: run the real thing, then refresh the symlink farm (`link-win-exes`, above) so a

@@ -3,13 +3,14 @@
 // log. Nothing here opens a browser: the receiver's opener is SMART_OPEN_OPENER and the client's
 // this-machine opener is SMART_OPEN_LOCAL_OPENER, both pointed at the same recording script.
 //
-// The wire contract under test (smart-open/receive.ts header): one JSON line {"url": ...} in, one line
-// out — `ok` or `refused: <why>`. Each refusal case is paired with its accepting twin so a gate
+// The wire contract under test (smart-open/receive.ts header): one JSON line in — {"url": ...} or
+// {"path", "kind", "host"} — one line out: `ok`, `refused: <why>` or `busy: <why>`. Each refusal case is paired with its accepting twin so a gate
 // that always refuses, or always accepts, is caught.
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   renameSync,
@@ -349,21 +350,18 @@ describe("client routing", () => {
     expect(r.err).toContain("removed it");
   });
 
-  test("a path always opens here (the file is not on the client), resolved to absolute", async () => {
+  test("with no socket at all a path opens here, resolved to absolute, quietly", () => {
     const dir = scratch();
-    const rx = await startReceiver(dir);
     const [local, localOpened] = recorder(dir, "local-opened");
     const file = join(dir, "doc.txt");
     writeFileSync(file, "x");
     const r = client([file], {
-      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
       SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
     });
     expect(r.code).toBe(0);
     expect(localOpened()).toEqual([file]);
-    expect(rx.opened()).toEqual([]);
-    // A path offered to the receiver would be refused AND reported on stderr: silence is the proof
-    // it was never sent (the refusal alone also falls through to here, so opened() cannot tell).
     expect(r.out + r.err).toBe("");
   });
 
@@ -376,6 +374,335 @@ describe("client routing", () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain("no such file or directory");
     expect(localOpened()).toEqual([]);
+  });
+});
+
+// ---- Paths over a live forward: the file stays on the remote, so the client opens it as a VS Code
+// Remote-SSH window on the host the request names — and only a host whose resolved ssh config
+// forwards smart-open to this very receiver (--ssh-config points `ssh -G` at a fixture).
+
+/**
+ * A receiver whose `ssh -G` vouches for `probe-host` (it forwards to this receiver's socket, and
+ * probe-host-code reaches the same box without that forward). Also: `elsewhere` forwards to another
+ * socket; `nocode` has no -code alias; `leaky`'s -code alias carries the forward too.
+ */
+async function pathReceiver(
+  dir: string,
+  args: string[] = [],
+): Promise<Receiver> {
+  const config = join(dir, "ssh_config");
+  const fwd = `    RemoteForward /tmp/so-probe.sock ${join(dir, "r.sock")}\n`;
+  writeFileSync(
+    config,
+    [
+      "Host probe-host probe-host-code\n    HostName box.invalid\n",
+      `Host probe-host\n${fwd}`,
+      "Host elsewhere elsewhere-code\n    HostName box.invalid\n",
+      `Host elsewhere\n    RemoteForward /tmp/so-probe.sock ${join(dir, "other.sock")}\n`,
+      `Host nocode\n    HostName box.invalid\n${fwd}`,
+      `Host leaky leaky-code\n    HostName box.invalid\n${fwd}`,
+    ].join(""),
+  );
+  return startReceiver(dir, { args: ["--ssh-config", config, ...args] });
+}
+const pathLine = (path: unknown, host: unknown, kind: unknown = "dir") =>
+  `${JSON.stringify({ path, kind, host })}\n`;
+
+describe("paths over a live forward", () => {
+  test("a path goes to the client as a VS Code Remote-SSH URL on the named host, not to this machine", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain(
+      `sent to the client's VS Code (ssh-remote+probe-host-code): ${dir}`,
+    );
+    expect(rx.opened()).toEqual([
+      `vscode://vscode-remote/ssh-remote+probe-host-code${dir}`,
+    ]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("each path segment is percent-encoded, so `#`, `?` and spaces stay in the path", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    expect(
+      (await ask(rx.sock, pathLine("/w/a b/c#d?e", "probe-host"))).reply,
+    ).toBe("ok");
+    expect(rx.opened()).toEqual([
+      "vscode://vscode-remote/ssh-remote+probe-host-code/w/a%20b/c%23d%3Fe",
+    ]);
+  });
+
+  test("a host whose ssh config does not forward to THIS receiver is refused, and the client opens nothing anywhere", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    for (const host of ["elsewhere", "unknown-host"]) {
+      const r = client([dir], {
+        SMART_OPEN_SOCKET: rx.sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+        SMART_OPEN_SSH_HOST: host,
+      });
+      expect(r.code).toBe(1);
+      expect(r.err).toContain(`${host} does not forward smart-open`);
+      expect(r.err).toContain("--here");
+    }
+    expect(rx.opened()).toEqual([]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("with SMART_OPEN_SSH_HOST unset the refusal names the variable and how it is set", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: undefined,
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("SMART_OPEN_SSH_HOST is unset");
+    expect(r.err).toContain("SetEnv");
+    expect(rx.opened()).toEqual([]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test.each([
+    [
+      "a relative path",
+      pathLine("w/x", "probe-host"),
+      "refused: path must be absolute",
+    ],
+    [
+      "a path with a control character",
+      pathLine("/w/\u0007", "probe-host"),
+      "refused: path must be absolute",
+    ],
+    [
+      "a path that is not a string",
+      pathLine(42, "probe-host"),
+      "refused: path must be absolute",
+    ],
+    [
+      "a host that reads as an ssh option",
+      pathLine("/w", "-oProxyCommand=x"),
+      "refused: not an ssh host alias",
+    ],
+    [
+      "a host with a space",
+      pathLine("/w", "probe-host x"),
+      "refused: not an ssh host alias",
+    ],
+    [
+      "a path with a lone surrogate (encodeURIComponent would throw)",
+      pathLine("/a/\ud800", "probe-host"),
+      "refused: path must be absolute",
+    ],
+    [
+      "a kind that is neither file nor dir",
+      pathLine("/w", "probe-host", "link"),
+      "refused: kind must be file or dir",
+    ],
+    [
+      "a folder whose name ends in :<digits> (VS Code would read a line number)",
+      pathLine("/w/run:2", "probe-host"),
+      "refused: a folder whose name ends in :<digits> cannot be opened by URL",
+    ],
+    [
+      "a host that is not a string",
+      pathLine("/w", 7),
+      `refused: no ssh host (SMART_OPEN_SSH_HOST is unset on the remote)`,
+    ],
+  ])(
+    "refuses %s, costs no token, and never runs the opener",
+    async (_name, payload, reply) => {
+      const dir = scratch();
+      const rx = await pathReceiver(dir, [
+        "--burst",
+        "1",
+        "--refill-ms",
+        "600000",
+      ]);
+      expect((await ask(rx.sock, payload)).reply).toBe(reply);
+      expect((await ask(rx.sock, pathLine("/w", "probe-host"))).reply).toBe(
+        "ok",
+      );
+      expect(rx.opened()).toEqual([
+        "vscode://vscode-remote/ssh-remote+probe-host-code/w",
+      ]);
+    },
+  );
+
+  test("a file gets `:1`, the only suffix VS Code reads as a file rather than a folder", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    const file = join(dir, "notes.md");
+    writeFileSync(file, "x");
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([file], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(0);
+    expect(rx.opened()).toEqual([
+      `vscode://vscode-remote/ssh-remote+probe-host-code${file}:1`,
+    ]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("the receiver survives a request that once crashed it, and keeps serving", async () => {
+    const rx = await pathReceiver(scratch());
+    await ask(rx.sock, pathLine("/a/\ud800", "probe-host"));
+    expect((await ask(rx.sock, pathLine("/w", "probe-host"))).reply).toBe("ok");
+  });
+
+  test.each([
+    ["nocode", "nocode-code must reach the same box as nocode"],
+    ["leaky", "leaky-code must reach the same box as leaky"],
+  ])(
+    "an editor alias that is missing or carries the forward is refused (%s)",
+    async (host, reply) => {
+      const dir = scratch();
+      const rx = await pathReceiver(dir);
+      const [local, localOpened] = recorder(dir, "local-opened");
+      const r = client([dir], {
+        SMART_OPEN_SOCKET: rx.sock,
+        SMART_OPEN_LOCAL_OPENER: local,
+        SMART_OPEN_SSH_HOST: host,
+      });
+      expect(r.code).toBe(1);
+      expect(r.err).toContain(reply);
+      expect(r.err).toContain("config.local");
+      expect(rx.opened()).toEqual([]);
+      expect(localOpened()).toEqual([]);
+    },
+  );
+
+  test("a busy client stops a path too: nothing opens anywhere, and the second target is the one refused", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir, [
+      "--burst",
+      "1",
+      "--refill-ms",
+      "600000",
+    ]);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const second = join(dir, "sub");
+    mkdirSync(second);
+    const r = client([dir, second], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("busy: rate limit");
+    expect(r.err).toContain("--here");
+    expect(rx.opened()).toEqual([
+      `vscode://vscode-remote/ssh-remote+probe-host-code${dir}`,
+    ]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("path requests share the URL bucket", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir, [
+      "--burst",
+      "1",
+      "--refill-ms",
+      "600000",
+    ]);
+    expect((await ask(rx.sock, pathLine("/w", "probe-host"))).reply).toBe("ok");
+    expect((await ask(rx.sock, line("https://probe.invalid/a"))).reply).toBe(
+      "busy: rate limit",
+    );
+  });
+
+  test("--here opens a path on this machine and never touches the client", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client(["--here", dir], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(0);
+    expect(localOpened()).toEqual([dir]);
+    expect(rx.opened()).toEqual([]);
+  });
+
+  test("a client that accepts but never answers: the path is NOT opened here (nobody is at this screen)", async () => {
+    const dir = scratch();
+    const sock = join(dir, "silent.sock");
+    await silentListener(sock);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("did not open");
+    expect(r.err).toContain(`accepted but sent no ok within ${ACK_MS} ms`);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("a receiver from before path requests is named, with how to restart it", async () => {
+    const dir = scratch();
+    const sock = join(dir, "old.sock");
+    const old = Bun.spawn(
+      [
+        "bun",
+        "-e",
+        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { data(s) { s.end("refused: only http(s) URLs\\n"); } } }); setInterval(() => {}, 1000);`,
+      ],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+    cleanups.push(() => old.kill());
+    for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("predates folder support");
+    expect(r.err).toContain("launchctl kickstart");
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("a dead bind means nobody is attached: it is removed and the path opens here", async () => {
+    const dir = scratch();
+    const sock = join(dir, "dead.sock");
+    const holder = Bun.spawn(
+      [
+        "bun",
+        "-e",
+        `Bun.listen({ unix: ${JSON.stringify(sock)}, socket: { data() {} } }); setInterval(() => {}, 1000);`,
+      ],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+    cleanups.push(() => holder.kill());
+    for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
+    holder.kill("SIGKILL");
+    await holder.exited;
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: "probe-host",
+    });
+    expect(r.code).toBe(0);
+    expect(localOpened()).toEqual([dir]);
+    expect(r.err).toContain("had no listener");
   });
 });
 

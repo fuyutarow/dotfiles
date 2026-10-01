@@ -17,7 +17,25 @@ export const remoteSocket = (username: string): string =>
 export const receiverSocket = (home: string): string =>
   join(home, ".cache/smart-open/receiver.sock");
 
-/** How long the client waits for the receiver's one-line answer before opening here instead. */
+/**
+ * The ssh Host alias the CLIENT uses to reach the remote, as the remote learns it: ssh/config's
+ * `SetEnv` sends it on the same connection that carries the forward, and wsl/sshd-dotfiles.conf's
+ * `AcceptEnv` lets it in. A path request names it so the receiver can open the folder in an editor
+ * connected to that very host (vscode-remote ssh-remote+<alias>) — the remote cannot know the
+ * client's alias for it any other way.
+ */
+export const SSH_HOST_ENV = "SMART_OPEN_SSH_HOST";
+
+/**
+ * The alias the client's VS Code connects to for a path request: the attach alias + `-code`, which
+ * must reach the same box WITHOUT the smart-open RemoteForward (receive.ts vouches both). Were
+ * VS Code to use the attach alias itself, its ssh would take the forwarded socket over and leave a
+ * dead bind behind when its window closed.
+ */
+export const editorHost = (host: string): string => `${host}-code`;
+
+/** How long the client waits for the receiver's one-line answer before giving up on it (a URL then
+ * opens here; a path stops). */
 export const ACK_MS = 2_000;
 
 /**

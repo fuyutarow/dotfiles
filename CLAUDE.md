@@ -111,7 +111,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 
 ### Daily commands
 - `lg` lazygit · `j` jj · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
-- `o` open · `oo` open current dir — both `smart-open` (`smart-open/`): a URL opens on the client machine when attached over ssh/herdr, else here (Finder / Explorer) · `s`/`start` launch app
+- `o` open · `oo` open current dir — both `smart-open` (`smart-open/`): attached over ssh/herdr, a URL opens on the client and a path as a VS Code Remote-SSH window there; else here (Finder / Explorer) · `s`/`start` launch app
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)
 

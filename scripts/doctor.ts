@@ -25,7 +25,8 @@
 //   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
 //   smart-open  ssh/config + smart-open/sockets.ts
 //                                                r99-wsl's RemoteForward joins the two socket paths
-//                                                smart-open and its receiver actually use
+//                                                smart-open and its receiver actually use, and its
+//                                                SetEnv names the alias a path request opens on
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
 //
 // NO FLAGS, NO DEPENDENCIES — deliberate, like render-claude-settings.ts: the machine being
@@ -63,7 +64,12 @@ import {
   readDeclared,
   readLive,
 } from "../agents/codex/remote-control.ts";
-import { receiverSocket, remoteSocket } from "../smart-open/sockets.ts";
+import {
+  editorHost,
+  receiverSocket,
+  remoteSocket,
+  SSH_HOST_ENV,
+} from "../smart-open/sockets.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -793,10 +799,20 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
     return warn("smart-open", "ssh -G printed no `user` line");
   const want = `${remoteSocket(user)} ${receiverSocket(ctx.home)}`;
   const have = value("remoteforward");
+  // The path half (`oo`): the remote learns our alias for it only from this SetEnv.
+  const wantEnv = `${SSH_HOST_ENV}=${SMART_OPEN_HOST}`;
+  const env = value("setenv").flatMap((l) => l.split(/\s+/));
+  if (have.includes(want) && env.includes(wantEnv))
+    return checkEditorAlias(ctx, config, resolved, want, wantEnv);
   if (have.includes(want)) {
-    return pass(
+    return fail(
       "smart-open",
-      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")}`,
+      `${SMART_OPEN_HOST} sends no ${wantEnv} — \`oo\` there cannot name the host to open the folder on`,
+      `add \`SetEnv ${wantEnv}\` to ssh/config's Host ${SMART_OPEN_HOST} block`,
+      [
+        `want: setenv ${wantEnv}`,
+        `have: ${env.length > 0 ? env.join(" ") : "no SetEnv at all"}`,
+      ],
     );
   }
   const seen =
@@ -808,6 +824,52 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
     `${SMART_OPEN_HOST}'s RemoteForward does not join the paths smart-open/sockets.ts uses — \`o <url>\` would open on the remote's screen`,
     "make the RemoteForward in ssh/config match smart-open/sockets.ts (or the reverse)",
     [`want: ${want}`, ...seen],
+  );
+}
+
+// The editor half: VS Code connects to <alias>-code, which must reach the same box as the attach
+// alias WITHOUT its RemoteForward (smart-open/receive.ts vouches exactly this per request; here it
+// is checked before the first `oo` hits it). Its HostName/Port/User come from ~/.ssh/config.local.
+async function checkEditorAlias(
+  ctx: Ctx,
+  config: string,
+  attach: string[],
+  want: string,
+  wantEnv: string,
+): Promise<Finding> {
+  const editor = editorHost(SMART_OPEN_HOST);
+  const r = await run(["ssh", "-G", "-F", config, editor], { ms: 10_000 });
+  if (r.timedOut || r.code !== 0)
+    return warn(
+      "smart-open",
+      `ssh -G ${editor} did not resolve (exit ${r.code})`,
+    );
+  const target = (lines: string[]) =>
+    ["hostname", "port", "user"].map(
+      (k) => lines.find((l) => l.startsWith(`${k} `)) ?? `${k} ?`,
+    );
+  const code = r.out.split("\n");
+  const same = target(code).join(" ") === target(attach).join(" ");
+  const forwards = code.some(
+    (l) =>
+      l.startsWith("remoteforward ") &&
+      l.trim().endsWith(` ${receiverSocket(ctx.home)}`),
+  );
+  if (same && !forwards)
+    return pass(
+      "smart-open",
+      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")} and sends ${wantEnv}; ${editor} reaches the same box without the forward`,
+    );
+  return fail(
+    "smart-open",
+    forwards
+      ? `${editor} carries the smart-open forward — VS Code would take the socket over and leave a dead bind`
+      : `${editor} does not reach the same box as ${SMART_OPEN_HOST} — \`oo\` there is refused`,
+    `name ${editor} beside ${SMART_OPEN_HOST} on its Host line in ~/.ssh/config.local (\`Host ${SMART_OPEN_HOST} ${editor}\`), and give it no RemoteForward`,
+    [
+      `want: ${target(attach).join(" ")}, no forward`,
+      `have: ${target(code).join(" ")}${forwards ? ", forwards" : ""}`,
+    ],
   );
 }
 

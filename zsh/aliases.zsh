@@ -550,7 +550,8 @@ alias s='start'
 
 # o / oo — one implementation for mac, WSL and Linux: smart-open/smart-open.ts (PATH command `smart-open`,
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,
-# else here; a path always opens here (WSL: converted to a Windows path for explorer.exe).
+# else here. A path attached over ssh/herdr opens as a VS Code Remote-SSH window on the client (the
+# files stay here); unattached it opens here (WSL: converted to a Windows path for explorer.exe).
 alias o='smart-open'
 alias oo='smart-open .'
 

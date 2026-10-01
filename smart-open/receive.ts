@@ -3,19 +3,41 @@
 // ssh/config forwards the remote /tmp/smart-open-$USER.sock to this socket, so it is reachable
 // only through your own ssh connections; the socket file itself is owner-only.
 //
-// Protocol: one JSON line {"url": "..."} in, one line out:
+// Protocol: one JSON line in — {"url": "..."} or {"path": "/abs", "kind": "file"|"dir", "host":
+// "<ssh alias>"} — one line out:
 //   ok                  the URL was handed to the opener, which exited 0 — or was still starting
-//                       after --settle-ms (a cold-starting app: it launched, so say so)
-//   refused: <why>      this request will never be opened (not http(s), too long, opener failed)
+//                       after --settle-ms (a cold-starting app: it launched, so say so). For a
+//                       path that means VS Code got the URL; VS Code then asks before opening a
+//                       remote path (security.promptForRemoteFileProtocolHandling), and a No there
+//                       is invisible to this receiver
+//   refused: <why>      this request will never be opened (not http(s), too long, opener failed,
+//                       a malformed path or host, a host ssh does not vouch for)
 //   busy: <why>         a limit below was hit; the same request may succeed later
 // Only http(s) URLs are opened — anything that can write to the forwarded socket can reach this,
 // and a file:// or app-scheme URL would let a remote process drive local apps.
+//
+// A PATH lives on the remote, so Finder cannot show it; it opens as a VS Code Remote-SSH window on
+// that box instead (vscode://vscode-remote/ssh-remote+<host>-code<path>, `:1` appended for a file,
+// since VS Code reads every other path as a folder). That is the one non-http scheme, and this
+// receiver BUILDS it — the remote sends a path and a host, never a URL. Both aliases are vouched by
+// `ssh -G` (resolve without connecting):
+//   <host>        must forward smart-open to THIS socket — a box you deliberately attach from, so a
+//                 remote process cannot point your editor at an arbitrary ssh server
+//   <host>-code   (sockets.ts, editorHost) must reach the same hostname/port/user WITHOUT that
+//                 forward. VS Code's own ssh connection would otherwise request it too, take the
+//                 socket over (sshd StreamLocalBindUnlink: newest wins) and leave a dead bind when
+//                 its window closes — and the next `o` in the still-attached terminal would open on
+//                 the remote's own screen.
+// What the editor then runs is VS Code's business (remote-path prompt, Workspace Trust).
 //
 // BOUNDS. That socket is reachable by EVERY process of your user on the remote — AI agents
 // included — and the owner-only mode does not separate them. So what they can make this Mac do is
 // limited here instead of trusted away. The numbers are design choices, not derived: a person opens
 // a handful of URLs at once, and nothing a person does needs more than the defaults.
 //   line length      4096 characters                           refused: too long
+//   path requests    same bucket; the token is taken BEFORE the `ssh -G` vouch, so a flood of
+//                    well-formed paths spawns at most 2 x burst ssh processes. The vouch counts
+//                    against --settle-ms: the answer still lands inside the client's ACK_MS
 //   opens            token bucket: --burst up front, one more
 //                    every --refill-ms                         busy: rate limit
 //   in-flight        each open also leaves the bucket, so openers running at once are at most
@@ -26,7 +48,7 @@
 //                    before --settle-ms; after an `ok` it is only logged)
 //   answer time      --settle-ms, kept below the client's ACK_MS (sockets.ts): an answer that lands
 //                    after the client gave up would open the URL here AND on the client — twice
-// A request that is not a valid http(s) URL costs no token. Limit hits are logged to stderr, at
+// A request that is not a valid http(s) URL, or a malformed path request, costs no token. Limit hits are logged to stderr, at
 // most one summary line per REPORT_MS, never with the URL (the log is world-readable).
 //
 // WHAT THIS CANNOT DO: tell you from an agent running as you. A process that spends the bucket or
@@ -37,7 +59,13 @@ import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
 import { attempt, attemptOr } from "../agents/hooks/attempt.ts";
-import { ACK_MS, receiverSocket, SETTLE_MS } from "./sockets.ts";
+import {
+  ACK_MS,
+  editorHost,
+  receiverSocket,
+  SETTLE_MS,
+  SSH_HOST_ENV,
+} from "./sockets.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -53,7 +81,7 @@ const argv = cli(
     parameters: [],
     help: {
       description:
-        "Listen for smart-open requests forwarded over ssh and open http(s) URLs here.",
+        "Listen for smart-open requests forwarded over ssh: open http(s) URLs here, and remote paths as VS Code Remote-SSH windows.",
     },
     flags: {
       socket: {
@@ -87,6 +115,11 @@ const argv = cli(
         type: Number,
         default: 15_000,
         description: "milliseconds an opener may run before it is killed",
+      },
+      sshConfig: {
+        type: String,
+        description:
+          "ssh config file `ssh -G` reads to vouch for a path request's host (default: ssh's own)",
       },
       settleMs: {
         type: Number,
@@ -130,6 +163,7 @@ if (settleMs >= ACK_MS) {
 }
 
 const OPENER = (process.env.SMART_OPEN_OPENER ?? "open").split(" ");
+const SSH_CONFIG = argv.flags.sshConfig;
 const MAX_LINE = 4096;
 const REPORT_MS = 10_000;
 const sock = argv.flags.socket;
@@ -177,7 +211,7 @@ function note(kind: string): void {
 // in the background). The exit CODE, not "the timeout fired", says whether it failed: an opener
 // that exits 0 at the instant the timer fires did open the URL. SIGKILL because a helper that
 // ignores SIGTERM would otherwise live on, holding whatever it holds, forever.
-async function runOpener(url: string): Promise<string> {
+async function runOpener(url: string, settle = settleMs): Promise<string> {
   const timeout = AbortSignal.timeout(openTimeoutMs);
   const spawned = await attempt(() =>
     Bun.spawn([...OPENER, url], {
@@ -194,7 +228,7 @@ async function runOpener(url: string): Promise<string> {
   const proc = spawned.value;
   const early = await Promise.race([
     proc.exited,
-    Bun.sleep(settleMs).then(() => undefined),
+    Bun.sleep(settle).then(() => undefined),
   ]);
   if (early === undefined) {
     void proc.exited.then((code) => {
@@ -210,12 +244,124 @@ async function runOpener(url: string): Promise<string> {
   return `refused: opener exited ${early}`;
 }
 
+// A Host alias as ssh/config spells one. Leading alnum, so it can never be read as an ssh option.
+const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
+
+// What `ssh -G` RESOLVES an alias to: asking ssh keeps ssh/config the one place that says which
+// boxes may open folders here — a parse of our own would drift from ssh's Include/Match rules.
+type Resolved = {
+  target: string; // hostname:port as user — the box a connection would actually reach
+  forwardsHere: boolean; // carries a RemoteForward onto this receiver's socket
+};
+async function sshResolve(
+  host: string,
+  ms: number,
+): Promise<Resolved | undefined> {
+  const cmd = ["ssh", "-G", ...(SSH_CONFIG ? ["-F", SSH_CONFIG] : []), host];
+  const spawned = await attempt(() =>
+    Bun.spawn(cmd, {
+      stdout: "pipe",
+      stderr: "ignore",
+      signal: AbortSignal.timeout(ms),
+      killSignal: "SIGKILL",
+    }),
+  );
+  if (!spawned.ok) return undefined;
+  const [out, code] = await Promise.all([
+    new Response(spawned.value.stdout).text(),
+    spawned.value.exited,
+  ]);
+  if (code !== 0) return undefined;
+  const lines = out.split("\n").map((l) => l.trim());
+  const value = (key: string) =>
+    lines.find((l) => l.startsWith(`${key} `))?.slice(key.length + 1);
+  return {
+    target: `${value("hostname")}:${value("port")} as ${value("user")}`,
+    forwardsHere: lines.some(
+      (l) => l.startsWith("remoteforward ") && l.endsWith(` ${sock}`),
+    ),
+  };
+}
+
+// The remote path as a VS Code Remote-SSH URL. Each segment is percent-encoded, so a space, `#`
+// or `?` in a name stays part of the path; a file gets `:1` (open at line 1), the only suffix VS
+// Code's protocol handler reads as "a file, not a folder".
+const editorUrl = (host: string, path: string, kind: string): string =>
+  `vscode://vscode-remote/ssh-remote+${host}${path.split("/").map(encodeURIComponent).join("/")}${kind === "file" ? ":1" : ""}`;
+
+// Everything checkable without a token or a process. undefined = well-formed.
+function malformedPath(path: unknown, kind: unknown, host: unknown) {
+  if (
+    typeof path !== "string" ||
+    !path.startsWith("/") ||
+    !path.isWellFormed() ||
+    [...path].some((c) => c < " " || c === "\u007f")
+  )
+    return "refused: path must be absolute";
+  if (kind !== "file" && kind !== "dir")
+    return "refused: kind must be file or dir";
+  // VS Code would read the trailing :<digits> as a line number and open a file instead.
+  if (kind === "dir" && /:\d+$/.test(path))
+    return "refused: a folder whose name ends in :<digits> cannot be opened by URL";
+  if (typeof host !== "string" || host === "")
+    return `refused: no ssh host (${SSH_HOST_ENV} is unset on the remote)`;
+  if (!HOST.test(editorHost(host))) return "refused: not an ssh host alias";
+  return undefined;
+}
+
+async function handlePath(
+  path: unknown,
+  kind: unknown,
+  host: unknown,
+): Promise<string> {
+  const bad = malformedPath(path, kind, host);
+  if (bad !== undefined) return bad;
+  // Narrowed by malformedPath; restated for the type checker.
+  const [p, k, h] = [String(path), String(kind), String(host)];
+  if (!takeToken()) {
+    note("rate limit");
+    return "busy: rate limit";
+  }
+  const start = performance.now();
+  const editor = editorHost(h);
+  const [attach, code] = await Promise.all([
+    sshResolve(h, settleMs),
+    sshResolve(editor, settleMs),
+  ]);
+  if (!attach?.forwardsHere) {
+    note("unvouched host");
+    return `refused: ${h} does not forward smart-open to this receiver`;
+  }
+  if (
+    code === undefined ||
+    code.forwardsHere ||
+    code.target !== attach.target
+  ) {
+    note("no editor alias");
+    return `refused: ${editor} must reach the same box as ${h} without the smart-open forward (ssh/config)`;
+  }
+  const left = Math.floor(settleMs - (performance.now() - start));
+  if (left < 1) {
+    note("vouch too slow");
+    return "refused: ssh -G took the whole answer window";
+  }
+  return runOpener(editorUrl(editor, p, k), left);
+}
+
 async function handle(line: string): Promise<string> {
   if (line.length > MAX_LINE) return "refused: too long";
   const msg = await attemptOr(
-    () => JSON.parse(line) as { url?: unknown } | null,
+    () =>
+      JSON.parse(line) as {
+        url?: unknown;
+        path?: unknown;
+        kind?: unknown;
+        host?: unknown;
+      } | null,
     null,
   );
+  if (msg !== null && typeof msg === "object" && "path" in msg)
+    return handlePath(msg.path, msg.kind, msg.host);
   const url = typeof msg?.url === "string" ? msg.url : "";
   if (!/^https?:\/\/[^\s]+$/i.test(url)) return "refused: only http(s) URLs";
   if (!takeToken()) {
@@ -279,7 +425,13 @@ Bun.listen<Conn>({
       }
       s.data.done = true;
       clearTimeout(s.data.timer);
-      void handle(buf.slice(0, nl)).then((reply) => s.end(`${reply}\n`));
+      // No request may take the listener down: a throw anywhere in handling is one refusal.
+      void handle(buf.slice(0, nl))
+        .catch(() => {
+          note("handler error");
+          return "refused: internal error";
+        })
+        .then((reply) => s.end(`${reply}\n`));
     },
     close(s) {
       clearTimeout(s.data.timer);

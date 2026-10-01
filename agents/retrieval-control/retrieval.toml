@@ -1,19 +1,29 @@
-# retrieval — the declarative half of `repo-retrieve definition` (definitions.ts is the mechanism).
-# One place for which judge scores the candidates, where code may not be sent, and each judge's
-# thresholds. Edit here; no code edit.
+# retrieval — the declarative half of `rr exists` (definitions.ts is the mechanism).
+# One place for every decision and calibration: how many candidates are recalled and judged, the
+# priors, which judge scores them and where it is reached, where code may not be sent, each judge's
+# thresholds, and the local reranker's model. Edit here; no code edit. Values that are mechanism
+# (timeouts, request bounds, the extraction format tied to ccc_defs.py's CACHE_VERSION, the batch
+# size sized to the VRAM partition) stay in code beside what they protect.
 
 [definition]
+# Candidates: the `recall` nearest definitions by embedding; the first `pool` of them (after folding
+# private helpers into their owners) go to the judge. 40/40 is what the firedancer bench measured.
+recall = 40
+pool = 40
+
 # Second-stage judge: "jev" (TypeSafe Jev, remote: the candidates' name + signature + first doc
 # lines are sent; inputs are not used for training per TypeSafe's privacy policy; retention is
 # unspecified) or "local" (Qwen3-Reranker on this machine's GPU, socket-activated).
 # Owner decision 2026-10-01: Jev is acceptable; the local reranker stays as the fallback.
+# Bench 2026-10-01 (firedancer, 32 cases): jev top-3 22/24, absent 8/8, median 1.3 s, ~$0.0027 per
+# query at the reseller; local top-3 21/24, absent 8/8.
 judge = "jev"
 
-# Where Jev is reached. Same request shape (state + typed noul questions), different operator:
-#   "typesafe"       api.typesafe.ai/v1/systemone — TypeSafe AI itself, $0.042 per M input tokens.
-#   "jevtypesafeai"  jevtypesafeai.com/api/v1/decide — CODEFASHION TECH LTD, an independent reseller
-#                    ("not affiliated with TypeSafe AI"); forwards to TypeSafe or, on failover, an
-#                    unnamed AI gateway; does not store request bodies; $0.25-0.42 per M; prepaid.
+# Where Jev is reached: one of [definition.jev_endpoints.*]. Same request shape, different operator:
+#   "typesafe"       TypeSafe AI itself, $0.042 per M input tokens.
+#   "jevtypesafeai"  CODEFASHION TECH LTD, an independent reseller ("not affiliated with TypeSafe
+#                    AI"); forwards to TypeSafe or, on failover, an unnamed AI gateway; does not store
+#                    request bodies; $0.25-0.42 per M; prepaid.
 # The key in ~/.config/typesafe/.env must come from the chosen operator. Current key: the reseller's
 # (2026-10-01). Recommended: an official TypeSafe key — one party fewer, 6-10x cheaper.
 jev_provider = "jevtypesafeai"
@@ -22,14 +32,40 @@ jev_provider = "jevtypesafeai"
 # `judge`. Paths are home-relative (~/…) or absolute; a project matches if it is or lies under one.
 no_egress = []
 
+# Added to the judge's log-odds. A private helper's evidence also lifts its public owner by `public`.
+[definition.priors]
+public = 1.0
+documented = 0.5
+private = -1.5
+test = -1.5
+
 # Thresholds on the judge's log-odds (Jev's probability p is turned into ln(p/(1-p)) so both judges
 # share one scale and the same priors). strong = "this is the function"; likely = "read it first";
-# below likely = NO_DEFINITION. Local: measured on the firedancer bench (positives 4-10, absent
-# queries -2..-6). Jev: its probabilities are calibrated, so p >= 0.9 / p >= 0.5.
+# below likely = NO_DEFINITION. hook = the edit-time hook (suggest-existing-definition) speaks only
+# at or above this: its query is new CODE, on which the judges loosen, and a wrong interruption
+# inside an edit costs more than a missed one.
+# Local: measured on the firedancer bench (positives 4-10, absent -2..-6); hook: the duplicate probe
+# scored 8.0, an unrelated helper 6.3. Jev: its probabilities are calibrated, so p >= 0.9 / 0.5 /
+# 0.97.
 [definition.thresholds.local]
 strong = 4.0
 likely = 1.5
+hook = 7.5
 
 [definition.thresholds.jev]
 strong = 2.2 # p >= 0.9
 likely = 0.0 # p >= 0.5
+hook = 3.5   # p >= 0.97
+
+[definition.jev_endpoints.typesafe]
+url = "https://api.typesafe.ai/v1/systemone"
+model = "jev-latest"
+
+[definition.jev_endpoints.jevtypesafeai]
+url = "https://jevtypesafeai.com/api/v1/decide" # takes no `model` field
+
+# The local judge (rerank_server.py, started by repo-retrieve-rerank.socket). idle_seconds: how long
+# it keeps its GPU partition after the last request before exiting.
+[definition.local]
+model = "Qwen/Qwen3-Reranker-0.6B"
+idle_seconds = 1800

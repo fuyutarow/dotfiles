@@ -21,3 +21,42 @@ email = "fuyutarow@gmail.com"
 # Default 1MiB silently leaves larger new files untracked (only a stderr warning), and a commit
 # then drops them from history; jj-commit.ts refuses such a snapshot, this makes it rare.
 max-new-file-size = "16MiB"
+
+# Aliases mirror git/gitconfig [alias] — same letter, the jj verb with the same intent — so
+# `j s` / `j d` / `j pu` work like `g s` / `g d` / `g pu` (zsh: j = jj, g = git). A git alias with
+# no jj counterpart is left out on purpose: a/ap (jj has no staging area; the working copy IS the
+# change), dc/rss (no index), undo (jj's own `undo` is an operation-log undo — same name, use it).
+[aliases]
+alias = ["config", "list", "aliases"]
+# status / diff / files
+s = ["status"]
+ss = ["diff", "--summary"]
+d = ["diff"]
+l = ["file", "list"]
+# log
+g = ["log", "-r", "all()"]
+lo = ["log"]
+ta = ["log", "-r", "bookmarks() | @"]
+# change (commit) — git's amend = fold the working copy into the parent
+cm = ["commit", "-m"]
+ca = ["squash"]
+amend = ["squash"]
+pick = ["duplicate"]
+# move around — git switch/restore
+sw = ["new"]
+ch = ["new"]
+e = ["edit"]
+rs = ["restore"]
+rd = ["interdiff"]
+# bookmark (git branch)
+bd = ["bookmark", "delete"]
+br = ["bookmark", "rename"]
+bm = ["bookmark", "rename"]
+# remote
+c = ["git", "clone", "--colocate"]
+f = ["git", "fetch"]
+pu = ["git", "push"]
+r = ["git", "remote", "list"]
+# workspace (git worktree)
+wt = ["workspace"]
+wtl = ["workspace", "list"]

@@ -192,6 +192,9 @@ link topgrade/topgrade.toml "$HOME/.config/topgrade.toml"
 # --- bottom/btm (group processes by default; per-PID rows hide swarm leaks) ---
 link bottom/bottom.toml "$HOME/.config/bottom/bottom.toml"
 
+# --- jj (Jujutsu; one user config for every repo — jj reads ~/.config on Linux AND macOS) ---
+link jj/config.toml "$HOME/.config/jj/config.toml"
+
 # --- lazygit (cross-OS topic; config dir differs by OS — lazygit honors XDG_CONFIG_HOME on both) ---
 if $IS_MAC; then
   link lazygit/config.yml "$HOME/Library/Application Support/lazygit/config.yml"

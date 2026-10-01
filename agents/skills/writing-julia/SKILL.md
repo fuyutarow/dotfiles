@@ -12,7 +12,9 @@ description: >-
   Co-fire: feature/bugfix → implementing-and-debugging first. Refactor → refactoring-code governs.
   GPU device work → optimizing-julia-gpu-kernels after host type discipline. Formal proofs →
   proving-theorems. Python tooling → running-python-tools. Config authority →
-  governing-configuration-systems. Descriptive, VCS-only, and legal asks stay out.
+  governing-configuration-systems. New repo/project (新規プロジェクト, 立ち上げ) →
+  wiring-repositories FIRST; this skill then owns the Julia package. Descriptive, VCS-only,
+  and legal asks stay out.
 ---
 
 # Model Julia — Coding Discipline & Package Engineering

@@ -20,3 +20,4 @@
 | New critical interface waits behind an old-edition cleanup | Verify the dependency, freeze or reassign safely, and confirm the new slice starts | Delay solely because the same worker owns both |
 | Requested batch of four is rejected before launch | Report zero starts, preserve rejection and repair invocation | Report four running then retract after a result never arrives |
 | Parent runs an authorized deterministic readiness check | Treat it as operational evidence under applicable resource bounds | Count it as independent scientific verification or prohibit all parent observation |
+| A builder writes many new kernels despite an indexed shared component library, then lists search queries in its final report | Require before-write hits and a reuse/extend/new mapping in the brief return; accept only actual consumer integration | Treat post-hoc query names or a component inventory as evidence that reuse was considered |

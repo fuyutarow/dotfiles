@@ -15,6 +15,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | F9 | GPU is occupied; advance independent formal counterexamples and source checks now | HERE selects parallel microtickets; proof/evidence owners qualify their results |
 | F10 | 「状況掌握、競合仮説・予測表・識別実験・排除表から候補機械を再提案して」 | HERE owns the scientific loop; generation/evidence/proof owners supply their scoped outputs |
 | F11 | `/driving-bibifi-cycles` while a parent is repeating release-wait reports | HERE resumes actual authorized work; report-only response fails when a useful action is available |
+| F12 | 「標準ベンチマークの突破が目標なのに現行版は未測。理論の ticket ばかり増える」 | HERE selects the next actual-path coverage/conformance result; evidence owner qualifies each row |
 | N1 | Is this benchmark score leaking? | `validating-experimental-evidence` |
 | N2 | Generate five new research theses with no selected candidate | `forging-novel-theses` with its entry requirements |
 | N3 | Reallocate next quarter's research programme | `supervising-research-programmes` |
@@ -25,6 +26,7 @@ Read name/description with plausible siblings. Tests are routing expectations, n
 | N8 | Decide whether to commit to an expensive irreversible rewrite | `acting-on-hypotheses` |
 | N9 | Reforge this SKILL.md | `forging-skills` owns the edit |
 | N10 | Prove this one lemma, with no scheduling or execution-loop request | `proving-theorems` |
+| N11 | This measured score beats the paper: is it comparable and concept-eligible? | `validating-experimental-evidence` |
 
 Ordered handoffs: a granted section's admission → HERE's microticket plan → existing run/dispatch owners →
 validated receipt → immediate next selection and theory update where relevant. Respect local WIP slots;

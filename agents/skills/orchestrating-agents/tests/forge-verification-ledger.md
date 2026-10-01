@@ -1470,3 +1470,18 @@ Source/audit, independent reviews and real check-only paired rehearsal:
 validating-experimental-evidence/tests/postmortem-2026-09-30-boundaries.md and its forge ledger.
 No live reservation, production job or runner schema was changed. No demonstrated OLD/NEW decision improvement.
 PROSE-DEBT waiver: the13existing reference warnings remain unchanged; core adds none.
+
+## 2026-10-01 — before-write component retrieval, v2610.1.0
+
+Source and limits: driving-bibifi-cycles/tests/postmortem-2026-10-01-target-drift.md.
+The failure report says a builder wrote many components while an indexed shared library
+held relevant predecessors; the parent's brief had not required retrieval before writing.
+The target domain owns which component is semantically suitable. `driving-cocoindex`
+owns the search and absence battery. C1 owns the timing and evidence relay in the
+implementation brief, then consumer read-back. No new search algorithm or approval
+stage is added. The constructed coordination case checks the post-hoc-query failure.
+
+Static review and the skill floor are the evidence for this edit; no active builder was
+replayed under an OLD/NEW brief. Therefore prevention of repeated implementations is
+unverified operationally. PROSE-DEBT waiver (2026-10-01): the 13 existing reference
+warnings remain queued behind this boundary repair; the new paragraph adds none.

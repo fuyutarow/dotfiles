@@ -897,3 +897,24 @@ validating-experimental-evidence/tests/postmortem-2026-09-30-boundaries.md and i
 OLD and NEW made the same eight substantive decisions. Both withheld the over-budget launch even though
 the real runner's check-only accepted its envelope. No throughput or runtime-enforcement improvement is claimed.
 Descriptions/listing budget are unchanged. Scoped floor adds no core/reference warning.
+
+## 23. Authorized benchmark outcome before proxy work — v2610.1.0
+
+Source, chronology, source grades and limits: `tests/postmortem-2026-10-01-target-drift.md`.
+This is a bounded retrospective of a user-supplied account, not an independent terminal audit.
+The target-specific transition is: authorized benchmark goal plus current registry/evidence
+state → choose the next actual-path result or necessary blocker → qualified row or explicit gap.
+The artifact owner is the existing BIBIFI iteration plan/log. EV0–EV4 retain claim meaning;
+orchestration retains dispatch. No new score store or skill is admitted (F2/F4).
+
+Calibration: the source corrected an agent that generated many legitimate findings while
+the user's benchmark outcome remained unmeasured. The capable executor's risk is the same
+direction: it can optimize discovery count while the accepted result numerator stays zero.
+The new conditional table makes coverage and eligibility the selection inputs, with
+critical theory and apparatus work still permitted when tied to a consuming target row.
+
+Static desk-check: F12/N11 and D34/D35. The negative case keeps evidence judgment
+with EV; the positive cases require current-path work and zero-win reporting before
+another broad survey. No live OLD/NEW execution or measured discovery/time comparison
+was run, so operational compliance and improvement are unverified. The target floor,
+whole-collection budget and repo link check are the implementation receipts for this turn.

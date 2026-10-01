@@ -72,39 +72,40 @@ describe("log-sys-snapshot", () => {
       colored,
     );
   });
-  const writeRate = (
+  const writeSession = (
     home: string,
     sid: string,
-    line: string,
+    rows: string[],
     ageMs = 1_000,
   ) => {
-    const dir = join(home, ".cache", "claude", "statusline-rate");
+    const dir = join(home, ".cache", "claude", "statusline-session");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, `${sid}.json`),
       JSON.stringify({
         at: Temporal.Now.instant().epochMilliseconds - ageMs,
-        line,
+        rows: rows.map((line) => ({ line })),
       }),
     );
   };
+  const CTX = "Ctx: 120k 60%";
   const RATE = "Rate: 5h 40% ⟳2h · 7d 60% ⟳5d";
-  test("this session's Rate row comes first on its own line", () => {
+  test("this session's rows follow the time in the order given: Ctx, Rate, then Sys", () => {
     const home = homeWithCache(1_000);
-    writeRate(home, "s1", RATE);
-    expect(body(fire(home, "Stop").stdout)).toBe(`${RATE} | ${LINE}`);
+    writeSession(home, "s1", [CTX, RATE]);
+    expect(body(fire(home, "Stop").stdout)).toBe(`${CTX} | ${RATE} | ${LINE}`);
   });
-  test("another session's Rate row is never shown here", () => {
+  test("another session's rows are never shown here", () => {
     const home = homeWithCache(1_000);
-    writeRate(home, "other", "Rate: 7d 51% ⟳5d");
+    writeSession(home, "other", ["Ctx: 9k 5%", "Rate: 7d 51% ⟳5d"]);
     expect(body(fire(home, "Stop").stdout)).toBe(LINE);
   });
-  test("a stale or empty Rate row leaves only the Sys row", () => {
+  test("stale or empty session rows leave only the Sys row", () => {
     const stale = homeWithCache(1_000);
-    writeRate(stale, "s1", RATE, 10 * 60_000);
+    writeSession(stale, "s1", [CTX, RATE], 10 * 60_000);
     expect(body(fire(stale, "Stop").stdout)).toBe(LINE);
     const empty = homeWithCache(1_000);
-    writeRate(empty, "s1", "");
+    writeSession(empty, "s1", [""]);
     expect(body(fire(empty, "Stop").stdout)).toBe(LINE);
   });
 });

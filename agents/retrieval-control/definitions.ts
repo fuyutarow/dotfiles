@@ -68,7 +68,7 @@ export type DefinitionAnswer = {
 
 export type Judge = "jev" | "local";
 type Thresholds = { strong: number; likely: number; hook: number };
-type JevEndpoint = { url: string; model?: string };
+type JevEndpoint = { url: string; model?: string; whenExhausted?: string };
 export type RetrievalConfig = {
   recall: number;
   pool: number;
@@ -135,10 +135,12 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     fail(`jev_endpoints.${provider}.url`, "an https:// URL");
   if (e.model !== undefined && typeof e.model !== "string")
     fail(`jev_endpoints.${provider}.model`, "a string when present");
-  const jevEndpoint: JevEndpoint =
-    e.model === undefined
-      ? { url: e.url as string }
-      : { url: e.url as string, model: e.model as string };
+  if (e.when_exhausted !== undefined && typeof e.when_exhausted !== "string")
+    fail(`jev_endpoints.${provider}.when_exhausted`, "a string when present");
+  const jevEndpoint: JevEndpoint = { url: e.url as string };
+  if (e.model !== undefined) jevEndpoint.model = e.model as string;
+  if (e.when_exhausted !== undefined)
+    jevEndpoint.whenExhausted = e.when_exhausted as string;
 
   if (
     !Array.isArray(d.no_egress) ||
@@ -670,7 +672,9 @@ export async function judgeJev(
         reason: `HTTP 401 at ${provider}: the key is not this provider's (retrieval.toml jev_provider)`,
       };
     if (status === 402)
-      return { reason: `HTTP 402 at ${provider}: no credit left — top up` };
+      return {
+        reason: `HTTP 402 at ${provider}: no credit left — ${endpoint.whenExhausted ?? "top up"}`,
+      };
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
     const json = await attemptOr(
       async () =>

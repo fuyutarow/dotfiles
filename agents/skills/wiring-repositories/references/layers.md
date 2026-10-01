@@ -11,7 +11,7 @@ The SKILL.md body carries none of this. A version number or a path detail there 
 
 | Layer | The actual artifact | Owner's entry point |
 |---|---|---|
-| git boundary | `.git/`, `.gitignore` | — (this skill; it is the frame, not a wire) |
+| VCS boundary | `.jj/` + `.git/` (colocated), `.gitignore`; shared jj config in dotfiles `jj/config.toml` | — (this skill; the frame, not a wire). Operating: `driving-jujutsu` |
 | toolchain pins | `mise.toml` `[tools]` | `wiring-mise-tasks` |
 | verb contract | `mise.toml` `[tasks]` + aliases | `wiring-mise-tasks` → its `templates/<lang>.mise.toml`, gate `scripts/mise-contract.ts` |
 | language manifest | `Project.toml`+`Manifest.toml` / `pyproject.toml`+`uv.lock` / `Cargo.toml`+`Cargo.lock` / `package.json`+`bun.lock` | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
@@ -110,12 +110,15 @@ reads sibling source, because a shared helper is referenced by the files that im
 
 SKILL.md S2 gives the constraints. This sequence satisfies all five:
 
-1. `git init`; write `.gitignore` **first**. Every later layer is measured against it.
+1. `jj git init --colocate`; write `.gitignore` **first**. Every later layer is measured against it.
+   Check `jj status` before the first commit: it snapshots every untracked, unignored file.
 2. `mise.toml`: `[tools]` pins, then the verb contract. Call `wiring-mise-tasks`.
 3. Language manifests. Declare each manager's scope and invocation root (§3).
 4. Install and lock. Run `setup` when adopted; otherwise validate its waiver and selected build/check entrypoint.
-5. `.claude/`, only if a repo-specific rule exists that the global set does not cover (§2).
-6. The pre-commit **task and its script**. Then, last, `git config core.hooksPath .githooks`.
+5. `.claude/settings.json` with the JJ-2 git deny; a jj repo always admits it. Add any other
+   repo-specific rule only when the global set does not cover it (§2).
+6. The pre-commit **task and its script**, and the `commit` / `pull` verbs (JJ-1). Then, last,
+   `git config core.hooksPath .githooks`.
 7. `ccc` registration, after the exclude set is decided (§4). Per clone, not per repo.
 8. Research governance, if multiple uncoordinated writers produce documents.
 

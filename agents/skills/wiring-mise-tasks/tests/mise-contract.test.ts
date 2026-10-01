@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -100,6 +101,24 @@ describe("mise-contract floor", () => {
     );
     expect(code).toBe(1);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("a jj repo (.jj/ present) must resolve commit and pull; a git-only repo is not asked", () => {
+    const toml = '[tasks.hello]\nrun = "echo hi"\n';
+    const plain = makeRoot(toml);
+    expect(run(plain).out).not.toContain("commit");
+    const jjRepo = makeRoot(toml);
+    mkdirSync(join(jjRepo, ".jj"));
+    const { out } = run(jjRepo);
+    expect(out).toContain("FAIL  commit — unresolved in a jj repo");
+    expect(out).toContain("FAIL  pull — unresolved in a jj repo");
+    expect(out).toContain("9 hard, 7 warn");
+    const ok = makeRoot(
+      toml + '[tasks.commit]\nrun = "true"\n[tasks.pull]\nrun = "true"\n',
+    );
+    mkdirSync(join(ok, ".jj"));
+    expect(run(ok).out).toContain("OK    commit (jj repo)");
+    for (const d of [plain, jjRepo, ok]) rmSync(d, { recursive: true, force: true });
   });
 
   test("mise.toml has no [tasks] at all: FAIL 'no local mise tasks', exit 1", () => {

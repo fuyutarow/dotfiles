@@ -301,3 +301,18 @@ as the one place that says what a hook runs.
 do (rumdl, oxlint, typecheck). HOOK-1c forbids only the formatter check, the measured blocker. An
 index-scoped lint is each repo's `lint:*` design (firedancer's `polysearch hook pre-commit` already
 reads the index).
+
+## 11. Reforge 2026-10-01 — a new repo is colocated jj (v2610.1.0)
+
+Source: User decision 2026-10-01: 「new projectにおいては jjにしたい。それが私たちのsuiteです」. Precedent: firedancer (jj since 2026-09-30) and dotfiles (jj since 2026-10-01) — colocated `.jj/` + `.git/`, `.claude/settings.json` denying `Bash(git:*)` / `Bash(command git:*)` / `Bash(env git:*)`, commits through `mise run commit` (scripts/jj-commit.ts).
+
+| Change | Why | Receipt |
+|---|---|---|
+| S1 VCS row: colocated jj by default; plain git only with a named consumer | the house suite changed; git-only was the stale default | — |
+| JJ-1 commit/pull verbs | jj runs no git hooks; a bare `jj commit` passes ungated, silently | `mise-contract.ts` FAILs `commit`/`pull` in a fixture with `.jj/` (wiring-mise-tasks test) |
+| JJ-2 git deny | an agent `git commit` bypasses the gate and the bookmark | proof-of-fire: `wiring-check.ts` on a fresh `jj git init --colocate` fixture → `FAIL [JJ-2]`; dotfiles and firedancer → no JJ-2 finding |
+| JJ-3 shared jj config | `jj config set --repo` lives in ~/.config/jj/repos/, outside every checkout; values set there were lost per machine | dotfiles `jj/config.toml` linked to ~/.config/jj/config.toml (commit 7c0c3813) |
+
+skill-check: 0 FAIL, 0 prose-debt WARN (the first draft added 4 long sentences; split before commit). F4: `lint:skills-floor` within budget.
+Trigger desk-check: 「新しいプロジェクトは jj で始めたい」 → fires here (新しいリポジトリ / プロジェクトを立ち上げ + jj); driving-jujutsu also matches "jj" and routes repo wiring here — sequential co-fire, wiring first.
+Pre-existing findings seen, not in scope: dotfiles and firedancer `ORDER-4` (ccc excludes `**/.*`), firedancer `ORDER-3` (absolute hooksPath).

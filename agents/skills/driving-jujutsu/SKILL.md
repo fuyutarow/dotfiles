@@ -15,7 +15,7 @@ description: >-
 
 # Driving Jujutsu — changes, bookmarks, operations
 
-> **Version**: v2609.1.0 (2026-09-30). Command forms checked against jj 0.45.1.
+> **Version**: v2610.1.0 (2026-10-01) — house jj repos record via `mise run commit`. Command forms checked against jj 0.45.1.
 > Fast-moving compatibility and source links live only in [version-and-compatibility.md](references/version-and-compatibility.md); recheck them before migration or unsupported-feature claims.
 
 Verify this package: `bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/driving-jujutsu`.
@@ -59,7 +59,8 @@ Interpret either output as recorded state.
 | Intent | Command path | Check |
 |---|---|---|
 | Start a change | `jj new <base>` | `jj log -r '@|@-'` shows the intended parent. |
-| Finish current change and start an empty child | `jj commit -m '<message>'` | `jj log -r '@|@-'`; verify the completed diff with `jj show @-`. |
+| Record work in a repo with a `commit` mise task (house jj repos) | `mise run commit -- -m '<message>' [--push] -- <paths>` | Its receipts: the new `@-`, the diff stat, the bookmark; with `--push`, the remote bookmark. |
+| Finish current change and start an empty child (no `commit` task) | `jj commit -m '<message>'` | `jj log -r '@|@-'`; verify the completed diff with `jj show @-`. |
 | Change the current description without starting a child | `jj describe -m '<message>'` | `jj show @`; next file edit still amends this CHANGE. |
 | Put only selected work into a change | `jj split <paths>` or `jj split` interactively; `jj squash <paths>` to move work into the parent | `jj show` both resulting changes; do not assume Git's staged index controls jj. |
 | Rebase a stack | `jj rebase -b <branch-rev> -o <new-base>` | `jj log` shows descendants and any conflicts. |
@@ -81,11 +82,12 @@ for migration, Git colocation, unsupported features, and conflicts.
 | A green rebase means all conflicts were resolved | Inspect `jj status` and `jj log`; jj can record conflicted commits. |
 | `jj undo` is always the right recovery | Use the OPERATION log and J4; `jj op restore` changes the entire repo view. |
 | Git hooks, submodules, LFS, or Git worktrees behave like native jj features | Check the dated compatibility reference and the target repo's actual setup. |
+| A bare `jj commit` runs the repo's commit gate | It runs none. Where a `commit` task exists, use `mise run commit` (`wiring-repositories` JJ-1). |
 
 **PURPOSE cut:** This skill owns `jj` commands and jj↔Git interoperability.
 `driving-git` owns Git commands, storage cleanup, and shared checkout policy.
 Co-fire only when the job crosses that boundary. Repo wiring (ignore files,
-hooks, install/links) belongs to `wiring-repositories`. The code change itself belongs
+hooks, install/links, a new repo's jj layer JJ-1..3) belongs to `wiring-repositories`. The code change itself belongs
 to the relevant implementation skill.
 
 ## Fire / no-fire

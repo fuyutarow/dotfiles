@@ -3,7 +3,7 @@ name: wiring-mise-tasks
 description: >-
   Wires per-language toolchains into the house-standard mise task graph — one muscle-memory verb
   contract for every repo (setup/i, fmt/f, fmt:check, fmt:staged, lint/l, test/t, up/u, check/c = all-gates
-  aggregate; tokens resolve via `mise run` / the `m` alias) with per-language template bodies
+  aggregate; jj repos add commit/pull; tokens resolve via `mise run` / the `m` alias) with per-language template bodies
   (Julia Runic/Pkg, Rust cargo, Python uv/ruff, TypeScript bun/biome) and a machine gate
   (scripts/mise-contract.ts) proving the tokens resolve. MANDATORY — read before naming or adding
   any mise task. Use when creating or editing a mise.toml, adding/naming/renaming tasks
@@ -21,7 +21,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2609.2.0 (2026-09-25) — `fmt:staged`: the commit gate fixes staged files in place.
+> **Version**: v2610.1.0 (2026-10-01) — jj repos: `commit` / `pull` verbs, gated by `mise-contract`.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -66,6 +66,14 @@ skill now closes.
 | `up` / `u` | HARD / SOFT | dependency update — the lockfile-moving verb |
 | `check` / `c` | HARD / SOFT | ALL-GATES AGGREGATE: depends-only, never a body; CI = `mise run check` |
 | `setup` / `i` | SOFT / SOFT | instantiate deps/toolchain (Rust legitimately waives: cargo resolves at build) |
+
+**jj repos** (a `.jj/` beside `.git/`; the house default for a new repo) add two HARD verbs.
+jj runs no git hooks, so these are the only way the gate and post-merge step run:
+
+| Token | Tier | Meaning |
+|---|---|---|
+| `commit` | HARD in a jj repo | stage exactly the named paths, run `hook:pre-commit`, `jj commit` them, move the bookmark (`BOOKMARK`, default `alpha`) to `@-`, `--push` pushes and checks the remote; then the `post-commit` shim. Body = `scripts/jj-commit.ts`, run, never copied |
+| `pull` | HARD in a jj repo | `jj git fetch`, then `jj rebase -b @ -d 'trunk()'`; a repo with `hook:post-merge` runs it last |
 
 - **Resolution** = the token is a LOCAL task name or alias (`mise tasks ls --json`, source under
   the repo root — global `~/.config/mise` tasks do not count).
@@ -183,6 +191,7 @@ FIRES:
 | 「全リポで `mise run f` が効くか監査して」 | multi-repo audit — the fan-out case |
 | 「pre-commit で整形チェックに止められる。in place で直してほしい」 | `fmt:staged` + `hook:pre-commit` shape (with `wiring-repositories` HOOK-1c) |
 | 「このプロジェクトのタスク体系を qoed と揃えたい」 | contract adoption, no headline keyword |
+| 「jj のリポで `mise run commit` が無いと言われる」 | jj verbs — copy the template block |
 
 Co-fire:
 
@@ -220,4 +229,5 @@ MUST NOT fire (route):
 | `templates/*.mise.toml` | copy-out fragments; runtime versions and project scopes must be filled | scaffolding a repo, before materialization and verification |
 | `scripts/mise-contract.ts` | the resolution gate — run, never read into context | after every mise.toml edit; per-repo in audits |
 | `scripts/fmt-staged.ts` | the `fmt:staged` body — run, never copied into a repo | wiring or debugging a commit gate |
+| `scripts/jj-commit.ts` | the `commit` body in a jj repo — run, never copied; `--help` lists flags | wiring or debugging a jj commit gate |
 | `tests/forge-verification-ledger.md` | F3 artifact: fleet findings, drift baseline 2026-07-17, provenance of this skill's own claims | reforging; auditing this skill |

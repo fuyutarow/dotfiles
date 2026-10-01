@@ -11,6 +11,10 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 const hard = ["fmt", "f", "fmt:check", "lint", "test", "up", "check"];
 const soft = ["setup", "i", "fmt:staged", "l", "t", "u", "c"];
+// A colocated jj repo (a `.jj/` beside `.git/`) runs NO git hooks, so its commit gate and its
+// post-merge step exist only as these two verbs (wiring-repositories JJ-1). Hard there; not
+// checked in a git-only repo.
+const jj = ["commit", "pull"];
 
 type Task = Readonly<{
   name: string;
@@ -380,7 +384,7 @@ async function check(
     warnings += 1;
   }
   for (const token of waiver.active) {
-    if (![...hard, ...soft].includes(token)) {
+    if (![...hard, ...soft, ...jj].includes(token)) {
       process.stdout.write(
         `WARN  waiver names unknown token '${token}' — inert (not in the contract)\n`,
       );
@@ -404,6 +408,21 @@ async function check(
     else {
       process.stdout.write(`WARN  ${token} — unresolved (soft token)\n`);
       warnings += 1;
+    }
+  }
+  if (existsSync(`${root}/.jj`)) {
+    for (const token of jj) {
+      if (resolved.has(token)) process.stdout.write(`OK    ${token} (jj repo)\n`);
+      else if (waiver.active.has(token))
+        process.stdout.write(`WAIVE ${token} (mise.toml waiver)\n`);
+      else {
+        process.stdout.write(
+          `FAIL  ${token} — unresolved in a jj repo: jj runs no git hooks, so without it ` +
+            `${token === "commit" ? "every commit skips hook:pre-commit" : "a fetch never runs hook:post-merge"} ` +
+            `(template: templates/*.mise.toml [tasks.${token}])\n`,
+        );
+        failures += 1;
+      }
     }
   }
   if (existsSync(tomlPath)) {

@@ -17,7 +17,7 @@ description: >-
 
 # Driving git — jobs, verbs, receipts
 
-> **Version**: v2609.2.1 (2026-09-30) — routes jj operations to `driving-jujutsu`.
+> **Version**: v2609.2.2 (2026-10-01) — a house jj repo denies agents git; its jobs route to `driving-jujutsu`.
 > Receipts, grades, calibration, F3 desk-check: `tests/forge-verification-ledger.md`.
 > **Durability**: no version number or "experimental" claim in this body — all in `references/config.md`.
 
@@ -171,7 +171,7 @@ MUST NOT fire (with route):
 | 「この関数、振る舞い変えずに整理して」 (commit only at the end) | `refactoring-code` owns the change; this skill co-fires at the commit |
 | 「次のリリースは semver でいく? calver?」 | `designing-version-schemes` |
 | "generate an ssh key for GitHub" (the key, not git) | `securing-remote-access` |
-| 「jj (jujutsu) に乗り換えたい」 | `driving-jujutsu`; a colocated repo's Git commands still obey this skill |
+| 「jj (jujutsu) に乗り換えたい」 | `driving-jujutsu`; a new repo's jj wiring → `wiring-repositories` JJ-1..3 |
 | "what's the difference between a merge and a rebase?" (conceptual, no operation) | answer directly — no ceremony |
 | `git log --oneline -20` to orient before editing | a read — no pipeline, no receipt |
 | 「C: がいっぱい。WSL の VHDX を縮めたい」 | `operating-wsl2-on-windows`; Git fires only if a Git store is the measured cause |
@@ -188,7 +188,7 @@ MUST NOT fire (with route):
 | `driving-codex` · `driving-grok` · `driving-antigravity` | **PURPOSE** — whether a foreign agent needs containment → theirs. The worktree/branch it gets and how its work is reviewed and integrated → here (`references/shared-checkouts.md` §4) |
 | `securing-remote-access` | **DECISIVE by artifact** — the ssh key pair and its agent/hardware backing → theirs. `gh auth` state and the git-side signing config (`gpg.format`, `user.signingkey`, `commit.gpgsign`) → here (`references/jobs.md` §16, §21). Their body never mentions `gh`; this side owns it |
 | `designing-version-schemes` | **DECISIVE** — what a version/tag MEANS → theirs; `git tag`/push mechanics → here |
-| `driving-jujutsu` | **PURPOSE** — jj commands, bookmarks, operations, and jj↔Git interoperability → theirs; actual Git commands, Git storage, and shared Git checkout protocol → here. Co-fire only when a job crosses both command families. |
+| `driving-jujutsu` | **PURPOSE** — jj commands, bookmarks, operations, and jj↔Git interoperability → theirs; actual Git commands, Git storage, and shared Git checkout protocol → here. Co-fire only when a job crosses both command families. A house jj repo denies agents git (`wiring-repositories` JJ-2): there every agent job is theirs, and commits go through `mise run commit`. |
 | lazygit (`lg`) | `lg` is the human's interactive surface (house preference); an agent runs plain git. |
 
 ## Reference index

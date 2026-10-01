@@ -111,4 +111,17 @@ if (running && current && running !== current) {
   }
 }
 
+// The update path restarts the daemon (above, or codex's own updater), and a restart is where remote
+// control was lost on 2026-10-01. Re-converge to agents/codex/app-server.toml; report, never mask
+// the update's own status.
+const converge = Bun.spawn(
+  ["bun", `${import.meta.dir}/codex-remote-control.ts`],
+  {
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: RESTART_TIMEOUT_MS,
+  },
+);
+await converge.exited;
+
 process.exit(updateCode);

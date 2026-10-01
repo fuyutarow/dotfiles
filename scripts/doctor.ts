@@ -16,6 +16,7 @@
 //   bun-floor   mise installs + tracked pins     no bun < 1.4 (Temporal) installed or pinned
 //   mcp         .mcp.json                        every declared server registered in Claude Code
 //                                                (and Codex, when installed)
+//   codex-remote agents/codex/app-server.toml     Codex daemon remote control (mobile app) as declared
 //   wslconfig   wsl/wslconfig.win   (WSL only)   %USERPROFILE%\.wslconfig is a byte-equal copy
 //   ccc-daemon  cocoindex unit      (WSL only)   ccc-daemon.service is active under systemd --user
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
@@ -53,6 +54,11 @@ import {
   parseMapping,
 } from "../agents/retrieval-control/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
+import {
+  drift,
+  readDeclared,
+  readLive,
+} from "../agents/codex/remote-control.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -704,6 +710,29 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
   );
 }
 
+export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
+  if (!Bun.which("codex")) return skip("codex-remote", "codex not installed");
+  const declared = await readDeclared(ctx.dotfiles);
+  if (declared instanceof Error)
+    return fail(
+      "codex-remote",
+      declared.message,
+      "fix agents/codex/app-server.toml",
+    );
+  const lines = drift(declared, await readLive(ctx.home));
+  if (lines.length === 0)
+    return pass(
+      "codex-remote",
+      `app-server remote control ${declared ? "enabled" : "disabled"} as declared`,
+    );
+  return fail(
+    "codex-remote",
+    "Codex app-server remote control differs from agents/codex/app-server.toml (mobile app cannot connect when it is off)",
+    "mise run codex:remote-control",
+    lines,
+  );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -722,6 +751,7 @@ export const CHECKS: Check[] = [
   { name: "mise-scope", run: checkMiseScope, applies: always },
   { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
+  { name: "codex-remote", run: checkCodexRemote, applies: always },
   {
     name: "wslconfig",
     run: checkWslconfig,

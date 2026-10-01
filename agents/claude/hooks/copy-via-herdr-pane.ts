@@ -38,7 +38,14 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
 
-const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
+// herdr exports its own binary as HERDR_BIN_PATH when it starts a pane — a VERSIONED Homebrew
+// Cellar path. A `brew upgrade herdr` deletes that directory, so every pane opened before the
+// upgrade keeps a dead path (2026-10-01: 0.9.1 path gone after 0.9.3, /quote stopped copying).
+// Use it only while it still exists; otherwise the `herdr` on PATH (the stable brew symlink).
+const HERDR_BIN =
+  process.env.HERDR_BIN_PATH && existsSync(process.env.HERDR_BIN_PATH)
+    ? process.env.HERDR_BIN_PATH
+    : "herdr";
 const DOTFILES = process.env.DOTFILES || `${process.env.HOME}/dotfiles`;
 const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
 const POLL_ATTEMPTS = 10;

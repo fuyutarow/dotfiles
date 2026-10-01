@@ -27,7 +27,7 @@
 // within this one firing closes that race instead of relying on the next resume/compact.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 
@@ -39,7 +39,14 @@ const LOOKUP_RETRY_DELAY_MS = 500;
 // Prefer the env var Claude Code exports for its own binary — hooks may run with a narrow
 // PATH (see hooks/lib.ts's findExe comment) — falling back to a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
-const HERDR_BIN = process.env.HERDR_BIN_PATH || "herdr";
+// herdr exports its own binary as HERDR_BIN_PATH when it starts a pane — a VERSIONED Homebrew
+// Cellar path. A `brew upgrade herdr` deletes that directory, so every pane opened before the
+// upgrade keeps a dead path (2026-10-01: 0.9.1 path gone after 0.9.3, /quote stopped copying).
+// Use it only while it still exists; otherwise the `herdr` on PATH (the stable brew symlink).
+const HERDR_BIN =
+  process.env.HERDR_BIN_PATH && existsSync(process.env.HERDR_BIN_PATH)
+    ? process.env.HERDR_BIN_PATH
+    : "herdr";
 
 type Entry = { name?: string; at: number };
 

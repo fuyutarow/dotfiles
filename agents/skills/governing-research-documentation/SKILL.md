@@ -226,6 +226,7 @@ That skill never decides `DOC ADMISSION` or lifecycle meaning. This skill consum
 | One frozen bounded research-process retrospective | `auditing-research-processes`; co-fire HERE only when its artifact must become durable |
 | Actors, visibility, dependencies, vetoes, or acceptance topology | `orchestrating-agents`; HERE retains admission/lifecycle meaning |
 | One task's resumable transient state | `continuing-long-running-tasks` |
+| Records-store, code, or run-artifact home and landing in a research notebook repo | `keeping-research-notebooks`; the document portfolio stays HERE |
 | Wiki/search product installation without a governance problem | product/setup owner |
 | Naming or renaming one ordinary file with no R&D portfolio decision | repository/domain owner |
 | Cross-document admission, authority, lifecycle, or review contract | **HERE** |

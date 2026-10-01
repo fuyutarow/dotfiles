@@ -21,7 +21,7 @@ description: >-
 
 # Wiring mise tasks — one verb contract, per-language bodies
 
-> **Version**: v2610.1.0 (2026-10-01) — jj repos: `commit` / `pull` verbs, gated by `mise-contract`.
+> **Version**: v2610.2.0 (2026-10-01) — notebook repos take the recipes §1 RULING NOTEBOOK-JULIA bodies.
 > Owns the task graph, naming, template fragments and resolution gate.
 > Dated tool facts, provenance and rulings live in `references/recipes.md`.
 
@@ -149,7 +149,8 @@ declared under the first rule, moving a body to `scripts/*.ts` costs nothing —
 
 ## Templates and the gate
 
-- **Scaffold**: templates are fragments, not ready-to-run repositories.
+- **Scaffold**: templates are fragments, not ready-to-run repositories. A notebook repo
+  (`keeping-research-notebooks` homes §0) uses recipes §1 NOTEBOOK-JULIA for Julia bodies.
   Copy the nearest one, select runtime versions in `[tools]`, and fill the actual roots and coverage.
   Preserve verbs and aliases; verify the materialized configuration before calling it ready.
 - **Verify — after EVERY mise.toml edit**:

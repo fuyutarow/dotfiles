@@ -37,6 +37,24 @@ task description (「JET/Aqua等の追加は依存最小方針により見送り
 repos; **full** (the three dedicated tasks) once `src/` is a real package. A silent starter — no
 written deferral — is drift, not a tier.
 
+**RULING — NOTEBOOK-JULIA: a notebook repo's Julia root is `packages`, not `.`.** The class is
+`keeping-research-notebooks` homes §0's predicate. The workspace root has no deps, so Runic runs from
+a named shared env that the repo's own `setup:runic` task creates.
+
+| Verb | Notebook body |
+|---|---|
+| `setup` | depends `setup:runic`; run `julia --project=packages -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'` |
+| `setup:runic` | `julia --project=@runic -e 'import Pkg; Pkg.add("Runic")'` |
+| `fmt:julia` / `fmt:check` | `julia --project=@runic -m Runic --inplace packages` / `--check packages` |
+| `fmt:staged` | `--tool 'jl=julia --project=@runic -m Runic --inplace' --exclude '<records-store root>/**'` |
+| `test`, before the first member | `run = "echo '<no member yet>'"`, exit 0 |
+| `test`, from the first member | `depends = ["test:<Name>", ...]`; the first member replaces the `run` body |
+| `test:<Name>` (`<Name>` without `.jl`) | `julia --project=packages/<Name>.jl -e 'import Pkg; Pkg.test()'` |
+| `lint:aqua` / `lint:imports` / `lint:jet` | `julia --project=packages/<Name>.jl packages/<Name>.jl/test/<check>.jl`, one per member |
+| `up` | `julia --project=packages -e 'import Pkg; Pkg.update()'` |
+
+A backtrace after a sibling gate failed in the same `mise run check` is mise's SIGTERM, not a test fault.
+
 **RULING — test's token must resolve even when the suite is blocked.** Three observed shapes:
 plain `Pkg.test()` (beateater, the default); direct smoke script (xoria's
 `julia --project=poc poc/test/smoke.jl`, legal for poc-shaped repos); blocked-with-pointer (qoed:

@@ -316,3 +316,11 @@ Source: User decision 2026-10-01: 「new projectにおいては jjにしたい�
 skill-check: 0 FAIL, 0 prose-debt WARN (the first draft added 4 long sentences; split before commit). F4: `lint:skills-floor` within budget.
 Trigger desk-check: 「新しいプロジェクトは jj で始めたい」 → fires here (新しいリポジトリ / プロジェクトを立ち上げ + jj); driving-jujutsu also matches "jj" and routes repo wiring here — sequential co-fire, wiring first.
 Pre-existing findings seen, not in scope: dotfiles and firedancer `ORDER-4` (ccc excludes `**/.*`), firedancer `ORDER-3` (absolute hooksPath).
+
+## 2026-10-01 — notebook repo layout (cross-skill revision)
+
+A research notebook repo (`keeping-research-notebooks` homes §0 predicate) keeps no manifest at the root.
+This skill now cites that predicate instead of restating it.
+The full record is in `keeping-research-notebooks` tests/forge-verification-ledger.md §7: the incident, the findings
+(workflow `wf_d7608669-493`, 46 findings across four lenses), the fixes, and owner-named deferrals.
+Prose-debt WARN counts equal the pre-edit copy (standing debt, not added).

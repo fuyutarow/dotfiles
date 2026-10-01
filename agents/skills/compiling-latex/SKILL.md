@@ -28,7 +28,9 @@ Use executable repo configuration over long natural-language procedures. For pro
 - Get the base TeX distribution from Homebrew via the repo `Brewfile` (`mactex-no-gui` on mac, `texlive` on linuxbrew); get non-TeX tools (`tex-fmt`, `poppler`) from Homebrew too. See **Environment** below.
 - Use `tlmgr` for extra TeX Live packages — but on linuxbrew it MUST be **user mode** (`tlmgr --usermode install`), not system mode (which is blocked there). See **Environment**.
 - Put generated PDFs and aux files under a build directory whenever possible.
-- For papers/slides in `papers/`, prefer `{yymm}_{seq}-{title_name}` directories, where `title_name` uses underscores.
+- Name each paper/slide directory `{yymm}_{seq}-{title_name}`, where `title_name` uses underscores.
+  The parent is `papers/` in a plain repo. A research notebook repo uses `deliverables/papers/` or `deliverables/slides/`.
+  That placement is owned by `keeping-research-notebooks` homes §0; the name stays here.
 
 ## Environment (toolchain install)
 

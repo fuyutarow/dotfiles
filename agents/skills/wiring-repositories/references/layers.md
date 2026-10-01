@@ -47,6 +47,7 @@ Use a short table in the scaffold plan; no extra document is required.
 
 | Actual layout | Decision | Verification |
 |---|---|---|
+| Notebook class (`keeping-research-notebooks` homes §0 predicate) | no root manifest; every manifest under `packages/` or `envs/<slug>/`; the rows below apply to plain repos only | homes §0 root-deny list |
 | Independent component in a subtree | Keep its manifest there | Tasks select that root explicitly |
 | Two managers govern graphs from the repository root | Root manifests may coexist | Inspect both membership declarations and both command scopes |
 | Nested/excluded workspace | Name its separate build/test/release boundary | Run its own checks; parent success does not cover it |

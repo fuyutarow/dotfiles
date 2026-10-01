@@ -186,3 +186,11 @@ Source: User decision 2026-10-01: 「new projectにおいては jjにしたい�
 - All five templates carry the block and parse as TOML. `pull` rebases onto `trunk()`, which the shared jj config resolves.
 - `scripts/jj-commit.ts` (argv via cleye since 2026-10-01) is now indexed in the reference table.
 - skill-check: prose-debt unchanged from the pre-edit version (SKILL.md 11, recipes.md 14 — standing debt, not added here).
+
+## 2026-10-01 — notebook repo layout (cross-skill revision)
+
+A research notebook repo (`keeping-research-notebooks` homes §0 predicate) keeps no manifest at the root.
+This skill now cites that predicate instead of restating it.
+The full record is in `keeping-research-notebooks` tests/forge-verification-ledger.md §7: the incident, the findings
+(workflow `wf_d7608669-493`, 46 findings across four lenses), the fixes, and owner-named deferrals.
+Prose-debt WARN counts equal the pre-edit copy (standing debt, not added).

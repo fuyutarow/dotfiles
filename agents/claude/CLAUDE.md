@@ -40,10 +40,10 @@
   `battery` (≥3 JA/EN paraphrases) before absence/new implementation claims, `literal` for exact text,
   `exhaustive` for regex enumeration, `files` for path inventory, and `structural` for ccc
   by-example grep; known symbols go to Serena. **Before writing a new function or type**, run
-  `repo-retrieve definition --query '<what it does>'` — an existing one is reused, not rewritten. The guaranteed entrypoint is
-  `bun ~/.claude/hooks/repo-retrieve.ts`; the PATH command `repo-retrieve` is the same file installed
-  as a package `bin` by `bun link` (dotfiles `mise run deps`) and is only a convenience. If the
-  guaranteed file is missing, STOP and repair the harness — never bypass the gate with Python,
+  `repo-retrieve definition --query '<what it does>'` — an existing one is reused, not rewritten. Type
+  `repo-retrieve` (a package `bin` installed by `bun link`, dotfiles `mise run deps`). Only if that
+  name does not resolve, use the always-present file `bun ~/.claude/hooks/repo-retrieve.ts` — the
+  same router. If both are missing, STOP and repair the harness — never bypass the gate with Python,
   Node, shell loops, or another search implementation. Empty ccc output is NO_MATCH, never PASS.
   The router deliberately uses rg for lexical routes; the ban is unclassified search.
 

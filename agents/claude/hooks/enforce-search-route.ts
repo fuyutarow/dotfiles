@@ -7,7 +7,7 @@
 // silent: lexical search remains the only available local backend. The router lives beside this
 // hook, so the hook and its required entrypoint deploy as one linked directory.
 
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
@@ -50,7 +50,18 @@ const ROUTED_STREAM_FILTER = new RegExp(
     String.raw`(?:\s*\|\s*(?:head|tail)(?:\s+-n\s*\d+|\s+-\d+)?)?\s*$`,
 );
 const ROUTER = join(import.meta.dir, "repo-retrieve.ts");
-const ROUTER_COMMAND = "bun ~/.claude/hooks/repo-retrieve.ts";
+// What to tell the caller to type: the short PATH command when it resolves to THIS router (the
+// package bin from `bun link`), else the long path that always exists beside this hook. Every deny
+// used to print the long form, so agents copied `bun ~/.claude/hooks/repo-retrieve.ts …` forever
+// although `repo-retrieve` was installed (2026-10-01, owner: 「ずっとこれに耐えるしかないの？？」).
+const ROUTER_COMMAND = ((): string => {
+  const onPath = Bun.which("repo-retrieve");
+  const same =
+    onPath !== null &&
+    existsSync(ROUTER) &&
+    realpathSync(onPath) === realpathSync(ROUTER);
+  return same ? "repo-retrieve" : "bun ~/.claude/hooks/repo-retrieve.ts";
+})();
 
 function isRawSearch(command: unknown): boolean {
   if (typeof command !== "string" || command === "") return false;
@@ -188,7 +199,7 @@ function main(): void {
   decidePre(
     "deny",
     `search-route: raw ${tool} search is disabled in operational ccc project ${project}. ` +
-      `Declare the query shape through the guaranteed entrypoint ${ROUTER_COMMAND}: ` +
+      `Declare the query shape through ${ROUTER_COMMAND}: ` +
       `${ROUTER_COMMAND} concept --query '<unknown-name concept>'; ` +
       `${ROUTER_COMMAND} battery --query '<q1>' --query '<q2>' --query '<q3>' ` +
       `(absence/new implementation); ` +

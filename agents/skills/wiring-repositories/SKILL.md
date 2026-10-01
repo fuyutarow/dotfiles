@@ -7,7 +7,7 @@ description: >-
   bootstrap a repo — and equally for 配線監査, 健全性チェック, health check, repo audit,
   不備がないか, 発火しない hook, 呼ばれない tool, 版が固定されていない, "clone したら動かない".
   Owns the SET, the ORDER, the JOINT, and the GIT-HOOK shape (hook shim runs `hook:<event>`; a gate's
-  task is depends-only over contract verbs) across git/.gitignore, mise [tools], manifests,
+  task is depends-only over contract verbs); a new repo is colocated jj (JJ-1..3) across git/.gitignore, mise [tools], manifests,
   .claude/, .githooks + core.hooksPath, the ccc index, and research-governance config — never a
   layer's contents. LAW: a layer enters only with the failure it prevents named in the commit.
   Cuts — CARDINALITY vs wiring-mise-tasks: ONE artifact (the task graph, its verbs, its
@@ -110,6 +110,20 @@ A repo-specific check (governance, records, a version bump) becomes a `lint:*` s
 runs from `mise run lint` by hand AND at commit. Event hooks keep the positional-argument
 exemption. `pre-commit` does not: githooks(5) gives it no parameters.
 
+### Under jj — the hooks become verbs (JJ-1..3)
+
+jj runs **no** git hooks. In a jj repo the `.githooks/` shims fire only for a human's direct git
+command, so the gate and the post-merge step need an entrypoint jj cannot skip.
+
+| # | Rule | Floor |
+|---|---|---|
+| **JJ-1** | The commit gate is `mise run commit`; the post-merge step is `mise run pull`. Task bodies and the template block: `wiring-mise-tasks` (verbs `commit` / `pull`). `commit` runs `hook:pre-commit` over exactly the named paths, so HOOK-1/1c hold unchanged, then the `post-commit` shim | `mise-contract.ts`: `commit` / `pull` are hard where `.jj/` exists |
+| **JJ-2** | Agents get no git: `.claude/settings.json` denies `Bash(git:*)`, `Bash(command git:*)`, `Bash(env git:*)`. Mise task bodies may still call git | `wiring-check.ts` JJ-2 |
+| **JJ-3** | Identity, `trunk()`, and the snapshot size cap come from the dotfiles user config (`jj/config.toml`). `jj config set --repo` only for a value specific to this repo (e.g. `trunk()` on `main`), never a copy of the shared one | — (repo config lives outside the checkout) |
+
+Keep `.githooks/` + `core.hooksPath` in a jj repo: `commit` reuses `hook:pre-commit` and the
+`post-commit` shim, and a human's git command still runs them. S2 rows 2–3 still apply.
+
 **Waivers.** A finding is answered, not silenced, in the form this house already uses:
 
 ```toml
@@ -126,11 +140,11 @@ answer.
 
 | Layer | Admit when | Owner skill after |
 |---|---|---|
-| `git` + `.gitignore` | always — it is the frame every later layer is measured against | — |
+| VCS: **colocated jj** (`jj git init --colocate`) + `.gitignore` | always — the house suite for a new repo (2026-10-01). Plain git only for a repo whose named consumer cannot coexist with `.jj/`; say which | `driving-jujutsu` (operating); JJ-1..3 below (wiring) |
 | mise `[tools]` pins | the repo runs any tool whose version changes its output | `wiring-mise-tasks` |
 | mise `[tasks]` verb contract | always — the contract is repo-invariant | `wiring-mise-tasks` |
 | language manifest | the repo holds that language's source | `writing-julia` / `writing-python` / `writing-rust` / `writing-bun-scripts` |
-| `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce | `operating-the-harness` |
+| `.claude/settings.json` | a repo-specific rule exists that the **global** hooks do not already enforce — a jj repo always has one (JJ-2) | `operating-the-harness` |
 | `.githooks/` + hooksPath | a check must run at commit time, not only on demand | **this skill** owns the hook's SHAPE (below); `wiring-mise-tasks` owns the task it calls |
 | `.cocoindex_code/` | unknown-name search will happen, and the corpus is too big to read | `driving-cocoindex` |
 | research-governance config | **multiple uncoordinated writers** produce documents here | `governing-research-documentation` |
@@ -147,7 +161,7 @@ exact-patch pin rule are dated facts — `references/layers.md` §2.
 ## The pipeline
 
 1. **CLASSIFY** — repo, or scratch directory. One that will never be cloned, shared, or written
-   by a second session takes `git init` and nothing else. Say so and stop.
+   by a second session takes `jj git init --colocate` and nothing else. Say so and stop.
 2. **ADMIT (S1)** — walk the layer table. For each YES, write the failure it prevents. That list
    is the scaffold plan, and it goes in the commit message.
 3. **LAY (S2)** — in the order above, calling each layer's owner skill for its contents. This
@@ -183,6 +197,8 @@ FIRES:
 | 「使ってない hook とか tool が溜まってる。棚卸しして」 | S1 ADMISSION run backwards |
 | 「他のセッションの作業中ファイルのせいで commit が通らない」 | HOOK-1c — the commit gate reads the whole tree |
 | "I cloned this repo and nothing works" | S3 — green-from-clone is the definition of done |
+| 「新しいプロジェクトは jj で始めたい」 | VCS layer + JJ-1..3 — the house suite |
+| 「jj にしたら pre-commit が走ってない気がする」 | JJ-1 — jj runs no git hooks |
 
 MUST NOT fire (with route):
 
@@ -212,6 +228,7 @@ MUST NOT fire (with route):
 | `forging-skills` | **PURPOSE** — a repo-local `.claude/skills/` is a layer this skill may admit; the craft of any SKILL.md → theirs |
 | the built-in `init` | **DECISIVE by cardinality** — it produces exactly one file. One file → it; a wiring set → here. This skill may invoke it for that layer |
 | `compiling-latex` / `wrangler` | **DECISIVE** — a per-technology setup is theirs. This skill names the layer and calls them |
+| `driving-jujutsu` | **PURPOSE** — the jj layer's WIRING (colocated init, JJ-1..3) → here; operating it afterwards (changes, bookmarks, push, recovery) → theirs |
 | `driving-git` | **PURPOSE** — the `git` layer's WIRING (`.gitignore`, `core.hooksPath`, the git-hook shape) → here; OPERATING the repo afterwards (commit scope, rebase, push receipts, rewrites, shared checkouts) → theirs. Reciprocal row landed 2026-09-21 |
 
 ## Reference index

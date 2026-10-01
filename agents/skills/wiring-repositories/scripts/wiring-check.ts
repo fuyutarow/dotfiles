@@ -526,6 +526,22 @@ function miseRuns(body: string): MiseRun[] {
       `whoever clones it registers the repo themselves. Say so when handing the repo over.`);
   }
 
+  // JJ-2 — a colocated jj repo denies git to agents. jj runs no git hooks, and the commit gate is
+  // `mise run commit` (JJ-1, verbs checked by mise-contract); an agent that can run `git commit`
+  // writes history around that gate and around jj's bookmark, and nothing reports it.
+  if (existsSync(join(root, ".jj"))) {
+    const denied = ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"];
+    const deny = await Promise.try(() => JSON.parse(settingsRaw ?? "{}") as { permissions?: { deny?: unknown } }).then(
+      (v) => (Array.isArray(v.permissions?.deny) ? (v.permissions.deny as unknown[]) : []),
+      () => [] as unknown[],
+    );
+    const missing = denied.filter((rule) => !deny.includes(rule));
+    if (missing.length > 0) {
+      fail("JJ-2", `.jj/ exists but .claude/settings.json does not deny ${missing.join(", ")} — an ` +
+        `agent's \`git commit\` bypasses the \`mise run commit\` gate and the jj bookmark, silently.`);
+    }
+  }
+
   // JOINT — a repo-local hook file must be registered somewhere.
   if (settingsRaw !== undefined) {
     // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this

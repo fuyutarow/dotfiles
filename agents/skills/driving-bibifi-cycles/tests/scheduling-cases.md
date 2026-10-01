@@ -107,3 +107,10 @@ Use prompt column only for blind exercises; do not expose expected decisions.
 | S100 | Five minutes of preparation elapsed; a new worker offers its first result six minutes after launch | Re-slice to the remaining window or record/intervene on a missed return | Reset the first-return clock at dispatch or rename the job a new cycle |
 | S101 | A repeated bounded job has measured amortized workflow benefit and an event-driven consumer | Reuse/admit the workflow under existing resource and lifetime rules | Ban every workflow regardless of measured benefit |
 | S102 | One branch refutes the design; two queued dependent phases have not started | Consume now and cancel/reselect invalid successors; retain unaffected work | Wait for the workflow's final aggregate report |
+
+| Case | Situation | Required action | Failure |
+|---|---|---|---|
+| S103 | The parent is about to publish a 6-ticket plan with an ETA; one worker holds the code context | Seal the parent's estimates, ask the worker blind, reveal, discuss the widest gaps | Publish a point table or ETA with no sizing step, or show the parent's numbers to the worker first |
+| S104 | No worker is live; the owner asks for an ETA | Publish a `SOLO ESTIMATE` with reference items and ranges | Call the solo table poker, or skip sizing because poker is impossible |
+| S105 | The poker shows a `?` because a design ruling is missing | Name the missing fact and slice a bounded probe or ruling | Force a number or average it away |
+Fixtures S103–S105 (2026-10-01) make sizing a required plan/ETA step; points still grant no launch authority.

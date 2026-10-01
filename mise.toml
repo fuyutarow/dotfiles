@@ -195,7 +195,7 @@ git ls-files -z -- \
   ':(glob)agents/models/*.ts' ':(glob)agents/skills/*/scripts/**/*.ts' \
   'agents/goal-kernel/cli.ts' \
   'agents/resource-control/agent-resource-run.ts' \
-  'agents/serena-control/serena-foreground.ts' ':(glob)open/*.ts' \
+  'agents/serena-control/serena-foreground.ts' ':(glob)smart-open/*.ts' \
   ':(exclude)agents/claude/hooks/repo-retrieve.ts' |
   xargs -0 bun agents/skills/writing-bun-scripts/scripts/script-check.ts
 '''
@@ -584,7 +584,7 @@ description = "Audit recommended tools against the Brewfile (single source: scri
 run = 'bash ~/dotfiles/scripts/check-tools.sh'
 
 [tasks.doctor]
-description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
+description = "READ-ONLY: does this machine realize what the dotfiles declare? Links, rendered settings, skills wiring, Brewfile, pinned deps, PATH bins, git hooks, login shell, INV-6, MCP registrations, the smart-open ssh forward, and the per-OS pieces — one PASS/FAIL/WARN/SKIP line each, with the repairing command on every FAIL. DOCTOR_ONLY=links,bins to narrow."
 run = 'bun ~/dotfiles/scripts/doctor.ts'
 
 # FLAGGED 2026-09-09, not yet acted on: unlike check:tools (renamed to tools:audit, above),

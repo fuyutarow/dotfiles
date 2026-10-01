@@ -63,6 +63,6 @@ r = ["git", "remote", "list"]
 wt = ["workspace"]
 wtl = ["workspace", "list"]
 # open — mirrors git/gitconfig `url` and `o`. An ssh remote (git@host:owner/repo.git) becomes
-# https; `o` hands it to smart-open (open/smart-open.ts), which picks the screen.
+# https; `o` hands it to smart-open (smart-open/smart-open.ts), which picks the screen.
 url = ["util", "exec", "--", "sh", "-c", "jj git remote list | awk '$1 == \"origin\" { print $2 }' | sed -e 's#^git@\\([^:]*\\):#https://\\1/#' -e 's#\\.git$##'"]
 o = ["util", "exec", "--", "sh", "-c", "smart-open \"$(jj url)\""]

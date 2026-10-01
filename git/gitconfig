@@ -131,7 +131,7 @@
 
     # open
     url =! echo $(echo `git config remote.origin.url` | sed -e "s/git@/https:\\\\/\\\\//g" | sed -e "s/.com:/.com\\\\//g")
-    o =! smart-open "$(git url)"   # open/smart-open.ts: the client's browser over ssh/herdr, else here
+    o =! smart-open "$(git url)"   # smart-open/smart-open.ts: the client's browser over ssh/herdr, else here
 
     # status
     s = status

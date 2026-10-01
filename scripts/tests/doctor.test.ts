@@ -11,7 +11,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 
 const REPO = join(import.meta.dir, "..", "..");
@@ -175,6 +175,84 @@ describe("doctor", () => {
     const inactive = doctor("capacity-guard", env);
     expect(inactive.code).toBe(1);
     expect(inactive.out).toContain("enabled / inactive");
+  });
+
+  /** A dotfiles fixture whose ssh/config gives `r99-wsl` one User and (optionally) one forward. */
+  function fixtureSshConfig(forward: string | null): string {
+    const dir = tmp("doctor-ssh-");
+    mkdirSync(join(dir, "ssh"));
+    writeFileSync(
+      join(dir, "ssh", "config"),
+      `Host r99-wsl\n    User tester\n${forward === null ? "" : `    RemoteForward ${forward}\n`}`,
+    );
+    return dir;
+  }
+
+  test("smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides", () => {
+    const home = tmp("doctor-home-");
+    const remote = "/tmp/smart-open-tester.sock";
+    const receiver = `${home}/.cache/smart-open/receiver.sock`;
+    const pass = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(`${remote} ${receiver}`),
+    });
+    expect(pass.code).toBe(0);
+    expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /m);
+
+    for (const [name, forward] of [
+      ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
+      ["receiver path drifted", `${remote} ${home}/.cache/smart-open/r.sock`],
+    ] as const) {
+      const r = doctor("smart-open", {
+        HOME: home,
+        DOTFILES: fixtureSshConfig(forward),
+      });
+      expect([name, r.code]).toEqual([name, 1]);
+      expect(r.out).toContain(`want: ${remote} ${receiver}`);
+      expect(r.out).toContain(`have: ${forward}`);
+      expect(r.out).toContain("fix: make the RemoteForward in ssh/config");
+    }
+  });
+
+  test("smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift", () => {
+    const home = tmp("doctor-home-");
+    const none = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(null),
+    });
+    expect(none.code).toBe(1);
+    expect(none.out).toContain("have: no RemoteForward at all");
+
+    const unrelated = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig("/tmp/unrelated.sock /tmp/elsewhere.sock"),
+    });
+    expect(unrelated.code).toBe(1);
+    expect(unrelated.out).toContain(
+      "have: /tmp/unrelated.sock /tmp/elsewhere.sock",
+    );
+  });
+
+  test("smart-open: a checkout with no ssh/config is SKIPped with the reason, not PASSed", () => {
+    const r = doctor("smart-open", {
+      HOME: tmp("doctor-home-"),
+      DOTFILES: tmp("doctor-empty-"),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(
+      /^SKIP {2}smart-open {2}no ssh\/config in this checkout/m,
+    );
+  });
+
+  test("smart-open: the repo's own ssh/config agrees with smart-open/sockets.ts", () => {
+    if (!Bun.which("ssh")) return; // the check SKIPs without ssh; nothing to assert
+    // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.
+    const r = doctor("smart-open", {
+      HOME: userInfo().homedir,
+      DOTFILES: REPO,
+    });
+    expect(r.out).toMatch(/^PASS {2}smart-open /m);
+    expect(r.code).toBe(0);
   });
 
   test("two independent FAILs come back in one run, with a summary line", () => {

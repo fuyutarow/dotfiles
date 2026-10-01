@@ -78,7 +78,7 @@ link-win-exes() {
 }
 link-win-exes
 
-# `open` = smart-open (open/smart-open.ts): explorer.exe with a Windows path for files, and a URL
+# `open` = smart-open (smart-open/smart-open.ts): explorer.exe with a Windows path for files, and a URL
 # goes to the machine you sit at when you are attached over ssh/herdr. `o` / `oo` live in
 # zsh/aliases.zsh.
 alias open='smart-open'

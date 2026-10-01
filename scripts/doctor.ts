@@ -22,6 +22,9 @@
 //   capacity-guard WSL timer       (WSL only)   autonomous host recovery timer is enabled and active
 //   ccc-db-map  zsh/zshenv + unit                the ccc daemon relocates index DBs exactly as
 //                                                this shell does (`ccc doctor` DB path mappings)
+//   smart-open  ssh/config + smart-open/sockets.ts
+//                                                r99-wsl's RemoteForward joins the two socket paths
+//                                                smart-open and its receiver actually use
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
 //
 // NO FLAGS, NO DEPENDENCIES — deliberate, like render-claude-settings.ts: the machine being
@@ -59,6 +62,7 @@ import {
   readDeclared,
   readLive,
 } from "../agents/codex/remote-control.ts";
+import { receiverSocket, remoteSocket } from "../smart-open/sockets.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
 export type Finding = {
@@ -733,6 +737,55 @@ export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
   );
 }
 
+// ssh/config's `Host r99-wsl` forwards the REMOTE's smart-open socket to THIS machine's receiver.
+// Both ends are code (smart-open/sockets.ts); the forward is ssh syntax (%r, %d) that cannot
+// import them, so the only guard against drift is to ask ssh what it RESOLVES and compare. A
+// mismatch is silent in use: `o <url>` finds no socket (or one nobody answers) and opens on the
+// remote's own screen. -F pins the declared source (this repo's ssh/config, not whatever
+// ~/.ssh/config currently links to); -G prints the resolved options without connecting.
+const SMART_OPEN_HOST = "r99-wsl";
+export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
+  const config = join(ctx.dotfiles, "ssh", "config");
+  if (!existsSync(config))
+    return skip("smart-open", "no ssh/config in this checkout");
+  const r = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST], {
+    ms: 10_000,
+  });
+  if (r.missing) return skip("smart-open", "ssh is not installed");
+  if (r.timedOut || r.code !== 0) {
+    return warn(
+      "smart-open",
+      `ssh -G ${SMART_OPEN_HOST} did not resolve (exit ${r.code}): ${r.err.trim()}`,
+    );
+  }
+  const resolved = r.out.split("\n");
+  const value = (key: string): string[] =>
+    resolved
+      .filter((l) => l.startsWith(`${key} `))
+      .map((l) => l.slice(key.length + 1).trim());
+  const user = value("user")[0];
+  if (user === undefined)
+    return warn("smart-open", "ssh -G printed no `user` line");
+  const want = `${remoteSocket(user)} ${receiverSocket(ctx.home)}`;
+  const have = value("remoteforward");
+  if (have.includes(want)) {
+    return pass(
+      "smart-open",
+      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")}`,
+    );
+  }
+  const seen =
+    have.length > 0
+      ? have.map((h) => `have: ${h}`)
+      : ["have: no RemoteForward at all"];
+  return fail(
+    "smart-open",
+    `${SMART_OPEN_HOST}'s RemoteForward does not join the paths smart-open/sockets.ts uses — \`o <url>\` would open on the remote's screen`,
+    "make the RemoteForward in ssh/config match smart-open/sockets.ts (or the reverse)",
+    [`want: ${want}`, ...seen],
+  );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -752,6 +805,7 @@ export const CHECKS: Check[] = [
   { name: "bun-floor", run: checkBunFloor, applies: always },
   { name: "mcp", run: checkMcp, applies: always },
   { name: "codex-remote", run: checkCodexRemote, applies: always },
+  { name: "smart-open", run: checkSmartOpen, applies: always },
   {
     name: "wslconfig",
     run: checkWslconfig,

@@ -204,7 +204,7 @@ fi
 
 # --- smart-open receiver (macOS: the machine you sit at; opens URLs forwarded from remote `o`) ---
 if $IS_MAC; then
-  link open/smart-open-receiver.plist.mac "$HOME/Library/LaunchAgents/dotfiles.smart-open-receiver.plist"
+  link smart-open/smart-open-receiver.plist.mac "$HOME/Library/LaunchAgents/dotfiles.smart-open-receiver.plist"
   if ! $CHECK && ! launchctl print "gui/$(id -u)/dotfiles.smart-open-receiver" > /dev/null 2>&1; then
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dotfiles.smart-open-receiver.plist" \
       && echo "loaded: dotfiles.smart-open-receiver (launchd)"

@@ -63,9 +63,9 @@ describe("retrieval.toml", () => {
     writeFileSync(path, text);
     return () => loadRetrievalConfig(path);
   };
-  test("the shipped file carries exactly the values that were hardcoded before", () => {
+  test("the shipped file carries the hardcoded values it replaced (pool since re-measured)", () => {
     const c = loadRetrievalConfig();
-    expect([c.recall, c.pool]).toEqual([40, 40]);
+    expect([c.recall, c.pool]).toEqual([40, 25]); // pool 40 -> 25: bench 2026-10-01
     expect(c.priors).toEqual({
       public: 1,
       documented: 0.5,
@@ -91,7 +91,7 @@ describe("retrieval.toml", () => {
   });
   test("a bad value stops and names its key", () => {
     const cases: [string, string, RegExp][] = [
-      ["pool = 40", "pool = 41", /definition\.pool must be at most recall/],
+      ["pool = 25", "pool = 41", /definition\.pool must be at most recall/],
       ["recall = 40", "recall = 0", /definition\.recall must be an integer/],
       [
         'jev_provider = "jevtypesafeai"',

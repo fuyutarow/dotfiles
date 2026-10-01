@@ -1,6 +1,6 @@
 # Bounded retrospective — target drift, lost transfer, dormant gates
 
-This is a retrospective of three user-supplied, assistant-authored report transcripts.
+This is a retrospective of four user-supplied, assistant-authored report transcripts.
 The research and new implementation were still running at the reported boundaries. The
 accounts are one-sided: they locate reported actions and retractions, but they
 are not independent certification of raw benchmark runs or a terminal audit.
@@ -10,6 +10,7 @@ are not independent certification of raw benchmark runs or a terminal audit.
 | Earlier 1,390-line attachment, supplied 2026-10-01 | `d074fe5741aea59da06461b65e3ecc537492de8e5af1ba591613e54929e5f878` | 186–249, 356–379, 597–665, 836–859, 1358–1382 |
 | Later 1,375-line attachment, supplied 2026-10-01 | `90290617741c7f546507462ea27e563d74878c26154ffac889b5b6646dface0f` | 760–875, 950–1198, 1217–1375 |
 | Follow-on 1,208-line attachment, supplied 2026-10-01 | `0ad983c4501551ecc3bdb8e658e7609dddcd37e40896bf9eeda5ac0af6ed6f06` | 969–993, 1086–1122, 1189 |
+| 15:22 attachment, supplied 2026-10-01 | `1c35a3c6bf234b8df38e8a3e129893710c6e69ae98a3ba4ec2d3ae85257e5997` | 1158–1237, 1278–1300 |
 
 A read-only target-workspace inspection during the earlier review found active
 uncommitted work above `alpha` at `49adb526`. It did not establish the reported
@@ -29,6 +30,9 @@ scores, causes, or current target status at the later boundary.
 | Later 1296–1332 | The report says a message to an active agent resumed another writer, and several bold memory rules were repeatedly missed. | Treat actor identity and write ownership as observed tool state. Move must-happen rules to target tests, hooks, schema, or briefs; adding memory prose is insufficient. |
 | Follow-on 1086–1122 | A three-hour job was renamed MT1 at13:51 but its first return was14:10; GPU-first work was split into CPU implementation followed by a port. | The19min return still missed the6min policy. A valid slice must preserve the source task's device and implementation constraints. |
 | Follow-on 969–993, 1104–1113 | Release ETA was recalculated from an untested first-stage success. | A conditional branch duration is not an evidence-based promise of successful release. |
+| 15:22 snapshot 1181–1237 | A point table was called poker; independent voting/reveal is not shown. Subsequent1–2-point items still returned in10–20min. | Size labels did not satisfy the return policy. Poker adoption requires an actual independent-estimation process. |
+| 15:22 snapshot 1158–1200 | Three physical-memory slots were planned, then admission and a builder reduced the effective queue to one. | Queue and execution estimates need observed admission/contender state, not just physical capacity. |
+| 15:22 snapshot 1204–1214 | A full-job rate was compared with predecessor test-only throughput to claim a330-fold gap. | The timing boundaries differ; the transcript does not establish that speedup or a calibrated end-to-end target. |
 
 The reports also describe useful conduct: frozen predictions, fast falsification,
 independent source review, fail-fast launch checks, and reusable component work.
@@ -69,7 +73,7 @@ runtime probe of any present tool.
 
 | Item | Grade | Permitted use |
 |---|---|---|
-| Three assistant-authored report transcripts | user-supplied session account | Reported sequence, explicit corrections, local failure witnesses; not certified experimental truth. |
+| Four assistant-authored report transcripts | user-supplied session account | Reported sequence, explicit corrections, local failure witnesses; not certified experimental truth. |
 | Read-only target workspace inspection | direct observation, earlier boundary only | Active-work status at that inspection; not the later run outcomes. |
 | Selection, retrieval, actual-path and writer-identity rules | skill-supplied construction | Candidate prevention mechanisms; not measured improvement. |
 

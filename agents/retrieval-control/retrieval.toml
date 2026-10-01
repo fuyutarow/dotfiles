@@ -1,0 +1,26 @@
+# retrieval — the declarative half of `repo-retrieve definition` (definitions.ts is the mechanism).
+# One place for which judge scores the candidates, where code may not be sent, and each judge's
+# thresholds. Edit here; no code edit.
+
+[definition]
+# Second-stage judge: "jev" (TypeSafe Jev, remote: the candidates' name + signature + first doc
+# lines are sent; inputs are not used for training per TypeSafe's privacy policy; retention is
+# unspecified) or "local" (Qwen3-Reranker on this machine's GPU, socket-activated).
+# Owner decision 2026-10-01: Jev is acceptable; the local reranker stays as the fallback.
+judge = "jev"
+
+# Projects whose code must never leave this machine: the local judge is used there regardless of
+# `judge`. Paths are home-relative (~/…) or absolute; a project matches if it is or lies under one.
+no_egress = []
+
+# Thresholds on the judge's log-odds (Jev's probability p is turned into ln(p/(1-p)) so both judges
+# share one scale and the same priors). strong = "this is the function"; likely = "read it first";
+# below likely = NO_DEFINITION. Local: measured on the firedancer bench (positives 4-10, absent
+# queries -2..-6). Jev: its probabilities are calibrated, so p >= 0.9 / p >= 0.5.
+[definition.thresholds.local]
+strong = 4.0
+likely = 1.5
+
+[definition.thresholds.jev]
+strong = 2.2 # p >= 0.9
+likely = 0.0 # p >= 0.5

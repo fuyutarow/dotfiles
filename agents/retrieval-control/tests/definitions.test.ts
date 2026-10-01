@@ -2,7 +2,7 @@
 // bench-definitions.ts against a real catalog (README "Measurements"); these pin the rules that
 // decide what a card says and what counts as internal.
 import { describe, expect, test } from "bun:test";
-import { firstLine, isPrivate, isTest, strengthOf } from "../definitions.ts";
+import { firstLine, isPrivate, isTest, loadRetrievalConfig, strengthOf } from "../definitions.ts";
 
 describe("definition cards", () => {
   test("the doc line skips a signature copy and rulers", () => {
@@ -29,10 +29,14 @@ describe("definition cards", () => {
     expect(isTest({ file: "src/a.test.ts" })).toBe(true);
     expect(isTest({ file: "src/testing_utils.jl" })).toBe(false);
   });
-  test("without the reranker nothing is judged; with it, thresholds decide", () => {
-    expect(strengthOf(9, false)).toBe("unranked");
-    expect(strengthOf(4.2, true)).toBe("strong");
-    expect(strengthOf(2, true)).toBe("likely");
-    expect(strengthOf(-3, true)).toBe("none");
+  test("without a judge nothing is judged; with one, its thresholds decide", () => {
+    const local = loadRetrievalConfig().thresholds.local;
+    const jev = loadRetrievalConfig().thresholds.jev;
+    expect(strengthOf(9, false, local)).toBe("unranked");
+    expect(strengthOf(4.2, true, local)).toBe("strong");
+    expect(strengthOf(2, true, local)).toBe("likely");
+    expect(strengthOf(-3, true, local)).toBe("none");
+    expect(strengthOf(2.3, true, jev)).toBe("strong"); // p ~ 0.91
+    expect(strengthOf(-0.1, true, jev)).toBe("none"); // p < 0.5
   });
 });

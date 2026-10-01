@@ -1,5 +1,5 @@
-// Stop / PostToolUse hook — attach the statusline's "Rate: 5h … · 7d …" (API budget) and
-// "Sys: CPU … · RAM … · VRAM …" (host) rows to the thread at this moment, so a transcript shows what the machine looked like WHEN something
+// Stop / PostToolUse hook — attach one line "MM-DD HH:MM | Rate: 5h … · 7d … | Sys: CPU … · RAM …"
+// (time, API budget, host) to the thread at this moment, so a transcript shows what the machine looked like WHEN something
 // happened, not only what the statusline shows now.
 //
 // Channel: a top-level `systemMessage`. Claude Code records a hook's stdout in the transcript
@@ -30,6 +30,9 @@ const STATE_DIR = `${HOME}/.cache/claude/sys-log`;
 // let another session's older reading show here (2026-10-01: 7d 60% then 51%, same reset).
 const RATE_DIR = `${HOME}/.cache/claude/statusline-rate`;
 const STALE_MS = 120_000;
+const RST = "\x1b[0m";
+const DIM = "\x1b[2m";
+const SEP = ` ${DIM}|${RST} `; // the statusline's own separator
 const MIN_GAP_MS = 60_000;
 
 async function main(): Promise<void> {
@@ -63,10 +66,14 @@ async function main(): Promise<void> {
   const r = rateRead.ok ? rateRead.value : {};
   const rate = typeof r.ansi === "string" ? r.ansi : r.line;
   const rateFresh = typeof r.at === "number" && now - r.at <= STALE_MS;
-  const shown =
-    rateFresh && typeof rate === "string" && rate !== ""
-      ? `${rate}\n${sys}`
-      : sys;
+  // One record per line: "MM-DD HH:MM | Rate: … | Sys: …" — the time is this event's (the mobile
+  // app shows none), the separator is the bar's SEP. No Rate (missing, stale, empty) -> no field.
+  const t = Temporal.Now.plainDateTimeISO();
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const time = `${p2(t.month)}-${p2(t.day)} ${p2(t.hour)}:${p2(t.minute)}`;
+  const fields = [`${DIM}${time}${RST}`, sys];
+  if (rateFresh && typeof rate === "string" && rate !== "") fields.splice(1, 0, rate);
+  const shown = fields.join(SEP);
 
   const statePath = `${STATE_DIR}/${key}.last`;
   const last = await attempt(() => Number(readFileSync(statePath, "utf8")));

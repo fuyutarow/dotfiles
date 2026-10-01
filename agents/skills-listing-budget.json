@@ -1,10 +1,17 @@
 {
-  "maxListingChars": 65242,
+  "maxListingChars": 66012,
   "measuredOn": "2026-09-21",
   "skillsAtMeasurement": 71,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
+    {
+      "date": "2026-10-01",
+      "from": 65242,
+      "to": 66012,
+      "spentBy": "keeping-research-notebooks",
+      "reason": "A new 770-character name+description entry (26 + 744). The collection measured 64,906 at 74 skills before admission and 65,676 at 75 after; the raise equals that measured growth exactly, so the 336-char headroom is neither spent nor widened. The five reciprocal pointer rows (wiring-repositories, driving-jujutsu, writing-julia, validating-experimental-evidence, governing-research-documentation) are body rows and charge nothing. Admitted for ownership voids 2-8 of the sibling scope harvest (lexical sweep of agents/skills; no ccc battery): edition/revision discipline, the launcher as sole run entry, the single-committer protocol under jj, the repo-level directory convention, the scratchpad/agent-state ban, the retention-home map, and the run-landing commit ledger. Void 1 (record taxonomy, store CLI) belongs to driving-polysearch. Evidence: seven 2026-10-01 incidents in one research repo, each costing 30-120 minutes of critical path — an edition rewritten below its lineage, fixture-only conformance, a 4-of-5-file registration whose launcher dry-run printed modelCode:null at exit 0, 21 re-implemented shared kernels, agent VCS writes racing the committer, in-flight run dirs committed, scratchpad code landed as an external code dir. EXTEND was rejected: driving-jujutsu owns jj command semantics per workspace, wiring-repositories stops at wiring, validating-experimental-evidence forbids owning a store, writing-julia is language-scoped. Retiring a sibling was rejected: none does this job. The description sits above the spec's ~600-char target because the trigger desk-check failed two fire rows without the shared-checkout and conformance/acceptance tokens; ledger keeping-research-notebooks/tests/forge-verification-ledger.md §5."
+    },
     {
       "date": "2026-09-21",
       "from": 64026,

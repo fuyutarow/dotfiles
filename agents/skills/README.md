@@ -52,6 +52,7 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`systematizing-theories`](systematizing-theories/) — Build one theory's axioms, definitions and results; update exact statements and dependent predictions as findings arrive.
 - [`operationalizing-research-gaps`](operationalizing-research-gaps/) — Turn a signed position's gaps into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring openings retired only by a pre-declared observation.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
+- [`keeping-research-notebooks`](keeping-research-notebooks/) — Route every artifact of a research notebook repo to its one home and one entry point, land through a single committer, and gate when a model revision may be measured.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
 - [`directing-research`](directing-research/) — Explicit legacy invocation and v1-record compatibility only; generic discovery execution belongs to BIBIFI.
 - [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.

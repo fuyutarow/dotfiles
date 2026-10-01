@@ -78,10 +78,10 @@ link-win-exes() {
 }
 link-win-exes
 
-# Normalize `open` to the Windows file explorer, then build on it
-alias open='explorer.exe'
-alias o='open'
-alias oo='explorer.exe .'   # open the current directory in Windows Explorer
+# `open` = smart-open (open/smart-open.ts): explorer.exe with a Windows path for files, and a URL
+# goes to the machine you sit at when you are attached over ssh/herdr. `o` / `oo` live in
+# zsh/aliases.zsh.
+alias open='smart-open'
 # winget: run the real thing, then refresh the symlink farm (`link-win-exes`, above) so a
 # just-installed allowlisted tool is usable in EVERY live pane immediately — PATH never changes,
 # so herdr's frozen server env cannot stale it out.

@@ -2,7 +2,5 @@
 # macOS-specific aliases — sourced from zsh/aliases.zsh when $IS_MAC.
 # Common aliases live in zsh/aliases.zsh; only macOS-only ones belong here.
 
-# `open` is native on macOS; mirror the WSL shorthands so `o`/`oo` work the same on both
-alias o='open'
-alias oo='open .'        # open the current directory in Finder
+# `o` / `oo` live in zsh/aliases.zsh (smart-open); `open` stays macOS's own.
 alias start='open -a'    # launch a macOS app by name (`s` is the common shorthand)

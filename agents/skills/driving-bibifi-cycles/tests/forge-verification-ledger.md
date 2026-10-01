@@ -940,3 +940,28 @@ They test long-container relabeling, purpose-free side work, device substitution
 conditional ETA and domain near misses. No live OLD/NEW execution was performed.
 Operational improvement and runtime enforcement remain unverified; current floor,
 budget and installation receipts are recorded in the implementation turn.
+
+## 24. Estimate by uncertainty type — v2610.4.0
+
+The15:22 source snapshot is joined in the existing target-drift retrospective.
+Its point table gives no evidence of independent reveal, and its1–2-point children
+still exceed the six-minute first-return policy. This revision adopts optional
+Planning Poker for near-term scope disagreement; it does not mandate story points
+or turn them into elapsed time. Known runtime uses matched measurements; unknown
+feasibility gets a bounded discriminator. No new skill or record store is added.
+
+| Source, checked 2026-10-01 | Grade and supported use |
+|---|---|
+| [Mountain Goat Software, Planning Poker](https://www.mountaingoatsoftware.com/agile/story-points/planning-poker) | Author-confirmed method, paraphrased; no empirical agent-efficacy claim. |
+| [Scrum Guide](https://scrumguides.org/scrum-guide.html) | Primary framework; developers size the work. Poker is not imposed as a framework requirement. |
+| [Scrum.org, story-points myth](https://www.scrum.org/resources/blog/myth-9-story-points-are-required-scrum) | Practitioner explanation; story points are not mandatory Scrum. |
+| Discussion bound, no synthetic votes, measured elapsed-time ranges and calibration read-back | Skill-supplied agent adaptation, not a validated productivity result. |
+
+The consumer risk is decorating a guessed schedule with numbers and consensus.
+The revised reference owns the method lookup, the core points to it, and the
+existing card joins predicted versus actual return. S89–S94 cover solo pseudo-poker,
+low-point overlong work, honest unknowns, unmatched timing, unavailable capacity
+and disagreement resolved by inspection. F13/N12 separate live planning from a
+plain explanation. These are static decision checks; no agent-panel or real
+delivery-accuracy improvement was measured. Domain-specific point ceilings,
+speed targets, device choices and benchmark identities were not adopted.

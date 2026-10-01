@@ -8,7 +8,6 @@ Requires=repo-retrieve-rerank.socket
 [Service]
 Type=simple
 ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/agents/retrieval-control/rerank_server.py
-Environment=REPO_RETRIEVE_RERANK_IDLE=1800
 Restart=no
 CPUQuota=400%
 MemoryHigh=3G

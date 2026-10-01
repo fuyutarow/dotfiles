@@ -115,12 +115,18 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)
 
-## Git
-- Default branch: **`alpha`** (not main/master)
+## Git → jj (Jujutsu)
+- **Agents do not run git in this repo** (2026-10-01, same as firedancer). The repo is a colocated
+  jj repo (`.git` + `.jj`); `.claude/settings.json` denies `Bash(git:*)`. Operate it with jj
+  (`driving-jujutsu` skill). jj runs no Git hooks, so record and sync through mise:
+  `mise run commit -- -m "<msg>" [--push] -- <path>...` (stages exactly those paths, runs
+  `hook:pre-commit`, `jj commit`s them, moves `alpha` to `@-`) and `mise run pull` (fetch, rebase
+  onto `alpha`, then `hook:post-merge`). mise tasks may still call git internally.
+- Default branch / bookmark: **`alpha`** (not main/master)
 - **Commit messages are ENGLISH — subject and body.** This repo has older Japanese commits;
   they are history, not a template. Do not imitate them (2026-08-23).
 - Per-OS git config via `[include] ~/.local-gitconfig` (linked from `git/local.mac` or `git/local.wsl`)
-- Prefer lazygit (`lg`) for interactive git work
+- lazygit (`lg`) remains the human's interactive surface
 
 ## Safety Rules
 - `rm` is permanently disabled in shell config — **always use `rip`** (never suggest raw `rm`).

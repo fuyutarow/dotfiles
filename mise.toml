@@ -368,6 +368,23 @@ bash "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.sh" || true
 exec mise run link:skills
 '''
 
+# jj migration (2026-10-01, same shape as firedancer): agents never run git here — the project
+# .claude/settings.json denies it — and jj runs no Git hooks. So the two Git-hook events that matter
+# get one jj entrypoint each: commit runs hook:pre-commit over exactly the chosen paths (and
+# .githooks/post-commit afterwards); pull runs hook:post-merge after the fetch + rebase.
+[tasks.commit]
+description = "jj gated commit: stage exactly the named paths, run hook:pre-commit, jj commit them, move alpha to @-, optionally --push. mise run commit -- -m '<msg>' [--push] -- <path>..."
+run = "bun agents/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+
+[tasks.pull]
+description = "jj pull: fetch origin, rebase the working-copy branch onto alpha, then run hook:post-merge (relink dotfiles + skills) — what .githooks/post-merge did for git pull."
+run = '''
+set -e
+jj git fetch --remote origin
+jj rebase -b @ -d alpha
+mise run hook:post-merge
+'''
+
 # ── reclaim ─────────────────────────────────────────────────────────────────
 # Disk-space recovery. Named for the PURPOSE, because the previous domain name was a lie: this
 # family lived under `cache:` while five of its six members touched no cache at all —

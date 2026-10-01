@@ -81,6 +81,7 @@ for migration, Git colocation, unsupported features, and conflicts.
 | `jj git push --all` is a convenient way to publish one change | Name the BOOKMARK or CHANGE and preview with `--dry-run`. |
 | A green rebase means all conflicts were resolved | Inspect `jj status` and `jj log`; jj can record conflicted commits. |
 | `jj undo` is always the right recovery | Use the OPERATION log and J4; `jj op restore` changes the entire repo view. |
+| Any writer may commit in a shared multi-writer research notebook checkout | `keeping-research-notebooks` N4 decides WHO commits WHAT, WHEN; jj commands stay here. |
 | Git hooks, submodules, LFS, or Git worktrees behave like native jj features | Check the dated compatibility reference and the target repo's actual setup. |
 | A bare `jj commit` runs the repo's commit gate | It runs none. Where a `commit` task exists, use `mise run commit` (`wiring-repositories` JJ-1). |
 

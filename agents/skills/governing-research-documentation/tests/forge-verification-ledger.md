@@ -275,3 +275,9 @@ Fresh Terra routing review found no collision. Static review only.
 
 **PROSE-DEBT waiver (2026-09-27):** the pre-existing 45 reference sentence warnings across six files
 remain queued for the separate governance prose pass. This handoff introduces no new prose warning.
+
+## 2026-10-01 — reciprocal row for keeping-research-notebooks
+
+Added one MUST-NOT-FIRE row: records-store, code and run-artifact homes and landing in a notebook repo
+go to `keeping-research-notebooks` (PURPOSE); the document portfolio stays here. No rule changed.
+**PROSE-DEBT waiver (2026-10-01):** the 45 pre-existing reference warnings are unchanged and remain queued.

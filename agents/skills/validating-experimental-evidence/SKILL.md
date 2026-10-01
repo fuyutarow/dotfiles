@@ -128,6 +128,7 @@ target's accepted and rejected invocations plus raw output, not a parallel Bun s
 | Frozen terminal research-process audit | `auditing-research-processes`; this skill can validate its measurement rows |
 | Prove a theorem or judge faithfulness of its formal statement | `proving-theorems`; this skill only checks whether stated assumptions apply to a measured run |
 | Research document admission, retention, or authority | `governing-research-documentation`; it governs canonical records, not this verdict |
+| Where a record or run artifact lives, or whether a revision's acceptance rows exist and are green before measuring | `keeping-research-notebooks`; EV0/EV2 still set what those rows assert, and this skill judges what the number means |
 
 ## Reference index
 

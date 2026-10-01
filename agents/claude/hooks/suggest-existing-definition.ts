@@ -2,7 +2,7 @@
 // the repository already has one that does the same thing, and say so to the model.
 //
 // WHY A HOOK. Re-implementation happens when nobody searched, not when the search was poor:
-// builders wrote kernels that already existed (firedancer, 2026-10-01). `repo-retrieve definition`
+// builders wrote kernels that already existed (firedancer, 2026-10-01). `rr exists`
 // answers the question well, but only if asked; this asks for them at the one moment it matters.
 //
 // What it does: finds definitions in the inserted text that were not in the replaced text (Write:
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
-          "existing-definition check (repo-retrieve definition): the definition you just wrote may duplicate one " +
+          "existing-definition check (rr exists): the definition you just wrote may duplicate one " +
           "that already exists.\n" +
           findings.join("\n") +
           "\nRead it. If it does what you need, use it and remove the new one; if not, keep yours and say in one " +

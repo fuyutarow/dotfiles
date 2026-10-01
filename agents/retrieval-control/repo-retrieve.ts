@@ -79,6 +79,32 @@ const ROUTES = [
 
 type Route = (typeof ROUTES)[number];
 
+// Names say what the caller wants, not which engine answers (2026-10-01, owner asked whether the
+// mental model and naming were good enough; they were not: "concept", "battery", "exhaustive",
+// "structural" named the machinery). The old names stay as aliases, so every existing command line
+// keeps working.
+const PRIMARY: Record<Route, string> = {
+  concept: "about",
+  battery: "absent",
+  literal: "text",
+  exhaustive: "regex",
+  files: "files",
+  structural: "shape",
+  symbol: "symbol",
+};
+const DESCRIBE: Record<Route, string> = {
+  concept: "Code and notes ABOUT a meaning (semantic; English or Japanese): rr about 'retry with backoff'.",
+  battery: "Check that something is ABSENT: >=3 paraphrases (JA/EN); all must miss before claiming it does not exist.",
+  literal: "Exact TEXT, as written: rr text 'INDEXED_AT'.",
+  exhaustive: "Every match of a REGEX: rr regex 'fn\\s+main'.",
+  files: "FILES by glob: rr files '**/*.toml'.",
+  structural: "Code of a given SHAPE, by example: rr shape 'foo(\\(ARGS*\\))'.",
+  symbol: "A known symbol's definition/references belong to Serena (this route only says so).",
+};
+const aliasOf = (route: Route): { alias: string[] } => ({
+  alias: PRIMARY[route] === route ? [] : [route],
+});
+
 // The routes that delegate to rg -- shared by runRg (which dispatches on it) and lexicalMissLine
 // (which reports on the same set), so the two stay in lockstep instead of each declaring its own
 // copy of the literal union.
@@ -615,12 +641,12 @@ async function runRouteCommand(
   positionals: readonly string[],
   flags: SearchFlags,
 ): Promise<void> {
-  if (positionals.length > 0) {
-    throw new Error(
-      `unexpected positional arguments: ${positionals.join(" ")}`,
-    );
-  }
-  process.exitCode = await runRoute(route, flags);
+  // `rr text 'x'` = `rr text --query 'x'`; for `files` a positional is a glob.
+  const withPositionals: SearchFlags =
+    route === "files"
+      ? { ...flags, glob: [...(flags.glob ?? []), ...positionals] }
+      : { ...flags, query: [...(flags.query ?? []), ...positionals] };
+  process.exitCode = await runRoute(route, withPositionals);
 }
 
 // One `command()` call per flag shape, each with its flags as a fresh object literal written
@@ -640,11 +666,12 @@ function routeCommand(route: Route) {
   if (route === "concept" || route === "battery") {
     return command(
       {
-        name: route,
+        name: PRIMARY[route],
+        ...aliasOf(route),
         parameters: [],
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
-        help: { description: `Run the ${route} repository-search route.` },
+        help: { description: DESCRIBE[route] },
         flags: {
           ...queryFlag(),
           ...pathFlag(),
@@ -660,11 +687,12 @@ function routeCommand(route: Route) {
   if (route === "literal" || route === "exhaustive") {
     return command(
       {
-        name: route,
+        name: PRIMARY[route],
+        ...aliasOf(route),
         parameters: [],
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
-        help: { description: `Run the ${route} repository-search route.` },
+        help: { description: DESCRIBE[route] },
         flags: {
           ...queryFlag(),
           ...pathFlag(),
@@ -680,11 +708,12 @@ function routeCommand(route: Route) {
   if (route === "files") {
     return command(
       {
-        name: route,
+        name: PRIMARY[route],
+        ...aliasOf(route),
         parameters: [],
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
-        help: { description: `Run the ${route} repository-search route.` },
+        help: { description: DESCRIBE[route] },
         flags: {
           ...pathFlag(),
           ...projectFlag(),
@@ -699,11 +728,12 @@ function routeCommand(route: Route) {
   if (route === "structural") {
     return command(
       {
-        name: route,
+        name: PRIMARY[route],
+        ...aliasOf(route),
         parameters: [],
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
-        help: { description: `Run the ${route} repository-search route.` },
+        help: { description: DESCRIBE[route] },
         flags: {
           ...queryFlag(),
           ...pathFlag(),
@@ -716,11 +746,12 @@ function routeCommand(route: Route) {
   }
   return command(
     {
-      name: route,
+      name: PRIMARY[route],
+      ...aliasOf(route),
       parameters: [],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
-      help: { description: `Run the ${route} repository-search route.` },
+      help: { description: DESCRIBE[route] },
       flags: { ...queryFlag(), ...timeoutFlag() },
     },
     (parsed) => runRouteCommand(route, parsed._, parsed.flags),
@@ -778,15 +809,16 @@ async function runDefinition(
 function definitionCommand() {
   return command(
     {
-      name: "definition",
+      name: "exists",
+      alias: ["definition"],
       parameters: [],
       strictFlags: true,
       ignoreArgv: rejectPrototypeFlag,
       help: {
         description:
-          "Before writing a function: does a definition that does this already exist? Describe the " +
-          "behaviour in English or Japanese (not the name). Prints a few cards (name, signature, " +
-          "location, first doc line) or NO_DEFINITION.",
+          "Before writing a function: does one that does this already EXIST? Describe the behaviour " +
+          "in English or Japanese, not the name: rr exists 'add Int16 values without wrapping'. " +
+          "Prints a few cards (name, signature, location, first doc line) or NO_DEFINITION.",
       },
       flags: {
         ...queryFlag(),
@@ -796,12 +828,11 @@ function definitionCommand() {
       },
     },
     async (parsed) => {
-      if (parsed._.length > 0) {
-        throw new Error(
-          `unexpected positional arguments: ${parsed._.join(" ")}`,
-        );
-      }
-      const query = exactlyOneQuery("definition", parsed.flags.query ?? []);
+      // `rr exists '<what it does>'` = `rr exists --query '<what it does>'`.
+      const query = exactlyOneQuery("exists", [
+        ...(parsed.flags.query ?? []),
+        ...parsed._,
+      ]);
       process.exitCode = await runDefinition(
         query,
         parsed.flags.limit ?? 5,

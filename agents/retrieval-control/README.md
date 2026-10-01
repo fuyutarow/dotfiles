@@ -31,12 +31,12 @@ directory to be a registered ccc project root and retain its own freshness gate.
 command still operates on the current repository; enter the target first to index it.
 
 ```sh
-repo-retrieve concept --project ~/Workspace/soks --path knowledge --query 'known reduction'
-repo-retrieve literal --project ~/Workspace/soks --path knowledge --query 'exact phrase'
+rr about --project ~/Workspace/soks --path knowledge --query 'known reduction'
+rr text --project ~/Workspace/soks --path knowledge --query 'exact phrase'
 ```
 
 The search hook permits one stream-only display filter after a classified route, for example
-`repo-retrieve literal --query 'phrase' | grep -F -- 'file.md'`. The filter accepts a pattern
+`rr text --query 'phrase' | grep -F -- 'file.md'`. The filter accepts a pattern
 only, with no file operand or second pipeline stage. Filtered output is not an absence check:
 rerun the router without a filter before making an absence claim.
 Likewise, `| head -3` intentionally truncates output; the router exits quietly when the reader
@@ -49,7 +49,7 @@ mise run test:retrieval-control   # fake ccc/rg executables; no real index neede
 ## `definition` — before writing a function
 
 ```sh
-repo-retrieve definition --query 'Int16 の加算を飽和させて折り返さないようにする'
+rr exists --query 'Int16 の加算を飽和させて折り返さないようにする'
 ```
 
 Describe the behaviour (English or Japanese), not the name. The answer is a few cards — name,

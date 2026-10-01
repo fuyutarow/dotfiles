@@ -109,7 +109,7 @@ or shell loops. Exit-zero ccc output without result blocks is NO_MATCH, not PASS
 unregistered environments retain lexical fallback.
 
 From another repo, select the target with `--project <registered-root>`; `--path` / `-p` only
-filters inside that root. Example: `repo-retrieve concept --project ~/Workspace/soks --path
+filters inside that root. Example: `rr about --project ~/Workspace/soks --path
 knowledge --query '<concept>'`. A single `| grep -F -- '<pattern>'` may filter router output for
 display; no file operand or second pipeline is allowed, and filtered output is not an absence
 check. For a stale target, `cd <target> && repo-retrieve index` records its freshness watermark.
@@ -164,7 +164,7 @@ itself, and the install/verify procedure: `references/operations.md` §3a.
 | `ccc daemon stop` "does nothing" — the daemon is back seconds later with a new PID | SUPERVISED host: the stop succeeded, and the supervisor restarted it exactly as configured | `systemctl --user stop ccc-daemon` (and `reset-failed` if a crash loop tripped the start limit). Never `kill -9` the PID — on a supervised host it just restarts, and on a lazy-spawn host the next client forks an uncapped replacement |
 | daemon burning cores / GiB with nothing waiting on it; `daemon status` shows `[indexing]` for a project nobody asked about | the job outlives its client (see the interrupted-`ccc index` row) AND the idle reaper counts indexing as activity, so the idle timeout never fires. The `BrokenPipeError` in `daemon.log` is the tell: that line is the client's death, not the job's | LAZY-SPAWN → this is unbounded by construction; install the supervisor (`references/operations.md` §3a). SUPERVISED → it is already capped; confirm with the unit's cgroup and let it finish rather than killing it |
 | set `OMP_NUM_THREADS` (or any cap) with `export`, daemon still runs full-width | the daemon read its environment once, at ITS startup — a later `export` in your shell reaches the client only, and the client computes nothing | put it in `envs:` in `global_settings.yml`, then let the settings-mtime restart pick it up (§Ownership) |
-| capped the daemon, yet `repo-retrieve structural` still spikes the box | `ccc grep` is the one verb that never touches the daemon — it runs in the CALLER on a default `ThreadPoolExecutor()` (`min(32, cpu+4)`, so 16 here), which no daemon ceiling covers | bound the caller if it matters; otherwise accept it — unlike the daemon's, this work dies with the call that owns it |
+| capped the daemon, yet `rr shape` still spikes the box | `ccc grep` is the one verb that never touches the daemon — it runs in the CALLER on a default `ThreadPoolExecutor()` (`min(32, cpu+4)`, so 16 here), which no daemon ceiling covers | bound the caller if it matters; otherwise accept it — unlike the daemon's, this work dies with the call that owns it |
 | a search against an idle, fully-indexed project just hangs for minutes, while a DIFFERENT project is `[indexing]` | one daemon serves every project under ONE ceiling, and a search first awaits its project's index-start lock — so a large index elsewhere can starve an unrelated query outright, not merely slow it (measured 2026-08-08: 8+ minutes of dead concept search under a concurrent large index). Tightening `COCOINDEX_MAX_INFLIGHT_COMPONENTS` makes this worse, not better, since it is daemon-wide | `ccc daemon status` FIRST — if any project reads `[indexing]`, expect concept/battery routes to block; use the rg-backed routes meanwhile, and do not diagnose it as a broken index |
 | the daemon restarted on its own and a long index vanished from `ccc daemon status` | an out-of-band `uv tool upgrade` of cocoindex-code changes the binary under the running daemon; the next client's handshake sees a version mismatch and restarts it, discarding every loaded project's in-flight work (observed 2026-08-08, 0.2.40→0.2.41 mid-index). Supervision widens the blast radius by keeping ONE daemon loaded with many projects | committed index state on disk survives — re-run `ccc index` and it resumes from `unchanged`. To remove the trigger, pin the tool version; the install is UNPINNED (`references/catalog.md`) |
 | "offline" local embedding still shows HF Hub traffic in `daemon.log` | model LOAD still pings the Hub for cache-freshness/revision resolution even with cached weights | set `HF_HUB_OFFLINE=1` (and `TRANSFORMERS_OFFLINE=1`) for a true air-gap |
@@ -183,7 +183,7 @@ argued in §4b: (1) notes churn faster than code — PULL-BASED staleness bites 
 a pure-Japanese vault needs a multilingual model BEFORE any promise (the swap is an
 end-to-end-verified fix that also left EN search better, → §4b.3; the router's rg route covers
 literal lookups on unswapped hosts); (3) heading-echo and exact-token queries still belong to
-`repo-retrieve literal` / `exhaustive` — in BOTH languages (controls → catalog).
+`rr text` / `exhaustive` — in BOTH languages (controls → catalog).
 
 ## MCP surface — UNREGISTERED globally since 2026-07-25; use the CLI
 
@@ -271,14 +271,14 @@ FIRES:
 | 「PDF/論文(ドキュメント)を ccc で意味検索したい」 | ccc は PDF 非対応 — 生 PDF は無言スキップ(§Gotchas)。境界を示し PDF→Markdown 変換 → 変換後 `.md` を PROJECT-REGISTER へ誘導するのがこのスキルの責務(cocoindex フレームワークの docling PDF→MD example は別層・スコープ外) |
 | 「ccc が CPU/メモリを食いすぎている」「daemon が重い/索引が終わらない」「ccc に上限をかけたい」 | CC7 territory — probe the regime first (§Ownership). A limit proposed without naming the owner is the failure this LAW clause exists to stop |
 | 「ccc の daemon を止めたい/再起動したい」 | the verb depends on the regime, and the wrong one silently no-ops (§Ownership) |
-| 「機能重複してた/二重実装を作ってしまった/既存実装があるはずでは」— ccc 登録 repo での新規実装の着手前・grep 0件からの不在結論の前 | the duplicate-implementation pathway: literal grep 0 hits ≠ absence — `repo-retrieve battery` with ≥3 paraphrases FIRST. implementing-and-debugging carries the reciprocal co-fire row; the PreToolUse gate rejects unclassified raw search before it runs |
+| 「機能重複してた/二重実装を作ってしまった/既存実装があるはずでは」— ccc 登録 repo での新規実装の着手前・grep 0件からの不在結論の前 | the duplicate-implementation pathway: literal grep 0 hits ≠ absence — `rr absent` with ≥3 paraphrases FIRST. implementing-and-debugging carries the reciprocal co-fire row; the PreToolUse gate rejects unclassified raw search before it runs |
 
 MUST NOT fire (route):
 
 | Ask | Route |
 |---|---|
-| "grep for every TODO comment" | `repo-retrieve literal --query TODO` — declared literal route, rg engine |
-| 「ノートのあの見出し、どこだっけ」(フレーズをほぼ覚えている) / 「'deploy' を含むノートを全部列挙」(全文検索) | `repo-retrieve literal` / `exhaustive` — literal recall and exhaustive markdown listing use the rg engine; top-k adds nothing |
+| "grep for every TODO comment" | `rr text --query TODO` — declared literal route, rg engine |
+| 「ノートのあの見出し、どこだっけ」(フレーズをほぼ覚えている) / 「'deploy' を含むノートを全部列挙」(全文検索) | `rr text` / `exhaustive` — literal recall and exhaustive markdown listing use the rg engine; top-k adds nothing |
 | "rename this function safely, resolve its callers semantically" | `driving-serena` — exact symbol relation, not concept or exhaustive lexical occurrence |
 | 「このリポジトリを俯瞰したい、どこから読めばいい？」 | `Explore` agent — open-ended tour, no search term |
 | "install/upgrade the ccc binary" | `running-python-tools` — uv-tool territory, before this skill's scope starts |
@@ -297,7 +297,7 @@ CO-FIRE, ORDERED SECOND (fires, but not first):
 |---|---|
 | `running-python-tools` | INSTALL-vs-DRIVE — getting `ccc` onto PATH, pinning, upgrading (`uv tool install/upgrade cocoindex-code`) → there; everything you do once it's there → here. |
 | `operating-the-harness` | MCP-LIFECYCLE-FIRST — is the `cocoindex-code` MCP server even starting (`.mcp.json`, trust prompt, `claude mcp list`, restart)? → there, co-fire, FIRST; what `ccc` itself does (search/daemon/project semantics), reached via MCP or direct Bash → here. |
-| `driving-serena` | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → `repo-retrieve exhaustive`; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS. |
+| `driving-serena` | SYMBOL-vs-CONCEPT, decisive — exact identifier plus semantic definition/callers/rename/outline → there; exhaustive lexical occurrences → `rr regex`; concept without an identifier → here. Pipeline: ccc LOCATES by concept → Serena NAVIGATES/EDITS. |
 | `repo-retrieve` / `Explore` (non-skill) | QUERY-SHAPE ladder — literal string/regex/every-call-site → its literal/exhaustive rg routes; structural pattern → its ccc-grep route; open-ended "tour this repo" with no search term → Explore; a CONCEPT query against an INDEXED project → its concept/battery ccc route (CC1 first). Raw Grep is not a sibling: the user-global hook denies the unclassified surface. |
 | `orchestrating-agents` (P7 resource envelopes) | RESIDENT-vs-DISPATCH — per-run agent admission, declared per call and dying with its caller (`agent-resource-run --manifest`) → there; the ccc daemon, whose ceiling is declared ONCE in a supervisor unit and must survive every caller → here. The statusline `Job:` segment tracks only the dispatch path, so its silence about ccc is not evidence of an uncapped daemon. |
 | `operating-the-harness` (durability policy) | The user-global rule that bans orphaning work to init, and sanctions `systemd-run --user --unit=<name>` as the manager-owned alternative, is owned THERE. THIS skill owns only why ccc in particular needs an owner and which verbs change under supervision. |

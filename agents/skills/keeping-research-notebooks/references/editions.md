@@ -30,7 +30,7 @@ A NEW edition starts with its predecessor-row gate (§4 b) red until it matches 
 | version test | REVISION positive; ledger digest equals the computed digest | the package test task |
 | launch params | the params file naming the slug | launcher `--dry-run` resolves the slug and revision |
 
-Find each registry with `mise tasks` and `repo-retrieve concept`.
+Find each registry with `mise tasks` and `rr about`.
 Count them. A registration that misses one is incomplete.
 
 ## §3 Revision bump — in this order

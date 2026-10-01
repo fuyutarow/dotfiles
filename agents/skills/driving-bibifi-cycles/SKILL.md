@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.6.0 (2026-10-01) — sizing is required before a multi-ticket plan or ETA; poker when 2+ estimators exist.
+> **Version**: v2610.7.0 (2026-10-01) — sizing plus dependency/write-scope staffing is required before a multi-ticket plan or ETA.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -88,6 +88,17 @@ Size every item before publishing a plan of 2+ tickets or any release ETA; use t
 | Parent alone | Label the table `SOLO ESTIMATE` with reference items and ranges; never call it poker |
 
 Estimates never authorize a launch and never relax the six-minute first return.
+
+With the sizes, write each item's dependencies and write scope, then staff the plan by this lookup:
+
+| Item relation on the plan | Staffing |
+|---|---|
+| Depends on another item's output | Same chain; it starts when that output is consumed |
+| No output dependency and a disjoint write scope | Its own worker now, if a fit worker/slot exists; the seam is a written interface contract |
+| No output dependency but a shared write scope | Split the scope at a stated seam, or keep it serial and record why |
+
+One worker holding a queue of independent items violates the first-return rule for every item but the first.
+The release ETA is the longest staffed chain, not the sum of all items.
 For an anomaly, use `references/scientific-loop.md` to construct a discriminating return, not a mandatory study phase.
 Use `references/skill-composition.md` for content ownership; routine repairs need only a failing witness.
 

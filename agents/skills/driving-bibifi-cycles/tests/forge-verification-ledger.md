@@ -1006,3 +1006,12 @@ always skip it. Change: SKILL.md now has a lookup keyed by the available estimat
 before a plan of 2+ tickets or any release ETA. The reference heading drops "Optional", and the parent's estimates must be sealed
 before workers are asked. Fixtures S103–S105 were added. Unchanged: points never authorize launch; the six-minute first return
 stands. Description is unchanged ("planning poker / スクラムポーカー" already triggers). Verification: scoped skill-check below.
+
+## 2026-10-01 v2610.7.0 — plan-time staffing by dependency and write scope
+
+Failure (same day, firedancer): after the sizing fix, the executor queued P1–P8 on one builder and reported a summed ETA
+(22:00–24:00). P6 (13 pt) had no output dependency and wrote a disjoint file, but it was staffed only after the owner objected.
+Cause split: (a) executor violation of the existing rule "Admit all purpose-qualified work that fits"; (b) structural gap. The skill
+had event-time rows ("critical work waits behind a worker's older assignment") but no plan-time step that turns sizes into
+chains and staffing, and the direct-path/no-spare-slot cautions read as a bias toward serial work. Change: a staffing lookup keyed
+by dependency and write scope, directly after sizing; the ETA is the longest staffed chain. Fixtures S106–S107.

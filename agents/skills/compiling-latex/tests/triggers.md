@@ -12,6 +12,8 @@ Desk-check with the name and description only, against every plausibly matching 
 | 「platex + dvipdfmx の原稿を pdflatex に移したい。見た目は変えずに」 | FIRE: engine change between stage 1 and 2; line-break oracle. |
 | "After removing unused packages the blackboard-bold letters look different" | FIRE: MC3 package bisect (bbold). |
 | 「latexmk がエラーで落ちる」 | FIRE: build recovery (existing scope). |
+| 「NOTATION.md の禁止パターンで原稿を lint して、AI の編集が記法を崩していないか見て」 | FIRE: MC6, `tex-oracle.ts lint --contract` (§6). |
+| "Prepare this revtex paper for APS and arXiv: .bbl, 80 columns, figures" | FIRE: §4 venue rows and the packaging oracle. |
 
 ## Near-miss no-fire
 

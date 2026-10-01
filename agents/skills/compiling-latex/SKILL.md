@@ -18,6 +18,7 @@ Use executable repo configuration over long natural-language procedures. For pro
 - `assets/tex-fmt.toml`: formatter config for `tex-fmt`.
 - `assets/latexmkrc`: LuaLaTeX build config that routes outputs to `build/`.
 - `assets/latex.gitignore`: ignore snippet for generated TeX artifacts.
+- `assets/NOTATION.md`: per-paper notation contract with the REVTeX/APS + arXiv forbidden-pattern profile.
 
 ## Core Decisions
 
@@ -36,8 +37,9 @@ Use executable repo configuration over long natural-language procedures. For pro
 ## Manuscript cleanup (清書) — format only, proven by output
 
 A format-only cleanup changes the source (macros, preamble, engine, floats, markup), never the content.
-The typeset output is the proof, not the diff. Gates, stage table, traps and oracles:
-`references/manuscript-cleanup.md`; evidence tool: `scripts/tex-oracle.ts`.
+The typeset output is the proof, not the diff.
+Gates, stages, traps, oracles, venue rules, NOTATION contract: `references/manuscript-cleanup.md`.
+Evidence tool: `scripts/tex-oracle.ts`; contract template: `assets/NOTATION.md`.
 
 | Gate | Artifact |
 |---|---|
@@ -47,6 +49,7 @@ The typeset output is the proof, not the diff. Gates, stage table, traps and ora
 | MC3 packages | leave-one-out and pairwise bisect of every dropped package |
 | MC4 stage 2 listed | every visible change named first; `words` diff explained; `paras` equal |
 | MC5 content boundary | content defects reported, never fixed in a format task |
+| MC6 contract | `tex-oracle.ts lint main.tex --contract NOTATION.md` → LINT CLEAN (exit 1 on any forbidden hit) |
 
 ## Environment (toolchain install)
 

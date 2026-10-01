@@ -7,7 +7,8 @@ description: >-
   ZERO-DEP, and PINNED-OR-ABSENT. Use for ローカルスクリプト, スクリプト書いて, 自動化して, bash を bun/TS
   に書き換え, シェルスクリプト移行, bun スクリプト, bunx, npx, hooks 実装, or skill scripts/. CLI contract
   → designing-command-line-interfaces; TS → writing-typescript; Python → running-python-tools; task
-  graph → wiring-mise-tasks; hook events → operating-the-harness; vendor CLI semantics → driving-*.
+  graph → wiring-mise-tasks; new repo → wiring-repositories first;
+  hook events → operating-the-harness; vendor CLI semantics → driving-*.
   Workflow-native: one script SOLO; migrations fan out read-only. English skill; respond in the user's
   language.
 ---

@@ -1,0 +1,19 @@
+# The reranker behind repo-retrieve-rerank.socket — see that file. Runs under ccc's own Python
+# (torch + transformers + the HF model cache are already there). Resource-capped like ccc-daemon:
+# the model is ~1.2 GB in bf16 on the GPU; RAM caps bound the host side.
+[Unit]
+Description=repo-retrieve reranker (Qwen3-Reranker-0.6B, socket-activated, idle-exits)
+Requires=repo-retrieve-rerank.socket
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/uv/tools/cocoindex-code/bin/python %h/dotfiles/agents/retrieval-control/rerank_server.py
+Environment=REPO_RETRIEVE_RERANK_IDLE=1800
+Restart=no
+CPUQuota=400%
+MemoryHigh=3G
+MemoryMax=4G
+MemorySwapMax=0
+TasksMax=256
+OOMPolicy=kill
+Nice=5

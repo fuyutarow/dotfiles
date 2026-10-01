@@ -67,3 +67,22 @@ default_monitor_interval_ms = 200
 # times a second per GPU job; throttling it to once a second keeps a fleet of concurrent GPU jobs
 # from turning "measure the peak" into unmanaged load on the very device being measured.
 gpu_vram_sample_interval_ms = 1000
+
+# --- Standing GPU partitions for resident services ------------------------------------------------
+#
+# Owner ruling 2026-10-01: 「VRAM は ccc と分けて使うべきです。はじめから隔壁しておけよ」. The
+# resident services each get a FIXED partition; this is the one place the sizes live.
+#   - agent-resource-run subtracts both partitions on gpu_partition_device up front, used or not.
+#   - Each service caps ITSELF to its partition (agents/resource-control/gpu_partition.py, read by
+#     the ccc daemon launcher cocoindex/ccc-daemon-launch.py and by
+#     agents/retrieval-control/rerank_server.py): the PyTorch allocator is limited to the partition
+#     minus a CUDA-context allowance, and a service that finds less than its partition free at
+#     start runs on CPU instead of growing into job memory.
+# Why these sizes (measured 2026-10-01, RTX 3060 12 GiB):
+#   ccc     granite-embedding-311m-multilingual-r2, fp32 weights ~1.25 GB + indexing batches.
+#   rerank  Qwen3-Reranker-0.6B bf16 ~1.2 GB; with last-token logits only, a 30-candidate request
+#           raised device use by ~1.3 GB in total and ran in 0.6-0.9 s inside a 2 GiB cap.
+# 0 disables a partition (and that service then never uses the GPU).
+gpu_partition_device = 0
+gpu_partition_ccc_mib = 3072
+gpu_partition_rerank_mib = 2048

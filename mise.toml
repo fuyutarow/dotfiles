@@ -165,8 +165,8 @@ run = "bun ~/dotfiles/scripts/skills-doctor.ts"
 # what the collection charges every turn, against a declared ratchet.
 [tasks."lint:skills-floor"]
 dir = "{{config_root}}"
-description = "Structural floor over every skill (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget"
-run = "bun agents/skills/forging-skills/scripts/skill-check.ts --quiet --budget agents/skills-listing-budget.json agents/skills/*/"
+description = "Structural floor over every skill AS STAGED (forging-skills F1/F4): frontmatter, naming, unreachable references, and the collection's per-turn listing budget. Reads the git index (HOOK-1c), so another session's unstaged skill never blocks a commit"
+run = "bun scripts/lint-skills-floor.ts"
 
 # operating-the-harness P3: a rule naming ONE repo belongs in that repo's .claude/, never in user
 # scope behind a cwd check. The check existed since that skill was forged but nothing ran it, so

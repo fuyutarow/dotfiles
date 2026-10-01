@@ -100,7 +100,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - **MCP servers**: `mise run cc:install-mcp`
 - **Is this machine what the repo declares?** `mise run doctor` (read-only; each FAIL names its repair)
 
-(`j`/`jl` aliases for `just` remain for OTHER projects' justfiles — not used by this repo.)
+(`j` = `jj` since 2026-10-01, with git-mirroring subcommand aliases in `jj/config.toml`: `j s`, `j d`, `j pu` …; `jl` = `just -l` remains for OTHER projects' justfiles.)
 
 ## Key Tools & Aliases
 
@@ -110,7 +110,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - `rm` → **DISABLED** (function errors out); use `rip` for file removal
 
 ### Daily commands
-- `lg` lazygit · `j` just · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
+- `lg` lazygit · `j` jj · `e` editor · `c`/`cc` clipboard copy · `pp` view+copy
 - `o` open · `oo` open current dir (Finder on mac / Explorer on WSL) · `s`/`start` launch app
 - `hhh` list custom aliases · `h <cmd>` tldr · `jl` list just tasks
 - History: atuin (Ctrl+R)

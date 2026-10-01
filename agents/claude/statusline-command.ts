@@ -947,28 +947,26 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (conditional)
 // is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 (conditional) is Job;
 // each is always its own row so neither can ever be silently dropped by a missing sibling value.
-// Rate row, 5h-window half: "5h NN% [⟳reset]" — extracted out of render() only to keep its
-// nesting under max-depth; the formatting itself is unchanged from the inline version.
+// Rate row, 5h window: "5h NN% [⟳reset]". The three window segments carry no separator of their
+// own; rateRow() puts the middot BETWEEN them, so a missing 5h window cannot leave "Rate: · 7d".
 function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
   const { pct, col } = pctFmt(rl5);
-  let seg = ` 5h ${ESC}[${col}m${pct}%${RST}`;
+  let seg = `5h ${ESC}[${col}m${pct}%${RST}`;
   if (rl5Reset != null) seg += ` ${DIM}${reset5(rl5Reset)}${RST}`;
   return seg;
 }
-// Rate row, 7d-window half: same shape as rl5Segment, plus the leading middot that marks the
-// 5h/7d pair as independent siblings (see render()'s header note on MID).
+// Rate row, 7d window: same shape as rl5Segment.
 function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
   const { pct, col } = pctFmt(rl7);
-  let seg = ` ${DIM}${MID}${RST} 7d ${ESC}[${col}m${pct}%${RST}`;
+  let seg = `7d ${ESC}[${col}m${pct}%${RST}`;
   if (rl7Reset != null) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
   return seg;
 }
-// Rate row, per-model weekly-cap half (e.g. "· Fable 100% ⟳reset") — same reset7 shape as the
-// 7d segment above since this window is also day-scale, plus the same leading middot marking it
-// as an independent sibling value (see render()'s header note on MID).
+// Rate row, per-model weekly cap (e.g. "Fable 100% ⟳reset") — same reset7 shape as the 7d
+// segment, since this window is also day-scale.
 function rlModelSegment(m: ModelLimit): string {
   const { pct, col } = pctFmt(m.pct);
-  let seg = ` ${DIM}${MID}${RST} ${m.name} ${ESC}[${col}m${pct}%${RST}`;
+  let seg = `${m.name} ${ESC}[${col}m${pct}%${RST}`;
   if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
@@ -978,11 +976,12 @@ function rateRow(
   df: Pick<Dataframe, "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel">,
 ): string {
   if (df.rl5 == null && df.rl7 == null && df.rlModel.length === 0) return "";
-  let row = `${ESC}[38;5;108mRate:${RST}`;
-  if (df.rl5 != null) row += rl5Segment(df.rl5, df.rl5Reset);
-  if (df.rl7 != null) row += rl7Segment(df.rl7, df.rl7Reset);
-  for (const m of df.rlModel) row += rlModelSegment(m);
-  return row;
+  const parts: string[] = [];
+  if (df.rl5 != null) parts.push(rl5Segment(df.rl5, df.rl5Reset));
+  if (df.rl7 != null) parts.push(rl7Segment(df.rl7, df.rl7Reset));
+  for (const m of df.rlModel) parts.push(rlModelSegment(m));
+  // Independent sibling windows, so the middot (see render()'s header note on MID).
+  return `${ESC}[38;5;108mRate:${RST} ${parts.join(` ${DIM}${MID}${RST} `)}`;
 }
 // Job row, admitted-work half: "<name>[+N] <elapsed> [det×N]" — extracted out of render() only
 // to keep its nesting under max-depth; formatting unchanged from the inline version. VRAM used
@@ -1205,8 +1204,6 @@ const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replace(ANSI, "");
-// The Rate row rides along (API budget, account-wide like the host values); "" when absent.
-const rateColored = rateRow(df);
 if (sysPlain !== "") {
   fromThrowable(() => {
     mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
@@ -1217,8 +1214,28 @@ if (sysPlain !== "") {
         line: `Sys: ${sysPlain}`,
         // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
         ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
-        rate: rateColored.replace(ANSI, ""),
-        rate_ansi: rateColored,
+      }),
+    );
+  })();
+}
+
+// The Rate row is NOT host-wide: each session's payload carries the rate_limits it last received,
+// so one shared file let an idle session's older reading overwrite a fresh one (observed
+// 2026-10-01: 7d 60% then 51% with the same reset). One file per session; the hook reads its own.
+const sid = (parseResult.value.session_id ?? "").replace(
+  /[^A-Za-z0-9_-]/g,
+  "_",
+);
+if (sid !== "") {
+  const rateColored = rateRow(df);
+  fromThrowable(() => {
+    mkdirSync(`${HOME}/.cache/claude/statusline-rate`, { recursive: true });
+    writeFileSync(
+      `${HOME}/.cache/claude/statusline-rate/${sid}.json`,
+      JSON.stringify({
+        at: Temporal.Now.instant().epochMilliseconds,
+        line: rateColored.replace(ANSI, ""),
+        ansi: rateColored,
       }),
     );
   })();

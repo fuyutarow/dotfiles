@@ -67,66 +67,109 @@ export type DefinitionAnswer = {
 };
 
 export type Judge = "jev" | "local";
-type Thresholds = { strong: number; likely: number };
-type JevProvider = "typesafe" | "jevtypesafeai";
-type RetrievalConfig = {
+type Thresholds = { strong: number; likely: number; hook: number };
+type JevEndpoint = { url: string; model?: string };
+export type RetrievalConfig = {
+  recall: number;
+  pool: number;
+  priors: { public: number; documented: number; private: number; test: number };
   judge: Judge;
-  jevProvider: JevProvider;
+  jevEndpoint: JevEndpoint;
   noEgress: string[];
   thresholds: Record<Judge, Thresholds>;
 };
 
-const RECALL = 40; // embedding hits pulled from the catalog
-const RERANK_POOL = 40; // candidates the judge scores: 40 (the bench size)
-const PRIOR = { public: 1, documented: 0.5, private: -1.5, test: -1.5 };
 const CONFIG = join(import.meta.dir, "retrieval.toml");
-// Same request shape at both (retrieval.toml jev_provider); the reseller takes no `model` field.
-const JEV_ENDPOINTS: Record<JevProvider, { url: string; model?: string }> = {
-  typesafe: {
-    url: "https://api.typesafe.ai/v1/systemone",
-    model: "jev-latest",
-  },
-  jevtypesafeai: { url: "https://jevtypesafeai.com/api/v1/decide" },
-};
 const JEV_TIMEOUT_MS = 20_000;
 const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
 
+type Table = Record<string, unknown>;
+const isTable = (v: unknown): v is Table =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
 // retrieval.toml, validated: a wrong value names the key and stops, never a guessed default.
 export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
-  const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as {
-    definition?: {
-      judge?: unknown;
-      jev_provider?: unknown;
-      no_egress?: unknown;
-      thresholds?: Record<string, Partial<Thresholds>>;
-    };
+  const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as Table;
+  const d = isTable(raw.definition) ? raw.definition : {};
+  const fail = (key: string, want: string): never => {
+    throw new Error(`${path}: definition.${key} must be ${want}`);
   };
-  const d = raw.definition ?? {};
+  const num = (t: Table, key: string, at: string): number => {
+    const v = t[key];
+    return typeof v === "number" && Number.isFinite(v)
+      ? v
+      : fail(`${at}${key}`, "a finite number");
+  };
+  const count = (key: string): number => {
+    const v = d[key];
+    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 200
+      ? (v as number)
+      : fail(key, "an integer in 1..200");
+  };
+  const table = (t: unknown, key: string): Table =>
+    isTable(t) ? t : fail(key, "a table");
+
+  const recall = count("recall");
+  const pool = count("pool");
+  if (pool > recall) fail("pool", `at most recall (${recall})`);
+
+  const p = table(d.priors, "priors");
+  const priors = {
+    public: num(p, "public", "priors."),
+    documented: num(p, "documented", "priors."),
+    private: num(p, "private", "priors."),
+    test: num(p, "test", "priors."),
+  };
+
   if (d.judge !== "jev" && d.judge !== "local")
-    throw new Error(`${path}: definition.judge must be "jev" or "local"`);
-  if (d.jev_provider !== "typesafe" && d.jev_provider !== "jevtypesafeai")
-    throw new Error(
-      `${path}: definition.jev_provider must be "typesafe" or "jevtypesafeai"`,
+    fail("judge", '"jev" or "local"');
+  const endpoints = table(d.jev_endpoints, "jev_endpoints");
+  const provider = d.jev_provider;
+  if (typeof provider !== "string" || !isTable(endpoints[provider]))
+    fail(
+      "jev_provider",
+      `one of [definition.jev_endpoints.*] (${Object.keys(endpoints).join(", ")})`,
     );
+  const e = endpoints[provider as string] as Table;
+  if (typeof e.url !== "string" || !e.url.startsWith("https://"))
+    fail(`jev_endpoints.${provider}.url`, "an https:// URL");
+  if (e.model !== undefined && typeof e.model !== "string")
+    fail(`jev_endpoints.${provider}.model`, "a string when present");
+  const jevEndpoint: JevEndpoint =
+    e.model === undefined
+      ? { url: e.url as string }
+      : { url: e.url as string, model: e.model as string };
+
   if (
     !Array.isArray(d.no_egress) ||
-    !d.no_egress.every((p) => typeof p === "string")
+    !d.no_egress.every((x) => typeof x === "string")
   )
-    throw new Error(`${path}: definition.no_egress must be a list of paths`);
+    fail("no_egress", "a list of paths");
+
+  const ths = table(d.thresholds, "thresholds");
   const thresholds = {} as Record<Judge, Thresholds>;
   for (const j of ["jev", "local"] as const) {
-    const t = d.thresholds?.[j];
-    if (typeof t?.strong !== "number" || typeof t.likely !== "number")
-      throw new Error(
-        `${path}: definition.thresholds.${j} needs numeric strong and likely`,
-      );
-    thresholds[j] = { strong: t.strong, likely: t.likely };
+    const t = table(ths[j], `thresholds.${j}`);
+    const at = `thresholds.${j}.`;
+    const th = {
+      strong: num(t, "strong", at),
+      likely: num(t, "likely", at),
+      hook: num(t, "hook", at),
+    };
+    // Ordered bands: below likely = absent, likely..strong = read first, strong.. = this one.
+    if (!(th.likely < th.strong)) fail(`${at}likely`, "below strong");
+    if (!(th.hook >= th.strong)) fail(`${at}hook`, "at least strong");
+    thresholds[j] = th;
   }
-  const expand = (p: string) =>
-    p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+
+  const expand = (x: string) =>
+    x.startsWith("~/") ? join(homedir(), x.slice(2)) : x;
   return {
-    judge: d.judge,
-    jevProvider: d.jev_provider,
+    recall,
+    pool,
+    priors,
+    judge: d.judge as Judge,
+    jevEndpoint,
     noEgress: (d.no_egress as string[]).map(expand),
     thresholds,
   };
@@ -387,14 +430,18 @@ function writeAtomic(path: string, text: string): void {
 
 type Hit = { file_path: string; score: number };
 
-async function recall(dir: string, query: string): Promise<Hit[]> {
+async function recall(
+  dir: string,
+  query: string,
+  limit: number,
+): Promise<Hit[]> {
   const r = await runChildCaptured(
     [
       requireExecutable("ccc"),
       "search",
       "--json",
       "--limit",
-      String(RECALL),
+      String(limit),
       query,
     ],
     120_000,
@@ -513,15 +560,16 @@ export async function findDefinitions(
   const { dir, defs, byFile } = refresh
     ? await refreshCatalog(project, notes)
     : readCatalog(catalogDir(project));
-  const hits = await recall(dir, query);
+  const cfg = loadRetrievalConfig();
+  const hits = await recall(dir, query, cfg.recall);
 
   const owners = ownersOf(defs);
-  const order = candidates(hits, byFile, owners, exclude).slice(0, RERANK_POOL);
-  const cfg = loadRetrievalConfig();
+  const order = candidates(hits, byFile, owners, exclude).slice(0, cfg.pool);
   const { judge, result } = await judgeCandidates(
     query,
     order.map(rerankText),
     judgeFor(project, cfg),
+    cfg.jevEndpoint,
     notes,
   );
   const scores = "scores" in result ? result.scores : null;
@@ -529,7 +577,7 @@ export async function findDefinitions(
   if ("reason" in result) notes.push(`embedding order only — ${result.reason}`);
   // Unjudged: a descending stand-in keeps embedding order; strength is "unranked" regardless.
   const raw = scores ?? order.map((_, i) => order.length - i);
-  const ranked = toCards(order, finalScores(order, raw, owners)).slice(
+  const ranked = toCards(order, finalScores(order, raw, owners, cfg.priors)).slice(
     0,
     limit,
   );
@@ -551,11 +599,12 @@ async function judgeCandidates(
   query: string,
   docs: string[],
   preferred: Judge,
+  jevEndpoint: JevEndpoint,
   notes: string[],
 ): Promise<{ judge: Judge; result: RerankResult }> {
   if (docs.length === 0) return { judge: preferred, result: { scores: [] } };
   if (preferred === "jev") {
-    const jev = await judgeJev(query, docs, loadRetrievalConfig().jevProvider);
+    const jev = await judgeJev(query, docs, jevEndpoint);
     if ("scores" in jev) return { judge: "jev", result: jev };
     notes.push(`Jev unavailable (${jev.reason}); local reranker instead`);
   }
@@ -578,12 +627,11 @@ function jevKey(): string | null {
 export async function judgeJev(
   query: string,
   docs: string[],
-  provider: JevProvider,
+  endpoint: JevEndpoint,
 ): Promise<RerankResult> {
   const apiKey = jevKey();
   if (apiKey === null)
     return { reason: "no TYPESAFE_API_KEY (env or ~/.config/typesafe/.env)" };
-  const endpoint = JEV_ENDPOINTS[provider];
   const id = (i: number) => `C${String(i).padStart(2, "0")}`;
   const body = JSON.stringify({
     ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
@@ -647,12 +695,13 @@ export async function candidatePool(
   project: string,
   query: string,
 ): Promise<{ name: string; text: string; def: Definition }[]> {
+  const cfg = loadRetrievalConfig();
   const { dir, defs, byFile } = await refreshCatalog(project, []);
   const order = candidates(
-    await recall(dir, query),
+    await recall(dir, query, cfg.recall),
     byFile,
     ownersOf(defs),
-  ).slice(0, RERANK_POOL);
+  ).slice(0, cfg.pool);
   return order.map((def) => ({ name: def.name, text: rerankText(def), def }));
 }
 
@@ -701,25 +750,26 @@ function candidates(
 export const isTest = (d: Pick<Definition, "file">) =>
   /(^|\/)(tests?|spec|__tests__)\/|[._-]test\.|_spec\./.test(d.file);
 
-const prior = (d: Definition): number =>
-  (d.public ? PRIOR.public : 0) +
-  (d.doc ? PRIOR.documented : 0) +
-  (isPrivate(d) ? PRIOR.private : 0) +
-  (isTest(d) ? PRIOR.test : 0);
+const prior = (d: Definition, p: RetrievalConfig["priors"]): number =>
+  (d.public ? p.public : 0) +
+  (d.doc ? p.documented : 0) +
+  (isPrivate(d) ? p.private : 0) +
+  (isTest(d) ? p.test : 0);
 
 // Reranker log-odds + priors; a helper's evidence also counts for its owners.
 function finalScores(
   order: Definition[],
   raw: number[],
   owners: Map<string, Definition[]>,
+  priors: RetrievalConfig["priors"],
 ): Map<string, number> {
   const out = new Map<string, number>();
   const bump = (k: string, v: number) =>
     out.set(k, Math.max(out.get(k) ?? -99, v));
   order.forEach((d, i) => {
     const r = raw[i] ?? 0;
-    bump(key(d), r + prior(d));
-    for (const o of owners.get(key(d)) ?? []) bump(key(o), r + PRIOR.public);
+    bump(key(d), r + prior(d, priors));
+    for (const o of owners.get(key(d)) ?? []) bump(key(o), r + priors.public);
   });
   return out;
 }

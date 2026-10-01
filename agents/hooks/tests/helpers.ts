@@ -2,6 +2,8 @@
 // synthetic payload on stdin, the same way both Claude Code and Codex invoke it.
 
 import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
@@ -25,4 +27,8 @@ export function runHook(
 export function decisionOf(stdout: string): any {
   if (stdout.trim() === "") return null;
   return JSON.parse(stdout).hookSpecificOutput;
+}
+
+export function tempDir(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), prefix));
 }

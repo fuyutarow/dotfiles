@@ -45,7 +45,7 @@ pulled `cocoindex-code@latest` through `uvx`, i.e. a THIRD floating copy alongsi
 0.2.39 — the same version-confusion that produced two false findings on 2026-07-30.
 
 The decisive argument is not the failures, it is duplication of a **guarded** capability by an
-**unguarded** one. `~/.claude/hooks/enforce-search-route.ts` denies raw search (including bare
+**unguarded** one. `agents/hooks/enforce-search-route.ts` (Claude Code and Codex) denies raw search (including bare
 `ccc search`) inside a registered project and forces the caller through `agents/retrieval-control/repo-retrieve.ts`,
 which owns query-shape declaration, index freshness on `concept`, the ≥3-paraphrase `battery`
 gate, and the Serena hand-off. The MCP `search` tool answered the same questions with **none** of

@@ -311,3 +311,45 @@ isolation to the architecture rules above.
 | Slow first call in a big package | `@compile_workload` + fix invalidations (§10.7) |
 | Tempted to use a non-const global | put it in a function arg or a `const` container |
 | Tempted to extend others' funcs on others' types | **stop — type piracy**; own one side |
+| A state owns device arrays, or an API picks a device | device as a type parameter, explicit caller argument, counted boundary (§10.10) |
+
+## §10.10 Device ownership — the device is a type parameter of the owning state (SOLE home)
+
+SOLE home of state- and API-level device ownership. Kernel launch and step residency (GKR) stay in
+`optimizing-julia-gpu-kernels`, which points here. Lux models follow `nn-stack.md`: device-free model,
+`ps`/`st` moved by a device object. This section governs authored learner or model states.
+
+A part may pick a method from the array type it receives. The device POLICY is chosen once, by the caller.
+
+| If… | Then | Prevents (incident) |
+|---|---|---|
+| A struct owns arrays that must share one device | Declare `struct S{B<:KA.Backend, …}` with field `device::B`; `B` is a type parameter | firefly-stream-mp held `exec::Exec`, an abstract field, beside its arrays |
+| A state is built | One checked inner constructor: every array leaf has `typeof(KA.get_backend(a)) === B`, else throw | residency of the 54 pool arrays was established only by a 30-minute profile (finding2610_0122as8aq) |
+| An entry point (`init_model`, runner, edition API) needs a device | Take `device` as a required argument; no default; never derive it from a number | `select_exec(vram_bytes) = vram_bytes > 0 ? GPUExec() : CPUExec()` in firefly-stream-mp |
+| A resource budget (VRAM, memory bytes) reaches the model | Use it for admission and sizing only; a GPU device with budget 0 throws, never falls back to CPU | the same `select_exec`: the device became a side effect of the manifest's VRAM |
+| A part allocates scratch or output | `similar(x)` or `KA.allocate(state.device, T, dims)`; never `CuArray(…)`, `cu`, or `Array(…)` | parts transferring on their own (house ruling, 2026-09-24, item 5) |
+| Data must cross devices | Only inside named boundary functions (e.g. `to_host`), each counting its calls | 60 D2H reads per call in the round loop (finding2610_0122as8aq); `_fw_merge!` pulls learned tables to host |
+| A hot-path step runs in a test | Assert the boundary count after one warmed step equals the declared count (0 in the loop) | the same 60 reads, found only by a 30-minute profile |
+| A GPU error appears in a part | Fix it on the device; a host copy outside a boundary fails the gate | `Array()` host evacuation that hid GPU errors in an earlier edition |
+| A run writes a receipt or result row | Write `device = string(nameof(typeof(state.device)))` in every row | run2610_0121sqxbq: rows had no device, `vram_peak_measured_bytes = 0` under WSL |
+
+### §10.10.1 Executable gate
+
+Copy `assets/device_ownership.jl` to `test/device_ownership.jl`. Define its four constants first.
+
+| Constant | Holds |
+|---|---|
+| `DEVICE_OWNERSHIP_STATES` | built owning states, one per device the tests construct |
+| `DEVICE_OWNERSHIP_FILES` | source files on the device path |
+| `DEVICE_TRANSFER_BOUNDARIES` | `Set{Symbol}` of the boundary function names |
+| `DEVICE_OWNERSHIP_RECEIPTS` | rows a run writes (`Dict` or `NamedTuple`) |
+
+| Check | Fails on |
+|---|---|
+| state | no `device` field; its type is not a concrete `KA.Backend` type parameter; an array leaf on another backend |
+| source | `Array`/`Vector`/`Matrix`/`collect`/`cu`/`CuArray`/`@allowscalar` outside a boundary function |
+| source | a call named `*exec*`/`*device*`/`*backend*` with a `vram`/`budget` argument |
+| receipts | a row without a non-empty `device` field |
+
+The gate is a floor, not a semantic check. An unnamed indirection passes it; review the table above.
+The boundary call count is package code. Assert it in the package's own hot-path test.

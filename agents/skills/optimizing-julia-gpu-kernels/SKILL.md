@@ -16,7 +16,7 @@ description: >-
 
 # Optimizing Julia GPU kernels — CUDA.jl discipline
 
-> **Version**: v2610.1.0 (2026-10-01) — state/API device ownership points to writing-julia JG8 (§10.10); no copy here.
+> **Version**: v2610.2.0 (2026-10-02) — launch shape typed (Parallel/Serial), in-loop transfer budget 0, typed stage outcome; device ownership stays at writing-julia JG8 (§10.10).
 > **Scope**: CUDA.jl/KernelAbstractions kernels and CuArray/device paths; NVIDIA-first.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -151,6 +151,9 @@ Write the stage map before code. Do not hide a data-dependent stage outside that
 | A trace shows zero copies but a stage or output inside the hot-path boundary remains on the host | GKR still fails. Verify device execution and output residency per stage; zero memcpy is necessary, not sufficient. |
 | A step's measured time is dominated by host stages | Report the per-stage table (share of time, device or host) before any tuning; the host stages are the fix. |
 | The device follows a budget value, or result rows carry no `device` | Not a GKR repair: writing-julia JG8 (§10.10) owns it. GKR then profiles the explicitly chosen device. |
+| A launch has no declared `Parallel(ndrange)` / `Serial(work_bound)`, or a `Serial` launch sits in a per-round/per-pass loop with a constant or missing bound | Declare it; test the bound and a measured time against the throughput-floor budget (`execution-design.md` § Launch contract) |
+| A blocking host read (flag/scalar) occurs inside the round/pass loop | Budget 0 unless declared; pipeline it one check late and count transfers in a test (`host-performance.md` §4.1) |
+| A stage can be skipped (capacity, gate) | It returns a typed outcome (`ran` / `skipped_capacity` / `refused_gate`) that reaches the report row; never a zero count (`execution-design.md` § Launch contract) |
 | A known violation "CPU-only" survives more than one revision | Withhold the affected GPU-performance claim and prioritize its repair. BIBIFI owns the next useful work selection. |
 
 GKB's peak-based time is an optimistic lower bound, not a guaranteed attainable end-to-end runtime.
@@ -247,6 +250,8 @@ The five classes, each with its literal error string, live in `references/writin
 - [ ] GKD maps independent work and serial span; unexplained one-thread bulk work remains a performance defect.
 - [ ] GPU-performance step: `STAGE MAP` names the hot-path boundary. Each data stage and output inside it is
       device-resident. Its warmed trace has zero HtoD/DtoH copies inside that boundary (GKR).
+- [ ] Every launch declares `Parallel(ndrange)` or `Serial(work_bound)`; in-loop `Serial` bounds and measured times pass the budget test.
+- [ ] In-loop host transfers: declared count ≤ budget (default 0), flags read one check late; skipped stages report a typed outcome.
 - [ ] A selected K-of-C stage materializes and writes K outputs, or its C-cost is charged and passes GKB.
 - [ ] Every bottleneck claim names its counted quantity (`references/measuring.md` §11).
 - [ ] GK0 comment names the checked and rejected vendor/broadcast alternative.

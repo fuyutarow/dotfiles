@@ -110,3 +110,4 @@ description edit. Forged v2607.1.0 (2026-07-22). The decisive sibling boundary i
   whole-step GPU performance routes to GKB/GKR regardless of kernel syntax.
 - 2026-10-01 v2610.1.0: device-ownership seam rows added. No description edit: device tokens already fire
   here, and the routing row hands the state/API rule to writing-julia JG8 (§10.10).
+- 2026-10-02 v2610.2.0: launch-contract rows added. No description edit: the asks carry `ndrange`/`CuArray`/GPU step tokens already matched by the description; routing unchanged.

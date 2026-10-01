@@ -315,3 +315,39 @@ describe("enforce-search-route", () => {
     expect(decision.permissionDecisionReason).toContain("failing closed");
   });
 });
+
+describe("display filter over the router's stream (widened 2026-10-01)", () => {
+  // The deny message recommended these; the gate used to reject 2>&1, -e, and a trailing head.
+  const allowed = [
+    "bun ~/.claude/hooks/repo-retrieve.ts battery -q a -q b -q c -p pkg --limit 8 2>&1 | grep -F -- 'File:' | head",
+    "bun ~/.claude/hooks/repo-retrieve.ts battery -q a -q b -q c --limit 8 2>&1 | grep -F -e 'File:' | head -n 20",
+    "repo-retrieve literal --query 'x' 2>&1 | rg -F -- 'File:'",
+    "repo-retrieve definition --query 'x' | grep -F -- 'Ops'",
+  ];
+  const denied = [
+    "repo-retrieve literal --query 'x' | grep -F -- 'y' pkg/file.jl",
+    "repo-retrieve literal --query 'x' | grep -F -e 'y' | xargs cat",
+    "repo-retrieve literal --query 'x' | grep -F -- 'y' > out.txt",
+    "repo-retrieve literal --query 'x' | grep -F -- 'y' | head | grep z",
+  ];
+  for (const command of allowed) {
+    test(`allows: ${command}`, () => {
+      const r = runHook(
+        HOOK,
+        bashPayload(registerProject(), command),
+        withCcc(),
+      );
+      expect(r.stdout.trim()).toBe("");
+    });
+  }
+  for (const command of denied) {
+    test(`denies: ${command}`, () => {
+      const r = runHook(
+        HOOK,
+        bashPayload(registerProject(), command),
+        withCcc(),
+      );
+      expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+    });
+  }
+});

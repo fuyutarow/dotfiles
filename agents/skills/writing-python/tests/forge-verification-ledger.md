@@ -174,3 +174,11 @@ Source: SoK `urn:uuid:01a0cd74-0db5-7631-a93d-b6a4a73e1b19`, ESB-005–009 and Y
 No Pydantic version/API claims were added or refreshed.
 PROSE-DEBT waiver: references 156 long sentences, body 25, header 22 lines, 2 long cells after edit.
 Queue: next full Python reforge; this task fixes the substantive boundary contradiction only.
+
+
+## 2026-10-01 — description routes a new repo/project to wiring-repositories first
+
+Observed: asked 「juliaの新規プロジェクトを立ち上げたい」, a session loaded only the language skill and
+never wiring-repositories, so the repo's layer set (jj, mise contract, .claude/) was skipped. The
+description now names the cut: new repo/project (新規プロジェクト, 立ち上げ) → wiring-repositories FIRST;
+this skill then owns the language manifest. skill-check clean; listing within budget.

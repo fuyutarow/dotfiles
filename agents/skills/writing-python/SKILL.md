@@ -11,7 +11,8 @@ description: >-
   a repo → HERE); feature/bugfix → implementing-and-debugging (co-fire FIRST); restructure →
   refactoring-code (governs; this supplies the oracle); PyO3/maturin FROM Rust →
   writing-rust; prose → linting-prose. MANDATORY — read BEFORE writing ANY Python or adding
-  ANY dependency. Facts ROT — verify live (PG1). Workflow-native: harvest/verification fan
+  ANY dependency. Facts ROT — verify live (PG1). New repo/project (新規プロジェクト) →
+  wiring-repositories FIRST; this skill then owns the Python manifest. Workflow-native: harvest/verification fan
   out; SELECTION stays SOLO. English skill; respond in the user's language (default
   Japanese).
 ---

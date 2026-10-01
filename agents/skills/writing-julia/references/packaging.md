@@ -23,6 +23,21 @@ Three decisions control the rest. Record all three in the package plan.
 
 Do not infer any row from the folder name. Inspect `Project.toml` and `src/`.
 
+**Notebook row.** A repo holding a records store (`polysearch.json`), several packages, or papers
+is a research notebook. Its topology is fixed before any manifest is written:
+
+| Artifact | Path |
+|---|---|
+| workspace root | `packages/Project.toml` with no `name`/`uuid`, plus the one `packages/Manifest.toml` (commit it, PK4) |
+| member package | `packages/<Name>.jl/` with its own `Project.toml`, `src/`, `test/`; listed in the root's `[workspace] projects` |
+| member test project | `packages/<Name>.jl/test/Project.toml`, the member's own `[workspace] projects = ["test"]` (PK5) |
+| every Julia command | `--project=packages`, or `--project=packages/<Name>.jl` for one member |
+| repo root | no `Project.toml`, `Manifest.toml`, `src/` or `test/` |
+
+The rest of the repo layout is `keeping-research-notebooks` homes §0.
+Until the first member exists, omit the `[workspace]` table.
+Pkg 1.13.0 throws a `TypeError` on `projects = []` `[dated:2026-10]`.
+
 ## PK1. Identity and naming — choose by locus
 
 | Locus | Contract | Example |
@@ -48,6 +63,7 @@ Those checks include identifier shape, collision distance, and repository URL ru
 |---|---|
 | New maintained package | use `PkgTemplates.jl` for repeatable tests, CI, docs, and license setup |
 | Minimal or throwaway package | `Pkg.generate("MyPackage")` is the two-file floor |
+| New package inside a notebook repo (PK0 notebook row) | generate it at `packages/<Name>.jl/`, then add `"<Name>.jl"` to `packages/Project.toml`'s `[workspace] projects` |
 | Existing package | reconcile its contract; do not scaffold over it |
 
 PkgTemplates takes the bare package name. Its Git plugin adds `.jl` to the remote URL by default

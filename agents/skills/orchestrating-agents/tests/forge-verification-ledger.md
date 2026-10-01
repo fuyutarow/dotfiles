@@ -1471,17 +1471,23 @@ validating-experimental-evidence/tests/postmortem-2026-09-30-boundaries.md and i
 No live reservation, production job or runner schema was changed. No demonstrated OLD/NEW decision improvement.
 PROSE-DEBT waiver: the13existing reference warnings remain unchanged; core adds none.
 
-## 2026-10-01 — before-write component retrieval, v2610.1.0
+## 2026-10-01 — component transfer and writer identity, v2610.2.0
 
 Source and limits: driving-bibifi-cycles/tests/postmortem-2026-10-01-target-drift.md.
-The failure report says a builder wrote many components while an indexed shared library
-held relevant predecessors; the parent's brief had not required retrieval before writing.
-The target domain owns which component is semantically suitable. `driving-cocoindex`
-owns the search and absence battery. C1 owns the timing and evidence relay in the
-implementation brief, then consumer read-back. No new search algorithm or approval
-stage is added. The constructed coordination case checks the post-hoc-query failure.
+The previous v2610.1.0 added a late prose paragraph about retrieval. This reforge
+moves it into C1, where the supervisor's inputs, the executor's before-write hits,
+and actual consumer read-back form one transition. The target domain owns the
+semantic choice; `driving-cocoindex` owns search and absence. A blank rewrite that
+loses a working mechanism now fails the C1 transfer check, while EV4 keeps the
+scientific status of an ineligible predecessor separate.
 
-Static review and the skill floor are the evidence for this edit; no active builder was
-replayed under an OLD/NEW brief. Therefore prevention of repeated implementations is
-unverified operationally. PROSE-DEBT waiver (2026-10-01): the 13 existing reference
-warnings remain queued behind this boundary repair; the new paragraph adds none.
+The later report also describes an instruction message apparently resuming a
+second writer. C3a now keys changes to observed actor ID and exclusive write scope.
+It does not assert that every SendMessage-like tool duplicates agents; the live
+tool contract and receipt decide. Coordination cases replace generic message and
+component rows with these discriminating scenarios.
+
+Static review and the skill floor are the evidence for this edit. No active builder
+or duplicate-writer path was replayed under OLD/NEW briefs, so operational
+prevention remains unverified. PROSE-DEBT waiver (2026-10-01): the 13 existing
+reference warnings remain queued; this edit adds none.

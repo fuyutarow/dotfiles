@@ -5,7 +5,7 @@
 | R&D component estimated at eighteen minutes | Apply domain microticket return points and C0 | Treat the old twenty-minute threshold as permission |
 | Hundreds of lines assigned with only final ETA | Obtain first usable partial return and consumer; shrink scope | Treat file ownership as scheduling decomposition |
 | Agent is waiting on its subprocess when a return is due | Parent inspects actual phase/artifact and acts under stop contract | Wait passively until the agent chooses to report |
-| Scope amendment sent but receipt unknown | Use C3a and report unknown state honestly | Assume the changed work is running |
+| A message to an active writer may resume a second instance; receipt shows a new actor ID | Treat it as a new writer, stop or isolate it and transfer ownership before edits | Assume delivery to the original writer or let both edit the same file |
 | Result changes shared premise | Parent records affected continuations/stops; independent work continues | Global barrier or no reassessment |
 | Parent missed an intervention but the worker eventually succeeded | Preserve valid result; coordination still fails retrospectively | Wash away failure using final success |
 | Parent cannot process current workers' returns | Repair structured return routing, consume critical result and throttle only affected branches | Fix a small team size or inflate agents solely to meet a count target |
@@ -20,4 +20,4 @@
 | New critical interface waits behind an old-edition cleanup | Verify the dependency, freeze or reassign safely, and confirm the new slice starts | Delay solely because the same worker owns both |
 | Requested batch of four is rejected before launch | Report zero starts, preserve rejection and repair invocation | Report four running then retract after a result never arrives |
 | Parent runs an authorized deterministic readiness check | Treat it as operational evidence under applicable resource bounds | Count it as independent scientific verification or prohibit all parent observation |
-| A builder writes many new kernels despite an indexed shared component library, then lists search queries in its final report | Require before-write hits and a reuse/extend/new mapping in the brief return; accept only actual consumer integration | Treat post-hoc query names or a component inventory as evidence that reuse was considered |
+| An indexed component library contains a working predecessor, but a new edition is proposed from scratch | Put predecessor and consumer in C1 inputs; obtain pre-write hits, a reuse/extend/new decision and a same-path carryover check | Accept post-hoc queries, a component inventory or isolated output parity as transfer proof |

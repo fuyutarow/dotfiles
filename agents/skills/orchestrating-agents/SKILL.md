@@ -18,7 +18,7 @@ description: >-
 
 # orchestrating-agents — 委任体制を運転する監督の規律
 
-> **Version**: v2610.1.0 (2026-10-01) — 実装前の既存部品検索を発注と返却の境界に結ぶ。
+> **Version**: v2610.2.0 (2026-10-01) — 既存部品の移植をC1へ置き、変更時のwriter同一性をC3aで検査する。
 > 履歴、実測、採否、fire/no-fire の検証は `tests/forge-verification-ledger.md` が正本。
 
 読み込み元のこの `SKILL.md` があるdirectoryを、実行前に

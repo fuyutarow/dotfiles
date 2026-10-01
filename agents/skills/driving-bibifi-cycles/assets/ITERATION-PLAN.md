@@ -4,7 +4,7 @@ This is a work record, not a substitute for execution. A BIBIFI invocation must 
 
 ## Shared context
 
-- Goal/completion; prior release ETA or initial baseline; next six-minute report (JST).
+- Goal/completion; prior release ETA or initial baseline; next decision event or requested report (JST).
 - New knowledge sought; enabling repair and the discovery it unlocks; critical dependency.
 - Current code/input/statement/premise bindings and applicable validity/authority records.
 - For scientific diagnosis: contrast, live rivals, predictions/exclusions and candidate revision via STRONG-INFERENCE.md.
@@ -58,9 +58,9 @@ A sent message is not accepted work; completed text is not released memory; a su
 For launch batches, record each attempt's actual start or rejection; never promote the requested count to running.
 Keep failures and old bindings. Update the queue on each relevant event, not only at report time.
 
-## JST report every six minutes
+## JST update on a result, blocker, release change or explicit status request
 
-1. Artifacts, empirical results/proof status and changed decisions; enabling work separately.
-2. Ticket changes, blockers, parent interventions, worker/job termination and release.
-3. Next microtickets and CPU/RAM/VRAM plan with observed peaks/releases and idle reasons.
-4. Previous → current release ETA: initial baseline or ontime/delta/pivot with rationale.
+1. For a benchmark goal, accepted wins and eligible current-path coverage; otherwise accepted learning.
+2. New evidence/proof status, changed decision and enabling work separately.
+3. Actual blocker, parent intervention, next return and resource change, if any.
+4. Previous → current release ETA: initial baseline, ontime/delta/pivot or UNKNOWN with the next bounding observation.

@@ -1,4 +1,5 @@
-// PreToolUse gate — every dispatch names one of exactly two model+effort pairs, explicitly.
+// PreToolUse gate — every dispatch names one of exactly two model+effort pairs, explicitly,
+// and the Opus pair is escalation-only.
 // matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
 // ALLOWED PAIRS (the only two — nothing is implicit, nothing is injected):
@@ -27,6 +28,11 @@
 //               violation, not an inheritance.
 //               Named/child/unreadable workflows are denied because they cannot be
 //               inspected.
+//   - ESCALATION: sonnet-high is the default (2026-10-01: Sonnet 5.5 high scores within a few
+//                 points of Opus 5.5 medium at lower cost per task). An opus-medium dispatch —
+//                 Agent/Task subagent_type "opus-medium" or a Workflow agent() on the opus pair —
+//                 must carry exactly one `ESCALATE(OPUS): <reason>` line in its prompt (Workflow:
+//                 inside the same agent() call), the reason naming why Sonnet is not enough.
 //   - The role binding lives in orchestrating-agents/references/model-roster.md; this hook
 //     enforces it without a bypass. There is no low-effort escape hatch: 'low' is simply not
 //     an allowed value, so no declaration mechanism exists for it any more.
@@ -75,9 +81,40 @@ const AGENT_PAIR_HELP =
 // Which of the two to pick — the part a caller cannot infer from "not allowed" alone. Printed
 // once per deny, wherever the diagnostic leaves the choice open.
 const CHOOSE_PAIR =
-  "Choose by the task: sonnet-high when the brief fully specifies the result (mechanical edits, " +
-  "a named test run, bulk probes); opus-medium for multi-file refactors, root-cause debugging, " +
-  "long unattended coding, or an ambiguous spec.";
+  "Default to sonnet-high: implementation from a clear spec, bug fixes, tests, terminal work, " +
+  "bulk coding. Use opus-medium only as an escalation, with an ESCALATE(OPUS) line: ambiguous " +
+  "spec, multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high " +
+  "already stuck on this task.";
+
+// Opus is escalation-only: exactly one ESCALATE(OPUS) line whose reason says why Sonnet is not
+// enough. Matched on the ORIGINAL text (a prompt string is where it lives), like the resource
+// declaration. A reason under MIN_ESCALATION_REASON non-space characters is a placeholder.
+const ESCALATION_TOKEN = /ESCALATE\(OPUS\):[ \t]*([^\n]*)/g;
+const MIN_ESCALATION_REASON = 12;
+const ESCALATION_HELP =
+  "one line `ESCALATE(OPUS): <why Sonnet 5.5 high is not enough — ambiguous spec, " +
+  "multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high already " +
+  "stuck on this task>`";
+function escalationProblem(
+  text: string | null,
+  sonnetFix: string,
+): string | null {
+  if (text === null) {
+    return `opus-medium is escalation-only, but there is no inspectable prompt to carry ${ESCALATION_HELP} — ${sonnetFix}`;
+  }
+  const hits = [...text.matchAll(ESCALATION_TOKEN)];
+  if (hits.length === 0) {
+    return `opus-medium is escalation-only — add ${ESCALATION_HELP} to the prompt, or ${sonnetFix} (the default)`;
+  }
+  if (hits.length > 1) {
+    return `found ${hits.length} ESCALATE(OPUS) lines, need exactly 1 — keep one ${ESCALATION_HELP}`;
+  }
+  const reason = (hits[0]?.[1] ?? "").replace(/\s/g, "");
+  if (reason.length < MIN_ESCALATION_REASON) {
+    return `ESCALATE(OPUS) reason is empty or a placeholder (under ${MIN_ESCALATION_REASON} characters) — state why Sonnet is not enough, or ${sonnetFix}`;
+  }
+  return null;
+}
 const TYPE_FOR_FAMILY = { sonnet: "sonnet-high", opus: "opus-medium" } as const;
 function familyOf(model: string): "sonnet" | "opus" | null {
   if (SONNET.test(model)) return "sonnet";
@@ -114,11 +151,18 @@ const WORKFLOW_CHOICE_HELP =
 // ---------------------------------------------------------------------------
 
 // "shape" is script-level (the capability was not called directly); the rest are per-call.
-type Axis = "shape" | "syntax" | "model" | "effort" | "resource";
+type Axis = "shape" | "syntax" | "model" | "effort" | "escalation" | "resource";
 type Finding = { line: number; axis: Axis; detail: string };
 
 // Report order for the HOW TO FIX block: unsound-model first, then unparseable, then axes.
-const AXIS_ORDER: Axis[] = ["shape", "syntax", "model", "effort", "resource"];
+const AXIS_ORDER: Axis[] = [
+  "shape",
+  "syntax",
+  "model",
+  "effort",
+  "escalation",
+  "resource",
+];
 
 // A flood costs the reader more than it informs. Cap the listing and SAY it was capped.
 const MAX_REPORTED_LINES = 20;
@@ -140,6 +184,9 @@ const AXIS_HINT: Record<Axis, string> = {
     "effort   — exactly one literal effort: property, top-level in the options object " +
     `(no nesting, no spread, no computed key), paired with model as one of: ${WORKFLOW_PAIR_HELP}. ` +
     "No default applies: an omitted effort is a violation, and 'low' is not an allowed value.",
+  escalation:
+    `escalation — the opus pair is escalation-only: put ${ESCALATION_HELP} inside the SAME ` +
+    "agent() call (its prompt), or switch the call to agentType:'sonnet-high'.",
   resource: `resource — ${RESOURCE_DECLARATION_HELP}, inside the SAME agent() call.`,
 };
 
@@ -201,7 +248,7 @@ function denyFindings(findings: Finding[], totalCalls: number): void {
       ? "1 direct agent() call"
       : `${totalCalls} direct agent() calls`;
 
-  // BATCHED(shape, syntax, model, effort, resource): none of these consumes another's output,
+  // BATCHED(shape, syntax, model, effort, escalation, resource): none of these consumes another's output,
   // so all of them are collected across the whole script and reported in this one decision.
   decidePre(
     "deny",
@@ -620,6 +667,17 @@ function agentTypeFindings(shape: CallShape): { axis: Axis; detail: string }[] {
   return out;
 }
 
+// The call resolves to the opus pair: agentType:'opus-medium', or (no agentType) model:'opus'.
+function isOpusCall(shape: CallShape): boolean {
+  if (shape.agentTypeValues.length > 0) {
+    return (
+      shape.agentTypeValues.length === 1 &&
+      shape.agentTypeValues[0] === "opus-medium"
+    );
+  }
+  return shape.modelValues.length === 1 && shape.modelValues[0] === "opus";
+}
+
 // Scan forward from `open` (just past "agent(") to find where this call's parens balance.
 // Returns the index right after the matching close paren, plus the depth the scan ended at
 // (0 means balanced) — mirrors the original inline scan exactly, including running to the end
@@ -707,6 +765,15 @@ function checkWorkflowScript(src: string): void {
     const shape = scanCallOptions(src, blanked, open, i - 1);
     for (const finding of pairFindings(shape)) {
       findings.push({ line, ...finding });
+    }
+    if (isOpusCall(shape)) {
+      const escalation = escalationProblem(
+        originalSpan,
+        "switch to agentType:'sonnet-high'",
+      );
+      if (escalation !== null) {
+        findings.push({ line, axis: "escalation", detail: escalation });
+      }
     }
 
     const resource = resourceDeclarationResult(originalSpan);
@@ -798,10 +865,20 @@ async function main(): Promise<void> {
     if (typeof ti.prompt === "string") prompt = ti.prompt;
     else if (typeof ti.message === "string") prompt = ti.message;
     else prompt = null;
+    if (
+      subagentType === "opus-medium" ||
+      (typeFamily === null && modelFamily === "opus")
+    ) {
+      const escalation = escalationProblem(
+        prompt,
+        'dispatch subagent_type:"sonnet-high", model:"sonnet"',
+      );
+      if (escalation !== null) problems.push(escalation);
+    }
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
-    // BATCHED(pair, resource): the pair and the resource class are independent — a caller violating
+    // BATCHED(pair, escalation, resource): the pair, the escalation, and the resource class are independent — a caller violating
     // more than one of them is told about all of them at once, not denied once per axis.
     if (problems.length > 0) {
       decidePre(

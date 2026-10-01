@@ -1,11 +1,10 @@
 ---
 name: sonnet-high
 description: >-
-  Use for bulk, well-specified execution on Sonnet at high effort — the caller has already
-  done the design work and needs it carried out: mechanical multi-file edits, running a
-  specified verification suite, cheap parallel probes, or any dispatch whose brief leaves no
-  ambiguity about what "done" looks like. Not for ambiguous specs, architectural judgment,
-  or long unattended debugging — dispatch opus-medium for those instead.
+  The default executor, on Sonnet at high effort: implementation from a clear spec, bug
+  fixes, tests, terminal work, multi-file edits, verification runs, bulk probes. Escalate to
+  opus-medium (with an ESCALATE(OPUS) line) only for an ambiguous spec, a multi-repo or
+  large refactor, design judgment, factual accuracy, or when this agent got stuck.
 model: sonnet
 effort: high
 ---

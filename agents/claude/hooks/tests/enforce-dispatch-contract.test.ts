@@ -29,9 +29,11 @@ const sonnetHigh = (extra: Record<string, unknown> = {}) =>
     model: "sonnet",
     ...extra,
   });
+const ESCALATION =
+  "ESCALATE(OPUS): ambiguous spec spanning three repos needs design judgment";
 const opusMedium = (extra: Record<string, unknown> = {}) =>
   pre("Task", {
-    prompt: "x",
+    prompt: `${ESCALATION}\nx`,
     subagent_type: "opus-medium",
     model: "opus",
     ...extra,
@@ -136,9 +138,7 @@ describe("Agent / Task — every other shape is denied", () => {
     expect(d.permissionDecisionReason).toContain(
       "no allowed dispatch pair (subagent_type missing, model missing)",
     );
-    expect(d.permissionDecisionReason).toContain(
-      "Choose by the task: sonnet-high when the brief fully specifies the result",
-    );
+    expect(d.permissionDecisionReason).toContain("Default to sonnet-high");
   });
 
   test("every deny states the two allowed forms", () => {
@@ -212,7 +212,7 @@ describe("Workflow — allowed pairs", () => {
   test("all agent() calls literal opus/medium -> silent pass", () => {
     const r = runHook(
       HOOK,
-      wf(`await agent('x', {model: 'opus', effort: 'medium'})`),
+      wf(`await agent('${ESCALATION}', {model: 'opus', effort: 'medium'})`),
     );
     expect(r.code).toBe(0);
     expect(r.stdout.trim()).toBe("");
@@ -616,7 +616,10 @@ describe("deny text names the minimal exact repair", () => {
 // model AND effort), the same two names the Agent tool takes as subagent_type.
 describe("Workflow agentType names the pair", () => {
   test("agentType:'opus-medium' alone -> allow", () => {
-    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'opus-medium'})`));
+    const r = runHook(
+      HOOK,
+      wf(`await agent('${ESCALATION}', {agentType: 'opus-medium'})`),
+    );
     expect(r.stdout.trim()).toBe("");
   });
   test("agentType:'sonnet-high' with its own model and effort -> allow", () => {
@@ -644,5 +647,55 @@ describe("Workflow agentType names the pair", () => {
     expect(reason).toContain(
       "agentType:'sonnet-high' or agentType:'opus-medium'",
     );
+  });
+});
+
+describe("Opus is escalation-only", () => {
+  const denyReason = (input: unknown) => {
+    const d = decisionOf(runHook(HOOK, input).stdout);
+    expect(d.permissionDecision).toBe("deny");
+    return d.permissionDecisionReason as string;
+  };
+  test("Agent opus-medium without ESCALATE(OPUS) -> deny naming the token and the sonnet default", () => {
+    const why = denyReason(opusMedium({ prompt: "x" }));
+    expect(why).toContain("opus-medium is escalation-only");
+    expect(why).toContain("ESCALATE(OPUS):");
+    expect(why).toContain('subagent_type:"sonnet-high", model:"sonnet"');
+  });
+  test("Agent opus-medium with a placeholder reason -> deny", () => {
+    const why = denyReason(opusMedium({ prompt: "ESCALATE(OPUS): hard\nx" }));
+    expect(why).toContain("placeholder");
+  });
+  test("Agent opus-medium with two ESCALATE(OPUS) lines -> deny", () => {
+    const why = denyReason(
+      opusMedium({ prompt: `${ESCALATION}\n${ESCALATION}\nx` }),
+    );
+    expect(why).toContain("found 2 ESCALATE(OPUS) lines");
+  });
+  test("Agent sonnet-high needs no escalation", () => {
+    expect(runHook(HOOK, sonnetHigh()).stdout.trim()).toBe("");
+  });
+  test("Workflow opus pair without ESCALATE(OPUS) in the call -> deny on the escalation axis", () => {
+    const why = denyReason(
+      wf(`await agent('x', {model: 'opus', effort: 'medium'})`),
+    );
+    expect(why).toContain("opus-medium is escalation-only");
+    expect(why).toContain("escalation —");
+  });
+  test("Workflow agentType:'opus-medium' without ESCALATE(OPUS) -> deny", () => {
+    const why = denyReason(wf(`await agent('x', {agentType: 'opus-medium'})`));
+    expect(why).toContain("agentType:'sonnet-high'");
+  });
+  test("Workflow escalation in ANOTHER call does not cover this one", () => {
+    const why = denyReason(
+      wf(
+        `await agent('${ESCALATION}', {agentType: 'opus-medium'})\nawait agent('x', {agentType: 'opus-medium'})`,
+      ),
+    );
+    expect(why).toContain("line 2");
+  });
+  test("Workflow sonnet pair needs no escalation", () => {
+    const r = runHook(HOOK, wf(`await agent('x', {agentType: 'sonnet-high'})`));
+    expect(r.stdout.trim()).toBe("");
   });
 });

@@ -14,11 +14,11 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 |---|---|---|---|
 | supervisor / planning | Opus 5 | control plane only | executor、author、verifier、subagentへ配役しない。 |
 | supervisor / planning | gpt-5.6-sol | control plane only | executor、author、verifier、subagentへ配役しない。 |
-| delegated executor / verifier / outside observer | Sonnet 5 @ high (`subagent_type:"sonnet-high", model:"sonnet"`) | 仕様が明確な量産・定型の production、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium", model:"opus"`) | 複数ファイルのリファクタ、デバッグ、長いagentic coding、仕様が曖昧な実装 | authorならverifierはgpt-5.6-terra。 |
-| delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6-sol @ medium or high (`model:"gpt-6-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6-luna @ any effort (`model:"gpt-6-luna", reasoning_effort:<any>`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | Sonnet 5.5 @ high (`subagent_type:"sonnet-high", model:"sonnet"`) — 既定 | 仕様が明確な実装、バグ修正、テスト、ターミナル作業、量産、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium", model:"opus"`) — 昇格のみ、prompt に `ESCALATE(OPUS): <理由>` を1行 | 仕様が曖昧、複数リポジトリや大規模リファクタ、設計判断、事実の正確さ、Sonnet が同じ作業で詰まった | authorならverifierはgpt-5.6-terra。 |
+| delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-sol @ medium or high (`model:"gpt-6-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-luna @ any effort (`model:"gpt-6-luna", reasoning_effort:<any>`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 
 Claude側のdispatchはこの二組だけ(2026-09-27)。effortは暗黙継承しない:Agent/Taskは上の
 subagent_type+modelを必ず明示し、Workflowの`agent()`は`agentType:'sonnet-high'|'opus-medium'`

@@ -581,3 +581,30 @@ This skill now cites that predicate instead of restating it.
 The full record is in `keeping-research-notebooks` tests/forge-verification-ledger.md §7: the incident, the findings
 (workflow `wf_d7608669-493`, 46 findings across four lenses), the fixes, and owner-named deferrals.
 Prose-debt WARN counts equal the pre-edit copy (standing debt, not added).
+
+## 2026-10-01 — `[compat] julia` is profile-keyed, 1.11 is only the gate floor, v2610.2.0
+
+**Defect.** The skill mandated `[compat] julia = "1.11"` exactly, and `assets/no_exports.jl` asserted
+`== "1.11"`. 1.11 is the lowest line where `public` exists, not a line anyone tests. A notebook member
+sits in a `[workspace]` (Julia >= 1.12) and resolves against the one Manifest of the runtime pinned in
+`mise.toml` `[tools]` (e.g. 1.13), so a member declaring 1.11 advertised support its own layout cannot
+resolve. Origin: `keeping-research-notebooks` ledger deferral "Members' `[compat] julia = "1.11"` vs
+`[workspace]` needing 1.12 -> writing-julia next reforge".
+
+**Owner's words.** "why aren't we using Julia 1.13? fix the skill defect".
+
+**New rule** (one home: `references/packaging.md` PK3 profile table; PK0 notebook row carries the member line).
+Notebook member / application / research environment: the runtime line pinned in `mise.toml` `[tools]`,
+never below 1.12. Reusable library: the lowest line CI tests, and >= 1.11. The ZERO-EXPORTS gate
+enforces only the floor: the lowest version the spec admits (TOML-only parse, ranges split on ",",
+leading version of each) is >= 1.11, and a missing julia entry fails. No new test dependency.
+
+**Edits.** `assets/no_exports.jl` (`_julia_compat_floor_ok`), `SKILL.md` §9 checklist line + version header,
+`references/packaging.md` (version-gate row, PK3 profile table, PK0 notebook row, review checklist),
+`references/architecture.md` (§10.5 paragraph, §10 lookup row). `references/runtime-upgrades.md`
+and `tests/trigger-set.md` mention 1.11 as the `public` introduction/floor, which stays true; unchanged.
+
+**Receipts.** Fixture run through `agent-resource-run --manifest .../compat-gate.resource.json -- mise exec julia@1.13 -- julia check.jl`
+(job `job2610-julia-compat-gate-test`, exit 0), the function extracted from the asset itself:
+`"1.13"` PASS, `"1.10"` FAIL, `"1.11, 1.13"` PASS, missing entry FAIL, all as expected.
+skill-check: prose-debt WARN counts equal the pre-edit copy (157 reference / 10 core, waiver unchanged).

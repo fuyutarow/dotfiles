@@ -178,7 +178,7 @@ Floor: prose-debt WARN counts equal the pre-edit copies for all five skills.
 | Paper-figure build recipe (artifact path, figure task, receipt format) | next reforge here |
 | `compiling-latex/assets/mise-latex.toml` fails `mise-contract.ts` (3 HARD) and hardcodes one paper | `compiling-latex` owner |
 | Id grammars disagree (`{yymm}_{seq}` / `{type}{YYMM}-` / no YYMM) | collection editor |
-| Members' `[compat] julia = "1.11"` vs `[workspace]` needing 1.12 | `writing-julia` next reforge |
+| ~~Members' `[compat] julia = "1.11"` vs `[workspace]` needing 1.12~~ RESOLVED 2026-10-01: writing-julia v2610.2.0 keys `[compat] julia` by profile (PK3); a notebook member uses the pinned runtime line | `writing-julia` |
 | `wiring-check.ts` cannot detect a root manifest in a notebook repo | `wiring-repositories` next reforge |
 | Records store as an S1 layer row (order after VCS init; polysearch not in `[tools]`; `research_record/.agent-state` ignore rule) | `wiring-repositories` next reforge |
 | No-fire rows for paper naming and design reports may co-fire here through 置き場 tokens | next description edit |

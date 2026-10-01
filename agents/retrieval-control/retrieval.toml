@@ -9,6 +9,15 @@
 # Owner decision 2026-10-01: Jev is acceptable; the local reranker stays as the fallback.
 judge = "jev"
 
+# Where Jev is reached. Same request shape (state + typed noul questions), different operator:
+#   "typesafe"       api.typesafe.ai/v1/systemone — TypeSafe AI itself, $0.042 per M input tokens.
+#   "jevtypesafeai"  jevtypesafeai.com/api/v1/decide — CODEFASHION TECH LTD, an independent reseller
+#                    ("not affiliated with TypeSafe AI"); forwards to TypeSafe or, on failover, an
+#                    unnamed AI gateway; does not store request bodies; $0.25-0.42 per M; prepaid.
+# The key in ~/.config/typesafe/.env must come from the chosen operator. Current key: the reseller's
+# (2026-10-01). Recommended: an official TypeSafe key — one party fewer, 6-10x cheaper.
+jev_provider = "jevtypesafeai"
+
 # Projects whose code must never leave this machine: the local judge is used there regardless of
 # `judge`. Paths are home-relative (~/…) or absolute; a project matches if it is or lies under one.
 no_egress = []

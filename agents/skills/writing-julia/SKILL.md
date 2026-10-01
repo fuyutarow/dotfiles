@@ -17,7 +17,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2610.1.0 (2026-10-01) — a notebook repo's workspace root lives in `packages/`, never at the repo root (PK0).
+> **Version**: v2610.2.0 (2026-10-01) — `[compat] julia` is profile-keyed (pinned runtime line or tested minimum), 1.11 is only the gate floor (PK3).
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -393,7 +393,7 @@ Namespace contract — `references/architecture.md` §10.5:
 - [ ] No root, child, or extension module exports or reexports any binding.
 - [ ] `Reexport.jl` is not a dependency.
 - [ ] `Requires.jl` is not a dependency.
-- [ ] Stable API uses `public`; `[compat] julia = "1.11"` exactly.
+- [ ] Stable API uses `public`; `[compat] julia` follows the `packaging.md` PK3 profile table and its lowest admitted line is >= 1.11.
 - [ ] The copied `assets/no_exports.jl` gate passes for source, runtime state, API set, and extensions.
 - [ ] Every §10.5.1 ExplicitImports check passes under the strict keyword settings.
 - [ ] Existing exports are removed as a breaking release, never kept as a transition shim.

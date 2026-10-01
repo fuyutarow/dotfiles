@@ -184,8 +184,8 @@ The contract is support and SemVer, not access control. `baremodule` does not so
 The declaration syntax is `public solve`, not `Base.public :solve`.
 Qualified access also existed before Julia 1.11; `public` added API marking, not permission to call a binding.
 
-Authored packages declare the canonical `[compat] julia = "1.11"`. Do not use a Compat fallback.
-The executable gate checks that exact floor; a verifiable public-only API is part of the contract.
+Authored packages declare `[compat] julia` per `packaging.md` PK3; its lowest admitted line is >= 1.11. Do not use a Compat fallback.
+The executable gate checks that floor only; a verifiable public-only API is part of the contract.
 
 Package source under `src/` and `ext/` must not rely on bare `using Dep`. All dependency access is
 qualified or explicitly named. Every imported or qualified dependency binding must be public and
@@ -306,7 +306,7 @@ isolation to the architecture rules above.
 | Shared abstract API across packages | extract an **interface package** (SciMLBase-style) |
 | Optional / heavy dependency | native extension; never Requires.jl |
 | Need an internal namespace with the same lifecycle | submodule with relative imports |
-| Want stable API | `public`; require Julia 1.11+ |
+| Want stable API | `public`; compat floor >= 1.11, line per `packaging.md` PK3 |
 | Tempted to `export` / `@reexport` | stop; the ZERO-EXPORTS gate forbids namespace injection |
 | Slow first call in a big package | `@compile_workload` + fix invalidations (§10.7) |
 | Tempted to use a non-const global | put it in a function arg or a `const` container |

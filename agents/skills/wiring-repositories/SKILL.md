@@ -229,6 +229,7 @@ MUST NOT fire (with route):
 | the built-in `init` | **DECISIVE by cardinality** — it produces exactly one file. One file → it; a wiring set → here. This skill may invoke it for that layer |
 | `compiling-latex` / `wrangler` | **DECISIVE** — a per-technology setup is theirs. This skill names the layer and calls them |
 | `driving-jujutsu` | **PURPOSE** — the jj layer's WIRING (colocated init, JJ-1..3) → here; operating it afterwards (changes, bookmarks, push, recovery) → theirs |
+| `keeping-research-notebooks` | **PURPOSE** — which layers a repo admits and their wiring → here; operating a wired research notebook repo (artifact homes, the one launch and landing entry, edition acceptance) → theirs. Reciprocal, 2026-10-01 |
 | `driving-git` | **PURPOSE** — the `git` layer's WIRING (`.gitignore`, `core.hooksPath`, the git-hook shape) → here; OPERATING the repo afterwards (commit scope, rebase, push receipts, rewrites, shared checkouts) → theirs. Reciprocal row landed 2026-09-21 |
 
 ## Reference index

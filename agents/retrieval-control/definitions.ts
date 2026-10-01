@@ -58,18 +58,72 @@ export type Card = Definition & { score: number; methods: number };
 
 export type DefinitionAnswer = {
   cards: Card[];
-  strength: "strong" | "likely" | "none" | "unranked"; // unranked: no reranker, so no match/absence judgement
+  strength: "strong" | "likely" | "none" | "unranked"; // unranked: no judge answered, so no match/absence judgement
   best: number;
   reranked: boolean;
+  judge: Judge | "none";
   catalogSize: number;
   notes: string[];
 };
 
+export type Judge = "jev" | "local";
+type Thresholds = { strong: number; likely: number };
+type RetrievalConfig = {
+  judge: Judge;
+  noEgress: string[];
+  thresholds: Record<Judge, Thresholds>;
+};
+
 const RECALL = 40; // embedding hits pulled from the catalog
-const RERANK_POOL = 40; // candidates the cross-encoder scores: 40 (the bench size) ~1.2-1.6 s inside the 2 GiB partition
-const STRONG = 4; // log-odds; correct answers on the bench score 4-8
-const LIKELY = 1.5; // below this nothing is shown as a match (NO_DEFINITION)
+const RERANK_POOL = 40; // candidates the judge scores: 40 (the bench size)
 const PRIOR = { public: 1, documented: 0.5, private: -1.5, test: -1.5 };
+const CONFIG = join(import.meta.dir, "retrieval.toml");
+const JEV_URL = "https://api.typesafe.ai/v1/systemone";
+const JEV_TIMEOUT_MS = 20_000;
+const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
+
+// retrieval.toml, validated: a wrong value names the key and stops, never a guessed default.
+export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
+  const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as {
+    definition?: {
+      judge?: unknown;
+      no_egress?: unknown;
+      thresholds?: Record<string, Partial<Thresholds>>;
+    };
+  };
+  const d = raw.definition ?? {};
+  if (d.judge !== "jev" && d.judge !== "local")
+    throw new Error(`${path}: definition.judge must be "jev" or "local"`);
+  if (
+    !Array.isArray(d.no_egress) ||
+    !d.no_egress.every((p) => typeof p === "string")
+  )
+    throw new Error(`${path}: definition.no_egress must be a list of paths`);
+  const thresholds = {} as Record<Judge, Thresholds>;
+  for (const j of ["jev", "local"] as const) {
+    const t = d.thresholds?.[j];
+    if (typeof t?.strong !== "number" || typeof t.likely !== "number")
+      throw new Error(
+        `${path}: definition.thresholds.${j} needs numeric strong and likely`,
+      );
+    thresholds[j] = { strong: t.strong, likely: t.likely };
+  }
+  const expand = (p: string) =>
+    p.startsWith("~/") ? join(homedir(), p.slice(2)) : p;
+  return {
+    judge: d.judge,
+    noEgress: (d.no_egress as string[]).map(expand),
+    thresholds,
+  };
+}
+
+function judgeFor(project: string, cfg: RetrievalConfig): Judge {
+  const real = realpathSync(project);
+  const blocked = cfg.noEgress.some(
+    (p) => real === p || real.startsWith(`${p.replace(/\/$/, "")}/`),
+  );
+  return blocked ? "local" : cfg.judge;
+}
 const RERANK_TIMEOUT_MS = 45_000; // first query after idle loads the model (~16 s measured)
 const SCRIPT = join(import.meta.dir, "ccc_defs.py");
 
@@ -436,6 +490,7 @@ export async function findDefinitions(
       strength: "none",
       best: -99,
       reranked: false,
+      judge: "none",
       catalogSize: 0,
       notes: ["no catalog yet"],
     };
@@ -447,18 +502,18 @@ export async function findDefinitions(
 
   const owners = ownersOf(defs);
   const order = candidates(hits, byFile, owners, exclude).slice(0, RERANK_POOL);
-  const result: RerankResult =
-    order.length > 0
-      ? await rerank(query, order.map(rerankText))
-      : { scores: [] };
+  const cfg = loadRetrievalConfig();
+  const { judge, result } = await judgeCandidates(
+    query,
+    order.map(rerankText),
+    judgeFor(project, cfg),
+    notes,
+  );
   const scores = "scores" in result ? result.scores : null;
   const reranked = scores !== null;
   if ("reason" in result) notes.push(`embedding order only — ${result.reason}`);
-  const raw =
-    scores ??
-    order.map(
-      (_, i) => STRONG + 1 - (i * (STRONG + 1)) / Math.max(order.length, 1),
-    );
+  // Unjudged: a descending stand-in keeps embedding order; strength is "unranked" regardless.
+  const raw = scores ?? order.map((_, i) => order.length - i);
   const ranked = toCards(order, finalScores(order, raw, owners)).slice(
     0,
     limit,
@@ -466,12 +521,101 @@ export async function findDefinitions(
   const best = ranked[0]?.score ?? -99;
   return {
     cards: ranked,
-    strength: strengthOf(best, reranked),
+    strength: strengthOf(best, reranked, cfg.thresholds[judge]),
     best,
     reranked,
+    judge: reranked ? judge : "none",
     catalogSize: defs.length,
     notes,
   };
+}
+
+// The configured judge; Jev failing (network, quota, bad key) falls back to the local reranker and
+// says so — the answer never silently loses its judgement.
+async function judgeCandidates(
+  query: string,
+  docs: string[],
+  preferred: Judge,
+  notes: string[],
+): Promise<{ judge: Judge; result: RerankResult }> {
+  if (docs.length === 0) return { judge: preferred, result: { scores: [] } };
+  if (preferred === "jev") {
+    const jev = await judgeJev(query, docs);
+    if ("scores" in jev) return { judge: "jev", result: jev };
+    notes.push(`Jev unavailable (${jev.reason}); local reranker instead`);
+  }
+  return { judge: "local", result: await rerank(query, docs) };
+}
+
+function jevKey(): string | null {
+  const env = process.env.TYPESAFE_API_KEY;
+  if (env) return env;
+  const file = join(homedir(), ".config/typesafe/.env");
+  if (!existsSync(file)) return null;
+  const m = /^TYPESAFE_API_KEY=(\S+)$/m.exec(readFileSync(file, "utf8"));
+  return m?.[1] ?? null;
+}
+
+// One request: every candidate is one `noul` question about its own slot of the state. Jev's
+// probabilities are calibrated; they come back as log-odds so the priors and thresholds share the
+// local judge's scale. The candidate text (name, signature, first doc lines) is what leaves the
+// machine — never file bodies.
+export async function judgeJev(
+  query: string,
+  docs: string[],
+): Promise<RerankResult> {
+  const apiKey = jevKey();
+  if (apiKey === null)
+    return { reason: "no TYPESAFE_API_KEY (env or ~/.config/typesafe/.env)" };
+  const id = (i: number) => `C${String(i).padStart(2, "0")}`;
+  const body = JSON.stringify({
+    model: "jev-latest",
+    state: Object.fromEntries(docs.map((d, i) => [id(i), d])),
+    questions: Object.fromEntries(
+      docs.map((_, i) => [
+        id(i),
+        {
+          type: "noul",
+          instructions: `Does the code definition ${id(i)} already implement what this developer needs: "${query}"?`,
+        },
+      ]),
+    ),
+  });
+  for (let attempt_ = 0; attempt_ <= JEV_RETRIES; attempt_ += 1) {
+    const res = await attempt(() =>
+      fetch(JEV_URL, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body,
+        signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
+      }),
+    );
+    if (!res.ok) return { reason: `request failed: ${String(res.error)}` };
+    const status = res.value.status;
+    if ((status === 429 || status === 529) && attempt_ < JEV_RETRIES) {
+      await Bun.sleep(500 * 2 ** attempt_);
+      continue;
+    }
+    if (status !== 200) return { reason: `HTTP ${status}` };
+    const json = await attemptOr(
+      async () =>
+        (await res.value.json()) as {
+          answers?: Record<string, { noul?: number }>;
+        },
+      null,
+    );
+    const ps = docs.map((_, i) => json?.answers?.[id(i)]?.noul);
+    if (ps.some((p) => typeof p !== "number"))
+      return { reason: "malformed answer" };
+    const clamp = (p: number) => Math.min(1 - 1e-4, Math.max(1e-4, p));
+    return {
+      scores: (ps as number[]).map((p) => Math.log(clamp(p) / (1 - clamp(p)))),
+    };
+  }
+  return { reason: "still rate-limited after retries" };
 }
 
 // The candidates the second stage would score, with the exact text it would read — for comparing
@@ -577,10 +721,11 @@ function toCards(order: Definition[], score: Map<string, number>): Card[] {
 export function strengthOf(
   best: number,
   reranked: boolean,
+  t: Thresholds,
 ): DefinitionAnswer["strength"] {
   if (!reranked) return "unranked";
-  if (best >= STRONG) return "strong";
-  return best >= LIKELY ? "likely" : "none";
+  if (best >= t.strong) return "strong";
+  return best >= t.likely ? "likely" : "none";
 }
 
 // The first line that says what it does: Julia/Python docstrings usually open with a copy of the

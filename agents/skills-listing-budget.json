@@ -1,10 +1,17 @@
 {
-  "maxListingChars": 66012,
+  "maxListingChars": 67082,
   "measuredOn": "2026-09-21",
   "skillsAtMeasurement": 71,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
+    {
+      "date": "2026-10-03",
+      "from": 66012,
+      "to": 67082,
+      "spentBy": "verifying-symbolic-identities",
+      "reason": "A new name+description entry plus a co-fire token in writing-julia's description ('Does an identity hold (記号検算) → verifying-symbolic-identities.'). The collection measured 65,952 at 75 skills before this commit and 67,082 at 76 after; the raise equals the measured total, so the prior 60-char headroom is absorbed, not widened. The description grew after verification: qualified tool tokens and typed PURPOSE cuts to systematizing-knowledge and arguing-research-papers were needed because two near-miss rows (a CAS survey, an Oscar install) fired this skill on bare tool names. Ownership void: no skill owned whether an identity holds and at which rung. writing-julia's packages.md taught numeric substitution with a tolerance as symbolic verification; proving-theorems' depth table had no CAS row. Blocking failure: a paper-identity verification run was reported as 記号的検算 while it was exact random-point evaluation with no CAS; a postmortem found no skill that would have stopped it. Evidence: soks unit CAS (01a0fd5c-582c-7190-9692-bcaaed261971), 23 verbatim primary sources. EXTEND rejected: writing-julia is a code-and-package manual with a different stop condition; proving-theorems stops at a kernel receipt. Retiring a sibling was rejected: none does this job. proving-theorems' description was left unchanged to avoid further charge; its body carries the cut. Ledger: verifying-symbolic-identities/tests/forge-verification-ledger.md."
+    },
     {
       "date": "2026-10-01",
       "from": 65242,

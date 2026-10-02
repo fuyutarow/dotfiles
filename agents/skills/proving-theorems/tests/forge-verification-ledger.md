@@ -20,3 +20,10 @@ This is not a claim that the pre-existing dated ecosystem recommendations were r
 Fresh Terra routing review `/root/theory_routing_review`: no findings on the proof/theory cut.
 Static review only; no proof or live trigger evaluation ran. Final mechanical receipts are recorded
 in the new theory owner's forge ledger.
+
+## 2026-10-03 — CAS cut to verifying-symbolic-identities
+
+Added a body cut line, a depth-table row ("CAS or numeric identity check, no kernel replay" → not
+certified) and two routing rows. Description unchanged (listing budget). Seam: agrees in substance
+with the new skill's proving-theorems row; do not byte-diff.
+**PROSE-DEBT waiver (2026-10-03):** scoped seam edit only. Floor counts unchanged at 36 SKILL.md and 272 reference sentences. No new debt; the 2026-09-27 queue position stands.

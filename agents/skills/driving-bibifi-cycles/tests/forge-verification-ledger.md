@@ -1029,3 +1029,14 @@ had a field for them, so an implementation ticket passed admission without them.
 Change: admission step 4 now requires the card fields RETRIEVE, PREDICTION, PATH TRACE for every score-moving ticket; a
 benchmark goal binds a lineage scoreboard (missing current value = below lineage); decision cases D40-D43 added.
 Verification: build-order file check passed; skill-check.ts reports no FAIL and no prose-debt WARN after edits.
+
+## 2026-10-02 — v2610.9.0: module decomposition and the oracle-substitution credit ladder
+
+Owner: 「分割統治可能な modularity のある整理にしてよ。ベンチマーク欠陥についても module とその交絡因子にクレジットアサインできないと」「その点 skill 蒸留もしてくれよ」.
+Incident: firefly-scan-recall cycles ran the whole edition on whole arenas; failures (mqar 0.0 from symbol width, 0.70 plateau,
+parity red, walltime censoring) could not be credited to a module or to the benchmark until each was found by hand; two
+workers edited the shared I/O adapter and measured around each other's breakage.
+Change: scientific-loop §4b (module table + benchmark confounder rows + ladder: oracle model, all-oracle modules, one module
+returned at a time, pair only on non-additivity); SKILL.md staffing row for shared modules (one owner, serial) and a pointer;
+decision cases D44-D45. Ownership: evidence meaning stays with validating-experimental-evidence; §4b selects the test.
+Verification: skill-check.ts after edits (see commit).

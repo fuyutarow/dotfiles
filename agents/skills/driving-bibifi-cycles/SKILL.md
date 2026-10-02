@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.8.0 (2026-10-02) — every score-moving ticket carries RETRIEVE, PREDICTION and PATH TRACE; a benchmark goal binds a lineage scoreboard first.
+> **Version**: v2610.9.0 (2026-10-02) — module decomposition with an oracle-substitution credit ladder for benchmark failures; shared modules get one owner.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -108,6 +108,9 @@ With the sizes, write each item's dependencies and write scope, then staff the p
 | Depends on another item's output | Same chain; it starts when that output is consumed |
 | No output dependency and a disjoint write scope | Its own worker now, if a fit worker/slot exists; the seam is a written interface contract |
 | No output dependency but a shared write scope | Split the scope at a stated seam, or keep it serial and record why |
+| A module shared by 2+ chains (I/O boundary, budget) | One owner for that module; other chains request changes through it |
+
+Decompose a composed system into modules before staffing it; `references/scientific-loop.md` §4b gives the table and the credit ladder.
 
 One worker holding a queue of independent items violates the first-return rule for every item but the first.
 The release ETA is the longest staffed chain, not the sum of all items.

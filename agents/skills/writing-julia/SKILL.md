@@ -18,7 +18,7 @@ description: >-
 
 # Model Julia — Coding Discipline & Package Engineering
 
-> **Version**: v2610.3.0 (2026-10-01) — JG8: the device is a type parameter of the owning state, chosen by the caller (§10.10).
+> **Version**: v2610.4.0 (2026-10-03) — setup.md §3.5.0: cold start of per-commit snapshot runs (one canonical bind path).
 > **Scope**: modern Julia for research, from numerical method to a distributable package contract.
 > **History and source grades**: `tests/forge-verification-ledger.md`.
 
@@ -99,7 +99,7 @@ reference file that matches the task.
 | `references/toolchain.md` | data structures, parallelism, selection pointers | structure or compute-tool choice |
 | `references/packages.md` | research package choices; persistence vs interchange | dependency selection |
 | `references/packaging.md` | identity, deps, manifests, workspaces, state, release | package lifecycle |
-| `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT, output, REPL | runs and deployment |
+| `references/setup.md` | install, execution, exact envs, experiments, TTFX/AOT (§3.5.0: per-commit snapshot cold start), output, REPL | runs and deployment |
 | `references/architecture.md` | topology, naming, ZERO-EXPORTS, explicit imports, traits, API, hygiene, device ownership | implementation structure, naming, or a state/API holding device arrays |
 
 ---

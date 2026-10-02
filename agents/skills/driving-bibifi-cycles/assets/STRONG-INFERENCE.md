@@ -1,6 +1,7 @@
 # Strong Inference — embed in the existing iteration record
 
-Use for an unresolved scientific contrast; a routine known bug needs only its failing witness.
+Use for an unresolved scientific contrast; a located defect needs only its failing witness.
+A build or repair meant to move a score still carries the card's RETRIEVE, PREDICTION and PATH TRACE fields.
 Bind the applicable soks position/ledger/evidence and current target/model/statement versions once.
 
 ## Situation and anomaly

@@ -693,3 +693,15 @@ on the reveal input (io.jl:228), which pass once declared as egress/ingress boun
 
 **Still not covered.** No CUDA run: the backend-mismatch branch is unexercised on a GPU. Counters are package
 code; the gate trusts what they report.
+
+## 2026-10-03 — identity verification split out to verifying-symbolic-identities
+
+- Moved: the claim "verify symbolic equality by numeric substitution at a few points with a tolerance"
+  (`packages.md`) was wrong as a verification rule. It now points to `verifying-symbolic-identities`
+  and labels numeric substitution an R5 smoke test.
+- Added: one pointer line at the head of `packages.md` "Symbolic computation"; a routing row; a
+  description co-fire token; two near-miss rows in `tests/trigger-set.md`.
+- Stays here: package choice by role, Symbolics/ModelingToolkit codegen, `lambdify` to AD, setup times.
+- Evidence: soks unit CAS (01a0fd5c-582c-7190-9692-bcaaed261971). Seam: agrees in substance with the
+  new skill's writing-julia row; do not byte-diff.
+**PROSE-DEBT waiver (2026-10-03):** scoped seam edit only. Pre- and post-edit floor counts are equal: 10 long sentences in SKILL.md, 44 in packages.md, 157 across references. No new debt; queued for the next full reforge.

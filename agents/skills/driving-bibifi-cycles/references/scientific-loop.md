@@ -57,6 +57,35 @@ Prewrite outcomes, excluded subclaims, surviving candidates, auxiliary checks an
 Keep unchanged controls/context by locator. Scope safety and admission still apply.
 Independent questions may run broadly in parallel; result-dependent successors wait only for their own needed result.
 
+## 4b. Assign a benchmark failure to a module or a confounder
+
+Use when a composed system misses a benchmark target and the cause could sit in any component or in the benchmark.
+First write a module table from the code: id, file locus, input → output contract, unit witness, oracle substitute.
+Then add the benchmark-side confounders as their own rows:
+
+| Confounder | Typical defect | Separating check |
+|---|---|---|
+| Data / edition | Symbol width, scored bytes, reveal mask differ from what the system writes | A data-only oracle reaches the ceiling |
+| Protocol / footing | Prequential versus held-out; different training size | Same protocol as the comparison row |
+| Runner / launcher | Row slicing, episode cuts, validity masks | A trivial oracle model through the same runner reaches the ceiling |
+| Scoring | Byte versus symbol metric; mask | Oracle answers through the scorer |
+| Resources | Walltime, memory, compile censor the run | Completed positions versus planned |
+
+Run the ladder on a short prefix of the same member; each arm is one bounded witness:
+
+| Step | Arm | A drop credits |
+|---|---|---|
+| 0 | Oracle model through the runner and scorer | Benchmark-side confounders |
+| 1 | System with every learned module replaced by its oracle | Structure and I/O: not representable |
+| 2 | Return one module at a time from oracle to learned | That module |
+| 3 | Only when two single drops do not add up: that pair together | The pair's interaction |
+
+Do not run a full factorial. Do not tune a learned module before steps 0-1 pass.
+A module without an oracle substitute is verified by its unit witness or a round trip (ingress ↔ egress).
+Build missing oracle setters as the first ticket; they are diagnostic inputs, never a prospective rule.
+Staffing follows the table: chains of modules with disjoint files go to separate workers.
+Modules shared by 2+ chains (I/O boundary, budget) have one owner; their changes are serial.
+
 ## 5. Learn locally, revise the candidate immediately
 
 | Observation | Update now | Do not conclude |

@@ -1,5 +1,13 @@
 # Forge verification ledger — writing-julia (F3 artifact)
 
+## 2026-10-03 — cold start of per-commit snapshot runs (setup.md §3.5.0)
+
+**Trigger:** firedancer's launcher ran every registered run from a fresh `arena-snapshots/<key>` directory; each run spent 8–10 min
+recompiling the local workspace packages (measured: warm `import ModelRegistry` 0.14 s, cold run 556 s). The skill's TTFX map had no
+row for path-keyed package-image rejection. **Change:** a LOOKUP table keyed by the observation (new path per commit, slots, sync,
+heavy workload, GPU first call, dependency import). **Evidence:** stable path → 133 s per run; the canonical-bind-path row matches the
+independent rankings of Codex (gpt-6.1-sol) and Grok. Version facts tagged `[dated:2026-10]`.
+
 ## 2026-09-21 — compiler-mode decision map (v2609.4.0)
 
 **Trigger:** a user supplied an attractive but over-general `-O0`–`-O3` explanation and found

@@ -16,7 +16,7 @@ description: >-
 
 # Driving BIBIFI cycles
 
-> **Version**: v2610.7.0 (2026-10-01) — sizing plus dependency/write-scope staffing is required before a multi-ticket plan or ETA.
+> **Version**: v2610.8.0 (2026-10-02) — every score-moving ticket carries RETRIEVE, PREDICTION and PATH TRACE; a benchmark goal binds a lineage scoreboard first.
 
 ```sh
 for f in assets/ITERATION-PLAN.md assets/STRONG-INFERENCE.md \
@@ -75,11 +75,23 @@ Do these checks in order; resource availability cannot waive an earlier failure.
 | 1. Outcome and constraints | Bind the requested result and hard requirements: concept, target path, device, information access and budget. Read current-version evidence. | Retrieve the missing source or obtain the genuinely missing decision; do not invent an easier target. |
 | 2. Purpose | Name the observed obstacle, current consuming task/test, and what distinct results would change next. A repair names the exact blocked call. | Defer work justified only by “might help later”, taxonomy, general cleanup or spare capacity. |
 | 3. First return | Bind a checkable output, evidence-based duration estimate, six-minute due time and parent inspection. Preserve step 1 while shrinking. | Split or measure the unknown before dispatch. Low points cannot authorize an overlong or constraint-changing slice. |
-| 4. Reuse and path | If a predecessor exists, locate reusable parts and declared carryover obligations. Bind the smallest consumer check to current requirements. | Retrieve or repair the missing interface. An authorized new frame may retire old obligations; document that change. |
+| 4. Retrieve, predict, trace | Fill the card's `RETRIEVE`, `PREDICTION` and `PATH TRACE` fields (rules below the table). | Do not dispatch. Retrieve the mechanism, write the prediction, or make the first break in the traced path the first ticket. |
 | 5. Execution and fit | Apply the execution lookup below, then check ownership, capacity, critical headroom and C0/P7 for the selected path. | Reuse/re-slice before starting another actor; hold only conflicting work. |
 | 6. Consume | Read the result, apply its scoped implication and re-evaluate dependent work now. | An unconsumed report or sent message does not close the ticket. |
 
-For a benchmark goal, use current registry/EV evidence and the outcome table in `references/microticket-patterns.md`.
+Step 4 applies to every build, repair and experiment ticket meant to move a score or acceptance row.
+An implementation ticket is not a "routine known bug" for this purpose.
+
+| Card field | Required content | Missing or broken → |
+|---|---|---|
+| `RETRIEVE` | Locator (edition, file:line, run id) of the mechanism that already produced the best row for this member, plus the carryover obligations. Use `none` only after `rr absent` with 3+ paraphrases. | Retrieve first. Inventing a mechanism the lineage already has is rejected. |
+| `PREDICTION` | Rival hypotheses (or the diagnostic expected value), the value predicted per arm, the trivial baseline and the control. | Write it now. A run without a prewritten prediction cannot discriminate. |
+| `PATH TRACE` | file:line chain from the intervention, through the official execution path, to the scored output bytes. Name every selector or decoder on the chain. | The first break or masking selector becomes the ticket. Do not measure through it. |
+
+For a benchmark goal, bind one scoreboard before selecting tickets.
+Its rows: member × lineage best (value, edition, protocol, run) × current value on the same footing.
+A member without a current value counts as below its lineage.
+Use current registry/EV evidence and the outcome table in `references/microticket-patterns.md`.
 Size every item before publishing a plan of 2+ tickets or any release ETA; use that reference's estimation lookup.
 
 | Informed estimators available | Required method |
@@ -99,8 +111,10 @@ With the sizes, write each item's dependencies and write scope, then staff the p
 
 One worker holding a queue of independent items violates the first-return rule for every item but the first.
 The release ETA is the longest staffed chain, not the sum of all items.
-For an anomaly, use `references/scientific-loop.md` to construct a discriminating return, not a mandatory study phase.
-Use `references/skill-composition.md` for content ownership; routine repairs need only a failing witness.
+For an anomaly, use `references/scientific-loop.md` to construct a discriminating return; it is not a separate study phase.
+The step-4 card fields are never optional for score-moving work, whatever the ticket is called.
+Use `references/skill-composition.md` for content ownership.
+A repair of a located defect needs only its failing witness plus `PATH TRACE`.
 
 A first return can be a smallest working path, a counterexample or a located failure that changes the next action.
 A line count, test-running message, repeated host result or revised ETA is not that return.

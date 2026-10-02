@@ -1015,3 +1015,17 @@ Cause split: (a) executor violation of the existing rule "Admit all purpose-qual
 had event-time rows ("critical work waits behind a worker's older assignment") but no plan-time step that turns sizes into
 chains and staffing, and the direct-path/no-spare-slot cautions read as a bias toward serial work. Change: a staffing lookup keyed
 by dependency and write scope, directly after sizing; the ETA is the longest staffed chain. Fixtures S106–S107.
+
+## 2026-10-02 — v2610.8.0: RETRIEVE / PREDICTION / PATH TRACE made card fields
+
+Incident (firedancer, firefly-scan-recall, findings finding2610_0212mhvxk, finding2610_0213wcmst, finding2610_0218cqj1e):
+tickets reached dispatch without retrieving the lineage mechanism (a head-choice search was built where next-symbol's fixed
+offset associations already held 0.999), without tracing the path to the scored bytes (the teacher kept only the low byte of a
+2-byte symbol, so symbol accuracy was 0.0 by construction), and without isolating a selector (two heads tied at the credit
+ceiling; index order picked one). Owner: 「私たちの BIBIFI サイクルにおいては Retrieve, Strong Inference, 識別決定力のある実験計画まで含まれていたはずでは？」.
+Structural cause: the three checks lived only in conditionally read files (scientific-loop "not a mandatory study phase";
+STRONG-INFERENCE "routine known bug needs only its failing witness"), and neither the admission table nor the MICROTICKET card
+had a field for them, so an implementation ticket passed admission without them.
+Change: admission step 4 now requires the card fields RETRIEVE, PREDICTION, PATH TRACE for every score-moving ticket; a
+benchmark goal binds a lineage scoreboard (missing current value = below lineage); decision cases D40-D43 added.
+Verification: build-order file check passed; skill-check.ts reports no FAIL and no prose-debt WARN after edits.

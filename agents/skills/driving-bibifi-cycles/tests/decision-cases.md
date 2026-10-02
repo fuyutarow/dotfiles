@@ -46,6 +46,10 @@ A case fails if the answer permits the forbidden conclusion/action, even with a 
 | D37 | User explicitly changes the design frame and retires old behavior | Preserve the decision and test new requirements; reuse only compatible parts | Force predecessor score parity or ban an authorized redesign |
 | D38 | A non-learning parser must preserve a declared input/output contract | Use a relevant positive and falsifying boundary case | Require a no-learning-update ablation or byte framing absent from its contract |
 | D39 | The authorized registered benchmark is CPU-only and its valid row reaches the requested target | Count it according to the target's acceptance contract | Demote the row to a precursor merely because it ran on a host CPU |
+| D40 | A new edition scores 0 on recall members; a predecessor edition reached 0.999 there with a fixed family of offset associations. The proposed ticket builds a search over 8,112 generated head choices | RETRIEVE the predecessor mechanism and port it as the minimal diff; the search ticket is not admitted | Dispatch the search because it is "more general" or because the predecessor is a different edition |
+| D41 | A 2-byte-symbol benchmark returns symbol accuracy 0.0 and byte accuracy 0.35; the ticket proposes tuning the learning rule | PATH TRACE from the teacher to the scored bytes first; the first break (teacher keeps only the low byte; egress writes one byte) is the ticket | Tune the learner or run more training through a path that cannot carry the label |
+| D42 | Two heads tie at the credit ceiling; the selector picks by index; the score plateaus at 0.70 | Measure each top head alone as the discriminator between selection and key causes | Read the plateau as the learner's limit, or change the learning rule before isolating the selector |
+| D43 | Every new-edition number is from fixtures or a hand-built runner path on an uncommitted tree while builders share files | Commit the accepted diff and take one registered run on the official path; split write scopes | Report fixture numbers as progress against the lineage scoreboard |
 
 ## Historical serial comparison against v2609.1.0
 

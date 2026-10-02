@@ -21,6 +21,9 @@ Keep cross-arm details outside blind workers' read sets. This is not a new datab
 ```text
 OUTCOME / CONSTRAINTS: <source locator; requirements retained by this slice>
 DECISION / CONSUMER: <observed obstacle; current consuming test/task; distinct returns -> next actions>
+RETRIEVE: <mechanism that produced this member's best lineage row: edition, file:line, run id; carryover obligations; or `none` after rr absent x3>
+PREDICTION: <rivals or diagnostic expectation; predicted value per arm; trivial baseline; control; result -> next branch>
+PATH TRACE: <file:line chain intervention -> official execution path -> scored output bytes; every selector/decoder on it; first break = this ticket>
 FIRST RETURN: <output; total duration range + evidence/assumptions; selection -> due time; parent inspection>
 BUILD -> BREAK -> FIX: <reuse/transfer; smallest change; relevant control; conditional correction>
 BINDING / OWNER: <code/input/statement version; actual entry/device; read/write scope and owner>

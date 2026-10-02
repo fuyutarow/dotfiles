@@ -16,6 +16,11 @@ Description desk-check only; no live invocation or theorem certification claim.
 | Reorder a finished theory document without changing its mathematics | `structuring-documents` |
 | Pick next quarter's research programme | `supervising-research-programmes` |
 | Drive the next bounded empirical discriminator cycle | `driving-bibifi-cycles` |
+| Check whether this paper identity holds, with a Julia CAS | `verifying-symbolic-identities` |
+| Replay a CAS-found identity as a Lean `ring` or `linear_combination` proof | HERE |
+| Formalize this identity in Lean and close it with `ring` | HERE |
 
+Co-fire: `verifying-symbolic-identities` decides the identity at R2 and finds cofactors → HERE replays
+it in the kernel and owns the `certified` label.
 Co-fire: theory owner emits an exact proof obligation → HERE checks statement/proof → theory owner
 records the exact result. A failed target premise changes an application; it need not refute the conditional theorem.

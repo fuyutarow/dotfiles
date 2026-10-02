@@ -47,6 +47,8 @@ every decision below.
 `systematizing-theories` owns the surrounding theory map and finding-driven dependency updates.
 Return the exact statement version, premises, proof receipt and faithfulness status to that owner.
 A failed application premise does not refute a checked conditional theorem.
+CAS and numeric identity checks, tool choice and rung labels → `verifying-symbolic-identities`.
+Kernel replay of their witnesses and the `certified` label stay here.
 
 ## Decision 1 — formalize, or stay informal?
 
@@ -159,6 +161,7 @@ Label every artifact by what it actually guarantees, and never silently upgrade:
 | Lean proof, **no `sorry`**, **faithful statement** (gate passed) | kernel-certified | **certified** |
 | Lean proof with `sorry` / admitted lemmas | a typed TODO list | **NOT a proof** — track every `sorry` as an open obligation |
 | NL "gold-medal" / contest AI output | rhetorically rigorous, machine-**un**verifiable | not established without formalization |
+| CAS or numeric identity check, no kernel replay | untrusted oracle | **not certified** — label its rung per `verifying-symbolic-identities` |
 
 A `sorry`-laden or admitted-lemma development is **not done**: each `sorry` is an unproved obligation.
 A development is complete only when no load-bearing lemma is stubbed.

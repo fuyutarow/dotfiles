@@ -16,6 +16,8 @@ Description desk-check only; no live invocation or theorem certification claim.
 | Reorder a finished theory document without changing its mathematics | `structuring-documents` |
 | Pick next quarter's research programme | `supervising-research-programmes` |
 | Drive the next bounded empirical discriminator cycle | `driving-bibifi-cycles` |
+| Check whether this paper identity holds, with a Julia CAS | `verifying-symbolic-identities` |
+| Replay a CAS-found identity as a Lean `ring` or `linear_combination` proof | HERE |
 
 Co-fire: theory owner emits an exact proof obligation → HERE checks statement/proof → theory owner
 records the exact result. A failed target premise changes an application; it need not refute the conditional theorem.

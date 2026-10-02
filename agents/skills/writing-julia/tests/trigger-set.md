@@ -138,6 +138,8 @@ MUST NOT FIRE as JG8 (near-miss):
 |---|---|
 | 「この Julia プロジェクトの README を整理して」 | prose/document → `structuring-documents` / `linting-prose` (Julia is the topic, not the code) |
 | 「Julia で書いたこの結果を Lean で形式化したい」 | → `proving-theorems` (the ask is the PROOF; this skill only if the Julia side also changes) |
+| 「論文の式が恒等式か Julia で記号的に検算して」 | → `verifying-symbolic-identities` (rung and RECEIPT); this skill co-fires for the Julia it runs |
+| "my identity checks used isapprox at a few points — enough?" | → `verifying-symbolic-identities` (R5 relabel) |
 | "uv で Python の数値実験環境を作って" | numerics vocabulary but Python tooling → `running-python-tools` |
 | 「JuMP と Gurobi のライセンス形態は?」 | ecosystem question, no code to write — plain answer |
 | 「Julia という言語の歴史と設計思想を教えて」 | encyclopedia ask, no code — plain answer |

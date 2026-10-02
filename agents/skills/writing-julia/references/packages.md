@@ -95,6 +95,9 @@ It owns the defaults and exceptions; this catalog does not maintain a second bac
 
 ## Symbolic computation: pick by ROLE, not by preference
 
+Deciding whether an identity HOLDS (exact canonical forms, rung labels) → `verifying-symbolic-identities`.
+This section chooses the symbolic layer of a project.
+
 These three packages are **not substitutes competing for one slot** — they are **three different
 categories** of tool, and a real project commonly uses more than one. SymEngine and SymPy are
 sister projects (SymEngine is a fast C++ CAS started by SymPy developers and usable as SymPy's
@@ -169,8 +172,9 @@ in the search loop is orders of magnitude too slow); convert to `Symbolics` only
      hazard.)
    - **MUST** convert `Basic` to a number via `Float64(N(expr))` when extracting a value.
    - **MUST NOT** compare `Basic` by string equality — SymEngine returns its internal normal
-     form (`expand((x+y)^3)` → `3*x*y^2 + 3*x^2*y + x^3 + y^3`, not textbook order). **Verify
-     symbolic equality by numeric substitution** at a few points with a tolerance.
+     form (`expand((x+y)^3)` → `3*x*y^2 + 3*x^2*y + x^3 + y^3`, not textbook order). Whether two
+     expressions are equal is `verifying-symbolic-identities` (exact R2). Numeric substitution with a
+     tolerance is only an R5 smoke test and **MUST NOT** be reported as verification.
 
 2. **`Symbolics` + `ModelingToolkit` — the SPINE of any AI4S / SciML project.** This is the
    "explicit SciML integration" case where Symbolics is **required, not forbidden**. It is a

@@ -11,7 +11,7 @@ description: >-
   derivatives, grid optimization, and lerp-as-evaluation.
   Co-fire: feature/bugfix → implementing-and-debugging first. Refactor → refactoring-code governs.
   GPU kernel work → optimizing-julia-gpu-kernels after host type discipline. Formal proofs →
-  proving-theorems. Python tooling → running-python-tools. Config authority →
+  proving-theorems. Does an identity hold (記号検算) → verifying-symbolic-identities. Python tooling → running-python-tools. Config authority →
   governing-configuration-systems. New repo → wiring-repositories first. Descriptive,
   VCS-only, and legal asks stay out.
 ---
@@ -64,6 +64,7 @@ Run through `agent-resource-run`. P7 alone owns resource limits.
 | `refactoring-code` | **Co-fire:** it governs behavior preservation; Julia transforms and oracles here. |
 | `practicing-tiger-style` | **LANGUAGE:** Julia mechanism → HERE. Cross-language risk ledger → there. |
 | `proving-theorems` | **PURPOSE:** formal theorem → there. Julia computation or experiment → HERE. |
+| `verifying-symbolic-identities` | **PURPOSE:** whether an identity holds, its rung and RECEIPT → there. Package choice, codegen and the Julia it runs → HERE (JG gates co-fire). |
 | `optimizing-julia-gpu-kernels` | **DEVICE:** GPU path design, work/span mapping, timing and state oracle → there; compiling host-style code on a device is insufficient. Host types/packages and state/API device ownership (JG8) → HERE. |
 | `running-python-tools` | **LANGUAGE:** Python CLI → there. Python called from Julia → HERE under JG6. |
 | `writing-python` | **LANGUAGE:** Python source/project → there. PythonCall boundary → HERE. |

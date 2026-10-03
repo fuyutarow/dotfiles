@@ -33,7 +33,7 @@ description: >-
 > grok's verified 2026-07 data-exfiltration incident (THE LAW) — a risk the siblings do not carry.
 > **Durability contract**: NO model IDs, token prices, CLI version numbers, or exact error strings
 > are load-bearing ASSERTIONS in this body — the dated `references/model-catalog.md` owns them. Two
-> declared exemptions, both dated bait re-verified on reforge: (1) the recipe's `-m grok-4.5` is a
+> declared exemptions, both dated bait re-verified on reforge: (1) the recipe's `-m grok-4.7` is a
 > labeled example; (2) THE LAW cites the incident's version (`v0.2.93`) + `~27,800×` figure because
 > the safety rule is meaningless without its evidence anchor. Everything else resolves live per G1.
 > **Build order (atomic)**: `test -f references/model-catalog.md && test -f scripts/probe-models.ts
@@ -114,7 +114,7 @@ deployment fact — resolve them from `references/model-catalog.md`, not from th
 # G2 FIRST: is this checkout safe to expose to xAI? (EXFIL-RISK — grok bundles the repo even on a
 # trivial prompt.) If not, clone a scrubbed copy with no secrets/history and run from THERE.
 timeout 300 grok -p "$PROMPT" \
-  -m grok-4.5 \
+  -m grok-4.7 \
   --output-format json \
   --sandbox read-only \
   </dev/null
@@ -128,7 +128,9 @@ rc=$?   # or: out=$(timeout 300 grok … </dev/null); rc=$?  — never $? after 
 > interpolated.
 
 - `-m`/`--model`: exact model id (`grok models`). Unknown id → free RC=1 client-side fast-fail;
-  `-m grok-4.5` above is a dated example (G1 resolves it live for real work).
+  `-m grok-4.7` above is a dated example (G1 resolves it live for real work). The
+  `enforce-model-floor` gate denies an order below the floor in `agents/hooks/model-floor.toml`
+  (grok >= 4.7 today), so a model resolved live must be at or above it.
 - `--output-format json`: `{text, stopReason, sessionId, usage{…}, modelUsage{…}, structuredOutput?}`.
   Parse `.text`; read `.usage` for spend (METERED). `streaming-json` = NDJSON `{type: thought|text|end}`,
   the `end` event carries the full usage envelope. `--json-schema '<schema>'` implies json and adds a
@@ -184,7 +186,7 @@ const grokAudit = (target) => agent(
       prompt (EXFIL-RISK). Otherwise clone/point at a scrubbed dir.
    2. INJECTION RULE: write the audit prompt to a scratch file with your file tools — do NOT paste
       it into the shell. Then run exactly (from the scrubbed dir, model id resolved via G1):
-        timeout 300 grok -p "$(cat "$PROMPT_FILE")" -m grok-4.5 \
+        timeout 300 grok -p "$(cat "$PROMPT_FILE")" -m grok-4.7 \
           --output-format json --sandbox read-only </dev/null
         rc=$?
    3. G4 RELAY: return exit code + the JSON envelope's .text + the full .usage/.modelUsage block.
@@ -237,8 +239,8 @@ MUST NOT fire (route):
 | the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
 | `pipeline()`/`parallel()`/hook/subagent-policy mechanics of the CLAUDE harness | `operating-the-harness` |
 | xAI's raw REST API used DIRECTLY (not via the `grok` CLI) — `api.x.ai`, `XAI_API_KEY` in your own HTTP client, grok-4.5 REST pricing for that | model-native, no skill — name it. (CLI-relevant per-token cost for G5 spend IS in this skill's `references/model-catalog.md`) |
-| 「プロンプトを改善して」 | `driving-git` | PURPOSE — whether this subprocess needs containment → here; the worktree/branch it is given, how its output is reviewed (`range-diff`) and integrated → `driving-git` (2026-09-21). |
-| `prompting-llms` |
+| 「プロンプトを改善して」 | `prompting-llms` |
+| the worktree/branch the subprocess is given, how its output is reviewed (`range-diff`) and integrated | `driving-git` — PURPOSE: whether this subprocess needs containment → here; the worktree/branch, review and integration → `driving-git` (2026-09-21) |
 | the log-parsing tool named `grok` (Elasticsearch/Logstash pattern matcher) | unrelated — NOT this skill; name it explicitly to avoid the collision |
 | Groq (the hardware/inference vendor) | unrelated — NOT this skill (different company, different spelling) |
 | `xai-org/grok-1` (2024 open-weights release) or `superagent-ai/grok-cli` (unrelated ~2.4k★ community API wrapper) | unrelated projects — NOT this skill |

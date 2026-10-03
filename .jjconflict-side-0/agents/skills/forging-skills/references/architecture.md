@@ -1,149 +1,120 @@
-# Architecture — file topology and structural invariants (pipeline step 3)
+# Architecture — task boundaries and selective loading
 
-> **Scope**: HOW a skill's content is laid out across `SKILL.md` / `references/` / `scripts/` /
-> `assets/` — the SHAPE decisions. Stated once, for this whole file: **ALL numeric budgets and
-> loading mechanics — the three disclosure stages, the description-listing character cap, the
-> SKILL.md body line budget, compaction carry-over — are OWNED by `operating-the-harness`
-> (`references/commands-and-skills.md`). Read that first; every budget here is a pointer there,
-> and a hardcoded budget number in this file is a bug.** What content EARNS a line is distillation
-> (step 2); what the harness DOES with the files is `operating-the-harness`. This file decides only
-> WHERE each earned line lives and what structure makes the topology survive maintenance.
+> Scope: placement and resource topology. Host format and loading belong to `operating-the-harness`.
 
-## 1. Progressive disclosure as a design act, not a mechanic
+## 1. Progressive disclosure
 
-The harness loads in stages (mechanics: see the owner above). Architecture is deciding what
-DESERVES each stage:
-
-| Layer | Carries | Admission test |
+| Location | Content | Admission question |
 |---|---|---|
-| `SKILL.md` body | ONLY the precedence-setting core: LAW, gates, pipeline, MUST-NOT-FIRE + routing, execution-model summary, the reference index | would skipping this line at invoke time cause a wrong action? NO → exile it |
-| `references/*.md` | everything ARGUED — rationale, technique, schemas, case ledgers; one topic per file, one level deep (nested chains get half-read) | does it load only when its pipeline step runs? |
-| `scripts/` | TWO admitted classes: deterministic floors (owned in §5) — run, never read into context; and task executables, bundled when the same code would otherwise be rewritten per invocation (the Codex default's `rotate_pdf.py` example; the plugin's repeated-work signal — every test subagent writing the same helper script is the bundle signal) | deterministic AND reused across invocations? |
-| `assets/` / templates | files the skill SHIPS into deliverables | copied out, never loaded |
+| `SKILL.md` | Shared purpose, decisions, essential constraints and routing | Does the normal invocation need this? |
+| `references/` | Conditional procedures, schemas, source detail and examples | Which task condition causes this file to be read? |
+| `scripts/` | Repeated deterministic operations or reliability checks | Does execution avoid reconstruction or a concrete error? |
+| `assets/` | Material used in outputs | Is this copied into a deliverable? |
 
-- The index at the end of SKILL.md is a lazy-loading contract: `| File | Covers | Read when |`,
-  Covers at section level so the model routes without opening the file.
-- Taxonomy + exclusion rule absorbed from the Codex default skill-creator (`$CODEX`):
-  `scripts/` / `references/` / `assets/`, and **no README, CHANGELOG, INSTALL, or QUICK_REFERENCE
-  inside a skill dir** — a skill's only readers are the model and the interpreter; meta-docs are
-  dead weight at every load.
-- Inversion test, run both ways: a reference the model would read on EVERY invocation is core —
-  inline it; a SKILL.md section read on only SOME invocations is argued — exile it.
+A simple skill may contain only `SKILL.md`.
+Do not create empty directories or placeholders to make it look complete.
+A reference read every time may belong in the core.
+A core section used only in one mode may belong in that mode's reference.
+For a large reference, provide useful contents or search terms.
 
-## 2. FUNCTION MAP + ONE HOME — the load-bearing invariant
+The resource index is a loading contract: name the file and its read condition.
+Do not require all references to be read at invocation.
 
-Every rule has exactly ONE arguing home; every other occurrence is a one-line pointer. This is THE
-drift-prevention mechanism of the collection — apply it within the skill AND across siblings.
+## 2. Function map and one home
 
-Before choosing a skill boundary, write:
+Before selecting a name, state:
+`input state → decision/action → result → stop or handoff`.
 
-```text
-<input state> --<function verb>--> <owned artifact> --> <next state>
-```
+Keep that statement inline for a small job.
+Use a fuller map when multiple responsibilities or actors need a shared boundary.
+A new artifact name or role is not evidence of a new capability.
+Compare the closest incumbent's actual decisions, failure modes and consumers.
 
-The map is MECE over **declared responsibilities and artifacts**, not over open-world content.
-Every artifact has one owner. Every transition has a stop and a handoff. Keep an explicit residual
-when the subject matter cannot be exhaustively enumerated; never manufacture closure to fill a
-taxonomy. Recipe labels, topics, and agent roles are not functions.
+| Relationship to an incumbent | Placement |
+|---|---|
+| Same job, acceptance and stop; different provider/runtime/format | Conditional mode or reference |
+| Same rule repeated across jobs | One maintained home plus necessary pointers or local guards |
+| Distinct decisions or failures cannot be selected clearly inside one job | Separate skill with a distinguishing question |
+| Implementation operation repeated mechanically | Script under the existing owner |
+| Mandatory host restriction | Existing enforcement mechanism |
 
-- **Declare ownership in the section header**, using the word SOLE/owner, so a maintainer landing
-  mid-file knows whether they may edit substance or only the pointer. Precedents:
-  raising-resolution ("§C.6 is the SOLE home" of source-grading; "§C.7 (SOLE owner)"),
-  acting-on-hypotheses' verb-seam files, and systematizing-knowledge's SOLE-owner reference
-  headers.
-- **The "restated for completeness" trap.** A convenience mirror of another section's rule WILL
-  drift — the next edit updates one copy. Only two legal states: make it a pointer, or sync it in
-  the SAME edit and mark it a deliberate seam. There is no third state.
-- **Reciprocal pointers + seam contract.** Where two files (or two skills) share a boundary: both
-  sides name each other; the cut's canonical phrasing has ONE owner; and the seam carries a
-  maintenance note — *agrees in SUBSTANCE, do NOT diff for byte-identity; re-diff only if either
-  side's question clause changes* (the raising-resolution §C.7 pattern). This blocks drift AND the
-  opposite failure: a cleanup pass "deduplicating" a deliberate seam.
-- Cross-skill pointers go by SKILL NAME, never by path into another skill's dir. Sole exception:
-  the external default skill-creator machinery, addressed via the `$PLUGIN` / `$CODEX` roots
-  (defined once in SKILL.md's routing table; references point).
+Do not invent exhaustive partitions of open-world work.
+Keep unresolved boundaries explicit and resolve them through a relevant task.
+Declare a sole home for contested rules.
+Reciprocal pointers help when live owners otherwise collide or defer to each other.
+They are not mandatory for every mentioned tool or domain.
 
-## 3. Atomic build order — no dangling pointer, ever
+A deliberate local guard may repeat the actionable restriction.
+Identify its owner and scope; do not copy a second explanation or schema.
+An unavailable or retired sibling cannot be treated as callable.
+Use the archive index to locate retained contracts.
+Domain revisions do not redefine generic actor mechanics.
 
-- SKILL.md, every reference it indexes, and every script it invokes ship in **ONE commit**. A
-  pointer that resolves tomorrow is a lie today.
-- The SKILL.md header carries a **literal shell verify one-liner** — every house skill has one,
-  in a code fence adjacent to (not inside) the version blockquote (§5 dual-reader bar).
-  Shape (adapt names):
-  `for f in a b c; do test -f references/$f.md || echo MISSING $f; done; test -x scripts/check.sh || echo MISSING check.sh`
-- Add **negative checks** for deliberately retired/consolidated files — raising-resolution's
-  anti-resurrection form: `test -f references/action-loop.md && echo STALE-FILE || echo OK`. A
-  retired file that silently reappears re-creates a second arguing home (§2).
-- The frontmatter `references:` list (acting-on-hypotheses / forging-novel-theses) is a HOUSE
-  extension — the key is absent from the official allowed set, so `quick_validate.py` flags it as
-  an error. Treat that one failure as expected on those two skills, or omit the key entirely
-  (this skill omits it). The canonical dangling-pointer checks are the build-order one-liner
-  above plus `scripts/skill-check.ts` — never the frontmatter list.
+## 3. Complete changes without a mandatory package shape
 
-## 4. Durability contracts — quarantine what rots
+Keep referenced resources and affected callers valid in the same reviewable change.
+Check dangling references before distribution.
+Templates, custom floors, ledgers and version headers are not required of every skill.
 
-- Time-sensitive facts — model names, benchmark numbers, version-pinned features, tool SOTA —
-  live in **ONE dated reference file**, and the SKILL.md header BANS them everywhere else ("a
-  hardcoded model name/benchmark in the body is a bug"). Precedents: proving-theorems' durability
-  contract (body names NO model, all fast-moving facts under one dated heading);
-  designing-presentations' quarantined-numbers split (contested numbers + named studies in
-  references with citations; body stays durable).
-- Version header `> **Version**: v{yymm}.y.z (date)` whenever the skill was verified against a
-  dated external state and will be reforged — the scheme is OWNED by `grenza-doc-discipline`.
-  Book-distilled skills carry a lineage line instead; durability-contract skills date the
-  snapshot file, not the body.
+Exercise changed reusable helpers.
+For retired resources, check that active callers no longer require the old executable path.
+Use existing repository validators before writing another checker.
+Record or publish only within the user's authorization and repository workflow.
 
-## 5. Floor scripts vs semantic gates
+## 4. Durability and provenance
 
-- Anything greppable gets a `scripts/` floor check that runs **FIRST**, before any semantic audit,
-  and declares "THIS IS NOT A SEMANTIC CHECK" in its own header — stating what it cannot catch
-  (precedents: forging-novel-theses `gate-check.ts`; this skill's `scripts/skill-check.ts`). The
-  script owns the floor, judgment owns the ceiling, and the skill states the boundary between them.
-- **Never spawn an agent to run a regex** — script-over-agent is precedence
-  (`linting-prose`); agents add noise, not coverage.
-- **Prove the gate fires** (absorbed from `linting-prose`): inject a known-bad
-  input, watch the script FAIL, revert. Once at build, again after any script edit. A gate never
-  seen red is decoration, and a green from it is theater.
+Keep fast-moving model, product, version and availability facts in one dated source home.
+Refresh facts affected by the current change.
+Do not copy them into multiple bodies or describe a platform convention as universal.
 
-**The dual-reader prose bar** (SOLE home; added 2026-07-24 after the two-sided void — ledger).
-A skill has two readers: the executor model and the human auditor. The mechanical floor is
-`scripts/skill-check.ts`'s prose-debt WARNs (>120-char prose sentences ×3+, version header >3
-lines, table cells >400 chars — WARN tier, measurement; enforcement moment = forge exit, F1).
+A version or lineage note is useful when it supports a real review or compatibility decision.
+Retain negative evidence and historical corrections.
+Distinguish current instructions from superseded conclusions.
+History belongs in an existing evidence record, not an expanding runtime header.
 
-- SCOPE (measured, pilot 2026-07-24 — over-generalizing is the anti-pattern): full atomization
-  (one clause per rule row + artifact + dated 出自 pointer; narratives exiled to the ledger)
-  is INDICATED for SKILL.md gate/LAW/rule tables showing accretion pathology (append-only
-  version chains, narrative-in-cell). It is NOT applied to: references' argued prose;
-  ≥3-way shared-object seam cells; index/Covers rows; mature EN bodies without accretion.
-- The header verify one-liner lives in a code fence BELOW the version blockquote (a `>` block
-  stays ≤3 lines; §3's mandate is satisfied by adjacency, not embedding).
-- "Touch it, clear it": ANY commit that edits a skill's SKILL.md leaves that skill at
-  prose-debt WARNs 0, or writes a dated PROSE-DEBT waiver + queue position in its ledger
-  (a 2-line waiver is cheap; the loophole of "it was only a seam edit" is not). Distinct
-  from F3's solo-tier waiver. Corpus-wide sweeps are NOT mandated.
+## 5. Mechanical floors and the dual-reader bar
 
-## 6. Language architecture
+The executor and human auditor must identify the action, condition and completion.
+A short explanation may be necessary to apply a constraint correctly.
+Use tables for lookups and prose for reasoning-dependent choices.
+Sentence count or the presence of “because” does not decide whether a line earns space.
 
-- English body; Japanese trigger doublets in the description (the user prompts in Japanese and
-  description matching is lexical — WHICH doublets is a triggering decision, owned by that
-  pipeline step, not here).
-- When the skill defines vocabulary, add a `## Language` section pinning the **stable tokens**
-  that stay fixed even inside Japanese prose (LAW, gate, fire/no-fire, solo/fan-out/barrier,
-  skill-defined terms) — systematizing-knowledge / acting-on-hypotheses precedent. Tokens are
-  identifiers, not prose; translating one forks the concept.
-- Deliberately bilingual sections (e.g. Japanese gate names in an English file) get a one-line
-  style note declaring the mixing intentional — so a later cleanup pass doesn't "fix" the seam
-  into monolingual drift.
+The shared `scripts/skill-check.ts` checks metadata, names and reference discoverability.
+Its prose warnings are review signals.
+These heuristics do not prove correctness, usability or runtime behavior.
+Do not require a bespoke floor or waiver ledger for every small edit.
 
-## 7. Anti-patterns (architecture-scoped)
+| Defect | Default check |
+|---|---|
+| Metadata, naming or missing referenced resources | Shared structural validator |
+| Repeated deterministic operation | Existing helper and meaningful failure fixture |
+| Confusing or irrelevant instructions | Focused review and representative task |
+| Wrong task selected or permission crossed | Relevant negative case and target-host evidence |
 
-| Anti-pattern | Tell | Fix |
-|---|---|---|
-| **Skill-name-first design** | behavior is assigned to the nearest existing name before its input/output transition is stated | write the function map first; then reforge an owner or prove a reusable ownership void |
-| **Control-plane map takeover** | orchestration silently rewrites the target skill's semantic function map | craft owner signs the map; `orchestrating-agents` consumes locus/digest and owns only the dispatch overlay |
-| **Two arguing homes** | the same rule argued (not pointed) in two files — drift guaranteed | ONE owner with a SOLE declaration; demote the twin to a pointer; deliberate seams get the do-not-diff note (§2) |
-| **Dangling reference** | index or `references:` names a file that does not exist | atomic build order + verify one-liner (§3) |
-| **Kitchen-sink SKILL.md** | everything inline; every invocation pays for every rule | body = precedence-setting core only; exile argued content to `references/` (§1) |
-| **Orphan reference** | file on disk the index never names — it will never load | every file gets an index row with a Read-when cell, or is deleted |
-| **Resurrected file** | a retired/consolidated file reappears in a later edit — a second home reborn | negative STALE-FILE check in the verify line (§3) |
-| **Config-as-prose** | "always run X before commit" written as skill prose | hard enforcement lives in hooks/settings (`operating-the-harness`); the skill may point at the hook, never substitute for it |
+A new machine gate needs a known bad case that actually fails.
+Do not create a gate for a preference requiring contextual judgment.
+After substantial revision, record the relevance and unresolved cost of remaining warnings.
+A mechanical waiver cannot excuse a material behavior defect.
+
+## 6. Language and terminology
+
+Follow the reader and target environment.
+Use consistent names; define specialized tokens when they matter.
+Description examples should cover languages and request forms actually used.
+Do not duplicate every English word or require a vocabulary section in every skill.
+Gerund names are this repository's convention.
+Platform grammar is a separate mechanical contract.
+
+## 7. Failure cases
+
+| Problem | Correction |
+|---|---|
+| Names chosen before responsibilities | Compare input/decision/result/stop |
+| Every provider or chapter becomes a skill | Use selectable references unless a distinct boundary is demonstrated |
+| Every skill gets gates, ledgers and agent roles | Remove components with no task or risk justification |
+| Two copies of a rule drift | Choose one home and update consumers |
+| Both owners route a request away | Assign the missing owner and exercise the boundary |
+| All detail loads by default | Add read conditions and observe actual resource use |
+| Retired references imply callable skills | Mark the contract and repair discovery or executable paths |
+
+Source and incident lineage: `../tests/forge-verification-ledger.md`.

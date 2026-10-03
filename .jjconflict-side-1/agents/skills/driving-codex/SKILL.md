@@ -126,7 +126,7 @@ wrapper's StructuredOutput deadline). sol-class effort=high takes 10-30+ min —
 # from the MAIN loop, Bash run_in_background: true — NOT inside a Workflow agent()
 agent-resource-run --manifest "$RESOURCE_ENVELOPE" -- \
   timeout 1800 codex exec --skip-git-repo-check --sandbox read-only -C "$SCRATCH" \
-  -m gpt-5.6-sol -c 'model_reasoning_effort="high"' -o "$SCRATCH/out.txt" \
+  -m gpt-6.1-sol -c 'model_reasoning_effort="high"' -o "$SCRATCH/out.txt" \
   "$(cat "$BRIEF_FILE")" </dev/null
 # collect on task-notification; the answer is $SCRATCH/out.txt (C3: relay verbatim + tokens line)
 ```
@@ -253,8 +253,8 @@ MUST NOT fire (route):
 | "OpenAI API function calling の書き方" | no codex CLI involved — model-native (prompting-llms names an `openai-docs` owner; nonexistent as of 2026-07-12) |
 | "which Claude model should I use, and pricing?" | `claude-api` |
 | the `claude -p` subprocess driven from Codex | Codex-only `driving-claude` |
-| 「プロンプトを改善して」 | `driving-git` | PURPOSE — whether this subprocess needs containment → here; the worktree/branch it is given, how its output is reviewed (`range-diff`) and integrated → `driving-git` (2026-09-21). |
-| `prompting-llms` |
+| 「プロンプトを改善して」 | `prompting-llms` |
+| the worktree/branch the subprocess is given, how its output is reviewed (`range-diff`) and integrated | `driving-git` — PURPOSE: whether this subprocess needs containment → here; the worktree/branch, review and integration → `driving-git` (2026-09-21) |
 | the `grok`/Grok Build subprocess (xAI, EXFIL-RISK) or the `agy`/Antigravity subprocess | `driving-grok` / `driving-antigravity` — decide by which binary you invoke |
 | "what is Codex?" | trivial — no skill |
 

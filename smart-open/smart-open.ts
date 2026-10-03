@@ -15,9 +15,17 @@
 // client cannot do that, the path is NOT opened here either: someone attached remotely is not
 // looking at this box's screen (on WSL, an unattended Windows desktop). --here opens it here anyway.
 //
+// OVER SSH, "HERE" IS NOT A SCREEN. When this shell itself came in over ssh ($SSH_CONNECTION — herdr
+// panes inherit it) and the client cannot take the target, nothing is opened on this machine: the
+// reason and the repair are said, a URL is printed so the terminal can open it, exit 1. --here opens
+// it here anyway. (Before 2026-10-03 a URL fell through to explorer.exe on r99's unattended desktop —
+// which, locked, never returns: `g o` sat silent for 15 s and then claimed success.)
+// Opening on this machine is bounded to LOCAL_WAIT_MS: an opener still running then is stopped and
+// reported, never waited out in silence.
+//
 // The receiver must ANSWER `ok`. What else the socket can do, and what is said about it (stderr;
-// a missing socket is the everyday local case and stays silent). The fall-throughs to "here" are for
-// a URL; a path stops at `no answer` and `refused` instead (exit 1), for the reason above:
+// a missing socket is the everyday local case and stays silent). "→ here" below is for a shell NOT
+// over ssh (see above); a path also stops at `no answer` and `refused` (exit 1):
 //   no socket    not attached over ssh, or no forward         → open here, silently
 //   dead bind    ECONNREFUSED: left by a dropped connection.  → open here. sshd re-binds over it where
 //                wsl/sshd-dotfiles.conf is installed; elsewhere it is removed here — but only if it is
@@ -33,6 +41,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
+import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import {
   ACK_MS,
   editorHost,
@@ -83,6 +92,9 @@ const SOCKET =
   process.env.SMART_OPEN_SOCKET ?? remoteSocket(userInfo().username);
 const SSH_HOST = process.env[SSH_HOST_ENV] ?? "";
 const OPEN_MS = 15_000;
+const LOCAL_WAIT_MS = 3_000;
+// This shell came in over ssh, so this machine's own screen is not the one being looked at.
+const OVER_SSH = (process.env.SSH_CONNECTION ?? "") !== "";
 const isUrl = (t: string) =>
   /^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^mailto:/i.test(t);
 const isWsl = (): boolean =>
@@ -174,74 +186,100 @@ function localCommand(target: string): string[] {
   return ["xdg-open", target];
 }
 
-// Where a URL goes: the client took it, this machine should, or nowhere (the client said busy).
-type Route = "client" | "here" | "stop";
+// Where a target goes: the client took it, nowhere (said why already), or this machine — `why` is
+// the anomaly that sent it here, said once by landHere (undefined: no client at all, the quiet case).
+type Routed =
+  | { to: "client" | "stop" }
+  | { to: "here"; why: string | undefined };
+const HERE: Routed = { to: "here", why: undefined };
 
-async function routeUrl(url: string): Promise<Route> {
+async function routeUrl(url: string): Promise<Routed> {
   if (argv.flags.dryRun) {
-    console.log(`${url} -> client if ${SOCKET} answers, else this machine`);
-    return "client";
+    const otherwise = OVER_SSH
+      ? "not opened (this shell is over ssh)"
+      : "this machine";
+    console.log(`${url} -> client if ${SOCKET} answers, else ${otherwise}`);
+    return { to: "client" };
   }
   const probe = await toClient({ url });
   if (probe.outcome === "client") {
     console.log(`opened on the client: ${url}`);
-    return "client";
+    return { to: "client" };
   }
   if (probe.outcome === "busy") {
     console.error(
       `smart-open: the client is busy (${probe.reply}); not opened: ${url} — run it again, or use --here`,
     );
-    return "stop";
+    return { to: "stop" };
   }
-  if (probe.outcome === "stale") await dropStale(probe);
+  if (probe.outcome === "stale")
+    return { to: "here", why: await dropStale(probe) };
   if (probe.outcome === "no-receiver")
-    console.error(
-      `smart-open: ${SOCKET} ${probe.why} (is the client's receiver running?) — opening here`,
-    );
+    return {
+      to: "here",
+      why: `${SOCKET} ${probe.why} (is the client's receiver running?)`,
+    };
   if (probe.outcome === "refused")
-    console.error(
-      `smart-open: the client receiver refused ${url} (${probe.reply}) — opening here`,
-    );
-  return "here";
+    return {
+      to: "here",
+      why: `the client receiver refused ${url} (${probe.reply})`,
+    };
+  return HERE;
 }
 
 // A dead bind means no client is attached any more: remove it (if it is still the file we probed)
-// and say so. Both kinds of target then open here.
-async function dropStale(probe: Probe): Promise<void> {
+// and say what happened.
+async function dropStale(probe: Probe): Promise<string> {
   const removed =
     probe.seen !== undefined && (await unlinkIfSame(SOCKET, probe.seen));
-  console.error(
-    `smart-open: ${SOCKET} had no listener (a dropped ssh connection?)${removed ? "; removed it" : ""} — opening here`,
-  );
+  return `${SOCKET} had no listener (a dropped ssh connection?)${removed ? "; removed it" : ""}`;
 }
 
-// Where a path goes. Only "no client attached" (no socket, or a dead bind) opens it here.
-async function routePath(path: string): Promise<Route> {
+// Where a path goes. Only "no client attached" (no socket, or a dead bind) lands it here.
+async function routePath(path: string): Promise<Routed> {
   const editor =
     SSH_HOST === "" ? `<${SSH_HOST_ENV} unset: refused>` : editorHost(SSH_HOST);
   if (argv.flags.dryRun) {
+    const otherwise = OVER_SSH
+      ? "not opened (this shell is over ssh)"
+      : `${localCommand(path).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`;
     console.log(
-      `${path} -> the client's VS Code (ssh-remote+${editor}) if ${SOCKET} answers; ${localCommand(path).join(" ")} only if no client is attached (no socket, or a dead one); otherwise not opened`,
+      `${path} -> the client's VS Code (ssh-remote+${editor}) if ${SOCKET} answers; ${otherwise}`,
     );
-    return "client";
+    return { to: "client" };
   }
   const kind = statSync(path).isDirectory() ? "dir" : "file";
   const probe = await toClient({ path, kind, host: SSH_HOST });
   if (probe.outcome === "client") {
     // `sent`, not `opened`: VS Code asks before opening a remote path, and a No is invisible here.
     console.log(`sent to the client's VS Code (ssh-remote+${editor}): ${path}`);
-    return "client";
+    return { to: "client" };
   }
-  if (probe.outcome === "no-socket") return "here";
-  if (probe.outcome === "stale") {
-    await dropStale(probe);
-    return "here";
-  }
+  if (probe.outcome === "no-socket") return HERE;
+  if (probe.outcome === "stale")
+    return { to: "here", why: await dropStale(probe) };
   const why = probe.outcome === "no-receiver" ? probe.why : probe.reply;
   console.error(
     `smart-open: attached from a client, but it did not open ${path} (${why})${refusalHint(probe.reply)}. Not opened on this machine's screen either, which nobody attached remotely can see — use --here for that.`,
   );
-  return "stop";
+  return { to: "stop" };
+}
+
+// The target could not go to the client. Over ssh this machine's screen is not yours: say why and
+// how to repair, print a URL for the terminal to open, and fail. Otherwise open it here.
+async function landHere(
+  target: string,
+  why: string | undefined,
+): Promise<boolean> {
+  if (OVER_SSH && !argv.flags.here) {
+    console.error(
+      `smart-open: not opened: ${why ?? `no smart-open forward at ${SOCKET}`}. This shell is over ssh, so this machine's screen is not the one you are looking at. The forward rides only on an interactive \`ssh <host>\` or \`herdr --remote <host>\` attach from the client — reattach (a herdr server keeps its first connection's forward and environment), or use --here to open it on this machine anyway.`,
+    );
+    if (isUrl(target)) console.log(target);
+    return false;
+  }
+  if (why !== undefined) console.error(`smart-open: ${why} — opening here`);
+  return openHere(target);
 }
 
 // The one repair step a known refusal implies, or nothing.
@@ -256,40 +294,63 @@ function refusalHint(reply: string): string {
   return "";
 }
 
-// This machine. Returns false on failure.
-function openHere(target: string): boolean {
+// This machine, bounded: an opener still running after LOCAL_WAIT_MS is stopped and reported.
+// Returns false on failure.
+async function openHere(target: string): Promise<boolean> {
   const cmd = localCommand(target);
   if (argv.flags.dryRun) {
     console.log(`${target} -> ${cmd.join(" ")}`);
     return true;
   }
-  const p = Bun.spawnSync(cmd, {
-    stdout: "ignore",
-    stderr: "pipe",
-    timeout: OPEN_MS,
-  });
-  // explorer.exe exits 1 even when it opened the target; only a spawn failure means anything there.
-  if (cmd[0] === "explorer.exe" || p.exitCode === 0) return true;
-  console.error(
-    `smart-open: ${cmd.join(" ")} failed: ${p.stderr.toString().trim()}`,
+  const deadline = AbortSignal.timeout(LOCAL_WAIT_MS);
+  const spawned = await attempt(() =>
+    Bun.spawn(cmd, {
+      stdout: "ignore",
+      stderr: "pipe",
+      signal: deadline,
+      killSignal: "SIGKILL",
+    }),
   );
+  if (!spawned.ok) {
+    console.error(
+      `smart-open: cannot run ${cmd[0]}: ${errorMessage(spawned.error)}`,
+    );
+    return false;
+  }
+  const [code, err] = await Promise.all([
+    spawned.value.exited,
+    new Response(spawned.value.stderr).text(),
+  ]);
+  if (deadline.aborted) {
+    // A locked or logged-out Windows session is the case seen: explorer.exe then never returns.
+    const hint = isWsl()
+      ? " — is someone logged in, unlocked, at this machine's Windows desktop?"
+      : "";
+    console.error(
+      `smart-open: ${cmd[0]} did not return within ${LOCAL_WAIT_MS / 1000} s and was stopped; nothing is known to have opened${hint}`,
+    );
+    return false;
+  }
+  // explorer.exe exits 1 even when it opened the target; only a spawn failure means anything there.
+  if (cmd[0] === "explorer.exe" || code === 0) return true;
+  console.error(`smart-open: ${cmd.join(" ")} failed: ${err.trim()}`);
   return false;
 }
 
 async function openOne(raw: string): Promise<boolean> {
   if (isUrl(raw)) {
-    const route = argv.flags.here ? "here" : await routeUrl(raw);
-    if (route === "stop") return false;
-    return route === "client" || openHere(raw);
+    const routed = argv.flags.here ? HERE : await routeUrl(raw);
+    if (routed.to !== "here") return routed.to === "client";
+    return landHere(raw, routed.why);
   }
   const path = resolve(raw);
   if (!existsSync(path)) {
     console.error(`smart-open: no such file or directory: ${raw}`);
     return false;
   }
-  const route = argv.flags.here ? "here" : await routePath(path);
-  if (route === "stop") return false;
-  return route === "client" || openHere(path);
+  const routed = argv.flags.here ? HERE : await routePath(path);
+  if (routed.to !== "here") return routed.to === "client";
+  return landHere(path, routed.why);
 }
 
 const targets = argv._.targets.length > 0 ? argv._.targets : ["."];

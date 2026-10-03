@@ -66,7 +66,19 @@ Host r99-wsl r99-wsl-code r99
 # `-code` gets NO block here, and ~/.ssh/config.local must name it beside the real one
 # (`Host r99-wsl r99-wsl-code`) so it inherits HostName/Port/User. `mise run doctor` checks both.
 # SetEnv takes no %-tokens, hence the literal alias.
-Host r99-wsl
+#
+# ONLY THE ATTACH CARRIES IT. Newest-wins means every connection that requests this forward steals
+# the socket, and a short one (an agent's `ssh r99-wsl cmd`, a mise task, Codex's app-server, VS
+# Code) leaves a dead bind when it exits: the still-attached terminal's `o` then finds a stale
+# socket and opens on r99's own screen. Observed 2026-10-03 — a `mise run pull` over ssh did exactly
+# this. So the forward is scoped by Match (OpenSSH >= 9.9 client) to the two sessions that ARE the
+# screen you sit at: an interactive shell (`ssh r99-wsl`) and herdr's bridge (`herdr --remote`).
+# `originalhost`, not `host`: config.local has already rewritten the hostname to an address.
+# `ssh -G r99-wsl` (no command = shell) still shows it, which is what the receiver and doctor ask.
+Match originalhost r99-wsl sessiontype shell
+    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
+    SetEnv SMART_OPEN_SSH_HOST=r99-wsl
+Match originalhost r99-wsl command "*herdr remote-client-bridge*"
     RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
     SetEnv SMART_OPEN_SSH_HOST=r99-wsl
 

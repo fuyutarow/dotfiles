@@ -185,6 +185,7 @@ describe("doctor", () => {
     forward: string | null,
     setEnv = true,
     editor: "same" | "absent" | "forwards" = "same",
+    scoped = true,
   ): string {
     const dir = tmp("doctor-ssh-");
     mkdirSync(join(dir, "ssh"));
@@ -198,9 +199,13 @@ describe("doctor", () => {
       editor === "forwards" && forward !== null
         ? `Host r99-wsl-code\n${fwd}`
         : "";
+    // Scoped as ssh/config does it: only an interactive session carries the forward.
+    const attach = scoped
+      ? "Match originalhost r99-wsl sessiontype shell\n"
+      : "Host r99-wsl\n";
     writeFileSync(
       join(dir, "ssh", "config"),
-      `${shared}${leak}Host r99-wsl\n${fwd}${setEnv ? "    SetEnv SMART_OPEN_SSH_HOST=r99-wsl\n" : ""}`,
+      `${shared}${leak}${attach}${fwd}${setEnv ? "    SetEnv SMART_OPEN_SSH_HOST=r99-wsl\n" : ""}`,
     );
     return dir;
   }
@@ -255,6 +260,23 @@ describe("doctor", () => {
     });
     expect(leaks.code).toBe(1);
     expect(leaks.out).toContain("r99-wsl-code carries the smart-open forward");
+  });
+
+  test("smart-open: a forward every command session carries FAILs (it would steal the socket)", () => {
+    const home = tmp("doctor-home-");
+    const r = doctor("smart-open", {
+      HOME: home,
+      DOTFILES: fixtureSshConfig(
+        `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`,
+        true,
+        "same",
+        false,
+      ),
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(
+      "a command session to r99-wsl carries the smart-open forward",
+    );
   });
 
   test("smart-open: a joined forward without the SetEnv FAILs, naming the missing variable", () => {

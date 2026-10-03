@@ -855,11 +855,36 @@ async function checkEditorAlias(
       l.startsWith("remoteforward ") &&
       l.trim().endsWith(` ${receiverSocket(ctx.home)}`),
   );
-  if (same && !forwards)
+  if (same && !forwards) {
+    // Only the attach may carry the forward: a command session (an agent's `ssh r99-wsl cmd`)
+    // would steal the socket and leave a dead bind behind when it exits (ssh/config, Match).
+    const ex = await run(["ssh", "-G", "-F", config, SMART_OPEN_HOST, "true"], {
+      ms: 10_000,
+    });
+    const exForwards = ex.out
+      .split("\n")
+      .some(
+        (l) =>
+          l.startsWith("remoteforward ") &&
+          l.trim().endsWith(` ${receiverSocket(ctx.home)}`),
+      );
+    if (ex.timedOut || ex.code !== 0)
+      return warn(
+        "smart-open",
+        `ssh -G ${SMART_OPEN_HOST} true did not resolve (exit ${ex.code})`,
+      );
+    if (exForwards)
+      return fail(
+        "smart-open",
+        `a command session to ${SMART_OPEN_HOST} carries the smart-open forward — every \`ssh ${SMART_OPEN_HOST} <cmd>\` steals the socket and leaves a dead bind`,
+        'scope the RemoteForward in ssh/config with `Match originalhost … sessiontype shell` / `command "*herdr remote-client-bridge*"`',
+        [`have: ssh -G ${SMART_OPEN_HOST} true → remoteforward`],
+      );
     return pass(
       "smart-open",
-      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")} and sends ${wantEnv}; ${editor} reaches the same box without the forward`,
+      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")} and sends ${wantEnv} on attach only; ${editor} reaches the same box without the forward`,
     );
+  }
   return fail(
     "smart-open",
     forwards

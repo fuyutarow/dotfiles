@@ -552,6 +552,7 @@ alias s='start'
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,
 # else here. A path attached over ssh/herdr opens as a VS Code Remote-SSH window on the client (the
 # files stay here); unattached it opens here (WSL: converted to a Windows path for explorer.exe).
+# A shell over ssh never opens on this box's own screen: if the client cannot take it, it says why.
 alias o='smart-open'
 alias oo='smart-open .'
 

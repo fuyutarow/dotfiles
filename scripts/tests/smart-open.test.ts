@@ -153,8 +153,14 @@ async function silentListener(sock: string): Promise<void> {
 }
 
 type Run = { code: number; out: string; err: string };
+// SSH_CONNECTION is cleared unless a test sets it: run from a herdr pane on r99, the suite would
+// otherwise take every "over ssh" branch.
 function client(args: string[], env: Record<string, string | undefined>): Run {
-  const merged: Record<string, string | undefined> = { ...process.env, ...env };
+  const merged: Record<string, string | undefined> = {
+    ...process.env,
+    SSH_CONNECTION: undefined,
+    ...env,
+  };
   for (const k of Object.keys(merged))
     if (merged[k] === undefined) delete merged[k];
   const p = Bun.spawnSync(["bun", SMART_OPEN, ...args], {
@@ -703,6 +709,93 @@ describe("paths over a live forward", () => {
     expect(r.code).toBe(0);
     expect(localOpened()).toEqual([dir]);
     expect(r.err).toContain("had no listener");
+  });
+});
+
+// ---- Over ssh, this machine's screen is not the one being looked at: a target the client cannot
+// take is said, never opened here (unless --here). And opening here never hangs in silence.
+const OVER_SSH = { SSH_CONNECTION: "100.81.222.57 60778 100.110.117.86 2222" };
+
+describe("a shell over ssh never opens on this machine's own screen", () => {
+  test("no forward: the URL is not opened, is printed for the terminal, and the repair is named", () => {
+    const dir = scratch();
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client(["https://probe.invalid/ssh"], {
+      ...OVER_SSH,
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(r.code).toBe(1);
+    expect(r.out.trim()).toBe("https://probe.invalid/ssh");
+    expect(r.err).toContain("not opened: no smart-open forward");
+    expect(r.err).toContain("herdr --remote");
+    expect(r.err).toContain("--here");
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("no forward: a path is not opened either", () => {
+    const dir = scratch();
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      ...OVER_SSH,
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("not opened");
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("a scheme the client refuses is not opened here either, and the refusal is quoted", async () => {
+    const dir = scratch();
+    const rx = await startReceiver(dir);
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client(["mailto:probe@invalid"], {
+      ...OVER_SSH,
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("the client receiver refused mailto:probe@invalid");
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("--here still opens on this machine", () => {
+    const dir = scratch();
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client(["--here", "https://probe.invalid/forced"], {
+      ...OVER_SSH,
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(r.code).toBe(0);
+    expect(localOpened()).toEqual(["https://probe.invalid/forced"]);
+  });
+
+  test("with a live forward nothing changes: the client gets it", async () => {
+    const dir = scratch();
+    const rx = await startReceiver(dir);
+    const r = client(["https://probe.invalid/live"], {
+      ...OVER_SSH,
+      SMART_OPEN_SOCKET: rx.sock,
+    });
+    expect(r.code).toBe(0);
+    expect(rx.opened()).toEqual(["https://probe.invalid/live"]);
+  });
+});
+
+describe("opening on this machine is bounded", () => {
+  test("an opener that never returns is stopped at 3 s and reported, not waited out silently", () => {
+    const dir = scratch();
+    const [local] = recorder(dir, "local-opened", 30);
+    const started = performance.now();
+    const r = client(["https://probe.invalid/hang"], {
+      SMART_OPEN_SOCKET: join(dir, "absent.sock"),
+      SMART_OPEN_LOCAL_OPENER: local,
+    });
+    expect(performance.now() - started).toBeLessThan(8_000);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("did not return within 3 s and was stopped");
   });
 });
 

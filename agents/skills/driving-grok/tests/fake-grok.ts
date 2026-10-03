@@ -3,6 +3,9 @@
 // (probe-models.ts:54). Routes on the first argv token / the `-m` model id so
 // each test can pin one tri-state branch of the real script's behavior.
 
+// An empty export makes this file a module, so its consts are file-scoped.
+export {};
+
 const args = Bun.argv.slice(2);
 
 if (args[0] === "--version") {

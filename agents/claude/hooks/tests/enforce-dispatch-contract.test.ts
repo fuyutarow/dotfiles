@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { decisionOf, runHook } from "./helpers.ts";
+import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
+import { runHook } from "./helpers.ts";
 
 const HOOK = "enforce-dispatch-contract.ts";
 const RESOURCE_DECLARATION =
@@ -10,17 +11,28 @@ const rawPre = (tool_name: string, tool_input: unknown) => ({
   tool_input,
 });
 const pre = (tool_name: string, tool_input: unknown) => {
+  const input = obj(tool_input);
+  const prompt = strAt(tool_input, "prompt");
   if (
     (tool_name === "Agent" || tool_name === "Task") &&
-    typeof tool_input === "object" &&
-    tool_input !== null &&
-    !Array.isArray(tool_input) &&
-    typeof (tool_input as { prompt?: unknown }).prompt === "string"
+    input !== undefined &&
+    prompt !== undefined
   ) {
-    const input = tool_input as Record<string, unknown> & { prompt: string };
-    return rawPre(tool_name, { ...input, prompt: withResource(input.prompt) });
+    return rawPre(tool_name, { ...input, prompt: withResource(prompt) });
   }
   return rawPre(tool_name, tool_input);
+};
+
+// The hook's PreToolUse decision, read from its stdout JSON (hookSpecificOutput); every field is
+// undefined when the hook printed nothing (a silent pass).
+const decisionOf = (stdout: string) => {
+  const output =
+    stdout.trim() === "" ? undefined : at(parseJson(stdout), "hookSpecificOutput");
+  return {
+    permissionDecision: strAt(output, "permissionDecision"),
+    permissionDecisionReason: strAt(output, "permissionDecisionReason"),
+    output: obj(output),
+  };
 };
 const sonnetHigh = (extra: Record<string, unknown> = {}) =>
   pre("Agent", {
@@ -194,7 +206,7 @@ describe("Agent / Task — every other shape is denied", () => {
     const d = decisionOf(r.stdout);
     // no injection happens any more — a missing type/model is simply denied
     expect(d.permissionDecision).toBe("deny");
-    expect(d).not.toHaveProperty("updatedInput");
+    expect(d.output).not.toHaveProperty("updatedInput");
   });
 });
 
@@ -400,9 +412,9 @@ describe("batched diagnostics (2026-09-27)", () => {
 
   test("findings are grouped under the agent() call that owns them", () => {
     const r = runHook(HOOK, rawWf(`await agent('x', {schema: S})`));
-    const [entry] = decisionOf(r.stdout)
-      .permissionDecisionReason.split("\n")
-      .filter((l: string) => l.startsWith("  line "));
+    const [entry] = (decisionOf(r.stdout).permissionDecisionReason ?? "")
+      .split("\n")
+      .filter((l) => l.startsWith("  line "));
     expect(entry).toContain("line 1:");
     expect(entry).toContain("no agentType, model, or effort");
     expect(entry).toContain("add agentType:'sonnet-high'");
@@ -654,7 +666,7 @@ describe("Opus is escalation-only", () => {
   const denyReason = (input: unknown) => {
     const d = decisionOf(runHook(HOOK, input).stdout);
     expect(d.permissionDecision).toBe("deny");
-    return d.permissionDecisionReason as string;
+    return d.permissionDecisionReason ?? "";
   };
   test("Agent opus-medium without ESCALATE(OPUS) -> deny naming the token and the sonnet default", () => {
     const why = denyReason(opusMedium({ prompt: "x" }));

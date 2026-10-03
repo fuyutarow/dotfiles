@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { z } from "zod";
 
 const hook = join(import.meta.dir, "..", "enforce-terra-dispatch.ts");
 const resourceMessage = (message: string) =>
@@ -18,8 +19,17 @@ function run(payload: unknown) {
   };
 }
 
+const DecisionOutput = z.object({
+  hookSpecificOutput: z.object({
+    permissionDecision: z.string(),
+    permissionDecisionReason: z.string(),
+    updatedInput: z.unknown().optional(),
+  }),
+});
+
 function decision(stdout: string) {
-  return JSON.parse(stdout).hookSpecificOutput;
+  const raw = (): unknown => JSON.parse(stdout);
+  return DecisionOutput.parse(raw()).hookSpecificOutput;
 }
 
 const pre = (tool_input: unknown) => ({ tool_name: "Agent", tool_input });

@@ -63,6 +63,7 @@ import {
   resourceDeclarationResult,
 } from "../../resource-control/lib/dispatch-declaration.ts";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { at, obj, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const SONNET = /(?:^|[-_])sonnet(?:$|[-_])/i;
@@ -344,7 +345,7 @@ function blankBlockChar(
 // (a) brackets inside them cannot break the call-span scan and (b) prompt text cannot
 // spoof `agent(` / `model:`.
 function blank(s: string): string {
-  const chars = [...s];
+  const chars = Array.from(s);
   let st: LexState = "code";
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i];
@@ -766,14 +767,11 @@ function checkWorkflowScript(src: string): void {
     for (const finding of pairFindings(shape)) {
       findings.push({ line, ...finding });
     }
-    if (isOpusCall(shape)) {
-      const escalation = escalationProblem(
-        originalSpan,
-        "switch to agentType:'sonnet-high'",
-      );
-      if (escalation !== null) {
-        findings.push({ line, axis: "escalation", detail: escalation });
-      }
+    const escalation = isOpusCall(shape)
+      ? escalationProblem(originalSpan, "switch to agentType:'sonnet-high'")
+      : null;
+    if (escalation !== null) {
+      findings.push({ line, axis: "escalation", detail: escalation });
     }
 
     const resource = resourceDeclarationResult(originalSpan);
@@ -800,13 +798,23 @@ function promptResourceProblem(prompt: string | null): string | null {
   return resource.ok ? null : resource.reason;
 }
 
+// A payload `name` as the template literal `${name ?? "?"}` rendered it: a JSON value is a string,
+// number, boolean, array (joined by commas) or plain object ("[object Object]"); absent/null is "?".
+function displayName(name: unknown): string {
+  if (name === undefined || name === null) return "?";
+  if (typeof name === "string") return name;
+  if (typeof name === "number" || typeof name === "boolean") return `${name}`;
+  if (Array.isArray(name)) return name.join(",");
+  return "[object Object]";
+}
+
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  const tool: string = payload?.tool_name ?? "";
-  const ti = payload?.tool_input;
+  const tool = strAt(payload, "tool_name") ?? "";
+  const ti = obj(at(payload, "tool_input"));
 
   if (tool === "Agent" || tool === "Task") {
-    if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
+    if (ti === undefined) {
       // FATAL: with no object there is no prompt and no model key, so no axis can be located.
       decidePre(
         "deny",
@@ -822,9 +830,8 @@ async function main(): Promise<void> {
     // the observed values plus the smallest exact edit when one of them already fixes the pair,
     // and the choice criterion only when both are open. Nothing is injected: fork, Explore,
     // general-purpose, Plan, claude-code-guide, and a missing key are all "not a pair".
-    const subagentType =
-      typeof ti.subagent_type === "string" ? ti.subagent_type : null;
-    const model = typeof ti.model === "string" ? ti.model : null;
+    const subagentType = strAt(ti, "subagent_type") ?? null;
+    const model = strAt(ti, "model") ?? null;
     const typeFamily =
       subagentType === null ? null : (AGENT_TYPE_FAMILY[subagentType] ?? null);
     const modelFamily = model === null ? null : familyOf(model);
@@ -861,20 +868,17 @@ async function main(): Promise<void> {
       );
     }
 
-    let prompt: string | null;
-    if (typeof ti.prompt === "string") prompt = ti.prompt;
-    else if (typeof ti.message === "string") prompt = ti.message;
-    else prompt = null;
-    if (
+    const prompt = strAt(ti, "prompt") ?? strAt(ti, "message") ?? null;
+    const opusChosen =
       subagentType === "opus-medium" ||
-      (typeFamily === null && modelFamily === "opus")
-    ) {
-      const escalation = escalationProblem(
-        prompt,
-        'dispatch subagent_type:"sonnet-high", model:"sonnet"',
-      );
-      if (escalation !== null) problems.push(escalation);
-    }
+      (typeFamily === null && modelFamily === "opus");
+    const escalation = opusChosen
+      ? escalationProblem(
+          prompt,
+          'dispatch subagent_type:"sonnet-high", model:"sonnet"',
+        )
+      : null;
+    if (escalation !== null) problems.push(escalation);
     const resourceProblem = promptResourceProblem(prompt);
     if (resourceProblem !== null) problems.push(resourceProblem);
 
@@ -894,7 +898,7 @@ async function main(): Promise<void> {
 
   if (tool !== "Workflow") return;
 
-  if (ti === null || typeof ti !== "object" || Array.isArray(ti)) {
+  if (ti === undefined) {
     // FATAL: with no object there is no script to scan, so no per-call axis exists yet.
     decidePre(
       "deny",
@@ -902,14 +906,15 @@ async function main(): Promise<void> {
     );
   }
 
-  let src: string | null = typeof ti.script === "string" ? ti.script : null;
-  if (src === null && ti.scriptPath) {
-    const r = await attempt(() => readFileSync(ti.scriptPath, "utf8"));
+  let src: string | null = strAt(ti, "script") ?? null;
+  const scriptPath = strAt(ti, "scriptPath");
+  if (src === null && scriptPath) {
+    const r = await attempt(() => readFileSync(scriptPath, "utf8"));
     if (!r.ok) {
       // FATAL: the script never loaded, so there are no agent() calls to collect findings from.
       decidePre(
         "deny",
-        `dispatch-contract: cannot read scriptPath '${ti.scriptPath}' ` +
+        `dispatch-contract: cannot read scriptPath '${scriptPath}' ` +
           `(${errorMessage(r.error)}) — agent models unverified.`,
       );
     }
@@ -917,9 +922,10 @@ async function main(): Promise<void> {
   }
   if (src === null) {
     // FATAL: a named workflow has no inspectable source, so every axis is unknowable here.
+    const workflowName = displayName(at(ti, "name"));
     decidePre(
       "deny",
-      `dispatch-contract: named workflow '${ti.name ?? "?"}' — script not inspectable, ` +
+      `dispatch-contract: named workflow '${workflowName}' — script not inspectable, ` +
         `agent models unverified. Inline an inspectable script with agent() calls on Sonnet.`,
     );
   }

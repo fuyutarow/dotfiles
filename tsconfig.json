@@ -54,7 +54,6 @@
   "include": ["**/*.ts"],
   "exclude": [
     "node_modules",
-    "agents/skills",
     // Retired code: nothing links or runs archives/ (see archives/skills/README.md), so it is
     // outside the audit, like node_modules.
     "archives",

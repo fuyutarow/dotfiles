@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
+import { arr, parseJson, strAt } from "../../hooks/narrow.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
@@ -57,8 +58,25 @@ type Entry = { name?: string; at: number };
 // slot would.
 type LookupOutcome = { done: true; name: string | undefined } | { done: false };
 
+type Agent = { sessionId?: string | undefined; name?: string | undefined };
+
+// `claude agents --json` output as a list of agents, read field by field. Output that is not a
+// list, or a null entry, throws — as iterating it did before, which ends this hook silently.
+function agentsOf(parsed: unknown): Agent[] {
+  const list = arr(parsed);
+  if (list === undefined) {
+    throw new TypeError("claude agents --json did not print a list");
+  }
+  return list.map((a): Agent => {
+    if (a === null || a === undefined) {
+      throw new TypeError("claude agents --json listed a null agent");
+    }
+    return { sessionId: strAt(a, "sessionId"), name: strAt(a, "name") };
+  });
+}
+
 function buildEntryMap(
-  list: Array<{ sessionId?: string; name?: string }>,
+  list: Agent[],
   now: number,
 ): Record<string, Entry> {
   const next: Record<string, Entry> = {};
@@ -97,7 +115,7 @@ async function attemptLookup(
       encoding: "utf8",
       timeout: 3000,
     });
-    return JSON.parse(out) as Array<{ sessionId?: string; name?: string }>;
+    return parseJson(out);
   });
   if (!r.ok) {
     if (lookupAttempt === LOOKUP_RETRIES) {
@@ -107,7 +125,7 @@ async function attemptLookup(
     return { done: false };
   }
 
-  const list = r.value;
+  const list = agentsOf(r.value);
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = buildEntryMap(list, now);
   if (sid in next) {
@@ -181,10 +199,7 @@ await attempt(async () => {
   if (!tabId) process.exit(0);
 
   const payload = readStdinJson();
-  const sid: string | undefined =
-    typeof payload?.session_id === "string" && payload.session_id
-      ? payload.session_id
-      : undefined;
+  const sid = strAt(payload, "session_id") || undefined;
   if (!sid) process.exit(0);
 
   const name = await agentName(sid);

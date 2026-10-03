@@ -2,9 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "assign-command.ts";
+const Block = z.object({ decision: z.string(), reason: z.string() });
 const payload = (prompt: string, cwd = "/home/fuyu/Workspace/myproj") => ({
   prompt,
   cwd,
@@ -34,7 +37,7 @@ describe("assign-command: usage errors block without a model turn", () => {
   test("/assign with no role -> block, usage reason", () => {
     const r = runHook(HOOK, payload("/assign"));
     expect(r.code).toBe(0);
-    const out = JSON.parse(r.stdout);
+    const out = Block.parse(parseJson(r.stdout));
     expect(out.decision).toBe("block");
     expect(out.reason).toMatch(/usage/i);
   });
@@ -42,7 +45,7 @@ describe("assign-command: usage errors block without a model turn", () => {
   test("/assign with a malformed role -> block, shape reason", () => {
     const r = runHook(HOOK, payload("/assign BAD_ROLE"));
     expect(r.code).toBe(0);
-    const out = JSON.parse(r.stdout);
+    const out = Block.parse(parseJson(r.stdout));
     expect(out.decision).toBe("block");
     expect(out.reason).toContain("BAD_ROLE");
   });
@@ -64,7 +67,7 @@ describe("assign-command: valid role renames the session", () => {
     const out = decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(/^myproj-obs_[0-9a-hj-km-np-tv-z]{4}$/);
     expect(typeof out.additionalContext).toBe("string");
-    expect(out.additionalContext.length).toBeGreaterThan(0);
+    expect(out.additionalContext?.length).toBeGreaterThan(0);
   });
 
   test("lowercases the project from cwd's basename", () => {

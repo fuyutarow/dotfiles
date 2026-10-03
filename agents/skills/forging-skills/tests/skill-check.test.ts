@@ -246,13 +246,24 @@ describe("skill-check floor", () => {
     const wbs = join(REPO_ROOT, "agents/skills/writing-bun-scripts");
     const wmt = join(REPO_ROOT, "agents/skills/wiring-mise-tasks");
     const { out, code } = runCheck(wbs, wmt);
-    expect(out).toBe(
-      `WARN ${wbs}: 12 prose sentences >120 chars (technical-communication debt)\n` +
-        `WARN ${wbs}: version header 11 lines >3 — history belongs in the ledger\n` +
-        `WARN ${wbs}: 4 table cells >400 chars — inline narratives belong in the ledger (pointer + date in the cell)\n` +
-        `WARN ${wmt}: 13 prose sentences >120 chars (technical-communication debt)\n` +
-        `WARN ${wmt}: version header 9 lines >3 — history belongs in the ledger\n`,
-    );
+    // The counts in these lines (12 sentences, 2296 chars, ...) move whenever anyone edits those
+    // two skills' prose, so pinning them made this test fail on every unrelated edit. What it
+    // characterizes is the SHAPE: exit 0, nothing but WARN/LISTING lines (no FAIL), the
+    // technical-communication WARN present for each directory, and one LISTING budget line.
+    const lines = out.trimEnd().split("\n");
+    expect(lines.every((l) => /^(WARN|LISTING) /.test(l))).toBe(true);
+    for (const dir of [wbs, wmt]) {
+      expect(
+        lines.some(
+          (l) =>
+            l.startsWith(`WARN ${dir}: `) &&
+            /\d+ prose sentences >120 chars/.test(l),
+        ),
+      ).toBe(true);
+    }
+    const listing = lines.filter((l) => l.startsWith("LISTING "));
+    expect(listing).toHaveLength(1);
+    expect(listing[0]).toMatch(/^LISTING 2 skills, \d+ chars charged per turn$/);
     expect(code).toBe(0);
   });
 });

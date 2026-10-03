@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 import {
   buildSystemdLaunch,
   commandEnvironment,
@@ -43,6 +44,31 @@ import {
 
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
+
+const parseJson = (text: string): unknown => JSON.parse(text);
+
+// The fields of an admission receipt the tests read directly. Assertions on the whole receipt
+// (JSON.stringify round-trip, toMatchObject) stay on the unparsed value, whose key order is the
+// writer's.
+const ReceiptFieldsSchema = z.object({
+  cpu_ids: z.array(z.unknown()),
+  scope_unit: z.string(),
+  manifest_path: z.string(),
+  manifest_sha256: z.string(),
+  job_id: z.string(),
+});
+
+// What the child script in the receipt test writes to disk.
+const SavedChildSchema = z.object({
+  verified: z.boolean(),
+  cgroup: z.string(),
+  environment: z.record(z.string(), z.string()),
+});
+
+const PeakFieldsSchema = z.object({
+  ram_peak_measured_bytes: z.number(),
+  ram_peak_source: z.string(),
+});
 
 function cpuManifest(
   overrides: Partial<ResourceManifest> = {},
@@ -971,7 +997,7 @@ describe("admission receipt", () => {
       );
       const outerManifestBytes = readFileSync(outerManifestPath);
       const outerManifest = validateManifest(
-        JSON.parse(outerManifestBytes.toString()),
+        parseJson(outerManifestBytes.toString()),
       );
       const outerSource = manifestSourceFromBytes(
         outerManifestPath,
@@ -987,7 +1013,7 @@ describe("admission receipt", () => {
         "../examples/resource-runner-receipt-inner.resource.json",
       );
       const manifestBytes = readFileSync(manifestPath);
-      const manifest = validateManifest(JSON.parse(manifestBytes.toString()));
+      const manifest = validateManifest(parseJson(manifestBytes.toString()));
       const manifestSource = manifestSourceFromBytes(
         manifestPath,
         manifestBytes,
@@ -1018,9 +1044,10 @@ describe("admission receipt", () => {
       expect(
         verifyAdmissionReceipt(outerPayload, outerReceiptSha256, outerCgroup),
       ).toBe(true);
-      const outerReceipt = JSON.parse(outerPayload);
-      expect(JSON.stringify(outerReceipt)).toBe(outerPayload);
-      expect(outerReceipt).toMatchObject({
+      const outerReceiptRaw = parseJson(outerPayload);
+      const outerReceipt = ReceiptFieldsSchema.parse(outerReceiptRaw);
+      expect(JSON.stringify(outerReceiptRaw)).toBe(outerPayload);
+      expect(outerReceiptRaw).toMatchObject({
         schema: 1,
         admission_id: process.env.AGENT_RESOURCE_ADMISSION_ID,
         manifest_path: outerSource.path,
@@ -1076,7 +1103,9 @@ describe("admission receipt", () => {
       expect(admit).toContain("manifest_sha256=");
       expect(admit).toContain("receipt_sha256=");
 
-      const saved = JSON.parse(readFileSync(receiptPath, "utf8"));
+      const saved = SavedChildSchema.parse(
+        parseJson(readFileSync(receiptPath, "utf8")),
+      );
       expect(saved.verified).toBe(true);
       const innerEnvironment = saved.environment;
       const innerPayload = innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT;
@@ -1097,15 +1126,24 @@ describe("admission receipt", () => {
       );
       expect(typeof innerPayload).toBe("string");
       expect(typeof innerReceiptSha256).toBe("string");
+      if (
+        typeof innerPayload !== "string" ||
+        typeof innerReceiptSha256 !== "string"
+      ) {
+        throw new Error(
+          "the inner child did not receive an admission receipt",
+        );
+      }
       expect(innerReceiptSha256).toBe(
         createHash("sha256").update(innerPayload).digest("hex"),
       );
       expect(
         verifyAdmissionReceipt(innerPayload, innerReceiptSha256, saved.cgroup),
       ).toBe(true);
-      const innerReceipt = JSON.parse(innerPayload);
-      expect(JSON.stringify(innerReceipt)).toBe(innerPayload);
-      expect(innerReceipt).toMatchObject({
+      const innerReceiptRaw = parseJson(innerPayload);
+      const innerReceipt = ReceiptFieldsSchema.parse(innerReceiptRaw);
+      expect(JSON.stringify(innerReceiptRaw)).toBe(innerPayload);
+      expect(innerReceiptRaw).toMatchObject({
         schema: 1,
         admission_id: innerEnvironment.AGENT_RESOURCE_ADMISSION_ID,
         manifest_path: manifestSource.path,
@@ -1234,12 +1272,13 @@ describe("bounded execution", () => {
     expect(release).not.toContain("vram_peak_measured_bytes=");
 
     const peakPath = `${manifestPath}.peak.json`;
-    const peak = JSON.parse(readFileSync(peakPath, "utf8"));
-    expect(peak).toMatchObject({
+    const peakRaw = parseJson(readFileSync(peakPath, "utf8"));
+    const peak = PeakFieldsSchema.parse(peakRaw);
+    expect(peakRaw).toMatchObject({
       schema: 1,
       job_id: manifest.job_id,
-      ram_peak_source: expect.stringMatching(/^(cgroup|sampled)$/),
     });
+    expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/);
     expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
     rmSync(peakPath);
   });

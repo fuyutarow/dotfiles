@@ -2,10 +2,32 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempDir } from "./helpers.ts";
 
 const HOOK = "detect-ccc-gpu-hold.ts";
 const MIN = 60_000;
+
+// The fields of the hook's persisted state that these tests read.
+const State = z.looseObject({
+  pid: z.number().nullable(),
+  indexing: z.array(z.string()),
+  indexingSinceMs: z.number(),
+});
+const stateOf = (file: string) => State.parse(parseJson(readFileSync(file, "utf8")));
+// The alert JSON the hook prints on stdout.
+const Alert = z.looseObject({
+  systemMessage: z.string(),
+  hookSpecificOutput: z.looseObject({
+    additionalContext: z.string(),
+    hookEventName: z.string(),
+    permissionDecision: z.string().optional(),
+  }),
+});
+const HookEvent = z.looseObject({
+  hookSpecificOutput: z.looseObject({ hookEventName: z.string() }),
+});
 
 let daemon: ChildProcess;
 let dir: string;
@@ -86,8 +108,8 @@ describe("detect-ccc-gpu-hold", () => {
   test("indexing first observed: starts the clock, no alert yet", () => {
     const { state, env } = setup({ apps: [daemon.pid!] });
     expect(runHook(HOOK, payload(), env).stdout).toBe("");
-    const s = JSON.parse(readFileSync(state, "utf8"));
-    expect(s.pid).toBe(daemon.pid);
+    const s = stateOf(state);
+    expect(s.pid).toBe(daemon.pid!);
     expect(s.indexing).toEqual(["/w/qoed"]);
     expect(
       Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
@@ -98,11 +120,11 @@ describe("detect-ccc-gpu-hold", () => {
     const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
     const r = runHook(HOOK, payload(), env);
     expect(r.code).toBe(0);
-    const out = JSON.parse(r.stdout);
+    const out = Alert.parse(parseJson(r.stdout));
     expect(out.systemMessage).toContain(
       "indexing /w/qoed on the GPU for 20 min",
     );
-    const ctx: string = out.hookSpecificOutput.additionalContext;
+    const ctx = out.hookSpecificOutput.additionalContext;
     expect(ctx).toContain("host-wide GPU util 37%, VRAM 2385/12288 MiB");
     expect(ctx).toContain("NOT the daemon's load");
     expect(ctx).toContain("Do NOT stop ccc-daemon");
@@ -118,13 +140,13 @@ describe("detect-ccc-gpu-hold", () => {
       state: streak(400),
     });
     expect(runHook(HOOK, payload(), env).stdout).toBe("");
-    expect(JSON.parse(readFileSync(state, "utf8")).indexingSinceMs).toBe(0);
+    expect(stateOf(state).indexingSinceMs).toBe(0);
   });
 
   test("UserPromptSubmit gets the same alert under its own event name", () => {
     const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
-    const out = JSON.parse(
-      runHook(HOOK, payload("UserPromptSubmit"), env).stdout,
+    const out = HookEvent.parse(
+      parseJson(runHook(HOOK, payload("UserPromptSubmit"), env).stdout),
     );
     expect(out.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
   });
@@ -148,8 +170,8 @@ describe("detect-ccc-gpu-hold", () => {
       state: streak(60, { pid: 1 }),
     });
     expect(runHook(HOOK, payload(), env).stdout).toBe("");
-    const s = JSON.parse(readFileSync(state, "utf8"));
-    expect(s.pid).toBe(daemon.pid);
+    const s = stateOf(state);
+    expect(s.pid).toBe(daemon.pid!);
     expect(
       Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
     ).toBeLessThan(MIN);
@@ -158,7 +180,7 @@ describe("detect-ccc-gpu-hold", () => {
   test("a non-ccc compute app is not the daemon", () => {
     const { state, env } = setup({ apps: [process.pid], state: streak(60) });
     expect(runHook(HOOK, payload(), env).stdout).toBe("");
-    const s = JSON.parse(readFileSync(state, "utf8"));
+    const s = stateOf(state);
     expect(s.pid).toBeNull();
     expect(s.indexingSinceMs).toBe(0);
   });

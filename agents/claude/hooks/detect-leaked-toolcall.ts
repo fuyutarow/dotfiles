@@ -17,12 +17,13 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
+import { strAt } from "../../hooks/narrow.ts";
 import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  const transcript = payload?.transcript_path;
-  if (typeof transcript !== "string" || transcript === "") return;
+  const transcript = strAt(payload, "transcript_path");
+  if (transcript === undefined || transcript === "") return;
 
   const turn = turnText(await readTranscript(transcript));
   if (turn === "") return;

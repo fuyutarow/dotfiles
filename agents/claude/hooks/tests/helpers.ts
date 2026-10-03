@@ -6,6 +6,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 
@@ -24,10 +26,26 @@ export function runHook(
   return { code: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
-// PreToolUse hooks print one decision JSON on stdout (or nothing = silent pass).
-export function decisionOf(stdout: string): any {
-  if (stdout.trim() === "") return null;
-  return JSON.parse(stdout).hookSpecificOutput;
+// The hookSpecificOutput a hook prints; only the fields the tests read are named, any other key
+// is kept untouched. Every named field is optional because most decisions carry only some of them.
+const DecisionSchema = z.looseObject({
+  permissionDecision: z.string().optional(),
+  permissionDecisionReason: z.string().optional(),
+  additionalContext: z.string().optional(),
+  hookEventName: z.string().optional(),
+  sessionTitle: z.string().optional(),
+});
+export type Decision = z.infer<typeof DecisionSchema>;
+const DecisionEnvelope = z.looseObject({ hookSpecificOutput: DecisionSchema });
+
+// PreToolUse hooks print one decision JSON on stdout (or nothing = silent pass). A caller of
+// decisionOf expects a decision: it used to get null on empty stdout and then die on the first
+// property read; it now dies here, naming the cause.
+export function decisionOf(stdout: string): Decision {
+  if (stdout.trim() === "") {
+    throw new Error("decisionOf: the hook printed nothing (silent pass), so there is no decision");
+  }
+  return DecisionEnvelope.parse(parseJson(stdout)).hookSpecificOutput;
 }
 
 export function tempDir(prefix: string): string {

@@ -69,11 +69,13 @@ import {
   openSync,
   readFileSync,
   readSync,
+  renameSync,
   statfsSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { z } from "zod";
@@ -251,6 +253,70 @@ function failWhy(
   if (x.signal) return `${tool} killed by ${x.signal}`;
   if (x.code) return `${tool} ${x.code}`;
   return `${tool} failed`;
+}
+
+// RENDER BUDGET (Tiger: bound the whole, not only each part). Every child below has its own
+// bound (2 s, claude agents 3 s), but they run one after another: ps + git + nvidia-smi +
+// claude agents hanging together is 9 s, longer than the 5 s statusLine.refreshInterval, so
+// renders overlap and the bar itself piles load onto the host whose load made the children
+// hang. All children share ONE deadline: each gets min(its own bound, what is left), and once
+// nothing is left a child is not started — its segment prints n/a with that reason. Chosen as
+// 4 s so the slowest possible render (budget + the 200 ms herdr push) ends inside one interval.
+// performance.now(): monotonic, immune to a clock step, and defined on a bun without Temporal
+// (the floor check at the bottom must still get to print its message).
+const RENDER_BUDGET_MS = 4000;
+const RENDER_T0 = performance.now();
+interface ExecFailure {
+  why: string; // the n/a reason, from failWhy
+  stderr: string; // trimmed; "" when the child printed none or never started
+  ran: boolean; // false: never started (budget spent) — says nothing about the tool, so never cache it
+}
+// Run one child inside the render budget. stderr is captured (not discarded) so a caller can
+// tell git's "not a git repository" from its other fatal errors.
+function execBounded(
+  tool: string,
+  file: string,
+  args: string[],
+  ownBoundMs: number,
+  env?: NodeJS.ProcessEnv,
+): Result<string, ExecFailure> {
+  const left = RENDER_BUDGET_MS - (performance.now() - RENDER_T0);
+  if (left <= 0) {
+    return err({
+      why: `${tool} not run, render budget ${RENDER_BUDGET_MS}ms spent`,
+      stderr: "",
+      ran: false,
+    });
+  }
+  const bound = Math.min(ownBoundMs, Math.ceil(left));
+  return fromThrowable(
+    () =>
+      execFileSync(file, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8",
+        timeout: bound,
+        ...(env ? { env } : {}),
+      }),
+    (e): ExecFailure => ({
+      why: failWhy(e, tool, bound),
+      stderr: (execError(e).stderr ?? "").trim(),
+      ran: true,
+    }),
+  )();
+}
+
+// Write a cache file so no reader ever sees half of it: the whole file goes to a private temp
+// name and is renamed into place (atomic on one filesystem). A plain writeFileSync truncates
+// first, and these files are read by every other session on the host every 5 s — a reader landing
+// in the gap got invalid JSON, which reads as "no cache" (a false n/a, or an nvidia-smi spawn
+// nobody needed). Best-effort like every cache write: a failure leaves the old file and no temp.
+function writeCache(path: string, value: unknown): void {
+  const tmp = `${path}.${process.pid}.tmp`;
+  fromThrowable(() => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(tmp, JSON.stringify(value));
+    renameSync(tmp, path);
+  })().mapErr(() => fromThrowable(() => unlinkSync(tmp))());
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -463,10 +529,7 @@ function rcProbeValid(): boolean | undefined {
   const valid = binaryContains(exe, RC_NEEDLE);
   if (valid === undefined) return undefined;
   // The cache is an optimization; a failed write leaves the answer above standing.
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(RC_PROBE_CACHE, JSON.stringify({ ...cache, [key]: valid }));
-  })();
+  writeCache(RC_PROBE_CACHE, { ...cache, [key]: valid });
   return valid;
 }
 
@@ -542,16 +605,13 @@ function agentName(
     return ok(hit.name);
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
-  const outResult = fromThrowable(
-    () =>
-      execFileSync(CLAUDE_BIN, ["agents", "--json"], {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: AGENT_LIST_TIMEOUT_MS,
-      }),
-    (e) => failWhy(e, "claude agents", AGENT_LIST_TIMEOUT_MS),
-  )();
-  if (outResult.isErr()) return err(outResult.error); // `claude` missing/slow/errored
+  const outResult = execBounded(
+    "claude agents",
+    CLAUDE_BIN,
+    ["agents", "--json"],
+    AGENT_LIST_TIMEOUT_MS,
+  );
+  if (outResult.isErr()) return err(outResult.error.why); // `claude` missing/slow/errored/over budget
   const listResult = fromThrowable((): unknown =>
     JSON.parse(outResult.value),
   )().map((v) => AgentListSchema.safeParse(v));
@@ -567,10 +627,7 @@ function agentName(
   }
   // best-effort write, result discarded on purpose: cache write failed (e.g. read-only fs) ->
   // value below still returned, just not persisted.
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
-  })();
+  writeCache(AGENT_NAME_CACHE, next);
   return ok(next[sid]?.name);
 }
 
@@ -774,18 +831,15 @@ function scanOutOfHarness(): {
   // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
   // has no reason to be instant on a heavily loaded host, and this call used to have no
   // timeout at all.
-  const rawResult = fromThrowable(
-    () =>
-      execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: ENRICHMENT_TIMEOUT_MS,
-      }),
-    (e) => failWhy(e, "ps"),
-  )();
+  const rawResult = execBounded(
+    "ps",
+    "ps",
+    ["-eo", "ppid=,etimes=,args="],
+    ENRICHMENT_TIMEOUT_MS,
+  );
   // no ps / timed out: say so. This used to return an empty scan, which rendered as "no jobs".
   if (rawResult.isErr())
-    return { jobs: [], orphans: 0, failed: rawResult.error };
+    return { jobs: [], orphans: 0, failed: rawResult.error.why };
   const raw = rawResult.value;
   const jobs: Admitted[] = [];
   let orphans = 0;
@@ -855,6 +909,24 @@ type GpuCache = z.output<typeof GpuCacheSchema>;
 function within(at: number, now: number, windowMs: number): boolean {
   return now - at >= 0 && now - at < windowMs;
 }
+// Take one live sample and record it. `good` is the previous last-good sample, carried over a
+// failure so a transient miss can still be shown (marked stale) instead of turning into n/a.
+function resample(good: GpuCache["good"]): Result<MemReading, string> {
+  const sampled = sampleVram();
+  // Stamped AFTER the sample returns: a timed-out sample blocked ~2 s, and stamping the
+  // entry with the pre-sample time would hand it to the next render already 2 s into its TTL.
+  const at = Temporal.Now.instant().epochMilliseconds;
+  // A sample that never ran (this render's budget was already spent) says nothing about the
+  // GPU, so it is NOT cached: caching it would pin "n/a" on every session for the whole TTL.
+  if (sampled.isErr() && !sampled.error.ran) return err(sampled.error.why);
+  writeCache(
+    GPU_CACHE,
+    sampled.isOk()
+      ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
+      : { at, why: sampled.error.why, good }, // JSON drops an undefined `good`
+  );
+  return sampled.mapErr((f) => f.why);
+}
 function vramFrac(): Result<MemReading, string> {
   const now = Temporal.Now.instant().epochMilliseconds;
   // A file that is missing or fails GpuCacheSchema is an empty cache: the sample is retaken.
@@ -862,24 +934,11 @@ function vramFrac(): Result<MemReading, string> {
   const fresh =
     cached.at !== undefined && within(cached.at, now, GPU_SAMPLE_TTL_MS);
   if (fresh && cached.reading) return ok(cached.reading);
-  let why: string;
-  if (fresh && cached.why !== undefined) {
-    why = cached.why;
-  } else {
-    const sampled = sampleVram();
-    // Stamped AFTER the sample returns: a timed-out sample blocked ~2 s, and stamping the
-    // entry with the pre-sample time would hand it to the next render already 2 s into its TTL.
-    const at = Temporal.Now.instant().epochMilliseconds;
-    const note: GpuCache = sampled.isOk()
-      ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
-      : { at, why: sampled.error, good: cached.good }; // JSON drops an undefined `good`
-    fromThrowable(() => {
-      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-      writeFileSync(GPU_CACHE, JSON.stringify(note));
-    })();
-    if (sampled.isOk()) return sampled;
-    why = sampled.error;
-  }
+  // A cached miss is served as-is for the TTL (one bounded sample per 5 s, not one per render).
+  const latest =
+    fresh && cached.why !== undefined ? err(cached.why) : resample(cached.good);
+  if (latest.isOk()) return latest;
+  const why = latest.error;
   // The fresh sample failed. A recent good one is still better than nothing, provided its age
   // and the failure are printed beside it; otherwise the reading is plainly n/a.
   const good = cached.good;
@@ -896,28 +955,24 @@ const NvidiaSmiSchema = z
   .string()
   .transform((out) => (out.split("\n")[0] ?? "").split(","))
   .pipe(z.tuple([MiB, MiB]));
-function sampleVram(): Result<MemReading, string> {
-  return fromThrowable(
-    () =>
-      execFileSync(
-        "nvidia-smi",
-        [
-          "--query-gpu=memory.used,memory.total",
-          "--format=csv,noheader,nounits",
-        ],
-        {
-          stdio: ["ignore", "pipe", "ignore"],
-          encoding: "utf8",
-          timeout: ENRICHMENT_TIMEOUT_MS,
-        },
-      ),
-    (e) => failWhy(e, "nvidia-smi"),
-  )().andThen((out) => {
+// err.ran = whether nvidia-smi was actually started (false: the render budget was already spent).
+function sampleVram(): Result<MemReading, ExecFailure> {
+  return execBounded(
+    "nvidia-smi",
+    "nvidia-smi",
+    ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+    ENRICHMENT_TIMEOUT_MS,
+  ).andThen((out) => {
+    const unparsable: ExecFailure = {
+      why: "nvidia-smi output unparsable",
+      stderr: "",
+      ran: true,
+    };
     const parsed = NvidiaSmiSchema.safeParse(out);
-    if (!parsed.success) return err("nvidia-smi output unparsable");
+    if (!parsed.success) return err(unparsable);
     const [used, total] = parsed.data;
     const reading = memReading(used / 1024, total / 1024);
-    return reading ? ok(reading) : err("nvidia-smi output unparsable");
+    return reading ? ok(reading) : err(unparsable);
   });
 }
 
@@ -994,10 +1049,7 @@ function cpuPct(): Result<number, string> {
   const keep =
     prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
   if (!keep) {
-    fromThrowable(() => {
-      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-      writeFileSync(CPU_CACHE, JSON.stringify({ ...sample, at: now }));
-    })();
+    writeCache(CPU_CACHE, { ...sample, at: now });
   }
   if (prev === undefined) return err("no earlier sample to diff against"); // first render on this host
   // A baseline with no timestamp (pre-2026-10-03 file), from the future (clock stepped back) or
@@ -1097,30 +1149,27 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // ownership refusal, a vanished cwd), so only git's own "not a git repository" sentence — read
   // from stderr, in the C locale — means "nothing to show". Every other failure is shown as n/a
   // with git's reason.
-  const branchResult = fromThrowable(
-    () =>
-      execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf8",
-        timeout: ENRICHMENT_TIMEOUT_MS,
-        env: { ...process.env, LC_ALL: "C" },
-      }).trim(),
-    (e): { notRepo: boolean; why: string } => {
-      const stderr = (execError(e).stderr ?? "").trim();
-      if (stderr.includes("not a git repository"))
-        return { notRepo: true, why: "" };
-      // git's own words beat a bare "git exit 128": "fatal: <reason>" -> "<reason>", capped.
-      const reason = stderr
+  const branchResult = execBounded(
+    "git",
+    "git",
+    ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+    ENRICHMENT_TIMEOUT_MS,
+    { ...process.env, LC_ALL: "C" },
+  ).map((out) => out.trim());
+  const notRepo =
+    branchResult.isErr() &&
+    branchResult.error.stderr.includes("not a git repository");
+  const branch = branchResult.isOk() ? branchResult.value : undefined;
+  // git's own words beat a bare "git exit 128": "fatal: <reason>" -> "<reason>", capped.
+  const gitReason = branchResult.isErr()
+    ? branchResult.error.stderr
         .split("\n")[0]
         ?.replace(/^fatal: /, "")
-        .slice(0, 60);
-      return { notRepo: false, why: reason || failWhy(e, "git") };
-    },
-  )();
-  const branch = branchResult.isOk() ? branchResult.value : undefined;
+        .slice(0, 60)
+    : undefined;
   const branchWhy =
-    branchResult.isErr() && !branchResult.error.notRepo
-      ? branchResult.error.why
+    branchResult.isErr() && !notRepo
+      ? gitReason || branchResult.error.why
       : undefined;
 
   const scan = scanOutOfHarness();
@@ -1574,18 +1623,12 @@ const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replace(ANSI, "");
 // Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
-fromThrowable(() => {
-  mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-  writeFileSync(
-    SYS_CACHE,
-    JSON.stringify({
-      at: Temporal.Now.instant().epochMilliseconds,
-      line: `Sys: ${sysPlain}`,
-      // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
-      ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
-    }),
-  );
-})();
+writeCache(SYS_CACHE, {
+  at: Temporal.Now.instant().epochMilliseconds,
+  line: `Sys: ${sysPlain}`,
+  // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
+  ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
+});
 
 // This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
 // each session's payload carries its own context and the rate_limits it last received, so one
@@ -1595,14 +1638,8 @@ fromThrowable(() => {
 const sid = (payload.data.session_id ?? "").replace(/[^A-Za-z0-9_-]/g, "_");
 if (sid !== "") {
   const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude/statusline-session`, { recursive: true });
-    writeFileSync(
-      `${HOME}/.cache/claude/statusline-session/${sid}.json`,
-      JSON.stringify({
-        at: Temporal.Now.instant().epochMilliseconds,
-        rows: rows.map((ansi) => ({ line: ansi.replace(ANSI, ""), ansi })),
-      }),
-    );
-  })();
+  writeCache(`${HOME}/.cache/claude/statusline-session/${sid}.json`, {
+    at: Temporal.Now.instant().epochMilliseconds,
+    rows: rows.map((ansi) => ({ line: ansi.replace(ANSI, ""), ansi })),
+  });
 }

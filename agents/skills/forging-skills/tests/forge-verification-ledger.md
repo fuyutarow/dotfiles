@@ -1,12 +1,15 @@
 # Forge verification ledger — this skill's own F3 artifact (2026-07-02)
 
-This file is the adversarial-verification findings ledger that gate F3 demands of every forged
-skill, produced for THIS skill's own forge — and the worked example of what `references/verifying.md`
-§2's fleet returns. A skill that teaches verification and ships without this artifact fails its
-own LAW. Re-run the fleet (or write a scale waiver, `references/verifying.md` §7) on any reforge
-that touches the LAW, the gates, or a sibling cut; append findings here, never overwrite.
+Entries retain the claims and conventions recorded at their dates, including superseded requirements.
+Current instructions are in SKILL.md; the 2026-10-03 entry below reconciles historical findings with current sources.
+Historical comparative verdicts do not establish superiority over today's creator versions.
 
-## Fleet summary
+This is this package's own evidence record, not a required artifact for every target skill.
+The initial forge used a mandatory fleet/ledger convention; that convention is superseded.
+Current verification follows the changed behavior and risk in SKILL.md and verifying.md.
+Retain historical findings and append corrections rather than deleting the evidence.
+
+## 2026-07-02 — initial fleet summary (historical)
 
 5 lenses + a comparative judge (vs the two skill-creator defaults), per `references/verifying.md`
 §2: self-contradiction, architecture, sibling cuts, bloat/drift, trigger desk-check. 12 read-only
@@ -363,3 +366,97 @@ Use existing launchers/eval machinery, not a synthetic scheduler that merely ass
 Root ran actual P7 timeout/child cleanup plus normal completion and completed-worker resume/versioned
 artifact consumption. Full receipts and limits live in BIBIFI ledger§12. No real R&D speedup claimed.
 Existing core15/reference85prose warnings and2long cells are unchanged scoped debt; floor passes.
+
+## 2026-10-03 — outcome-first design and calibrated verification, v2610.1.0
+
+User request: revise this skill from prior empirical failures and current industry guidance.
+This is a design correction with structural and static evidence, not a measured discovery-throughput gain.
+
+### Historical revisions and the scope retained
+
+| Period / repository receipt | Observed failure or earlier finding | Original correction | Current disposition |
+|---|---|---|---|
+| 2026-07-02, original findings above | Ambiguous routing, unsupported metadata and missing source classes | Source taxonomy, typed boundaries and verification | Keep provenance and real boundary checks; structure follows the job |
+| 2026-07-24, `965eb66daa1c` | SKILL.md prose fell between two owners; narrative accumulated | Dual-reader responsibility and prose floor | Keep the responsibility and review signals; warnings do not prove runtime failure |
+| 2026-07-30 ledger / 2026-08-01 commit `6b70af6529cc` | Names selected before comparing responsibilities | Function-first existence gate | Keep input/decision/result/stop; a named packet alone is not independence |
+| 2026-08-15, `71b79d3eaf4b` | Individually admitted skills accumulated; the collection was not swept | F4 budget and shared floor | Keep the ceiling and membership decision; name the metric as a static proxy |
+| 2026-08-17, `58d00ed46677` | Reference prose was unmeasured and runtime decisions required re-derivation | Reference coverage and line-shape review | Keep selective loading and readable decisions; tables are a form choice |
+| 2026-09-22, `11034d81323c` | Repeated warning output buried structural failures | Quiet aggregate diagnostics | Preserve quiet behavior and explicit structural failures |
+| 2026-09-23, `64f826a4d025` | Definitions/guidelines were assigned invented magnitude or mechanism | Claim-type and applicability correction | Preserve scoped source claims and mark local additions |
+| 2026-09-27, `804ac2cf62dd` / `23c80bb2f7c7` | Text plans and structural greens were treated as runtime compliance | Observed actions and bounded event rehearsal | Preserve for execution claims; do not impose that tier on simple edits |
+
+These are repository/ledger observations. Earlier fleet counts and verdicts are historical reports.
+They do not establish superiority over current creators or a causal productivity effect.
+
+### Current primary sources inspected on 2026-10-03
+
+| Source | Supported guidance | Limit |
+|---|---|---|
+| [OpenAI build-skills](https://learn.chatgpt.com/docs/build-skills) | Focus each skill on a job; scripts/resources are optional; test selection | Host-specific invocation/loading settings are not universal |
+| [OpenAI skill evals](https://developers.openai.com/blog/eval-skills) | Targeted positive/negative cases and observable execution events | Prompt examples and suggested counts are not mandatory quotas |
+| [Anthropic authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) | Match specificity to fragility; establish task gaps and baseline before extensive instructions | Vendor guidance does not validate the house's fixed scaffold or every local adaptation |
+| [Agent Skills specification](https://agentskills.io/specification) | Metadata, instructions and optional resources support progressive disclosure | Format conformance is not behavioral efficacy |
+| Installed Codex `skill-creator/SKILL.md` | Useful non-obvious guidance, narrow scope, optional resources and meaningful checks | Local snapshot; refresh on a relevant contract change |
+| Installed plugin `skill-creator/SKILL.md` | Real requests, old/no-skill comparison, near misses and iterative evaluation | Description proxy results do not certify the actual installation path |
+
+The two local creator roots are defined in SKILL.md.
+Current guidance was read, not inferred from old comparison verdicts.
+This revision withdraws the blanket “SUPERSEDED as defaults” claim.
+
+### Present-session failures and revised decisions
+
+| Evidence | Correction |
+|---|---|
+| The user's repeated requests for concrete progress during the retirement discussion | Begin with a useful task-sized correction; do not substitute planning ceremony or invented poker votes |
+| A proposed “60 independent” count was a packaging judgment, not proven functional independence | Compare actual decisions, failures and consumers; separate independence from registration |
+| The supplied Stats snapshot distinguishes listing context, invocations and attributed session tokens | Keep these metrics separate; do not claim all metadata bytes are measured tokens charged each turn |
+| Existing retirement work required caller, catalog and provenance repair | Preserve consumers and source; do not automatically restore archived registration |
+| The previous manual required a fixed description shape and broad target scaffolds | Require only components justified by a task or concrete risk |
+
+Source snapshot: user-supplied Stats attachment in this chat.
+The 30-day newcomer grace used in the retirement batch is a local decision, not an industry standard.
+Usage from one host does not prove no indirect reading or no use on another host.
+
+### Package revision and verification scope
+
+F1–F4 remain useful decisions: operationality, placement, self-verification and standing.
+They no longer require a copied gate framework, custom checker, ledger or fixed fleet per target.
+The five references were revised together with the core; their source and trust boundaries remain explicit.
+The diagnostic now labels aggregate characters as `name+description chars (static proxy)`.
+The budget key and ceiling comparison retain their executable contract.
+
+`tests/decision-cases.json` records 12 static acceptance scenarios for these design boundaries.
+They cover small instruction-only work, variants, distinct stops, aliases, selection and retirement.
+They also cover cost attribution, execution claims, guideline distillation and creator freshness.
+These are author-context review scenarios, not independent live-model results.
+
+Before rewriting, the shared floor reported 85 long reference sentences, 15 long core sentences and two long cells.
+After the rewrite, the target floor emitted no prose warnings and no structural failures.
+The floor's shared regression suite and official quick-validator results are recorded below after execution.
+No controlled old/new task benefit, installed implicit-selection rate or R&D throughput has been measured.
+
+The Desktop tool accepted an explicit Terra dispatch into a fresh read-only context.
+That reviewer found three remaining stale requirements in the ledger and checker; fixes are recorded below.
+Served-model identity and Desktop hook enforcement were not observable and are not claimed.
+This supplies an independent-context static review, not live-selection or comparative-task evidence.
+
+## Final verification receipts — 2026-10-03
+
+- Target shared floor: exit 0; zero structural failures and zero core/reference prose warnings.
+- Official Codex quick validator via isolated uv: “Skill is valid!”
+- Shared checker regressions: 29 passed, zero failed. Budget boundary and quoted-YAML cases are included.
+- Collection working-tree floor: 58 skills, 55,721 static characters, ceiling 55,721; no structural failure.
+- Existing collection readability warnings: 77 across 38 other skills; no broad cleanup was performed.
+- Relinking and wiring: `mise run link:skills` and `mise run lint:skills-wiring` succeeded.
+- Markdown gate: `mise run lint:md` passed on 31 files.
+- Scoped typecheck: inherited repository options, only the changed checker and its tests; passed.
+- Formatting: repository style with the skills exclusion removed for these two targets; passed after formatting.
+- Scoped oxlint: no errors; three pre-existing nested-loop review warnings remain.
+- Repository-wide `mise run typecheck`: failed on conflict markers in parallel changes to `obsidian/apply.ts` and `smart-open/receive.ts`. Those files were not changed here.
+- Fresh-context static review: four material inconsistencies found and repaired; final review accepted their repairs.
+- Served model and Desktop hook enforcement: not observed. No claim of verified cross-model enforcement.
+- Benefit and live implicit-selection accuracy: unmeasured. Static cases and validators do not establish them.
+
+Reviewer corrections retained: historical fleet prose made non-operative; zero-WARN mandate removed;
+table advice limited to keyed lookups; 1,500-character threshold labeled local rather than a universal platform cap.
+Additional author correction: valid quoted descriptions no longer receive the plain-scalar warning.

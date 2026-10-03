@@ -58,7 +58,8 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
-import { attempt, attemptOr } from "../agents/hooks/attempt.ts";
+import { z } from "zod";
+import { attempt } from "../agents/hooks/attempt.ts";
 import {
   ACK_MS,
   editorHost,
@@ -348,21 +349,19 @@ async function handlePath(
   return runOpener(editorUrl(editor, p, k), left);
 }
 
+// A request line is a JSON object; which keys it has says what it asks for. Anything else (not
+// JSON, an array, a scalar) is "no keys", which falls through to the URL refusal below.
+const MessageSchema = z.record(z.string(), z.unknown());
+
 async function handle(line: string): Promise<string> {
   if (line.length > MAX_LINE) return "refused: too long";
-  const msg = await attemptOr(
-    () =>
-      JSON.parse(line) as {
-        url?: unknown;
-        path?: unknown;
-        kind?: unknown;
-        host?: unknown;
-      } | null,
-    null,
-  );
-  if (msg !== null && typeof msg === "object" && "path" in msg)
-    return handlePath(msg.path, msg.kind, msg.host);
-  const url = typeof msg?.url === "string" ? msg.url : "";
+  const parsed = await attempt((): unknown => JSON.parse(line));
+  const checked = parsed.ok ? MessageSchema.safeParse(parsed.value) : undefined;
+  const msg = checked?.success ? checked.data : undefined;
+  if (msg !== undefined && Object.hasOwn(msg, "path"))
+    return handlePath(msg["path"], msg["kind"], msg["host"]);
+  const rawUrl = msg?.["url"];
+  const url = typeof rawUrl === "string" ? rawUrl : "";
   if (!/^https?:\/\/[^\s]+$/i.test(url)) return "refused: only http(s) URLs";
   if (!takeToken()) {
     note("rate limit");

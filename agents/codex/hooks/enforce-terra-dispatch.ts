@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { resourceDeclarationResult } from "../../resource-control/lib/dispatch-declaration.ts";
 import { attempt } from "../../hooks/attempt.ts";
+import { at, obj, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // Codex spawn_agent (hooks see it as tool "Agent") takes per-call `model` and
 // `reasoning_effort` overrides — both keys observed in this machine's own session records
@@ -56,10 +57,6 @@ function pairProblem(
   return null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function denyMalformed(reason: string): never {
   process.stderr.write(`dispatch-contract: ${reason}\n`);
   process.exit(2);
@@ -78,31 +75,29 @@ function output(decision: "allow" | "deny", reason: string): void {
 }
 
 async function main(): Promise<void> {
-  const parsed = await attempt(() => JSON.parse(readFileSync(0, "utf8")));
+  const parsed = await attempt(() => parseJson(readFileSync(0, "utf8")));
   if (!parsed.ok) denyMalformed("invalid JSON payload");
   const payload: unknown = parsed.value;
+  const input = obj(at(payload, "tool_input"));
   if (
-    !isRecord(payload) ||
-    payload.tool_name !== "Agent" ||
-    !isRecord(payload.tool_input)
+    obj(payload) === undefined ||
+    strAt(payload, "tool_name") !== "Agent" ||
+    input === undefined
   ) {
     denyMalformed("unverifiable Agent payload");
   }
 
-  const input = payload.tool_input;
-  let dispatchText: string | null;
-  if (typeof input.message === "string") dispatchText = input.message;
-  else if (typeof input.prompt === "string") dispatchText = input.prompt;
-  else dispatchText = null;
-  if (dispatchText === null)
+  const dispatchText = str(at(input, "message")) ?? str(at(input, "prompt"));
+  if (dispatchText === undefined)
     denyMalformed("Agent message/prompt must be a string");
-  if ("model" in input && typeof input.model !== "string")
+  const rawModel = at(input, "model");
+  if (rawModel !== undefined && typeof rawModel !== "string")
     denyMalformed("model must be a string");
-  if ("reasoning_effort" in input && typeof input.reasoning_effort !== "string")
+  const rawEffort = at(input, "reasoning_effort");
+  if (rawEffort !== undefined && typeof rawEffort !== "string")
     denyMalformed("reasoning_effort must be a string");
-  const model = typeof input.model === "string" ? input.model : null;
-  const effort =
-    typeof input.reasoning_effort === "string" ? input.reasoning_effort : null;
+  const model = str(rawModel) ?? null;
+  const effort = str(rawEffort) ?? null;
 
   const problems: string[] = [];
   const resource = resourceDeclarationResult(dispatchText);

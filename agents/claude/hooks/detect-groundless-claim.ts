@@ -20,6 +20,7 @@
 // user, not a block that feeds back into the transcript.
 
 import { attempt } from "../../hooks/attempt.ts";
+import { at, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson, readTranscript, stripCode, turnText } from "./lib.ts";
 
 const MIN_LINES = 8;
@@ -66,9 +67,9 @@ const DENOMINATOR_PATTERNS: RegExp[] = [
 
 async function main(): Promise<number> {
   const payload = readStdinJson();
-  if (payload?.stop_hook_active) return 0;
-  const transcript = payload?.transcript_path;
-  if (typeof transcript !== "string" || transcript === "") return 0;
+  if (at(payload, "stop_hook_active")) return 0;
+  const transcript = strAt(payload, "transcript_path");
+  if (transcript === undefined || transcript === "") return 0;
 
   const entries = await readTranscript(transcript);
   const turn = turnText(entries);

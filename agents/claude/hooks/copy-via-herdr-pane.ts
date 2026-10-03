@@ -37,6 +37,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
+import { parseJson, strAt } from "../../hooks/narrow.ts";
 
 // herdr exports its own binary as HERDR_BIN_PATH when it starts a pane — a VERSIONED Homebrew
 // Cellar path. A `brew upgrade herdr` deletes that directory, so every pane opened before the
@@ -51,13 +52,13 @@ const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
 const POLL_ATTEMPTS = 10;
 const POLL_DELAY_MS = 200;
 
-function herdr(args: string[]): any {
+function herdr(args: string[]): unknown {
   const out = execFileSync(HERDR_BIN, args, {
     stdio: ["ignore", "pipe", "ignore"],
     encoding: "utf8",
     timeout: 5000,
   });
-  return JSON.parse(out);
+  return parseJson(out);
 }
 
 // a stray small leftover pane is cosmetic, not a delivery failure -> never throw from here
@@ -112,7 +113,7 @@ const split = await attempt(() =>
 );
 // split itself failed (e.g. too small to split) -> caller falls back
 if (!split.ok) process.exit(4);
-const paneId: string | undefined = split.value?.result?.pane?.pane_id;
+const paneId = strAt(split.value, "result", "pane", "pane_id");
 if (!paneId) process.exit(4);
 
 let ready = false;

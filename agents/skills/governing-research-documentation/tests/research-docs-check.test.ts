@@ -447,7 +447,7 @@ describe("OKF compatibility and local profile boundary", () => {
 			today: "2026-08-02",
 		});
 		expect(okf.findings).toHaveLength(0);
-		expect([...codes(profile)]).toEqual(
+		expect<unknown>([...codes(profile)]).toEqual(
 			expect.arrayContaining([
 				"RDS003",
 				"RDS007",
@@ -475,7 +475,7 @@ describe("OKF compatibility and local profile boundary", () => {
 		});
 		const profile = await inspect(bundle);
 		expect(okf.findings).toHaveLength(0);
-		expect([...codes(profile)]).toEqual(
+		expect<unknown>([...codes(profile)]).toEqual(
 			expect.arrayContaining(["RDS006", "RDR050"]),
 		);
 	});
@@ -705,7 +705,7 @@ describe("valid role and review lifecycles", () => {
 		const bundle = makeBundle();
 		replace(bundle.statePath, "status: draft", "status: stable");
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDL003", "RDA002"]),
 		);
 	});
@@ -770,7 +770,7 @@ describe("valid role and review lifecycles", () => {
 			"stale_after: 2026-08-02",
 		);
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDL002", "RDL012"]),
 		);
 	});
@@ -845,7 +845,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 			"../../../outside.json",
 		);
 		result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDR001", "RDR021"]),
 		);
 	});
@@ -857,7 +857,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 		unlinkSync(bundle.rawPath);
 		symlinkSync(outsidePath, bundle.rawPath);
 
-		expect([...codes(await inspect(bundle))]).toEqual(
+		expect<unknown>([...codes(await inspect(bundle))]).toEqual(
 			expect.arrayContaining(["RDR001", "RDR021"]),
 		);
 	});
@@ -907,7 +907,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 		);
 		replace(bundle.statePath, "[^route-evidence]", "without-citation");
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDR010", "RDR011"]),
 		);
 	});
@@ -962,7 +962,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 			`evidence:\n        - ../generated/${GENERATED_NAME}`,
 		);
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDR041", "RDR044"]),
 		);
 	});
@@ -1034,7 +1034,7 @@ describe("generated-view and retirement policy", () => {
 			"---",
 		);
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining([
 				"RDS080",
 				"RDS081",
@@ -1100,7 +1100,7 @@ describe("generated-view and retirement policy", () => {
 			`rd_authority_key: another/question\nrd_supersedes:\n  - ${CANONICAL_NAME}`,
 		);
 		const result = await inspect(bundle);
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDL031", "RDL032", "RDL033"]),
 		);
 	});
@@ -1121,7 +1121,7 @@ describe("Git append-only and durable-history floor", () => {
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDI001", "RDI002"]),
 		);
 	});
@@ -1137,7 +1137,7 @@ describe("Git append-only and durable-history floor", () => {
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDI001", "RDI002"]),
 		);
 		expect(codes(result)).not.toContain("RDI010");
@@ -1525,7 +1525,7 @@ The run recorded a negative result.[^raw-negative]
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDI006", "RDA002"]),
 		);
 	});
@@ -1549,7 +1549,7 @@ The run recorded a negative result.[^raw-negative]
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect([...codes(result)]).toEqual(
+		expect<unknown>([...codes(result)]).toEqual(
 			expect.arrayContaining(["RDI001", "RDI002"]),
 		);
 		expect(codes(result)).not.toContain("RDI010");

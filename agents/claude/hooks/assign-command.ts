@@ -41,6 +41,7 @@ import {
   sessionName,
 } from "./assign-lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
+import { strAt } from "../../hooks/narrow.ts";
 
 function block(reason: string): never {
   console.log(JSON.stringify({ decision: "block", reason }));
@@ -61,8 +62,8 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
 // FAIL OPEN — see the header: a bug here must never block an ordinary prompt.
 const r = await attempt(async () => {
   const payload = readStdinJson();
-  const prompt = typeof payload?.prompt === "string" ? payload.prompt : "";
-  const cwd = typeof payload?.cwd === "string" ? payload.cwd : process.cwd();
+  const prompt = strAt(payload, "prompt") ?? "";
+  const cwd = strAt(payload, "cwd") ?? process.cwd();
 
   const m = prompt.trim().match(/^\/assign(?:\s+(\S+))?/);
   if (!m) process.exit(0); // not an /assign invocation -> silent pass, zero cost

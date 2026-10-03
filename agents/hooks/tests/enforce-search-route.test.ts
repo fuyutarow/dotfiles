@@ -87,15 +87,15 @@ describe("enforce-search-route", () => {
     const decision = decisionOf(result.stdout);
 
     expect(result.code).toBe(0);
-    expect(decision.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecision).toBe("deny");
     // The shortest installed name of this router (rr, repo-retrieve), else the long path; routes by
     // intent name.
-    expect(decision.permissionDecisionReason).toMatch(
+    expect(decision?.permissionDecisionReason).toMatch(
       /(?:^|[\s:;])(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
     );
-    expect(decision.permissionDecisionReason).toContain(" text '");
-    expect(decision.permissionDecisionReason).toContain(" exists '");
-    expect(decision.permissionDecisionReason).toContain("do not bypass");
+    expect(decision?.permissionDecisionReason).toContain(" text '");
+    expect(decision?.permissionDecisionReason).toContain(" exists '");
+    expect(decision?.permissionDecisionReason).toContain("do not bypass");
   });
 
   test("denies direct rg, grep, git grep, and filtered find", () => {
@@ -118,7 +118,7 @@ describe("enforce-search-route", () => {
     ]) {
       const project = registerProject();
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
-      expect(decisionOf(result.stdout).permissionDecision).toBe("deny");
+      expect(decisionOf(result.stdout)?.permissionDecision).toBe("deny");
     }
   });
 
@@ -131,7 +131,7 @@ describe("enforce-search-route", () => {
       withCcc(),
     );
 
-    expect(decisionOf(result.stdout).permissionDecision).toBe("deny");
+    expect(decisionOf(result.stdout)?.permissionDecision).toBe("deny");
   });
 
   test("allows only the classified router and non-search ccc operations", () => {
@@ -193,8 +193,8 @@ describe("enforce-search-route", () => {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       const decision = decisionOf(result.stdout);
 
-      expect(decision.permissionDecision).toBe("deny");
-      expect(decision.permissionDecisionReason).toMatch(
+      expect(decision?.permissionDecision).toBe("deny");
+      expect(decision?.permissionDecisionReason).toMatch(
         /(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
       );
     }
@@ -211,8 +211,8 @@ describe("enforce-search-route", () => {
       const result = runHook(HOOK, bashPayload(project, command), withCcc());
       const decision = decisionOf(result.stdout);
 
-      expect(decision.permissionDecision).toBe("deny");
-      expect(decision.permissionDecisionReason).toContain("do not bypass");
+      expect(decision?.permissionDecision).toBe("deny");
+      expect(decision?.permissionDecisionReason).toContain("do not bypass");
     }
   });
 
@@ -278,8 +278,8 @@ describe("enforce-search-route", () => {
     const decision = decisionOf(result.stdout);
 
     expect(result.code).toBe(0);
-    expect(decision.permissionDecision).toBe("deny");
-    expect(decision.permissionDecisionReason).not.toContain("failing closed");
+    expect(decision?.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecisionReason).not.toContain("failing closed");
   });
 
   test("Grep tool_input.path pointing at a nonexistent directory still climbs to a registered project", () => {
@@ -289,8 +289,8 @@ describe("enforce-search-route", () => {
     const decision = decisionOf(result.stdout);
 
     expect(result.code).toBe(0);
-    expect(decision.permissionDecision).toBe("deny");
-    expect(decision.permissionDecisionReason).not.toContain("failing closed");
+    expect(decision?.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecisionReason).not.toContain("failing closed");
   });
 
   test("Grep tool_input.path resolves relative to cwd into a registered project", () => {
@@ -305,7 +305,7 @@ describe("enforce-search-route", () => {
       withCcc(),
     );
 
-    expect(decisionOf(result.stdout).permissionDecision).toBe("deny");
+    expect(decisionOf(result.stdout)?.permissionDecision).toBe("deny");
   });
 
   test("malformed input fails closed", () => {
@@ -313,8 +313,8 @@ describe("enforce-search-route", () => {
     const decision = decisionOf(result.stdout);
 
     expect(result.code).toBe(0);
-    expect(decision.permissionDecision).toBe("deny");
-    expect(decision.permissionDecisionReason).toContain("failing closed");
+    expect(decision?.permissionDecision).toBe("deny");
+    expect(decision?.permissionDecisionReason).toContain("failing closed");
   });
 });
 
@@ -349,7 +349,7 @@ describe("display filter over the router's stream (widened 2026-10-01)", () => {
         bashPayload(registerProject(), command),
         withCcc(),
       );
-      expect(decisionOf(r.stdout).permissionDecision).toBe("deny");
+      expect(decisionOf(r.stdout)?.permissionDecision).toBe("deny");
     });
   }
 });

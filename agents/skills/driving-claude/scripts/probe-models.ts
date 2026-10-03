@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { isRecord, runClaude, type RunConfig } from "./run-claude.ts";
+import { asRecord, runClaude, type RunConfig } from "./run-claude.ts";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -58,18 +58,18 @@ export async function probeModels(
       claudeBin: options.claudeBin,
     };
     const run = await runClaude(config);
-    const envelope = run.claude;
+    const envelope = asRecord(run.claude);
     const available =
       run.exitCode === 0 &&
-      isRecord(envelope) &&
+      envelope !== undefined &&
       typeof envelope.result === "string" &&
       typeof envelope.session_id === "string";
     const cost =
-      available && isRecord(envelope)
+      available && envelope !== undefined
         ? String(envelope.total_cost_usd ?? "?")
         : "?";
     const session =
-      available && isRecord(envelope) ? String(envelope.session_id) : "?";
+      available && envelope !== undefined ? String(envelope.session_id) : "?";
     records.push(
       available
         ? {

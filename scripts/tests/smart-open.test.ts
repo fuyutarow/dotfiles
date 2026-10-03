@@ -156,15 +156,18 @@ type Run = { code: number; out: string; err: string };
 // SSH_CONNECTION is cleared unless a test sets it: run from a herdr pane on r99, the suite would
 // otherwise take every "over ssh" branch.
 function client(args: string[], env: Record<string, string | undefined>): Run {
-  const merged: Record<string, string | undefined> = {
-    ...process.env,
-    SSH_CONNECTION: undefined,
-    ...env,
-  };
-  for (const k of Object.keys(merged))
-    if (merged[k] === undefined) delete merged[k];
+  // An env entry set to undefined is removed from the child's environment, not passed through.
+  const merged: Record<string, string> = Object.fromEntries(
+    Object.entries({
+      ...process.env,
+      SSH_CONNECTION: undefined,
+      ...env,
+    }).flatMap(([k, v]): [string, string][] =>
+      v === undefined ? [] : [[k, v]],
+    ),
+  );
   const p = Bun.spawnSync(["bun", SMART_OPEN, ...args], {
-    env: merged as Record<string, string>,
+    env: merged,
     timeout: 20_000,
   });
   return {

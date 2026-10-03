@@ -36,6 +36,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
+import { at, obj, parseJson, strAt, strsAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 
 const INDEXING_ALERT_MS = 15 * 60_000;
@@ -57,9 +58,19 @@ type State = {
   alerted: Record<string, number>; // session_id -> last alert time
 };
 
+// session_id -> last alert time; entries whose time is not a number are dropped.
+function alertedOf(raw: unknown): Record<string, number> {
+  const table = obj(raw) ?? {};
+  return Object.fromEntries(
+    Object.entries(table).flatMap(([session, time]): [string, number][] =>
+      typeof time === "number" ? [[session, time]] : [],
+    ),
+  );
+}
+
 async function readState(): Promise<State> {
   const s = await attemptOr(
-    () => JSON.parse(readFileSync(STATE_PATH, "utf8")),
+    (): unknown => parseJson(readFileSync(STATE_PATH, "utf8")),
     null,
   );
   if (s === null) {
@@ -71,15 +82,15 @@ async function readState(): Promise<State> {
       alerted: {},
     };
   }
+  const pid = at(s, "pid");
+  const indexingSinceMs = at(s, "indexingSinceMs");
+  const lastProbeMs = at(s, "lastProbeMs");
   return {
-    pid: typeof s.pid === "number" ? s.pid : null,
-    indexing: Array.isArray(s.indexing)
-      ? s.indexing.filter((p: unknown) => typeof p === "string")
-      : [],
-    indexingSinceMs:
-      typeof s.indexingSinceMs === "number" ? s.indexingSinceMs : 0,
-    lastProbeMs: typeof s.lastProbeMs === "number" ? s.lastProbeMs : 0,
-    alerted: s.alerted && typeof s.alerted === "object" ? s.alerted : {},
+    pid: typeof pid === "number" ? pid : null,
+    indexing: strsAt(s, "indexing"),
+    indexingSinceMs: typeof indexingSinceMs === "number" ? indexingSinceMs : 0,
+    lastProbeMs: typeof lastProbeMs === "number" ? lastProbeMs : 0,
+    alerted: alertedOf(at(s, "alerted")),
   };
 }
 
@@ -161,8 +172,8 @@ function clock(ms: number): string {
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  const event: string = payload?.hook_event_name ?? "PreToolUse";
-  const session: string = payload?.session_id ?? "unknown";
+  const event = strAt(payload, "hook_event_name") ?? "PreToolUse";
+  const session = strAt(payload, "session_id") ?? "unknown";
   const now = Temporal.Now.instant().epochMilliseconds;
   const state = await readState();
 
@@ -178,8 +189,8 @@ async function main(): Promise<void> {
     state.indexing = indexing;
     state.lastProbeMs = now;
   }
-  for (const [s, at] of Object.entries(state.alerted)) {
-    if (now - at > SESSION_TTL_MS) delete state.alerted[s];
+  for (const [s, alertedAt] of Object.entries(state.alerted)) {
+    if (now - alertedAt > SESSION_TTL_MS) delete state.alerted[s];
   }
 
   const indexingMs =

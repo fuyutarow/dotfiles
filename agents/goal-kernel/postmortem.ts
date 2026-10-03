@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
 import {
+  asRecord,
   assertReadableRegularFile,
   type GoalAuthority,
   type GoalDecision,
@@ -96,10 +97,6 @@ const MAX_TRANSCRIPT_BYTES = 10 * 1024 * 1024;
 const MAX_MESSAGES = 500;
 const MAX_TEXT_BYTES = 250_000;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function contentText(
   content: unknown,
   acceptedTypes: readonly string[],
@@ -107,13 +104,14 @@ function contentText(
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter(
-      (block) =>
-        isRecord(block) &&
-        acceptedTypes.includes(String(block.type)) &&
-        typeof block.text === "string",
-    )
-    .map((block) => (block as Record<string, unknown>).text as string)
+    .flatMap((block) => {
+      const record = asRecord(block);
+      return record !== undefined &&
+        acceptedTypes.includes(String(record.type)) &&
+        typeof record.text === "string"
+        ? [record.text]
+        : [];
+    })
     .join("\n");
 }
 
@@ -175,9 +173,10 @@ function collectClaudeToolUseCalls(
   toolCalls: TranscriptToolCall[],
   textBytes: number,
 ): Readonly<{ textBytes: number; truncated: boolean }> {
-  for (const block of content) {
+  for (const entry of content) {
+    const block = asRecord(entry);
     if (
-      !isRecord(block) ||
+      block === undefined ||
       block.type !== "tool_use" ||
       typeof block.name !== "string"
     ) {
@@ -245,16 +244,18 @@ function parseTranscriptEntry(
   let truncated = false;
   let claudeMessages = 0;
   let codexMessages = 0;
+  const message = asRecord(entry.message);
+  const payload = asRecord(entry.payload);
   if (
     (entry.type === "user" || entry.type === "assistant") &&
-    isRecord(entry.message)
+    message !== undefined
   ) {
     role = entry.type;
-    rawText = contentText(entry.message.content, ["text"]);
+    rawText = contentText(message.content, ["text"]);
     claudeMessages = rawText === "" ? 0 : 1;
-    if (Array.isArray(entry.message.content)) {
+    if (Array.isArray(message.content)) {
       const result = collectClaudeToolUseCalls(
-        entry.message.content,
+        message.content,
         sourceLine,
         toolCalls,
         textBytes,
@@ -262,8 +263,7 @@ function parseTranscriptEntry(
       textBytes = result.textBytes;
       truncated = result.truncated;
     }
-  } else if (entry.type === "response_item" && isRecord(entry.payload)) {
-    const payload = entry.payload;
+  } else if (entry.type === "response_item" && payload !== undefined) {
     if (
       payload.type === "message" &&
       (payload.role === "user" || payload.role === "assistant")
@@ -356,13 +356,13 @@ async function parseTranscript(path: string): Promise<TranscriptReadout> {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (line === undefined || line.trim() === "") continue;
-    const parsedLine = await attempt(() => JSON.parse(line));
+    const parsedLine = await attempt((): unknown => JSON.parse(line));
     if (!parsedLine.ok) {
       parseErrors += 1;
       continue;
     }
-    const entry: unknown = parsedLine.value;
-    if (!isRecord(entry)) continue;
+    const entry = asRecord(parsedLine.value);
+    if (entry === undefined) continue;
 
     const parsed = parseTranscriptEntry(entry, index + 1, toolCalls, textBytes);
     textBytes = parsed.textBytes;
@@ -473,8 +473,8 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
       trace.workspace_paths = [
         ...new Set([
           ...trace.workspace_paths,
-          ...event.workspace_paths.filter(
-            (path): path is string => typeof path === "string",
+          ...event.workspace_paths.flatMap((path) =>
+            typeof path === "string" ? [path] : [],
           ),
         ]),
       ].sort();

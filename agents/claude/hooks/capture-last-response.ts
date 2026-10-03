@@ -14,6 +14,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
+import { parseJson, strAt } from "../../hooks/narrow.ts";
 import { MAX_QUOTE_TURNS } from "./quote.config.ts";
 
 const HOME = process.env.HOME ?? "";
@@ -25,12 +26,13 @@ async function recordResponse(sid: unknown, text: unknown): Promise<void> {
   const file = `${dir}/${sid}.jsonl`;
 
   // no (readable) history yet -> start one
+  const noHistory: string[] = [];
   const lines = await attemptOr(
     () =>
       readFileSync(file, "utf8")
         .split("\n")
         .filter((l) => l.trim() !== ""),
-    [] as string[],
+    noHistory,
   );
   lines.push(
     JSON.stringify({ at: Temporal.Now.instant().epochMilliseconds, text }),
@@ -42,7 +44,10 @@ async function recordResponse(sid: unknown, text: unknown): Promise<void> {
 
 // best-effort snapshot -> never fail Stop over this (a bad payload OR a failed write)
 await attempt(async () => {
-  const payload = JSON.parse(readFileSync(0, "utf8"));
-  await recordResponse(payload?.session_id, payload?.last_assistant_message);
+  const payload = parseJson(readFileSync(0, "utf8"));
+  await recordResponse(
+    strAt(payload, "session_id"),
+    strAt(payload, "last_assistant_message"),
+  );
 });
 process.exit(0);

@@ -27,6 +27,7 @@ import {
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 const USAGE =
   "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]\n";
@@ -165,6 +166,9 @@ function checkLedgerWiring(home: string, dotfiles: string): Finding[] {
   ];
 }
 
+// Only the names under `skills` matter here; anything else in the ledger is not this check's.
+const LedgerSchema = z.object({ skills: z.record(z.string(), z.unknown()) });
+
 /** A ledger entry with no skill on disk means the record and the tree disagree. */
 function checkLedgerOrphans(dotfiles: string): Finding[] {
   const path = `${dotfiles}/agents/skills-lock.json`;
@@ -177,14 +181,9 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
     ];
   }
   const namesResult = fromThrowable(() => {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    const skills =
-      typeof parsed === "object" && parsed !== null && "skills" in parsed
-        ? (parsed as { skills: unknown }).skills
-        : undefined;
-    return typeof skills === "object" && skills !== null
-      ? Object.keys(skills).sort()
-      : [];
+    const parsed = ((): unknown => JSON.parse(readFileSync(path, "utf8")))();
+    const ledger = LedgerSchema.safeParse(parsed);
+    return ledger.success ? Object.keys(ledger.data.skills).sort() : [];
   })();
   if (namesResult.isErr()) {
     const error = namesResult.error;

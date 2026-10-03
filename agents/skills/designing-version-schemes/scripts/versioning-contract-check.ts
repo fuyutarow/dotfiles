@@ -133,8 +133,9 @@ async function main(): Promise<void> {
 	}
 
 	const semverClaim = fields.get("SemVer claim")?.[0];
-	const claim = semverClaim?.match(/^([a-z-]+)/i)?.[1]?.toLowerCase();
-	if (claim === undefined || !semverClaims.includes(claim as (typeof semverClaims)[number])) {
+	const rawClaim = semverClaim?.match(/^([a-z-]+)/i)?.[1]?.toLowerCase();
+	const claim = semverClaims.find((candidate) => candidate === rawClaim);
+	if (claim === undefined) {
 		report("V3", "FAIL", "SemVer claim must begin conformant, syntax-only, or not-claimed");
 	} else {
 		report("V3", "PASS", "SemVer claim: " + claim);

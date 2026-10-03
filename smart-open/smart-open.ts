@@ -107,7 +107,8 @@ function pickForward(): { socket: string; alias: string } {
 }
 const FORWARD = pickForward();
 const SOCKET = FORWARD.socket;
-const SSH_HOST = process.env[SSH_HOST_ENV] ?? FORWARD.alias;
+// An empty override is no override: an `export SMART_OPEN_SSH_HOST=` must not hide the name's alias.
+const SSH_HOST = process.env[SSH_HOST_ENV] || FORWARD.alias;
 const OPEN_MS = 15_000;
 const LOCAL_WAIT_MS = 3_000;
 // This shell came in over ssh, so this machine's own screen is not the one being looked at.

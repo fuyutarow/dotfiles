@@ -26,8 +26,10 @@ const nowMs = (): number => Temporal.Now.instant().epochMilliseconds;
 // The hung-nvidia-smi cases spend a full 2 s bound per render (and two renders in a few); bun's
 // 5 s default would make them fail on a loaded host, which is the very condition under test.
 const SLOW = { timeout: 30_000 };
-// CPU/RAM readings come from the host's own /proc; elsewhere they are n/a for a different reason.
+// CPU/RAM readings come from the host's own /proc on Linux and from os.cpus()/vm_stat on macOS.
 const HAS_PROC = existsSync("/proc/stat");
+const IS_MAC = process.platform === "darwin";
+const HAS_CPU = HAS_PROC || IS_MAC;
 
 // A bin dir holding only the fakes named here: anything else (ps, git, nvidia-smi) is absent,
 // which is exactly the "tool not installed" failure.
@@ -95,7 +97,8 @@ describe("statusline Sys row: VRAM", () => {
     expect(sysRow(render({ bin }).text)).toContain("VRAM 29% (3.5/12.0G)");
   });
 
-  test("no nvidia-smi is stated, not silently omitted", () => {
+  // Linux only: on a Mac no nvidia-smi means no discrete VRAM (see the macOS test below).
+  test.skipIf(IS_MAC)("no nvidia-smi is stated, not silently omitted", () => {
     const row = sysRow(render({ bin: binWith({}) }).text);
     expect(row).toContain("VRAM n/a (no nvidia-smi)");
   });
@@ -219,31 +222,65 @@ describe("statusline Sys row: VRAM", () => {
 });
 
 describe("statusline Sys row: every reading is present", () => {
-  test.skipIf(!HAS_PROC)(
-    "CPU's first render says why it has no number; RAM, VRAM and Disk stay",
+  test.skipIf(!HAS_CPU)(
+    "CPU's first render says why it has no number; RAM and Disk stay",
     () => {
       const row = sysRow(render({ bin: binWith({}) }).text);
       expect(row).toContain("CPU n/a (no earlier sample to diff against)");
       expect(row).toContain("RAM ");
-      expect(row).toContain("VRAM ");
       expect(row).toContain("Disk ");
     },
   );
 
-  test("without /proc the reasons name the missing file (macOS)", () => {
-    if (HAS_PROC) return; // only meaningful where /proc is absent
-    const row = sysRow(render({ bin: binWith({}) }).text);
-    expect(row).toContain("CPU n/a (no /proc/stat)");
-    expect(row).toContain("RAM n/a (no /proc/meminfo)");
-  });
+  test.skipIf(!IS_MAC)(
+    "macOS: no nvidia-smi means no discrete VRAM, so no VRAM segment",
+    () => {
+      expect(sysRow(render({ bin: binWith({}) }).text)).not.toContain("VRAM");
+    },
+  );
 
-  test.skipIf(!HAS_PROC)("the second render has a CPU number", () => {
+  test.skipIf(!IS_MAC)(
+    "macOS: RAM is Activity Monitor's used (app + wired + compressed) from vm_stat",
+    () => {
+      // 16 KiB pages: wired 65536 (1 GiB) + compressed 65536 (1 GiB) + anonymous 131072 - purgeable
+      // 65536 (1 GiB) = 3 GiB used; free pages (near zero on a Mac) play no part.
+      const vmStat = [
+        "Mach Virtual Memory Statistics: (page size of 16384 bytes)",
+        "Pages free:                               12.",
+        "Pages wired down:                      65536.",
+        "Pages purgeable:                       65536.",
+        "Anonymous pages:                      131072.",
+        "Pages occupied by compressor:          65536.",
+      ];
+      const bin = binWith({
+        vm_stat: vmStat.map((l) => `echo '${l}'`).join("\n"),
+      });
+      expect(sysRow(render({ bin }).text)).toMatch(
+        /RAM \d+% \(3\.0\/\d+\.\dG\)/,
+      );
+    },
+  );
+
+  test.skipIf(!IS_MAC)(
+    "macOS: no vm_stat, or output it cannot read, is n/a with the reason",
+    () => {
+      expect(sysRow(render({ bin: binWith({}) }).text)).toContain(
+        "RAM n/a (no vm_stat)",
+      );
+      const bin = binWith({ vm_stat: "echo 'nothing useful'" });
+      expect(sysRow(render({ bin }).text)).toContain(
+        "RAM n/a (vm_stat output unparsable)",
+      );
+    },
+  );
+
+  test.skipIf(!HAS_CPU)("the second render has a CPU number", () => {
     const home = tempHome();
     render({ home, bin: binWith({}) });
     expect(sysRow(render({ home, bin: binWith({}) }).text)).toMatch(/CPU \d+%/);
   });
 
-  test.skipIf(!HAS_PROC)(
+  test.skipIf(!HAS_CPU)(
     "a CPU baseline older than 60 s is n/a, not an average over some other period",
     () => {
       const home = tempHome();
@@ -261,7 +298,10 @@ describe("statusline Sys row: every reading is present", () => {
   test("the snapshot the log hook reads carries the n/a too", () => {
     const { home } = render({ bin: binWith({}) });
     const cached = readCache(home, "statusline-sys.json", SysCacheSchema);
-    expect(cached.line).toContain("VRAM n/a (no nvidia-smi)");
+    // No tool on PATH: Linux lacks nvidia-smi, macOS lacks vm_stat — each is n/a there.
+    expect(cached.line).toContain(
+      IS_MAC ? "RAM n/a (no vm_stat)" : "VRAM n/a (no nvidia-smi)",
+    );
   });
 });
 
@@ -275,6 +315,20 @@ describe("statusline other rows", () => {
     const bin = binWith({ ps: "exit 0" });
     expect(render({ bin }).text).not.toContain("Job:");
   });
+
+  test.each([
+    ["02:00", "2m00s"],
+    ["1-02:03:04", "26h03m"],
+    ["120", "2m00s"], // a bare number is seconds (etimes' shape)
+  ])(
+    "Job: ps's etime %s ([[dd-]hh:]mm:ss on both procps and BSD ps) reads as %s",
+    (etime, shown) => {
+      const bin = binWith({
+        ps: `echo '    9  ${etime} /x/agent-resource-run --manifest /m/jobx.resource.json'`,
+      });
+      expect(render({ bin }).text).toContain(`Job: jobx ${shown}`);
+    },
+  );
 
   test("Job: an orphan with nothing admitted is spelled out, not `det×`", () => {
     const bin = binWith({ ps: "echo '    1  120 /x/scratchpad/leak.sh'" });

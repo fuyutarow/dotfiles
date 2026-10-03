@@ -27,9 +27,10 @@
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
 //   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) · VRAM <pct>% (<used>/<total>G) · Disk ..
 //     (host load; ALWAYS present, and every reading in it is a value or `<label> n/a (<why>)` —
-//     CPU/RAM are Linux-only for now, read from /proc, see cpuPct()/ramFrac(); CPU needs a prior
-//     render to diff against, so its very first render reads n/a; VRAM that missed its bound
-//     shows the last good sample marked `stale <N>s`; see the EXPLICIT-ABSENCE law below)
+//     CPU/RAM come from /proc on Linux and from os.cpus()/vm_stat on macOS, see cpuPct()/ramFrac();
+//     CPU needs a prior render to diff against, so its very first render reads n/a; VRAM that
+//     missed its bound shows the last good sample marked `stale <N>s`; a Mac without nvidia-smi
+//     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
 //
 // EXPLICIT-ABSENCE (2026-10-03): no reading is ever dropped from a row because it could not be
@@ -78,6 +79,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { createConnection } from "node:net";
+import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { z } from "zod";
 import {
@@ -194,7 +196,8 @@ interface Dataframe {
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
-  vram: Result<MemReading, string>;
+  // undefined: this host has no discrete VRAM at all (see vramGated) — silence, not n/a.
+  vram: Result<MemReading, string> | undefined;
   disks: Result<DiskEntry[], string>;
   cpuPct: Result<number, string>;
   ram: Result<MemReading, string>;
@@ -821,6 +824,17 @@ function admittedName(tok: string[]): string | undefined {
     ?.replace(/\.resource\.json$/, "");
   return name === "" ? undefined : name;
 }
+// ps's `etime`, "[[dd-]hh:]mm:ss" on both procps and BSD ps, in seconds. A bare number is taken as
+// seconds (etimes' shape), so a recorded etimes line still reads. undefined: not that shape.
+function etimeSecs(etime: string): number | undefined {
+  const m = etime.match(/^(?:(?:(\d+)-)?(\d+):)?(?:(\d+):)?(\d+)$/);
+  if (!m) return undefined;
+  const [, dd, a, b, last] = m;
+  if (b === undefined && a === undefined) return Number(last); // "ss" alone: plain seconds
+  // "mm:ss" matches a=mm (b unset); "hh:mm:ss" matches a=hh, b=mm.
+  const [hh, mm] = b === undefined ? [0, Number(a)] : [Number(a), Number(b)];
+  return Number(dd ?? 0) * 86_400 + hh * 3_600 + mm * 60 + Number(last);
+}
 // Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked helper)
 // that outlived its session. Counted, never judged — deciding which orphan is "real work" is
 // exactly the guess this segment exists to stop us making.
@@ -832,10 +846,13 @@ function scanOutOfHarness(): {
   // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
   // has no reason to be instant on a heavily loaded host, and this call used to have no
   // timeout at all.
+  // `etime`, not `etimes`: etimes (plain seconds) is a procps extension that macOS's BSD ps
+  // rejects ("etimes: keyword not found", exit 1), while etime exists in both — one call for
+  // both OSes, parsed by etimeSecs().
   const rawResult = execBounded(
     "ps",
     "ps",
-    ["-eo", "ppid=,etimes=,args="],
+    ["-eo", "ppid=,etime=,args="],
     ENRICHMENT_TIMEOUT_MS,
   );
   // no ps / timed out: say so. This used to return an empty scan, which rendered as "no jobs".
@@ -847,15 +864,16 @@ function scanOutOfHarness(): {
   for (const line of raw.split("\n")) {
     // .match(), not RegExp.prototype.exec(): this file imports node:child_process, and the
     // writing-bun-scripts floor (F4) fails any such file that also carries the token `exec(`.
-    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S.*)$/);
+    const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/);
     if (!m) continue;
-    const [, ppid, etimes, args] = m;
+    const [, ppid, etime, args] = m;
     // All three are non-optional capture groups, so a successful match always has them;
     // this guard exists only for noUncheckedIndexedAccess, never actually taken.
-    if (ppid === undefined || etimes === undefined || args === undefined)
+    if (ppid === undefined || etime === undefined || args === undefined)
       continue;
     const name = admittedName(args.split(/\s+/));
-    if (name != null) jobs.push({ name, secs: Number(etimes) });
+    const secs = etimeSecs(etime);
+    if (name != null && secs !== undefined) jobs.push({ name, secs });
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
   return { jobs, orphans };
@@ -973,6 +991,17 @@ function resample(good: GpuCache["good"]): Result<MemReading, string> {
   );
   return sampled.mapErr((f) => f.why);
 }
+// A Mac with no nvidia-smi has no discrete VRAM to read: Apple silicon's GPU shares the RAM the
+// row already shows. That is "does not exist", which the EXPLICIT-ABSENCE law keeps silent. On
+// Linux a missing nvidia-smi stays n/a — there it is a broken GPU box, not a GPU-less one.
+function vramGated(): Result<MemReading, string> | undefined {
+  const vram = vramFrac();
+  const absent =
+    process.platform === "darwin" &&
+    vram.isErr() &&
+    vram.error === "no nvidia-smi";
+  return absent ? undefined : vram;
+}
 function vramFrac(): Result<MemReading, string> {
   const now = Temporal.Now.instant().epochMilliseconds;
   // A file that is missing or fails GpuCacheSchema is an empty cache: the sample is retaken.
@@ -1025,10 +1054,47 @@ function sampleVram(): Result<MemReading, ExecFailure> {
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
 // MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
 // which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
-// macOS has no /proc; it reads as n/a (no /proc/meminfo) there (sysctl+vm_stat parsing is real work
-// and untestable from this host, so it is left as a follow-up rather than shipped unverified —
-// see the module docstring's row-5 note).
+// macOS host RAM: `vm_stat` (a few ms, no privileges) for the page counts, os.totalmem() for the
+// size. "Used" is Activity Monitor's Memory Used — app memory (anonymous minus purgeable pages) +
+// wired + compressed — NOT total minus "Pages free": macOS keeps free pages near zero by caching
+// files, so that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`:
+// its PhysMem "used" counts that file cache too, and it costs a full process-table pass.
+const VmStatPage = z.string().regex(/^\d+$/).transform(Number);
+function macRam(): Result<MemReading, string> {
+  return execBounded("vm_stat", "vm_stat", [], ENRICHMENT_TIMEOUT_MS)
+    .mapErr((f) => f.why)
+    .andThen((raw) => {
+      const size = raw.match(/page size of (\d+) bytes/)?.[1];
+      const pages = (label: string): number | undefined => {
+        const line = raw.split("\n").find((l) => l.startsWith(`${label}:`));
+        const v = VmStatPage.safeParse(
+          line?.split(/\s+/).pop()?.replace(/\.$/, ""),
+        );
+        return v.success ? v.data : undefined;
+      };
+      const wired = pages("Pages wired down");
+      const compressed = pages("Pages occupied by compressor");
+      const anonymous = pages("Anonymous pages");
+      const purgeable = pages("Pages purgeable");
+      if (
+        size === undefined ||
+        wired === undefined ||
+        compressed === undefined ||
+        anonymous === undefined ||
+        purgeable === undefined
+      )
+        return err("vm_stat output unparsable");
+      const usedBytes =
+        (wired + compressed + Math.max(0, anonymous - purgeable)) *
+        Number(size);
+      const GiB = 1024 ** 3;
+      const reading = memReading(usedBytes / GiB, totalmem() / GiB);
+      return reading ? ok(reading) : err("vm_stat output unparsable");
+    });
+}
+// macOS has no /proc: see macRam().
 function ramFrac(): Result<MemReading, string> {
+  if (process.platform === "darwin") return macRam();
   return fromThrowable(
     () => readFileSync("/proc/meminfo", "utf8"),
     () => "no /proc/meminfo",
@@ -1064,8 +1130,24 @@ const CPU_BASELINE_MIN_MS = 2_000;
 const CPU_BASELINE_MAX_MS = 60_000;
 // Aggregate "cpu  ..." line (not a per-core "cpu0 ..." line): user+nice+system+idle+iowait+
 // irq+softirq+steal[+guest+guest_nice]. idle time is idle+iowait; total is the sum of every
-// field. Linux only, like ramFrac() above — no /proc on mac.
+// field. On macOS (no /proc) the same cumulative counters come from os.cpus() — libuv's
+// host_processor_info, per-core ms since boot — summed over cores: no subprocess, and the same
+// two-sample delta. Not `top -l 2`: its first sample is the since-boot average, so a real
+// percentage costs a second sample ~1 s later (measured 1.9 s), most of ENRICHMENT_TIMEOUT_MS.
+// The units differ (jiffies vs ms) but a host only ever diffs against its own kind.
+function macCpuSample(): Result<CpuSample, string> {
+  const cores = cpus();
+  if (cores.length === 0) return err("os.cpus() returned no cores");
+  let total = 0;
+  let idle = 0;
+  for (const { times } of cores) {
+    total += times.user + times.nice + times.sys + times.idle + times.irq;
+    idle += times.idle;
+  }
+  return total > 0 ? ok({ total, idle }) : err("os.cpus() counters are zero");
+}
 function readCpuSample(): Result<CpuSample, string> {
+  if (process.platform === "darwin") return macCpuSample();
   return fromThrowable(
     () => readFileSync("/proc/stat", "utf8"),
     () => "no /proc/stat",
@@ -1224,7 +1306,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // own header note for why paying nvidia-smi every render is fine).
   const cpu = cpuPct();
   const ram = ramFrac();
-  const vram = vramFrac();
+  const vram = vramGated();
   const disks = diskReadings();
 
   return {
@@ -1501,7 +1583,7 @@ function diskSegment(d: DiskEntry): string {
 function sysSegment(
   cpu: Result<number, string>,
   ram: Result<MemReading, string>,
-  vram: Result<MemReading, string>,
+  vram: Result<MemReading, string> | undefined,
   disks: Result<DiskEntry[], string>,
 ): string {
   const parts: string[] = [
@@ -1516,10 +1598,14 @@ function sysSegment(
       (m) => memSegment("RAM", m),
       (why) => naSegment("RAM", why),
     ),
-    vram.match(
-      (m) => memSegment("VRAM", m),
-      (why) => naSegment("VRAM", why),
-    ),
+    ...(vram === undefined
+      ? []
+      : [
+          vram.match(
+            (m) => memSegment("VRAM", m),
+            (why) => naSegment("VRAM", why),
+          ),
+        ]),
     ...disks.match(
       (ds) => ds.map(diskSegment),
       (why) => [naSegment("Disk", why)],

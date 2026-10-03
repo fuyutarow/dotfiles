@@ -3,6 +3,9 @@
 // Substituted in via AGY_BIN (probe-models.ts's env override). Behavior is keyed off argv so
 // each pinned RESULT/verdict case in probe-models.test.ts gets a deterministic, instant reply.
 
+// An empty export makes this file a module, so its consts are file-scoped.
+export {};
+
 const argv = Bun.argv.slice(2);
 
 if (argv[0] === "--version") {

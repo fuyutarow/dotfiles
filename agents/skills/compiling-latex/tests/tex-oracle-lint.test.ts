@@ -27,8 +27,8 @@ describe("lint against the shipped NOTATION.md template", () => {
   test("dirty fixture: every rule hits exactly once, exit 1", async () => {
     const { code, out } = await run("lint", dirty, "--contract", contract);
     const ruleCount = Number(out.match(/\((\d+) rules, 3 files\)/)?.[1]);
-    const ids = [...out.matchAll(/^\S+:\d+:\d+: \[(R\d+)\]/gm)].map((m) => m[1]).sort();
-    const expected = Array.from({ length: ruleCount }, (_, i) => `R${i + 1}`).sort();
+    const ids = [...out.matchAll(/^\S+:\d+:\d+: \[(R\d+)\]/gm)].map((m) => m[1]).sort((a, b) => (a ?? "").localeCompare(b ?? ""));
+    const expected = Array.from({ length: ruleCount }, (_, i) => `R${i + 1}`).sort((a, b) => a.localeCompare(b));
     expect(code).toBe(1);
     expect(ruleCount).toBeGreaterThan(0);
     expect(ids).toEqual(expected);

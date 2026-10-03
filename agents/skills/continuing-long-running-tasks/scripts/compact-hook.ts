@@ -6,6 +6,7 @@
 
 import { readSync } from "node:fs";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 import {
   continuationProjectRoot,
   inspectContinuationRecord,
@@ -13,7 +14,9 @@ import {
   readContinuationBinding,
 } from "./continuation-record";
 
-type HookInput = Readonly<Record<string, unknown>>;
+// A hook payload is a plain JSON object; null, arrays, and scalars fail the schema.
+const HookInputSchema = z.record(z.string(), z.unknown());
+type HookInput = Readonly<z.output<typeof HookInputSchema>>;
 
 const MAX_HOOK_INPUT_BYTES = 1_048_576;
 
@@ -31,13 +34,6 @@ function readBoundedStdin(): string | undefined {
     chunks.push(chunk.subarray(0, count));
   }
   return Buffer.concat(chunks, total).toString("utf8");
-}
-
-// A type-guard predicate (rather than a value-returning helper) so the narrowing to
-// HookInput comes from the declared predicate, not from a cast on the `object`-typed
-// narrowing this check alone gives TS.
-function isHookInput(value: unknown): value is HookInput {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringField(input: HookInput, key: string): string | undefined {
@@ -79,8 +75,9 @@ export function handleCompactHook(
   platform: Platform,
   rawInput: unknown,
 ): string | undefined {
-  if (!isHookInput(rawInput)) return undefined;
-  const input = rawInput;
+  const parsedInput = HookInputSchema.safeParse(rawInput);
+  if (!parsedInput.success) return undefined;
+  const input: HookInput = parsedInput.data;
 
   const event = stringField(input, "hook_event_name");
   const cwd = stringField(input, "cwd");
@@ -133,7 +130,10 @@ export function runCompactHook(platform: Platform): void {
   fromThrowable((): void => {
     const raw = readBoundedStdin();
     if (raw === undefined) return;
-    const output = handleCompactHook(platform, JSON.parse(raw));
+    const output = handleCompactHook(
+      platform,
+      ((): unknown => JSON.parse(raw))(),
+    );
     if (output !== undefined) process.stdout.write(`${output}\n`);
   })();
 }

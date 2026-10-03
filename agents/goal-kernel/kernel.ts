@@ -133,8 +133,14 @@ class GoalKernelError extends Error {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// A plain object as a Record, or undefined for anything else (null, arrays, primitives). The
+// shallow copy is what lets the compiler see the narrowed type without a cast or a hand-written
+// type predicate; Object.fromEntries defines own properties, so a "__proto__" key stays data.
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(Object.entries(value));
 }
 
 function exactKeys(
@@ -217,10 +223,11 @@ async function isIsoTimestamp(s: string): Promise<boolean> {
 }
 
 async function parseAuthority(
-  value: unknown,
+  input: unknown,
   locus: string,
 ): Promise<GoalAuthority> {
-  if (!isRecord(value)) {
+  const value = asRecord(input);
+  if (value === undefined) {
     throw new GoalKernelError("GK_SCHEMA", `${locus} must be an object`);
   }
   exactKeys(value, ["actor", "approved_at"], ["source"], locus);
@@ -246,8 +253,9 @@ async function parseAuthority(
   };
 }
 
-function parseDecision(value: unknown, locus: string): GoalDecision {
-  if (!isRecord(value)) {
+function parseDecision(input: unknown, locus: string): GoalDecision {
+  const value = asRecord(input);
+  if (value === undefined) {
     throw new GoalKernelError("GK_SCHEMA", `${locus} must be an object`);
   }
   exactKeys(
@@ -320,8 +328,11 @@ function validateDecisionOrder(
   }
 }
 
-export async function parseGoalContract(value: unknown): Promise<GoalContract> {
-  if (!isRecord(value)) {
+export async function parseGoalContract(
+  input: unknown,
+): Promise<GoalContract> {
+  const value = asRecord(input);
+  if (value === undefined) {
     throw new GoalKernelError("GK_SCHEMA", "Goal contract must be an object");
   }
   exactKeys(
@@ -409,8 +420,9 @@ export async function parseGoalContract(value: unknown): Promise<GoalContract> {
   };
 }
 
-export async function parseRunDecision(value: unknown): Promise<RunDecision> {
-  if (!isRecord(value)) {
+export async function parseRunDecision(input: unknown): Promise<RunDecision> {
+  const value = asRecord(input);
+  if (value === undefined) {
     throw new GoalKernelError("GK_SCHEMA", "Run decision must be an object");
   }
   exactKeys(
@@ -447,12 +459,13 @@ export async function parseRunDecision(value: unknown): Promise<RunDecision> {
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
-  if (!isRecord(value)) return value;
+  const record = asRecord(value);
+  if (record === undefined) return value;
   return Object.fromEntries(
-    Object.keys(value)
+    Object.keys(record)
       .sort()
-      .filter((key) => value[key] !== undefined)
-      .map((key) => [key, canonicalize(value[key])]),
+      .filter((key) => record[key] !== undefined)
+      .map((key) => [key, canonicalize(record[key])]),
   );
 }
 
@@ -598,7 +611,9 @@ async function withExclusiveStateLock<T>(
 }
 
 async function readJson(path: string, locus: string): Promise<unknown> {
-  const result = await attempt(() => JSON.parse(readFileSync(path, "utf8")));
+  const result = await attempt(
+    (): unknown => JSON.parse(readFileSync(path, "utf8")),
+  );
   if (!result.ok) {
     throw new GoalKernelError(
       "GK_STATE",
@@ -672,8 +687,9 @@ async function readGoalSnapshot(
 async function readActivePointer(
   paths: ReturnType<typeof goalKernelPaths>,
 ): Promise<ActiveGoal> {
-  const value = await readJson(paths.active, "ACTIVE.json");
-  if (!isRecord(value)) {
+  const active = await readJson(paths.active, "ACTIVE.json");
+  const value = asRecord(active);
+  if (value === undefined) {
     throw new GoalKernelError("GK_STATE", "ACTIVE.json must be an object");
   }
   exactKeys(
@@ -872,8 +888,9 @@ function runDirectory(
   return join(paths.runs, id);
 }
 
-function parseBinding(value: unknown): RunBinding {
-  if (!isRecord(value)) {
+function parseBinding(input: unknown): RunBinding {
+  const value = asRecord(input);
+  if (value === undefined) {
     throw new GoalKernelError("GK_STATE", "run binding must be an object");
   }
   const required = [
@@ -1073,8 +1090,9 @@ export async function listRunEvents(
     .filter((entry) => entry.endsWith(".json"))
     .sort()) {
     // Read in filename order (sorted above) so event identity is deterministic.
-    const value = await readJson(join(directory, name), `event ${name}`);
-    if (!isRecord(value)) {
+    const stored = await readJson(join(directory, name), `event ${name}`);
+    const value = asRecord(stored);
+    if (value === undefined) {
       throw new GoalKernelError("GK_STATE", `event ${name} must be an object`);
     }
     const filenameDigest = name.match(/-([a-f0-9]{64})\.json$/)?.[1];
@@ -1163,15 +1181,16 @@ function toolWorkspacePaths(
   toolInput: unknown,
   workspaceRoot: string,
 ): string[] {
-  if (!isRecord(toolInput)) return [];
+  const input = asRecord(toolInput);
+  if (input === undefined) return [];
   const paths: string[] = [];
   for (const key of ["file_path", "path"] as const) {
-    const value = toolInput[key];
+    const value = input[key];
     if (typeof value === "string" && value !== "") {
       paths.push(safeWorkspacePath(value, workspaceRoot));
     }
   }
-  const command = toolInput.command;
+  const command = input.command;
   if (typeof command === "string" && command.includes("*** Begin Patch")) {
     paths.push(...patchFilePaths(command, workspaceRoot));
   }
@@ -1211,8 +1230,9 @@ function recordToolExitCode(
   event: Record<string, unknown>,
   toolResponse: unknown,
 ): void {
-  if (!isRecord(toolResponse)) return;
-  const exitCode = toolResponse.exit_code ?? toolResponse.exitCode;
+  const response = asRecord(toolResponse);
+  if (response === undefined) return;
+  const exitCode = response.exit_code ?? response.exitCode;
   if (typeof exitCode === "number" && Number.isSafeInteger(exitCode)) {
     event.tool_exit_code = exitCode;
   }
@@ -1373,9 +1393,10 @@ function neutralHookResult(
 
 export async function processHookEvent(
   provider: Provider,
-  value: unknown,
+  input: unknown,
 ): Promise<HookResult> {
-  if (!isRecord(value)) {
+  const value = asRecord(input);
+  if (value === undefined) {
     return {
       exit_code: 1,
       stdout: "",
@@ -1456,7 +1477,9 @@ export async function processHookEvent(
 }
 
 export async function runGoalKernelHook(provider: Provider): Promise<void> {
-  const parsed = await attempt(() => JSON.parse(readFileSync(0, "utf8")));
+  const parsed = await attempt(
+    (): unknown => JSON.parse(readFileSync(0, "utf8")),
+  );
   if (!parsed.ok) {
     process.stderr.write(
       `goal-kernel: malformed hook JSON: ${errorMessage(parsed.error)}\n`,

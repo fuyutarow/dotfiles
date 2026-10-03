@@ -6,7 +6,11 @@
       "specifier": "oxlint-plugin-eslint"
     }
   ],
-  "ignorePatterns": ["node_modules", "archives"],
+  "ignorePatterns": [
+    "node_modules",
+    "archives",
+    "agents/claude/hooks/repo-retrieve.ts"
+  ],
   "rules": {
     "max-depth": ["warn", 2],
     "no-restricted-globals": [
@@ -76,7 +80,6 @@
         "agents/claude/hooks/lib.ts",
         "agents/claude/hooks/log-sys-snapshot.ts",
         "agents/claude/hooks/quote-command.ts",
-        "agents/claude/hooks/repo-retrieve.ts",
         "agents/claude/hooks/resolve-agent-name.ts",
         "agents/claude/hooks/suggest-existing-definition.ts",
         "agents/claude/hooks/tests/assign-command.test.ts",

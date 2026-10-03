@@ -1,6 +1,7 @@
 import { cli } from "cleye";
+import { z } from "zod";
 
-type RecoveryMode = "exact" | "conditional" | "investigate" | "none";
+const RecoveryModeSchema = z.enum(["exact", "conditional", "investigate", "none"]);
 
 export type CardCheck = {
   failures: string[];
@@ -42,7 +43,7 @@ function fields(text: string): Map<string, string> {
   return cardFields;
 }
 
-function isMeaningful(value: string | undefined): value is string {
+function isMeaningful(value: string | undefined): boolean {
   return value !== undefined && value.trim() !== "" && value.trim() !== "<none>";
 }
 
@@ -63,11 +64,12 @@ export function checkCard(text: string): CardCheck {
     failures.push("Cause confidence must be proven, candidate, or unknown");
   }
 
-  const recoveryMode = cardFields.get("Recovery mode") as RecoveryMode | undefined;
-  if (!["exact", "conditional", "investigate", "none"].includes(recoveryMode ?? "")) {
+  const recoveryModeParse = RecoveryModeSchema.safeParse(cardFields.get("Recovery mode"));
+  if (!recoveryModeParse.success) {
     failures.push("Recovery mode must be exact, conditional, investigate, or none");
     return { failures };
   }
+  const recoveryMode = recoveryModeParse.data;
 
   const recovery = cardFields.get("Validated recovery");
   const preconditions = cardFields.get("Preconditions");

@@ -1,4 +1,5 @@
 import { cli } from "cleye";
+import { z } from "zod";
 
 // Wire the vendor-neutral hooks (agents/hooks/hooks.toml) into every agent CLI's hook config.
 // Consumer: `mise run hooks:wire` (write) and `mise run test` via tests/wire-hooks.test.ts (check).
@@ -30,9 +31,29 @@ export type HookSpec = {
   vendors: Vendor[];
 };
 
-type HookCommand = { type: string; command?: string; timeout?: number };
-type MatcherGroup = { matcher?: string; hooks: HookCommand[] };
+// Vendor files carry fields this script does not own (matcher, command, timeout, and whatever a
+// vendor adds), so the types keep an index signature and the parsers below spread the input record:
+// parsing validates the fields the logic reads and leaves every other key where it was, in order.
+type HookCommand = { type: string; [key: string]: unknown };
+type MatcherGroup = { hooks: HookCommand[]; [key: string]: unknown };
 export type HooksConfig = Record<string, MatcherGroup[]>;
+
+const JsonObject = z.record(z.string(), z.unknown());
+const toHookCommand = (v: unknown): HookCommand => {
+  const rec = JsonObject.parse(v);
+  return { ...rec, type: z.string().parse(rec.type) };
+};
+const toMatcherGroup = (v: unknown): MatcherGroup => {
+  const rec = JsonObject.parse(v);
+  return { ...rec, hooks: z.array(z.unknown()).parse(rec.hooks).map(toHookCommand) };
+};
+const toHooksConfig = (v: unknown): HooksConfig =>
+  Object.fromEntries(
+    Object.entries(JsonObject.parse(v)).map(([event, groups]) => [
+      event,
+      z.array(z.unknown()).parse(groups).map(toMatcherGroup),
+    ]),
+  );
 
 class UsageError extends Error {}
 
@@ -45,44 +66,72 @@ function rejectPrototypeFlag(
   }
 }
 
+const VendorSchema = z.enum(VENDORS);
+const RegistrySchema = z.object({ hook: z.array(z.unknown()) });
+
+// The entries of a `vendors` value that name a known vendor ([] when it is not a list).
+const knownVendorsOf = (vendors: unknown): Vendor[] =>
+  (Array.isArray(vendors) ? vendors : []).flatMap((v: unknown) => {
+    const p = VendorSchema.safeParse(v);
+    return p.success ? [p.data] : [];
+  });
+
 // Every error is collected, not the first one — a fixed typo should not reveal the next.
 export function parseRegistry(
-  raw: any,
+  raw: unknown,
   scriptExists: (name: string) => boolean,
 ): { specs: HookSpec[]; errors: string[] } {
   const errors: string[] = [];
   const specs: HookSpec[] = [];
-  const list = raw?.hook;
-  if (!Array.isArray(list) || list.length === 0) {
+  const registry = RegistrySchema.safeParse(raw);
+  if (!registry.success || registry.data.hook.length === 0) {
     return { specs, errors: ["no [[hook]] entries"] };
   }
-  list.forEach((h: any, i: number) => {
+  registry.data.hook.forEach((entry, i) => {
     const at = `hook[${i}]`;
     const before = errors.length;
-    if (typeof h?.script !== "string" || !/^[\w.-]+\.ts$/.test(h.script))
+    // A non-table entry reads as an empty one: every field below is then absent.
+    const h = JsonObject.catch({}).parse(entry);
+    const { script, event, matcher, timeout, vendors } = h;
+    const failClosed = h.fail_closed;
+    if (typeof script !== "string" || !/^[\w.-]+\.ts$/.test(script))
       errors.push(`${at}.script must be a bare <name>.ts`);
-    else if (!scriptExists(h.script))
-      errors.push(`${at}.script ${h.script} is not in agents/hooks`);
-    if (typeof h?.event !== "string" || h.event === "")
+    else if (!scriptExists(script))
+      errors.push(`${at}.script ${script} is not in agents/hooks`);
+    if (typeof event !== "string" || event === "")
       errors.push(`${at}.event must be a non-empty string`);
-    if (h?.matcher !== undefined && typeof h.matcher !== "string")
+    if (matcher !== undefined && typeof matcher !== "string")
       errors.push(`${at}.matcher must be a string`);
-    if (typeof h?.fail_closed !== "boolean")
+    if (typeof failClosed !== "boolean")
       errors.push(`${at}.fail_closed must be true or false`);
     if (
-      h?.timeout !== undefined &&
-      (typeof h.timeout !== "number" || h.timeout <= 0)
+      timeout !== undefined &&
+      (typeof timeout !== "number" || timeout <= 0)
     )
       errors.push(`${at}.timeout must be a positive number`);
+    const knownVendors = knownVendorsOf(vendors);
     if (
-      !Array.isArray(h?.vendors) ||
-      h.vendors.length === 0 ||
-      !h.vendors.every((v: unknown) => VENDORS.includes(v as Vendor))
+      !Array.isArray(vendors) ||
+      vendors.length === 0 ||
+      knownVendors.length !== vendors.length
     )
       errors.push(
         `${at}.vendors must be a non-empty subset of ${VENDORS.join(", ")}`,
       );
-    if (errors.length === before) specs.push(h as HookSpec);
+    if (
+      errors.length === before &&
+      typeof script === "string" &&
+      typeof event === "string" &&
+      typeof failClosed === "boolean"
+    )
+      specs.push({
+        script,
+        event,
+        ...(typeof matcher === "string" ? { matcher } : {}),
+        fail_closed: failClosed,
+        ...(typeof timeout === "number" ? { timeout } : {}),
+        vendors: knownVendors,
+      });
   });
   return { specs, errors };
 }
@@ -152,7 +201,7 @@ async function main(): Promise<number> {
   const root = process.env.DOTFILES ?? new URL("..", import.meta.url).pathname;
   const hooksDir = `${root}/agents/hooks`;
 
-  const registry = Bun.TOML.parse(
+  const registry: unknown = Bun.TOML.parse(
     await Bun.file(`${hooksDir}/hooks.toml`).text(),
   );
   const { specs, errors } = parseRegistry(
@@ -172,8 +221,8 @@ async function main(): Promise<number> {
   for (const vendor of VENDORS) {
     const path = targets[vendor];
     const text = await Bun.file(path).text();
-    const config = JSON.parse(text);
-    const next = `${JSON.stringify({ ...config, hooks: wire(config.hooks ?? {}, specs, vendor) }, null, 2)}\n`;
+    const config = JsonObject.parse(((): unknown => JSON.parse(text))());
+    const next = `${JSON.stringify({ ...config, hooks: wire(toHooksConfig(config.hooks ?? {}), specs, vendor) }, null, 2)}\n`;
     const rel = path.slice(root.length).replace(/^\//, "");
     if (next === text) {
       process.stdout.write(`current: ${rel}\n`);

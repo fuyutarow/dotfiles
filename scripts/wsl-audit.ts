@@ -185,7 +185,7 @@ function encodePs(script: string): string {
 const INTEROP_TRIES = 4;
 
 async function interopSockets(): Promise<string[]> {
-  const names = await readdir("/run/WSL").catch(() => [] as string[]);
+  const names = await readdir("/run/WSL").catch((): string[] => []);
   const stamped = await Promise.all(
     names
       .filter((n) => n.endsWith("_interop"))

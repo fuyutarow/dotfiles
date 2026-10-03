@@ -25,23 +25,29 @@
 //   3 <name> | Model | Effort[+WF] | 🔗|rc:off|rc:? | Ctx: <k> <pct>%  (agent + config +
 //     budget-now; Remote Control on / off / probe unverified — see rcState())
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
-//   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) [· VRAM <pct>% (<used>/<total>G)]  (host
-//     load; CPU/RAM are Linux-only for now — read from /proc, see cpuPct()/ramFrac() — and CPU
-//     needs a prior render to diff against, so it's absent on the very first render of a
-//     session; conditional row, appears once any one reading is available)
-//   6 Job: ... (conditional)                          (background work)
+//   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) · VRAM <pct>% (<used>/<total>G) · Disk ..
+//     (host load; ALWAYS present, and every reading in it is a value or `<label> n/a (<why>)` —
+//     CPU/RAM are Linux-only for now, read from /proc, see cpuPct()/ramFrac(); CPU needs a prior
+//     render to diff against, so its very first render reads n/a; VRAM that missed its bound
+//     shows the last good sample marked `stale <N>s`; see the EXPLICIT-ABSENCE law below)
+//   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
+//
+// EXPLICIT-ABSENCE (2026-10-03): no reading is ever dropped from a row because it could not be
+// taken — it prints as n/a with the reason. Silence is reserved for "does not exist" (not a
+// repo -> no branch; no admitted job -> no Job row; no drive on this OS -> no disk; a parsed
+// config that lacks a field -> no email). Defined at naSegment(); the contract is pinned by
+// hooks/tests/statusline-explicit-absence.test.ts.
 //
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
-// buildDataframe() is now bounded. Two calls — the `git rev-parse` branch lookup and the `ps
+// buildDataframe() is bounded. Two calls — the `git rev-parse` branch lookup and the `ps
 // -eo` process-table scan — used to have NO timeout, unlike every other call here (agentName:
 // 3000ms, herdrSend: 200ms, vramFrac: 2000ms). A stale NFS-mounted repo, a held git index.lock,
 // or `ps` delayed by extreme scheduling pressure (this host has run 40+ concurrent Claude
 // sessions plus several 100%-CPU experiments at once, observed live) would hang either call
 // synchronously and freeze the whole render, not just its own segment. Both now share
 // ENRICHMENT_TIMEOUT_MS, reusing vramFrac's existing 2000ms rather than inventing a new number
-// for an equivalent risk; handling is identical to every other bounded call — catch, omit, no
-// visible error. Named, not silently closed: this script still has no dedicated test suite —
-// verification here is the manual stdin invocations recorded in the commit, not an automated net.
+// for an equivalent risk. A call that hits its bound is caught and its segment prints n/a with
+// the reason (since 2026-10-03; it used to be omitted without a trace).
 //
 // BG3 dependencies (writing-bun-scripts floor), not a standalone zero-dep script: this file
 // lives inside the dotfiles repo tree, so even invoked via its ~/.claude symlink, Bun resolves
@@ -69,7 +75,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { createConnection } from "node:net";
-import { fromThrowable } from "neverthrow";
+import { err, fromThrowable, ok, type Result } from "neverthrow";
 import {
   clockHM,
   localFromEpochSec,
@@ -116,30 +122,36 @@ interface StatusInput {
 interface Dataframe {
   cwd: string;
   sid?: string | undefined;
-  sessionName?: string | undefined;
+  sessionName?: string | undefined; // undefined with no sessionNameWhy = not listed yet
+  sessionNameWhy?: string | undefined; // `claude agents --json` failed: the name is unknown
   email?: string | undefined;
   model: string;
   effort?: string | undefined;
   wfOn: boolean;
   /** Remote Control: on / off / unknown — see rcState(). */
   rc: RcState;
-  ctx: string;
+  ctx?: string | undefined; // undefined = the payload carried no token count (NOT zero tokens)
   ctxPct?: number | undefined;
   rl5?: number | undefined;
   rl5Reset?: number | undefined;
   rl7?: number | undefined;
   rl7Reset?: number | undefined;
   rlModel: ModelLimit[];
-  branch?: string | undefined;
-  add: number;
-  del: number;
+  claudeJsonWhy?: string | undefined; // ~/.claude.json unreadable: email and model caps are unknown
+  branch?: string | undefined; // undefined with no branchWhy = cwd is not a repo (nothing to show)
+  branchWhy?: string | undefined; // the lookup itself failed — shown as n/a, never dropped
+  add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)
+  del?: number | undefined;
   wt?: string | undefined;
   jobs: Admitted[];
   orphans: number;
-  vram?: MemReading | undefined;
-  disks: DiskReading[];
-  cpuPct?: number | undefined;
-  ram?: MemReading | undefined;
+  jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
+  // Host readings are Results, not optionals: "could not be taken" carries its reason, and
+  // render() prints it. See the EXPLICIT-ABSENCE law below.
+  vram: Result<MemReading, string>;
+  disks: Result<DiskEntry[], string>;
+  cpuPct: Result<number, string>;
+  ram: Result<MemReading, string>;
 }
 
 const HOME = process.env.HOME ?? "";
@@ -156,6 +168,38 @@ const RSET = "⟳"; //  rate-limit reset marker
 // enrichment" subprocess call in buildDataframe() that is not already governed by its own
 // specific number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
 const ENRICHMENT_TIMEOUT_MS = 2000;
+
+// EXPLICIT-ABSENCE law (owner ruling 2026-10-03: 「implicit display は本当によくない」). A value
+// the bar could not take is printed as `<label> n/a (<why>)`, never left off the row: a missing
+// segment reads as "there is nothing to show", which is a claim, and for a failed probe it is a
+// false one (2026-10-03: a loaded host made nvidia-smi miss its 2 s bound, the miss was cached as
+// "no GPU", and VRAM vanished while the card was fine). Absence stays silent ONLY where it means
+// the thing does not exist (not a repo -> no branch; no model-scoped weekly cap -> no segment).
+// rc:? above is the older instance of the same rule.
+const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", not "bad"
+function naSegment(label: string, why: string): string {
+  return `${label} ${NA_COLOR}n/a${RST} ${DIM}(${why})${RST}`;
+}
+// Why a bounded subprocess call failed, in the few words that tell a human what to fix: the tool
+// is not installed, it hit the shared bound, or it ran and exited non-zero. `status` is checked
+// by narrowing, not by an `as` cast.
+function failWhy(
+  e: unknown,
+  tool: string,
+  timeoutMs: number = ENRICHMENT_TIMEOUT_MS,
+): string {
+  if (!(e instanceof Error)) return `${tool} failed`;
+  if ("code" in e && e.code === "ENOENT") return `no ${tool}`;
+  if ("code" in e && e.code === "ETIMEDOUT")
+    return `${tool} timeout ${timeoutMs}ms`;
+  if ("status" in e && typeof e.status === "number")
+    return `${tool} exit ${e.status}`;
+  // Killed by a signal (an OOM kill under load has status null): name it.
+  if ("signal" in e && typeof e.signal === "string")
+    return `${tool} killed by ${e.signal}`;
+  if ("code" in e && typeof e.code === "string") return `${tool} ${e.code}`;
+  return `${tool} failed`;
+}
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -177,10 +221,14 @@ interface ClaudeJson {
     };
   };
 }
-function readClaudeJson(): ClaudeJson {
-  return fromThrowable((): ClaudeJson =>
-    JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
-  )().unwrapOr({}); // unreadable / not JSON / logged out -> every reader below just sees absence
+// err = the file could not be read or parsed (claude rewrites it constantly, so a read can land
+// mid-write): the account and the model caps are then UNKNOWN, which render() says, instead of
+// reading as "no account" / "no cap". A file that parses but lacks a field is the real absence.
+function readClaudeJson(): Result<ClaudeJson, string> {
+  return fromThrowable(
+    (): ClaudeJson => JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
+    () => "~/.claude.json unreadable",
+  )();
 }
 function account(cj: ClaudeJson): string | undefined {
   // `||` not `??`: an empty string is not an account either, and must drop the segment.
@@ -365,6 +413,7 @@ const RC_TOKEN: Record<RcState, string> = {
 
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 const AGENT_NAME_TTL_MS = 30_000;
+const AGENT_LIST_TIMEOUT_MS = 3000; // `claude agents --json`, slower than the 2000ms enrichment bound
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
 // var Claude Code exports for its own binary over a bare PATH lookup.
 const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
@@ -390,7 +439,12 @@ function agentNameEntries(
   }
   return next;
 }
-function agentName(sid: string, hint?: string): string | undefined {
+// ok(undefined) = the session is simply not listed (yet): nothing to show. err = the lookup
+// failed, so the name is unknown, which render() says instead of dropping the segment.
+function agentName(
+  sid: string,
+  hint?: string,
+): Result<string | undefined, string> {
   // missing / corrupt cache file -> treat as empty and refetch below
   const cache: Record<string, AgentNameEntry> = fromThrowable(
     (): Record<string, AgentNameEntry> =>
@@ -407,22 +461,24 @@ function agentName(sid: string, hint?: string): string | undefined {
     !renamed &&
     Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
   )
-    return hit.name;
+    return ok(hit.name);
 
   // Cache miss or stale: pay the ~0.5-0.75s (measured 2026-08-28) `claude agents --json` cost.
-  const outResult = fromThrowable(() =>
-    execFileSync(CLAUDE_BIN, ["agents", "--json"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: 3000,
-    }),
+  const outResult = fromThrowable(
+    () =>
+      execFileSync(CLAUDE_BIN, ["agents", "--json"], {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+        timeout: AGENT_LIST_TIMEOUT_MS,
+      }),
+    (e) => failWhy(e, "claude agents", AGENT_LIST_TIMEOUT_MS),
   )();
-  if (outResult.isErr()) return undefined; // `claude` missing/slow/errored -> segment just disappears this render
+  if (outResult.isErr()) return err(outResult.error); // `claude` missing/slow/errored
   const listResult = fromThrowable(
     (): Array<{ sessionId?: string; name?: string }> =>
       JSON.parse(outResult.value),
   )();
-  if (listResult.isErr()) return undefined; // malformed JSON -> same as a missing `claude`
+  if (listResult.isErr()) return err("claude agents output unparsable");
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.value, now);
   if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
@@ -437,7 +493,7 @@ function agentName(sid: string, hint?: string): string | undefined {
     mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
     writeFileSync(AGENT_NAME_CACHE, JSON.stringify(next));
   })();
-  return next[sid]?.name;
+  return ok(next[sid]?.name);
 }
 
 // Best-effort push to herdr over the same JSON-RPC unix socket its own vendored integration
@@ -632,18 +688,26 @@ function admittedName(tok: string[]): string | undefined {
 // Reparented to init AND still pointing at a Claude scratchpad: a driver (or a leaked helper)
 // that outlived its session. Counted, never judged — deciding which orphan is "real work" is
 // exactly the guess this segment exists to stop us making.
-function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
+function scanOutOfHarness(): {
+  jobs: Admitted[];
+  orphans: number;
+  failed?: string; // set when `ps` itself failed: jobs/orphans are then unknown, not zero
+} {
   // Tiger-Style bound (see the top-of-file note): a `ps` snapshot of the WHOLE process table
   // has no reason to be instant on a heavily loaded host, and this call used to have no
   // timeout at all.
-  const rawResult = fromThrowable(() =>
-    execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: ENRICHMENT_TIMEOUT_MS,
-    }),
+  const rawResult = fromThrowable(
+    () =>
+      execFileSync("ps", ["-eo", "ppid=,etimes=,args="], {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+        timeout: ENRICHMENT_TIMEOUT_MS,
+      }),
+    (e) => failWhy(e, "ps"),
   )();
-  if (rawResult.isErr()) return { jobs: [], orphans: 0 }; // no ps / timed out -> segment silently disappears
+  // no ps / timed out: say so. This used to return an empty scan, which rendered as "no jobs".
+  if (rawResult.isErr())
+    return { jobs: [], orphans: 0, failed: rawResult.error };
   const raw = rawResult.value;
   const jobs: Admitted[] = [];
   let orphans = 0;
@@ -670,6 +734,10 @@ function scanOutOfHarness(): { jobs: Admitted[]; orphans: number } {
 interface MemReading {
   frac: string; // e.g. "16.2/54.9G"
   pct: number; // used/total*100, unrounded — pctFmt() rounds at render time
+  // Set only when this is the last GOOD sample served because the fresh one failed (VRAM only):
+  // how old it is and why the fresh one failed. render() prints it, so an old number is never
+  // shown as if it were current.
+  stale?: { secs: number; why: string };
 }
 function memReading(usedG: number, totalG: number): MemReading | undefined {
   if (!Number.isFinite(usedG) || !Number.isFinite(totalG) || totalG <= 0)
@@ -688,57 +756,101 @@ function memReading(usedG: number, totalG: number): MemReading | undefined {
 // show up promptly, since the bridge attaches after the command's own render.
 const GPU_CACHE = `${HOME}/.cache/claude/statusline-gpu.json`;
 const GPU_SAMPLE_TTL_MS = 5_000;
-type GpuCache = { at?: unknown; reading?: MemReading | null };
-function vramFrac(): MemReading | undefined {
+// A last-good sample older than this is a claim about a moment too far back to still be useful;
+// beyond it the reading becomes n/a instead of a stale number.
+const GPU_STALE_MAX_MS = 30 * 60_000;
+// `reading`: the newest sample, set when it succeeded. `why`: set when it failed — a failure is
+// cached for the TTL like a success, so a hung nvidia-smi costs one bounded render per 5 s, not
+// every render. `good`: the newest SUCCESSFUL sample, kept across failures. The pre-2026-10-03
+// shape wrote `reading: null` for ANY failure ("no GPU"), which is how a timeout under load made
+// VRAM disappear; that shape carries no `why`, so it is simply treated as expired.
+interface GpuCache {
+  at?: unknown;
+  reading?: MemReading | null;
+  why?: unknown;
+  good?: { at?: unknown; reading?: MemReading } | undefined;
+}
+// A timestamp is "within" a window only if it is not in the future: a clock stepped backwards
+// (WSL2 time sync after sleep) must not keep an old entry fresh for hours or print a negative age.
+function within(at: unknown, now: number, windowMs: number): at is number {
+  return typeof at === "number" && now - at >= 0 && now - at < windowMs;
+}
+function vramFrac(): Result<MemReading, string> {
   const now = Temporal.Now.instant().epochMilliseconds;
   const none: GpuCache = {};
   const cached = fromThrowable((): GpuCache =>
     JSON.parse(readFileSync(GPU_CACHE, "utf8")),
   )().unwrapOr(none);
-  if (typeof cached.at === "number" && now - cached.at < GPU_SAMPLE_TTL_MS) {
-    return cached.reading ?? undefined; // null = "no GPU" is cached too
+  const fresh = within(cached.at, now, GPU_SAMPLE_TTL_MS);
+  if (fresh && cached.reading) return ok(cached.reading);
+  let why: string;
+  if (fresh && typeof cached.why === "string") {
+    why = cached.why;
+  } else {
+    const sampled = sampleVram();
+    // Stamped AFTER the sample returns: a timed-out sample blocked ~2 s, and stamping the
+    // entry with the pre-sample time would hand it to the next render already 2 s into its TTL.
+    const at = Temporal.Now.instant().epochMilliseconds;
+    const note: GpuCache = sampled.isOk()
+      ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
+      : { at, why: sampled.error, good: cached.good }; // JSON drops an undefined `good`
+    fromThrowable(() => {
+      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+      writeFileSync(GPU_CACHE, JSON.stringify(note));
+    })();
+    if (sampled.isOk()) return sampled;
+    why = sampled.error;
   }
-  const reading = sampleVram();
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(
-      GPU_CACHE,
-      JSON.stringify({ at: now, reading: reading ?? null }),
-    );
-  })();
-  return reading;
+  // The fresh sample failed. A recent good one is still better than nothing, provided its age
+  // and the failure are printed beside it; otherwise the reading is plainly n/a.
+  const good = cached.good;
+  if (good?.reading !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
+    const secs = Math.round((now - good.at) / 1000);
+    return ok({ ...good.reading, stale: { secs, why } });
+  }
+  return err(why);
 }
-function sampleVram(): MemReading | undefined {
-  return fromThrowable((): MemReading | undefined => {
-    const out = execFileSync(
-      "nvidia-smi",
-      ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-      {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: ENRICHMENT_TIMEOUT_MS,
-      },
-    );
+function sampleVram(): Result<MemReading, string> {
+  return fromThrowable(
+    () =>
+      execFileSync(
+        "nvidia-smi",
+        [
+          "--query-gpu=memory.used,memory.total",
+          "--format=csv,noheader,nounits",
+        ],
+        {
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf8",
+          timeout: ENRICHMENT_TIMEOUT_MS,
+        },
+      ),
+    (e) => failWhy(e, "nvidia-smi"),
+  )().andThen((out) => {
     const [usedRaw, totalRaw] = (out.split("\n")[0] ?? "")
       .split(",")
       .map((s) => Number(s.trim()));
-    // A short/malformed csv line leaves these missing; NaN fails isFinite below exactly like
+    // A short/malformed csv line leaves these missing; NaN fails isFinite in memReading, like
     // Number("") already would, so this default changes no observable behavior.
-    const used = usedRaw ?? NaN;
-    const total = totalRaw ?? NaN;
-    return memReading(used / 1024, total / 1024);
-  })().unwrapOr(undefined); // no GPU / no driver -> just omit the reading
+    const reading = memReading(
+      (usedRaw ?? NaN) / 1024,
+      (totalRaw ?? NaN) / 1024,
+    );
+    return reading ? ok(reading) : err("nvidia-smi output unparsable");
+  });
 }
 
 // Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
 // MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
 // which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
-// macOS has no /proc; this simply returns undefined there (sysctl+vm_stat parsing is real work
+// macOS has no /proc; it reads as n/a (no /proc/meminfo) there (sysctl+vm_stat parsing is real work
 // and untestable from this host, so it is left as a follow-up rather than shipped unverified —
 // see the module docstring's row-5 note).
-function ramFrac(): MemReading | undefined {
-  return fromThrowable((): MemReading | undefined => {
-    const raw = readFileSync("/proc/meminfo", "utf8");
+function ramFrac(): Result<MemReading, string> {
+  return fromThrowable(
+    () => readFileSync("/proc/meminfo", "utf8"),
+    () => "no /proc/meminfo",
+  )().andThen((raw) => {
     let totalKb: number | undefined;
     let availKb: number | undefined;
     for (const line of raw.split("\n")) {
@@ -747,10 +859,12 @@ function ramFrac(): MemReading | undefined {
         availKb = Number(line.split(/\s+/)[1]);
       if (totalKb != null && availKb != null) break;
     }
-    if (totalKb == null || availKb == null) return undefined;
+    if (totalKb == null || availKb == null)
+      return err("meminfo lacks MemTotal/MemAvailable");
     const usedKb = totalKb - availKb;
-    return memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
-  })().unwrapOr(undefined); // no /proc (mac) / malformed -> just omit the reading
+    const reading = memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
+    return reading ? ok(reading) : err("meminfo unparsable");
+  });
 }
 
 // One /proc/stat snapshot alone cannot give a CPU percentage — its counters are cumulative
@@ -761,42 +875,63 @@ const CPU_CACHE = `${HOME}/.cache/claude/statusline-cpu.json`;
 interface CpuSample {
   total: number;
   idle: number;
+  at?: number; // epoch ms the sample was taken; only the cached baseline carries it
 }
+const CPU_BASELINE_MIN_MS = 2_000;
+const CPU_BASELINE_MAX_MS = 60_000;
 // Aggregate "cpu  ..." line (not a per-core "cpu0 ..." line): user+nice+system+idle+iowait+
 // irq+softirq+steal[+guest+guest_nice]. idle time is idle+iowait; total is the sum of every
 // field. Linux only, like ramFrac() above — no /proc on mac.
-function readCpuSample(): CpuSample | undefined {
-  return fromThrowable((): CpuSample | undefined => {
-    const raw = readFileSync("/proc/stat", "utf8");
+function readCpuSample(): Result<CpuSample, string> {
+  return fromThrowable(
+    () => readFileSync("/proc/stat", "utf8"),
+    () => "no /proc/stat",
+  )().andThen((raw) => {
     const line = raw.split("\n").find((l) => l.startsWith("cpu "));
-    if (!line) return undefined;
+    if (!line) return err("/proc/stat has no cpu line");
     const fields = line.trim().split(/\s+/).slice(1).map(Number);
     const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
     const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-    return Number.isFinite(idle) && total > 0 ? { total, idle } : undefined;
-  })().unwrapOr(undefined);
+    return Number.isFinite(idle) && total > 0
+      ? ok({ total, idle })
+      : err("/proc/stat cpu line unparsable");
+  });
 }
-function cpuPct(): number | undefined {
-  const sample = readCpuSample();
-  if (!sample) return undefined; // no /proc (mac) / malformed line -> no reading this render
+function cpuPct(): Result<number, string> {
+  const sampled = readCpuSample();
+  if (sampled.isErr()) return err(sampled.error); // no /proc (mac) / malformed line
+  const sample = sampled.value;
+  const now = Temporal.Now.instant().epochMilliseconds;
   const cacheResult = fromThrowable((): CpuSample =>
     JSON.parse(readFileSync(CPU_CACHE, "utf8")),
   )();
   // Best-effort write of THIS render's sample for the NEXT render to diff against, unconditional
   // on whether this render itself can show a value — same "write regardless, return what we
-  // have" shape as agentName()'s cache-miss path above.
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(CPU_CACHE, JSON.stringify(sample));
-  })();
-  if (cacheResult.isErr()) return undefined; // first render this session -> nothing to diff against yet
+  // have" shape as agentName()'s cache-miss path above. EXCEPT a baseline younger than
+  // CPU_BASELINE_MIN_MS is kept: the file is shared by every session, so overwriting it each
+  // render shrank the window to the gap since ANOTHER session's render (a few ms -> a coarse 0%
+  // or 100%).
+  const keep =
+    cacheResult.isOk() &&
+    within(cacheResult.value.at, now, CPU_BASELINE_MIN_MS);
+  if (!keep) {
+    fromThrowable(() => {
+      mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+      writeFileSync(CPU_CACHE, JSON.stringify({ ...sample, at: now }));
+    })();
+  }
+  if (cacheResult.isErr()) return err("no earlier sample to diff against"); // first render on this host
   const prev = cacheResult.value;
+  // A baseline with no timestamp (pre-2026-10-03 file), from the future (clock stepped back) or
+  // older than CPU_BASELINE_MAX_MS would be an average over some other period than "now".
+  if (!within(prev.at, now, CPU_BASELINE_MAX_MS))
+    return err("no earlier sample from the last 60s");
   const dTotal = sample.total - prev.total;
   const dIdle = sample.idle - prev.idle;
   // dTotal<=0 means no jiffies elapsed between two renders (or a counter reset) -> a division
-  // here would be by ~0 or negative, not a real rate; omit rather than show a bogus number.
-  if (dTotal <= 0) return undefined;
-  return Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100));
+  // here would be by ~0 or negative, not a real rate; say so rather than show a bogus number.
+  if (dTotal <= 0) return err("no ticks since the last sample");
+  return ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
 const dur = (s: number) =>
@@ -810,9 +945,15 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
   const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
   const sid = data.session_id || undefined; // "" is not an id either
-  const sessionName =
-    sid != null ? agentName(sid, data.session_name || undefined) : undefined;
-  const cj = readClaudeJson();
+  const nameResult =
+    sid != null
+      ? agentName(sid, data.session_name || undefined)
+      : ok<string | undefined, string>(undefined);
+  const sessionName = nameResult.unwrapOr(undefined);
+  const sessionNameWhy = nameResult.isErr() ? nameResult.error : undefined;
+  const cjResult = readClaudeJson();
+  const cj = cjResult.unwrapOr({});
+  const claudeJsonWhy = cjResult.isErr() ? cjResult.error : undefined;
   const email = account(cj);
   const rlModel = modelWeeklyLimits(cj);
 
@@ -863,25 +1004,50 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 
   await reportToHerdr(model, sessionName, effortDisplay);
 
+  // No `?? 0`: a payload that carries no token count is "unknown", not "zero tokens".
   const ctxTok =
     data.context_window?.total_input_tokens ??
-    data.context_window?.current_usage?.input_tokens ??
-    0;
-  const ctx =
-    ctxTok >= 1000 ? `${(ctxTok / 1000).toFixed(1)}k` : String(ctxTok);
+    data.context_window?.current_usage?.input_tokens;
+  const tokenLabel = (n: number) =>
+    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+  const ctx = ctxTok === undefined ? undefined : tokenLabel(ctxTok);
 
-  // git branch from cwd (omitted if not a repo, or if the lookup hangs/times out — see the
-  // top-of-file Tiger-Style note for why this call is bounded).
-  const branchResult = fromThrowable(() =>
-    execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
-      stdio: ["ignore", "pipe", "ignore"],
-      encoding: "utf8",
-      timeout: ENRICHMENT_TIMEOUT_MS,
-    }).trim(),
+  // git branch from cwd — see the top-of-file Tiger-Style note for why this call is bounded.
+  // Exit 128 is git's code for EVERY fatal error (an empty repo's unknown HEAD, a dubious-
+  // ownership refusal, a vanished cwd), so only git's own "not a git repository" sentence — read
+  // from stderr, in the C locale — means "nothing to show". Every other failure is shown as n/a
+  // with git's reason.
+  const branchResult = fromThrowable(
+    () =>
+      execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], {
+        stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8",
+        timeout: ENRICHMENT_TIMEOUT_MS,
+        env: { ...process.env, LC_ALL: "C" },
+      }).trim(),
+    (e): { notRepo: boolean; why: string } => {
+      const stderr =
+        e instanceof Error && "stderr" in e && typeof e.stderr === "string"
+          ? e.stderr.trim()
+          : "";
+      if (stderr.includes("not a git repository"))
+        return { notRepo: true, why: "" };
+      // git's own words beat a bare "git exit 128": "fatal: <reason>" -> "<reason>", capped.
+      const reason = stderr
+        .split("\n")[0]
+        ?.replace(/^fatal: /, "")
+        .slice(0, 60);
+      return { notRepo: false, why: reason || failWhy(e, "git") };
+    },
   )();
   const branch = branchResult.isOk() ? branchResult.value : undefined;
+  const branchWhy =
+    branchResult.isErr() && !branchResult.error.notRepo
+      ? branchResult.error.why
+      : undefined;
 
-  const { jobs, orphans } = scanOutOfHarness();
+  const scan = scanOutOfHarness();
+  const { jobs, orphans } = scan;
   // Sys-row readings — always computed now, not gated on a job being admitted (see vramFrac()'s
   // own header note for why paying nvidia-smi every render is fine).
   const cpu = cpuPct();
@@ -893,6 +1059,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     cwd,
     sid,
     sessionName,
+    sessionNameWhy,
     email,
     model,
     effort,
@@ -905,12 +1072,15 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     rl7: data.rate_limits?.seven_day?.used_percentage,
     rl7Reset: data.rate_limits?.seven_day?.resets_at,
     rlModel,
+    claudeJsonWhy,
     branch,
-    add: data.cost?.total_lines_added ?? 0,
-    del: data.cost?.total_lines_removed ?? 0,
+    branchWhy,
+    add: data.cost?.total_lines_added,
+    del: data.cost?.total_lines_removed,
     wt: data.worktree?.name,
     jobs,
     orphans,
+    jobScanWhy: scan.failed,
     vram,
     disks,
     cpuPct: cpu,
@@ -944,9 +1114,10 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 // is one fact shown twice, not two facts — a bare space reads as one unit. Line 4 is Rate,
 // where the two values ARE independent siblings (the 5h window vs the 7d window), so they keep
 // the middot between them — same role MID plays between Sys's CPU/RAM/VRAM readings below (each
-// an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (conditional)
-// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 (conditional) is Job;
-// each is always its own row so neither can ever be silently dropped by a missing sibling value.
+// an independent host-resource sibling, unlike Ctx's count+percent pair). Line 5 (always present)
+// is Sys — host CPU/RAM/VRAM, distinct from Rate's API budget — and Line 6 (conditional: only
+// when a job is admitted, an orphan lives, or the scan failed) is Job; each is always its own row
+// so neither can ever be silently dropped by a missing sibling value.
 // Rate row, 5h window: "5h NN% [⟳reset]". The three window segments carry no separator of their
 // own; rateRow() puts the middot BETWEEN them, so a missing 5h window cannot leave "Rate: · 7d".
 function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
@@ -972,49 +1143,76 @@ function rlModelSegment(m: ModelLimit): string {
 }
 // Ctx segment: "Ctx: <tokens> NN%". One builder for the bar's agent row and the snapshot.
 function ctxSegment(df: Pick<Dataframe, "ctx" | "ctxPct">): string {
-  let seg = `${ESC}[38;5;66mCtx:${RST} ${df.ctx}`;
+  const label = `${ESC}[38;5;66mCtx:${RST}`;
+  const na = `${NA_COLOR}n/a${RST}`;
+  // Neither figure in the payload (before the first API response): one n/a, not two.
+  if (df.ctx === undefined && df.ctxPct == null) return `${label} ${na}`;
+  let seg = `${label} ${df.ctx ?? na}`;
+  // No MID here on purpose — see render()'s header note: this is one fact (context usage)
+  // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
   if (df.ctxPct != null) {
     const { pct, col } = pctFmt(df.ctxPct);
-    // No MID here on purpose — see render()'s header note: this is one fact (context usage)
-    // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
     seg += ` ${ESC}[${col}m${pct}%${RST}`;
+  } else {
+    seg += ` ${na}`;
   }
   return seg;
 }
-// Rate row: "Rate: 5h NN% ⟳… · 7d NN% ⟳… [· <Model> NN% ⟳…]", or "" when the payload carries no
-// rate_limits. One builder for the bar and for the snapshot log-sys-snapshot.ts attaches.
+// Rate row: "Rate: 5h NN% ⟳… · 7d NN% ⟳… [· <Model> NN% ⟳…]". A window the payload does not carry
+// reads `5h n/a`; a payload with none at all (before the first API response, or an account with
+// no rate limits) reads `Rate: n/a (…)`. One builder for the bar and for the snapshot
+// log-sys-snapshot.ts attaches.
 function rateRow(
-  df: Pick<Dataframe, "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel">,
+  df: Pick<
+    Dataframe,
+    "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel" | "claudeJsonWhy"
+  >,
 ): string {
-  if (df.rl5 == null && df.rl7 == null && df.rlModel.length === 0) return "";
+  const label = `${ESC}[38;5;108mRate:${RST}`;
+  if (df.rl5 == null && df.rl7 == null && df.rlModel.length === 0)
+    return `${label} ${NA_COLOR}n/a${RST} ${DIM}(no rate_limits in the payload)${RST}`;
   const parts: string[] = [];
-  if (df.rl5 != null) parts.push(rl5Segment(df.rl5, df.rl5Reset));
-  if (df.rl7 != null) parts.push(rl7Segment(df.rl7, df.rl7Reset));
+  parts.push(
+    df.rl5 != null
+      ? rl5Segment(df.rl5, df.rl5Reset)
+      : `5h ${NA_COLOR}n/a${RST}`,
+  );
+  parts.push(
+    df.rl7 != null
+      ? rl7Segment(df.rl7, df.rl7Reset)
+      : `7d ${NA_COLOR}n/a${RST}`,
+  );
   for (const m of df.rlModel) parts.push(rlModelSegment(m));
+  if (df.claudeJsonWhy) parts.push(naSegment("model caps", df.claudeJsonWhy));
   // Independent sibling windows, so the middot (see render()'s header note on MID).
-  return `${ESC}[38;5;108mRate:${RST} ${parts.join(` ${DIM}${MID}${RST} `)}`;
+  return `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
 }
-// Job row, admitted-work half: "<name>[+N] <elapsed> [det×N]" — extracted out of render() only
-// to keep its nesting under max-depth; formatting unchanged from the inline version. VRAM used
-// to ride this segment (only while a job was admitted); it now lives unconditionally on the Sys
-// row instead, so it is not repeated here.
+// Job row, admitted-work half: "<name>[+N] <elapsed> [orphan×N]" — extracted out of render() only
+// to keep its nesting under max-depth. `orphan` spelled out (it was `det×N`, which named nothing
+// a reader could look up): a process reparented to init that still points at a Claude scratchpad.
+// VRAM used to ride this segment (only while a job was admitted); it now lives unconditionally
+// on the Sys row instead, so it is not repeated here.
 function admittedJobSegment(jobs: Admitted[], orphans: number): string {
   const first = jobs[0];
   const more = jobs.length > 1 ? `${DIM}+${jobs.length - 1}${RST}` : "";
   // Guaranteed by the length check above; only noUncheckedIndexedAccess can't see that.
   let seg =
     first !== undefined ? ` ${first.name}${more} ${dur(first.secs)}` : "";
-  if (orphans > 0) seg += ` ${DIM}det×${orphans}${RST}`;
+  if (orphans > 0) seg += ` ${DIM}orphan×${orphans}${RST}`;
   return seg;
 }
-// Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) [· VRAM NN% (X.X/Y.YG)]" — host resource usage, always
-// its own row like Job (never folded into Rate, which is API budget, not host load). All three
+// Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) · VRAM NN% (X.X/Y.YG) · Disk …" — each reading a value
+// or `n/a (<why>)` — host resource usage, always its own row like Job (never folded into Rate, which is API budget, not host load). All three
 // percentages share the same green/yellow/red pctFmt threshold as every other percentage in
 // this file; the fraction rides alongside each, dimmed, as supporting detail — same
 // percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
 function memSegment(label: string, m: MemReading): string {
   const { pct, col } = pctFmt(m.pct);
-  return `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
+  let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
+  // An old number is never shown as a current one: amber `stale`, its age, and why it is old.
+  if (m.stale)
+    seg += ` ${NA_COLOR}stale ${m.stale.secs}s${RST} ${DIM}(${m.stale.why})${RST}`;
+  return seg;
 }
 // Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
 // they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
@@ -1045,22 +1243,50 @@ function diskLabel(path: string): string {
   if (path === "/" && IS_WSL) return "Disk WSL";
   return `Disk ${path}`;
 }
-function diskReadings(): DiskReading[] {
-  const drives = fromThrowable(() => {
-    const cfg = Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")) as {
-      drive?: Record<
-        string,
-        { path?: unknown; deny_gib?: unknown; warn_gib?: unknown }
-      >;
-    };
-    return Object.values(cfg.drive ?? {});
-  })().unwrapOr([]);
-  const out: DiskReading[] = [];
-  for (const d of drives) {
-    if (typeof d.path !== "string") continue;
+// A drive that statfs could not read, shown as `<label> n/a (<why>)`.
+interface DiskMiss {
+  label: string;
+  why: string;
+}
+type DiskEntry = DiskReading | DiskMiss;
+// err = the drive list itself could not be read, so WHICH disks to show is unknown.
+function diskReadings(): Result<DiskEntry[], string> {
+  const parsed = fromThrowable(
+    () => {
+      const cfg = Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")) as {
+        drive?: Record<
+          string,
+          { path?: unknown; deny_gib?: unknown; warn_gib?: unknown }
+        >;
+      };
+      return Object.values(cfg.drive ?? {});
+    },
+    () => "storage-headroom.toml unreadable",
+  )();
+  if (parsed.isErr()) return err(parsed.error);
+  // The config says WHICH disks to show: an empty list is the config failing to say, not "no disks".
+  if (parsed.value.length === 0)
+    return err("no [drive.*] in storage-headroom.toml");
+  const out: DiskEntry[] = [];
+  for (const d of parsed.value) {
+    if (typeof d.path !== "string") {
+      out.push({ label: "Disk", why: "drive entry has no path" });
+      continue;
+    }
     const path = d.path;
-    const st = fromThrowable(() => statfsSync(path))();
-    if (st.isErr()) continue;
+    const st = fromThrowable(
+      () => statfsSync(path),
+      (e): string =>
+        e instanceof Error && "code" in e ? String(e.code) : "statfs failed",
+    )();
+    // ENOENT off WSL: this OS has no such drive (/mnt/c on macOS) — nothing to show. Under WSL
+    // /mnt/c is the host drive the storage gate exists to protect, so a missing mount is a drive
+    // that could not be read, like any other failure: shown as n/a.
+    if (st.isErr() && st.error === "ENOENT" && !IS_WSL) continue;
+    if (st.isErr()) {
+      out.push({ label: diskLabel(path), why: st.error });
+      continue;
+    }
     const { bsize, blocks, bfree, bavail } = st.value;
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
@@ -1070,26 +1296,42 @@ function diskReadings(): DiskReading[] {
     if (typeof d.deny_gib === "number" && freeG < d.deny_gib) col = "38;5;167";
     out.push({ label: diskLabel(path), usedG, totalG, freeG, col });
   }
-  return out;
+  return ok(out);
 }
-function diskSegment(d: DiskReading): string {
+function diskSegment(d: DiskEntry): string {
+  if ("why" in d) return naSegment(d.label, d.why);
   const pct = Math.round((d.usedG / d.totalG) * 100);
   return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${Math.round(d.usedG)}/${Math.round(d.totalG)}G)${RST}`;
 }
+// Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
+// EXPLICIT-ABSENCE law at the top. The row therefore always carries CPU, RAM and VRAM.
 function sysSegment(
-  cpu: number | undefined,
-  ram: MemReading | undefined,
-  vram: MemReading | undefined,
-  disks: DiskReading[] = [],
+  cpu: Result<number, string>,
+  ram: Result<MemReading, string>,
+  vram: Result<MemReading, string>,
+  disks: Result<DiskEntry[], string>,
 ): string {
-  const parts: string[] = [];
-  if (cpu != null) {
-    const { pct, col } = pctFmt(cpu);
-    parts.push(`CPU ${ESC}[${col}m${pct}%${RST}`);
-  }
-  if (ram != null) parts.push(memSegment("RAM", ram));
-  if (vram != null) parts.push(memSegment("VRAM", vram));
-  for (const d of disks) parts.push(diskSegment(d));
+  const parts: string[] = [
+    cpu.match(
+      (v) => {
+        const { pct, col } = pctFmt(v);
+        return `CPU ${ESC}[${col}m${pct}%${RST}`;
+      },
+      (why) => naSegment("CPU", why),
+    ),
+    ram.match(
+      (m) => memSegment("RAM", m),
+      (why) => naSegment("RAM", why),
+    ),
+    vram.match(
+      (m) => memSegment("VRAM", m),
+      (why) => naSegment("VRAM", why),
+    ),
+    ...disks.match(
+      (ds) => ds.map(diskSegment),
+      (why) => [naSegment("Disk", why)],
+    ),
+  ];
   return parts.join(` ${DIM}${MID}${RST} `);
 }
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
@@ -1112,6 +1354,8 @@ function render(df: Dataframe): string {
   let identityLine = "";
   if (df.email != null)
     identityLine = join(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
+  else if (df.claudeJsonWhy)
+    identityLine = join(identityLine, naSegment("account", df.claudeJsonWhy));
   if (df.sid != null)
     identityLine = join(
       identityLine,
@@ -1121,6 +1365,8 @@ function render(df: Dataframe): string {
   let agentLine = "";
   if (df.sessionName != null)
     agentLine = join(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
+  else if (df.sessionNameWhy)
+    agentLine = join(agentLine, naSegment("name", df.sessionNameWhy));
   agentLine = join(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
   if (df.effort) {
     agentLine += `${SEP}${ESC}[38;5;209m${df.effort}${RST}`;
@@ -1143,22 +1389,31 @@ function render(df: Dataframe): string {
   let repoLine = "";
   if (df.branch)
     repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
-  repoLine = join(repoLine, `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`);
+  else if (df.branchWhy)
+    repoLine = join(repoLine, `${BR} ${naSegment("branch", df.branchWhy)}`);
+  repoLine = join(
+    repoLine,
+    df.add === undefined || df.del === undefined
+      ? naSegment("diff", "payload has no cost block")
+      : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
+  );
   if (df.wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 
-  let sysLine = "";
-  const sysSeg = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
-  if (sysSeg) sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSeg}`;
+  // Always present: every reading in it is either a value or an explicit n/a.
+  const sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSegment(df.cpuPct, df.ram, df.vram, df.disks)}`;
 
   let jobLine: string | undefined;
-  if (df.jobs.length > 0 || df.orphans > 0) {
+  if (df.jobScanWhy !== undefined) {
+    // The process scan failed, so "no jobs" would be a guess; say the scan failed instead.
+    jobLine = `${ESC}[38;5;173mJob:${RST} ${naSegment("scan", df.jobScanWhy)}`;
+  } else if (df.jobs.length > 0 || df.orphans > 0) {
     jobLine = `${ESC}[38;5;173mJob:${RST}`;
     if (df.jobs.length > 0) {
       jobLine += admittedJobSegment(df.jobs, df.orphans);
     } else {
-      // Detached processes alive with nothing admitted: waiting, wedged, or leaked — all three
+      // Orphan processes alive with nothing admitted: waiting, wedged, or leaked — all three
       // are states the harness reports as "idle", which is the failure this segment answers.
-      jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167mdet×${df.orphans}${RST}`;
+      jobLine += ` ${DIM}—${RST} ${ESC}[38;5;167morphan×${df.orphans}${RST}`;
     }
   }
 
@@ -1208,20 +1463,19 @@ const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
 const sysPlain = sysColored.replace(ANSI, "");
-if (sysPlain !== "") {
-  fromThrowable(() => {
-    mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
-    writeFileSync(
-      SYS_CACHE,
-      JSON.stringify({
-        at: Temporal.Now.instant().epochMilliseconds,
-        line: `Sys: ${sysPlain}`,
-        // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
-        ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
-      }),
-    );
-  })();
-}
+// Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
+fromThrowable(() => {
+  mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
+  writeFileSync(
+    SYS_CACHE,
+    JSON.stringify({
+      at: Temporal.Now.instant().epochMilliseconds,
+      line: `Sys: ${sysPlain}`,
+      // Same colors as the bar's Sys row (pctFmt thresholds), for a renderer that keeps ANSI.
+      ansi: `${ESC}[38;5;74mSys:${RST} ${sysColored}`,
+    }),
+  );
+})();
 
 // This session's rows for the snapshot, in display order: Ctx, then Rate. Neither is host-wide —
 // each session's payload carries its own context and the rate_limits it last received, so one
@@ -1233,7 +1487,7 @@ const sid = (parseResult.value.session_id ?? "").replace(
   "_",
 );
 if (sid !== "") {
-  const rows = [ctxSegment(df), rateRow(df)].filter((r) => r !== "");
+  const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
   fromThrowable(() => {
     mkdirSync(`${HOME}/.cache/claude/statusline-session`, { recursive: true });
     writeFileSync(

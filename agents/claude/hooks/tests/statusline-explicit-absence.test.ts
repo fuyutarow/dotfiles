@@ -9,10 +9,12 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { fromThrowable } from "neverthrow";
 import { z } from "zod";
 import { tempDir, tempHome } from "./helpers.ts";
 
@@ -70,6 +72,13 @@ function readCache<S extends z.ZodType>(
   const raw = readFileSync(join(home, ".cache", "claude", file), "utf8");
   const json = ((): unknown => JSON.parse(raw))();
   return schema.parse(json);
+}
+// What a concurrent reader would see: no file yet, a whole JSON document, or half of one.
+function cacheFileState(path: string): "missing" | "valid" | "torn" {
+  const read = fromThrowable(() => readFileSync(path, "utf8"))();
+  if (read.isErr()) return "missing";
+  const parsed = fromThrowable((): unknown => JSON.parse(read.value))();
+  return parsed.isOk() ? "valid" : "torn";
 }
 const GpuMissSchema = z.object({
   at: z.number(),
@@ -402,6 +411,84 @@ describe("statusline identity and model caps", () => {
       "model caps n/a (~/.claude.json has an unexpected usage-limits shape)",
     );
   });
+});
+
+// TIGER STYLE (practicing-tiger-style, 2026-10-03): the bar runs every 5 s in every session, so its
+// worst case — not its typical case — is what the host pays for.
+describe("statusline resource bounds", () => {
+  const HANG = "exec /bin/sleep 8";
+
+  test(
+    "O1: every child hanging still ends inside the render budget, each segment an explicit n/a",
+    () => {
+      // ps + git + nvidia-smi + claude agents, each hung: unbudgeted that is 2+2+2+3 = 9 s, longer
+      // than the 5 s refresh, so renders would overlap and pile load on a loaded host.
+      const bin = binWith({
+        ps: HANG,
+        git: HANG,
+        "nvidia-smi": HANG,
+        claude: HANG,
+      });
+      const home = tempHome();
+      const started = nowMs();
+      const text = render({
+        bin,
+        home,
+        payload: { session_id: "bounds-1" },
+      }).text;
+      const took = nowMs() - started;
+      expect(took).toBeLessThan(6000); // budget 4 s + herdr + process start; unbudgeted ≥ 9 s
+      expect(text).toContain("name n/a (claude agents timeout 3000ms)");
+      expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/);
+      expect(text).toContain(
+        "scan n/a (ps not run, render budget 4000ms spent)",
+      );
+      expect(sysRow(text)).toContain(
+        "VRAM n/a (nvidia-smi not run, render budget 4000ms spent)",
+      );
+      // The sample that never ran says nothing about the GPU: it must not be cached as a failure
+      // (that would pin n/a on every session for the whole TTL).
+      expect(
+        existsSync(join(home, ".cache", "claude", "statusline-gpu.json")),
+      ).toBe(false);
+    },
+    SLOW,
+  );
+
+  test(
+    "O2: concurrent renders never leave a reader a torn cache file or a stray temp file",
+    async () => {
+      const home = tempHome();
+      const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+      const cacheDir = join(home, ".cache", "claude");
+      const files = ["statusline-gpu.json", "statusline-cpu.json"];
+      const procs = Array.from({ length: 8 }, () =>
+        Bun.spawn([process.execPath, STATUSLINE], {
+          stdin: new Blob([JSON.stringify({ session_id: "bounds-2" })]),
+          stdout: "ignore",
+          stderr: "ignore",
+          env: { HOME: home, PATH: bin, TZ: "UTC" },
+          cwd: tempDir("slcwd-"),
+        }),
+      );
+      let alive = procs.length;
+      for (const p of procs) void p.exited.then(() => (alive -= 1));
+      let reads = 0;
+      while (alive > 0) {
+        for (const f of files) {
+          const state = cacheFileState(join(cacheDir, f));
+          if (state === "missing") continue; // not written yet
+          reads += 1;
+          expect(state).toBe("valid"); // "torn" = a reader saw half a write
+        }
+        await Bun.sleep(1);
+      }
+      expect(reads).toBeGreaterThan(0);
+      const left = readdirSync(cacheDir).filter((n) => n.endsWith(".tmp"));
+      expect(left).toEqual([]);
+    },
+    SLOW,
+  );
 });
 
 // ZOD FIRST: every external value is parsed by a schema; a file or payload of the wrong shape is

@@ -31,5 +31,53 @@
         "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["agents/claude/statusline-command.ts"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "SwitchStatement",
+            "message": "switch is banned: ts-pattern's match(..).exhaustive() where the file may import it, else an if/else chain or a lookup table."
+          },
+          {
+            "selector": "ConditionalExpression ConditionalExpression",
+            "message": "nested ternaries are banned: one level max; beyond that ts-pattern's match(), an if/else chain, or early returns."
+          },
+          {
+            "selector": "TryStatement",
+            "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
+          },
+          {
+            "selector": "TSTypePredicate",
+            "message": "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
+          },
+          {
+            "selector": "BinaryExpression[operator='in'][left.type='Literal']",
+            "message": "probing with `\"key\" in value` is banned (writing-typescript): parse the value with a zod schema (safeParse); for your own union use a discriminant tag."
+          },
+          {
+            "selector": "TSAsExpression:not([typeAnnotation.typeName.name='const'])",
+            "message": "`as` cast is banned (writing-typescript): it asserts a type the compiler cannot verify. Parse with a zod schema, or use `satisfies` / inference. (`as const` is allowed.)"
+          },
+          {
+            "selector": "TSTypeAssertion",
+            "message": "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
+          },
+          {
+            "selector": ":not(ArrowFunctionExpression[returnType.typeAnnotation.type='TSUnknownKeyword']) > CallExpression[callee.object.name='JSON'][callee.property.name='parse']",
+            "message": "JSON.parse returns `any`: write it as the body of `(): unknown => JSON.parse(..)` and parse the result with a zod schema (safeParse). A type annotation alone validates nothing."
+          }
+        ],
+        "typescript/no-unsafe-assignment": "error",
+        "typescript/no-unsafe-return": "error",
+        "typescript/no-unsafe-argument": "error",
+        "typescript/no-unsafe-member-access": "error",
+        "typescript/no-unsafe-type-assertion": "error",
+        "typescript/no-explicit-any": "error"
+      }
+    }
+  ]
 }

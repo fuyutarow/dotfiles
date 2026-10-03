@@ -1,8 +1,0 @@
-#!/bin/sh
-# 薄い殻。中身は mise.toml の `hook:post-merge`(link-dots + link:skills の再配線)。
-# git はこのフックの終了コードを無視するので、失敗しても pull は成立したまま。
-command -v mise > /dev/null 2>&1 || {
-  echo "post-merge: mise not on PATH; run 'mise run hook:post-merge' manually" >&2
-  exit 0
-}
-exec mise run hook:post-merge

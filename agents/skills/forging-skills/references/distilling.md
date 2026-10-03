@@ -1,127 +1,108 @@
-# Distilling — SOURCE → operational rules (pipeline steps 1–2)
+# Distilling — evidence into scoped guidance
 
-> **Scope**: steps 1–2 of the parent SKILL.md pipeline — pick the ENGINE for the source (step 1),
-> then turn its content into graded, calibrated, operational rules (step 2). This file owns the
-> source taxonomy, the distillation cut, PROVENANCE GRADING, the CALIBRATION INVERSION, and the
-> degrees-of-freedom choice. What the rules become structurally (LAW / gates / artifacts), where
-> each fact lives, sibling cuts, and verification are later pipeline steps — owned by their own
-> references, pointed at from the parent SKILL.md, never re-argued here.
+> Scope: source selection, claim grading, calibration and specificity. Placement belongs to `architecture.md`.
 
-## 1. Source taxonomy — one engine per source class
+## 1. Source taxonomy
 
-Classify the source FIRST; the engine is not interchangeable. Mixed sources are graded rule-by-rule
-(§3), not skill-by-dominant-source.
-
-| Source class | Engine | Worked precedent |
+| Source | First action | Limit |
 |---|---|---|
-| **BOOK / deck** (one author's framework) | **Deck-grounding**: no claim becomes a rule until verified against the author's own materials (deck, digest, book text); separate *verbatim* from *paraphrase* at capture time — a strong slogan you cannot quote is labeled paraphrase, never presented as the author's words | raising-resolution and acting-on-hypotheses (the 馬田 decks); quote-vs-paraphrase discipline at raising-resolution §C.3 |
-| **SURVEY / corpus** (many cases or papers) | Do NOT distill from the raw corpus. Run method-fit synthesis FIRST — coverage contract, claim ledger, applicable appraisal, and reconciliation are owned by systematizing-knowledge — then distill THE RESULT, not the raw papers | growing-oss-adoption: 90-agent adversarial survey → reconciled mechanisms → skill |
-| **Live SESSION** (operational failures just observed — or a workflow just performed: 「このセッションを skill 化して」) | **Highest-grade source** — the failure (or the working sequence) arrives already operational. Capture the exact trigger, the wrong action, and the correction WHILE the transcript exists; a just-performed workflow is mined the same way (transcript engine shared with TACIT/ELICITED below); no fleet needed for what you watched happen | the 2026-07 reforging: the fabricated-bibliography quarantine (systematizing-knowledge) and the whole of recovering-poisoned-context entered as observed production failures, not literature |
-| **Official DOCS** (vendor / spec pages) | Fetch at build time and **cite with URLs**; tag [verbatim] vs [paraphrase]; **re-verify every URL on reforge** — docs move (docs.claude.com → platform.claude.com is a live redirect). Fast-moving facts go under a dated heading, not the durable body (proving-theorems' durability contract is the exemplar) | operating-the-harness lineage line: "re-verify against the docs" |
-| **TACIT / ELICITED** (no artifact exists — the source is the user's head or the live conversation) | **Intent capture.** Workflow just performed in-session → mine the transcript FIRST: tools used, step sequence, the corrections the user made (credit: anthropic-skills:skill-creator, "Capture Intent"). Nothing to mine → the compact interview: functionality; 2–3 concrete example asks; the trigger phrasings a user would actually type; output format; edge cases/dependencies (credit: the Codex default's Step 1) — capped at the questions that actually BLOCK generation, never a questionnaire | the plugin's "turn this into a skill" path; the Codex default's image-editor interview (`.system:skill-creator`, Step 1) |
+| Book or author's framework | Read the relevant primary passage and preserve its audience/context | Do not attribute invented lists or agent adaptations to the author |
+| Paper corpus or conflicting studies | Obtain method-fit synthesis from `systematizing-knowledge` | Raw excerpts do not establish a reconciled position |
+| Observed session failure or successful workflow | Capture trigger, actual action, outcome and correction | One episode does not prove a universal cause or general benefit |
+| Official documentation | Fetch the affected current contract and keep its locator/date | Vendor advice is not a platform-independent requirement |
+| User's tacit knowledge | Use supplied examples or ask only blocking questions | Do not role-play missing human testimony |
 
-## 2. The distillation cut — what earns a line
+Mixed sources are graded claim by claim.
+Do not choose one dominant grade for the whole skill.
+Use observed failures to construct discriminating checks before extensive documentation.
+If no baseline run is available, label the proposed benefit untested.
 
-Three tests; a candidate rule survives only if it passes all that apply.
+## 2. What earns a line
 
-1. **The command test** (house origin: raising-resolution §C.2 #6 — "Every retained line must
-   change a tool call"). Ask per line: *does this make the agent run a different command, or make
-   a different decision?* No → cut, or compress into the rule it was justifying. A line that only
-   explains is source residue.
-2. **Resolution on load-bearing claims.** Preserve the proposition, source locus, and supported scope.
-   Follow systematizing-knowledge's claim-type appraisal: magnitude applies to quantitative claims;
-   mechanism applies to explanatory or causal claims. Do not invent either for a definition or guideline.
-   A reporting rule licenses a reporting check; it does not establish conduct quality or causal benefit.
-3. **The 既視感 kill** (pattern owned by raising-resolution §C.5). State explicitly what the
-   source SUBSUMES (classic tools in a fresh metaphor) vs what is GENUINELY NEW — and claim the
-   skill's own delta (the agent-specific operationalization) as skill-supplied, never attributed
-   to the source. Marketing subsumed tools as novelty is laundering in both directions.
+A line must improve a decision, action, deliverable or correct use of a constraint.
+The change need not be a different shell command.
+A concise explanation can prevent misuse or make the evidence boundary auditable.
+Remove generic advice and source residue that supply no useful capability.
 
-FORM-vs-CONTENT carve-out (2026-07-24): the three tests judge CONTENT lines. FORM rules — the
-dual-reader prose bar — are enforced by the floor script at forge exit (`architecture.md` §5),
-never distilled as content rules; a readability rule is not "cut" for changing no tool call.
+| Candidate content | Keep when |
+|---|---|
+| A restriction | Its scope and prevented failure are clear |
+| A procedure | It supplies non-obvious steps or a fragile ordering |
+| An example | It resolves a real ambiguity |
+| A rationale | It helps apply or audit the constraint correctly |
+| A historical narrative | It belongs in the existing evidence record |
+| A new checker, packet or reporting layer | A consumer or reliability need justifies it |
 
-## 3. PROVENANCE GRADING — the source-grade table
+Preserve the proposition, source locator and supported scope.
+Quantitative claims need applicable measurement.
+Explanatory claims need the stated causal or mechanism support.
+Definitions and guidelines do not acquire invented effect sizes.
+Reporting compliance cannot establish conduct quality or causal benefit.
 
-Canonical instance: raising-resolution §C.6 — declared the SOLE grade table for that entire skill.
-Reproduce the pattern, not the content: **one table per skill, one home, every distilled rule
-graded at capture time** (grading after writing invites laundering).
+Identify what a source restates and what the agent-specific adaptation adds.
+Do not sell an old method under a new name as a demonstrated ownership void.
+Readable instructions remain necessary even when the command is already determined.
 
-For a surveyed position, record `rule | source claim/locus | applicability | added convention` in that table.
-Keep the source's venue, population, and coverage limits in the rule's trigger or condition.
-Label a broader operating choice `skill-supplied`; a structurally valid or admitted SoK does not validate that choice.
+## 3. Provenance grading
 
-| Grade | Meaning | Handling |
+Use the existing evidence home for load-bearing claims and disputed rules.
+A separate table and ledger in every small skill are not required.
+For a broad synthesis, `rule | source/locus | applicability | added convention` is useful.
+
+| Grade | Meaning | Treatment |
 |---|---|---|
-| **author-confirmed** | verified against the author's own materials (verbatim, or sense confirmed) | may be stated in the source's voice |
-| **needs-verification** | named in the source; exact content or wording not retrieved | label it; **DO-NOT-FABRICATE** — ship the named SLOT, never invent the items (an N-item list you cannot retrieve ships by function, with no normative numbering) |
-| **skill-supplied** | THIS skill's operationalization; not the source's category | never present in the author's voice |
-| **third-party** | non-author commentary, criteria, critique | name the party |
-| **constructed** | engineered by the forger (e.g., a failure-mode list synthesized from the framework's own guardrails), found in no source | say so: "engineered, not measured" |
+| author-confirmed | Checked against primary material | Preserve quote/paraphrase and context |
+| observed-in-production | Specific action/outcome observed | State episode and coverage; do not infer universal causation |
+| needs-verification | Wording, content or support not retrieved | Keep it uncertain; do not fabricate missing items |
+| skill-supplied / constructed | Engineered adaptation or local policy | Mark it as a design choice, not the source's requirement |
+| third-party | Commentary outside the primary source | Identify the commentator and inspect important primary claims |
 
-**Reflexive corollary** (§C.6): the skill's own claims are held to the skill's own gate — a skill
-that demands citations from the agent while carrying ungraded claims fails its own LAW. Where a
-claim is single-sourced or unverified, label it in the grade table and do not launder it upward.
-This skill eats its own rule: its grade table lives in `tests/forge-verification-ledger.md`.
+Keep source venue, population and coverage limits where they affect application.
+A valid corpus record or structural validator does not certify a derived operating rule.
+The same discipline applies to this skill's own claims.
+Its evidence home is `../tests/forge-verification-ledger.md`.
 
-## 4. CALIBRATION INVERSION — step 2's non-optional question
+## 4. Calibrate for the actual consumer
 
-Every source was written to correct SOMEONE's failure mode. Before freezing any rule, answer two
-questions in writing:
+Ask whose failure the source addresses and whether the agent fails in the same direction.
+Do not assume every human remedy transfers unchanged.
+Do not mechanically invert every source either.
 
-1. **Whose failure was the source correcting?** (usually a human audience's)
-2. **Does a capable model fail in the SAME direction — or the INVERSE?**
+| Observed agent problem | Emphasis |
+|---|---|
+| Missing non-obvious information | Supply the necessary context or worked case |
+| Speculating instead of inspecting | Require the cheapest relevant observation |
+| Over-elaboration or ceremony on ordinary work | Narrow scope and simplify the procedure |
+| Premature confident execution | Preserve the consequential prerequisite and failure case |
+| Over-flagging during review | Give neutral criteria and raw evidence |
+| Unsupported consensus claim | Require the domain's actual evidence |
 
-The answer decides **PROMINENCE**: what goes first-class in SKILL.md vs appendix. When over-firing
-is the model's risk, the **MUST-NOT-FIRE list is first-class** — not an afterthought. Fill this
-template for every source-distilled skill (shape from raising-resolution §C.4, the canonical
-statement):
+Use a formal calibration table when the transformation is consequential or disputed.
+A straightforward vendor procedure may need only a short applicability statement.
+Retain both over-firing and under-firing guards when the observed boundary requires them.
 
-| | Source's audience | This skill's agent consumer |
-|---|---|---|
-| dominant error | ___ (the failure the source corrects) | ___ (SAME or INVERSE — argue it, don't assume) |
-| corrective bias | ___ (the source's push) | ___ (the skill's push — often the reverse) |
-| what to make prominent | ___ (the source's 型) | ___ (MUST-NOT-FIRE first-class when the model over-fires) |
+## 5. Degrees of freedom
 
-Worked instances across the collection — the inversion is tuned to the consumer's evidence type,
-not a mechanical flip:
+| Situation | Instruction form |
+|---|---|
+| Multiple valid approaches; decisions depend on context | Outcome, criteria and essential constraints |
+| Preferred method with meaningful variation | Example, pseudocode or parameterized helper |
+| Fragile operation with costly errors or necessary order | Exact procedure, preconditions and direct checks |
 
-| Skill | Source corrected | Model's failure | Prominence decision |
-|---|---|---|---|
-| raising-resolution | human under-deepening | INVERSE: over-elaboration, ritual application | MUST-NOT-FIRE first-class |
-| acting-on-hypotheses | human freeze / collect-until-certain | INVERSE: be-bold THEATER | STEP 0 over-firing guard + a dual under-firing guard ("fire even at felt confidence") |
-| growing-oss-adoption | author optimism | SAME axis, new form: reciting mechanisms as causes | mechanisms demoted to table-stakes; regime classification first |
-| forging-novel-theses | idea-books' missing control loop | evidence-type inversion: a consensus estimator judging 合意非依存 theses | agent consensus = ANTI-signal; advocates forbidden |
-| linting-prose | human blindness to LLM-ish prose | the audit skill ITSELF over-flags at machine speed | "name the slots, never the sins" anti-priming |
+Specificity follows fragility, not the mere presence of a named framework.
+Assume the agent already has general competence.
+State the missing task-specific information and verify it against representative work.
+Inspect the relevant target model if a capability claim affects the design.
 
-Both directions can need guards (acting-on-hypotheses keeps both); the table forces you to argue
-which is DOMINANT and give it the first-class slot.
+## 6. Failure cases
 
-## 5. Degrees of freedom — how tightly to specify each rule
+| Problem | Repair |
+|---|---|
+| Book chapters copied into the runtime manual | Reorganize around actual decisions and selective reading |
+| Unretrieved source claim becomes an absolute rule | Locate support or label the uncertainty |
+| A reporting standard becomes a causal quality claim | Restore claim type and evidence scope |
+| One incident becomes a universal workflow | Bound the rule and test a plausible adjacent case |
+| A useful preference list is forced into gates and loops | Keep the simplest form that resolves the task |
+| Source lineage or model names substitute for verification | State actual observations and current limits |
 
-Absorbed, with credit, from the Codex default skill-creator (`$CODEX/SKILL.md`, "Degrees of
-Freedom"; paths defined once in SKILL.md's routing table):
-
-| Freedom | Form | When |
-|---|---|---|
-| **High** | prose — goals + constraints; the model picks the path | many valid approaches; judgment is reliable; contexts vary |
-| **Medium** | pseudocode or a parameterized script | a preferred pattern exists; deviations are costly |
-| **Low** | exact script, "do not modify" | fragile operation, one right answer, errors hard to recover |
-
-Match specificity to fragility: a narrow bridge with cliffs needs guardrails; an open field needs
-a direction. The ceiling over all three: **"Default assumption: Claude is already very smart"** —
-only add context the model doesn't have
-(https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices). Operational
-form: per candidate rule ask *"would a frontier model do this right WITHOUT the line?"* — yes →
-cut. This test and the command test (§2.1) kill from opposite ends: was it already going to
-happen / does it change anything.
-
-## 6. Anti-patterns (TELL → fix)
-
-| Anti-pattern | Observable TELL | Fix |
-|---|---|---|
-| **Book-summary skill** | lines inform but change no command; section order mirrors the source's chapters | run §2.1 per line; reorganize by DECISION, not by chapter |
-| **Unverified-claim laundering** | rules in the author's voice with no grade tag; no source-grade table anywhere | build the §3 table; label paraphrase vs verbatim; DO-NOT-FABRICATE unretrievable lists |
-| **Calibration copied unexamined** | the skill exhorts the model in the same direction the source exhorted humans, no inversion table | fill the §4 template; re-decide prominence |
-| **10個を並べる static list** | N parallel tips; no gate blocks, nothing loops, nothing can fail | convert to gates + a loop edge — the gate/artifact machinery is a later pipeline step (parent SKILL.md), but the flat list dies HERE, at distillation |
-| **Source-worship** | lineage recited ("distilled from X…") while the body executes none of X; provenance as decoration | the lineage line stays only if every body rule traces to a graded source claim; else cut the recitation |
+Source dates, official comparisons and historical incidents remain in the evidence ledger.

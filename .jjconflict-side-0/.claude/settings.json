@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "deny": ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"]
-  }
-}

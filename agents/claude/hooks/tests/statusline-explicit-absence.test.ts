@@ -370,4 +370,76 @@ describe("statusline identity and model caps", () => {
     expect(text).not.toContain("account");
     expect(text).not.toContain("model caps");
   });
+
+  test("a drifted usage-limits shape makes only the caps n/a; the account survives", () => {
+    const home = tempHome();
+    writeClaudeJson(
+      home,
+      JSON.stringify({
+        oauthAccount: { emailAddress: "a@b.c" },
+        cachedUsageUtilization: { utilization: { limits: "not-an-array" } },
+      }),
+    );
+    const text = render({
+      home,
+      bin: binWith({}),
+      payload: { rate_limits: { five_hour: { used_percentage: 5 } } },
+    }).text;
+    expect(text).toContain("a@b.c");
+    expect(text).toContain(
+      "model caps n/a (~/.claude.json has an unexpected usage-limits shape)",
+    );
+  });
+});
+
+// ZOD FIRST: every external value is parsed by a schema; a file or payload of the wrong shape is
+// "no usable input", never half-trusted.
+describe("statusline trust boundaries (zod)", () => {
+  test("a payload with a field of the wrong type names the field instead of rendering from it", () => {
+    const text = render({
+      bin: binWith({}),
+      payload: { context_window: { total_input_tokens: "lots" } },
+    }).text;
+    expect(text).toContain(
+      "invalid statusline payload: context_window.total_input_tokens:",
+    );
+    expect(text).not.toContain("Sys:");
+  });
+
+  test("nulls in the payload are one absent state (Claude Code sends null before the first reply)", () => {
+    const text = render({
+      bin: binWith({}),
+      payload: {
+        context_window: { total_input_tokens: 12_345, used_percentage: null },
+        rate_limits: null,
+      },
+    }).text;
+    expect(text).toContain("Ctx: 12.3k n/a");
+    expect(text).toContain("Rate: n/a (no rate_limits in the payload)");
+  });
+
+  test("a GPU cache of the wrong shape is an empty cache: the sample is retaken", () => {
+    const home = tempHome();
+    seedGpuCache(home, { at: "yesterday", reading: { frac: 1, pct: "x" } });
+    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    expect(sysRow(render({ home, bin }).text)).toContain(
+      "VRAM 29% (3.5/12.0G)",
+    );
+  });
+
+  test("a CPU cache of the wrong shape is no baseline, not a crash", () => {
+    if (!HAS_PROC) return;
+    const home = tempHome();
+    seedCache(home, "statusline-cpu.json", { total: "x", idle: null });
+    expect(sysRow(render({ home, bin: binWith({}) }).text)).toContain(
+      "CPU n/a (no earlier sample to diff against)",
+    );
+  });
+
+  test("an empty-field nvidia-smi line is unparsable, not 0 MiB", () => {
+    const bin = binWith({ "nvidia-smi": "echo ' , 12288'" });
+    expect(sysRow(render({ bin }).text)).toContain(
+      "VRAM n/a (nvidia-smi output unparsable)",
+    );
+  });
 });

@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "scope": "Static design/selection review scenarios; not live model accuracy or comparative performance.",
+  "cases": [
+    {
+      "id": "small-style",
+      "request": "Add a short TypeScript style skill for three repeatedly missed local conventions.",
+      "acceptance": [
+        "Focused instructions and clear scope suffice.",
+        "No mandatory custom floor, ledger, fleet or full gate table.",
+        "Use existing format checks and a relevant task case."
+      ]
+    },
+    {
+      "id": "provider-mode",
+      "request": "Two skills run the same worker job with different CLI backends.",
+      "acceptance": [
+        "Compare decisions, consumers and stopping conditions before splitting.",
+        "Provider-specific permissions, isolation and output rules must be preserved.",
+        "Use conditional references unless a distinct boundary is demonstrated."
+      ]
+    },
+    {
+      "id": "distinct-stop",
+      "request": "One skill constructs a candidate; another decides whether a costly test permits commitment.",
+      "acceptance": [
+        "Different substantive decision and stop can justify separate owners.",
+        "Do not merge solely because both mention hypotheses."
+      ]
+    },
+    {
+      "id": "role-alias",
+      "request": "A new PI-named skill returns the same decision and result as an existing section role.",
+      "acceptance": [
+        "New role or packet name alone does not prove independence.",
+        "Inspect the actual role boundary and existing callers."
+      ]
+    },
+    {
+      "id": "listed-no-fire",
+      "request": "A skill is installed but no needed capability was used.",
+      "acceptance": [
+        "Separate registration/truncation from selection and execution.",
+        "Inspect a realistic implicit request and adjacent negative.",
+        "Do not assume a missing literal keyword is the cause."
+      ]
+    },
+    {
+      "id": "wrong-scope",
+      "request": "A deployment skill activates on a request to explain an existing deployment.",
+      "acceptance": [
+        "Keep explanation within the user's requested scope.",
+        "Add the realistic negative boundary.",
+        "Do not seek the highest activation rate."
+      ]
+    },
+    {
+      "id": "unused-new",
+      "request": "A skill installed twelve days ago has no recorded invocations.",
+      "acceptance": [
+        "Inspect observation period, host coverage and stated newcomer policy.",
+        "Do not invent an industry-wide retirement age."
+      ]
+    },
+    {
+      "id": "unused-mature",
+      "request": "A mature zero-use skill has surviving references and executable consumers.",
+      "acceptance": [
+        "Inspect demand, references and invocation coverage.",
+        "Preserve or relocate required executables.",
+        "Archive outside discovery and repair consumers before claiming retirement."
+      ]
+    },
+    {
+      "id": "metric-scope",
+      "request": "The floor sums 56000 characters and Stats attributes a billion session tokens to a skill.",
+      "acceptance": [
+        "Characters are a static footprint proxy.",
+        "Session attribution does not measure manual-loading cost.",
+        "Do not convert either number into measured per-turn savings."
+      ]
+    },
+    {
+      "id": "execution-claim",
+      "request": "A revised interruption/cleanup manual passes wording checks and one plan answer.",
+      "acceptance": [
+        "Structural/static evidence does not certify interruption or cleanup.",
+        "Exercise relevant events and actual permitted actions.",
+        "Unavailable paths remain unverified."
+      ]
+    },
+    {
+      "id": "source-guideline",
+      "request": "Turn a qualitative writing guideline into a skill.",
+      "acceptance": [
+        "Preserve source scope and source-versus-local adaptation.",
+        "Do not demand invented effect sizes or causal mechanisms."
+      ]
+    },
+    {
+      "id": "creator-refresh",
+      "request": "The local manual says the default skill creators have no meaningful verification guidance.",
+      "acceptance": [
+        "Inspect current creators and affected official guidance.",
+        "Historical judgments do not establish current superiority.",
+        "Reuse available guidance and tooling."
+      ]
+    }
+  ]
+}

@@ -119,6 +119,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-model-floor.ts"
+          }
+        ]
+      },
+      {
         "matcher": "Grep|Bash",
         "hooks": [
           {

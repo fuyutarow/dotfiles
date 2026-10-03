@@ -237,15 +237,16 @@ git ls-files -z -- \
 # JSON.parse() or any other `any` flowing into a typed slot fails too. `--type-aware` is
 # REQUIRED here: without it oxlint skips the no-unsafe-* rules silently (verified 2026-10-03) —
 # an implicit gap. It needs oxlint-tsgolint (devDependency, pinned beside oxlint) and costs ~0.8 s.
-# NOT the no-overrides state the paragraph above describes: the rules landed with a measured
-# backlog of 1534 errors in 105 files, so `.oxlintrc.json` carries ONE `overrides` entry — a
-# DEBT LEDGER listing exactly those files, in which only the older bans apply. Every file NOT
-# listed (every new file, every file converted since) gets the full rules as errors. The list may
-# only shrink: lint:ts-ratchet fails when a listed file is already clean, so a converted file
-# cannot stay exempt. Never add a file to the list to make a lint pass — convert it.
+# The rules landed with a measured backlog of 1534 errors in 105 files. All but the HOOKS were
+# converted the same day; those 34 files (live gates, zero-dependency, so they read their payload
+# through agents/hooks/narrow.ts instead of zod) are being converted next, and until then
+# `.oxlintrc.json` carries ONE `overrides` entry listing exactly them, in which only the older bans
+# apply. Every file NOT listed gets the full rules as errors. The list only shrinks, and it is
+# deleted with the last hook — there is no standing exception. Never add a file to it to make a
+# lint pass — convert the file.
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint --type-aware the repo's TS (.oxlintrc.json): Date -> Temporal, switch/nested ternary/try, and the trust-boundary bans (type-predicate guards, `in` probing, `as` casts, un-parsed JSON.parse, unsafe any) are errors on every file outside the shrinking debt ledger; max-depth 2 warns; no disable comments"
+description = "oxlint --type-aware the repo's TS (.oxlintrc.json): Date -> Temporal, switch/nested ternary/try, and the trust-boundary bans (type-predicate guards, `in` probing, `as` casts, un-parsed JSON.parse, unsafe any) are errors on every file (but the 34 hooks still in the debt ledger, see above); max-depth 2 warns; no disable comments"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 depends = ["lint:ts-no-disable"]
 run = "bunx --bun oxlint --type-aware"
@@ -256,25 +257,7 @@ run = "bunx --bun oxlint --type-aware"
 [tasks."lint:ts-ratchet"]
 dir = "{{config_root}}"
 description = "Fail when a file in the .oxlintrc.json debt ledger is already clean under the full rules: remove it from the list so the ban applies to it from now on"
-run = '''
-set -eu
-cfg=./.oxlintrc.ratchet.$$.json   # beside .oxlintrc.json: oxlint resolves its jsPlugins from the config's directory; $$ keeps concurrent runs apart (BSD mktemp cannot take a .json suffix)
-dirty=$(mktemp) listed=$(mktemp) out=$(mktemp)
-trap 'rm -f "$cfg" "$dirty" "$listed" "$out"' EXIT
-jq 'del(.overrides)' .oxlintrc.json > "$cfg"
-# To a FILE, not a pipe: oxlint exits right after writing, and a pipe truncates its JSON at the
-# 64 KB pipe buffer (seen 2026-10-03: jq "Unfinished JSON term"). Exit 1 is expected — errors exist.
-bunx --bun oxlint --type-aware -c "$cfg" -f json > "$out" || test $? -eq 1
-jq -r '[.diagnostics[] | select(.severity == "error") | .filename] | unique[]' "$out" | sort > "$dirty"
-jq -r '.overrides[0].files[]' .oxlintrc.json | sort > "$listed"
-stale=$(comm -23 "$listed" "$dirty")
-if [ -n "$stale" ]; then
-  echo "lint:ts-ratchet: these files are in the .oxlintrc.json debt ledger but are already clean — remove them from overrides[0].files:" >&2
-  echo "$stale" >&2
-  exit 1
-fi
-echo "lint:ts-ratchet: $(wc -l < "$listed") files still in the debt ledger, none stale"
-'''
+run = "bun scripts/lint-ts-ratchet.ts"
 
 # oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not

@@ -2,6 +2,9 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
+
+const BudgetSchema = z.object({ maxListingChars: z.unknown() });
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -373,7 +376,9 @@ async function reportListingBudget(budgetPath: string | undefined): Promise<void
   // `.then` maps to a tagged error, so the FAIL message below is byte-identical to before.
   const parsed = await Promise.try(async () => {
     const text = await Bun.file(budgetPath).text();
-    return { ok: true as const, value: (JSON.parse(text) as { maxListingChars?: unknown } | null)?.maxListingChars };
+    const raw = ((): unknown => JSON.parse(text))();
+    const budget = BudgetSchema.safeParse(raw);
+    return { ok: true as const, value: budget.success ? budget.data.maxListingChars : undefined };
   }).then(
     (ok) => ok,
     (error: unknown) => ({ ok: false as const, error }),

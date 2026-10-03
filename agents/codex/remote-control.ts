@@ -11,7 +11,10 @@
 //              null = no daemon running, which is not drift: the next start reads `persisted`.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { attempt } from "../hooks/attempt.ts";
+
+const RecordSchema = z.record(z.string(), z.unknown());
 
 export type Live = { persisted: boolean; running: boolean | null };
 
@@ -21,10 +24,12 @@ const DAEMON_DIR = (home: string) => join(home, ".codex/app-server-daemon");
 export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
   const path = join(dotfiles, "agents/codex/app-server.toml");
   const r = await attempt(
-    () => Bun.TOML.parse(readFileSync(path, "utf8")) as Record<string, unknown>,
+    (): unknown => Bun.TOML.parse(readFileSync(path, "utf8")),
   );
   if (!r.ok) return new Error(`${path}: unreadable or not TOML`);
-  const v = r.value.remote_control;
+  const table = RecordSchema.safeParse(r.value);
+  if (!table.success) return new Error(`${path}: unreadable or not TOML`);
+  const v = table.data.remote_control;
   return typeof v === "boolean"
     ? v
     : new Error(`${path}: remote_control must be true or false`);
@@ -33,9 +38,11 @@ export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
 async function readJson(path: string): Promise<Record<string, unknown> | null> {
   if (!existsSync(path)) return null;
   const r = await attempt(
-    () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>,
+    (): unknown => JSON.parse(readFileSync(path, "utf8")),
   );
-  return r.ok ? r.value : null;
+  if (!r.ok) return null;
+  const parsed = RecordSchema.safeParse(r.value);
+  return parsed.success ? parsed.data : null;
 }
 
 /** The machine's state; `running` is null when no managed daemon is alive. */

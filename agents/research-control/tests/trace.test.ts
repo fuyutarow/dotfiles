@@ -3,12 +3,28 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 import { checkTrace } from "../trace.ts";
 
 const digest = (digit: string) => digit.repeat(64);
 const at = (second: number) =>
   `2026-08-03T00:00:${String(second).padStart(2, "0")}Z`;
-function trace(): Record<string, unknown> {
+type Rec = Record<string, unknown>;
+type TraceFixture = {
+  schema: string;
+  authority: Record<string, Rec | undefined>;
+  evaluatedAt: string;
+  status: string;
+  lease: Rec;
+  roleGrants: Rec[];
+  events: Rec[];
+};
+const RecSchema = z.looseObject({});
+// A parsed COPY of an object, for reading; mutate through the fixture itself.
+function rec(value: unknown): Rec {
+  return RecSchema.parse(value);
+}
+function trace(): TraceFixture {
   const semantic = {
     objectiveId: "objective-id",
     successObservableId: "success-id",
@@ -251,43 +267,42 @@ function trace(): Record<string, unknown> {
     ],
   };
 }
-function events(value: Record<string, unknown>): Record<string, unknown>[] {
-  return value.events as Record<string, unknown>[];
+function events(value: TraceFixture): Rec[] {
+  return value.events;
 }
-function codes(value: Record<string, unknown>): string[] {
+function codes(value: unknown): string[] {
   return checkTrace(value).findings.map((finding) => finding.code);
 }
-function expectCode(value: Record<string, unknown>, code: string): void {
+function expectCode(value: unknown, code: string): void {
   expect(codes(value)).toContain(code);
+}
+function section(value: TraceFixture, name: string): Rec {
+  const found = value.authority[name];
+  if (found === undefined) throw new Error(`fixture is missing ${name}`);
+  return found;
+}
+function patchEvidence(event: Rec, patch: Rec): void {
+  event.evidence = { ...rec(event.evidence), ...patch };
 }
 // Fixtures below always index within the fixed event list they just built;
 // this only guards noUncheckedIndexedAccess, the index is never actually out of range.
-function nth(
-  list: Record<string, unknown>[],
-  index: number,
-): Record<string, unknown> {
+function nth(list: Rec[], index: number): Rec {
   const item = list[index];
   if (item === undefined) throw new Error(`fixture is missing event ${index}`);
   return item;
 }
-function eventAt(
-  value: Record<string, unknown>,
-  index: number,
-): Record<string, unknown> {
+function eventAt(value: TraceFixture, index: number): Rec {
   return nth(events(value), index);
 }
 if (process.env.WRITE_WIRE_FIXTURES === "1") {
   const directory = resolve(import.meta.dir, "../fixtures");
-  const make = (mutate: (value: Record<string, unknown>) => void) => {
+  const make = (mutate: (value: TraceFixture) => void) => {
     const value = trace();
     mutate(value);
     return `${JSON.stringify(value)}\n`;
   };
-  const blocker = (value: Record<string, unknown>) => {
-    value.lease = {
-      ...(value.lease as Record<string, unknown>),
-      terminalTarget: "EXACT_BLOCKER",
-    };
+  const blocker = (value: TraceFixture) => {
+    value.lease = { ...value.lease, terminalTarget: "EXACT_BLOCKER" };
     const list = events(value);
     list.splice(5);
     list.push({
@@ -313,16 +328,14 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
     "valid-intent-receipt-learning.json": make(() => {}),
     "valid-exact-blocker.json": make(blocker),
     "role-switch.json": make((v) =>
-      (v.roleGrants as unknown[]).push({
+      v.roleGrants.push({
         grantId: "d2",
         actorInstanceId: "director",
         role: "section-director",
       }),
     ),
-    "transient-scientific-evidence.json": make(
-      (v) =>
-        ((eventAt(v, 5).evidence as Record<string, unknown>).locator =
-          "/x/.agent-state/y"),
+    "transient-scientific-evidence.json": make((v) =>
+      patchEvidence(eventAt(v, 5), { locator: "/x/.agent-state/y" }),
     ),
     "receipt-without-intent.json": make(
       (v) => (eventAt(v, 5).intentId = "missing"),
@@ -394,9 +407,11 @@ describe("research-section-trace/v2 exact wire", () => {
     ["role-authority-violation.json", "ROLE_AUTHORITY_VIOLATION"],
     ["invalid-intent-does-not-release-wip.json", "INTENT_NOT_EXECUTABLE"],
   ])("live fixture %s", (name, code) => {
-    const value = JSON.parse(
-      readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8"),
-    ) as Record<string, unknown>;
+    const text = readFileSync(
+      resolve(import.meta.dir, "../fixtures", name),
+      "utf8",
+    );
+    const value: unknown = ((): unknown => JSON.parse(text))();
     if (code === undefined) expect(checkTrace(value).ok).toBe(true);
     else expectCode(value, code);
   });
@@ -447,7 +462,7 @@ describe("research-section-trace/v2 exact wire", () => {
     expect(checkTrace(trace()).ok).toBe(true));
   test("missing authority lineage is rejected before event indexing", () => {
     const value = trace();
-    delete (value.authority as Record<string, unknown>).openIssue;
+    delete value.authority.openIssue;
     expectCode(value, "AUTHORITY_LINEAGE_INVALID");
   });
   test("known result cannot be admitted as a novel gap", () => {
@@ -462,8 +477,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("registered replication cannot claim knownResult=false", () => {
     const value = trace();
-    const authority = value.authority as Record<string, unknown>;
-    const grounding = authority.grounding as Record<string, unknown>;
+    const grounding = section(value, "grounding");
     grounding.knownResultDisposition = "REGISTERED_REPLICATION";
     grounding.knownResult = true;
     eventAt(value, 1).noveltyDisposition = "REGISTERED_REPLICATION";
@@ -485,12 +499,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("an intermediate semantic authority link cannot drift from Goal Constitution", () => {
     const value = trace();
-    (
-      (value.authority as Record<string, unknown>).openIssue as Record<
-        string,
-        unknown
-      >
-    ).objectiveId = "other-objective";
+    section(value, "openIssue").objectiveId = "other-objective";
     expectCode(value, "GOAL_LINEAGE_MISMATCH");
   });
   test("measurement-invalid receipt closes the intent but earns no scientific credit", () => {
@@ -600,7 +609,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("duplicate same-role actor grant is ROLE_SWITCH", () => {
     const value = trace();
-    (value.roleGrants as unknown[]).push({
+    value.roleGrants.push({
       grantId: "d2",
       actorInstanceId: "director",
       role: "section-director",
@@ -649,7 +658,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("evidence requires lowercase SHA-256", () => {
     const value = trace();
-    (eventAt(value, 5).evidence as Record<string, unknown>).sha256 = "ABC";
+    patchEvidence(eventAt(value, 5), { sha256: "ABC" });
     expectCode(value, "TRANSIENT_SCIENTIFIC_EVIDENCE");
   });
   test("second receipt is duplicate terminal", () => {
@@ -700,8 +709,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("invalid receipt evidence still closes a structural terminal", () => {
     const value = trace();
-    (eventAt(value, 5).evidence as Record<string, unknown>).locator =
-      "/x/.agent-state/y";
+    patchEvidence(eventAt(value, 5), { locator: "/x/.agent-state/y" });
     expectCode(value, "TRANSIENT_SCIENTIFIC_EVIDENCE");
     expect(codes(value)).not.toContain("MISSING_TERMINAL_RECEIPT");
   });
@@ -713,10 +721,7 @@ describe("research-section-trace/v2 exact wire", () => {
   });
   test("exact blocker alternate terminal passes without learning", () => {
     const value = trace();
-    value.lease = {
-      ...(value.lease as Record<string, unknown>),
-      terminalTarget: "EXACT_BLOCKER",
-    };
+    value.lease = { ...value.lease, terminalTarget: "EXACT_BLOCKER" };
     const list = events(value);
     list.splice(5);
     list.push({

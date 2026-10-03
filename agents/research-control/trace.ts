@@ -1,4 +1,5 @@
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 export const SCHEMA = "research-section-trace/v2";
 export type Finding = { code: string; eventId?: string; message: string };
@@ -85,22 +86,43 @@ const authority = new Map<string, readonly string[]>([
   ["PROMOTION", ["section-director", "process-auditor"]],
 ]);
 
-function record(value: unknown): value is R {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// z.looseObject({}) accepts exactly an object that is not null and not an array, and keeps every
+// own key: the parsed copy is what callers use.
+const RecordSchema = z.looseObject({});
+function record(value: unknown): R | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
-function nonempty(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "";
+function list(value: unknown): unknown[] | undefined {
+  const parsed = z.array(z.unknown()).safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+// The string itself when it is nonempty after trim, else undefined.
+function str(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+function nonempty(value: unknown): boolean {
+  return str(value) !== undefined;
+}
+// Map lookup by a key that may not be a nonempty string (then: no entry).
+function lookup<V>(map: Map<string, V>, key: unknown): V | undefined {
+  const k = str(key);
+  return k === undefined ? undefined : map.get(k);
+}
+function nonNegativeInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 const instantMs = fromThrowable(
   (value: string) => Temporal.Instant.from(value).epochMilliseconds,
 );
 function time(value: unknown): number | undefined {
-  if (!nonempty(value) || !RFC3339.test(value)) return undefined;
+  const text = str(value);
+  if (text === undefined || !RFC3339.test(text)) return undefined;
   // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over; that
   // rejection is exactly the "not a timestamp" answer.
-  return instantMs(value).unwrapOr(undefined);
+  return instantMs(text).unwrapOr(undefined);
 }
-function sha(value: unknown): value is string {
+function sha(value: unknown): boolean {
   return typeof value === "string" && SHA.test(value);
 }
 function add(
@@ -115,18 +137,20 @@ function add(
     ...(eventId === undefined ? {} : { eventId }),
   });
 }
-function fields(event: E, names: string[]): boolean {
+function fields(event: R, names: string[]): boolean {
   return names.every((name) => nonempty(event[name]));
 }
 function evidence(value: unknown): boolean {
+  const item = record(value);
+  if (item === undefined) return false;
+  const locator = str(item.locator);
   return (
-    record(value) &&
-    nonempty(value.locator) &&
-    sha(value.sha256) &&
-    value.tracked === true &&
-    value.ignored === false &&
-    value.locator !== ".agent-state" &&
-    !/(?:^|\/)\.agent-state(?:\/|$)/.test(value.locator)
+    locator !== undefined &&
+    sha(item.sha256) &&
+    item.tracked === true &&
+    item.ignored === false &&
+    locator !== ".agent-state" &&
+    !/(?:^|\/)\.agent-state(?:\/|$)/.test(locator)
   );
 }
 function dispositionMatchesKnownResult(
@@ -162,7 +186,7 @@ export type TraceResult = {
   };
 };
 
-export function checkTrace(input: unknown): TraceResult {
+export function checkTrace(rawInput: unknown): TraceResult {
   const findings: Finding[] = [];
   const result = (
     events = 0,
@@ -200,13 +224,18 @@ export function checkTrace(input: unknown): TraceResult {
       receiptDigests,
     },
   });
+  const input = record(rawInput);
+  const lease = record(input?.lease);
+  const authorityRoot = record(input?.authority);
+  const roleGrants = list(input?.roleGrants);
+  const rawEvents = list(input?.events);
   if (
-    !record(input) ||
+    input === undefined ||
     input.schema !== SCHEMA ||
-    !record(input.lease) ||
-    !record(input.authority) ||
-    !Array.isArray(input.roleGrants) ||
-    !Array.isArray(input.events)
+    lease === undefined ||
+    authorityRoot === undefined ||
+    roleGrants === undefined ||
+    rawEvents === undefined
   ) {
     add(
       findings,
@@ -215,7 +244,6 @@ export function checkTrace(input: unknown): TraceResult {
     );
     return result();
   }
-  const authorityRoot = input.authority;
   const lineageNames = [
     "goalConstitution",
     "programmeSnapshot",
@@ -224,16 +252,22 @@ export function checkTrace(input: unknown): TraceResult {
     "sectionCharter",
     "grounding",
   ] as const;
-  const lineage = Object.fromEntries(
-    lineageNames.map((name) => [name, authorityRoot[name]]),
-  ) as Record<(typeof lineageNames)[number], unknown>;
-  const authorityRecord = lineageNames.every((name) => record(lineage[name]));
-  const link = (
-    child: (typeof lineageNames)[number],
-    parent: (typeof lineageNames)[number],
-  ): boolean => {
-    const c = lineage[child] as R;
-    const p = lineage[parent] as R;
+  type LineageName = (typeof lineageNames)[number];
+  const lineage: Record<LineageName, R | undefined> = {
+    goalConstitution: record(authorityRoot.goalConstitution),
+    programmeSnapshot: record(authorityRoot.programmeSnapshot),
+    openIssue: record(authorityRoot.openIssue),
+    sectionMandate: record(authorityRoot.sectionMandate),
+    sectionCharter: record(authorityRoot.sectionCharter),
+    grounding: record(authorityRoot.grounding),
+  };
+  const authorityRecord = lineageNames.every(
+    (name) => lineage[name] !== undefined,
+  );
+  const link = (child: LineageName, parent: LineageName): boolean => {
+    const c = lineage[child];
+    const p = lineage[parent];
+    if (c === undefined || p === undefined) return false;
     return (
       nonempty(c.id) &&
       sha(c.sha256) &&
@@ -241,12 +275,11 @@ export function checkTrace(input: unknown): TraceResult {
       c[`${parent}Sha256`] === p.sha256
     );
   };
-  const grounding = authorityRecord ? (lineage.grounding as R) : undefined;
-  const goal = authorityRecord ? (lineage.goalConstitution as R) : undefined;
+  const grounding = authorityRecord ? lineage.grounding : undefined;
+  const goal = authorityRecord ? lineage.goalConstitution : undefined;
   const semanticGoalValid =
     goal !== undefined &&
-    Number.isInteger(goal.revision) &&
-    (goal.revision as number) >= 0 &&
+    nonNegativeInteger(goal.revision) &&
     nonempty(goal.signer) &&
     nonempty(goal.objectiveId) &&
     nonempty(goal.successObservableId) &&
@@ -265,14 +298,16 @@ export function checkTrace(input: unknown): TraceResult {
     link("openIssue", "programmeSnapshot") &&
     link("sectionMandate", "openIssue") &&
     link("sectionCharter", "sectionMandate") &&
-    lineageNames.slice(1).every((name) => semanticJoin(lineage[name] as R)) &&
+    lineageNames.slice(1).every((name) => {
+      const value = lineage[name];
+      return value !== undefined && semanticJoin(value);
+    }) &&
     grounding !== undefined &&
     link("grounding", "sectionCharter") &&
-    Number.isInteger(grounding.revision) &&
-    (grounding.revision as number) >= 0 &&
+    nonNegativeInteger(grounding.revision) &&
     nonempty(grounding.fence) &&
     sha(grounding.sha256) &&
-    fields(grounding as E, ["objective", "success"]) &&
+    fields(grounding, ["objective", "success"]) &&
     dispositionMatchesKnownResult(
       grounding.knownResultDisposition,
       grounding.knownResult,
@@ -292,7 +327,6 @@ export function checkTrace(input: unknown): TraceResult {
       "GOAL_LINEAGE_MISMATCH",
       "authority lineage does not preserve the Goal Constitution semantic IDs",
     );
-  const lease = input.lease;
   const start = time(lease.startedAt),
     expires = time(lease.expiresAt),
     due = time(lease.firstIntentDueAt),
@@ -343,14 +377,17 @@ export function checkTrace(input: unknown): TraceResult {
 
   const grants = new Map<string, G>();
   const actors = new Set<string>();
-  for (const raw of input.roleGrants) {
+  for (const rawGrant of roleGrants) {
+    const raw = record(rawGrant);
+    const grantId = str(raw?.grantId);
+    const grantActor = str(raw?.actorInstanceId);
+    const grantRole = str(raw?.role);
     if (
-      !record(raw) ||
-      !nonempty(raw.grantId) ||
-      !nonempty(raw.actorInstanceId) ||
-      !nonempty(raw.role) ||
-      !roles.has(raw.role) ||
-      grants.has(raw.grantId)
+      grantId === undefined ||
+      grantActor === undefined ||
+      grantRole === undefined ||
+      !roles.has(grantRole) ||
+      grants.has(grantId)
     ) {
       add(
         findings,
@@ -359,24 +396,22 @@ export function checkTrace(input: unknown): TraceResult {
       );
       continue;
     }
-    if (actors.has(raw.actorInstanceId))
+    if (actors.has(grantActor))
       add(
         findings,
         "ROLE_SWITCH",
         "actor instance has more than one immutable grant",
-        raw.actorInstanceId,
+        grantActor,
       );
-    actors.add(raw.actorInstanceId);
-    grants.set(raw.grantId, {
-      grantId: raw.grantId,
-      actorInstanceId: raw.actorInstanceId,
-      role: raw.role,
+    actors.add(grantActor);
+    grants.set(grantId, {
+      grantId,
+      actorInstanceId: grantActor,
+      role: grantRole,
     });
   }
-  const grounder = authorityValid ? (grounding as R) : undefined;
-  const grounderGrant = nonempty(grounder?.grounderGrantId)
-    ? grants.get(grounder.grounderGrantId)
-    : undefined;
+  const grounder = authorityValid ? grounding : undefined;
+  const grounderGrant = lookup(grants, grounder?.grounderGrantId);
   if (
     grounder === undefined ||
     grounderGrant?.role !== "section-grounder" ||
@@ -389,16 +424,22 @@ export function checkTrace(input: unknown): TraceResult {
     );
   const events: E[] = [];
   const ids = new Set<string>();
-  for (const raw of input.events) {
+  for (const rawEvent of rawEvents) {
+    const raw = record(rawEvent);
+    const eventId = str(raw?.id);
+    const eventKind = str(raw?.kind);
+    const eventActor = str(raw?.actorInstanceId);
+    const eventGrant = str(raw?.grantId);
+    const eventAt = str(raw?.at);
     if (
-      !record(raw) ||
-      !nonempty(raw.id) ||
-      !nonempty(raw.kind) ||
-      !nonempty(raw.actorInstanceId) ||
-      !nonempty(raw.grantId) ||
-      !nonempty(raw.at) ||
-      time(raw.at) === undefined ||
-      ids.has(raw.id)
+      raw === undefined ||
+      eventId === undefined ||
+      eventKind === undefined ||
+      eventActor === undefined ||
+      eventGrant === undefined ||
+      eventAt === undefined ||
+      time(eventAt) === undefined ||
+      ids.has(eventId)
     ) {
       add(
         findings,
@@ -407,14 +448,14 @@ export function checkTrace(input: unknown): TraceResult {
       );
       continue;
     }
-    ids.add(raw.id);
+    ids.add(eventId);
     const event: E = {
       ...raw,
-      id: raw.id,
-      at: raw.at,
-      kind: raw.kind,
-      actorInstanceId: raw.actorInstanceId,
-      grantId: raw.grantId,
+      id: eventId,
+      at: eventAt,
+      kind: eventKind,
+      actorInstanceId: eventActor,
+      grantId: eventGrant,
     };
     events.push(event);
     if (!kinds.has(event.kind))
@@ -486,8 +527,9 @@ export function checkTrace(input: unknown): TraceResult {
   const candidateAuthorityJoin = (event: E): boolean =>
     authorityValid &&
     lineageNames.every((name) => {
-      const value = lineage[name] as R;
+      const value = lineage[name];
       return (
+        value !== undefined &&
         event[`${name}Id`] === value.id &&
         event[`${name}Sha256`] === value.sha256
       );
@@ -579,9 +621,7 @@ export function checkTrace(input: unknown): TraceResult {
   }
   const validCandidates = candidates.filter(candidateValid);
   const validAdmission = (event: E): boolean => {
-    const candidate = nonempty(event.candidateEventId)
-      ? byId.get(event.candidateEventId)
-      : undefined;
+    const candidate = lookup(byId, event.candidateEventId);
     const good =
       grants.get(event.grantId)?.role === "section-director" &&
       candidate?.kind === "CANDIDATE_PACKET" &&
@@ -612,9 +652,7 @@ export function checkTrace(input: unknown): TraceResult {
     admissions.filter(validAdmission).map((event) => event.id),
   );
   const validSpec = (event: E): boolean => {
-    const admission = nonempty(event.admissionId)
-      ? byId.get(event.admissionId)
-      : undefined;
+    const admission = lookup(byId, event.admissionId);
     const good =
       grants.get(event.grantId)?.role === "builder" &&
       admission?.kind === "ADMISSION" &&
@@ -657,12 +695,8 @@ export function checkTrace(input: unknown): TraceResult {
   };
   const specOk = new Set(specs.filter(validSpec).map((event) => event.id));
   const validIntent = (event: E): boolean => {
-    const admission = nonempty(event.admissionId)
-      ? byId.get(event.admissionId)
-      : undefined;
-    const spec = nonempty(event.executableSpecificationId)
-      ? byId.get(event.executableSpecificationId)
-      : undefined;
+    const admission = lookup(byId, event.admissionId);
+    const spec = lookup(byId, event.executableSpecificationId);
     const deadline = time(event.terminalDueAt);
     const good =
       grants.get(event.grantId)?.role === "section-director" &&
@@ -750,9 +784,7 @@ export function checkTrace(input: unknown): TraceResult {
   const scientificReceipts = new Map<string, E>();
   const blockers: E[] = [];
   const handleReceipt = (event: E, intent: E): void => {
-    const spec = nonempty(intent.executableSpecificationId)
-      ? byId.get(intent.executableSpecificationId)
-      : undefined;
+    const spec = lookup(byId, intent.executableSpecificationId);
     const measurementJoined =
       spec?.kind === "EXECUTABLE_SPEC" &&
       event.measurementContractSha256 === spec.measurementContractSha256 &&
@@ -814,9 +846,7 @@ export function checkTrace(input: unknown): TraceResult {
     else terminalsByIntent.set(intent.id, [event]);
   };
   const handleTerminalEvent = (event: E): void => {
-    const intent = nonempty(event.intentId)
-      ? byId.get(event.intentId)
-      : undefined;
+    const intent = lookup(byId, event.intentId);
     const joined =
       grants.get(event.grantId)?.role === "executor" &&
       intent !== undefined &&
@@ -889,10 +919,8 @@ export function checkTrace(input: unknown): TraceResult {
   const validLearning = new Map<string, E>();
   const usedReceipts = new Set<string>();
   const processLearningItem = (item: E): void => {
-    const receiptId = item.receiptId;
-    const receipt = nonempty(receiptId)
-      ? validReceipts.get(receiptId)
-      : undefined;
+    const receiptId = str(item.receiptId);
+    const receipt = lookup(validReceipts, receiptId);
     const scientific =
       receipt !== undefined && scientificReceipts.has(receipt.id);
     if (item.learningClass === "SCIENTIFIC" && !scientific)
@@ -904,7 +932,7 @@ export function checkTrace(input: unknown): TraceResult {
       );
     const good =
       receipt !== undefined &&
-      nonempty(receiptId) &&
+      receiptId !== undefined &&
       time(item.at)! > time(receipt.at)! &&
       item.receiptSha256 === receipt.artifactSha256 &&
       !usedReceipts.has(receiptId) &&
@@ -933,7 +961,7 @@ export function checkTrace(input: unknown): TraceResult {
         item.receiptSha256 !== receipt.artifactSha256
       )
         digestMismatch(item, "learning receipt digest mismatch");
-    } else if (nonempty(receiptId)) {
+    } else if (receiptId !== undefined) {
       usedReceipts.add(receiptId);
       validLearning.set(item.id, item);
     }
@@ -942,13 +970,9 @@ export function checkTrace(input: unknown): TraceResult {
   const committed = new Map<string, E>();
   const scientificCommits = new Map<string, E>();
   const processDirectorCommit = (commit: E): void => {
-    const item = nonempty(commit.learningId)
-      ? validLearning.get(commit.learningId)
-      : undefined;
+    const item = lookup(validLearning, commit.learningId);
     const receipt =
-      item !== undefined && nonempty(item.receiptId)
-        ? validReceipts.get(item.receiptId)
-        : undefined;
+      item !== undefined ? lookup(validReceipts, item.receiptId) : undefined;
     const good =
       item !== undefined &&
       receipt !== undefined &&
@@ -1051,9 +1075,7 @@ export function checkTrace(input: unknown): TraceResult {
   );
   const creditableScientificCommits = new Map(
     [...scientificCommits].filter(([, commit]) => {
-      const learning = nonempty(commit.learningId)
-        ? validLearning.get(commit.learningId)
-        : undefined;
+      const learning = lookup(validLearning, commit.learningId);
       return (
         learning !== undefined &&
         creditableScientificReceipts.has(String(learning.receiptId))
@@ -1064,9 +1086,7 @@ export function checkTrace(input: unknown): TraceResult {
     [...committed].filter(([learningId, commit]) => {
       const item = validLearning.get(learningId);
       const receipt =
-        item !== undefined && nonempty(item.receiptId)
-          ? validReceipts.get(item.receiptId)
-          : undefined;
+        item !== undefined ? lookup(validReceipts, item.receiptId) : undefined;
       return (
         item?.learningClass === "INSTRUMENTATION_REPAIR" &&
         receipt !== undefined &&
@@ -1077,9 +1097,7 @@ export function checkTrace(input: unknown): TraceResult {
   );
   const instrumentationReceipts = new Map(
     [...instrumentationCommits.values()].flatMap((commit) => {
-      const item = nonempty(commit.learningId)
-        ? validLearning.get(commit.learningId)
-        : undefined;
+      const item = lookup(validLearning, commit.learningId);
       const receipt =
         item !== undefined
           ? validReceipts.get(String(item.receiptId))
@@ -1169,8 +1187,8 @@ export function checkTrace(input: unknown): TraceResult {
     instrumentationCommits.size,
     validCandidates.length,
     specOk.size,
-    nonempty(lease.sectionId) ? lease.sectionId : null,
-    nonempty(lease.leaseId) ? lease.leaseId : null,
+    str(lease.sectionId) ?? null,
+    str(lease.leaseId) ?? null,
     [...validReceipts.values()].map((receipt) =>
       String(receipt.artifactSha256),
     ),

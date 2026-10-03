@@ -50,6 +50,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 class UsageError extends Error {}
 
@@ -77,7 +78,19 @@ type ServerEntry = {
   command?: unknown;
   args?: unknown;
 };
-type McpJson = { mcpServers?: Record<string, ServerEntry> };
+// .mcp.json is parsed, not asserted: a server entry is read as a record and only the four fields
+// this script uses are kept (each stays `unknown` — jqOr() decides how it prints).
+const ServerEntrySchema = z
+  .record(z.string(), z.unknown())
+  .transform((r) => ({
+    type: r.type,
+    url: r.url,
+    command: r.command,
+    args: r.args,
+  }));
+const McpJsonSchema = z.object({
+  mcpServers: z.record(z.string(), ServerEntrySchema).nullish(),
+});
 
 type Plan = {
   name: string;
@@ -146,10 +159,12 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
 export function loadMcpServers(
   mcpJsonPath: string,
 ): Record<string, ServerEntry> {
-  return fromThrowable(() => {
-    const raw = JSON.parse(readFileSync(mcpJsonPath, "utf8")) as McpJson;
-    return raw.mcpServers ?? {};
-  })().unwrapOr({});
+  const parsed = fromThrowable((): unknown =>
+    JSON.parse(readFileSync(mcpJsonPath, "utf8")),
+  )()
+    .map((raw) => McpJsonSchema.safeParse(raw))
+    .unwrapOr(undefined);
+  return parsed?.success ? (parsed.data.mcpServers ?? {}) : {};
 }
 
 export function buildPlan(name: string, entry: ServerEntry): Plan {
@@ -446,7 +461,7 @@ function main(): void {
     // pathological line starting with just ": " captures a ZERO-length name, and sed still
     // emits (and `sort`/`comm` still process) that blank line. Only DROP entries the regex
     // didn't match at all (undefined); keep an empty-string capture, matching sed verbatim.
-    .filter((n): n is string => typeof n === "string")
+    .flatMap((n) => (n === undefined ? [] : [n]))
     .sort();
 
   printDriftReport(declared, liveNames, claudeBin, codexBin, dryRun, prune);

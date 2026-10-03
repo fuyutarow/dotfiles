@@ -14,9 +14,12 @@
 import { constants, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { parseJson, strAt } from "./narrow.ts";
 
-export function readStdinJson(): any {
-  return JSON.parse(readFileSync(0, "utf8"));
+// The event JSON as `unknown`: read fields through ./narrow.ts (obj/str/strAt/...), which return a
+// value only if it really has that type. It used to be `any`, which type-checked any field access.
+export function readStdinJson(): unknown {
+  return parseJson(readFileSync(0, "utf8"));
 }
 
 // PreToolUse decision — print JSON and exit 0. `extra` merges into hookSpecificOutput
@@ -82,15 +85,10 @@ function expandHome(path: string): string {
   return path;
 }
 
-export function bashCwd(payload: any): string {
-  const initial =
-    typeof payload?.cwd === "string" && payload.cwd !== ""
-      ? payload.cwd
-      : process.cwd();
-  const command =
-    typeof payload?.tool_input?.command === "string"
-      ? payload.tool_input.command
-      : "";
+export function bashCwd(payload: unknown): string {
+  const cwd = strAt(payload, "cwd");
+  const initial = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
+  const command = strAt(payload, "tool_input", "command") ?? "";
 
   let current = resolve(initial);
   for (const match of command.matchAll(SIMPLE_CD)) {

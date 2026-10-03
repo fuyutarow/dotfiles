@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -23,29 +24,27 @@ type Task = Readonly<{
   depends: unknown[];
 }>;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const TaskEntrySchema = z.object({
+  name: z.string(),
+  source: z.string(),
+  aliases: z.array(z.unknown()).catch([]),
+  depends: z.array(z.unknown()).catch([]),
+});
 
 function tasks(value: unknown): Task[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    if (
-      !isRecord(entry) ||
-      typeof entry.name !== "string" ||
-      typeof entry.source !== "string"
-    )
-      return [];
+  const entries = z.array(z.unknown()).safeParse(value);
+  if (!entries.success) return [];
+  return entries.data.flatMap((entry) => {
+    const parsed = TaskEntrySchema.safeParse(entry);
+    if (!parsed.success) return [];
     return [
       {
-        name: entry.name,
-        source: entry.source,
-        aliases: Array.isArray(entry.aliases)
-          ? entry.aliases.filter(
-              (alias): alias is string => typeof alias === "string",
-            )
-          : [],
-        depends: Array.isArray(entry.depends) ? entry.depends : [],
+        name: parsed.data.name,
+        source: parsed.data.source,
+        aliases: parsed.data.aliases.flatMap((alias) =>
+          typeof alias === "string" ? [alias] : [],
+        ),
+        depends: parsed.data.depends,
       },
     ];
   });
@@ -71,7 +70,7 @@ async function miseTasks(
   if (exitCode !== 0) return { tasks: [], error: stderr };
   // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
   // `.then` maps to the same error tag as the old catch branch.
-  return Promise.try(() => tasks(JSON.parse(stdout))).then(
+  return Promise.try(() => tasks(((): unknown => JSON.parse(stdout))())).then(
     (ok) => ({ tasks: ok }),
     () => ({ tasks: [], error: "mise returned invalid JSON" }),
   );
@@ -113,14 +112,15 @@ function waivers(lines: string[]): {
       if (incomplete !== undefined) reasonless.push(incomplete);
     }
   }
-  for (const [verb, alias] of [
+  const verbAliases: ReadonlyArray<readonly [string, string]> = [
     ["setup", "i"],
     ["fmt", "f"],
     ["lint", "l"],
     ["test", "t"],
     ["up", "u"],
     ["check", "c"],
-  ]) {
+  ];
+  for (const [verb, alias] of verbAliases) {
     if (active.has(verb)) active.add(alias);
   }
   return { active, reasonless };
@@ -278,7 +278,7 @@ function declaredTools(source: string): Set<string> {
   const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/.exec(source);
   const out = new Set<string>();
   if (!m) return out;
-  for (const line of m[1].split("\n")) {
+  for (const line of (m[1] ?? "").split("\n")) {
     const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=/.exec(line);
     if (k) out.add((k[1] ?? k[2] ?? "").toLowerCase());
   }

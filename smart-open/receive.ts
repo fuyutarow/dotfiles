@@ -36,6 +36,7 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
 import { attempt, attemptOr } from "../agents/hooks/attempt.ts";
 import { ACK_MS, receiverSocket, SETTLE_MS } from "./sockets.ts";
 
@@ -210,13 +211,13 @@ async function runOpener(url: string): Promise<string> {
   return `refused: opener exited ${early}`;
 }
 
+const RequestSchema = z.object({ url: z.string() });
+
 async function handle(line: string): Promise<string> {
   if (line.length > MAX_LINE) return "refused: too long";
-  const msg = await attemptOr(
-    () => JSON.parse(line) as { url?: unknown } | null,
-    null,
-  );
-  const url = typeof msg?.url === "string" ? msg.url : "";
+  const raw = await attemptOr((): unknown => JSON.parse(line), null);
+  const msg = RequestSchema.safeParse(raw);
+  const url = msg.success ? msg.data.url : "";
   if (!/^https?:\/\/[^\s]+$/i.test(url)) return "refused: only http(s) URLs";
   if (!takeToken()) {
     note("rate limit");

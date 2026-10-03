@@ -5,6 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
+import { z } from "zod";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
@@ -57,11 +58,18 @@ type FileResult = {
   loadBearing: number;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const RecordSchema = z.record(z.string(), z.unknown());
+const NonemptyStringSchema = z.string().refine((text) => text.trim().length > 0);
 
-const isNonemptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const nonemptyString = (value: unknown): string | undefined => {
+  const parsed = NonemptyStringSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
 
 const messageFrom = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -78,11 +86,12 @@ const stringArray = (
 
   const values: string[] = [];
   for (const item of value) {
-    if (!isNonemptyString(item)) {
+    const text = nonemptyString(item);
+    if (text === undefined) {
       report(`${field} must contain only non-empty strings`);
       continue;
     }
-    values.push(item);
+    values.push(text);
   }
   return values;
 };
@@ -98,21 +107,25 @@ const validateSources = (
 
   let validSources = 0;
   for (const [index, source] of value.entries()) {
-    if (!isRecord(source)) {
+    const sourceRecord = asRecord(source);
+    if (sourceRecord === undefined) {
       report(`sources[${index}] must be an object`);
       continue;
     }
 
     let valid = true;
-    if (!isNonemptyString(source.source_id)) {
+    if (nonemptyString(sourceRecord.source_id) === undefined) {
       report(`sources[${index}].source_id must be a non-empty string`);
       valid = false;
     }
-    if (!isNonemptyString(source.locator)) {
+    if (nonemptyString(sourceRecord.locator) === undefined) {
       report(`sources[${index}].locator must be a non-empty string`);
       valid = false;
     }
-    if (source.role !== undefined && !isNonemptyString(source.role)) {
+    if (
+      sourceRecord.role !== undefined &&
+      nonemptyString(sourceRecord.role) === undefined
+    ) {
       report(`sources[${index}].role must be a non-empty string when present`);
     }
     if (valid) {
@@ -133,27 +146,28 @@ const validateAssessment = (
     }
     return;
   }
-  if (!isRecord(value)) {
+  const assessment = asRecord(value);
+  if (assessment === undefined) {
     report("assessment must be an object");
     return;
   }
 
-  if (
-    !isNonemptyString(value.status) ||
-    !assessmentStatuses.has(value.status)
-  ) {
+  const status = nonemptyString(assessment.status);
+  if (status === undefined || !assessmentStatuses.has(status)) {
     report(
       `assessment.status must be one of: ${[...assessmentStatuses].join(", ")}`,
     );
   }
-  if (!isNonemptyString(value.basis)) {
+  if (nonemptyString(assessment.basis) === undefined) {
     report("assessment.basis must be a non-empty string");
   }
-  if (!Array.isArray(value.limitations)) {
+  if (!Array.isArray(assessment.limitations)) {
     report("assessment.limitations must be an array of strings");
     return;
   }
-  if (!value.limitations.every(isNonemptyString)) {
+  if (
+    !assessment.limitations.every((item) => nonemptyString(item) !== undefined)
+  ) {
     report("assessment.limitations must contain only non-empty strings");
   }
 };
@@ -169,21 +183,24 @@ const validateRelations = (
 
   const targets: string[] = [];
   for (const [index, relation] of value.entries()) {
-    if (!isRecord(relation)) {
+    const relationRecord = asRecord(relation);
+    if (relationRecord === undefined) {
       report(`relations[${index}] must be an object`);
       continue;
     }
-    if (!isNonemptyString(relation.target)) {
+    const target = nonemptyString(relationRecord.target);
+    if (target === undefined) {
       report(`relations[${index}].target must be a non-empty string`);
     } else {
-      targets.push(relation.target);
+      targets.push(target);
     }
-    if (!isNonemptyString(relation.type) || !relationTypes.has(relation.type)) {
+    const relationType = nonemptyString(relationRecord.type);
+    if (relationType === undefined || !relationTypes.has(relationType)) {
       report(
         `relations[${index}].type must be one of: ${[...relationTypes].join(", ")}`,
       );
     }
-    if (!isNonemptyString(relation.basis)) {
+    if (nonemptyString(relationRecord.basis) === undefined) {
       report(`relations[${index}].basis must be a non-empty string`);
     }
   }
@@ -270,7 +287,7 @@ const checkFile = async (path: string): Promise<FileResult> => {
 
     // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
     // `.then` maps to `undefined`, so the invalid-JSON report below is unchanged.
-    const value: unknown = await Promise.try(() => JSON.parse(rawLine)).then(
+    const value: unknown = await Promise.try((): unknown => JSON.parse(rawLine)).then(
       (ok) => ok,
       () => undefined,
     );
@@ -279,67 +296,59 @@ const checkFile = async (path: string): Promise<FileResult> => {
       continue;
     }
 
-    if (!isRecord(value)) {
+    const row = asRecord(value);
+    if (row === undefined) {
       report(line, "row must be a JSON object");
       continue;
     }
 
     const rowReport = (message: string): void => report(line, message);
-    if (!isNonemptyString(value.claim_id)) {
+    const claimId = nonemptyString(row.claim_id);
+    if (claimId === undefined) {
       rowReport("claim_id must be a non-empty string");
       continue;
     }
-    const claimId = value.claim_id;
     if (nodes.has(claimId)) {
       rowReport(`duplicate claim_id: ${claimId}`);
       continue;
     }
 
-    if (!isNonemptyString(value.claim)) {
+    if (nonemptyString(row.claim) === undefined) {
       rowReport("claim must be a non-empty string");
     }
-    if (!isNonemptyString(value.scope)) {
+    if (nonemptyString(row.scope) === undefined) {
       rowReport("scope must be a non-empty string");
     }
-    if (typeof value.load_bearing !== "boolean") {
+    if (typeof row.load_bearing !== "boolean") {
       rowReport("load_bearing must be a boolean");
     }
-    if (
-      !isNonemptyString(value.claim_type) ||
-      !claimTypes.has(value.claim_type)
-    ) {
+    const claimType = nonemptyString(row.claim_type);
+    if (claimType === undefined || !claimTypes.has(claimType)) {
       rowReport(`claim_type must be one of: ${[...claimTypes].join(", ")}`);
     }
 
-    const validSourceCount = validateSources(value.sources, rowReport);
-    const derivedFrom = stringArray(
-      value.derived_from,
-      "derived_from",
-      rowReport,
-    );
-    const relationTargets = validateRelations(value.relations, rowReport);
-    const isLoadBearing = value.load_bearing === true;
+    const validSourceCount = validateSources(row.sources, rowReport);
+    const derivedFrom = stringArray(row.derived_from, "derived_from", rowReport);
+    const relationTargets = validateRelations(row.relations, rowReport);
+    const isLoadBearing = row.load_bearing === true;
     if (isLoadBearing) {
       loadBearing += 1;
     }
-    validateAssessment(value.assessment, isLoadBearing, rowReport);
+    validateAssessment(row.assessment, isLoadBearing, rowReport);
 
     if (
-      isNonemptyString(value.claim_type) &&
-      sourceClaimTypes.has(value.claim_type) &&
+      claimType !== undefined &&
+      sourceClaimTypes.has(claimType) &&
       validSourceCount === 0
     ) {
-      rowReport(`${value.claim_type} claim requires at least one source`);
+      rowReport(`${claimType} claim requires at least one source`);
     }
     if (
-      (value.claim_type === "synthesis" ||
-        value.claim_type === "open-question") &&
+      (claimType === "synthesis" || claimType === "open-question") &&
       validSourceCount === 0 &&
       derivedFrom.length === 0
     ) {
-      rowReport(
-        `${value.claim_type} claim requires a source or derived_from claim`,
-      );
+      rowReport(`${claimType} claim requires a source or derived_from claim`);
     }
 
     nodes.set(claimId, {

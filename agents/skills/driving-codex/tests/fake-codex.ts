@@ -5,6 +5,9 @@
  * covers every branch of the real contract without touching a network.
  */
 
+// An empty export makes this file a module, so its consts are file-scoped.
+export {};
+
 const modelIndex = Bun.argv.indexOf("-m");
 const model = modelIndex === -1 ? "" : Bun.argv[modelIndex + 1];
 

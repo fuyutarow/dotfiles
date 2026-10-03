@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync } from "node:fs";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 // The Windows half of the Brewfile: capture what winget manages on the host into
 // wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
@@ -137,6 +138,11 @@ async function scratch(): Promise<{ win: string; wsl: string }> {
   return { win, wsl: w.out.trim() };
 }
 
+const JsonRecord = z.record(z.string(), z.unknown());
+const JsonRecordList = z.array(JsonRecord);
+const SourceName = z.object({ SourceDetails: z.object({ Name: z.string() }) });
+const PackageId = z.object({ PackageIdentifier: z.string() });
+
 async function dump(): Promise<void> {
   const { win, wsl } = await scratch();
   console.log(
@@ -164,24 +170,33 @@ async function dump(): Promise<void> {
     );
     process.exit(1);
   }
-  const json = await Bun.file(wsl).json();
-  const sources = (json.Sources ?? []) as Array<{
-    SourceDetails: { Name: string };
-    Packages: unknown[];
-  }>;
-  const total = sources.reduce((n, s) => n + s.Packages.length, 0);
-  // Stable ordering so the tracked file diffs by content, not by winget's enumeration order.
-  for (const s of sources) {
-    (s.Packages as Array<{ PackageIdentifier: string }>).sort((a, b) =>
-      a.PackageIdentifier.localeCompare(b.PackageIdentifier),
-    );
-  }
-  sources.sort((a, b) =>
-    a.SourceDetails.Name.localeCompare(b.SourceDetails.Name),
+  const raw: unknown = await Bun.file(wsl).json();
+  const doc = JsonRecord.parse(raw);
+  // Every record is spread, never rebuilt from a schema's output: the tracked file keeps winget's
+  // own key order and every field this script does not read.
+  const sources = (JsonRecordList.nullish().parse(doc.Sources) ?? []).map(
+    (src) => {
+      const packages = JsonRecordList.parse(src.Packages)
+        .map((p) => ({ id: PackageId.parse(p).PackageIdentifier, p }))
+        // Stable ordering so the tracked file diffs by content, not by winget's enumeration order.
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((e) => e.p);
+      return {
+        name: SourceName.parse(src).SourceDetails.Name,
+        count: packages.length,
+        src: { ...src, Packages: packages },
+      };
+    },
   );
+  const total = sources.reduce((n, s) => n + s.count, 0);
+  sources.sort((a, b) => a.name.localeCompare(b.name));
+  const json =
+    doc.Sources === undefined || doc.Sources === null
+      ? doc
+      : { ...doc, Sources: sources.map((s) => s.src) };
   await Bun.write(repoFile, `${JSON.stringify(json, null, 2)}\n`);
   console.log(
-    `  ${total} packages across ${sources.map((s) => `${s.SourceDetails.Name}(${s.Packages.length})`).join(", ")}`,
+    `  ${total} packages across ${sources.map((s) => `${s.name}(${s.count})`).join(", ")}`,
   );
   if (skipped > 0) {
     console.log(

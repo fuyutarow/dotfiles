@@ -65,7 +65,7 @@ async function allowedPrefixes(root: string): Promise<string[]> {
     return collected;
   }).then(
     (ok) => ok,
-    () => [] as string[],
+    (): string[] => [],
   );
   return [...prefixes, ...extra];
 }

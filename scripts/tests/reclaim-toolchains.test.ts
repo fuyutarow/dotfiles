@@ -80,6 +80,16 @@ function runScript(
   };
 }
 
+// A stand-in for Bun.spawnSync that never spawns. The Proxy keeps the real function's type, so no
+// cast is needed, and its apply trap answers every call with impl(argv-and-options).
+function fakeSpawnSync(
+  impl: (args: unknown[]) => unknown,
+): typeof Bun.spawnSync {
+  return new Proxy(Bun.spawnSync, {
+    apply: (_target, _thisArg, args: unknown[]) => impl(args),
+  });
+}
+
 // ---- unit: parseRustupToolchainList ----------------------------------------------------------
 
 describe("parseRustupToolchainList", () => {
@@ -264,23 +274,23 @@ describe("serverVersionsToRemove", () => {
 
 describe("isProcessRunning", () => {
   test("pgrep exit 0 => running", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 0,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isProcessRunning("abc123", fakeSpawn)).toBe(true);
   });
 
   test("pgrep nonzero exit => not running", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 1,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isProcessRunning("abc123", fakeSpawn)).toBe(false);
   });
 
   test("pgrep missing => treated as RUNNING (conservative: keep on missing evidence)", () => {
-    const fakeSpawn = (() => {
+    const fakeSpawn = fakeSpawnSync(() => {
       throw new Error("ENOENT");
-    }) as unknown as typeof Bun.spawnSync;
+    });
     expect(isProcessRunning("abc123", fakeSpawn)).toBe(true);
   });
 });

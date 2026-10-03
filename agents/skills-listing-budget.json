@@ -1,10 +1,17 @@
 {
-  "maxListingChars": 55721,
+  "maxListingChars": 56059,
   "measuredOn": "2026-10-03",
-  "skillsAtMeasurement": 58,
+  "skillsAtMeasurement": 59,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
+    {
+      "date": "2026-10-03",
+      "from": 55721,
+      "to": 56059,
+      "spentBy": "transcribing-media",
+      "reason": "Restore was explicitly requested after a renewed transcription task. The active local Whisper guide adds 338 characters to the static listing proxy after shortening its description; the ceiling is pinned to the measured total, with no additional slack. Updated the procedure against current MLX Whisper, yt-dlp, and Whisper CLI documentation, including subtitles-first URL handling and an authorization boundary."
+    },
     {
       "date": "2026-10-03",
       "from": 66012,

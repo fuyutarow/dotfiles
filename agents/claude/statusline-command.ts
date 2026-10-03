@@ -59,8 +59,8 @@
 // .oxlintrc.json's ban override was extended from scripts/*.ts to agents/claude/*.ts to enforce
 // it here too (agents/claude/hooks/*.ts stays exempt -- those run before `mise run deps` has
 // necessarily restored node_modules, this file never does).
-// Static safety comes from the all-optional StatusInput shape + native `!= null` narrowing.
-// Input: JSON via stdin from Claude Code.
+// Static safety comes from the zod schemas below (every external value is parsed, see ZOD FIRST)
+// + native `!= null` narrowing. Input: JSON via stdin from Claude Code.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -76,6 +76,7 @@ import {
 import { join } from "node:path";
 import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { z } from "zod";
 import {
   clockHM,
   localFromEpochSec,
@@ -85,30 +86,69 @@ import {
   type PromptParts,
 } from "./hooks/prompt-stamp.ts";
 
-interface RateWindow {
-  used_percentage?: number;
-  resets_at?: number; // Unix epoch seconds
-}
-interface StatusInput {
-  cwd?: string;
-  session_id?: string;
+// ZOD FIRST (writing-typescript, owner call 2026-10-03): every value that enters this file from
+// outside — the stdin payload, the cache files under ~/.cache/claude, ~/.claude.json, the storage
+// TOML, a failed child process's error object — is parsed with a schema here, and the parsed
+// OUTPUT is what the rest of the file uses. A type annotation on JSON.parse() or an `as` cast
+// proves nothing, and a hand-written `x is T` guard drifts from the type it guards. The types
+// below are z.infer of these schemas, so the schema is the one place a shape is written.
+// A file that fails its schema is "no usable file" (a cache is re-sampled) or an explicit n/a
+// (~/.claude.json, the TOML, the payload) — never half-trusted.
+// A value the source may send as null, or omit, is `undefined` after parsing: one absent state.
+const maybe = <T extends z.ZodType>(schema: T) =>
+  schema.nullish().transform((v) => v ?? undefined);
+
+const RateWindowSchema = z.object({
+  used_percentage: maybe(z.number()),
+  resets_at: maybe(z.number()), // Unix epoch seconds
+});
+const StatusInputSchema = z.object({
+  cwd: maybe(z.string()),
+  session_id: maybe(z.string()),
   // NOT the displayed name: it can hold an AI-generated title instead of the real
   // cross-session-addressable name (caught live 2026-08-28 — one session showed its title here
   // while `claude agents --json` still had "firedancer-1d"). Read only as a CHANGE SIGNAL: it is
   // the custom title (or AI title) and moves the instant /rename runs, so a new value bypasses
   // the name cache's TTL (see agentName()).
-  session_name?: string;
-  workspace?: { current_dir?: string };
-  model?: { display_name?: string; id?: string };
-  context_window?: {
-    total_input_tokens?: number;
-    current_usage?: { input_tokens?: number };
-    used_percentage?: number;
-  };
-  cost?: { total_lines_added?: number; total_lines_removed?: number };
-  effort?: { level?: string };
-  rate_limits?: { five_hour?: RateWindow; seven_day?: RateWindow };
-  worktree?: { name?: string };
+  session_name: maybe(z.string()),
+  workspace: maybe(z.object({ current_dir: maybe(z.string()) })),
+  model: maybe(
+    z.object({ display_name: maybe(z.string()), id: maybe(z.string()) }),
+  ),
+  context_window: maybe(
+    z.object({
+      total_input_tokens: maybe(z.number()),
+      current_usage: maybe(z.object({ input_tokens: maybe(z.number()) })),
+      used_percentage: maybe(z.number()),
+    }),
+  ),
+  cost: maybe(
+    z.object({
+      total_lines_added: maybe(z.number()),
+      total_lines_removed: maybe(z.number()),
+    }),
+  ),
+  effort: maybe(z.object({ level: maybe(z.string()) })),
+  rate_limits: maybe(
+    z.object({
+      five_hour: maybe(RateWindowSchema),
+      seven_day: maybe(RateWindowSchema),
+    }),
+  ),
+  worktree: maybe(z.object({ name: maybe(z.string()) })),
+});
+type StatusInput = z.output<typeof StatusInputSchema>;
+
+// Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
+// shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
+function readJson<S extends z.ZodType>(
+  path: string,
+  schema: S,
+): z.output<S> | undefined {
+  const parsed = fromThrowable(() => JSON.parse(readFileSync(path, "utf8")))();
+  if (parsed.isErr()) return undefined;
+  const checked = schema.safeParse(parsed.value);
+  return checked.success ? checked.data : undefined;
 }
 
 // Every value this file can show, already computed — the sole output of buildDataframe() and
@@ -137,7 +177,8 @@ interface Dataframe {
   rl7?: number | undefined;
   rl7Reset?: number | undefined;
   rlModel: ModelLimit[];
-  claudeJsonWhy?: string | undefined; // ~/.claude.json unreadable: email and model caps are unknown
+  accountWhy?: string | undefined; // ~/.claude.json unreadable / unexpected shape: email unknown
+  modelCapsWhy?: string | undefined; // same, for the per-model weekly caps
   branch?: string | undefined; // undefined with no branchWhy = cwd is not a repo (nothing to show)
   branchWhy?: string | undefined; // the lookup itself failed — shown as n/a, never dropped
   add?: number | undefined; // undefined = the payload carried no cost block (NOT zero lines)
@@ -180,24 +221,33 @@ const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", no
 function naSegment(label: string, why: string): string {
   return `${label} ${NA_COLOR}n/a${RST} ${DIM}(${why})${RST}`;
 }
+// What execFileSync's thrown error carries, parsed rather than probed with `in`/`typeof`. Each
+// field is read on its own (.catch): an error object that lacks or mangles one still yields the
+// others, and the all-missing case falls through to the generic "<tool> failed" below.
+const ExecErrorSchema = z.object({
+  code: z.string().optional().catch(undefined),
+  status: z.number().nullish().catch(undefined),
+  signal: z.string().nullish().catch(undefined),
+  stderr: z.string().optional().catch(undefined),
+});
+function execError(e: unknown): z.output<typeof ExecErrorSchema> {
+  const parsed = ExecErrorSchema.safeParse(e);
+  return parsed.success ? parsed.data : {};
+}
 // Why a bounded subprocess call failed, in the few words that tell a human what to fix: the tool
-// is not installed, it hit the shared bound, or it ran and exited non-zero. `status` is checked
-// by narrowing, not by an `as` cast.
+// is not installed, it hit its bound, it ran and exited non-zero, or a signal killed it.
 function failWhy(
   e: unknown,
   tool: string,
   timeoutMs: number = ENRICHMENT_TIMEOUT_MS,
 ): string {
-  if (!(e instanceof Error)) return `${tool} failed`;
-  if ("code" in e && e.code === "ENOENT") return `no ${tool}`;
-  if ("code" in e && e.code === "ETIMEDOUT")
-    return `${tool} timeout ${timeoutMs}ms`;
-  if ("status" in e && typeof e.status === "number")
-    return `${tool} exit ${e.status}`;
+  const x = execError(e);
+  if (x.code === "ENOENT") return `no ${tool}`;
+  if (x.code === "ETIMEDOUT") return `${tool} timeout ${timeoutMs}ms`;
+  if (typeof x.status === "number") return `${tool} exit ${x.status}`;
   // Killed by a signal (an OOM kill under load has status null): name it.
-  if ("signal" in e && typeof e.signal === "string")
-    return `${tool} killed by ${e.signal}`;
-  if ("code" in e && typeof e.code === "string") return `${tool} ${e.code}`;
+  if (x.signal) return `${tool} killed by ${x.signal}`;
+  if (x.code) return `${tool} ${x.code}`;
   return `${tool} failed`;
 }
 
@@ -208,31 +258,26 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 // keeps refreshing (via `cachedUsageUtilization`) whenever it fetches usage data.
 // Cost measured 2026-08-24: 0.64 ms read + 0.91 ms parse for a 129 KB file, against the
 // 8.8 ms this script already spends on its one `ps -eo` pass. Not worth caching.
-interface ClaudeJson {
-  oauthAccount?: { emailAddress?: string };
-  cachedUsageUtilization?: {
-    utilization?: {
-      limits?: Array<{
-        kind?: string;
-        percent?: number;
-        resets_at?: string | null;
-        scope?: { model?: { display_name?: string } } | null;
-      }>;
-    };
-  };
-}
+// The file is read once as raw JSON; each reader below validates ONLY the part it uses, so a
+// drifted `cachedUsageUtilization` cannot take the account down with it.
 // err = the file could not be read or parsed (claude rewrites it constantly, so a read can land
-// mid-write): the account and the model caps are then UNKNOWN, which render() says, instead of
-// reading as "no account" / "no cap". A file that parses but lacks a field is the real absence.
-function readClaudeJson(): Result<ClaudeJson, string> {
+// mid-write), or a part has an unexpected shape: that part is then UNKNOWN, which render() says,
+// instead of reading as "no account" / "no cap". A part that is validly absent is the real absence.
+function readClaudeJson(): Result<unknown, string> {
   return fromThrowable(
-    (): ClaudeJson => JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
+    (): unknown => JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
     () => "~/.claude.json unreadable",
   )();
 }
-function account(cj: ClaudeJson): string | undefined {
+const AccountSchema = z.object({
+  oauthAccount: maybe(z.object({ emailAddress: maybe(z.string()) })),
+});
+function account(cj: unknown): Result<string | undefined, string> {
+  const parsed = AccountSchema.safeParse(cj);
+  if (!parsed.success)
+    return err("~/.claude.json has an unexpected account shape");
   // `||` not `??`: an empty string is not an account either, and must drop the segment.
-  return cj.oauthAccount?.emailAddress || undefined;
+  return ok(parsed.data.oauthAccount?.emailAddress || undefined);
 }
 
 // Fable (and any other model with its own weekly ceiling — the CLI's own "You've hit your Opus
@@ -250,8 +295,35 @@ interface ModelLimit {
   pct: number;
   resetEpoch: number | undefined;
 }
-function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
-  const limits = cj.cachedUsageUtilization?.utilization?.limits ?? [];
+const CapsSchema = z.object({
+  cachedUsageUtilization: maybe(
+    z.object({
+      utilization: maybe(
+        z.object({
+          limits: maybe(
+            z.array(
+              z.object({
+                kind: maybe(z.string()),
+                percent: maybe(z.number()),
+                resets_at: maybe(z.string()),
+                scope: maybe(
+                  z.object({
+                    model: maybe(z.object({ display_name: maybe(z.string()) })),
+                  }),
+                ),
+              }),
+            ),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
+  const parsed = CapsSchema.safeParse(cj);
+  if (!parsed.success)
+    return err("~/.claude.json has an unexpected usage-limits shape");
+  const limits = parsed.data.cachedUsageUtilization?.utilization?.limits ?? [];
   const out: ModelLimit[] = [];
   for (const l of limits) {
     if (l.kind !== "weekly_scoped" || l.percent == null) continue;
@@ -272,7 +344,7 @@ function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
         epochMs !== undefined ? Math.floor(epochMs / 1000) : undefined,
     });
   }
-  return out;
+  return ok(out);
 }
 
 // Is `ultracode: true` set in the CLI's OWN live settings file — not this repo's committed
@@ -281,12 +353,13 @@ function modelWeeklyLimits(cj: ClaudeJson): ModelLimit[] {
 // showed up here as modelSettings.<model>.effortLevel, not as this repo's flat `effortLevel`
 // key), so this file — not the repo source — is the only place that reflects what is ACTUALLY
 // configured right now. Cheap like account() just above: same file class, smaller payload.
+const SettingsSchema = z.object({ ultracode: z.boolean().optional() });
 function ultracodeConfigured(): boolean {
-  return fromThrowable((): { ultracode?: boolean } =>
-    JSON.parse(readFileSync(`${HOME}/.claude/settings.json`, "utf8")),
-  )()
-    .map((s) => s.ultracode === true)
-    .unwrapOr(false); // unreadable / not JSON -> treat as not configured, segment reads "off"
+  // unreadable / not JSON / wrong shape -> treated as not configured, the segment reads "off"
+  return (
+    readJson(`${HOME}/.claude/settings.json`, SettingsSchema)?.ultracode ===
+    true
+  );
 }
 
 // `name` — the actual field `claude agents --json` returns per session (confirmed live
@@ -369,6 +442,7 @@ function binaryContains(path: string, needle: string): boolean | undefined {
   return scanFd(opened.value, Buffer.from(needle));
 }
 
+const RcProbeCacheSchema = z.record(z.string(), z.boolean());
 /**
  * Keyed by path+size+mtime, and a MAP rather than one slot: sessions on two CLI builds render
  * side by side after an auto-update, and a single slot would make them evict each other and
@@ -380,15 +454,10 @@ function rcProbeValid(): boolean | undefined {
   const st = fromThrowable(() => statSync(exe))();
   if (st.isErr()) return undefined;
   const key = `${exe}\u0000${st.value.size}\u0000${st.value.mtimeMs}`;
-  const cache = fromThrowable(
-    () =>
-      JSON.parse(readFileSync(RC_PROBE_CACHE, "utf8")) as Record<
-        string,
-        unknown
-      >,
-  )().unwrapOr({} as Record<string, unknown>);
+  // A cache that is not a plain {key: boolean} map is "no cache": one re-scan rewrites it clean.
+  const cache = readJson(RC_PROBE_CACHE, RcProbeCacheSchema) ?? {};
   const hit = cache[key];
-  if (typeof hit === "boolean") return hit;
+  if (hit !== undefined) return hit;
   const valid = binaryContains(exe, RC_NEEDLE);
   if (valid === undefined) return undefined;
   // The cache is an optimization; a failed write leaves the answer above standing.
@@ -420,12 +489,22 @@ const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
 // `hint`: the stdin session_name seen when this entry was fetched — a different value now means
 // the session was renamed, so the entry is stale regardless of age.
-type AgentNameEntry = { name?: string; at: number; hint?: string };
+const AgentNameEntrySchema = z.object({
+  name: z.string().optional(),
+  at: z.number(),
+  hint: z.string().optional(),
+});
+type AgentNameEntry = z.output<typeof AgentNameEntrySchema>;
+const AgentNameCacheSchema = z.record(z.string(), AgentNameEntrySchema);
+// What `claude agents --json` prints: one object per session.
+const AgentListSchema = z.array(
+  z.object({ sessionId: maybe(z.string()), name: maybe(z.string()) }),
+);
 // Cache-miss refresh: fold `claude agents --json`'s list into the sid->name map, keeping only
 // entries that carry a sessionId. Extracted out of agentName() only to keep its try/for nesting
 // under max-depth; the exactOptionalPropertyTypes name-omission below is unchanged.
 function agentNameEntries(
-  list: Array<{ sessionId?: string; name?: string }>,
+  list: z.output<typeof AgentListSchema>,
   now: number,
 ): Record<string, AgentNameEntry> {
   const next: Record<string, AgentNameEntry> = {};
@@ -445,11 +524,8 @@ function agentName(
   sid: string,
   hint?: string,
 ): Result<string | undefined, string> {
-  // missing / corrupt cache file -> treat as empty and refetch below
-  const cache: Record<string, AgentNameEntry> = fromThrowable(
-    (): Record<string, AgentNameEntry> =>
-      JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
-  )().unwrapOr({});
+  // missing / corrupt / wrong-shape cache file -> treat as empty and refetch below
+  const cache = readJson(AGENT_NAME_CACHE, AgentNameCacheSchema) ?? {};
   const hit = cache[sid];
   // A /rename shows up here first: the stdin session_name moves at once, while the cached name
   // would lag up to the TTL (and the herdr tab with it). Only a KNOWN previous value can differ —
@@ -474,13 +550,13 @@ function agentName(
     (e) => failWhy(e, "claude agents", AGENT_LIST_TIMEOUT_MS),
   )();
   if (outResult.isErr()) return err(outResult.error); // `claude` missing/slow/errored
-  const listResult = fromThrowable(
-    (): Array<{ sessionId?: string; name?: string }> =>
-      JSON.parse(outResult.value),
-  )();
-  if (listResult.isErr()) return err("claude agents output unparsable");
+  const listResult = fromThrowable((): unknown =>
+    JSON.parse(outResult.value),
+  )().map((v) => AgentListSchema.safeParse(v));
+  if (listResult.isErr() || !listResult.value.success)
+    return err("claude agents output unparsable");
   const now = Temporal.Now.instant().epochMilliseconds;
-  const next = agentNameEntries(listResult.value, now);
+  const next = agentNameEntries(listResult.value.data, now);
   if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
   // Keep every session's last-seen hint across this whole-file rewrite; record ours.
   for (const [id, entry] of Object.entries(next)) {
@@ -731,14 +807,15 @@ function scanOutOfHarness(): {
 // AND the percentage, since render() needs the percentage to threshold-color the segment the
 // same way every other percentage in this file is colored (pctFmt) — a plain fraction alone
 // cannot drive that.
-interface MemReading {
-  frac: string; // e.g. "16.2/54.9G"
-  pct: number; // used/total*100, unrounded — pctFmt() rounds at render time
+const MemReadingSchema = z.object({
+  frac: z.string(), // e.g. "16.2/54.9G"
+  pct: z.number(), // used/total*100, unrounded — pctFmt() rounds at render time
   // Set only when this is the last GOOD sample served because the fresh one failed (VRAM only):
   // how old it is and why the fresh one failed. render() prints it, so an old number is never
   // shown as if it were current.
-  stale?: { secs: number; why: string };
-}
+  stale: z.object({ secs: z.number(), why: z.string() }).optional(),
+});
+type MemReading = z.output<typeof MemReadingSchema>;
 function memReading(usedG: number, totalG: number): MemReading | undefined {
   if (!Number.isFinite(usedG) || !Number.isFinite(totalG) || totalG <= 0)
     return undefined;
@@ -764,27 +841,27 @@ const GPU_STALE_MAX_MS = 30 * 60_000;
 // every render. `good`: the newest SUCCESSFUL sample, kept across failures. The pre-2026-10-03
 // shape wrote `reading: null` for ANY failure ("no GPU"), which is how a timeout under load made
 // VRAM disappear; that shape carries no `why`, so it is simply treated as expired.
-interface GpuCache {
-  at?: unknown;
-  reading?: MemReading | null;
-  why?: unknown;
-  good?: { at?: unknown; reading?: MemReading } | undefined;
-}
+const GpuCacheSchema = z.object({
+  at: z.number().optional(),
+  reading: MemReadingSchema.nullish(), // `null` is the pre-fix "no GPU" marker
+  why: z.string().optional(),
+  good: z.object({ at: z.number(), reading: MemReadingSchema }).optional(),
+});
+type GpuCache = z.output<typeof GpuCacheSchema>;
 // A timestamp is "within" a window only if it is not in the future: a clock stepped backwards
 // (WSL2 time sync after sleep) must not keep an old entry fresh for hours or print a negative age.
-function within(at: unknown, now: number, windowMs: number): at is number {
-  return typeof at === "number" && now - at >= 0 && now - at < windowMs;
+function within(at: number, now: number, windowMs: number): boolean {
+  return now - at >= 0 && now - at < windowMs;
 }
 function vramFrac(): Result<MemReading, string> {
   const now = Temporal.Now.instant().epochMilliseconds;
-  const none: GpuCache = {};
-  const cached = fromThrowable((): GpuCache =>
-    JSON.parse(readFileSync(GPU_CACHE, "utf8")),
-  )().unwrapOr(none);
-  const fresh = within(cached.at, now, GPU_SAMPLE_TTL_MS);
+  // A file that is missing or fails GpuCacheSchema is an empty cache: the sample is retaken.
+  const cached: GpuCache = readJson(GPU_CACHE, GpuCacheSchema) ?? {};
+  const fresh =
+    cached.at !== undefined && within(cached.at, now, GPU_SAMPLE_TTL_MS);
   if (fresh && cached.reading) return ok(cached.reading);
   let why: string;
-  if (fresh && typeof cached.why === "string") {
+  if (fresh && cached.why !== undefined) {
     why = cached.why;
   } else {
     const sampled = sampleVram();
@@ -804,12 +881,19 @@ function vramFrac(): Result<MemReading, string> {
   // The fresh sample failed. A recent good one is still better than nothing, provided its age
   // and the failure are printed beside it; otherwise the reading is plainly n/a.
   const good = cached.good;
-  if (good?.reading !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
+  if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
     const secs = Math.round((now - good.at) / 1000);
     return ok({ ...good.reading, stale: { secs, why } });
   }
   return err(why);
 }
+// `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits`: the first GPU's
+// line, "<used MiB>, <total MiB>". Whole numbers only — an empty field must not read as 0.
+const MiB = z.string().trim().regex(/^\d+$/).transform(Number);
+const NvidiaSmiSchema = z
+  .string()
+  .transform((out) => (out.split("\n")[0] ?? "").split(","))
+  .pipe(z.tuple([MiB, MiB]));
 function sampleVram(): Result<MemReading, string> {
   return fromThrowable(
     () =>
@@ -827,15 +911,10 @@ function sampleVram(): Result<MemReading, string> {
       ),
     (e) => failWhy(e, "nvidia-smi"),
   )().andThen((out) => {
-    const [usedRaw, totalRaw] = (out.split("\n")[0] ?? "")
-      .split(",")
-      .map((s) => Number(s.trim()));
-    // A short/malformed csv line leaves these missing; NaN fails isFinite in memReading, like
-    // Number("") already would, so this default changes no observable behavior.
-    const reading = memReading(
-      (usedRaw ?? NaN) / 1024,
-      (totalRaw ?? NaN) / 1024,
-    );
+    const parsed = NvidiaSmiSchema.safeParse(out);
+    if (!parsed.success) return err("nvidia-smi output unparsable");
+    const [used, total] = parsed.data;
+    const reading = memReading(used / 1024, total / 1024);
     return reading ? ok(reading) : err("nvidia-smi output unparsable");
   });
 }
@@ -872,11 +951,12 @@ function ramFrac(): Result<MemReading, string> {
 // render is a fresh process (see this file's header note), so that second snapshot has to be
 // the previous render's, kept on disk — same shape as AGENT_NAME_CACHE / RC_PROBE_CACHE above.
 const CPU_CACHE = `${HOME}/.cache/claude/statusline-cpu.json`;
-interface CpuSample {
-  total: number;
-  idle: number;
-  at?: number; // epoch ms the sample was taken; only the cached baseline carries it
-}
+const CpuSampleSchema = z.object({
+  total: z.number(),
+  idle: z.number(),
+  at: z.number().optional(), // epoch ms the sample was taken; only the cached baseline carries it
+});
+type CpuSample = z.output<typeof CpuSampleSchema>;
 const CPU_BASELINE_MIN_MS = 2_000;
 const CPU_BASELINE_MAX_MS = 60_000;
 // Aggregate "cpu  ..." line (not a per-core "cpu0 ..." line): user+nice+system+idle+iowait+
@@ -902,9 +982,7 @@ function cpuPct(): Result<number, string> {
   if (sampled.isErr()) return err(sampled.error); // no /proc (mac) / malformed line
   const sample = sampled.value;
   const now = Temporal.Now.instant().epochMilliseconds;
-  const cacheResult = fromThrowable((): CpuSample =>
-    JSON.parse(readFileSync(CPU_CACHE, "utf8")),
-  )();
+  const prev = readJson(CPU_CACHE, CpuSampleSchema); // undefined: no usable baseline file
   // Best-effort write of THIS render's sample for the NEXT render to diff against, unconditional
   // on whether this render itself can show a value — same "write regardless, return what we
   // have" shape as agentName()'s cache-miss path above. EXCEPT a baseline younger than
@@ -912,19 +990,17 @@ function cpuPct(): Result<number, string> {
   // render shrank the window to the gap since ANOTHER session's render (a few ms -> a coarse 0%
   // or 100%).
   const keep =
-    cacheResult.isOk() &&
-    within(cacheResult.value.at, now, CPU_BASELINE_MIN_MS);
+    prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
   if (!keep) {
     fromThrowable(() => {
       mkdirSync(`${HOME}/.cache/claude`, { recursive: true });
       writeFileSync(CPU_CACHE, JSON.stringify({ ...sample, at: now }));
     })();
   }
-  if (cacheResult.isErr()) return err("no earlier sample to diff against"); // first render on this host
-  const prev = cacheResult.value;
+  if (prev === undefined) return err("no earlier sample to diff against"); // first render on this host
   // A baseline with no timestamp (pre-2026-10-03 file), from the future (clock stepped back) or
   // older than CPU_BASELINE_MAX_MS would be an average over some other period than "now".
-  if (!within(prev.at, now, CPU_BASELINE_MAX_MS))
+  if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
     return err("no earlier sample from the last 60s");
   const dTotal = sample.total - prev.total;
   const dIdle = sample.idle - prev.idle;
@@ -952,10 +1028,12 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const sessionName = nameResult.unwrapOr(undefined);
   const sessionNameWhy = nameResult.isErr() ? nameResult.error : undefined;
   const cjResult = readClaudeJson();
-  const cj = cjResult.unwrapOr({});
-  const claudeJsonWhy = cjResult.isErr() ? cjResult.error : undefined;
-  const email = account(cj);
-  const rlModel = modelWeeklyLimits(cj);
+  const accountResult = cjResult.andThen(account);
+  const capsResult = cjResult.andThen(modelWeeklyLimits);
+  const email = accountResult.unwrapOr(undefined);
+  const accountWhy = accountResult.isErr() ? accountResult.error : undefined;
+  const rlModel = capsResult.unwrapOr([]);
+  const modelCapsWhy = capsResult.isErr() ? capsResult.error : undefined;
 
   let model = data.model?.display_name ?? "";
   const modelId = data.model?.id ?? "";
@@ -1026,10 +1104,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
         env: { ...process.env, LC_ALL: "C" },
       }).trim(),
     (e): { notRepo: boolean; why: string } => {
-      const stderr =
-        e instanceof Error && "stderr" in e && typeof e.stderr === "string"
-          ? e.stderr.trim()
-          : "";
+      const stderr = (execError(e).stderr ?? "").trim();
       if (stderr.includes("not a git repository"))
         return { notRepo: true, why: "" };
       // git's own words beat a bare "git exit 128": "fatal: <reason>" -> "<reason>", capped.
@@ -1072,7 +1147,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     rl7: data.rate_limits?.seven_day?.used_percentage,
     rl7Reset: data.rate_limits?.seven_day?.resets_at,
     rlModel,
-    claudeJsonWhy,
+    accountWhy,
+    modelCapsWhy,
     branch,
     branchWhy,
     add: data.cost?.total_lines_added,
@@ -1165,7 +1241,7 @@ function ctxSegment(df: Pick<Dataframe, "ctx" | "ctxPct">): string {
 function rateRow(
   df: Pick<
     Dataframe,
-    "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel" | "claudeJsonWhy"
+    "rl5" | "rl5Reset" | "rl7" | "rl7Reset" | "rlModel" | "modelCapsWhy"
   >,
 ): string {
   const label = `${ESC}[38;5;108mRate:${RST}`;
@@ -1183,7 +1259,7 @@ function rateRow(
       : `7d ${NA_COLOR}n/a${RST}`,
   );
   for (const m of df.rlModel) parts.push(rlModelSegment(m));
-  if (df.claudeJsonWhy) parts.push(naSegment("model caps", df.claudeJsonWhy));
+  if (df.modelCapsWhy) parts.push(naSegment("model caps", df.modelCapsWhy));
   // Independent sibling windows, so the middot (see render()'s header note on MID).
   return `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
 }
@@ -1250,34 +1326,41 @@ interface DiskMiss {
 }
 type DiskEntry = DiskReading | DiskMiss;
 // err = the drive list itself could not be read, so WHICH disks to show is unknown.
+// Only the keys this file reads; the gate's own keys (label, stop_gib, ...) are not its business.
+const StorageConfigSchema = z.object({
+  drive: z
+    .record(
+      z.string(),
+      z.object({
+        path: z.string().optional(),
+        deny_gib: z.number().optional(),
+        warn_gib: z.number().optional(),
+      }),
+    )
+    .optional(),
+});
 function diskReadings(): Result<DiskEntry[], string> {
-  const parsed = fromThrowable(
-    () => {
-      const cfg = Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")) as {
-        drive?: Record<
-          string,
-          { path?: unknown; deny_gib?: unknown; warn_gib?: unknown }
-        >;
-      };
-      return Object.values(cfg.drive ?? {});
-    },
+  const raw = fromThrowable(
+    (): unknown => Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")),
     () => "storage-headroom.toml unreadable",
   )();
-  if (parsed.isErr()) return err(parsed.error);
+  if (raw.isErr()) return err(raw.error);
+  const parsed = StorageConfigSchema.safeParse(raw.value);
+  if (!parsed.success)
+    return err("storage-headroom.toml has an unexpected shape");
+  const drives = Object.values(parsed.data.drive ?? {});
   // The config says WHICH disks to show: an empty list is the config failing to say, not "no disks".
-  if (parsed.value.length === 0)
-    return err("no [drive.*] in storage-headroom.toml");
+  if (drives.length === 0) return err("no [drive.*] in storage-headroom.toml");
   const out: DiskEntry[] = [];
-  for (const d of parsed.value) {
-    if (typeof d.path !== "string") {
+  for (const d of drives) {
+    if (d.path === undefined) {
       out.push({ label: "Disk", why: "drive entry has no path" });
       continue;
     }
     const path = d.path;
     const st = fromThrowable(
       () => statfsSync(path),
-      (e): string =>
-        e instanceof Error && "code" in e ? String(e.code) : "statfs failed",
+      (e): string => execError(e).code ?? "statfs failed",
     )();
     // ENOENT off WSL: this OS has no such drive (/mnt/c on macOS) — nothing to show. Under WSL
     // /mnt/c is the host drive the storage gate exists to protect, so a missing mount is a drive
@@ -1292,8 +1375,8 @@ function diskReadings(): Result<DiskEntry[], string> {
     const freeG = (bavail * bsize) / 1024 ** 3;
     const totalG = usedG + freeG; // df's Use% denominator (reserved blocks excluded)
     let col = "38;5;71";
-    if (typeof d.warn_gib === "number" && freeG < d.warn_gib) col = "38;5;178";
-    if (typeof d.deny_gib === "number" && freeG < d.deny_gib) col = "38;5;167";
+    if (d.warn_gib !== undefined && freeG < d.warn_gib) col = "38;5;178";
+    if (d.deny_gib !== undefined && freeG < d.deny_gib) col = "38;5;167";
     out.push({ label: diskLabel(path), usedG, totalG, freeG, col });
   }
   return ok(out);
@@ -1354,8 +1437,8 @@ function render(df: Dataframe): string {
   let identityLine = "";
   if (df.email != null)
     identityLine = join(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
-  else if (df.claudeJsonWhy)
-    identityLine = join(identityLine, naSegment("account", df.claudeJsonWhy));
+  else if (df.accountWhy)
+    identityLine = join(identityLine, naSegment("account", df.accountWhy));
   if (df.sid != null)
     identityLine = join(
       identityLine,
@@ -1444,15 +1527,27 @@ if (typeof Temporal === "undefined") {
   process.exit(0);
 }
 const raw = await Bun.stdin.text();
-// any -> StatusInput at the trust boundary (no `as` cast).
-const parseResult = fromThrowable((): StatusInput => JSON.parse(raw))();
-if (parseResult.isErr()) {
+// unknown -> StatusInput at the trust boundary: parsed with StatusInputSchema, never cast. A
+// payload that is not JSON, or has a field of the wrong type, renders line 1 plus the first
+// reason — the whole bar saying "the input is wrong" beats a bar built from half-trusted values.
+const json = fromThrowable((): unknown => JSON.parse(raw))();
+if (json.isErr()) {
   process.stdout.write(`${coloredHead(promptParts(process.env.PWD ?? ""))}\n`);
   process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
   process.exit(0);
 }
+const payload = StatusInputSchema.safeParse(json.value);
+if (!payload.success) {
+  const issue = payload.error.issues[0];
+  const where = (issue?.path ?? []).map(String).join(".") || "(root)";
+  process.stdout.write(`${coloredHead(promptParts(process.env.PWD ?? ""))}\n`);
+  process.stdout.write(
+    `${DIM}Model: ? | invalid statusline payload: ${where}: ${issue?.message ?? "?"}${RST}`,
+  );
+  process.exit(0);
+}
 
-const df = await buildDataframe(parseResult.value);
+const df = await buildDataframe(payload.data);
 process.stdout.write(render(df));
 
 // Hand the plain Sys row to hooks/log-sys-snapshot.ts, which attaches it to the transcript.
@@ -1482,10 +1577,7 @@ fromThrowable(() => {
 // shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
 // then 51% with the same reset). One file per session; the hook reads its own and inserts the
 // rows as given.
-const sid = (parseResult.value.session_id ?? "").replace(
-  /[^A-Za-z0-9_-]/g,
-  "_",
-);
+const sid = (payload.data.session_id ?? "").replace(/[^A-Za-z0-9_-]/g, "_");
 if (sid !== "") {
   const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
   fromThrowable(() => {

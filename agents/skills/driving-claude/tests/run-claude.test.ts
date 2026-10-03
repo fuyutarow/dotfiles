@@ -2,8 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { z } from "zod";
 import { probeModels } from "../scripts/probe-models.ts";
-import { isRecord, runClaude, toRelay } from "../scripts/run-claude.ts";
+import { asRecord, runClaude, toRelay } from "../scripts/run-claude.ts";
+
+const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
+
+function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
+  return ErrorEnvelope.parse(((): unknown => JSON.parse(stdout))());
+}
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");
 const runnerScript = resolve(import.meta.dir, "../scripts/run-claude.ts");
@@ -43,8 +50,8 @@ describe("driving-claude runner", () => {
     );
 
     expect(run.exitCode).toBe(0);
-    expect(isRecord(run.claude)).toBe(true);
-    expect(isRecord(run.claude) && run.claude.result).toBe("OK");
+    expect(asRecord(run.claude) !== undefined).toBe(true);
+    expect(asRecord(run.claude)?.result).toBe("OK");
   });
 
   test("kills a child that exceeds its explicit timeout", async () => {
@@ -96,7 +103,7 @@ describe("driving-claude argv boundary", () => {
   test("run-claude rejects --__proto__", () => {
     const result = runCli(runnerScript, ["--__proto__"]);
     expect(result.exitCode).toBe(2);
-    expect(JSON.parse(result.stdout).error).toContain(
+    expect(parseErrorEnvelope(result.stdout).error).toContain(
       "Unknown option '--__proto__'",
     );
     expect(result.stderr).toBe("");
@@ -115,7 +122,7 @@ describe("driving-claude argv boundary", () => {
       const args = [flag];
       const result = runCli(runnerScript, args);
       expect(result.exitCode).toBe(2);
-      const envelope = JSON.parse(result.stdout);
+      const envelope = parseErrorEnvelope(result.stdout);
       expect(envelope.exit_code).toBe(2);
       expect(envelope.error).toContain(`${flag} requires a value`);
       expect(result.stderr).toBe("");

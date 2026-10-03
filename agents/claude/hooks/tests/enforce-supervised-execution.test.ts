@@ -27,7 +27,7 @@ describe("enforce-supervised-execution", () => {
       "/usr/bin/setsid ./queue.sh",
     ]) {
       const decision = denial(command);
-      expect(decision?.permissionDecision).toBe("deny");
+      expect(decision.permissionDecision).toBe("deny");
       expect(decision.permissionDecisionReason).toContain(
         "supervised-execution",
       );
@@ -40,7 +40,7 @@ describe("enforce-supervised-execution", () => {
       `sh -c "setsid ./queue.sh"`,
       `zsh -c 'julia probe.jl & disown'`,
     ]) {
-      expect(denial(command)?.permissionDecision).toBe("deny");
+      expect(denial(command).permissionDecision).toBe("deny");
     }
   });
 
@@ -53,7 +53,7 @@ describe("enforce-supervised-execution", () => {
       "batch now",
       "crontab - < mycron",
     ]) {
-      expect(denial(command)?.permissionDecision).toBe("deny");
+      expect(denial(command).permissionDecision).toBe("deny");
     }
   });
 
@@ -110,7 +110,7 @@ describe("enforce-supervised-execution", () => {
       'pid=$(pgrep -f job.jl | head -1); while kill -0 "$pid"; do sleep 5; done',
     ]) {
       const decision = denial(command);
-      expect(decision?.permissionDecision).toBe("deny");
+      expect(decision.permissionDecision).toBe("deny");
       expect(decision.permissionDecisionReason).toContain("pgrep -f");
       expect(decision.permissionDecisionReason).toContain("run_in_background");
     }
@@ -152,6 +152,6 @@ describe("enforce-supervised-execution", () => {
   test("fails closed on a malformed payload", () => {
     const result = runHook(HOOK, "{not json");
     expect(result.code).toBe(0);
-    expect(decisionOf(result.stdout)?.permissionDecision).toBe("deny");
+    expect(decisionOf(result.stdout).permissionDecision).toBe("deny");
   });
 });

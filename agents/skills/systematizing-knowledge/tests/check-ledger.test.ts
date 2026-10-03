@@ -228,9 +228,9 @@ describe("check-ledger", () => {
     ];
 
     expect(results.map((result) => result.exitCode)).toEqual([1, 1, 1]);
-    expect(results[0].stdout).toContain("sources must be an array");
-    expect(results[1].stdout).toContain("derived_from must be an array");
-    expect(results[2].stdout).toContain("relations must be an array");
+    expect(results[0]?.stdout).toContain("sources must be an array");
+    expect(results[1]?.stdout).toContain("derived_from must be an array");
+    expect(results[2]?.stdout).toContain("relations must be an array");
   });
 
   test("requires an assessment for a load-bearing claim", () => {

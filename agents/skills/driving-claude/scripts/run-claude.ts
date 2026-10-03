@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
+import { z } from "zod";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -33,11 +34,11 @@ export type RunConfig = Readonly<{
   permissionMode: string;
   maxTurns: number;
   timeoutMs: number;
-  maxBudgetUsd?: number;
+  maxBudgetUsd?: number | undefined;
   safeMode: boolean;
   bare: boolean;
-  allowedTools?: string;
-  jsonSchema?: string;
+  allowedTools?: string | undefined;
+  jsonSchema?: string | undefined;
   claudeBin: string;
 }>;
 
@@ -46,26 +47,35 @@ export type RunResult = Readonly<{
   timedOut: boolean;
   stdout: string;
   stderr: string;
-  claude: unknown | undefined;
+  claude: unknown;
   parseError: string | undefined;
 }>;
 
 type Relay = Readonly<{
   exit_code: number;
   timed_out: boolean;
-  result?: string;
-  session_id?: string | number | boolean | null;
-  total_cost_usd?: string | number | boolean | null;
+  result?: string | undefined;
+  session_id?: string | number | boolean | null | undefined;
+  total_cost_usd?: string | number | boolean | null | undefined;
   usage?: unknown;
   structured_output?: unknown;
-  stdout?: string;
-  stderr?: string;
-  parse_error?: string;
+  stdout?: string | undefined;
+  stderr?: string | undefined;
+  parse_error?: string | undefined;
 }>;
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const RecordSchema = z.record(z.string(), z.unknown());
+
+/** The value as a plain string-keyed record, or undefined for any other JSON shape. */
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
+
+type ParsedStdout = Readonly<{
+  claude: unknown;
+  parseError: string | undefined;
+}>;
 
 export async function runClaude(config: RunConfig): Promise<RunResult> {
   const args = [
@@ -110,10 +120,10 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
 
   // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
   // `.then` maps to the same `parseError` message, leaving `claude` undefined as before.
-  const parsed = await Promise.try(() => JSON.parse(stdout)).then(
-    (ok) => ({ claude: ok as unknown, parseError: undefined as string | undefined }),
-    (error: unknown) => ({
-      claude: undefined as unknown,
+  const parsed = await Promise.try((): unknown => JSON.parse(stdout)).then(
+    (ok): ParsedStdout => ({ claude: ok, parseError: undefined }),
+    (error: unknown): ParsedStdout => ({
+      claude: undefined,
       parseError: error instanceof Error ? error.message : String(error),
     }),
   );
@@ -160,7 +170,8 @@ function primitive(
 }
 
 export function toRelay(run: RunResult): Relay {
-  if (!isRecord(run.claude)) {
+  const claude = asRecord(run.claude);
+  if (claude === undefined) {
     return {
       exit_code: run.exitCode,
       timed_out: run.timedOut,
@@ -170,15 +181,15 @@ export function toRelay(run: RunResult): Relay {
     };
   }
 
-  const result = run.claude.result;
+  const result = claude.result;
   return {
     exit_code: run.exitCode,
     timed_out: run.timedOut,
     result: typeof result === "string" ? boundedText(result) : undefined,
-    session_id: primitive(run.claude.session_id),
-    total_cost_usd: primitive(run.claude.total_cost_usd),
-    usage: boundedJson(run.claude.usage),
-    structured_output: boundedJson(run.claude.structured_output),
+    session_id: primitive(claude.session_id),
+    total_cost_usd: primitive(claude.total_cost_usd),
+    usage: boundedJson(claude.usage),
+    structured_output: boundedJson(claude.structured_output),
     stderr: boundedText(run.stderr),
   };
 }
@@ -307,7 +318,7 @@ async function main(): Promise<void> {
   const relay = toRelay(run);
   process.stdout.write(`${JSON.stringify(relay)}\n`);
   process.exit(
-    run.exitCode === 0 && isRecord(run.claude) ? 0 : run.exitCode || 1,
+    run.exitCode === 0 && asRecord(run.claude) !== undefined ? 0 : run.exitCode || 1,
   );
 }
 

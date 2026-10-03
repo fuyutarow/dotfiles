@@ -45,6 +45,7 @@
 // FAIL CLOSED on hook errors (registered with run.sh --fail-closed).
 
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
+import { strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Command position: start of line, or after a shell separator / then / do. Keeps the gate off
@@ -157,9 +158,9 @@ const SELF_MATCHING_POLL_REASON =
 
 function main(): void {
   const payload = readStdinJson();
-  if (payload?.tool_name !== "Bash") return;
-  const command = payload?.tool_input?.command;
-  if (typeof command !== "string" || command === "") return;
+  if (strAt(payload, "tool_name") !== "Bash") return;
+  const command = strAt(payload, "tool_input", "command");
+  if (command === undefined || command === "") return;
 
   const reasons: string[] = [];
   const detached = detachmentIn(command);

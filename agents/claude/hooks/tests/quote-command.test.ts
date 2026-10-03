@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
+
+const Output = z.object({ decision: z.string(), reason: z.string() });
 
 function runQuote(
   count: number,
@@ -33,7 +37,12 @@ function runQuote(
       ...env,
     },
   );
-  return { home, turns, result, output: JSON.parse(result.stdout) };
+  return {
+    home,
+    turns,
+    result,
+    output: Output.parse(parseJson(result.stdout)),
+  };
 }
 
 describe("quote-command: output mode follows the requested count", () => {
@@ -55,7 +64,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.decision).toBe("block");
     const file = output.reason.match(/ at (\/\S+\.txt)\./)?.[1];
     expect(file).toBeDefined();
-    const text = readFileSync(file, "utf8");
+    const text = readFileSync(file ?? "", "utf8");
     // PS1-shaped head: from <name> | user@host:MM-DD HH:MM|~ | turns: N | <bytes>B
     expect(text.split("\n")[0]).toMatch(
       new RegExp(

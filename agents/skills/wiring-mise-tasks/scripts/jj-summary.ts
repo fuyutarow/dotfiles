@@ -6,13 +6,13 @@ export function summaryPaths(summary: string): string[] {
   for (const line of summary.split("\n")) {
     const m = /^([A-Z]) (.+)$/.exec(line);
     if (!m) continue;
-    const [, kind, spec] = m as unknown as [string, string, string];
+    const [, kind = "", spec = ""] = m;
     const brace = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(spec);
     if (!brace) {
       out.push(spec);
       continue;
     }
-    const [, pre, from, to, post] = brace as unknown as [string, string, string, string, string];
+    const [, pre = "", from = "", to = "", post = ""] = brace;
     const join = (mid: string) => `${pre}${mid}${post}`.replace(/\/{2,}/g, "/").replace(/^\//, "");
     if (kind === "R") out.push(join(from));
     out.push(join(to));

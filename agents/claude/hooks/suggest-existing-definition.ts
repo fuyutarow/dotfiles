@@ -24,6 +24,7 @@ import {
 } from "../../retrieval-control/definitions.ts";
 import { findRegisteredProject } from "../../retrieval-control/ccc-index.ts";
 import { attempt } from "../../hooks/attempt.ts";
+import { arr, at, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 
 const MAX_CHECKS = 2;
@@ -71,30 +72,24 @@ export function definitionsIn(text: string, ext: string): NewDef[] {
   return out;
 }
 
-function insertedAndReplaced(input: Record<string, unknown>): {
+function insertedAndReplaced(input: unknown): {
   added: string;
   removed: string;
 } {
-  if (typeof input.content === "string")
-    return { added: input.content, removed: "" };
-  const edits = Array.isArray(input.edits)
-    ? (input.edits as Record<string, unknown>[])
-    : [input];
+  const content = strAt(input, "content");
+  if (content !== undefined) return { added: content, removed: "" };
+  const edits = arr(at(input, "edits")) ?? [input];
   return {
-    added: edits
-      .map((e) => (typeof e.new_string === "string" ? e.new_string : ""))
-      .join("\n"),
-    removed: edits
-      .map((e) => (typeof e.old_string === "string" ? e.old_string : ""))
-      .join("\n"),
+    added: edits.map((e) => strAt(e, "new_string") ?? "").join("\n"),
+    removed: edits.map((e) => strAt(e, "old_string") ?? "").join("\n"),
   };
 }
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  if (payload?.hook_event_name !== "PostToolUse") return;
-  const input = (payload.tool_input ?? {}) as Record<string, unknown>;
-  const file = typeof input.file_path === "string" ? input.file_path : "";
+  if (strAt(payload, "hook_event_name") !== "PostToolUse") return;
+  const input = at(payload, "tool_input");
+  const file = strAt(input, "file_path") ?? "";
   const ext = file.split(".").at(-1) ?? "";
   // A test file defines fixtures and helpers by design; reusing them is not the point.
   if (!HEADERS[ext] || isTest({ file })) return;

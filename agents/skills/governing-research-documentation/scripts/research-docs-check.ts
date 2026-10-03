@@ -14,6 +14,7 @@ import {
 } from "node:path";
 import { cli } from "cleye";
 import { parseDocument } from "yaml";
+import { z } from "zod";
 
 type Layer =
 	| "OKF"
@@ -25,14 +26,23 @@ type Layer =
 	| "RD_SCHEMA";
 
 type Mode = "okf" | "profile";
-type Role = "canonical" | "evidence" | "generated_view" | "review_request";
-type Status = "deprecated" | "draft" | "stable";
-type ReviewState =
-	| "accepted"
-	| "changes_requested"
-	| "open"
-	| "rejected"
-	| "withdrawn";
+const RoleSchema = z.enum([
+	"canonical",
+	"evidence",
+	"generated_view",
+	"review_request",
+]);
+const StatusSchema = z.enum(["deprecated", "draft", "stable"]);
+const ReviewStateSchema = z.enum([
+	"accepted",
+	"changes_requested",
+	"open",
+	"rejected",
+	"withdrawn",
+]);
+type Role = z.output<typeof RoleSchema>;
+type Status = z.output<typeof StatusSchema>;
+type ReviewState = z.output<typeof ReviewStateSchema>;
 
 export type ResearchDocsFinding = {
 	code: string;
@@ -49,10 +59,10 @@ export type ResearchDocsInspection = {
 };
 
 export type ResearchDocsOptions = {
-	base?: string;
-	mode?: Mode;
-	rawRoot?: string;
-	today?: string;
+	base?: string | undefined;
+	mode?: Mode | undefined;
+	rawRoot?: string | undefined;
+	today?: string | undefined;
 };
 
 type ParsedMarkdown = {
@@ -81,7 +91,7 @@ type ReviewQuestion = {
 type ReviewContract = {
 	candidate: string;
 	candidateSha256: string;
-	decidedAt?: string;
+	decidedAt?: string | undefined;
 	decision: string;
 	questions: ReviewQuestion[];
 	reviewer: string;
@@ -95,10 +105,10 @@ type Concept = {
 	generatedAt?: string;
 	meta: Record<string, unknown>;
 	path: string;
-	review?: ReviewContract;
-	role?: Role;
+	review?: ReviewContract | undefined;
+	role?: Role | undefined;
 	sources: SourceRef[];
-	status?: Status;
+	status?: Status | undefined;
 	supersedes: string[];
 };
 
@@ -106,7 +116,7 @@ type ReservedDocument = {
 	absolutePath: string;
 	body: string;
 	kind: "index" | "log";
-	meta?: Record<string, unknown>;
+	meta?: Record<string, unknown> | undefined;
 	path: string;
 };
 
@@ -153,20 +163,7 @@ function attempt<T>(fn: () => T | PromiseLike<T>): Promise<Attempt<T>> {
 	);
 }
 
-const roles = new Set([
-	"canonical",
-	"evidence",
-	"generated_view",
-	"review_request",
-]);
-const statuses = new Set(["deprecated", "draft", "stable"]);
-const reviewStates = new Set([
-	"accepted",
-	"changes_requested",
-	"open",
-	"rejected",
-	"withdrawn",
-]);
+const reviewStates = new Set<string>(ReviewStateSchema.options);
 const standardFields = new Set([
 	"attester",
 	"computation",
@@ -208,11 +205,21 @@ const layerOrder: Record<Layer, number> = {
 	RD_ADMISSION: 6,
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === "object" && value !== null && !Array.isArray(value);
+// A plain-object check as a zod schema: z.custom keeps the very value (no copy), so identity and
+// own keys are exactly what the old guard saw; the output type is the one the file works with.
+const RecordSchema = z.custom<Record<string, unknown>>(
+	(value) =>
+		typeof value === "object" && value !== null && !Array.isArray(value),
+);
 
-const isNonemptyString = (value: unknown): value is string =>
-	typeof value === "string" && value.trim().length > 0;
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+	const parsed = RecordSchema.safeParse(value);
+	return parsed.success ? parsed.data : undefined;
+};
+
+// Callers narrow with `typeof x === "string"` first, so the string type comes from the check at
+// the call site and this only decides blankness.
+const nonemptyText = (value: string): boolean => value.trim().length > 0;
 
 const posixPath = (value: string): string => value.split(sep).join("/");
 
@@ -362,7 +369,7 @@ const locatorResolutionError = async (
 		return undefined;
 	}
 
-	const parsedAttempt = await attempt<unknown>(() => JSON.parse(content));
+	const parsedAttempt = await attempt<unknown>((): unknown => JSON.parse(content));
 	if (!parsedAttempt.ok) {
 		return `json-pointer requires valid JSON: ${parsedAttempt.error instanceof Error ? parsedAttempt.error.message : String(parsedAttempt.error)}`;
 	}
@@ -378,16 +385,17 @@ const locatorResolutionError = async (
 			current = current[index];
 			continue;
 		}
-		if (!isRecord(current) || !Object.hasOwn(current, token)) {
+		const currentRecord = asRecord(current);
+		if (currentRecord === undefined || !Object.hasOwn(currentRecord, token)) {
 			return `JSON object key is absent: ${token}`;
 		}
-		current = current[token];
+		current = currentRecord[token];
 	}
 	return undefined;
 };
 
 const reviewStateType = (value: string): ReviewState | undefined =>
-	reviewStates.has(value) ? (value as ReviewState) : undefined;
+	ReviewStateSchema.safeParse(value).data;
 
 const parseMarkdown = async (
 	content: string,
@@ -426,11 +434,12 @@ const parseMarkdown = async (
 				return undefined;
 			}
 			const value: unknown = document.toJS({ maxAliasCount: 100 });
-			if (!isRecord(value)) {
+			const record = asRecord(value);
+			if (record === undefined) {
 				onError("OKF005", "frontmatter must parse to a YAML mapping");
 				return undefined;
 			}
-			return value;
+			return record;
 		},
 	);
 	if (!parsedAttempt.ok) {
@@ -613,7 +622,7 @@ const stringArray = (
 	}
 	const result: string[] = [];
 	for (const [index, item] of value.entries()) {
-		if (!isNonemptyString(item)) {
+		if ((typeof item !== "string" || !nonemptyText(item))) {
 			report("RDS021", `${field}[${index}] must be a non-empty string`);
 			continue;
 		}
@@ -629,27 +638,28 @@ const normalizedVerified = (
 	if (value === undefined) return [];
 	const items = Array.isArray(value) ? value : [value];
 	const events: Array<{ at: string; by: string }> = [];
-	for (const [index, item] of items.entries()) {
-		if (!isRecord(item)) {
+	for (const [index, rawItem] of items.entries()) {
+		const item = asRecord(rawItem);
+		if (item === undefined) {
 			report("RDS030", `verified[${index}] must be a mapping`);
 			continue;
 		}
-		if (!isNonemptyString(item.by) || !validActor(item.by)) {
+		if ((typeof item.by !== "string" || !nonemptyText(item.by)) || !validActor(item.by)) {
 			report(
 				"RDS031",
 				`verified[${index}].by must use the OKF actor convention`,
 			);
 		}
-		if (!isNonemptyString(item.at) || !validDateTime(item.at)) {
+		if ((typeof item.at !== "string" || !nonemptyText(item.at)) || !validDateTime(item.at)) {
 			report(
 				"RDS032",
 				`verified[${index}].at must be an ISO-8601 datetime with timezone`,
 			);
 		}
 		if (
-			isNonemptyString(item.by) &&
+			(typeof item.by === "string" && nonemptyText(item.by)) &&
 			validActor(item.by) &&
-			isNonemptyString(item.at) &&
+			(typeof item.at === "string" && nonemptyText(item.at)) &&
 			validDateTime(item.at)
 		) {
 			events.push({ at: item.at, by: item.by });
@@ -669,13 +679,14 @@ const parseSources = (
 	}
 	const result: SourceRef[] = [];
 	const ids = new Set<string>();
-	for (const [index, item] of value.entries()) {
-		if (!isRecord(item)) {
+	for (const [index, rawItem] of value.entries()) {
+		const item = asRecord(rawItem);
+		if (item === undefined) {
 			report("RDS041", `sources[${index}] must be a mapping`);
 			continue;
 		}
 		if (
-			!isNonemptyString(item.id) ||
+			(typeof item.id !== "string" || !nonemptyText(item.id)) ||
 			!/^[A-Za-z][A-Za-z0-9._-]*$/.test(item.id)
 		) {
 			report(
@@ -687,10 +698,10 @@ const parseSources = (
 		} else {
 			ids.add(item.id);
 		}
-		if (!isNonemptyString(item.resource)) {
+		if ((typeof item.resource !== "string" || !nonemptyText(item.resource))) {
 			report("RDS044", `sources[${index}].resource must be non-empty`);
 		}
-		if (isNonemptyString(item.id) && isNonemptyString(item.resource)) {
+		if ((typeof item.id === "string" && nonemptyText(item.id)) && (typeof item.resource === "string" && nonemptyText(item.resource))) {
 			result.push({ id: item.id, resource: item.resource });
 		}
 	}
@@ -698,10 +709,11 @@ const parseSources = (
 };
 
 const parseReview = (
-	value: unknown,
+	rawValue: unknown,
 	report: (code: string, message: string) => void,
 ): ReviewContract | undefined => {
-	if (!isRecord(value)) {
+	const value = asRecord(rawValue);
+	if (value === undefined) {
 		report("RDS100", "rd_review must be a mapping");
 		return undefined;
 	}
@@ -710,7 +722,7 @@ const parseReview = (
 	const candidateSha256 = value.candidate_sha256;
 	const reviewer = value.reviewer;
 	const decision = value.decision;
-	const parsedState = isNonemptyString(state)
+	const parsedState = (typeof state === "string" && nonemptyText(state))
 		? reviewStateType(state)
 		: undefined;
 	if (parsedState === undefined) {
@@ -719,11 +731,11 @@ const parseReview = (
 			`rd_review.state must be one of: ${[...reviewStates].join(", ")}`,
 		);
 	}
-	if (!isNonemptyString(candidate)) {
+	if ((typeof candidate !== "string" || !nonemptyText(candidate))) {
 		report("RDS102", "rd_review.candidate must be a non-empty path");
 	}
 	if (
-		!isNonemptyString(candidateSha256) ||
+		(typeof candidateSha256 !== "string" || !nonemptyText(candidateSha256)) ||
 		!/^[a-f0-9]{64}$/.test(candidateSha256)
 	) {
 		report(
@@ -732,13 +744,13 @@ const parseReview = (
 		);
 	}
 	if (
-		!isNonemptyString(reviewer) ||
+		(typeof reviewer !== "string" || !nonemptyText(reviewer)) ||
 		!reviewer.startsWith("human:") ||
 		!validActor(reviewer)
 	) {
 		report("RDS103", "rd_review.reviewer must be a human:<id> actor");
 	}
-	if (!isNonemptyString(decision)) {
+	if ((typeof decision !== "string" || !nonemptyText(decision))) {
 		report("RDS104", "rd_review.decision must name a concrete decision");
 	}
 
@@ -747,8 +759,9 @@ const parseReview = (
 	if (!Array.isArray(value.questions) || value.questions.length === 0) {
 		report("RDS105", "rd_review.questions must be a non-empty array");
 	} else {
-		for (const [index, item] of value.questions.entries()) {
-			if (!isRecord(item)) {
+		for (const [index, rawItem] of value.questions.entries()) {
+			const item = asRecord(rawItem);
+			if (item === undefined) {
 				report("RDS106", `rd_review.questions[${index}] must be a mapping`);
 				continue;
 			}
@@ -760,7 +773,7 @@ const parseReview = (
 				`rd_review.questions[${index}].evidence`,
 				report,
 			);
-			if (!isNonemptyString(id) || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(id)) {
+			if ((typeof id !== "string" || !nonemptyText(id)) || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(id)) {
 				report(
 					"RDS107",
 					`rd_review.questions[${index}].id must be a stable key`,
@@ -770,22 +783,22 @@ const parseReview = (
 			} else {
 				questionIds.add(id);
 			}
-			if (!isNonemptyString(question)) {
+			if ((typeof question !== "string" || !nonemptyText(question))) {
 				report(
 					"RDS109",
 					`rd_review.questions[${index}].question must be non-empty`,
 				);
 			}
-			if (!isNonemptyString(acceptIf)) {
+			if ((typeof acceptIf !== "string" || !nonemptyText(acceptIf))) {
 				report(
 					"RDS110",
 					`rd_review.questions[${index}].accept_if must be non-empty`,
 				);
 			}
 			if (
-				isNonemptyString(id) &&
-				isNonemptyString(question) &&
-				isNonemptyString(acceptIf) &&
+				(typeof id === "string" && nonemptyText(id)) &&
+				(typeof question === "string" && nonemptyText(question)) &&
+				(typeof acceptIf === "string" && nonemptyText(acceptIf)) &&
 				evidence.length > 0
 			) {
 				questions.push({ acceptIf, evidence, id, question });
@@ -795,7 +808,7 @@ const parseReview = (
 
 	const decidedAt = value.decided_at;
 	if (parsedState !== undefined && parsedState !== "open") {
-		if (!isNonemptyString(decidedAt) || !validDateTime(decidedAt)) {
+		if ((typeof decidedAt !== "string" || !nonemptyText(decidedAt)) || !validDateTime(decidedAt)) {
 			report(
 				"RDS111",
 				"a closed rd_review requires decided_at as an ISO-8601 datetime with timezone",
@@ -807,13 +820,13 @@ const parseReview = (
 
 	if (
 		parsedState === undefined ||
-		!isNonemptyString(candidate) ||
-		!isNonemptyString(candidateSha256) ||
+		(typeof candidate !== "string" || !nonemptyText(candidate)) ||
+		(typeof candidateSha256 !== "string" || !nonemptyText(candidateSha256)) ||
 		!/^[a-f0-9]{64}$/.test(candidateSha256) ||
-		!isNonemptyString(reviewer) ||
+		(typeof reviewer !== "string" || !nonemptyText(reviewer)) ||
 		!reviewer.startsWith("human:") ||
 		!validActor(reviewer) ||
-		!isNonemptyString(decision) ||
+		(typeof decision !== "string" || !nonemptyText(decision)) ||
 		questions.length === 0
 	) {
 		return undefined;
@@ -822,7 +835,7 @@ const parseReview = (
 		candidate,
 		candidateSha256,
 		decidedAt:
-			isNonemptyString(decidedAt) && validDateTime(decidedAt)
+			(typeof decidedAt === "string" && nonemptyText(decidedAt)) && validDateTime(decidedAt)
 				? decidedAt
 				: undefined,
 		decision,
@@ -833,10 +846,10 @@ const parseReview = (
 };
 
 const roleType = (value: string): Role | undefined =>
-	roles.has(value) ? (value as Role) : undefined;
+	RoleSchema.safeParse(value).data;
 
 const statusType = (value: string): Status | undefined =>
-	statuses.has(value) ? (value as Status) : undefined;
+	StatusSchema.safeParse(value).data;
 
 const readAllMarkdown = async (root: string): Promise<string[]> => {
 	const paths: string[] = [];
@@ -855,7 +868,7 @@ const readAllMarkdown = async (root: string): Promise<string[]> => {
 const parseRdTypeRegistryText = async (
 	source: string,
 ): Promise<RdTypeRegistryParse> => {
-	const parsedAttempt = await attempt<unknown>(() => JSON.parse(source));
+	const parsedAttempt = await attempt<unknown>((): unknown => JSON.parse(source));
 	if (!parsedAttempt.ok) {
 		return {
 			findings: [
@@ -863,7 +876,8 @@ const parseRdTypeRegistryText = async (
 			],
 		};
 	}
-	const parsed = parsedAttempt.value;
+	const parsed = asRecord(parsedAttempt.value);
+	const typeCodes = asRecord(parsed?.type_codes);
 	const document = parseDocument(source, {
 		prettyErrors: true,
 		strict: true,
@@ -882,9 +896,9 @@ const parseRdTypeRegistryText = async (
 		};
 	}
 	if (
-		!isRecord(parsed) ||
+		parsed === undefined ||
 		parsed.schema !== "rd-document-types/v1" ||
-		!isRecord(parsed.type_codes) ||
+		typeCodes === undefined ||
 		Object.keys(parsed).sort().join(",") !== "schema,type_codes"
 	) {
 		return {
@@ -898,7 +912,7 @@ const parseRdTypeRegistryText = async (
 		};
 	}
 
-	const entries = Object.entries(parsed.type_codes);
+	const entries = Object.entries(typeCodes);
 	if (entries.length === 0) {
 		return {
 			findings: [
@@ -918,7 +932,7 @@ const parseRdTypeRegistryText = async (
 		if (
 			type.trim() === "" ||
 			type.trim() !== type ||
-			!isNonemptyString(code) ||
+			(typeof code !== "string" || !nonemptyText(code)) ||
 			!rdTypeCodePattern.test(code)
 		) {
 			findings.push({
@@ -1005,7 +1019,7 @@ const gitRoot = async (root: string): Promise<string> => {
 };
 
 type GitChange = {
-	newPath?: string;
+	newPath?: string | undefined;
 	oldPath: string;
 	status: string;
 };
@@ -1146,7 +1160,7 @@ const readBaseDocumentIdentities = async (
 	for (const [index, path] of paths.entries()) {
 		const document = await parseMarkdown(sources[index] ?? "", () => undefined);
 		const value = document?.meta?.rd_document_id;
-		if (!isNonemptyString(value)) continue;
+		if ((typeof value !== "string" || !nonemptyText(value))) continue;
 		const identity = parseRdDocumentId(value);
 		if (identity !== undefined) identities.push({ identity, path });
 	}
@@ -1228,9 +1242,10 @@ const checkDocumentSequenceAllocations = (
 
 const stableValue = (value: unknown): unknown => {
 	if (Array.isArray(value)) return value.map(stableValue);
-	if (!isRecord(value)) return value;
+	const record = asRecord(value);
+	if (record === undefined) return value;
 	return Object.fromEntries(
-		Object.entries(value)
+		Object.entries(record)
 			.sort(([left], [right]) => left.localeCompare(right))
 			.map(([key, item]) => [key, stableValue(item)]),
 	);
@@ -1348,16 +1363,14 @@ const checkGitIntegrity = async (
 
 		const oldDocument = await baseDocument(repositoryRoot, base, oldPath);
 		const oldMeta = oldDocument?.meta;
-		const oldRole = isNonemptyString(oldMeta?.rd_role)
+		const oldRole = (typeof oldMeta?.rd_role === "string" && nonemptyText(oldMeta?.rd_role))
 			? roleType(oldMeta.rd_role)
 			: undefined;
-		const oldStatus = isNonemptyString(oldMeta?.status)
+		const oldStatus = (typeof oldMeta?.status === "string" && nonemptyText(oldMeta?.status))
 			? statusType(oldMeta.status)
 			: undefined;
-		const oldReview = isRecord(oldMeta?.rd_review)
-			? oldMeta.rd_review.state
-			: undefined;
-		const oldDocumentId = isNonemptyString(oldMeta?.rd_document_id)
+		const oldReview = asRecord(oldMeta?.rd_review)?.state;
+		const oldDocumentId = (typeof oldMeta?.rd_document_id === "string" && nonemptyText(oldMeta?.rd_document_id))
 			? oldMeta.rd_document_id
 			: undefined;
 		if (oldDocumentId !== undefined) {
@@ -1373,7 +1386,7 @@ const checkGitIntegrity = async (
 			}
 		}
 		if (
-			isNonemptyString(oldMeta?.type) &&
+			(typeof oldMeta?.type === "string" && nonemptyText(oldMeta?.type)) &&
 			baseTypeRegistry !== undefined &&
 			typeRegistry !== undefined
 		) {
@@ -1403,7 +1416,7 @@ const checkGitIntegrity = async (
 		if (
 			status === "M" &&
 			currentDocument !== undefined &&
-			isNonemptyString(oldMeta?.rd_document_id) &&
+			(typeof oldMeta?.rd_document_id === "string" && nonemptyText(oldMeta?.rd_document_id)) &&
 			currentDocument?.meta?.rd_document_id !== oldMeta.rd_document_id
 		) {
 			add(
@@ -1416,7 +1429,7 @@ const checkGitIntegrity = async (
 		if (
 			status === "M" &&
 			currentDocument !== undefined &&
-			isNonemptyString(oldMeta?.type) &&
+			(typeof oldMeta?.type === "string" && nonemptyText(oldMeta?.type)) &&
 			currentDocument?.meta?.type !== oldMeta.type
 		) {
 			add(
@@ -1474,7 +1487,7 @@ const checkGitIntegrity = async (
 		if (
 			status === "M" &&
 			oldRole === "review_request" &&
-			isNonemptyString(oldReview) &&
+			(typeof oldReview === "string" && nonemptyText(oldReview)) &&
 			oldReview !== "open"
 		) {
 			add(
@@ -1494,16 +1507,12 @@ const checkGitIntegrity = async (
 				canonicalContentFingerprint(currentDocument) !==
 				canonicalContentFingerprint(oldDocument)
 			) {
-				const oldGenerated = isRecord(oldMeta?.generated)
-					? oldMeta.generated.at
-					: undefined;
-				const currentGenerated = isRecord(currentDocument.meta.generated)
-					? currentDocument.meta.generated.at
-					: undefined;
+				const oldGenerated = asRecord(oldMeta?.generated)?.at;
+				const currentGenerated = asRecord(currentDocument.meta.generated)?.at;
 				if (
-					!isNonemptyString(oldGenerated) ||
+					(typeof oldGenerated !== "string" || !nonemptyText(oldGenerated)) ||
 					!validDateTime(oldGenerated) ||
-					!isNonemptyString(currentGenerated) ||
+					(typeof currentGenerated !== "string" || !nonemptyText(currentGenerated)) ||
 					!validDateTime(currentGenerated) ||
 					Temporal.Instant.from(currentGenerated).epochMilliseconds <=
 						Temporal.Instant.from(oldGenerated).epochMilliseconds
@@ -1587,7 +1596,7 @@ export async function inspectResearchDocs(
 			add("OKF", "OKF001", path, "concept is missing YAML frontmatter");
 			continue;
 		}
-		if (!isNonemptyString(parsed.meta.type)) {
+		if ((typeof parsed.meta.type !== "string" || !nonemptyText(parsed.meta.type))) {
 			add("OKF", "OKF006", path, "concept requires a non-empty type");
 		}
 		concepts.push({
@@ -1698,7 +1707,7 @@ export async function inspectResearchDocs(
 				"concept filename must be {type_code}{YYYYMM}_{001..999}-{lower_snake_case}.md",
 			);
 		}
-		const parsedDocumentId = isNonemptyString(meta.rd_document_id)
+		const parsedDocumentId = (typeof meta.rd_document_id === "string" && nonemptyText(meta.rd_document_id))
 			? parseRdDocumentId(meta.rd_document_id)
 			: undefined;
 		if (parsedDocumentId === undefined) {
@@ -1723,7 +1732,7 @@ export async function inspectResearchDocs(
 				`filename ID ${parsedFilename.id} does not match rd_document_id ${parsedDocumentId.id}`,
 			);
 		}
-		if (typeRegistry !== undefined && isNonemptyString(meta.type)) {
+		if (typeRegistry !== undefined && (typeof meta.type === "string" && nonemptyText(meta.type))) {
 			const expectedCode = typeRegistry.get(meta.type);
 			if (expectedCode === undefined) {
 				add(
@@ -1757,14 +1766,14 @@ export async function inspectResearchDocs(
 				);
 			}
 		}
-		if (!isNonemptyString(meta.title)) {
+		if ((typeof meta.title !== "string" || !nonemptyText(meta.title))) {
 			report("RDS007", "profile requires a non-empty title");
 		}
-		if (!isNonemptyString(meta.description)) {
+		if ((typeof meta.description !== "string" || !nonemptyText(meta.description))) {
 			report("RDS008", "profile requires a non-empty description");
 		}
 		if (
-			!isNonemptyString(meta.status) ||
+			(typeof meta.status !== "string" || !nonemptyText(meta.status)) ||
 			statusType(meta.status) === undefined
 		) {
 			report(
@@ -1775,36 +1784,37 @@ export async function inspectResearchDocs(
 			concept.status = statusType(meta.status);
 		}
 		if (
-			!isNonemptyString(meta.rd_role) ||
+			(typeof meta.rd_role !== "string" || !nonemptyText(meta.rd_role)) ||
 			roleType(meta.rd_role) === undefined
 		) {
-			report("RDS010", `rd_role must be one of: ${[...roles].join(", ")}`);
+			report("RDS010", `rd_role must be one of: ${RoleSchema.options.join(", ")}`);
 		} else {
 			concept.role = roleType(meta.rd_role);
 		}
-		if (!isRecord(meta.generated)) {
+		const generatedMeta = asRecord(meta.generated);
+		if (generatedMeta === undefined) {
 			report("RDS011", "generated must be a mapping with by and at");
 		} else {
 			if (
-				!isNonemptyString(meta.generated.by) ||
-				!validActor(meta.generated.by)
+				(typeof generatedMeta.by !== "string" || !nonemptyText(generatedMeta.by)) ||
+				!validActor(generatedMeta.by)
 			) {
 				report("RDS012", "generated.by must use the OKF actor convention");
 			}
 			if (
-				!isNonemptyString(meta.generated.at) ||
-				!validDateTime(meta.generated.at)
+				(typeof generatedMeta.at !== "string" || !nonemptyText(generatedMeta.at)) ||
+				!validDateTime(generatedMeta.at)
 			) {
 				report(
 					"RDS013",
 					"generated.at must be an ISO-8601 datetime with timezone",
 				);
 			} else {
-				concept.generatedAt = meta.generated.at;
+				concept.generatedAt = generatedMeta.at;
 			}
 		}
 		if (meta.stale_after !== undefined) {
-			if (!isNonemptyString(meta.stale_after) || !validDate(meta.stale_after)) {
+			if ((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) || !validDate(meta.stale_after)) {
 				report("RDS014", "stale_after must be YYYY-MM-DD");
 			}
 		}
@@ -1928,7 +1938,7 @@ export async function inspectResearchDocs(
 				"rd_review",
 			]);
 			if (
-				!isNonemptyString(meta.rd_authority_key) ||
+				(typeof meta.rd_authority_key !== "string" || !nonemptyText(meta.rd_authority_key)) ||
 				!validAuthorityKey(meta.rd_authority_key)
 			) {
 				add(
@@ -1938,7 +1948,7 @@ export async function inspectResearchDocs(
 					"canonical requires rd_authority_key as a normalized lowercase slug",
 				);
 			}
-			if (!isNonemptyString(meta.rd_owner) || !validOwner(meta.rd_owner)) {
+			if ((typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) || !validOwner(meta.rd_owner)) {
 				add(
 					"RD_SCHEMA",
 					"RDS052",
@@ -1946,7 +1956,7 @@ export async function inspectResearchDocs(
 					"canonical rd_owner must be a human:<id> or process:<id> actor",
 				);
 			}
-			if (!isNonemptyString(meta.rd_retire_when)) {
+			if ((typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when))) {
 				add(
 					"RD_SCHEMA",
 					"RDS053",
@@ -1964,7 +1974,7 @@ export async function inspectResearchDocs(
 			}
 			if (status !== "deprecated") {
 				if (
-					!isNonemptyString(meta.stale_after) ||
+					(typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
 					!validDate(meta.stale_after)
 				) {
 					add(
@@ -1982,7 +1992,8 @@ export async function inspectResearchDocs(
 					);
 				}
 			}
-			const sourceMap = resolvedSources.get(concept.absolutePath) ?? new Map();
+			const sourceMap = resolvedSources.get(concept.absolutePath) ??
+				new Map<string, LocalReference>();
 			for (const source of concept.sources) {
 				const target = sourceMap.get(source.id);
 				const targetConcept =
@@ -2070,7 +2081,8 @@ export async function inspectResearchDocs(
 					"an evidence record must bind exactly one raw artifact",
 				);
 			}
-			if (!isRecord(meta.rd_evidence)) {
+			const evidenceMeta = asRecord(meta.rd_evidence);
+			if (evidenceMeta === undefined) {
 				add(
 					"RD_SCHEMA",
 					"RDS063",
@@ -2078,13 +2090,13 @@ export async function inspectResearchDocs(
 					"evidence requires rd_evidence with source_id, sha256, and locator",
 				);
 			} else {
-				const sourceId = meta.rd_evidence.source_id;
-				const digest = meta.rd_evidence.sha256;
-				const locator = meta.rd_evidence.locator;
-				const locatorSpec = isNonemptyString(locator)
+				const sourceId = evidenceMeta.source_id;
+				const digest = evidenceMeta.sha256;
+				const locator = evidenceMeta.locator;
+				const locatorSpec = (typeof locator === "string" && nonemptyText(locator))
 					? parseEvidenceLocator(locator)
 					: undefined;
-				if (!isNonemptyString(sourceId)) {
+				if ((typeof sourceId !== "string" || !nonemptyText(sourceId))) {
 					add(
 						"RD_SCHEMA",
 						"RDS064",
@@ -2092,7 +2104,7 @@ export async function inspectResearchDocs(
 						"rd_evidence.source_id is required",
 					);
 				}
-				if (!isNonemptyString(digest) || !/^[a-f0-9]{64}$/.test(digest)) {
+				if ((typeof digest !== "string" || !nonemptyText(digest)) || !/^[a-f0-9]{64}$/.test(digest)) {
 					add(
 						"RD_SCHEMA",
 						"RDS065",
@@ -2108,7 +2120,7 @@ export async function inspectResearchDocs(
 						"rd_evidence.locator must be whole, line:<N>[-<M>], or json-pointer:<RFC6901 pointer>",
 					);
 				}
-				const source = isNonemptyString(sourceId)
+				const source = (typeof sourceId === "string" && nonemptyText(sourceId))
 					? concept.sources.find((item) => item.id === sourceId)
 					: undefined;
 				if (source === undefined) {
@@ -2138,7 +2150,7 @@ export async function inspectResearchDocs(
 								"evidence source must resolve to a regular raw artifact file",
 							);
 						} else {
-							if (isNonemptyString(digest)) {
+							if ((typeof digest === "string" && nonemptyText(digest))) {
 								const actual = await sha256File(target.absolutePath);
 								if (actual !== digest) {
 									add(
@@ -2186,7 +2198,7 @@ export async function inspectResearchDocs(
 				"rd_retired_reason",
 				"rd_supersedes",
 			]);
-			if (!isNonemptyString(meta.rd_owner) || !validOwner(meta.rd_owner)) {
+			if ((typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) || !validOwner(meta.rd_owner)) {
 				add(
 					"RD_SCHEMA",
 					"RDS070",
@@ -2194,7 +2206,7 @@ export async function inspectResearchDocs(
 					"review rd_owner must be a human:<id> or process:<id> actor",
 				);
 			}
-			if (!isNonemptyString(meta.rd_retire_when)) {
+			if ((typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when))) {
 				add(
 					"RD_SCHEMA",
 					"RDS071",
@@ -2223,7 +2235,7 @@ export async function inspectResearchDocs(
 					);
 				}
 				if (
-					!isNonemptyString(meta.stale_after) ||
+					(typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
 					!validDate(meta.stale_after)
 				) {
 					add(
@@ -2298,7 +2310,7 @@ export async function inspectResearchDocs(
 					"generated_view requires non-empty rd_generated_from",
 				);
 			}
-			if (!isNonemptyString(meta.stale_after) || !validDate(meta.stale_after)) {
+			if ((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) || !validDate(meta.stale_after)) {
 				add(
 					"RD_LIFECYCLE",
 					"RDL020",
@@ -2307,7 +2319,7 @@ export async function inspectResearchDocs(
 				);
 			}
 			if (
-				!isNonemptyString(meta.rd_expires_at) ||
+				(typeof meta.rd_expires_at !== "string" || !nonemptyText(meta.rd_expires_at)) ||
 				!validDate(meta.rd_expires_at)
 			) {
 				add(
@@ -2325,7 +2337,7 @@ export async function inspectResearchDocs(
 				);
 			}
 			if (
-				isNonemptyString(meta.rd_expires_at) &&
+				(typeof meta.rd_expires_at === "string" && nonemptyText(meta.rd_expires_at)) &&
 				validDate(meta.rd_expires_at) &&
 				concept.generatedAt !== undefined
 			) {
@@ -2589,7 +2601,7 @@ export async function inspectResearchDocs(
 		if (
 			concept.role !== "canonical" ||
 			concept.status === "deprecated" ||
-			!isNonemptyString(concept.meta.rd_authority_key)
+			(typeof concept.meta.rd_authority_key !== "string" || !nonemptyText(concept.meta.rd_authority_key))
 		) {
 			continue;
 		}
@@ -2686,7 +2698,7 @@ export async function inspectResearchDocs(
 		(item) => item.role === "canonical" && item.status === "deprecated",
 	)) {
 		const incoming = successorIncoming.get(concept.absolutePath) ?? [];
-		const hasReason = isNonemptyString(concept.meta.rd_retired_reason);
+		const hasReason = (typeof concept.meta.rd_retired_reason === "string" && nonemptyText(concept.meta.rd_retired_reason));
 		if (incoming.length === 0 && !hasReason) {
 			add(
 				"RD_LIFECYCLE",

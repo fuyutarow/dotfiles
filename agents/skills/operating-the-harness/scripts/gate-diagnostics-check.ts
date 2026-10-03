@@ -86,7 +86,7 @@ function denyLines(source: string): number[] {
 function catchStart(source: string): number {
   const lines = source.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (/^\}\s*catch\b/.test(lines[i])) return i + 1;
+    if (/^\}\s*catch\b/.test(lines[i] ?? "")) return i + 1;
   }
   return Number.POSITIVE_INFINITY;
 }
@@ -94,14 +94,15 @@ function catchStart(source: string): number {
 function declarationAbove(lines: string[], denyLine: number): Kind | null {
   const from = Math.max(0, denyLine - LOOKBEHIND);
   for (let i = denyLine - 1; i >= from; i--) {
-    const match = DECLARATION.exec(lines[i]);
+    const match = DECLARATION.exec(lines[i] ?? "");
     if (match === null) continue;
+    const [, marker = "", detail, reason = ""] = match;
     // Two non-empty fields: a bare marker is not a declaration.
-    if (match[3].trim() === "") return null;
-    if (match[1].startsWith("BATCHED")) {
-      return (match[2] ?? "").trim() === "" ? null : "BATCHED";
+    if (reason.trim() === "") return null;
+    if (marker.startsWith("BATCHED")) {
+      return (detail ?? "").trim() === "" ? null : "BATCHED";
     }
-    return match[1] as Kind;
+    return marker === "FATAL" ? "FATAL" : "SINGLE-AXIS";
   }
   return null;
 }

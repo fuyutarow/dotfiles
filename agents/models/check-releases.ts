@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 import releases from "./releases.toml";
 
 class UsageError extends Error {}
@@ -40,21 +41,28 @@ function nonEmptyString(flag: string): (value: string) => string {
   };
 }
 
-type Model = {
-  slug: string;
-  vendor: string;
-  released: string;
-  status: string;
-  role?: string;
-  source: string;
-  verified: string;
-  retires?: string;
-};
-type Meta = {
-  last_full_sweep: string;
-  max_age_days: number;
-  retirement_warning_days: number;
-};
+// source/verified fall back to "" so a row that lacks them reaches the targeted "every row needs a
+// source and a verified date" finding below instead of a generic schema crash.
+const ModelSchema = z.object({
+  slug: z.string(),
+  vendor: z.string(),
+  released: z.string(),
+  status: z.string(),
+  role: z.string().optional(),
+  source: z.string().catch(""),
+  verified: z.string().catch(""),
+  retires: z.string().optional(),
+});
+const MetaSchema = z.object({
+  last_full_sweep: z.string(),
+  max_age_days: z.number(),
+  retirement_warning_days: z.number(),
+});
+const ReleasesSchema = z.object({
+  meta: MetaSchema,
+  model: z.array(ModelSchema).default([]),
+});
+type Model = z.output<typeof ModelSchema>;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILLS_DIR = join(HERE, "..", "skills");
@@ -147,8 +155,7 @@ function main(): void {
   quiet = parsed.flags.quiet === true;
   requestedToday = parsed.flags.today;
 
-  const meta = (releases as { meta: Meta }).meta;
-  const models = (releases as { model: Model[] }).model ?? [];
+  const { meta, model: models } = ReleasesSchema.parse(releases);
   const today = todayStamp();
   const todayMs = parseDay(today);
 

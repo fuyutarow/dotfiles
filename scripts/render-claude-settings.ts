@@ -46,6 +46,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { obj } from "../agents/hooks/narrow.ts";
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -64,11 +65,10 @@ const overlayPath =
 const destPath = `${home}/.claude/settings.json`;
 
 async function readJson(path: string): Promise<Record<string, unknown>> {
-  const parsed: unknown = JSON.parse(await Bun.file(path).text());
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("not a JSON object");
-  }
-  return parsed as Record<string, unknown>;
+  const text = await Bun.file(path).text();
+  const parsed = obj(((): unknown => JSON.parse(text))());
+  if (parsed === undefined) throw new Error("not a JSON object");
+  return parsed;
 }
 
 const baseRead = await attempt(() => readJson(basePath));

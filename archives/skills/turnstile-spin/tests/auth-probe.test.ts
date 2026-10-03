@@ -11,7 +11,10 @@ describe("auth-probe", () => {
     const env = { ...process.env };
     delete env.CLOUDFLARE_API_TOKEN;
     // bounded: no-network branch; the script exits before any spawn
-    const proc = Bun.spawnSync(["bun", SCRIPT], { env, maxBuffer: 1024 * 1024 });
+    const proc = Bun.spawnSync(["bun", SCRIPT], {
+      env,
+      maxBuffer: 1024 * 1024,
+    });
     expect(JSON.parse(proc.stdout.toString().trim())).toEqual({
       status: "missing_token",
       reason: "no_env_var",

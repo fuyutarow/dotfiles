@@ -43,6 +43,17 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { attempt, attemptOr, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
+import {
+  type Obj,
+  arr,
+  at,
+  bool,
+  num,
+  obj,
+  parseJson,
+  str,
+  strAt,
+} from "./narrow.ts";
 
 const GiB = 1024 ** 3;
 const CONFIG_PATH =
@@ -79,161 +90,308 @@ type Config = {
 };
 
 // Hand-rolled on purpose: hooks stay zero-dep (writing-bun-scripts BG3), so no schema library.
-// Every error is collected, not the first one — a fixed typo should not reveal the next.
-function validate(raw: any): { config: Config | null; errors: string[] } {
-  const errors: string[] = [];
-  const isObj = (v: unknown): v is Record<string, any> =>
-    typeof v === "object" && v !== null && !Array.isArray(v);
-  const num = (v: unknown, at: string) => {
-    if (typeof v !== "number" || !Number.isFinite(v) || v < 0) {
-      errors.push(
-        `${at}: expected a non-negative number, got ${JSON.stringify(v)}`,
-      );
-    }
-  };
-  const str = (v: unknown, at: string) => {
-    if (typeof v !== "string" || v === "")
-      errors.push(`${at}: expected a non-empty string`);
-  };
-  const strs = (v: unknown, at: string) => {
-    if (
-      !Array.isArray(v) ||
-      v.length === 0 ||
-      v.some((s) => typeof s !== "string" || s === "")
-    ) {
-      errors.push(`${at}: expected a non-empty array of non-empty strings`);
-    }
-  };
-  const only = (o: Record<string, unknown>, keys: string[], at: string) => {
-    for (const k of Object.keys(o))
-      if (!keys.includes(k)) errors.push(`${at}: unknown key '${k}'`);
-  };
+// Every error is collected, not the first one — a fixed typo should not reveal the next. Each
+// reader below pushes its error and returns a placeholder; the placeholders are only ever used
+// when `errors` ends up non-empty, in which case the whole config is discarded.
+function nonNegative(v: unknown, where: string, errors: string[]): number {
+  const n = num(v);
+  if (n === undefined || n < 0) {
+    errors.push(
+      `${where}: expected a non-negative number, got ${JSON.stringify(v)}`,
+    );
+    return 0;
+  }
+  return n;
+}
 
-  if (!isObj(raw))
+function optionalNonNegative(
+  v: unknown,
+  where: string,
+  errors: string[],
+): number | undefined {
+  return v === undefined ? undefined : nonNegative(v, where, errors);
+}
+
+function nonEmptyString(v: unknown, where: string, errors: string[]): string {
+  const s = str(v);
+  if (s === undefined || s === "") {
+    errors.push(`${where}: expected a non-empty string`);
+    return "";
+  }
+  return s;
+}
+
+function nonEmptyStrings(
+  v: unknown,
+  where: string,
+  errors: string[],
+): string[] {
+  const list = arr(v);
+  const items = (list ?? []).flatMap((s) => {
+    const t = str(s);
+    return t === undefined || t === "" ? [] : [t];
+  });
+  if (list === undefined || list.length === 0 || items.length !== list.length) {
+    errors.push(`${where}: expected a non-empty array of non-empty strings`);
+    return [];
+  }
+  return items;
+}
+
+function onlyKeys(
+  o: Obj,
+  keys: string[],
+  where: string,
+  errors: string[],
+): void {
+  for (const k of Object.keys(o))
+    if (!keys.includes(k)) errors.push(`${where}: unknown key '${k}'`);
+}
+
+function parseDrive(where: string, d: unknown, errors: string[]): Drive {
+  const t = obj(d);
+  if (t === undefined) {
+    errors.push(`${where}: expected a table`);
+    return { label: "", path: "", deny_gib: 0 };
+  }
+  onlyKeys(
+    t,
+    ["label", "path", "deny_gib", "warn_gib", "stop_gib"],
+    where,
+    errors,
+  );
+  const label = nonEmptyString(at(t, "label"), `${where}.label`, errors);
+  const path = nonEmptyString(at(t, "path"), `${where}.path`, errors);
+  const rawDeny = at(t, "deny_gib");
+  const deny = nonNegative(rawDeny, `${where}.deny_gib`, errors);
+  const warn = optionalNonNegative(
+    at(t, "warn_gib"),
+    `${where}.warn_gib`,
+    errors,
+  );
+  const rawStop = at(t, "stop_gib");
+  const stop = optionalNonNegative(rawStop, `${where}.stop_gib`, errors);
+  if (
+    where === "drive.host" &&
+    typeof rawStop === "number" &&
+    typeof rawDeny === "number" &&
+    rawDeny > 0 &&
+    rawStop >= rawDeny
+  ) {
+    errors.push(`${where}.stop_gib: must be below deny_gib`);
+  }
+  return {
+    label,
+    path,
+    deny_gib: deny,
+    ...(warn === undefined ? {} : { warn_gib: warn }),
+    ...(stop === undefined ? {} : { stop_gib: stop }),
+  };
+}
+
+function parseDrives(raw: unknown, errors: string[]): Record<string, Drive> {
+  const table = obj(raw);
+  if (table === undefined || Object.keys(table).length === 0) {
+    errors.push("drive: expected at least one [drive.<name>] table");
+    return {};
+  }
+  if (obj(at(table, "host")) === undefined)
+    errors.push("drive.host: required Windows host drive table");
+  return Object.fromEntries(
+    Object.entries(table).map(([name, d]) => [
+      name,
+      parseDrive(`drive.${name}`, d, errors),
+    ]),
+  );
+}
+
+function parseDeny(raw: unknown, errors: string[]): { advice: string } {
+  const t = obj(raw);
+  if (t === undefined) {
+    errors.push("deny: expected a [deny] table");
+    return { advice: "" };
+  }
+  onlyKeys(t, ["advice"], "deny", errors);
+  return { advice: nonEmptyString(at(t, "advice"), "deny.advice", errors) };
+}
+
+function parseLauncher(l: unknown, i: number, errors: string[]): Launcher {
+  const where = `launcher[${i}]`;
+  const t = obj(l);
+  if (t === undefined) {
+    errors.push(`${where}: expected a table`);
+    return { command: "" };
+  }
+  onlyKeys(t, ["command", "subcommands", "tasks"], where, errors);
+  const rawCommand = at(t, "command");
+  const command = nonEmptyString(rawCommand, `${where}.command`, errors);
+  if (typeof rawCommand === "string" && !/^[A-Za-z0-9._-]+$/.test(rawCommand)) {
+    errors.push(`${where}.command: '${rawCommand}' is not a bare command name`);
+  }
+  const rawSubcommands = at(t, "subcommands");
+  const subcommands =
+    rawSubcommands === undefined
+      ? undefined
+      : nonEmptyStrings(rawSubcommands, `${where}.subcommands`, errors);
+  const rawTasks = at(t, "tasks");
+  const tasks =
+    rawTasks === undefined
+      ? undefined
+      : nonEmptyStrings(rawTasks, `${where}.tasks`, errors);
+  return {
+    command,
+    ...(subcommands === undefined ? {} : { subcommands }),
+    ...(tasks === undefined ? {} : { tasks }),
+  };
+}
+
+function parseLaunchers(
+  list: readonly unknown[] | undefined,
+  errors: string[],
+): Launcher[] {
+  if (list === undefined || list.length === 0) {
+    errors.push("launcher: expected at least one [[launcher]]");
+    return [];
+  }
+  return list.map((l, i) => parseLauncher(l, i, errors));
+}
+
+function parseBudget(
+  b: unknown,
+  i: number,
+  known: ReadonlySet<unknown>,
+  errors: string[],
+): Budget {
+  const where = `budget[${i}]`;
+  const t = obj(b);
+  if (t === undefined) {
+    errors.push(`${where}: expected a table`);
+    return { name: "", launchers: [], locate: "path", warn_gib: 0, advice: "" };
+  }
+  onlyKeys(
+    t,
+    [
+      "name",
+      "launchers",
+      "locate",
+      "path",
+      "warn_gib",
+      "deny_gib",
+      "incremental",
+      "advice",
+    ],
+    where,
+    errors,
+  );
+  const name = nonEmptyString(at(t, "name"), `${where}.name`, errors);
+  const rawLaunchers = at(t, "launchers");
+  const launchers = nonEmptyStrings(rawLaunchers, `${where}.launchers`, errors);
+  for (const l of arr(rawLaunchers) ?? []) {
+    if (!known.has(l))
+      errors.push(
+        `${where}.launchers: '${String(l)}' is not a [[launcher]] command`,
+      );
+  }
+  const rawLocate = at(t, "locate");
+  const locate = rawLocate === "cargo-target" ? rawLocate : "path";
+  if (rawLocate !== "path" && rawLocate !== "cargo-target") {
+    errors.push(`${where}.locate: expected "path" or "cargo-target"`);
+  }
+  const path =
+    rawLocate === "path"
+      ? nonEmptyString(at(t, "path"), `${where}.path`, errors)
+      : undefined;
+  const rawWarn = at(t, "warn_gib");
+  const warn = nonNegative(rawWarn, `${where}.warn_gib`, errors);
+  const rawDeny = at(t, "deny_gib");
+  const deny = optionalNonNegative(rawDeny, `${where}.deny_gib`, errors);
+  if (
+    typeof rawDeny === "number" &&
+    typeof rawWarn === "number" &&
+    rawDeny <= rawWarn
+  ) {
+    errors.push(`${where}.deny_gib: must be above warn_gib`);
+  }
+  const rawIncremental = at(t, "incremental");
+  const incremental = bool(rawIncremental);
+  if (rawIncremental !== undefined && incremental === undefined) {
+    errors.push(`${where}.incremental: expected true or false`);
+  }
+  const advice = nonEmptyString(at(t, "advice"), `${where}.advice`, errors);
+  return {
+    name,
+    launchers,
+    locate,
+    warn_gib: warn,
+    advice,
+    ...(path === undefined ? {} : { path }),
+    ...(deny === undefined ? {} : { deny_gib: deny }),
+    ...(incremental === undefined ? {} : { incremental }),
+  };
+}
+
+function parseBudgets(
+  raw: unknown,
+  known: ReadonlySet<unknown>,
+  errors: string[],
+): Budget[] {
+  const list = arr(raw);
+  if (list === undefined) {
+    errors.push("budget: expected [[budget]] tables");
+    return [];
+  }
+  return list.map((b, i) => parseBudget(b, i, known, errors));
+}
+
+function parseMeasure(raw: unknown, errors: string[]): Config["measure"] {
+  const t = obj(raw);
+  if (t === undefined) {
+    errors.push("measure: expected a [measure] table");
+    return { du_timeout_seconds: 0, cache_minutes: 0 };
+  }
+  onlyKeys(t, ["du_timeout_seconds", "cache_minutes"], "measure", errors);
+  return {
+    du_timeout_seconds: nonNegative(
+      at(t, "du_timeout_seconds"),
+      "measure.du_timeout_seconds",
+      errors,
+    ),
+    cache_minutes: nonNegative(
+      at(t, "cache_minutes"),
+      "measure.cache_minutes",
+      errors,
+    ),
+  };
+}
+
+function validate(raw: unknown): { config: Config | null; errors: string[] } {
+  const errors: string[] = [];
+  const top = obj(raw);
+  if (top === undefined)
     return { config: null, errors: ["top level: expected a table"] };
-  only(
-    raw,
+  onlyKeys(
+    top,
     ["schema", "drive", "deny", "launcher", "budget", "measure"],
     "top level",
+    errors,
   );
-  if (raw.schema !== 1)
-    errors.push(`schema: expected 1, got ${JSON.stringify(raw.schema)}`);
+  if (at(top, "schema") !== 1)
+    errors.push(`schema: expected 1, got ${JSON.stringify(at(top, "schema"))}`);
 
-  if (!isObj(raw.drive) || Object.keys(raw.drive).length === 0) {
-    errors.push("drive: expected at least one [drive.<name>] table");
-  } else {
-    if (!isObj(raw.drive.host))
-      errors.push("drive.host: required Windows host drive table");
-    const drive = (at: string, d: unknown) => {
-      if (!isObj(d)) return void errors.push(`${at}: expected a table`);
-      only(d, ["label", "path", "deny_gib", "warn_gib", "stop_gib"], at);
-      str(d.label, `${at}.label`);
-      str(d.path, `${at}.path`);
-      num(d.deny_gib, `${at}.deny_gib`);
-      if (d.warn_gib !== undefined) num(d.warn_gib, `${at}.warn_gib`);
-      if (d.stop_gib !== undefined) num(d.stop_gib, `${at}.stop_gib`);
-      if (
-        at === "drive.host" &&
-        typeof d.stop_gib === "number" &&
-        typeof d.deny_gib === "number" &&
-        d.deny_gib > 0 &&
-        d.stop_gib >= d.deny_gib
-      ) {
-        errors.push(`${at}.stop_gib: must be below deny_gib`);
-      }
-    };
-    for (const [name, d] of Object.entries(raw.drive))
-      drive(`drive.${name}`, d);
-  }
-
-  if (!isObj(raw.deny)) errors.push("deny: expected a [deny] table");
-  else {
-    only(raw.deny, ["advice"], "deny");
-    str(raw.deny.advice, "deny.advice");
-  }
-
-  const launchers: unknown = raw.launcher;
-  if (!Array.isArray(launchers) || launchers.length === 0) {
-    errors.push("launcher: expected at least one [[launcher]]");
-  } else {
-    launchers.forEach((l, i) => {
-      const at = `launcher[${i}]`;
-      if (!isObj(l)) return void errors.push(`${at}: expected a table`);
-      only(l, ["command", "subcommands", "tasks"], at);
-      str(l.command, `${at}.command`);
-      if (
-        typeof l.command === "string" &&
-        !/^[A-Za-z0-9._-]+$/.test(l.command)
-      ) {
-        errors.push(`${at}.command: '${l.command}' is not a bare command name`);
-      }
-      if (l.subcommands !== undefined) strs(l.subcommands, `${at}.subcommands`);
-      if (l.tasks !== undefined) strs(l.tasks, `${at}.tasks`);
-    });
-  }
-
-  const budgets: unknown = raw.budget ?? [];
-  if (!Array.isArray(budgets))
-    errors.push("budget: expected [[budget]] tables");
-  else {
-    const known = new Set(
-      Array.isArray(launchers) ? launchers.map((l: any) => l?.command) : [],
-    );
-    budgets.forEach((b, i) => {
-      const at = `budget[${i}]`;
-      if (!isObj(b)) return void errors.push(`${at}: expected a table`);
-      only(
-        b,
-        [
-          "name",
-          "launchers",
-          "locate",
-          "path",
-          "warn_gib",
-          "deny_gib",
-          "incremental",
-          "advice",
-        ],
-        at,
-      );
-      str(b.name, `${at}.name`);
-      strs(b.launchers, `${at}.launchers`);
-      for (const l of Array.isArray(b.launchers) ? b.launchers : []) {
-        if (!known.has(l))
-          errors.push(`${at}.launchers: '${l}' is not a [[launcher]] command`);
-      }
-      if (b.locate !== "path" && b.locate !== "cargo-target") {
-        errors.push(`${at}.locate: expected "path" or "cargo-target"`);
-      }
-      if (b.locate === "path") str(b.path, `${at}.path`);
-      num(b.warn_gib, `${at}.warn_gib`);
-      if (b.deny_gib !== undefined) {
-        num(b.deny_gib, `${at}.deny_gib`);
-        if (
-          typeof b.deny_gib === "number" &&
-          typeof b.warn_gib === "number" &&
-          b.deny_gib <= b.warn_gib
-        ) {
-          errors.push(`${at}.deny_gib: must be above warn_gib`);
-        }
-      }
-      if (b.incremental !== undefined && typeof b.incremental !== "boolean") {
-        errors.push(`${at}.incremental: expected true or false`);
-      }
-      str(b.advice, `${at}.advice`);
-    });
-  }
-
-  if (!isObj(raw.measure)) errors.push("measure: expected a [measure] table");
-  else {
-    only(raw.measure, ["du_timeout_seconds", "cache_minutes"], "measure");
-    num(raw.measure.du_timeout_seconds, "measure.du_timeout_seconds");
-    num(raw.measure.cache_minutes, "measure.cache_minutes");
-  }
+  const drive = parseDrives(at(top, "drive"), errors);
+  const deny = parseDeny(at(top, "deny"), errors);
+  const rawLaunchers = arr(at(top, "launcher"));
+  const launcher = parseLaunchers(rawLaunchers, errors);
+  // Budgets name launchers by their raw `command` value, valid or not.
+  const known = new Set<unknown>(
+    (rawLaunchers ?? []).map((l) => at(l, "command")),
+  );
+  const budget = parseBudgets(at(top, "budget") ?? [], known, errors);
+  const measure = parseMeasure(at(top, "measure"), errors);
 
   return errors.length > 0
     ? { config: null, errors }
-    : { config: { ...raw, budget: budgets } as Config, errors };
+    : { config: { schema: 1, drive, deny, launcher, budget, measure }, errors };
 }
 
 async function loadConfig(): Promise<{
@@ -346,6 +504,16 @@ function gib(n: number | null): string {
 
 type Size = { bytes: number; incremental: number; at: number };
 
+// A cache file as a Size; null when it is not one (a stale or corrupt file just re-measures).
+function parseSize(v: unknown): Size | null {
+  const bytes = num(at(v, "bytes"));
+  const incremental = num(at(v, "incremental"));
+  const stamp = num(at(v, "at"));
+  if (bytes === undefined || incremental === undefined || stamp === undefined)
+    return null;
+  return { bytes, incremental, at: stamp };
+}
+
 // Cached per artifact path: a 100 GiB tree takes seconds to walk, and agents launch builds many
 // times an hour.
 async function measured(
@@ -365,7 +533,7 @@ async function measured(
   );
   // no or unreadable cache: measure
   const cached = await attemptOr(
-    () => JSON.parse(readFileSync(cacheFile, "utf8")) as Size,
+    () => parseSize(parseJson(readFileSync(cacheFile, "utf8"))),
     null,
   );
   if (
@@ -499,9 +667,9 @@ async function budgetStatus(
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  if (payload?.tool_name !== "Bash") return;
-  const command = payload?.tool_input?.command;
-  if (typeof command !== "string" || command === "") return;
+  if (strAt(payload, "tool_name") !== "Bash") return;
+  const command = strAt(payload, "tool_input", "command");
+  if (command === undefined || command === "") return;
   if (/\bSTORAGE_ASSERT_OVERRIDE=1\b/.test(command)) return;
 
   const { config, errors } = await loadConfig();
@@ -582,7 +750,7 @@ async function main(): Promise<void> {
       );
     }
   }
-  const cwd = typeof payload?.cwd === "string" ? payload.cwd : process.cwd();
+  const cwd = strAt(payload, "cwd") ?? process.cwd();
   const budgetDenials: string[] = [];
   for (const b of config.budget) {
     if (!b.launchers.includes(hit.command)) continue;

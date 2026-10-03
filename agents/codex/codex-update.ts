@@ -32,14 +32,17 @@
 
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
 // scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
+import { z } from "zod";
 import { attempt } from "../hooks/attempt.ts";
 
 const CODEX = "codex";
 
-interface DaemonVersion {
-  appServerVersion?: string;
-  managedCodexVersion?: string;
-}
+// A field that is absent or not a string reads as undefined; a non-object payload is "no version".
+const DaemonVersionSchema = z.object({
+  appServerVersion: z.string().optional().catch(undefined),
+  managedCodexVersion: z.string().optional().catch(undefined),
+});
+type DaemonVersion = z.output<typeof DaemonVersionSchema>;
 
 // Every spawn below is bounded. This runs unattended inside `mise run up`, where a hung child
 // would stall the whole topgrade run with no one watching; the updater in particular reaches
@@ -69,8 +72,10 @@ async function daemonVersion(): Promise<DaemonVersion | null> {
   });
   const out = await new Response(proc.stdout).text();
   if ((await proc.exited) !== 0) return null;
-  const parsed = await attempt(() => JSON.parse(out) as DaemonVersion);
-  return parsed.ok ? parsed.value : null;
+  const parsed = await attempt((): unknown => JSON.parse(out));
+  if (!parsed.ok) return null;
+  const version = DaemonVersionSchema.safeParse(parsed.value);
+  return version.success ? version.data : null;
 }
 
 // Shared with macOS, where codex may simply be absent: skip, never fail the topgrade run.

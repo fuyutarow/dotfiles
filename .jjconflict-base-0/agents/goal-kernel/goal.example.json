@@ -1,0 +1,22 @@
+{
+	"schema_version": 1,
+	"goal_id": "replace-me",
+	"goal_version": 1,
+	"supersedes_goal_digest": null,
+	"north_star": "Replace this with the single outcome the run must preserve.",
+	"acceptance": ["Replace this with one observable acceptance condition."],
+	"non_goals": ["Replace this with an explicit exclusion."],
+	"decisions": [
+		{
+			"decision_id": "D-001",
+			"summary": "Replace this with an admitted decision.",
+			"parent_decision_id": null,
+			"evidence_refs": ["replace-with-an-evidence-locator"]
+		}
+	],
+	"authority": {
+		"actor": "human:replace-me",
+		"approved_at": "2026-08-03T00:00:00.000Z",
+		"source": "replace-with-approval-locator"
+	}
+}

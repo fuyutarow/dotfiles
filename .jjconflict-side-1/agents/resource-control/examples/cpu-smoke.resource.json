@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "job_id": "resource-smoke",
+  "run_class": "test",
+  "cpu_threads": 1,
+  "processes": 2,
+  "host_ram_peak_bytes": 67108864,
+  "memory_bound": "shell plus one child stays below 64 MiB in the smoke fixture",
+  "device": {
+    "kind": "cpu",
+    "gpu_status": "incompatible",
+    "rationale": "the smoke fixture validates process control and has no numerical kernel"
+  },
+  "scratch_bytes": 0,
+  "child_fanout": 0,
+  "walltime_seconds": 10,
+  "cleanup": {
+    "mode": "term-then-kill",
+    "grace_seconds": 1
+  }
+}

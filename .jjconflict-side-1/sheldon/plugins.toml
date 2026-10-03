@@ -1,0 +1,32 @@
+shell = "zsh"
+
+# Local configurations - now pointing to new structure
+[plugins.common-configs]
+local = "~/dotfiles/zsh"
+use = ["aliases.zsh"]  # ONLY this; it sources mac.zsh/wsl.zsh conditionally itself
+apply = ["source"]
+
+# OS-specific configs will be loaded by .zshrc directly
+
+# Essential zsh plugins
+[plugins.zsh-defer]
+github = "romkatv/zsh-defer"
+apply = ["source"]
+
+[plugins.zsh-autosuggestions]
+github = "zsh-users/zsh-autosuggestions"
+use = ["{{ name }}.zsh"]
+apply = ["source"]
+
+[plugins.zsh-syntax-highlighting]
+github = "zsh-users/zsh-syntax-highlighting"
+apply = ["source"]
+
+# Utilities
+[plugins.zsh-completions]
+github = "zsh-users/zsh-completions"
+apply = ["fpath"]
+
+[plugins.base16]
+github = "chriskempson/base16-shell"
+apply = ["source"]

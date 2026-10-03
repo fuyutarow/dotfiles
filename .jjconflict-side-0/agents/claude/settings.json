@@ -1,0 +1,309 @@
+{
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-dispatch-contract.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-supervised-execution.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh --fail-closed enforce-no-new-bash.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-search-route.ts"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/herdr-agent-state.sh session",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh herdr-tab-name.ts",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh --enforce",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh assign-command.ts",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-ccc-gpu-hold.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "quote",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh quote-command.ts",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh task-continuity.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-leaked-toolcall.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-audit-theater.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh detect-groundless-claim.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh capture-last-response.ts"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh log-sys-snapshot.ts",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run.sh suggest-existing-definition.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.claude/hooks/run-goal-kernel.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "enableWorkflows": true,
+  "statusLine": {
+    "type": "command",
+    "command": "bun ~/.claude/statusline-command.ts",
+    "refreshInterval": 5
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
+  "effortLevel": "medium",
+  "ultracode": true,
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "switchModelsOnFlag": true,
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true
+}

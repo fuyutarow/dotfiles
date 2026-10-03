@@ -1,0 +1,17 @@
+\documentclass[aps,pra,reprint]{revtex4-2}
+\usepackage{physics}
+\usepackage[numbers]{natbib}
+\usepackage{subcaption}
+\usepackage{cleveref}
+\usepackage{array}
+\input{notation}
+% \input{missing-file}   a commented input must not be followed
+% \def\commented{x}      a commented violation must not hit
+\begin{document}
+\title{Fixture}
+\date{\today}
+\maketitle
+Text with 50\% \raisebox{1pt}{x} where the percent sign is escaped.
+A line break then a comment \\% \mbox{x} must not hit.
+\input{sections/body}
+\end{document}

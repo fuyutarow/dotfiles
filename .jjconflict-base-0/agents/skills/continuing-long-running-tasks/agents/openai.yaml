@@ -1,0 +1,4 @@
+interface:
+  display_name: "Continue Long-Running Tasks"
+  short_description: "Keep long tasks resumable across compact and handoff"
+  default_prompt: "Use $continuing-long-running-tasks to leave a verified continuation record for this task."

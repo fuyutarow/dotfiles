@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 80,
+  "endOfLine": "lf",
+  "singleQuote": false,
+  "quoteProps": "as-needed",
+  "trailingComma": "all",
+  "semi": true,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "sortImports": false,
+  "sortPackageJson": false,
+  "ignorePatterns": ["**/node_modules", "agents/skills", "**/bun.lock"]
+}

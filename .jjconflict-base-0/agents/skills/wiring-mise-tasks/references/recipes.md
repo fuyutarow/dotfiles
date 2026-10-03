@@ -1,0 +1,197 @@
+# Recipes — per-language verb bodies, provenance, and rulings
+
+> **Snapshot**: 2026-07-17 (tool versions of record: mise 2026.7.5 · bun 1.3.14 · biome 2.5.3).
+> **Scope**: WHAT command each verb runs per language, WHY (provenance per cell), and the house
+> RULINGS where the owner skill and the corpus disagree. The verb contract, grammar, and gate are
+> owned by `SKILL.md` — never re-argued here. Tool CHOICE per language is owned by the
+> `writing-<lang>` skills and `compiling-latex` — cells cite them; a cell is never a licence to
+> skip the owner when the language question itself is in play.
+> Fast-moving tool facts live ONLY in this dated file — a tool version or flag in SKILL.md is a bug.
+
+## §0 Provenance grades (per cell, assigned at harvest 2026-07-17)
+
+| Grade | Meaning |
+|---|---|
+| **skill-endorsed** | the owner `writing-<lang>` skill states the command/flag |
+| **corpus-observed** | converged practice in ≥2 of the 5 house repos (beateater · correo · qoed · xoria · dotfiles) |
+| **probe-verified** | flag semantics confirmed live via `--help` at snapshot date |
+| **synthesized** | no precedent existed; constructed from probes — lowest grade, re-verify on first real use |
+| **ruling** | house decision where sources conflict — engineered, not measured |
+
+## §1 Julia
+
+| Verb | Body | Grade |
+|---|---|---|
+| setup | `julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'` | skill-endorsed (writing-julia references/setup.md verbatim) |
+| fmt | `julia --project=. -m Runic --inplace .` | corpus-observed ×3 (tool = skill-endorsed, exact CLI corpus-only) |
+| fmt:check | `julia --project=. -m Runic --check .` | corpus-observed ×3 |
+| lint | see RULING below | — |
+| test | `julia --project=. -e 'using Pkg; Pkg.test()'` | corpus-observed (beateater); see RULING |
+| up | `julia --project=. -e 'using Pkg; Pkg.update()'` | corpus-observed ×2 (beateater copied qoed verbatim; skill silent) |
+
+**RULING — lint has two declared tiers.** writing-julia's JG2/JG3 demand Aqua `test_all` +
+ExplicitImports + JET as three distinct artifacts; qoed implements all three (`lint:aqua` /
+`lint:imports` / `lint:jet`). beateater/xoria instead alias `lint` → `fmt:check` and say so in the
+task description (「JET/Aqua等の追加は依存最小方針により見送り」). Both are legal states:
+**starter** (fmt:check reuse, deferral WRITTEN in the description) for pre-package exploratory
+repos; **full** (the three dedicated tasks) once `src/` is a real package. A silent starter — no
+written deferral — is drift, not a tier.
+
+**RULING — NOTEBOOK-JULIA: a notebook repo's Julia root is `packages`, not `.`.** The class is
+`keeping-research-notebooks` homes §0's predicate. The workspace root has no deps, so Runic runs from
+a named shared env that the repo's own `setup:runic` task creates.
+
+| Verb | Notebook body |
+|---|---|
+| `setup` | depends `setup:runic`; run `julia --project=packages -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'` |
+| `setup:runic` | `julia --project=@runic -e 'import Pkg; Pkg.add("Runic")'` |
+| `fmt:julia` / `fmt:check` | `julia --project=@runic -m Runic --inplace packages` / `--check packages` |
+| `fmt:staged` | `--tool 'jl=julia --project=@runic -m Runic --inplace' --exclude '<records-store root>/**'` |
+| `test`, before the first member | `run = "echo '<no member yet>'"`, exit 0 |
+| `test`, from the first member | `depends = ["test:<Name>", ...]`; the first member replaces the `run` body |
+| `test:<Name>` (`<Name>` without `.jl`) | `julia --project=packages/<Name>.jl -e 'import Pkg; Pkg.test()'` |
+| `lint:aqua` / `lint:imports` / `lint:jet` | `julia --project=packages/<Name>.jl packages/<Name>.jl/test/<check>.jl`, one per member |
+| `up` | `julia --project=packages -e 'import Pkg; Pkg.update()'` |
+
+A backtrace after a sibling gate failed in the same `mise run check` is mise's SIGTERM, not a test fault.
+
+**RULING — test's token must resolve even when the suite is blocked.** Three observed shapes:
+plain `Pkg.test()` (beateater, the default); direct smoke script (xoria's
+`julia --project=poc poc/test/smoke.jl`, legal for poc-shaped repos); blocked-with-pointer (qoed:
+body prints the focused `test:*` menu and `exit 2`). The qoed shape is the sanctioned way to
+retire an expensive suite: the TOKEN stays resolvable, the body becomes a signpost. Deleting the
+task instead is a contract violation the gate will catch.
+
+## §2 Rust
+
+| Verb | Body | Grade |
+|---|---|---|
+| setup | *(may be waived when Cargo resolves dependencies at build)* | the waiver does not exempt task runtimes from RUNTIME-DECLARED |
+| fmt | `cargo fmt --all` | skill-endorsed ("fmt is not negotiable") + corpus |
+| fmt:check | `cargo fmt --all -- --check` | skill-endorsed + corpus |
+| lint | `cargo clippy --workspace --all-targets -- -D warnings` | scope-corrected 2026-09-23; default features; see RULING |
+| test | `cargo test --workspace` | scope-corrected 2026-09-23; see RULING |
+| up | `command -v cargo-upgrade \|\| cargo install cargo-edit; cargo upgrade --incompatible allow; cargo update` | corpus-observed (correo; skill silent — cargo standard `update` moves only Cargo.lock, cargo-edit moves the Cargo.toml requirements) |
+
+**RULING — clippy denial location.** writing-rust prefers `[workspace.lints.clippy]` in
+Cargo.toml (CLI/env denial "doesn't compose across a workspace"). The task keeps `-D warnings`
+until the repo adopts the table; on adoption, drop the flag from the task in the same edit —
+carrying both is redundancy, not safety.
+
+**RULING — scope and runner.** `writing-rust` RG5 owns package, target, feature and test-mode coverage.
+This starter covers one workspace with default features, including members beside a root package.
+Keep a narrower existing scope when intentional; label it and wire the remaining required scopes separately.
+Add valid feature combinations and separate workspace/simulator tasks from the RG5 scope table.
+The template does not assume `--all-features` is a valid or complete matrix.
+With nextest, wire the companion doctest command over the same package/feature scope.
+Tool requirements and native prerequisites also precede any setup waiver.
+
+**RULING — mise vs xtask.** writing-rust's project reference names `xtask` "the Rust-native
+pattern" for repo dev tasks, with mise as one alternative. House repos standardize on mise — the
+muscle-memory contract is cross-language and xtask cannot serve non-Rust cells. An xtask binary
+remains legitimate INSIDE a task body (`run = "cargo xtask codegen"`) for Rust-heavy automation;
+the contract verbs still resolve via mise. Reciprocal note landed in writing-rust (same commit).
+
+## §3 Python (uv-managed project)
+
+| Verb | Body | Grade |
+|---|---|---|
+| setup | `uv sync` (CI: `uv sync --locked`) | skill-endorsed (writing-python §uv table) + probe-verified |
+| fmt | `uv run ruff format` | skill-endorsed (the "highest-leverage single action" line) |
+| fmt:check | `uv run ruff format --check` | skill-endorsed + probe-verified (`--check` = report-only exit 1) |
+| lint | `uv run ruff check` | skill-endorsed ("no --fix in CI") |
+| test | `uv run pytest` | skill-endorsed (PG4) + corpus (beateater oracle:test shape) |
+| up | `uv lock --upgrade && uv sync` | skill-endorsed ("only `uv lock --upgrade` moves it") + probe-verified; two-step is inherent — lock moves pins, sync materializes |
+
+Boundary condition (qoed precedent): a NON-uv-managed `scripts/` dir in a Julia-primary repo may
+run bare `ruff` installed via brew — writing-python's `uv run` prefix rule is scoped to genuinely
+uv-managed projects (no pyproject.toml/uv.lock → nothing to pin against). Declare which side the
+repo is on in the task description.
+
+## §4 TypeScript / JS (bun-managed)
+
+| Verb | Body | Grade |
+|---|---|---|
+| setup | `bun install --frozen-lockfile` | corpus-observed (qoed) + probe-verified |
+| fmt | `bunx biome format --write .` | corpus-observed (qoed shape) |
+| fmt:check | `bunx biome format .` | probe-verified (no `--write` = report-only, dotfiles shape) |
+| lint | `bunx biome lint .` | corpus-observed (qoed lint:json) |
+| test | `bun test` | corpus-observed (dotfiles test:hooks) + probe-verified |
+| up | `bun update` | **synthesized** — zero corpus precedent; probe: respects package.json semver ranges, rewrites bun.lock; `--latest` jumps ranges; `bun outdated` is the read-only companion. Re-grade on first real use |
+
+**RULING — fmt/lint separation.** `biome check` (formatter+linter+import-sort in one) is
+deliberately NOT the house shape — fmt and lint stay separate tasks, same split as ruff and rumdl
+(qoed lint:json description states this). **RULING — config home.** Committed `biome.json` is the
+preferred home (qoed); CLI-flag pinning (`--indent-style=space --indent-width=2`, dotfiles) is the
+fallback for config-averse repos. One repo picks ONE — both at once guarantees drift.
+
+## §4b Markdown — the cross-cutting cell (every repo)
+
+| Verb | Body | Grade |
+|---|---|---|
+| fmt:md | `rumdl fmt` (config = `.rumdl.toml`) | corpus-observed ×4 (beateater · qoed · xoria · dotfiles — the one cell every repo shares) |
+| lint:md | `rumdl check` | corpus-observed ×4; structural-defects-only configs keep the gate green at adoption |
+
+No owner skill exists for Markdown tooling — the corpus convergence IS the authority here;
+`.rumdl.toml` scoping (exclude machine-owned/sealed docs) is per-repo judgment.
+
+## §5 TeX — defer to `compiling-latex`
+
+TeX leaf tasks are owned wholesale by `compiling-latex` (its `assets/mise-latex.toml` template:
+`latex:setup` / `latex:fmt` / `latex:fmt:check` / `latex:lint` / `latex` / `latex:check` /
+`latex:clean` / `latex:distclean`). Repo-level wiring of `latex:check` into `check` follows
+SKILL.md's TeX line — leaf graph theirs, repo verb ours.
+
+## §6 Polyglot composition
+
+Obtain manifest roots and manager scopes from `wiring-repositories` before writing task bodies.
+Repository verbs are depends-only aggregates; each leaf selects its manager and working directory.
+Keep a manager-specific update independently invocable so users can choose which lockfile changes.
+
+| Repository topology | Task wiring |
+|---|---|
+| Julia root, Rust subtree | Julia leaves use its project root; Rust leaves select the subtree manifest/cwd |
+| Peer Cargo and pnpm roots, as in Tauri | Rust and JS leaves may both use repository root; each invokes its own manager |
+| Multiple Cargo workspaces | One named leaf per required workspace/mode; aggregate the declared coverage |
+
+For formatting, pair `fmt:rust` with `fmt:rust:check` and `fmt:ts` with `fmt:ts:check`.
+Repository `fmt` and `fmt:check` depend on their respective leaves, with no command bodies.
+The copy-out polyglot template illustrates a Julia/Rust subtree layout; its paths are not universal.
+Apply grammar rule 3 when adopting gates; it owns inclusion in `check`.
+Keep cross-cutting hygiene names under the existing reserved namespace.
+
+## §7 Known corpus deviations left standing (2026-07-17)
+
+Recorded so an audit doesn't re-discover them as news; fixing them is repo work, not skill work:
+
+- dotfiles: RESOLVED 2026-09-22 for the HARD tokens (`fmt:check`/`test`/`check` exist; the two
+  body FAILs were cleared). Hyphen names remain WARN: `cc:install-mcp`, `install:ai-clis`,
+  `lint:harness-scope`, `lint:skills-*`. `hook:*` names are exempt (§8).
+- xoria: missing `up`/`u` — the 2026-07-17 incident (`m up` → no task found) that forged this skill.
+- correo: no aliases beyond `f`; no `setup` (waivable by design).
+- qoed: aliases `l`/`t`/`c` missing; harness/ Rust crate has no clippy/test task (gap vs both
+  writing-rust RG2/RG3 and correo's quartet).
+
+## §8 Running tasks from a git hook — three mise facts (measured 2026-09-22, mise 2026.9.12)
+
+SOLE home of these facts. The hook SHAPE (shim -> `hook:<event>`, gate tasks depends-only over
+contract verbs) is `wiring-repositories` HOOK-1; this section only says how mise behaves there.
+
+| Fact | Consequence | Measured |
+|---|---|---|
+| `mise run a b` passes `b` as an ARGUMENT to `a`; only `:::` starts a second task | a hook written `mise run fmt:check lint` never lints and exits 0 | subtask listing of the run: only `fmt:*:check` ran |
+| With the default parallel scheduler, an aggregate whose dependency fails can hang and ignores SIGTERM | a red gate freezes the commit instead of refusing it | `mise run lint` with failing deps: 3 of 6 runs hung (SIGKILL at 20 s); `--jobs 1`: 0 of 6, and 0 of 5 through the real hook |
+| `raw = true` connects the task to the caller's stdin | the only way git's pre-push ref list reaches the check through `mise run` | a raw task running `cat` echoed the piped ref line |
+
+### `fmt:staged` — the commit-time formatter (2026-09-25)
+
+| Fact | Consequence | Measured |
+|---|---|---|
+| A whole-tree `fmt:check` in the commit gate reads every session's worktree | any session's unstaged or untracked WIP refuses every session's commit | firedancer 2026-09-25: 4 blocks across ~20 sessions, 10–20 min each |
+| Re-adding a whole partially staged file commits its unstaged hunks | `fmt:staged` REFUSES such a file untouched | dotfiles 2026-09-22 (`wiring-repositories` ledger §9) |
+| `git commit -- <paths>` runs the hook against a temporary index (`GIT_INDEX_FILE`) | re-stage with `git add` from the hook's own environment | `tests/fmt-staged.test.ts`, real commit |
+| Bare `rustfmt` parses as edition 2015 | pass `--edition` = the Cargo.toml edition | `rustfmt 1.9.0`: `async fn` → E0670 without it |
+| `rustfmt` follows out-of-line `mod` children beyond the files it is given | `fmt:staged` FAILs naming any changed file outside the staged set, and stages none | by construction; the stray guard is tested |
+
+Naming: `hook:<event>` repeats git's hook file name verbatim (githooks(5)), hyphen included.
+`mise-contract.ts` exempts exactly those names from the hyphen WARN; `hook:my-thing` still warns.

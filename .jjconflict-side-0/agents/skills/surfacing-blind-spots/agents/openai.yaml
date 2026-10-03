@@ -1,0 +1,4 @@
+interface:
+  display_name: "Surfacing Blind Spots"
+  short_description: "Excavate hidden premises in one existing artifact"
+  default_prompt: "Use $surfacing-blind-spots to expose load-bearing assumptions in this plan without generating solutions."

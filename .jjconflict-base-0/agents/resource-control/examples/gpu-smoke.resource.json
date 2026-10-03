@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "job_id": "gpu-resource-smoke",
+  "run_class": "test",
+  "cpu_threads": 1,
+  "processes": 2,
+  "host_ram_peak_bytes": 134217728,
+  "memory_bound": "admission-only fixture starts no CUDA process and reserves a 128 MiB host ceiling",
+  "device": {
+    "kind": "gpu",
+    "gpu_id": 0,
+    "vram_peak_bytes": 1073741824
+  },
+  "scratch_bytes": 0,
+  "child_fanout": 0,
+  "walltime_seconds": 10,
+  "cleanup": {
+    "mode": "term-then-kill",
+    "grace_seconds": 1
+  }
+}

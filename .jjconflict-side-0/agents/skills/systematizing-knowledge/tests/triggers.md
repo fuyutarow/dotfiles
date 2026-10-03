@@ -1,0 +1,85 @@
+# Fire / no-fire desk-check — systematizing-knowledge
+
+Re-run after any `description:` edit. **Stage-only protocol:** read only the `name:` and
+`description:` fields of this skill and plausible siblings, then decide FIRE / NO-FIRE / CO-FIRE.
+Do not use body knowledge to rescue an ambiguous description.
+
+## FIRES
+
+| # | Ask | Why this skill |
+|---|---|---|
+| F1 | “Synthesize these 40 papers into what the field knows, disputes, and still cannot answer.” | a corpus must become a field-level, evidence-bounded position |
+| F2 | 「渡した12本は同じ手法を評価しているのに結論が割れている。比較可能性を見て、何が言えるか統合して」 | a closed corpus plus discrepancy adjudication |
+| F3 | “Build a defensible taxonomy of authentication failures from this literature, including boundary cases.” | classification is the requested corpus-level contribution |
+| F4 | “Plan a reproducible systematic review and meta-analysis of this intervention outcome.” | review-mode, coverage, appraisal, and synthesis-operator selection |
+| F5 | 「この領域の系統的レビューを更新して、どの結論が新しい研究で変わったか追跡して」 | living-review evidence and claim-graph update |
+| F6 | “I have papers, standards, and benchmark reports with incompatible metrics; tell me who actually agrees and how confident we should be.” | multi-source synthesis without a headline keyword |
+| F7 | “Does the security literature support the belief that memory-safe rewrites eliminate this attack class, or are there scoped counterexamples?” | venue-style SoK belief test and threat-model comparison |
+| F8 | 「この固定した研究フレームに使える外部の関係を、対象への対応付けはせず複数分野から探して DONOR SET にして」 | target-agnostic source-side relation discovery and comparison |
+| F9 | “Only establish the calibrated evidence position across this corpus; do not create or designate a canonical document.” | evidence synthesis terminates here; no document-authority decision is requested |
+
+## MUST NOT FIRE
+
+| # | Ask | Route |
+|---|---|---|
+| N1a | “Extract the sample size and confidence interval reported in Table 3 of this one paper.” | `raising-resolution` — one bounded factual extract |
+| N1b | “Give me a neutral summary of this one paper.” | direct answer; apply `raising-resolution`'s citation gate silently, but no specialist skill fires |
+| N1c | “Critically appraise whether this one paper's identification strategy supports its causal claim.” | `arguing-research-papers` reviewer red-team — argument/method/validity appraisal |
+| N1d | “Surface the hidden assumptions in this review plan; do not synthesize or resolve them yet.” | `surfacing-blind-spots` — premise-only excavation |
+| N2 | “Help defend the central claim of my manuscript against reviewers.” | `arguing-research-papers` — one manuscript’s argument |
+| N3 | 「次の半年で賭ける研究テーマを3案から選びたい」 | `supervising-research-programmes` — future research bets |
+| N3b | “The corpus position is fixed; generate three thesis candidates beyond it.” | `forging-novel-theses` — candidate genesis |
+| N3c | “Here is one expensive/irreversible selected thesis; set its test threshold and kill condition.” | `acting-on-hypotheses` — hard-gated future tree |
+| N3d | “Run this deterministic 30-second reversible check.” | domain/plain executor; return `EXECUTOR RESULT` to `directing-research-sections` |
+| N4 | “Reorder this completed review and remove duplicate sections; the evidence judgments are settled.” | `structuring-documents` — document architecture |
+| N5 | “Find every mention of data leakage in my indexed notes.” | `driving-cocoindex` — retrieval, not synthesis |
+| N6 | “Debug the split leakage in my own training pipeline.” | `raising-resolution`, then `implementing-and-debugging` if a fix is requested |
+| N7 | “Create a reusable skill from this already-reconciled operating manual.” | `forging-skills` — skill craft |
+| N8 | “Map these donor roles onto my selected target and derive the target prediction.” | `forging-novel-theses` — target correspondence and thesis genesis; this skill stops at `DONOR SET` |
+| N9 | “Freeze the current research note, retire its predecessor, and designate the surviving authority; the evidence position is already fixed.” | `governing-research-documentation` — document authority/lifecycle only |
+| N10 | 「新しい finding を受けて、私たちの公理・補題・系のどこを更新するか決めて」 | `systematizing-theories` — selected theory semantics and affected dependencies |
+
+## CO-FIRE — order matters
+
+| # | Ask | Order |
+|---|---|---|
+| C1 | “Use several agents to synthesize 300 papers into an SoK.” | `systematizing-knowledge` selects review mode, schemas, and SOLO judgments → `orchestrating-agents` runs generic briefing/dispatch/acceptance → this skill adjudicates and signs the position |
+| C2 | “Synthesize the field, then turn the result into our paper’s governing claim.” | `systematizing-knowledge` establishes the bounded evidence state → `arguing-research-papers` chooses and defends the manuscript claim |
+| C3 | “Map the evidence gaps, then decide which research direction deserves funding.” | `systematizing-knowledge` identifies evidence-specific gaps without ranking them → `supervising-research-programmes` makes the forward-looking bet |
+| C4 | “Reforge systematizing-knowledge because its rules are crude.” | `forging-skills` owns the reforge → `systematizing-knowledge` is the domain artifact under audit; use `operating-the-harness` when executable checks are added |
+| C5 | “Turn a raw paper corpus into a durable synthesis skill.” | `systematizing-knowledge` reconciles the corpus first → `forging-skills` distills the settled operating knowledge |
+| C6 | “Find source-side relational donors in adjacent fields, then map the surviving relation to this selected assay.” | `systematizing-knowledge` compiles a frozen target-agnostic `DONOR SET` → `forging-novel-theses` constructs correspondence and emits `CANDIDATE` or `MAPPING-BREAK` → `directing-research-sections` later disposes attempts |
+| C7 | “Synthesize this corpus into a calibrated position, then make the accepted result our canonical authority.” | `systematizing-knowledge` signs the corpus position first → `governing-research-documentation` decides DOC ADMISSION, authority, review, and lifecycle |
+| C8 | “Synthesize these papers, then integrate their results into our versioned theory.” | Corpus position here → `systematizing-theories`; source certainty does not certify the target derivation |
+
+## Review-design regression scenarios
+
+These are semantic desk-check cases, not executable tests or measured trigger performance.
+
+| ID | User request | Required behavior | Failure |
+|---|---|---|---|
+| R1 | “Prepare a venue SoK using a systematic mapping study.” | Keep mapping conduct and the venue contribution criterion as separate plan fields | Force a choice between SoK and mapping |
+| R2 | “Here are 12 papers; no external search. Write a conceptual synthesis.” | Retain supplied-corpus coverage and choose conceptual synthesis | Infer systematic completeness or fetch more papers |
+| R3 | “We completed PRISMA; can we say the review is scientifically valid?” | Report checklist scope and inspect conduct and source support separately | Treat reporting compliance as certification |
+| R4 | “Map definitions with a scoping review; use the applicable reporting extension.” | Record the conceptual purpose, scoping conduct, and reporting extension | Force an intervention-effect question or ignore scoping reporting |
+| R5 | “The repository validator accepted this SoK; distill universal rules.” | Retain the position's scope and inspect claim support before handoff to forging-skills | Treat admission as evidence for universal rules |
+| R6 | “How do we make a good SoK for a venue other than IEEE S&P?” | Check that venue's requirements and select conduct from the question | Impose IEEE S&P's taxonomy or contribution criteria universally |
+
+## Sharp cuts
+
+- **Function before cardinality:** a bounded factual extract from one artifact goes to
+  `raising-resolution`; a neutral one-paper summary is a direct answer using its citation gate
+  silently; critical appraisal of one paper's argument/method/validity goes to
+  `arguing-research-papers`; multiple sources supporting a knowledge-state claim come here.
+- **Premise-only exposure:** hidden premises or tacit constraints in an existing synthesis plan go
+  to `surfacing-blind-spots`; appraisal and corpus adjudication stay with their owners.
+- **Time direction:** what existing evidence licenses comes here; which future bet deserves effort
+  goes to the stage owner: problem construction/selection or >=2 directions →
+  `supervising-research-programmes`; thesis-candidate genesis → `forging-novel-theses`; an expensive/irreversible
+  selected tree's test/commit/kill → `acting-on-hypotheses`; a cheap deterministic reversible probe →
+  domain/plain executor, then `EXECUTOR RESULT` returns to `directing-research-sections`.
+- **Fix locality:** settled prose architecture goes to `structuring-documents`; unsettled evidence
+  derivation stays here.
+- **Transfer stop:** this skill may search and compare source-side relations, but never names a
+  source-to-target mapping, target prediction, thesis, or target-side support. A single donor remains
+  an explicit hypothesis seed, not an abstract schema.

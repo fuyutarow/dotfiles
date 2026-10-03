@@ -1,0 +1,90 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。写しを直すな、正本を直してから配れ。
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
+
+# notebook repo(keeping-research-notebooks homes §0)では本体が違う: Julia の根は packages/、Runic は
+# @runic env(setup:runic が作る)、test は member ごとの test:<Name>。recipes.md §1 RULING NOTEBOOK-JULIA の表を写す。
+[tasks.setup]
+alias = "i"
+description = "Julia依存関係のインスタンス化 + precompile (Project.toml/Manifest.toml)"
+run = "julia --project=. -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'"
+
+[tasks.fmt]
+alias = "f"
+description = "一括フォーマット: Julia (Runic) + Markdown (rumdl)"
+depends = ["fmt:julia", "fmt:md"]
+
+[tasks."fmt:julia"]
+description = "JuliaソースをRunicで整形"
+run = "julia --project=. -m Runic --inplace ."
+
+[tasks."fmt:md"]
+description = "Markdownをrumdlで整形 (config = .rumdl.toml)"
+run = "rumdl fmt"
+
+[tasks."fmt:staged"]
+description = "commit 用: staged の file だけを in-place 整形して再 stage。unstaged hunk を持つ file は拒否"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'jl=julia --project=. -m Runic --inplace' --tool 'md=rumdl fmt'"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): Runic + rumdl"
+run = '''
+julia --project=. -m Runic --check .
+rumdl check .
+'''
+
+# lint は二段構え（裁定は wiring-mise-tasks/references/recipes.md §Julia）:
+#   starter — fmt:check 流用。導入判断を明記して先送りする（beateater 方式）。
+#   full    — package 化したら Aqua + ExplicitImports + JET へ昇格（writing-julia JG2/JG3）。
+[tasks.lint]
+alias = "l"
+description = "静的チェック。現状はRunicの非破壊checkを流用 (JET/Aqua導入は package 化時に昇格)"
+depends = ["fmt:check"]
+# full 昇格時: depends = ["lint:aqua", "lint:imports", "lint:jet"] に差し替え
+# [tasks."lint:aqua"]    run = "julia --project=. test/test_aqua.jl"
+# [tasks."lint:imports"] run = "julia --project=. test/check_imports.jl"
+# [tasks."lint:jet"]     run = "julia --project=. test/test_jet.jl"
+
+[tasks.test]
+alias = "t"
+description = "Julia側テスト (Pkg.test)。重くなったら qoed 方式: 本体を exit 2 の案内板にして test:* へ分割 (トークンは残す)"
+run = "julia --project=. -e 'using Pkg; Pkg.test()'"
+
+[tasks.up]
+alias = "u"
+description = "依存パッケージを [compat] 範囲内で一括更新 (Pkg.update → Manifest.toml 書換)"
+run = "julia --project=. -e 'using Pkg; Pkg.update()'"
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"
+
+# git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
+# だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
+# recipes.md §8)。gate の task は契約 verb の depends のみで、run 本体を持たない。
+# commit gate は commit される中身だけを見る(HOOK-1c)。starter 期の lint は fmt:check
+# (木全体) の流用なので gate に入れない — 他 session の WIP で全員の commit が止まる。
+# lint を index を読む形に昇格したら depends に "lint" を足す。
+[tasks."hook:pre-commit"]
+description = "commit gate — .githooks/pre-commit が走らせるものそのもの。staged だけを in-place 整形"
+depends = ["fmt:staged"]
+
+# jj(新リポの既定 2026-10-01): jj は git の hook を走らせない。commit と取り込みはこの二つの入口だけで
+# 行う(形 = wiring-repositories JJ-1、.jj/ があれば mise-contract が二つとも必須にする)。
+# git だけのリポジトリなら二つとも消す。hook:post-merge を持つリポジトリは pull の最後で呼ぶ。
+[tasks.commit]
+description = "jj gated commit: 指定 path だけを hook:pre-commit に通して jj commit、bookmark を @- へ、--push で push。mise run commit -- -m '<msg>' [--push] -- <path>..."
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+
+[tasks.pull]
+description = "jj 取り込み: origin を fetch し、作業中の枝を trunk() の上へ rebase"
+run = """
+set -e
+jj git fetch --remote origin
+jj rebase -b @ -d 'trunk()'
+"""

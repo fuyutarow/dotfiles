@@ -1,0 +1,43 @@
+version: 1
+
+# linting-prose house prh dict — ALWAYS ON (loaded by textlintrc.json). Two roles:
+#   1. terminology normalization (表記ゆれ → the canonical surface form of the SAME word) — PORTABLE
+#   2. coined-label graveyard (a repo's KNOWN bad coinage) — SEED PER REPO; the entries below are
+#      QOED examples, fenced, and meant to be REPLACED with your repo's own coined labels.
+# The C9 register set (ledger IDs, verdict enums, receipt:, PASS) lives in prh-external.yml and is
+# loaded ONLY by textlintrc-external.json — those tokens are legitimate in internal working docs.
+#
+# DETECT-ONLY for role 2: prh flags, the model applies the human-legible fix (five-slot discipline).
+# Never auto-substitute coinage — see references/machine-floor.md (the 非飽和iciency case).
+
+rules:
+  # === role 1: terminology normalization — PORTABLE, safe to keep ================================
+  - expected: テープアウト
+    pattern: /tape-out/
+
+  # === role 2: coined-label graveyard — ⚠ PER-REPO EXAMPLES (QOED); REPLACE with your own =========
+  # Each entry: the coined label -> a pointer to its plain-language meaning. Detect-only.
+  - expected: "中心の未解決問題（研究フロンティア）と平文で述べる"
+    pattern: "§0 frontier"
+  - expected: "最適値を決める双対面の層、と平文で述べる"
+    pattern: value face
+  # agent-coinage: English house-token calqued into Japanese (house rule: keep the token in English,
+  # never translate/calque it). Caught live 2026-07-04 — the model coined these describing THIS skill.
+  - expected: 'machine floor は英語 token のまま — 日本語へ calque しない（house rule: token を訳すな）'
+    pattern: 機械床
+  - expected: '「捉え直す/再考」等の平文へ — reframe の calque「再フレーム」を避ける'
+    pattern: 再フレーム
+  # === end per-repo section =======================================================================
+
+  # === role 3: code-mixing floor (ルー語) — ALWAYS ON. Added 2026-07-04 (QOED R2607_021 incident:
+  # 15 latin tokens/100 JA chars in prose; "cite する", "deliverable である", "moat を主張しない").
+  # Verb calque is never house style in ANY register; the nouns below have exact JP equivalents.
+  # Detect-only; JA-prose oriented (hits inside English docs are advisory).
+  - expected: '日本語動詞へ（cite する→引用する 等）— 英語動詞+する の calque は register を問わず不可'
+    pattern: /[a-zA-Z]{2,} ?する/
+  - expected: 成果物
+    pattern: deliverable
+  - expected: '位置づけ（または 枠組み）'
+    pattern: framing
+  - expected: '参入障壁 — 事業 register の語を研究/技術 prose に持ち込まない'
+    pattern: moat

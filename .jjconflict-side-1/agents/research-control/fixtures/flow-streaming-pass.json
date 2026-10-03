@@ -1,0 +1,47 @@
+{
+	"schema": "programme-flow/v2",
+	"currentAuthorityRevision": "r1",
+	"currentAuthorityFence": "f1",
+	"sectionAuthorities": [
+		{
+			"sectionId": "A",
+			"goalConstitutionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"groundingSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"groundingRevision": 1,
+			"groundingFence": "gf1"
+		}
+	],
+	"completedJobIds": [],
+	"releasedReceiptDigests": [],
+	"now": 10,
+	"elapsedMs": 3600000,
+	"config": { "schedulerTickMs": 100 },
+	"slots": [{ "id": "s1", "resource": "cpu", "free": true }],
+	"traces": [],
+	"jobs": [
+		{
+			"id": "a",
+			"sectionId": "A",
+			"stage": "EXECUTION",
+			"readyAt": 1,
+			"deadline": 2,
+			"resource": "cpu",
+			"authorityRevision": "r1",
+			"authorityFence": "f1",
+			"dependsOn": [],
+			"semanticAuthorization": {
+				"kind": "SECTION_ADMISSION",
+				"locator": "admission:A",
+				"sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				"goalConstitutionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"groundingSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				"groundingRevision": 1,
+				"groundingFence": "gf1",
+				"valueClass": "MINIMAL_DISCRIMINATOR"
+			},
+			"runScale": "MINIMAL_DISCRIMINATOR",
+			"escalationClass": "NONE"
+		}
+	],
+	"counts": {}
+}

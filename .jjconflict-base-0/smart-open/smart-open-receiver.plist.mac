@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd agent for smart-open/receive.ts — linked to ~/Library/LaunchAgents/ and bootstrapped by
+     scripts/link-dots.sh on macOS. A login shell resolves bun and $HOME, so no machine-absolute
+     user path appears in this tracked file. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dotfiles.smart-open-receiver</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>exec bun "$HOME/dotfiles/smart-open/receive.ts"</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardErrorPath</key>
+  <string>/tmp/smart-open-receiver.log</string>
+</dict>
+</plist>

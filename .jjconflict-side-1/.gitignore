@@ -1,0 +1,49 @@
+.serena/
+/.agent-state/
+agents/commands/.system/
+
+# Local overrides
+local/
+*.local
+**/settings.local.json   # Claude Code per-machine permission overrides — never commit
+
+# Backups
+backups/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Secrets
+*.key
+*.pem
+.env
+
+# Karabiner automatic backups
+karabiner/automatic_backups/
+# CocoIndex Code (ccc) — DBs ignored, settings.yml committed (qoed と同型)
+/.cocoindex_code/*
+!/.cocoindex_code/settings.yml
+
+# Bun graduation project (writing-bun-scripts BG3) — package.json + bun.lock are COMMITTED
+# (they carry the pin); the installed tree is not. `mise run deps` restores it.
+node_modules/
+
+# agent-resource-run writes each job's measured peak beside its manifest (<manifest>.peak.json);
+# a runtime receipt, not source.
+*.resource.json.peak.json
+
+# Python bytecode (the ccc-interpreter helpers in agents/)
+__pycache__/

@@ -1,0 +1,154 @@
+# Gate startup debug logs behind $DOTFILES_DEBUG (export DOTFILES_DEBUG=1 to see them)
+_dbg(){ [[ -n "$DOTFILES_DEBUG" ]] && echo "[DEBUG] $*"; }
+
+_dbg "Starting .zprofile"
+
+# Homebrew
+_dbg "Setting up Homebrew"
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+else
+  _dbg "Homebrew not found at /home/linuxbrew/.linuxbrew/bin/brew"
+fi
+
+# PATH exports
+_dbg "Setting up PATH exports"
+# bun global package bins (claude, gemini, this repo's `bin` commands); bun itself comes from
+# Homebrew, not ~/.bun. .zshenv already puts both dirs on every shell's PATH (2026-09-13); this
+# re-prepend exists only to keep them AHEAD of the Homebrew dirs `brew shellenv` just inserted
+# above, in login shells. Order matters: ~/.local/bin last, so official standalone CLIs there
+# (e.g. Codex) beat stale npm/Bun shims of the same name.
+[ -d "$HOME/.bun/bin" ] && export PATH="$HOME/.bun/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
+
+# CUDA — guarded like every other PATH addition here. Unguarded, it pinned a version-specific
+# absolute path onto PATH/LD_LIBRARY_PATH even on machines without it (measured: this box has no
+# /usr/local/cuda-12.4, so it was a dead entry on every shell).
+if [ -d /usr/local/cuda-12.4 ]; then
+  export CUDA_HOME=/usr/local/cuda-12.4
+  export PATH="$CUDA_HOME/bin:$PATH"
+  export LD_LIBRARY_PATH="$CUDA_HOME/lib64:${LD_LIBRARY_PATH:-}"
+fi
+
+# WSL-provided GPU tools: nvidia-smi lives HERE, not in the CUDA toolkit's bin.
+# WSL auto-mounts this dir and registers it in ld.so.conf (ld.wsl.conf) but NOT on
+# PATH, so nvidia-smi is unreachable by name until we add it. LD already handled → PATH-only.
+[ -d /usr/lib/wsl/lib ] && export PATH="/usr/lib/wsl/lib:$PATH"
+
+# # Conda
+# export PATH="$HOME/miniconda3/bin:$PATH"
+# source $HOME/miniconda3/etc/profile.d/conda.sh
+
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# --- Windows interop PATH -----------------------------------------------------
+# Under systemd=true, WSL boots systemd as PID 1 in a clean namespace and does NOT
+# inherit the Windows PATH that /init injects, so appendWindowsPath is effectively
+# ignored. Re-expose only what we use, and keep the huge /mnt/c/Windows/System32
+# OFF $PATH so TAB-completion stays fast over the 9p bridge.
+# WindowsApps holds the App Execution Aliases (winget.exe & co) — small dir, cheap.
+# (winget.exe is a 0-byte alias stub: it must live on PATH; it can NOT be symlinked.)
+for _wa in /mnt/c/Users/*/AppData/Local/Microsoft/WindowsApps(N); do
+  # Skip empty template profiles (Default / Default User) by requiring the winget
+  # alias as a sentinel; dedupe so repeated sourcing doesn't stack entries.
+  [[ -e "$_wa/winget.exe" && ":$PATH:" != *":$_wa:"* ]] && export PATH="$PATH:$_wa"
+done
+unset _wa
+# The Windows-exe symlink farm (_WIN_EXES / link-win-exes) and the WSL_DISTRO_NAME derivation
+# deliberately do NOT live here: this file is read by LOGIN shells only. herdr/config.toml now
+# forces `[terminal] shell_mode = "login"` so herdr panes DO read this file, but keep this logic
+# in zsh/wsl.zsh anyway — that file is sourced by EVERY interactive shell regardless of login
+# status (aliases.zsh → here; zshrc loads sheldon when .zprofile was skipped), so it survives a
+# bare `zsh` invocation, an SSH-forwarded session, or shell_mode ever reverting to non-login.
+# (Historical bug, root-caused 2026-08-23: before shell_mode=login, herdr's default non-login
+# panes skipped this file AND silently failed to load sheldon/aliases.zsh too — see
+# herdr/config.toml's [terminal] comment. Keep pane-critical setup in wsl.zsh, not here.)
+# DELIBERATELY NO bare-name `cmd.exe` shim: Zed's remote-SSH OS probe runs `cmd.exe /c ver`,
+# and via WSL interop that execs the REAL Windows cmd.exe printing "Microsoft Windows [...]",
+# so Zed misdetects this Linux box as Windows and aborts with "windows-%PROCESSOR_ARCHITECTURE%".
+# `start` (zsh/wsl.zsh) calls cmd by absolute path instead.
+# Migration: purge any legacy bare-name cmd.exe shim an older rev created (breaks Zed WSL2 detect).
+[[ -e "$HOME/.local/bin/cmd.exe" || -e "$HOME/.local/bin/cmd.exe.zed-disabled" ]] &&
+  command rm -f "$HOME/.local/bin/cmd.exe" "$HOME/.local/bin/cmd.exe.zed-disabled"
+# -----------------------------------------------------------------------------
+
+
+# Source commands
+_dbg "Sourcing cargo env"
+if [[ -f "$HOME/.cargo/env" ]]; then
+  source "$HOME/.cargo/env"
+else
+  _dbg "Warning: $HOME/.cargo/env not found"
+fi
+
+# fnm removed 2026-08-06 (INV-6, see zsh/zshenv): a second version manager hooking every
+# login shell is an implicit global toolchain by construction. Measured on the Mac before
+# removal — `fnm list` held nothing but `* system`, so `fnm env` prepended a PATH entry for
+# zero installed nodes and had left 1672 stale dirs under ~/.local/state/fnm_multishells.
+# Node, if ever needed again, is declared in a project's mise.toml like every other tool.
+# Do not reintroduce fnm, nvm, volta, or a `mise use -g`; `mise run test:mise-scope` fails.
+
+
+# X11 configuration
+_dbg "Setting up X11"
+if [[ -f /etc/resolv.conf ]]; then
+  export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
+fi
+
+# Sheldon (load this last)
+# NOTE: the old form piped into the FIXED name /tmp/sheldon_source, then sourced it as shell
+# code. /tmp is world-writable and sticky, so on any shared host another user could pre-create
+# that path (or a symlink through it) and get their code sourced into this login shell;
+# concurrent shells also raced on the same file. Eval the output directly — no file, no race,
+# no plant surface. The 5s timeout survives (a wedged `sheldon` must not hang the shell); with
+# $() the timeout's exit status is what we test. (This note also covered the fnm block, removed
+# 2026-08-06 — the rule outlives it: never stage a hook's output through a fixed /tmp path.)
+_dbg "Setting up sheldon"
+if command -v sheldon &> /dev/null; then
+  if _sheldon_src="$(timeout 5s sheldon source 2>/dev/null)"; then
+    eval "$_sheldon_src"
+  else
+    _dbg "Warning: sheldon source timed out or failed"
+    # Fallback: load aliases directly
+    _dbg "Loading aliases.zsh directly as fallback"
+    if [[ -f "$HOME/dotfiles/zsh/aliases.zsh" ]]; then
+      source "$HOME/dotfiles/zsh/aliases.zsh"
+    fi
+  fi
+  unset _sheldon_src
+else
+  _dbg "Warning: sheldon not found"
+  # Fallback: load aliases directly
+  _dbg "Loading aliases.zsh directly as fallback"
+  if [[ -f "$HOME/dotfiles/zsh/aliases.zsh" ]]; then
+    source "$HOME/dotfiles/zsh/aliases.zsh"
+  fi
+fi
+
+_dbg "Setting up direnv"
+if command -v direnv &> /dev/null; then
+  eval "$(direnv hook zsh)"
+else
+  _dbg "Warning: direnv not found"
+fi
+
+
+
+# bun completions
+_dbg "Setting up bun completions"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# Sui version path configuration
+_dbg "Setting up Sui"
+if [[ -f "$HOME/.suim/current" ]]; then
+  export SUI_VERSION_PATH="$HOME/.suim/versions/$(cat $HOME/.suim/current)"
+  export PATH="$SUI_VERSION_PATH:$PATH"
+else
+  _dbg "Warning: $HOME/.suim/current not found"
+fi
+
+
+# for Rust
+export RUSTC_WRAPPER="sccache"
+
+_dbg "Finished .zprofile"

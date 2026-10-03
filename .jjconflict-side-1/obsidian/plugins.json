@@ -1,0 +1,11 @@
+{
+  "show-whitespace-cm6": {
+    "repo": "ebullient/obsidian-show-whitespace-cm6",
+    "version": "0.3.0",
+    "sha256": {
+      "main.js": "381521387f11ca03ba471a5608323a7d4cca84cc77018380b1c3b39ae58b5262",
+      "manifest.json": "1cee712a991cd637751d0470b472a81ed2eddd3aa21a05b09cbcba41959657a7",
+      "styles.css": "27811abbb6e0bd1bc27bdfa8a3521c12bca0130b811ac14b4cef65cdeb574ea4"
+    }
+  }
+}

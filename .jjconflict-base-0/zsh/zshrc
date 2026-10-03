@@ -1,0 +1,117 @@
+# Gate startup debug logs behind $DOTFILES_DEBUG (export DOTFILES_DEBUG=1 to see them)
+_dbg(){ [[ -n "$DOTFILES_DEBUG" ]] && echo "[DEBUG] $*"; }
+
+_dbg "Starting .zshrc"
+
+# Load sheldon if not already loaded (non-login shells skip .zprofile)
+if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
+  _dbg "Loading sheldon from .zshrc"
+  eval "$(sheldon source)"
+fi
+
+#zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
+_dbg "Setting up theme based on HOST: $HOST"
+case "$HOST" in
+"tomatowk")
+  zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
+  ;;
+"conohatan")
+  zplug denysdovhan/spaceship-prompt, use:spaceship.zsh, from:github, as:theme
+  zinit ice pick"async.zsh" src"pure.zsh"
+  zinit light sindresorhus/pure
+  ;;
+"spaceshit")
+  zinit ice pick'spaceship.zsh' wait'!0'
+  zinit light 'denysdovhan/spaceship-zsh-theme'
+  ;;
+*)
+  uname="%F{magenta}%n%f"
+  host="%F{yellow}%m%f"
+  pwd="%F{green}%~%f"
+  NEWLINE=$'\n'
+  # prompt="%F{blue})%f "
+  prompt="%F{blue}$%f "
+  datetime="%F{cyan}%D{%m-%d %H:%M}%f"
+
+  PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"
+  ;;
+esac
+
+# Initialize zsh completions (cached + resilient)
+_dbg "Initializing zsh completions"
+# Load completions from a cache that rebuilds at most once a day. On fresh starts we trust
+# the cache (compinit -C) and skip re-scanning the completion dirs — which also keeps a
+# dangling vendor completion (e.g. Docker Desktop's _docker symlink, broken whenever Docker
+# Desktop isn't running) from erroring on startup.
+autoload -Uz compinit
+_zcd=${ZDOTDIR:-$HOME}/.zcompdump
+# Age check via `find` — no glob-qualifier / EXTENDED_GLOB dependency, works in any zsh.
+if [[ -f $_zcd ]] && [[ -z "$(find "$_zcd" -mtime +1 2>/dev/null)" ]]; then
+  compinit -C -d $_zcd         # cache exists and is <1 day old: fast load, no rescan
+else
+  compinit -d $_zcd            # missing or stale: full rebuild
+fi
+unset _zcd
+
+# Shopify Hydrogen alias to local projects
+alias h2='$(npm prefix -s)/node_modules/.bin/shopify hydrogen'
+
+# Suim (Sui version manager) configuration
+_dbg "Setting up Suim in .zshrc"
+if [[ -d "$HOME/.suim" ]]; then
+  export PATH="$HOME/.suim:$PATH"
+  if [[ -f "$HOME/.suim/current" ]]; then
+    export SUI_VERSION_PATH="$HOME/.suim/versions/$(<$HOME/.suim/current)"
+    export PATH="$SUI_VERSION_PATH:$PATH"
+  fi
+else
+  _dbg "Warning: $HOME/.suim directory not found in .zshrc"
+fi
+
+# bun completions
+_dbg "Setting up bun completions in .zshrc"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+_dbg "Finished .zshrc"
+
+# julia is mise-managed; juliaup intentionally NOT used (the two juliaup guards here were
+# dead no-ops and were removed). If juliaup is ever installed and re-appends a machine-absolute
+# block, fold it back into a $HOME-relative existence-guarded form (INV-4).
+#
+# mise: interactive per-directory tool activation (cross-OS). ONLY mise activation in the shell.
+# This is the INTERACTIVE half of INV-6 (no implicit global toolchain; the law and the
+# measurements are in zsh/zshenv). Interactive shells get tools ONLY from here — declaration
+# by declaration, directory by directory — and .zshenv deliberately withholds the shim dir
+# from them. The shim dir is the NON-interactive half, for `ssh host 'cmd'`, which reads only
+# .zshenv and would otherwise reach no declared tool at all. Never merge the two halves.
+# Here in zshrc so it covers BOTH login and non-login interactive shells (tmux panes, bare zsh),
+# after every PATH edit in this file so __MISE_ORIG_PATH captures them and mise prepends tool
+# dirs ahead of everything (this, not the removed brew julia, is what makes mise beat a brew dup).
+# Homebrew provides the mise binary and `brew shellenv` runs login-only in .zprofile, so in a
+# NON-login interactive shell `command -v mise` fails; locate the binary via an existence-guarded
+# cross-OS scan. mise bakes its own absolute path into the generated hook, so the hook stays
+# self-contained even where mise is not otherwise on PATH.
+_mise_bin=""
+if command -v mise &>/dev/null; then
+  _mise_bin=mise
+else
+  for _mise_cand in "$HOME/.local/bin/mise" /opt/homebrew/bin/mise /usr/local/bin/mise /home/linuxbrew/.linuxbrew/bin/mise; do
+    [[ -x "$_mise_cand" ]] && { _mise_bin="$_mise_cand"; break; }
+  done
+fi
+if [[ -n "$_mise_bin" ]]; then
+  _dbg "Activating mise ($_mise_bin)"
+  eval "$("$_mise_bin" activate zsh)"
+fi
+unset _mise_bin _mise_cand
+
+# Machine/OS-specific PATH entries belong in mac/.zprofile or wsl/.zprofile, not here.
+
+# ── PATH hygiene: one final normalization pass ────────────────────────────────
+# `typeset -U path` (zshenv) only dedupes writes made THROUGH the array; every
+# `export PATH="X:$PATH"` in zprofile/zshrc/tool-installers bypasses it (measured: 6 duplicate
+# entries in a login shell). Rewriting the array once, here at the end of the load chain,
+# applies uniqueness AND drops entries whose directory has vanished (retired version-manager
+# uninstalled CUDA, retired plugin bins) — a shorter PATH is a faster command lookup.
+typeset -U path PATH
+path=( ${(u)^path}(N-/) )

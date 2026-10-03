@@ -119,7 +119,8 @@ describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)
       CODEX_BIN: "codex-does-not-exist-xyz-a1b2c3",
     });
     expect(run.stderr).toBe('Error: Missing required parameter "models"\n\n');
-    expect(run.stdout).toContain("USAGE:");
+    // The pinned Cleye (2.6.0) prints its heading as "Usage:" (bold); this said "USAGE:".
+    expect(run.stdout).toContain("Usage:");
     expect(run.stdout).toContain("probe-models.ts [flags...] <models...>");
     expect(run.exitCode).toBe(1);
   });

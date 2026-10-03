@@ -6,6 +6,10 @@ const ROOT = new URL("../../../../", import.meta.url).pathname;
 type CorpusEntry = Readonly<{
   path: string;
   command?: string;
+  // A CLI whose OWN contract differs from Cleye's default for an unknown flag (exit 1, "Unknown
+  // flag") declares it here, and the test then holds it to THAT. tex-oracle reserves exit 1 for
+  // "the oracle does not hold", so its usage errors are exit 2 (see rejectPrototypeFlag there).
+  unknownFlag?: Readonly<{ exit: number; message: string }>;
 }>;
 
 const CORPUS = [
@@ -13,10 +17,15 @@ const CORPUS = [
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "agents/resource-control/agent-resource-run.ts" },
+  { path: "agents/retrieval-control/bench-definitions.ts" },
   { path: "agents/serena-control/serena-foreground.ts" },
   { path: "agents/skills/arguing-research-papers/scripts/claim-check.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
   { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
+  {
+    path: "agents/skills/compiling-latex/scripts/tex-oracle.ts",
+    unknownFlag: { exit: 2, message: "unknown option" },
+  },
   {
     path: "agents/skills/continuing-long-running-tasks/scripts/continuation-check.ts",
   },
@@ -67,6 +76,7 @@ const CORPUS = [
   { path: "agents/skills/systematizing-knowledge/scripts/check-donor-set.ts" },
   { path: "agents/skills/systematizing-knowledge/scripts/check-ledger.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/fmt-staged.ts" },
+  { path: "agents/skills/wiring-mise-tasks/scripts/jj-commit.ts" },
   { path: "agents/skills/wiring-mise-tasks/scripts/mise-contract.ts" },
   { path: "agents/skills/wiring-repositories/scripts/wiring-check.ts" },
   { path: "agents/skills/writing-bun-scripts/scripts/script-check.ts" },
@@ -140,8 +150,9 @@ describe("production Cleye corpus boundary", () => {
       expect(help.stdout.toString()).toContain("Show help");
 
       const unknown = run(entry, ["--definitely-unknown-cleye-contract"]);
-      expect(unknown.exitCode).toBe(1);
-      expect(unknown.stderr.toString()).toContain("Unknown flag");
+      const expected = entry.unknownFlag ?? { exit: 1, message: "Unknown flag" };
+      expect(unknown.exitCode).toBe(expected.exit);
+      expect(unknown.stderr.toString()).toContain(expected.message);
 
       const prototype = run(entry, ["--__proto__"]);
       expect(prototype.exitCode).toBe(2);

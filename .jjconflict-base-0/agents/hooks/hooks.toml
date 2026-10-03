@@ -22,6 +22,16 @@ matcher = "Bash"
 fail_closed = true
 vendors = ["claude", "codex"]
 
+# Orders to codex / grok / claude / agy must name a model of the CURRENT generation: the floors per
+# model family are in model-floor.toml (sol >= 6.1, grok >= 4.7, ...), so a newer generation passes
+# without an edit. Both vendors, because a Codex session orders work from grok and claude too.
+[[hook]]
+script = "enforce-model-floor.ts"
+event = "PreToolUse"
+matcher = "Bash"
+fail_closed = true
+vendors = ["claude", "codex"]
+
 [[hook]]
 script = "enforce-search-route.ts"
 event = "PreToolUse"

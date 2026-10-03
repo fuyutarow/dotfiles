@@ -1,0 +1,108 @@
+# model-floor — the declarative half of enforce-model-floor.ts.
+#
+# POLICY (owner, 2026-10-03): work is ordered from the CURRENT generation of every model, never an
+# older one that still happens to answer. This file says WHAT counts as current — per model family,
+# the oldest generation still allowed — and the hook (agents/hooks/enforce-model-floor.ts, with the
+# parsing in model-orders.ts) says HOW: it denies a Bash command that RUNS codex, grok, claude or agy
+# with a model below its family's floor. `min` is a FLOOR, not a pin: a newer generation (sol 6.2,
+# sol 7, grok 5) passes with no edit here.
+#
+# HOW A FLOOR MOVES. When a vendor ships a newer generation of a family and you have confirmed it
+# exists, raise that family's `min` to it in the same commit — that is what retires the old one.
+# Confirm against the source, not memory (CATALOG-BY-PROBE):
+#   codex   ~/.codex/models_cache.json (slugs with visibility "list"), or `codex exec -m <slug>` probe
+#   grok    `grok models`
+#   agy     `agy models`
+#   claude  the vendor model page; the aliases opus/sonnet/haiku/fable/mythos always mean the newest
+#           and are never judged
+# A NEW FAMILY (a vendor invents a tier name) has no row and is DENIED until one is added: that is
+# deliberate, so a new tier is a decision and not a default. Release DATES stay in
+# agents/models/releases.toml, which is the sole home for them.
+#
+# WHAT THE HOOK ALSO ENFORCES, from driving-codex C2 and driving-antigravity: `codex exec|e|review`
+# and `agy -p` must NAME their model (a bare call inherits its own configured default, which is not
+# necessarily current). `grok` and `claude` with no -m run the vendor's own default, which the vendor
+# keeps at its newest, so only an explicit old choice is denied there.
+
+schema = 1
+
+# --- openai (codex) -----------------------------------------------------------------------------
+# Evidence 2026-10-03: ~/.codex/models_cache.json lists gpt-6.1-sol, gpt-6-sol, gpt-6-astra,
+# gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna, gpt-5.5 as selectable. Newest per family:
+[[family]]
+vendor = "openai"
+family = "sol"
+min = "6.1"
+
+[[family]]
+vendor = "openai"
+family = "terra"
+min = "5.6"
+
+[[family]]
+vendor = "openai"
+family = "luna"
+min = "6"
+
+[[family]]
+vendor = "openai"
+family = "astra"
+min = "6"
+
+# --- xai (grok) ---------------------------------------------------------------------------------
+# Evidence 2026-10-03: `grok models` lists grok-4.7 (default), grok-4.7-build-fast, grok-4.6, grok-4.5.
+# A variant suffix (-build-fast) does not change the generation.
+[[family]]
+vendor = "xai"
+family = "grok"
+min = "4.7"
+
+# --- anthropic (claude, and the claude models agy serves) ---------------------------------------
+# Evidence 2026-10-03: the harness's own model list names Fable 5.1, Opus 5.5, Sonnet 5.5 and
+# Haiku 4.5 as the most recent (ids claude-fable-5-1, claude-opus-5-5, claude-sonnet-5-5,
+# claude-haiku-4-5-20251001). Mythos is invitation-only and has no newer generation than 5.
+[[family]]
+vendor = "anthropic"
+family = "opus"
+min = "5.5"
+
+[[family]]
+vendor = "anthropic"
+family = "sonnet"
+min = "5.5"
+
+[[family]]
+vendor = "anthropic"
+family = "haiku"
+min = "4.5"
+
+[[family]]
+vendor = "anthropic"
+family = "fable"
+min = "5.1"
+
+[[family]]
+vendor = "anthropic"
+family = "mythos"
+min = "5"
+
+# --- google (gemini, reached through agy) -------------------------------------------------------
+# Evidence: agents/models/releases.toml (swept 2026-07-25) and driving-antigravity's catalog
+# (probed 2026-07-23): gemini-3.6-flash, gemini-3.5-flash-lite and gemini-3.1-pro-preview are the
+# newest of their tiers. NOT re-probed on this machine (agy is not installed here): re-confirm with
+# `agy models` when agy is next available. Tiers are compared only against their own tier — a
+# tier name is not an ordering across generations.
+[[family]]
+vendor = "google"
+family = "flash"
+min = "3.6"
+
+[[family]]
+vendor = "google"
+family = "flash-lite"
+min = "3.5"
+
+[[family]]
+vendor = "google"
+family = "pro"
+min = "3.1"

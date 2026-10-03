@@ -61,6 +61,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-model-floor.ts"
+          }
+        ]
+      },
+      {
         "matcher": "Grep|Bash",
         "hooks": [
           {
@@ -295,7 +304,7 @@
     "refreshInterval": 5
   },
   "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": true
   },
   "effortLevel": "medium",

@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh ~/.codex/hooks/run.sh"
+            "command": "sh ~/.codex/hooks/run-dispatch-contract.sh"
           }
         ]
       },
@@ -115,6 +115,15 @@
           {
             "type": "command",
             "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-model-floor.ts"
           }
         ]
       },

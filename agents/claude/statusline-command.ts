@@ -145,7 +145,9 @@ function readJson<S extends z.ZodType>(
   path: string,
   schema: S,
 ): z.output<S> | undefined {
-  const parsed = fromThrowable(() => JSON.parse(readFileSync(path, "utf8")))();
+  const parsed = fromThrowable(
+    (): unknown => JSON.parse(readFileSync(path, "utf8")),
+  )();
   if (parsed.isErr()) return undefined;
   const checked = schema.safeParse(parsed.value);
   return checked.success ? checked.data : undefined;
@@ -1302,6 +1304,7 @@ const STORAGE_CONFIG = join(
   "storage-headroom.toml",
 );
 interface DiskReading {
+  kind: "reading"; // discriminant: DiskEntry is told apart by this tag, not by probing for a key
   label: string; // "Disk C:", "Disk WSL", or "Disk <path>" — see diskLabel
   usedG: number;
   totalG: number;
@@ -1321,6 +1324,7 @@ function diskLabel(path: string): string {
 }
 // A drive that statfs could not read, shown as `<label> n/a (<why>)`.
 interface DiskMiss {
+  kind: "miss";
   label: string;
   why: string;
 }
@@ -1354,7 +1358,11 @@ function diskReadings(): Result<DiskEntry[], string> {
   const out: DiskEntry[] = [];
   for (const d of drives) {
     if (d.path === undefined) {
-      out.push({ label: "Disk", why: "drive entry has no path" });
+      out.push({
+        kind: "miss",
+        label: "Disk",
+        why: "drive entry has no path",
+      });
       continue;
     }
     const path = d.path;
@@ -1367,7 +1375,7 @@ function diskReadings(): Result<DiskEntry[], string> {
     // that could not be read, like any other failure: shown as n/a.
     if (st.isErr() && st.error === "ENOENT" && !IS_WSL) continue;
     if (st.isErr()) {
-      out.push({ label: diskLabel(path), why: st.error });
+      out.push({ kind: "miss", label: diskLabel(path), why: st.error });
       continue;
     }
     const { bsize, blocks, bfree, bavail } = st.value;
@@ -1377,12 +1385,19 @@ function diskReadings(): Result<DiskEntry[], string> {
     let col = "38;5;71";
     if (d.warn_gib !== undefined && freeG < d.warn_gib) col = "38;5;178";
     if (d.deny_gib !== undefined && freeG < d.deny_gib) col = "38;5;167";
-    out.push({ label: diskLabel(path), usedG, totalG, freeG, col });
+    out.push({
+      kind: "reading",
+      label: diskLabel(path),
+      usedG,
+      totalG,
+      freeG,
+      col,
+    });
   }
   return ok(out);
 }
 function diskSegment(d: DiskEntry): string {
-  if ("why" in d) return naSegment(d.label, d.why);
+  if (d.kind === "miss") return naSegment(d.label, d.why);
   const pct = Math.round((d.usedG / d.totalG) * 100);
   return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${Math.round(d.usedG)}/${Math.round(d.totalG)}G)${RST}`;
 }
@@ -1508,7 +1523,7 @@ function render(df: Dataframe): string {
     sysLine,
     jobLine,
   ]
-    .filter((r): r is string => r != null && r !== "")
+    .flatMap((r) => (r ? [r] : [])) // drops undefined and "" without an `r is string` guard
     .join("\n");
 }
 
@@ -1591,3 +1606,10 @@ if (sid !== "") {
     );
   })();
 }
+
+interface ZzCache { at?: number }
+export const zzBad1: ZzCache = JSON.parse("{}");
+export const zzBad2 = (JSON.parse("1") as { a: number }).a;
+export function zzBad3(x: unknown): x is string { return typeof x === "string"; }
+export const zzBad4 = (e: object) => "code" in e;
+export const zzOk = (): unknown => JSON.parse("1");

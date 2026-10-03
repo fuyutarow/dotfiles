@@ -13,6 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { tempDir, tempHome } from "./helpers.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "..", "statusline-command.ts");
@@ -59,6 +60,23 @@ function seedCache(home: string, file: string, cache: unknown): void {
 }
 const seedGpuCache = (home: string, cache: unknown): void =>
   seedCache(home, "statusline-gpu.json", cache);
+// Read back a cache file the statusline wrote, parsed by a schema (never an annotation): a file
+// of the wrong shape fails the test with zod's message instead of a confusing `undefined`.
+function readCache<S extends z.ZodType>(
+  home: string,
+  file: string,
+  schema: S,
+): z.output<S> {
+  const raw = readFileSync(join(home, ".cache", "claude", file), "utf8");
+  const json = ((): unknown => JSON.parse(raw))();
+  return schema.parse(json);
+}
+const GpuMissSchema = z.object({
+  at: z.number(),
+  why: z.string().optional(),
+  reading: z.unknown().optional(),
+});
+const SysCacheSchema = z.object({ line: z.string() });
 
 describe("statusline Sys row: VRAM", () => {
   test("a working nvidia-smi shows the number", () => {
@@ -97,8 +115,7 @@ describe("statusline Sys row: VRAM", () => {
         bin: binWith({ "nvidia-smi": "exec /bin/sleep 6" }),
       });
       // Simulate time passing past the 5 s TTL, then a healthy driver.
-      const cache = join(home, ".cache", "claude", "statusline-gpu.json");
-      const failed = JSON.parse(readFileSync(cache, "utf8"));
+      const failed = readCache(home, "statusline-gpu.json", GpuMissSchema);
       expect(failed.why).toBe("nvidia-smi timeout 2000ms");
       expect(failed.reading ?? null).toBeNull();
       seedGpuCache(home, { ...failed, at: failed.at - 60_000 });
@@ -232,12 +249,7 @@ describe("statusline Sys row: every reading is present", () => {
 
   test("the snapshot the log hook reads carries the n/a too", () => {
     const { home } = render({ bin: binWith({}) });
-    const cached = JSON.parse(
-      readFileSync(
-        join(home, ".cache", "claude", "statusline-sys.json"),
-        "utf8",
-      ),
-    );
+    const cached = readCache(home, "statusline-sys.json", SysCacheSchema);
     expect(cached.line).toContain("VRAM n/a (no nvidia-smi)");
   });
 });

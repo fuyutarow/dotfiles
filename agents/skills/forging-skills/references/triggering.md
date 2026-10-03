@@ -1,132 +1,106 @@
-# Triggering — naming, description engineering, fire/no-fire proof
+# Triggering — precise discovery and relevant negatives
 
-> Scope: pipeline step 4 (SKILL.md). The `name:` + `description:` pair is the skill's API — the
-> ONLY surface the model sees when deciding whether to load the body. Matching is **LEXICAL**
-> (surface tokens, not intent: a keyword matches only if it literally appears — stem-tolerant in
-> practice, but never design on that: cover the surface forms your user actually types) and
-> **BUDGETED** (listings truncate under a context budget). This file owns engineering that surface and proving
-> it fires; the harness mechanics of listing, budget fractions, truncation, and `/doctor`
-> diagnostics are owned by the operating-the-harness skill — pointed at, never restated here.
->
-> Contents: §1 the triggering LAW · §2 naming · §3 description anatomy (8 parts) · §4 winning the
-> match vs incumbents · §5 fire/no-fire test sets (gate F3) · §6 machinery · §7 anti-patterns.
+> Scope: names, descriptions and selection evidence. Loading mechanics belong to `operating-the-harness`.
 
-## 1. THE TRIGGERING LAW
+## 1. Selection is an observed behavior
 
-> **"Claude only consults skills for tasks it can't easily handle on its own."** — the official
-> plugin default's own text, buried three paragraphs deep in its description-optimization step;
-> promoted here to law because it governs every choice below.
+Names and descriptions provide the initial discovery surface.
+Describe capability and invocation conditions, not an exhaustive manual.
+Selection can depend on meaning, context, explicit invocation and host behavior.
+Literal keywords are not proven necessary or sufficient for every selection.
+Word matching and text-only review do not measure live accuracy.
 
-Three consequences, each changing what you write:
+A trivial request may be handled correctly without loading a skill.
+A missed invocation matters when it loses a needed capability or ignores an explicit request.
+Check that difference before expanding the description.
 
-1. **A perfect match can still no-fire.** On a trivial ask the model answers directly even when
-   every keyword matches. Do not debug that no-fire by inflating the description — the mechanism
-   is working. Aim the description at the asks the model would fumble WITHOUT the body.
-2. **Auto-trigger is NEVER guaranteed — verify invocation, don't trust the match.** The F3 test
-   set (§5) is the proof artifact; live diagnostics (listing budget, drop order, `/doctor`) →
-   operating-the-harness.
-3. The plugin's corrective — Claude "undertriggers", so make descriptions "a little pushy" — is
-   absorbed WITH a correction: pushiness is safe only when paired with explicit no-fire cuts
-   (§3 parts 3–4, §5). Push without negative space converts under-triggering into misfires.
+## 2. Naming and host contract
 
-## 2. Naming
+Use an activity and object that distinguish the actual job.
+This repository uses gerund names.
+Platform grammar, caps, supported fields and invocation policy belong to the host contract.
+Read that contract instead of copying numerical limits into each manual.
+A separate name does not establish an independent responsibility.
 
-| Rule | Source |
+## 3. Description content
+
+| Content | Include when |
 |---|---|
-| Gerund `<verb-ing>-<object>` (`writing-julia`, `forging-skills`) | Official best-practices RECOMMENDS gerund form (platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices); this collection MANDATES it — "inconsistent patterns within your skill collection" is itself a documented official anti-pattern (same page), so one shape for all |
-| Lowercase letters / digits / hyphens only, ≤64 chars | Anthropic platform validation (platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) |
-| No leading/trailing hyphen, no consecutive `--`, name = parent directory name | agentskills.io/specification — the hyphen-shape and dir-match rules appear ONLY there, not in Anthropic's docs; treat them as binding anyway |
-| No reserved words `claude` / `anthropic` | Anthropic platform docs ONLY (overview page) — agentskills.io does NOT carry this rule. Both divergences cut one way: obey the UNION of the two sources; a name valid everywhere never bites |
+| Capability and invocation condition | Always for a discoverable reusable skill |
+| Typical request terms and languages | They reflect user asks and improve recognition |
+| Exclusion or neighboring owner | A realistic adjacent request otherwise misroutes |
+| Essential prerequisite or tool | Selection depends on it |
+| Delegation or language detail | It affects selection rather than only execution |
 
-The name is trigger surface too: names survive the listing-budget drops that truncate
-descriptions (mechanics → operating-the-harness), so the name itself must carry the object —
-`forging-skills`, never `skill-helper`.
+There is no required eight-part anatomy.
+Avoid exhaustive sibling lists, catchalls and copied competitor keywords.
+Use source-specific restrictions only when they belong to this task.
 
-## 3. Description anatomy — the house 8-part shape
+Folded scalars are a useful house convention for multiline descriptions.
+Correctly quoted YAML is also valid.
+The historical colon-space failure is a parsing problem, not proof that all scalars must be folded.
 
-Parts 1–6 appear in this order inside the description; 7–8 constrain the whole.
+Discovery conditions belong in the description.
+The body may repeat a boundary needed after explicit invocation.
+It cannot repair missing discovery information before it loads.
 
-| # | Part | Contract |
-|---|---|---|
-| 1 | **3rd-person what+when opener** | "Forges… / Audits… Use when(ever)…" — official rule: always third person; the description is injected into the system prompt and inconsistent POV causes discovery problems |
-| 2 | **Trigger keywords WITH Japanese doublets** | Matching is lexical and the user prompts in Japanese: スキル作成 matches ONLY if スキル作成 literally appears. Every load-bearing English keyword gets its Japanese doublet; include quoted user-phrasings ("turn this into a skill") |
-| 3 | **Typed cuts IN the description** | DECISIVE / CARDINALITY / PURPOSE one-liners against each overlapping sibling — routing must resolve at match time, from descriptions alone. The cut's rationale lives in a reference; the description carries only the one-line question |
-| 4 | **Precedence / owner-filter declarations** | MANDATORY-read status, LOWEST-precedence-yields-to lists, CO-FIRES-with clauses — whichever the skill's position in the family requires; co-matching must be resolvable without loading any body |
-| 5 | **Workflow-native clause** | One sentence declaring the solo/fan-out split, always naming what stays SOLO |
-| 6 | **Language directive LAST** | "English skill; respond in the user's language (default Japanese)" — final sentence, mirrored by a body Language section pinning stable tokens |
-| 7 | **Block scalar `>-` ALWAYS** | A plain scalar breaks on any "X: " colon-space inside the text — YAML reads it as a mapping and the description parses to garbage (observed 2026-07-02). No exceptions |
-| 8 | **Length** | Platform hard cap: 1024 chars (API-deployment validation). Claude Code's listing truncates longer entries — observed failure window ~1520–1570 chars (2026-07); keep ≤1500 so the tail-positioned language directive survives. The exact cap number and its config knobs live in operating-the-harness — this file records only the observed failure |
+## 4. Resolve actual collisions
 
-## 4. Winning the match vs incumbents
+Compare competing descriptions against real requests.
+Use a runtime-answerable distinguishing question for a genuine overlap.
+PURPOSE, CARDINALITY and DECISIVE are optional shorthand for that question.
+Do not put every possible relationship into the description.
 
-When a default/generic skill already owns the ask, out-lexicalize DELIBERATELY: cover the
-incumbent's own tokens, add what it lacks, cut against it by name. Worked example — this skill's
-description vs the two skill-creator defaults (trigger surfaces quoted, 2026-07 dissection):
-
-- Codex system default: "Guide for creating effective skills. This skill should be used when
-  users want to create a new skill (or update an existing skill)…"
-- Official plugin: "Create new skills, modify and improve existing skills, and measure skill
-  performance. Use when users want to … run evals … optimize a skill's description for better triggering accuracy."
-
-| Lexical surface | Codex | Plugin | A winning description must |
-|---|---|---|---|
-| create / update / optimize a skill, evals, benchmark | ✓ | ✓ | Include the SAME tokens — cover their whole ask |
-| `SKILL.md`, `frontmatter`, `agents/skills/` | — | — | Include — the tokens this user actually types |
-| Japanese (スキル作成 / スキルを作って / スキル改善) | — | — | Include — the user prompts in Japanese |
-| Negative space (should-NOT-fire carve-outs) | — | — | Include cuts + precedence so a double-fire resolves |
-
-(Instructive irony: the plugin teaches near-miss negatives for OTHER skills while shipping none
-for its own.) Siblings get the same discipline: operating-the-harness already claims "Skills
-(SKILL.md)" in its description — without a typed cut, a SKILL.md ask races three ways.
-
-Ethics of the match: out-lexicalizing is legitimate only as BETTER COVERAGE — include an
-incumbent's tokens because this skill genuinely serves those asks (invoking the incumbent's
-machinery by pointer, §6), and CUT explicitly against the incumbent so any double-fire resolves
-deterministically. Tokens you don't serve are a misfire factory, not a win.
-
-## 5. Fire / no-fire test sets — gate F3
-
-The trigger artifact: a query table that ships IN the skill (SKILL.md MUST-NOT-FIRE section, or
-`tests/triggers.md` for long sets) and is re-run as a desk-check after EVERY description edit.
-Query-design craft absorbed from the official plugin (credited — the best prose it contains):
-
-| Requirement | Rule |
+| Collision | Repair |
 |---|---|
-| ≥5 should-fire | Realistic-messy, as users actually type: real filenames ("Q4 sales final FINAL v2.xlsx"), typos, backstory clutter; ≥1 in Japanese; ≥1 describing the situation without any headline keyword |
-| ≥5 should-NOT-fire | NEAR-MISS negatives — the plugin's own rule: "don't make should-not-trigger queries obviously irrelevant… 'Write a fibonacci function' as a negative test for a PDF skill is too easy." Each row names which sibling (or no skill) fires instead |
-| Co-fire rows | Braided asks where a sibling should ALSO fire (state the order) or INSTEAD fire — these rows are the executable form of the description's cuts (§3 part 3) |
+| Two owners prescribe different results for the same job | Choose one owner and narrow competing scope |
+| Variants compete for the same request | Select modes inside an owner or justify a split |
+| Both owners defer a request away | Repair the responsibility gap |
+| Broad term attracts unrelated work | Remove the catchall; add a near-miss case |
+| Explicit invocation is ignored | Check registration, policy and host before editing prose |
 
-Desk-check protocol: for each row, read ONLY the name + description — the model's stage-1 view
-(disclosure stages → operating-the-harness) — and answer fire / no-fire / co-fire. A wrong answer
-is a description bug (or a badly designed query — decide which, in writing, before editing);
-contested rows escalate to live evals (§6). A green desk-check after every edit is the regression floor.
+A current creator may already handle the task well.
+Inspect current guidance and observed failures before claiming local guidance is preferable.
+An old comparison cannot establish superiority over an updated incumbent.
 
-## 6. Machinery — invoke, never rebuild
+## 5. Selection cases
 
-Trigger-eval rows ONLY (paths: SKILL.md routing table). Shared invocation details — uv/pyyaml,
-`cwd=$PLUGIN`, the `-m scripts.*` module form — and the FULL machinery table live in
-`verifying.md` §4; do not restate them here.
+Cover the changed boundary with explicit invocation, an implicit ask and a plausible adjacent negative.
+Use the user's languages, typos and contextual clutter where they matter.
+Add a co-use case only when the workflow needs both owners.
+Case count follows coverage; do not pad a tiny revision to a fixed quota.
 
-| Need | Invoke | Note |
-|---|---|---|
-| Live trigger eval | `python -m scripts.run_eval …` | N runs per query, trigger threshold 0.5; PROXY CAVEAT below |
-| Description-optimization loop | `python -m scripts.run_loop --eval-set … --skill-path … --model <session model> --max-iterations 5` | 60/40 train/test split, blinded test scoring, best-by-test-score — real anti-overfit machinery; never rebuild it |
-| Description rewriter | `python -m scripts.improve_description …` | anti-overfit prompt, 1024-char auto-shorten retry |
+A desk review sees the available name and description.
+Record expected routes and disputed rows.
+It checks understandability, not measured model selection.
 
-**PROXY CAVEAT** — attach to every run_eval/run_loop result you cite: the machinery does NOT
-install your SKILL.md; it writes a temporary `.claude/commands/<name>-skill-<uuid>.md` proxy
-carrying the description and detects invocation from stream events. It measures the DESCRIPTION
-as a trigger through a command proxy — an approximation, not the installed-skill listing path.
-Order of proof: skill-check floor → F3 desk-check → run_eval on contested rows → one real
-installed-skill session before freezing.
+For live tests, preserve inputs, host, model and invocation policy.
+Observe both selection and whether the result stayed in scope.
+More activations can be a regression if false positives increase.
 
-## 7. Anti-patterns
+## 6. Existing eval machinery
 
-| Anti-pattern | Observable tell | Fix |
-|---|---|---|
-| Description-as-summary | An abstract of the skill: no "Use when", no token a user would type | §3 parts 1–2 |
-| Monolingual triggers | Zero Japanese in a description written for a user who prompts in Japanese | Doublet every load-bearing keyword (§3 part 2) |
-| "When to Use" in the BODY | A body section restating triggers — the body loads only AFTER triggering, so it can never influence the decision; dead weight (the Codex default itself flags these sections as unhelpful) | All when-information in `description:`; delete the body section |
-| Untyped cut | "related to X", "for complex cases" — unanswerable at runtime | One askable question with a named type: DECISIVE / CARDINALITY / PURPOSE (§3 part 3) |
-| Description race left standing | Two descriptions match one ask; neither names the other; fire order is luck | Cut in BOTH descriptions + a precedence/sequencing clause; add the F3 co-fire row that proves it resolved (§4–5) |
-| **Mutual-deferral void** | The inverse of a race: BOTH siblings' cuts route an ask to the other — silence, no owner (observed 2026-07-24: SKILL.md prose; both sides pointed away for weeks) | Declare ONE canonical owner in that side's cut; the other side points WITH rationale; add the F3 row proving the ask now lands |
+Use installed creator evaluation and description tools when available.
+Paths and invocation details are in `verifying.md` §4.
+Inspect the actual helper interface; do not rebuild it for another proof artifact.
+
+If a runner uses a temporary command proxy, label that measurement surface.
+It does not prove installed registration or the full workflow.
+Verify the actual deployment before making the stronger claim.
+Keep held-out cases separate during tuning.
+
+Optimize for relevant selection and successful, authorized completion.
+Do not optimize the largest activation rate.
+
+## 7. Failure cases
+
+| Symptom | First check |
+|---|---|
+| Absent from the available list | Registration and host diagnostics |
+| Description shortened or missing | Actual listing budget and scope |
+| Needed capability not used despite availability | Implicit case, description and model |
+| Unrelated work activates the skill | Adjacent negative and overbroad description |
+| Tuning consumes every known test | Held-out cases and regression |
+| Strong wording changes scope or permissions | Restore the authorized task boundary |
+
+Revision lineage: `../tests/forge-verification-ledger.md`.

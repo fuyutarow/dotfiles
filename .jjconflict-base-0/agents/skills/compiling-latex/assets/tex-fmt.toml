@@ -1,8 +1,0 @@
-# Place at repository root so tex-fmt can discover it from paper subdirectories.
-# One sentence per line is the source layout; wrapping would break lines inside inline math.
-wrap = false
-tabsize = 2
-tabchar = "space"
-verbosity = "warn"
-lists = []
-no-indent-envs = ["verbatim", "lstlisting", "minted"]

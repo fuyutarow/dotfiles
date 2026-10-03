@@ -1,6 +1,7 @@
 import { cli } from "cleye";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
 //   app.json     — keys merged into each vault's .obsidian/app.json
@@ -42,39 +43,42 @@ function rejectPrototypeFlag(
   }
 }
 
-type Plugin = { repo: string; version: string; sha256: Record<string, string> };
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+const RecordSchema = z.record(z.string(), z.unknown());
+const VaultSchema = z.object({ path: z.string() });
+const PluginSchema = z.object({
+  repo: z.string(),
+  version: z.string(),
+  sha256: z.record(z.string(), z.string()),
+});
+type Plugin = z.output<typeof PluginSchema>;
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
   const data: unknown = await Bun.file(path).json();
-  if (!isRecord(data)) throw new Error(`${path}: not a JSON object`);
-  return data;
+  const record = RecordSchema.safeParse(data);
+  if (!record.success) throw new Error(`${path}: not a JSON object`);
+  return record.data;
 }
 
 function asPlugin(id: string, v: unknown): Plugin {
-  const ok =
-    isRecord(v) &&
-    typeof v.repo === "string" &&
-    typeof v.version === "string" &&
-    isRecord(v.sha256) &&
-    Object.values(v.sha256).every((h) => typeof h === "string");
-  if (!ok)
+  const plugin = PluginSchema.safeParse(v);
+  if (!plugin.success)
     throw new Error(
       `plugins.json: ${id}: needs repo, version, sha256{file: hash}`,
     );
-  return v as Plugin;
+  return plugin.data;
 }
 
 async function vaultPaths(): Promise<string[]> {
   if (!existsSync(REGISTRY)) return [];
   const reg = await readJsonObject(REGISTRY);
-  const vaults = isRecord(reg.vaults) ? reg.vaults : {};
-  return Object.values(vaults)
-    .map((v) => (isRecord(v) && typeof v.path === "string" ? v.path : null))
-    .filter((p): p is string => p !== null);
+  const vaultsRecord = RecordSchema.safeParse(reg.vaults);
+  const vaults: Record<string, unknown> = vaultsRecord.success
+    ? vaultsRecord.data
+    : {};
+  return Object.values(vaults).flatMap((v) => {
+    const vault = VaultSchema.safeParse(v);
+    return vault.success ? [vault.data.path] : [];
+  });
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -153,8 +157,10 @@ async function pluginFixes(dir: string, id: string, p: Plugin): Promise<Fix[]> {
 async function enableFix(dir: string, ids: string[]): Promise<Fix[]> {
   const target = join(dir, "community-plugins.json");
   const raw: unknown = existsSync(target) ? await Bun.file(target).json() : [];
-  if (!Array.isArray(raw)) throw new Error(`${target}: not a JSON array`);
-  const missing = ids.filter((id) => !raw.includes(id));
+  const list = z.array(z.unknown()).safeParse(raw);
+  if (!list.success) throw new Error(`${target}: not a JSON array`);
+  const current = list.data;
+  const missing = ids.filter((id) => !current.includes(id));
   if (missing.length === 0) return [];
   return [
     {
@@ -162,7 +168,7 @@ async function enableFix(dir: string, ids: string[]): Promise<Fix[]> {
       apply: async () => {
         await Bun.write(
           target,
-          `${JSON.stringify([...raw, ...missing], null, 2)}\n`,
+          `${JSON.stringify([...current, ...missing], null, 2)}\n`,
         );
       },
     },

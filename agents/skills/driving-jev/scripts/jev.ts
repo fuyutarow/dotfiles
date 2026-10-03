@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
+import { z } from "zod";
 
 // Consumer: machine. Success is one JSON value on stdout; diagnostics stay on stderr.
 
@@ -53,16 +54,24 @@ function positiveInteger(
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const RecordSchema = z.record(z.string(), z.unknown());
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function isStructuredText(value: unknown): boolean {
-  return typeof value === "string" || Array.isArray(value) || isRecord(value);
+  return (
+    typeof value === "string" ||
+    Array.isArray(value) ||
+    asRecord(value) !== undefined
+  );
 }
 
-function validateQuestion(id: string, value: unknown): void {
-  if (!isRecord(value))
+function validateQuestion(id: string, question: unknown): void {
+  const value = asRecord(question);
+  if (value === undefined)
     throw new JevCliError(2, `question '${id}' must be an object`);
   const type = value.type;
   if (type !== "noul" && type !== "choice" && type !== "score") {
@@ -76,13 +85,14 @@ function validateQuestion(id: string, value: unknown): void {
   }
 
   if (type === "choice") {
-    if (!isRecord(value.criteria)) {
+    const criteria = asRecord(value.criteria);
+    if (criteria === undefined) {
       throw new JevCliError(
         2,
         `choice question '${id}' requires object criteria`,
       );
     }
-    const options = Object.keys(value.criteria);
+    const options = Object.keys(criteria);
     if (options.length < 2 || options.length > 255) {
       throw new JevCliError(
         2,
@@ -107,7 +117,7 @@ function validateQuestion(id: string, value: unknown): void {
   if (
     type === "noul" &&
     value.criteria !== undefined &&
-    !isRecord(value.criteria)
+    asRecord(value.criteria) === undefined
   ) {
     throw new JevCliError(
       2,
@@ -116,21 +126,24 @@ function validateQuestion(id: string, value: unknown): void {
   }
 }
 
-function validateRequest(value: unknown): Record<string, unknown> {
-  if (!isRecord(value))
+// Returns the original parsed value (not the zod copy): it is forwarded verbatim to the provider.
+function validateRequest(raw: unknown): unknown {
+  const value = asRecord(raw);
+  if (value === undefined)
     throw new JevCliError(2, "request must be a JSON object");
-  if (!("state" in value) || !isStructuredText(value.state)) {
+  if (!isStructuredText(value.state)) {
     throw new JevCliError(2, "request requires string/object/array state");
   }
   if (typeof value.model !== "string" || value.model.trim() === "") {
     throw new JevCliError(2, "request requires an explicit non-empty model");
   }
-  if (!isRecord(value.questions) || Object.keys(value.questions).length === 0) {
+  const questions = asRecord(value.questions);
+  if (questions === undefined || Object.keys(questions).length === 0) {
     throw new JevCliError(2, "request requires a non-empty questions object");
   }
-  for (const [id, question] of Object.entries(value.questions))
+  for (const [id, question] of Object.entries(questions))
     validateQuestion(id, question);
-  return value;
+  return raw;
 }
 
 function validateBaseUrl(raw: string, allowCustom: boolean): URL {
@@ -158,7 +171,7 @@ function validateBaseUrl(raw: string, allowCustom: boolean): URL {
   return url;
 }
 
-async function readRequest(path: string): Promise<Record<string, unknown>> {
+async function readRequest(path: string): Promise<unknown> {
   if (path === "-") {
     if (process.stdin.isTTY)
       throw new JevCliError(2, "request '-' requires non-interactive stdin");
@@ -170,10 +183,8 @@ async function readRequest(path: string): Promise<Record<string, unknown>> {
   return await parseRequestJson(await Bun.file(path).text());
 }
 
-async function parseRequestJson(
-  text: string,
-): Promise<Record<string, unknown>> {
-  const parsed = await Promise.try(() => JSON.parse(text)).then(
+async function parseRequestJson(text: string): Promise<unknown> {
+  const parsed = await Promise.try((): unknown => JSON.parse(text)).then(
     (value) => value,
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -262,18 +273,19 @@ async function main(): Promise<void> {
     );
   }
 
-  const result = await Promise.try(() => JSON.parse(body)).then(
+  const result = await Promise.try((): unknown => JSON.parse(body)).then(
     (value) => value,
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
     },
   );
+  const resultRecord = asRecord(result);
   if (
-    !isRecord(result) ||
-    typeof result.model !== "string" ||
-    !isRecord(result.answers) ||
-    !isRecord(result.usage)
+    resultRecord === undefined ||
+    typeof resultRecord.model !== "string" ||
+    asRecord(resultRecord.answers) === undefined ||
+    asRecord(resultRecord.usage) === undefined
   ) {
     throw new JevCliError(
       5,

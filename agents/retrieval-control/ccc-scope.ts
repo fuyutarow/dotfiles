@@ -10,6 +10,7 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { attempt } from "../hooks/attempt.ts";
 
 // The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
@@ -49,6 +50,9 @@ async function capture(
 
 export type ScopeDrift = { changed: number; inScope: string[] };
 
+// ccc_scope.py prints the in-scope subset as a JSON array of paths.
+const InScopeSchema = z.array(z.string());
+
 // null = could not decide (treat as stale). Otherwise the changed paths and the subset ccc
 // would index; an empty `inScope` means a re-index at `to` reproduces the index built at `from`.
 export async function inScopeChanges(
@@ -72,11 +76,10 @@ export async function inScopeChanges(
     JSON.stringify(changed),
   );
   if (out === null) return null;
-  const parsed = await attempt(() => JSON.parse(out));
+  const parsed = await attempt((): unknown => JSON.parse(out));
   if (!parsed.ok) return null;
-  const inScope: unknown = parsed.value;
-  return Array.isArray(inScope) &&
-    inScope.every((p): p is string => typeof p === "string")
-    ? { changed: changed.length, inScope }
+  const inScope = InScopeSchema.safeParse(parsed.value);
+  return inScope.success
+    ? { changed: changed.length, inScope: inScope.data }
     : null;
 }

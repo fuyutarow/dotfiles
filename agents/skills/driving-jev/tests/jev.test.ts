@@ -2,6 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
+import { z } from "zod";
+
+const ModelEnvelope = z.object({ model: z.string() });
+
+function parseJson(text: string): unknown {
+  return ((): unknown => JSON.parse(text))();
+}
 
 const script = join(import.meta.dir, "..", "scripts", "jev.ts");
 const temporaryDirectories: string[] = [];
@@ -82,7 +89,7 @@ describe("driving-jev runner", () => {
     ]);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual({
+    expect(parseJson(result.stdout)).toEqual({
       model: "jev-test",
       answers: { asks_for_refund: { type: "noul", noul: 0.9 } },
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -109,7 +116,9 @@ describe("driving-jev runner", () => {
       JSON.stringify(requestBody()),
     );
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout).model).toBe("jev-test");
+    expect(ModelEnvelope.parse(parseJson(result.stdout)).model).toBe(
+      "jev-test",
+    );
   });
 
   test("rejects invalid local requests before the network", async () => {

@@ -42,6 +42,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
 
 let failures = 0;
 let warnings = 0;
@@ -81,7 +82,7 @@ function checkShellFile(file: string, source: string): void {
   const match = source.match(SHIM_LINE);
   if (match) {
     const declared = match[1] ?? "";
-    if ((SHIM_CLASSES as readonly string[]).includes(declared)) return;
+    if (SHIM_CLASSES.some((shimClass) => shimClass === declared)) return;
     fail(
       file,
       `'# shim: ${declared}' is not a declared class (${SHIM_CLASSES.join("|")}) (BG0)`,
@@ -125,6 +126,20 @@ function classifySpecifier(
 // the package): those files ARE binaries — `bun link` symlinks each onto PATH — so W8/F14 treat
 // them as the one place a shebang is required rather than suspect.
 type Graduation = { root: string; deps: Map<string, string>; bins: Set<string> };
+// A field of the wrong shape reads as absent (the old cast trusted it blindly); a manifest that is
+// not an object at all fails the parse and lands in the same empty-deps fallback as bad JSON.
+const StringRecord = z.record(z.string(), z.string());
+const ManifestSchema = z.object({
+  bin: z
+    .union([
+      z.string().transform((target) => [target]),
+      StringRecord.transform((targets) => Object.values(targets)),
+    ])
+    .optional()
+    .catch(undefined),
+  dependencies: StringRecord.optional().catch(undefined),
+  devDependencies: StringRecord.optional().catch(undefined),
+});
 const graduationCache = new Map<string, Graduation | null>();
 
 // No try/catch (audited *.ts ban): Promise.try turns a manifest-parsing throw into a rejection
@@ -143,21 +158,14 @@ async function findGraduation(fromFile: string): Promise<Graduation | null> {
     const manifest = join(directory, "package.json");
     if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
       const { deps, bins } = await Promise.try((): { deps: Map<string, string>; bins: Set<string> } => {
-        const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
-          name?: string;
-          bin?: string | Record<string, string>;
-          dependencies?: Record<string, string>;
-          devDependencies?: Record<string, string>;
-        };
+        const parsed = ManifestSchema.parse(
+          ((): unknown => JSON.parse(readFileSync(manifest, "utf8")))(),
+        );
         const parsedDeps = new Map(
           Object.entries({ ...parsed.dependencies, ...parsed.devDependencies }),
         );
         const parsedBins = new Set<string>();
-        const binEntries =
-          typeof parsed.bin === "string"
-            ? [parsed.bin]
-            : Object.values(parsed.bin ?? {});
-        for (const target of binEntries) {
+        for (const target of parsed.bin ?? []) {
           const abs = join(directory, target);
           if (existsSync(abs)) parsedBins.add(realpathSync(abs));
         }
@@ -233,7 +241,7 @@ function codeLines(source: string): string {
 // through nested templates. The slash heuristic is intentionally conservative; a false positive is
 // a floor finding to review, never an automatic source rewrite.
 function executableCode(source: string): string {
-  const output = Array.from(source, (character) =>
+  const output = Array.from(source, (character): string =>
     character === "\n" ? "\n" : " ",
   );
   const reveal = (index: number): void => {

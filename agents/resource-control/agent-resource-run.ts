@@ -21,6 +21,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -61,6 +62,41 @@ export type ResourcePolicy = {
   gpu_partition_ccc_bytes: number;
   gpu_partition_rerank_bytes: number;
 };
+
+// Any non-null, non-array object (the shape every untrusted JSON/TOML value is first checked
+// against); `undefined` when the value is anything else.
+const RecordSchema = z.looseObject({});
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+const safeIntIn = (minimum: number, maximum = Number.MAX_SAFE_INTEGER) =>
+  z
+    .number()
+    .refine(
+      (value) =>
+        Number.isSafeInteger(value) && value >= minimum && value <= maximum,
+    );
+const textOf = (maximum = 2_000) =>
+  z.string().refine((value) => value.trim() !== "" && value.length <= maximum);
+
+const ResourcePolicySchema: z.ZodType<ResourcePolicy> = z.object({
+  cpu_safety_count: z.number(),
+  min_host_ram_safety_bytes: z.number(),
+  host_ram_safety_fraction: z.number(),
+  scratch_safety_bytes: z.number(),
+  gpu_safety_bytes: z.number(),
+  gpu_idle_utilization_percent: z.number(),
+  gpu_idle_power_watts: z.number(),
+  gpu_max_concurrent_jobs: z.number(),
+  gpu_soft_limit_fraction: z.number(),
+  default_monitor_interval_ms: z.number(),
+  gpu_vram_sample_interval_ms: z.number(),
+  gpu_partition_device: z.number(),
+  gpu_partition_ccc_bytes: z.number(),
+  gpu_partition_rerank_bytes: z.number(),
+});
 
 type PolicyRule = {
   field: keyof ResourcePolicy;
@@ -213,8 +249,8 @@ function policyKeyErrors(raw: Record<string, unknown>): string[] {
 export function loadResourcePolicy(
   path: string = resourcePolicyPath(),
 ): ResourcePolicy {
-  const parsed = fromThrowable(
-    () => Bun.TOML.parse(readFileSync(path, "utf8")) as unknown,
+  const parsed = fromThrowable((): unknown =>
+    Bun.TOML.parse(readFileSync(path, "utf8")),
   )();
   if (parsed.isErr()) {
     throw new UsageError(
@@ -225,8 +261,8 @@ export function loadResourcePolicy(
       }`,
     );
   }
-  const raw = parsed.value;
-  if (!isRecord(raw)) {
+  const raw = asRecord(parsed.value);
+  if (raw === undefined) {
     throw new UsageError(`resource policy '${path}' must be a TOML table`);
   }
   const errors = policyKeyErrors(raw);
@@ -235,11 +271,14 @@ export function loadResourcePolicy(
       `resource policy '${path}' is invalid (admission refused, no defaults): ${errors.join("; ")}`,
     );
   }
-  const policy: Partial<ResourcePolicy> = {};
-  for (const [key, rule] of Object.entries(POLICY_RULES)) {
-    policy[rule.field] = (raw[key] as number) * rule.scale;
-  }
-  return policy as ResourcePolicy;
+  // Every value was range-checked as a finite number by policyKeyErrors above.
+  const scaled = Object.entries(POLICY_RULES).map(
+    ([key, rule]): [string, number] => [
+      rule.field,
+      z.number().parse(raw[key]) * rule.scale,
+    ],
+  );
+  return ResourcePolicySchema.parse(Object.fromEntries(scaled));
 }
 
 // Loaded once at startup. A broken policy does not crash the import: it is re-thrown as the
@@ -409,6 +448,8 @@ type ExecuteOptions = {
 };
 
 type Lease = {
+  // Discriminant against AdmissionFailure (`ok: false`) in acquireLease's result union.
+  ok: true;
   reservation: Reservation;
   reservationPath: string;
   stateDirectory: string;
@@ -433,10 +474,6 @@ export type MeasuredPeak = {
   vram_peak_source?: "nvidia-smi";
   released_at: string;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function exactKeys(
   value: Record<string, unknown>,
@@ -497,38 +534,8 @@ function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function isNonEmptyText(value: unknown, maximum = 2_000): value is string {
-  return (
-    typeof value === "string" && value.trim() !== "" && value.length <= maximum
-  );
-}
-
-function isSafeIntegerInRange(
-  value: unknown,
-  minimum: number,
-  maximum = Number.MAX_SAFE_INTEGER,
-): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= minimum &&
-    value <= maximum
-  );
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value);
-  return (
-    keys.length === expected.length &&
-    keys.every((key) => expected.includes(key))
-  );
-}
-
-function isSha256Hex(value: unknown): value is string {
-  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+function isSha256Hex(value: string): boolean {
+  return /^[0-9a-f]{64}$/.test(value);
 }
 
 export function manifestSourceFromBytes(
@@ -546,14 +553,17 @@ function oneOf<T extends string>(
   allowed: readonly T[],
   label: string,
 ): T {
-  if (typeof value !== "string" || !allowed.includes(value as T)) {
+  const found = allowed.find((item) => item === value);
+  if (found === undefined) {
     throw new UsageError(`${label} must be one of: ${allowed.join(", ")}`);
   }
-  return value as T;
+  return found;
 }
 
-export function validateManifest(value: unknown): ResourceManifest {
-  if (!isRecord(value)) throw new UsageError("manifest must be a JSON object");
+export function validateManifest(input: unknown): ResourceManifest {
+  const value = asRecord(input);
+  if (value === undefined)
+    throw new UsageError("manifest must be a JSON object");
   exactKeys(
     value,
     [
@@ -575,26 +585,27 @@ export function validateManifest(value: unknown): ResourceManifest {
   if (value.schema !== 1) throw new UsageError("schema must be 1");
   const jobId = validateJobId(value.job_id, "job_id");
 
-  if (!isRecord(value.device)) {
+  const rawDevice = asRecord(value.device);
+  if (rawDevice === undefined) {
     throw new UsageError("device must be an object");
   }
   let device: CpuDevice | GpuDevice;
-  if (value.device.kind === "cpu") {
+  if (rawDevice.kind === "cpu") {
     exactKeys(
-      value.device,
+      rawDevice,
       ["kind", "gpu_status", "gpu_vram_peak_bytes", "rationale"],
       "device",
     );
     const gpuStatus = oneOf(
-      value.device.gpu_status,
+      rawDevice.gpu_status,
       ["compatible", "incompatible", "not-beneficial"] as const,
       "device.gpu_status",
     );
     const gpuVram =
-      value.device.gpu_vram_peak_bytes === undefined
+      rawDevice.gpu_vram_peak_bytes === undefined
         ? undefined
         : integer(
-            value.device.gpu_vram_peak_bytes,
+            rawDevice.gpu_vram_peak_bytes,
             "device.gpu_vram_peak_bytes",
             1,
           );
@@ -607,15 +618,15 @@ export function validateManifest(value: unknown): ResourceManifest {
       kind: "cpu",
       gpu_status: gpuStatus,
       ...(gpuVram === undefined ? {} : { gpu_vram_peak_bytes: gpuVram }),
-      rationale: nonEmpty(value.device.rationale, "device.rationale"),
+      rationale: nonEmpty(rawDevice.rationale, "device.rationale"),
     };
-  } else if (value.device.kind === "gpu") {
-    exactKeys(value.device, ["kind", "gpu_id", "vram_peak_bytes"], "device");
+  } else if (rawDevice.kind === "gpu") {
+    exactKeys(rawDevice, ["kind", "gpu_id", "vram_peak_bytes"], "device");
     device = {
       kind: "gpu",
-      gpu_id: integer(value.device.gpu_id, "device.gpu_id", 0, 1_024),
+      gpu_id: integer(rawDevice.gpu_id, "device.gpu_id", 0, 1_024),
       vram_peak_bytes: integer(
-        value.device.vram_peak_bytes,
+        rawDevice.vram_peak_bytes,
         "device.vram_peak_bytes",
         1,
       ),
@@ -624,11 +635,12 @@ export function validateManifest(value: unknown): ResourceManifest {
     throw new UsageError("device.kind must be cpu or gpu");
   }
 
-  if (!isRecord(value.cleanup)) {
+  const cleanup = asRecord(value.cleanup);
+  if (cleanup === undefined) {
     throw new UsageError("cleanup must be an object");
   }
-  exactKeys(value.cleanup, ["mode", "grace_seconds"], "cleanup");
-  if (value.cleanup.mode !== "term-then-kill") {
+  exactKeys(cleanup, ["mode", "grace_seconds"], "cleanup");
+  if (cleanup.mode !== "term-then-kill") {
     throw new UsageError("cleanup.mode must be term-then-kill");
   }
   // Validated to be exactly 0; child_fanout is pinned to the literal type 0 in ResourceManifest
@@ -663,7 +675,7 @@ export function validateManifest(value: unknown): ResourceManifest {
     cleanup: {
       mode: "term-then-kill",
       grace_seconds: integer(
-        value.cleanup.grace_seconds,
+        cleanup.grace_seconds,
         "cleanup.grace_seconds",
         1,
         30,
@@ -718,18 +730,23 @@ function meminfoBytes(text: string, key: string): number {
 // "[N/A]" on boards that do not report it, which leaves power_watts undefined.
 export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
   const fields = line.split(",").map((field) => Number(field.trim()));
+  const [id, totalMiB, usedMiB, utilization, power] = fields;
   if (
     fields.length !== 5 ||
+    id === undefined ||
+    totalMiB === undefined ||
+    usedMiB === undefined ||
+    utilization === undefined ||
+    power === undefined ||
     fields.slice(0, 4).some((field) => !Number.isFinite(field))
   ) {
     throw new StateError(`unparseable nvidia-smi row: ${line}`);
   }
-  const power = fields[4] as number;
   const row: GpuSnapshot = {
-    id: fields[0] as number,
-    total_bytes: (fields[1] as number) * MiB,
-    used_bytes: (fields[2] as number) * MiB,
-    utilization_percent: fields[3] as number,
+    id,
+    total_bytes: totalMiB * MiB,
+    used_bytes: usedMiB * MiB,
+    utilization_percent: utilization,
   };
   if (Number.isFinite(power)) row.power_watts = power;
   return row;
@@ -1160,10 +1177,10 @@ function ensureStateDirectory(path: string): string {
   return absolute;
 }
 
+const ErrnoSchema = z.object({ code: z.string() });
 function errorCode(error: unknown): string | undefined {
-  return isRecord(error) && typeof error.code === "string"
-    ? error.code
-    : undefined;
+  const parsed = ErrnoSchema.safeParse(error);
+  return parsed.success ? parsed.data.code : undefined;
 }
 
 function pidIsAlive(pid: number): boolean {
@@ -1196,15 +1213,16 @@ function handleLockAcquisitionError(
   );
 }
 
+const LockOwnerSchema = z.object({ pid: z.number() });
+
 function readOwnerPid(lockDirectory: string): number | null {
-  const result = fromThrowable(() => {
-    const owner = JSON.parse(
-      readFileSync(join(lockDirectory, "owner.json"), "utf8"),
-    ) as { pid?: unknown };
-    return typeof owner.pid === "number" ? owner.pid : null;
-  })();
+  const result = fromThrowable((): unknown =>
+    JSON.parse(readFileSync(join(lockDirectory, "owner.json"), "utf8")),
+  )();
+  if (result.isErr()) return null;
   // The owner may still be writing. Age decides whether this becomes stale.
-  return result.isOk() ? result.value : null;
+  const owner = LockOwnerSchema.safeParse(result.value);
+  return owner.success ? owner.data.pid : null;
 }
 
 function releaseIfStale(
@@ -1250,32 +1268,29 @@ async function acquireStateLock(stateDirectory: string): Promise<() => void> {
   throw new StateError(`reservation lock remained busy for ${LOCK_WAIT_MS} ms`);
 }
 
+const anySafeInt = safeIntIn(Number.MIN_SAFE_INTEGER);
+const ReservationSchema: z.ZodType<Reservation> = z.object({
+  schema: z.literal(1),
+  reservation_id: z.string(),
+  job_id: z.string(),
+  controller_pid: anySafeInt,
+  cpu_ids: z.array(anySafeInt),
+  host_ram_peak_bytes: anySafeInt,
+  scratch_bytes: anySafeInt,
+  device: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("cpu") }),
+    z.object({
+      kind: z.literal("gpu"),
+      gpu_id: anySafeInt,
+      vram_peak_bytes: anySafeInt,
+    }),
+  ]),
+  started_at: z.string(),
+});
+
 function reservationFrom(value: unknown): Reservation | null {
-  if (!isRecord(value) || value.schema !== 1) return null;
-  if (
-    typeof value.reservation_id !== "string" ||
-    typeof value.job_id !== "string" ||
-    !Number.isSafeInteger(value.controller_pid) ||
-    !Array.isArray(value.cpu_ids) ||
-    !value.cpu_ids.every(Number.isSafeInteger) ||
-    !Number.isSafeInteger(value.host_ram_peak_bytes) ||
-    !Number.isSafeInteger(value.scratch_bytes) ||
-    !isRecord(value.device) ||
-    typeof value.started_at !== "string"
-  ) {
-    return null;
-  }
-  if (value.device.kind === "cpu") {
-    return value as Reservation;
-  }
-  if (
-    value.device.kind === "gpu" &&
-    Number.isSafeInteger(value.device.gpu_id) &&
-    Number.isSafeInteger(value.device.vram_peak_bytes)
-  ) {
-    return value as Reservation;
-  }
-  return null;
+  const parsed = ReservationSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function unlinkIgnoringMissing(path: string): void {
@@ -1291,7 +1306,9 @@ function liveReservations(stateDirectory: string): Reservation[] {
     if (!name.endsWith(".reservation.json")) continue;
     const path = join(stateDirectory, name);
     const parsed = fromThrowable(() =>
-      reservationFrom(JSON.parse(readFileSync(path, "utf8"))),
+      reservationFrom(
+        ((): unknown => JSON.parse(readFileSync(path, "utf8")))(),
+      ),
     )();
     const reservation = parsed.isOk() ? parsed.value : null;
     if (reservation !== null && pidIsAlive(reservation.controller_pid)) {
@@ -1339,7 +1356,7 @@ async function acquireLease(
   const fd = openSync(reservationPath, "wx", 0o600);
   using _fd = { [Symbol.dispose]: () => closeSync(fd) };
   writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
-  return { reservation, reservationPath, stateDirectory };
+  return { ok: true, reservation, reservationPath, stateDirectory };
 }
 
 async function releaseLease(lease: Lease): Promise<void> {
@@ -1406,11 +1423,15 @@ export function parseNvidiaSmiComputeAppRow(
   line: string,
 ): { pid: number; usedBytes: number } | null {
   const fields = line.split(",").map((field) => Number(field.trim()));
-  if (fields.length !== 2 || fields.some((field) => !Number.isFinite(field))) {
+  const [pid, usedMiB] = fields;
+  if (
+    fields.length !== 2 ||
+    pid === undefined ||
+    usedMiB === undefined ||
+    fields.some((field) => !Number.isFinite(field))
+  ) {
     return null;
   }
-  const pid = fields[0] as number;
-  const usedMiB = fields[1] as number;
   if (!Number.isSafeInteger(pid) || pid <= 0) return null;
   return { pid, usedBytes: usedMiB * MiB };
 }
@@ -1444,7 +1465,7 @@ function sampleGpuComputeApps(): Map<number, number> {
     .split("\n")
     .filter(Boolean)
     .map(parseNvidiaSmiComputeAppRow)
-    .filter((row): row is { pid: number; usedBytes: number } => row !== null);
+    .flatMap((row) => (row === null ? [] : [row]));
   for (const row of rows) usage.set(row.pid, row.usedBytes);
   return usage;
 }
@@ -1601,100 +1622,55 @@ export function createAdmissionReceipt(
   };
 }
 
-function receiptDeviceFrom(
-  value: unknown,
-): AdmissionReceiptPayload["device"] | null {
-  if (!isRecord(value) || typeof value.kind !== "string") return null;
-  if (value.kind === "cpu") {
-    return hasExactKeys(value, ["kind"]) ? { kind: "cpu" } : null;
-  }
-  if (
-    value.kind === "gpu" &&
-    hasExactKeys(value, ["kind", "gpu_id", "vram_peak_bytes"]) &&
-    isSafeIntegerInRange(value.gpu_id, 0, 1_024) &&
-    isSafeIntegerInRange(value.vram_peak_bytes, 1)
-  ) {
-    return {
-      kind: "gpu",
-      gpu_id: value.gpu_id,
-      vram_peak_bytes: value.vram_peak_bytes,
-    };
-  }
-  return null;
+// Canonical form only: exactly what the writer emits (ms precision, `Z`), round-tripped.
+function isCanonicalInstant(text: string): boolean {
+  const canonicalResult = fromThrowable(() =>
+    Temporal.Instant.from(text).toString({ fractionalSecondDigits: 3 }),
+  )();
+  return canonicalResult.isOk() && canonicalResult.value === text;
 }
+
+// Exact key sets (strict objects), in the writer's field order so JSON.stringify() of the parsed
+// output reproduces the canonical payload byte for byte.
+const ReceiptDeviceSchema = z.union([
+  z.strictObject({ kind: z.literal("cpu") }),
+  z.strictObject({
+    kind: z.literal("gpu"),
+    gpu_id: safeIntIn(0, 1_024),
+    vram_peak_bytes: safeIntIn(1),
+  }),
+]);
+
+const AdmissionReceiptPayloadSchema: z.ZodType<AdmissionReceiptPayload> = z
+  .strictObject({
+    schema: z.literal(1),
+    admission_id: textOf(),
+    manifest_path: textOf().refine(
+      (path) => isAbsolute(path) && resolve(path) === path,
+    ),
+    manifest_sha256: z.string().refine(isSha256Hex),
+    job_id: textOf(80),
+    reservation_id: textOf(256),
+    scope_unit: textOf(300),
+    controller_pid: safeIntIn(1),
+    cpu_ids: z
+      .array(safeIntIn(0))
+      .refine((ids) => ids.length > 0 && new Set(ids).size === ids.length),
+    host_ram_peak_bytes: safeIntIn(1),
+    scratch_bytes: safeIntIn(0),
+    device: ReceiptDeviceSchema,
+    started_at: textOf(64).refine(isCanonicalInstant),
+  })
+  .refine(
+    (receipt) =>
+      receipt.scope_unit === `agent-resource-${receipt.reservation_id}.scope`,
+  );
 
 function admissionReceiptPayloadFrom(
   value: unknown,
 ): AdmissionReceiptPayload | null {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, [
-      "schema",
-      "admission_id",
-      "manifest_path",
-      "manifest_sha256",
-      "job_id",
-      "reservation_id",
-      "scope_unit",
-      "controller_pid",
-      "cpu_ids",
-      "host_ram_peak_bytes",
-      "scratch_bytes",
-      "device",
-      "started_at",
-    ]) ||
-    value.schema !== 1 ||
-    !isNonEmptyText(value.admission_id) ||
-    !isNonEmptyText(value.manifest_path) ||
-    !isAbsolute(value.manifest_path) ||
-    resolve(value.manifest_path) !== value.manifest_path ||
-    !isSha256Hex(value.manifest_sha256) ||
-    !isNonEmptyText(value.job_id, 80) ||
-    !isNonEmptyText(value.reservation_id, 256) ||
-    !isNonEmptyText(value.scope_unit, 300) ||
-    !isSafeIntegerInRange(value.controller_pid, 1) ||
-    !Array.isArray(value.cpu_ids) ||
-    !isSafeIntegerInRange(value.host_ram_peak_bytes, 1) ||
-    !isSafeIntegerInRange(value.scratch_bytes, 0) ||
-    !isNonEmptyText(value.started_at, 64)
-  ) {
-    return null;
-  }
-  // Canonical form only: exactly what the writer emits (ms precision, `Z`), round-tripped.
-  const startedAt = value.started_at;
-  const canonicalResult = fromThrowable(() =>
-    Temporal.Instant.from(startedAt).toString({ fractionalSecondDigits: 3 }),
-  )();
-  if (canonicalResult.isErr()) return null;
-  if (canonicalResult.value !== startedAt) return null;
-
-  const cpuIds: number[] = [];
-  for (const cpuId of value.cpu_ids) {
-    if (!isSafeIntegerInRange(cpuId, 0) || cpuIds.includes(cpuId)) return null;
-    cpuIds.push(cpuId);
-  }
-  if (cpuIds.length === 0) return null;
-
-  const device = receiptDeviceFrom(value.device);
-  if (device === null) return null;
-  if (value.scope_unit !== `agent-resource-${value.reservation_id}.scope`) {
-    return null;
-  }
-  return {
-    schema: 1,
-    admission_id: value.admission_id,
-    manifest_path: value.manifest_path,
-    manifest_sha256: value.manifest_sha256,
-    job_id: value.job_id,
-    reservation_id: value.reservation_id,
-    scope_unit: value.scope_unit,
-    controller_pid: value.controller_pid,
-    cpu_ids: cpuIds,
-    host_ram_peak_bytes: value.host_ram_peak_bytes,
-    scratch_bytes: value.scratch_bytes,
-    device,
-    started_at: value.started_at,
-  };
+  const parsed = AdmissionReceiptPayloadSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -1709,7 +1685,7 @@ export function verifyAdmissionReceipt(
 ): boolean {
   if (!isSha256Hex(expectedSha256)) return false;
   if (sha256Hex(Buffer.from(payload, "utf8")) !== expectedSha256) return false;
-  const parsedResult = fromThrowable(() => JSON.parse(payload) as unknown)();
+  const parsedResult = fromThrowable((): unknown => JSON.parse(payload))();
   if (parsedResult.isErr()) return false;
   const receipt = admissionReceiptPayloadFrom(parsedResult.value);
   if (receipt === null || JSON.stringify(receipt) !== payload) return false;
@@ -1911,7 +1887,7 @@ export async function checkJob(
     snapshot,
     options.stateDirectory,
   );
-  if (!("reservation" in acquired)) {
+  if (!acquired.ok) {
     report(`DENY job=${manifest.job_id} reason=${acquired.reason}`);
     return { ok: false, exitCode: 69, reason: "admission" };
   }
@@ -1985,7 +1961,7 @@ export async function executeJob(
     snapshot,
     options.stateDirectory,
   );
-  if (!("reservation" in acquired)) {
+  if (!acquired.ok) {
     report(`DENY job=${manifest.job_id} reason=${acquired.reason}`);
     return { ok: false, exitCode: 69, reason: "admission" };
   }
@@ -2095,7 +2071,8 @@ export async function executeJob(
       let reason: "walltime" | "interrupt" | "memory" | "processes";
       if (walltimeFired) reason = "walltime";
       else if (interrupted) reason = "interrupt";
-      else reason = breach as "memory" | "processes";
+      else if (breach !== null) reason = breach;
+      else throw new StateError("monitor ended without a breach reason");
       const exitCode = reason === "walltime" ? 124 : 137;
       report(`BREACH job=${manifest.job_id} reason=${reason}`);
       return { ok: false, exitCode, reason };
@@ -2234,7 +2211,7 @@ async function main(): Promise<void> {
   const manifestPath = resolve(parsed.flags.manifest);
   const readResult = fromThrowable(() => {
     const bytes = readFileSync(manifestPath);
-    return { bytes, raw: JSON.parse(bytes.toString()) as unknown };
+    return { bytes, raw: ((): unknown => JSON.parse(bytes.toString()))() };
   })();
   if (readResult.isErr()) {
     throw new UsageError(

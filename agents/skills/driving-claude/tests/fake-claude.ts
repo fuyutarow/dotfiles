@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
 
+// An empty export makes this file a module: top-level await and file-scoped consts.
+export {};
+
 const modelIndex = Bun.argv.indexOf("--model");
 const model = modelIndex === -1 ? "" : Bun.argv[modelIndex + 1];
 

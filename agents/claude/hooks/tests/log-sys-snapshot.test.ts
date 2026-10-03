@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
 
 const HOOK = "log-sys-snapshot.ts";
@@ -19,9 +21,13 @@ function homeWithCache(ageMs: number): string {
   return home;
 }
 // The hook prefixes the event time and joins fields with the bar's dimmed "|"; strip both.
-const ANSI = new RegExp("\u001b\\[[0-9;]*m", "g");
+const ESC = String.fromCharCode(0x1b);
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const Message = z.looseObject({ systemMessage: z.string() });
+const messageOf = (stdout: string): string =>
+  Message.parse(parseJson(stdout)).systemMessage;
 const body = (stdout: string): string =>
-  (JSON.parse(stdout).systemMessage as string)
+  messageOf(stdout)
     .replace(ANSI, "")
     .replace(/^\d\d-\d\d \d\d:\d\d \| /, "");
 const fire = (home: string, event: string) =>
@@ -35,8 +41,7 @@ describe("log-sys-snapshot", () => {
   });
 
   test("one line: local event time, then the fields, joined by the bar's dimmed |", () => {
-    const msg = JSON.parse(fire(homeWithCache(1_000), "Stop").stdout)
-      .systemMessage as string;
+    const msg = messageOf(fire(homeWithCache(1_000), "Stop").stdout);
     expect(msg).not.toContain("\n");
     expect(msg.replace(ANSI, "")).toMatch(
       /^\d\d-\d\d \d\d:\d\d \| Sys: CPU 25%/,
@@ -66,11 +71,9 @@ describe("log-sys-snapshot", () => {
     const cache = join(home, ".cache", "claude", "statusline-sys.json");
     const colored =
       "\u001b[38;5;74mSys:\u001b[0m CPU \u001b[38;5;71m25%\u001b[0m";
-    const cur = JSON.parse(readFileSync(cache, "utf8"));
+    const cur = z.looseObject({}).parse(parseJson(readFileSync(cache, "utf8")));
     writeFileSync(cache, JSON.stringify({ ...cur, ansi: colored }));
-    expect(JSON.parse(fire(home, "Stop").stdout).systemMessage).toContain(
-      colored,
-    );
+    expect(messageOf(fire(home, "Stop").stdout)).toContain(colored);
   });
   const writeSession = (
     home: string,

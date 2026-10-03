@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
+import { parseJson } from "../../../hooks/narrow.ts";
 import { assistant, runHook, user, writeTranscript } from "./helpers.ts";
+
+const Message = z.object({ systemMessage: z.string() });
 
 const stopPayload = (transcript_path: string, active = false) => ({
   transcript_path,
@@ -19,7 +23,7 @@ describe("detect-groundless-claim", () => {
     const t = writeTranscript([user("進捗どう?"), assistant(body)]);
     const r = runHook(HOOK, stopPayload(t));
     expect(r.code).toBe(0);
-    const parsed = JSON.parse(r.stdout);
+    const parsed = Message.parse(parseJson(r.stdout));
     expect(typeof parsed.systemMessage).toBe("string");
     expect(parsed.systemMessage).toContain("実証");
     expect(parsed.systemMessage).toContain("分母");

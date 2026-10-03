@@ -5,6 +5,7 @@
 
 import { resolve } from "node:path";
 import { cli, command } from "cleye";
+import { z } from "zod";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
 import {
   activateGoal,
@@ -15,6 +16,8 @@ import {
 import { buildPostmortem, type PostmortemReport } from "./postmortem.ts";
 
 class UsageError extends Error {}
+
+const RecordedDecisionSchema = z.object({ decision_id: z.unknown() });
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -192,9 +195,12 @@ async function main(): Promise<void> {
             if (parsed.flags.json) {
               jsonLine({ ok: true, command: "decide", event });
             } else {
-              const recorded = event.decision as { decision_id?: unknown };
+              const recorded = RecordedDecisionSchema.safeParse(event.decision);
+              const decisionId = recorded.success
+                ? recorded.data.decision_id
+                : undefined;
               process.stdout.write(
-                `PASS run=${event.run_id} decision=${String(recorded.decision_id)} event=${event.event_id}\nFAIL=0\n`,
+                `PASS run=${event.run_id} decision=${String(decisionId)} event=${event.event_id}\nFAIL=0\n`,
               );
             }
           },

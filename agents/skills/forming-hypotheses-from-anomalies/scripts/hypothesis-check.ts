@@ -68,7 +68,9 @@ function rowsOf(text: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const line of text.split("\n")) {
     const m = /^\s*[-*]\s*([A-Z][A-Za-z ]*?)\s*:\s*(.*)$/.exec(line);
-    if (m) out.set(m[1].trim(), m[2].trim());
+    const key = m?.[1];
+    const value = m?.[2];
+    if (key !== undefined && value !== undefined) out.set(key.trim(), value.trim());
   }
   return out;
 }

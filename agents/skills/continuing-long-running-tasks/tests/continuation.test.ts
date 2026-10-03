@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { z } from "zod";
 import {
 	bindContinuationSlot,
 	continuationSlotPath,
@@ -17,6 +18,26 @@ import {
 	readContinuationBinding,
 	validateContinuationRecord,
 } from "../scripts/continuation-record";
+
+// What the code under test prints is parsed, never cast: the stdout/stderr of a subprocess is
+// untrusted text until a schema accepts it.
+const jsonOf = (text: string): unknown => JSON.parse(text);
+const CheckpointOutputSchema = z.object({
+	revision: z.number(),
+	sha256: z.string(),
+	writer: z.string(),
+});
+const CheckpointErrorSchema = z.object({ code: z.string() });
+const HookDecisionSchema = z.object({
+	continue: z.boolean().optional(),
+	stopReason: z.string().optional(),
+	decision: z.string().optional(),
+	reason: z.string().optional(),
+});
+const checkpointOutput = (text: string) =>
+	CheckpointOutputSchema.parse(jsonOf(text));
+const checkpointError = (text: string) =>
+	CheckpointErrorSchema.parse(jsonOf(text));
 
 const temporaryDirectories: string[] = [];
 const skillDirectory = resolve(import.meta.dir, "..");
@@ -124,12 +145,13 @@ const runRaw = (script: string, stdin: string): RunResult => {
 	};
 };
 
-const run = (script: string, payloadOrArgs: unknown | string[]): RunResult => {
-	if (!Array.isArray(payloadOrArgs)) {
+const run = (script: string, payloadOrArgs: unknown): RunResult => {
+	const args = z.array(z.string()).safeParse(payloadOrArgs);
+	if (!args.success) {
 		return runRaw(script, JSON.stringify(payloadOrArgs));
 	}
 	const result = Bun.spawnSync({
-		cmd: ["bun", script, ...payloadOrArgs],
+		cmd: ["bun", script, ...args.data],
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
@@ -469,7 +491,7 @@ describe("compact lifecycle adapters", () => {
 
 			const result = run(hook, payload("PreCompact", root, session, "manual"));
 			expect(result.code).toBe(0);
-			const decision = JSON.parse(result.stdout);
+			const decision = HookDecisionSchema.parse(jsonOf(result.stdout));
 			if (platform === "codex") {
 				expect(decision.continue).toBe(false);
 				expect(decision.stopReason).toContain("manual compact blocked");
@@ -601,8 +623,8 @@ describe("single-writer checkpoint transaction", () => {
 		]);
 		expect(snapshotA.code).toBe(0);
 		expect(snapshotB.code).toBe(0);
-		const base = JSON.parse(snapshotA.stdout);
-		expect(JSON.parse(snapshotB.stdout).sha256).toBe(base.sha256);
+		const base = checkpointOutput(snapshotA.stdout);
+		expect(checkpointOutput(snapshotB.stdout).sha256).toBe(base.sha256);
 		reviseProposal(proposalA, 4, "2026-08-01T12:10:00+09:00 by writer-a", {
 			"old login path": "writer-a checkpoint",
 		});
@@ -624,7 +646,7 @@ describe("single-writer checkpoint transaction", () => {
 			proposalA,
 		]);
 		expect(applied.code).toBe(0);
-		expect(JSON.parse(applied.stdout).revision).toBe(4);
+		expect(checkpointOutput(applied.stdout).revision).toBe(4);
 		expect(existsSync(proposalA)).toBe(false);
 
 		const stale = run(checkpoint, [
@@ -641,7 +663,7 @@ describe("single-writer checkpoint transaction", () => {
 			proposalB,
 		]);
 		expect(stale.code).toBe(1);
-		expect(JSON.parse(stale.stderr).code).toBe("TCR42");
+		expect(checkpointError(stale.stderr).code).toBe("TCR42");
 		expect(readFileSync(path, "utf8")).toContain("writer-a checkpoint");
 		expect(readFileSync(path, "utf8")).not.toContain(
 			"stale writer-b checkpoint",
@@ -666,7 +688,7 @@ describe("single-writer checkpoint transaction", () => {
 		expect(bindContinuationSlot(slotA, path)).toEqual([]);
 		expect(bindContinuationSlot(slotB, path)).toEqual([]);
 		const proposal = join(root, "TASK-CONTINUATION.handoff.proposal.md");
-		const base = JSON.parse(
+		const base = checkpointOutput(
 			run(checkpoint, [
 				"snapshot",
 				"--path",
@@ -697,7 +719,7 @@ describe("single-writer checkpoint transaction", () => {
 			slotB,
 		]);
 		expect(wrongWriter.code).toBe(1);
-		expect(JSON.parse(wrongWriter.stderr).code).toBe("TCR44");
+		expect(checkpointError(wrongWriter.stderr).code).toBe("TCR44");
 
 		const handedOff = run(checkpoint, [
 			"apply",
@@ -715,7 +737,7 @@ describe("single-writer checkpoint transaction", () => {
 			slotB,
 		]);
 		expect(handedOff.code).toBe(0);
-		expect(JSON.parse(handedOff.stdout).writer).toBe(writerForSlot(slotB));
+		expect(checkpointOutput(handedOff.stdout).writer).toBe(writerForSlot(slotB));
 		expect(readFileSync(path, "utf8")).toContain(
 			`WRITER: ${writerForSlot(slotB)}`,
 		);
@@ -735,7 +757,7 @@ describe("single-writer checkpoint transaction", () => {
 		);
 		expect(bindContinuationSlot(slot, path)).toEqual([]);
 		const proposal = join(root, "TASK-CONTINUATION.lock.proposal.md");
-		const base = JSON.parse(
+		const base = checkpointOutput(
 			run(checkpoint, [
 				"snapshot",
 				"--path",
@@ -763,7 +785,7 @@ describe("single-writer checkpoint transaction", () => {
 			proposal,
 		]);
 		expect(locked.code).toBe(1);
-		expect(JSON.parse(locked.stderr).code).toBe("TCR40");
+		expect(checkpointError(locked.stderr).code).toBe("TCR40");
 		expect(readFileSync(path, "utf8")).toContain("REVISION: 3");
 	});
 });

@@ -3,18 +3,22 @@
 // Run: bun test agents/skills/designing-interactions/tests
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
+import { z } from "zod";
 
 const ROOT = join(import.meta.dir, "..");
 const PROBE = join(ROOT, "scripts", "captive-probe.ts");
 const FIXTURES = join(ROOT, "tests", "fixtures");
 
-type Envelope = {
-  status: string;
-  command: string[];
-  exit_code: number | null;
-  timed_out: boolean;
-  findings: { level: string; code: string; detail: string }[];
-};
+const EnvelopeSchema = z.object({
+  status: z.string(),
+  command: z.array(z.string()),
+  exit_code: z.number().nullable(),
+  timed_out: z.boolean(),
+  findings: z.array(
+    z.object({ level: z.string(), code: z.string(), detail: z.string() }),
+  ),
+});
+type Envelope = z.output<typeof EnvelopeSchema>;
 
 async function probe(
   args: string[],
@@ -40,7 +44,7 @@ async function codes(
   const result = await probe(["--json", ...args]);
   return {
     exitCode: result.exitCode,
-    envelope: JSON.parse(result.stdout) as Envelope,
+    envelope: EnvelopeSchema.parse(((): unknown => JSON.parse(result.stdout))()),
   };
 }
 
@@ -121,7 +125,7 @@ describe("captive-probe contract", () => {
   test("verdict lines are the default consumer; --json switches to the envelope", async () => {
     const lines = await probe(fixture("prompts.ts"));
     expect(lines.stdout).toStartWith("FAIL PROMPT-WITHOUT-TTY:");
-    expect(() => JSON.parse(lines.stdout)).toThrow();
+    expect((): unknown => JSON.parse(lines.stdout)).toThrow();
   });
 
   test("exits 2 with usage on no command", async () => {

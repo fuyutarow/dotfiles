@@ -17,6 +17,7 @@
 // NO "what was checked / what is unchecked" clause (the skill's bounded-PASS rule).
 
 import { attempt } from "../../hooks/attempt.ts";
+import { at, strAt } from "../../hooks/narrow.ts";
 import {
   lastUserText,
   readStdinJson,
@@ -27,9 +28,9 @@ import {
 
 async function main(): Promise<number> {
   const payload = readStdinJson();
-  if (payload?.stop_hook_active) return 0;
-  const transcript = payload?.transcript_path;
-  if (typeof transcript !== "string" || transcript === "") return 0;
+  if (at(payload, "stop_hook_active")) return 0;
+  const transcript = strAt(payload, "transcript_path");
+  if (transcript === undefined || transcript === "") return 0;
 
   const entries = await readTranscript(transcript);
   const turn = turnText(entries);

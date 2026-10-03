@@ -10,6 +10,10 @@
   // multi-value flag tuple in ccc-swap.ts, an acquireLease() return type wider than its
   // returns). agents/skills/** is excluded like every other repo gate (vendored templates
   // share that tree); lint:bun still reaches those scripts structurally.
+  // MEASURED 2026-10-03, and that reason does not hold: with the exclusion removed tsgo reports
+  // 65 errors, ALL in skills' own scripts/ (51) and tests/ (14), none in templates/. So the
+  // exclusion is the largest remaining gap (the repo's own code, unchecked), not a necessary
+  // one: pay the 65 down, then delete "agents/skills" from `exclude` below.
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "ESNext",
@@ -28,6 +32,13 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
+    // `import "x"` with an unresolvable path is an error. Measured 2026-10-03: 0 errors, so it is
+    // free. Nothing else catches it here: bun transpiles and never type-checks, and a bad path
+    // only fails when that file actually runs (there is no bundler resolving it at build time).
+    "noUncheckedSideEffectImports": true,
+    // Kept OFF on purpose, measured 2026-10-03: ON is 1345 errors, almost all `process.env.X` ->
+    // `process.env["X"]`, for little safety gain (the property is read through an index signature
+    // either way). Revisit only if a repo-wide codemod becomes cheap.
     "noPropertyAccessFromIndexSignature": false,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,

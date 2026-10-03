@@ -161,6 +161,9 @@ function client(args: string[], env: Record<string, string | undefined>): Run {
     Object.entries({
       ...process.env,
       SSH_CONNECTION: undefined,
+      // Progress lines only where a test asks for them (it sets 400): a loaded host would
+      // otherwise print them for a trivial spawn and break the quiet-path assertions.
+      SMART_OPEN_SAY_AFTER_MS: "60000",
       ...env,
     }).flatMap(([k, v]): [string, string][] =>
       v === undefined ? [] : [[k, v]],
@@ -853,9 +856,12 @@ describe("opening on this machine is bounded", () => {
     const r = client(["https://probe.invalid/hang"], {
       SMART_OPEN_SOCKET: join(dir, "absent.sock"),
       SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SAY_AFTER_MS: "400",
     });
     expect(performance.now() - started).toBeLessThan(8_000);
     expect(r.code).toBe(1);
+    expect(r.err).toContain("waiting for ");
+    expect(r.err).toContain("(gives up after 3 s)…");
     expect(r.err).toContain("did not return within 3 s and was stopped");
   });
 });
@@ -1287,9 +1293,15 @@ describe("answer time: the receiver settles before the client gives up", () => {
     const r = client(["https://probe.invalid/slowopen"], {
       SMART_OPEN_SOCKET: rx.sock,
       SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SAY_AFTER_MS: "400",
     });
-    expect(r.out).toContain(
-      "opened on the client: https://probe.invalid/slowopen",
+    // A wait past SAY_AFTER_MS is said while it runs, and the result carries how long it took:
+    // a slow step must not read as a hang.
+    expect(r.err).toContain(
+      "smart-open: waiting for the client to open https://probe.invalid/slowopen…",
+    );
+    expect(r.out).toMatch(
+      /^opened on the client \(1\.\d s\): https:\/\/probe\.invalid\/slowopen$/m,
     );
     expect(localOpened()).toEqual([]); // the old behaviour: client gave up at 2 s, opened here too
     expect(slowOpened()).toEqual(["https://probe.invalid/slowopen"]);

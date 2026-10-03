@@ -110,6 +110,12 @@ const SOCKET = FORWARD.socket;
 // An empty override is no override: an `export SMART_OPEN_SSH_HOST=` must not hide the name's alias.
 const SSH_HOST = process.env[SSH_HOST_ENV] || FORWARD.alias;
 const OPEN_MS = 15_000;
+// A wait longer than this says what it is waiting for, and the result line then carries how long
+// it took: a step that is merely slow (VS Code cold-starting on the client, ssh -G vouching, a
+// slow uplink) must never read as a hang. Shorter waits print nothing extra.
+// SMART_OPEN_SAY_AFTER_MS overrides it — a test seam, like SMART_OPEN_LOCAL_OPENER: a loaded test
+// host makes even a trivial spawn exceed 400 ms, and the quiet-path tests must stay quiet.
+const SAY_AFTER_MS = Number(process.env.SMART_OPEN_SAY_AFTER_MS ?? "") || 400;
 const LOCAL_WAIT_MS = 3_000;
 // This shell came in over ssh, so this machine's own screen is not the one being looked at.
 const OVER_SSH = (process.env.SSH_CONNECTION ?? "") !== "";
@@ -207,6 +213,27 @@ function localCommand(target: string): string[] {
   return ["xdg-open", target];
 }
 
+// Await `work`; if it is still running after SAY_AFTER_MS, say on stderr what is being waited for.
+// Returns the value and, when the wait was long enough to have been said, its duration (" (1.6 s)")
+// for the result line; "" otherwise.
+async function waitSaying<T>(
+  what: string,
+  work: Promise<T>,
+): Promise<{ value: T; took: string }> {
+  const t0 = performance.now();
+  const timer = setTimeout(
+    () => console.error(`smart-open: ${what}…`),
+    SAY_AFTER_MS,
+  );
+  const value = await work;
+  clearTimeout(timer);
+  const ms = performance.now() - t0;
+  return {
+    value,
+    took: ms >= SAY_AFTER_MS ? ` (${(ms / 1000).toFixed(1)} s)` : "",
+  };
+}
+
 // Where a target goes: the client took it, nowhere (said why already), or this machine — `why` is
 // the anomaly that sent it here, said once by landHere (undefined: no client at all, the quiet case).
 type Routed =
@@ -222,9 +249,12 @@ async function routeUrl(url: string): Promise<Routed> {
     console.log(`${url} -> client if ${SOCKET} answers, else ${otherwise}`);
     return { to: "client" };
   }
-  const probe = await toClient({ url });
+  const { value: probe, took } = await waitSaying(
+    `waiting for the client to open ${url}`,
+    toClient({ url }),
+  );
   if (probe.outcome === "client") {
-    console.log(`opened on the client: ${url}`);
+    console.log(`opened on the client${took}: ${url}`);
     return { to: "client" };
   }
   if (probe.outcome === "busy") {
@@ -269,10 +299,15 @@ async function routePath(path: string): Promise<Routed> {
     return { to: "client" };
   }
   const kind = statSync(path).isDirectory() ? "dir" : "file";
-  const probe = await toClient({ path, kind, host: SSH_HOST });
+  const { value: probe, took } = await waitSaying(
+    `waiting for the client's VS Code (ssh-remote+${editor}) to take ${path}`,
+    toClient({ path, kind, host: SSH_HOST }),
+  );
   if (probe.outcome === "client") {
     // `sent`, not `opened`: VS Code asks before opening a remote path, and a No is invisible here.
-    console.log(`sent to the client's VS Code (ssh-remote+${editor}): ${path}`);
+    console.log(
+      `sent to the client's VS Code (ssh-remote+${editor})${took}: ${path}`,
+    );
     return { to: "client" };
   }
   if (probe.outcome === "no-socket") return HERE;
@@ -337,10 +372,15 @@ async function openHere(target: string): Promise<boolean> {
     );
     return false;
   }
-  const [code, err] = await Promise.all([
-    spawned.value.exited,
-    new Response(spawned.value.stderr).text(),
-  ]);
+  const {
+    value: [code, err],
+  } = await waitSaying(
+    `waiting for ${cmd[0]} (gives up after ${LOCAL_WAIT_MS / 1000} s)`,
+    Promise.all([
+      spawned.value.exited,
+      new Response(spawned.value.stderr).text(),
+    ]),
+  );
   if (deadline.aborted) {
     // A locked or logged-out Windows session is the case seen: explorer.exe then never returns.
     const hint = isWsl()

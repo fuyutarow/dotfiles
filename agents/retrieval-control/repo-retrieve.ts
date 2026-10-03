@@ -56,6 +56,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
+import { z } from "zod";
 import {
   checkIndexFreshness,
   citationToken,
@@ -925,12 +926,14 @@ async function main(): Promise<void> {
   );
 }
 
+const ErrnoSchema = z.object({ code: z.string() });
+
 if (import.meta.main) {
   // Bun reports a closed stdout pipe as a stream error after write() returns, so a
   // try/catch around the RESULT write cannot catch `repo-retrieve files | head -3`.
   // The consumer chose to stop reading; no further result can be delivered.
   process.stdout.on("error", (error) => {
-    if ("code" in error && error.code === "EPIPE") process.exit(0);
+    if (ErrnoSchema.safeParse(error).data?.code === "EPIPE") process.exit(0);
     throw error;
   });
   main().catch((error) => {

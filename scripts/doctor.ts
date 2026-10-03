@@ -59,6 +59,7 @@ import {
   parseMapping,
 } from "../agents/retrieval-control/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
+import { obj } from "../agents/hooks/narrow.ts";
 import {
   drift,
   readDeclared,
@@ -155,8 +156,9 @@ const fail = (
   lines: capped(lines),
 });
 
-function readJson(path: string): Promise<any> {
-  return attemptOr(() => JSON.parse(readFileSync(path, "utf8")), null);
+// The parsed JSON as `unknown` (null = missing or not JSON); each caller reads it through obj().
+function readJson(path: string): Promise<unknown> {
+  return attemptOr((): unknown => JSON.parse(readFileSync(path, "utf8")), null);
 }
 
 export async function checkLinks(ctx: Ctx): Promise<Finding> {
@@ -232,9 +234,11 @@ export async function checkSettings(ctx: Ctx): Promise<Finding> {
     );
   }
   if (!Bun.deepEquals(want, have, true)) {
-    const keys = new Set([...Object.keys(want ?? {}), ...Object.keys(have)]);
+    const wantObj = obj(want) ?? {};
+    const haveObj = obj(have) ?? {};
+    const keys = new Set([...Object.keys(wantObj), ...Object.keys(haveObj)]);
     const differing = [...keys].filter(
-      (k) => !Bun.deepEquals(want?.[k], have[k], true),
+      (k) => !Bun.deepEquals(wantObj[k], haveObj[k], true),
     );
     return fail(
       "settings",
@@ -305,18 +309,22 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
 export async function checkDeps(ctx: Ctx): Promise<Finding> {
   const pkg = await readJson(join(ctx.dotfiles, "package.json"));
   if (pkg === null) return skip("deps", "no package.json in this checkout");
-  const pins: Record<string, string> = {
-    ...pkg.dependencies,
-    ...pkg.devDependencies,
-  };
+  const pkgObj = obj(pkg);
+  const pins: Record<string, string> = Object.fromEntries(
+    [pkgObj?.dependencies, pkgObj?.devDependencies].flatMap((section) =>
+      Object.entries(obj(section) ?? {}).flatMap(
+        ([n, v]): [string, string][] => (typeof v === "string" ? [[n, v]] : []),
+      ),
+    ),
+  );
   const off: string[] = [];
   for (const [name, want] of Object.entries(pins)) {
     const installed = await readJson(
       join(ctx.dotfiles, "node_modules", name, "package.json"),
     );
     if (installed === null) off.push(`${name}: not installed (pinned ${want})`);
-    else if (installed.version !== want)
-      off.push(`${name}: ${installed.version} ≠ pinned ${want}`);
+    else if (obj(installed)?.version !== want)
+      off.push(`${name}: ${String(obj(installed)?.version)} ≠ pinned ${want}`);
   }
   return off.length === 0
     ? pass(
@@ -340,7 +348,11 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   // permission error) and reports false, so a prior real path is safe to resolve unconditionally.
   const resolved = (p: string): string | null =>
     existsSync(p) ? realpathSync(p) : null;
-  for (const [name, rel] of Object.entries<string>(pkg.bin ?? {})) {
+  const bins = obj(obj(pkg)?.bin) ?? {};
+  const declaredBins = Object.entries(bins).flatMap(
+    ([n, r]): [string, string][] => (typeof r === "string" ? [[n, r]] : []),
+  );
+  for (const [name, rel] of declaredBins) {
     const link = join(binDir, name);
     const have = resolved(link);
     if (have === null) {
@@ -366,7 +378,7 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   return problems.length === 0
     ? pass(
         "bins",
-        `${Object.keys(pkg.bin ?? {}).length} PATH command(s) resolve into this repo`,
+        `${Object.keys(bins).length} PATH command(s) resolve into this repo`,
       )
     : fail(
         "bins",
@@ -436,7 +448,7 @@ export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
 
 export async function checkMcp(ctx: Ctx): Promise<Finding> {
   const declared = Object.keys(
-    (await readJson(join(ctx.dotfiles, ".mcp.json")))?.mcpServers ?? {},
+    obj(obj(await readJson(join(ctx.dotfiles, ".mcp.json")))?.mcpServers) ?? {},
   );
   if (declared.length === 0)
     return skip("mcp", ".mcp.json declares no servers");

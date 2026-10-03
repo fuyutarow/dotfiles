@@ -16,6 +16,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
+import { arr, at, parseJson, strAt } from "../../hooks/narrow.ts";
 
 const HOME = process.env.HOME ?? "";
 const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
@@ -28,8 +29,25 @@ const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
 
 type Entry = { name?: string; at: number };
 
+type Agent = { sessionId?: string | undefined; name?: string | undefined };
+
+// `claude agents --json` output as a list of agents, read field by field. Output that is not a
+// list, or a null entry, throws — as iterating it did before, which makes the lookup fail.
+function agentsOf(parsed: unknown): Agent[] {
+  const list = arr(parsed);
+  if (list === undefined) {
+    throw new TypeError("claude agents --json did not print a list");
+  }
+  return list.map((a): Agent => {
+    if (a === null || a === undefined) {
+      throw new TypeError("claude agents --json listed a null agent");
+    }
+    return { sessionId: strAt(a, "sessionId"), name: strAt(a, "name") };
+  });
+}
+
 function buildEntries(
-  list: Array<{ sessionId?: string; name?: string }>,
+  list: Agent[],
   sid: string,
   now: number,
 ): Record<string, Entry> {
@@ -49,16 +67,17 @@ function buildEntries(
 
 async function agentName(sid: string): Promise<string | undefined> {
   // missing / corrupt cache file -> treat as empty and refetch below
-  const cache: Record<string, Entry> = await attemptOr(
-    () => JSON.parse(readFileSync(AGENT_NAME_CACHE, "utf8")),
+  const cache = await attemptOr(
+    (): unknown => parseJson(readFileSync(AGENT_NAME_CACHE, "utf8")),
     {},
   );
-  const hit = cache[sid];
+  const hit = at(cache, sid);
+  const hitAt = at(hit, "at");
   if (
-    hit != null &&
-    Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
+    typeof hitAt === "number" &&
+    Temporal.Now.instant().epochMilliseconds - hitAt < AGENT_NAME_TTL_MS
   )
-    return hit.name;
+    return strAt(hit, "name");
 
   const fetched = await attempt(() => {
     const out = execFileSync(CLAUDE_BIN, ["agents", "--json"], {
@@ -66,7 +85,7 @@ async function agentName(sid: string): Promise<string | undefined> {
       encoding: "utf8",
       timeout: 3000,
     });
-    const list: Array<{ sessionId?: string; name?: string }> = JSON.parse(out);
+    const list = agentsOf(parseJson(out));
     const now = Temporal.Now.instant().epochMilliseconds;
     return buildEntries(list, sid, now);
   });

@@ -111,7 +111,7 @@ function parseTable(body: string | undefined): Table | undefined {
   if (body === undefined) return undefined;
   const lines = body.split(/\r?\n/).filter((line) => line.includes("|"));
   if (lines.length < 2) return undefined;
-  const headers = tableCells(lines[0]);
+  const headers = tableCells(lines[0] ?? "");
   const rows = lines
     .slice(1)
     .map(tableCells)

@@ -38,21 +38,25 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { attempt, attemptOr } from "../hooks/attempt.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 
-export type Definition = {
-  name: string;
-  kind: string;
-  lang: string;
-  file: string;
-  start: number;
-  end: number;
-  signature: string;
-  doc: string;
-  body: string;
-  public: boolean;
-};
+// One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
+// back — the extractor's cache and the catalog's records.json — is parsed with this schema.
+const DefinitionSchema = z.object({
+  name: z.string(),
+  kind: z.string(),
+  lang: z.string(),
+  file: z.string(),
+  start: z.number(),
+  end: z.number(),
+  signature: z.string(),
+  doc: z.string(),
+  body: z.string(),
+  public: z.boolean(),
+});
+export type Definition = z.output<typeof DefinitionSchema>;
 
 export type Card = Definition & { score: number; methods: number };
 
@@ -84,16 +88,19 @@ const JEV_TIMEOUT_MS = 20_000;
 const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
 
 type Table = Record<string, unknown>;
-const isTable = (v: unknown): v is Table =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
+const TableSchema = z.record(z.string(), z.unknown());
+const asTable = (v: unknown): Table | undefined =>
+  TableSchema.safeParse(v).data;
+const NoEgressSchema = z.array(z.string());
 
 // retrieval.toml, validated: a wrong value names the key and stops, never a guessed default.
 export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
-  const raw = Bun.TOML.parse(readFileSync(path, "utf8")) as Table;
-  const d = isTable(raw.definition) ? raw.definition : {};
-  const fail = (key: string, want: string): never => {
+  const parsedToml: unknown = Bun.TOML.parse(readFileSync(path, "utf8"));
+  const raw = asTable(parsedToml) ?? {};
+  const d = asTable(raw.definition) ?? {};
+  function fail(key: string, want: string): never {
     throw new Error(`${path}: definition.${key} must be ${want}`);
-  };
+  }
   const num = (t: Table, key: string, at: string): number => {
     const v = t[key];
     return typeof v === "number" && Number.isFinite(v)
@@ -102,12 +109,12 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
   };
   const count = (key: string): number => {
     const v = d[key];
-    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 200
-      ? (v as number)
+    return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 200
+      ? v
       : fail(key, "an integer in 1..200");
   };
   const table = (t: unknown, key: string): Table =>
-    isTable(t) ? t : fail(key, "a table");
+    asTable(t) ?? fail(key, "a table");
 
   const recall = count("recall");
   const pool = count("pool");
@@ -121,36 +128,35 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     test: num(p, "test", "priors."),
   };
 
-  if (d.judge !== "jev" && d.judge !== "local")
-    fail("judge", '"jev" or "local"');
+  const judge = d.judge;
+  if (judge !== "jev" && judge !== "local") fail("judge", '"jev" or "local"');
   const endpoints = table(d.jev_endpoints, "jev_endpoints");
   const provider = d.jev_provider;
-  if (typeof provider !== "string" || !isTable(endpoints[provider]))
+  const e =
+    typeof provider === "string" ? asTable(endpoints[provider]) : undefined;
+  if (typeof provider !== "string" || e === undefined)
     fail(
       "jev_provider",
       `one of [definition.jev_endpoints.*] (${Object.keys(endpoints).join(", ")})`,
     );
-  const e = endpoints[provider as string] as Table;
-  if (typeof e.url !== "string" || !e.url.startsWith("https://"))
+  const url = e.url;
+  if (typeof url !== "string" || !url.startsWith("https://"))
     fail(`jev_endpoints.${provider}.url`, "an https:// URL");
-  if (e.model !== undefined && typeof e.model !== "string")
+  const model = e.model;
+  if (model !== undefined && typeof model !== "string")
     fail(`jev_endpoints.${provider}.model`, "a string when present");
-  if (e.when_exhausted !== undefined && typeof e.when_exhausted !== "string")
+  const whenExhausted = e.when_exhausted;
+  if (whenExhausted !== undefined && typeof whenExhausted !== "string")
     fail(`jev_endpoints.${provider}.when_exhausted`, "a string when present");
-  const jevEndpoint: JevEndpoint = { url: e.url as string };
-  if (e.model !== undefined) jevEndpoint.model = e.model as string;
-  if (e.when_exhausted !== undefined)
-    jevEndpoint.whenExhausted = e.when_exhausted as string;
+  const jevEndpoint: JevEndpoint = { url };
+  if (model !== undefined) jevEndpoint.model = model;
+  if (whenExhausted !== undefined) jevEndpoint.whenExhausted = whenExhausted;
 
-  if (
-    !Array.isArray(d.no_egress) ||
-    !d.no_egress.every((x) => typeof x === "string")
-  )
-    fail("no_egress", "a list of paths");
+  const noEgress = NoEgressSchema.safeParse(d.no_egress);
+  if (!noEgress.success) fail("no_egress", "a list of paths");
 
   const ths = table(d.thresholds, "thresholds");
-  const thresholds = {} as Record<Judge, Thresholds>;
-  for (const j of ["jev", "local"] as const) {
+  const thresholdsOf = (j: Judge): Thresholds => {
     const t = table(ths[j], `thresholds.${j}`);
     const at = `thresholds.${j}.`;
     const th = {
@@ -161,8 +167,12 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     // Ordered bands: below likely = absent, likely..strong = read first, strong.. = this one.
     if (!(th.likely < th.strong)) fail(`${at}likely`, "below strong");
     if (!(th.hook >= th.strong)) fail(`${at}hook`, "at least strong");
-    thresholds[j] = th;
-  }
+    return th;
+  };
+  const thresholds: Record<Judge, Thresholds> = {
+    jev: thresholdsOf("jev"),
+    local: thresholdsOf("local"),
+  };
 
   const expand = (x: string) =>
     x.startsWith("~/") ? join(homedir(), x.slice(2)) : x;
@@ -170,9 +180,9 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     recall,
     pool,
     priors,
-    judge: d.judge as Judge,
+    judge,
     jevEndpoint,
-    noEgress: (d.no_egress as string[]).map(expand),
+    noEgress: noEgress.data.map(expand),
     thresholds,
   };
 }
@@ -194,14 +204,15 @@ export const catalogDir = (project: string): string =>
     createHash("sha1").update(realpathSync(project)).digest("hex").slice(0, 16),
   );
 
-type Meta = {
-  project: string;
-  head: string | null;
-  files: Record<string, string>; // code file -> "size mtimeMs" when last parsed
-  checkedAt: number; // epoch ms of the last full (git) check
-  builtAt: string;
-  count: number;
-};
+const MetaSchema = z.object({
+  project: z.string(),
+  head: z.string().nullable(),
+  files: z.record(z.string(), z.string()), // code file -> "size mtimeMs" when last parsed
+  checkedAt: z.number(), // epoch ms of the last full (git) check
+  builtAt: z.string(),
+  count: z.number(),
+});
+type Meta = z.output<typeof MetaSchema>;
 const SCAN_EVERY_MS = 60_000;
 
 // The interpreter that can import cocoindex: the `ccc` script's own shebang (same as ccc-scope.ts).
@@ -259,13 +270,26 @@ function mdText(d: Definition): string {
 const mdName = (text: string) =>
   `${createHash("sha1").update(text).digest("hex").slice(0, 20)}.md`;
 
+// A JSON file's content, still unknown: the caller's schema decides what it is.
+const readJsonText = (path: string): unknown =>
+  ((): unknown => JSON.parse(readFileSync(path, "utf8")))();
+
+const DefsCacheSchema = z.object({
+  files: z.record(
+    z.string(),
+    z.object({
+      records: z.array(DefinitionSchema),
+      publics: z.array(z.string()),
+    }),
+  ),
+});
+const RecordsSchema = z.record(z.string(), z.array(DefinitionSchema));
+
 function loadDefinitions(cachePath: string): {
   defs: Definition[];
   files: string[];
 } {
-  const cache = JSON.parse(readFileSync(cachePath, "utf8")) as {
-    files: Record<string, { records: Definition[]; publics: string[] }>;
-  };
+  const cache = DefsCacheSchema.parse(readJsonText(cachePath));
   const publics = new Set(Object.values(cache.files).flatMap((f) => f.publics));
   const defs = Object.values(cache.files).flatMap((f) =>
     f.records.map((r) => ({ ...r, public: r.public || publics.has(r.name) })),
@@ -299,7 +323,7 @@ export async function refreshCatalog(
   const metaPath = join(dir, "catalog.json");
   const recordsPath = join(dir, "records.json");
   const meta = await attemptOr(
-    () => JSON.parse(readFileSync(metaPath, "utf8")) as Meta,
+    () => MetaSchema.parse(readJsonText(metaPath)),
     null,
   );
   const head = (await git(project, ["rev-parse", "HEAD"]))?.trim() ?? null;
@@ -350,10 +374,7 @@ function readCatalog(dir: string): {
 } {
   const byFile = new Map(
     Object.entries(
-      JSON.parse(readFileSync(join(dir, "records.json"), "utf8")) as Record<
-        string,
-        Definition[]
-      >,
+      RecordsSchema.parse(readJsonText(join(dir, "records.json"))),
     ),
   );
   return { dir, defs: [...byFile.values()].flat(), byFile };
@@ -430,7 +451,11 @@ function writeAtomic(path: string, text: string): void {
   renameSync(tmp, path);
 }
 
-type Hit = { file_path: string; score: number };
+// ccc search --json: only the path is read; the rest of each result is ignored.
+const SearchSchema = z.object({
+  results: z.array(z.object({ file_path: z.string() })),
+});
+type Hit = z.output<typeof SearchSchema>["results"][number];
 
 async function recall(
   dir: string,
@@ -452,13 +477,21 @@ async function recall(
   );
   if (r.exitCode !== 0)
     throw new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`);
-  return (JSON.parse(r.stdout) as { results: Hit[] }).results;
+  return SearchSchema.parse(((): unknown => JSON.parse(r.stdout))()).results;
 }
 
 const rerankSocket = (): string =>
   join(homedir(), ".cache/repo-retrieve/rerank.sock");
 
-export type RerankResult = { scores: number[] } | { reason: string };
+export type RerankResult =
+  | { scores: number[]; reason?: undefined }
+  | { reason: string; scores?: undefined };
+
+// rerank_server.py's one-line reply. A field of the wrong type counts as absent.
+const RerankReplySchema = z.object({
+  scores: z.array(z.number()).optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
+});
 
 // One request to the resident reranker. A `reason` means the caller ranks by embeddings and says why.
 export async function rerank(
@@ -482,11 +515,9 @@ export async function rerank(
   }
   const finish = async () => {
     const line = reply.split("\n", 1)[0] ?? "";
-    const r = await attemptOr(
-      () => JSON.parse(line) as { scores?: number[]; error?: string },
-      null,
-    );
-    if (r && Array.isArray(r.scores) && r.scores.length === docs.length)
+    const parsedLine = await attemptOr((): unknown => JSON.parse(line), null);
+    const r = RerankReplySchema.safeParse(parsedLine).data;
+    if (r?.scores !== undefined && r.scores.length === docs.length)
       return done({ scores: r.scores });
     return done({
       reason: r?.error
@@ -574,9 +605,10 @@ export async function findDefinitions(
     cfg.jevEndpoint,
     notes,
   );
-  const scores = "scores" in result ? result.scores : null;
+  const scores = result.scores ?? null;
   const reranked = scores !== null;
-  if ("reason" in result) notes.push(`embedding order only — ${result.reason}`);
+  if (result.reason !== undefined)
+    notes.push(`embedding order only — ${result.reason}`);
   // Unjudged: a descending stand-in keeps embedding order; strength is "unranked" regardless.
   const raw = scores ?? order.map((_, i) => order.length - i);
   const ranked = toCards(
@@ -607,7 +639,7 @@ async function judgeCandidates(
   if (docs.length === 0) return { judge: preferred, result: { scores: [] } };
   if (preferred === "jev") {
     const jev = await judgeJev(query, docs, jevEndpoint);
-    if ("scores" in jev) return { judge: "jev", result: jev };
+    if (jev.scores !== undefined) return { judge: "jev", result: jev };
     notes.push(`Jev unavailable (${jev.reason}); local reranker instead`);
   }
   return { judge: "local", result: await rerank(query, docs) };
@@ -621,6 +653,11 @@ function jevKey(): string | null {
   const m = /^TYPESAFE_API_KEY=(\S+)$/m.exec(readFileSync(file, "utf8"));
   return m?.[1] ?? null;
 }
+
+// The Jev answer: only each slot's `noul` probability is read.
+const JevAnswerSchema = z.object({
+  answers: z.record(z.string(), z.object({ noul: z.unknown() })).optional(),
+});
 
 // One request: every candidate is one `noul` question about its own slot of the state. Jev's
 // probabilities are calibrated; they come back as log-odds so the priors and thresholds share the
@@ -676,19 +713,17 @@ export async function judgeJev(
         reason: `HTTP 402 at ${provider}: no credit left — ${endpoint.whenExhausted ?? "top up"}`,
       };
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
-    const json = await attemptOr(
-      async () =>
-        (await res.value.json()) as {
-          answers?: Record<string, { noul?: number }>;
-        },
-      null,
-    );
+    const answered = await attemptOr(async (): Promise<unknown> => {
+      const body: unknown = await res.value.json();
+      return body;
+    }, null);
+    const json = JevAnswerSchema.safeParse(answered).data;
     const ps = docs.map((_, i) => json?.answers?.[id(i)]?.noul);
-    if (ps.some((p) => typeof p !== "number"))
-      return { reason: "malformed answer" };
+    const numbers = ps.flatMap((p) => (typeof p === "number" ? [p] : []));
+    if (numbers.length !== ps.length) return { reason: "malformed answer" };
     const clamp = (p: number) => Math.min(1 - 1e-4, Math.max(1e-4, p));
     return {
-      scores: (ps as number[]).map((p) => Math.log(clamp(p) / (1 - clamp(p)))),
+      scores: numbers.map((p) => Math.log(clamp(p) / (1 - clamp(p)))),
     };
   }
   return { reason: "still rate-limited after retries" };

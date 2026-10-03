@@ -33,6 +33,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
 import {
   ACK_MS,
   editorHost,
@@ -113,6 +114,8 @@ const classify = (reply: string): Outcome => {
   return reply.startsWith("busy") ? "busy" : "refused";
 };
 
+const ErrorCodeSchema = z.object({ code: z.unknown() });
+
 // One line out, one line back. Resolves to the outcome; never throws.
 function toClient(request: Record<string, string>): Promise<Probe> {
   const seen = fileKey(SOCKET);
@@ -149,7 +152,8 @@ function toClient(request: Record<string, string>): Promise<Probe> {
     // A refused connect is a bind nobody listens on: a stale socket, not a missing receiver. Any
     // other failure to connect (EACCES on someone else's socket, ...) is said as what it was.
     (e: unknown) => {
-      const code = String((e as { code?: unknown } | null)?.code ?? e);
+      const withCode = ErrorCodeSchema.safeParse(e);
+      const code = String(withCode.success ? (withCode.data.code ?? e) : e);
       if (/ECONNREFUSED|ENOENT/.test(code)) finish("stale");
       else finish("no-receiver", `could not connect (${code})`);
     },

@@ -24,6 +24,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
+import { arr, at, parseJson, str, strAt } from "./narrow.ts";
 
 type Rule = { text: string; prefix: string; exact: boolean };
 
@@ -42,23 +43,35 @@ function settingsRoot(start: string): string | null {
   }
 }
 
+// One deny entry as a rule; undefined for anything that is not a plain `Bash(...)` rule form.
+function ruleOf(entry: unknown): Rule | undefined {
+  const text = str(entry);
+  const body =
+    text === undefined ? undefined : /^Bash\((.+)\)$/.exec(text)?.[1];
+  if (text === undefined || body === undefined) return undefined;
+  if (body.endsWith(":*"))
+    return { text, prefix: body.slice(0, -2), exact: false };
+  if (!body.includes("*")) return { text, prefix: body, exact: true };
+  return undefined;
+}
+
 function bashRules(root: string): Rule[] {
   const path = join(root, ".claude", "settings.json");
-  const deny = JSON.parse(readFileSync(path, "utf8"))?.permissions?.deny;
+  const deny = at(parseJson(readFileSync(path, "utf8")), "permissions", "deny");
   if (deny === undefined) return [];
-  if (!Array.isArray(deny))
+  const list = arr(deny);
+  if (list === undefined)
     throw new Error(`${path}: permissions.deny is not a list`);
-  const rules: Rule[] = [];
-  for (const entry of deny) {
-    const m = typeof entry === "string" ? /^Bash\((.+)\)$/.exec(entry) : null;
-    const body = m?.[1];
-    if (body === undefined) continue;
-    if (body.endsWith(":*"))
-      rules.push({ text: entry, prefix: body.slice(0, -2), exact: false });
-    else if (!body.includes("*"))
-      rules.push({ text: entry, prefix: body, exact: true });
-  }
-  return rules;
+  return list.flatMap((entry) => {
+    const rule = ruleOf(entry);
+    return rule === undefined ? [] : [rule];
+  });
+}
+
+function hits(seg: string, rule: Rule): boolean {
+  return (
+    seg === rule.prefix || (!rule.exact && seg.startsWith(`${rule.prefix} `))
+  );
 }
 
 export function matchingRules(command: string, rules: Rule[]): Rule[] {
@@ -66,9 +79,7 @@ export function matchingRules(command: string, rules: Rule[]): Rule[] {
   for (const raw of command.split(SEGMENT_SPLIT)) {
     const seg = raw.trim().replace(/\s+/g, " ");
     if (seg === "") continue;
-    for (const r of rules)
-      if (seg === r.prefix || (!r.exact && seg.startsWith(`${r.prefix} `)))
-        hit.add(r);
+    for (const r of rules.filter((rule) => hits(seg, rule))) hit.add(r);
   }
   return [...hit];
 }
@@ -88,19 +99,19 @@ function jjAdvice(root: string, rules: Rule[]): string {
 
 function main(): void {
   const payload = readStdinJson();
-  if (payload?.tool_name !== "Bash") return;
-  const command = payload?.tool_input?.command;
-  if (typeof command !== "string" || command === "") return;
+  if (strAt(payload, "tool_name") !== "Bash") return;
+  const command = strAt(payload, "tool_input", "command");
+  if (command === undefined || command === "") return;
 
-  const sessionCwd =
-    typeof payload?.cwd === "string" && payload.cwd !== ""
-      ? payload.cwd
-      : process.cwd();
-  const roots = new Set(
-    [settingsRoot(sessionCwd), settingsRoot(bashCwd(payload))].filter(
-      (r): r is string => r !== null,
-    ),
-  );
+  const cwd = strAt(payload, "cwd");
+  const sessionCwd = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
+  const roots = new Set<string>();
+  for (const root of [
+    settingsRoot(sessionCwd),
+    settingsRoot(bashCwd(payload)),
+  ]) {
+    if (root !== null) roots.add(root);
+  }
   const found: string[] = [];
   for (const root of roots) {
     const rules = matchingRules(command, bashRules(root));

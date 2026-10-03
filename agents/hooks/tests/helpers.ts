@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { at, obj, parseJson, strAt } from "../narrow.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 
@@ -23,10 +24,24 @@ export function runHook(
   return { code: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
+// The fields of a PreToolUse decision the hook tests read; a field the hook did not print is undefined.
+export type Decision = {
+  readonly permissionDecision: string | undefined;
+  readonly permissionDecisionReason: string | undefined;
+  readonly additionalContext: string | undefined;
+};
+
 // PreToolUse hooks print one decision JSON on stdout (or nothing = silent pass).
-export function decisionOf(stdout: string): any {
+export function decisionOf(stdout: string): Decision | null {
   if (stdout.trim() === "") return null;
-  return JSON.parse(stdout).hookSpecificOutput;
+  const out = at(parseJson(stdout), "hookSpecificOutput");
+  if (obj(out) === undefined)
+    throw new Error(`hook stdout has no hookSpecificOutput object: ${stdout}`);
+  return {
+    permissionDecision: strAt(out, "permissionDecision"),
+    permissionDecisionReason: strAt(out, "permissionDecisionReason"),
+    additionalContext: strAt(out, "additionalContext"),
+  };
 }
 
 export function tempDir(prefix: string): string {

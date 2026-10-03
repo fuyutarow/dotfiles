@@ -46,10 +46,10 @@ type Check = Readonly<{
 }>;
 
 type TransferAttempt = Readonly<{
-	discriminator?: string;
+	discriminator?: string | undefined;
 	id: string;
 	kind: "CANDIDATE" | "MAPPING-BREAK";
-	prediction?: string;
+	prediction?: string | undefined;
 }>;
 
 type FrozenReference = Readonly<{
@@ -1144,7 +1144,7 @@ async function validateTransferDisposition(
 		readField(lines, "Target-side test or result locus") ?? "";
 	const action = readField(lines, "Integration / retirement action") ?? "";
 	const decisionValues = decisions === undefined ? [] : [...decisions.values()];
-	const targetResultDecisionIds = [...(decisions ?? new Map())]
+	const targetResultDecisionIds = [...(decisions ?? [])]
 		.filter(([, decision]) => decision === "ADOPT" || decision === "RETIRE")
 		.map(([id]) => id);
 	const targetResultReference = targetEvidence.match(

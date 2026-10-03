@@ -9,6 +9,7 @@
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { z } from "zod";
 import { findDefinitions } from "./definitions.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -35,16 +36,19 @@ if (argv._.length > 0 || argv.flags.cases === "") {
   process.exit(2);
 }
 
-type Case = {
-  need: number | string;
-  truth: string[];
-  en?: string;
-  ja?: string;
-};
-const spec = JSON.parse(await Bun.file(argv.flags.cases).text()) as {
-  project: string;
-  cases: Case[];
-};
+const CaseSchema = z.object({
+  need: z.union([z.number(), z.string()]),
+  truth: z.array(z.string()),
+  en: z.string().optional(),
+  ja: z.string().optional(),
+});
+type Case = z.output<typeof CaseSchema>;
+const SpecSchema = z.object({
+  project: z.string(),
+  cases: z.array(CaseSchema),
+});
+const specText = await Bun.file(argv.flags.cases).text();
+const spec = SpecSchema.parse(((): unknown => JSON.parse(specText))());
 const project = spec.project.replace(/^~(?=\/)/, homedir());
 const tally: Record<
   string,

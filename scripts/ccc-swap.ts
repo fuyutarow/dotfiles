@@ -75,6 +75,7 @@ import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { match } from "ts-pattern";
+import { z } from "zod";
 import {
   DB_ARTIFACTS,
   MAPPING_ENV,
@@ -274,6 +275,16 @@ export function humanSize(bytes: number): string {
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)}${units[unitIndex]}`;
 }
 
+// A row read from sqlite is parsed, never asserted: no row (null) or a row of another shape is "no value".
+const SqliteMasterRowSchema = z.object({ sql: z.string().nullish() });
+const CountRowSchema = z.object({ n: z.number() });
+
+// The marker a cutover leaves behind: only the model it replaced is read back.
+const CutoverMarkerSchema = z.object({ previousModel: z.string().nullish() });
+
+// The `code` of a failed fs call (EXDEV, ...); any other thrown value has none.
+const ErrnoSchema = z.object({ code: z.unknown() });
+
 /** Parses the `embedding float[N]` DDL fragment out of `code_chunks_vec`'s sqlite_master row. */
 export function computeIndexDimension(
   targetSqliteDbPath: string,
@@ -288,12 +299,16 @@ export function computeIndexDimension(
   // once this block ends, in either case.
   using _db = { [Symbol.dispose]: () => db.close() };
   return fromThrowable(() => {
-    const row = db
-      .query(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
-      )
-      .get() as { sql: string } | null;
-    const match = row?.sql?.match(/embedding\s+float\[(\d+)\]/);
+    const row = SqliteMasterRowSchema.safeParse(
+      db
+        .query(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks_vec'",
+        )
+        .get(),
+    );
+    const match = row.success
+      ? row.data.sql?.match(/embedding\s+float\[(\d+)\]/)
+      : null;
     if (!match?.[1]) return null;
     const dim = Number(match[1]);
     return Number.isFinite(dim) ? dim : null;
@@ -312,12 +327,10 @@ export function countIndexedRows(targetSqliteDbPath: string): number | null {
   // once this block ends, in either case.
   using _db = { [Symbol.dispose]: () => db.close() };
   return fromThrowable(() => {
-    const row = db
-      .query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids")
-      .get() as {
-      n: number;
-    } | null;
-    return row ? row.n : null;
+    const row = CountRowSchema.safeParse(
+      db.query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids").get(),
+    );
+    return row.success ? row.data.n : null;
   })().unwrapOr(null);
 }
 
@@ -650,10 +663,8 @@ export async function moveDbArtifact(
   const renameResult = await fromAsyncThrowable(() => rename(src, dst))();
   if (renameResult.isOk()) return { ok: true };
   const error = renameResult.error;
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? (error as NodeJS.ErrnoException).code
-      : undefined;
+  const errno = ErrnoSchema.safeParse(error);
+  const code = errno.success ? errno.data.code : undefined;
   if (code !== "EXDEV") {
     return {
       ok: false,
@@ -1159,16 +1170,12 @@ async function cmdRollback(
     );
   }
 
-  const usable = withGens
-    .map((p) => ({
-      root: p.root,
-      liveDbDir: p.liveDbDir,
-      gen: p.gens.find((g) => g.timestamp === targetTs),
-    }))
-    .filter(
-      (p): p is { root: string; liveDbDir: string; gen: PrevGeneration } =>
-        p.gen !== undefined,
-    );
+  const usable = withGens.flatMap((p) => {
+    const gen = p.gens.find((g) => g.timestamp === targetTs);
+    return gen === undefined
+      ? []
+      : [{ root: p.root, liveDbDir: p.liveDbDir, gen }];
+  });
   const missing = withGens.filter(
     (p) => !p.gens.some((g) => g.timestamp === targetTs),
   );
@@ -1199,9 +1206,10 @@ async function cmdRollback(
   if (existsSync(markerPath)) {
     // best effort
     const markerResult = await fromAsyncThrowable(async () => {
-      const marker = JSON.parse(await readFile(markerPath, "utf8")) as {
-        previousModel?: string | null;
-      };
+      const text = await readFile(markerPath, "utf8");
+      const marker = CutoverMarkerSchema.parse(
+        ((): unknown => JSON.parse(text))(),
+      );
       return marker.previousModel ?? null;
     })();
     if (markerResult.isOk()) previousModel = markerResult.value;
@@ -1627,7 +1635,7 @@ async function main(): Promise<void> {
     (parsed) => {
       if (
         parsed._.verb === undefined ||
-        !(VERBS as readonly string[]).includes(parsed._.verb)
+        !VERBS.some((v) => v === parsed._.verb)
       ) {
         throw new Error(`usage: bun ccc-swap.ts <${VERBS.join("|")}> [flags]`);
       }

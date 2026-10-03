@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { z } from "zod";
 import {
   bodySha256,
   checkLearningBus,
@@ -12,6 +13,29 @@ const at = (second: number) =>
   `2026-08-04T00:00:${String(second).padStart(2, "0")}Z`;
 type R = Record<string, unknown>;
 type Dependency = { kind: string; id: string; sha256: string };
+type Envelope = {
+  id: string;
+  kind: string;
+  locator: string;
+  at: string;
+  body: R;
+  sha256: string;
+  dependencies: Dependency[];
+};
+type Artifacts = {
+  packets: Envelope[];
+  subscriptions: Envelope[];
+  deliveries: Envelope[];
+  admissions: Envelope[];
+  commits: Envelope[];
+};
+type BusInput = R & {
+  schema: string;
+  evaluatedAt: string;
+  sourceTrace: R;
+  sourceCommitEventId: string;
+  artifacts: Artifacts;
+};
 
 function sourceTrace(): R {
   const semantic = {
@@ -292,7 +316,7 @@ function envelope(
   kind: string,
   body: R,
   dependencies: Dependency[] = [],
-): R {
+): Envelope {
   return {
     id,
     kind,
@@ -303,7 +327,7 @@ function envelope(
     dependencies,
   };
 }
-function packet(): R {
+function packet(): Envelope {
   return envelope(
     "packet",
     "SECTION_TRANSFER_PACKET",
@@ -333,7 +357,10 @@ function packet(): R {
     [{ kind: "DIRECTOR_COMMIT", id: "source-commit", sha256: digest("9") }],
   );
 }
-function subscription(recipient: string, id = `subscription-${recipient}`): R {
+function subscription(
+  recipient: string,
+  id = `subscription-${recipient}`,
+): Envelope {
   return envelope(id, "SECTION_SUBSCRIPTION", {
     subscriptionId: id,
     recipientSectionId: recipient,
@@ -358,7 +385,11 @@ function subscription(recipient: string, id = `subscription-${recipient}`): R {
     authority: "ROUTING_FILTER_ONLY",
   });
 }
-function delivery(recipient: string, sub: R, id = `delivery-${recipient}`): R {
+function delivery(
+  recipient: string,
+  sub: Envelope,
+  id = `delivery-${recipient}`,
+): Envelope {
   const p = packet();
   return envelope(
     id,
@@ -386,22 +417,22 @@ function delivery(recipient: string, sub: R, id = `delivery-${recipient}`): R {
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256 as string,
+        sha256: p.sha256,
       },
       {
         kind: "SECTION_SUBSCRIPTION",
-        id: sub.id as string,
-        sha256: sub.sha256 as string,
+        id: sub.id,
+        sha256: sub.sha256,
       },
     ],
   );
 }
 function admission(
   recipient: string,
-  sub: R,
-  deliveryEnvelope: R,
+  sub: Envelope,
+  deliveryEnvelope: Envelope,
   decision: "ADOPT" | "REJECT" | "DEFER",
-): R {
+): Envelope {
   const p = packet();
   return envelope(
     `admission-${recipient}`,
@@ -434,23 +465,23 @@ function admission(
     [
       {
         kind: "SECTION_TRANSFER_DELIVERY",
-        id: deliveryEnvelope.id as string,
-        sha256: deliveryEnvelope.sha256 as string,
+        id: deliveryEnvelope.id,
+        sha256: deliveryEnvelope.sha256,
       },
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256 as string,
+        sha256: p.sha256,
       },
       {
         kind: "SECTION_SUBSCRIPTION",
-        id: sub.id as string,
-        sha256: sub.sha256 as string,
+        id: sub.id,
+        sha256: sub.sha256,
       },
     ],
   );
 }
-function commit(recipient: string, admissionEnvelope: R): R {
+function commit(recipient: string, admissionEnvelope: Envelope): Envelope {
   const p = packet();
   return envelope(
     `commit-${recipient}`,
@@ -484,18 +515,18 @@ function commit(recipient: string, admissionEnvelope: R): R {
     [
       {
         kind: "SECTION_TRANSFER_ADMISSION",
-        id: admissionEnvelope.id as string,
-        sha256: admissionEnvelope.sha256 as string,
+        id: admissionEnvelope.id,
+        sha256: admissionEnvelope.sha256,
       },
       {
         kind: "SECTION_TRANSFER_PACKET",
         id: "packet",
-        sha256: p.sha256 as string,
+        sha256: p.sha256,
       },
     ],
   );
 }
-function input(overrides: Partial<R> = {}): R {
+function input(overrides: R = {}): BusInput {
   const p = packet(),
     left = subscription("left"),
     right = subscription("right"),
@@ -518,7 +549,7 @@ function input(overrides: Partial<R> = {}): R {
     ...overrides,
   };
 }
-const codes = (value: R) =>
+const codes = (value: unknown) =>
   checkLearningBus(value).findings.map((finding) => finding.code);
 
 describe("cross-section-learning-bus/v1", () => {
@@ -538,10 +569,10 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("unsubscribed Director receives no delivery", () => {
     const value = input();
-    (value.artifacts as R).subscriptions = [subscription("other")];
-    (value.artifacts as R).deliveries = [];
-    (value.artifacts as R).admissions = [];
-    (value.artifacts as R).commits = [];
+    value.artifacts.subscriptions = [subscription("other")];
+    value.artifacts.deliveries = [];
+    value.artifacts.admissions = [];
+    value.artifacts.commits = [];
     expect(checkLearningBus(value)).toMatchObject({
       ok: true,
       metrics: {
@@ -554,12 +585,12 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("replay is dropped without multiplying propagation or scientific metrics", () => {
     const value = input();
-    const seededDelivery = ((value.artifacts as R).deliveries as R[])[0];
+    const seededDelivery = value.artifacts.deliveries[0];
     if (seededDelivery === undefined)
       throw new Error("expected a seeded delivery");
     const replay = structuredClone(seededDelivery);
     replay.id = "delivery-replay";
-    ((value.artifacts as R).deliveries as R[]).push(replay);
+    value.artifacts.deliveries.push(replay);
     const result = checkLearningBus(value);
     expect(codes(value)).toContain("TRANSFER_REPLAY");
     expect(result.metrics).toMatchObject({
@@ -570,11 +601,11 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a replay cannot create a second local transfer commit", () => {
     const value = input();
-    const seededCommit = ((value.artifacts as R).commits as R[])[0];
+    const seededCommit = value.artifacts.commits[0];
     if (seededCommit === undefined) throw new Error("expected a seeded commit");
     const replay = structuredClone(seededCommit);
     replay.id = "commit-replay";
-    ((value.artifacts as R).commits as R[]).push(replay);
+    value.artifacts.commits.push(replay);
     expect(checkLearningBus(value)).toMatchObject({
       metrics: { transferCommits: 1, transferReplayDrops: 1 },
     });
@@ -582,11 +613,11 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("a source commit publishes only one packet", () => {
     const value = input();
-    const seededPacket = ((value.artifacts as R).packets as R[])[0];
+    const seededPacket = value.artifacts.packets[0];
     if (seededPacket === undefined) throw new Error("expected a seeded packet");
     const replay = structuredClone(seededPacket);
     replay.id = "packet-replay";
-    ((value.artifacts as R).packets as R[]).push(replay);
+    value.artifacts.packets.push(replay);
     expect(checkLearningBus(value)).toMatchObject({
       metrics: { transferPacketsPublished: 1, transferReplayDrops: 1 },
     });
@@ -596,22 +627,25 @@ describe("cross-section-learning-bus/v1", () => {
     const value = input({ sourceCommitEventId: "missing" });
     expect(codes(value)).toContain("TRANSFER_WITHOUT_COMMIT");
     const mismatched = input();
-    const mismatchedPacket = ((mismatched.artifacts as R).packets as R[])[0];
+    const mismatchedPacket = mismatched.artifacts.packets[0];
     if (mismatchedPacket === undefined)
       throw new Error("expected a seeded packet");
-    const packetBody = mismatchedPacket.body as R;
+    const packetBody = mismatchedPacket.body;
     packetBody.sourceCommitSha256 = digest("f");
     mismatchedPacket.sha256 = bodySha256(packetBody)!;
     expect(codes(mismatched)).toContain("TRANSFER_WITHOUT_COMMIT");
   });
   test("packet receipt lineage rejects an unrelated extra digest", () => {
     const value = input();
-    const artifacts = value.artifacts as R;
-    const packetEnvelope = (artifacts.packets as R[])[0];
+    const artifacts = value.artifacts;
+    const packetEnvelope = artifacts.packets[0];
     if (packetEnvelope === undefined)
       throw new Error("expected a seeded packet");
-    const packetBody = packetEnvelope.body as R;
-    (packetBody.sourceReceiptDigests as string[]).push(digest("f"));
+    const packetBody = packetEnvelope.body;
+    packetBody.sourceReceiptDigests = [
+      ...z.array(z.string()).parse(packetBody.sourceReceiptDigests),
+      digest("f"),
+    ];
     packetEnvelope.sha256 = bodySha256(packetBody)!;
     artifacts.deliveries = [];
     artifacts.admissions = [];
@@ -624,10 +658,10 @@ describe("cross-section-learning-bus/v1", () => {
   });
   test("committed learning misses its declared publish deadline", () => {
     const value = input();
-    (value.artifacts as R).packets = [];
-    (value.artifacts as R).deliveries = [];
-    (value.artifacts as R).admissions = [];
-    (value.artifacts as R).commits = [];
+    value.artifacts.packets = [];
+    value.artifacts.deliveries = [];
+    value.artifacts.admissions = [];
+    value.artifacts.commits = [];
     expect(codes(value)).toContain("COMMITTED_LEARNING_NOT_PUBLISHED");
   });
   test.each([
@@ -636,25 +670,25 @@ describe("cross-section-learning-bus/v1", () => {
     ["TRANSFER_GLOBAL_BARRIER", "DELIVERY_QUORUM"],
   ])("forbidden dependency %s is classified", (code, kind) => {
     const value = input();
-    const p = ((value.artifacts as R).packets as R[])[0];
+    const p = value.artifacts.packets[0];
     if (p === undefined) throw new Error("expected a seeded packet");
     p.dependencies = [{ kind, id: "wait", sha256: digest("d") }];
     expect(codes(value)).toContain(code);
   });
   test("programme visibility and auto-enactment fail closed", () => {
     const visible = input();
-    const visiblePacket = ((visible.artifacts as R).packets as R[])[0];
+    const visiblePacket = visible.artifacts.packets[0];
     if (visiblePacket === undefined)
       throw new Error("expected a seeded packet");
-    const packetBody = visiblePacket.body as R;
+    const packetBody = visiblePacket.body;
     packetBody.programmeVisible = true;
     visiblePacket.sha256 = bodySha256(packetBody)!;
     expect(codes(visible)).toContain("RAW_METHOD_LEAK_TO_PROGRAMME");
     const mutation = input();
-    const mutationAdmission = ((mutation.artifacts as R).admissions as R[])[0];
+    const mutationAdmission = mutation.artifacts.admissions[0];
     if (mutationAdmission === undefined)
       throw new Error("expected a seeded admission");
-    const body = mutationAdmission.body as R;
+    const body = mutationAdmission.body;
     body.localStateMutation = true;
     mutationAdmission.sha256 = bodySha256(body)!;
     expect(codes(mutation)).toContain("TRANSFER_AUTO_ENACTED");
@@ -675,9 +709,8 @@ describe("cross-section-learning-bus/v1", () => {
     );
     expect(names).toEqual(["transfer-without-commit.json"]);
     for (const name of names) {
-      const result = checkLearningBus(
-        JSON.parse(readFileSync(resolve(directory, name), "utf8")),
-      );
+      const text = readFileSync(resolve(directory, name), "utf8");
+      const result = checkLearningBus(((): unknown => JSON.parse(text))());
       expect(result.schema).toBe("cross-section-learning-bus/v1");
       expect(result.findings.map((finding) => finding.code)).toContain(
         "TRANSFER_WITHOUT_COMMIT",

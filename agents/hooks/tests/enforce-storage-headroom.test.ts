@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "enforce-storage-headroom.ts";
@@ -18,33 +19,60 @@ const bash = (command: string) => ({
 // threshold makes it green. The hook reads real statfs numbers either way.
 const REAL = join(import.meta.dir, "..", "storage-headroom.toml");
 
+// The shape of storage-headroom.toml as the fixtures edit it. Declared here and parsed with zod, so
+// the real file is checked on read; a Row is loose on purpose, because the invalid-config tests
+// write a wrong type ("thirty") and an unknown key ("comand") into it.
+const Scalar = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+type Scalar = z.infer<typeof Scalar>;
+const Row = z.record(z.string(), Scalar);
+type Row = z.infer<typeof Row>;
+const Doc = z.object({
+  schema: z.number(),
+  drive: z.record(z.string(), Row),
+  deny: Row,
+  launcher: z.array(Row),
+  budget: z.array(Row),
+  measure: Row,
+});
+type Doc = z.infer<typeof Doc>;
+
+function scalar(v: Scalar): string {
+  if (Array.isArray(v))
+    return `[${v.map((s) => JSON.stringify(s)).join(", ")}]`;
+  if (typeof v === "string") return JSON.stringify(v);
+  return String(v);
+}
+
+const body = (row: Row): string[] =>
+  Object.entries(row).map(([k, v]) => `${k} = ${scalar(v)}`);
+
 // A minimal TOML writer for this schema (Bun parses TOML but does not emit it).
-function toToml(obj: Record<string, any>): string {
-  const scalar = (v: unknown): string => {
-    if (Array.isArray(v)) return `[${v.map(scalar).join(", ")}]`;
-    if (typeof v === "string") return JSON.stringify(v);
-    return String(v);
-  };
-  const isTable = (v: unknown) =>
-    typeof v === "object" && v !== null && !Array.isArray(v);
-  const body = (o: Record<string, any>) =>
-    Object.entries(o)
-      .filter(([, v]) => !isTable(v) && !(Array.isArray(v) && isTable(v[0])))
-      .map(([k, v]) => `${k} = ${scalar(v)}`);
-  const out = body(obj);
-  for (const [k, v] of Object.entries(obj)) {
-    if (Array.isArray(v) && isTable(v[0]))
-      for (const item of v) out.push(`[[${k}]]`, ...body(item));
-    else if (isTable(v) && Object.values(v).every(isTable))
-      for (const [sub, t] of Object.entries(v))
-        out.push(`[${k}.${sub}]`, ...body(t as any));
-    else if (isTable(v)) out.push(`[${k}]`, ...body(v));
-  }
+function toToml(doc: Doc): string {
+  const out = [`schema = ${doc.schema}`];
+  for (const [sub, t] of Object.entries(doc.drive))
+    out.push(`[drive.${sub}]`, ...body(t));
+  out.push("[deny]", ...body(doc.deny));
+  for (const item of doc.launcher) out.push("[[launcher]]", ...body(item));
+  for (const item of doc.budget) out.push("[[budget]]", ...body(item));
+  out.push("[measure]", ...body(doc.measure));
   return `${out.join("\n")}\n`;
 }
 
-function config(edit: (c: any) => void): Record<string, string> {
-  const c = Bun.TOML.parse(readFileSync(REAL, "utf8")) as any;
+function present<T>(v: T | undefined, what: string): T {
+  if (v === undefined) throw new Error(`fixture config has no ${what}`);
+  return v;
+}
+const driveRow = (c: Doc, name: string): Row =>
+  present(c.drive[name], `drive.${name}`);
+const firstBudget = (c: Doc): Row => present(c.budget[0], "budget[0]");
+
+function config(edit: (c: Doc) => void): Record<string, string> {
+  const c = Doc.parse(Bun.TOML.parse(readFileSync(REAL, "utf8")));
   edit(c);
   const path = join(
     mkdtempSync(join(tmpdir(), "storage-cfg-")),
@@ -53,10 +81,10 @@ function config(edit: (c: any) => void): Record<string, string> {
   writeFileSync(path, toToml(c));
   return { STORAGE_HEADROOM_CONFIG: path };
 }
-const drives = (host: number, guest: number, hostWarn: number) => (c: any) => {
-  c.drive.host.deny_gib = host;
-  c.drive.guest.deny_gib = guest;
-  c.drive.host.warn_gib = hostWarn;
+const drives = (host: number, guest: number, hostWarn: number) => (c: Doc) => {
+  driveRow(c, "host").deny_gib = host;
+  driveRow(c, "guest").deny_gib = guest;
+  driveRow(c, "host").warn_gib = hostWarn;
 };
 const FULL = config(drives(1_000_000, 1_000_000, 60));
 const EMPTY = config(drives(0, 0, 0));
@@ -83,26 +111,28 @@ describe("enforce-storage-headroom", () => {
       expect(r.code).toBe(0);
       const d = decisionOf(r.stdout);
       expect(d?.permissionDecision).toBe("deny");
-      expect(d.permissionDecisionReason).toContain("storage-headroom");
-      expect(d.permissionDecisionReason).toMatch(/free \d+\.\d GiB|unmeasured/);
+      expect(d?.permissionDecisionReason).toContain("storage-headroom");
+      expect(d?.permissionDecisionReason).toMatch(
+        /free \d+\.\d GiB|unmeasured/,
+      );
     }
   });
 
   test("host AND guest short come back in ONE deny naming both", () => {
     const d = decisionOf(runHook(HOOK, bash("cargo build"), FULL).stdout);
     expect(d?.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("host C:");
-    expect(d.permissionDecisionReason).toContain("guest /");
+    expect(d?.permissionDecisionReason).toContain("host C:");
+    expect(d?.permissionDecisionReason).toContain("guest /");
   });
 
   test("an unreadable Windows drive denies compute on WSL", () => {
     const cfg = config((c) => {
       drives(0, 0, 0)(c);
-      c.drive.host.path = "/missing-wsl-host-drive";
+      driveRow(c, "host").path = "/missing-wsl-host-drive";
     });
     const d = decisionOf(runHook(HOOK, bash("cargo build"), cfg).stdout);
     expect(d?.permissionDecision).toBe("deny");
-    expect(d.permissionDecisionReason).toContain("could not be measured");
+    expect(d?.permissionDecisionReason).toContain("could not be measured");
   });
 
   test("never blocks cleanup, reads, or git — even when full", () => {
@@ -172,8 +202,8 @@ describe("enforce-storage-headroom", () => {
     const budget = (warn: number, hostWarn = 0) =>
       config((c) => {
         drives(0, 0, hostWarn)(c);
-        c.budget[0].warn_gib = warn;
-        c.budget[0].deny_gib = Math.max(warn + 1, 80);
+        firstBudget(c).warn_gib = warn;
+        firstBudget(c).deny_gib = Math.max(warn + 1, 80);
       });
     const TINY = budget(0.001);
     const HUGE = budget(1000);
@@ -198,8 +228,8 @@ describe("enforce-storage-headroom", () => {
       const { root, home } = workspace();
       const full = config((c) => {
         drives(0, 0, 0)(c);
-        c.budget[0].warn_gib = 0.0005;
-        c.budget[0].deny_gib = 0.001;
+        firstBudget(c).warn_gib = 0.0005;
+        firstBudget(c).deny_gib = 0.001;
       });
       for (const command of ["cargo test", "mise run test", "m t"]) {
         const r = runHook(
@@ -291,37 +321,41 @@ describe("enforce-storage-headroom", () => {
 
     test("an invalid config denies with EVERY error in one decision, and names the escape", () => {
       const bad = config((c) => {
-        c.drive.host.deny_gib = "thirty"; // wrong type
-        c.launcher[0].comand = "typo"; // unknown key
+        driveRow(c, "host").deny_gib = "thirty"; // wrong type
+        present(c.launcher[0], "launcher[0]").comand = "typo"; // unknown key
       });
       const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
-      expect(d.permissionDecisionReason).toContain(
+      expect(d?.permissionDecisionReason).toContain(
         "drive.host.deny_gib: expected a non-negative number",
       );
-      expect(d.permissionDecisionReason).toContain(
+      expect(d?.permissionDecisionReason).toContain(
         "launcher[0]: unknown key 'comand'",
       );
-      expect(d.permissionDecisionReason).toContain("STORAGE_ASSERT_OVERRIDE=1");
+      expect(d?.permissionDecisionReason).toContain(
+        "STORAGE_ASSERT_OVERRIDE=1",
+      );
     });
 
     test("omitting the Windows drive cannot silently disarm the gate", () => {
       const bad = config((c) => {
-        delete c.drive.host;
+        c.drive = Object.fromEntries(
+          Object.entries(c.drive).filter(([name]) => name !== "host"),
+        );
       });
       const d = decisionOf(runHook(HOOK, bash("cargo build"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
-      expect(d.permissionDecisionReason).toContain("drive.host: required");
+      expect(d?.permissionDecisionReason).toContain("drive.host: required");
     });
 
     test("the emergency floor must remain below the launch-denial line", () => {
       const bad = config((c) => {
-        c.drive.host.deny_gib = 20;
-        c.drive.host.stop_gib = 30;
+        driveRow(c, "host").deny_gib = 20;
+        driveRow(c, "host").stop_gib = 30;
       });
       const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");
-      expect(d.permissionDecisionReason).toContain(
+      expect(d?.permissionDecisionReason).toContain(
         "drive.host.stop_gib: must be below deny_gib",
       );
     });
@@ -336,7 +370,7 @@ describe("enforce-storage-headroom", () => {
         runHook(HOOK, bash("ls"), { STORAGE_HEADROOM_CONFIG: path }).stdout,
       );
       expect(d?.permissionDecision).toBe("deny");
-      expect(d.permissionDecisionReason).toContain("is not valid TOML");
+      expect(d?.permissionDecisionReason).toContain("is not valid TOML");
     });
 
     test('a new budget is config only: locate = "path" sizes a fixed directory', () => {

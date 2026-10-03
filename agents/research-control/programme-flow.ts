@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { checkTrace } from "./trace.ts";
 
 export const FLOW_SCHEMA = "programme-flow/v2";
@@ -8,24 +9,6 @@ export type FlowFinding = {
   locator?: string;
 };
 type R = Record<string, unknown>;
-type Job = R & {
-  id: string;
-  sectionId: string;
-  stage: string;
-  readyAt: number;
-  deadline: number;
-  resource: string;
-  authorityRevision: string | number;
-  authorityFence: string;
-  dependsOn: string[];
-};
-type SectionAuthority = {
-  sectionId: string;
-  goalConstitutionSha256: string;
-  groundingSha256: string;
-  groundingRevision: string | number;
-  groundingFence: string;
-};
 const stages = [
   "SEARCH",
   "BUILD",
@@ -54,18 +37,63 @@ const forbidden = new Map([
   ["SUPERVISOR_REVIEW", "SUPERVISOR_ON_HOT_PATH"],
   ["MODEL_VERIFICATION", "VERIFIER_ON_HOT_PATH"],
 ]);
-function record(value: unknown): value is R {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// z.looseObject({}) accepts exactly an object that is not null and not an array, and keeps every
+// own key: the parsed copy is what callers use.
+const RecordSchema = z.looseObject({});
+const nonEmpty = z.string().min(1);
+const Revision = z.union([nonEmpty, z.number()]);
+const Sha = z.string().regex(/^[a-f0-9]{64}$/);
+// A plain object as a Record, or undefined; the parsed copy is what callers use.
+function record(value: unknown): R | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
-function finite(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+function list(value: unknown): unknown[] | undefined {
+  const parsed = z.array(z.unknown()).safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
-function revision(value: unknown): value is string | number {
-  return (typeof value === "string" && value !== "") || finite(value);
+// A finite number, or undefined (z.number() rejects NaN and +-Infinity).
+function finite(value: unknown): number | undefined {
+  const parsed = z.number().safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
-function sha(value: unknown): value is string {
-  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
+const JobSchema = z
+  .looseObject({
+    id: nonEmpty,
+    sectionId: nonEmpty,
+    stage: z.enum(stages),
+    readyAt: z.number().min(0),
+    deadline: z.number(),
+    resource: nonEmpty,
+    authorityRevision: Revision,
+    authorityFence: nonEmpty,
+    dependsOn: z.array(nonEmpty),
+  })
+  .refine((job) => job.deadline >= job.readyAt);
+type Job = z.output<typeof JobSchema>;
+const SectionAuthoritySchema = z.object({
+  sectionId: nonEmpty,
+  goalConstitutionSha256: Sha,
+  groundingSha256: Sha,
+  groundingRevision: Revision,
+  groundingFence: nonEmpty,
+});
+type SectionAuthority = z.output<typeof SectionAuthoritySchema>;
+const FlowInputSchema = z.object({
+  schema: z.literal(FLOW_SCHEMA),
+  config: RecordSchema,
+  jobs: z.array(z.unknown()),
+  slots: z.array(z.unknown()),
+  traces: z.array(z.unknown()),
+  currentAuthorityRevision: Revision,
+  currentAuthorityFence: nonEmpty,
+  completedJobIds: z.array(nonEmpty),
+  releasedReceiptDigests: z.array(nonEmpty),
+  sectionAuthorities: z.array(z.unknown()),
+  now: z.number().min(0),
+  elapsedMs: z.number().positive(),
+  counts: z.unknown(),
+});
 function add(
   findings: FlowFinding[],
   code: string,
@@ -80,45 +108,14 @@ function add(
     ...(locator === undefined ? {} : { locator }),
   });
 }
-function validJob(value: unknown): value is Job {
-  return (
-    record(value) &&
-    typeof value.id === "string" &&
-    value.id !== "" &&
-    typeof value.sectionId === "string" &&
-    value.sectionId !== "" &&
-    typeof value.stage === "string" &&
-    stages.includes(value.stage as (typeof stages)[number]) &&
-    finite(value.readyAt) &&
-    finite(value.deadline) &&
-    value.readyAt >= 0 &&
-    value.deadline >= value.readyAt &&
-    typeof value.resource === "string" &&
-    value.resource !== "" &&
-    revision(value.authorityRevision) &&
-    typeof value.authorityFence === "string" &&
-    value.authorityFence !== "" &&
-    Array.isArray(value.dependsOn) &&
-    value.dependsOn.every(
-      (dependency) => typeof dependency === "string" && dependency !== "",
-    )
-  );
-}
-function validSectionAuthority(value: unknown): value is SectionAuthority {
-  return (
-    record(value) &&
-    typeof value.sectionId === "string" &&
-    value.sectionId !== "" &&
-    sha(value.goalConstitutionSha256) &&
-    sha(value.groundingSha256) &&
-    revision(value.groundingRevision) &&
-    typeof value.groundingFence === "string" &&
-    value.groundingFence !== ""
-  );
-}
 function releasedScientificPassDigests(trace: unknown): Set<string> {
-  if (!record(trace) || !Array.isArray(trace.events)) return new Set();
-  const events = trace.events.filter(record);
+  const traceRecord = record(trace);
+  const rawEvents = list(traceRecord?.events);
+  if (rawEvents === undefined) return new Set();
+  const events = rawEvents.flatMap((event) => {
+    const parsed = record(event);
+    return parsed === undefined ? [] : [parsed];
+  });
   const receipts = new Set<string>();
   const learningById = new Map<string, R>();
   for (const event of events) {
@@ -177,10 +174,11 @@ function recordDependencyNotReady(
   item: Job,
   locator: string,
 ): void {
+  const itemWait = record(item.wait);
   if (
-    !record(item.wait) ||
-    item.wait.reason !== "DEPENDENCY_NOT_READY" ||
-    item.wait.locator !== locator
+    itemWait === undefined ||
+    itemWait.reason !== "DEPENDENCY_NOT_READY" ||
+    itemWait.locator !== locator
   )
     add(
       findings,
@@ -194,13 +192,14 @@ function recordDependencyNotReady(
 function evaluateWaitedJob(
   findings: FlowFinding[],
   item: Job,
-  wait: unknown,
+  rawWait: unknown,
   capacity: number,
   now: number,
   ready: Job[],
 ): void {
+  const wait = record(rawWait);
   if (
-    !record(wait) ||
+    wait === undefined ||
     typeof wait.reason !== "string" ||
     typeof wait.locator !== "string" ||
     wait.locator.trim() === ""
@@ -244,7 +243,7 @@ function evaluateWaitedJob(
   }
 }
 
-export function checkProgrammeFlow(input: unknown): FlowResult {
+export function checkProgrammeFlow(rawInput: unknown): FlowResult {
   const findings: FlowFinding[] = [];
   const zero: FlowResult["metrics"] = {
     candidateInventory: 0,
@@ -265,28 +264,8 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     dispatched,
     metrics,
   });
-  if (
-    !record(input) ||
-    input.schema !== FLOW_SCHEMA ||
-    !record(input.config) ||
-    !Array.isArray(input.jobs) ||
-    !Array.isArray(input.slots) ||
-    !Array.isArray(input.traces) ||
-    !revision(input.currentAuthorityRevision) ||
-    typeof input.currentAuthorityFence !== "string" ||
-    input.currentAuthorityFence === "" ||
-    !Array.isArray(input.completedJobIds) ||
-    !input.completedJobIds.every((id) => typeof id === "string" && id !== "") ||
-    !Array.isArray(input.releasedReceiptDigests) ||
-    !input.releasedReceiptDigests.every(
-      (digest) => typeof digest === "string" && digest !== "",
-    ) ||
-    !Array.isArray(input.sectionAuthorities) ||
-    !finite(input.now) ||
-    input.now < 0 ||
-    !finite(input.elapsedMs) ||
-    input.elapsedMs <= 0
-  ) {
+  const parsedInput = FlowInputSchema.safeParse(rawInput);
+  if (!parsedInput.success) {
     add(
       findings,
       "FLOW_INVALID",
@@ -294,13 +273,18 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     );
     return finish();
   }
+  const input = parsedInput.data;
+  const schedulerTickMs = finite(input.config.schedulerTickMs);
   if (
-    !finite(input.config.schedulerTickMs) ||
-    input.config.schedulerTickMs < 100 ||
-    input.config.schedulerTickMs > 5000
+    schedulerTickMs === undefined ||
+    schedulerTickMs < 100 ||
+    schedulerTickMs > 5000
   )
     add(findings, "FLOW_INVALID", "schedulerTickMs must be 100..5000");
-  const jobs = input.jobs.filter(validJob);
+  const jobs = input.jobs.flatMap((raw) => {
+    const parsed = JobSchema.safeParse(raw);
+    return parsed.success ? [parsed.data] : [];
+  });
   if (jobs.length !== input.jobs.length)
     add(findings, "FLOW_INVALID", "job fields must be finite and valid");
   const jobIds = new Set<string>();
@@ -318,9 +302,10 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     add(findings, "FLOW_INVALID", "released receipt digests must be unique");
   const completedJobIds = new Set(input.completedJobIds);
   const releasedReceiptDigests = new Set(input.releasedReceiptDigests);
-  const sectionAuthorities = input.sectionAuthorities.filter(
-    validSectionAuthority,
-  );
+  const sectionAuthorities = input.sectionAuthorities.flatMap((raw) => {
+    const parsed = SectionAuthoritySchema.safeParse(raw);
+    return parsed.success ? [parsed.data] : [];
+  });
   if (sectionAuthorities.length !== input.sectionAuthorities.length)
     add(findings, "FLOW_INVALID", "section authorities must be valid");
   const sectionAuthorityById = new Map<string, SectionAuthority>();
@@ -339,9 +324,10 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
   }
   const free = new Map<string, number>();
   const slotIds = new Set<string>();
-  for (const slot of input.slots) {
+  for (const rawSlot of input.slots) {
+    const slot = record(rawSlot);
     if (
-      !record(slot) ||
+      slot === undefined ||
       typeof slot.id !== "string" ||
       slot.id === "" ||
       typeof slot.resource !== "string" ||
@@ -400,7 +386,7 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     traceMetrics.searchReceipts += checked.summary.receipts;
     traceMetrics.learningCommits += checked.summary.commits;
   }
-  const counts = record(input.counts) ? input.counts : {};
+  const counts: R = record(input.counts) ?? {};
   if (
     ["candidateInventory", "builds", "searchReceipts", "learningCommits"].some(
       (key) => key in counts,
@@ -413,25 +399,24 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     );
   if (traceMetrics.learningCommits > traceMetrics.searchReceipts)
     add(findings, "FLOW_INVALID", "derived commits exceed receipts");
+  const rawInfrastructureChecks = finite(counts.infrastructureChecks);
   const infrastructureChecks =
-    finite(counts.infrastructureChecks) && counts.infrastructureChecks >= 0
-      ? counts.infrastructureChecks
+    rawInfrastructureChecks !== undefined && rawInfrastructureChecks >= 0
+      ? rawInfrastructureChecks
       : 0;
-  const idle =
-    finite(counts.readySlotIdleMs) && counts.readySlotIdleMs >= 0
-      ? counts.readySlotIdleMs
-      : 0;
+  const rawIdle = finite(counts.readySlotIdleMs);
+  const idle = rawIdle !== undefined && rawIdle >= 0 ? rawIdle : 0;
+  const rawUtilization = finite(counts.candidateComputeUtilization);
   const utilization =
-    finite(counts.candidateComputeUtilization) &&
-    counts.candidateComputeUtilization >= 0 &&
-    counts.candidateComputeUtilization <= 1
-      ? counts.candidateComputeUtilization
+    rawUtilization !== undefined && rawUtilization >= 0 && rawUtilization <= 1
+      ? rawUtilization
       : 0;
   if (
-    ("infrastructureChecks" in counts &&
+    (Object.hasOwn(counts, "infrastructureChecks") &&
       infrastructureChecks !== counts.infrastructureChecks) ||
-    ("readySlotIdleMs" in counts && idle !== counts.readySlotIdleMs) ||
-    ("candidateComputeUtilization" in counts &&
+    (Object.hasOwn(counts, "readySlotIdleMs") &&
+      idle !== counts.readySlotIdleMs) ||
+    (Object.hasOwn(counts, "candidateComputeUtilization") &&
       utilization !== counts.candidateComputeUtilization)
   )
     add(
@@ -457,16 +442,13 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
   for (const item of jobs) {
     if (wipExceeded.has(item.sectionId)) continue;
     const sectionAuthority = sectionAuthorityById.get(item.sectionId);
-    const authorization = item.semanticAuthorization;
+    const authorization = record(item.semanticAuthorization);
     const requiredKind =
       item.stage === "SEARCH" ? "GROUNDED_SEARCH" : "SECTION_ADMISSION";
     const validValueClass =
       item.stage === "SEARCH"
-        ? authorization !== undefined &&
-          record(authorization) &&
-          authorization.valueClass === "SEARCH"
+        ? authorization !== undefined && authorization.valueClass === "SEARCH"
         : authorization !== undefined &&
-          record(authorization) &&
           [
             "UPSTREAM_KILL",
             "MINIMAL_DISCRIMINATOR",
@@ -545,11 +527,11 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
     if (
       ambiguousSections.has(item.sectionId) ||
       sectionAuthority === undefined ||
-      !record(authorization) ||
+      authorization === undefined ||
       authorization.kind !== requiredKind ||
       typeof authorization.locator !== "string" ||
       authorization.locator === "" ||
-      !sha(authorization.sha256) ||
+      !Sha.safeParse(authorization.sha256).success ||
       authorization.goalConstitutionSha256 !==
         sectionAuthority.goalConstitutionSha256 ||
       authorization.groundingSha256 !== sectionAuthority.groundingSha256 ||
@@ -565,7 +547,7 @@ export function checkProgrammeFlow(input: unknown): FlowResult {
       );
       continue;
     }
-    if ("waitReason" in item) {
+    if (Object.hasOwn(item, "waitReason")) {
       add(findings, "FLOW_INVALID", "bare waitReason is forbidden", item.id);
       continue;
     }

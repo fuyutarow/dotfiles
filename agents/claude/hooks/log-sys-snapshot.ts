@@ -21,6 +21,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
+import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
 
 const HOME = process.env.HOME ?? "";
@@ -38,38 +39,34 @@ const MIN_GAP_MS = 60_000;
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
-  const event: string = payload?.hook_event_name ?? "";
-  const sid: string = payload?.session_id ?? "unknown";
+  const event = strAt(payload, "hook_event_name") ?? "";
+  const sid = str(at(payload, "session_id") ?? "unknown");
   if (event !== "Stop" && event !== "PostToolUse") return;
+  if (sid === undefined) return; // a non-string session_id never had a usable key
 
   const now = Temporal.Now.instant().epochMilliseconds;
-  const cached = JSON.parse(readFileSync(CACHE, "utf8")) as {
-    at?: unknown;
-    line?: unknown;
-    ansi?: unknown;
-  };
-  if (typeof cached.at !== "number" || typeof cached.line !== "string") return;
+  const cached = parseJson(readFileSync(CACHE, "utf8"));
+  const cachedAt = at(cached, "at");
+  const cachedLine = strAt(cached, "line");
+  if (typeof cachedAt !== "number" || cachedLine === undefined) return;
   // The statusline's own colors when present (the renderer keeps ANSI: hook_system_message is a
   // plain Ink text node), else the plain row.
-  const sys = typeof cached.ansi === "string" ? cached.ansi : cached.line;
-  if (now - cached.at > STALE_MS) return;
+  const sys = strAt(cached, "ansi") ?? cachedLine;
+  if (now - cachedAt > STALE_MS) return;
 
   const key = sid.replace(/[^A-Za-z0-9_-]/g, "_");
   // This session's rows, as the statusline ordered them. Missing or stale -> none.
-  const read = await attempt(
-    () =>
-      JSON.parse(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")) as {
-        at?: unknown;
-        rows?: unknown;
-      },
+  const read = await attempt(() =>
+    parseJson(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")),
   );
-  const sess = read.ok ? read.value : {};
-  const fresh = typeof sess.at === "number" && now - sess.at <= STALE_MS;
-  const rows = (fresh && Array.isArray(sess.rows) ? sess.rows : [])
-    .map((r: { line?: unknown; ansi?: unknown }) =>
-      typeof r?.ansi === "string" ? r.ansi : r?.line,
-    )
-    .filter((r): r is string => typeof r === "string" && r !== "");
+  if (read.ok && read.value === null) return; // a literal null file was never a readable record
+  const sess: unknown = read.ok ? read.value : {};
+  const sessAt = at(sess, "at");
+  const fresh = typeof sessAt === "number" && now - sessAt <= STALE_MS;
+  const rows = (fresh ? (arr(at(sess, "rows")) ?? []) : []).flatMap((r) => {
+    const row = strAt(r, "ansi") ?? strAt(r, "line");
+    return row === undefined || row === "" ? [] : [row];
+  });
   // One record per line: "MM-DD HH:MM | Ctx: … | Rate: … | Sys: …" — the time is this event's (the
   // mobile app shows none), the separator is the bar's SEP.
   const t = Temporal.Now.plainDateTimeISO();

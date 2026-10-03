@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     report(message);
     warns += 1;
   };
-  const present = (value: string | undefined): value is string =>
+  const present = (value: string | undefined): boolean =>
     value !== undefined && !placeholder(value);
 
   if (slots.g0 === undefined)

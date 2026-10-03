@@ -6,7 +6,9 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 
+const RelayedSchema = z.array(z.string());
 const FLOOR = new URL("../scripts/lint-floor.ts", import.meta.url).pathname;
 const REFUSAL =
   "REFUSED: --fix is banned on the prose floor (detect-only; prh replacements are guidance, not text).\n" +
@@ -18,7 +20,7 @@ function run(
 ): { out: string; err: string; code: number } {
   // bounded: one-shot textlint invocation over a tiny fixture, no watch mode
   const proc = Bun.spawnSync(["bun", FLOOR, ...args], {
-    env: env === undefined ? undefined : { ...process.env, ...env },
+    ...(env === undefined ? {} : { env: { ...process.env, ...env } }),
     maxBuffer: 4 * 1024 * 1024,
   });
   return {
@@ -74,7 +76,7 @@ describe("lint-floor passthrough (no --fix)", () => {
     const { out, err, code } = run(["--__proto__", "target.md"], {
       PATH: `${dir}:${process.env.PATH ?? ""}`,
     });
-    const relayed = JSON.parse(out) as string[];
+    const relayed = RelayedSchema.parse(((): unknown => JSON.parse(out))());
     expect(relayed.slice(-2)).toEqual(["--__proto__", "target.md"]);
     expect(err).toBe("");
     expect(code).toBe(0);
@@ -95,7 +97,7 @@ describe("lint-floor passthrough (no --fix)", () => {
       ["--version", "--", "--downstream-only", "target.md"],
       { PATH: `${dir}:${process.env.PATH ?? ""}` },
     );
-    const relayed = JSON.parse(out) as string[];
+    const relayed = RelayedSchema.parse(((): unknown => JSON.parse(out))());
     expect(relayed.slice(-4)).toEqual([
       "--version",
       "--",

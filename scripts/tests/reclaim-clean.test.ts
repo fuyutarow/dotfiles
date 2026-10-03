@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   cleanupTempDir,
   freeSpace,
@@ -83,39 +84,50 @@ function runScript(
   };
 }
 
+// A stand-in for Bun.spawnSync that never spawns. The Proxy keeps the real function's type, so no
+// cast is needed, and its apply trap answers every call with impl(argv-and-options).
+function fakeSpawnSync(
+  impl: (args: unknown[]) => unknown,
+): typeof Bun.spawnSync {
+  return new Proxy(Bun.spawnSync, {
+    apply: (_target, _thisArg, args: unknown[]) => impl(args),
+  });
+}
+const OptsSchema = z.record(z.string(), z.unknown());
+
 // ---- unit: freeSpace ------------------------------------------------------------------------
 
 describe("freeSpace", () => {
   test("reads the 4th whitespace-separated field of the second line, appends ' free'", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       stdout: Buffer.from(
         "Filesystem      Size  Used Avail Use% Mounted on\n" +
           "/dev/sda1       200G  100G   60G  63% /\n",
       ),
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(freeSpace("/whatever", fakeSpawn)).toBe("60G free");
   });
 
   test("returns empty string when df has no second line (awk's NR==2 never fires)", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       stdout: Buffer.from("Filesystem      Size  Used Avail Use% Mounted on\n"),
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(freeSpace("/whatever", fakeSpawn)).toBe("");
   });
 
   test("returns empty string when the df spawn itself throws (df missing)", () => {
-    const fakeSpawn = (() => {
+    const fakeSpawn = fakeSpawnSync(() => {
       throw new Error("ENOENT");
-    }) as unknown as typeof Bun.spawnSync;
+    });
     expect(freeSpace("/whatever", fakeSpawn)).toBe("");
   });
 
   test('df\'s own stderr is inherited, not suppressed (original `df -h "$HOME" | awk ...` never redirects it)', () => {
     let seenOpts: Record<string, unknown> | undefined;
-    const fakeSpawn = ((_cmd: string[], opts: Record<string, unknown>) => {
-      seenOpts = opts;
+    const fakeSpawn = fakeSpawnSync((args) => {
+      seenOpts = OptsSchema.parse(args[1]);
       return { stdout: Buffer.from("") };
-    }) as unknown as typeof Bun.spawnSync;
+    });
     freeSpace("/whatever", fakeSpawn);
     expect(seenOpts?.stderr).toBe("inherit");
   });
@@ -125,23 +137,23 @@ describe("freeSpace", () => {
 
 describe("isUvBusy", () => {
   test("pgrep exit 0 => busy", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 0,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isUvBusy(fakeSpawn)).toBe(true);
   });
 
   test("pgrep nonzero exit => not busy", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 1,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isUvBusy(fakeSpawn)).toBe(false);
   });
 
   test("pgrep missing (spawn throws) => not busy, mirrors the shell's `if pgrep ...` false branch", () => {
-    const fakeSpawn = (() => {
+    const fakeSpawn = fakeSpawnSync(() => {
       throw new Error("ENOENT");
-    }) as unknown as typeof Bun.spawnSync;
+    });
     expect(isUvBusy(fakeSpawn)).toBe(false);
   });
 });
@@ -150,32 +162,32 @@ describe("isUvBusy", () => {
 
 describe("isJuliaBusy", () => {
   test("pgrep exit 0 => busy", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 0,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isJuliaBusy(fakeSpawn)).toBe(true);
   });
 
   test("pgrep nonzero exit => not busy", () => {
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 1,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     expect(isJuliaBusy(fakeSpawn)).toBe(false);
   });
 
   test("pgrep missing (spawn throws) => not busy", () => {
-    const fakeSpawn = (() => {
+    const fakeSpawn = fakeSpawnSync(() => {
       throw new Error("ENOENT");
-    }) as unknown as typeof Bun.spawnSync;
+    });
     expect(isJuliaBusy(fakeSpawn)).toBe(false);
   });
 
   test("checks by exact comm name (-x julia), not a cmdline substring", () => {
     let seenArgv: string[] | undefined;
-    const fakeSpawn = ((cmd: string[]) => {
-      seenArgv = cmd;
+    const fakeSpawn = fakeSpawnSync((args) => {
+      seenArgv = z.array(z.string()).parse(args[0]);
       return { exitCode: 1 };
-    }) as unknown as typeof Bun.spawnSync;
+    });
     isJuliaBusy(fakeSpawn);
     expect(seenArgv).toEqual(["pgrep", "-x", "julia"]);
   });
@@ -190,9 +202,9 @@ describe("cleanupTempDir", () => {
 
   test("rip available and succeeds -> rmSync fallback is NOT taken (dir left for rip to have handled)", () => {
     const dir = makeTempDir();
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 0,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     cleanupTempDir(dir, { ripAvailable: true, spawn: fakeSpawn });
     // the fake spawn never really deletes anything; the dir surviving proves our code did NOT
     // also call rmSync as a fallback when rip reported success
@@ -202,9 +214,9 @@ describe("cleanupTempDir", () => {
 
   test("rip available but reports failure -> falls back to rmSync", () => {
     const dir = makeTempDir();
-    const fakeSpawn = (() => ({
+    const fakeSpawn = fakeSpawnSync(() => ({
       exitCode: 1,
-    })) as unknown as typeof Bun.spawnSync;
+    }));
     cleanupTempDir(dir, { ripAvailable: true, spawn: fakeSpawn });
     expect(existsSync(dir)).toBe(false);
   });
@@ -212,10 +224,10 @@ describe("cleanupTempDir", () => {
   test("rip unavailable -> spawn is never invoked, falls straight to rmSync", () => {
     const dir = makeTempDir();
     let called = false;
-    const fakeSpawn = (() => {
+    const fakeSpawn = fakeSpawnSync(() => {
       called = true;
       return { exitCode: 0 };
-    }) as unknown as typeof Bun.spawnSync;
+    });
     cleanupTempDir(dir, { ripAvailable: false, spawn: fakeSpawn });
     expect(called).toBe(false);
     expect(existsSync(dir)).toBe(false);
@@ -224,10 +236,10 @@ describe("cleanupTempDir", () => {
   test('rip\'s stdout is inherited, only its stderr is suppressed (original `rip "$_bt" 2>/dev/null`)', () => {
     const dir = makeTempDir();
     let seenOpts: Record<string, unknown> | undefined;
-    const fakeSpawn = ((_cmd: string[], opts: Record<string, unknown>) => {
-      seenOpts = opts;
+    const fakeSpawn = fakeSpawnSync((args) => {
+      seenOpts = OptsSchema.parse(args[1]);
       return { exitCode: 0 };
-    }) as unknown as typeof Bun.spawnSync;
+    });
     cleanupTempDir(dir, { ripAvailable: true, spawn: fakeSpawn });
     expect(seenOpts?.stdout).toBe("inherit");
     expect(seenOpts?.stderr).toBe("ignore");
@@ -278,8 +290,9 @@ describe("runSimpleStep", () => {
         console.log = orig;
       },
     };
-    console.log = ((...a: unknown[]) =>
-      logs.push(a.join(" "))) as typeof console.log;
+    console.log = (...a: unknown[]) => {
+      logs.push(a.join(" "));
+    };
     fn();
     return logs;
   }

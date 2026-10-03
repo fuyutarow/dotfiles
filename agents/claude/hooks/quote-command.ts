@@ -30,6 +30,7 @@ import { tmpdir, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
+import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { promptHead, promptParts } from "./prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
@@ -97,9 +98,14 @@ if (!stdinRead.ok) {
   block("/quote could not read its hook input.");
 } else {
   const payload = stdinRead.value;
-  if (typeof payload?.session_id === "string") sid = payload.session_id;
-  if (typeof payload?.cwd === "string") cwd = payload.cwd;
-  rawArgs = String(payload?.command_args ?? "").trim();
+  sid = strAt(payload, "session_id") ?? sid;
+  cwd = strAt(payload, "cwd") ?? cwd;
+  const args = at(payload, "command_args");
+  const argText =
+    typeof args === "number" || typeof args === "boolean"
+      ? String(args)
+      : (str(args) ?? "");
+  rawArgs = argText.trim();
 }
 // No argument -> default to 1, the common case, and not an error. An argument that IS given
 // but isn't a clean positive whole number is rejected rather than coerced: a mistyped count
@@ -128,8 +134,10 @@ const turnsRead = await attempt(() =>
   readFileSync(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
     .split("\n")
     .filter((l) => l.trim() !== "")
-    .map((l) => JSON.parse(l)?.text)
-    .filter((t): t is string => typeof t === "string"),
+    .flatMap((l) => {
+      const t = strAt(parseJson(l), "text");
+      return t === undefined ? [] : [t];
+    }),
 );
 const turns: string[] = turnsRead.ok ? turnsRead.value : [];
 

@@ -30,6 +30,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
+import { arr, at, str, strAt } from "../../hooks/narrow.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 // Overridable for the test suite only; a malformed value falls back rather than disarming.
@@ -62,48 +63,43 @@ function lineCount(content: string): number {
   return content.endsWith("\n") ? n - 1 : n;
 }
 
-type Edit = {
-  old_string?: unknown;
-  new_string?: unknown;
-  replace_all?: unknown;
-};
-
 // Replays Edit/MultiEdit on the current text. null = an edit would not apply, so the tool
 // itself fails and there is nothing to judge.
-function applyEdits(text: string, edits: Edit[]): string | null {
+// Each edit is read field by field: old_string / new_string / replace_all.
+function applyEdits(text: string, edits: readonly unknown[]): string | null {
   let out = text;
   for (const e of edits) {
-    if (typeof e.old_string !== "string" || typeof e.new_string !== "string")
-      return null;
-    if (e.old_string === "" || !out.includes(e.old_string)) return null;
+    const oldString = strAt(e, "old_string");
+    const newString = strAt(e, "new_string");
+    if (oldString === undefined || newString === undefined) return null;
+    if (oldString === "" || !out.includes(oldString)) return null;
     out =
-      e.replace_all === true
-        ? out.split(e.old_string).join(e.new_string)
-        : out.replace(e.old_string, () => e.new_string as string);
+      at(e, "replace_all") === true
+        ? out.split(oldString).join(newString)
+        : out.replace(oldString, () => newString);
   }
   return out;
 }
 
 function main(): void {
   const payload = readStdinJson();
-  const tool = payload?.tool_name;
-  const input = payload?.tool_input ?? {};
-  const path = input.file_path;
-  if (typeof path !== "string" || path === "") return;
+  const tool = strAt(payload, "tool_name");
+  const input = at(payload, "tool_input");
+  const path = strAt(input, "file_path");
+  if (path === undefined || path === "") return;
 
   const onDisk = existsSync(path);
   const before = onDisk ? readFileSync(path, "utf8") : null;
 
   let after: string | null;
   if (tool === "Write") {
-    after = typeof input.content === "string" ? input.content : null;
+    after = str(at(input, "content")) ?? null;
   } else if (tool === "Edit") {
     after = before === null ? null : applyEdits(before, [input]);
   } else if (tool === "MultiEdit") {
+    const edits = arr(at(input, "edits"));
     after =
-      before === null || !Array.isArray(input.edits)
-        ? null
-        : applyEdits(before, input.edits);
+      before === null || edits === undefined ? null : applyEdits(before, edits);
   } else {
     return;
   }

@@ -54,6 +54,7 @@ import {
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 /** Pinned deliberately: `add` is the one command here that can overwrite repo content. */
 const SKILLS_CLI = "skills@1.5.22";
@@ -157,29 +158,33 @@ export function detectStowaways(
   return after.filter((n) => !beforeSet.has(n) && !requestedSet.has(n));
 }
 
+// The ledger is read as a record: only `skills` is looked at, every other key is carried through.
+const LedgerDocSchema = z.record(z.string(), z.unknown());
+
 /** Best-effort: drop a stowaway's entry from the committed provenance ledger too, so the ledger
  * never records a name that no longer exists on disk (skills-doctor's ORPHAN check would flag
  * the reverse gap otherwise). Never fatal — the directory removal is the safety net that matters. */
 function scrubLedger(dotfiles: string, names: string[]): void {
   const path = `${dotfiles}/agents/skills-lock.json`;
-  const parsed = fromThrowable(() => JSON.parse(readFileSync(path, "utf8")))();
+  const parsed = fromThrowable((): unknown =>
+    JSON.parse(readFileSync(path, "utf8")),
+  )();
   if (parsed.isErr()) return;
-  const doc = parsed.value;
-  if (typeof doc !== "object" || doc === null || !("skills" in doc)) return;
-  const skills = (doc as { skills: unknown }).skills;
-  if (typeof skills !== "object" || skills === null) return;
-  let changed = false;
-  for (const name of names) {
-    if (name in skills) {
-      delete (skills as Record<string, unknown>)[name];
-      changed = true;
-    }
-  }
-  if (changed) {
-    fromThrowable(() =>
-      writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`),
-    )();
-  }
+  const doc = LedgerDocSchema.safeParse(parsed.value);
+  if (!doc.success) return;
+  const skills = LedgerDocSchema.safeParse(doc.data.skills);
+  if (!skills.success) return;
+  if (!names.some((name) => name in skills.data)) return;
+  // The rewritten ledger keeps every other key, and `skills` stays where it was.
+  const kept = Object.fromEntries(
+    Object.entries(skills.data).filter(([key]) => !names.includes(key)),
+  );
+  fromThrowable(() =>
+    writeFileSync(
+      path,
+      `${JSON.stringify({ ...doc.data, skills: kept }, null, 2)}\n`,
+    ),
+  )();
 }
 
 function main(): void {

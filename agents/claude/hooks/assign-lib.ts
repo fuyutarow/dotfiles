@@ -15,6 +15,7 @@
 import { basename, dirname, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
+import { at, obj, str } from "../../hooks/narrow.ts";
 
 // Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
 // role token seen live so far (obs, dtr, pi, gpu, ...) without accepting something that would
@@ -52,7 +53,7 @@ export function sessionName(cwd: string, role: string, suffix: string): string {
 }
 
 export interface RoleConfig {
-  prompt?: string;
+  prompt?: string | undefined;
 }
 
 // Path to the skill-shipped default, resolved relative to THIS module's own real location
@@ -83,8 +84,14 @@ async function readPolicyFile(
 ): Promise<Record<string, RoleConfig> | null> {
   const r = await attempt(() => import(path));
   if (!r.ok) return null;
-  const table = (r.value as { default?: unknown }).default ?? r.value;
-  return table as Record<string, RoleConfig>;
+  const mod: unknown = r.value;
+  const table = obj(at(mod, "default") ?? mod) ?? {};
+  return Object.fromEntries(
+    Object.entries(table).map(([role, config]): [string, RoleConfig] => [
+      role,
+      { prompt: str(at(config, "prompt")) },
+    ]),
+  );
 }
 
 // Resolution order: a `fleet_policy.toml` at the PROJECT ROOT (cwd) wins when the project

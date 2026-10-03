@@ -16,6 +16,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, findExe, readStdinJson } from "./lib.ts";
+import { strAt } from "./narrow.ts";
 
 const GREP_SEARCH =
   /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/;
@@ -78,8 +79,8 @@ const ROUTER_COMMAND = ((): string => {
   return `bun ${ROUTER}`;
 })();
 
-function isRawSearch(command: unknown): boolean {
-  if (typeof command !== "string" || command === "") return false;
+function isRawSearch(command: string | undefined): boolean {
+  if (command === undefined || command === "") return false;
   if (ROUTED_STREAM_FILTER.test(command)) return false;
   return (
     GREP_SEARCH.test(command) ||
@@ -92,15 +93,14 @@ function isRawSearch(command: unknown): boolean {
   );
 }
 
-function startPath(payload: any): string {
-  if (payload?.tool_name === "Bash") return bashCwd(payload);
+function startPath(payload: unknown): string {
+  if (strAt(payload, "tool_name") === "Bash") return bashCwd(payload);
 
+  const payloadCwd = strAt(payload, "cwd");
   const cwd =
-    typeof payload?.cwd === "string" && payload.cwd !== ""
-      ? payload.cwd
-      : process.cwd();
-  const raw = payload?.tool_input?.path;
-  if (typeof raw !== "string" || raw === "") return cwd;
+    payloadCwd !== undefined && payloadCwd !== "" ? payloadCwd : process.cwd();
+  const raw = strAt(payload, "tool_input", "path");
+  if (raw === undefined || raw === "") return cwd;
   return isAbsolute(raw) ? raw : resolve(cwd, raw);
 }
 
@@ -159,10 +159,13 @@ function cccIsAvailable(): boolean {
 
 function main(): void {
   const payload = readStdinJson();
-  const tool = payload?.tool_name;
+  const tool = strAt(payload, "tool_name");
   if (tool !== "Grep" && tool !== "Bash") return;
 
-  if (tool === "Bash" && !isRawSearch(payload?.tool_input?.command)) {
+  if (
+    tool === "Bash" &&
+    !isRawSearch(strAt(payload, "tool_input", "command"))
+  ) {
     return;
   }
 

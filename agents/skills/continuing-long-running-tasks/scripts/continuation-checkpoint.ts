@@ -83,10 +83,11 @@ function metadata(text: string, key: string): string {
 	const values = [...text.matchAll(new RegExp(`^${key}:\\s*(.*)$`, "gm"))].map(
 		(match) => match[1]?.trim() ?? "",
 	);
-	if (values.length !== 1 || values[0] === "") {
+	const only = values[0];
+	if (values.length !== 1 || only === undefined || only === "") {
 		throw new TransactionError("TCR49", `${key} metadata is not singular`);
 	}
-	return values[0] as string;
+	return only;
 }
 
 function digest(text: string): string {
@@ -306,7 +307,8 @@ function applyCheckpoint(args: {
 	_cleanup.defer(() => {
 		if (temporary !== undefined) {
 			// The randomized incomplete file is never a canonical record.
-			fromThrowable(() => unlinkSync(temporary as string))();
+			const leftover = temporary;
+			fromThrowable(() => unlinkSync(leftover))();
 		}
 	});
 

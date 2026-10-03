@@ -18,6 +18,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { cli } from "cleye";
+import { z } from "zod";
+
+/** `.claude/settings.json` `permissions.deny`, the only part of the file JJ-2 reads. */
+const DenyRulesSchema = z.object({ permissions: z.object({ deny: z.array(z.unknown()) }) });
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -471,7 +475,9 @@ function miseRuns(body: string): MiseRun[] {
         fail("HOOK-1", `.githooks/${hook} has no \`${expected}\` in mise.toml to run.`);
       }
       // HOOK-3 — the two ways a correct-looking gate line silently gates nothing, or never returns.
-      const swallowedTasks = r.swallowed.filter((t) => tasks.has(t) || GATE_VERBS.has(t));
+      const swallowedTasks = r.swallowed.filter(
+        (t) => tasks.has(t) || Object.values(GATE_VERBS).some((verbs) => verbs.has(t)),
+      );
       if (swallowedTasks.length > 0) {
         fail("HOOK-3", `.githooks/${hook}: \`mise run ${r.tasks[0]} ${swallowedTasks.join(" ")}\` passes ` +
           `${swallowedTasks.join(", ")} as ARGUMENTS to ${r.tasks[0]} — they never run, and the hook ` +
@@ -531,9 +537,13 @@ function miseRuns(body: string): MiseRun[] {
   // writes history around that gate and around jj's bookmark, and nothing reports it.
   if (existsSync(join(root, ".jj"))) {
     const denied = ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"];
-    const deny = await Promise.try(() => JSON.parse(settingsRaw ?? "{}") as { permissions?: { deny?: unknown } }).then(
-      (v) => (Array.isArray(v.permissions?.deny) ? (v.permissions.deny as unknown[]) : []),
-      () => [] as unknown[],
+    const noRules: unknown[] = [];
+    const deny = await Promise.try((): unknown => JSON.parse(settingsRaw ?? "{}")).then(
+      (v) => {
+        const parsed = DenyRulesSchema.safeParse(v);
+        return parsed.success ? parsed.data.permissions.deny : noRules;
+      },
+      () => noRules,
     );
     const missing = denied.filter((rule) => !deny.includes(rule));
     if (missing.length > 0) {
@@ -546,7 +556,7 @@ function miseRuns(body: string): MiseRun[] {
   if (settingsRaw !== undefined) {
     // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
     // `.then` maps to the same FAIL as the old catch branch.
-    const parsesClean = await Promise.try(() => JSON.parse(settingsRaw)).then(
+    const parsesClean = await Promise.try((): unknown => JSON.parse(settingsRaw)).then(
       () => true,
       () => false,
     );

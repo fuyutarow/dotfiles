@@ -82,6 +82,7 @@ const CORPUS = [
   { path: "scripts/reclaim-toolchains.ts" },
   { path: "scripts/reclaim-vhdx.ts" },
   { path: "scripts/ccc-swap.ts", command: "discover" },
+  { path: "scripts/edge-policy.ts" },
   { path: "scripts/install-mcp.ts" },
   { path: "scripts/link-skills.ts" },
   { path: "scripts/skills-doctor.ts" },

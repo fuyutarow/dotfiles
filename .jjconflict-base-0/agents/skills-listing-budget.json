@@ -1,7 +1,7 @@
 {
-  "maxListingChars": 67082,
-  "measuredOn": "2026-09-21",
-  "skillsAtMeasurement": 71,
+  "maxListingChars": 56125,
+  "measuredOn": "2026-10-03",
+  "skillsAtMeasurement": 58,
   "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
   "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
   "raises": [
@@ -100,6 +100,12 @@
       "from": 60520,
       "to": 60228,
       "reason": "F4 STANDING reduction. The 2026-09-05 reduceWhen obligation was discharged before admitting governing-configuration-systems: structuring-documents, issuing-technical-memoranda, and driving-antigravity descriptions were shortened through trigger/cut desk-checks, and the new skill's description was also compressed. A final typed-cut/co-fire correction increased the new description after the first measurement. The 64-skill collection now measures 60,228 chars, so the ratchet is pinned to the measured total with no recovered slack."
+    },
+    {
+      "date": "2026-10-03",
+      "from": 67082,
+      "to": 56125,
+      "reason": "Retire 18 repository skills with zero recorded invocations and more than 30 days since admission. Sources are preserved under archives/skills. The working-tree floor measures 58 active skills and 56,125 name+description characters; ratchet lowered to that measured total. Recent unused additions driving-jev, typesafe-ai, operating-wsl2-on-windows and validating-experimental-evidence retain their observation period. Archive index records admission dates and retirement decisions."
     }
   ]
 }

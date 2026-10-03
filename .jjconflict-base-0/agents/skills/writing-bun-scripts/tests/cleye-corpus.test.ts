@@ -19,7 +19,6 @@ const CORPUS = [
   { path: "agents/resource-control/agent-resource-run.ts" },
   { path: "agents/retrieval-control/bench-definitions.ts" },
   { path: "agents/serena-control/serena-foreground.ts" },
-  { path: "agents/skills/arguing-research-papers/scripts/claim-check.ts" },
   { path: "agents/skills/codifying-doctrine/scripts/doctrine-check.ts" },
   { path: "agents/skills/commanding-research-fleets/scripts/check.ts" },
   {
@@ -69,9 +68,6 @@ const CORPUS = [
     path: "agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts",
   },
   { path: "agents/skills/operating-the-harness/scripts/scope-check.ts" },
-  {
-    path: "agents/skills/operationalizing-research-gaps/scripts/openings-check.ts",
-  },
   { path: "agents/skills/surfacing-blind-spots/scripts/blind-spot-check.ts" },
   { path: "agents/skills/systematizing-knowledge/scripts/check-donor-set.ts" },
   { path: "agents/skills/systematizing-knowledge/scripts/check-ledger.ts" },

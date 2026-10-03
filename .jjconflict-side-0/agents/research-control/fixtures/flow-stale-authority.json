@@ -1,0 +1,55 @@
+{
+	"schema": "programme-flow/v2",
+	"currentAuthorityRevision": "r2",
+	"currentAuthorityFence": "f2",
+	"sectionAuthorities": [
+		{
+			"sectionId": "A",
+			"goalConstitutionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"groundingSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"groundingRevision": 1,
+			"groundingFence": "gf1"
+		},
+		{
+			"sectionId": "B",
+			"goalConstitutionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"groundingSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"groundingRevision": 1,
+			"groundingFence": "gf1"
+		}
+	],
+	"completedJobIds": [],
+	"releasedReceiptDigests": [],
+	"now": 10,
+	"elapsedMs": 1000,
+	"config": { "schedulerTickMs": 100 },
+	"slots": [{ "id": "cpu-1", "resource": "cpu", "free": true }],
+	"traces": [],
+	"jobs": [
+		{
+			"id": "stale-revision",
+			"sectionId": "A",
+			"stage": "EXECUTION",
+			"readyAt": 1,
+			"deadline": 2,
+			"resource": "cpu",
+			"authorityRevision": "r1",
+			"authorityFence": "f2",
+			"dependsOn": [],
+			"runScale": "MINIMAL_DISCRIMINATOR"
+		},
+		{
+			"id": "stale-fence",
+			"sectionId": "B",
+			"stage": "EXECUTION",
+			"readyAt": 1,
+			"deadline": 2,
+			"resource": "cpu",
+			"authorityRevision": "r2",
+			"authorityFence": "f1",
+			"dependsOn": [],
+			"runScale": "MINIMAL_DISCRIMINATOR"
+		}
+	],
+	"counts": {}
+}

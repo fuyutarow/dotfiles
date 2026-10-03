@@ -1,0 +1,24 @@
+# LaTeX / Beamer generated artifacts.
+# Keep source/reference PDFs visible unless the repository routes generated PDFs to build/.
+**/build/
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+*.ilg
+*.ind
+*.idx
+*.ist
+*.log

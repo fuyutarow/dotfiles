@@ -1,0 +1,200 @@
+# Minimal environment for every zsh invocation, including `ssh host 'cmd'`.
+#
+# Architecture note for future agents:
+# - `ssh host 'cmd'` with a zsh login shell runs a non-interactive command shell.
+#   zsh reads .zshenv there, but skips .zprofile and .zshrc.
+# - Remote bootstrap tools such as Codex App SSH connections need standalone user
+#   CLIs like ~/.local/bin/codex to be visible even in that thin environment.
+# - Keep this file silent and cheap. No Homebrew `shellenv`, plugin managers,
+#   prompts, completions, timeouts, or commands that may print or hang.
+# - ~/.bun/bin is bun's global bin dir: `bun add -g` CLIs (claude, gemini, …) and this
+#   repo's own PATH commands (package.json `bin`, installed by `bun link` from `mise run
+#   deps`). It belongs on EVERY shell's PATH for the same reason ~/.local/bin does — a
+#   hook, an agent, or `ssh host 'agent-resource-run …'` runs in exactly this thin
+#   environment. Until 2026-09-13 only .zprofile added it, so those commands existed in a
+#   terminal and vanished one process down. ~/.local/bin stays FIRST: official standalone
+#   CLIs there (codex) must beat any stale npm/Bun shim of the same name.
+#
+# ── NO IMPLICIT GLOBAL TOOLCHAIN (INV-6) ─────────────────────────────────────
+# A managed tool is reachable where a config DECLARES it, or not at all. There is no
+# global default version anywhere: `~/.config/mise/config.toml` declares no [tools], and
+# nothing here may reintroduce one.
+#
+# mise ships TWO delivery paths and they are not interchangeable:
+#   `mise activate` (zsh/zshrc) — per-directory, declaration-driven → INTERACTIVE shells
+#   the shim dir    (below)     — one static dir holding a name for EVERY installed
+#                                 binary of EVERY installed version → NON-INTERACTIVE only
+# This file used to add the shim dir unconditionally, so both ran at once and every
+# installed tool squatted a name on the interactive PATH. What leaked was the NAME, not a
+# version: the shim resolves the version at exec time and, finding no declaration, refuses.
+# Measured 2026-08-06 — `which npm` answered with a path while `npm -V` died with
+# "No version is set for shim: npm". A name that exists and cannot run.
+#
+# The shim dir stays for the non-interactive case because that is the one thing it is
+# load-bearing for: `ssh host 'cmd'` skips .zshrc, so `mise activate` never runs and a
+# DECLARED tool would otherwise be unreachable. Measured in that exact environment:
+#   cd ~          → `bun --version` = "No version is set for shim" (correctly refuses)
+#   cd ~/dotfiles → `bun --version` = 1.3.14                        (mise.toml declares it)
+# Both halves are asserted by `mise run test:mise-scope`.
+#
+# Corollary, enforced by the same test: no second version manager may hook a login shell.
+# fnm was removed 2026-08-06 for exactly this reason — it held no node yet ran `fnm env`
+# on every login, prepending a PATH entry no config asked for (and leaving 1672 stale
+# multishell dirs behind).
+
+# ── LOCALE SAFETY NET (2026-09-13, root-caused) ──────────────────────────────
+# Something upstream of this shell exports LC_ALL=en_US.UTF-8 — not this repo: searched
+# zsh/*, wsl/*, herdr/config.toml, and every system-level /etc/{profile,zsh,locale.conf,
+# default/locale} on this WSL host, none set LANG/LC_ALL. Whatever sets it (Windows
+# Terminal profile env, WSL init — outside this repo's reach) assumes en_US.UTF-8 is
+# installed; on this host `locale -a` only has C / C.utf8 / POSIX. glibc's setlocale()
+# then fails (the "setlocale: LC_ALL: cannot change locale" warning every subshell
+# prints), and falls back to the C locale for width-aware string handling — which is why
+# `git log --graph` (CJK commit subjects next to ASCII graph lines), `less`, and `column`
+# render garbled even though the underlying bytes are correct UTF-8. The real fix is
+# `sudo locale-gen en_US.UTF-8` at the host that's missing it, which a dotfile can't do
+# (needs root, and doing it silently on every shell start would be worse than the bug).
+# Normalize instead: if the locale this shell was HANDED isn't actually generated, fall
+# back to C.UTF-8 — always present on modern glibc, still fully UTF-8-aware — rather than
+# silently running in a broken one. Pure zsh + one `locale -a` call: cheap, no network,
+# can't hang.
+if [[ -n "${LC_ALL:-$LANG}" ]]; then
+  _zshenv_locale="${(L)${LC_ALL:-$LANG}//-/}"
+  _zshenv_avail=("${(f)$(locale -a 2>/dev/null)}")
+  _zshenv_locale_ok=0
+  for _zshenv_l in "${_zshenv_avail[@]}"; do
+    [[ "${(L)_zshenv_l//-/}" == "$_zshenv_locale" ]] && { _zshenv_locale_ok=1; break }
+  done
+  if (( ! _zshenv_locale_ok )); then
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+  fi
+  unset _zshenv_locale _zshenv_avail _zshenv_locale_ok _zshenv_l
+fi
+
+# TELL mise, do not out-edit it. `mise activate` gained a setting, `activate_shims` (default
+# TRUE), whose effect is to append the shim dir to PATH from inside activate's own output —
+# measured on mise 2026.9.3, the emitted script ends with `export PATH='<shims>:...'`. activate
+# runs from .zshrc, i.e. AFTER everything below, so every defence written here was being undone
+# one file later and `mise run test:mise-scope` failed on exactly that (18 passed / 1 failed,
+# "shim dir LEAKED — some later startup file re-adds it").
+#
+# The direction of the flow is the whole point. Correcting mise's output downstream is a race
+# this file cannot win: mise writes last, so the only durable answer is to stop it CONTRIBUTING,
+# which is an input to mise, not an edit of its result. One declaration replaces a defence that
+# would otherwise have to grow a new mechanism every time activate changes. Measured, whole gate:
+#   as-is                        18 passed / 1 failed
+#   MISE_ACTIVATE_SHIMS=false    19 passed / 0 failed
+#
+# The env var rather than `[settings]` in ~/.config/mise/config.toml, because THIS file already
+# owns the question "who puts the shim dir on PATH" — the answer belongs beside the rule it
+# qualifies, not in a second file in a second format. It must be exported before .zshrc runs
+# activate; .zshenv always does.
+#
+# What this does NOT do is remove the two guards further down. Both were re-verified by deleting
+# them one at a time with this declaration already in place, and each still fails its own case:
+#   without the strip loop        18/1  "inherited shim dir survived (strip is missing)"
+#   without the ORIG_PATH block   18/1  "shim dir survives in __MISE_ORIG_PATH"
+# They defend a different boundary — PROCESS INHERITANCE, where there is no upstream to declare
+# to, because a child cannot tell the parent that spawned it what to export. Sanitising what
+# arrives at the entry point is the correct shape there, not a symptom of the same race.
+export MISE_ACTIVATE_SHIMS=false
+
+_zshenv_shims="$HOME/.local/share/mise/shims"
+_zshenv_cand=(
+  "$HOME/.local/bin"
+  "$HOME/.bun/bin"
+  "$_zshenv_shims"
+  "$HOME/.cargo/bin"
+  "$HOME/.foundry/bin"
+)
+
+_zshenv_path_prefix=()
+for _zshenv_dir in "${_zshenv_cand[@]}"; do
+  [[ "$_zshenv_dir" == "$_zshenv_shims" ]] && [[ -o interactive ]] && continue
+  [[ -d "$_zshenv_dir" ]] && _zshenv_path_prefix+=("$_zshenv_dir")
+done
+
+# Strip EVERY candidate, not only the ones being re-added. An interactive shell inherits
+# PATH from whatever spawned it — the tmux server, an editor, a non-interactive parent —
+# so without this the shim dir rides in from the parent and the gate above is decorative.
+for _zshenv_dir in "${_zshenv_cand[@]}"; do
+  path=("${(@)path:#$_zshenv_dir}")
+done
+path=($_zshenv_path_prefix $path)
+
+# Second carrier, same leak. `mise activate` stashes the pre-activation PATH in an EXPORTED
+# __MISE_ORIG_PATH and reuses an inherited one verbatim (`if [ -z "${__MISE_ORIG_PATH:-}" ]`),
+# rebuilding PATH from it on every hook. So an interactive shell spawned from an activated
+# NON-interactive parent — Claude Code's Bash tool, an `ssh host 'cmd'` session that then
+# starts tmux — inherits a base PATH that still holds the shim dir, and mise restores it one
+# prompt after the block above stripped it. Measured 2026-08-06 in a real login pty:
+# clean env → no shim dir; env inherited from an activated parent → shim dir back.
+# __MISE_DIFF is deliberately left alone: that is how mise undoes the PARENT's tool dirs.
+if [[ -o interactive ]] && [[ -n "${__MISE_ORIG_PATH:-}" ]]; then
+  _zshenv_orig=("${(@s.:.)__MISE_ORIG_PATH}")
+  _zshenv_orig=("${(@)_zshenv_orig:#$_zshenv_shims}")
+  export __MISE_ORIG_PATH="${(j.:.)_zshenv_orig}"
+  unset _zshenv_orig
+fi
+
+typeset -U path
+unset _zshenv_dir _zshenv_cand _zshenv_shims _zshenv_path_prefix
+export PATH
+
+# ── WSL interop for sshd-spawned shells ──────────────────────────────────────
+# Launching ANY Windows binary from WSL2 needs WSL_INTEROP to name a live per-session unix
+# socket under /run/WSL/. sshd inherits none, so in every shell that arrives over ssh the
+# variable is UNSET and every Windows binary dies with a bare "Invalid argument" — a message
+# that names nothing, and sends the reader after PATH or /etc/wsl.conf interop instead.
+# Measured on r99 2026-09-13 — non-interactive `ssh host 'cmd'`, `zsh -lc` and an interactive
+# login shell were ALL unset, and with it unset:
+#   explorer.exe / clip.exe / cmd.exe    ->  rc=1 "Invalid argument"
+#   clip.exe with WSL_INTEROP=<live>     ->  rc=0
+# That socket is the whole WSL<->Windows bridge, so what was broken is not one tool: cc/pp/pwdc
+# (clipboard), o/oo/open (explorer), s/start, e/ee (VS Code launcher) and the wsl:* mise tasks
+# all route through it. On r99, ssh is the ONLY way in, so all of them were dead there.
+#
+# WHY THIS FILE and not zsh/wsl.zsh: wsl.zsh is sourced from aliases.zsh, i.e. interactive
+# shells only, while `ssh host 'mise run wsl:wslconfig'` reads nothing but .zshenv. Fixing it
+# in wsl.zsh would repair the half that is easiest to notice and leave the automated half —
+# the half agents and mise tasks use — still broken.
+#
+# BEST-EFFORT, and that limit is deliberate rather than overlooked. Socket FILES outlive their
+# session: 4 were present on r99 and 2 of them were dead. Liveness cannot be tested without
+# spawning a process, which this file must never do, so it takes the NEWEST socket — the most
+# recently created session being the one most likely still alive. Tools that need certainty
+# retry across candidates themselves (scripts/wsl-audit.ts does, newest-first, up to 4).
+# Glob qualifiers: `=` keeps only real sockets, `om` orders by mtime newest-first, `N` makes an
+# empty match empty rather than an error.
+if [[ -z "${WSL_INTEROP:-}" ]] && [[ -d /run/WSL ]]; then
+  _zshenv_socks=(/run/WSL/*_interop(N=om))
+  if (( $#_zshenv_socks )); then
+    export WSL_INTEROP="${_zshenv_socks[1]}"
+  fi
+  unset _zshenv_socks
+fi
+
+# cocoindex-code: when a supervisor unit owns the daemon, no client may spawn its own.
+# Without this, every client (shell, MCP server, agent) that finds the socket missing —
+# after a settings edit, a crash, or the idle exit — forks an UNCAPPED daemon into its own
+# cgroup, and that daemon outlives it. See cocoindex/ccc-daemon.service.wsl.
+# The guard is the unit file itself, not an OS test: no unit -> no supervisor -> stock
+# lazy-spawn behavior (macOS), which is what we want there.
+# An `if` block, not `test && export`: as the LAST statement, the latter makes .zshenv itself
+# exit 1 wherever the unit is absent (macOS), which aborts any later `setopt ERR_EXIT; source`.
+if [[ -e "$HOME/.config/systemd/user/ccc-daemon.service" ]]; then
+  export COCOINDEX_CODE_DAEMON_SUPERVISED=1
+fi
+
+# cocoindex-code: keep each project's index DB OUT of the repo. ccc's default is
+# <project>/.cocoindex_code/, where the daemon rewrites GBs on every commit and every tool that
+# walks the repo tree pays for derived bytes (firedancer measured 2026-09-23: polysearch landing
+# 21–36 s while the in-repo DB was being rewritten, 0.65–0.88 s otherwise). ccc's prefix mapping
+# moves a project under $HOME to ~/.cache/cocoindex-code/db/<path relative to $HOME>/; only
+# settings.yml stays in the repo. Every CLIENT needs this (`ccc reset`/`ccc status` and
+# repo-retrieve's watermark resolve the DB dir client-side); the daemon needs the SAME value —
+# lazily spawned (macOS) it inherits it from here, supervised (WSL) it gets it from
+# cocoindex/ccc-daemon.service.wsl. A mismatch makes client and daemon open different DBs;
+# `repo-retrieve index` refuses to certify one it cannot see, and `mise run doctor` compares both.
+export COCOINDEX_CODE_DB_PATH_MAPPING="$HOME=$HOME/.cache/cocoindex-code/db"

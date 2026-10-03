@@ -1,0 +1,4 @@
+interface:
+  display_name: "Govern Research Documentation"
+  short_description: "Admit, review, maintain, and retire R&D documents"
+  default_prompt: "Use $governing-research-documentation to decide what this research repository should create, update, derive, preserve, retire, or delete."

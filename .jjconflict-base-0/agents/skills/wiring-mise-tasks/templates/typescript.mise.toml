@@ -1,0 +1,73 @@
+# <repo> — mise task runner。TEMPLATE (view) — 文法と動詞契約の正本は
+# wiring-mise-tasks/SKILL.md。bun 管理プロジェクト前提 (package.json + bun.lock)。
+# biome は fmt と lint を別タスクに保ち (check 合流は不使用)、設定は committed
+# biome.json に置く — 両裁定とも wiring-mise-tasks/references/recipes.md §4。
+# 検査: bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts
+
+[tasks.setup]
+alias = "i"
+description = "bun install --frozen-lockfile (lockfile 固定・CI-safe)"
+run = "bun install --frozen-lockfile"
+
+[tasks.fmt]
+alias = "f"
+description = "TS/JS/JSON を biome で整形 (config = biome.json)"
+run = "bunx biome format --write ."
+
+[tasks."fmt:staged"]
+description = "commit 用: staged の file だけを in-place 整形して再 stage。unstaged hunk を持つ file は拒否"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/fmt-staged.ts --tool 'ts,tsx,js,jsx,mjs,cjs,json=bunx biome format --write --no-errors-on-unmatched'"
+
+[tasks."fmt:check"]
+description = "整形チェック (CI用・非破壊): --write を渡さない biome format は報告のみ"
+run = "bunx biome format ."
+
+[tasks.lint]
+alias = "l"
+description = "biome lint (報告のみ・整形は fmt)"
+run = "bunx biome lint ."
+
+[tasks.test]
+alias = "t"
+description = "bun test (bun 内蔵 runner・別フレームワーク不要)"
+run = "bun test"
+
+# 素の bun update は package.json の semver 範囲内 (bun.lock 書換)。
+# 範囲を跨ぐなら --latest。事前調査は bun outdated (読み取り専用)。
+[tasks.up]
+alias = "u"
+description = "依存を semver 範囲内で一括更新 (bun update → bun.lock 書換)。実行後は mise run check"
+run = "bun update"
+
+[tasks.check]
+alias = "c"
+description = "全gate集約: fmt:check + lint + test"
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."mise:contract"]
+description = "筋肉記憶トークン契約の検査 (wiring-mise-tasks gate)。mise.toml 編集後に実行"
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/mise-contract.ts"
+
+# git の各 hook で何が走るかはここで宣言する。.githooks/<event> は `mise run --jobs 1 hook:<event>`
+# だけを実行する shim(形 = wiring-repositories HOOK-1、mise の実行上の注意 = wiring-mise-tasks
+# recipes.md §8)。gate の task は契約 verb の depends のみで、run 本体を持たない。
+# commit gate は commit される中身だけを見る(HOOK-1c): 木全体の fmt:check ではなく
+# fmt:staged(staged file だけ in-place 整形・再 stage)。fmt:check は check と CI に残す。
+[tasks."hook:pre-commit"]
+description = "commit gate — .githooks/pre-commit が走らせるものそのもの。契約 verb の depends のみ"
+depends = ["fmt:staged", "lint"]
+
+# jj(新リポの既定 2026-10-01): jj は git の hook を走らせない。commit と取り込みはこの二つの入口だけで
+# 行う(形 = wiring-repositories JJ-1、.jj/ があれば mise-contract が二つとも必須にする)。
+# git だけのリポジトリなら二つとも消す。hook:post-merge を持つリポジトリは pull の最後で呼ぶ。
+[tasks.commit]
+description = "jj gated commit: 指定 path だけを hook:pre-commit に通して jj commit、bookmark を @- へ、--push で push。mise run commit -- -m '<msg>' [--push] -- <path>..."
+run = "bun ~/.claude/skills/wiring-mise-tasks/scripts/jj-commit.ts"
+
+[tasks.pull]
+description = "jj 取り込み: origin を fetch し、作業中の枝を trunk() の上へ rebase"
+run = """
+set -e
+jj git fetch --remote origin
+jj rebase -b @ -d 'trunk()'
+"""

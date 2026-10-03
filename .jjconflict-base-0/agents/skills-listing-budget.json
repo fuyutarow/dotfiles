@@ -1,0 +1,105 @@
+{
+  "maxListingChars": 67082,
+  "measuredOn": "2026-09-21",
+  "skillsAtMeasurement": 71,
+  "why": "A RATCHET, not an estimate of what the platform can afford — no verified number for that exists here. Every installed skill's name and description are injected into every turn, so this sum is what the collection costs continuously, and no per-skill cap bounds it. Set to the measured value on the day the aggregate was first measured, so growth stops being a sum nobody watches. Lowering it is free. Raising it means editing this number in the same commit as the skill that needed the room, with the reason in that commit message — that is the whole enforcement mechanism. Owner: forging-skills F4 STANDING; the check lives in its scripts/skill-check.ts --budget and runs from mise's lint:skills-floor.",
+  "evidenceAtMeasurement": "18 of 60 descriptions exceeded 1024 chars (44% of the total); 13 sat within 12 chars of the 1500 per-skill cap — the signature of an allowance being spent, not a length being chosen.",
+  "raises": [
+    {
+      "date": "2026-10-03",
+      "from": 66012,
+      "to": 67082,
+      "spentBy": "verifying-symbolic-identities",
+      "reason": "A new name+description entry plus a co-fire token in writing-julia's description ('Does an identity hold (記号検算) → verifying-symbolic-identities.'). The collection measured 65,952 at 75 skills before this commit and 67,082 at 76 after; the raise equals the measured total, so the prior 60-char headroom is absorbed, not widened. The description grew after verification: qualified tool tokens and typed PURPOSE cuts to systematizing-knowledge and arguing-research-papers were needed because two near-miss rows (a CAS survey, an Oscar install) fired this skill on bare tool names. Ownership void: no skill owned whether an identity holds and at which rung. writing-julia's packages.md taught numeric substitution with a tolerance as symbolic verification; proving-theorems' depth table had no CAS row. Blocking failure: a paper-identity verification run was reported as 記号的検算 while it was exact random-point evaluation with no CAS; a postmortem found no skill that would have stopped it. Evidence: soks unit CAS (01a0fd5c-582c-7190-9692-bcaaed261971), 23 verbatim primary sources. EXTEND rejected: writing-julia is a code-and-package manual with a different stop condition; proving-theorems stops at a kernel receipt. Retiring a sibling was rejected: none does this job. proving-theorems' description was left unchanged to avoid further charge; its body carries the cut. Ledger: verifying-symbolic-identities/tests/forge-verification-ledger.md."
+    },
+    {
+      "date": "2026-10-01",
+      "from": 65242,
+      "to": 66012,
+      "spentBy": "keeping-research-notebooks",
+      "reason": "A new 770-character name+description entry (26 + 744). The collection measured 64,906 at 74 skills before admission and 65,676 at 75 after; the raise equals that measured growth exactly, so the 336-char headroom is neither spent nor widened. The five reciprocal pointer rows (wiring-repositories, driving-jujutsu, writing-julia, validating-experimental-evidence, governing-research-documentation) are body rows and charge nothing. Admitted for ownership voids 2-8 of the sibling scope harvest (lexical sweep of agents/skills; no ccc battery): edition/revision discipline, the launcher as sole run entry, the single-committer protocol under jj, the repo-level directory convention, the scratchpad/agent-state ban, the retention-home map, and the run-landing commit ledger. Void 1 (record taxonomy, store CLI) belongs to driving-polysearch. Evidence: seven 2026-10-01 incidents in one research repo, each costing 30-120 minutes of critical path — an edition rewritten below its lineage, fixture-only conformance, a 4-of-5-file registration whose launcher dry-run printed modelCode:null at exit 0, 21 re-implemented shared kernels, agent VCS writes racing the committer, in-flight run dirs committed, scratchpad code landed as an external code dir. EXTEND was rejected: driving-jujutsu owns jj command semantics per workspace, wiring-repositories stops at wiring, validating-experimental-evidence forbids owning a store, writing-julia is language-scoped. Retiring a sibling was rejected: none does this job. The description sits above the spec's ~600-char target because the trigger desk-check failed two fire rows without the shared-checkout and conformance/acceptance tokens; ledger keeping-research-notebooks/tests/forge-verification-ledger.md §5."
+    },
+    {
+      "date": "2026-09-21",
+      "from": 64026,
+      "to": 65242,
+      "spentBy": "driving-git",
+      "reason": "A new 1,216-character name+description entry (11 + 1,205); the delta matches exactly, so no pre-existing drift is absorbed. Admitted because no skill owns git OPERATIONS: a lexical enumeration of agents/skills for git (commit|rebase|push|stash|worktree|reflog|bisect|switch|restore|checkout) returned only incidental lines (refactoring-code's stash-not-checkout rule, operating-the-harness permission examples and subagent worktree isolation, one pathspec line in a fleet ledger). The ccc semantic battery could not run (index rebuild timed out at 600 s); the residual is recorded in the skill's ledger §0 and §5. Source is the highest grade the house has: a live multi-session incident set (3.9 GB swept into a commit by a regex pathspec, a 90-minute silent push hang, an --amend --only that re-added dropped files, a peer's paused rebase reverting the shared tree) plus the current git man pages and release notes. Retiring a sibling was considered and rejected: nothing does this job at all, so nothing does it badly. EXTEND was considered and rejected: wiring-repositories owns repo LAYERS and stops at the git-hook shape; operating-the-harness owns permission rules and worktree mechanics, not the commands inside them; both are cut by PURPOSE in the new description.",
+      "alsoFound": "driving-codex charges 1,510 chars, ten under the observed ~1,520 truncation window; operating-the-harness 1,498 and driving-grok 1,496 sit at the per-skill cap. None is over the window today; reported so the next admission does not discover it as drift. Reconciliation, same day: designing-command-line-interfaces (forged 2026-09-18, 891 chars) has NO raises[] entry of its own — it was admitted between the 09-17 raises and the 09-21 typesafe-ai pin, and the pin silently absorbed it. Its charge is inside the measured totals from 64,026 onward; recorded here so the ledger and the measurement agree."
+    },
+    {
+      "date": "2026-09-21",
+      "from": 63355,
+      "to": 64026,
+      "spentBy": "typesafe-ai",
+      "reason": "A new 671-character name+description entry (671 = 11-char name + 660-char description; exact match to the delta, so no pre-existing drift absorbed). Vendored via `mise run skills:add -- typesafe-ai/skills --skill typesafe-ai` at direct user request; not an authored skill, so no ownership-void battery applies — admission is a vendor decision, same category as the existing Cloudflare/Mintlify entries. The same fetch also silently installed an unrequested `find-skills` companion skill (see scripts/vendor-skill.ts header note 4, added this same commit); it was removed and its ledger entry scrubbed before this measurement, so it charges nothing here."
+    },
+    {
+      "date": "2026-09-21",
+      "from": 62517,
+      "to": 63355,
+      "spentBy": "driving-jev",
+      "reason": "A new 897-character name+description entry; the 69-skill collection measures 63,355 characters after admission, with the prior collection at 62,458 (59 below its 62,517 ratchet). Admission closes a distinct ownership void: the existing driving-* family operates generative agents/models, while no house skill owns Jev's non-generative state-plus-typed-questions to probabilities boundary, primitive choice, caller-side abstention policy, and exact JSON relay. Retiring or merging a sibling was rejected because doing so would collapse JUDGMENT-NOT-AGENT into a tool-using/generative worker contract. The vendor typesafe-ai skill remains the application-integration owner; driving-jev owns immediate agent/shell operation through the bundled official-API runner."
+    },
+    {
+      "date": "2026-09-17",
+      "from": 61723,
+      "to": 62517,
+      "spentBy": "designing-developer-diagnostics",
+      "reason": "A new 794-character name+description entry, measured by `mise run lint:skills-floor` across 67 installed skill directories. Admission closes a demonstrated ownership void: no existing skill owns the DIAGNOSTIC CARD from observed developer-tool failure through recovery confidence, locus/grouping, and human-plus-machine receipt. Retiring a sibling was considered and rejected: linting-prose owns wording, implementing-and-debugging owns cause/fix work, governing-configuration-systems owns authority and integrity, and designing-interactions owns end-user interaction flows. The descriptor carries typed cuts for those races."
+    },
+    {
+      "date": "2026-09-17",
+      "from": 61245,
+      "to": 61723,
+      "spentBy": "designing-version-schemes",
+      "reason": "A new 478-character name+description entry. Admission closes a demonstrated ownership void: no existing skill owns the VERSIONING CONTRACT from compatibility/chronology/release-order signals through a target comparator and range receipt. Retiring a sibling was considered and rejected: growing-oss-adoption owns distribution and positioning, governing-configuration-systems owns executable configuration representation and integrity, and language skills own manifest/release implementation. The descriptor carries typed cuts for those selection races."
+    },
+    {
+      "date": "2026-08-15",
+      "from": 56420,
+      "to": 56582,
+      "spentBy": "forging-skills",
+      "reason": "F4 STANDING itself. The gate cannot be reached without trigger words in the owning skill's description, so the collection pays 162 chars once to make every future addition visible. The gate fired red on this very edit before the ceiling moved, which is the mechanism working rather than an exception to it."
+    },
+    {
+      "date": "2026-08-30",
+      "from": 56582,
+      "to": 58008,
+      "spentBy": "wiring-repositories",
+      "reason": "Two distinct amounts, recorded separately because they have different causes. 82 chars were ALREADY over the ceiling before this admission: measured 56,664 at 60 skills, so descriptions drifted upward since 2026-08-15 without anyone re-measuring — the ratchet caught drift it was built to catch, and it is absorbed here rather than hunted. 1,349 chars are the new skill's description. It was admitted because the battery found no owner: 8 EN/JA queries over 60 readable SKILL.md files returned only incidental hits, plus wiring-mise-tasks which scopes itself to the mise task-graph layer alone. Retiring a sibling was considered and rejected — no sibling was found doing this job badly; the ceiling had simply never been re-measured since it was set.",
+      "alsoFound": "Two descriptions sit at or past the observed truncation window (~1520-1570): structuring-documents 1669 and issuing-technical-memoranda 1515. Their tail-positioned language directives may already be silently dropped. That is a live defect independent of this raise, reported rather than absorbed — trimming them would also return ~170 chars."
+    },
+    {
+      "date": "2026-09-03",
+      "from": 58008,
+      "to": 59102,
+      "spentBy": "commanding-research-fleets",
+      "reason": "One amount, one cause: the new skill's own description (1,094 chars), no drift absorbed — the collection re-measured clean at 58,008 for 61 skills before this admission. Forged solo per an explicit direct-user instruction (\"thin directorと協調してスキル作成してください\") after four earlier peer relays of the same spec were each refused as non-authorizing. Function+existence gate (forging-skills step 0) found no owner: supervising-research-programmes/directing-research-sections own the programme/section state machinery this doctrine's vocabulary maps onto but never merges with, orchestrating-agents owns generic dispatch not this fleet's specific role content, and codifying-doctrine's own routing table sends a named-executor runbook here rather than claiming it. Full source-grade table and the placement reasoning: commanding-research-fleets/tests/forge-verification-ledger.md §0-§1."
+    },
+    {
+      "date": "2026-09-05",
+      "from": 59102,
+      "to": 60520,
+      "spentBy": "forming-hypotheses-from-anomalies",
+      "reason": "Two amounts, separated because they have different causes. 2 chars were ALREADY over the ceiling before this admission: the collection measured 59,104 at 62 skills against a 59,102 ratchet set on 2026-09-03, i.e. descriptions drifted in two days. That drift is absorbed here rather than hunted. 1,416 chars are the new skill's own description (1,410 as first written, plus 6 for the 語彙の外 doublet that the F3 desk-check proved was missing — trigger row F5 could not have fired without it). It was admitted because the forging-skills step-0 existence battery (6 EN/JA paraphrases via repo-search battery, route ccc, 6/6 queries with hits, confidence verified(index)) found NO OWNER for the transition anomaly -> contrast -> exhausted closed route -> licensed vocabulary-introducing hypothesis. forging-novel-theses was the near miss and was read in full: its entry gate REQUIRES a selected frame plus a provenance-bearing seed or frozen DONOR SET (items 1 and 4) — it consumes that precondition and does not manufacture it. EXTEND was considered and rejected: a LICENSE is retired by its kill condition and a CANDIDATE by a test, so merging them would put GENESIS and the license decision in one packet, which is the collapse the new skill's A3 gate exists to prevent. Retiring a sibling was considered and rejected — no sibling was found doing this job badly. The skill derives from a signed SoK corpus position admitted the same day (soks 208e187, 8 units / 103 captures, 36 load-bearing captures adversarially re-verified).",
+      "alsoFound": "Unchanged from the 2026-08-30 raise and still unfixed: structuring-documents charges 1,669 chars, above the observed truncation window (~1,520-1,570), so its tail-positioned language directive may already be silently dropped; issuing-technical-memoranda (1,515) and driving-antigravity (1,514) sit at the edge. Trimming those three would return roughly 200 chars AND repair a live defect. Reported rather than absorbed: editing three unrelated skills' descriptions is outside this forge's scope, and the defect is a triggering-correctness problem, not a budget problem.",
+      "reduceWhen": "CONDITIONAL RAISE. Objected to by the dotfiles Director on 2026-09-05: raise is the weakest of F4's four permitted answers and is self-serving by construction, and this forge held a shortening that pays twice (see alsoFound). Accepted. The obligation is recorded here rather than left to memory: when the structuring-documents / issuing-technical-memoranda / driving-antigravity descriptions are trimmed under the observed truncation window, re-run 'mise run lint:skills-floor' and pin maxListingChars to the newly MEASURED total in that same commit — do not leave the recovered headroom sitting as slack. Lowering is free (see 'why'). Until that lands, this raise is the reason the budget is not currently binding, and any later raise should be refused while this reduction is outstanding."
+    },
+    {
+      "date": "2026-09-17",
+      "from": 60228,
+      "to": 61245,
+      "spentBy": "operating-wsl2-on-windows",
+      "reason": "A new skill's name+description, 1024 chars (60,221 was charged before it, within the 60,228 ceiling — no pre-existing drift to absorb). Admitted because the battery found no owner: securing-remote-access owns the ACCESS chain (its wsl2-mac.md sets up ssh/Tailscale/.wslconfig reachability), but nothing owned OPERATING a running WSL2-on-Windows host — its sparse-vhdx storage model, the disk-reclaim lever ladder, the measurement traps, and recovery when the box wedges on its own resources. That void is load-bearing: the forging model itself made four confident-wrong host-number calls in the source session (instantaneous-vs-sustained CPU, cumulative-vs-rate pgscan, free-vs-available memory, an Application Data junction loop reading 647GB of phantom data) before the code caught them, which is exactly what the skill's deny-list exists to prevent. Retiring a sibling was considered and rejected: the one overlap (lifecycle) was resolved MECE by localizing prevention-config to securing-remote-access and recovery here, with a reciprocal pointer — complementary, not redundant. Description kept tight to hold the charge to 1024."
+    }
+  ],
+  "reductions": [
+    {
+      "date": "2026-09-10",
+      "from": 60520,
+      "to": 60228,
+      "reason": "F4 STANDING reduction. The 2026-09-05 reduceWhen obligation was discharged before admitting governing-configuration-systems: structuring-documents, issuing-technical-memoranda, and driving-antigravity descriptions were shortened through trigger/cut desk-checks, and the new skill's description was also compressed. A final typed-cut/co-fire correction increased the new description after the first measurement. The 64-skill collection now measures 60,228 chars, so the ratchet is pinned to the measured total with no recovered slack."
+    }
+  ]
+}

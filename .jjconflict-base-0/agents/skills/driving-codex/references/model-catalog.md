@@ -1,0 +1,158 @@
+# Model catalog & fast-moving facts — verified 2026-07-12
+
+> Everything in this file rots. Each claim carries its provenance grade (§ bottom); on reforge,
+> re-run `bun scripts/probe-models.ts` and re-fetch official docs instead of trusting this snapshot.
+> The durable rules (CATALOG-BY-PROBE, LEAST-PRIVILEGE, RELAY-VERBATIM) live in SKILL.md — this
+> file holds only the perishable facts.
+
+## Account catalog — probe-verified on THIS account, 2026-07-12
+
+`codex exec --skip-git-repo-check --sandbox read-only -m <model> -c 'model_reasoning_effort="low"'
+'Reply with exactly: OK' </dev/null` — exit 0 + `OK` = AVAILABLE.
+
+| Model | Probe result | tokens used (trivial ping) |
+|---|---|---|
+| `gpt-5.6-sol` | AVAILABLE | 9,486 |
+| `gpt-5.6-terra` | AVAILABLE | 9,278 |
+| `gpt-5.6-luna` | AVAILABLE | 9,120 |
+| `gpt-5.5` | AVAILABLE | 11,799 |
+| `gpt-5.4-mini` | AVAILABLE | 10,766 |
+| `gpt-5.4` | in `models_cache.json`; not probed |  |
+| `codex-auto-review` | internal auto-review routing, not a general-purpose peer [third-party] |  |
+
+## Environment facts (observed 2026-07-12)
+
+- CLI: `codex-cli 0.144.1` at `~/.local/bin/codex`.
+  - **CORRECTION (same day, later session)**: `~/.local/bin/codex` NO LONGER EXISTS on this host;
+    the only binary is `/opt/homebrew/bin/codex` = **0.141.0** — a dual-install/PATH-shadowing
+    trap: workers resolving `codex` from PATH got 0.141.0 and `gpt-5.6-sol` failed with a NEW
+    error shape, exit 1 + 400 `"The 'gpt-5.6-sol' model requires a newer version of Codex.
+    Please upgrade..."` — a VERSION-GATE 400, distinct from the ambiguous not-supported 400 in
+    the triage table below. `gpt-5.5` probe-verified AVAILABLE on 0.141.0 (exit 0, 15,184
+    tokens). Rule reinforced: `which -a codex` + version check before any model assumption.
+- GPT-5.6 requires CLI ≥ 0.144.0; rollout is staged per account/workspace, so a current CLI can
+  still lack a model [third-party — re-verify against official docs before load-bearing use;
+  the version-gate 400 above is now probe-confirmed first-party evidence of the CLI floor].
+- `~/.codex/config.toml` defaults: `model = "gpt-5.5"`, `model_reasoning_effort = "medium"` — a
+  flagless `codex exec` runs THAT, at whatever sandbox the directory's trust level implies
+  (a flagless run header showed `sandbox: danger-full-access` in a trusted workspace
+  [user transcript, 2026-07-12]).
+- `model_reasoning_effort` — the FULL ladder, no longer inferred (verified 2026-07-25 two ways:
+  the installed 0.144.4 binary's variant table reads `MinimalLowMediumXHighMaxUltra`, and the
+  upstream enum in `codex-rs/protocol/src/openai_models.rs` reads
+  `None, Minimal, Low, Medium(default), High, XHigh, Max, Ultra` with `FromStr` accepting each
+  wire string) [author-confirmed + official-primary]:
+
+  | value | what it buys | note |
+  |---|---|---|
+  | `minimal` `low` `medium` `high` | the ordinary ladder | `medium` is the config default |
+  | `xhigh` | deepest SINGLE-agent reasoning | this account's `~/.codex/config.toml` default |
+  | `max` | "Maximum reasoning depth for the hardest problems" | still one agent |
+  | `ultra` | "Maximum reasoning with automatic task delegation" | **spawns subagents** — see ULTRA below |
+
+- **`max` and `ultra` exist only on `gpt-5.6-sol` and `gpt-5.6-terra`.** The upstream catalog
+  (`codex-rs/models-manager/models.json`) advertises `levels: [low, medium, high, xhigh, max, ultra]`
+  for exactly those two, both `multi_agent_version: v2`, `min_client_version: 0.144.0`. `luna` and
+  the 5.5/5.4 family do NOT carry them [official-primary, 2026-07-25].
+- The published config-reference page still lists only `minimal|low|medium|high|xhigh` — the docs
+  lag the enum. Do not read that page's silence as absence [secondary, 2026-07-25].
+
+## ULTRA — the multi-agent switch, not just a taller ladder (2026-07-25)
+
+`ultra` is not "xhigh but more". In `codex-rs/core/src/session/multi_agents.rs`, selecting Ultra is
+the one condition that flips a turn's multi-agent policy to **Proactive** — codex delegates to
+subagents on its own, with no explicit request. Upstream deprecated the old explicit toggle in its
+favour; the binary still carries the note verbatim: `@deprecated Ignored. Use Ultra reasoning effort
+for proactive multi-agent behavior.` [author-confirmed from the 0.144.4 binary + official-primary].
+
+Cost consequence, in upstream's own words — the TUI raises a dedicated warning:
+`⚠ Ultra reasoning may proactively use multiple agents. This session is configured for 8 concurrent
+threads with up to 7 subagents which can increase usage quickly.` Upstream also refuses to let the
+Alt+`,`/Alt+`.` effort shortcuts cross into Max or Ultra: "Raising never silently crosses into Max
+or Ultra; those efforts require the explicit advanced-reasoning picker." Treat that as the vendor
+telling you this tier is opt-in-by-name only [official-primary].
+
+Unknowns, deliberately not filled: no official token/cost multiplier for ultra, and no official
+default for `features.multi_agent_v2.max_concurrent_threads` was found. Third-party blogs asserting
+"ultra runs exactly four agents in parallel" are **unverified** — the number in upstream's own test
+fixture is 8 threads / 7 subagents, and it is configuration, not a constant. Do not quote a count.
+
+- CLI floor for `ultra`: **0.144.0**. Installed here: **0.144.4** (author-confirmed 2026-07-25) —
+  meets it. Latest released upstream is 0.145.0 (2026-07-21), which stabilized multi-agent v2 with
+  configurable sub-agent models, reasoning levels, and concurrency [official-primary].
+- Inspect the spawned threads with `/subagents` (aliased `/agent`); `/debug-config` dumps the
+  resolved config [official-primary].
+- `models_cache.json` refreshes on use: mtime observed updating per run (author-confirmed);
+  a prior session reported the cache lacking the 5.6 family entirely before any successful 5.6
+  run [user-relayed]. Either way the load-bearing rule holds: the cache is authoritative in
+  NEITHER direction — models absent from it ran fine when probed directly.
+- Sandbox modes (`codex exec --help`): `read-only`, `workspace-write`, `danger-full-access`;
+  plus `--dangerously-bypass-approvals-and-sandbox` (never in embedded use).
+
+## Cost shape of a trivial call
+
+`tokens used ≈ 9–12k` for a one-word reply — that is INITIAL CONTEXT (system + AGENTS.md +
+skills, capped at a 2% skills budget + MCP), not output. `--json` usage on a repeat call:
+
+```json
+{"input_tokens":19257,"cached_input_tokens":9984,"output_tokens":5,"reasoning_output_tokens":0}
+```
+
+Repeat calls in the same workdir hit the cache for roughly half the input. Aggregate spend:
+ccusage MCP `codex-daily` / `codex-monthly`.
+
+## Cost model & cross-vendor baseline — 2026-07-12
+
+**Economics of THIS setup (both sides subscription):** codex runs on a ChatGPT plan, Claude Code
+on a Claude plan → marginal dollar cost per call ≈ 0 until a QUOTA binds; the real currencies
+are each plan's quota drain, wall time, and context overhead. Measure quota drain with ccusage:
+`codex-daily`/`codex-monthly` vs `daily`/`monthly`. Headless `claude -p --output-format json`
+reports per-run `total_cost_usd` (API-equivalent); codex reports blended `tokens used` only —
+the two token counts are NOT unit-comparable (blended total vs in/cache/out split).
+
+**Hypothesis on file (user, 2026-07-12, UNVERIFIED):** "codex (terra/luna) is effectively
+cheaper than sonnet-5 because OpenAI absorbs inference losses on subscriptions." Plausible,
+not encodable as fact — subsidy levels and quota policies are unpublished and repriceable at
+any time. Decision procedure (C4): compare quota drain per unit of ACCEPTED work on both
+ccusage ledgers over a real week; re-evaluate on any repricing announcement.
+
+**n=1 smoke benchmark (2026-07-12)** — same planted-bug prompt (one wrong expression in a
+moving-average function), codex arms `--sandbox read-only` effort medium, Claude arm `claude -p`
+defaults. WORKED EXAMPLE of the C4 procedure, NOT a ranking: all four arms answered correctly
+(exact expression + correct mechanism) — a ceiling effect; a task at your real difficulty is
+required before any promotion decision.
+
+| Arm | Correct | Wall | Reported usage |
+|---|---|---|---|
+| `gpt-5.6-sol` | yes | 10 s | 9,643 tokens (blended) |
+| `gpt-5.6-terra` | yes | 10 s | 8,914 tokens (blended) |
+| `gpt-5.6-luna` | yes | 9 s | 9,321 tokens (blended) |
+| `claude-sonnet-5` (via `claude -p`) | yes | 8 s | in 12,993 + cache-read 23,314 + out 482; $0.0908 API-equiv |
+
+Comparability caveats (carry with any reuse): effort settings differ (codex `medium` vs Claude
+CLI defaults); each side loads different fixed context (AGENTS.md/skills vs CLAUDE.md/system);
+n=1 discriminates nothing — this table's value is the PROCEDURE and the overhead shape, not the
+ordering. Trivial-ping overhead for `claude -p`: ~13k input + 23k cache-read, ~$0.082 — same
+overhead class as codex's 9–12k.
+
+## Error strings — exact triage table (probe-captured)
+
+| Observation | Meaning |
+|---|---|
+| exit 0, expected reply | model available on this account, now |
+| `warning: Model metadata for 'X' not found. Defaulting to fallback metadata` → `ERROR {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'X' model is not supported when using Codex with a ChatGPT account."}}`, exit 1 | AMBIGUOUS: wrong/short name of a real model, bogus name, or not rolled out — probe-verified byte-identical shape for `-m sol` (short name of the available `gpt-5.6-sol`) and `-m gpt-9.9-bogus` (nonexistent), both 2026-07-12 (the rule this fact grounds is C1's ASYMMETRY; home: SKILL.md) |
+| 401 | authentication — `codex login status`; check WHICH account is logged in |
+| 403 | account/workspace permission — model exists, you don't have it |
+| `Not inside a trusted directory and --skip-git-repo-check was not specified`, exit 1 | git-trust check, NOT a model problem |
+| `warning: Skill descriptions were shortened to fit the 2% skills context budget` | benign; codex-side skills listing pressure, not an error |
+
+## Provenance grades
+
+| Claim | Grade |
+|---|---|
+| probe table, error strings, config defaults, cache mtime refresh, cost shape, sandbox mode list | author-confirmed — probes run 2026-07-12; outputs appended in `tests/forge-verification-ledger.md` |
+| `danger-full-access` / `xhigh` observed in flagless & explicit run headers; cache lacking the 5.6 family pre-rollout | user transcript / user-relayed (2026-07-12) — seen, but not by this forge's own probes |
+| ≥0.144.0 floor, staged rollout, plan eligibility, recommended default | third-party — a ChatGPT answer relayed by the user (2026-07-12), not checked against official docs |
+| `high` effort value; `codex-auto-review` = internal routing | unverified / third-party |
+| n=1 smoke benchmark table, `claude -p` overhead & `total_cost_usd` shape | author-confirmed — runs 2026-07-12, artifacts in the forge ledger |
+| "codex is effectively cheaper (OpenAI absorbs losses)" | user-hypothesis, UNVERIFIED — never assert; decide via the C4 ccusage procedure above |

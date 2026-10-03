@@ -1,0 +1,100 @@
+# Admission and lifecycle adjudication
+
+Use this reference when the action is not obvious. The decision unit is a purpose/authority pair,
+not a filename. A stable filename is allocated only after admission; it never supplies the reason
+to admit a document.
+
+## The admission test
+
+A new durable concept is admissible only when all answers are concrete:
+
+1. **Decision value** — who will make which decision from it?
+2. **Ownership gap** — which existing artifact was inspected, and why can it not be updated?
+3. **Role** — is this authority, evidence, a review request, or a reproducible view?
+4. **Provenance** — which immutable evidence supports its load-bearing claims?
+5. **Maintenance** — who updates it, on which event, and how is staleness detected?
+6. **Retirement** — what observable event deprecates or deletes it?
+
+Any missing answer means `freeze`; do not manufacture fields from inference.
+Only after all answers exist may a new `create` or `derive` allocate an ID under
+[naming.md](naming.md). `update`, correction, and retirement reuse the existing ID and path.
+
+## Action matrix
+
+| Observed state | Action | Required transition |
+|---|---|---|
+| No durable reader decision; answer is momentary | `freeze` | Answer inline; create no file. |
+| Existing artifact already owns the purpose | `update` | Edit that authority at its existing ID/path and re-review changed claims. |
+| New reader/register, same underlying facts or an already bounded SoK position | `derive` | Generate from declared sources; add expiry; never copy authority or create a new corpus conclusion. |
+| New research question with evidence and reviewer | `create` | Allocate new IDs after admission; add a draft canonical plus an open review request. |
+| Raw run, dataset, trace, or negative result arrived | `create` | Preserve the raw artifact, then allocate an ID for its immutable evidence record; do not add interpretation automatically. |
+| A stable successor replaces an authority | `retire` | Deprecate predecessor atomically and point successor to it. |
+| An authority is abandoned without successor | `retire` | Deprecate it and record a non-empty retirement reason. |
+| Generated view expired or can be reproduced | `delete` | Remove it and rebuild indexes/caches; a later new derivation receives a new ID. |
+| Evidence or deprecated authority seems embarrassing/wrong | `freeze` | Preserve it; add correction evidence or successor. Never erase history silently. |
+| Secret, personal data, or legal deletion is required | `delete` | Stop the ordinary lifecycle. Route to the repository's security/legal owner for an authorized purge, dependent-claim cleanup, and safe tombstone when allowed. |
+
+The append-only checker has no self-authorizing purge flag. A privacy, security, or legal removal
+therefore fails the ordinary integrity gate by design. The accountable repository owner must use
+its exceptional purge and re-baseline process; an agent may not turn this row into a silent waiver.
+
+## What must be maintained
+
+- Stable and draft canonical concepts: evidence, verification, review decision, staleness, and one
+  authority key.
+- Evidence records and raw artifacts: append-only identity, digest, resolvable typed locator, and
+  provenance.
+- Review requests: state transitions and decision outcome; accepted/rejected records become history.
+- The reachable index and supersession graph.
+- Stable concept IDs/paths and the one-to-one type-code registry.
+- The profile/schema and validator itself, under higher review than ordinary content.
+
+## Reverse lineage from evidence
+
+For a completeness claim, start from each admitted raw record. Find its domain interpretation,
+explicit exclusion, or still-open question. A forward-only check misses raw observations
+that never acquired an interpretation. Flag unmatched evidence as an open gap in the existing index.
+Do not invent a hypothesis or finding to make the join pass. Ask the domain owner for the
+correct disposition and retain the raw record. The domain owner judges scientific meaning;
+this check detects the missing link and prevents a false completeness claim.
+
+## What should be retired or deleted
+
+- **Delete** generated summaries, graph caches, search answers, dashboards, and reviewer packets
+  once expired or reproducible.
+- **Deprecate** superseded canonical concepts; retain their stable IDs and evidence lineage.
+- **Withdraw/deprecate** abandoned review requests; retain the decision trail.
+- **Do not create** meeting-summary or progress-report files whose only function is to repeat a
+  current authority. Attach the source as evidence, update the authority, and derive a view if a
+  reader needs one.
+
+## Corrections
+
+Do not edit an evidence record or raw artifact to make history agree with a later conclusion. Add a
+new evidence record, update or supersede the canonical interpretation, and cite both when the
+conflict matters. A negative result remains searchable evidence even when a later experiment
+succeeds.
+
+Do not silently turn a generated view into a canonical concept. Admission requires a new draft
+canonical path or an update to the existing authority, an open review request, evidence-only
+sources, and a later accepted review.
+
+## Transfer-artifact lifecycle
+
+The local profile deliberately keeps four roles. `DONOR SET`, transfer bundle, `MAPPING-BREAK`,
+`TARGET RESULT`, and `TRANSFER DISPOSITION` name domain-level artifacts; they do not justify a fifth role or a generic
+permanent report. Govern their lineage without re-performing their domain operation:
+
+1. A `DONOR SET` retains its corpus boundary, source locators, and digest. It is not a target mapping.
+2. A transfer bundle links each candidate or `MAPPING-BREAK` to that frozen donor set. A later view must
+   preserve the IDs and digest rather than silently re-summarizing them.
+3. A `MAPPING-BREAK` is negative/limiting decision history. Retire it only with an explicit successor
+   or a stated retirement reason; never discard it merely because another transfer became attractive.
+4. A `TARGET RESULT` preserves its frozen transfer-bundle binding, candidate ID, target observation,
+   prewritten threshold, exact locus, threshold result, and digest. Governance may not revise the
+   threshold or declare a mapping break.
+5. A `TRANSFER DISPOSITION` records the decision and target-side evidence it consumed. It does not make
+   the decision scientifically correct, prove target truth, or replace its semantic owner.
+
+These are constructed governance rules. They prescribe reviewability and lifecycle, not an empirically
+validated documentation effect.

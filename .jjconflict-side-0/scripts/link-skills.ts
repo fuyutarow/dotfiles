@@ -1,0 +1,410 @@
+// Port of mise task `link:skills` (see mise.toml). Structural port only — same links, same
+// guards, same four prune mechanisms, same printed lines as the original shell body. Consumer:
+// human/agent running `mise run link:skills` — output is verdict-style lines meant for
+// eyeballing (linked/skip/pruned/excluded), not a machine envelope, matching the shell original.
+//
+// Links agents/commands + agents/skills from this dotfiles repo into Claude Code, Codex, and
+// Gemini's config directories, and prunes stale links that a rename/delete would otherwise
+// leave dangling. Four DISTINCT prune/exclusion mechanisms, do not conflate them:
+//   (a) ~/.claude/skills legacy whole-dir symlink -> unlinked unconditionally if IS a symlink
+//       at all (no target check), then recreated as a real directory.
+//   (b) ~/.claude/skills/<name> per-skill -> pruned only if symlink AND dangling AND its raw
+//       (non-canonicalized) target starts with "<dotfiles>/".
+//   (c) ~/.claude/skills/driving-claude -> unlinked only if its raw target is EXACTLY
+//       "<dotfiles>/agents/skills/driving-claude" (driving-claude is Codex-only by design).
+//   (d) ~/.codex/skills -> unlinked only if its raw target is EXACTLY "<dotfiles>/agents/commands"
+//       (cleanup of one specific historical misconfiguration).
+// Real plugin-installed skill directories (not symlinks) are never touched by any of the four.
+// A real directory occupying a name this repo DOES own is reported as "SHADOWED: …" rather than
+// the generic skip, because that case is a defect and not content worth protecting. It is still
+// left untouched here; `mise run lint:skills-wiring` is the check that actually fails on it.
+//
+// Two printed strings intentionally hardcode a literal "~/..." rather than interpolating the
+// actual home path — this reproduces the ORIGINAL shell's own quirk (its echo used a
+// double-quoted "~/..." literal, which bash never tilde-expands inside quotes, unlike the
+// unquoted `~/...` arguments used everywhere else in that script, which the shell DOES expand
+// before the function/command ever sees them). Preserved verbatim, not "fixed".
+//
+// Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]
+//   --dotfiles defaults to $DOTFILES, else "<home>/dotfiles" (matches the shell default).
+//   --home     defaults to $HOME, else os.homedir() — pass a fixture dir to test without
+//              touching the real one.
+//   --dry-run  prints every intended link/unlink/prune as "[dry-run] would …" and performs
+//              zero filesystem writes (no mkdir, no symlink, no unlink, no git config).
+//
+// Error handling mirrors the original shell body EXACTLY: that body has no `set -e` anywhere,
+// so every individual `mkdir`/`ln`/`unlink`/`rm` failure is tolerated (bash just falls through
+// to the next statement) and the task ALWAYS reaches its final line, which always exits 0 (the
+// last command run is always `echo "✅ ..."`). Every filesystem mutation below is therefore
+// wrapped in its OWN local try/catch that swallows the failure and falls through, exactly like
+// bash without `set -e` — never in one outer catch-all that would abort everything else. Two
+// print sites intentionally differ in whether the failure suppresses the message, because the
+// original differs too: `link_path`'s `ln -sfn` and every PRUNE site except (b) have NO `&&`
+// between the mutation and its `echo`, so the message prints unconditionally even when the
+// mutation itself failed (preserved here, not "fixed" — see two-hats/behavior-preservation);
+// PRUNE (b) alone uses `rm -f "$old" && echo ...`, so ITS message is gated on success.
+// Exit: always 0 for every filesystem-mutation path, matching the original — no FATAL line is
+// ever printed for those (the original prints none either). Usage failures happen before that
+// path: Cleye strictFlags rejects ordinary unknown flags with its native exit 1, while the local
+// compatibility guard rejects its missed `--__proto__` edge with exit 2. Neither path performs
+// linking/pruning, so a typo'd `--dry-run` can never silently run a real mutation pass.
+
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
+import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { cli } from "cleye";
+import { fromThrowable } from "neverthrow";
+
+const USAGE =
+  "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
+
+class UsageError extends Error {}
+
+// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before
+// assignment. Every ordinary unknown remains Cleye strictFlags' responsibility.
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new UsageError(`unknown flag(s): --${flag}`);
+  }
+}
+
+function nonEmptyString(flag: string): (value: string) => string {
+  return (value) => {
+    if (value === "") throw new UsageError(`${flag} requires a value`);
+    return value;
+  };
+}
+
+function print(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
+/**
+ * Runs a single filesystem mutation and swallows any failure, mirroring bash's tolerance for
+ * an individual `mkdir`/`unlink`/`ln`/`rm` command when the script has no `set -e`: bash prints
+ * that command's own stderr and falls through to the next statement regardless. Used at every
+ * mutation site so a failure here NEVER bubbles to an outer catch-all that would abort the rest
+ * of the run — each site stays locally tolerant, exactly like the original shell body.
+ */
+function tryOp(fn: () => void): void {
+  // swallowed — see function doc.
+  fromThrowable(fn)();
+}
+
+/** Directory-follows check: mirrors POSIX `[ -d p ]` (false for missing/non-dir, no throw). */
+function isDir(p: string): boolean {
+  return fromThrowable((path: string) => statSync(path))(p)
+    .map((s) => s.isDirectory())
+    .unwrapOr(false);
+}
+
+/**
+ * Raw, non-canonicalizing symlink probe: mirrors `[ -L p ]` combined with a bare `readlink p`
+ * (the literal stored target string, never resolved via `-f`/`-e`). Returns null when p is not
+ * a symlink at all, including "does not exist".
+ */
+function symlinkTarget(p: string): string | null {
+  const lstat = fromThrowable((path: string) => lstatSync(path))(p);
+  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
+  return readlinkSync(p);
+}
+
+/**
+ * Mirrors `[ -L dst ] || [ ! -e dst ]` — the shell guard `link_path` uses to decide whether it
+ * may (re)write dst. `-e`/`existsSync` alone can't distinguish "no path" from "dangling
+ * symlink"; combining it with the `-L`/lstat check does.
+ */
+function isSymlinkOrAbsent(p: string): boolean {
+  const isSymlink = fromThrowable((path: string) => lstatSync(path))(p)
+    .map((s) => s.isSymbolicLink())
+    .unwrapOr(false);
+  return isSymlink || !existsSync(p);
+}
+
+/**
+ * Sorted directory listing (bash pathname expansion sorts glob matches); [] if unreadable.
+ * Dot-prefixed entries are excluded to match bash's default (non-dotglob) globbing in both
+ * call sites this feeds (the per-skill "agents/skills" glob and the "~/.claude/skills" glob),
+ * which never match hidden entries unless `shopt -s dotglob` is set (it is not, in the original).
+ */
+function listEntries(dir: string): string[] {
+  return fromThrowable((path: string) => readdirSync(path))(dir)
+    .map((names) => names.filter((n) => !n.startsWith(".")).sort())
+    .unwrapOr([]);
+}
+
+/**
+ * `link_path` from the shell body. Refuses to touch dst when it exists as a REAL file/dir
+ * (never overwrites plugin-installed content); force-relinks (`ln -sfn` semantics: unlink then
+ * symlink, never a naive `symlink` that would throw EEXIST or nest inside an existing dir
+ * symlink) whenever dst is a symlink (dangling or not) or simply absent.
+ */
+function linkPath(src: string, dst: string, dryRun: boolean): void {
+  if (!existsSync(src)) {
+    print(`skip (missing): ${src}`);
+    return;
+  }
+  if (!dryRun) {
+    // `mkdir -p "$(dirname "$dst")"` has no `&&`/`set -e` gate in the original — a failure
+    // prints its own stderr and falls through to the next line regardless.
+    tryOp(() => mkdirSync(dirname(dst), { recursive: true }));
+  }
+  if (isSymlinkOrAbsent(dst)) {
+    if (dryRun) {
+      print(`[dry-run] would link: ${dst} -> ${src}`);
+      return;
+    }
+    tryOp(() => unlinkSync(dst)); // dst didn't exist — nothing to remove, matches `ln -f`.
+    // `ln -sfn "$src" "$dst"` failing doesn't stop the original: the very next line,
+    // `echo "linked: $dst -> $src"`, has no `&&` gate on the `ln`, so it prints
+    // unconditionally even when `ln` itself failed — preserved verbatim, not fixed.
+    tryOp(() => symlinkSync(src, dst));
+    print(`linked: ${dst} -> ${src}`);
+  } else {
+    print(`skip (exists, not symlink): ${dst}`);
+  }
+}
+
+/**
+ * One skill directory under agents/skills: either the Codex-only exclusion (PRUNE (c), for
+ * `driving-claude`) or the ordinary link-or-report-shadowed path for every other skill.
+ */
+function linkOrExcludeSkill(
+  name: string,
+  dotfilesSkillsDir: string,
+  claudeSkillsDir: string,
+  dryRun: boolean,
+): void {
+  if (name !== "driving-claude") {
+    // SHADOW report. linkPath's refusal to clobber a real directory is correct and stays, but
+    // its generic "skip (exists, not symlink)" line reads the same whether the destination is
+    // foreign content worth protecting or a stale copy MASKING this repo's own skill. Only the
+    // second case is a defect, and only here can it be told apart — the loop already knows the
+    // repo owns this name. Eight skills were masked this way for ~3 months behind that generic
+    // line. Naming the consequence is all that changes; the exit status stays 0 (this script is
+    // a tolerant linker, never a gate) and `mise run lint:skills-wiring` is what actually fails.
+    const claudeDst = `${claudeSkillsDir}/${name}`;
+    if (!isSymlinkOrAbsent(claudeDst)) {
+      print(
+        `SHADOWED: ${claudeDst} is a real path — agents/skills/${name} is NOT in use ` +
+          "(run: mise run lint:skills-wiring)",
+      );
+      return;
+    }
+    linkPath(`${dotfilesSkillsDir}/${name}`, claudeDst, dryRun);
+    return;
+  }
+  // `driving-claude` is deliberately Codex-only: it teaches Codex to drive this CLI, so
+  // exposing it as a Claude Code skill would be self-referential and creates a needless
+  // trigger collision. Codex receives the whole source tree through ~/.agents/skills below.
+  // PRUNE (c)
+  const dst = `${claudeSkillsDir}/${name}`;
+  const expected = `${dotfilesSkillsDir}/${name}`;
+  if (symlinkTarget(dst) !== expected) {
+    print(`excluded (Codex-only): ${dst}`);
+    return;
+  }
+  if (dryRun) {
+    print(`[dry-run] would exclude (unlink, Codex-only): ${dst}`);
+    return;
+  }
+  // Same unconditional-echo shape as PRUNE (a)/(d): no `&&` gates the `unlink` in
+  // the original, so the message prints even if `unlink` itself failed.
+  tryOp(() => unlinkSync(dst));
+  print(`excluded (Codex-only): ${dst}`);
+}
+
+/**
+ * Prune (b): remove one dangling, dotfiles-owned skill symlink under ~/.claude/skills so a
+ * rename/delete in agents/skills doesn't leave Claude listing a skill that's gone. No-op for
+ * anything else: not a symlink, not dangling, or not owned by this dotfiles checkout.
+ */
+function pruneDanglingSkillLink(
+  name: string,
+  claudeSkillsDir: string,
+  dotfiles: string,
+  dryRun: boolean,
+): void {
+  const old = `${claudeSkillsDir}/${name}`;
+  const target = symlinkTarget(old);
+  if (target === null) return; // not a symlink
+  if (existsSync(old)) return; // not dangling
+  if (!target.startsWith(`${dotfiles}/`)) return; // not dotfiles-owned
+  if (dryRun) {
+    print(`[dry-run] would prune (renamed/deleted): ${old}`);
+    return;
+  }
+  // Unlike every other prune/exclude site, the original gates this one on success —
+  // `rm -f "$old" && echo "pruned ...`. A failed `rm -f` short-circuits the `&&`, so
+  // the message must NOT print and the loop just moves to the next entry.
+  if (fromThrowable(unlinkSync)(old).isErr()) return;
+  print(`pruned (renamed/deleted): ${old}`);
+}
+
+function main(): void {
+  const parsed = cli(
+    {
+      name: "link-skills.ts",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: [],
+      help: {
+        description:
+          "Link shared agent skills and commands into local AI tool homes.",
+      },
+      flags: {
+        dryRun: { type: Boolean, default: false },
+        dotfiles: { type: nonEmptyString("--dotfiles") },
+        home: { type: nonEmptyString("--home") },
+      },
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+
+  // The [] schema leaves unexpected operands in argv._; never let one fall through to a real
+  // prune/relink pass.
+  if (parsed._.length > 0) {
+    process.stderr.write(
+      `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+
+  const dryRun = parsed.flags.dryRun === true;
+  const home = parsed.flags.home ?? process.env.HOME ?? homedir();
+  const dotfiles =
+    parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
+
+  // Activate the post-merge hook so future `git pull`s auto-relink skills. Idempotent,
+  // best-effort: the original swallows failure via `2>/dev/null || true` and never prints
+  // either way — mirrored exactly (real run prints nothing for this step).
+  if (dryRun) {
+    print(
+      `[dry-run] would set: git -C ${dotfiles} config core.hooksPath .githooks`,
+    );
+  } else {
+    // swallowed, matching `|| true`
+    fromThrowable(Bun.spawnSync)(
+      ["git", "-C", dotfiles, "config", "core.hooksPath", ".githooks"],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+  }
+
+  // Claude Code — slash commands
+  if (!dryRun) tryOp(() => mkdirSync(`${home}/.claude`, { recursive: true }));
+  linkPath(`${dotfiles}/agents/commands`, `${home}/.claude/commands`, dryRun);
+
+  // Claude Code — skills: link each skill INDIVIDUALLY. Claude Code itself populates
+  // ~/.claude/skills/ with plugin-installed skills (real dirs), so a whole-dir symlink would
+  // either clobber them or silently nest. Per-skill links coexist with plugin skills.
+  const claudeSkillsDir = `${home}/.claude/skills`;
+  const wholeDirTarget = symlinkTarget(claudeSkillsDir); // PRUNE (a)
+  if (wholeDirTarget !== null) {
+    if (dryRun) {
+      print(
+        `[dry-run] would remove whole-dir symlink: ~/.claude/skills -> ${wholeDirTarget}`,
+      );
+    } else {
+      // `unlink` failing doesn't stop the original: its `echo` on the next line has no `&&`
+      // gate, so it prints unconditionally even when `unlink` itself failed.
+      tryOp(() => unlinkSync(claudeSkillsDir));
+      print(`removed whole-dir symlink: ~/.claude/skills -> ${wholeDirTarget}`);
+    }
+  }
+  if (!dryRun) tryOp(() => mkdirSync(claudeSkillsDir, { recursive: true }));
+
+  const dotfilesSkillsDir = `${dotfiles}/agents/skills`;
+  if (isDir(dotfilesSkillsDir)) {
+    for (const name of listEntries(dotfilesSkillsDir).filter((n) =>
+      isDir(`${dotfilesSkillsDir}/${n}`),
+    )) {
+      linkOrExcludeSkill(name, dotfilesSkillsDir, claudeSkillsDir, dryRun);
+    }
+
+    // Prune renamed/deleted skills (b): the loop above only ADDS, so a rename leaves the old
+    // link dangling and Claude keeps listing a skill that is gone. Remove only dangling links
+    // INTO this repo; plugin skills (real dirs) and non-dotfiles-owned dangling links untouched.
+    for (const name of listEntries(claudeSkillsDir)) {
+      pruneDanglingSkillLink(name, claudeSkillsDir, dotfiles, dryRun);
+    }
+  } else {
+    print(`skip (missing): ${dotfilesSkillsDir}`);
+  }
+
+  // Codex — global guidance, skills, and legacy markdown prompts
+  if (!dryRun) {
+    tryOp(() => mkdirSync(`${home}/.codex`, { recursive: true }));
+    tryOp(() => mkdirSync(`${home}/.agents`, { recursive: true }));
+  }
+  linkPath(
+    `${dotfiles}/agents/codex/AGENTS.md`,
+    `${home}/.codex/AGENTS.md`,
+    dryRun,
+  );
+  linkPath(dotfilesSkillsDir, `${home}/.agents/skills`, dryRun);
+  linkPath(`${dotfiles}/agents/commands`, `${home}/.codex/prompts`, dryRun);
+
+  // PRUNE (d)
+  const codexSkillsDst = `${home}/.codex/skills`;
+  const staleExpected = `${dotfiles}/agents/commands`;
+  if (symlinkTarget(codexSkillsDst) === staleExpected) {
+    if (dryRun) {
+      print(
+        `[dry-run] would remove stale: ~/.codex/skills -> ${staleExpected}`,
+      );
+    } else {
+      // Unconditional echo, same shape as PRUNE (a)/(c) — no `&&` gates the `unlink`.
+      tryOp(() => unlinkSync(codexSkillsDst));
+      print(`removed stale: ~/.codex/skills -> ${staleExpected}`);
+    }
+  }
+
+  // Gemini — global_workflows
+  if (!dryRun) {
+    tryOp(() => mkdirSync(`${home}/.gemini/antigravity`, { recursive: true }));
+  }
+  linkPath(
+    `${dotfiles}/agents/commands`,
+    `${home}/.gemini/antigravity/global_workflows`,
+    dryRun,
+  );
+
+  print(`✅ Agent link pass complete. Source root: ${dotfiles}`);
+}
+
+// No outer abort here, matching the original's total tolerance: every mutation above already
+// guards itself locally via tryOp(), so main() should never throw. This handler is a last-resort
+// safety net only — even in the unforeseen case something escapes a local guard, it is
+// swallowed silently (no new "FATAL" stderr line the original never printed) and the process
+// still exits 0, exactly like the original shell body always reaching its final `echo` (last
+// command run, so its exit status — always 0 — is the task's exit status).
+// Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
+// is the sync equivalent of BG1's mandated `main().catch(...)`.
+process.on("uncaughtException", (error) => {
+  if (error instanceof UsageError) {
+    process.stderr.write(`${error.message}\n${USAGE}`);
+    process.exitCode = 2;
+  }
+  // Every non-usage failure is swallowed — see comment above.
+  process.exit(process.exitCode ?? 0);
+});
+
+main();
+// `?? 0` preserves the original's unconditional exit 0 for valid mutation paths. Locally caught
+// usage errors (including `--__proto__`) set exit 2 before this line; Cleye ordinary-unknown
+// strictness exits 1 inside the framework, before any filesystem work.
+process.exit(process.exitCode ?? 0);

@@ -1,0 +1,81 @@
+# retrieval — the declarative half of `rr exists` (definitions.ts is the mechanism).
+# One place for every decision and calibration: how many candidates are recalled and judged, the
+# priors, which judge scores them and where it is reached, where code may not be sent, each judge's
+# thresholds, and the local reranker's model. Edit here; no code edit. Values that are mechanism
+# (timeouts, request bounds, the extraction format tied to ccc_defs.py's CACHE_VERSION, the batch
+# size sized to the VRAM partition) stay in code beside what they protect.
+
+[definition]
+# Candidates: the `recall` nearest definitions by embedding; the first `pool` of them (after folding
+# private helpers into their owners) go to the judge. `pool` is what Jev is paid for (~2/3 of its
+# input is the candidates). Firedancer bench 2026-10-01: the right definition sat at pool position
+# <= 19 in every case where recall found it at all (2 of 24 it did not, at any pool size); pool 20
+# and 40 both gave top-3 22/24, absent 8/8. 25 keeps a margin over the observed 19.
+recall = 40
+pool = 25
+
+# Second-stage judge: "jev" (TypeSafe Jev, remote: the candidates' name + signature + first doc
+# lines are sent; inputs are not used for training per TypeSafe's privacy policy; retention is
+# unspecified) or "local" (Qwen3-Reranker on this machine's GPU, socket-activated).
+# Owner decision 2026-10-01: Jev is acceptable; the local reranker stays as the fallback.
+# Bench 2026-10-01 (firedancer, 32 cases): jev top-3 22/24, absent 8/8, median 1.3 s, ~$0.0027 per
+# query at the reseller with pool 40 (~$0.0017 at pool 25); local top-3 21/24, absent 8/8.
+# Tried and rejected: stating the need once in the state instead of in every question (-1/3 of the
+# question tokens) lowered top-3 to 21/24 and judged one correct answer "none".
+judge = "jev"
+
+# Where Jev is reached: one of [definition.jev_endpoints.*]. Same request shape, different operator.
+# An endpoint's optional `when_exhausted` is the instruction shown when it answers HTTP 402 (no credit).
+#   "typesafe"       TypeSafe AI itself, $0.042 per M input tokens.
+#   "jevtypesafeai"  CODEFASHION TECH LTD, an independent reseller ("not affiliated with TypeSafe
+#                    AI"); forwards to TypeSafe or, on failover, an unnamed AI gateway; does not store
+#                    request bodies; $0.25-0.42 per M; prepaid.
+# The key in ~/.config/typesafe/.env must come from the chosen operator. Current key: the reseller's
+# (2026-10-01). Recommended: an official TypeSafe key — one party fewer, 6-10x cheaper.
+jev_provider = "jevtypesafeai"
+
+# Projects whose code must never leave this machine: the local judge is used there regardless of
+# `judge`. Paths are home-relative (~/…) or absolute; a project matches if it is or lies under one.
+no_egress = []
+
+# Added to the judge's log-odds. A private helper's evidence also lifts its public owner by `public`.
+[definition.priors]
+public = 1.0
+documented = 0.5
+private = -1.5
+test = -1.5
+
+# Thresholds on the judge's log-odds (Jev's probability p is turned into ln(p/(1-p)) so both judges
+# share one scale and the same priors). strong = "this is the function"; likely = "read it first";
+# below likely = NO_DEFINITION. hook = the edit-time hook (suggest-existing-definition) speaks only
+# at or above this: its query is new CODE, on which the judges loosen, and a wrong interruption
+# inside an edit costs more than a missed one.
+# Local: measured on the firedancer bench (positives 4-10, absent -2..-6); hook: the duplicate probe
+# scored 8.0, an unrelated helper 6.3. Jev: its probabilities are calibrated, so p >= 0.9 / 0.5 /
+# 0.97.
+[definition.thresholds.local]
+strong = 4.0
+likely = 1.5
+hook = 7.5
+
+[definition.thresholds.jev]
+strong = 2.2 # p >= 0.9
+likely = 0.0 # p >= 0.5
+hook = 3.5   # p >= 0.97
+
+[definition.jev_endpoints.typesafe]
+url = "https://api.typesafe.ai/v1/systemone"
+model = "jev-latest"
+
+[definition.jev_endpoints.jevtypesafeai]
+url = "https://jevtypesafeai.com/api/v1/decide" # takes no `model` field
+# Owner decision 2026-10-01: the prepaid reseller balance is used up, never topped up again.
+when_exhausted = """do NOT top up the reseller — switch to official TypeSafe: get a key at \
+console.typesafe.ai, put it in ~/.config/typesafe/.env as TYPESAFE_API_KEY, and set \
+jev_provider = "typesafe" in agents/retrieval-control/retrieval.toml"""
+
+# The local judge (rerank_server.py, started by repo-retrieve-rerank.socket). idle_seconds: how long
+# it keeps its GPU partition after the last request before exiting.
+[definition.local]
+model = "Qwen/Qwen3-Reranker-0.6B"
+idle_seconds = 1800

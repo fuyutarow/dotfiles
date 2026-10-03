@@ -1,0 +1,19 @@
+\documentclass[aps,pra,reprint]{revtex4-2}
+\usepackage{mathtools}
+\usepackage{bm}
+\input{notation}
+% \def\commented{x}   commented violations do not hit: \mbox $$ \today
+\begin{document}
+\title{Fixture}
+\maketitle
+Text with 50\% and a line break \\% then \raisebox{x} in a comment.
+\begin{align}
+  \abs{x} &= \frac{a}{b} \\
+  \ket{\psi} &= \text{state}
+\end{align}
+\begin{figure}
+\includegraphics{fig1}
+\caption{A figure.\label{fig:a}}
+\end{figure}
+See Fig.~\ref{fig:a} and \cite{key}.
+\end{document}

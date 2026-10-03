@@ -1,0 +1,112 @@
+# SSH client policy — the TRANSPORT half of this repo's remote-access story.
+# Symlinked to ~/.ssh/config by scripts/link-dots.sh. OS-neutral: nothing here branches on
+# macOS vs WSL, so there is no config.mac / config.wsl split.
+#
+# THE SPLIT, and why it is not negotiable. This repo is PUBLIC. A host inventory is
+# HostName / Port / User — a map of the tailnet and who to log in as — so it lives in an
+# UNTRACKED ~/.ssh/config.local, exactly as per-machine git identity lives in ~/.local-gitconfig
+# (see git/gitconfig). What stays here is POLICY: options that are argued from measurement and
+# are worth carrying to any machine that clones this repo. Host ALIASES appear here because they
+# are already all over this repo's tracked files (mise.toml, scripts/reclaim-system.ts); the
+# addresses behind them are not.
+#
+# ORDER IS LOAD-BEARING. ssh takes the FIRST value it obtains for any option and never revises
+# it, so this file reads most-specific -> least-specific, and the Include comes first so a
+# machine-local decision always outranks a house default. A missing config.local is NOT an
+# error (verified: ssh -G still resolves, exit 0), so a fresh clone works before the local file
+# exists — you simply have no hosts defined yet.
+
+Include ~/.ssh/config.local
+
+# --- bandwidth: compress before the bytes reach a slow uplink -----------------------------
+# r99 is a compute box on an ASYMMETRIC line. Measured 2026-09-09: egress caps at ~1.3 MB/s
+# (~10.4 Mbps) while ingress reaches 145 Mbps — 40x. A remote TUI sends keystrokes UP the fast
+# path and receives redraws DOWN the slow one, which is exactly why `herdr --remote r99-wsl`
+# felt laggy while every latency metric read clean: RTT 33ms, 0% loss over 240 packets, ssh
+# round-trip p99 146ms with zero samples over 500ms in 60 trials.
+#
+# It is genuinely the link, not a tuning problem: 4 parallel streams measured SLOWER than one
+# (0.48 vs 0.72 MB/s). A TCP window limit would have summed HIGHER; degradation under
+# parallelism is a saturated bottleneck. So the only remaining lever is sending fewer bytes.
+#
+# Terminal data is ~10x compressible (a 2,225,104-byte `ls -laR` dump gzips to 225,552).
+# Measured A/B across this link with the same payload:
+#     Compression=no   6.47s / 8.02s
+#     Compression=yes  0.84s / 0.89s      <- ~8x
+# Client-side only: `ssh -v` shows `compression: zlib@openssh.com` negotiated in BOTH
+# directions against a stock sshd, so nothing is required on the server.
+#
+# This reaches herdr WITHOUT changing how herdr is launched. `herdr --remote` writes its own ssh
+# config, and that file's first line is `Include "~/.ssh/config"` — so with first-value-wins,
+# a Host block here outranks herdr's own `Host *` defaults. Verified through herdr's generated
+# config: `ssh -F <herdr's config> -G r99-wsl` reports `compression yes`.
+# NOTE: ControlPersist keeps an existing master alive, so an already-running `herdr --remote`
+# must be restarted before it picks this up.
+#
+# COST, so the tradeoff is visible rather than folded away: CPU on both ends (both had headroom
+# — host 53%, guest loadavg ~2), and a small LOSS on already-compressed payloads. Compression is
+# therefore scoped to this slow link, never `Host *`. For a bulk transfer of compressed data:
+#     ssh -o Compression=no ...
+Host r99-wsl r99-wsl-code r99
+    Compression yes
+
+# --- smart-open: open a URL on the machine you sit at, not on the box you drive ----------------
+# `o <url>` on r99-wsl (smart-open/smart-open.ts) writes to /tmp/smart-open-$USER.sock there; this forward
+# carries it to the local receiver (smart-open/receive.ts, started at login on macOS by
+# smart-open/smart-open-receiver.plist.mac), which opens http(s) URLs and remote folders. herdr --remote reads this file
+# first, so its attach carries the forward too. With no receiver running locally the remote side
+# gets no `ok`: a URL then opens on Windows, a path is not opened at all (nobody is at that screen).
+# A second concurrent connection cannot re-bind the same path and prints a warning; the WSL sshd
+# drop-in (wsl/sshd-dotfiles.conf, StreamLocalBindUnlink yes) makes the NEWEST connection win.
+# A PATH (`oo`) cannot travel — the files stay on r99 — so it goes as a request to open a VS Code
+# Remote-SSH window on r99-wsl-code. SetEnv tells the remote the alias we know it by (it has no
+# other way to learn it); the sshd drop-in AcceptEnv's it. The receiver honours it only if this
+# alias carries the RemoteForward below AND <alias>-code reaches the same box WITHOUT it — VS Code's
+# own ssh would otherwise take the socket over and leave a dead bind when its window closed. So
+# `-code` gets NO block here, and ~/.ssh/config.local must name it beside the real one
+# (`Host r99-wsl r99-wsl-code`) so it inherits HostName/Port/User. `mise run doctor` checks both.
+# SetEnv takes no %-tokens, hence the literal alias.
+#
+# ONLY THE ATTACH CARRIES IT. Newest-wins means every connection that requests this forward steals
+# the socket, and a short one (an agent's `ssh r99-wsl cmd`, a mise task, Codex's app-server, VS
+# Code) leaves a dead bind when it exits: the still-attached terminal's `o` then finds a stale
+# socket and opens on r99's own screen. Observed 2026-10-03 — a `mise run pull` over ssh did exactly
+# this. So the forward is scoped by Match (OpenSSH >= 9.9 client) to the two sessions that ARE the
+# screen you sit at: an interactive shell (`ssh r99-wsl`) and herdr's bridge (`herdr --remote`).
+# `originalhost`, not `host`: config.local has already rewritten the hostname to an address.
+# `ssh -G r99-wsl` (no command = shell) still shows it, which is what the receiver and doctor ask.
+Match originalhost r99-wsl sessiontype shell
+    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
+    SetEnv SMART_OPEN_SSH_HOST=r99-wsl
+Match originalhost r99-wsl command "*herdr remote-client-bridge*"
+    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
+    SetEnv SMART_OPEN_SSH_HOST=r99-wsl
+
+# r99-lan is the SAME Windows host as r99, over the LAN rather than the tailnet, and it exists
+# because Tailscale on Windows is a USER-SESSION GUI client: the tailnet address is unreachable
+# while the machine sits at a logon screen — precisely when you most need to get in. sshd is a
+# service and answers on the LAN throughout. Proven 2026-09-12: after a reboot `ssh r99` timed out
+# while `ssh r99-lan` worked, and the auto-logon diagnosis happened only through it.
+#
+# Deliberately NOT compressed: the ~10x win above is an asymmetric-WAN result (r99's uplink is
+# ~10 Mbps). On a gigabit LAN, zlib is slower than the wire, so compressing costs CPU for nothing.
+# Addressed by mDNS, NOT by IP, which is why this block can live in a public repo at all: the LAN
+# address is DHCP and drifts, but `R99.local` follows it — verified 2026-09-12, resolves to the
+# current lease. `.local` is also not routable off the segment, so it discloses nothing and cannot
+# be reached from the internet; the thing never to publish is the WAN address, and this is not it.
+# If mDNS is ever unavailable (some managed networks block it), override in ~/.ssh/config.local
+# with a literal `HostName <ip>` — that file is Included first, so it wins.
+Host r99-lan
+    HostName R99.local
+    User fuyutarow
+
+# --- keepalive: prevent an idle NAT/firewall from silently reaping a live connection -------
+# Probe every 30s, give up after 3 misses (~90s), so a long-lived agent session notices a dead
+# link and reconnects promptly instead of hanging on a socket the path has already forgotten.
+# TCPKeepAlive is off deliberately: it is the kernel-level, spoofable probe, and the
+# application-level ServerAlive* pair above is both encrypted and the one that actually drives
+# ssh's own disconnect decision.
+Host *
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+    TCPKeepAlive no

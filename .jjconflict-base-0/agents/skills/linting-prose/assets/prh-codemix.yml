@@ -1,0 +1,8 @@
+version: 1
+# Code-mixing HARD floor: flag ALL latin runs in 地文; the allowlist filter (real, v4.0.0)
+# suppresses the legitimate ones. This is the WORKING implementation of what the community
+# "決定版" wanted via en-ja-translator-find-english (which is E404 / does not exist, verified
+# 2026-07-04). Opt-in via textlintrc-strict.json — cost is maintaining the allowlist vocabulary.
+rules:
+  - expected: '日本語へ。固有名詞・確立した専門語は textlintrc の allowlist フィルタへ登録して除外'
+    pattern: /[A-Za-z][A-Za-z0-9_-]+/

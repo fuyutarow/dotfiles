@@ -1,0 +1,15 @@
+{
+	"schema": "programme-flow/v2",
+	"currentAuthorityRevision": "r1",
+	"currentAuthorityFence": "f1",
+	"sectionAuthorities": [],
+	"completedJobIds": [],
+	"releasedReceiptDigests": [],
+	"now": 10,
+	"elapsedMs": 3600000,
+	"config": { "schedulerTickMs": 100 },
+	"slots": [],
+	"traces": [],
+	"jobs": [],
+	"counts": { "infrastructureChecks": 1683 }
+}

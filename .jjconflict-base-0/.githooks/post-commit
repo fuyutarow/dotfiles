@@ -1,0 +1,7 @@
+#!/bin/sh
+# 薄い殻。中身は mise.toml の `hook:post-commit`(cocoindex の増分の温め)。
+# 切り離して即返る — 索引の更新でコミットを待たせない。post-commit の終了コードは
+# commit の成否に影響しないので、失敗しても黙って捨てる。
+command -v mise > /dev/null 2>&1 || exit 0
+mise run hook:post-commit > /dev/null 2>&1 &
+exit 0

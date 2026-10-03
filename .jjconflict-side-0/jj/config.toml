@@ -1,0 +1,68 @@
+# jj/config.toml — dotfiles-managed USER config for Jujutsu, shared by every repo on the machine.
+# Linked to ~/.config/jj/config.toml by scripts/link-dots.sh (jj reads $XDG_CONFIG_HOME or
+# ~/.config on Linux AND macOS). Edit here, never the linked copy.
+#
+# Repo-level config (`jj config set --repo`) is NOT in the repo: jj 0.45 keeps it under
+# ~/.config/jj/repos/<hash>/, outside every checkout and outside this repo, so a value set there
+# is lost on a new machine. Put cross-project values here; use --repo only for a value that is
+# genuinely specific to one repo, and say why where it is set.
+
+[user]
+# Same identity as git/gitconfig — a colocated repo's commits are written by jj, not git.
+name = "fuyutarow"
+email = "fuyutarow@gmail.com"
+
+[revset-aliases]
+# House default branch is alpha (CLAUDE.md → Git), and jj's built-in trunk() only looks for
+# main/master/trunk. A repo whose trunk differs overrides this one alias with --repo.
+# present() + root(): a repo with no alpha@origin yet (a new project before its first push) gets
+# root() quietly, instead of a 'Failed to resolve trunk()' warning on every command.
+"trunk()" = "latest(present(alpha@origin) | root())"
+
+[snapshot]
+# Default 1MiB silently leaves larger new files untracked (only a stderr warning), and a commit
+# then drops them from history; jj-commit.ts refuses such a snapshot, this makes it rare.
+max-new-file-size = "16MiB"
+
+# Aliases mirror git/gitconfig [alias] — same letter, the jj verb with the same intent — so
+# `j s` / `j d` / `j pu` work like `g s` / `g d` / `g pu` (zsh: j = jj, g = git). A git alias with
+# no jj counterpart is left out on purpose: a/ap (jj has no staging area; the working copy IS the
+# change), dc/rss (no index), undo (jj's own `undo` is an operation-log undo — same name, use it).
+[aliases]
+alias = ["config", "list", "aliases"]
+# status / diff / files
+s = ["status"]
+ss = ["diff", "--summary"]
+d = ["diff"]
+l = ["file", "list"]
+# log
+g = ["log", "-r", "all()"]
+lo = ["log"]
+ta = ["log", "-r", "bookmarks() | @"]
+# change (commit) — git's amend = fold the working copy into the parent
+cm = ["commit", "-m"]
+ca = ["squash"]
+amend = ["squash"]
+pick = ["duplicate"]
+# move around — git switch/restore
+sw = ["new"]
+ch = ["new"]
+e = ["edit"]
+rs = ["restore"]
+rd = ["interdiff"]
+# bookmark (git branch)
+bd = ["bookmark", "delete"]
+br = ["bookmark", "rename"]
+bm = ["bookmark", "rename"]
+# remote
+c = ["git", "clone", "--colocate"]
+f = ["git", "fetch"]
+pu = ["git", "push"]
+r = ["git", "remote", "list"]
+# workspace (git worktree)
+wt = ["workspace"]
+wtl = ["workspace", "list"]
+# open — mirrors git/gitconfig `url` and `o`. An ssh remote (git@host:owner/repo.git) becomes
+# https; `o` hands it to smart-open (smart-open/smart-open.ts), which picks the screen.
+url = ["util", "exec", "--", "sh", "-c", "jj git remote list | awk '$1 == \"origin\" { print $2 }' | sed -e 's#^git@\\([^:]*\\):#https://\\1/#' -e 's#\\.git$##'"]
+o = ["util", "exec", "--", "sh", "-c", "smart-open \"$(jj url)\""]

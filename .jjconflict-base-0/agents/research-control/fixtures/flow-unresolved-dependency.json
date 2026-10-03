@@ -1,0 +1,39 @@
+{
+	"schema": "programme-flow/v2",
+	"currentAuthorityRevision": "r1",
+	"currentAuthorityFence": "f1",
+	"sectionAuthorities": [
+		{
+			"sectionId": "B",
+			"goalConstitutionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"groundingSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			"groundingRevision": 1,
+			"groundingFence": "gf1"
+		}
+	],
+	"completedJobIds": [],
+	"releasedReceiptDigests": [],
+	"now": 10,
+	"elapsedMs": 1000,
+	"config": { "schedulerTickMs": 100 },
+	"slots": [
+		{ "id": "cpu-1", "resource": "cpu", "free": true },
+		{ "id": "gpu-1", "resource": "gpu", "free": true }
+	],
+	"traces": [],
+	"jobs": [
+		{
+			"id": "downstream",
+			"sectionId": "B",
+			"stage": "EXECUTION",
+			"readyAt": 1,
+			"deadline": 2,
+			"resource": "gpu",
+			"authorityRevision": "r1",
+			"authorityFence": "f1",
+			"dependsOn": ["upstream-invalidated"],
+			"runScale": "MINIMAL_DISCRIMINATOR"
+		}
+	],
+	"counts": {}
+}

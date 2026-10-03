@@ -31,7 +31,6 @@ Archived names in an active manual refer to the contract below; read the archive
 | [`prompting-llms`](prompting-llms/SKILL.md) | 2026-07-03 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`recovering-poisoned-context`](recovering-poisoned-context/SKILL.md) | 2026-07-01 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`securing-remote-access`](securing-remote-access/SKILL.md) | 2026-06-19 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
-| [`transcribing-media`](transcribing-media/SKILL.md) | 2026-07-05 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`workers-best-practices`](workers-best-practices/SKILL.md) | 2026-06-19 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`wrangler`](wrangler/SKILL.md) | 2026-06-19 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
 | [`driving-serena`](driving-serena/SKILL.md) | 2026-07-28 | 2026-10-03 | 0 recorded uses; beyond newcomer grace |
@@ -39,3 +38,7 @@ Archived names in an active manual refer to the contract below; read the archive
 Recent unused additions retained: `driving-jev` and `typesafe-ai` (2026-09-21), `operating-wsl2-on-windows` (2026-09-17), and `validating-experimental-evidence` (2026-09-25).
 
 Restore only on an explicit request: move the complete directory back to `agents/skills/`, restore its catalog and vendor-ledger entry where applicable, then run `mise run link:skills` and the skill floor.
+
+## Restored
+
+`transcribing-media` was restored to `agents/skills/` on 2026-10-03 at the user's request.

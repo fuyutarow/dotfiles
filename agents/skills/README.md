@@ -154,6 +154,8 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 ### People & media
 
+- [`transcribing-media`](transcribing-media/) — Transcribe authorized audio/video locally into text or subtitles via Whisper.
+
 
 ## Vendored (upstream)
 

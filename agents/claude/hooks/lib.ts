@@ -10,15 +10,24 @@
 
 import { readFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
+import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
 // Claude-only hooks keep importing everything from ./lib.ts.
 export { decidePre, findExe, readStdinJson } from "../../hooks/lib.ts";
 
 export type TranscriptEntry = {
-  type?: string;
-  message?: { content?: unknown };
+  type?: string | undefined;
+  message?: { content?: unknown } | undefined;
 };
+
+// One transcript line, read field by field (a field of the wrong type is simply absent).
+function entryOf(line: unknown): TranscriptEntry {
+  return {
+    type: strAt(line, "type"),
+    message: { content: at(line, "message", "content") },
+  };
+}
 
 // Transcript is JSONL; skip malformed lines rather than fail the whole read. An unreadable
 // file still throws (rejects), exactly as the synchronous read did.
@@ -26,18 +35,19 @@ export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
   const entries: TranscriptEntry[] = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
-    const parsed = await attempt((): TranscriptEntry => JSON.parse(line));
-    if (parsed.ok) entries.push(parsed.value);
+    const parsed = await attempt(() => parseJson(line));
+    if (parsed.ok) entries.push(entryOf(parsed.value));
   }
   return entries;
 }
 
 function textBlocks(content: unknown): string[] {
-  if (typeof content === "string") return [content];
-  if (!Array.isArray(content)) return [];
-  return content
-    .filter((b: any) => b && b.type === "text" && typeof b.text === "string")
-    .map((b: any) => b.text);
+  const whole = str(content);
+  if (whole !== undefined) return [whole];
+  return (arr(content) ?? []).flatMap((b) => {
+    const text = strAt(b, "text");
+    return strAt(b, "type") === "text" && text !== undefined ? [text] : [];
+  });
 }
 
 // This turn's assistant prose = assistant text blocks after the last user-type entry

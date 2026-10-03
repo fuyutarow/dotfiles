@@ -23,6 +23,7 @@
 import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { z } from "zod";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
@@ -103,6 +104,12 @@ type Watermark = {
   source: "index" | "stamp";
 };
 
+const WatermarkSchema = z.object({
+  head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/i)]),
+  indexedAt: z.string(),
+  source: z.enum(["index", "stamp"]),
+});
+
 const WATERMARK_BASENAME = "INDEXED_AT";
 const INDEX_ATTEMPTS = 3;
 
@@ -120,19 +127,12 @@ type WatermarkRead =
 async function readWatermark(project: string): Promise<WatermarkRead> {
   const file = Bun.file(watermarkPath(project));
   if (!(await file.exists())) return { kind: "missing" };
-  const parsed = await attempt(async () => {
-    const value = JSON.parse(await file.text());
-    if (
-      value &&
-      typeof value === "object" &&
-      (value.head === null ||
-        (typeof value.head === "string" &&
-          /^[0-9a-f]{40}$/i.test(value.head))) &&
-      (value.source === "index" || value.source === "stamp") &&
-      typeof value.indexedAt === "string"
-    ) {
-      return value as Watermark;
-    }
+  const parsed = await attempt(async (): Promise<Watermark> => {
+    const text = await file.text();
+    const value = WatermarkSchema.safeParse(
+      ((): unknown => JSON.parse(text))(),
+    );
+    if (value.success) return value.data;
     throw new Error("invalid watermark shape");
   });
   return parsed.ok ? { kind: "ok", value: parsed.value } : { kind: "invalid" };

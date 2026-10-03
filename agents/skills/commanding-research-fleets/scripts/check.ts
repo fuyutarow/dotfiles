@@ -47,7 +47,7 @@ function countTableRows(source: string, headerRe: RegExp): number {
   // rows start at index 2 (0=header, 1=separator)
   for (let i = 2; i < rest.length; i++) {
     const line = rest[i];
-    if (!line.startsWith("|")) break;
+    if (line === undefined || !line.startsWith("|")) break;
     count++;
   }
   return count;
@@ -86,7 +86,7 @@ async function main(): Promise<number> {
   if (!fmMatch) {
     fail("no YAML frontmatter block found");
   } else {
-    const fm = fmMatch[1];
+    const fm = fmMatch[1] ?? "";
     if (!/^name:\s*commanding-research-fleets\s*$/m.test(fm)) {
       fail("frontmatter name: must be exactly 'commanding-research-fleets'");
     } else {
@@ -97,7 +97,7 @@ async function main(): Promise<number> {
       fail("description: must use block scalar '>-' — a plain scalar breaks on any 'X: ' inside");
     } else {
       // Reconstruct the folded scalar length roughly: join continuation lines with spaces.
-      const raw = descMatch[1]
+      const raw = (descMatch[1] ?? "")
         .split("\n")
         .map((l) => l.trim())
         .join(" ")

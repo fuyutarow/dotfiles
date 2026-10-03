@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
+import { z } from "zod";
 
 const ROUTER = join(import.meta.dir, "..", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
@@ -23,6 +24,19 @@ const COMPATIBILITY_PATH = join(
   "hooks",
   "repo-retrieve.ts",
 );
+
+const WrittenWatermarkSchema = z.object({
+  head: z.string().nullable(),
+  source: z.string(),
+});
+
+// The watermark file `index` wrote, parsed — an unparseable file fails the test loudly.
+function readWrittenWatermark(dir: string) {
+  return WrittenWatermarkSchema.parse(
+    ((): unknown =>
+      JSON.parse(readFileSync(watermarkFilePath(dir), "utf8")))(),
+  );
+}
 
 function tempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -936,7 +950,7 @@ describe("repo-retrieve route contract", () => {
       `RESULT: INDEXED project=${dir} head=${head}`,
     );
     expect(result.stdout).toContain("confidence=verified(index)");
-    const written = JSON.parse(readFileSync(watermarkFilePath(dir), "utf8"));
+    const written = readWrittenWatermark(dir);
     expect(written.head).toBe(head);
     expect(written.source).toBe("index");
 
@@ -1047,7 +1061,7 @@ describe("repo-retrieve route contract", () => {
     expect(result.stderr).toContain("NOTE:");
     expect(result.stderr).toContain("not inside a git repository");
     expect(result.stdout).toContain("RESULT: INDEXED");
-    const written = JSON.parse(readFileSync(watermarkFilePath(dir), "utf8"));
+    const written = readWrittenWatermark(dir);
     expect(written.head).toBeNull();
     expect(written.source).toBe("index");
 

@@ -1,6 +1,7 @@
 import { cli } from "cleye";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 
 // Merge obsidian/app.json (single source) into EVERY vault's .obsidian/app.json.
 // Run via `mise run mac:obsidian` (wired into `mise run mac:init`). Consumer: human, verdict lines.
@@ -33,23 +34,27 @@ function rejectPrototypeFlag(
   }
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+const RecordSchema = z.record(z.string(), z.unknown());
+const VaultSchema = z.object({ path: z.string() });
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
   const data: unknown = await Bun.file(path).json();
-  if (!isRecord(data)) throw new Error(`${path}: not a JSON object`);
-  return data;
+  const record = RecordSchema.safeParse(data);
+  if (!record.success) throw new Error(`${path}: not a JSON object`);
+  return record.data;
 }
 
 async function vaultPaths(): Promise<string[]> {
   if (!existsSync(REGISTRY)) return [];
   const reg = await readJsonObject(REGISTRY);
-  const vaults = isRecord(reg.vaults) ? reg.vaults : {};
-  return Object.values(vaults)
-    .map((v) => (isRecord(v) && typeof v.path === "string" ? v.path : null))
-    .filter((p): p is string => p !== null);
+  const vaultsRecord = RecordSchema.safeParse(reg.vaults);
+  const vaults: Record<string, unknown> = vaultsRecord.success
+    ? vaultsRecord.data
+    : {};
+  return Object.values(vaults).flatMap((v) => {
+    const vault = VaultSchema.safeParse(v);
+    return vault.success ? [vault.data.path] : [];
+  });
 }
 
 async function main(): Promise<void> {

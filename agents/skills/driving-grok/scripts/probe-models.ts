@@ -2,6 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
+import { z } from "zod";
+
+const RecordSchema = z.record(z.string(), z.unknown());
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -26,7 +29,7 @@ async function run(
   // its real exit code. The sentinel 124 is preserved verbatim for the timeout case.
   const signal = AbortSignal.timeout(timeoutMs);
   const child = Bun.spawn(command, {
-    cwd,
+    ...(cwd === undefined ? {} : { cwd }),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -51,13 +54,12 @@ async function run(
 async function jsonRecord(
   value: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const parsed: unknown = await Promise.try(() => JSON.parse(value)).then(
+  const parsed: unknown = await Promise.try((): unknown => JSON.parse(value)).then(
     (ok) => ok,
     () => undefined,
   );
-  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : undefined;
+  const record = RecordSchema.safeParse(parsed);
+  return record.success ? record.data : undefined;
 }
 
 async function probeAll(models: readonly string[], grok: string): Promise<number> {
@@ -87,13 +89,10 @@ async function probeAll(models: readonly string[], grok: string): Promise<number
     const envelope =
       result.exitCode === 0 ? await jsonRecord(result.output) : undefined;
     const text = envelope?.text;
-    const usage =
-      typeof envelope?.usage === "object" && envelope.usage !== null
-        ? envelope.usage
-        : undefined;
+    const usage = RecordSchema.safeParse(envelope?.usage);
     const tokens =
-      typeof usage === "object" && usage !== null && "total_tokens" in usage
-        ? String(usage.total_tokens)
+      usage.success && Object.hasOwn(usage.data, "total_tokens")
+        ? String(usage.data.total_tokens)
         : "?";
     if (result.exitCode === 0 && text === "OK") {
       process.stdout.write(

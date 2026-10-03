@@ -1,39 +1,27 @@
 import { createHash } from "node:crypto";
 import { fromThrowable } from "neverthrow";
+import { z } from "zod";
 import { checkTrace, type Finding, type TraceResult } from "./trace.ts";
 
 /** A deliberately small, closed V0 wire for checking lateral transfer records. */
 export const LEARNING_BUS_SCHEMA = "cross-section-learning-bus/v1";
 
 type RecordValue = Record<string, unknown>;
-type Envelope = {
-  id: string;
-  kind: ArtifactKind;
-  locator: string;
-  at: string;
-  body: RecordValue;
-  sha256: string;
-  dependencies: Dependency[];
-};
-type ArtifactKind =
-  | "SECTION_TRANSFER_PACKET"
-  | "SECTION_SUBSCRIPTION"
-  | "SECTION_TRANSFER_DELIVERY"
-  | "SECTION_TRANSFER_ADMISSION"
-  | "SECTION_TRANSFER_COMMIT";
-type Dependency = { kind: string; id: string; sha256: string };
-type BusFinding = Finding & { artifactId?: string };
-
-const RFC3339 =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
-const SHA = /^[a-f0-9]{64}$/;
-const KINDS = new Set<ArtifactKind>([
+const KIND_LIST = [
   "SECTION_TRANSFER_PACKET",
   "SECTION_SUBSCRIPTION",
   "SECTION_TRANSFER_DELIVERY",
   "SECTION_TRANSFER_ADMISSION",
   "SECTION_TRANSFER_COMMIT",
-]);
+] as const;
+type ArtifactKind = (typeof KIND_LIST)[number];
+type Dependency = { kind: string; id: string; sha256: string };
+type Envelope = z.output<typeof EnvelopeSchema>;
+type BusFinding = Finding & { artifactId?: string };
+
+const RFC3339 =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const SHA = /^[a-f0-9]{64}$/;
 const DELTAS = new Set([
   "supports",
   "weakens",
@@ -47,31 +35,60 @@ const BARRIERS =
   /(?:^|[_-])(?:ACK(?:NOWLEDG(?:EMENT)?)?|QUORUM|WAVE|ALL[_-]?RECIPIENT|GLOBAL)(?:$|[_-])/i;
 const SUPERVISOR = /(?:SUPERVISOR|VERIFIER|PROGRAMME)/i;
 
-function record(value: unknown): value is RecordValue {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// z.looseObject({}) accepts exactly an object that is not null and not an array, and keeps every
+// own key: the parsed copy is what callers use.
+const RecordSchema = z.looseObject({});
+function record(value: unknown): RecordValue | undefined {
+  const parsed = RecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
-function text(value: unknown): value is string {
-  return typeof value === "string" && value.trim() !== "";
+function list(value: unknown): unknown[] | undefined {
+  const parsed = z.array(z.unknown()).safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+// The string itself when it is nonempty after trim, else undefined.
+function str(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+function text(value: unknown): boolean {
+  return str(value) !== undefined;
+}
+function nonNegativeInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 const instantMs = fromThrowable(
   (value: string) => Temporal.Instant.from(value).epochMilliseconds,
 );
 function timestamp(value: unknown): number | undefined {
-  if (!text(value) || !RFC3339.test(value)) return undefined;
+  const raw = str(value);
+  if (raw === undefined || !RFC3339.test(raw)) return undefined;
   // Temporal rejects impossible instants (02-30, 24:00) that Date silently rolled over; that
   // rejection is exactly the "not a timestamp" answer.
-  return instantMs(value).unwrapOr(undefined);
+  return instantMs(raw).unwrapOr(undefined);
 }
-function digest(value: unknown): value is string {
-  return typeof value === "string" && SHA.test(value);
+// The string itself when it is a lowercase SHA-256 hex digest, else undefined.
+function digestOf(value: unknown): string | undefined {
+  return typeof value === "string" && SHA.test(value) ? value : undefined;
 }
-function strings(value: unknown, allowEmpty = false): value is string[] {
-  return (
-    Array.isArray(value) &&
-    (allowEmpty || value.length > 0) &&
-    value.every(text) &&
-    new Set(value).size === value.length
-  );
+function digest(value: unknown): boolean {
+  return digestOf(value) !== undefined;
+}
+// The unique nonempty strings, or undefined when the value is not exactly that.
+function stringList(value: unknown, allowEmpty = false): string[] | undefined {
+  const items = list(value);
+  if (items === undefined) return undefined;
+  const texts = items.flatMap((item) => {
+    const t = str(item);
+    return t === undefined ? [] : [t];
+  });
+  return (allowEmpty || items.length > 0) &&
+    texts.length === items.length &&
+    new Set(texts).size === texts.length
+    ? texts
+    : undefined;
+}
+function strings(value: unknown, allowEmpty = false): boolean {
+  return stringList(value, allowEmpty) !== undefined;
 }
 function exactKeys(value: RecordValue, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
@@ -97,10 +114,11 @@ export function canonicalJson(value: unknown): string | undefined {
       ? undefined
       : `[${entries.join(",")}]`;
   }
-  if (!record(value)) return undefined;
+  const object = record(value);
+  if (object === undefined) return undefined;
   const entries: string[] = [];
-  for (const key of Object.keys(value).sort()) {
-    const entry = canonicalJson(value[key]);
+  for (const key of Object.keys(object).sort()) {
+    const entry = canonicalJson(object[key]);
     if (entry === undefined) return undefined;
     entries.push(`${JSON.stringify(key)}:${entry}`);
   }
@@ -124,41 +142,21 @@ function add(
     ...(artifactId === undefined ? {} : { artifactId }),
   });
 }
-function dependencies(value: unknown): value is Dependency[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (dependency) =>
-        record(dependency) &&
-        exactKeys(dependency, ["kind", "id", "sha256"]) &&
-        text(dependency.kind) &&
-        text(dependency.id) &&
-        digest(dependency.sha256),
-    )
-  );
-}
-function envelope(value: unknown): value is Envelope {
-  return (
-    record(value) &&
-    exactKeys(value, [
-      "id",
-      "kind",
-      "locator",
-      "at",
-      "body",
-      "sha256",
-      "dependencies",
-    ]) &&
-    text(value.id) &&
-    typeof value.kind === "string" &&
-    KINDS.has(value.kind as ArtifactKind) &&
-    text(value.locator) &&
-    timestamp(value.at) !== undefined &&
-    record(value.body) &&
-    digest(value.sha256) &&
-    dependencies(value.dependencies)
-  );
-}
+const TextSchema = z.string().refine((value) => value.trim() !== "");
+const DependencySchema = z.strictObject({
+  kind: TextSchema,
+  id: TextSchema,
+  sha256: z.string().regex(SHA),
+});
+const EnvelopeSchema = z.strictObject({
+  id: TextSchema,
+  kind: z.enum(KIND_LIST),
+  locator: TextSchema,
+  at: z.string().refine((value) => timestamp(value) !== undefined),
+  body: RecordSchema,
+  sha256: z.string().regex(SHA),
+  dependencies: z.array(DependencySchema),
+});
 function dependencySet(deps: Dependency[], expected: Dependency[]): boolean {
   if (deps.length !== expected.length) return false;
   const actual = deps
@@ -288,13 +286,14 @@ function subscriptionBody(body: RecordValue): boolean {
     ]) &&
     digest(body.sectionMandateSha256) &&
     digest(body.sectionCharterSha256) &&
-    Number.isInteger(body.mandateRevision) &&
-    (body.mandateRevision as number) >= 0 &&
+    nonNegativeInteger(body.mandateRevision) &&
     strings(body.topicIds) &&
     strings(body.affectedPremiseIds, true) &&
     strings(body.interfaceIds, true) &&
-    strings(body.acceptedDeltaClasses) &&
-    body.acceptedDeltaClasses.every((delta) => DELTAS.has(delta)) &&
+    (stringList(body.acceptedDeltaClasses)?.every((delta) =>
+      DELTAS.has(delta),
+    ) ??
+      false) &&
     timestamp(body.effectiveAt) !== undefined &&
     timestamp(body.expiresAt) !== undefined &&
     timestamp(body.expiresAt)! > timestamp(body.effectiveAt)! &&
@@ -392,8 +391,7 @@ function admissionBody(body: RecordValue): boolean {
     ]) &&
     digest(body.sectionMandateSha256) &&
     digest(body.sectionCharterSha256) &&
-    Number.isInteger(body.mandateRevision) &&
-    (body.mandateRevision as number) >= 0 &&
+    nonNegativeInteger(body.mandateRevision) &&
     digest(body.deliverySha256) &&
     digest(body.transferSha256) &&
     digest(body.subscriptionSha256) &&
@@ -448,8 +446,7 @@ function commitBody(body: RecordValue): boolean {
     ]) &&
     digest(body.sectionMandateSha256) &&
     digest(body.sectionCharterSha256) &&
-    Number.isInteger(body.mandateRevision) &&
-    (body.mandateRevision as number) >= 0 &&
+    nonNegativeInteger(body.mandateRevision) &&
     digest(body.admissionSha256) &&
     digest(body.transferSha256) &&
     digest(body.stateBeforeSha256) &&
@@ -465,21 +462,23 @@ function commitBody(body: RecordValue): boolean {
   );
 }
 function matches(packet: RecordValue, subscription: RecordValue): boolean {
-  const includes = (available: string[], required: string[]) =>
-    required.every((value) => available.includes(value));
+  const includes = (available: unknown, required: unknown): boolean => {
+    const have = stringList(available, true);
+    const need = stringList(required, true);
+    return (
+      have !== undefined &&
+      need !== undefined &&
+      need.every((value) => have.includes(value))
+    );
+  };
+  const accepted = stringList(subscription.acceptedDeltaClasses, true);
   return (
-    includes(subscription.topicIds as string[], packet.topicIds as string[]) &&
-    includes(
-      subscription.affectedPremiseIds as string[],
-      packet.affectedPremiseIds as string[],
-    ) &&
-    includes(
-      subscription.interfaceIds as string[],
-      packet.interfaceIds as string[],
-    ) &&
-    (subscription.acceptedDeltaClasses as string[]).includes(
-      packet.deltaClass as string,
-    )
+    includes(subscription.topicIds, packet.topicIds) &&
+    includes(subscription.affectedPremiseIds, packet.affectedPremiseIds) &&
+    includes(subscription.interfaceIds, packet.interfaceIds) &&
+    accepted !== undefined &&
+    typeof packet.deltaClass === "string" &&
+    accepted.includes(packet.deltaClass)
   );
 }
 function bodyValid(kind: ArtifactKind, body: RecordValue): boolean {
@@ -526,7 +525,7 @@ export type LearningBusResult = {
   };
 };
 
-export function checkLearningBus(input: unknown): LearningBusResult {
+export function checkLearningBus(rawInput: unknown): LearningBusResult {
   const findings: BusFinding[] = [];
   const zero: LearningBusResult["metrics"] = {
     transferPacketsPublished: 0,
@@ -549,8 +548,10 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     source,
     metrics,
   });
+  const input = record(rawInput);
+  const artifacts = record(input?.artifacts);
   if (
-    !record(input) ||
+    input === undefined ||
     !exactKeys(input, [
       "schema",
       "evaluatedAt",
@@ -561,7 +562,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     input.schema !== LEARNING_BUS_SCHEMA ||
     timestamp(input.evaluatedAt) === undefined ||
     !text(input.sourceCommitEventId) ||
-    !record(input.artifacts)
+    artifacts === undefined
   ) {
     add(
       findings,
@@ -585,17 +586,26 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     add(findings, "TRANSFER_WITHOUT_COMMIT", "source trace is not valid");
     return finish(source.summary);
   }
-  const events = (input.sourceTrace as RecordValue).events as RecordValue[];
+  const events = (list(record(input.sourceTrace)?.events) ?? []).flatMap(
+    (event) => {
+      const parsed = record(event);
+      return parsed === undefined ? [] : [parsed];
+    },
+  );
   const selected = events.find(
     (event) => event.id === input.sourceCommitEventId,
   );
+  const selectedId = str(selected?.id);
+  const selectedSha = digestOf(selected?.artifactSha256);
+  const selectedReceipt = digestOf(selected?.receiptSha256);
   if (
-    !record(selected) ||
+    selected === undefined ||
+    selectedId === undefined ||
     selected.kind !== "DIRECTOR_COMMIT" ||
     selected.decision !== "COMMIT" ||
-    !digest(selected.artifactSha256) ||
-    !digest(selected.receiptSha256) ||
-    !source.summary.receiptDigests.includes(selected.receiptSha256)
+    selectedSha === undefined ||
+    selectedReceipt === undefined ||
+    !source.summary.receiptDigests.includes(selectedReceipt)
   ) {
     add(
       findings,
@@ -611,7 +621,6 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     "admissions",
     "commits",
   ] as const;
-  const artifacts = input.artifacts;
   if (
     !exactKeys(artifacts, kinds) ||
     !kinds.every((kind) => Array.isArray(artifacts[kind]))
@@ -623,11 +632,12 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     );
     return finish(source.summary);
   }
-  const all = kinds.flatMap((kind) => artifacts[kind] as unknown[]);
+  const all = kinds.flatMap((kind) => list(artifacts[kind]) ?? []);
   const envelopes: Envelope[] = [];
   const ids = new Set<string>();
-  for (const raw of all) {
-    if (!envelope(raw) || ids.has((raw as { id?: unknown }).id as string)) {
+  for (const candidate of all) {
+    const parsedEnvelope = EnvelopeSchema.safeParse(candidate);
+    if (!parsedEnvelope.success || ids.has(parsedEnvelope.data.id)) {
       add(
         findings,
         "BUS_INVALID",
@@ -635,6 +645,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
       );
       continue;
     }
+    const raw = parsedEnvelope.data;
     ids.add(raw.id);
     const actual = bodySha256(raw.body);
     if (actual !== raw.sha256) {
@@ -670,14 +681,14 @@ export function checkLearningBus(input: unknown): LearningBusResult {
   const commits = byKind("SECTION_TRANSFER_COMMIT");
   const selectedDependency: Dependency = {
     kind: "DIRECTOR_COMMIT",
-    id: selected.id as string,
-    sha256: selected.artifactSha256 as string,
+    id: selectedId,
+    sha256: selectedSha,
   };
   const validPackets: Envelope[] = [];
   let replayDrops = 0;
   for (const packet of packets) {
     const body = packet.body;
-    const packetReceipts = body.sourceReceiptDigests as string[];
+    const packetReceipts = stringList(body.sourceReceiptDigests, true) ?? [];
     if (
       !dependencySet(packet.dependencies, [selectedDependency]) ||
       body.sourceCommitSha256 !== selected.artifactSha256 ||
@@ -714,7 +725,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
       findings,
       "COMMITTED_LEARNING_NOT_PUBLISHED",
       "eligible selected commit missed its declared transfer publish deadline",
-      selected.id as string,
+      selectedId,
     );
   const packetByDigest = new Map(
     validPackets.map((item) => [item.sha256, item]),
@@ -728,7 +739,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     const body = delivery.body,
       packet = packetByDigest.get(String(body.transferSha256)),
       subscription = subscriptionByDigest.get(String(body.subscriptionSha256));
-    const key = `${body.transferSha256}:${body.recipientSectionId}`;
+    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
     if (seenDeliveryKeys.has(key)) {
       add(
         findings,
@@ -785,7 +796,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
       delivery = deliveryByDigest.get(String(body.deliverySha256)),
       packet = packetByDigest.get(String(body.transferSha256)),
       subscription = subscriptionByDigest.get(String(body.subscriptionSha256));
-    const key = `${body.transferSha256}:${body.recipientSectionId}`;
+    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
     if (
       seenAdmissionKeys.has(key) ||
       seenDeliveryKeys.has(`admission:${key}`)
@@ -867,7 +878,7 @@ export function checkLearningBus(input: unknown): LearningBusResult {
     const body = commit.body,
       admission = admissionByDigest.get(String(body.admissionSha256)),
       packet = packetByDigest.get(String(body.transferSha256));
-    const key = `${body.transferSha256}:${body.recipientSectionId}`;
+    const key = `${String(body.transferSha256)}:${String(body.recipientSectionId)}`;
     if (seenCommitKeys.has(key)) {
       add(
         findings,

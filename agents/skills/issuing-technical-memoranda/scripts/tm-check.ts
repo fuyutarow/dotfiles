@@ -13,14 +13,18 @@
  */
 
 import { cli } from "cleye";
+import { z } from "zod";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUIRED = ["tm", "title", "date", "author", "authority", "release", "to"] as const;
 
-type Front = Record<string, unknown>;
+const FrontSchema = z.record(z.string(), z.unknown());
+type Front = z.output<typeof FrontSchema>;
 
-const asRecord = (v: unknown): Front | null =>
-  typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Front) : null;
+const asRecord = (v: unknown): Front | null => {
+  const parsed = FrontSchema.safeParse(v);
+  return parsed.success ? parsed.data : null;
+};
 
 // No try/catch (audited *.ts ban): Promise.try turns a YAML.parse throw into a rejection this
 // `.then` maps to `null`, same outward result as the old catch branch.

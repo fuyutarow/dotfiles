@@ -30,9 +30,10 @@ export const MAX_RECORD_BYTES = 65_536;
 
 /** `.code` of a caught Node error, if it has one (ENOENT, EEXIST, ...). */
 function errorCode(error: unknown): string | undefined {
-	return typeof error === "object" && error !== null && "code" in error
-		? String((error as { code: unknown }).code)
-		: undefined;
+	if (typeof error !== "object" || error === null) return undefined;
+	if (!Reflect.has(error, "code")) return undefined;
+	const code: unknown = Reflect.get(error, "code");
+	return String(code);
 }
 
 const parseInstant = fromThrowable((value: string) =>
@@ -204,7 +205,7 @@ export function validateContinuationRecord(
 		previousIndex = index;
 	}
 	for (const heading of presentHeadings) {
-		if (!(requiredHeadings as readonly string[]).includes(heading)) {
+		if (!requiredHeadings.some((required) => required === heading)) {
 			findings.push({
 				code: "TCR31",
 				message: `unexpected heading: ${heading}`,
@@ -605,7 +606,9 @@ export function bindContinuationSlot(
 		return recordInspection.findings;
 	}
 
-	let temporary: string | undefined;
+	// The write closure records its temporary path here; a plain `let` would be narrowed to
+	// `undefined` at the cleanup site because the compiler does not track closure assignments.
+	const temporary: { path: string | undefined } = { path: undefined };
 	const write = fromThrowable((): readonly Finding[] => {
 		if (existsSync(slot) && lstatSync(slot).isSymbolicLink()) {
 			return [
@@ -621,19 +624,21 @@ export function bindContinuationSlot(
 			return [createdAncestorFinding];
 		}
 		const portablePath = relative(root, record).split(sep).join("/");
-		temporary = `${slot}.tmp-${process.pid}-${randomUUID()}`;
-		writeFileSync(temporary, `TCR_PATH: ${portablePath}\n`, {
+		const temporaryPath = `${slot}.tmp-${process.pid}-${randomUUID()}`;
+		temporary.path = temporaryPath;
+		writeFileSync(temporaryPath, `TCR_PATH: ${portablePath}\n`, {
 			flag: "wx",
 			mode: 0o600,
 		});
-		renameSync(temporary, slot);
-		temporary = undefined;
+		renameSync(temporaryPath, slot);
+		temporary.path = undefined;
 		return [];
 	});
 	const result = write();
 	if (result.isOk()) return result.value;
 	// Best effort: the exact randomized temporary path is never a binding.
-	if (temporary !== undefined) fromThrowable(() => unlinkSync(temporary as string))();
+	const leftover = temporary.path;
+	if (leftover !== undefined) fromThrowable(() => unlinkSync(leftover))();
 	return [
 		{
 			code: "TCR26",

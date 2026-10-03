@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   activateGoal,
   type GoalContract,
@@ -20,6 +21,31 @@ import {
   recordRunDecision,
 } from "../kernel.ts";
 import { buildPostmortem } from "../postmortem.ts";
+
+// JSON.parse returns `any`; every parsed value enters the test as `unknown` and is read through a
+// schema (or compared whole with toEqual / toMatchObject).
+const jsonOf = (text: string): unknown => JSON.parse(text);
+
+const SnapshotSchema = z.object({ north_star: z.string() });
+const DenyOutputSchema = z.object({
+  hookSpecificOutput: z.object({
+    permissionDecision: z.string(),
+    permissionDecisionReason: z.string(),
+  }),
+});
+const ContextOutputSchema = z.object({
+  hookSpecificOutput: z.object({
+    hookEventName: z.string(),
+    additionalContext: z.string(),
+  }),
+});
+const StoredEventSchema = z.record(z.string(), z.unknown());
+const StatusOutputSchema = z.object({
+  active: z.object({ goal: z.object({ goal_version: z.number() }) }),
+});
+const PostmortemOutputSchema = z.object({
+  report: z.object({ decisions: z.array(z.unknown()) }),
+});
 
 function workspace(): string {
   const root = mkdtempSync(join(tmpdir(), "goal-kernel-"));
@@ -86,7 +112,9 @@ describe("immutable Goal authority", () => {
     const first = await activateGoal(root, original);
 
     original.north_star = "mutated source object";
-    const snapshot = JSON.parse(readFileSync(first.snapshot_path, "utf8"));
+    const snapshot = SnapshotSchema.parse(
+      jsonOf(readFileSync(first.snapshot_path, "utf8")),
+    );
     expect(snapshot.north_star).toContain("run id reconstructs");
     expect(snapshot.north_star).not.toContain("mutated");
     expect(first.goal_digest).toMatch(/^[a-f0-9]{64}$/);
@@ -167,7 +195,7 @@ describe("hook enforcement and privacy", () => {
         "codex",
         hookPayload(workspace(), "codex-neutral", event),
       );
-      expect(JSON.parse(unconfigured.stdout)).toEqual({});
+      expect(jsonOf(unconfigured.stdout)).toEqual({});
 
       const root = workspace();
       await activateGoal(root, goal());
@@ -175,7 +203,7 @@ describe("hook enforcement and privacy", () => {
         "codex",
         hookPayload(root, "codex-neutral", event),
       );
-      expect(JSON.parse(configured.stdout)).toEqual({});
+      expect(jsonOf(configured.stdout)).toEqual({});
     },
   );
 
@@ -225,10 +253,11 @@ describe("hook enforcement and privacy", () => {
         tool_input: { command: "true" },
       }),
     );
-    expect(JSON.parse(preTool.stdout).hookSpecificOutput).toMatchObject({
-      permissionDecision: "deny",
-      permissionDecisionReason: expect.stringContaining("GK_CONFIG_UNTRUSTED"),
-    });
+    const denied = DenyOutputSchema.parse(jsonOf(preTool.stdout));
+    expect(denied.hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(denied.hookSpecificOutput.permissionDecisionReason).toContain(
+      "GK_CONFIG_UNTRUSTED",
+    );
   });
 
   test.each(["claude", "codex"] as const)(
@@ -246,7 +275,7 @@ describe("hook enforcement and privacy", () => {
         }),
       );
       expect(result.exit_code).toBe(0);
-      const output = JSON.parse(result.stdout);
+      const output = DenyOutputSchema.parse(jsonOf(result.stdout));
       expect(output.hookSpecificOutput.permissionDecision).toBe("deny");
       expect(output.hookSpecificOutput.permissionDecisionReason).toContain(
         "GK_AUTHORITY_UNAVAILABLE",
@@ -319,7 +348,9 @@ describe("hook enforcement and privacy", () => {
     const eventName = readdirSync(eventsDir)[0];
     if (eventName === undefined) throw new Error("expected one run event");
     const eventPath = join(eventsDir, eventName);
-    const event = JSON.parse(readFileSync(eventPath, "utf8"));
+    const event = StoredEventSchema.parse(
+      jsonOf(readFileSync(eventPath, "utf8")),
+    );
     event.event_type = "tampered";
     writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
     await expect(listRunEvents(root, requiredRunId(start))).rejects.toThrow(
@@ -547,7 +578,7 @@ describe("real protocol adapters", () => {
         encoding: "utf8",
       });
       expect(result.status).toBe(0);
-      const output = JSON.parse(result.stdout);
+      const output = ContextOutputSchema.parse(jsonOf(result.stdout));
       expect(output.hookSpecificOutput.hookEventName).toBe("SessionStart");
       expect(output.hookSpecificOutput.additionalContext).toContain(
         "harness-postmortem",
@@ -566,7 +597,7 @@ describe("real protocol adapters", () => {
         encoding: "utf8",
       });
       expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({});
+      expect(jsonOf(result.stdout)).toEqual({});
     },
   );
 
@@ -603,7 +634,7 @@ describe("real protocol adapters", () => {
       });
       expect(observe.status).toBe(0);
       expect(observe.stderr).toContain("event was not observed");
-      expect(JSON.parse(observe.stdout)).toEqual({});
+      expect(jsonOf(observe.stdout)).toEqual({});
 
       const available = spawnSync("/bin/sh", [runner, "--enforce"], {
         input: payload,
@@ -681,14 +712,16 @@ describe("Cleye command boundary", () => {
     writeFileSync(contract, `${JSON.stringify(goal())}\n`);
     const activated = run(["activate", contract, "--root", root, "--json"]);
     expect(activated.code).toBe(0);
-    expect(JSON.parse(activated.stdout)).toMatchObject({
+    expect(jsonOf(activated.stdout)).toMatchObject({
       ok: true,
       command: "activate",
       goal_id: "harness-postmortem",
     });
     const status = run(["status", "--root", root, "--json"]);
     expect(status.code).toBe(0);
-    expect(JSON.parse(status.stdout).active.goal.goal_version).toBe(1);
+    expect(
+      StatusOutputSchema.parse(jsonOf(status.stdout)).active.goal.goal_version,
+    ).toBe(1);
 
     const extra = run([
       "activate",
@@ -737,7 +770,7 @@ describe("Cleye command boundary", () => {
       "--json",
     ]);
     expect(decided.code).toBe(0);
-    expect(JSON.parse(decided.stdout)).toMatchObject({
+    expect(jsonOf(decided.stdout)).toMatchObject({
       ok: true,
       command: "decide",
       event: { decision: { decision_id: "D-002" } },
@@ -745,11 +778,13 @@ describe("Cleye command boundary", () => {
 
     const postmortem = run(["postmortem", runId, "--root", root, "--json"]);
     expect(postmortem.code).toBe(0);
-    expect(JSON.parse(postmortem.stdout)).toMatchObject({
+    expect(jsonOf(postmortem.stdout)).toMatchObject({
       ok: true,
       command: "postmortem",
       report: { run_id: runId, provider: "codex", findings: [] },
     });
-    expect(JSON.parse(postmortem.stdout).report.decisions).toHaveLength(2);
+    expect(
+      PostmortemOutputSchema.parse(jsonOf(postmortem.stdout)).report.decisions,
+    ).toHaveLength(2);
   });
 });

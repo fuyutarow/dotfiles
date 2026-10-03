@@ -1,14 +1,40 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { z } from "zod";
 import { checkProgrammeFlow } from "../programme-flow.ts";
 
-function flow(name: string): ReturnType<typeof checkProgrammeFlow> {
-  return checkProgrammeFlow(
-    JSON.parse(
-      readFileSync(resolve(import.meta.dir, "../fixtures", name), "utf8"),
-    ),
+const FlowBaseSchema = z.looseObject({ jobs: z.array(z.looseObject({})) });
+const TraceFixtureSchema = z.looseObject({
+  events: z.array(z.looseObject({})),
+  lease: z.looseObject({}),
+});
+function fixture(name: string): unknown {
+  const text = readFileSync(
+    resolve(import.meta.dir, "../fixtures", name),
+    "utf8",
   );
+  return ((): unknown => JSON.parse(text))();
+}
+function flow(name: string): ReturnType<typeof checkProgrammeFlow> {
+  return checkProgrammeFlow(fixture(name));
+}
+function flowBase(name: string): z.output<typeof FlowBaseSchema> {
+  return FlowBaseSchema.parse(fixture(name));
+}
+function traceFixture(): z.output<typeof TraceFixtureSchema> {
+  return TraceFixtureSchema.parse(
+    fixture("valid-intent-receipt-learning.json"),
+  );
+}
+function eventAt(
+  trace: z.output<typeof TraceFixtureSchema>,
+  index: number,
+): Record<string, unknown> {
+  const event = trace.events[index];
+  if (event === undefined)
+    throw new Error(`trace fixture has no event ${index}`);
+  return event;
 }
 describe("programme-flow/v2", () => {
   test("streaming pass dispatches independent section work", () =>
@@ -18,12 +44,9 @@ describe("programme-flow/v2", () => {
     }));
   test("global barrier fails", () => {
     const result = flow("flow-global-barrier.json");
-    expect(result.findings.map((f) => f.code)).toEqual(
-      expect.arrayContaining([
-        "GLOBAL_BATCH_BARRIER",
-        "READY_WORK_NOT_DISPATCHED",
-      ]),
-    );
+    const codes = result.findings.map((f) => f.code);
+    for (const code of ["GLOBAL_BATCH_BARRIER", "READY_WORK_NOT_DISPATCHED"])
+      expect(codes).toContain(code);
   });
   test("Supervisor is not hot path", () =>
     expect(
@@ -38,13 +61,17 @@ describe("programme-flow/v2", () => {
   test("an unresolved invalidator dependency holds downstream despite free slots", () => {
     const result = flow("flow-unresolved-dependency.json");
     expect(result.dispatched).toEqual([]);
-    expect(result.findings).toContainEqual(
-      expect.objectContaining({
-        code: "DEPENDENCY_NOT_READY",
-        jobId: "downstream",
-        locator: "job:upstream-invalidated",
-      }),
-    );
+    expect(
+      result.findings.map(({ code, jobId, locator }) => ({
+        code,
+        jobId,
+        locator,
+      })),
+    ).toContainEqual({
+      code: "DEPENDENCY_NOT_READY",
+      jobId: "downstream",
+      locator: "job:upstream-invalidated",
+    });
   });
   test("stale authority revision or fence is rejected deterministically", () => {
     const result = flow("flow-stale-authority.json");
@@ -75,23 +102,10 @@ describe("programme-flow/v2", () => {
     );
   });
   test("a validated scientific PASS receipt and Director release authorize confirmation", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-streaming-pass.json"),
-        "utf8",
-      ),
-    );
-    const trace = JSON.parse(
-      readFileSync(
-        resolve(
-          import.meta.dir,
-          "../fixtures/valid-intent-receipt-learning.json",
-        ),
-        "utf8",
-      ),
-    );
-    const digest = trace.events[5].artifactSha256;
-    trace.events[7].scaleRelease = "ESCALATED_CONFIRMATION";
+    const base = flowBase("flow-streaming-pass.json");
+    const trace = traceFixture();
+    const digest = eventAt(trace, 5).artifactSha256;
+    eventAt(trace, 7).scaleRelease = "ESCALATED_CONFIRMATION";
     const result = checkProgrammeFlow({
       ...base,
       traces: [trace],
@@ -108,24 +122,11 @@ describe("programme-flow/v2", () => {
     expect(result).toMatchObject({ ok: true, dispatched: ["a"] });
   });
   test("a Director rejection cannot release confirmation", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-streaming-pass.json"),
-        "utf8",
-      ),
-    );
-    const trace = JSON.parse(
-      readFileSync(
-        resolve(
-          import.meta.dir,
-          "../fixtures/valid-intent-receipt-learning.json",
-        ),
-        "utf8",
-      ),
-    );
-    const digest = trace.events[5].artifactSha256;
-    trace.events[7].decision = "REJECT";
-    trace.events[7].scaleRelease = "ESCALATED_CONFIRMATION";
+    const base = flowBase("flow-streaming-pass.json");
+    const trace = traceFixture();
+    const digest = eventAt(trace, 5).artifactSha256;
+    eventAt(trace, 7).decision = "REJECT";
+    eventAt(trace, 7).scaleRelease = "ESCALATED_CONFIRMATION";
     const result = checkProgrammeFlow({
       ...base,
       traces: [trace],
@@ -147,23 +148,27 @@ describe("programme-flow/v2", () => {
   test("a queued job cannot certify its own dependency as complete", () => {
     const result = flow("flow-self-dependency.json");
     expect(result.dispatched).toEqual([]);
-    expect(result.findings).toContainEqual(
-      expect.objectContaining({
-        code: "DEPENDENCY_NOT_READY",
-        jobId: "self-dependent",
-        locator: "job:self-dependent",
-      }),
-    );
+    expect(
+      result.findings.map(({ code, jobId, locator }) => ({
+        code,
+        jobId,
+        locator,
+      })),
+    ).toContainEqual({
+      code: "DEPENDENCY_NOT_READY",
+      jobId: "self-dependent",
+      locator: "job:self-dependent",
+    });
   });
   test("free GPU and high utilization never override scientific admission", () => {
     const result = flow("flow-gpu-admission-hold.json");
     expect(result.dispatched).toEqual([]);
-    expect(result.findings).toContainEqual(
-      expect.objectContaining({
-        code: "DEPENDENCY_NOT_READY",
-        locator: "job:scientific-release",
-      }),
-    );
+    expect(
+      result.findings.map(({ code, locator }) => ({ code, locator })),
+    ).toContainEqual({
+      code: "DEPENDENCY_NOT_READY",
+      locator: "job:scientific-release",
+    });
   });
   test("free GPU cannot dispatch work without section scientific admission", () => {
     const result = flow("flow-gpu-missing-admission.json");
@@ -180,12 +185,7 @@ describe("programme-flow/v2", () => {
     );
   });
   test("execution rejects inconsistent run scale and escalation class", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-streaming-pass.json"),
-        "utf8",
-      ),
-    );
+    const base = flowBase("flow-streaming-pass.json");
     const result = checkProgrammeFlow({
       ...base,
       jobs: [{ ...base.jobs[0], escalationClass: "GPU_PORT" }],
@@ -217,27 +217,14 @@ describe("programme-flow/v2", () => {
       candidateInventory: 0,
     }));
   test("scientific counters derive only from valid embedded traces", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-metric-integrity.json"),
-        "utf8",
-      ),
-    );
+    const base = flowBase("flow-metric-integrity.json");
     expect(
       checkProgrammeFlow({
         ...base,
         counts: { searchReceipts: 999, learningCommits: 999 },
       }).metrics,
     ).toMatchObject({ searchReceipts: 0, learningCommits: 0 });
-    const trace = JSON.parse(
-      readFileSync(
-        resolve(
-          import.meta.dir,
-          "../fixtures/valid-intent-receipt-learning.json",
-        ),
-        "utf8",
-      ),
-    );
+    const trace = traceFixture();
     expect(
       checkProgrammeFlow({ ...base, traces: [trace] }).metrics,
     ).toMatchObject({
@@ -248,21 +235,8 @@ describe("programme-flow/v2", () => {
     });
   });
   test("replayed trace or receipt never inflates metrics", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-metric-integrity.json"),
-        "utf8",
-      ),
-    );
-    const trace = JSON.parse(
-      readFileSync(
-        resolve(
-          import.meta.dir,
-          "../fixtures/valid-intent-receipt-learning.json",
-        ),
-        "utf8",
-      ),
-    );
+    const base = flowBase("flow-metric-integrity.json");
+    const trace = traceFixture();
     const replay = checkProgrammeFlow({
       ...base,
       traces: [trace, structuredClone(trace)],
@@ -285,12 +259,7 @@ describe("programme-flow/v2", () => {
     expect(sharedReceipt.metrics.searchReceipts).toBe(1);
   });
   test("wait grammar and finite snapshot values fail closed", () => {
-    const base = JSON.parse(
-      readFileSync(
-        resolve(import.meta.dir, "../fixtures/flow-streaming-pass.json"),
-        "utf8",
-      ),
-    );
+    const base = flowBase("flow-streaming-pass.json");
     expect(
       checkProgrammeFlow({
         ...base,

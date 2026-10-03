@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import { z } from "zod";
 
 // Consumer: a user-systemd timer and the Claude storage hook. One short run checks the Windows
 // drive and host RAM under WSL, reclaims only the repository's unattended-safe tiers, and stops
@@ -75,16 +76,20 @@ function rejectPrototypeFlag(
   }
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const JsonRecord = z.record(z.string(), z.unknown());
+
+// A plain table as a string-keyed record; undefined for anything else.
+function record(value: unknown): Record<string, unknown> | undefined {
+  const parsed = JsonRecord.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function policyFromToml(path: string): Policy {
   const parsed: unknown = Bun.TOML.parse(readFileSync(path, "utf8"));
-  if (!record(parsed) || !record(parsed.drive) || !record(parsed.drive.host)) {
+  const host = record(record(record(parsed)?.drive)?.host);
+  if (host === undefined) {
     throw new Error(`missing drive.host in ${path}`);
   }
-  const host = parsed.drive.host;
   if (
     typeof host.path !== "string" ||
     typeof host.deny_gib !== "number" ||
@@ -365,7 +370,7 @@ function liveTargets(): StopTarget[] {
   const processes = readdirSync("/proc")
     .filter((name) => /^\d+$/.test(name))
     .map((name) => readProcess(Number(name)))
-    .filter((p): p is ComputeProcess => p !== null);
+    .flatMap((p) => (p === null ? [] : [p]));
   return selectStopTargets(processes, process.getuid?.() ?? -1);
 }
 
@@ -384,7 +389,7 @@ function buildStillRunning(): boolean {
   const processes = readdirSync("/proc")
     .filter((name) => /^\d+$/.test(name))
     .map((name) => readProcess(Number(name)))
-    .filter((p): p is ComputeProcess => p !== null);
+    .flatMap((p) => (p === null ? [] : [p]));
   return hasLiveBuildProcess(processes, process.getuid?.() ?? -1);
 }
 

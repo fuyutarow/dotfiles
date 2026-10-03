@@ -153,11 +153,14 @@ async function silentListener(sock: string): Promise<void> {
 
 type Run = { code: number; out: string; err: string };
 function client(args: string[], env: Record<string, string | undefined>): Run {
-  const merged: Record<string, string | undefined> = { ...process.env, ...env };
-  for (const k of Object.keys(merged))
-    if (merged[k] === undefined) delete merged[k];
+  // An env entry set to undefined is removed from the child's environment, not passed through.
+  const merged: Record<string, string> = Object.fromEntries(
+    Object.entries({ ...process.env, ...env }).flatMap(([k, v]): [string, string][] =>
+      v === undefined ? [] : [[k, v]],
+    ),
+  );
   const p = Bun.spawnSync(["bun", SMART_OPEN, ...args], {
-    env: merged as Record<string, string>,
+    env: merged,
     timeout: 20_000,
   });
   return {

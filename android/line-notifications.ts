@@ -74,7 +74,7 @@ async function connectedDevice(requestedSerial?: string): Promise<string> {
     .map((line) => line.trim().split(/\s+/))
     .filter((parts) => parts.length >= 2 && parts[1] === "device")
     .map((parts) => parts[0])
-    .filter((serial): serial is string => serial !== undefined);
+    .flatMap((serial) => (serial === undefined ? [] : [serial]));
   if (requestedSerial) {
     if (!devices.includes(requestedSerial)) {
       throw new Error(

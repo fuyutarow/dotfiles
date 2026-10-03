@@ -48,7 +48,7 @@ async function census(files: string[]): Promise<number> {
     body += bodyOf(s);
     const pre = s.includes("\\begin{document}") ? s.slice(0, s.indexOf("\\begin{document}")) : s;
     pre.split("\n").forEach((line, i) => {
-      for (const [kind, re] of pats) for (const m of line.matchAll(re)) defs.push({ name: m[1], kind, at: `${f.split("/").pop()}:${i + 1}` });
+      for (const [kind, re] of pats) for (const m of line.matchAll(re)) defs.push({ name: m[1] ?? "", kind, at: `${f.split("/").pop()}:${i + 1}` });
       const delim = line.match(/\\def\s*\\([A-Za-z]+)([0-9]+)\s*\{/);
       if (delim) console.log(`TRAP  \\def\\${delim[1]}${delim[2]} is a DELIMITED macro (\\${delim[1]} must be followed by "${delim[2]}"), not a name with a digit  [${f}:${i + 1}]`);
     });
@@ -61,7 +61,7 @@ async function census(files: string[]): Promise<number> {
   };
   const byName = new Map<string, Def[]>();
   for (const d of defs) byName.set(d.name, [...(byName.get(d.name) || []), d]);
-  const rows = [...byName.entries()].map(([name, ds]) => ({ name, ds, n: uses(ds[0]) })).sort((a, b) => a.n - b.n || a.name.localeCompare(b.name));
+  const rows = [...byName.entries()].map(([name, ds]) => ({ name, ds, n: ds[0] === undefined ? 0 : uses(ds[0]) })).sort((a, b) => a.n - b.n || a.name.localeCompare(b.name));
   for (const r of rows) {
     const re = r.ds.length > 1 ? `  REDEFINED x${r.ds.length} (last wins: ${r.ds.at(-1)!.at})` : "";
     console.log(`${String(r.n).padStart(4)}  \\${r.name}  ${r.ds.map((d) => `${d.kind}@${d.at}`).join(", ")}${re}`);
@@ -78,7 +78,7 @@ async function bboxWords(pdf: string): Promise<Word[]> {
   for (const line of html.split("\n")) {
     if (line.includes("<page ")) page++;
     const m = line.match(/xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*)<\/word>/);
-    if (m) out.push({ page, x: +m[1], y: +m[2], t: m[3] });
+    if (m) out.push({ page, x: Number(m[1]), y: Number(m[2]), t: m[3] ?? "" });
   }
   return out;
 }
@@ -89,6 +89,7 @@ async function boxes(a: string, b: string): Promise<number> {
   let bad = 0;
   for (let i = 0; i < Math.min(wa.length, wb.length); i++) {
     const A = wa[i], B = wb[i];
+    if (A === undefined || B === undefined) continue;
     const dx = B.x - A.x, dy = B.y - A.y;
     if (A.t !== B.t || Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
       if (bad++ < 30) console.log(`p${A.page} "${A.t}"${A.t !== B.t ? ` -> "${B.t}"` : ""} dx=${dx.toFixed(3)} dy=${dy.toFixed(3)}`);
@@ -140,48 +141,50 @@ async function paras(a: string, b: string): Promise<number> {
 // the line "```forbidden" and closed by "```". Inside it a blank line is skipped; every other line
 // is <regex><TAB><reason>, split at the FIRST tab, both halves non-empty. The regex is ECMAScript,
 // compiled with flag g, and applied to one comment-stripped source line at a time.
-type Rule = { id: string; re: RegExp; reason: string };
-type ContractError = { line: number; problem: string };
+type Rule = { kind: "rule"; id: string; re: RegExp; reason: string };
+type ContractError = { kind: "error"; line: number; problem: string };
+type ForbiddenBlock = { kind: "block"; start: number; body: string[] };
+const contractError = (line: number, problem: string): ContractError => ({ kind: "error", line, problem });
 type TexFile = { path: string; lines: string[] };
 const usageError = (message: string): number => {
   console.error(`tex-oracle: ${message}`);
   return 2;
 };
 
-function forbiddenBlock(lines: string[]): { start: number; body: string[] } | ContractError {
+function forbiddenBlock(lines: string[]): ForbiddenBlock | ContractError {
   const opens = lines.flatMap((l, i) => (/^```forbidden\s*$/.test(l) ? [i] : []));
-  if (opens.length !== 1) return { line: (opens[1] ?? 0) + 1, problem: `need exactly one \`\`\`forbidden block, found ${opens.length}` };
-  const start = opens[0];
+  if (opens.length !== 1) return contractError((opens[1] ?? 0) + 1, `need exactly one \`\`\`forbidden block, found ${opens.length}`);
+  const start = opens[0] ?? 0;
   const close = lines.findIndex((l, i) => i > start && /^```\s*$/.test(l));
-  if (close < 0) return { line: start + 1, problem: "the ```forbidden block is never closed" };
-  return { start, body: lines.slice(start + 1, close) };
+  if (close < 0) return contractError(start + 1, "the ```forbidden block is never closed");
+  return { kind: "block", start, body: lines.slice(start + 1, close) };
 }
 
 async function compileRule(line: string, n: number, lineNo: number): Promise<Rule | ContractError> {
   const tab = line.indexOf("\t");
   const source = tab < 0 ? "" : line.slice(0, tab);
   const reason = tab < 0 ? "" : line.slice(tab + 1).trim();
-  if (!source || !reason) return { line: lineNo, problem: "a rule line is <regex><TAB><reason>, both non-empty" };
+  if (!source || !reason) return contractError(lineNo, "a rule line is <regex><TAB><reason>, both non-empty");
   const re = await Promise.try(() => new RegExp(source, "g")).then(
     (ok) => ok,
     (e: Error) => e.message,
   );
-  if (typeof re === "string") return { line: lineNo, problem: `bad regex: ${re}` };
-  return { id: `R${n}`, re, reason };
+  if (typeof re === "string") return contractError(lineNo, `bad regex: ${re}`);
+  return { kind: "rule", id: `R${n}`, re, reason };
 }
 
 async function readContract(path: string): Promise<Rule[] | ContractError> {
   const lines = (await Bun.file(path).text()).split("\n");
   const block = forbiddenBlock(lines);
-  if ("problem" in block) return block;
+  if (block.kind === "error") return block;
   const rules: Rule[] = [];
   for (const [k, line] of block.body.entries()) {
     if (line.trim() === "") continue;
     const rule = await compileRule(line, rules.length + 1, block.start + k + 2);
-    if ("problem" in rule) return rule;
+    if (rule.kind === "error") return rule;
     rules.push(rule);
   }
-  if (rules.length === 0) return { line: block.start + 1, problem: "the ```forbidden block has no rules" };
+  if (rules.length === 0) return contractError(block.start + 1, "the ```forbidden block has no rules");
   return rules;
 }
 
@@ -198,7 +201,7 @@ async function texClosure(main: string): Promise<TexFile[] | string> {
     if (!(await Bun.file(path).exists())) return `missing input file ${relative(process.cwd(), path)}`;
     const lines = stripComments(await Bun.file(path).text()).split("\n");
     out.push({ path, lines });
-    const names = [...lines.join("\n").matchAll(/\\(?:input|include)\s*\{([^}]+)\}/g)].map((m) => resolve(root, m[1].trim()));
+    const names = [...lines.join("\n").matchAll(/\\(?:input|include)\s*\{([^}]+)\}/g)].map((m) => resolve(root, (m[1] ?? "").trim()));
     for (const name of names) {
       const target = (await Bun.file(`${name}.tex`).exists()) ? `${name}.tex` : name;
       const problem = await visit(target);
@@ -212,7 +215,7 @@ async function texClosure(main: string): Promise<TexFile[] | string> {
 
 // Non-ASCII and control characters print as <U+XXXX>, so an invisible hit (NBSP, a stray tab) is legible.
 const visible = (text: string): string =>
-  [...text].map((c) => (/[\x20-\x7E]/.test(c) ? c : `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`)).join("");
+  Array.from(text).map((c) => (/[\x20-\x7E]/.test(c) ? c : `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`)).join("");
 
 function lintHits(file: TexFile, rules: Rule[]): string[] {
   const shown = relative(process.cwd(), file.path);
@@ -226,7 +229,7 @@ function lintHits(file: TexFile, rules: Rule[]): string[] {
 async function lint(main: string, contract: string): Promise<number> {
   if (!(await Bun.file(contract).exists())) return usageError(`contract not found: ${contract}`);
   const rules = await readContract(contract);
-  if ("problem" in rules) return usageError(`contract ${contract}:${rules.line}: ${rules.problem}`);
+  if (!Array.isArray(rules)) return usageError(`contract ${contract}:${rules.line}: ${rules.problem}`);
   const files = await texClosure(main);
   if (typeof files === "string") return usageError(files);
   const hits = files.flatMap((f) => lintHits(f, rules));
@@ -274,22 +277,22 @@ const argv = cli({
     }),
   ],
 });
-const p = argv._ as Record<string, string | string[]>;
-const run: Record<string, () => Promise<number>> = {
-  census: () => census(p.files as string[]),
-  boxes: () => boxes(p.a as string, p.b as string),
-  words: () => words(p.a as string, p.b as string),
-  paras: () => paras(p.a as string, p.b as string),
-  lint: async () => {
-    const contract = (argv.flags as { contract?: string }).contract;
+const run = async (): Promise<number | undefined> => {
+  if (argv.command === "census") return census(argv._.files);
+  if (argv.command === "boxes") return boxes(argv._.a, argv._.b);
+  if (argv.command === "words") return words(argv._.a, argv._.b);
+  if (argv.command === "paras") return paras(argv._.a, argv._.b);
+  if (argv.command === "lint") {
+    const contract = argv.flags.contract;
     if (argv._.length !== 1) return usageError("lint takes exactly one <main.tex>");
     if (!contract) return usageError("lint needs --contract <NOTATION.md>");
-    return lint(p.main as string, contract);
-  },
+    return lint(argv._.main, contract);
+  }
+  return undefined;
 };
-const handler = argv.command ? run[argv.command] : undefined;
-if (!handler) {
+const code = await run();
+if (code === undefined) {
   argv.showHelp();
   process.exit(2);
 }
-process.exit(await handler());
+process.exit(code);

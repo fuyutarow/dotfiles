@@ -165,6 +165,20 @@ describe("skill-check floor", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  for (const quote of ['"', "'"]) {
+    test(`quoted description with colon-space is valid (${quote})`, () => {
+      const name = "quoted-description";
+      const dir = makeSkillDir(
+        name,
+        `---\nname: ${name}\ndescription: ${quote}A valid description: scoped work.${quote}\n---\n\nBody text.\n`,
+      );
+      const { out, code } = runCheck(dir);
+      expect(code).toBe(0);
+      expect(out).toBe("");
+      rmSync(dir, { recursive: true, force: true });
+    });
+  }
+
   test("frontmatter references an unresolvable file: FAIL", () => {
     const dir = makeSkillDir(
       "refs-missing",
@@ -263,8 +277,42 @@ describe("skill-check floor", () => {
     }
     const listing = lines.filter((l) => l.startsWith("LISTING "));
     expect(listing).toHaveLength(1);
-    expect(listing[0]).toMatch(/^LISTING 2 skills, \d+ chars charged per turn$/);
+    expect(listing[0]).toMatch(/^LISTING 2 skills, \d+ name\+description chars \(static proxy\)$/);
     expect(code).toBe(0);
+  });
+});
+
+describe("skill-check static listing footprint", () => {
+  test("counts explicit-only metadata as a static proxy and enforces the exact ceiling", () => {
+    const nameA = "proxy-budget-a";
+    const nameB = "proxy-budget-b";
+    const a = makeSkillDir(nameA, validSkillMd(nameA));
+    const b = makeSkillDir(
+      nameB,
+      validSkillMd(nameB, "disable-model-invocation: true\n"),
+    );
+    const description =
+      "A short valid description for testing purposes, long enough to be " +
+      "meaningful but well under any length cap.";
+    const expected = nameA.length + nameB.length + 2 * description.length;
+    const budget = join(a, "budget.json");
+    writeFileSync(budget, JSON.stringify({ maxListingChars: expected - 1 }));
+    const over = runCheck("--budget", budget, a, b);
+    expect(over.code).toBe(1);
+    expect(over.out).toContain(
+      `LISTING 2 skills, ${expected} name+description chars (static proxy)`,
+    );
+    expect(over.out).toContain(
+      `FAIL listing budget: ${expected} chars > ${expected - 1}`,
+    );
+    expect(over.out).not.toContain("charged per turn");
+
+    writeFileSync(budget, JSON.stringify({ maxListingChars: expected }));
+    const exact = runCheck("--budget", budget, a, b);
+    expect(exact.code).toBe(0);
+    expect(exact.out).not.toContain("FAIL");
+    rmSync(a, { recursive: true, force: true });
+    rmSync(b, { recursive: true, force: true });
   });
 });
 

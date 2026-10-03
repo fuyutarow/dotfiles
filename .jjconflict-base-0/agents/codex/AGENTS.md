@@ -36,6 +36,11 @@ Before non-trivial planning or editing in such a repository:
 
 Use Codex skills from `.agents/skills` and user skills from `~/.agents/skills` when their descriptions match the task. If repository guidance points to a `SKILL.md` outside those discovery paths, read it as a task reference even if it is not surfaced as an invokable Codex skill.
 
+Retired skills are indexed in `~/dotfiles/archives/skills/README.md` and are not callable skills.
+When an active manual names one, read its archived contract only if the task requires it.
+Never invoke a retired skill by name or automatically restore its registration. Existing
+executable tools keep their own lifecycle.
+
 ## Personal Prompt Aliases
 
 Codex custom prompts are invoked as `/prompts:<name>` in the CLI/IDE, but some Codex surfaces may pass a leading slash prompt through as plain user text. When a user message starts with `/umada` or `/prompts:umada`, treat it as the personal alias defined in `agents/commands/umada.md`: use `raising-resolution` first, then `acting-on-hypotheses`, and apply both to the remaining prompt text.

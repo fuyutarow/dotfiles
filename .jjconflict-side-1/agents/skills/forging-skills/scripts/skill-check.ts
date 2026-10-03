@@ -15,11 +15,10 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 let failures = 0;
 
 /**
- * Per-skill listing cost, accumulated across every directory this run checked. The name and the
- * description are what the harness injects into EVERY turn, for every installed skill — so the
- * quantity a collection actually spends is this sum, and no per-skill cap can bound it. A cap
- * with no total is why 13 of this repo's descriptions sat within 12 chars of the 1500 limit:
- * everyone spends their full allowance. Reported always; gated only with --budget.
+ * Static name-plus-description character footprint across the directories checked here.
+ * This is a conservative collection proxy, not measured per-turn tokens: host selection,
+ * truncation, invocation policy and tokenizer behavior can change actual context cost.
+ * Reported for collections; gated only with --budget. F4 owns the membership decision.
  */
 const listingCost: { name: string; chars: number }[] = [];
 
@@ -29,10 +28,10 @@ function fail(directory: string, message: string): void {
 }
 
 /**
- * --quiet: WARNs are counted, not printed. They are prose-debt MEASUREMENT whose enforcement moment
- * is a forge's exit, on the one skill being forged — not a collection sweep. Printed from a gate that
- * runs on every commit they were ~100 lines per commit, burying the FAIL lines the gate exists to
- * show (2026-09-22). FAILs always print. Run without --quiet on a skill to see its list.
+ * --quiet counts readability review signals rather than printing every warning.
+ * Warnings are not automatic F1 failures or evidence of bad runtime behavior.
+ * The aggregate avoids burying structural failures; FAILs always print.
+ * Run without --quiet on a skill to inspect the specific review candidates.
  */
 let quiet = false;
 const warnedDirs = new Set<string>();
@@ -179,7 +178,7 @@ async function reportReferenceProse(directory: string): Promise<void> {
   warn(
     directory,
     `references: ${total} prose sentences >120 chars across ${files} file(s) — worst ${worstFile} (${worstCount}). ` +
-      "A decision keyed on 2+ inputs belongs in a table; the argument for it belongs in the ledger",
+      "Review clarity and selective loading; use a table when the decision is a keyed lookup",
   );
 }
 
@@ -263,7 +262,7 @@ async function checkDirectory(input: string): Promise<void> {
   const description = scalar(metadata.lines, "description");
   const descriptionLine =
     metadata.lines.find((line) => line.startsWith("description:")) ?? "";
-  if (/^description:\s*[^>|\s]/.test(descriptionLine)) {
+  if (/^description:\s*[^>|'"\s]/.test(descriptionLine)) {
     warn(
       directory,
       "plain-scalar description — any ': ' inside will break YAML parsing (observed 2026-07-02); use >-",
@@ -312,13 +311,9 @@ async function checkDirectory(input: string): Promise<void> {
   if (bodyLines > 500)
     warn(directory, `SKILL.md body ${bodyLines} lines > 500`);
 
-  // References were UNMEASURED until 2026-08-17: this function only ever read SKILL.md, while
-  // 80% of the corpus by character count lives under references/ (3.34M vs 853K chars over 60
-  // skills). F1's exit condition is "prose-debt WARNs 0", so a skill could pass it with
-  // unreadable references — and one did, which is how a 27-line argument shipped where a 4-row
-  // lookup table belonged. Reported as ONE aggregate line per skill naming the worst file, not
-  // per sentence: sixty readable lines beat a flood nobody reads, which is the same failure this
-  // check exists to catch.
+  // Scan references as well as the core so selective-loading detail is not invisible.
+  // Report one aggregate warning per skill, naming the largest review candidate.
+  // Sentence length is a heuristic; F1 requires review of the useful decision, not zero WARNs.
   await reportReferenceProse(directory);
 
   const bodyContentLines = lines.slice(metadata.bodyStart);
@@ -364,7 +359,7 @@ async function reportListingBudget(budgetPath: string | undefined): Promise<void
   if (listingCost.length < 2) return; // a single-skill forge has no collection to weigh
   const total = listingCost.reduce((sum, s) => sum + s.chars, 0);
   process.stdout.write(
-    `LISTING ${listingCost.length} skills, ${total} chars charged per turn\n`,
+    `LISTING ${listingCost.length} skills, ${total} name+description chars (static proxy)\n`,
   );
   if (budgetPath === undefined) return;
   if (!existsSync(budgetPath)) {

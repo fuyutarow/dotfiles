@@ -70,6 +70,7 @@ import {
   readFileSync,
   readSync,
   renameSync,
+  rmdirSync,
   statfsSync,
   statSync,
   unlinkSync,
@@ -909,9 +910,54 @@ type GpuCache = z.output<typeof GpuCacheSchema>;
 function within(at: number, now: number, windowMs: number): boolean {
   return now - at >= 0 && now - at < windowMs;
 }
+// ONE nvidia-smi in flight host-wide (Tiger ledger O3). While the driver hangs, every session
+// whose render lands in the 2 s hang window used to spawn its own nvidia-smi — at 40 sessions that
+// is ~16 stuck processes, the incident's load feeding itself. The lock is a directory because
+// mkdir is atomic (EEXIST for every loser) and needs no flags or libraries. Its owner is not
+// recorded: a lock older than GPU_LOCK_STALE_MS (the 2 s bound + margin) is a crashed holder's, and
+// is broken. A session that cannot take it serves the last cache — marked stale, with this reason —
+// instead of starting a second sampler.
+const GPU_LOCK = `${HOME}/.cache/claude/statusline-gpu.lock`;
+const GPU_LOCK_STALE_MS = 3_000;
+function acquireGpuLock(): Result<Disposable, string> {
+  const take = (): boolean =>
+    fromThrowable(() => {
+      mkdirSync(dirname(GPU_LOCK), { recursive: true });
+      mkdirSync(GPU_LOCK);
+    })().isOk();
+  const release = (): Disposable => ({
+    [Symbol.dispose]: () => {
+      fromThrowable(() => rmdirSync(GPU_LOCK))();
+    },
+  });
+  if (take()) return ok(release());
+  const held = fromThrowable(() => statSync(GPU_LOCK).mtimeMs)();
+  const now = Temporal.Now.instant().epochMilliseconds;
+  if (held.isOk() && !within(held.value, now, GPU_LOCK_STALE_MS)) {
+    fromThrowable(() => rmdirSync(GPU_LOCK))();
+    if (take()) return ok(release());
+  }
+  return err("nvidia-smi is being sampled by another session");
+}
 // Take one live sample and record it. `good` is the previous last-good sample, carried over a
 // failure so a transient miss can still be shown (marked stale) instead of turning into n/a.
 function resample(good: GpuCache["good"]): Result<MemReading, string> {
+  const lock = acquireGpuLock();
+  if (lock.isErr()) return err(lock.error); // not cached: it describes this session, not the GPU
+  using _held = lock.value;
+  // Double-check under the lock: the session that held it before us has usually just refreshed
+  // the cache, and sampling again would be the very duplicate the lock exists to prevent.
+  const again = readJson(GPU_CACHE, GpuCacheSchema);
+  if (
+    again?.at !== undefined &&
+    again.reading &&
+    within(
+      again.at,
+      Temporal.Now.instant().epochMilliseconds,
+      GPU_SAMPLE_TTL_MS,
+    )
+  )
+    return ok(again.reading);
   const sampled = sampleVram();
   // Stamped AFTER the sample returns: a timed-out sample blocked ~2 s, and stamping the
   // entry with the pre-sample time would hand it to the next render already 2 s into its TTL.

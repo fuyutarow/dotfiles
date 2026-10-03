@@ -1,7 +1,9 @@
 # Agent Skills
 
 Operating manuals for AI coding agents, deployed to Claude Code (and Codex) by `mise run link:skills`.
-Each skill is a durable rule-set the agent loads on demand — open any `SKILL.md` for the full spec.
+Each active skill is a durable rule-set the agent loads on demand.
+Retired manuals are listed in [the archive](../../archives/skills/README.md); they are not callable skills.
+A reference to a retired skill means its archived contract, not automatic reactivation.
 
 The collection contains authored manuals and vendored upstream skills (Cloudflare/Workers, Mintlify, TypeSafe). This page is the human map;
 the canonical trigger definitions live in each skill's `SKILL.md` frontmatter.
@@ -26,7 +28,6 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`structuring-documents`](structuring-documents/) — Reorganize a document so every fact has one home and references point backward.
 - [`designing-presentations`](designing-presentations/) — Plan or critique talks and decks to change what the audience decides, not just inform.
 - [`issuing-technical-memoranda`](issuing-technical-memoranda/) — Issue a technical memo by fixing its wrapper — cover, authority line, addressee, release marking — while the body stays deliberately unregulated.
-- [`prompting-llms`](prompting-llms/) — Write and audit Claude/Anthropic prompts, system prompts, and evals as testable contracts.
 - [`compiling-latex`](compiling-latex/) — Modern repo-native LaTeX/Beamer: mise, latexmk, tex-fmt, chktex for building and linting papers.
 - [`writing-technical-japanese`](writing-technical-japanese/) — Entrypoint for 木下『理科系の作文技術』: dispatches to structuring-documents → linting-prose (→ designing-presentations). `/koreo` is its alias.
 
@@ -50,16 +51,13 @@ Formal Methods. `forging-skills` owns the admission test; activity counts alone 
 - [`forging-novel-theses`](forging-novel-theses/) — Generate traceable, testable thesis candidates for a selected problem; every output remains a candidate.
 - [`systematizing-knowledge`](systematizing-knowledge/) — Turn a source corpus into a traceable, method-fit position without forcing taxonomies, grades, or explanations.
 - [`systematizing-theories`](systematizing-theories/) — Build one theory's axioms, definitions and results; update exact statements and dependent predictions as findings arrive.
-- [`operationalizing-research-gaps`](operationalizing-research-gaps/) — Turn a signed position's gaps into an `OPENINGS SHEET`: typed, test-bound, addressed, expiring openings retired only by a pre-declared observation.
 - [`governing-research-documentation`](governing-research-documentation/) — Govern a research-document portfolio: admission, authority, evidence lineage, review, retirement, and deletion.
 - [`keeping-research-notebooks`](keeping-research-notebooks/) — Route every artifact of a research notebook repo to its one home and one entry point, land through a single committer, and gate when a model revision may be measured.
 - [`growing-oss-adoption`](growing-oss-adoption/) — Make a developer OSS tool actually spread — for naming, launching, or diagnosing adoption.
 - [`directing-research`](directing-research/) — Explicit legacy invocation and v1-record compatibility only; generic discovery execution belongs to BIBIFI.
 - [`supervising-research-programmes`](supervising-research-programmes/) — Construct and steer programme problems, issues, mandates, allocation, and global transitions.
-- [`directing-research-sections`](directing-research-sections/) — Direct one granted live section: local admission, run intent, receipt-linked learning, and declassified signal.
 - [`commanding-research-fleets`](commanding-research-fleets/) — Define explicit Director/PI/Researcher fleet roles and legacy certification; local execution follows BIBIFI, while formal sections retain their own admission and verification rules.
 - [`auditing-research-processes`](auditing-research-processes/) — Audit one frozen bounded research episode and return a non-enacting recommendation.
-- [`arguing-research-papers`](arguing-research-papers/) — Build a paper's argument: claim = evidence, novelty positioning, reviewer-proof framing.
 
 #### Research responsibility map
 
@@ -73,14 +71,14 @@ This is the collection's responsibility map. Individual skills own the detailed 
 |---|---|---|
 | Existing artifact → inspect a factual row | Located observation | `raising-resolution` |
 | Source corpus → synthesize its evidence | Known/uncertain/disputed/missing position, or source-side DONOR SET | `systematizing-knowledge` |
-| Signed corpus gaps → specify observations that would resolve them | Non-authoritative OPENINGS SHEET | `operationalizing-research-gaps` |
+| Signed corpus gaps → specify observations that would resolve them | Non-authoritative OPENINGS SHEET | [`operationalizing-research-gaps`](../../archives/skills/operationalizing-research-gaps/SKILL.md) (retired) |
 | Existing plan/frame → expose assumptions | Blind-spot packet; no proposed solution | `surfacing-blind-spots` |
 | Observed P versus expected Q → construct an explanation | HYPOTHESIS and vocabulary grounds | `forming-hypotheses-from-anomalies` |
 | Bounded local frame supplied/agreed in the task and sourced seed → transform | Unranked CANDIDATE or MAPPING-BREAK | `forging-novel-theses` |
 | Bounded statements/findings → construct or revise theoretical relations | THEORY MAP / THEORY CHANGESET | `systematizing-theories` |
 | Exact statement → prove or formalize | Statement/version and proof/faithfulness status | `proving-theorems` |
 | Measurement and contract → qualify validity/comparability | EVIDENCE DISPOSITION | `validating-experimental-evidence` |
-| Finished claim and evidence → argue or appraise | CLAIM SPEC or paper appraisal | `arguing-research-papers` |
+| Finished claim and evidence → argue or appraise | CLAIM SPEC or paper appraisal | [`arguing-research-papers`](../../archives/skills/arguing-research-papers/SKILL.md) (retired) |
 | Frozen research episode → audit evidence/process | Non-enacting process audit and recommendation | `auditing-research-processes` |
 
 **Execution and commitment** determine what to do with current knowledge:
@@ -100,7 +98,7 @@ Question clarification within an authorized local task stays with its content ow
 | Decision | Owned result | Sole owner |
 |---|---|---|
 | Which programme problems receive allocation or mandates? | Programme state, OPEN_ISSUE and SECTION_MANDATE | `supervising-research-programmes` |
-| Which work/learning is admitted within an existing mandate? | Section charter, intent and learning state | `directing-research-sections` |
+| Which work/learning is admitted within an existing mandate? | Section charter, intent and learning state | [`directing-research-sections`](../../archives/skills/directing-research-sections/SKILL.md) (retired) |
 | What do explicitly used Director/PI/Researcher roles mean? | Fleet role charters and order forms | `commanding-research-fleets` |
 | Which documents are authoritative, retained or retired? | Document admission/lifecycle | `governing-research-documentation` |
 | What task state survives handoff or compaction? | TASK-CONTINUATION | `continuing-long-running-tasks` |
@@ -122,14 +120,12 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 - [`forging-skills`](forging-skills/) — Create and reforge Agent Skills to the house bar: triggers, gates, sibling cuts, verification.
 - [`operating-the-harness`](operating-the-harness/) — Configure Claude Code itself: lean CLAUDE.md, hooks, permissions, verification loops, MCP, subagents.
 - [`continuing-long-running-tasks`](continuing-long-running-tasks/) — Keep one evidence-linked task record trustworthy across compact, resume, and Codex/Claude handoff.
-- [`recovering-poisoned-context`](recovering-poisoned-context/) — Rescue a session broken by a leaked/malformed tool call by rewinding, not retrying.
 - [`driving-codex`](driving-codex/) — Drive the OpenAI Codex CLI (`codex exec`) as a headless worker: sonnet-wrapper pattern, sandbox flags, availability by probe, spend accounting.
 - [`driving-claude`](driving-claude/) — **Codex-only**: drive Claude Code (`claude -p`) as a headless worker with trusted-CWD, least-privilege, JSON relay, and model-probe gates.
 - [`driving-jev`](driving-jev/) — Drive TypeSafe Jev as a non-generative judgment engine: atomic Noul/Choice/Score questions, explicit abstention policy, and typed JSON relay.
 - [`driving-antigravity`](driving-antigravity/) — Drive the Antigravity CLI (`agy`) as a headless worker: multi-vendor roster on one subscription, no per-call meter, unconfined by default.
 - [`driving-grok`](driving-grok/) — Drive xAI's Grok Build CLI (`grok`) as a headless worker: metered + real sandbox, but an EXFIL-RISK data-minimize law, catalog by probe.
 - [`driving-cocoindex`](driving-cocoindex/) — Route declared query shapes through `repo-retrieve`: ccc for concepts/structure, rg for lexical enumeration.
-- [`driving-serena`](driving-serena/) — Drive Serena MCP with live-contract, project/language capability, memory-freshness, and FD/process resource gates.
 - [`orchestrating-agents`](orchestrating-agents/) — 委任体制を運転する監督の規律: 宣言制・委任契約・検収の試験・pacing の12門(旧 acting-as-director)。
 
 ### Coding & proofs
@@ -145,7 +141,6 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 - [`writing-typescript`](writing-typescript/) — House TypeScript idioms (`satisfies` over `as`, `??` over `||`, ts-pattern, zod) when writing or reviewing `.ts`.
 - [`writing-bun-scripts`](writing-bun-scripts/) — Local automation in Bun TypeScript: zero-config single-file scripts, Bun.$/spawn+timeout, pinned bunx, and the bash→TS refactor map.
 - [`proving-theorems`](proving-theorems/) — Formalize and machine-check math proofs, with AI drafting and human-owned statement faithfulness.
-- [`linting-sui-move`](linting-sui-move/) — Review Sui Move 2024 code for style, gas, and security the compiler can't catch.
 - [`running-python-tools`](running-python-tools/) — Run every Python tool via uv/uvx instead of pip, keeping environments isolated and reproducible.
 - [`wiring-mise-tasks`](wiring-mise-tasks/) — One mise verb contract for every repo (fmt/f, lint, test, up, check…): naming grammar, per-language templates, and a resolution gate that catches drift.
 - [`wiring-repositories`](wiring-repositories/) — Which wiring layers a repo admits, the order whose violations are silent, the git-hook shape, and a floor that audits the joint for life.
@@ -155,12 +150,10 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 ### Systems & security
 
 - [`governing-configuration-systems`](governing-configuration-systems/) — Design or audit executable configuration: consumer/trust regime, canonical bytes, authority, exceptions, and target validation.
-- [`securing-remote-access`](securing-remote-access/) — Pick and harden the right remote-shell architecture: SSH keys, certs, hardware tokens, or zero-trust mesh.
 - [`operating-wsl2-on-windows`](operating-wsl2-on-windows/) — Operate a WSL2 compute host on Windows: why C: fills while the guest looks healthy, the disk-reclaim levers, the host-number measurement traps, and recovery when the box wedges.
 
 ### People & media
 
-- [`transcribing-media`](transcribing-media/) — Transcribe or subtitle audio/video with Whisper via uv — for 文字起こし and captions.
 
 ## Vendored (upstream)
 
@@ -168,16 +161,7 @@ Third-party skills kept in-tree for convenience — vendor platform docs, not au
 Acquired through `mise run skills:add`; provenance is recorded in `agents/skills-lock.json`.
 The pre-2026-08-14 Cloudflare entries predate that path and carry no ledger record.
 
-- [`cloudflare`](cloudflare/) — Umbrella guide to the whole Cloudflare platform: Workers, storage, AI, networking, security.
-- [`workers-best-practices`](workers-best-practices/) — Write and review Cloudflare Workers code against production best practices and anti-patterns.
-- [`wrangler`](wrangler/) — Correct syntax and best practices for the Wrangler CLI that deploys and manages Workers.
-- [`agents-sdk`](agents-sdk/) — Build stateful, durable AI agents on Cloudflare Workers with the Agents SDK.
-- [`durable-objects`](durable-objects/) — Build and review Cloudflare Durable Objects for stateful edge coordination.
-- [`cloudflare-one`](cloudflare-one/) — Design and configure Cloudflare One Zero Trust / SASE: Access, Gateway, WARP, Tunnel, DLP.
-- [`cloudflare-one-migrations`](cloudflare-one-migrations/) — Plan migrations from Zscaler, Palo Alto, or legacy VPN/SASE to Cloudflare One.
-- [`cloudflare-email-service`](cloudflare-email-service/) — Send and receive transactional email via Cloudflare Email Sending and Routing.
 - [`web-perf`](web-perf/) — Audit page-load speed and Core Web Vitals with Chrome DevTools MCP.
-- [`mintlify`](mintlify/) — Build and maintain Mintlify documentation sites: pages, navigation, components, API references.
 - [`typesafe-ai`](typesafe-ai/) — Build AI-powered features with TypeSafe: typed judgment/probability primitives (System One models, Jev) composable into routing, ranking, extraction, and verification.
 
 ---

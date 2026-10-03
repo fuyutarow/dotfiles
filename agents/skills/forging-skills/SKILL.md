@@ -1,198 +1,204 @@
 ---
 name: forging-skills
 description: >-
-  Forges and reforges Agent Skills with LAW, gates, one-home artifacts, typed sibling cuts,
-  fire/no-fire tests, and adversarial verification. Owns the CRAFT:
-  source distillation, trigger/cut design, and skill verification.
-  Use for SKILL.md creation/update/audit, skill creator, reforge, reorganization/統廃合,
-  鍛錬, スキル作成/改善, description tuning, trigger collisions, skill evals/評価セット,
-  or work under agents/skills/. Owns collection
-  standing cost (F4): listing budget, retirement/merge, スキルが増えすぎ.
-  MANDATORY before substantive skill revision. Harness listing/firing mechanics
-  → operating-the-harness; packaging → skill-creator; human-facing prose → linting-prose;
-  thesis → forging-novel-theses; corpus → systematizing-knowledge. Workflow-native:
-  design/cuts stay SOLO; bounded evidence harvest and verification may fan out.
+  Creates, revises, evaluates and consolidates Agent Skills from observed failures and current
+  authoring guidance. Use for SKILL.md work, スキル作成・改善・統廃合, trigger collisions,
+  skill evals, unnecessary scaffolding, or retirement and listing-cost review.
+  Owns content, boundaries and proportionate verification; harness loading and enforcement
+  belong to operating-the-harness. Reuse available skill-creator machinery.
   English skill; respond in the user's language.
 ---
 
-# Forging skills — the craft of making operating manuals that outlive their maker
+# Forging skills
 
-> **Version**: v2609.2.0 (2026-09-27) — execution-loop verification requires observed tool actions.
-> History, scope prose, and lineage: `tests/forge-verification-ledger.md`.
+> **Version**: v2610.1.0 (2026-10-03) — outcome-first design and proportionate verification.
+> Revision evidence and historical findings: `tests/forge-verification-ledger.md`.
 
-Build order (atomic — SKILL.md, 5 references, floor script, ledger ship in ONE commit). Verify:
+Verify this package from the repository root:
 
-```bash
-for f in distilling architecture triggering execution-models verifying; do test -f references/$f.md || echo MISSING $f; done; test -f scripts/skill-check.ts || echo MISSING skill-check.ts; test -f tests/forge-verification-ledger.md || echo MISSING ledger
+```sh
+bun agents/skills/forging-skills/scripts/skill-check.ts agents/skills/forging-skills
+bun test agents/skills/forging-skills/tests
 ```
 
-## Language & stable tokens
+This package has five references, a shared floor and a historical ledger.
+That is its maintained structure, not a template required of every target skill.
 
-This skill is **English**; respond to the user in their language (default Japanese). Keep the
-house tokens stable even inside Japanese prose — they are technical identifiers, not
-translatable words: **LAW**, **gate** (F1–F4), **fire / no-fire**, **line shape**, **鍛錬 / reforge**,
-**solo / fan-out / barrier**, **DECISIVE / CARDINALITY / PURPOSE cut**, **function map**, **one home**,
-**scaffold theater**. Every skill you forge defines and pins ITS tokens the same way
-(`references/triggering.md`, `references/architecture.md` §6).
+## LAW — earn the intervention
 
-## THE LAW
+Add guidance only when it changes a useful decision, action or deliverable.
+Preserve the user's task, chosen approach and authorization.
+Start with the smallest instruction that addresses an observed failure or a demonstrated need.
+An explanation earns space when it makes a constraint usable or auditable.
 
-> A skill is a durable operating manual from the model that forged it to every model that
-> executes it later — not documentation, not a book summary. And it has TWO READERS: the
-> executor model, and the human auditor who must be able to trust it. 形式 is the floor; the
-> bar is that EVERY RETAINED LINE CHANGES WHAT THE EXECUTOR DOES — stated so both readers can
-> check it, and stated in the SHAPE the executor can act on without re-deriving it (§ Line shape). FORM itself is floor-enforced, never line-retained (the dual-reader prose bar,
-> `references/architecture.md` §5; carve-out at `references/distilling.md` §2). A skill that cannot be wrong — no
-> artifact, no check, no deny-list anywhere — is prose wearing a skill costume. And the
-> description is the skill's API: match is lexical and budgeted, so triggering is engineered,
-> never assumed. A COLLECTION is not the sum of its admissions: every installed skill charges
-> its description on every turn thereafter, so standing cost is measured against a declared
-> ceiling and membership is re-justified — admission alone is never the whole gate.
+The collection's objective is valid knowledge discovery per unit time.
+For research work, name the observation, discriminating result or checked proof supported.
+For enabling work, name its current consumer and the failure or delay removed.
+Do not invent a research experiment, numerical benefit or extra workflow for an ordinary task.
 
-The collection objective is **valid knowledge discovery per unit time**.
-Experimental and Formal Methods supply the evidence. For each admission or reforge,
-name the observation, discriminating result, or checked proof it helps reach.
-The path may be indirect through a named consumer. Name the failure or delay removed.
-A skill whose only output is more agents,
-reports, runs, or rules fails the existence gate. This objective does not turn every
-routine task into an experiment; choose the smallest check that changes a decision.
+The executor and human auditor must both understand the manual.
+Its success criterion must be observable; named gates and custom artifacts are optional.
+A skill is not enforcement. Put mandatory runtime restrictions in the appropriate harness mechanism.
 
-## The four gates — F1 / F2 / F3 / F4
+Stable tokens: `F1–F4`, `fire / no-fire`, `function map`, `one home`, `baseline`.
+Use specialized cut or delegation vocabulary only when it resolves an actual boundary.
 
-同型: these gates carry the LAW exactly as `systematizing-knowledge`'s ledger discipline,
-`acting-on-hypotheses`' R1–R3, and `forging-novel-theses`' G1–G3 carry theirs — each demands a
-grep-able artifact; no artifact → gate un-passed, 感触では通れない.
+## F1–F4 — decisions to check, not mandatory scaffolds
 
-| Gate | Inverts (the error) | ARTIFACT — must exist in the forged skill |
+| Gate | Decision | Sufficient evidence |
 |---|---|---|
-| **F1 OPERATIONALITY** | book-summary / scaffold theater — machinery present, every line explains, nothing changes a tool call. Second half: a line that earns its place but in the WRONG SHAPE, so the executor re-derives a lookup on every read (§ Line shape) | The target skill's LAW, gates, or deny-list, each rule naming a grep-able artifact or runnable check; where a rule is greppable, a floor script owns it (`references/distilling.md`; floor split → `references/architecture.md` §5). EXIT: prose-debt WARNs 0 across **SKILL.md AND `references/`** (why both: ledger 2026-08-17), or a dated PROSE-DEBT waiver in the ledger (§5; ≠ F3 solo-tier waiver) |
-| **F2 PLACEMENT** | collection collision / description races — two skills match the same ask and neither yields | A **function map** (`input state → verb → artifact → next state`) + one artifact owner + a TYPED cut per overlapping sibling + reciprocal pointers, or an owner-named deferral (`references/architecture.md`, `references/triggering.md`) |
-| **F3 SELF-VERIFICATION** | ship-and-hope — the skill that teaches verification ships unverified | Atomic build-order verify command + a fire/no-fire trigger set (≥5 fire / ≥5 near-miss no-fire) + an adversarial-verification findings ledger recording the skill-check run incl. prose-debt counts — waivable ONLY at the solo tier, waiver written (`references/verifying.md`) |
-| **F4 STANDING** | admission-only collection — every member was justified ONCE, none is ever re-justified, and the listing grows monotonically because each marginal skill looks cheap against a per-skill cap nobody sums | A declared listing ceiling the collection is measured against (`agents/skills-listing-budget.json` here) + the aggregate check wired into a routinely-run gate (`mise run lint:skills-floor`, i.e. `skill-check.ts --budget`) + a RETIREMENT answer whenever the ceiling binds: retire, merge, shorten, or raise the ceiling in the same commit with the reason in that commit |
+| **F1 OPERATIONALITY** | Does the instruction supply a needed capability or correct a concrete failure? | Named task, useful behavior and observable acceptance; source and scope for load-bearing claims. |
+| **F2 PLACEMENT** | Is this a separate job, an existing skill's mode, a script, or enforced policy? | Input → decision/action → result → stop; inspect the closest incumbent and assign one maintained home. |
+| **F3 SELF-VERIFICATION** | What has actually been checked, and how strongly may success be claimed? | Checks sized to the changed behavior and risk; distinguish structure, selection, execution and comparative benefit. |
+| **F4 STANDING** | Should the skill remain discoverable at this scope and cost? | Current inventory, demand, usage coverage, admission age and dependencies; separate footprint estimates from observed context. |
 
-## Line shape — F1's second half
+Keep these decisions in the existing change, review or evidence record.
+Do not copy this gate table, mint a new schema, or add a ledger to every target.
 
-Earning a place and being cheap to use are different tests. F1's first half asks whether the line
-changes a tool call. This asks what the executor must DO to use it.
+## Choose placement before naming a skill
 
-| Shape | Executor cost | Belongs |
+| Observed need | Default placement | Reason to split |
 |---|---|---|
-| LOOKUP — a table keyed by the runtime-answerable inputs | read one cell | the manual |
-| PREDICATE — one if/then | evaluate once | the manual |
-| ARGUMENT — premises the executor must chain to reach the conclusion | re-derived on EVERY read | rewrite as LOOKUP or PREDICATE |
-| NARRATIVE — why we decided, what was refuted, what a source said | changes no decision | the ledger |
+| Reusable job with a distinct acceptance boundary | Extend an existing owner if it already serves the job | Different decisions, failures or stops would misroute under one entrypoint |
+| Provider, runtime, format or difficulty variant | Conditional mode and reference | Selection otherwise loads irrelevant guidance or loses an essential boundary |
+| Deterministic work repeatedly reimplemented | Reusable script under its actual owner | Independently useful executable contract |
+| A rule that must be enforced | Hook, settings or another existing machine gate | Enforcement is not supplied by skill prose |
+| An alias adding invocation convenience | Existing command or entrypoint | Substantive capability beyond routing |
+| Established unused or superseded guidance | Scope reduction, consolidation or archive | Current task or protected dependency justifies continued registration |
 
-**A decision keyed on 2+ discriminating inputs is a table, not a paragraph.**
-Grep symptom: `because` / `since` / `verified in`, a version number, or a date in a rule paragraph.
-Both halves of F1 can pass independently. The incident proving it: ledger 2026-08-17.
+A differently named packet, role or topic is not sufficient proof of independence.
+Different technologies are not automatically duplicates either.
+Compare actual decisions and consumer paths; retain necessary domain-specific rules.
+When a split is justified, name the distinguishing question.
+Check both collision and mutual deferral.
 
-## The pipeline
+Read `operating-the-harness`'s commands-and-skills reference for the target host's mechanical contract.
+Refresh facts affected by the revision; consult current official guidance and creator resources.
+For a paper corpus, let `systematizing-knowledge` synthesize it before distillation.
 
-0. **FUNCTION + EXISTENCE GATE** — decompose the requested behavior as
-   `input state → function verb → owned artifact → next state`, then run
-   `operating-the-harness`'s decision reflex (CLAUDE.md line / rule / hook / settings / skill).
-   Add `knowledge artifact / current blocking failure / expected decision-time delta`.
-   If that causal path cannot be named, reject the skill. Merge or retire an
-   overlapping member instead of adding another description to the collection.
-   If an existing skill owns that transition or artifact, EXTEND it. Forge a sibling only for a
-   reusable ownership void with a distinct stop condition. EXTEND is not the polite option — it
-   is the one that does not charge the listing again (F4).
-   The target's craft owner signs this semantic map. `orchestrating-agents` may consume its locus/digest
-   and add a dispatch overlay, but never co-owns or rewrites the map.
-   → `references/verifying.md` §6 for reforge-vs-create.
-1. **SOURCE & DISTILL** — type the source; keep only lines that change what the executor does.
-   → `references/distilling.md`
-2. **CALIBRATE for the consumer** — the inversion question: is the model's default failure the
-   SAME direction as the source's target failure, or the inverse? Prominence follows the answer.
-   → `references/distilling.md`
-3. **ARCHITECT** — topology, one-home-per-concept, budget pointers. → `references/architecture.md`
-4. **TRIGGER SURFACE** — description, naming, the fire/no-fire set. → `references/triggering.md`
-5. **EXECUTION MODEL** — treatment tier + the seven components. → `references/execution-models.md`
-6. **VERIFY** — adversarial fleet, trigger desk-check, floor scripts. → `references/verifying.md`
-7. **SHIP & MAINTAIN** — atomic commit, `mise run link:skills`, staleness triggers, and the
-   collection's standing cost (F4): run the floor over the WHOLE collection, not just the skill
-   you touched. Per-skill runs are what let six orphan-reference FAILs and fifteen YAML-fragile
-   descriptions accumulate unseen here between 2026-06 and 2026-08.
-   → `references/verifying.md`
+## Revise the smallest coherent unit
 
-## Execution model — forge solo, fan out harvest and verification
+1. Locate the requested outcome, current failure and affected callers.
+2. Inspect current source, the nearest owner and existing verification.
+3. State the correction and success criterion before substantial drafting.
+4. Write minimal instructions; put conditional detail in a reference with a read condition.
+5. Check the affected behavior and relevant near miss; repair findings and report uncertainty.
+6. Keep referenced files and caller changes reviewable together; relink after deployment changes.
 
-Harvest and audit FAN OUT: sources, the defaults, sibling skills, official docs — one read-only
-agent per surface. DESIGN, the sibling cuts, and the description stay SOLO — an architecture
-assembled from shards is not an architecture. Reference drafting fans out only under
-editor-signed specs with disjoint file ownership; verification fans out read-only (refuters,
-cross-consistency, comparative judge, trigger desk-check); fixes are solo — the editor signs
-every line. Scale: a small procedural skill → solo end-to-end, zero agents; a flagship forge or
-a reforge-of-N → fleets at harvest and verify. No harness → the same pipeline as serial focused
-passes. Written as durable operating guidance from a frontier model (Fable 5, 2026-07). The
-forging meta-workflow itself (audit → spec → forge → verify → fix, with contracts and schemas)
-is owned by `references/verifying.md` §1; DESIGNING the target skill's workflow-native layer is
-`references/execution-models.md`. If a constraint here feels unnecessary, that feeling is the
-failure mode — follow the map.
+A narrow correction does not require a full audit fleet.
+Repeated failure, contradictory contracts or major boundary changes need broader re-examination.
+When a result changes the premises, revise the affected scope.
+Do not accumulate universal rules from one incident.
 
-## MUST-NOT-FIRE — and the fire/no-fire set
+## Write for selective loading
 
-Over-firing is a first-class liability: ceremony on a typo fix is this skill failing its own F1.
-This table doubles as this skill's OWN F3 artifact (≥5 fire / ≥5 near-miss no-fire) — desk-check
-it after any description edit. The adversarial half of F3 is this skill's own findings ledger:
-`tests/forge-verification-ledger.md` (F3).
-
-FIRES:
-
-| Ask | Why here |
+| Resource | Carries |
 |---|---|
-| "create a skill for X" / 「スキル作って」 | creation is the core territory |
-| "reforge this skill" / 「鍛え直して」 | reforge = the same pipeline over an existing skill |
-| "this SKILL.md is low quality — raise it" | the bar (F1) is owned here |
-| 「この SKILL.md、散文が読みにくい/監査して」 | the dual-reader prose bar + floor are owned HERE, not linting-prose (the 2026-07-24 void's proof row) |
-| "these two skills collide / both keep triggering" | sibling cuts (F2) are owned here |
-| 「スキルが増えすぎ」/ "the listing is too big" / "which skills should we retire?" | F4 STANDING — the collection's standing cost and the retirement answer are owned here |
-| "is this skill still worth its slot?" / 「これもう要らないのでは」 | F4 — re-justifying membership is a transition this skill owns; admission alone was never the whole gate |
-| "write a trigger test set for this skill" | the F3 artifact is owned here |
-| "tune this skill's description" | trigger-surface engineering is owned here |
-| "skill won't trigger though it IS listed" / 「description が発火しない」 | CO-FIRE: `operating-the-harness` diagnostics FIRST (listing/budget); listing healthy → description craft here (`references/triggering.md` §5–§6) |
-| 「うちの deploy 手順、毎回説明してる気がする — skill にしといて」 (messy, no headline keyword) | creation from a TACIT source — `references/distilling.md` §1 |
-| "評価セットを回してこの skill をベンチマークして" | fires here as router: the plugin's eval loop invoked with the PROXY CAVEAT (`references/verifying.md` §4 / `references/triggering.md` §6) |
+| Description | Capability and invocation conditions; exclusions for likely misrouting |
+| Body | Shared purpose, decisions, essential constraints and usable links |
+| References | Mode-specific procedures, substantial examples, schemas and source detail |
+| Scripts | Repeated deterministic operations or meaningful reliability checks |
+| Assets | Material copied into the user's deliverable |
 
-MUST NOT fire (with route):
+No fixed description anatomy, chapter count, execution model or ancillary file set is required.
+Use concise predicates, tables, examples or prose according to the decision.
+Keep one substantive home for a rule; other occurrences point there or declare a necessary local guard.
+Remove generic advice and stale policy copied from another owner.
+Readability warnings identify review candidates, not proof of an unusable skill.
 
-| Ask | Route |
+## Verify the claim you intend to make
+
+| Claim | Necessary observation |
 |---|---|
-| "use skill X" | just invoke it — no ceremony |
-| "skill not LISTED / description truncated in the listing" | mechanics → `operating-the-harness` ALONE |
-| "what IS the per-skill description cap / the platform's listing limit?" | the NUMBERS are `operating-the-harness`'s; F4 spends against them, it does not set them |
-| "make Claude always do X" | likely a hook/rule → `operating-the-harness` decision reflex |
-| a one-line typo fix in a SKILL.md | just fix it — no ceremony |
-| "package / install this skill" | model-native routing — no skill needs to fire; if this skill IS fired, delegate to the packaging machinery (`references/verifying.md` §4) and stop |
-| a domain question about a skill's SUBJECT | route to that skill, not to its forge |
+| Package is structurally sound | Valid metadata and resolving references; changed helpers exercised |
+| Description selects intended work | Representative explicit and implicit asks, plus adjacent negatives |
+| Procedure works on the target path | Actual permitted actions and artifacts, including the relevant failure |
+| Revision improves outcomes or cost | Matched old/no-skill and new runs under stated conditions |
 
-## Routing — sibling cuts (typed, runtime-answerable)
+Choose cases from demonstrated misses and consequential boundaries.
+The case count follows coverage; do not pad to a fixed quota.
+A small instruction-only skill can use focused review and an actual task check.
+A delicate tool sequence needs direct execution evidence.
+A structural floor or wording match cannot establish selector accuracy or runtime compliance.
 
-| Sibling | Cut |
+Use independent evaluation when it adds needed confidence and is authorized and available.
+Freeze inputs and criteria; give evaluators the task and raw artifacts without expected findings.
+Without an independent evaluator, use scoped serial checks and state that limitation.
+Do not invent multiple votes or independent consensus inside one model response.
+Generic dispatch, resources and trust mechanics belong to `orchestrating-agents`.
+
+## Read doctor statistics correctly
+
+Distinguish an absent skill, a truncated description, an unselected skill and a failing procedure.
+Inspect the host and measurement period.
+A Claude-only usage record does not cover Codex-only skills.
+Invocation counts may omit manual reference reads and indirect application.
+A high count is not proof of benefit.
+A zero warrants investigation of demand, discovery and duplication.
+
+| Measurement | Interpretation |
 |---|---|
-| `operating-the-harness` | PURPOSE cut — contract vs craft. That skill owns the HARNESS CONTRACT of a skill: frontmatter fields, invocation control, disclosure/loading, caps and budgets, triggering diagnostics — everything checkable against the docs. THIS skill owns the CRAFT: whether the skill should exist, how sources distill into rules, one-home placement, sibling cuts, trigger test sets, adversarial proof. Question form: "What will the harness DO with this file?" → theirs; "Is this file WORTH loading, true, and cut correctly against its siblings?" → here. F4 sharpens the same seam at collection scale: the NUMBERS are theirs (per-skill cap, platform limit, truncation behaviour), the SPEND is here (what the collection's total may be, and which member gets retired when it binds). A budget with no owner of the decision is how 13 descriptions came to sit within 12 chars of the cap. |
-| the two defaults — `.system:skill-creator`, `anthropic-skills:skill-creator` | SUPERSEDED as defaults: step lists with no LAW, no gates, no MUST-NOT-FIRE, no verification of the skill itself. Their format/packaging/eval MACHINERY stays live and is invoked by pointer, never rebuilt — trigger-eval + description-optimization loop via `references/triggering.md` §6; validators, grader/comparator/analyzer, viewer, packaging via `references/verifying.md` §4. PURPOSE cut: need their MACHINERY (evals/packaging/scaffold) → invoke by pointer under this pipeline; need GUIDANCE → here. Reciprocal edit impossible (marketplace-managed, read-only) — deferral recorded here. `$PLUGIN` = `~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator`; `$CODEX` = `~/.codex/skills/.system/skill-creator` (defined ONCE here; references point). |
-| `forging-novel-theses` | PURPOSE cut — name-adjacent, zero overlap: a thesis is a BET about the world; a skill is an OPERATING MANUAL for executors. 鍛錬 of an idea → there; 鍛錬 of a manual → here. |
-| `systematizing-knowledge` | Co-fire, sequential never racing: a paper corpus runs as an SoK FIRST (coverage, claim ledger, applicable appraisal, reconciliation), THEN the bounded position distills into a skill here. Never skill-ify a raw corpus. |
-| `linting-prose` | PURPOSE cut — human-facing prose deliverables → there. SKILL.md prose is DUAL-READER (executor + auditor): floor (skill-check prose-debt WARNs) and judgment bar owned HERE (`references/architecture.md` §5). Counter-precedent: the 2026-07-24 mutual-deferral void (ledger). Seam: agrees in substance with linting-prose's cut; do not byte-diff. |
-| `raising-resolution` | owner-filter chain: its yield list routes skill craft here and harness contract to `operating-the-harness` (reciprocal edit landed 2026-07-02); inspect-before-assert runs as a silent sub-step inside every forge. |
-| `practicing-tiger-style` | PURPOSE cut: “Is the request to create, alter, audit, or trigger-test a SKILL.md rather than to apply a risk-calibrated code discipline?” **Yes** → this skill retains F1–F3 craft; **No** → `practicing-tiger-style` owns the risk-calibrated code ledger. |
-| `codifying-doctrine` | CARDINALITY/PURPOSE cut: “Is the artifact a task manual loaded by ONE executor for ONE class of task, or the trade-off ordering that governs actors ACROSS tasks when no procedure covers the case?” Manual → here. Tie-break → there. This skill remains the craft owner of `codifying-doctrine/SKILL.md` itself; reforging that file fires HERE, not there. Reciprocal row lives in its routing table. |
+| Static name-plus-description characters | Conservative collection-footprint proxy |
+| Observed listing tokens | Host/session context actually reported |
+| Invocations and body/reference loads | How often and what was read |
+| Attributed session tokens | Workload-associated usage, not manual size or causal loading cost |
 
-**Co-fire clause (`operating-the-harness`).** On every skill authoring/edit, CO-FIRE: read that
-skill's commands-and-skills reference FIRST for the mechanical contract (frontmatter fields,
-description/listing caps, body budget, disclosure stages, `context: fork` constraints — the
-numbers live there and are never restated here), THEN apply this skill for what to say and
-where. Complementary, never competing — a mechanics-only question ("why isn't my skill
-listed?") fires `operating-the-harness` ALONE (one exception: the floor script executably
-encodes two thresholds — its seam comments name the owning homes).
+Here, `agents/skills-listing-budget.json` and the shared floor maintain the static footprint ceiling.
+A binding ceiling needs an explicit retire/merge/shorten/raise decision.
+Do not raise it silently or call its character sum measured tokens charged on every turn.
 
-## Reference index — load the file you need
+For retirement, check admission age, covered usage, callers and the user's retention policy.
+A newcomer grace period is a declared local policy, not an industry constant.
+Archive outside discovery; update links, catalog and provenance.
+Preserve required executable consumers.
+Do not automatically reactivate a retired skill through a surviving reference.
 
-| File | Covers | Read when |
-|---|---|---|
-| `references/distilling.md` | Source taxonomy (one engine per source class), the distillation cut — what earns a line, provenance grading / the source-grade table, the calibration inversion (§4), degrees of freedom per rule, anti-patterns | pipeline steps 1–2; any source in hand; deciding what survives distillation |
-| `references/architecture.md` | Progressive disclosure as a design act, ONE-HOME-per-concept + SOLE-owner declarations (§2), atomic build order (§3), durability contracts + version headers (§4), floor scripts vs semantic gates (§5), language architecture (§6), anti-patterns | step 3; adding or splitting a file; any fact that could live in two places |
-| `references/triggering.md` | The triggering LAW, naming discipline, the house 8-part description anatomy (what+when, Japanese doublets, cuts-in-description, Workflow-native clause, language directive), winning the match vs incumbents (§4), fire/no-fire test sets — gate F3 (§5), the defaults' trigger-eval machinery (§6), anti-patterns | step 4; any description edit; a trigger collision or misfire |
-| `references/execution-models.md` | Typing the target's EVIDENCE → its epistemics delta (Step A), the seven components every workflow-native model carries (Step B), treatment tier — where the model lives (Step C), lens conversion + the worker side, anti-patterns | step 5; writing any Workflow-native clause; deciding solo-vs-fleet for a target skill |
-| `references/verifying.md` | The two objects to verify (§0), the 鍛錬 meta-workflow audit→spec→forge→verify→fix (§1), the verification fleet — one lens per failure class (§2), forward-testing anti-leak + baseline (§3), live eval machinery pointers (§4), the mechanical floor `scripts/skill-check.ts` (§5), ship & maintain — `mise run link:skills`, staleness triggers, reforge-vs-create (§6), scale calibration (§7) | steps 0, 6–7; before any commit; "is this skill stale?" |
+## Routes and boundaries
+
+| Request | Owner / relationship |
+|---|---|
+| Skill content, placement, distillation, trigger evaluation or standing | **Here** |
+| Host loading, permissions, hooks or listing diagnostics | `operating-the-harness`; resolve the affected mechanical contract first |
+| Scaffold, format validator, package or eval runner | Available `skill-creator` machinery and current guidance |
+| Ordinary prose | `linting-prose`; skill wording and operational clarity remain here |
+| Task manual versus cross-actor trade-offs | Here versus `codifying-doctrine` |
+| Domain result or ordinary use of a skill | Domain owner; no forge ceremony |
+| One-line typo or straightforward packaging | Direct edit or tool operation |
+
+Current creator roots, if installed:
+- `$CODEX = ~/.codex/skills/.system/skill-creator`
+- `$PLUGIN = ~/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator`
+
+These identify reusable machinery and guidance, not permanent superiority.
+Inspect the installed interface before invoking a helper.
+Retired domain manuals are references through the archive index, not callable skills.
+
+## This skill's selection cases
+
+| Ask | Expected route |
+|---|---|
+| 「実際の失敗を踏まえてskillを直して」 | Here |
+| 「同じ仕事を持つskillを統合したい」 | Here |
+| 「descriptionが広すぎて別の仕事にも発火する」 | Here |
+| 「未使用skillを退役させて」 | Here; inspect age, coverage and callers |
+| 「繰り返す手順をskillにしたい」 | Here; check the smallest useful placement |
+| 「skillが一覧に出ない」 | Harness diagnostics first |
+| 「このskillを使ってPDFを処理して」 | Existing domain skill |
+| 「SKILL.mdの一文字だけ直して」 | Direct edit |
+| 「hookで必ずこの処理を止めたい」 | Harness owner |
+| 「Rustコードを実装して」 | Implementation and language owners |
+
+These are desk-review cases, not measured live-selection accuracy.
+Recheck affected rows after a description or routing change.
+
+## References
+
+| File | Read when |
+|---|---|
+| `references/distilling.md` | Deriving rules from incidents, frameworks, corpora or documentation |
+| `references/architecture.md` | Choosing boundaries, resource homes, loading levels or package structure |
+| `references/triggering.md` | Editing descriptions or investigating false positives and missed selection |
+| `references/execution-models.md` | Delegation or a consequential trust boundary is actually needed |
+| `references/verifying.md` | Choosing checks, comparative evaluation, machinery or maintenance |
+| `tests/forge-verification-ledger.md` | Revision lineage, applicability, findings and verification limits |
+| `tests/decision-cases.json` | Static review of small skills, splits, retirement, statistics and evidence boundaries |

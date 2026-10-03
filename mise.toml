@@ -127,6 +127,7 @@ depends = [
   "lint:zsh",
   "lint:bun",
   "lint:ts",
+  "lint:ts-ratchet",
   "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
@@ -227,12 +228,53 @@ git ls-files -z -- \
 # The `if { if { if } }` shape a ts-pattern ban cannot reach. WARN, not error, because the
 # measured backlog on 2026-09-12 was 103 sites in 16 house files (26 at depth 3); ratchet to
 # "error" once that backlog is paid down — a warn that never becomes an error is theater.
+#
+# TRUST-BOUNDARY BANS (2026-10-03, writing-typescript's "zod safeParse over hand-written type
+# guards", made a machine floor because prose was not enough): on EVERY audited file a hand-written
+# `x is T` guard, `"key" in value` probing, an `as` cast (`as const` allowed), `<T>value`, and a
+# JSON.parse that is not the body of `(): unknown => JSON.parse(..)` are errors, and the
+# type-aware `typescript/no-unsafe-*` + `no-explicit-any` rules are errors, so an annotation on a
+# JSON.parse() or any other `any` flowing into a typed slot fails too. `--type-aware` is
+# REQUIRED here: without it oxlint skips the no-unsafe-* rules silently (verified 2026-10-03) —
+# an implicit gap. It needs oxlint-tsgolint (devDependency, pinned beside oxlint) and costs ~0.8 s.
+# NOT the no-overrides state the paragraph above describes: the rules landed with a measured
+# backlog of 1534 errors in 105 files, so `.oxlintrc.json` carries ONE `overrides` entry — a
+# DEBT LEDGER listing exactly those files, in which only the older bans apply. Every file NOT
+# listed (every new file, every file converted since) gets the full rules as errors. The list may
+# only shrink: lint:ts-ratchet fails when a listed file is already clean, so a converted file
+# cannot stay exempt. Never add a file to the list to make a lint pass — convert it.
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint the repo's TS (.oxlintrc.json): max-depth 2 warns and Date (-> Temporal) errors everywhere; switch/nested ternary -> ts-pattern and every try (catch or finally) -> neverthrow/attempt.ts / using are errors everywhere, with no per-file opt-out or disable comment"
+description = "oxlint --type-aware the repo's TS (.oxlintrc.json): Date -> Temporal, switch/nested ternary/try, and the trust-boundary bans (type-predicate guards, `in` probing, `as` casts, un-parsed JSON.parse, unsafe any) are errors on every file outside the shrinking debt ledger; max-depth 2 warns; no disable comments"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 depends = ["lint:ts-no-disable"]
-run = "bunx --bun oxlint"
+run = "bunx --bun oxlint --type-aware"
+
+# The ratchet for the debt ledger in .oxlintrc.json (overrides[0].files): lints every file with the
+# FULL rules (the ledger removed) and fails on a listed file that now has no violation, naming it.
+# That is the only way a listed file leaves the list; there is no way to add one here.
+[tasks."lint:ts-ratchet"]
+dir = "{{config_root}}"
+description = "Fail when a file in the .oxlintrc.json debt ledger is already clean under the full rules: remove it from the list so the ban applies to it from now on"
+run = '''
+set -eu
+cfg=./.oxlintrc.ratchet.$$.json   # beside .oxlintrc.json: oxlint resolves its jsPlugins from the config's directory; $$ keeps concurrent runs apart (BSD mktemp cannot take a .json suffix)
+dirty=$(mktemp) listed=$(mktemp) out=$(mktemp)
+trap 'rm -f "$cfg" "$dirty" "$listed" "$out"' EXIT
+jq 'del(.overrides)' .oxlintrc.json > "$cfg"
+# To a FILE, not a pipe: oxlint exits right after writing, and a pipe truncates its JSON at the
+# 64 KB pipe buffer (seen 2026-10-03: jq "Unfinished JSON term"). Exit 1 is expected — errors exist.
+bunx --bun oxlint --type-aware -c "$cfg" -f json > "$out" || test $? -eq 1
+jq -r '[.diagnostics[] | select(.severity == "error") | .filename] | unique[]' "$out" | sort > "$dirty"
+jq -r '.overrides[0].files[]' .oxlintrc.json | sort > "$listed"
+stale=$(comm -23 "$listed" "$dirty")
+if [ -n "$stale" ]; then
+  echo "lint:ts-ratchet: these files are in the .oxlintrc.json debt ledger but are already clean — remove them from overrides[0].files:" >&2
+  echo "$stale" >&2
+  exit 1
+fi
+echo "lint:ts-ratchet: $(wc -l < "$listed") files still in the debt ledger, none stale"
+'''
 
 # oxlint has no rule that forbids its own suppression comments, so this does: any oxlint-disable
 # or eslint-disable in tracked TS fails (audit targets get no exception rules — enforced, not

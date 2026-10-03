@@ -1,1 +1,0 @@
-../../hooks/run.sh

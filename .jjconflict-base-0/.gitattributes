@@ -1,4 +1,0 @@
-* text=auto eol=lf
-
-# /model が書き戻す volatile な model キーを staging 時に剥ぐ(filter 本体は git/local.*)
-agents/claude/settings.json filter=claude-settings

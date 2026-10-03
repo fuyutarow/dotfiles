@@ -11,6 +11,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -19,7 +20,8 @@ import { z } from "zod";
 import { tempDir, tempHome } from "./helpers.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "..", "statusline-command.ts");
-const ANSI = new RegExp("\u001b\\[[0-9;]*m", "g");
+const ESC = String.fromCharCode(27); // not a literal \u001b: the pattern then has no control character
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const nowMs = (): number => Temporal.Now.instant().epochMilliseconds;
 // The hung-nvidia-smi cases spend a full 2 s bound per render (and two renders in a few); bun's
 // 5 s default would make them fail on a loaded host, which is the very condition under test.
@@ -473,14 +475,17 @@ describe("statusline resource bounds", () => {
       );
       let alive = procs.length;
       for (const p of procs) void p.exited.then(() => (alive -= 1));
+      // Poll every cache file while the writers run; a file that exists must always be whole.
+      const poll = (): number => {
+        const states = files
+          .map((f) => cacheFileState(join(cacheDir, f)))
+          .filter((s) => s !== "missing"); // not written yet
+        for (const state of states) expect(state).toBe("valid"); // "torn" = half a write
+        return states.length;
+      };
       let reads = 0;
       while (alive > 0) {
-        for (const f of files) {
-          const state = cacheFileState(join(cacheDir, f));
-          if (state === "missing") continue; // not written yet
-          reads += 1;
-          expect(state).toBe("valid"); // "torn" = a reader saw half a write
-        }
+        reads += poll();
         await Bun.sleep(1);
       }
       expect(reads).toBeGreaterThan(0);
@@ -489,6 +494,81 @@ describe("statusline resource bounds", () => {
     },
     SLOW,
   );
+
+  // O3: at most one nvidia-smi in flight host-wide. `invocations` counts what the fake was asked.
+  const countingGpu = (log: string, body: string): string =>
+    `echo run >> '${log}'\n${body}`;
+  const invocations = (log: string): number =>
+    existsSync(log)
+      ? readFileSync(log, "utf8").split("\n").filter(Boolean).length
+      : 0;
+
+  test(
+    "O3: six concurrent renders start exactly one nvidia-smi; the others say why they wait",
+    async () => {
+      const home = tempHome();
+      const log = join(tempDir("slog-"), "gpu.log");
+      const bin = binWith({
+        "nvidia-smi": countingGpu(log, "/bin/sleep 1\necho '3584, 12288'"),
+      });
+      const outputs = await Promise.all(
+        Array.from({ length: 6 }, async () => {
+          const p = Bun.spawn([process.execPath, STATUSLINE], {
+            stdin: new Blob([JSON.stringify({})]),
+            stdout: "pipe",
+            stderr: "ignore",
+            env: { HOME: home, PATH: bin, TZ: "UTC" },
+            cwd: tempDir("slcwd-"),
+          });
+          const text = await new Response(p.stdout).text();
+          await p.exited;
+          return text.replace(ANSI, "");
+        }),
+      );
+      expect(invocations(log)).toBe(1);
+      const rows = outputs.map(sysRow);
+      expect(rows.some((r) => r.includes("VRAM 29% (3.5/12.0G)"))).toBe(true);
+      // Every session shows a value or an explicit reason — none is silent about VRAM.
+      for (const r of rows) {
+        expect(r).toMatch(
+          /VRAM (29% \(3\.5\/12\.0G\)|n\/a \(nvidia-smi is being sampled by another session\))/,
+        );
+      }
+    },
+    SLOW,
+  );
+
+  test("O3: a lock older than 3 s belongs to a crashed holder and is broken", () => {
+    const home = tempHome();
+    const lock = join(home, ".cache", "claude", "statusline-gpu.lock");
+    mkdirSync(lock, { recursive: true });
+    const oldSecs = (nowMs() - 10_000) / 1000; // utimes takes epoch seconds; no Date (banned)
+    utimesSync(lock, oldSecs, oldSecs);
+    const bin = binWith({ "nvidia-smi": "echo '3584, 12288'" });
+    expect(sysRow(render({ home, bin }).text)).toContain(
+      "VRAM 29% (3.5/12.0G)",
+    );
+    expect(existsSync(lock)).toBe(false); // released after the sample
+  });
+
+  test("O3: while another session holds the lock, no second nvidia-smi starts and the last good value is shown stale", () => {
+    const home = tempHome();
+    const log = join(tempDir("slog-"), "gpu.log");
+    mkdirSync(join(home, ".cache", "claude", "statusline-gpu.lock"), {
+      recursive: true,
+    });
+    seedGpuCache(home, {
+      at: nowMs() - 60_000,
+      good: { at: nowMs() - 30_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+    });
+    const bin = binWith({ "nvidia-smi": countingGpu(log, "echo '1, 2'") });
+    const row = sysRow(render({ home, bin }).text);
+    expect(invocations(log)).toBe(0);
+    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toMatch(
+      /stale \d+s \(nvidia-smi is being sampled by another session\)/,
+    );
+  });
 });
 
 // ZOD FIRST: every external value is parsed by a schema; a file or payload of the wrong shape is

@@ -178,12 +178,10 @@ describe("doctor", () => {
   });
 
   /**
-   * A dotfiles fixture whose ssh/config gives `r99-wsl` one User, (optionally) one forward, and the
-   * SetEnv that names the alias for path requests (unless `setEnv` is false).
+   * A dotfiles fixture whose ssh/config gives `r99-wsl` one User and (optionally) one forward.
    */
   function fixtureSshConfig(
     forward: string | null,
-    setEnv = true,
     editor: "same" | "absent" | "forwards" = "same",
     scoped = true,
   ): string {
@@ -205,14 +203,14 @@ describe("doctor", () => {
       : "Host r99-wsl\n";
     writeFileSync(
       join(dir, "ssh", "config"),
-      `${shared}${leak}${attach}${fwd}${setEnv ? "    SetEnv SMART_OPEN_SSH_HOST=r99-wsl\n" : ""}`,
+      `${shared}${leak}${attach}${fwd}`,
     );
     return dir;
   }
 
   test("smart-open: a forward joining the paths the code uses PASSes; drift on either end FAILs naming both sides", () => {
     const home = tmp("doctor-home-");
-    const remote = "/tmp/smart-open-tester.sock";
+    const remote = "/tmp/smart-open-tester--r99-wsl.sock";
     const receiver = `${home}/.cache/smart-open/receiver.sock`;
     const pass = doctor("smart-open", {
       HOME: home,
@@ -223,6 +221,8 @@ describe("doctor", () => {
 
     for (const [name, forward] of [
       ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
+      // The pre-2026-10-03 name, without the alias: `oo` there could not name the host.
+      ["remote name lost the alias", `/tmp/smart-open-tester.sock ${receiver}`],
       ["receiver path drifted", `${remote} ${home}/.cache/smart-open/r.sock`],
     ] as const) {
       const r = doctor("smart-open", {
@@ -238,7 +238,7 @@ describe("doctor", () => {
 
   test("smart-open: an editor alias that is missing, or carries the forward, FAILs naming the fix", () => {
     const home = tmp("doctor-home-");
-    const forward = `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`;
+    const forward = `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`;
     const ok = doctor("smart-open", {
       HOME: home,
       DOTFILES: fixtureSshConfig(forward),
@@ -249,14 +249,14 @@ describe("doctor", () => {
     );
     const absent = doctor("smart-open", {
       HOME: home,
-      DOTFILES: fixtureSshConfig(forward, true, "absent"),
+      DOTFILES: fixtureSshConfig(forward, "absent"),
     });
     expect(absent.code).toBe(1);
     expect(absent.out).toContain("r99-wsl-code does not reach the same box");
     expect(absent.out).toContain("Host r99-wsl r99-wsl-code");
     const leaks = doctor("smart-open", {
       HOME: home,
-      DOTFILES: fixtureSshConfig(forward, true, "forwards"),
+      DOTFILES: fixtureSshConfig(forward, "forwards"),
     });
     expect(leaks.code).toBe(1);
     expect(leaks.out).toContain("r99-wsl-code carries the smart-open forward");
@@ -267,8 +267,7 @@ describe("doctor", () => {
     const r = doctor("smart-open", {
       HOME: home,
       DOTFILES: fixtureSshConfig(
-        `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`,
-        true,
+        `/tmp/smart-open-tester--r99-wsl.sock ${home}/.cache/smart-open/receiver.sock`,
         "same",
         false,
       ),
@@ -277,21 +276,6 @@ describe("doctor", () => {
     expect(r.out).toContain(
       "a command session to r99-wsl carries the smart-open forward",
     );
-  });
-
-  test("smart-open: a joined forward without the SetEnv FAILs, naming the missing variable", () => {
-    const home = tmp("doctor-home-");
-    const r = doctor("smart-open", {
-      HOME: home,
-      DOTFILES: fixtureSshConfig(
-        `/tmp/smart-open-tester.sock ${home}/.cache/smart-open/receiver.sock`,
-        false,
-      ),
-    });
-    expect(r.code).toBe(1);
-    expect(r.out).toContain("sends no SMART_OPEN_SSH_HOST=r99-wsl");
-    expect(r.out).toContain("want: setenv SMART_OPEN_SSH_HOST=r99-wsl");
-    expect(r.out).toContain("have: no SetEnv at all");
   });
 
   test("smart-open: a host with no RemoteForward at all FAILs, and an extra unrelated forward does not mask drift", () => {

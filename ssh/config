@@ -51,36 +51,36 @@ Host r99-wsl r99-wsl-code r99
     Compression yes
 
 # --- smart-open: open a URL on the machine you sit at, not on the box you drive ----------------
-# `o <url>` on r99-wsl (smart-open/smart-open.ts) writes to /tmp/smart-open-$USER.sock there; this forward
-# carries it to the local receiver (smart-open/receive.ts, started at login on macOS by
-# smart-open/smart-open-receiver.plist.mac), which opens http(s) URLs and remote folders. herdr --remote reads this file
-# first, so its attach carries the forward too. With no receiver running locally the remote side
-# gets no `ok`: a URL then opens on Windows, a path is not opened at all (nobody is at that screen).
-# A second concurrent connection cannot re-bind the same path and prints a warning; the WSL sshd
-# drop-in (wsl/sshd-dotfiles.conf, StreamLocalBindUnlink yes) makes the NEWEST connection win.
-# A PATH (`oo`) cannot travel — the files stay on r99 — so it goes as a request to open a VS Code
-# Remote-SSH window on r99-wsl-code. SetEnv tells the remote the alias we know it by (it has no
-# other way to learn it); the sshd drop-in AcceptEnv's it. The receiver honours it only if this
-# alias carries the RemoteForward below AND <alias>-code reaches the same box WITHOUT it — VS Code's
-# own ssh would otherwise take the socket over and leave a dead bind when its window closed. So
-# `-code` gets NO block here, and ~/.ssh/config.local must name it beside the real one
-# (`Host r99-wsl r99-wsl-code`) so it inherits HostName/Port/User. `mise run doctor` checks both.
-# SetEnv takes no %-tokens, hence the literal alias.
+# `o <url>` on r99-wsl (smart-open/smart-open.ts) writes to /tmp/smart-open-$USER--<alias>.sock there;
+# this forward carries it to the local receiver (smart-open/receive.ts, started at login on macOS by
+# smart-open/smart-open-receiver.plist.mac), which opens http(s) URLs and remote folders. herdr
+# --remote reads this file first, so its attach carries the forward too. With no receiver running
+# locally the remote side gets no `ok`: a URL is then printed, a path not opened (nobody is at r99's
+# screen). The WSL sshd drop-in (wsl/sshd-dotfiles.conf, StreamLocalBindUnlink yes) lets the NEWEST
+# connection re-bind a path a dropped one left behind.
 #
-# ONLY THE ATTACH CARRIES IT. Newest-wins means every connection that requests this forward steals
-# the socket, and a short one (an agent's `ssh r99-wsl cmd`, a mise task, Codex's app-server, VS
-# Code) leaves a dead bind when it exits: the still-attached terminal's `o` then finds a stale
-# socket and opens on r99's own screen. Observed 2026-10-03 — a `mise run pull` over ssh did exactly
-# this. So the forward is scoped by Match (OpenSSH >= 9.9 client) to the two sessions that ARE the
-# screen you sit at: an interactive shell (`ssh r99-wsl`) and herdr's bridge (`herdr --remote`).
-# `originalhost`, not `host`: config.local has already rewritten the hostname to an address.
-# `ssh -G r99-wsl` (no command = shell) still shows it, which is what the receiver and doctor ask.
+# THE ALIAS IS IN THE SOCKET NAME (%n = the host as typed here). A PATH (`oo`) cannot travel — the
+# files stay on r99 — so it asks the receiver to open a VS Code Remote-SSH window on <alias>-code,
+# and the remote has no other way to learn our alias for it. Not SetEnv: an environment variable is
+# frozen into a long-lived herdr server at its first attach, so no relogin could refresh it; a file
+# name is read fresh on every `oo`. The receiver honours the alias only if it carries this forward
+# AND <alias>-code reaches the same box WITHOUT it — VS Code's own ssh would otherwise take the socket
+# over and leave a dead bind when its window closed. So `-code` gets NO block here, and
+# ~/.ssh/config.local names it beside the real one (`Host r99-wsl r99-wsl-code`) so it inherits
+# HostName/Port/User. `mise run doctor` checks all of it.
+#
+# ONLY THE ATTACH CARRIES IT. Every connection that requests this forward re-binds the socket, and
+# a short one (an agent's `ssh r99-wsl cmd`, a mise task, Codex's app-server, VS Code) leaves a dead
+# bind when it exits: the still-attached terminal's `o` then finds a stale socket. Observed
+# 2026-10-03 — a `mise run pull` over ssh did exactly this. So Match (OpenSSH >= 9.9 client) scopes
+# it to the two sessions that ARE the screen you sit at: an interactive shell (`ssh r99-wsl`) and
+# herdr's bridge (`herdr --remote`). `originalhost`, not `host`: config.local has already rewritten
+# the hostname to an address. `ssh -G r99-wsl` (no command = shell) still shows it, which is what
+# the receiver and doctor ask.
 Match originalhost r99-wsl sessiontype shell
-    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
-    SetEnv SMART_OPEN_SSH_HOST=r99-wsl
+    RemoteForward /tmp/smart-open-%r--%n.sock %d/.cache/smart-open/receiver.sock
 Match originalhost r99-wsl command "*herdr remote-client-bridge*"
-    RemoteForward /tmp/smart-open-%r.sock %d/.cache/smart-open/receiver.sock
-    SetEnv SMART_OPEN_SSH_HOST=r99-wsl
+    RemoteForward /tmp/smart-open-%r--%n.sock %d/.cache/smart-open/receiver.sock
 
 # r99-lan is the SAME Windows host as r99, over the LAN rather than the tailnet, and it exists
 # because Tailscale on Windows is a USER-SESSION GUI client: the tailnet address is unreachable

@@ -76,9 +76,9 @@ type Receiver = { sock: string; opened: () => string[] };
 
 async function startReceiver(
   dir: string,
-  opts: { args?: string[]; opener?: string } = {},
+  opts: { args?: string[]; opener?: string; sockName?: string } = {},
 ): Promise<Receiver> {
-  const sock = join(dir, "r.sock");
+  const sock = join(dir, opts.sockName ?? "r.sock");
   const [script, opened] = recorder(dir, "receiver-opened");
   const proc = Bun.spawn(
     ["bun", RECEIVE, "--socket", sock, ...(opts.args ?? [])],
@@ -250,10 +250,13 @@ describe("receiver wire protocol", () => {
 });
 
 describe("socket defaults", () => {
-  test("smart-open looks for /tmp/smart-open-<user>.sock unless SMART_OPEN_SOCKET says otherwise", () => {
-    const base = { SMART_OPEN_SOCKET: undefined };
+  test("smart-open looks for /tmp/smart-open-<user>--<alias>.sock unless SMART_OPEN_SOCKET says otherwise", () => {
+    const empty = scratch();
+    const base = { SMART_OPEN_SOCKET: undefined, SMART_OPEN_SOCKET_DIR: empty };
     const r = client(["--dry-run", "https://probe.invalid/"], base);
-    expect(r.out).toContain(`/tmp/smart-open-${userInfo().username}.sock`);
+    expect(r.out).toContain(
+      join(empty, `smart-open-${userInfo().username}--<alias>.sock`),
+    );
     const o = client(["--dry-run", "https://probe.invalid/"], {
       SMART_OPEN_SOCKET: "/tmp/elsewhere.sock",
     });
@@ -398,9 +401,10 @@ describe("client routing", () => {
 async function pathReceiver(
   dir: string,
   args: string[] = [],
+  sockName = "r.sock",
 ): Promise<Receiver> {
   const config = join(dir, "ssh_config");
-  const fwd = `    RemoteForward /tmp/so-probe.sock ${join(dir, "r.sock")}\n`;
+  const fwd = `    RemoteForward /tmp/so-probe.sock ${join(dir, sockName)}\n`;
   writeFileSync(
     config,
     [
@@ -412,7 +416,10 @@ async function pathReceiver(
       `Host leaky leaky-code\n    HostName box.invalid\n${fwd}`,
     ].join(""),
   );
-  return startReceiver(dir, { args: ["--ssh-config", config, ...args] });
+  return startReceiver(dir, {
+    args: ["--ssh-config", config, ...args],
+    sockName,
+  });
 }
 const pathLine = (path: unknown, host: unknown, kind: unknown = "dir") =>
   `${JSON.stringify({ path, kind, host })}\n`;
@@ -466,7 +473,7 @@ describe("paths over a live forward", () => {
     expect(localOpened()).toEqual([]);
   });
 
-  test("with SMART_OPEN_SSH_HOST unset the refusal names the variable and how it is set", async () => {
+  test("a forward whose socket name carries no alias is refused, and the repair names the socket name", async () => {
     const dir = scratch();
     const rx = await pathReceiver(dir);
     const [local, localOpened] = recorder(dir, "local-opened");
@@ -476,10 +483,61 @@ describe("paths over a live forward", () => {
       SMART_OPEN_SSH_HOST: undefined,
     });
     expect(r.code).toBe(1);
-    expect(r.err).toContain("SMART_OPEN_SSH_HOST is unset");
-    expect(r.err).toContain("SetEnv");
+    expect(r.err).toContain("forward names no client alias");
+    expect(r.err).toContain("smart-open-%r--%n.sock");
     expect(rx.opened()).toEqual([]);
     expect(localOpened()).toEqual([]);
+  });
+
+  test("the alias is read from the newest forward's socket name: no environment, no relogin", async () => {
+    const dir = scratch();
+    const user = userInfo().username;
+    // An older dead bind for another alias: present, but not the newest.
+    const stale = join(dir, `smart-open-${user}--elsewhere.sock`);
+    const holder = Bun.spawn(
+      [
+        "bun",
+        "-e",
+        `Bun.listen({ unix: ${JSON.stringify(stale)}, socket: { data() {} } }); setInterval(() => {}, 1000);`,
+      ],
+      { stdout: "ignore", stderr: "ignore" },
+    );
+    cleanups.push(() => holder.kill());
+    for (let i = 0; i < 200 && !existsSync(stale); i++) await Bun.sleep(25);
+    holder.kill("SIGKILL");
+    await holder.exited;
+    await Bun.sleep(20);
+    const rx = await pathReceiver(
+      dir,
+      [],
+      `smart-open-${user}--probe-host.sock`,
+    );
+    writeFileSync(join(dir, `smart-open-someone-else--probe-host.sock`), "");
+    const [local, localOpened] = recorder(dir, "local-opened");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET_DIR: dir,
+      SMART_OPEN_LOCAL_OPENER: local,
+      SMART_OPEN_SSH_HOST: undefined,
+      SMART_OPEN_SOCKET: undefined,
+    });
+    expect(r.code).toBe(0);
+    expect(rx.opened()).toEqual([
+      `vscode://vscode-remote/ssh-remote+probe-host-code${dir}`,
+    ]);
+    expect(localOpened()).toEqual([]);
+  });
+
+  test("a pinned SMART_OPEN_SOCKET also yields its alias from the name", async () => {
+    const dir = scratch();
+    const rx = await pathReceiver(dir, [], "pinned--probe-host.sock");
+    const r = client([dir], {
+      SMART_OPEN_SOCKET: rx.sock,
+      SMART_OPEN_SSH_HOST: undefined,
+    });
+    expect(r.code).toBe(0);
+    expect(rx.opened()).toEqual([
+      `vscode://vscode-remote/ssh-remote+probe-host-code${dir}`,
+    ]);
   });
 
   test.each([
@@ -526,7 +584,7 @@ describe("paths over a live forward", () => {
     [
       "a host that is not a string",
       pathLine("/w", 7),
-      `refused: no ssh host (SMART_OPEN_SSH_HOST is unset on the remote)`,
+      "refused: no ssh host (the remote's forward names no client alias)",
     ],
   ])(
     "refuses %s, costs no token, and never runs the opener",

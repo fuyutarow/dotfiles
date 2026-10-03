@@ -1,6 +1,6 @@
 // smart-open receiver — runs on the machine you sit at (the Mac), opens what a remote
 // `smart-open` sends it. Started at login by smart-open/smart-open-receiver.plist.mac (launchd).
-// ssh/config forwards the remote /tmp/smart-open-$USER.sock to this socket, so it is reachable
+// ssh/config forwards the remote /tmp/smart-open-$USER--<alias>.sock to this socket, so it is reachable
 // only through your own ssh connections; the socket file itself is owner-only.
 //
 // Protocol: one JSON line in — {"url": "..."} or {"path": "/abs", "kind": "file"|"dir", "host":
@@ -60,13 +60,7 @@ import { dirname } from "node:path";
 import { cli } from "cleye";
 import { z } from "zod";
 import { attempt } from "../agents/hooks/attempt.ts";
-import {
-  ACK_MS,
-  editorHost,
-  receiverSocket,
-  SETTLE_MS,
-  SSH_HOST_ENV,
-} from "./sockets.ts";
+import { ACK_MS, editorHost, receiverSocket, SETTLE_MS } from "./sockets.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -296,7 +290,10 @@ function malformedPath(path: unknown, kind: unknown, host: unknown) {
     typeof path !== "string" ||
     !path.startsWith("/") ||
     !path.isWellFormed() ||
-    [...path].some((c) => c < " " || c === "\u007f")
+    // A control character (C0 or DEL) by UTF-16 code unit; none is a surrogate half.
+    Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).some(
+      (c) => c < 0x20 || c === 0x7f,
+    )
   )
     return "refused: path must be absolute";
   if (kind !== "file" && kind !== "dir")
@@ -305,7 +302,7 @@ function malformedPath(path: unknown, kind: unknown, host: unknown) {
   if (kind === "dir" && /:\d+$/.test(path))
     return "refused: a folder whose name ends in :<digits> cannot be opened by URL";
   if (typeof host !== "string" || host === "")
-    return `refused: no ssh host (${SSH_HOST_ENV} is unset on the remote)`;
+    return "refused: no ssh host (the remote's forward names no client alias)";
   if (!HOST.test(editorHost(host))) return "refused: not an ssh host alias";
   return undefined;
 }

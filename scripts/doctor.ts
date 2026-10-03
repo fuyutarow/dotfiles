@@ -25,8 +25,8 @@
 //   edge-policy edge/policy.plist.mac (mac only) the live Edge managed policy is a byte-equal copy
 //   smart-open  ssh/config + smart-open/sockets.ts
 //                                                r99-wsl's RemoteForward joins the two socket paths
-//                                                smart-open and its receiver actually use, and its
-//                                                SetEnv names the alias a path request opens on
+//                                                smart-open and its receiver actually use (the
+//                                                remote name carrying the alias), on attach only
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
 //
 // NO FLAGS, NO DEPENDENCIES — deliberate, like render-claude-settings.ts: the machine being
@@ -69,7 +69,6 @@ import {
   editorHost,
   receiverSocket,
   remoteSocket,
-  SSH_HOST_ENV,
 } from "../smart-open/sockets.ts";
 
 type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
@@ -809,24 +808,10 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
   const user = value("user")[0];
   if (user === undefined)
     return warn("smart-open", "ssh -G printed no `user` line");
-  const want = `${remoteSocket(user)} ${receiverSocket(ctx.home)}`;
+  // The socket NAME carries the alias (%n): it is how `oo` there learns which host to open on.
+  const want = `${remoteSocket(user, SMART_OPEN_HOST)} ${receiverSocket(ctx.home)}`;
   const have = value("remoteforward");
-  // The path half (`oo`): the remote learns our alias for it only from this SetEnv.
-  const wantEnv = `${SSH_HOST_ENV}=${SMART_OPEN_HOST}`;
-  const env = value("setenv").flatMap((l) => l.split(/\s+/));
-  if (have.includes(want) && env.includes(wantEnv))
-    return checkEditorAlias(ctx, config, resolved, want, wantEnv);
-  if (have.includes(want)) {
-    return fail(
-      "smart-open",
-      `${SMART_OPEN_HOST} sends no ${wantEnv} — \`oo\` there cannot name the host to open the folder on`,
-      `add \`SetEnv ${wantEnv}\` to ssh/config's Host ${SMART_OPEN_HOST} block`,
-      [
-        `want: setenv ${wantEnv}`,
-        `have: ${env.length > 0 ? env.join(" ") : "no SetEnv at all"}`,
-      ],
-    );
-  }
+  if (have.includes(want)) return checkEditorAlias(ctx, config, resolved, want);
   const seen =
     have.length > 0
       ? have.map((h) => `have: ${h}`)
@@ -847,7 +832,6 @@ async function checkEditorAlias(
   config: string,
   attach: string[],
   want: string,
-  wantEnv: string,
 ): Promise<Finding> {
   const editor = editorHost(SMART_OPEN_HOST);
   const r = await run(["ssh", "-G", "-F", config, editor], { ms: 10_000 });
@@ -894,7 +878,7 @@ async function checkEditorAlias(
       );
     return pass(
       "smart-open",
-      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")} and sends ${wantEnv} on attach only; ${editor} reaches the same box without the forward`,
+      `${SMART_OPEN_HOST} forwards ${want.replace(" ", " → ")} on attach only; ${editor} reaches the same box without the forward`,
     );
   }
   return fail(

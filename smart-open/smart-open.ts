@@ -5,13 +5,14 @@
 // WHERE IT OPENS, in order (first that succeeds wins):
 //   1. URL + a live client receiver  → the CLIENT machine. When you drive this box from a Mac over
 //      `ssh` / `herdr --remote`, ssh/config's RemoteForward exposes the Mac's receiver
-//      (smart-open/receive.ts) here as /tmp/smart-open-$USER.sock. Opening "here" would put the page on a
-//      screen nobody is in front of — that was the old WSL `o` (explorer.exe, always).
+//      (smart-open/receive.ts) here as /tmp/smart-open-$USER--<client alias>.sock (the newest one
+//      wins). Opening "here" would put the page on a screen nobody is in front of — that was the
+//      old WSL `o` (explorer.exe, always).
 //   2. this machine: macOS `open`; WSL → explorer.exe (a path converted by `wslpath -w` first,
 //      because explorer.exe reads only Windows paths); other Linux → xdg-open.
 // A PATH lives here, so the client's Finder cannot show it. Over a live forward it goes to the client
 // as {path, kind, host}, and the receiver opens it as a VS Code Remote-SSH window on THIS box (`host`
-// is $SMART_OPEN_SSH_HOST — the client's own ssh alias for us, sent by ssh/config's SetEnv). When the
+// is the client's own ssh alias for us, read from the forward's socket name). When the
 // client cannot do that, the path is NOT opened here either: someone attached remotely is not
 // looking at this box's screen (on WSL, an unattended Windows desktop). --here opens it here anyway.
 //
@@ -47,6 +48,7 @@ import {
   ACK_MS,
   editorHost,
   fileKey,
+  remoteForwards,
   remoteSocket,
   SSH_HOST_ENV,
   unlinkIfSame,
@@ -89,9 +91,23 @@ const argv = cli(
   Bun.argv.slice(2),
 );
 
-const SOCKET =
-  process.env.SMART_OPEN_SOCKET ?? remoteSocket(userInfo().username);
-const SSH_HOST = process.env[SSH_HOST_ENV] ?? "";
+// The forward to use, and the client alias its socket name carries (sockets.ts, remoteSocket):
+// SMART_OPEN_SOCKET pins one (tests, a hand-bound forward); otherwise the newest bound in
+// SMART_OPEN_SOCKET_DIR (default /tmp). With none bound, SOCKET names the pattern, for messages.
+function pickForward(): { socket: string; alias: string } {
+  const user = userInfo().username;
+  const pinned = process.env.SMART_OPEN_SOCKET;
+  if (pinned !== undefined) {
+    const named = /--([^/]+)\.sock$/.exec(pinned);
+    return { socket: pinned, alias: named?.[1] ?? "" };
+  }
+  const dir = process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp";
+  const newest = existsSync(dir) ? remoteForwards(user, dir)[0] : undefined;
+  return newest ?? { socket: remoteSocket(user, "<alias>", dir), alias: "" };
+}
+const FORWARD = pickForward();
+const SOCKET = FORWARD.socket;
+const SSH_HOST = process.env[SSH_HOST_ENV] ?? FORWARD.alias;
 const OPEN_MS = 15_000;
 const LOCAL_WAIT_MS = 3_000;
 // This shell came in over ssh, so this machine's own screen is not the one being looked at.
@@ -241,8 +257,7 @@ async function dropStale(probe: Probe): Promise<string> {
 
 // Where a path goes. Only "no client attached" (no socket, or a dead bind) lands it here.
 async function routePath(path: string): Promise<Routed> {
-  const editor =
-    SSH_HOST === "" ? `<${SSH_HOST_ENV} unset: refused>` : editorHost(SSH_HOST);
+  const editor = SSH_HOST === "" ? "<no alias: refused>" : editorHost(SSH_HOST);
   if (argv.flags.dryRun) {
     const otherwise = OVER_SSH
       ? "not opened (this shell is over ssh)"
@@ -293,8 +308,8 @@ function refusalHint(reply: string): string {
     return " — the client's receiver predates folder support; on the Mac: launchctl kickstart -k gui/$(id -u)/dotfiles.smart-open-receiver";
   if (reply.includes("without the smart-open forward"))
     return " — on the Mac, give ~/.ssh/config.local's Host line for this box the -code alias too (e.g. `Host r99-wsl r99-wsl-code`)";
-  if (reply.includes(SSH_HOST_ENV))
-    return " — ssh/config sends it with SetEnv on attach; a herdr server started before that keeps its old environment, so restart it";
+  if (reply.includes("no ssh host"))
+    return " — the alias rides in the forward's socket name (ssh/config: RemoteForward /tmp/smart-open-%r--%n.sock); reattach from the client so it is bound under that name";
   return "";
 }
 

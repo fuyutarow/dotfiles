@@ -3,26 +3,56 @@
 // the two socket paths, the two timings that couple the client's patience to the receiver's
 // answer, and the one file operation the client performs on the remote socket.
 // ssh/config's `RemoteForward` spells the path pair in ssh's own token syntax (%r = the remote
-// user, %d = the local home); that is a different language and cannot import this file, so the
-// doctor compares what ssh RESOLVES it to against the two path functions.
-import { lstatSync, unlinkSync } from "node:fs";
+// user, %n = the host alias as typed on the client, %d = the local home); that is a different
+// language and cannot import this file, so the doctor compares what ssh RESOLVES it to against the
+// two path functions.
+import { lstatSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { attempt } from "../agents/hooks/attempt.ts";
 
-/** Where `smart-open` looks on the REMOTE box; sshd binds the forward there, once per user. */
-export const remoteSocket = (username: string): string =>
-  `/tmp/smart-open-${username}.sock`;
+/**
+ * Where sshd binds the forward on the REMOTE box: one per user AND client alias. The alias is in
+ * the NAME (ssh/config's `%n`) because it is the one thing the remote cannot learn otherwise, and a
+ * path request needs it (the client's VS Code connects back to <alias>-code). A file name is read
+ * fresh by every invocation; an environment variable is frozen into a long-lived herdr server at
+ * its first attach, where no relogin can ever refresh it.
+ */
+export const remoteSocket = (
+  username: string,
+  alias: string,
+  dir = "/tmp",
+): string => join(dir, `smart-open-${username}--${alias}.sock`);
+
+/**
+ * The forwards bound for `username` in `dir`, newest first, each with the alias its name carries.
+ * Newest first: the newest attach is the screen you most recently sat down at.
+ */
+export function remoteForwards(
+  username: string,
+  dir = "/tmp",
+): { socket: string; alias: string }[] {
+  const prefix = `smart-open-${username}--`;
+  const bound = readdirSync(dir).flatMap((name) => {
+    if (!name.startsWith(prefix) || !name.endsWith(".sock")) return [];
+    const alias = name.slice(prefix.length, -".sock".length);
+    const socket = join(dir, name);
+    const s = lstatSync(socket, { throwIfNoEntry: false });
+    return alias !== "" && s?.isSocket()
+      ? [{ socket, alias, mtime: s.mtimeMs }]
+      : [];
+  });
+  return bound
+    .sort((a, b) => b.mtime - a.mtime)
+    .map(({ socket, alias }) => ({ socket, alias }));
+}
 
 /** Where the receiver listens on the CLIENT machine; the forward carries the remote socket here. */
 export const receiverSocket = (home: string): string =>
   join(home, ".cache/smart-open/receiver.sock");
 
 /**
- * The ssh Host alias the CLIENT uses to reach the remote, as the remote learns it: ssh/config's
- * `SetEnv` sends it on the same connection that carries the forward, and wsl/sshd-dotfiles.conf's
- * `AcceptEnv` lets it in. A path request names it so the receiver can open the folder in an editor
- * connected to that very host (vscode-remote ssh-remote+<alias>) — the remote cannot know the
- * client's alias for it any other way.
+ * Overrides the client alias that the forward's socket name carries (remoteSocket) — for tests and
+ * for a forward bound by hand under another name. Normally unset.
  */
 export const SSH_HOST_ENV = "SMART_OPEN_SSH_HOST";
 

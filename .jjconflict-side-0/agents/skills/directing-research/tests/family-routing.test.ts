@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 // Description size is enforced by forging-skills/skill-check.ts and the collection budget.
 // Do not freeze a second, drifting platform cap in this semantic-routing fixture.
 const SKILLS_ROOT = resolve(import.meta.dir, "../..");
+const ARCHIVE_ROOT = resolve(SKILLS_ROOT, "../../archives/skills");
 
 const FAMILY = [
   "directing-research",
@@ -31,11 +32,17 @@ const FAMILY = [
 ] as const;
 
 type FamilySkill = (typeof FAMILY)[number];
+// Archived contracts remain readable; this does not assert callable registration.
+const RETIRED_FAMILY = new Set<FamilySkill>([
+  "directing-research-sections",
+  "arguing-research-papers",
+]);
 type Assertion = readonly [skill: FamilySkill, pattern: RegExp];
 type Contract = readonly [name: string, assertions: readonly Assertion[]];
 
 function description(skill: FamilySkill): string {
-  const text = readFileSync(resolve(SKILLS_ROOT, skill, "SKILL.md"), "utf8");
+  const root = RETIRED_FAMILY.has(skill) ? ARCHIVE_ROOT : SKILLS_ROOT;
+  const text = readFileSync(resolve(root, skill, "SKILL.md"), "utf8");
   const frontmatter = text.match(/^---\n([\s\S]*?)\n---/u)?.[1];
   if (frontmatter === undefined)
     throw new Error(`${skill}: missing frontmatter`);

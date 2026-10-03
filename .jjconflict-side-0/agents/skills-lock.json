@@ -1,15 +1,6 @@
 {
   "version": 3,
   "skills": {
-    "mintlify": {
-      "source": "mintlify/docs",
-      "sourceType": "github",
-      "sourceUrl": "https://github.com/mintlify/docs.git",
-      "skillPath": "skills/mintlify-docs/SKILL.md",
-      "skillFolderHash": "d9ce17880c2414dbdff7d8e91c9f68678f3204cf",
-      "installedAt": "2026-08-14T16:01:15.521Z",
-      "updatedAt": "2026-08-14T16:01:15.521Z"
-    },
     "typesafe-ai": {
       "source": "typesafe-ai/skills",
       "sourceType": "github",
@@ -36,5 +27,18 @@
     "opencode",
     "warp",
     "zed"
-  ]
+  ],
+  "archivedSkills": {
+    "mintlify": {
+      "source": "mintlify/docs",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/mintlify/docs.git",
+      "skillPath": "skills/mintlify-docs/SKILL.md",
+      "skillFolderHash": "d9ce17880c2414dbdff7d8e91c9f68678f3204cf",
+      "installedAt": "2026-08-14T16:01:15.521Z",
+      "updatedAt": "2026-08-14T16:01:15.521Z",
+      "archivedAt": "2026-10-03",
+      "archivePath": "archives/skills/mintlify"
+    }
+  }
 }

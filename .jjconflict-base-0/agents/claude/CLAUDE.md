@@ -1,5 +1,10 @@
 # User-global policy
 
+- **Retired skills are reference material, not callable skills.** The retirement index is
+  `~/dotfiles/archives/skills/README.md`. When an active manual names a retired skill,
+  read its archived contract only if the task requires it; never invoke it by Skill name or
+  automatically restore its registration. Existing executable tools keep their own lifecycle.
+
 - **Every dispatch names one of exactly two model+effort pairs, explicitly; Opus is
   escalation-only.** **Sonnet 5.5 at `high`** is the default (clear-spec implementation, bug
   fixes, tests, terminal work, bulk coding — within a few points of Opus medium, cheaper per

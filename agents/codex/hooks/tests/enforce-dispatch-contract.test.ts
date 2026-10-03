@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 
-const hook = join(import.meta.dir, "..", "enforce-terra-dispatch.ts");
+const hook = join(import.meta.dir, "..", "enforce-dispatch-contract.ts");
 const resourceMessage = (message: string) =>
   `RESOURCE-CLASS(NONCOMPUTE): hook fixture performs no numerical work\n${message}`;
 
@@ -48,8 +50,10 @@ describe("Codex spawn_agent model+effort guard", () => {
 
   test.each([
     ["gpt-5.6-terra", "high"],
-    ["gpt-6-sol", "medium"],
-    ["gpt-6-sol", "high"],
+    ["gpt-6.1-sol", "medium"],
+    ["gpt-6.1-sol", "high"],
+    ["gpt-6.2-sol", "high"],
+    ["gpt-7-sol", "medium"],
     ["gpt-6-luna", "low"],
     ["gpt-6-luna", "ultra"],
   ])("allowed pair %p + %p passes silently", (model, reasoning_effort) => {
@@ -62,9 +66,12 @@ describe("Codex spawn_agent model+effort guard", () => {
 
   test.each([
     ["gpt-5.6-terra", "medium", "set reasoning_effort: 'high'"],
-    ["gpt-6-sol", "low", "set reasoning_effort: 'medium' or 'high'"],
-    ["gpt-5.6-sol", "high", "model 'gpt-5.6-sol' is not allowed"],
+    ["gpt-6.1-sol", "low", "set reasoning_effort: 'medium' or 'high'"],
+    ["gpt-5.6-sol", "high", "below the sol floor >= 6.1 — use 'gpt-6.1-sol'"],
+    ["gpt-6-sol", "high", "below the sol floor >= 6.1 — use 'gpt-6.1-sol'"],
+    ["gpt-5.5-terra", "high", "below the terra floor >= 5.6"],
     ["gpt-6-astra", "high", "model 'gpt-6-astra' is not allowed"],
+    ["gpt-9-nova", "high", "model 'gpt-9-nova' is not allowed"],
   ])(
     "pair %p + %p is denied with the exact fix",
     (model, reasoning_effort, fix) => {
@@ -91,7 +98,7 @@ describe("Codex spawn_agent model+effort guard", () => {
       pre({ message: resourceMessage("inspect"), reasoning_effort: "medium" }),
     );
     expect(decision(result.stdout).permissionDecisionReason).toContain(
-      "add model: 'gpt-6-sol' or 'gpt-6-luna'",
+      "add model: 'gpt-6.1-sol' or 'gpt-6-luna'",
     );
   });
 
@@ -117,6 +124,47 @@ describe("Codex spawn_agent model+effort guard", () => {
     expect(result.code).toBe(2);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("dispatch-contract:");
+  });
+
+  test("the generation floor is data: a custom floor file moves what the dispatch gate allows", () => {
+    const dir = mkdtempSync(join(tmpdir(), "terra-floor-"));
+    const config = join(dir, "model-floor.toml");
+    writeFileSync(
+      config,
+      'schema = 1\n[[family]]\nvendor = "openai"\nfamily = "sol"\nmin = "7"\n',
+    );
+    const dispatch = (model: string) =>
+      spawnSync(process.execPath, [hook], {
+        input: JSON.stringify(
+          pre({
+            message: resourceMessage("inspect"),
+            model,
+            reasoning_effort: "high",
+          }),
+        ),
+        encoding: "utf8",
+        env: { ...process.env, MODEL_FLOOR_CONFIG: config },
+      });
+    expect(decision(dispatch("gpt-6.1-sol").stdout).permissionDecision).toBe(
+      "deny",
+    );
+    expect(dispatch("gpt-7-sol").stdout).toBe("");
+  });
+
+  test("an unreadable floor file fails closed (exit 2), never open", () => {
+    const result = spawnSync(process.execPath, [hook], {
+      input: JSON.stringify(
+        pre({
+          message: resourceMessage("inspect"),
+          model: "gpt-6.1-sol",
+          reasoning_effort: "high",
+        }),
+      ),
+      encoding: "utf8",
+      env: { ...process.env, MODEL_FLOOR_CONFIG: "/nonexistent/model-floor.toml" },
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("cannot read");
   });
 
   test("missing resource declaration is denied", () => {

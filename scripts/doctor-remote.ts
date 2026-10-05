@@ -5,6 +5,7 @@
 //   ssh-cmd    `ssh <host> 'cmd'` — herdr --remote's bridge lives here — finds the core CLIs
 //   login      an interactive login lands in zsh with the dotfiles aliases loaded
 //   pane       an interactive NON-login shell (how herdr opens a pane: `$SHELL`, no -l) does too
+//   commands   every alias target and topic command (btm, herdr, …) resolves there
 //   smart-open a host tagged `Tag smart-open` gets its forwarded socket bound on attach
 // Every check here was first a hand-run ssh during the 2026-10-05 rentals, and two of them found
 // real defects (a bash pane on sol; a forward refused by a stale socket) — silent until asked.
@@ -175,6 +176,58 @@ async function checkPane(host: string): Promise<Finding> {
   return shellVerdict("pane", "a herdr pane (`$SHELL -i`, non-login)", r);
 }
 
+// The commands dotfiles itself relies on, beyond the aliases: each topic whose config is linked on
+// every machine names its tool here. A tool missing from Brewfile.core surfaced one at a time on the
+// 2026-10-05 boxes (gh, claude, topgrade, btm) — each found by hand. This asks for all of them at once.
+const TOPIC_COMMANDS = [
+  "btm",
+  "herdr",
+  "jj",
+  "lazygit",
+  "sheldon",
+  "topgrade",
+  "tmux",
+] as const;
+// Words that start an alias but are not the command it needs.
+const PREFIXES =
+  "sudo|command|noglob|nocorrect|builtin|exec|cd|echo|print|source|*=*|\\$*";
+
+async function checkCommands(host: string): Promise<Finding> {
+  const probe =
+    `for n v in \${(kv)aliases}; do c=\${(Q)\${\${(z)v}[1]}}; [[ $c == (${PREFIXES}) ]] && continue; ` +
+    `whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=$n→$c"; done; ` +
+    `for c in ${TOPIC_COMMANDS.join(" ")}; do whence -- $c > /dev/null || print -r -- "${MARK("UNRESOLVED")}=topic→$c"; done; ` +
+    `print -r -- "${MARK("DONE")}=1"`;
+  const r = await run(
+    [...SSH, "-o", "ClearAllForwardings=yes", "-tt", host],
+    `${probe}\nexit\n`,
+    45_000,
+  );
+  if (marker(r.out, "DONE") === null)
+    return finding(
+      "commands",
+      "WARN",
+      `the probe did not finish (exit ${r.code})`,
+    );
+  const missing = [
+    ...new Set(
+      [...r.out.matchAll(/@@UNRESOLVED=(\S+)/gu)].map((m) => m[1] ?? ""),
+    ),
+  ].toSorted();
+  return missing.length === 0
+    ? finding(
+        "commands",
+        "PASS",
+        "every alias target and topic command resolves",
+      )
+    : finding(
+        "commands",
+        "FAIL",
+        `${missing.length} command(s) the dotfiles use do not resolve: ${missing.join(", ")}`,
+        "a core tool → Brewfile.core, then mise run linux:init there; an alias for a tool this box should not have → define it only when the tool exists",
+      );
+}
+
 async function checkSmartOpen(host: string): Promise<Finding> {
   const g = await run(["ssh", "-G", host], null, 10_000);
   const forward = g.out
@@ -273,8 +326,9 @@ async function main(): Promise<void> {
           checkSshCmd(host),
           checkLogin(host),
           checkPane(host),
+          checkCommands(host),
         ])
-      : (["ssh-cmd", "login", "pane"] as const).map((n) =>
+      : (["ssh-cmd", "login", "pane", "commands"] as const).map((n) =>
           finding(n, "SKIP", "host unreachable"),
         );
   // smart-open last and alone: it binds the forward, and the sessions above must not race it.

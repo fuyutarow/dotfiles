@@ -32,5 +32,6 @@ brew "gping"        # ping with a graph
 brew "sd"           # sed replacement
 brew "choose-rust"  # cut replacement, binary `choose`
 brew "broot"        # tree/navigator
+brew "bottom"       # btm — config in bottom/, linked on every machine (declared nowhere until 2026-10-05)
 brew "btop"         # system monitor (tmux prefix+G popup)
 brew "tldr"         # better man (h)

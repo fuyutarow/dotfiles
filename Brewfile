@@ -18,7 +18,7 @@ brew "jq"           # @core
 brew "fnox"        # secrets: one CLI over the macOS Keychain (mac) and age files (WSL); config is
                     # per machine in ~/.config/fnox/config.toml, never in this public repo
 brew "age"         # fnox age provider (WSL has no Secret Service, so its secrets are age-encrypted)
-brew "just"         # task runner (j)
+brew "just"         # @core task runner (j)
 brew "mise"         # @core
 brew "ripgrep"      # @core better grep (gr)
 brew "rm-improved"  # @core rip — the ONLY sanctioned file remover (rm is disabled)
@@ -34,13 +34,17 @@ brew "uv"           # @core Python tool runner/installer: `uvx` (ephemeral, pref
                     # `brew bundle` would have skipped it and `cc:install-mcp` would have failed on the first step.
 
 # Productivity / TUI
-brew "atuin"        # shell history (Ctrl+R)
-brew "lazygit"      # git TUI (lg)
+brew "atuin"        # @core shell history (Ctrl+R)
+brew "lazygit"      # @core git TUI (lg)
 brew "jj"           # @core Jujutsu VCS; colocated with git in dotfiles/firedancer (config: jj/)
-brew "direnv"
+brew "direnv"       # @core
 brew "fzf"          # @core
-brew "dust"         # better du (du2)
-brew "procs"        # better ps
+brew "dust"         # @core better du (du2)
+brew "procs"        # @core better ps
+brew "gping"        # @core ping with a graph (aliases.zsh relies on it; installed on the Mac but undeclared until 2026-10-05)
+brew "sd"           # @core sed replacement (aliases.zsh)
+brew "choose-rust"  # @core cut replacement, binary `choose` (aliases.zsh)
+brew "broot"        # @core tree/navigator (aliases.zsh)
 brew "btop"         # @core system monitor (tmux prefix+G popup)
 
 # Linux-desktop clipboard backends for tmux (WSL uses clip.exe, mac uses pbcopy — neither needs these)
@@ -49,7 +53,7 @@ if OS.linux?
   brew "wl-clipboard" # Wayland clipboard (wl-copy/wl-paste)
   brew "bubblewrap"   # bwrap: grok --sandbox needs it on Linux (refuses to start without it)
 end
-brew "tldr"         # better man (h)
+brew "tldr"         # @core better man (h)
 brew "yq"
 brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run reclaim:pick`
 brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)

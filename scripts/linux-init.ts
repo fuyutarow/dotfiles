@@ -30,6 +30,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { $ } from "bun";
+import { sudoIsOurs } from "./sudo-group.ts";
 
 const DOTFILES = join(homedir(), "dotfiles");
 const BIN = join(homedir(), ".local/bin");
@@ -122,6 +123,32 @@ await $`${MISE} run install:ai-clis`.cwd(DOTFILES);
 // Their MCP servers (.mcp.json), registered in Claude Code AND Codex. Codex starts an OAuth login
 // a headless box cannot finish; install-mcp bounds that and says so (scripts/install-mcp.ts).
 await $`${MISE} run cc:install-mcp`.cwd(DOTFILES);
+
+// sshd: let the newest attach re-bind smart-open's forwarded socket (wsl/sshd-dotfiles.conf says
+// why). Without it a dropped session leaves a dead /tmp/smart-open-*.sock and the next attach loses
+// its forward (doctor:remote FAILed exactly that on a rented box, 2026-10-06). Needs root, so only
+// where sudo is ours (scripts/sudo-group.ts) — never tried elsewhere, where it would be reported.
+// The reload is a HUP to the LISTENER alone: session sshd processes are left alone, so no
+// connection drops (a container's sshd has no systemd unit to reload).
+const SSHD_DROPIN = "/etc/ssh/sshd_config.d/50-dotfiles.conf";
+if (await sudoIsOurs()) {
+  await $`sudo -n install -m 644 ${join(DOTFILES, "wsl/sshd-dotfiles.conf")} ${SSHD_DROPIN}`;
+  const listener = (await $`pgrep -f "^sshd: .*\[listener\]"`.nothrow().text())
+    .trim()
+    .split("\n")[0];
+  if (listener !== undefined && listener !== "") {
+    await $`sudo -n kill -HUP ${listener}`;
+    say(`sshd: ${SSHD_DROPIN} in place, listener ${listener} reloaded`);
+  } else {
+    say(
+      `sshd: ${SSHD_DROPIN} in place; no sshd listener found to reload — it applies at sshd's next start`,
+    );
+  }
+} else {
+  say(
+    `sshd: skipped — sudo is not ours here (scripts/sudo-group.ts); a dropped session can leave a dead smart-open socket (doctor:remote names it)`,
+  );
+}
 
 say("sheldon plugins");
 await $`${join(BIN, "sheldon")} lock`;

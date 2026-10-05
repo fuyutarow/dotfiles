@@ -76,12 +76,20 @@ git archive --format=tar HEAD <paths…> | ssh $(vast ssh-url <ID> | sed 's#ssh:
 Ship a tree, not a checkout (`git archive` carries no `.git` history). Never write to `/` or `/root`
 (it breaks the instance's ssh permissions). No keys, tokens, or `.env` files.
 
-## 4b. House environment (dotfiles + `herdr --remote`), observed 2026-10-05
+## 4b. House environment (dotfiles + `herdr --remote`), verified end to end 2026-10-05
 
-The machine gets the same environment as R99, not hand-installed tools: a non-root user (Homebrew
-refuses root), linuxbrew, `brew install herdr mise sheldon jj bun`, `git clone` of the public
-dotfiles, `scripts/link-dots.sh`; toolchains such as Julia come from the project's `mise.toml`.
-Skip `wsl:init`'s systemd steps (the instance is a container). Traps seen on `vastai/base-image`:
+One command as root on the fresh instance builds the same environment as R99 (a non-root user,
+linuxbrew, the Brewfile `@remote` entries, dotfile links, herdr/mise/jj/bun on the non-interactive
+PATH); toolchains such as Julia then come from the project's `mise.toml`:
+
+```sh
+ssh -p <port> root@<host> 'curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash'
+```
+
+Right after pushing a change to it, use the commit in the URL instead of `alpha`
+(`…/dotfiles/<commit>/scripts/bootstrap-linux.sh`): raw.githubusercontent.com served the
+pre-push version for several minutes (observed 2026-10-05). The traps it handles, seen on
+`vastai/base-image`:
 
 | Symptom | Cause | Fix |
 |---|---|---|

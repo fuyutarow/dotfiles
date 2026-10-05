@@ -109,7 +109,7 @@ function integerFlag(
   maximum: number,
 ): (value: string) => number {
   return (value) => {
-    if (!/^\d+$/.test(value)) {
+    if (!/^\d+$/u.test(value)) {
       throw new UsageError(`${flag} must be an integer`);
     }
     const parsed = Number(value);
@@ -216,7 +216,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().then(undefined, (error: unknown) => {
     process.stderr.write(
       `${error instanceof UsageError ? "USAGE" : "ERROR"}: ${
         error instanceof Error ? error.message : String(error)

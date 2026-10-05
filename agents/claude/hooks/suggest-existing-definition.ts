@@ -40,13 +40,13 @@ const HEADERS: Record<string, RegExp[]> = {
     /^function\s+(?:[\w.]+\.)?([\p{L}_][\p{L}\p{N}_!]*)\s*[({]/gmu,
     /^([\p{L}_][\p{L}\p{N}_!]*)\(.*\)\s*(?:where\s.*)?=(?!=)/gmu,
   ],
-  py: [/^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm],
+  py: [/^(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gmu],
   ts: [
-    /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]/gm,
-    /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/gm,
+    /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]/gmu,
+    /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/gmu,
   ],
   rs: [
-    /^ {0,4}(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gm,
+    /^ {0,4}(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)\s*[(<]/gmu,
   ],
 };
 HEADERS.tsx = HEADERS.ts ?? [];
@@ -92,11 +92,10 @@ async function main(): Promise<void> {
   const file = strAt(input, "file_path") ?? "";
   const ext = file.split(".").at(-1) ?? "";
   // A test file defines fixtures and helpers by design; reusing them is not the point.
-  if (!HEADERS[ext] || isTest({ file })) return;
-  const project = findRegisteredProject(
-    file.slice(0, file.lastIndexOf("/")) || ".",
-  );
-  if (!project) return;
+  if (HEADERS[ext] === undefined || isTest({ file })) return;
+  const directory = file.slice(0, file.lastIndexOf("/"));
+  const project = findRegisteredProject(directory !== "" ? directory : ".");
+  if (project === null || project === "") return;
 
   const { added, removed } = insertedAndReplaced(input);
   const before = new Set(definitionsIn(removed, ext).map((d) => d.name));
@@ -123,14 +122,14 @@ async function main(): Promise<void> {
     // the judge loosens on code-vs-code (2026-10-01: an argv helper "looked like" a directory
     // lister at local 6.3). A wrong interruption costs more than a missed one inside an edit.
     if (
-      !top ||
+      top === undefined ||
       !a.reranked ||
       top.score < hookMin[a.judge === "jev" ? "jev" : "local"]
     )
       continue;
     findings.push(
       `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, ${a.judge} score ${top.score.toFixed(1)}): ` +
-        `${top.signature.slice(0, 140)}`,
+        top.signature.slice(0, 140),
     );
   }
   if (findings.length === 0) return;

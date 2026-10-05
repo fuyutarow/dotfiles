@@ -62,7 +62,10 @@ export async function readLive(home: string): Promise<Live> {
   ]);
   if (code !== 0 || !args.includes("app-server"))
     return { persisted, running: null };
-  return { persisted, running: args.split(/\s+/).includes("--remote-control") };
+  return {
+    persisted,
+    running: args.split(/\s+/u).includes("--remote-control"),
+  };
 }
 
 /** Human-readable drift lines; empty = the machine matches the declaration. */

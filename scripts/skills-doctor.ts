@@ -81,7 +81,7 @@ function listSkillNames(skillsDir: string): string[] {
       names
         .filter((n) => !n.startsWith("."))
         .filter((n) => isDir(`${skillsDir}/${n}`))
-        .sort(),
+        .toSorted(),
     )
     .unwrapOr([]);
 }
@@ -184,7 +184,7 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
   const decoded = textResult.isOk()
     ? jsonText.safeParse(textResult.value)
     : undefined;
-  if (textResult.isErr() || !decoded?.success) {
+  if (textResult.isErr() || decoded?.success !== true) {
     const error = textResult.isErr()
       ? textResult.error
       : (decoded?.error?.issues.map((i) => i.message).join("; ") ??
@@ -197,7 +197,9 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
     ];
   }
   const ledger = LedgerSchema.safeParse(decoded.data);
-  const names = ledger.success ? Object.keys(ledger.data.skills).sort() : [];
+  const names = ledger.success
+    ? Object.keys(ledger.data.skills).toSorted()
+    : [];
   return names
     .filter((n) => !existsSync(`${dotfiles}/agents/skills/${n}/SKILL.md`))
     .map((n) => ({

@@ -57,7 +57,11 @@ async function run(command: string[], timeoutMs = 15_000): Promise<Probe> {
 }
 
 async function adb(args: string[], serial?: string): Promise<string> {
-  const command = ["adb", ...(serial ? ["-s", serial] : []), ...args];
+  const command = [
+    "adb",
+    ...(serial !== undefined && serial !== "" ? ["-s", serial] : []),
+    ...args,
+  ];
   const result = await run(command);
   if (result.timedOut) throw new Error(`adb ${args[0]} timed out`);
   if (result.code !== 0) {
@@ -71,11 +75,11 @@ async function connectedDevice(requestedSerial?: string): Promise<string> {
   const devices = output
     .split("\n")
     .slice(1)
-    .map((line) => line.trim().split(/\s+/))
+    .map((line) => line.trim().split(/\s+/u))
     .filter((parts) => parts.length >= 2 && parts[1] === "device")
     .map((parts) => parts[0])
     .flatMap((serial) => (serial === undefined ? [] : [serial]));
-  if (requestedSerial) {
+  if (requestedSerial !== undefined && requestedSerial !== "") {
     if (!devices.includes(requestedSerial)) {
       throw new Error(
         "requested Android device is not connected and authorized",
@@ -95,6 +99,13 @@ async function connectedDevice(requestedSerial?: string): Promise<string> {
 
 export type PolicyFinding = { name: string; ok: boolean; detail: string };
 
+function isActiveMode(line: string): boolean {
+  return (
+    line.includes("state=STATE_TRUE") ||
+    line.includes("conditionOverride=OVERRIDE_ACTIVATE")
+  );
+}
+
 function finding(name: string, ok: boolean, detail: string): PolicyFinding {
   return { name, ok, detail };
 }
@@ -109,11 +120,11 @@ export function inspectNotificationPolicy(
     dump.split("  Ranking Config:")[1]?.split("  Notification listeners:")[0] ??
     "";
   const policy = zenSection.match(
-    /mConsolidatedPolicy=NotificationManager\.Policy\[([^\n]+)\]/,
+    /mConsolidatedPolicy=NotificationManager\.Policy\[([^\n]+)\]/u,
   )?.[1];
   const categories =
     policy
-      ?.match(/priorityCategories=(.*?),priorityCallSenders=/)?.[1]
+      ?.match(/priorityCategories=(.*?),priorityCallSenders=/u)?.[1]
       ?.split(",")
       .filter(Boolean) ?? [];
   const allowedCategories = new Set([
@@ -128,14 +139,11 @@ export function inspectNotificationPolicy(
     .filter((line) => line.includes("ZenRule["));
   // Custom manual Modes use OVERRIDE_ACTIVATE even when the condition's raw
   // state remains STATE_FALSE. The Settings UI then shows "OFF にする".
-  const isActive = (line: string): boolean =>
-    line.includes("state=STATE_TRUE") ||
-    line.includes("conditionOverride=OVERRIDE_ACTIVATE");
   const selectedModeActive = modeLines.some(
-    (line) => line.includes(`name=${MODE_NAME},`) && isActive(line),
+    (line) => line.includes(`name=${MODE_NAME},`) && isActiveMode(line),
   );
   const otherActiveModes = modeLines.filter(
-    (line) => isActive(line) && !line.includes(`name=${MODE_NAME},`),
+    (line) => isActiveMode(line) && !line.includes(`name=${MODE_NAME},`),
   );
 
   let currentPackage: string | undefined;
@@ -146,8 +154,8 @@ export function inspectNotificationPolicy(
   let lineCallBypasses = false;
   const bypassingPackages = new Set<string>();
   for (const line of rankingSection.split("\n")) {
-    const app = line.match(/^\s*AppSettings: (\S+) \((\d+)\)/);
-    if (app) {
+    const app = line.match(/^\s*AppSettings: (\S+) \((\d+)\)/u);
+    if (app !== null) {
       currentPackage = app[1];
       packageUser = Math.floor(Number(app[2]) / 100_000);
     }
@@ -157,7 +165,7 @@ export function inspectNotificationPolicy(
     ) {
       continue;
     }
-    const channelId = line.match(/mId='([^']+)'/)?.[1];
+    const channelId = line.match(/mId='([^']+)'/u)?.[1];
     if (
       currentPackage === LINE_PACKAGE &&
       packageUser === currentUser &&
@@ -171,12 +179,16 @@ export function inspectNotificationPolicy(
       packageUser === currentUser &&
       channelId === INCOMING_CALL_CHANNEL
     ) {
-      const importance = Number(line.match(/mImportance=(\d+)/)?.[1]);
+      const importance = Number(line.match(/mImportance=(\d+)/u)?.[1]);
       lineCallVibrates =
         line.includes("mVibrationEnabled=true") && importance >= 3;
       lineCallBypasses = line.includes("mBypassDnd=true");
     }
-    if (line.includes("mBypassDnd=true") && currentPackage) {
+    if (
+      line.includes("mBypassDnd=true") &&
+      currentPackage !== undefined &&
+      currentPackage !== ""
+    ) {
       bypassingPackages.add(currentPackage);
     }
   }
@@ -216,7 +228,7 @@ export function inspectNotificationPolicy(
 }
 
 function ringerMode(audioDump: string): string | undefined {
-  return audioDump.match(/Ringer mode:\s*\n- mode \(internal\) = (\w+)/)?.[1];
+  return audioDump.match(/Ringer mode:\s*\n- mode \(internal\) = (\w+)/u)?.[1];
 }
 
 async function inspect(serial: string): Promise<PolicyFinding[]> {
@@ -305,7 +317,7 @@ async function main(): Promise<void> {
   );
   if (parsed._.length > 0)
     throw new UsageError("unexpected positional argument");
-  if (!Bun.which("adb"))
+  if (Bun.which("adb") === null)
     throw new Error("adb is missing; install Android Platform Tools");
   const serial = await connectedDevice(parsed.flags.serial);
   if (parsed.flags.apply) {
@@ -325,16 +337,17 @@ async function main(): Promise<void> {
     );
     const before = await inspect(serial);
     const guards = before.filter((item) => item.name !== "ringer");
-    if (report(guards) !== 0) {
-      if (before.find((item) => item.name === "ringer")?.ok) {
-        await adb(
-          ["shell", "cmd", "audio", "set-ringer-mode", "SILENT"],
-          serial,
-        );
-        process.stdout.write(
-          "SAFE: restored SILENT ringer mode after failed guards.\n",
-        );
-      }
+    const guardFailed = report(guards) !== 0;
+    if (
+      guardFailed &&
+      before.find((item) => item.name === "ringer")?.ok === true
+    ) {
+      await adb(["shell", "cmd", "audio", "set-ringer-mode", "SILENT"], serial);
+      process.stdout.write(
+        "SAFE: restored SILENT ringer mode after failed guards.\n",
+      );
+    }
+    if (guardFailed) {
       process.stdout.write(
         "NEXT: configure and activate the dedicated Mode as documented in android/README.md; VIBRATE was not enabled.\n",
       );
@@ -358,7 +371,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error: unknown) => {
+  await main().catch((error: unknown) => {
     process.stderr.write(`FATAL: ${String(error)}\n`);
     process.exitCode = 2;
   });

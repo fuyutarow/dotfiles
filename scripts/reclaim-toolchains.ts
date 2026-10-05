@@ -87,8 +87,8 @@ export function parseRustupToolchainList(output: string): RustupToolchain[] {
     .map((l) => l.trim())
     .filter(Boolean)
     .map((line) => {
-      const name = /^(\S+)/.exec(line)?.[1] ?? line;
-      return { name, isDefault: /\(.*default.*\)/.test(line) };
+      const name = /^(\S+)/u.exec(line)?.[1] ?? line;
+      return { name, isDefault: /\(.*default.*\)/u.test(line) };
     });
 }
 
@@ -112,10 +112,10 @@ export function pinKeepsToolchain(
 export function extractChannel(
   rustToolchainFileText: string,
 ): string | undefined {
-  const toml = /channel\s*=\s*"?([^"\s]+)"?/.exec(rustToolchainFileText);
-  if (toml?.[1]) return toml[1];
+  const toml = /channel\s*=\s*"?([^"\s]+)"?/u.exec(rustToolchainFileText);
+  if (toml?.[1] !== undefined && toml[1] !== "") return toml[1];
   const bare = rustToolchainFileText.trim().split("\n")[0]?.trim();
-  return bare || undefined;
+  return bare !== "" ? bare : undefined;
 }
 
 export function rustupToolchainsToRemove(
@@ -148,14 +148,17 @@ async function runRustupSection(dryRun: boolean, home: string): Promise<void> {
   const fdRes = await $`fd -H -t f "^rust-toolchain(\\.toml)?$" ${projects}`
     .quiet()
     .nothrow();
-  const pinFiles = fdRes.stdout.toString().split("\n").filter(Boolean);
+  const pinFiles = fdRes.stdout
+    .toString()
+    .split("\n")
+    .filter((f) => f !== "");
   const pinnedChannels: string[] = [];
   for (const f of pinFiles) {
     const text = await Bun.file(f)
       .text()
       .catch(() => "");
     const channel = extractChannel(text);
-    if (channel) pinnedChannels.push(channel);
+    if (channel !== undefined && channel !== "") pinnedChannels.push(channel);
   }
 
   const toRemove = rustupToolchainsToRemove(toolchains, pinnedChannels);
@@ -179,7 +182,7 @@ export type ServerVersion = { name: string; hash: string; mtimeSec: number };
 
 /** "Stable-<hash>" or "Stable-<hash>.staging" -> "<hash>" for the process-match predicate. */
 export function serverHash(dirName: string): string {
-  return dirName.replace(/^Stable-/, "").replace(/\.staging$/, "");
+  return dirName.replace(/^Stable-/u, "").replace(/\.staging$/u, "");
 }
 
 export function serverVersionsToRemove(
@@ -228,7 +231,7 @@ function runVscodeServerSection(
   }
 
   const versions: ServerVersion[] = [];
-  for (const name of readdirSync(serversDir).sort()) {
+  for (const name of readdirSync(serversDir).toSorted()) {
     if (!name.startsWith("Stable-")) continue;
     const path = `${serversDir}/${name}`;
     // statSync is overloaded (bigint/throwIfNoEntry variants); wrapping the CALL rather than the
@@ -287,7 +290,7 @@ async function main(): Promise<void> {
   }
 
   const home = resolveHome(parsed.flags.home);
-  const dryRun = parsed.flags.dryRun === true;
+  const dryRun = parsed.flags.dryRun;
   const keepDays = Number(process.env.KEEP_DAYS ?? "2");
 
   await runRustupSection(dryRun, home);
@@ -299,7 +302,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
+  await main().then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

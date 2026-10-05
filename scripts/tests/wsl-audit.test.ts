@@ -67,7 +67,7 @@ function healthyHost(over: Record<string, string> = {}): Map<string, string> {
 const keys = (g: Map<string, string>, h: Map<string, string>) =>
   judge(g, h)
     .map((f) => f.key)
-    .sort();
+    .toSorted();
 
 describe("judge — baseline", () => {
   test("a healthy pair produces no findings at all", () => {

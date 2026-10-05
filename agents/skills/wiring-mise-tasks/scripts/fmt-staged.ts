@@ -41,7 +41,7 @@ function parseTool(spec: string): Tool {
   const exts = spec
     .slice(0, Math.max(cut, 0))
     .split(",")
-    .map((e) => e.trim().replace(/^\./, "").toLowerCase())
+    .map((e) => e.trim().replace(/^\./u, "").toLowerCase())
     .filter((e) => e !== "");
   const command = cut < 0 ? "" : spec.slice(cut + 1).trim();
   if (exts.length === 0 || command === "") {
@@ -206,12 +206,8 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => {
-    process.exitCode = code;
-  },
-  (error: unknown) => {
+const code = await main().catch((error: unknown) => {
     process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 2;
-  },
-);
+    return 2;
+  });
+process.exitCode = code;

@@ -62,12 +62,12 @@ describe("quote-command: output mode follows the requested count", () => {
     const { result, output } = runQuote(51, 51);
     expect(result.code).toBe(0);
     expect(output.decision).toBe("block");
-    const file = output.reason.match(/ at (\/\S+\.txt)\./)?.[1];
+    const file = output.reason.match(/ at (\/\S+\.txt)\./u)?.[1];
     expect(file).toBeDefined();
     const text = readFileSync(file ?? "", "utf8");
     // Head: from <name> | MM-DD HH:MM | turns: N | <bytes>B — no user@host, no cwd.
     expect(text.split("\n")[0]).toMatch(
-      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2} \| turns: 51 \| \d+B$/,
+      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2} \| turns: 51 \| \d+B$/u,
     );
     expect(text).toContain("turns: 51");
     expect(text).toContain("response 1");
@@ -106,7 +106,7 @@ describe("quote-command: output mode follows the requested count", () => {
     expect(output.reason).toContain("Download command copied");
     expect(output.reason).toContain("[pane-test]");
     const copied = readFileSync(join(home, "clipboard.txt"), "utf8");
-    expect(copied).toMatch(/^scp -P 2222 /);
+    expect(copied).toMatch(/^scp -P 2222 /u);
     expect(copied).toContain("@100.110.117.86:");
     expect(copied).not.toContain("response 1");
   });

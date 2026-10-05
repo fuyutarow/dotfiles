@@ -48,11 +48,17 @@ async function run(cmd: string[], ms: number): Promise<Ran> {
     proc.exited,
   ]).then(([out, err, code]) => ({ code, out: `${out}${err}` }));
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
   if (done === null) return { code: -1, out: "", timedOut: true };
-  return { ...done, out: done.out.replace(/\r/g, ""), timedOut: false };
+  return { ...done, out: done.out.replaceAll("\r", ""), timedOut: false };
 }
 
 function encodePs(script: string): string {
@@ -85,7 +91,7 @@ export function classifySwaps(swaps: Swap[]): {
   reclaimBytes: number;
 } {
   if (swaps.length === 0) return { live: null, orphans: [], reclaimBytes: 0 };
-  const byNewest = [...swaps].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const byNewest = swaps.toSorted((a, b) => b.mtimeMs - a.mtimeMs);
   const [live, ...orphans] = byNewest;
   return {
     live: live ?? null,
@@ -127,12 +133,12 @@ function parseProbe(out: string): {
   let wingetCache: number | null = null;
   for (const line of out.split("\n")) {
     const t = line.trim();
-    const [, mtime, bytes, path] = /^swap=(\d+)\|(\d+)\|(.+)$/.exec(t) ?? [];
+    const [, mtime, bytes, path] = /^swap=(\d+)\|(\d+)\|(.+)$/u.exec(t) ?? [];
     if (mtime !== undefined && bytes !== undefined && path !== undefined) {
       swaps.push({ mtimeMs: Number(mtime), bytes: Number(bytes), path });
       continue;
     }
-    const kv = /^(c_free|c_total|winget_cache)=(\d+)$/.exec(t);
+    const kv = /^(c_free|c_total|winget_cache)=(\d+)$/u.exec(t);
     if (kv === null) continue;
     if (kv[1] === "c_free") cFree = Number(kv[2]);
     else if (kv[1] === "c_total") cTotal = Number(kv[2]);
@@ -169,7 +175,7 @@ async function main(): Promise<void> {
   }
   const { host } = parsed.flags;
 
-  if (!Bun.which("ssh")) {
+  if (Bun.which("ssh") === null) {
     console.log("no ssh on PATH");
     process.exit(1);
   }
@@ -214,7 +220,8 @@ async function main(): Promise<void> {
   // newest-is-live guess is wrong, so passing every orphan to Remove-Item -Force is safe.
   const removals = orphans
     .map(
-      (o) => `Remove-Item -Force -LiteralPath '${o.path.replace(/'/g, "''")}'`,
+      (o) =>
+        `Remove-Item -Force -LiteralPath '${o.path.replaceAll("'", "''")}'`,
     )
     .join("; ");
   const cleanWinget =
@@ -227,7 +234,7 @@ async function main(): Promise<void> {
 $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 "c_free_after=" + $c.FreeSpace`,
   );
-  const after = /c_free_after=(\d+)/.exec(exec.out);
+  const after = /c_free_after=(\d+)/u.exec(exec.out);
   console.log("---");
   if (after !== null && cFree !== null) {
     const freed = Number(after[1]) - cFree;
@@ -240,7 +247,7 @@ $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
+  await main().then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

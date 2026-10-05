@@ -28,10 +28,10 @@ import { Database } from "bun:sqlite";
 function parseDbPathMapping(
   raw: string | undefined,
 ): Array<{ source: string; target: string }> {
-  if (!raw) return [];
+  if (raw === undefined || raw === "") return [];
   return raw
     .split(",")
-    .filter(Boolean)
+    .filter((entry) => entry !== "")
     .map((entry) => {
       const [source, target] = entry.split("=");
       return { source: source ?? "", target: target ?? "" };
@@ -43,8 +43,8 @@ function resolveDbDir(cwd: string): string {
     process.env.COCOINDEX_CODE_DB_PATH_MAPPING,
   )) {
     if (cwd === m.source || cwd.startsWith(`${m.source}/`)) {
-      const rel = cwd.slice(m.source.length).replace(/^\//, "");
-      return rel ? join(m.target, rel) : m.target;
+      const rel = cwd.slice(m.source.length).replace(/^\//u, "");
+      return rel !== "" ? join(m.target, rel) : m.target;
     }
   }
   return join(cwd, ".cocoindex_code");
@@ -65,12 +65,19 @@ if (command === "index") {
   // (client.py _is_daemon_supervised -> _wait_for_daemon, no start_daemon), waits out 30s for a
   // socket nobody will ever create, and raises DaemonStartError. Reproduce that here, or the
   // suite silently passes on an env leak that breaks every real build (regression 2026-08-08).
-  if (process.env.COCOINDEX_CODE_DAEMON_SUPERVISED) {
+  if (
+    process.env.COCOINDEX_CODE_DAEMON_SUPERVISED !== undefined &&
+    process.env.COCOINDEX_CODE_DAEMON_SUPERVISED !== ""
+  ) {
     process.stderr.write("Daemon did not start in time.\n");
     process.exit(1);
   }
 
-  if (process.env.FAKE_CCC_FAIL && cwd.includes(process.env.FAKE_CCC_FAIL)) {
+  if (
+    process.env.FAKE_CCC_FAIL !== undefined &&
+    process.env.FAKE_CCC_FAIL !== "" &&
+    cwd.includes(process.env.FAKE_CCC_FAIL)
+  ) {
     process.stderr.write("fake ccc: simulated indexing failure\n");
     process.exit(1);
   }

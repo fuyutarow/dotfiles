@@ -29,7 +29,7 @@ export function sha256(value: string): string {
 }
 
 function denominatorDigest(runIds: readonly string[]): string {
-  return sha256(`${[...new Set(runIds)].sort().join("\n")}\n`);
+  return sha256(`${[...new Set(runIds)].toSorted().join("\n")}\n`);
 }
 
 export function temporaryRoot(): string {

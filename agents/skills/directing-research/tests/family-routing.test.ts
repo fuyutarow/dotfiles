@@ -56,7 +56,7 @@ function description(skill: FamilySkill): string {
     valueLines.push(line.slice(2).trim());
   }
   if (valueLines.length === 0) throw new Error(`${skill}: empty description`);
-  return valueLines.join(" ").replaceAll(/\s+/g, " ").trim();
+  return valueLines.join(" ").replaceAll(/\s+/gu, " ").trim();
 }
 
 // biome-ignore format: keep the lexical matrix compact and below the component-size ceiling.

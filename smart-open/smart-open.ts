@@ -98,7 +98,7 @@ function pickForward(): { socket: string; alias: string } {
   const user = userInfo().username;
   const pinned = process.env.SMART_OPEN_SOCKET;
   if (pinned !== undefined) {
-    const named = /--([^/]+)\.sock$/.exec(pinned);
+    const named = /--([^/]+)\.sock$/u.exec(pinned);
     return { socket: pinned, alias: named?.[1] ?? "" };
   }
   const dir = process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp";
@@ -108,24 +108,32 @@ function pickForward(): { socket: string; alias: string } {
 const FORWARD = pickForward();
 const SOCKET = FORWARD.socket;
 // An empty override is no override: an `export SMART_OPEN_SSH_HOST=` must not hide the name's alias.
-const SSH_HOST = process.env[SSH_HOST_ENV] || FORWARD.alias;
+const configuredSshHost = process.env[SSH_HOST_ENV];
+const SSH_HOST =
+  configuredSshHost !== undefined && configuredSshHost !== ""
+    ? configuredSshHost
+    : FORWARD.alias;
 const OPEN_MS = 15_000;
 // A wait longer than this says what it is waiting for, and the result line then carries how long
 // it took: a step that is merely slow (VS Code cold-starting on the client, ssh -G vouching, a
 // slow uplink) must never read as a hang. Shorter waits print nothing extra.
 // SMART_OPEN_SAY_AFTER_MS overrides it — a test seam, like SMART_OPEN_LOCAL_OPENER: a loaded test
 // host makes even a trivial spawn exceed 400 ms, and the quiet-path tests must stay quiet.
-const SAY_AFTER_MS = Number(process.env.SMART_OPEN_SAY_AFTER_MS ?? "") || 400;
+const configuredSayAfterMs = Number(process.env.SMART_OPEN_SAY_AFTER_MS ?? "");
+const SAY_AFTER_MS =
+  Number.isNaN(configuredSayAfterMs) || configuredSayAfterMs === 0
+    ? 400
+    : configuredSayAfterMs;
 const LOCAL_WAIT_MS = 3_000;
 // This shell came in over ssh, so this machine's own screen is not the one being looked at.
 const OVER_SSH = (process.env.SSH_CONNECTION ?? "") !== "";
 const isUrl = (t: string) =>
-  /^[a-z][a-z0-9+.-]*:\/\//i.test(t) || /^mailto:/i.test(t);
+  /^[a-z][a-z0-9+.-]*:\/\//iu.test(t) || /^mailto:/iu.test(t);
 const isWsl = (): boolean =>
   process.platform === "linux" &&
   (process.env.WSL_DISTRO_NAME !== undefined ||
     (existsSync("/proc/version") &&
-      /microsoft/i.test(readFileSync("/proc/version", "utf8"))));
+      /microsoft/iu.test(readFileSync("/proc/version", "utf8"))));
 
 type Outcome =
   | "client"
@@ -162,14 +170,15 @@ function toClient(request: Record<string, string>): Promise<Probe> {
     clearTimeout(timer);
     done({ outcome, reply: reply.trim(), why, seen });
   };
-  const timer = setTimeout(
-    () => finish("no-receiver", `accepted but sent no ok within ${ACK_MS} ms`),
-    ACK_MS,
-  );
+  const timer = setTimeout(() => {
+    finish("no-receiver", `accepted but sent no ok within ${ACK_MS} ms`);
+  }, ACK_MS);
   Bun.connect({
     unix: SOCKET,
     socket: {
-      open: (s) => void s.write(`${JSON.stringify(request)}\n`),
+      open: (s) => {
+        void s.write(`${JSON.stringify(request)}\n`);
+      },
       data: (s, chunk) => {
         reply += chunk.toString();
         if (!reply.includes("\n")) return;
@@ -177,19 +186,21 @@ function toClient(request: Record<string, string>): Promise<Probe> {
         finish(classify(reply));
         s.end();
       },
-      close: () =>
-        finish("no-receiver", "closed the connection without answering"),
-      error: (_s, e) =>
-        finish("no-receiver", `connection error (${e.message})`),
+      close: () => {
+        finish("no-receiver", "closed the connection without answering");
+      },
+      error: (_s, e) => {
+        finish("no-receiver", `connection error (${e.message})`);
+      },
     },
   }).then(
-    () => undefined,
+    () => {},
     // A refused connect is a bind nobody listens on: a stale socket, not a missing receiver. Any
     // other failure to connect (EACCES on someone else's socket, ...) is said as what it was.
     (e: unknown) => {
       const withCode = ErrorCodeSchema.safeParse(e);
       const code = String(withCode.success ? (withCode.data.code ?? e) : e);
-      if (/ECONNREFUSED|ENOENT/.test(code)) finish("stale");
+      if (/ECONNREFUSED|ENOENT/u.test(code)) finish("stale");
       else finish("no-receiver", `could not connect (${code})`);
     },
   );
@@ -200,7 +211,8 @@ function toClient(request: Record<string, string>): Promise<Probe> {
 // SMART_OPEN_OPENER) so tests can drive every fall-through without opening a real browser.
 function localCommand(target: string): string[] {
   const override = process.env.SMART_OPEN_LOCAL_OPENER;
-  if (override) return [...override.split(" "), target];
+  if (override !== undefined && override !== "")
+    return [...override.split(" "), target];
   if (process.platform === "darwin") return ["open", target];
   if (isWsl()) {
     if (isUrl(target)) return ["explorer.exe", target];
@@ -208,7 +220,8 @@ function localCommand(target: string): string[] {
       stdout: "pipe",
       timeout: OPEN_MS,
     });
-    return ["explorer.exe", win.stdout.toString().trim() || target];
+    const windowsPath = win.stdout.toString().trim();
+    return ["explorer.exe", windowsPath !== "" ? windowsPath : target];
   }
   return ["xdg-open", target];
 }
@@ -221,10 +234,9 @@ async function waitSaying<T>(
   work: Promise<T>,
 ): Promise<{ value: T; took: string }> {
   const t0 = performance.now();
-  const timer = setTimeout(
-    () => console.error(`smart-open: ${what}…`),
-    SAY_AFTER_MS,
-  );
+  const timer = setTimeout(() => {
+    console.error(`smart-open: ${what}…`);
+  }, SAY_AFTER_MS);
   const value = await work;
   clearTimeout(timer);
   const ms = performance.now() - t0;

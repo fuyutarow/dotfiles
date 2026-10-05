@@ -44,10 +44,15 @@ import { parseJson, strAt } from "../../hooks/narrow.ts";
 // upgrade keeps a dead path (2026-10-01: 0.9.1 path gone after 0.9.3, /quote stopped copying).
 // Use it only while it still exists; otherwise the `herdr` on PATH (the stable brew symlink).
 const HERDR_BIN =
-  process.env.HERDR_BIN_PATH && existsSync(process.env.HERDR_BIN_PATH)
+  process.env.HERDR_BIN_PATH !== undefined &&
+  process.env.HERDR_BIN_PATH !== "" &&
+  existsSync(process.env.HERDR_BIN_PATH)
     ? process.env.HERDR_BIN_PATH
     : "herdr";
-const DOTFILES = process.env.DOTFILES || `${process.env.HOME}/dotfiles`;
+const DOTFILES =
+  process.env.DOTFILES !== undefined && process.env.DOTFILES !== ""
+    ? process.env.DOTFILES
+    : `${process.env.HOME}/dotfiles`;
 const CLIP_SCRIPT = `${DOTFILES}/zsh/copy-to-clipboard.sh`;
 const POLL_ATTEMPTS = 10;
 const POLL_DELAY_MS = 200;
@@ -82,13 +87,17 @@ async function isBarePrompt(paneId: string): Promise<boolean> {
     }),
   );
   if (!r.ok) return false;
-  const lines = r.value.replace(/\s+$/, "").split("\n");
-  const last = (lines[lines.length - 1] ?? "").trim();
-  return /^[$%#>]$/.test(last);
+  const lines = r.value.replace(/\s+$/u, "").split("\n");
+  const last = (lines.at(-1) ?? "").trim();
+  return /^[$%#>]$/u.test(last);
 }
 
 const payloadFile = process.env.COPY_PAYLOAD_FILE;
-if (!payloadFile || !existsSync(payloadFile)) {
+if (
+  payloadFile === undefined ||
+  payloadFile === "" ||
+  !existsSync(payloadFile)
+) {
   console.error(
     "usage: COPY_PAYLOAD_FILE=<payload-file> bun copy-via-herdr-pane.ts",
   );
@@ -97,7 +106,7 @@ if (!payloadFile || !existsSync(payloadFile)) {
 if (process.env.HERDR_ENV !== "1" || !existsSync(CLIP_SCRIPT)) process.exit(3);
 
 const selfPane = process.env.HERDR_PANE_ID;
-if (!selfPane) process.exit(3);
+if (selfPane === undefined || selfPane === "") process.exit(3);
 
 const split = await attempt(() =>
   herdr([
@@ -114,7 +123,7 @@ const split = await attempt(() =>
 // split itself failed (e.g. too small to split) -> caller falls back
 if (!split.ok) process.exit(4);
 const paneId = strAt(split.value, "result", "pane", "pane_id");
-if (!paneId) process.exit(4);
+if (paneId === undefined || paneId === "") process.exit(4);
 
 let ready = false;
 for (let pollAttempt = 0; pollAttempt < POLL_ATTEMPTS; pollAttempt++) {

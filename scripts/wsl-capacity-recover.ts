@@ -37,7 +37,7 @@ const COMPUTE_NAMES = new Set([
   "polysearch",
 ]);
 const DEDICATED_UNIT =
-  /^(?:sb-|agent-resource-|fd-|polysearch-)[A-Za-z0-9_.@-]+\.(?:service|scope)$/;
+  /^(?:sb-|agent-resource-|fd-|polysearch-)[A-Za-z0-9_.@-]+\.(?:service|scope)$/u;
 const POWERSHELL =
   "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
 const WSL_DISTRO = "Ubuntu-24.04";
@@ -112,7 +112,7 @@ function policyFromToml(path: string): Policy {
 
 function freeBytes(path: string): number {
   const fs = statfsSync(path);
-  const value = Number(fs.bavail) * Number(fs.bsize);
+  const value = fs.bavail * fs.bsize;
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${path} returned an invalid free-byte count`);
   }
@@ -137,7 +137,7 @@ export function shouldReclaim(
   return nowMs - lastAttemptMs >= cooldown;
 }
 
-function lastAttemptMs(): number {
+function readLastAttemptMs(): number {
   return fromThrowable(() => statSync(STAMP_PATH).mtimeMs)().unwrapOr(0);
 }
 
@@ -202,15 +202,15 @@ $available = @(); $reads = @()
 `;
 
 export function parseHostMemory(output: string): HostMemory | null {
-  const availableMb = Number(/(?:^|\n)available_mb=(\d+)/.exec(output)?.[1]);
+  const availableMb = Number(/(?:^|\n)available_mb=(\d+)/u.exec(output)?.[1]);
   const pageReadsPerSecond = Number(
-    /(?:^|\n)page_reads_s=(\d+)/.exec(output)?.[1],
+    /(?:^|\n)page_reads_s=(\d+)/u.exec(output)?.[1],
   );
   if (
     !Number.isSafeInteger(availableMb) ||
     !Number.isSafeInteger(pageReadsPerSecond) ||
-    output.indexOf("available_mb=") < 0 ||
-    output.indexOf("page_reads_s=") < 0
+    !output.includes("available_mb=") ||
+    !output.includes("page_reads_s=")
   ) {
     return null;
   }
@@ -241,7 +241,7 @@ async function probeHostMemory(): Promise<HostMemory | null> {
   if (result.isErr() || result.value.code !== 0 || result.value.timedOut) {
     return null;
   }
-  return parseHostMemory(result.value.output.replace(/\r/g, ""));
+  return parseHostMemory(result.value.output.replaceAll("\r", ""));
 }
 
 async function dropPageCache(): Promise<boolean> {
@@ -318,7 +318,7 @@ export function startTicks(stat: string): string | null {
     stat
       .slice(close + 2)
       .trim()
-      .split(/\s+/)[19] ?? null
+      .split(/\s+/u)[19] ?? null
   );
 }
 
@@ -329,10 +329,10 @@ export function selectStopTargets(
   const targets = new Map<string, StopTarget>();
   for (const p of processes) {
     if (p.uid !== currentUid || !COMPUTE_NAMES.has(p.comm)) continue;
-    const unit = /\/app\.slice\/([^/]+\.(?:service|scope))(?:\/|$)/.exec(
+    const unit = /\/app\.slice\/([^/]+\.(?:service|scope))(?:\/|$)/u.exec(
       p.cgroup,
     )?.[1];
-    if (unit && DEDICATED_UNIT.test(unit)) {
+    if (unit !== undefined && DEDICATED_UNIT.test(unit)) {
       targets.set(`unit:${unit}`, { kind: "unit", name: unit });
     } else {
       targets.set(`pid:${p.pid}`, {
@@ -352,7 +352,7 @@ function readProcess(pid: number): ComputeProcess | null {
     const comm = readFileSync(`${root}/comm`, "utf8").trim();
     if (!COMPUTE_NAMES.has(comm)) return null;
     const status = readFileSync(`${root}/status`, "utf8");
-    const uid = Number(/^Uid:\s+(\d+)/m.exec(status)?.[1]);
+    const uid = Number(/^Uid:\s+(\d+)/mu.exec(status)?.[1]);
     const ticks = startTicks(readFileSync(`${root}/stat`, "utf8"));
     if (!Number.isInteger(uid) || ticks === null) return null;
     return {
@@ -368,7 +368,7 @@ function readProcess(pid: number): ComputeProcess | null {
 
 function liveTargets(): StopTarget[] {
   const processes = readdirSync("/proc")
-    .filter((name) => /^\d+$/.test(name))
+    .filter((name) => /^\d+$/u.test(name))
     .map((name) => readProcess(Number(name)))
     .flatMap((p) => (p === null ? [] : [p]));
   return selectStopTargets(processes, process.getuid?.() ?? -1);
@@ -387,7 +387,7 @@ export function hasLiveBuildProcess(
 
 function buildStillRunning(): boolean {
   const processes = readdirSync("/proc")
-    .filter((name) => /^\d+$/.test(name))
+    .filter((name) => /^\d+$/u.test(name))
     .map((name) => readProcess(Number(name)))
     .flatMap((p) => (p === null ? [] : [p]));
   return hasLiveBuildProcess(processes, process.getuid?.() ?? -1);
@@ -402,6 +402,37 @@ function sameProcess(target: Extract<StopTarget, { kind: "pid" }>): boolean {
   );
 }
 
+async function stopTarget(
+  target: StopTarget,
+  raw: Extract<StopTarget, { kind: "pid" }>[],
+): Promise<void> {
+  if (target.kind === "unit") {
+    const stopped = await fromAsyncThrowable(() =>
+      runBounded(["systemctl", "--user", "stop", target.name], 25_000),
+    )();
+    const active = await fromAsyncThrowable(() =>
+      runBounded(["systemctl", "--user", "is-active", target.name], 5_000),
+    )();
+    process.stdout.write(
+      `STOP unit=${target.name} exit=${stopped.isOk() ? stopped.value.code : "error"} ` +
+        `inactive=${active.isOk() && active.value.code !== 0 && !active.value.timedOut}\n`,
+    );
+    return;
+  }
+  if (!sameProcess(target)) return;
+  const result = fromThrowable(() => process.kill(target.pid, "SIGTERM"))();
+  if (result.isOk()) {
+    raw.push(target);
+    process.stdout.write(
+      `STOP pid=${target.pid} comm=${target.comm} signal=TERM\n`,
+    );
+    return;
+  }
+  process.stderr.write(
+    `WARN pid=${target.pid} TERM failed: ${String(result.error)}\n`,
+  );
+}
+
 export async function stopCompute(targets: StopTarget[]): Promise<void> {
   if (targets.length === 0) {
     process.stderr.write("NO_TARGET no recognized compute process to stop\n");
@@ -409,33 +440,10 @@ export async function stopCompute(targets: StopTarget[]): Promise<void> {
   }
   const raw: Extract<StopTarget, { kind: "pid" }>[] = [];
   for (const target of targets) {
-    if (target.kind === "unit") {
-      const stopped = await fromAsyncThrowable(() =>
-        runBounded(["systemctl", "--user", "stop", target.name], 25_000),
-      )();
-      const active = await fromAsyncThrowable(() =>
-        runBounded(["systemctl", "--user", "is-active", target.name], 5_000),
-      )();
-      process.stdout.write(
-        `STOP unit=${target.name} exit=${stopped.isOk() ? stopped.value.code : "error"} ` +
-          `inactive=${active.isOk() && active.value.code !== 0 && !active.value.timedOut}\n`,
-      );
-    } else if (sameProcess(target)) {
-      const result = fromThrowable(() => process.kill(target.pid, "SIGTERM"))();
-      if (result.isOk()) {
-        raw.push(target);
-        process.stdout.write(
-          `STOP pid=${target.pid} comm=${target.comm} signal=TERM\n`,
-        );
-      } else {
-        process.stderr.write(
-          `WARN pid=${target.pid} TERM failed: ${String(result.error)}\n`,
-        );
-      }
-    }
+    await stopTarget(target, raw);
   }
   if (raw.length > 0) await Bun.sleep(1_000);
-  if (raw.some(sameProcess)) await Bun.sleep(9_000);
+  if (raw.some((target) => sameProcess(target))) await Bun.sleep(9_000);
   for (const target of raw) {
     if (!sameProcess(target)) continue;
     const result = fromThrowable(() => process.kill(target.pid, "SIGKILL"))();
@@ -498,7 +506,7 @@ async function main(): Promise<void> {
   );
   if (parsed._.length > 0)
     throw new Error(`Unexpected argument '${parsed._[0]}'`);
-  if (parsed.flags.config !== POLICY_PATH && !parsed.flags.dryRun) {
+  if (parsed.flags.config !== POLICY_PATH && parsed.flags.dryRun !== true) {
     throw new Error("--config override is permitted only with --dry-run");
   }
   const policy = policyFromToml(parsed.flags.config);
@@ -520,11 +528,11 @@ async function main(): Promise<void> {
   const runReclaim = shouldReclaim(
     free,
     policy,
-    lastAttemptMs(),
+    readLastAttemptMs(),
     Temporal.Now.instant().epochMilliseconds,
   );
   const targets = free < policy.stopBytes || memoryLow ? liveTargets() : [];
-  if (parsed.flags.dryRun) {
+  if (parsed.flags.dryRun === true) {
     process.stdout.write(
       `DRY_RUN host_free=${gib(free)} reclaim=${runReclaim} ` +
         `memory=${JSON.stringify(memoryBefore)} memory_emergency=${memoryLow} ` +
@@ -579,9 +587,9 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  fromAsyncThrowable(main)().then((result) => {
-    if (result.isOk()) return;
+  const result = await fromAsyncThrowable(main)();
+  if (result.isErr()) {
     process.stderr.write(`FATAL: ${String(result.error)}\n`);
     process.exitCode = 2;
-  });
+  }
 }

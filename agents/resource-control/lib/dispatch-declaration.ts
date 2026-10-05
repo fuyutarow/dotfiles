@@ -15,7 +15,7 @@ export type ResourceDeclarationResult =
 export function resourceDeclarationResult(
   text: string,
 ): ResourceDeclarationResult {
-  const tokens = text.match(/RESOURCE-(?:CLASS|ENVELOPE)\s*\(/gi) ?? [];
+  const tokens = text.match(/RESOURCE-(?:CLASS|ENVELOPE)\s*\(/giu) ?? [];
   if (tokens.length !== 1) {
     return {
       ok: false,
@@ -24,10 +24,10 @@ export function resourceDeclarationResult(
   }
 
   const noncompute =
-    /RESOURCE-CLASS\s*\(\s*NONCOMPUTE\s*\)\s*:\s*([^\r\n]+)/i.exec(text);
+    /RESOURCE-CLASS\s*\(\s*NONCOMPUTE\s*\)\s*:\s*([^\r\n]+)/iu.exec(text);
   if (noncompute !== null) {
     const reason = noncompute[1]?.trim() ?? "";
-    if (reason.replace(/[\s*/'"`]/g, "") !== "") {
+    if (reason.replaceAll(/[\s*/'"`]/gu, "") !== "") {
       return { ok: true, declaration: { kind: "noncompute", reason } };
     }
     return {
@@ -42,7 +42,7 @@ export function resourceDeclarationResult(
   // extends that same tolerance to a period abutting "only" with no space before it. Six
   // otherwise well-formed dispatches were denied on exactly this before the fix.
   const envelope =
-    /RESOURCE-ENVELOPE\s*\(([^)\r\n]+)\)\s*:\s*agent-resource-run only\.?(?:\s|$)/i.exec(
+    /RESOURCE-ENVELOPE\s*\(([^)\r\n]+)\)\s*:\s*agent-resource-run only\.?(?:\s|$)/iu.exec(
       text,
     );
   if (envelope !== null) {

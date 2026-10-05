@@ -1,29 +1,34 @@
 # Single source of truth for CLI tooling (macOS AND WSL/linuxbrew).
 # Apply with: brew bundle --file=~/dotfiles/Brewfile
 # Check with: mise run tools:audit  (scripts/check-tools.sh)
+# `@remote` in an entry's comment = also installed on a throwaway Linux box by `mise run linux:init`
+# (scripts/bootstrap-linux.sh); keep that set to what a remote shell + herdr --remote needs.
 
 # Core CLI tools
-brew "bat"          # better cat (alias: p)
+brew "bat"          # @remote better cat (alias: p)
 brew "coreutils"
-brew "eza"          # better ls (l, ll, la)
-brew "fd"           # better find (f)
+brew "eza"          # @remote better ls (l, ll, la)
+brew "fd"           # @remote better find (f)
 # fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
 # implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
 brew "gh"
 brew "git"
-brew "git-delta"    # better diff
-brew "jq"
+brew "git-delta"    # @remote better diff
+brew "jq"           # @remote
+brew "fnox"        # secrets: one CLI over the macOS Keychain (mac) and age files (WSL); config is
+                    # per machine in ~/.config/fnox/config.toml, never in this public repo
+brew "age"         # fnox age provider (WSL has no Secret Service, so its secrets are age-encrypted)
 brew "just"         # task runner (j)
-brew "mise"
-brew "ripgrep"      # better grep (gr)
-brew "rm-improved"  # rip — the ONLY sanctioned file remover (rm is disabled)
-brew "sheldon"
+brew "mise"         # @remote
+brew "ripgrep"      # @remote better grep (gr)
+brew "rm-improved"  # @remote rip — the ONLY sanctioned file remover (rm is disabled)
+brew "sheldon"      # @remote
 brew "tmux"
-brew "herdr"        # agent multiplexer (tmux-like workspace for AI coding agents) — config in herdr/, cross-OS
+brew "herdr"        # @remote agent multiplexer (tmux-like workspace for AI coding agents) — config in herdr/, cross-OS
 brew "topgrade"
-brew "zoxide"       # better cd (,)
-brew "bun"          # JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)
-brew "uv"           # Python tool runner/installer: `uvx` (ephemeral, preferred) + `uv tool install` (ccc via
+brew "zoxide"       # @remote better cd (,)
+brew "bun"          # @remote JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)
+brew "uv"           # @remote Python tool runner/installer: `uvx` (ephemeral, preferred) + `uv tool install` (ccc via
                     # `mise run cc:install-mcp`). Its tool bins land in ~/.local/bin, on every shell's PATH via
                     # zsh/zshenv. Was brew-installed by hand and never declared here until 2026-09-13 — a fresh
                     # `brew bundle` would have skipped it and `cc:install-mcp` would have failed on the first step.
@@ -31,12 +36,12 @@ brew "uv"           # Python tool runner/installer: `uvx` (ephemeral, preferred)
 # Productivity / TUI
 brew "atuin"        # shell history (Ctrl+R)
 brew "lazygit"      # git TUI (lg)
-brew "jj"           # Jujutsu VCS; colocated with git in dotfiles/firedancer (config: jj/)
+brew "jj"           # @remote Jujutsu VCS; colocated with git in dotfiles/firedancer (config: jj/)
 brew "direnv"
-brew "fzf"
+brew "fzf"          # @remote
 brew "dust"         # better du (du2)
 brew "procs"        # better ps
-brew "btop"         # system monitor (tmux prefix+G popup)
+brew "btop"         # @remote system monitor (tmux prefix+G popup)
 
 # Linux-desktop clipboard backends for tmux (WSL uses clip.exe, mac uses pbcopy — neither needs these)
 if OS.linux?

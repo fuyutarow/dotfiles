@@ -425,7 +425,7 @@ describe("link-skills: link_path guard", () => {
     cleanup(dotfiles, home);
   });
 
-  test("relinks a dangling pre-existing symlink at the destination (ln -sfn semantics)", async () => {
+  test("relinks a dangling pre-existing symlink at the destination (ln -sfn semantics)", () => {
     const dotfiles = makeDotfiles(["only-skill"]);
     const home = makeHome();
     mkdirSync(`${home}/.claude`, { recursive: true });

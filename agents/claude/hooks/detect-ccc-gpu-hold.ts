@@ -117,7 +117,7 @@ async function isCccDaemon(pid: number): Promise<boolean> {
     () => readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").join(" "),
     null,
   );
-  return cmdline !== null && /\bccc run-daemon\b/.test(cmdline);
+  return cmdline !== null && /\bccc run-daemon\b/u.test(cmdline);
 }
 
 // undefined = no GPU probe available on this host; null = no ccc daemon on the GPU.
@@ -128,7 +128,7 @@ async function probeDaemonOnGpu(): Promise<number | null | undefined> {
   );
   if (out === null) return undefined;
   for (const line of out.split("\n")) {
-    const pid = Number.parseInt(line.trim(), 10);
+    const pid = Math.trunc(Number(line.trim()));
     if (Number.isInteger(pid) && pid > 0 && (await isCccDaemon(pid)))
       return pid;
   }
@@ -158,7 +158,12 @@ function hostGpuLine(): string {
       .split("\n")[0]
       ?.split(",")
       .map((s) => s.trim()) ?? [];
-  return util && used && total
+  return util !== undefined &&
+    util !== "" &&
+    used !== undefined &&
+    used !== "" &&
+    total !== undefined &&
+    total !== ""
     ? `host-wide GPU util ${util}%, VRAM ${used}/${total} MiB`
     : "host-wide GPU util/VRAM unreadable";
 }

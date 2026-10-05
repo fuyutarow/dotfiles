@@ -136,13 +136,13 @@ describe("enforce-model-floor: orders go to the current generation only", () => 
   });
 });
 
-describe("enforce-model-floor: the config can be broken without bricking the session", () => {
-  const configAt = (text: string): Record<string, string> => {
-    const path = join(tempDir("modelfloor-"), "model-floor.toml");
-    writeFileSync(path, text);
-    return { MODEL_FLOOR_CONFIG: path };
-  };
+const configAt = (text: string): Record<string, string> => {
+  const path = join(tempDir("modelfloor-"), "model-floor.toml");
+  writeFileSync(path, text);
+  return { MODEL_FLOOR_CONFIG: path };
+};
 
+describe("enforce-model-floor: the config can be broken without bricking the session", () => {
   test("an invalid floor file denies an order, listing every error, and nothing else", () => {
     const env = configAt(
       `schema = 2\n[[family]]\nvendor = "nope"\nfamily = "x"\nmin = "1"\n`,

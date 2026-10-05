@@ -30,7 +30,7 @@ const ENVELOPE =
 
 function userSystemdCanAdmit(): boolean {
   if (process.platform !== "linux") return false;
-  if (!Bun.which("systemctl")) return false;
+  if (Bun.which("systemctl") === null) return false;
   const probe = Bun.spawnSync(["systemctl", "--user", "is-system-running"], {
     stdout: "pipe",
     stderr: "ignore",

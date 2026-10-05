@@ -76,42 +76,42 @@ type Input = Readonly<{
 }>;
 
 const labelMatchers: ReadonlyArray<readonly [SlotName, RegExp]> = [
-	["stage", /stage diagnosis|段階診断/i],
-	["blindSpots", /blind[- ]spot packet|盲点.*(?:packet|パケット)/i],
+	["stage", /stage diagnosis|段階診断/iu],
+	["blindSpots", /blind[- ]spot packet|盲点.*(?:packet|パケット)/iu],
 	[
 		"explorationAllocation",
-		/exploration allocation|探索.*(?:allocation|配分)/i,
+		/exploration allocation|探索.*(?:allocation|配分)/iu,
 	],
-	["frames", /problem[- ]frame slate|問題フレーム.*候補/i],
-	["axes", /selection axes|選択軸/i],
-	["cheapVictory", /(?:the )?cheap victory|安い勝利/i],
-	["firewall", /optimi[sz]e\/trust firewall|最適化.*信頼.*firewall/i],
+	["frames", /problem[- ]frame slate|問題フレーム.*候補/iu],
+	["axes", /selection axes|選択軸/iu],
+	["cheapVictory", /(?:the )?cheap victory|安い勝利/iu],
+	["firewall", /optimi[sz]e\/trust firewall|最適化.*信頼.*firewall/iu],
 	[
 		"collapse",
-		/diversity[- ]collapse rule|多様性.*(?:collapse|崩壊).*(?:rule|規則)/i,
+		/diversity[- ]collapse rule|多様性.*(?:collapse|崩壊).*(?:rule|規則)/iu,
 	],
 	[
 		"registry",
-		/prediction[- ]registry policy|予測.*(?:台帳|レジストリ).*方針/i,
+		/prediction[- ]registry policy|予測.*(?:台帳|レジストリ).*方針/iu,
 	],
-	["denominator", /denominator policy|分母.*方針/i],
+	["denominator", /denominator policy|分母.*方針/iu],
 	[
 		"audit",
-		/independent[- ]audit requirement|独立監査.*要件|generator.*auditor|生成者.*監査者/i,
+		/independent[- ]audit requirement|独立監査.*要件|generator.*auditor|生成者.*監査者/iu,
 	],
-	["portfolio", /portfolio update|ポートフォリオ.*更新/i],
-	["reopen", /reopen rule|再オープン.*規則|再検討.*規則/i],
+	["portfolio", /portfolio update|ポートフォリオ.*更新/iu],
+	["reopen", /reopen rule|再オープン.*規則|再検討.*規則/iu],
 ];
 
 const stagePattern =
-	/corpus[- ]unclear|unclear corpus|anomaly[- ]unverified|unverified anomaly|assumptions?[- ]unexposed|unexposed assumptions?|problem[- ]underconstructed|underconstructed problem|thesis[- ]missing|missing thesis|candidate[- ]selection|select(?:ing)? candidates|one[- ]bet[- ]untested|untested (?:one|single) bet|program[- ]steering|steer(?:ing)? (?:the )?program|finished[- ]claim|finished claim|コーパス.*不明|文献.*不明|異常.*未検証|前提.*未(?:露出|顕在化)|問題.*未構成|問題設定.*不足|仮説.*欠如|候補.*選択|単一.*未検証|プログラム.*操舵|完成.*主張/i;
+	/corpus[- ]unclear|unclear corpus|anomaly[- ]unverified|unverified anomaly|assumptions?[- ]unexposed|unexposed assumptions?|problem[- ]underconstructed|underconstructed problem|thesis[- ]missing|missing thesis|candidate[- ]selection|select(?:ing)? candidates|one[- ]bet[- ]untested|untested (?:one|single) bet|program[- ]steering|steer(?:ing)? (?:the )?program|finished[- ]claim|finished claim|コーパス.*不明|文献.*不明|異常.*未検証|前提.*未(?:露出|顕在化)|問題.*未構成|問題設定.*不足|仮説.*欠如|候補.*選択|単一.*未検証|プログラム.*操舵|完成.*主張/iu;
 
 const axisPatterns = [
-	/consequence|importance|impact|重要|帰結/i,
-	/discriminab|識別|弁別/i,
-	/feasib|実現可能|実行可能/i,
-	/novel|新規|独創/i,
-	/bounded loss|loss cap|損失上限|許容.*損失/i,
+	/consequence|importance|impact|重要|帰結/iu,
+	/discriminab|識別|弁別/iu,
+	/feasib|実現可能|実行可能/iu,
+	/novel|新規|独創/iu,
+	/bounded loss|loss cap|損失上限|許容.*損失/iu,
 ] satisfies RegExp[];
 
 function valueAfterLabel(line: string): string {
@@ -121,15 +121,15 @@ function valueAfterLabel(line: string): string {
 	return normalized
 		.slice(index + 1)
 		.trim()
-		.replace(/^(\*\*|__)\s*/, "")
-		.replace(/^　+|　+$/g, "");
+		.replace(/^(\*\*|__)\s*/u, "")
+		.replaceAll(/^　+|　+$/gu, "");
 }
 
 function fieldPattern(label: string): RegExp {
-	const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 	return new RegExp(
 		String.raw`^\s*(?:[-*+]\s+|#{1,6}\s+)?(?:\*\*|__)?${escaped}(?:(?:\*\*|__)\s*[：:]|\s*[：:](?:\*\*|__)?)`,
-		"i",
+		"iu",
 	);
 }
 
@@ -160,7 +160,7 @@ function sameResolvedFile(first: string, second: string): boolean {
 function normalizedOperation(value: string | undefined): string | undefined {
 	const match = value
 		?.trim()
-		.match(/^([A-Za-z]+)(?:\s*(?:—|–|:|\s-\s)\s*.+)?$/);
+		.match(/^([A-Za-z]+)(?:\s*(?:—|–|:|\s-\s)\s*.+)?$/u);
 	return match?.[1]?.toUpperCase();
 }
 
@@ -171,7 +171,7 @@ function stableIds(value: string): readonly string[] | undefined {
 		.filter((id) => id !== "");
 	if (
 		ids.length === 0 ||
-		ids.some((id) => !/^[A-Za-z][A-Za-z0-9._-]*$/.test(id))
+		ids.some((id) => !/^[A-Za-z][A-Za-z0-9._-]*$/u.test(id))
 	) {
 		return undefined;
 	}
@@ -182,28 +182,28 @@ function resolvePreservedIds(
 	value: string | undefined,
 ): readonly string[] | undefined {
 	if (value === undefined) return undefined;
-	if (/^NONE\s*(?:—|–|:|\s-\s)/.test(value)) return [];
+	if (/^NONE\s*(?:—|–|:|\s-\s)/u.test(value)) return [];
 	return stableIds(value);
 }
 
 function placeholder(value: string): boolean {
 	return (
 		value === "" ||
-		/^(\[\.\.\.\]|\[…\]|\[ *\])$/.test(value) ||
-		/^(未回答|未記入|未定|TBD|N\/?A|NA|-|—|ー|―|\?+|\.\.\.)$/i.test(value)
+		/^(\[\.\.\.\]|\[…\]|\[ *\])$/u.test(value) ||
+		/^(未回答|未記入|未定|TBD|N\/?A|NA|-|—|ー|―|\?+|\.\.\.)$/iu.test(value)
 	);
 }
 
 function structuralItems(value: string): string[] {
 	return value
-		.split(/\s*(?:;|；|、|\s\|\s| \/ )\s*/)
+		.split(/\s*(?:;|；|、|\s\|\s| \/ )\s*/u)
 		.map((item) => item.trim())
 		.filter((item) => item !== "");
 }
 
 function hasAtLeastStructuralItems(value: string, minimum: 2 | 3): boolean {
 	if (structuralItems(value).length >= minimum) return true;
-	const numberedItems = [...value.matchAll(/(?:^|\s)\d+[.)]\s+\S/g)].length;
+	const numberedItems = [...value.matchAll(/(?:^|\s)\d+[.)]\s+\S/gu)].length;
 	return numberedItems >= minimum;
 }
 
@@ -214,13 +214,13 @@ function invalidStage(value: string): string | undefined {
 
 function invalidBlindSpots(value: string): string | undefined {
 	const missing: string[] = [];
-	if (!/locus|path|file|packet|所在|場所|台帳/i.test(value))
+	if (!/locus|path|file|packet|所在|場所|台帳/iu.test(value))
 		missing.push("packet locus");
-	if (!/assumption|premise|前提/i.test(value))
+	if (!/assumption|premise|前提/iu.test(value))
 		missing.push("load-bearing assumption");
-	if (!/open[- ]set|open residual|OPEN|未分類|残余/i.test(value))
+	if (!/open[- ]set|open residual|OPEN|未分類|残余/iu.test(value))
 		missing.push("open-set residual");
-	if (!/stop|停止|打ち切/i.test(value)) missing.push("stop reason");
+	if (!/stop|停止|打ち切/iu.test(value)) missing.push("stop reason");
 	return missing.length === 0
 		? undefined
 		: `blind-spot packet needs ${missing.join(", ")}`;
@@ -229,27 +229,27 @@ function invalidBlindSpots(value: string): string | undefined {
 function invalidExplorationAllocation(value: string): string | undefined {
 	const missing: string[] = [];
 	if (
-		!/blind[- ]spot packet.{0,50}(?:locus|path|file|=|:)|(?:locus|path|file).{0,50}blind[- ]spot packet/i.test(
+		!/blind[- ]spot packet.{0,50}(?:locus|path|file|=|:)|(?:locus|path|file).{0,50}blind[- ]spot packet/iu.test(
 			value,
 		)
 	)
 		missing.push("Blind-spot packet locus");
-	if (!/\bSearch budget\b|探索予算/i.test(value))
+	if (!/\bSearch budget\b|探索予算/iu.test(value))
 		missing.push("SBS Search budget pointer");
 	if (
-		!/cross[- ]frame (?:micro[- ]?)?probe|フレーム間.*(?:probe|試行)/i.test(
+		!/cross[- ]frame (?:micro[- ]?)?probe|フレーム間.*(?:probe|試行)/iu.test(
 			value,
 		)
 	)
 		missing.push("cross-frame probe allocation");
 	if (
-		!/\bNONE\b|\b(?:cap|limit)\b|上限|\d+\s*frames?.{0,30}\d+\s*candidates?/i.test(
+		!/\bNONE\b|\b(?:cap|limit)\b|上限|\d+\s*frames?.{0,30}\d+\s*candidates?/iu.test(
 			value,
 		)
 	)
 		missing.push("cross-frame probe cap or NONE");
 	if (
-		/\bbreadth(?: sweep)?\b|\bdepth(?: allocation)?\b|decision-sensitive stop/i.test(
+		/\bbreadth(?: sweep)?\b|\bdepth(?: allocation)?\b|decision-sensitive stop/iu.test(
 			value,
 		)
 	)
@@ -260,36 +260,36 @@ function invalidExplorationAllocation(value: string): string | undefined {
 }
 
 function invalidFrames(value: string): string | undefined {
-	const coverageGapCount = [...value.matchAll(/\bCOVERAGE GAP\b/gi)].length;
+	const coverageGapCount = [...value.matchAll(/\bCOVERAGE GAP\b/giu)].length;
 	if (coverageGapCount > 2)
 		return "problem-frame slate permits at most two honest COVERAGE GAP entries";
 	const missingRoles: string[] = [];
-	if (!/CONTROL|grounded control|対照|既定.*保持/i.test(value))
+	if (!/CONTROL|grounded control|対照|既定.*保持/iu.test(value))
 		missingRoles.push("CONTROL");
 	if (
-		!/PREMISE[- ]BREAK|assumption[- ]break|breaks? (?:a )?(?:premise|assumption)|前提.*(?:破|反転|変更)/i.test(
+		!/PREMISE[- ]BREAK|assumption[- ]break|breaks? (?:a )?(?:premise|assumption)|前提.*(?:破|反転|変更)/iu.test(
 			value,
 		)
 	)
 		missingRoles.push("PREMISE-BREAK");
-	if (!/ORTHOGONAL|直交|別.*(?:前提|slot|軸)/i.test(value))
+	if (!/ORTHOGONAL|直交|別.*(?:前提|slot|軸)/iu.test(value))
 		missingRoles.push("ORTHOGONAL");
 	if (missingRoles.length > 0)
 		return `problem-frame slate needs functional roles ${missingRoles.join(", ")}`;
 	if (
 		coverageGapCount > 0 &&
-		(!/attempt(?:ed)?|tried|試み|試行/i.test(value) ||
-			!/fixed (?:fact|constraint)|hard constraint|invariant|固定.*(?:事実|制約)|不変/i.test(
+		(!/attempt(?:ed)?|tried|試み|試行/iu.test(value) ||
+			!/fixed (?:fact|constraint)|hard constraint|invariant|固定.*(?:事実|制約)|不変/iu.test(
 				value,
 			) ||
-			!/illegitimate|invalid|impossible|not legitimate|不正当|無効|不可能/i.test(
+			!/illegitimate|invalid|impossible|not legitimate|不正当|無効|不可能/iu.test(
 				value,
 			))
 	)
 		return "each COVERAGE GAP needs the attempted transformation, fixed fact/constraint, and why a fabricated frame would be illegitimate";
 
 	const discriminatorCount = [
-		...value.matchAll(/discriminator|識別(?:子|観測|条件)?/gi),
+		...value.matchAll(/discriminator|識別(?:子|観測|条件)?/giu),
 	].length;
 	const requiredActualFrames = 3 - coverageGapCount;
 	if (discriminatorCount < requiredActualFrames)
@@ -297,7 +297,7 @@ function invalidFrames(value: string): string | undefined {
 
 	const slotCount = [
 		...value.matchAll(
-			/\b(?:OBJECT|RELATION|OBSERVATION|REGIME|VALUE|ACTION|OPEN)\b/g,
+			/\b(?:OBJECT|RELATION|OBSERVATION|REGIME|VALUE|ACTION|OPEN)\b/gu,
 		),
 	].length;
 	if (slotCount < requiredActualFrames)
@@ -307,7 +307,7 @@ function invalidFrames(value: string): string | undefined {
 
 function invalidAxes(value: string): string | undefined {
 	const scalarProduct =
-		/scalar product|single score|aggregate score|weighted sum|multiply|multiplicative|掛け合わせ|総合点|単一.*スコア|[×*]/i.test(
+		/scalar product|single score|aggregate score|weighted sum|multiply|multiplicative|掛け合わせ|総合点|単一.*スコア|[×*]/iu.test(
 			value,
 		);
 	if (scalarProduct)
@@ -318,11 +318,11 @@ function invalidAxes(value: string): string | undefined {
 		return "selection axes need consequence/importance, discriminability, feasibility, novelty, and bounded loss";
 
 	const keyedAxes = [
-		/(?:consequence|importance|impact|重要|帰結)\s*[:=＝]/i,
-		/(?:discriminab\w*|識別|弁別)\s*[:=＝]/i,
-		/(?:feasib\w*|実現可能|実行可能)\s*[:=＝]/i,
-		/(?:novel\w*|新規|独創)\s*[:=＝]/i,
-		/(?:bounded loss|loss cap|損失上限|許容.*損失)\s*[:=＝]/i,
+		/(?:consequence|importance|impact|重要|帰結)\s*[:=＝]/iu,
+		/(?:discriminab\w*|識別|弁別)\s*[:=＝]/iu,
+		/(?:feasib\w*|実現可能|実行可能)\s*[:=＝]/iu,
+		/(?:novel\w*|新規|独創)\s*[:=＝]/iu,
+		/(?:bounded loss|loss cap|損失上限|許容.*損失)\s*[:=＝]/iu,
 	].filter((pattern) => pattern.test(value)).length;
 	if (structuralItems(value).length < 5 && keyedAxes < 5)
 		return "selection axes are named but not recorded as five separate judgments";
@@ -330,9 +330,9 @@ function invalidAxes(value: string): string | undefined {
 }
 
 function invalidFirewall(value: string): string | undefined {
-	const namesOptimization = /optimi[sz]|最適化/i.test(value);
+	const namesOptimization = /optimi[sz]|最適化/iu.test(value);
 	const namesHeldOutWitness =
-		/held[- ]?out|holdout|untouched witness|unseen witness|未使用.*(?:証人|検証)|独立.*(?:証人|検証)/i.test(
+		/held[- ]?out|holdout|untouched witness|unseen witness|未使用.*(?:証人|検証)|独立.*(?:証人|検証)/iu.test(
 			value,
 		);
 	if (namesOptimization && namesHeldOutWitness) return undefined;
@@ -341,19 +341,19 @@ function invalidFirewall(value: string): string | undefined {
 
 function invalidCollapse(value: string): string | undefined {
 	const missing: string[] = [];
-	if (!/dedup|collapse|semantic duplicate|重複|崩壊/i.test(value))
+	if (!/dedup|collapse|semantic duplicate|重複|崩壊/iu.test(value))
 		missing.push("dedup/collapse trigger");
-	if (!/premise|assumption|target|discriminator|前提|対象|識別/i.test(value))
+	if (!/premise|assumption|target|discriminator|前提|対象|識別/iu.test(value))
 		missing.push("collapsed dimension");
-	if (!/\bonce\b|\bone\b|exactly one|一度|1回|一回/i.test(value))
+	if (!/\bonce\b|\bone\b|exactly one|一度|1回|一回/iu.test(value))
 		missing.push("one bounded regeneration");
 	if (
-		!/coverage[- ]gap|forging-novel-theses|unoccupied|未使用|未占有|被覆.*不足/i.test(
+		!/coverage[- ]gap|forging-novel-theses|unoccupied|未使用|未占有|被覆.*不足/iu.test(
 			value,
 		)
 	)
 		missing.push("coverage-gap handoff");
-	if (!/stop|停止|final|最終/i.test(value)) missing.push("final stop");
+	if (!/stop|停止|final|最終/iu.test(value)) missing.push("final stop");
 	return missing.length === 0
 		? undefined
 		: `diversity-collapse rule needs ${missing.join(", ")}`;
@@ -361,11 +361,11 @@ function invalidCollapse(value: string): string | undefined {
 
 function invalidRegistry(value: string): string | undefined {
 	const hasLocus =
-		/registry|ledger|logbook|prediction log|台帳|記録簿|レジストリ/i.test(
+		/registry|ledger|logbook|prediction log|台帳|記録簿|レジストリ/iu.test(
 			value,
 		);
 	const hasBeforeRule =
-		/\bbefore\b|\bprior(?: to)?\b|pre[- ]?(?:register|commit)|事前|観測前|結果.*前|先に/i.test(
+		/\bbefore\b|\bprior(?: to)?\b|pre[- ]?(?:register|commit)|事前|観測前|結果.*前|先に/iu.test(
 			value,
 		);
 	const missing: string[] = [];
@@ -379,22 +379,22 @@ function invalidRegistry(value: string): string | undefined {
 
 function invalidAudit(value: string): string | undefined {
 	const missing: string[] = [];
-	if (!/\b(?:independent|separate|distinct)\b|別|独立|分離|異なる/i.test(value))
+	if (!/\b(?:independent|separate|distinct)\b|別|独立|分離|異なる/iu.test(value))
 		missing.push("required separation");
 	if (
-		!/evidence surface|blind input|frozen (?:packet|artifact)|証拠面|盲検入力/i.test(
+		!/evidence surface|blind input|frozen (?:packet|artifact)|証拠面|盲検入力/iu.test(
 			value,
 		)
 	)
 		missing.push("evidence surface");
 	if (
-		!/acceptance condition|reject|block|clearance|受入条件|棄却|阻止|解除条件/i.test(
+		!/acceptance condition|reject|block|clearance|受入条件|棄却|阻止|解除条件/iu.test(
 			value,
 		)
 	)
 		missing.push("acceptance condition");
 	if (
-		!/actor assignment.{0,30}orchestrating-agents|配役.{0,30}orchestrating-agents/i.test(
+		!/actor assignment.{0,30}orchestrating-agents|配役.{0,30}orchestrating-agents/iu.test(
 			value,
 		)
 	)
@@ -406,22 +406,22 @@ function invalidAudit(value: string): string | undefined {
 
 function isSingleBetHandoff(value: string): boolean {
 	const namesHandoff =
-		/(?:single|one|1)[- ]bet.*(?:handoff|hand[- ]off|acting-on-hypotheses)/i.test(
+		/(?:single|one|1)[- ]bet.*(?:handoff|hand[- ]off|acting-on-hypotheses)/iu.test(
 			value,
 		) ||
-		/(?:handoff|hand[- ]off|acting-on-hypotheses).*(?:single|one|1)[- ]bet/i.test(
+		/(?:handoff|hand[- ]off|acting-on-hypotheses).*(?:single|one|1)[- ]bet/iu.test(
 			value,
 		) ||
-		/単一.*(?:bet|ベット).*(?:引き渡|委譲)|(?:引き渡|委譲).*単一.*(?:bet|ベット)/i.test(
+		/単一.*(?:bet|ベット).*(?:引き渡|委譲)|(?:引き渡|委譲).*単一.*(?:bet|ベット)/iu.test(
 			value,
 		);
 	const passesHardGate =
-		/expensive|irreversible|load[- ]bearing|高価|不可逆|載荷/i.test(value);
+		/expensive|irreversible|load[- ]bearing|高価|不可逆|載荷/iu.test(value);
 	return namesHandoff && passesHardGate;
 }
 
 function invalidPortfolio(value: string): string | undefined {
-	const namedBets = [...value.matchAll(/\bbet\s+[A-Za-z0-9]+\b/gi)].length;
+	const namedBets = [...value.matchAll(/\bbet\s+[A-Za-z0-9]+\b/giu)].length;
 	if (
 		hasAtLeastStructuralItems(value, 2) ||
 		namedBets >= 2 ||
@@ -433,26 +433,26 @@ function invalidPortfolio(value: string): string | undefined {
 
 function invalidReopen(value: string): string | undefined {
 	const namesUnexpectedResult =
-		/unexpected|surpris|anomal|予想外|予期せぬ|異常|驚き/i.test(value);
-	const namesFrameOrStage = /problem[- ]?frame|stage|問題フレーム|段階/i.test(
+		/unexpected|surpris|anomal|予想外|予期せぬ|異常|驚き/iu.test(value);
+	const namesFrameOrStage = /problem[- ]?frame|stage|問題フレーム|段階/iu.test(
 		value,
 	);
 	const namesUpdate =
-		/reopen|update|revise|reframe|再検討|更新|改訂|組み直/i.test(value);
+		/reopen|update|revise|reframe|再検討|更新|改訂|組み直/iu.test(value);
 	if (namesUnexpectedResult && namesFrameOrStage && namesUpdate)
 		return undefined;
 	return "reopen rule must let an unexpected result update the problem frame or stage";
 }
 
 function transferDispositionLines(text: string): readonly string[] | undefined {
-	const lines = text.split(/\r?\n/);
+	const lines = text.split(/\r?\n/u);
 	const start = lines.findIndex((line) =>
-		/^\s*#{1,6}\s+TRANSFER DISPOSITION\s*$/i.test(line),
+		/^\s*#{1,6}\s+TRANSFER DISPOSITION\s*$/iu.test(line),
 	);
 	if (start === -1) return undefined;
 	const endOffset = lines
 		.slice(start + 1)
-		.findIndex((line) => /^\s*#{1,6}\s+/.test(line));
+		.findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
 	const end = endOffset === -1 ? lines.length : start + 1 + endOffset;
 	return lines.slice(start + 1, end);
 }
@@ -461,14 +461,14 @@ function parseTransferBundle(text: string): Readonly<{
 	attempts: TransferAttempt[];
 	findings: string[];
 }> {
-	const lines = text.split(/\r?\n/);
+	const lines = text.split(/\r?\n/u);
 	const starts: Readonly<{
 		headingId: string;
 		kind: "CANDIDATE" | "MAPPING-BREAK";
 		line: number;
 	}>[] = lines.flatMap((line, index) => {
 		const match = line.match(
-			/^\s*##\s+(Candidate|MAPPING-BREAK)(?:\s+\[([^\]]+)\]|\s+(.+?))\s*$/i,
+			/^\s*##\s+(Candidate|MAPPING-BREAK)(?:\s+\[([^\]]+)\]|\s+(.+?))\s*$/iu,
 		);
 		if (match === null) return [];
 		const rawId = (match[2] ?? match[3] ?? "").trim();
@@ -489,7 +489,7 @@ function parseTransferBundle(text: string): Readonly<{
 	for (const start of starts) {
 		const headingOffset = lines
 			.slice(start.line + 1)
-			.findIndex((line) => /^\s*#{1,2}\s+/.test(line));
+			.findIndex((line) => /^\s*#{1,2}\s+/u.test(line));
 		const sectionEnd =
 			headingOffset === -1 ? lines.length : start.line + 1 + headingOffset;
 		const section = lines.slice(start.line + 1, sectionEnd);
@@ -504,16 +504,16 @@ function parseTransferBundle(text: string): Readonly<{
 		]);
 		for (const field of duplicates) {
 			findings.push(
-				`${start.headingId || "<unnamed>"} has duplicate field ${field}`,
+				`${start.headingId !== undefined && start.headingId !== "" ? start.headingId : "<unnamed>"} has duplicate field ${field}`,
 			);
 		}
 		const attemptId = readField(section, "Transfer attempt ID");
 		if (
 			attemptId === undefined ||
-			!/^[A-Za-z][A-Za-z0-9._-]*$/.test(attemptId)
+			!/^[A-Za-z][A-Za-z0-9._-]*$/u.test(attemptId)
 		) {
 			findings.push(
-				`${start.kind} ${start.headingId || "<unnamed>"} lacks a stable Transfer attempt ID`,
+				`${start.kind} ${start.headingId !== undefined && start.headingId !== "" ? start.headingId : "<unnamed>"} lacks a stable Transfer attempt ID`,
 			);
 			continue;
 		}
@@ -550,7 +550,7 @@ function parseTransferBundle(text: string): Readonly<{
 function validateFrozenTransferBundle(
 	bytes: Uint8Array,
 	donorSetPath: string,
-	report: (message: string) => void,
+	reportTransferFinding: (message: string) => void,
 ): void {
 	if (!existsSync(thesisGateCheckPath)) {
 		throw new Error(
@@ -573,22 +573,22 @@ function validateFrozenTransferBundle(
 	});
 	if (upstream.exitCode === 2) {
 		throw new Error(
-			`forging-novel-theses gate-check failed: ${upstream.stderr.toString().trim() || "fatal upstream validator error"}`,
+			`forging-novel-theses gate-check failed: ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "fatal upstream validator error"}`,
 		);
 	}
 	if (upstream.exitCode !== 0 && upstream.exitCode !== 1) {
 		throw new Error(
-			`forging-novel-theses gate-check could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() || "upstream validator unavailable or timed out"}`,
+			`forging-novel-theses gate-check could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "upstream validator unavailable or timed out"}`,
 		);
 	}
 	if (upstream.exitCode !== 0) {
 		const findings = upstream.stdout
 			.toString()
-			.split(/\r?\n/)
-			.filter((line) => /\s(?:FAIL|MISSING)\s/.test(line))
+			.split(/\r?\n/u)
+			.filter((line) => /\s(?:FAIL|MISSING)\s/u.test(line))
 			.slice(0, 3)
 			.join(" | ");
-		report(
+		reportTransferFinding(
 			`frozen transfer bundle failed forging-novel-theses gate-check${findings === "" ? "" : `: ${findings}`}`,
 		);
 	}
@@ -596,19 +596,19 @@ function validateFrozenTransferBundle(
 
 function exactObservationLocus(value: string): boolean {
 	const fileLine =
-		/(?:^|\s)[\w./-]+\.(?:md|txt|json|jsonl|csv|tsv|log):\d+(?:-\d+)?\b/i.test(
+		/(?:^|\s)[\w./-]+\.(?:md|txt|json|jsonl|csv|tsv|log):\d+(?:-\d+)?\b/iu.test(
 			value,
 		);
-	const externalSource = /\bdoi:\S+|https?:\/\/\S+/i.test(value);
+	const externalSource = /\bdoi:\S+|https?:\/\/\S+/iu.test(value);
 	const externalAnchor =
-		/#[A-Za-z0-9._:-]+|\b(?:p{1,2}\.\s*|p{1,2}\s+|pages?\s+|§\s*|section\s+|table\s+|figure\s+|fig\.\s*)[A-Za-z0-9.-]+/i.test(
+		/#[A-Za-z0-9._:-]+|\b(?:p{1,2}\.\s*|p{1,2}\s+|pages?\s+|§\s*|section\s+|table\s+|figure\s+|fig\.\s*)[A-Za-z0-9.-]+/iu.test(
 			value,
 		);
 	return fileLine || (externalSource && externalAnchor);
 }
 
 function frozenReference(value: string): FrozenReference | undefined {
-	const match = value.match(/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/);
+	const match = value.match(/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/u);
 	const path = match?.[1]?.trim();
 	const digest = match?.[2];
 	return path === undefined || digest === undefined
@@ -621,7 +621,7 @@ function invalidTargetObservation(value: string): string | undefined {
 		return "Target-side observation must record a concrete observed consequence";
 	}
 	if (
-		/(?:\bdonor\b|\bsource(?:-side)?\b).{0,80}(?:succeed|success|worked|support|confirm|validat|establish)|(?:succeed|success|worked|support|confirm|validat|establish).{0,80}(?:\bdonor\b|\bsource(?:-side)?\b)/i.test(
+		/(?:\bdonor\b|\bsource(?:-side)?\b).{0,80}(?:succeed|success|worked|support|confirm|validat|establish)|(?:succeed|success|worked|support|confirm|validat|establish).{0,80}(?:\bdonor\b|\bsource(?:-side)?\b)/iu.test(
 			value,
 		)
 	) {
@@ -631,7 +631,7 @@ function invalidTargetObservation(value: string): string | undefined {
 }
 
 function invalidPrewrittenThreshold(value: string): string | undefined {
-	for (const match of value.matchAll(/\b(\d+)\s*(?:of|\/)\s*(\d+)\b/gi)) {
+	for (const match of value.matchAll(/\b(\d+)\s*(?:of|\/)\s*(\d+)\b/giu)) {
 		const numerator = Number(match[1]);
 		const denominator = Number(match[2]);
 		if (denominator === 0) {
@@ -641,13 +641,13 @@ function invalidPrewrittenThreshold(value: string): string | undefined {
 			return "Prewritten threshold ratio cannot exceed its denominator";
 		}
 	}
-	const passBoundary = /\bPASS\b.{0,40}\b(?:when|if)\b/i.test(value);
+	const passBoundary = /\bPASS\b.{0,40}\b(?:when|if)\b/iu.test(value);
 	const numericBoundary =
-		/(?:[<>]=?|≥|≤|=)\s*\d|\b(?:at least|at most|more than|less than|fewer than|no more than|no fewer than|exactly)\s+\d|\b\d+\s*(?:of|\/)\s*\d+|\b\d+(?:\.\d+)?%/i.test(
+		/(?:[<>]=?|≥|≤|=)\s*\d|\b(?:at least|at most|more than|less than|fewer than|no more than|no fewer than|exactly)\s+\d|\b\d+\s*(?:of|\/)\s*\d+|\b\d+(?:\.\d+)?%/iu.test(
 			value,
 		);
 	const precommitted =
-		/\b(?:before|prior to|pre[- ]?(?:registered|committed|written))\b|事前/i.test(
+		/\b(?:before|prior to|pre[- ]?(?:registered|committed|written))\b|事前/iu.test(
 			value,
 		);
 	if (!(passBoundary && numericBoundary && precommitted)) {
@@ -659,7 +659,7 @@ function invalidPrewrittenThreshold(value: string): string | undefined {
 type NumericRatio = Readonly<{ denominator: number; numerator: number }>;
 
 function numericRatio(value: string): NumericRatio | undefined {
-	const match = value.match(/\b(\d+)\s*(?:of|\/)\s*(\d+)\b/i);
+	const match = value.match(/\b(\d+)\s*(?:of|\/)\s*(\d+)\b/iu);
 	if (match?.[1] === undefined || match[2] === undefined) return undefined;
 	return { denominator: Number(match[2]), numerator: Number(match[1]) };
 }
@@ -681,19 +681,19 @@ function invalidThresholdApplication(
 	const boundaryValue = boundary.numerator / boundary.denominator;
 	const observedValue = observed.numerator / observed.denominator;
 	let passes: boolean | undefined;
-	if (/\b(?:at least|no fewer than)\b|(?:≥|>=)/i.test(prewrittenThreshold)) {
+	if (/\b(?:at least|no fewer than)\b|(?:≥|>=)/iu.test(prewrittenThreshold)) {
 		passes = observedValue >= boundaryValue;
-	} else if (/\bmore than\b|(?:^|[^<])>(?!=)/i.test(prewrittenThreshold)) {
+	} else if (/\bmore than\b|(?:^|[^<])>(?!=)/iu.test(prewrittenThreshold)) {
 		passes = observedValue > boundaryValue;
 	} else if (
-		/\b(?:at most|no more than)\b|(?:≤|<=)/i.test(prewrittenThreshold)
+		/\b(?:at most|no more than)\b|(?:≤|<=)/iu.test(prewrittenThreshold)
 	) {
 		passes = observedValue <= boundaryValue;
 	} else if (
-		/\b(?:less than|fewer than)\b|(?:^|[^>])<(?!=)/i.test(prewrittenThreshold)
+		/\b(?:less than|fewer than)\b|(?:^|[^>])<(?!=)/iu.test(prewrittenThreshold)
 	) {
 		passes = observedValue < boundaryValue;
-	} else if (/\bexactly\b/i.test(prewrittenThreshold)) {
+	} else if (/\bexactly\b/iu.test(prewrittenThreshold)) {
 		passes = observedValue === boundaryValue;
 	}
 	if (passes === undefined) {
@@ -709,8 +709,8 @@ function markdownCells(line: string): readonly string[] {
 	const trimmed = line.trim();
 	if (!trimmed.startsWith("|")) return [];
 	return trimmed
-		.replace(/^\|/, "")
-		.replace(/\|$/, "")
+		.replace(/^\|/u, "")
+		.replace(/\|$/u, "")
 		.split("|")
 		.map((cell) => cell.trim());
 }
@@ -722,38 +722,38 @@ type DonorReference = Readonly<{
 }>;
 
 function sourceIdentity(locator: string): string | undefined {
-	const doi = locator.match(/\bdoi:\s*(10\.\d{4,9}\/[A-Z0-9._;()/:+-]+)/i)?.[1];
+	const doi = locator.match(/\bdoi:\s*(10\.\d{4,9}\/[A-Z0-9._;()/:+-]+)/iu)?.[1];
 	if (doi !== undefined) return `doi:${doi.toLowerCase()}`;
 
-	const url = locator.match(/https?:\/\/[^\s,;]+/i)?.[0];
+	const url = locator.match(/https?:\/\/[^\s,;]+/iu)?.[0];
 	if (url !== undefined) {
 		return `url:${url
-			.replace(/[#?].*$/, "")
-			.replace(/[.)]+$/, "")
+			.replace(/[#?].*$/u, "")
+			.replace(/[.)]+$/u, "")
 			.toLowerCase()}`;
 	}
 
 	const file = locator.match(
-		/(?:^|[\s;])([\w./-]+\.(?:md|txt|json|jsonl|csv|tsv|log|pdf)):\d+(?:-\d+)?\b/i,
+		/(?:^|[\s;])([\w./-]+\.(?:md|txt|json|jsonl|csv|tsv|log|pdf)):\d+(?:-\d+)?\b/iu,
 	)?.[1];
 	return file === undefined ? undefined : `file:${file.toLowerCase()}`;
 }
 
 function donorReferencesFromSet(text: string): readonly DonorReference[] {
-	const lines = text.split(/\r?\n/);
+	const lines = text.split(/\r?\n/u);
 	const headerIndex = lines.findIndex(
 		(line) => markdownCells(line)[0]?.toLowerCase() === "donor id",
 	);
 	if (headerIndex === -1) return [];
 	const references: DonorReference[] = [];
 	for (const line of lines.slice(headerIndex + 1)) {
-		if (/^\s*#{1,6}\s+/.test(line)) break;
+		if (/^\s*#{1,6}\s+/u.test(line)) break;
 		const cells = markdownCells(line);
-		if (cells.length === 0 || cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+		if (cells.every((cell) => /^:?-{3,}:?$/u.test(cell))) {
 			continue;
 		}
 		const id = cells[0]?.trim();
-		const locator = cells[1]?.replace(/\s+/g, " ").trim();
+		const locator = cells[1]?.replaceAll(/\s+/gu, " ").trim();
 		if (
 			id !== undefined &&
 			id !== "" &&
@@ -767,9 +767,10 @@ function donorReferencesFromSet(text: string): readonly DonorReference[] {
 }
 
 function mentionsStableId(value: string, id: string): boolean {
-	const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const escaped = id.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 	return new RegExp(
 		`(?:^|[^A-Za-z0-9._-])${escaped}(?:$|[^A-Za-z0-9._-])`,
+		"u",
 	).test(value);
 }
 
@@ -777,9 +778,9 @@ function parseTargetResultBundle(text: string): Readonly<{
 	findings: readonly string[];
 	results: readonly TargetResult[];
 }> {
-	const lines = text.split(/\r?\n/);
+	const lines = text.split(/\r?\n/u);
 	const starts = lines.flatMap((line, index) =>
-		/^\s*##\s+TARGET RESULT(?:\s+\[[^\]]+\]|\s+[A-Za-z][A-Za-z0-9._-]*)?\s*$/i.test(
+		/^\s*##\s+TARGET RESULT(?:\s+\[[^\]]+\]|\s+[A-Za-z][A-Za-z0-9._-]*)?\s*$/iu.test(
 			line,
 		)
 			? [index]
@@ -801,7 +802,7 @@ function parseTargetResultBundle(text: string): Readonly<{
 	for (const start of starts) {
 		const relativeEnd = lines
 			.slice(start + 1)
-			.findIndex((line) => /^\s*#{1,6}\s+/.test(line));
+			.findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
 		const end = relativeEnd === -1 ? lines.length : start + 1 + relativeEnd;
 		const section = lines.slice(start + 1, end);
 		for (const label of duplicateFields(section, labels)) {
@@ -810,17 +811,17 @@ function parseTargetResultBundle(text: string): Readonly<{
 		const values = new Map(
 			labels.map((label) => [label, readField(section, label)] as const),
 		);
-		for (const label of labels) {
+		labels.forEach((label) => {
 			const value = values.get(label);
 			if (value === undefined || placeholder(value)) {
 				findings.push(`${label}: required in TARGET RESULT`);
 			}
-		}
+		});
 
 		const candidateId = values.get("Candidate ID");
 		if (
 			candidateId === undefined ||
-			!/^[A-Za-z][A-Za-z0-9._-]*$/.test(candidateId)
+			!/^[A-Za-z][A-Za-z0-9._-]*$/u.test(candidateId)
 		) {
 			findings.push("Candidate ID must be a stable ID in TARGET RESULT");
 			continue;
@@ -845,7 +846,7 @@ function parseTargetResultBundle(text: string): Readonly<{
 			);
 		}
 		const thresholdToken = thresholdResult.match(
-			/^(PASS|FAIL)\s*(?:—|–|:|\s-\s)\s*\S.+$/,
+			/^(PASS|FAIL)\s*(?:—|–|:|\s-\s)\s*\S.+$/u,
 		)?.[1];
 		const thresholdVerdict =
 			thresholdToken === "PASS" || thresholdToken === "FAIL"
@@ -864,8 +865,8 @@ function parseTargetResultBundle(text: string): Readonly<{
 		if (applicationFailure !== undefined) findings.push(applicationFailure);
 		const mappingRequest = values.get("Mapping assessment request") ?? "";
 		if (
-			!/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/i.test(mappingRequest) &&
-			!/^forging-novel-theses\s*(?:—|–|:|\s-\s)\s*\S.+$/i.test(mappingRequest)
+			!/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(mappingRequest) &&
+			!/^forging-novel-theses\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(mappingRequest)
 		) {
 			findings.push(
 				`TARGET RESULT ${candidateId} Mapping assessment request must be NONE or forging-novel-theses with a reason`,
@@ -873,20 +874,20 @@ function parseTargetResultBundle(text: string): Readonly<{
 		}
 		const handoff = values.get("Handoff") ?? "";
 		const preservesBreaks =
-			/preserv(?:e|es|ed|ing)\s+(?:all|every)\s+(?:existing\s+)?MAPPING-BREAK(?:\s+IDs?)?/i.test(
+			/preserv(?:e|es|ed|ing)\s+(?:all|every)\s+(?:existing\s+)?MAPPING-BREAK(?:\s+IDs?)?/iu.test(
 				handoff,
 			);
 		const destroysBreaks =
-			/(?:discard|delete|drop|omit|remove|suppress).{0,60}MAPPING-BREAK|MAPPING-BREAK.{0,60}(?:discard|delete|drop|omit|remove|suppress)/i.test(
+			/(?:discard|delete|drop|omit|remove|suppress).{0,60}MAPPING-BREAK|MAPPING-BREAK.{0,60}(?:discard|delete|drop|omit|remove|suppress)/iu.test(
 				handoff,
 			);
 		const negatesPreservation =
-			/(?:\b(?:do\s+not|don't|never|without|cannot|can't|fail(?:s|ed)?\s+to)\b.{0,40}\bpreserv|\bpreserv.{0,80}\b(?:except|unless|but\s+not)\b)/i.test(
+			/(?:\b(?:do\s+not|don't|never|without|cannot|can't|fail(?:s|ed)?\s+to)\b.{0,40}\bpreserv|\bpreserv.{0,80}\b(?:except|unless|but\s+not)\b)/iu.test(
 				handoff,
 			);
 		if (
-			!/directing-research/i.test(handoff) ||
-			!/TRANSFER DISPOSITION/i.test(handoff) ||
+			!/directing-research/iu.test(handoff) ||
+			!/TRANSFER DISPOSITION/iu.test(handoff) ||
 			!preservesBreaks ||
 			destroysBreaks ||
 			negatesPreservation
@@ -922,11 +923,11 @@ function parseTargetResultBundle(text: string): Readonly<{
 function parseDecisions(
 	value: string,
 ): ReadonlyMap<string, "ADOPT" | "REOPEN" | "RETIRE" | "TEST"> | undefined {
-	if (/^NONE\s*(?:—|–|:|\s-\s)/.test(value)) return new Map();
+	if (/^NONE\s*(?:—|–|:|\s-\s)/u.test(value)) return new Map();
 	const decisions = new Map<string, "ADOPT" | "REOPEN" | "RETIRE" | "TEST">();
-	for (const item of value.split(/\s*;\s*/)) {
+	for (const item of value.split(/\s*;\s*/u)) {
 		const match = item.match(
-			/^([A-Za-z][A-Za-z0-9._-]*)\s*=\s*(ADOPT|REOPEN|RETIRE|TEST)$/,
+			/^([A-Za-z][A-Za-z0-9._-]*)\s*=\s*(ADOPT|REOPEN|RETIRE|TEST)$/u,
 		);
 		if (match === null || match[1] === undefined || match[2] === undefined) {
 			return undefined;
@@ -953,7 +954,7 @@ async function validateTransferDisposition(
 	targetResultPath: string | undefined,
 ): Promise<number> {
 	const dispositionHeadings = [
-		...text.matchAll(/^\s*#{1,6}\s+TRANSFER DISPOSITION\s*$/gim),
+		...text.matchAll(/^\s*#{1,6}\s+TRANSFER DISPOSITION\s*$/gimu),
 	];
 	if (dispositionHeadings.length > 1) {
 		report("R14  FAIL     duplicate TRANSFER DISPOSITION section");
@@ -969,7 +970,7 @@ async function validateTransferDisposition(
 		report("R14  FAIL     Transfer bundle is blank, missing, or a placeholder");
 		return 1;
 	}
-	if (/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/.test(bundleField)) {
+	if (/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/u.test(bundleField)) {
 		if (
 			transferBundlePath !== undefined ||
 			donorSetPath !== undefined ||
@@ -1019,7 +1020,7 @@ async function validateTransferDisposition(
 		transferReport(`TRANSFER DISPOSITION has duplicate field ${field}`);
 	}
 	const referenceMatch = bundleField.match(
-		/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/,
+		/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/u,
 	);
 	const declaredPath = referenceMatch?.[1]?.trim();
 	const declaredDigest = referenceMatch?.[2];
@@ -1062,18 +1063,18 @@ async function validateTransferDisposition(
 		);
 	} else {
 		const declared = new Set(denominator);
-		for (const attempt of parsed.attempts) {
+		parsed.attempts.forEach((attempt) => {
 			if (!declared.has(attempt.id)) {
 				transferReport(
 					`transfer disposition omits bundle attempt ${attempt.id} (${attempt.kind})`,
 				);
 			}
-		}
-		for (const id of declared) {
+		});
+		declared.forEach((id) => {
 			if (!actual.has(id)) {
 				transferReport(`Attempt denominator names absent bundle attempt ${id}`);
 			}
-		}
+		});
 	}
 
 	const breakIds = parsed.attempts
@@ -1087,20 +1088,20 @@ async function validateTransferDisposition(
 		);
 	} else {
 		const preservedSet = new Set(preserved);
-		for (const id of breakIds) {
+		breakIds.forEach((id) => {
 			if (!preservedSet.has(id)) {
 				transferReport(
 					`MAPPING-BREAK ${id} is absent from the preserved-break list`,
 				);
 			}
-		}
-		for (const id of preservedSet) {
+		});
+		preservedSet.forEach((id) => {
 			if (!breakIds.includes(id)) {
 				transferReport(
 					`preserved MAPPING-BREAK ID is absent from the frozen transfer bundle: ${id}`,
 				);
 			}
-		}
+		});
 	}
 
 	const decisionsValue = readField(lines, "Candidate disposition");
@@ -1114,18 +1115,18 @@ async function validateTransferDisposition(
 			"Candidate disposition must use ID=TEST|REOPEN|ADOPT|RETIRE or precise NONE",
 		);
 	} else {
-		for (const candidate of candidates) {
+		candidates.forEach((candidate) => {
 			if (!decisions.has(candidate.id)) {
 				transferReport(`candidate ${candidate.id} has no disposition`);
 			}
-		}
-		for (const id of decisions.keys()) {
+		});
+		decisions.forEach((_decision, id) => {
 			if (!candidates.some((candidate) => candidate.id === id)) {
 				transferReport(
 					`candidate disposition names non-candidate attempt ${id}`,
 				);
 			}
-		}
+		});
 	}
 
 	for (const label of [
@@ -1148,7 +1149,7 @@ async function validateTransferDisposition(
 		.filter(([, decision]) => decision === "ADOPT" || decision === "RETIRE")
 		.map(([id]) => id);
 	const targetResultReference = targetEvidence.match(
-		/^TARGET RESULT\s*(?:—|–|:|\s-\s)\s*path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/i,
+		/^TARGET RESULT\s*(?:—|–|:|\s-\s)\s*path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/iu,
 	);
 	if (targetResultDecisionIds.length > 0 && targetResultPath === undefined) {
 		transferReport("ADOPT or RETIRE requires --target-result <path>");
@@ -1158,7 +1159,8 @@ async function validateTransferDisposition(
 			"ADOPT or RETIRE requires TARGET RESULT — path=<locus>; sha256=<digest>; donor-side support is insufficient",
 		);
 	}
-	if (targetResultPath !== undefined) {
+	const verifyTargetResults = async (): Promise<void> => {
+		if (targetResultPath === undefined) return;
 		if (!existsSync(targetResultPath)) {
 			throw new Error(`target result not found: ${targetResultPath}`);
 		}
@@ -1192,7 +1194,7 @@ async function validateTransferDisposition(
 			const resultIds = new Set(
 				parsedResults.results.map((result) => result.candidateId),
 			);
-			for (const result of parsedResults.results) {
+			parsedResults.results.forEach((result) => {
 				const attempt = actual.get(result.candidateId);
 				if (attempt === undefined || attempt.kind !== "CANDIDATE") {
 					transferReport(
@@ -1214,7 +1216,7 @@ async function validateTransferDisposition(
 				if (
 					donorReferences.some((reference) =>
 						result.observationLocus
-							.replace(/\s+/g, " ")
+							.replaceAll(/\s+/gu, " ")
 							.trim()
 							.includes(reference.locator),
 					)
@@ -1234,13 +1236,13 @@ async function validateTransferDisposition(
 						`TARGET RESULT ${result.candidateId} observation locus reuses frozen donor source identity`,
 					);
 				}
-				for (const reference of donorReferences) {
+				donorReferences.forEach((reference) => {
 					if (mentionsStableId(result.targetObservation, reference.id)) {
 						transferReport(
 							`Target-side observation mentions frozen donor ID ${reference.id}`,
 						);
 					}
-				}
+				});
 				if (
 					decisions?.get(result.candidateId) === "ADOPT" &&
 					result.thresholdVerdict !== "PASS"
@@ -1251,7 +1253,7 @@ async function validateTransferDisposition(
 				}
 				if (
 					decisions?.get(result.candidateId) === "ADOPT" &&
-					!/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/i.test(
+					!/^NONE\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(
 						result.mappingAssessmentRequest,
 					)
 				) {
@@ -1259,31 +1261,32 @@ async function validateTransferDisposition(
 						`ADOPT requires Mapping assessment request: NONE for candidate ${result.candidateId}`,
 					);
 				}
-			}
-			for (const id of targetResultDecisionIds) {
+			});
+			targetResultDecisionIds.forEach((id) => {
 				if (!resultIds.has(id)) {
 					transferReport(`candidate ${id} has no frozen TARGET RESULT`);
 				}
-			}
+			});
 			if (failures === beforeTargetResult) {
 				report(
 					`R14  PASS     frozen TARGET RESULT verified: sha256=${actualResultDigest} candidates=${resultIds.size}`,
 				);
 			}
 		}
-	}
+	};
+	await verifyTargetResults();
 	if (decisionValues.includes("TEST")) {
 		if (
-			!/^UNTESTED\s*(?:—|–|:|\s-\s)/.test(targetEvidence) ||
-			!/prediction registry=/i.test(targetEvidence) ||
-			!/handoff=/i.test(targetEvidence)
+			!/^UNTESTED\s*(?:—|–|:|\s-\s)/u.test(targetEvidence) ||
+			!/prediction registry=/iu.test(targetEvidence) ||
+			!/handoff=/iu.test(targetEvidence)
 		) {
 			transferReport(
 				"TEST requires an UNTESTED target prediction registry and target-side test handoff",
 			);
 		}
-		for (const [id, decision] of decisions ?? []) {
-			if (decision !== "TEST") continue;
+		decisions?.forEach((decision, id) => {
+			if (decision !== "TEST") return;
 			const candidate = actual.get(id);
 			if (
 				placeholder(candidate?.prediction ?? "") ||
@@ -1293,26 +1296,23 @@ async function validateTransferDisposition(
 					`TEST requires candidate ${id} prediction and alternative discriminator`,
 				);
 			}
-		}
+		});
 	}
-	if (decisionValues.includes("RETIRE")) {
-		if (
-			!/tested|mapping family|transfer boundary|検証|写像.*族|境界/i.test(
-				action,
-			)
-		) {
+	if (
+		decisionValues.includes("RETIRE") &&
+		!/tested|mapping family|transfer boundary|検証|写像.*族|境界/iu.test(action)
+	) {
 			transferReport(
 				"RETIRE must name the tested mapping family or transfer boundary",
 			);
-		}
 	}
 
 	if (candidates.length === 0) {
 		if (
 			decisions === undefined ||
-			decisions.size !== 0 ||
-			!/^NONE\s*(?:—|–|:|\s-\s)/.test(targetEvidence) ||
-			!/^REOPEN\s*(?:—|–|:|\s-\s)/.test(action)
+			decisions.size > 0 ||
+			!/^NONE\s*(?:—|–|:|\s-\s)/u.test(targetEvidence) ||
+			!/^REOPEN\s*(?:—|–|:|\s-\s)/u.test(action)
 		) {
 			transferReport(
 				"all-MAPPING-BREAK bundles require NONE candidate disposition and explicit REOPEN",
@@ -1408,11 +1408,11 @@ async function main(): Promise<void> {
 	const slots: Partial<Record<SlotName, string>> = {};
 	const { donorSetPath, targetResultPath, text, transferBundlePath } =
 		await readInput();
-	for (const line of text.split(/\r?\n/)) {
-		for (const [name, pattern] of labelMatchers) {
+	for (const line of text.split(/\r?\n/u)) {
+		labelMatchers.forEach(([name, pattern]) => {
 			if (slots[name] === undefined && pattern.test(line))
 				slots[name] = valueAfterLabel(line);
-		}
+		});
 	}
 
 	const checks: Check[] = [
@@ -1521,7 +1521,7 @@ async function main(): Promise<void> {
 	}
 }
 
-main().catch((error) => {
+await main().catch((error) => {
 	process.stderr.write(
 		`FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
 	);

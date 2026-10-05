@@ -21,7 +21,7 @@ export function runHook(
     input: typeof payload === "string" ? payload : JSON.stringify(payload),
     encoding: "utf8",
     env: { ...process.env, CLAUDE_HOOK_QUIET: "1", ...env },
-    ...(cwd ? { cwd } : {}),
+    ...(cwd !== undefined && cwd !== "" ? { cwd } : {}),
   });
   return { code: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }

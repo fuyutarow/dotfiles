@@ -40,9 +40,10 @@ const DETAIL_CAP = 80;
 
 // A prompt this process can never answer, because it gave the child no stdin and no terminal.
 const PROMPT =
-  /\[y\/n\]|\(y\/n\)|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|press any key|press enter|continue\?|are you sure|overwrite\?|^\s*\?\s+\S/im;
+  /\[y\/n\]|\(y\/n\)|\[Y\/n\]|\[y\/N\]|\(yes\/no\)|press any key|press enter|continue\?|are you sure|overwrite\?|^\s*\?\s+\S/imu;
 const ANSI_ESCAPE = new RegExp(
-  `${String.fromCharCode(0x1b)}\\[[0-9;]*[A-Za-z]`,
+  `${String.fromCodePoint(0x1b)}\\[[0-9;]*[A-Za-z]`,
+  "u",
 );
 
 function inspect(
@@ -92,7 +93,7 @@ function inspect(
   }
 
   // F4 CR-FLOOD — a spinner or progress bar rendering into a captured transcript.
-  const carriageReturns = (stdout.match(/\r/g) ?? []).length;
+  const carriageReturns = (stdout.match(/\r/gu) ?? []).length;
   if (carriageReturns > 5) {
     findings.push({
       level: "WARN",
@@ -142,7 +143,7 @@ async function main(): Promise<void> {
   // otherwise. Measured against bun 1.3.14 / Cleye 2.6.0, 2026-08-02.
   const raw = Bun.argv.slice(2);
   const argv =
-    raw.length > 0 && !raw[0]?.startsWith("-") ? ["--", ...raw] : raw;
+    raw.length > 0 && raw[0]?.startsWith("-") !== true ? ["--", ...raw] : raw;
 
   const parsed = cli(
     {
@@ -175,7 +176,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (Bun.which(command[0] ?? "") === null && !command[0]?.includes("/")) {
+  if (Bun.which(command[0] ?? "") === null && command[0]?.includes("/") !== true) {
     process.stderr.write(`FATAL: command not found on PATH: ${command[0]}\n`);
     process.exitCode = 2;
     return;
@@ -243,7 +244,7 @@ async function main(): Promise<void> {
     : 0;
 }
 
-main().catch((error: unknown) => {
+await main().then(undefined, (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`FATAL: ${message}\n`);
   process.exit(2);

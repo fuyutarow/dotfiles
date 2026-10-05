@@ -53,7 +53,7 @@ function allow(sessionTitle: string, additionalContext: string | null): never {
     hookEventName: "UserPromptSubmit",
     sessionTitle,
   };
-  if (additionalContext)
+  if (additionalContext !== null && additionalContext !== "")
     hookSpecificOutput.additionalContext = additionalContext;
   console.log(JSON.stringify({ hookSpecificOutput }));
   process.exit(0);
@@ -65,11 +65,11 @@ const r = await attempt(async () => {
   const prompt = strAt(payload, "prompt") ?? "";
   const cwd = strAt(payload, "cwd") ?? process.cwd();
 
-  const m = prompt.trim().match(/^\/assign(?:\s+(\S+))?/);
-  if (!m) process.exit(0); // not an /assign invocation -> silent pass, zero cost
+  const m = prompt.trim().match(/^\/assign(?:\s+(\S+))?/u);
+  if (m === null) process.exit(0); // not an /assign invocation -> silent pass, zero cost
 
   const role = m[1];
-  if (!role) {
+  if (role === undefined || role === "") {
     block('usage: /assign <role>  (e.g. "/assign obs")');
   }
   if (!isValidRole(role)) {

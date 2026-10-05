@@ -14,6 +14,11 @@ type CorpusEntry = Readonly<{
 
 const CORPUS = [
   { path: "agents/goal-kernel/cli.ts" },
+  { path: "agents/routing-control/agent-router.ts" },
+  { path: "agents/skills/driving-codex/scripts/codex-run.ts" },
+  { path: "scripts/render-oxlintrc.ts" },
+  { path: "scripts/render-roster.ts" },
+  { path: "scripts/vendor-deps.ts" },
   { path: "agents/models/check-releases.ts" },
   { path: "agents/research-control/cli.ts" },
   { path: "agents/resource-control/agent-resource-run.ts" },
@@ -101,7 +106,7 @@ function run(entry: CorpusEntry, argv: string[]) {
     [
       "bun",
       join(ROOT, entry.path),
-      ...(entry.command ? [entry.command] : []),
+      ...(entry.command !== undefined && entry.command !== "" ? [entry.command] : []),
       ...argv,
     ],
     {
@@ -116,27 +121,33 @@ function run(entry: CorpusEntry, argv: string[]) {
   );
 }
 
+async function productionCleyeImportsIn(base: string): Promise<string[]> {
+  const paths: string[] = [];
+  const glob = new Bun.Glob("**/*.ts");
+  for await (const file of glob.scan({
+    cwd: join(ROOT, base),
+    onlyFiles: true,
+  })) {
+    const path = `${base}/${file}`;
+    if (path.includes("/tests/")) continue;
+    const source = await Bun.file(join(ROOT, path)).text();
+    if (/\bfrom\s+["']cleye["']/u.test(source)) paths.push(path);
+  }
+  return paths;
+}
+
 async function productionCleyeImports(): Promise<string[]> {
   const paths: string[] = [];
   for (const base of ["agents", "cocoindex", "scripts"] as const) {
-    const glob = new Bun.Glob("**/*.ts");
-    for await (const file of glob.scan({
-      cwd: join(ROOT, base),
-      onlyFiles: true,
-    })) {
-      const path = `${base}/${file}`;
-      if (path.includes("/tests/")) continue;
-      const source = await Bun.file(join(ROOT, path)).text();
-      if (/\bfrom\s+["']cleye["']/.test(source)) paths.push(path);
-    }
+    paths.push(...(await productionCleyeImportsIn(base)));
   }
-  return paths.sort();
+  return paths.toSorted();
 }
 
 describe("production Cleye corpus boundary", () => {
   test("the declared corpus exactly covers every production Cleye import", async () => {
     expect(await productionCleyeImports()).toEqual(
-      CORPUS.map((entry) => entry.path).sort(),
+      CORPUS.map((entry) => entry.path).toSorted(),
     );
   });
 

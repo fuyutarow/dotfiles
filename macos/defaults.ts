@@ -147,7 +147,7 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((e: unknown) => {
+await main().catch((e: unknown) => {
   const msg = e instanceof Error ? e.message : String(e);
   process.stderr.write(`FATAL: ${msg}\n`);
   process.exit(2);

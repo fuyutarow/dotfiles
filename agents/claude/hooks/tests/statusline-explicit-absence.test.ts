@@ -20,8 +20,8 @@ import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
 import { tempDir, tempHome } from "./helpers.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "..", "statusline-command.ts");
-const ESC = String.fromCharCode(27); // not a literal \u001b: the pattern then has no control character
-const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const ESC = String.fromCodePoint(27); // not a literal \u001b: the pattern then has no control character
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const nowMs = (): number => Temporal.Now.instant().epochMilliseconds;
 // The hung-nvidia-smi cases spend a full 2 s bound per render (and two renders in a few); bun's
 // 5 s default would make them fail on a loaded host, which is the very condition under test.
@@ -91,8 +91,9 @@ function seedCache(home: string, file: string, cache: unknown): void {
   mkdirSync(join(home, ".cache", "claude"), { recursive: true });
   writeFileSync(join(home, ".cache", "claude", file), JSON.stringify(cache));
 }
-const seedGpuCache = (home: string, cache: unknown): void =>
+const seedGpuCache = (home: string, cache: unknown): void => {
   seedCache(home, "statusline-gpu.json", cache);
+};
 // Read back a cache file the statusline wrote, parsed by a schema (never an annotation): a file
 // of the wrong shape fails the test with zod's message instead of a confusing `undefined`.
 function readCache<S extends z.ZodType>(
@@ -103,6 +104,21 @@ function readCache<S extends z.ZodType>(
   const raw = readFileSync(join(home, ".cache", "claude", file), "utf8");
   return jsonOf(schema).parse(raw);
 }
+
+function writeClaudeJson(home: string, body: string): void {
+  writeFileSync(join(home, ".claude.json"), body);
+}
+
+function countingGpu(log: string, body: string): string {
+  return `echo run >> '${log}'\n${body}`;
+}
+
+function invocations(log: string): number {
+  return existsSync(log)
+    ? readFileSync(log, "utf8").split("\n").filter(Boolean).length
+    : 0;
+}
+
 // What a concurrent reader would see: no file yet, a whole JSON document, or half of one.
 function cacheFileState(path: string): "missing" | "valid" | "torn" {
   const read = fromThrowable(() => readFileSync(path, "utf8"))();
@@ -266,7 +282,7 @@ describe("statusline Sys row: VRAM", () => {
       renderSettled({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
     );
     expect(row).toContain("VRAM 29% (3.5/12.0G)");
-    expect(row).toMatch(/stale (9[0-9])s \(nvidia-smi exit 9\)/);
+    expect(row).toMatch(/stale (9[0-9])s \(nvidia-smi exit 9\)/u);
   });
 
   test("a last-good under 60 s old is shown plainly: that age is the normal case, not news", () => {
@@ -371,7 +387,7 @@ describe("statusline Sys row: every reading is present", () => {
         vm_stat: vmStat.map((l) => `echo '${l}'`).join("\n"),
       });
       expect(sysRow(render({ bin }).text)).toMatch(
-        /RAM \d+% \(3\.0\/\d+\.\dG\)/,
+        /RAM \d+% \(3\.0\/\d+\.\dG\)/u,
       );
     },
   );
@@ -392,7 +408,9 @@ describe("statusline Sys row: every reading is present", () => {
   test.skipIf(!HAS_CPU)("the second render has a CPU number", () => {
     const home = tempHome();
     render({ home, bin: binWith({}) });
-    expect(sysRow(render({ home, bin: binWith({}) }).text)).toMatch(/CPU \d+%/);
+    expect(sysRow(render({ home, bin: binWith({}) }).text)).toMatch(
+      /CPU \d+%/u,
+    );
   });
 
   test.skipIf(!HAS_CPU)(
@@ -531,9 +549,6 @@ describe("statusline repo line: branch", () => {
 });
 
 describe("statusline identity and model caps", () => {
-  const writeClaudeJson = (home: string, body: string): void =>
-    writeFileSync(join(home, ".claude.json"), body);
-
   test("an unreadable ~/.claude.json makes the account and model caps n/a, not absent", () => {
     // tempHome() has no ~/.claude.json
     const text = render({
@@ -611,7 +626,7 @@ describe("statusline resource bounds", () => {
       const took = nowMs() - started;
       expect(took).toBeLessThan(6000); // budget 4 s + herdr + process start; unbudgeted ≥ 9 s
       expect(text).toContain("name n/a (claude agents timeout 3000ms)");
-      expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/);
+      expect(text).toMatch(/branch n\/a \(git timeout \d+ms\)/u);
       expect(text).toContain(
         "scan n/a (ps not run, render budget 4000ms spent)",
       );
@@ -639,8 +654,6 @@ describe("statusline resource bounds", () => {
           cwd: tempDir("slcwd-"),
         }),
       );
-      let alive = procs.length;
-      for (const p of procs) void p.exited.then(() => (alive -= 1));
       // Poll every cache file while the writers run; a file that exists must always be whole.
       const poll = (): number => {
         const states = files
@@ -650,10 +663,11 @@ describe("statusline resource bounds", () => {
         return states.length;
       };
       let reads = 0;
-      while (alive > 0) {
+      while (procs.some((p) => p.exitCode === null)) {
         reads += poll();
         await Bun.sleep(1);
       }
+      await Promise.all(procs.map((p) => p.exited));
       expect(reads).toBeGreaterThan(0);
       const left = readdirSync(cacheDir).filter((n) => n.endsWith(".tmp"));
       expect(left).toEqual([]);
@@ -662,13 +676,6 @@ describe("statusline resource bounds", () => {
   );
 
   // O3: at most one nvidia-smi in flight host-wide. `invocations` counts what the fake was asked.
-  const countingGpu = (log: string, body: string): string =>
-    `echo run >> '${log}'\n${body}`;
-  const invocations = (log: string): number =>
-    existsSync(log)
-      ? readFileSync(log, "utf8").split("\n").filter(Boolean).length
-      : 0;
-
   test(
     "O3: six concurrent renders start exactly one nvidia-smi; each says it is sampling",
     async () => {
@@ -694,7 +701,7 @@ describe("statusline resource bounds", () => {
       waitForSampler(home);
       expect(invocations(log)).toBe(1);
       // Every session names what it is waiting for — none is silent about VRAM.
-      for (const r of outputs.map(sysRow)) {
+      for (const r of outputs.map((output) => sysRow(output))) {
         expect(r).toContain("VRAM n/a (sampling in progress)");
       }
       // One refresh later every session reads the one shared sample.

@@ -223,7 +223,7 @@ async function runOpener(url: string, settle = settleMs): Promise<string> {
   const proc = spawned.value;
   const early = await Promise.race([
     proc.exited,
-    Bun.sleep(settle).then(() => undefined),
+    Bun.sleep(settle).then(() => {}),
   ]);
   if (early === undefined) {
     void proc.exited.then((code) => {
@@ -240,7 +240,7 @@ async function runOpener(url: string, settle = settleMs): Promise<string> {
 }
 
 // A Host alias as ssh/config spells one. Leading alnum, so it can never be read as an ssh option.
-const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
+const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/u;
 
 // What `ssh -G` RESOLVES an alias to: asking ssh keeps ssh/config the one place that says which
 // boxes may open folders here — a parse of our own would drift from ssh's Include/Match rules.
@@ -252,7 +252,14 @@ async function sshResolve(
   host: string,
   ms: number,
 ): Promise<Resolved | undefined> {
-  const cmd = ["ssh", "-G", ...(SSH_CONFIG ? ["-F", SSH_CONFIG] : []), host];
+  const cmd = [
+    "ssh",
+    "-G",
+    ...(SSH_CONFIG !== undefined && SSH_CONFIG !== ""
+      ? ["-F", SSH_CONFIG]
+      : []),
+    host,
+  ];
   const spawned = await attempt(() =>
     Bun.spawn(cmd, {
       stdout: "pipe",
@@ -282,29 +289,37 @@ async function sshResolve(
 // or `?` in a name stays part of the path; a file gets `:1` (open at line 1), the only suffix VS
 // Code's protocol handler reads as "a file, not a folder".
 const editorUrl = (host: string, path: string, kind: string): string =>
-  `vscode://vscode-remote/ssh-remote+${host}${path.split("/").map(encodeURIComponent).join("/")}${kind === "file" ? ":1" : ""}`;
+  `vscode://vscode-remote/ssh-remote+${host}${path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/")}${kind === "file" ? ":1" : ""}`;
 
-// Everything checkable without a token or a process. undefined = well-formed.
-function malformedPath(path: unknown, kind: unknown, host: unknown) {
+// Everything checkable without a token or a process. null = well-formed.
+function malformedPath(
+  path: unknown,
+  kind: unknown,
+  host: unknown,
+): string | null {
   if (
     typeof path !== "string" ||
     !path.startsWith("/") ||
     !path.isWellFormed() ||
     // A control character (C0 or DEL) by UTF-16 code unit; none is a surrogate half.
-    Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).some(
-      (c) => c < 0x20 || c === 0x7f,
-    )
+    Array.from(
+      { length: path.length },
+      (_, i) => path.codePointAt(i) ?? 0,
+    ).some((c) => c < 0x20 || c === 0x7f)
   )
     return "refused: path must be absolute";
   if (kind !== "file" && kind !== "dir")
     return "refused: kind must be file or dir";
   // VS Code would read the trailing :<digits> as a line number and open a file instead.
-  if (kind === "dir" && /:\d+$/.test(path))
+  if (kind === "dir" && /:\d+$/u.test(path))
     return "refused: a folder whose name ends in :<digits> cannot be opened by URL";
   if (typeof host !== "string" || host === "")
     return "refused: no ssh host (the remote's forward names no client alias)";
   if (!HOST.test(editorHost(host))) return "refused: not an ssh host alias";
-  return undefined;
+  return null;
 }
 
 async function handlePath(
@@ -313,7 +328,7 @@ async function handlePath(
   host: unknown,
 ): Promise<string> {
   const bad = malformedPath(path, kind, host);
-  if (bad !== undefined) return bad;
+  if (bad !== null) return bad;
   // Narrowed by malformedPath; restated for the type checker.
   const [p, k, h] = [String(path), String(kind), String(host)];
   if (!takeToken()) {
@@ -326,7 +341,7 @@ async function handlePath(
     sshResolve(h, settleMs),
     sshResolve(editor, settleMs),
   ]);
-  if (!attach?.forwardsHere) {
+  if (attach?.forwardsHere !== true) {
     note("unvouched host");
     return `refused: ${h} does not forward smart-open to this receiver`;
   }
@@ -358,7 +373,7 @@ async function handle(line: string): Promise<string> {
     return handlePath(msg["path"], msg["kind"], msg["host"]);
   const rawUrl = msg?.["url"];
   const url = typeof rawUrl === "string" ? rawUrl : "";
-  if (!/^https?:\/\/[^\s]+$/i.test(url)) return "refused: only http(s) URLs";
+  if (!/^https?:\/\/[^\s]+$/iu.test(url)) return "refused: only http(s) URLs";
   if (!takeToken()) {
     note("rate limit");
     return "busy: rate limit";

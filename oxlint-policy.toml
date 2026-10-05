@@ -1,0 +1,235 @@
+# oxlint-policy — the ONE home of this repo's TypeScript lint policy. `.oxlintrc.json` is GENERATED
+# from it by scripts/render-oxlintrc.ts (`mise run oxlint:render`); `mise run lint:oxlint-policy`
+# fails when the two differ, and tests/oxlint-policy.test.ts proves every custom rule fires on its
+# `bad` snippet and stays silent on its `good` one.
+#
+# No implicit default (owner, 2026-10-05: 「妥協なくstrict」): the plugins and every category level
+# are stated here. In the four quality categories every rule is an error unless it is listed under
+# [[off]] with the failure-or-cost reason it was judged on; restriction rules are opt-in, one by one,
+# under [[on]]. There is no warn level (a warning nobody must fix trains people to read past it),
+# no `overrides` and no disable comment (lint:ts-ratchet, lint:ts-no-disable).
+#
+# Every key is required where its table appears; the renderer's schema is strict, so a typo or an
+# unknown rule name fails the render (oxlint itself also rejects an unknown rule).
+
+schema = 1
+
+# oxlint's default plugin set, named so it cannot change under us on an upgrade.
+plugins = ["eslint", "typescript", "unicorn", "oxc"]
+
+# Loads ESLint's core rules into oxlint, for `no-restricted-syntax` (the [[custom]] kind "syntax").
+js_plugins = [{ name = "eslint-js", specifier = "oxlint-plugin-eslint" }]
+
+[categories]
+correctness = "error"
+suspicious = "error"
+pedantic = "error"
+perf = "error"
+restriction = "off" # opt-in rules only: see [[on]]
+style = "off"       # formatting is oxfmt's; naming style is not a failure
+nursery = "off"     # unstable rules
+
+[[ignore]]
+pattern = "node_modules"
+reason = "third-party code"
+
+[[ignore]]
+pattern = "archives"
+reason = "retired skills kept as reference, not maintained code"
+
+[[ignore]]
+pattern = "agents/claude/hooks/repo-retrieve.ts"
+reason = "a symlink oxlint resolves at the link path; the real file (agents/retrieval-control/repo-retrieve.ts) is linted"
+
+[[ignore]]
+pattern = "agents/hooks/vendor"
+reason = "generated dependency bundle (scripts/vendor-deps.ts)"
+
+# --- quality-category rules judged OFF (counts measured 2026-10-05, oxlint 1.82.0) ---------------
+
+[[off]]
+rule = "typescript/prefer-readonly-parameter-types"
+reason = "1109 hits. Requires DEEPLY readonly parameter types, which mutable library classes (Response, Subprocess, Bun.Glob) cannot satisfy, and disable comments are banned; revisit with a measured `allow` list."
+
+[[off]]
+rule = "eslint/max-lines-per-function"
+reason = "274 hits. A length threshold names no failure; nesting is limited by max-depth and size is a review judgment."
+
+[[off]]
+rule = "eslint/max-lines"
+reason = "70 hits. A file-length threshold names no failure."
+
+[[off]]
+rule = "eslint/max-classes-per-file"
+reason = "2 hits. A count threshold names no failure."
+
+[[off]]
+rule = "eslint/no-inline-comments"
+reason = "224 hits. The house style puts the reason for a constant or a branch on its own line."
+
+[[off]]
+rule = "eslint/no-await-in-loop"
+reason = "141 hits. The mechanical fix (Promise.all) runs deliberately serial work concurrently, which breaks resource admission (orchestrating-agents P7) and rate limits."
+
+[[off]]
+rule = "eslint/no-underscore-dangle"
+reason = "54 hits. Style: `_` marks intentionally unused bindings and foreign API names (`__proto__` guards)."
+
+[[off]]
+rule = "eslint/no-negated-condition"
+reason = "45 hits. Style; no failure prevented."
+
+[[off]]
+rule = "unicorn/no-negated-condition"
+reason = "45 hits. Style; no failure prevented (same as the eslint rule)."
+
+[[off]]
+rule = "eslint/sort-vars"
+reason = "8 hits. Style; no failure prevented."
+
+[[off]]
+rule = "eslint/no-redeclare"
+reason = "3 hits, all the house pattern of a zod schema and its type sharing one name (`const Row = z…; type Row = z.output<typeof Row>`); tsc already rejects a real redeclaration."
+
+[[off]]
+rule = "eslint/require-await"
+reason = "Duplicate of typescript/require-await, which is type-aware and stays on."
+
+[[off]]
+rule = "unicorn/require-module-specifiers"
+reason = "Flags `export {}`, the idiom that makes a script a module so its top-level names stay file-scoped; its autofix removed it from scripts/tests/fake-codex.ts and two fixtures then redeclared each other (observed 2026-10-05)."
+
+# --- options: a rule on by category, with its setting stated -------------------------------------
+
+[[option]]
+rule = "unicorn/no-useless-undefined"
+value = { checkArguments = false, checkArrowFunctionBody = true }
+reason = "An explicit `undefined` ARGUMENT is not useless under TypeScript: a required `T | undefined` parameter needs it (the autofix dropped such arguments and broke 60+ calls, observed 2026-10-05). `return undefined` and `= undefined` stay errors."
+
+[[option]]
+rule = "eslint/max-depth"
+value = 2
+reason = "Nesting beyond two blocks hides the control flow; flatten with early returns, lookup tables or a named helper."
+
+[[option]]
+rule = "typescript/strict-boolean-expressions"
+value = { allowString = false, allowNumber = false, allowNullableObject = false, allowNullableBoolean = false, allowNullableString = false, allowNullableNumber = false, allowAny = false }
+reason = "No implicit truthiness: an empty string, 0 and null/undefined are different cases and each is tested explicitly."
+
+# --- restriction rules turned ON one by one -------------------------------------------------------
+
+[[on]]
+rule = "typescript/no-explicit-any"
+reason = "`any` switches type checking off at the trust boundary; parse with zod instead."
+
+# --- custom bans: each carries its message and a bad/good pair the test lints --------------------
+# kind: global -> no-restricted-globals · syntax -> eslint-js/no-restricted-syntax (ESTree selector)
+#       import-path / import-pattern -> no-restricted-imports paths / patterns
+
+[[custom]]
+id = "no-date"
+kind = "global"
+target = "Date"
+since = "2026-10-03"
+message = "Date is banned: use Temporal (bun >= 1.4 ships it; mise.toml pins bun \"1.4\"; `mise run doctor` bun-floor guards the runtime)."
+bad = "export const t = Date.now();\n"
+good = "export const t = Temporal.Now.instant();\n"
+
+[[custom]]
+id = "no-switch"
+kind = "syntax"
+target = "SwitchStatement"
+since = "2026-10-03"
+message = "switch is banned: ts-pattern's match(..).exhaustive() where the file may import it, else an if/else chain or a lookup table."
+bad = "export function f(x: number): number {\n  switch (x) {\n    case 1:\n      return 1;\n    default:\n      return 0;\n  }\n}\n"
+good = "export function f(x: number): number {\n  return x === 1 ? 1 : 0;\n}\n"
+
+[[custom]]
+id = "no-nested-ternary"
+kind = "syntax"
+target = "ConditionalExpression ConditionalExpression"
+since = "2026-10-03"
+message = "nested ternaries are banned: one level max; beyond that ts-pattern's match(), an if/else chain, or early returns."
+bad = "export const f = (a: boolean, b: boolean): number => (a ? (b ? 1 : 2) : 3);\n"
+good = "export const f = (a: boolean): number => (a ? 1 : 3);\n"
+
+[[custom]]
+id = "no-try"
+kind = "syntax"
+target = "TryStatement"
+since = "2026-10-03"
+message = "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
+bad = "declare function g(): void;\nexport function f(): void {\n  try {\n    g();\n  } finally {\n    g();\n  }\n}\n"
+good = "declare function g(): void;\nexport function f(): void {\n  g();\n}\n"
+
+[[custom]]
+id = "no-type-predicate"
+kind = "syntax"
+target = "TSTypePredicate"
+since = "2026-10-03"
+message = "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
+bad = "export function isText(x: unknown): x is string {\n  return typeof x === \"string\";\n}\n"
+good = "export function isText(x: unknown): boolean {\n  return typeof x === \"string\";\n}\n"
+
+[[custom]]
+id = "no-in-probe"
+kind = "syntax"
+target = "BinaryExpression[operator='in'][left.type='Literal']"
+since = "2026-10-03"
+message = "probing with `\"key\" in value` is banned (writing-typescript): parse the value with a zod schema (safeParse); for your own union use a discriminant tag."
+bad = "export const has = (v: object): boolean => \"k\" in v;\n"
+good = "export const has = (v: { k?: number }): boolean => v.k !== undefined;\n"
+
+[[custom]]
+id = "no-as-cast"
+kind = "syntax"
+target = "TSAsExpression:not([typeAnnotation.typeName.name='const'])"
+since = "2026-10-03"
+message = "`as` cast is banned (writing-typescript): it asserts a type the compiler cannot verify. Parse with a zod schema, or use `satisfies` / inference. (`as const` is allowed.)"
+bad = "export const n = (v: unknown): number => v as number;\n"
+good = "export const pair = [1, 2] as const;\n"
+
+[[custom]]
+id = "no-angle-cast"
+kind = "syntax"
+target = "TSTypeAssertion"
+since = "2026-10-03"
+message = "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
+bad = "export const n = (v: unknown): number => <number>v;\n"
+good = "export const pair = [1, 2] as const;\n"
+
+[[custom]]
+id = "no-json-parse"
+kind = "syntax"
+target = "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.property.name='codec'] *)"
+since = "2026-10-04"
+message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+bad = "export const v: unknown = JSON.parse(\"1\");\n"
+good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const c = z.codec(z.string(), z.unknown(), {\n  decode: (s: string): unknown => JSON.parse(s),\n  encode: (v: unknown): string => JSON.stringify(v),\n});\n"
+
+[[custom]]
+id = "no-untyped-json-body"
+kind = "syntax"
+target = "CallExpression[callee.property.name='json'][arguments.length=0]"
+since = "2026-10-04"
+message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
+bad = "export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"
+good = "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n"
+
+[[custom]]
+id = "no-direct-zod"
+kind = "import-path"
+target = "zod"
+since = "2026-10-04"
+message = "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
+bad = "import { z } from \"zod\";\nexport const s = z.string();\n"
+good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"
+
+[[custom]]
+id = "no-direct-zod-subpath"
+kind = "import-pattern"
+target = "zod/*"
+since = "2026-10-04"
+message = "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+bad = "import { z } from \"zod/v4\";\nexport const s = z.string();\n"
+good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"

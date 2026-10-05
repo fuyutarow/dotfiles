@@ -148,11 +148,17 @@ async function run(
     proc.exited,
   ]).then(([out, err, code]) => ({ code, out: `${out}${err}` }));
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
   if (done === null) return { code: -1, out: "", timedOut: true };
-  return { ...done, out: done.out.replace(/\r/g, ""), timedOut: false };
+  return { ...done, out: done.out.replaceAll("\r", ""), timedOut: false };
 }
 
 // A leg is "where do I run this": null = right here, a string = through ssh to that alias.
@@ -196,7 +202,7 @@ async function interopSockets(): Promise<string[]> {
       }),
   );
   return stamped
-    .sort((a, b) => b.mtime - a.mtime)
+    .toSorted((a, b) => b.mtime - a.mtime)
     .slice(0, INTEROP_TRIES)
     .map((e) => e.path);
 }
@@ -239,7 +245,7 @@ export async function ps(leg: Leg, script: string, ms: number): Promise<Ran> {
 export function parseKv(out: string): Map<string, string> {
   const kv = new Map<string, string>();
   for (const line of out.split("\n")) {
-    const [, key, value] = /^([a-z0-9_]+)=(.*)$/.exec(line.trim()) ?? [];
+    const [, key, value] = /^([a-z0-9_]+)=(.*)$/u.exec(line.trim()) ?? [];
     if (key !== undefined && value !== undefined) kv.set(key, value);
   }
   return kv;
@@ -308,9 +314,9 @@ foreach ($k in $lx) {
 // which is exactly the class of confident-wrong number this script exists to prevent.
 export function toMntPath(winPath: string): string | null {
   const [, drive, rest] =
-    /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/.exec(winPath.trim()) ?? [];
+    /^(?:\\\\\?\\)?([A-Za-z]):\\(.*)$/u.exec(winPath.trim()) ?? [];
   if (drive === undefined || rest === undefined) return null;
-  return `/mnt/${drive.toLowerCase()}/${rest.replace(/\\/g, "/")}`;
+  return `/mnt/${drive.toLowerCase()}/${rest.replaceAll("\\", "/")}`;
 }
 
 function gb(bytes: number): string {
@@ -491,7 +497,7 @@ export function judge(
     f.push({
       level: "WARN",
       key: "host-spin",
-      text: `${spin} host process(es) past ${SPIN_CPU_SECONDS}s CPU${names ? ` — ${names}` : ""}; the 2026-09-09 set held 6.8 of 16 cores for 3 days. CPU alone does not mean orphaned (a long herdr session accrues it too) — \`mise run wsl:reap\` lists the true sshd orphans`,
+      text: `${spin} host process(es) past ${SPIN_CPU_SECONDS}s CPU${names !== "" ? ` — ${names}` : ""}; the 2026-09-09 set held 6.8 of 16 cores for 3 days. CPU alone does not mean orphaned (a long herdr session accrues it too) — \`mise run wsl:reap\` lists the true sshd orphans`,
     });
   }
 
@@ -507,16 +513,18 @@ export function judge(
   return f;
 }
 
+function reportLine(k: string, v: string): void {
+  console.log(`  ${k.padEnd(10)}${v}`);
+}
+
 function report(
   g: Map<string, string>,
   h: Map<string, string>,
   vhdx: { alloc: number | null; apparent: number | null },
 ): void {
-  const line = (k: string, v: string) => console.log(`  ${k.padEnd(10)}${v}`);
-
   console.log("GUEST (WSL2)");
   const nproc = g.get("nproc") ?? "?";
-  line(
+  reportLine(
     "cpu",
     `nproc=${nproc}  load ${g.get("load1")} ${g.get("load5")} ${g.get("load15")}  PSI some avg10=${g.get("cpu_psi")}`,
   );
@@ -524,7 +532,7 @@ function report(
   const ma = num(g, "mem_avail");
   const st = num(g, "swap_total");
   const sf = num(g, "swap_free");
-  line(
+  reportLine(
     "mem",
     `available ${gbOr(ma)} of ${gbOr(mt)}` +
       `   swap ${st === null || sf === null ? "?" : `${gb(st - sf)} / ${gb(st)}`}` +
@@ -536,7 +544,7 @@ function report(
   const du = num(g, "disk_used");
   const dt = num(g, "disk_total");
   const da = num(g, "disk_avail");
-  line(
+  reportLine(
     "disk",
     du === null || dt === null || da === null
       ? "?"
@@ -544,13 +552,13 @@ function report(
   );
   for (const k of ["top1", "top2", "top3"]) {
     const v = g.get(k);
-    if (v !== undefined && v !== "") line(k === "top1" ? "top" : "", v);
+    if (v !== undefined && v !== "") reportLine(k === "top1" ? "top" : "", v);
   }
 
   console.log("HOST (Windows)");
   const cpu = h.get("host_cpu_pct");
   // The mean is the judged number; max is shown so a spike is visible and not actionable.
-  line(
+  reportLine(
     "cpu",
     `${cpu ?? "?"}% mean of ${h.get("host_cpu_n") ?? "?"} (max ${h.get("host_cpu_max") ?? "?"}%)` +
       `   uptime ${h.get("host_uptime_h") ?? "?"}h`,
@@ -562,26 +570,26 @@ function report(
   // aggressively), so FreePhysicalMemory reads alarmingly low on a perfectly healthy host —
   // it showed 0.2GB here while 4.5GB was actually available. Hard page reads/s sits beside it
   // because that, not the gauge, is what a memory shortage does to you.
-  line(
+  reportLine(
     "mem",
     `available ${gbOr(rf)} of ${gbOr(rt)}   vmmemWSL ${gbOr(vm)}` +
       `   hard page reads/s ${h.get("host_pagereads") ?? "?"}`,
   );
   const cf = num(h, "host_c_free");
   const ct = num(h, "host_c_total");
-  line(
+  reportLine(
     "C:",
     cf === null || ct === null
       ? "?"
       : `free ${gb(cf)} of ${gb(ct)} (${((cf / ct) * 100).toFixed(1)}%)`,
   );
-  line(
+  reportLine(
     "health",
     `spinning=${h.get("host_spin") ?? "?"}   service crashes/1h=${h.get("host_crashes_1h") ?? "?"}`,
   );
 
   // Printed together on one line precisely because printing either alone is what misleads.
-  line(
+  reportLine(
     "vhdx",
     vhdx.alloc === null && vhdx.apparent === null
       ? "n/a (path not resolved)"
@@ -633,7 +641,10 @@ async function main(): Promise<void> {
     parsed.flags.guest === "local" ? null : parsed.flags.guest;
   const hostLeg: Leg = parsed.flags.host === "local" ? null : parsed.flags.host;
 
-  if ((guestLeg !== null || hostLeg !== null) && !Bun.which("ssh")) {
+  if (
+    (guestLeg !== null || hostLeg !== null) &&
+    Bun.which("ssh") === undefined
+  ) {
     console.log("no ssh on PATH");
     process.exit(1);
   }
@@ -721,7 +732,7 @@ async function main(): Promise<void> {
 // Guarded so the test file can import judge/parseKv/toMntPath without this script reaching for
 // ssh on import — the house pattern (reclaim-clean.ts, reclaim-toolchains.ts).
 if (import.meta.main) {
-  main().catch((err) => {
+  await main().catch((err) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

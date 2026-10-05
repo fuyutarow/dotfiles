@@ -34,7 +34,7 @@ function entryOf(line: unknown): TranscriptEntry {
 export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
   const entries: TranscriptEntry[] = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
+    if (line.trim() === "") continue;
     const parsed = await attempt(() => parseJson(line));
     if (parsed.ok) entries.push(entryOf(parsed.value));
   }
@@ -73,7 +73,7 @@ export function lastUserText(entries: TranscriptEntry[]): string {
     .filter((e) => e.type === "user")
     .map((e) => textBlocks(e.message?.content).join("\n"))
     .filter((t) => t !== "");
-  return texts[texts.length - 1] ?? "";
+  return texts.at(-1) ?? "";
 }
 
 // Remove ``` fences, `inline` spans (line-scoped, like the sed it replaces), and
@@ -85,13 +85,13 @@ export function stripCode(
   const out: string[] = [];
   let inFence = false;
   for (const line of text.split("\n")) {
-    if (/^\s*```/.test(line)) {
+    if (/^\s*```/u.test(line)) {
       inFence = !inFence;
       continue;
     }
     if (inFence) continue;
-    if (opts.blockquotes && /^\s*>/.test(line)) continue;
-    out.push(line.replace(/`[^`]*`/g, ""));
+    if (opts.blockquotes === true && /^\s*>/u.test(line)) continue;
+    out.push(line.replaceAll(/`[^`]*`/gu, ""));
   }
   return out.join("\n");
 }

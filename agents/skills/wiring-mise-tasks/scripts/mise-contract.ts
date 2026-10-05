@@ -16,6 +16,10 @@ const soft = ["setup", "i", "fmt:staged", "l", "t", "u", "c"];
 // post-merge step exist only as these two verbs (wiring-repositories JJ-1). Hard there; not
 // checked in a git-only repo.
 const jj = ["commit", "pull"];
+const unknownArrayOrEmpty = z.unknown().transform((value) => {
+  const parsed = z.array(z.unknown()).safeParse(value);
+  return parsed.success ? parsed.data : [];
+});
 
 type Task = Readonly<{
   name: string;
@@ -27,8 +31,8 @@ type Task = Readonly<{
 const TaskEntrySchema = z.object({
   name: z.string(),
   source: z.string(),
-  aliases: z.array(z.unknown()).catch([]),
-  depends: z.array(z.unknown()).catch([]),
+  aliases: unknownArrayOrEmpty,
+  depends: unknownArrayOrEmpty,
 });
 
 function tasks(value: unknown): Task[] {
@@ -79,13 +83,13 @@ function topLevelToml(source: string): string[] {
   const lines: string[] = [];
   let inBlock = false;
   for (const line of source.split("\n")) {
-    const delimiters = (line.match(/'''|"""/g) ?? []).length;
-    if (!inBlock && delimiters % 2 === 1) {
-      inBlock = true;
+    const delimiters = (line.match(/'''|"""/gu) ?? []).length;
+    if (inBlock) {
+      inBlock = delimiters % 2 !== 1;
       continue;
     }
-    if (inBlock) {
-      if (delimiters % 2 === 1) inBlock = false;
+    if (delimiters % 2 === 1) {
+      inBlock = true;
       continue;
     }
     lines.push(line);
@@ -101,15 +105,16 @@ function waivers(lines: string[]): {
   const reasonless: string[] = [];
   for (const line of lines) {
     const full = line.match(
-      /^\s*#\s*mise-contract:\s*waive\s+(\S+)\s+--\s+.+$/,
+      /^\s*#\s*mise-contract:\s*waive\s+(\S+)\s+--\s+.+$/u,
     )?.[1];
-    if (full !== undefined) active.add(full);
-    else {
-      const incomplete = line.match(
-        /^\s*#\s*mise-contract:\s*waive\s+(\S+)/,
-      )?.[1];
-      if (incomplete !== undefined) reasonless.push(incomplete);
+    if (full !== undefined) {
+      active.add(full);
+      continue;
     }
+    const incomplete = line.match(
+      /^\s*#\s*mise-contract:\s*waive\s+(\S+)/u,
+    )?.[1];
+    if (incomplete !== undefined) reasonless.push(incomplete);
   }
   const verbAliases: ReadonlyArray<readonly [string, string]> = [
     ["setup", "i"],
@@ -151,12 +156,12 @@ const BODY_MAX_LINES = 10;
 // Runtime binaries whose presence a task body assumes. Key = binary in command position,
 // value = the [tools] key that would declare it.
 const RUNTIMES: Array<[RegExp, string]> = [
-  [/(^|[|;&(]|&&|\|\|)\s*bunx?\b/m, "bun"],
-  [/(^|[|;&(]|&&|\|\|)\s*deno\b/m, "deno"],
-  [/(^|[|;&(]|&&|\|\|)\s*(node|npx)\b/m, "node"],
-  [/(^|[|;&(]|&&|\|\|)\s*(uv|uvx)\b/m, "uv"],
-  [/(^|[|;&(]|&&|\|\|)\s*julia\b/m, "julia"],
-  [/(^|[|;&(]|&&|\|\|)\s*cargo\b/m, "rust"],
+  [/(^|[|;&(]|&&|\|\|)\s*bunx?\b/mu, "bun"],
+  [/(^|[|;&(]|&&|\|\|)\s*deno\b/mu, "deno"],
+  [/(^|[|;&(]|&&|\|\|)\s*(node|npx)\b/mu, "node"],
+  [/(^|[|;&(]|&&|\|\|)\s*(uv|uvx)\b/mu, "uv"],
+  [/(^|[|;&(]|&&|\|\|)\s*julia\b/mu, "julia"],
+  [/(^|[|;&(]|&&|\|\|)\s*cargo\b/mu, "rust"],
 ];
 
 // Raw-text parse on purpose: we need the BODY of every task, and `mise tasks ls` reports
@@ -180,48 +185,62 @@ function taskBodies(source: string): Array<{ name: string; body: string }> {
 
   for (const line of source.split("\n")) {
     if (closer !== undefined) {
-      const end = line.indexOf(closer);
-      if (end === -1) {
-        body?.push(line);
-      } else {
-        if (end > 0) body?.push(line.slice(0, end));
-        if (name !== undefined && body !== undefined) out.push({ name, body: body.join("\n") });
-        body = undefined;
-        closer = undefined;
-      }
+      const handled = consumeTaskBodyLine(line, closer, name, body, out);
+      body = handled.body;
+      closer = handled.closer;
       continue;
     }
-    const header = /^\s*\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]/.exec(line);
+    const header = /^\s*\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]/u.exec(line);
     if (header !== null) {
       name = header[1] ?? header[2];
       continue;
     }
-    if (/^\s*\[/.test(line)) {
+    if (/^\s*\[/u.test(line)) {
       name = undefined;
       continue;
     }
     if (name === undefined) continue;
 
-    const run = /^\s*run\s*=\s*(.*)$/.exec(line);
+    const run = /^\s*run\s*=\s*(.*)$/u.exec(line);
     if (run === null) continue;
     const rest = run[1] ?? "";
-    const open = /^('''|""")/.exec(rest);
-    if (open !== null) {
-      closer = open[1];
-      const tail = rest.slice(3);
-      const end = tail.indexOf(closer ?? "");
-      if (end === -1) {
-        body = tail.trim() === "" ? [] : [tail];
-      } else {
-        out.push({ name, body: tail.slice(0, end) });
-        closer = undefined;
-      }
+    const open = /^('''|""")/u.exec(rest);
+    const single = /^(?:'([^']*)'|"([^"]*)")/u.exec(rest);
+    if (open === null && single !== null) {
+      out.push({ name, body: single[1] ?? single[2] ?? "" });
+    }
+    if (open === null) {
       continue;
     }
-    const single = /^(?:'([^']*)'|"([^"]*)")/.exec(rest);
-    if (single !== null) out.push({ name, body: single[1] ?? single[2] ?? "" });
+    closer = open[1];
+    const tail = rest.slice(3);
+    const end = tail.indexOf(closer ?? "");
+    if (end !== -1) {
+      out.push({ name, body: tail.slice(0, end) });
+      closer = undefined;
+      continue;
+    }
+    body = tail.trim() === "" ? [] : [tail];
   }
   return out;
+}
+
+function consumeTaskBodyLine(
+  line: string,
+  closer: string,
+  name: string | undefined,
+  body: string[] | undefined,
+  out: Array<{ name: string; body: string }>,
+): { closer: string | undefined; body: string[] | undefined } {
+  const end = line.indexOf(closer);
+  if (end === -1) {
+    body?.push(line);
+    return { body, closer };
+  }
+  if (end > 0) body?.push(line.slice(0, end));
+  if (name !== undefined && body !== undefined)
+    out.push({ name, body: body.join("\n") });
+  return { body: undefined, closer: undefined };
 }
 
 /**
@@ -239,9 +258,9 @@ function taskBodies(source: string): Array<{ name: string; body: string }> {
 function commandText(body: string): string {
   return body
     .split("\n")
-    .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
+    .map((l) => l.replace(/(^|\s)#.*$/u, "$1"))
     .join("\n")
-    .replace(/\b(?:echo|printf)\b[^\n;]*/g, " ");
+    .replaceAll(/\b(?:echo|printf)\b[^\n;]*/gu, " ");
 }
 
 /**
@@ -257,29 +276,29 @@ function commandText(body: string): string {
 function controlFlow(body: string): string[] {
   const code = body
     .split("\n")
-    .map((l) => l.replace(/(^|\s)#.*$/, "$1"))
+    .map((l) => l.replace(/(^|\s)#.*$/u, "$1"))
     .join("\n")
-    .replace(/'[^'\n]*'|"[^"\n]*"/g, " ");
+    .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
   const at = "(?:^|[\\n;|&(]|\\bthen\\b|\\bdo\\b)\\s*";
   const tells: Array<[RegExp, string]> = [
-    [new RegExp(`${at}if\\b`, "m"), "if"],
-    [new RegExp(`${at}for\\b`, "m"), "for"],
-    [new RegExp(`${at}while\\b`, "m"), "while"],
-    [new RegExp(`${at}until\\b`, "m"), "until"],
-    [new RegExp(`${at}case\\b`, "m"), "case"],
-    [new RegExp(`${at}\\[\\[?\\s`, "m"), "a [ test"],
-    [new RegExp(`${at}test\\s`, "m"), "a test command"],
+    [new RegExp(`${at}if\\b`, "mu"), "if"],
+    [new RegExp(`${at}for\\b`, "mu"), "for"],
+    [new RegExp(`${at}while\\b`, "mu"), "while"],
+    [new RegExp(`${at}until\\b`, "mu"), "until"],
+    [new RegExp(`${at}case\\b`, "mu"), "case"],
+    [new RegExp(`${at}\\[\\[?\\s`, "mu"), "a [ test"],
+    [new RegExp(`${at}test\\s`, "mu"), "a test command"],
   ];
   return tells.filter(([re]) => re.test(code)).map(([, label]) => label);
 }
 
 function declaredTools(source: string): Set<string> {
-  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/.exec(source);
+  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/u.exec(source);
   const out = new Set<string>();
-  if (!m) return out;
+  if (m === null) return out;
   for (const line of (m[1] ?? "").split("\n")) {
-    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=/.exec(line);
-    if (k) out.add((k[1] ?? k[2] ?? "").toLowerCase());
+    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=/u.exec(line);
+    if (k !== null) out.add((k[1] ?? k[2] ?? "").toLowerCase());
   }
   return out;
 }
@@ -293,11 +312,11 @@ function declaredTools(source: string): Set<string> {
 // warn on a patch pin, since their owners choose the version.
 const HOUSE_TOML = join(import.meta.dir, "..", "..", "..", "..", "mise.toml");
 function toolPins(source: string): Map<string, string> {
-  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/.exec(source);
+  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/u.exec(source);
   const out = new Map<string, string>();
   for (const line of (m?.[1] ?? "").split("\n")) {
-    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=\s*"([^"]*)"/.exec(line);
-    if (k) out.set((k[1] ?? k[2] ?? "").toLowerCase(), k[3] ?? "");
+    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=\s*"([^"]*)"/u.exec(line);
+    if (k !== null) out.set((k[1] ?? k[2] ?? "").toLowerCase(), k[3] ?? "");
   }
   return out;
 }
@@ -313,7 +332,7 @@ async function checkPins(source: string): Promise<[number, number]> {
         `FAIL  pin: bun = "${pin}" — the house pin is bun = "${house}" (a minor, tracking its newest patch); write bun = "${house}"\n`,
       );
       failures += 1;
-    } else if (/^\d+\.\d+\.\d+$/.test(pin)) {
+    } else if (/^\d+\.\d+\.\d+$/u.test(pin)) {
       process.stdout.write(
         `WARN  pin: ${tool} = "${pin}" is a patch pin — it is never bumped and mise auto_install reinstalls it; pin the minor ("${pin.split(".").slice(0, 2).join(".")}")\n`,
       );
@@ -333,12 +352,7 @@ function checkBodies(source: string): [number, number] {
   const needed = new Map<string, string[]>();
   for (const { name, body } of bodies) {
     const cmd = commandText(body);
-    for (const [re, tool] of RUNTIMES) {
-      if (!re.test(cmd)) continue;
-      const users = needed.get(tool);
-      if (users === undefined) needed.set(tool, [name]);
-      else users.push(name);
-    }
+    recordRuntimeUsers(cmd, name, needed);
     const lines = body.split("\n").filter((l) => l.trim() !== "").length;
     if (lines > BODY_MAX_LINES) {
       process.stdout.write(
@@ -376,6 +390,40 @@ function checkBodies(source: string): [number, number] {
     }
   }
   return [failures, warnings];
+}
+
+function recordRuntimeUsers(command: string, taskName: string, needed: Map<string, string[]>): void {
+  for (const [pattern, tool] of RUNTIMES) {
+    if (!pattern.test(command)) continue;
+    const users = needed.get(tool);
+    if (users === undefined) needed.set(tool, [taskName]);
+    else users.push(taskName);
+  }
+}
+
+function reportJjTokens(
+  tokens: string[],
+  resolved: Set<string>,
+  activeWaivers: Set<string>,
+): number {
+  let failures = 0;
+  for (const token of tokens) {
+    if (resolved.has(token)) {
+      process.stdout.write(`OK    ${token} (jj repo)\n`);
+      continue;
+    }
+    if (activeWaivers.has(token)) {
+      process.stdout.write(`WAIVE ${token} (mise.toml waiver)\n`);
+      continue;
+    }
+    process.stdout.write(
+      `FAIL  ${token} — unresolved in a jj repo: jj runs no git hooks, so without it ` +
+        `${token === "commit" ? "every commit skips hook:pre-commit" : "a fetch never runs hook:post-merge"} ` +
+        `(template: templates/*.mise.toml [tasks.${token}])\n`,
+    );
+    failures += 1;
+  }
+  return failures;
 }
 
 async function check(
@@ -453,21 +501,7 @@ async function check(
       warnings += 1;
     }
   }
-  if (existsSync(`${root}/.jj`)) {
-    for (const token of jj) {
-      if (resolved.has(token)) process.stdout.write(`OK    ${token} (jj repo)\n`);
-      else if (waiver.active.has(token))
-        process.stdout.write(`WAIVE ${token} (mise.toml waiver)\n`);
-      else {
-        process.stdout.write(
-          `FAIL  ${token} — unresolved in a jj repo: jj runs no git hooks, so without it ` +
-            `${token === "commit" ? "every commit skips hook:pre-commit" : "a fetch never runs hook:post-merge"} ` +
-            `(template: templates/*.mise.toml [tasks.${token}])\n`,
-        );
-        failures += 1;
-      }
-    }
-  }
+  if (existsSync(`${root}/.jj`)) failures += reportJjTokens(jj, resolved, waiver.active);
   if (existsSync(tomlPath)) {
     const source = await readFile(tomlPath, "utf8");
     const [bodyFailures, bodyWarnings] = checkBodies(source);
@@ -553,7 +587,7 @@ async function main(): Promise<void> {
   process.exit(code);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `ENV ${error instanceof Error ? error.message : String(error)}\n`,
   );

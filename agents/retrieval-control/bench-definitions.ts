@@ -49,7 +49,7 @@ const SpecSchema = z.object({
 });
 const specText = await Bun.file(argv.flags.cases).text();
 const spec = jsonOf(SpecSchema).parse(specText);
-const project = spec.project.replace(/^~(?=\/)/, homedir());
+const project = spec.project.replace(/^~(?=\/)/u, homedir());
 const tally: Record<
   string,
   { n: number; top1: number; top3: number; top10: number }
@@ -83,14 +83,15 @@ async function runCase(c: Case, lang: "en" | "ja", q: string): Promise<void> {
     .map((d) => d.name)
     .join(", ");
   console.log(
-    `${c.need} ${lang} rank=${rank || "×"} ${a.strength} best=${a.best.toFixed(2)} top=${top}`,
+    `${c.need} ${lang} rank=${rank !== 0 ? rank : "×"} ${a.strength} best=${a.best.toFixed(2)} top=${top}`,
   );
 }
 
 const runs = spec.cases.flatMap((c) =>
   (["en", "ja"] as const).map((lang) => ({ c, lang, q: c[lang] })),
 );
-for (const { c, lang, q } of runs) if (q) await runCase(c, lang, q);
+for (const { c, lang, q } of runs)
+  if (q !== undefined && q !== "") await runCase(c, lang, q);
 ms.sort((x, y) => x - y);
 for (const [lang, t] of Object.entries(tally))
   console.log(
@@ -102,7 +103,9 @@ const all = Object.values(tally).reduce(
 );
 console.log(
   `all: top3 ${all.top3}/${all.n}` +
-    (absentTotal ? `  absent correctly ${absentRight}/${absentTotal}` : ""),
+    (absentTotal !== 0
+      ? `  absent correctly ${absentRight}/${absentTotal}`
+      : ""),
 );
 console.log(
   `latency median ${Math.round(ms[Math.floor(ms.length / 2)] ?? 0)} ms, max ${Math.round(ms.at(-1) ?? 0)} ms`,

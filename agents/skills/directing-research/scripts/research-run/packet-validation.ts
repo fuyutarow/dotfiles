@@ -76,7 +76,7 @@ export function validateReceipt(
   if (
     status !== undefined &&
     status !== "succeeded" &&
-    field(packet, "FAILURE_OR_EXCLUSION_REASON")?.startsWith("NONE")
+    field(packet, "FAILURE_OR_EXCLUSION_REASON")?.startsWith("NONE") === true
   )
     addFinding(
       findings,
@@ -85,7 +85,7 @@ export function validateReceipt(
       `${status} receipt requires a concrete failure/exclusion reason`,
     );
   const digests = field(packet, "CODE_CONFIG_DATA_DIGESTS");
-  if (digests !== undefined && !/[a-f0-9]{64}/.test(digests))
+  if (digests !== undefined && !/[a-f0-9]{64}/u.test(digests))
     addFinding(
       findings,
       "RR006",
@@ -108,10 +108,8 @@ function tableCells(line: string): string[] | undefined {
       continue;
     }
     if (character === "`") {
-      let runLength = 1;
-      while (trimmed[index + runLength] === "`") runLength += 1;
-      if (codeTicks === 0) codeTicks = runLength;
-      else if (codeTicks === runLength) codeTicks = 0;
+      const runLength = backtickRunLength(trimmed, index);
+      codeTicks = nextCodeTickCount(codeTicks, runLength);
       cell += "`".repeat(runLength);
       index += runLength - 1;
       continue;
@@ -126,19 +124,31 @@ function tableCells(line: string): string[] | undefined {
   return cell === "" && codeTicks === 0 ? cells : undefined;
 }
 
+function backtickRunLength(value: string, index: number): number {
+  let runLength = 1;
+  while (value[index + runLength] === "`") runLength += 1;
+  return runLength;
+}
+
+function nextCodeTickCount(current: number, runLength: number): number {
+  if (current === 0) return runLength;
+  if (current === runLength) return 0;
+  return current;
+}
+
 function isTableSeparator(line: string): boolean {
   const cells = tableCells(line);
-  return cells?.length === 5 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  return cells?.length === 5 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell));
 }
 
 function validateProcessLenses(
   packet: LoadedPacket,
   findings: Finding[],
 ): void {
-  const lines = withoutComments(packet.text).split(/\r?\n/);
+  const lines = withoutComments(packet.text).split(/\r?\n/u);
   const headings = lines
     .map((line, index) =>
-      /^##\s+PROCESS LENSES\s*$/.test(line) ? index : undefined,
+      /^##\s+PROCESS LENSES\s*$/u.test(line) ? index : undefined,
     )
     .filter((index) => index !== undefined);
   if (headings.length === 0) {
@@ -187,7 +197,7 @@ function validateProcessLenses(
   const ids: string[] = [];
   while (cursor < lines.length) {
     const line = lines[cursor] ?? "";
-    if (line.trim() === "" || /^#{1,6}\s+/.test(line)) break;
+    if (line.trim() === "" || /^#{1,6}\s+/u.test(line)) break;
     const cells = tableCells(line);
     if (cells?.length !== 5) {
       addFinding(

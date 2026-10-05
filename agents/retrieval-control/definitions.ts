@@ -83,6 +83,13 @@ export type RetrievalConfig = {
   thresholds: Record<Judge, Thresholds>;
 };
 
+function configuredString(value: unknown, key: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string")
+    throw new Error(`${key} must be a string when present`);
+  return value;
+}
+
 const CONFIG = join(import.meta.dir, "retrieval.toml");
 const JEV_TIMEOUT_MS = 20_000;
 const JEV_RETRIES = 3; // 429 / 529, exponential backoff — the API reference's guidance
@@ -92,15 +99,21 @@ const TableSchema = z.record(z.string(), z.unknown());
 const asTable = (v: unknown): Table | undefined =>
   TableSchema.safeParse(v).data;
 const NoEgressSchema = z.array(z.string());
+const expandHome = (value: string): string =>
+  value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
+const definitionId = (index: number): string =>
+  `C${String(index).padStart(2, "0")}`;
+const clampProbability = (p: number): number =>
+  Math.min(1 - 1e-4, Math.max(1e-4, p));
 
 // retrieval.toml, validated: a wrong value names the key and stops, never a guessed default.
 export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
   const parsedToml: unknown = Bun.TOML.parse(readFileSync(path, "utf8"));
   const raw = asTable(parsedToml) ?? {};
   const d = asTable(raw.definition) ?? {};
-  function fail(key: string, want: string): never {
+  const fail = (key: string, want: string): never => {
     throw new Error(`${path}: definition.${key} must be ${want}`);
-  }
+  };
   const num = (t: Table, key: string, at: string): number => {
     const v = t[key];
     return typeof v === "number" && Number.isFinite(v)
@@ -116,9 +129,9 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
   const table = (t: unknown, key: string): Table =>
     asTable(t) ?? fail(key, "a table");
 
-  const recall = count("recall");
+  const recallCount = count("recall");
   const pool = count("pool");
-  if (pool > recall) fail("pool", `at most recall (${recall})`);
+  if (pool > recallCount) fail("pool", `at most recall (${recallCount})`);
 
   const p = table(d.priors, "priors");
   const priors = {
@@ -128,32 +141,42 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     test: num(p, "test", "priors."),
   };
 
-  const judge = d.judge;
-  if (judge !== "jev" && judge !== "local") fail("judge", '"jev" or "local"');
+  const judgeValue = d.judge;
+  if (judgeValue !== "jev" && judgeValue !== "local")
+    fail("judge", '"jev" or "local"');
+  const judge: Judge = judgeValue === "jev" ? "jev" : "local";
   const endpoints = table(d.jev_endpoints, "jev_endpoints");
-  const provider = d.jev_provider;
+  const providerValue = d.jev_provider;
+  const provider =
+    typeof providerValue === "string"
+      ? providerValue
+      : fail("jev_provider", "a configured provider");
   const e =
-    typeof provider === "string" ? asTable(endpoints[provider]) : undefined;
-  if (typeof provider !== "string" || e === undefined)
+    asTable(endpoints[provider]) ??
     fail(
       "jev_provider",
       `one of [definition.jev_endpoints.*] (${Object.keys(endpoints).join(", ")})`,
     );
-  const url = e.url;
-  if (typeof url !== "string" || !url.startsWith("https://"))
+  const urlValue = e.url;
+  const url =
+    typeof urlValue === "string"
+      ? urlValue
+      : fail(`jev_endpoints.${provider}.url`, "an https:// URL");
+  if (!url.startsWith("https://"))
     fail(`jev_endpoints.${provider}.url`, "an https:// URL");
-  const model = e.model;
-  if (model !== undefined && typeof model !== "string")
-    fail(`jev_endpoints.${provider}.model`, "a string when present");
-  const whenExhausted = e.when_exhausted;
-  if (whenExhausted !== undefined && typeof whenExhausted !== "string")
-    fail(`jev_endpoints.${provider}.when_exhausted`, "a string when present");
+  const model = configuredString(e.model, `jev_endpoints.${provider}.model`);
+  const whenExhausted = configuredString(
+    e.when_exhausted,
+    `jev_endpoints.${provider}.when_exhausted`,
+  );
   const jevEndpoint: JevEndpoint = { url };
   if (model !== undefined) jevEndpoint.model = model;
   if (whenExhausted !== undefined) jevEndpoint.whenExhausted = whenExhausted;
 
   const noEgress = NoEgressSchema.safeParse(d.no_egress);
-  if (!noEgress.success) fail("no_egress", "a list of paths");
+  const noEgressPaths = noEgress.success
+    ? noEgress.data
+    : fail("no_egress", "a list of paths");
 
   const ths = table(d.thresholds, "thresholds");
   const thresholdsOf = (j: Judge): Thresholds => {
@@ -174,15 +197,13 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
     local: thresholdsOf("local"),
   };
 
-  const expand = (x: string) =>
-    x.startsWith("~/") ? join(homedir(), x.slice(2)) : x;
   return {
-    recall,
+    recall: recallCount,
     pool,
     priors,
     judge,
     jevEndpoint,
-    noEgress: noEgress.data.map(expand),
+    noEgress: noEgressPaths.map((entry) => expandHome(entry)),
     thresholds,
   };
 }
@@ -190,7 +211,7 @@ export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
 function judgeFor(project: string, cfg: RetrievalConfig): Judge {
   const real = realpathSync(project);
   const blocked = cfg.noEgress.some(
-    (p) => real === p || real.startsWith(`${p.replace(/\/$/, "")}/`),
+    (p) => real === p || real.startsWith(`${p.replace(/\/$/u, "")}/`),
   );
   return blocked ? "local" : cfg.judge;
 }
@@ -220,7 +241,7 @@ function cccPython(): string {
   const ccc = realpathSync(requireExecutable("ccc"));
   const line = readFileSync(ccc, "utf8").split("\n", 1)[0] ?? "";
   const py = line.startsWith("#!/") ? line.slice(2).trim() : "";
-  if (!/\/python[0-9.]*$/.test(py))
+  if (!/\/python[0-9.]*$/u.test(py))
     throw new Error(`cannot find ccc's Python interpreter (shebang of ${ccc})`);
   return py;
 }
@@ -251,7 +272,7 @@ async function changedSince(
   return [
     ...committed.split("\n"),
     ...dirty.split("\n").map((l) => l.slice(3).split(" -> ").at(-1) ?? ""),
-  ].filter((p) => /\.(jl|py|ts|tsx|js|mjs|rs)$/.test(p));
+  ].filter((p) => /\.(jl|py|ts|tsx|js|mjs|rs)$/u.test(p));
 }
 
 function mdText(d: Definition): string {
@@ -301,7 +322,7 @@ function loadDefinitions(cachePath: string): {
 
 const statKey = (project: string, rel: string): string => {
   const st = statSync(join(project, rel), { throwIfNoEntry: false });
-  return st ? `${st.size} ${st.mtimeMs}` : "gone";
+  return st !== undefined ? `${st.size} ${st.mtimeMs}` : "gone";
 };
 
 // Bring the catalog to the working tree. Returns the definitions and the catalog dir.
@@ -360,7 +381,7 @@ export async function refreshCatalog(
     } satisfies Meta),
   );
   notes.push(
-    `catalog ${meta ? "refreshed" : "built"}: ${rebuilt.count} definitions` +
+    `catalog ${meta !== null ? "refreshed" : "built"}: ${rebuilt.count} definitions` +
       (only === null ? " (full scan)" : ` (${only.length} changed path(s))`),
   );
   return readCatalog(dir);
@@ -485,9 +506,18 @@ export type RerankResult =
   | { reason: string; scores?: undefined };
 
 // rerank_server.py's one-line reply. A field of the wrong type counts as absent.
+const optionalParsed = <S extends z.ZodType>(schema: S) =>
+  z
+    .unknown()
+    .transform((value): z.output<S> | undefined => {
+      const parsed = schema.safeParse(value);
+      return parsed.success ? parsed.data : undefined;
+    })
+    .optional();
+
 const RerankReplySchema = z.object({
-  scores: z.array(z.number()).optional().catch(undefined),
-  error: z.string().optional().catch(undefined),
+  scores: optionalParsed(z.array(z.number())),
+  error: optionalParsed(z.string()),
 });
 
 // One request to the resident reranker. A `reason` means the caller ranks by embeddings and says why.
@@ -500,32 +530,34 @@ export async function rerank(
   const { promise, resolve } = Promise.withResolvers<RerankResult>();
   let reply = "";
   let settled = false;
-  const timer = setTimeout(
-    () => done({ reason: `no answer within ${RERANK_TIMEOUT_MS} ms` }),
-    RERANK_TIMEOUT_MS,
-  );
+  const timer = setTimeout(() => {
+    done({ reason: `no answer within ${RERANK_TIMEOUT_MS} ms` });
+  }, RERANK_TIMEOUT_MS);
   function done(v: RerankResult): void {
     if (settled) return;
     settled = true;
     clearTimeout(timer);
     resolve(v);
   }
-  const finish = async () => {
+  const finish = () => {
     const line = reply.split("\n", 1)[0] ?? "";
     const r = jsonOf(RerankReplySchema).safeParse(line).data;
-    if (r?.scores !== undefined && r.scores.length === docs.length)
-      return done({ scores: r.scores });
-    return done({
-      reason: r?.error
-        ? `reranker: ${r.error}`
-        : "reranker closed without an answer",
+    if (r?.scores !== undefined && r.scores.length === docs.length) {
+      done({ scores: r.scores });
+      return;
+    }
+    done({
+      reason:
+        r?.error !== undefined
+          ? `reranker: ${r.error}`
+          : "reranker closed without an answer",
     });
   };
   // A large request does not fit one write: Bun's socket.write sends what the kernel buffer takes
   // and returns that count; the rest goes out on `drain` (measured 2026-10-01: 30 candidates were
   // silently cut, the server never saw the newline, every rerank failed).
   let pending = Buffer.from(`${JSON.stringify({ query, docs })}\n`);
-  const flush = (s: { write: (b: Buffer) => number }) => {
+  const flush = (s: { write: (b: Buffer) => number }): void => {
     const n = s.write(pending);
     pending = pending.subarray(n);
   };
@@ -540,12 +572,15 @@ export async function rerank(
         data: (s, chunk) => {
           reply += chunk.toString();
           if (!reply.includes("\n")) return;
-          void finish();
+          finish();
           s.end();
         },
-        close: () => void finish(),
-        error: (_s, e) =>
-          done({ reason: `reranker socket error: ${String(e)}` }),
+        close: () => {
+          finish();
+        },
+        error: (_s, e) => {
+          done({ reason: `reranker socket error: ${String(e)}` });
+        },
       },
     }),
   );
@@ -561,7 +596,7 @@ const rerankText = (d: Definition) =>
 // Internal by convention: a leading underscore, or a kernel/impl/inner suffix (the GPU kernel or
 // worker a public entry point launches — `residual_add_flag_kernel!` behind `residual_add_flag!`).
 export const isPrivate = (d: Pick<Definition, "name">) =>
-  d.name.startsWith("_") || /_(kernel|impl|inner|helper)!?$/.test(d.name);
+  d.name.startsWith("_") || /_(kernel|impl|inner|helper)!?$/u.test(d.name);
 const key = (d: Definition) => `${d.file}:${d.start}`;
 
 // `refresh: false` serves the catalog as it stands (the PostToolUse hook: it must not pay a
@@ -596,7 +631,7 @@ export async function findDefinitions(
   const order = candidates(hits, byFile, owners, exclude).slice(0, cfg.pool);
   const { judge, result } = await judgeCandidates(
     query,
-    order.map(rerankText),
+    order.map((definition) => rerankText(definition)),
     judgeFor(project, cfg),
     cfg.jevEndpoint,
     notes,
@@ -643,10 +678,10 @@ async function judgeCandidates(
 
 function jevKey(): string | null {
   const env = process.env.TYPESAFE_API_KEY;
-  if (env) return env;
+  if (env !== undefined && env !== "") return env;
   const file = join(homedir(), ".config/typesafe/.env");
   if (!existsSync(file)) return null;
-  const m = /^TYPESAFE_API_KEY=(\S+)$/m.exec(readFileSync(file, "utf8"));
+  const m = /^TYPESAFE_API_KEY=(\S+)$/mu.exec(readFileSync(file, "utf8"));
   return m?.[1] ?? null;
 }
 
@@ -667,16 +702,15 @@ export async function judgeJev(
   const apiKey = jevKey();
   if (apiKey === null)
     return { reason: "no TYPESAFE_API_KEY (env or ~/.config/typesafe/.env)" };
-  const id = (i: number) => `C${String(i).padStart(2, "0")}`;
   const body = JSON.stringify({
     ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
-    state: Object.fromEntries(docs.map((d, i) => [id(i), d])),
+    state: Object.fromEntries(docs.map((d, i) => [definitionId(i), d])),
     questions: Object.fromEntries(
       docs.map((_, i) => [
-        id(i),
+        definitionId(i),
         {
           type: "noul",
-          instructions: `Does the code definition ${id(i)} already implement what this developer needs: "${query}"?`,
+          instructions: `Does the code definition ${definitionId(i)} already implement what this developer needs: "${query}"?`,
         },
       ]),
     ),
@@ -711,12 +745,13 @@ export async function judgeJev(
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
     const answered = await attemptOr(() => res.value.text(), "");
     const json = jsonOf(JevAnswerSchema).safeParse(answered).data;
-    const ps = docs.map((_, i) => json?.answers?.[id(i)]?.noul);
+    const ps = docs.map((_, i) => json?.answers?.[definitionId(i)]?.noul);
     const numbers = ps.flatMap((p) => (typeof p === "number" ? [p] : []));
     if (numbers.length !== ps.length) return { reason: "malformed answer" };
-    const clamp = (p: number) => Math.min(1 - 1e-4, Math.max(1e-4, p));
     return {
-      scores: numbers.map((p) => Math.log(clamp(p) / (1 - clamp(p)))),
+      scores: numbers.map((p) =>
+        Math.log(clampProbability(p) / (1 - clampProbability(p))),
+      ),
     };
   }
   return { reason: "still rate-limited after retries" };
@@ -765,7 +800,7 @@ function candidates(
   const order: Definition[] = [];
   const seen = new Set<string>();
   const add = (d: Definition) => {
-    if (seen.has(key(d)) || exclude?.(d)) return;
+    if (seen.has(key(d)) || exclude?.(d) === true) return;
     seen.add(key(d));
     order.push(d);
   };
@@ -781,11 +816,11 @@ function candidates(
 
 // A helper defined in a test file is rarely the thing to reuse.
 export const isTest = (d: Pick<Definition, "file">) =>
-  /(^|\/)(tests?|spec|__tests__)\/|[._-]test\.|_spec\./.test(d.file);
+  /(^|\/)(tests?|spec|__tests__)\/|[._-]test\.|_spec\./u.test(d.file);
 
 const prior = (d: Definition, p: RetrievalConfig["priors"]): number =>
   (d.public ? p.public : 0) +
-  (d.doc ? p.documented : 0) +
+  (d.doc !== "" ? p.documented : 0) +
   (isPrivate(d) ? p.private : 0) +
   (isTest(d) ? p.test : 0);
 
@@ -814,14 +849,14 @@ function toCards(order: Definition[], score: Map<string, number>): Card[] {
     const k = `${d.file}\0${d.name}`;
     const s = score.get(key(d)) ?? -99;
     const prev = cards.get(k);
-    const better = !prev || s > prev.score;
+    const better = prev === undefined || s > prev.score;
     cards.set(k, {
       ...(better ? d : prev),
       score: better ? s : prev.score,
       methods: (prev?.methods ?? 0) + 1,
     });
   }
-  return [...cards.values()].sort((a, b) => b.score - a.score);
+  return [...cards.values()].toSorted((a, b) => b.score - a.score);
 }
 
 export function strengthOf(
@@ -843,10 +878,10 @@ export function firstLine(name: string, doc: string): string {
     .find(
       (l) =>
         l !== "" &&
-        !/^[-=*_`#]{3,}/.test(l) &&
+        !/^[-=*_`#]{3,}/u.test(l) &&
         !l.startsWith(`${name}(`) &&
         !l.startsWith(`${name} `) &&
-        !/^(function|struct|macro|def|fn|export)\b/.test(l),
+        !/^(function|struct|macro|def|fn|export)\b/u.test(l),
     );
   return (said ?? "").slice(0, 160);
 }
@@ -856,17 +891,17 @@ export function renderCards(a: DefinitionAnswer): string {
     .map((c, i) => {
       const tags = [
         c.lang,
-        c.kind.replace(/_definition$/, ""),
+        c.kind.replace(/_definition$/u, ""),
         c.public ? "public" : "",
         c.methods > 1 ? `${c.methods} methods` : "",
       ]
-        .filter(Boolean)
+        .filter((tag) => tag !== "")
         .join(", ");
       const doc = firstLine(c.name, c.doc);
       return [
         `${i + 1}. ${c.name}  (${tags})  ${c.file}:${c.start}`,
         `   ${c.signature.slice(0, 160)}`,
-        ...(doc ? [`   ${doc}`] : []),
+        ...(doc !== "" ? [`   ${doc}`] : []),
       ].join("\n");
     })
     .join("\n");

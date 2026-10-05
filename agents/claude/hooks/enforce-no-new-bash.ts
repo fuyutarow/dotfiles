@@ -37,13 +37,13 @@ import { decidePre, readStdinJson } from "./lib.ts";
 const envMax = Number(process.env.NO_NEW_BASH_MAX_LINES);
 const MAX_LINES = Number.isInteger(envMax) && envMax > 0 ? envMax : 12;
 const SHELLS = new Set(["sh", "bash", "dash", "ksh", "zsh"]);
-const VENDORED = /^#\s*(?:installed|managed) by herdr\b/m;
-const BOOTSTRAP = /^#\s*shim:\s*bootstrap\b/m;
+const VENDORED = /^#\s*(?:installed|managed) by herdr\b/mu;
+const BOOTSTRAP = /^#\s*shim:\s*bootstrap\b/mu;
 
 function shebangShell(content: string): boolean {
   const first = content.split("\n", 1)[0] ?? "";
   if (!first.startsWith("#!")) return false;
-  const tokens = first.slice(2).trim().split(/\s+/);
+  const tokens = first.slice(2).trim().split(/\s+/u);
   let interp = basename(tokens[0] ?? "");
   if (interp === "env") {
     interp = basename(tokens.slice(1).find((t) => !t.startsWith("-")) ?? "");
@@ -129,7 +129,7 @@ function main(): void {
     );
   }
 
-  const marker = /^#\s*shim:\s*\S+/m.test(after)
+  const marker = /^#\s*shim:\s*\S+/mu.test(after)
     ? ""
     : " It also carries no `# shim: <bootstrap|hook-entry|exec-wrapper|vendored>` line.";
   process.stdout.write(

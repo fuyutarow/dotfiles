@@ -65,11 +65,21 @@ async function run(cmd: string[], ms: number): Promise<Ran> {
     proc.exited,
   ]).then(([out, err, code]) => ({ code, out: `${out}${err}` }));
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
   if (done === null) return { code: -1, out: "", timedOut: true };
-  return { ...done, out: done.out.replace(/\r/g, "").trim(), timedOut: false };
+  return {
+    ...done,
+    out: done.out.replaceAll("\r", "").trim(),
+    timedOut: false,
+  };
 }
 
 // The host inventory is machine-local (public repo); an explicit --host pins ONE alias, otherwise
@@ -154,7 +164,7 @@ async function main(): Promise<void> {
   }
   const { guest, distro } = parsed.flags;
 
-  if (!Bun.which("ssh")) {
+  if (Bun.which("ssh") === undefined) {
     console.log("no ssh on PATH");
     process.exit(1);
   }
@@ -205,7 +215,7 @@ async function main(): Promise<void> {
     console.log(`after:  ${after ?? "(state read failed)"}`);
     if (after === null || !after.includes("Running")) {
       console.log(
-        `FAILED: ${distro} did not reach Running${wake.out ? ` — ${wake.out}` : ""}`,
+        `FAILED: ${distro} did not reach Running${wake.out !== "" ? ` — ${wake.out}` : ""}`,
       );
       process.exit(1);
     }
@@ -242,7 +252,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
+  await main().catch((err) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

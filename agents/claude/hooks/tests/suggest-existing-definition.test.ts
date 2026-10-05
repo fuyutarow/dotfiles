@@ -6,7 +6,7 @@ describe("new-definition detection", () => {
     const text =
       "# clamp instead of wrap\nfunction clamp_add16(a, b)\n  a + b\nend\nsq(x) = x * x\ny = f(1)\n";
     const found = definitionsIn(text, "jl");
-    expect(found.map((d) => d.name).sort()).toEqual(["clamp_add16", "sq"]);
+    expect(found.map((d) => d.name).toSorted()).toEqual(["clamp_add16", "sq"]);
     expect(found.find((d) => d.name === "clamp_add16")?.text).toContain(
       "clamp instead of wrap",
     );

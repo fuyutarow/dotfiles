@@ -33,7 +33,7 @@ const CONTRACT = new URL("../scripts/mise-contract.ts", import.meta.url)
   .pathname;
 // tests/ -> forging-skills/ -> skills/ -> agents/ -> repo root
 const REPO_ROOT = new URL("../../../../", import.meta.url).pathname.replace(
-  /\/$/,
+  /\/$/u,
   "",
 );
 
@@ -163,7 +163,7 @@ describe("mise-contract floor", () => {
 
   test("reasonless waiver is inert (no reason ⇒ warning, token still unresolved)", () => {
     const dir = makeRoot(
-      "# mise-contract: waive bogus-token\n\n" + '[tasks.fmt]\nrun = "true"\n',
+      "# mise-contract: waive bogus-token\n\n[tasks.fmt]\nrun = \"true\"\n",
     );
     const { out, code } = run(dir);
     expect(out).toContain(

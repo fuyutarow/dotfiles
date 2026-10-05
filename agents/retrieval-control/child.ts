@@ -4,7 +4,8 @@
 
 export function requireExecutable(name: string): string {
   const executable = Bun.which(name);
-  if (!executable) throw new Error(`${name} is not available on PATH`);
+  if (executable === null || executable === "")
+    throw new Error(`${name} is not available on PATH`);
   return executable;
 }
 

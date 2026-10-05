@@ -58,23 +58,23 @@ function inputPath(): string {
 function fieldValue(line: string, label: string): string | undefined {
 	const normalized = line
 		.trim()
-		.replace(/^[-*+]\s+/, "")
-		.replace(/^(?:\*\*|__)/, "")
+		.replace(/^[-*+]\s+/u, "")
+		.replace(/^(?:\*\*|__)/u, "")
 		.replaceAll("：", ":");
 	if (!normalized.toLowerCase().startsWith(label.toLowerCase())) return undefined;
 	const suffix = normalized
 		.slice(label.length)
-		.replace(/^(?:\*\*|__)/, "")
+		.replace(/^(?:\*\*|__)/u, "")
 		.trimStart();
 	if (!suffix.startsWith(":")) return undefined;
-	return suffix.slice(1).trim().replace(/^(?:\*\*|__)/, "").trim();
+	return suffix.slice(1).trim().replace(/^(?:\*\*|__)/u, "").trim();
 }
 
 function isPlaceholder(value: string | undefined): boolean {
 	if (value === undefined || value.trim() === "") return true;
 	return (
-		/<[^>]*>/.test(value) ||
-		/^(?:tbd|todo|unknown|unresolved|undecided|未定|未記入|要決定|\?+)$/i.test(
+		/<[^>]*>/u.test(value) ||
+		/^(?:tbd|todo|unknown|unresolved|undecided|未定|未記入|要決定|\?+)$/iu.test(
 			value.trim(),
 		)
 	);
@@ -87,7 +87,7 @@ function extractFields(text: string): ReadonlyMap<string, readonly string[]> {
 		const trimmed = line.trim();
 		const marker = trimmed.match(/^(?:`{3,}|~{3,})/u)?.[0];
 		if (activeFence !== undefined) {
-			if (marker === activeFence && trimmed === marker) activeFence = undefined;
+			activeFence = marker === activeFence && trimmed === marker ? undefined : activeFence;
 			continue;
 		}
 		if (marker !== undefined) {
@@ -95,15 +95,19 @@ function extractFields(text: string): ReadonlyMap<string, readonly string[]> {
 			continue;
 		}
 		if (/^(?: {4}|\t)/u.test(line)) continue;
-		for (const label of requiredFields) {
-			const value = fieldValue(line, label);
-			if (value === undefined) continue;
-			const values = fields.get(label) ?? [];
-			values.push(value);
-			fields.set(label, values);
-		}
+		collectLineFields(line, fields);
 	}
 	return fields;
+}
+
+function collectLineFields(line: string, fields: Map<string, string[]>): void {
+	for (const label of requiredFields) {
+		const value = fieldValue(line, label);
+		if (value === undefined) continue;
+		const values = fields.get(label) ?? [];
+		values.push(value);
+		fields.set(label, values);
+	}
 }
 
 async function main(): Promise<void> {
@@ -133,7 +137,7 @@ async function main(): Promise<void> {
 	}
 
 	const semverClaim = fields.get("SemVer claim")?.[0];
-	const rawClaim = semverClaim?.match(/^([a-z-]+)/i)?.[1]?.toLowerCase();
+	const rawClaim = semverClaim?.match(/^([a-z-]+)/iu)?.[1]?.toLowerCase();
 	const claim = semverClaims.find((candidate) => candidate === rawClaim);
 	if (claim === undefined) {
 		report("V3", "FAIL", "SemVer claim must begin conformant, syntax-only, or not-claimed");
@@ -143,10 +147,10 @@ async function main(): Promise<void> {
 
 	const comparator = fields.get("Comparator")?.[0] ?? "";
 	const parserVerification = fields.get("Parser verification")?.[0] ?? "";
-	if (/^(?:none|n\/?a|not applicable|なし|不要)(?:\b|\s|[(:：])/i.test(comparator)) {
+	if (/^(?:none|n\/?a|not applicable|なし|不要)(?:\b|\s|[(:：])/iu.test(comparator)) {
 		report("V2", "FAIL", "a named comparator is required");
 	}
-	if (/^(?:none|n\/?a|not applicable|なし|不要)(?:\b|\s|[(:：])/i.test(parserVerification)) {
+	if (/^(?:none|n\/?a|not applicable|なし|不要)(?:\b|\s|[(:：])/iu.test(parserVerification)) {
 		report("V4", "FAIL", "a parser verification path is required");
 	}
 
@@ -154,7 +158,7 @@ async function main(): Promise<void> {
 	if (failures > 0) process.exitCode = 1;
 }
 
-main().catch((error: unknown) => {
+await main().catch((error: unknown) => {
 	process.stderr.write("FATAL: " + String(error) + "\n");
 	process.exitCode = 2;
 });

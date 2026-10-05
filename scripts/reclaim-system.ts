@@ -41,11 +41,13 @@ const BLIND = process.env.RECLAIM_TIER === "blind";
 function unmet(reason: string, humanCommand?: string): never {
   if (BLIND) {
     console.log(`SKIP reclaim:system — ${reason}`);
-    if (humanCommand) console.log(`  human tier: ${humanCommand}`);
+    if (humanCommand !== undefined && humanCommand !== "")
+      console.log(`  human tier: ${humanCommand}`);
     process.exit(0);
   }
   console.log(reason);
-  if (humanCommand) console.log(`  ${humanCommand}`);
+  if (humanCommand !== undefined && humanCommand !== "")
+    console.log(`  ${humanCommand}`);
   process.exit(1);
 }
 
@@ -112,7 +114,13 @@ async function run(cmd: string[], ms: number): Promise<Ran> {
   // killed it (exit 124). A local probe missed it because it spawned `sleep` DIRECTLY, with no
   // shell in between and therefore no grandchild — only the end-to-end shape exposes this.
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
 
@@ -131,7 +139,7 @@ async function step(
   cmd: string[],
   ms: number = STEP_MS,
 ): Promise<Outcome> {
-  if (!Bun.which(cmd[0] ?? "")) {
+  if (Bun.which(cmd[0] ?? "") === null) {
     tally.push({ label, outcome: "skipped", detail: `${cmd[0]} not on PATH` });
     return "skipped";
   }
@@ -140,11 +148,13 @@ async function step(
     .with({ timedOut: true }, () => "timeout" as const)
     .with({ code: 0 }, () => "ok" as const)
     .otherwise(() => "failed" as const);
-  const detail = r.timedOut
-    ? `no exit within ${ms / 1000}s — killed`
-    : (r.out.trim() || r.err.trim() || `exit ${r.code}`).slice(0, 200);
+  const rawDetail = r.out.trim() !== "" ? r.out.trim() : r.err.trim();
+  let detail: string;
+  if (r.timedOut) detail = `no exit within ${ms / 1000}s — killed`;
+  else if (rawDetail !== "") detail = rawDetail.slice(0, 200);
+  else detail = `exit ${r.code}`;
   tally.push({ label, outcome, detail });
-  console.log(`• ${label}: ${outcome}${detail ? ` — ${detail}` : ""}`);
+  console.log(`• ${label}: ${outcome}${detail !== "" ? ` — ${detail}` : ""}`);
   return outcome;
 }
 
@@ -158,7 +168,7 @@ async function freeBytes(): Promise<number> {
 
 // The gate, now bounded like everything else. `sudo -n` is non-interactive on purpose: a task
 // runner may have no tty, and a password prompt there is indistinguishable from a hang.
-if (!Bun.which("sudo")) {
+if (Bun.which("sudo") === null) {
   unmet("no sudo on PATH — this task needs root to reclaim system state");
 }
 const probe = await run(["sudo", "-n", "true"], STEP_MS);
@@ -204,12 +214,12 @@ await step("journalctl --vacuum-size=200M (old archived journals)", [
 // of text this script parsed, so malformed or unexpected `snap list` output turns into an
 // unbounded run of privileged deletions. Bounded, and the remainder is REPORTED — a silent
 // truncation would read as "there were only 32", which is the failure mode of every quiet cap.
-if (Bun.which("snap")) {
+if (Bun.which("snap") !== null) {
   const listed = (await run(["snap", "list", "--all"], STEP_MS)).out;
   const disabled = listed
     .split("\n")
-    .map((line) => line.trim().split(/\s+/))
-    .filter((f) => f.length >= 6 && f[5]?.includes("disabled"))
+    .map((line) => line.trim().split(/\s+/u))
+    .filter((f) => f.length >= 6 && f[5]?.includes("disabled") === true)
     .map((f) => ({ name: f[0] ?? "", revision: f[2] ?? "" }))
     .filter((s) => s.name !== "" && s.revision !== "");
   const take = disabled.slice(0, SNAP_MAX);

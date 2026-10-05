@@ -185,8 +185,8 @@ const reviseProposal = (
 	replacements: Readonly<Record<string, string>> = {},
 ): void => {
 	let text = readFileSync(path, "utf8")
-		.replace(/^REVISION:\s*\d+$/m, `REVISION: ${revision}`)
-		.replace(/^UPDATED:.*$/m, `UPDATED: ${updated}`);
+		.replace(/^REVISION:\s*\d+$/mu, `REVISION: ${revision}`)
+		.replace(/^UPDATED:.*$/mu, `UPDATED: ${updated}`);
 	for (const [before, after] of Object.entries(replacements)) {
 		text = text.replace(before, after);
 	}

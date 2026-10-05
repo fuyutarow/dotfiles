@@ -4,7 +4,7 @@ import { $ } from "bun";
 // assertion — one guarded regression is a hang).
 const to = Bun.which("timeout") ?? Bun.which("gtimeout");
 
-if (!to) {
+if (to === null) {
   console.log(
     "⚠️  no timeout(1) on PATH — running unbounded; a hang regression will block instead of failing",
   );

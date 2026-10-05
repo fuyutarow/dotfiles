@@ -37,27 +37,31 @@ function eventAt(
   return event;
 }
 describe("programme-flow/v2", () => {
-  test("streaming pass dispatches independent section work", () =>
+  test("streaming pass dispatches independent section work", () => {
     expect(flow("flow-streaming-pass.json")).toMatchObject({
       ok: true,
       dispatched: ["a"],
-    }));
+    });
+  });
   test("global barrier fails", () => {
     const result = flow("flow-global-barrier.json");
     const codes = result.findings.map((f) => f.code);
     for (const code of ["GLOBAL_BATCH_BARRIER", "READY_WORK_NOT_DISPATCHED"])
       expect(codes).toContain(code);
   });
-  test("Supervisor is not hot path", () =>
+  test("Supervisor is not hot path", () => {
     expect(
       flow("flow-hot-supervisor.json").findings.map((f) => f.code),
-    ).toContain("SUPERVISOR_ON_HOT_PATH"));
-  test("verifier is not hot path", () =>
+    ).toContain("SUPERVISOR_ON_HOT_PATH");
+  });
+  test("verifier is not hot path", () => {
     expect(
       flow("flow-premature-verifier.json").findings.map((f) => f.code),
-    ).toContain("VERIFIER_ON_HOT_PATH"));
-  test("capacity is filled", () =>
-    expect(flow("flow-capacity-fill.json").dispatched).toEqual(["a", "b"]));
+    ).toContain("VERIFIER_ON_HOT_PATH");
+  });
+  test("capacity is filled", () => {
+    expect(flow("flow-capacity-fill.json").dispatched).toEqual(["a", "b"]);
+  });
   test("an unresolved invalidator dependency holds downstream despite free slots", () => {
     const result = flow("flow-unresolved-dependency.json");
     expect(result.dispatched).toEqual([]);
@@ -202,20 +206,23 @@ describe("programme-flow/v2", () => {
       "SECTION_WIP_EXCEEDED",
     );
   });
-  test("backpressure leaves later stage live", () =>
+  test("backpressure leaves later stage live", () => {
     expect(flow("flow-backpressure-pass.json")).toMatchObject({
       ok: true,
       dispatched: ["build"],
-    }));
-  test("learning wakes ahead of execution", () =>
-    expect(flow("flow-immediate-learning.json").dispatched).toEqual(["learn"]));
-  test("metrics exclude infrastructure checks", () =>
+    });
+  });
+  test("learning wakes ahead of execution", () => {
+    expect(flow("flow-immediate-learning.json").dispatched).toEqual(["learn"]);
+  });
+  test("metrics exclude infrastructure checks", () => {
     expect(flow("flow-metric-integrity.json").metrics).toMatchObject({
       infrastructureChecks: 1683,
       searchPerHour: 0,
       learnPerHour: 0,
       candidateInventory: 0,
-    }));
+    });
+  });
   test("scientific counters derive only from valid embedded traces", () => {
     const base = flowBase("flow-metric-integrity.json");
     expect(

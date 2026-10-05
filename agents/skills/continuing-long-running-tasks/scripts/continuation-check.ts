@@ -37,6 +37,23 @@ function inside(root: string, candidate: string): boolean {
 	);
 }
 
+function printBindingFindings(slot: string, findings: ReturnType<typeof bindContinuationSlot>): void {
+	for (const finding of findings) {
+		process.stdout.write(
+			`FAIL ${resolve(slot)}: ${finding.code} ${finding.message}\n`,
+		);
+	}
+	process.stdout.write(`FAIL=${findings.length}\n`);
+}
+
+function bindSlotOrFail(slot: string, path: string): boolean {
+	const findings = bindContinuationSlot(slot, path);
+	if (findings.length === 0) return false;
+	printBindingFindings(slot, findings);
+	process.exitCode = 1;
+	return true;
+}
+
 function main(): void {
 	const parsed = cli(
 		{
@@ -74,18 +91,8 @@ function main(): void {
 			: continuationWorkspaceRootFromSlot(resolve(bindSlot));
 	const inspection = inspectContinuationRecord(absolutePath, workspaceRoot);
 	if (inspection.status === "valid") {
+		if (bindSlot !== undefined && bindSlotOrFail(bindSlot, absolutePath)) return;
 		if (bindSlot !== undefined) {
-			const findings = bindContinuationSlot(bindSlot, absolutePath);
-			if (findings.length > 0) {
-				for (const finding of findings) {
-					process.stdout.write(
-						`FAIL ${resolve(bindSlot)}: ${finding.code} ${finding.message}\n`,
-					);
-				}
-				process.stdout.write(`FAIL=${findings.length}\n`);
-				process.exitCode = 1;
-				return;
-			}
 			process.stdout.write(`BOUND ${resolve(bindSlot)} -> ${absolutePath}\n`);
 		}
 		process.stdout.write(

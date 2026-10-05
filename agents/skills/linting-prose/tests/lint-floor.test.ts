@@ -71,7 +71,7 @@ describe("lint-floor passthrough (no --fix)", () => {
     );
     chmodSync(fakeBunx, 0o755);
     using _cleanupDir = {
-      [Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
+      [Symbol.dispose]: () =>{  rmSync(dir, { recursive: true, force: true }); },
     };
     const { out, err, code } = run(["--__proto__", "target.md"], {
       PATH: `${dir}:${process.env.PATH ?? ""}`,
@@ -91,7 +91,7 @@ describe("lint-floor passthrough (no --fix)", () => {
     );
     chmodSync(fakeBunx, 0o755);
     using _cleanupDir = {
-      [Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
+      [Symbol.dispose]: () =>{  rmSync(dir, { recursive: true, force: true }); },
     };
     const { out, err, code } = run(
       ["--version", "--", "--downstream-only", "target.md"],

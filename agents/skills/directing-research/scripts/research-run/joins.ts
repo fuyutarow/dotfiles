@@ -46,7 +46,7 @@ function setDifference(
 }
 
 function formatSet(values: ReadonlySet<string>): string {
-  return [...values].sort().join(",") || "NONE";
+  return values.size > 0 ? [...values].toSorted().join(",") : "NONE";
 }
 
 function validateReceiptJoins(
@@ -142,7 +142,7 @@ export function validatePacketJoins(
     if (
       !sameSet(intentSet, receiptSet) ||
       !sameSet(intentSet, judgmentSet) ||
-      missingSet.size !== 0
+      missingSet.size > 0
     )
       addFinding(
         findings,

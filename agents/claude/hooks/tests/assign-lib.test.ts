@@ -32,7 +32,7 @@ describe("isValidRole", () => {
 
 describe("randomSuffix", () => {
   test("is 4 chars from the Crockford base32 alphabet by default", () => {
-    expect(randomSuffix()).toMatch(/^[0-9a-hj-km-np-tv-z]{4}$/);
+    expect(randomSuffix()).toMatch(/^[0-9a-hj-km-np-tv-z]{4}$/u);
   });
 
   test("honors an injected rand() for determinism", () => {
@@ -100,9 +100,9 @@ describe("loadFleetPolicy", () => {
     // The shipped default (agents/skills/commanding-research-fleets/fleet_policy.toml)
     // configures dtr/pi/obs — same charter text assign-roles.toml carried before the
     // 2026-09-07 migration.
-    expect(rolePrompt("dtr", policy)).toMatch(/thin Director/);
-    expect(rolePrompt("pi", policy)).toMatch(/grit PI/);
-    expect(rolePrompt("obs", policy)).toMatch(/観察者/);
+    expect(rolePrompt("dtr", policy)).toMatch(/thin Director/u);
+    expect(rolePrompt("pi", policy)).toMatch(/grit PI/u);
+    expect(rolePrompt("obs", policy)).toMatch(/観察者/u);
   });
 
   test("an unconfigured role stays unconfigured under the shipped default", async () => {

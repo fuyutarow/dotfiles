@@ -65,11 +65,17 @@ async function run(
   // Raced against the abort: killing the child does not close a pipe a grandchild holds, so
   // awaiting the drain alone is unbounded (measured in scripts/reclaim-system.ts).
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
   if (done === null) return { code: -1, out: "", timedOut: true };
-  return { ...done, out: done.out.replace(/\r/g, ""), timedOut: false };
+  return { ...done, out: done.out.replaceAll("\r", ""), timedOut: false };
 }
 
 async function requireWsl(): Promise<void> {
@@ -82,7 +88,7 @@ async function requireWsl(): Promise<void> {
     );
     process.exit(1);
   }
-  if (!Bun.which("wslpath") || !Bun.which("powershell.exe")) {
+  if (Bun.which("wslpath") === null || Bun.which("powershell.exe") === null) {
     console.log(
       "wslpath / powershell.exe not reachable — is [interop] enabled in /etc/wsl.conf?",
     );
@@ -162,7 +168,7 @@ async function dump(): Promise<void> {
   const skipped = r.out
     .split("\n")
     .filter((l) =>
-      /not available from any source|どのソースからも/.test(l),
+      /not available from any source|どのソースからも/u.test(l),
     ).length;
   if (!existsSync(wsl)) {
     console.log(
@@ -178,7 +184,7 @@ async function dump(): Promise<void> {
       const packages = JsonRecordList.parse(src.Packages)
         .map((p) => ({ id: PackageId.parse(p).PackageIdentifier, p }))
         // Stable ordering so the tracked file diffs by content, not by winget's enumeration order.
-        .sort((a, b) => a.id.localeCompare(b.id))
+        .toSorted((a, b) => a.id.localeCompare(b.id))
         .map((e) => e.p);
       return {
         name: SourceName.parse(src).SourceDetails.Name,
@@ -188,14 +194,16 @@ async function dump(): Promise<void> {
     },
   );
   const total = sources.reduce((n, s) => n + s.count, 0);
-  sources.sort((a, b) => a.name.localeCompare(b.name));
+  const sortedSources = sources.toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  );
   const json =
     doc.Sources === undefined || doc.Sources === null
       ? doc
-      : { ...doc, Sources: sources.map((s) => s.src) };
+      : { ...doc, Sources: sortedSources.map((s) => s.src) };
   await Bun.write(repoFile, `${JSON.stringify(json, null, 2)}\n`);
   console.log(
-    `  ${total} packages across ${sources.map((s) => `${s.name}(${s.count})`).join(", ")}`,
+    `  ${total} packages across ${sortedSources.map((s) => `${s.name}(${s.count})`).join(", ")}`,
   );
   if (skipped > 0) {
     console.log(
@@ -218,7 +226,7 @@ async function restore(dryRun: boolean): Promise<void> {
   const { win, wsl } = await scratch();
   const staged = copyFile(repoFile, wsl);
   if (staged.isErr()) {
-    console.log(`could not stage manifest at ${wsl}: ${staged.error}`);
+    console.log(`could not stage manifest at ${wsl}: ${String(staged.error)}`);
     process.exit(1);
   }
   const winget = await wingetPath();
@@ -278,10 +286,10 @@ async function main(): Promise<void> {
   }
   await requireWsl();
   if (verb === "dump") return dump();
-  return restore(parsed.flags.dryRun === true);
+  return restore(parsed.flags.dryRun);
 }
 
-main().catch((err) => {
+await main().catch((err) => {
   console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(err instanceof UsageError ? 2 : 1);
 });

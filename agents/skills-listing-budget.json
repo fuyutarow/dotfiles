@@ -1,5 +1,5 @@
 {
-  "maxListingChars": 53106,
+  "maxListingChars": 53867,
   "measuredOn": "2026-10-03",
   "skillsAtMeasurement": 59,
   "why": "A local ratchet over the static sum of active skill names and descriptions. This is a conservative character-footprint proxy, not measured per-turn tokens: host selection, truncation, invocation policy and tokenization affect observed listing cost. F4 in forging-skills owns membership and the retire/merge/shorten/raise decision. The shared floor compares the proxy against maxListingChars. A ceiling raise needs an explicit reason in the same reviewable change; recovered footprint may lower the ceiling.",
@@ -99,6 +99,13 @@
       "to": 61245,
       "spentBy": "operating-wsl2-on-windows",
       "reason": "A new skill's name+description, 1024 chars (60,221 was charged before it, within the 60,228 ceiling — no pre-existing drift to absorb). Admitted because the battery found no owner: securing-remote-access owns the ACCESS chain (its wsl2-mac.md sets up ssh/Tailscale/.wslconfig reachability), but nothing owned OPERATING a running WSL2-on-Windows host — its sparse-vhdx storage model, the disk-reclaim lever ladder, the measurement traps, and recovery when the box wedges on its own resources. That void is load-bearing: the forging model itself made four confident-wrong host-number calls in the source session (instantaneous-vs-sustained CPU, cumulative-vs-rate pgscan, free-vs-available memory, an Application Data junction loop reading 647GB of phantom data) before the code caught them, which is exactly what the skill's deny-list exists to prevent. Retiring a sibling was considered and rejected: the one overlap (lifecycle) was resolved MECE by localizing prevention-config to securing-remote-access and recovery here, with a reciprocal pointer — complementary, not redundant. Description kept tight to hold the charge to 1024."
+    },
+    {
+      "date": "2026-10-05",
+      "from": 53106,
+      "to": 53867,
+      "spentBy": "renting-cloud-gpus",
+      "reason": "A new name+description entry (761 chars; the 59-skill collection measured 53,106 before and the 60-skill collection 53,867 after, so no drift is absorbed). Ownership void: no skill owned renting a remote GPU and leaving nothing behind; a literal search of agents/skills for vast/runpod found only incidental text (the semantic battery was unavailable: stale index). The vendor-shipped vastai SKILL.md covers CLI syntax only and was not vendored to save its listing cost; this skill links its facts and owns the house layer the owner asked for (no source left on the host, 500 yen/day budget, keys via fnox, secrecy tiers). Extending a sibling was rejected: operating-wsl2-on-windows owns the local host, orchestrating-agents owns local admission."
     }
   ],
   "reductions": [

@@ -57,14 +57,17 @@ function scalar(lines: string[], key: string): string | undefined {
   const index = lines.findIndex((line) => line.startsWith(`${key}:`));
   if (index === -1) return undefined;
   const raw = lines[index]?.slice(key.length + 1).trim() ?? "";
-  if (raw !== ">" && raw !== ">-" && raw !== "|" && raw !== "|-")
-    return raw.replaceAll('"', "") || undefined;
+  if (raw !== ">" && raw !== ">-" && raw !== "|" && raw !== "|-") {
+    const scalarText = raw.replaceAll('"', "");
+    return scalarText === "" ? undefined : scalarText;
+  }
   const folded: string[] = [];
   for (const line of lines.slice(index + 1)) {
-    if (line !== "" && !/^\s/.test(line)) break;
+    if (line !== "" && !/^\s/u.test(line)) break;
     folded.push(line.trim());
   }
-  return folded.join(" ").trim() || undefined;
+  const foldedText = folded.join(" ").trim();
+  return foldedText === "" ? undefined : foldedText;
 }
 
 function listedReferences(lines: string[]): string[] {
@@ -72,12 +75,12 @@ function listedReferences(lines: string[]): string[] {
   if (start === -1) return [];
   const refs: string[] = [];
   for (const line of lines.slice(start + 1)) {
-    const match = line.match(/^\s*-\s*(.+)$/);
+    const match = line.match(/^\s*-\s*(.+)$/u);
     if (match?.[1] !== undefined) {
       refs.push(match[1].replaceAll('"', ""));
       continue;
     }
-    if (/^\S/.test(line)) break;
+    if (/^\S/u.test(line)) break;
   }
   return refs;
 }
@@ -88,17 +91,17 @@ function listedReferences(lines: string[]): string[] {
 // (`> `) are stripped so blockquoted prose still counts. These three checks never FAIL —
 // they measure technical-communication debt for later, deliberate enforcement.
 
-const SENTENCE_TERMINATORS = /[。.！？]/;
-const TABLE_SEPARATOR_ROW = /^\|[\s:|-]+\|?$/;
-const VERSION_HEADER_START = /^>\s*\*\*Version\*\*/;
-const URL_ONLY_LINE = /^[<(]?https?:\/\/\S+[)>.,;:]?$/;
+const SENTENCE_TERMINATORS = /[。.！？]/u;
+const TABLE_SEPARATOR_ROW = /^\|[\s:|-]+\|?$/u;
+const VERSION_HEADER_START = /^>\s*\*\*Version\*\*/u;
+const URL_ONLY_LINE = /^[<(]?https?:\/\/\S+[)>.,;:]?$/u;
 
 function isFenceMarker(line: string): boolean {
   return line.trim().startsWith("```");
 }
 
 function stripBlockquoteMarker(line: string): string {
-  return line.replace(/^\s*(?:>\s?)+/, "");
+  return line.replace(/^\s*(?:>\s?)+/u, "");
 }
 
 // Prose sentence length — paragraph-joins consecutive prose lines (broken by blank
@@ -115,7 +118,7 @@ function countLongProseSentences(bodyLines: string[]): number {
     paragraph = [];
     for (const segment of text.split(SENTENCE_TERMINATORS)) {
       const trimmed = segment.trim();
-      if (trimmed !== "" && [...trimmed].length > 120) longCount += 1;
+      if (trimmed !== "" && Array.from(trimmed).length > 120) longCount += 1;
     }
   };
 
@@ -159,13 +162,13 @@ async function reportReferenceProse(directory: string): Promise<void> {
     const path = join(dir, entry);
     // No try/catch (audited *.ts ban): Promise.try turns an unreadable-file throw into a
     // rejection this `.then` maps to `undefined`, same as the old catch's `continue`.
-    const text: string | undefined = await Promise.try(() =>
+    const text: string | null = await Promise.try(() =>
       Bun.file(path).text(),
     ).then(
       (ok) => ok,
-      () => undefined,
+      () => null,
     );
-    if (text === undefined) continue; // a directory entry or unreadable file — the mention check already covers absence
+    if (text === null) continue; // a directory entry or unreadable file — the mention check already covers absence
     files += 1;
     const count = countLongProseSentences(text.split("\n"));
     total += count;
@@ -188,15 +191,14 @@ function versionHeaderBlockLengths(bodyLines: string[]): number[] {
   const blocks: number[] = [];
   let index = 0;
   while (index < bodyLines.length) {
-    if (VERSION_HEADER_START.test(bodyLines[index]?.trim() ?? "")) {
-      let end = index + 1;
-      while (end < bodyLines.length && bodyLines[end]?.trim().startsWith(">"))
-        end += 1;
-      blocks.push(end - index);
-      index = end;
-    } else {
+    if (!VERSION_HEADER_START.test(bodyLines[index]?.trim() ?? "")) {
       index += 1;
+      continue;
     }
+    let end = index + 1;
+    while (end < bodyLines.length && bodyLines[end]?.trim().startsWith(">") === true) end += 1;
+    blocks.push(end - index);
+    index = end;
   }
   return blocks;
 }
@@ -217,15 +219,13 @@ function countLongTableCells(bodyLines: string[]): number {
     let cells = trimmed.split("|");
     if (trimmed.startsWith("|")) cells = cells.slice(1);
     if (trimmed.endsWith("|")) cells = cells.slice(0, -1);
-    for (const cell of cells) {
-      if ([...cell.trim()].length > 400) longCells += 1;
-    }
+    longCells += cells.filter((cell) => Array.from(cell.trim()).length > 400).length;
   }
   return longCells;
 }
 
 async function checkDirectory(input: string): Promise<void> {
-  const directory = input.replace(/\/$/, "");
+  const directory = input.replace(/\/$/u, "");
   const skillPath = join(directory, "SKILL.md");
   if (!existsSync(skillPath)) {
     fail(directory, "SKILL.md missing");
@@ -245,14 +245,14 @@ async function checkDirectory(input: string): Promise<void> {
       `frontmatter name '${name}' != dir basename '${directoryName}'`,
     );
   }
-  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(name)) {
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(name)) {
     fail(directory, `name '${name}' violates ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`);
   }
-  if ([...name].length > 64)
-    fail(directory, `name '${name}' exceeds 64 chars (${[...name].length})`);
+  if (Array.from(name).length > 64)
+    fail(directory, `name '${name}' exceeds 64 chars (${Array.from(name).length})`);
   if (name.includes("--"))
     fail(directory, `name '${name}' has consecutive hyphens`);
-  if (/(claude|anthropic)/i.test(name) && name !== "driving-claude") {
+  if (/(claude|anthropic)/iu.test(name) && name !== "driving-claude") {
     fail(
       directory,
       `name '${name}' contains a reserved word (claude/anthropic)`,
@@ -262,7 +262,7 @@ async function checkDirectory(input: string): Promise<void> {
   const description = scalar(metadata.lines, "description");
   const descriptionLine =
     metadata.lines.find((line) => line.startsWith("description:")) ?? "";
-  if (/^description:\s*[^>|'"\s]/.test(descriptionLine)) {
+  if (/^description:\s*[^>|'"\s]/u.test(descriptionLine)) {
     warn(
       directory,
       "plain-scalar description — any ': ' inside will break YAML parsing (observed 2026-07-02); use >-",
@@ -271,28 +271,26 @@ async function checkDirectory(input: string): Promise<void> {
   if (description !== undefined) {
     listingCost.push({
       name,
-      chars: [...name].length + [...description].length,
+      chars: Array.from(name).length + Array.from(description).length,
     });
   }
   if (description === undefined) {
     fail(directory, "description: missing or empty");
-  } else if ([...description].length > 1500) {
+  } else if (Array.from(description).length > 1500) {
     warn(
       directory,
-      `description ${[...description].length} chars > 1500 (local review threshold; target-host limits owned by operating-the-harness)`,
+      `description ${Array.from(description).length} chars > 1500 (local review threshold; target-host limits owned by operating-the-harness)`,
     );
   }
 
   const body = lines.slice(metadata.bodyStart).join("\n");
   const referencesDirectory = join(directory, "references");
   if (existsSync(referencesDirectory)) {
-    for (const entry of await readdir(referencesDirectory)) {
-      if (entry.endsWith(".md") && !body.includes(entry))
-        fail(
-          directory,
-          `references/${entry} exists but is never mentioned in SKILL.md`,
-        );
-    }
+    (await readdir(referencesDirectory))
+      .filter((entry) => entry.endsWith(".md") && !body.includes(entry))
+      .forEach((entry) => {
+        fail(directory, `references/${entry} exists but is never mentioned in SKILL.md`);
+      });
   }
   for (const reference of listedReferences(metadata.lines)) {
     const candidates = [
@@ -300,7 +298,7 @@ async function checkDirectory(input: string): Promise<void> {
       join(referencesDirectory, reference),
       join(referencesDirectory, `${reference}.md`),
     ];
-    if (!candidates.some(existsSync))
+    if (!candidates.some((candidate) => existsSync(candidate)))
       fail(
         directory,
         `frontmatter references '${reference}' has no file (references/${reference}.md missing)`,
@@ -403,7 +401,7 @@ async function reportListingBudget(
   }
   if (total > max) {
     const worst = [...listingCost]
-      .sort((a, b) => b.chars - a.chars)
+      .toSorted((a, b) => b.chars - a.chars)
       .slice(0, 3);
     process.stdout.write(
       `FAIL listing budget: ${total} chars > ${max} declared in ${budgetPath}. ` +
@@ -449,7 +447,7 @@ async function main(): Promise<void> {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
   );

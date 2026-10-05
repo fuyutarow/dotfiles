@@ -10,7 +10,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
     throw new UsageError(`unknown option '--${flag}'`);
 }
 async function main(): Promise<void> {
-  const parsed = await cli(
+  const parsed = cli(
     {
       name: "research-section-trace",
       parameters: ["<trace>"],
@@ -42,10 +42,11 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.ok) process.exitCode = 1;
 }
-if (import.meta.main)
-  main().catch((error: unknown) => {
+if (import.meta.main) {
+  await main().catch((error: unknown) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );
     process.exitCode = 2;
   });
+}

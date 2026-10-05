@@ -190,7 +190,7 @@ describe("discoverProjects", () => {
     const byName = join(home, "vendor", "prune-by-name");
     for (const p of [keep, byPath, byName]) makeProject(p);
 
-    expect(discoverProjects(home)).toEqual([keep, byPath, byName].sort());
+    expect(discoverProjects(home)).toEqual([keep, byPath, byName].toSorted());
 
     const found = discoverProjects(home, {
       excludeDirNames: ["vendor"],
@@ -393,7 +393,7 @@ describe("CLI: discover", () => {
     makeProject(join(home, "proj-c"), { dim: 384, chunks: 5 }); // stale straggler
     const { out, code } = runScript(["discover", "--home", home]);
     expect(out).toContain(`PROJECT ${join(home, "proj-c")} `);
-    expect(out).toMatch(/proj-c.*status=MISMATCH/);
+    expect(out).toMatch(/proj-c.*status=MISMATCH/u);
     expect(code).toBe(1);
   });
 });
@@ -428,7 +428,7 @@ describe("CLI: cutover refuses on missing/empty shadow", () => {
     makeProject(join(home, "proj-a"));
     const { out, code } = runScript(["cutover", "--home", home, "--yes"]);
     expect(code).toBe(2); // FATAL: no shadow global_settings.yml at all yet
-    expect(`${out}`).toBeDefined();
+    expect(out).toBeDefined();
   });
 
   test("refuses (exit 1) when the shadow index exists but is empty", () => {

@@ -13,6 +13,15 @@ import {
   strengthOf,
 } from "../definitions.ts";
 
+const loadFromText = (text: string) => {
+  const path = join(
+    mkdtempSync(join(tmpdir(), "retrieval-")),
+    "retrieval.toml",
+  );
+  writeFileSync(path, text);
+  return () => loadRetrievalConfig(path);
+};
+
 describe("definition cards", () => {
   test("the doc line skips a signature copy and rulers", () => {
     const doc =
@@ -55,14 +64,6 @@ describe("retrieval.toml", () => {
     join(import.meta.dir, "..", "retrieval.toml"),
     "utf8",
   );
-  const load = (text: string) => {
-    const path = join(
-      mkdtempSync(join(tmpdir(), "retrieval-")),
-      "retrieval.toml",
-    );
-    writeFileSync(path, text);
-    return () => loadRetrievalConfig(path);
-  };
   test("the shipped file carries the hardcoded values it replaced (pool since re-measured)", () => {
     const c = loadRetrievalConfig();
     expect([c.recall, c.pool]).toEqual([40, 25]); // pool 40 -> 25: bench 2026-10-01
@@ -78,7 +79,7 @@ describe("retrieval.toml", () => {
     // Owner decision 2026-10-01: an exhausted reseller balance points to the official API.
     expect(c.jevEndpoint.whenExhausted).toContain('jev_provider = "typesafe"');
     expect(
-      load(
+      loadFromText(
         shipped.replace(
           'jev_provider = "jevtypesafeai"',
           'jev_provider = "typesafe"',
@@ -91,32 +92,32 @@ describe("retrieval.toml", () => {
   });
   test("a bad value stops and names its key", () => {
     const cases: [string, string, RegExp][] = [
-      ["pool = 25", "pool = 41", /definition\.pool must be at most recall/],
-      ["recall = 40", "recall = 0", /definition\.recall must be an integer/],
+      ["pool = 25", "pool = 41", /definition\.pool must be at most recall/u],
+      ["recall = 40", "recall = 0", /definition\.recall must be an integer/u],
       [
         'jev_provider = "jevtypesafeai"',
         'jev_provider = "other"',
-        /definition\.jev_provider must be one of/,
+        /definition\.jev_provider must be one of/u,
       ],
       [
         'url = "https://api.typesafe.ai/v1/systemone"',
         'url = "http://api.typesafe.ai"',
-        /jev_endpoints\.typesafe\.url/,
+        /jev_endpoints\.typesafe\.url/u,
       ],
       [
         "hook = 7.5",
         "hook = 3.0",
-        /thresholds\.local\.hook must be at least strong/,
+        /thresholds\.local\.hook must be at least strong/u,
       ],
       [
         "likely = 1.5",
         "likely = 5.0",
-        /thresholds\.local\.likely must be below strong/,
+        /thresholds\.local\.likely must be below strong/u,
       ],
       [
         "documented = 0.5",
         'documented = "0.5"',
-        /priors\.documented must be a finite number/,
+        /priors\.documented must be a finite number/u,
       ],
     ];
     for (const [from, to, err] of cases) {
@@ -129,7 +130,7 @@ describe("retrieval.toml", () => {
               'jev_provider = "typesafe"',
             )
         : shipped.replace(from, to);
-      expect(load(text)).toThrow(err);
+      expect(() => loadFromText(text)()).toThrow(err);
     }
   });
 });

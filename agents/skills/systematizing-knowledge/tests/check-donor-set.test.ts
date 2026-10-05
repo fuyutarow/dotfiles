@@ -96,7 +96,7 @@ describe("check-donor-set", () => {
 				"NONE — two distinct donor evidence units were compared",
 				"SINGLE-DONOR LIMIT — hypothesis seed only; no abstract schema established; no target transport established",
 			)
-			.replace(/\| D2 \|.*\n/, "")
+			.replace(/\| D2 \|.*\n/u, "")
 			.replace("donor IDs D1,D2", "donor ID D1");
 		const result = run([fixture(oneDonor)]);
 
@@ -106,7 +106,7 @@ describe("check-donor-set", () => {
 
 	test("rejects one donor promoted to an established schema", () => {
 		const invalid = twoDonors
-			.replace(/\| D2 \|.*\n/, "")
+			.replace(/\| D2 \|.*\n/u, "")
 			.replace("donor IDs D1,D2", "donor ID D1");
 		const result = run([fixture(invalid)]);
 
@@ -188,10 +188,10 @@ describe("check-donor-set", () => {
 
 	test("does not borrow fields or donor tables from a later Notes section", () => {
 		const misplacedField = `${twoDonors.replace(
-			/^- Transfer search question:.*$/m,
+			/^- Transfer search question:.*$/mu,
 			"",
 		)}\n## Notes\n- Transfer search question: Which source relations preserve recoverability after aggregation?`;
-		const donorTable = twoDonors.match(/^\| Donor ID[\s\S]*?^\| D2 .*$/m)?.[0];
+		const donorTable = twoDonors.match(/^\| Donor ID[\s\S]*?^\| D2 .*$/mu)?.[0];
 		expect(donorTable).toBeDefined();
 		const misplacedTable = `${twoDonors.replace(donorTable ?? "", "")}\n## Notes\n${donorTable ?? ""}`;
 
@@ -209,7 +209,7 @@ describe("check-donor-set", () => {
 	test("does not borrow Comparison fields from nested Notes headings", () => {
 		for (const heading of ["##", "###", "####", "######"]) {
 			const invalid = twoDonors
-				.replace(/^- Single-donor limit:.*$/m, "")
+				.replace(/^- Single-donor limit:.*$/mu, "")
 				.replace(
 					"\n## Knowledge state",
 					`\n${heading} Notes\n- Single-donor limit: NONE — borrowed from a nested section\n\n## Knowledge state`,

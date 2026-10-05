@@ -51,7 +51,7 @@ export function decidePre(
 // PATH lookup of a named binary neither case is a real executable.
 function isExecutable(p: string): boolean {
   const st = statSync(p, { throwIfNoEntry: false });
-  if (!st || !st.isFile()) return false;
+  if (st === undefined || !st.isFile()) return false;
   return (
     (st.mode & constants.S_IXUSR) !== 0 ||
     (st.mode & constants.S_IXGRP) !== 0 ||
@@ -78,7 +78,7 @@ export function findExe(
 // The directory a Bash command ends up in: the payload cwd, then each plain `cd <dir>` the
 // command itself runs (quoted or bare, after start / && / ;). Not a shell: `cd "$X"` and
 // `pushd` are not followed. Shared by the gates that judge a command by where it runs.
-const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/g;
+const SIMPLE_CD = /(?:^|&&|;)\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gu;
 function expandHome(path: string): string {
   if (path === "~") return homedir();
   if (path.startsWith("~/")) return join(homedir(), path.slice(2));

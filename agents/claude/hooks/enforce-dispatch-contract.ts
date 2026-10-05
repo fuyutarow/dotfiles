@@ -3,7 +3,7 @@
 // matcher: Agent|Task|Workflow   (settings.json: run.sh --fail-closed)
 //
 // THE ROSTER (agents/models/dispatch-roster.toml, read through agents/models/roster.ts) is the one
-// home of what may be dispatched. Each row is luna (gpt-6-luna, run as `codex-run --choice <id>`
+// home of what may be dispatched. Each row is luna (gpt-6-luna, run as `agent-router run --choice <id>`
 // from the main loop's Bash) or claude (the Agent tool, `subagent_type: "<id>"`).
 //
 // Policy (owner, 2026-10-05: 「workflowの起動をむしろ禁止すればいいだけでは？？ simplify」):
@@ -43,7 +43,7 @@ import { decidePre, readStdinJson } from "./lib.ts";
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
 
 function familyPattern(family: string): RegExp {
-  return new RegExp(`(?:^|[-_])${family}(?:$|[-_])`, "i");
+  return new RegExp(`(?:^|[-_])${family}(?:$|[-_])`, "iu");
 }
 
 function claudeEnabled(roster: Roster): boolean {
@@ -53,7 +53,7 @@ function claudeEnabled(roster: Roster): boolean {
 function pickHelp(roster: Roster): string {
   return (
     `Pick one row (● = default) from ${ROSTER_FILE}:\n${rosterTable(roster)}\n` +
-    `Luna: run \`codex-run --choice <id> --sandbox read-only --cd <dir> --prompt-file <brief>\` from Bash ` +
+    `Luna: run \`agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only\` from Bash (Jev picks the row; \`--choice <id>\` to name it) ` +
     `(background it for parallel work).` +
     (claudeEnabled(roster)
       ? " Claude: the Agent tool with subagent_type set to the id."
@@ -62,7 +62,7 @@ function pickHelp(roster: Roster): string {
 }
 
 function lunaLine(id: string): string {
-  return `codex-run --choice ${id} --sandbox read-only --cd <dir> --prompt-file <brief>`;
+  return `agent-router run --choice ${id} --prompt-file <brief> --cd <dir> --sandbox read-only`;
 }
 
 function promptResourceProblem(prompt: string | null): string | null {
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     decidePre(
       "deny",
       "dispatch-contract: the Workflow tool is not used (luna first: its agents can only be Claude models). " +
-        "Fan out instead: luna workers as several `codex-run --choice <id>` calls in the background from Bash" +
+        "Fan out instead: luna workers as several `agent-router run` calls in the background from Bash" +
         (claudeEnabled(roster) ? "; Claude workers as Agent calls" : "") +
         `.\n${pickHelp(roster)}`,
     );

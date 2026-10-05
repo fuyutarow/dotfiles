@@ -693,8 +693,9 @@ describe("cross-section-learning-bus/v1", () => {
     mutationAdmission.sha256 = bodySha256(body)!;
     expect(codes(mutation)).toContain("TRANSFER_AUTO_ENACTED");
   });
-  test("caller supplied scientific counters fail closed", () =>
-    expect(codes(input({ searchReceipts: 99 }))).toContain("BUS_INVALID"));
+  test("caller supplied scientific counters fail closed", () => {
+    expect(codes(input({ searchReceipts: 99 }))).toContain("BUS_INVALID");
+  });
   test("nearest-rank propagation percentiles are deterministic", () => {
     expect(nearestRankPercentile([], 0.5)).toBeNull();
     expect(nearestRankPercentile([20, 10], 0.5)).toBe(10);

@@ -39,7 +39,9 @@ afterEach(() => {
 // Short on purpose: a unix socket path is limited to ~104 bytes on macOS.
 function scratch(): string {
   const dir = mkdtempSync(join(tmpdir(), "so-"));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  cleanups.push(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
   return dir;
 }
 
@@ -88,7 +90,9 @@ async function startReceiver(
       stderr: "ignore",
     },
   );
-  cleanups.push(() => proc.kill());
+  cleanups.push(() => {
+    proc.kill();
+  });
   for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
   expect(existsSync(sock)).toBe(true);
   return { sock, opened };
@@ -107,11 +111,15 @@ function ask(sock: string, payload: string, waitMs = 5_000): Promise<Answer> {
       clearTimeout(timer);
       resolve({ reply: reply.trim(), closedByPeer });
     };
-    const timer = setTimeout(() => finish(false), waitMs);
+    const timer = setTimeout(() => {
+      finish(false);
+    }, waitMs);
     Bun.connect({
       unix: sock,
       socket: {
-        open: (s) => void s.write(payload),
+        open: (s) => {
+          void s.write(payload);
+        },
         data: (s, chunk) => {
           reply += chunk.toString();
           if (reply.includes("\n")) {
@@ -119,10 +127,16 @@ function ask(sock: string, payload: string, waitMs = 5_000): Promise<Answer> {
             s.end();
           }
         },
-        close: () => finish(true),
-        error: () => finish(true),
+        close: () => {
+          finish(true);
+        },
+        error: () => {
+          finish(true);
+        },
       },
-    }).catch(() => finish(false));
+    }).catch(() => {
+      finish(false);
+    });
   });
 }
 
@@ -134,7 +148,9 @@ async function hold(sock: string): Promise<() => void> {
     unix: sock,
     socket: { data() {}, open() {}, close() {}, error() {} },
   });
-  return () => conn.end();
+  return () => {
+    conn.end();
+  };
 }
 
 /** A listener that accepts and never answers — a forward whose Mac side has no receiver behind it. */
@@ -147,7 +163,9 @@ async function silentListener(sock: string): Promise<void> {
     ],
     { stdout: "ignore", stderr: "ignore" },
   );
-  cleanups.push(() => proc.kill());
+  cleanups.push(() => {
+    proc.kill();
+  });
   for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
   expect(existsSync(sock)).toBe(true);
 }
@@ -347,7 +365,9 @@ describe("client routing", () => {
       ],
       { stdout: "ignore", stderr: "ignore" },
     );
-    cleanups.push(() => holder.kill());
+    cleanups.push(() => {
+      holder.kill();
+    });
     for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
     holder.kill("SIGKILL"); // leaves the socket file behind, nobody listening
     await holder.exited;
@@ -505,7 +525,9 @@ describe("paths over a live forward", () => {
       ],
       { stdout: "ignore", stderr: "ignore" },
     );
-    cleanups.push(() => holder.kill());
+    cleanups.push(() => {
+      holder.kill();
+    });
     for (let i = 0; i < 200 && !existsSync(stale); i++) await Bun.sleep(25);
     holder.kill("SIGKILL");
     await holder.exited;
@@ -571,7 +593,7 @@ describe("paths over a live forward", () => {
     ],
     [
       "a path with a lone surrogate (encodeURIComponent would throw)",
-      pathLine("/a/\ud800", "probe-host"),
+      pathLine("/a/\uD800", "probe-host"),
       "refused: path must be absolute",
     ],
     [
@@ -629,7 +651,7 @@ describe("paths over a live forward", () => {
 
   test("the receiver survives a request that once crashed it, and keeps serving", async () => {
     const rx = await pathReceiver(scratch());
-    await ask(rx.sock, pathLine("/a/\ud800", "probe-host"));
+    await ask(rx.sock, pathLine("/a/\uD800", "probe-host"));
     expect((await ask(rx.sock, pathLine("/w", "probe-host"))).reply).toBe("ok");
   });
 
@@ -735,7 +757,9 @@ describe("paths over a live forward", () => {
       ],
       { stdout: "ignore", stderr: "ignore" },
     );
-    cleanups.push(() => old.kill());
+    cleanups.push(() => {
+      old.kill();
+    });
     for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
     const [local, localOpened] = recorder(dir, "local-opened");
     const r = client([dir], {
@@ -760,7 +784,9 @@ describe("paths over a live forward", () => {
       ],
       { stdout: "ignore", stderr: "ignore" },
     );
-    cleanups.push(() => holder.kill());
+    cleanups.push(() => {
+      holder.kill();
+    });
     for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
     holder.kill("SIGKILL");
     await holder.exited;
@@ -1177,7 +1203,7 @@ async function stubborn(sock: string, payload: string) {
     unix: sock,
     socket: {
       open: (s) => {
-        if (payload) s.write(payload);
+        if (payload !== "") s.write(payload);
       },
       data: (_s, c) => {
         reply += c.toString();
@@ -1186,7 +1212,9 @@ async function stubborn(sock: string, payload: string) {
       error() {},
     },
   });
-  cleanups.push(() => conn.terminate());
+  cleanups.push(() => {
+    conn.terminate();
+  });
   return { conn, reply: () => reply.trim() };
 }
 
@@ -1301,7 +1329,7 @@ describe("answer time: the receiver settles before the client gives up", () => {
       "smart-open: waiting for the client to open https://probe.invalid/slowopen…",
     );
     expect(r.out).toMatch(
-      /^opened on the client \(1\.\d s\): https:\/\/probe\.invalid\/slowopen$/m,
+      /^opened on the client \(1\.\d s\): https:\/\/probe\.invalid\/slowopen$/mu,
     );
     expect(localOpened()).toEqual([]); // the old behaviour: client gave up at 2 s, opened here too
     expect(slowOpened()).toEqual(["https://probe.invalid/slowopen"]);
@@ -1334,7 +1362,9 @@ describe("client diagnostics say what actually happened", () => {
       ],
       { stdout: "ignore", stderr: "ignore" },
     );
-    cleanups.push(() => proc.kill());
+    cleanups.push(() => {
+      proc.kill();
+    });
     for (let i = 0; i < 200 && !existsSync(sock); i++) await Bun.sleep(25);
     const [local, localOpened] = recorder(dir, "local-opened");
     const r = client(["https://probe.invalid/hangup"], {
@@ -1374,7 +1404,9 @@ describe("request decoding", () => {
     const conn = await Bun.connect({
       unix: rx.sock,
       socket: {
-        open: (s) => void s.write(bytes.subarray(0, cut)),
+        open: (s) => {
+          void s.write(bytes.subarray(0, cut));
+        },
         data: (_s, c) => {
           reply += c.toString();
           if (reply.includes("\n")) answered.resolve(reply.trim());
@@ -1383,7 +1415,9 @@ describe("request decoding", () => {
         error() {},
       },
     });
-    cleanups.push(() => conn.terminate());
+    cleanups.push(() => {
+      conn.terminate();
+    });
     await Bun.sleep(100);
     conn.write(bytes.subarray(cut));
     // Wait for the receiver's answer, not a fixed pause: the opener has finished once it is given.

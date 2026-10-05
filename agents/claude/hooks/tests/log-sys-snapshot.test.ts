@@ -20,16 +20,33 @@ function homeWithCache(ageMs: number): string {
   );
   return home;
 }
+
+function writeSession(
+  home: string,
+  sid: string,
+  rows: string[],
+  ageMs = 1_000,
+): void {
+  const dir = join(home, ".cache", "claude", "statusline-session");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, `${sid}.json`),
+    JSON.stringify({
+      at: Temporal.Now.instant().epochMilliseconds - ageMs,
+      rows: rows.map((line) => ({ line })),
+    }),
+  );
+}
 // The hook prefixes the event time and joins fields with the bar's dimmed "|"; strip both.
-const ESC = String.fromCharCode(0x1b);
-const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const ESC = String.fromCodePoint(0x1b);
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const Message = z.looseObject({ systemMessage: z.string() });
 const messageOf = (stdout: string): string =>
   Message.parse(parseJson(stdout)).systemMessage;
 const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
-    .replace(/^\d\d-\d\d \d\d:\d\d \| /, "");
+    .replace(/^\d\d-\d\d \d\d:\d\d \| /u, "");
 const fire = (home: string, event: string) =>
   runHook(HOOK, { hook_event_name: event, session_id: "s1" }, { HOME: home });
 
@@ -44,7 +61,7 @@ describe("log-sys-snapshot", () => {
     const msg = messageOf(fire(homeWithCache(1_000), "Stop").stdout);
     expect(msg).not.toContain("\n");
     expect(msg.replace(ANSI, "")).toMatch(
-      /^\d\d-\d\d \d\d:\d\d \| Sys: CPU 25%/,
+      /^\d\d-\d\d \d\d:\d\d \| Sys: CPU 25%/u,
     );
   });
   test("PostToolUse within a minute of the last line stays silent", () => {
@@ -70,27 +87,11 @@ describe("log-sys-snapshot", () => {
     const home = homeWithCache(1_000);
     const cache = join(home, ".cache", "claude", "statusline-sys.json");
     const colored =
-      "\u001b[38;5;74mSys:\u001b[0m CPU \u001b[38;5;71m25%\u001b[0m";
+      "\u001B[38;5;74mSys:\u001B[0m CPU \u001B[38;5;71m25%\u001B[0m";
     const cur = z.looseObject({}).parse(parseJson(readFileSync(cache, "utf8")));
     writeFileSync(cache, JSON.stringify({ ...cur, ansi: colored }));
     expect(messageOf(fire(home, "Stop").stdout)).toContain(colored);
   });
-  const writeSession = (
-    home: string,
-    sid: string,
-    rows: string[],
-    ageMs = 1_000,
-  ) => {
-    const dir = join(home, ".cache", "claude", "statusline-session");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, `${sid}.json`),
-      JSON.stringify({
-        at: Temporal.Now.instant().epochMilliseconds - ageMs,
-        rows: rows.map((line) => ({ line })),
-      }),
-    );
-  };
   const CTX = "Ctx: 120k 60%";
   const RATE = "Rate: 5h 40% ⟳2h · 7d 60% ⟳5d";
   test("this session's rows follow the time in the order given: Ctx, Rate, then Sys", () => {

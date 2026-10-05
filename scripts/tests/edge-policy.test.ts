@@ -24,7 +24,9 @@ afterEach(() => {
 
 function dst(): string {
   const dir = mkdtempSync(join(tmpdir(), "edge-policy-"));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  cleanups.push(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
   return join(dir, "com.microsoft.Edge.plist");
 }
 
@@ -83,7 +85,7 @@ describe("edge/policy.plist.mac", () => {
   const text = readFileSync(POLICY, "utf8");
 
   test("is a valid property list", () => {
-    if (!Bun.which("plutil")) return; // macOS tool; nothing to assert elsewhere
+    if (Bun.which("plutil") === null) return; // macOS tool; nothing to assert elsewhere
     const p = Bun.spawnSync(["plutil", "-lint", POLICY]);
     expect(p.exitCode).toBe(0);
   });
@@ -91,8 +93,10 @@ describe("edge/policy.plist.mac", () => {
   test("blocks the extension that took over the default search, and pins the engine", () => {
     // ID of "You.com v1.0" (chrome_settings_overrides.search_provider.is_default, 2026-10-01).
     expect(text).toContain("<string>ffoiecgjambohnpffggcdidbomhmcack</string>");
-    expect(text).toMatch(/<key>ExtensionInstallBlocklist<\/key>\s*<array>/);
-    expect(text).toMatch(/<key>DefaultSearchProviderEnabled<\/key>\s*<true\/>/);
+    expect(text).toMatch(/<key>ExtensionInstallBlocklist<\/key>\s*<array>/u);
+    expect(text).toMatch(
+      /<key>DefaultSearchProviderEnabled<\/key>\s*<true\/>/u,
+    );
     expect(text).toContain("<key>DefaultSearchProviderSearchURL</key>");
     expect(text).toContain("{searchTerms}");
   });

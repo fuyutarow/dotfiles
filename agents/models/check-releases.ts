@@ -19,8 +19,7 @@
 // Exit:   0 = clean, 1 = at least one FAIL.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { z } from "../hooks/zod.ts";
@@ -43,14 +42,18 @@ function nonEmptyString(flag: string): (value: string) => string {
 
 // source/verified fall back to "" so a row that lacks them reaches the targeted "every row needs a
 // source and a verified date" finding below instead of a generic schema crash.
+function stringOrEmpty(value: unknown): string {
+  if (typeof value === "string") return value;
+  return "";
+}
 const ModelSchema = z.object({
   slug: z.string(),
   vendor: z.string(),
   released: z.string(),
   status: z.string(),
   role: z.string().optional(),
-  source: z.string().catch(""),
-  verified: z.string().catch(""),
+  source: z.preprocess(stringOrEmpty, z.string()),
+  verified: z.preprocess(stringOrEmpty, z.string()),
   retires: z.string().optional(),
 });
 const MetaSchema = z.object({
@@ -64,7 +67,7 @@ const ReleasesSchema = z.object({
 });
 type Model = z.output<typeof ModelSchema>;
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = import.meta.dirname;
 const SKILLS_DIR = join(HERE, "..", "skills");
 
 // Statuses a skill body should not be steering work toward.
@@ -72,7 +75,7 @@ const DISCOURAGED = new Set(["retired", "deprecated", "preview", "legacy"]);
 
 // Files whose job IS to record history/provenance, so a stale slug in them is data,
 // not a recommendation.
-const HISTORY_FILE = /(forge-verification-ledger|survey-sok|releases\.toml)/;
+const HISTORY_FILE = /(forge-verification-ledger|survey-sok|releases\.toml)/u;
 
 let failures = 0;
 let warnings = 0;
@@ -89,7 +92,7 @@ function warn(msg: string): void {
 }
 
 function parseDay(s: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(s)) return null;
   // UTC midnight of that day; an impossible date (02-30) is rejected, not rolled over.
   return fromThrowable(
     () => Temporal.PlainDate.from(s).toZonedDateTime("UTC").epochMilliseconds,
@@ -191,7 +194,8 @@ function main(): void {
   const guidance = guidanceFiles();
   const namedIn = (slug: string): string[] => {
     const re = new RegExp(
-      `(^|[^a-zA-Z0-9.\\-])${slug.replace(/[.]/g, "\\.")}(?![a-zA-Z0-9])`,
+      `(^|[^a-zA-Z0-9.\\-])${slug.replaceAll(/[.]/gu, "\\.")}(?![a-zA-Z0-9])`,
+      "u",
     );
     return guidance
       .filter(([, text]) => re.test(text))
@@ -226,10 +230,10 @@ function main(): void {
       fail(
         `${m.slug}: released '${m.released}' is neither YYYY-MM-DD nor "unknown"`,
       );
-    if (!m.source || !m.verified)
+    if (m.source === "" || m.verified === "")
       fail(`${m.slug}: every row needs a source and a verified date`);
 
-    if (!m.retires) continue;
+    if (m.retires === undefined || m.retires === "") continue;
     const r = parseDay(m.retires);
     if (r === null) {
       fail(`${m.slug}: retires '${m.retires}' is not YYYY-MM-DD`);

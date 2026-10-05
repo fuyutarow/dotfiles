@@ -97,27 +97,27 @@ async function probeAll(models: readonly string[], grok: string): Promise<number
       process.stdout.write(
         `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an exact model id (\`${process.env.GROK ?? "grok"} models\` or references/model-catalog.md); copy it verbatim\n`,
       );
-    } else {
-      let note: string;
-      if (result.timedOut) {
-        note = "timeout — not a catalog verdict";
-      } else if (result.exitCode === 0) {
-        note =
-          'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
-      } else {
-        note = `rc=${result.exitCode}`;
-      }
-      process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
-      for (const line of result.output
-        .split("\n")
-        .filter((entry) => /Error|error|denied|quota|auth/.test(entry))
-        .slice(0, 2)) {
-        process.stdout.write(`  ${line}\n`);
-      }
+      failures += 1;
+      continue;
     }
+    let note = `rc=${result.exitCode}`;
+    if (result.exitCode === 0)
+      note = 'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
+    if (result.timedOut) note = "timeout — not a catalog verdict";
+    process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
+    writeDiagnosticLines(result.output);
     failures += 1;
   }
   return failures;
+}
+
+function writeDiagnosticLines(output: string): void {
+  for (const line of output
+    .split("\n")
+    .filter((entry) => /Error|error|denied|quota|auth/u.test(entry))
+    .slice(0, 2)) {
+    process.stdout.write(`  ${line}\n`);
+  }
 }
 
 async function main(): Promise<void> {
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
   );

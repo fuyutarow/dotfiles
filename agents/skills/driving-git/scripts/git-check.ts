@@ -119,13 +119,13 @@ async function state(cwd: string, allowDetached: boolean): Promise<number> {
 
 /** Names that should never enter history without a human saying so. Case-insensitive on the basename. */
 const SECRET_SHAPED = [
-  /^\.env(\..+)?$/i,
-  /\.(pem|key|p12|pfx|jks|keystore)$/i,
-  /^id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
-  /credentials?(\.json|\.ya?ml|\.toml)?$/i,
-  /secrets?(\.json|\.ya?ml|\.toml)?$/i,
-  /\.(netrc|npmrc|pypirc)$/i,
-  /^\.?token$/i,
+  /^\.env(\..+)?$/iu,
+  /\.(pem|key|p12|pfx|jks|keystore)$/iu,
+  /^id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/iu,
+  /credentials?(\.json|\.ya?ml|\.toml)?$/iu,
+  /secrets?(\.json|\.ya?ml|\.toml)?$/iu,
+  /\.(netrc|npmrc|pypirc)$/iu,
+  /^\.?token$/iu,
 ];
 
 async function staged(cwd: string, maxBytes: number): Promise<number> {
@@ -215,41 +215,52 @@ async function push(cwd: string, remote: string, branch: string, timeoutS: numbe
 
 /** Deny-list idioms as they appear in scripts, aliases, hooks, and task bodies. */
 const DENY: readonly (readonly [string, RegExp, string])[] = [
-  ["CHECKOUT", /\bgit\s+checkout\b/, "git switch / git restore"],
-  ["ADD-ALL", /\bgit\s+add\s+(-A|--all|\.|:\/)(\s|$)/, "enumerate paths; git add -p"],
-  ["FORCE-PUSH", /\bgit\s+push\b(?![^\n]*--force-with-lease)[^\n]*(\s-f\b|\s--force\b)/, "--force-with-lease=<ref>:<sha>"],
-  ["QUIET-PUSH", /\bgit\s+push\b[^\n]*(\s-q\b|\s--quiet\b)/, "never quiet a push; timeout + rev-parse receipt"],
-  ["RESET-HARD", /\bgit\s+reset\s+(--hard|--merge)\b/, "safety ref first; git restore for files"],
-  ["CLEAN-FORCE", /\bgit\s+clean\b(?![^\n]*(\s-[a-zA-Z]*n|--dry-run))[^\n]*\s-[a-zA-Z]*f/, "preview the same enumerated paths and ignore flags with -n first"],
-  ["NO-VERIFY", /--no-verify\b/, "fix what the hook reports"],
-  ["FILTER-BRANCH", /\bgit\s+filter-branch\b/, "git filter-repo"],
-  ["PRUNE-NOW", /\b(gc|prune)\b[^\n]*--prune=now|--expire=now/, "measure first; preserve recovery history; select maintenance tasks only in an idle common object store"],
-  ["THEIRS-MERGE", /-X\s*theirs\b/, "resolve conflicts; rerere"],
-  ["AMEND-ONLY", /--amend\b[^\n]*\s(-o|--only)\b|\s(-o|--only)\b[^\n]*--amend\b/, "git rm --cached then --amend --no-edit"],
+  ["CHECKOUT", /\bgit\s+checkout\b/u, "git switch / git restore"],
+  ["ADD-ALL", /\bgit\s+add\s+(-A|--all|\.|:\/)(\s|$)/u, "enumerate paths; git add -p"],
+  ["FORCE-PUSH", /\bgit\s+push\b(?![^\n]*--force-with-lease)[^\n]*(\s-f\b|\s--force\b)/u, "--force-with-lease=<ref>:<sha>"],
+  ["QUIET-PUSH", /\bgit\s+push\b[^\n]*(\s-q\b|\s--quiet\b)/u, "never quiet a push; timeout + rev-parse receipt"],
+  ["RESET-HARD", /\bgit\s+reset\s+(--hard|--merge)\b/u, "safety ref first; git restore for files"],
+  ["CLEAN-FORCE", /\bgit\s+clean\b(?![^\n]*(\s-[a-zA-Z]*n|--dry-run))[^\n]*\s-[a-zA-Z]*f/u, "preview the same enumerated paths and ignore flags with -n first"],
+  ["NO-VERIFY", /--no-verify\b/u, "fix what the hook reports"],
+  ["FILTER-BRANCH", /\bgit\s+filter-branch\b/u, "git filter-repo"],
+  ["PRUNE-NOW", /\b(gc|prune)\b[^\n]*--prune=now|--expire=now/u, "measure first; preserve recovery history; select maintenance tasks only in an idle common object store"],
+  ["THEIRS-MERGE", /-X\s*theirs\b/u, "resolve conflicts; rerere"],
+  ["AMEND-ONLY", /--amend\b[^\n]*\s(-o|--only)\b|\s(-o|--only)\b[^\n]*--amend\b/u, "git rm --cached then --amend --no-edit"],
 ];
+
+function scanLintLine(path: string, line: string, lineNumber: number, trimmed: string): boolean {
+  let found = false;
+  for (const [tag, re, fix] of DENY) {
+    if (!re.test(line)) continue;
+    process.stdout.write(`DENY ${tag} ${path}:${lineNumber}: ${trimmed.slice(0, 110)}\n      -> ${fix}\n`);
+    found = true;
+  }
+  return found;
+}
+
+function lintFile(path: string): number {
+  const src = readFileSync(resolve(path), "utf8");
+  let inAlias = false; // gitconfig [alias] bodies omit the `git` prefix: `co = checkout`
+  let rc = 0;
+  for (const [i, raw] of src.split("\n").entries()) {
+    const t = raw.trimStart();
+    if (t.startsWith("#") || t.startsWith("//") || t.startsWith("*") || t.startsWith("<!--")) continue; // a mention is not an action
+    if (t.startsWith('[')) inAlias = /^\[alias\]/iu.test(t);
+    let line = raw;
+    const alias = inAlias ? /^\s*[\w.-]+\s*=\s*(!?)\s*(.*)$/u.exec(raw) : null;
+    if (alias !== null) line = alias[1] === "!" ? (alias[2] ?? "") : `git ${alias[2] ?? ""}`;
+    if (scanLintLine(path, line, i + 1, t)) rc = 1;
+  }
+  return rc;
+}
 
 function lint(paths: string[]): number {
   let rc = 0;
-  for (const p of paths) {
-    const abs = resolve(p);
-    if (!existsSync(abs)) return fatal(`no such file: ${p}`);
-    if (statSync(abs).isDirectory()) return fatal(`lint takes files, not directories: ${p}`);
-    const src = readFileSync(abs, "utf8");
-    let inAlias = false; // gitconfig [alias] bodies omit the `git` prefix: `co = checkout`
-    src.split("\n").forEach((raw, i) => {
-      const t = raw.trimStart();
-      if (t.startsWith("#") || t.startsWith("//") || t.startsWith("*") || t.startsWith("<!--")) return; // a mention is not an action
-      if (/^\[/.test(t)) inAlias = /^\[alias\]/i.test(t);
-      let line = raw;
-      const alias = inAlias ? /^\s*[\w.-]+\s*=\s*(!?)\s*(.*)$/.exec(raw) : null;
-      if (alias !== null) line = alias[1] === "!" ? (alias[2] ?? "") : `git ${alias[2] ?? ""}`;
-      for (const [tag, re, fix] of DENY) {
-        if (re.test(line)) {
-          process.stdout.write(`DENY ${tag} ${p}:${i + 1}: ${t.slice(0, 110)}\n      -> ${fix}\n`);
-          rc = 1;
-        }
-      }
-    });
+  for (const path of paths) {
+    const abs = resolve(path);
+    if (!existsSync(abs)) return fatal(`no such file: ${path}`);
+    if (statSync(abs).isDirectory()) return fatal(`lint takes files, not directories: ${path}`);
+    if (lintFile(path) !== 0) rc = 1;
   }
   process.stdout.write(rc === 0 ? "LINT clean\n" : "LINT findings above; each is a deny-list idiom (driving-git SKILL.md)\n");
   return rc;
@@ -286,7 +297,7 @@ const sub = argv._.subcommand;
 const rest = argv._.args;
 const cwd = resolve(argv.flags.cwd);
 
-return await (async (): Promise<number> => {
+return (async (): Promise<number> => {
   if (sub === "state") return state(cwd, argv.flags.allowDetached);
   if (sub === "staged") return staged(cwd, argv.flags.maxBytes);
   if (sub === "push") {
@@ -302,9 +313,14 @@ return await (async (): Promise<number> => {
 })();
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((error: unknown) => {
+async function runMain(): Promise<void> {
+  const code = await main().then(
+    (value) => value,
+    (error: unknown) => {
     process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.exit(2);
+      return 2;
   });
+  process.exit(code);
+}
+
+await runMain();

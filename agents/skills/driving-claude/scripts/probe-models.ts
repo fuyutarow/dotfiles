@@ -66,7 +66,7 @@ export async function probeModels(
       typeof envelope.session_id === "string";
     const cost =
       available && envelope !== undefined
-        ? String(envelope.total_cost_usd ?? "?")
+        ? JSON.stringify(envelope.total_cost_usd ?? "?")
         : "?";
     const session =
       available && envelope !== undefined ? String(envelope.session_id) : "?";
@@ -139,10 +139,12 @@ async function main(): Promise<void> {
   process.exit(records.some((record) => record.kind !== "AVAILABLE") ? 1 : 0);
 }
 
-if (import.meta.main) {
-  main().catch((error) => {
+async function runMain(): Promise<void> {
+  await main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`FATAL: ${message}\n`);
     process.exit(2);
   });
 }
+
+if (import.meta.main) await runMain();

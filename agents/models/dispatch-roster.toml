@@ -36,6 +36,24 @@ schema = 1
 as_of = "2026-10-05"
 default = "luna-high"
 
+# AUTO PICK — `agent-router run` without --choice asks Jev (one Choice question over the enabled rows;
+# each criterion is that row's `use_for`) which row fits the brief. Below min_confidence, on any Jev
+# failure, or when the brief's cwd lies under a no_egress path, the `default` row runs and the reason
+# is logged (~/.local/state/agent-router/runs.jsonl). Every key is required (owner 2026-10-05: no
+# implicit default).
+[auto]
+min_confidence = 0.5   # provisional; revisit from `agent-router stats` once picks accumulate
+max_task_chars = 6000  # the head of the brief that leaves the machine
+timeout_ms = 20000
+no_egress = []         # ~/… or absolute paths whose briefs never leave the machine
+
+# Where Jev is reached. Owner 2026-10-05: the reseller (CODEFASHION TECH LTD, jevtypesafeai.com — not
+# TypeSafe; states it does not store request bodies) until an official TypeSafe key exists; then
+# { api = "typesafe", url = "https://api.typesafe.ai/v1/systemone", model = "jev-latest" }.
+[auto.jev]
+api = "reseller"
+url = "https://jevtypesafeai.com/api/v1/decide"
+
 [sources]
 aa_models = "https://artificialanalysis.ai/models/"
 aa_coding_agents = "https://artificialanalysis.ai/agents/coding-agents"

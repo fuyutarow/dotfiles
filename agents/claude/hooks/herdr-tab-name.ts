@@ -39,13 +39,15 @@ const LOOKUP_RETRY_DELAY_MS = 500;
 
 // Prefer the env var Claude Code exports for its own binary — hooks may run with a narrow
 // PATH (see hooks/lib.ts's findExe comment) — falling back to a bare PATH lookup.
-const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
+const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH ?? "claude";
 // herdr exports its own binary as HERDR_BIN_PATH when it starts a pane — a VERSIONED Homebrew
 // Cellar path. A `brew upgrade herdr` deletes that directory, so every pane opened before the
 // upgrade keeps a dead path (2026-10-01: 0.9.1 path gone after 0.9.3, /quote stopped copying).
 // Use it only while it still exists; otherwise the `herdr` on PATH (the stable brew symlink).
 const HERDR_BIN =
-  process.env.HERDR_BIN_PATH && existsSync(process.env.HERDR_BIN_PATH)
+  process.env.HERDR_BIN_PATH !== undefined &&
+  process.env.HERDR_BIN_PATH !== "" &&
+  existsSync(process.env.HERDR_BIN_PATH)
     ? process.env.HERDR_BIN_PATH
     : "herdr";
 
@@ -78,7 +80,7 @@ function agentsOf(parsed: unknown): Agent[] {
 function buildEntryMap(list: Agent[], now: number): Record<string, Entry> {
   const next: Record<string, Entry> = {};
   for (const a of list) {
-    if (!a.sessionId) continue;
+    if (a.sessionId === undefined || a.sessionId === "") continue;
     // exactOptionalPropertyTypes: omit `name` entirely when absent rather than
     // assigning an explicit `undefined` into the optional slot (JSON.stringify would
     // drop it either way, so this changes nothing on disk). Key order matches the
@@ -193,22 +195,27 @@ async function reportPaneMetadata(paneId: string, name: string): Promise<void> {
 await attempt(async () => {
   if (process.env.HERDR_ENV !== "1") process.exit(0);
   const tabId = process.env.HERDR_TAB_ID;
-  if (!tabId) process.exit(0);
+  if (tabId === undefined || tabId === "") process.exit(0);
 
   const payload = readStdinJson();
-  const sid = strAt(payload, "session_id") || undefined;
-  if (!sid) process.exit(0);
+  const sid = strAt(payload, "session_id");
+  if (sid === undefined || sid === "") process.exit(0);
 
   const name = await agentName(sid);
-  if (!name) process.exit(0);
+  if (name === undefined || name === "") process.exit(0);
 
-  const shortName = name.split("-").pop() || name;
+  const lastNameSegment = name.split("-").at(-1);
+  const shortName =
+    lastNameSegment !== undefined && lastNameSegment !== ""
+      ? lastNameSegment
+      : name;
   execFileSync(HERDR_BIN, ["tab", "rename", tabId, shortName], {
     stdio: ["ignore", "ignore", "ignore"],
     timeout: 3000,
   });
 
   const paneId = process.env.HERDR_PANE_ID;
-  if (paneId) await reportPaneMetadata(paneId, name);
+  if (paneId !== undefined && paneId !== "")
+    await reportPaneMetadata(paneId, name);
 });
 process.exit(0);

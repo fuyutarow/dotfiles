@@ -30,7 +30,16 @@ function runCli(
 
 async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   const target = await mkdtemp(join(tmpdir(), "driving-claude-test-"));
-  return fn(target).finally(() => rm(target, { recursive: true, force: true }));
+  return fn(target).then(
+    async (value) => {
+      await rm(target, { recursive: true, force: true });
+      return value;
+    },
+    async (error: unknown) => {
+      await rm(target, { recursive: true, force: true });
+      throw error;
+    },
+  );
 }
 
 describe("driving-claude runner", () => {

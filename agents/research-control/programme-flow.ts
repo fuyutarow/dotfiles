@@ -42,7 +42,7 @@ const forbidden = new Map([
 const RecordSchema = z.looseObject({});
 const nonEmpty = z.string().min(1);
 const Revision = z.union([nonEmpty, z.number()]);
-const Sha = z.string().regex(/^[a-f0-9]{64}$/);
+const Sha = z.string().regex(/^[a-f0-9]{64}$/u);
 // A plain object as a Record, or undefined; the parsed copy is what callers use.
 function record(value: unknown): R | undefined {
   const parsed = RecordSchema.safeParse(value);
@@ -559,12 +559,13 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
     }
     if (item.readyAt <= input.now && capacity > 0) ready.push(item);
   }
-  ready.sort(
-    (a, b) =>
-      priority.indexOf(a.stage) - priority.indexOf(b.stage) ||
-      a.deadline - b.deadline ||
-      a.readyAt - b.readyAt,
-  );
+  ready.sort((a, b) => {
+    const stageOrder = priority.indexOf(a.stage) - priority.indexOf(b.stage);
+    if (stageOrder !== 0) return stageOrder;
+    const deadlineOrder = a.deadline - b.deadline;
+    if (deadlineOrder !== 0) return deadlineOrder;
+    return a.readyAt - b.readyAt;
+  });
   const dispatched: string[] = [];
   for (const item of ready) {
     const capacity = free.get(item.resource) ?? 0;

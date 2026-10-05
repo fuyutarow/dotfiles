@@ -86,7 +86,8 @@ async function matches(): Promise<boolean> {
 
 const verdict = (v: "PASS" | "FAIL", detail: string, fix?: string): void => {
   process.stdout.write(`${v} edge-policy: ${detail}\n`);
-  if (fix) process.stdout.write(`     fix: ${fix}\n`);
+  if (fix !== undefined && fix !== "")
+    process.stdout.write(`     fix: ${fix}\n`);
 };
 
 // Copy the policy into place; resolves to why it could not, or undefined when it did. Under the
@@ -164,7 +165,6 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
-  (code) => process.exit(code),
-  (e: unknown) => die(`FATAL: ${errorMessage(e)}`, 2),
-);
+const result = await attempt(main);
+if (result.ok) process.exit(result.value);
+die(`FATAL: ${errorMessage(result.error)}`, 2);

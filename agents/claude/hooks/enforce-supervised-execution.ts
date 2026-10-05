@@ -53,32 +53,32 @@ import { decidePre, readStdinJson } from "./lib.ts";
 const POS = String.raw`(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*`;
 const PREFIX = String.raw`(?:(?:sudo|command|time|nice|exec)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+)*`;
 const detacher = (name: string) =>
-  new RegExp(`${POS}${PREFIX}(?:\\S*\\/)?${name}\\b`);
+  new RegExp(`${POS}${PREFIX}(?:\\S*\\/)?${name}\\b`, "u");
 
 // setsid is the one detacher with a supervised form, so it is matched with its tail attached.
 const SETSID_CALL = new RegExp(
   `${POS}${PREFIX}(?:\\S*\\/)?setsid\\b([^|;&]*)`,
-  "g",
+  "gu",
 );
-const SETSID_WAITS = /^\s+(?:--wait\b|-\w*w)/;
+const SETSID_WAITS = /^\s+(?:--wait\b|-\w*w)/u;
 
 // A detacher hidden inside a nested shell string never reaches a separator, so POS misses it.
 const NESTED_SHELL =
-  /\b(?:ba|z|da)?sh\s+-c\s+(?:"[^"\n]*\b(?:setsid|nohup|disown)\b|'[^'\n]*\b(?:setsid|nohup|disown)\b)/;
+  /\b(?:ba|z|da)?sh\s+-c\s+(?:"[^"\n]*\b(?:setsid|nohup|disown)\b|'[^'\n]*\b(?:setsid|nohup|disown)\b)/u;
 
 // Detached-launch forms only. Plain tmux/screen usage (attach, list, send-keys, pane work) is
 // untouched: the banned act is starting WORK where nothing can observe it.
 const MUX_DETACHED =
-  /(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?(?:tmux\s+new(?:-session)?\b[^|;&]*\s-\w*d|screen\b[^|;&]*\s-\w*d\w*m)/;
+  /(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?(?:tmux\s+new(?:-session)?\b[^|;&]*\s-\w*d|screen\b[^|;&]*\s-\w*d\w*m)/u;
 // Handing work to a scheduler is the same escape with a timer in front of it.
 const SCHEDULED =
-  /(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?(?:at|batch)\s+(?:-|now\b|\d|noon\b|midnight\b|teatime\b)|(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?crontab\s+(?!-l\b|-e\b)/;
+  /(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?(?:at|batch)\s+(?:-|now\b|\d|noon\b|midnight\b|teatime\b)|(^|[|;&(]|&&|\|\|)\s*(?:\S*\/)?crontab\s+(?!-l\b|-e\b)/u;
 
 // Multiline: an agent-written loop usually starts on its own line after a `cd` or an assignment.
-const POLL_LOOP = new RegExp(`${POS}(?:while|until)\\b`, "m");
+const POLL_LOOP = new RegExp(`${POS}(?:while|until)\\b`, "mu");
 // One pgrep invocation and its arguments, up to the next separator, `)`, backtick, or newline.
-const PGREP_CALL = /(?:^|[\s(`!])(?:\S*\/)?pgrep\b([^|;&)`\n]*)/g;
-const FULL_CMDLINE_FLAG = /\s(?:-[A-Za-z]*f[A-Za-z]*|--full)(?=\s|$)/;
+const PGREP_CALL = /(?:^|[\s(`!])(?:\S*\/)?pgrep\b([^|;&)`\n]*)/gu;
+const FULL_CMDLINE_FLAG = /\s(?:-[A-Za-z]*f[A-Za-z]*|--full)(?=\s|$)/u;
 
 type Finding = { what: string; hint: string };
 
@@ -164,7 +164,7 @@ function main(): void {
 
   const reasons: string[] = [];
   const detached = detachmentIn(command);
-  if (detached) reasons.push(detachmentReason(detached));
+  if (detached !== null) reasons.push(detachmentReason(detached));
   if (selfMatchingPollIn(command)) reasons.push(SELF_MATCHING_POLL_REASON);
   if (reasons.length === 0) return;
 

@@ -56,6 +56,10 @@ const replace = (path: string, before: string, after: string): void => {
 
 const codes = (inspection: ResearchDocsInspection): Set<string> =>
 	new Set(inspection.findings.map((finding) => finding.code));
+// Every value present (what expect.arrayContaining asserted), without an `any`-typed matcher.
+const expectContainsAll = (actual: readonly string[], values: readonly string[]): void => {
+	for (const v of values) expect(actual).toContain(v);
+};
 
 const makeBundle = (state: "draft" | "stable" = "draft"): Bundle => {
 	const researchRoot = mkdtempSync(join(tmpdir(), "research-docs-"));
@@ -240,7 +244,7 @@ okf_version: "0.2"
 	);
 
 	return {
-		cleanup: () => rmSync(researchRoot, { force: true, recursive: true }),
+		cleanup: () =>{  rmSync(researchRoot, { force: true, recursive: true }); },
 		evidencePath,
 		generatedPath,
 		knowledgeRoot,
@@ -325,7 +329,7 @@ const git = (cwd: string, ...args: string[]): void => {
 		maxBuffer: 1024 * 1024,
 	});
 	if (result.exitCode !== 0) {
-		throw new Error(result.stderr.toString() || `git ${args.join(" ")} failed`);
+		throw new Error(result.stderr.toString() !== "" ? result.stderr.toString() : `git ${args.join(" ")} failed`);
 	}
 };
 
@@ -340,7 +344,7 @@ const commitFixture = (bundle: Bundle): void => {
 const refreshCandidateDigest = (bundle: Bundle): void => {
 	const digest = sha256(readFileSync(bundle.statePath, "utf8"));
 	const review = readFileSync(bundle.reviewPath, "utf8").replace(
-		/candidate_sha256: [a-f0-9]{64}/,
+		/candidate_sha256: [a-f0-9]{64}/u,
 		`candidate_sha256: ${digest}`,
 	);
 	writeFileSync(bundle.reviewPath, review);
@@ -447,15 +451,13 @@ describe("OKF compatibility and local profile boundary", () => {
 			today: "2026-08-02",
 		});
 		expect(okf.findings).toHaveLength(0);
-		expect<unknown>([...codes(profile)]).toEqual(
-			expect.arrayContaining([
+		expectContainsAll([...codes(profile)], [
 				"RDS003",
 				"RDS007",
 				"RDS008",
 				"RDS009",
 				"RDS010",
-			]),
-		);
+			]);
 	});
 
 	test("base OKF tolerates unknown fields and broken links while the profile rejects them", async () => {
@@ -475,9 +477,7 @@ describe("OKF compatibility and local profile boundary", () => {
 		});
 		const profile = await inspect(bundle);
 		expect(okf.findings).toHaveLength(0);
-		expect<unknown>([...codes(profile)]).toEqual(
-			expect.arrayContaining(["RDS006", "RDR050"]),
-		);
+		expectContainsAll([...codes(profile)], ["RDS006", "RDR050"]);
 	});
 
 	test("duplicate top-level YAML keys fail the OKF parser floor", async () => {
@@ -705,9 +705,7 @@ describe("valid role and review lifecycles", () => {
 		const bundle = makeBundle();
 		replace(bundle.statePath, "status: draft", "status: stable");
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDL003", "RDA002"]),
-		);
+		expectContainsAll([...codes(result)], ["RDL003", "RDA002"]);
 	});
 
 	test("human verification older than generated.at does not authorize stable content", async () => {
@@ -744,7 +742,7 @@ describe("valid role and review lifecycles", () => {
 	test("an open review pins the exact candidate bytes", async () => {
 		const bundle = makeBundle();
 		const review = readFileSync(bundle.reviewPath, "utf8").replace(
-			/candidate_sha256: [a-f0-9]{64}/,
+			/candidate_sha256: [a-f0-9]{64}/u,
 			`candidate_sha256: ${"b".repeat(64)}`,
 		);
 		writeFileSync(bundle.reviewPath, review);
@@ -770,9 +768,7 @@ describe("valid role and review lifecycles", () => {
 			"stale_after: 2026-08-02",
 		);
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDL002", "RDL012"]),
-		);
+		expectContainsAll([...codes(result)], ["RDL002", "RDL012"]);
 	});
 
 	test("a stable current candidate needs an accepted review of its current digest", async () => {
@@ -845,9 +841,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 			"../../../outside.json",
 		);
 		result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDR001", "RDR021"]),
-		);
+		expectContainsAll([...codes(result)], ["RDR001", "RDR021"]);
 	});
 
 	test("a raw-path symlink cannot escape the configured raw root", async () => {
@@ -857,9 +851,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 		unlinkSync(bundle.rawPath);
 		symlinkSync(outsidePath, bundle.rawPath);
 
-		expect<unknown>([...codes(await inspect(bundle))]).toEqual(
-			expect.arrayContaining(["RDR001", "RDR021"]),
-		);
+		expectContainsAll([...codes(await inspect(bundle))], ["RDR001", "RDR021"]);
 	});
 
 	test("evidence locators must use a typed syntax and resolve in the raw artifact", async () => {
@@ -907,9 +899,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 		);
 		replace(bundle.statePath, "[^route-evidence]", "without-citation");
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDR010", "RDR011"]),
-		);
+		expectContainsAll([...codes(result)], ["RDR010", "RDR011"]);
 	});
 
 	test("durable concepts cannot link to generated views", async () => {
@@ -962,9 +952,7 @@ describe("authority, provenance, and anti-drift invariants", () => {
 			`evidence:\n        - ../generated/${GENERATED_NAME}`,
 		);
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDR041", "RDR044"]),
-		);
+		expectContainsAll([...codes(result)], ["RDR041", "RDR044"]);
 	});
 
 	test("semantic adequacy remains a human gate even when the review shape passes", async () => {
@@ -1034,15 +1022,13 @@ describe("generated-view and retirement policy", () => {
 			"---",
 		);
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining([
+		expectContainsAll([...codes(result)], [
 				"RDS080",
 				"RDS081",
 				"RDL022",
 				"RDL023",
 				"RDR034",
-			]),
-		);
+			]);
 	});
 
 	test("expired generated views fail and may be deleted", async () => {
@@ -1100,9 +1086,7 @@ describe("generated-view and retirement policy", () => {
 			`rd_authority_key: another/question\nrd_supersedes:\n  - ${CANONICAL_NAME}`,
 		);
 		const result = await inspect(bundle);
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDL031", "RDL032", "RDL033"]),
-		);
+		expectContainsAll([...codes(result)], ["RDL031", "RDL032", "RDL033"]);
 	});
 });
 
@@ -1121,9 +1105,7 @@ describe("Git append-only and durable-history floor", () => {
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDI001", "RDI002"]),
-		);
+		expectContainsAll([...codes(result)], ["RDI001", "RDI002"]);
 	});
 
 	test("changing raw and its digest together cannot bypass append-only history", async () => {
@@ -1137,9 +1119,7 @@ describe("Git append-only and durable-history floor", () => {
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDI001", "RDI002"]),
-		);
+		expectContainsAll([...codes(result)], ["RDI001", "RDI002"]);
 		expect(codes(result)).not.toContain("RDI010");
 	});
 
@@ -1525,9 +1505,7 @@ The run recorded a negative result.[^raw-negative]
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDI006", "RDA002"]),
-		);
+		expectContainsAll([...codes(result)], ["RDI006", "RDA002"]);
 	});
 
 	test("a committed raw and evidence rewrite is detected against HEAD^", async () => {
@@ -1549,9 +1527,7 @@ The run recorded a negative result.[^raw-negative]
 			rawRoot: bundle.rawRoot,
 			today: "2026-08-02",
 		});
-		expect<unknown>([...codes(result)]).toEqual(
-			expect.arrayContaining(["RDI001", "RDI002"]),
-		);
+		expectContainsAll([...codes(result)], ["RDI001", "RDI002"]);
 		expect(codes(result)).not.toContain("RDI010");
 	});
 });

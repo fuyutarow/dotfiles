@@ -48,7 +48,11 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
 const MAX_TIMEOUT_S = 1800; // a main-loop background run; relays stay under 540
 // CODEX_RUN_HEARTBEAT_S is a test seam (a test cannot wait 30 s for the first liveness line).
-const HEARTBEAT_S = Number(process.env.CODEX_RUN_HEARTBEAT_S ?? "") || 30;
+const parsedHeartbeat = Number(process.env.CODEX_RUN_HEARTBEAT_S ?? "");
+const HEARTBEAT_S =
+  parsedHeartbeat !== 0 && !Number.isNaN(parsedHeartbeat)
+    ? parsedHeartbeat
+    : 30;
 const FLOOR_CONFIG =
   process.env.MODEL_FLOOR_CONFIG ??
   join(import.meta.dir, "..", "..", "..", "hooks", "model-floor.toml");
@@ -130,7 +134,7 @@ let effort = argv.flags.effort;
 const t0 = performance.now();
 const elapsed = (): number => Math.round((performance.now() - t0) / 100) / 10;
 const startedAt = Temporal.Now.instant().toString();
-const runId = `${startedAt.replace(/[:.]/g, "-")}-${process.pid}`;
+const runId = `${startedAt.replaceAll(/[:.]/gu, "-")}-${process.pid}`;
 
 // Print the receipt (stdout, one line), save it, say the end on stderr, and exit. Never returns:
 // every caller's path ends here.
@@ -251,7 +255,7 @@ if (argv.flags.emitEnvelope !== undefined) {
   };
   const path = resolve(argv.flags.emitEnvelope);
   const written = fromThrowable(
-    () => writeFileSync(path, `${JSON.stringify(envelope, null, 2)}\n`),
+    () =>{  writeFileSync(path, `${JSON.stringify(envelope, null, 2)}\n`); },
     (e) => errorMessage(e),
   )();
   if (written.isErr()) refuse(`cannot write the envelope ${path}: ${written.error}`);
@@ -261,7 +265,7 @@ if (argv.flags.emitEnvelope !== undefined) {
 }
 
 const promptRead = await attempt(async () =>
-  promptFile !== undefined ? readFileSync(promptFile, "utf8") : await Bun.stdin.text(),
+  promptFile !== undefined ? readFileSync(promptFile, "utf8") : Bun.stdin.text(),
 );
 if (!promptRead.ok) refuse(`cannot read the prompt: ${errorMessage(promptRead.error)}`);
 const prompt = promptRead.value.trim();
@@ -297,7 +301,7 @@ const spawned = await attempt(() =>
 if (!spawned.ok) refuse(`cannot start ${CODEX_BIN}: ${errorMessage(spawned.error)}`);
 const proc = spawned.value;
 const heartbeat = setInterval(
-  () => say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`),
+  () =>{  say(`waiting for ${model} (${elapsed()} s of ${timeoutS} s)…`); },
   HEARTBEAT_S * 1000,
 );
 // Read both pipes from the start (a child blocked on a full pipe never exits), but stop waiting for
@@ -314,7 +318,11 @@ clearInterval(heartbeat);
 
 // Usage is the sum over every turn.completed event (`--json` JSONL); a line that is not JSON, or
 // an event of another shape, carries no usage and is skipped.
-const Count = z.number().int().nonnegative().catch(0);
+const Count = z
+  .number()
+  .int()
+  .nonnegative()
+  .or(z.unknown().transform(() => 0));
 const TurnCompleted = z.object({
   type: z.literal("turn.completed"),
   usage: z.object({
@@ -329,7 +337,7 @@ let turns = 0;
 for (const line of events.split("\n")) {
   const json = jsonText.safeParse(line);
   const turn = json.success ? TurnCompleted.safeParse(json.data) : undefined;
-  if (!turn?.success) continue;
+  if (turn?.success !== true) continue;
   turns += 1;
   usage.input_tokens += turn.data.usage.input_tokens;
   usage.cached_input_tokens += turn.data.usage.cached_input_tokens;

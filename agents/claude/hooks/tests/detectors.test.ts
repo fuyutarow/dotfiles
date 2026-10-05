@@ -58,7 +58,7 @@ describe("detect-leaked-toolcall", () => {
 // ── detect-audit-theater ─────────────────────────────────────────────────────
 describe("detect-audit-theater", () => {
   const HOOK = "detect-audit-theater.ts";
-  const gateWord = "監査" + "完了"; // built by concat so this test file never contains it raw
+  const gateWord = "監査完了";
 
   test("unbounded gate language in an audit turn -> exit 2 with rewrite instruction", () => {
     const t = writeTranscript([
@@ -100,7 +100,7 @@ describe("detect-audit-theater", () => {
   });
 
   test("loop guard: stop_hook_active -> exit 0", () => {
-    const t = writeTranscript([user("監査して"), assistant(`${gateWord}`)]);
+    const t = writeTranscript([user("監査して"), assistant(gateWord)]);
     expect(runHook(HOOK, stopPayload(t, true)).code).toBe(0);
   });
 });

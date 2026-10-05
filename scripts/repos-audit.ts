@@ -24,11 +24,11 @@ dirs.push(`${process.env.HOME}/dotfiles/`);
 let rc = 0;
 for (const d of dirs) {
   if (!existsSync(`${d}.git`)) continue;
-  const name = basename(d.replace(/\/$/, ""));
+  const name = basename(d.replace(/\/$/u, ""));
   const res = await $`bun ${check} --repo ${d} --audit 2>&1`.quiet().nothrow();
   if (res.exitCode !== 0) rc = 1;
-  const out = res.stdout.toString().replace(/\n$/, "");
-  const n = (out.match(/^FAIL/gm) ?? []).length;
+  const out = res.stdout.toString().replace(/\n$/u, "");
+  const n = (out.match(/^FAIL/gmu) ?? []).length;
   console.log(`\n=== ${name.padEnd(16)} ${n} FAIL ===`);
   for (const line of out.split("\n")) {
     console.log(`  ${line}`);

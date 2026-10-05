@@ -34,6 +34,10 @@
 //     not landed shows the last good one, marked `stale <N>s` from 60 s on; a Mac without nvidia-smi
 //     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
+//   7 Run: <row> <elapsed> <label>, ONE LINE PER WORKER, longest-running first, at most RUN_LINES
+//     then `+N more`; `stale×N` on its own line (conditional: workers started by agent-router;
+//     the markers are agents/routing-control/state.ts; a marker whose process is gone is
+//     counted as stale, never hidden; an unreadable state dir prints n/a with the reason)
 //
 // EXPLICIT-ABSENCE (2026-10-03): no reading is ever dropped from a row because it could not be
 // taken — it prints as n/a with the reason. Silence is reserved for "does not exist" (not a
@@ -72,6 +76,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   readSync,
   renameSync,
   rmdirSync,
@@ -85,6 +90,13 @@ import { createConnection } from "node:net";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
+import { activeDir, ActiveSchema } from "../routing-control/state.ts";
+const recoverInvalid = <T extends z.ZodType>(schema: T) =>
+  schema.optional().catch(undefined);
+const defaultOnInvalid = <T extends z.ZodType>(
+  schema: T,
+  fallback: z.output<T>,
+) => schema.catch(fallback);
 import {
   clockHM,
   localFromEpochSec,
@@ -195,6 +207,8 @@ interface Dataframe {
   jobs: Admitted[];
   orphans: number;
   jobScanWhy?: string | undefined; // the process scan failed: jobs/orphans are unknown, not zero
+  // agent-router workers. undefined = agent-router has never run on this machine (no state dir).
+  routes?: Result<RouteRun[], string> | undefined;
   // Host readings are Results, not optionals: "could not be taken" carries its reason, and
   // render() prints it. See the EXPLICIT-ABSENCE law below.
   // undefined: this host has no discrete VRAM at all (see vramGated) — silence, not n/a.
@@ -207,7 +221,7 @@ interface Dataframe {
 const HOME = process.env.HOME ?? "";
 
 // --- ANSI / glyph constants (literals so segment assembly stays readable) ---
-const ESC = "\x1b";
+const ESC = "\u001B";
 const RST = `${ESC}[0m`;
 const DIM = `${ESC}[2m`;
 const SEP = ` ${DIM}|${RST} `;
@@ -234,10 +248,10 @@ function naSegment(label: string, why: string): string {
 // field is read on its own (.catch): an error object that lacks or mangles one still yields the
 // others, and the all-missing case falls through to the generic "<tool> failed" below.
 const ExecErrorSchema = z.object({
-  code: z.string().optional().catch(undefined),
-  status: z.number().nullish().catch(undefined),
-  signal: z.string().nullish().catch(undefined),
-  stderr: z.string().optional().catch(undefined),
+  code: recoverInvalid(z.string()),
+  status: recoverInvalid(z.number().nullish()),
+  signal: recoverInvalid(z.string().nullish()),
+  stderr: recoverInvalid(z.string()),
 });
 function execError(e: unknown): z.output<typeof ExecErrorSchema> {
   const parsed = ExecErrorSchema.safeParse(e);
@@ -255,8 +269,9 @@ function failWhy(
   if (x.code === "ETIMEDOUT") return `${tool} timeout ${timeoutMs}ms`;
   if (typeof x.status === "number") return `${tool} exit ${x.status}`;
   // Killed by a signal (an OOM kill under load has status null): name it.
-  if (x.signal) return `${tool} killed by ${x.signal}`;
-  if (x.code) return `${tool} ${x.code}`;
+  if (x.signal !== undefined && x.signal !== "")
+    return `${tool} killed by ${x.signal}`;
+  if (x.code !== undefined && x.code !== "") return `${tool} ${x.code}`;
   return `${tool} failed`;
 }
 
@@ -316,7 +331,7 @@ function execWithin(
         stdio: ["ignore", "pipe", "pipe"],
         encoding: "utf8",
         timeout: boundMs,
-        ...(env ? { env } : {}),
+        ...(env !== undefined ? { env } : {}),
       }),
     (e): ExecFailure => ({
       why: failWhy(e, tool, boundMs),
@@ -337,7 +352,11 @@ function writeCache(path: string, value: unknown): void {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(tmp, JSON.stringify(value));
     renameSync(tmp, path);
-  })().mapErr(() => fromThrowable(() => unlinkSync(tmp))());
+  })().mapErr(() => {
+    fromThrowable(() => {
+      unlinkSync(tmp);
+    })();
+  });
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -370,7 +389,8 @@ function account(cj: unknown): Result<string | undefined, string> {
   if (!parsed.success)
     return err("~/.claude.json has an unexpected account shape");
   // `||` not `??`: an empty string is not an account either, and must drop the segment.
-  return ok(parsed.data.oauthAccount?.emailAddress || undefined);
+  const email = parsed.data.oauthAccount?.emailAddress;
+  return ok(email !== undefined && email !== "" ? email : undefined);
 }
 
 // Fable (and any other model with its own weekly ceiling — the CLI's own "You've hit your Opus
@@ -419,17 +439,23 @@ function modelWeeklyLimits(cj: unknown): Result<ModelLimit[], string> {
   const limits = parsed.data.cachedUsageUtilization?.utilization?.limits ?? [];
   const out: ModelLimit[] = [];
   for (const l of limits) {
-    if (l.kind !== "weekly_scoped" || l.percent == null) continue;
+    if (
+      l.kind !== "weekly_scoped" ||
+      l.percent === null ||
+      l.percent === undefined
+    )
+      continue;
     const name = l.scope?.model?.display_name;
-    if (!name) continue;
+    if (name === undefined || name === "") continue;
     // Instant.from demands an offset/`Z` (Date guessed local time for a bare one); a string it
     // rejects drops just the reset countdown, like an unparseable one always has.
     const resetsAt = l.resets_at;
-    const epochMs = resetsAt
-      ? fromThrowable(
-          () => Temporal.Instant.from(resetsAt).epochMilliseconds,
-        )().unwrapOr(undefined)
-      : undefined;
+    const epochMs =
+      resetsAt !== undefined && resetsAt !== ""
+        ? fromThrowable(
+            () => Temporal.Instant.from(resetsAt).epochMilliseconds,
+          )().unwrapOr(undefined)
+        : undefined;
     out.push({
       name,
       pct: l.percent,
@@ -515,7 +541,7 @@ function scanFd(fd: number, pat: Buffer): boolean | undefined {
   const buf = Buffer.alloc(chunk + pat.length);
   let carry = 0;
   for (;;) {
-    const read = fromThrowable(() => readSync(fd, buf, carry, chunk, null))();
+    const read = readFdChunk(fd, buf, carry, chunk);
     if (read.isErr()) return undefined;
     if (read.value <= 0) return false;
     const end = carry + read.value;
@@ -524,6 +550,9 @@ function scanFd(fd: number, pat: Buffer): boolean | undefined {
     buf.copy(buf, 0, end - carry, end);
   }
 }
+function readFdChunk(fd: number, buf: Buffer, offset: number, length: number) {
+  return fromThrowable(() => readSync(fd, buf, offset, length, null))();
+}
 
 /** true/false = scanned; undefined = could not scan (missing, unreadable). */
 function binaryContains(path: string, needle: string): boolean | undefined {
@@ -531,7 +560,11 @@ function binaryContains(path: string, needle: string): boolean | undefined {
   if (opened.isErr()) return undefined;
   // Cleanup runs on return AND on throw, same as the prior try/finally: the fd closes once this
   // block ends, in either case.
-  using _fd = { [Symbol.dispose]: () => closeSync(opened.value) };
+  using _fd = {
+    [Symbol.dispose]: () => {
+      closeSync(opened.value);
+    },
+  };
   return scanFd(opened.value, Buffer.from(needle));
 }
 
@@ -543,7 +576,7 @@ const RcProbeCacheSchema = z.record(z.string(), z.boolean());
  */
 function rcProbeValid(): boolean | undefined {
   const exe = process.env.CLAUDE_CODE_EXECPATH;
-  if (!exe) return undefined;
+  if (exe === undefined || exe === "") return undefined;
   const st = fromThrowable(() => statSync(exe))();
   if (st.isErr()) return undefined;
   const key = `${exe}\u0000${st.value.size}\u0000${st.value.mtimeMs}`;
@@ -575,7 +608,11 @@ const AGENT_NAME_TTL_MS = 30_000;
 const AGENT_LIST_TIMEOUT_MS = 3000; // `claude agents --json`, slower than the 2000ms enrichment bound
 // statusLine commands can run with a narrower PATH than an interactive shell; prefer the env
 // var Claude Code exports for its own binary over a bare PATH lookup.
-const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
+const CLAUDE_BIN =
+  process.env.CLAUDE_CODE_EXECPATH !== undefined &&
+  process.env.CLAUDE_CODE_EXECPATH !== ""
+    ? process.env.CLAUDE_CODE_EXECPATH
+    : "claude";
 
 // `hint`: the stdin session_name seen when this entry was fetched — a different value now means
 // the session was renamed, so the entry is stale regardless of age.
@@ -599,7 +636,7 @@ function agentNameEntries(
 ): Record<string, AgentNameEntry> {
   const next: Record<string, AgentNameEntry> = {};
   for (const a of list) {
-    if (!a.sessionId) continue;
+    if (a.sessionId === undefined || a.sessionId === "") continue;
     // exactOptionalPropertyTypes: omit `name` rather than set it to explicit undefined.
     next[a.sessionId] = {
       at: now,
@@ -623,7 +660,8 @@ function agentName(
   const renamed =
     hit?.hint !== undefined && hint !== undefined && hit.hint !== hint;
   if (
-    hit != null &&
+    hit !== null &&
+    hit !== undefined &&
     !renamed &&
     Temporal.Now.instant().epochMilliseconds - hit.at < AGENT_NAME_TTL_MS
   )
@@ -747,14 +785,22 @@ async function reportToHerdr(
   const socketPath = process.env.HERDR_SOCKET_PATH;
   const paneId = process.env.HERDR_PANE_ID;
   const tabId = process.env.HERDR_TAB_ID;
-  if (process.env.HERDR_ENV !== "1" || !socketPath || !paneId) return;
+  if (
+    process.env.HERDR_ENV !== "1" ||
+    socketPath === undefined ||
+    socketPath === "" ||
+    paneId === undefined ||
+    paneId === ""
+  )
+    return;
 
   const stamp = Temporal.Now.instant().epochMilliseconds;
   const tokens: Record<string, string> = { model: m };
   // Rides the SAME request as model — one socket round-trip, not two (see the
   // ONE-REQUEST-PER-CONNECTION note above for why a second request here would risk being
   // dropped anyway).
-  if (sessionName) tokens.fullname = sessionName;
+  if (sessionName !== undefined && sessionName !== "")
+    tokens.fullname = sessionName;
   // Always set, never omitted — see the pane.report_metadata header note above for why
   // $effort and $rc need an active off-toggle instead of an absent key.
   tokens.effort = effortDisplay ?? "";
@@ -768,8 +814,17 @@ async function reportToHerdr(
       tokens,
     },
   });
-  if (tabId && sessionName) {
-    const shortName = sessionName.split("-").pop() || sessionName;
+  if (
+    tabId !== undefined &&
+    tabId !== "" &&
+    sessionName !== undefined &&
+    sessionName !== ""
+  ) {
+    const lastNamePart = sessionName.split("-").pop();
+    const shortName =
+      lastNamePart !== undefined && lastNamePart !== ""
+        ? lastNamePart
+        : sessionName;
     await herdrSend(socketPath, {
       id: `dotfiles:statusline-tab:${stamp}`,
       method: "tab.rename",
@@ -839,14 +894,14 @@ function admittedName(tok: string[]): string | undefined {
   const name = (tok[i + 2] ?? "")
     .split("/")
     .pop()
-    ?.replace(/\.resource\.json$/, "");
+    ?.replace(/\.resource\.json$/u, "");
   return name === "" ? undefined : name;
 }
 // ps's `etime`, "[[dd-]hh:]mm:ss" on both procps and BSD ps, in seconds. A bare number is taken as
 // seconds (etimes' shape), so a recorded etimes line still reads. undefined: not that shape.
 function etimeSecs(etime: string): number | undefined {
-  const m = etime.match(/^(?:(?:(\d+)-)?(\d+):)?(?:(\d+):)?(\d+)$/);
-  if (!m) return undefined;
+  const m = etime.match(/^(?:(?:(\d+)-)?(\d+):)?(?:(\d+):)?(\d+)$/u);
+  if (m === null) return undefined;
   const [, dd, a, b, last] = m;
   if (b === undefined && a === undefined) return Number(last); // "ss" alone: plain seconds
   // "mm:ss" matches a=mm (b unset); "hh:mm:ss" matches a=hh, b=mm.
@@ -882,16 +937,17 @@ function scanOutOfHarness(): {
   for (const line of raw.split("\n")) {
     // .match(), not RegExp.prototype.exec(): this file imports node:child_process, and the
     // writing-bun-scripts floor (F4) fails any such file that also carries the token `exec(`.
-    const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/);
-    if (!m) continue;
+    const m = line.match(/^\s*(\d+)\s+([\d:-]+)\s+(\S.*)$/u);
+    if (m === null) continue;
     const [, ppid, etime, args] = m;
     // All three are non-optional capture groups, so a successful match always has them;
     // this guard exists only for noUncheckedIndexedAccess, never actually taken.
     if (ppid === undefined || etime === undefined || args === undefined)
       continue;
-    const name = admittedName(args.split(/\s+/));
+    const name = admittedName(args.split(/\s+/u));
     const secs = etimeSecs(etime);
-    if (name != null && secs !== undefined) jobs.push({ name, secs });
+    if (name !== null && name !== undefined && secs !== undefined)
+      jobs.push({ name, secs });
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
   return { jobs, orphans };
@@ -930,13 +986,11 @@ const GPU_SAMPLE_TTL_MS = 5_000;
 // p50 2.6 s, p90 5.6 s, max 12.6 s, 15 of 24 over the old 2 s bound. Above the
 // worst seen, so a slow answer is an answer; below "hung", so a dead driver is still named.
 // STATUSLINE_GPU_SAMPLE_TIMEOUT_MS lets the tests exercise the timeout without waiting it out.
-const GPU_SAMPLE_TIMEOUT_MS = z.coerce
-  .number()
-  .int()
-  .min(100)
-  .max(120_000)
-  .catch(20_000)
-  .parse(process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS);
+const GPU_SAMPLE_TIMEOUT_SCHEMA = z.coerce.number().int().min(100).max(120_000);
+const GPU_SAMPLE_TIMEOUT_MS = defaultOnInvalid(
+  GPU_SAMPLE_TIMEOUT_SCHEMA,
+  20_000,
+).parse(process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS);
 // A last-good sample older than this is a claim about a moment too far back to still be useful;
 // beyond it the reading becomes n/a instead of a stale number.
 const GPU_STALE_MAX_MS = 30 * 60_000;
@@ -991,7 +1045,9 @@ function acquireGpuLock(): Result<GpuLock, string> {
     })().isOk();
   const lock: GpuLock = {
     release: () => {
-      fromThrowable(() => rmdirSync(GPU_LOCK))();
+      fromThrowable(() => {
+        rmdirSync(GPU_LOCK);
+      })();
     },
   };
   if (take()) return ok(lock);
@@ -1014,7 +1070,9 @@ function ensureSampler(): Result<void, string> {
         stdio: "ignore",
         env: { ...process.env, [SAMPLE_ENV]: "1" },
       });
-      child.once("error", () => lock.value.release());
+      child.once("error", () => {
+        lock.value.release();
+      });
       child.unref(); // the render exits without waiting; the child is bounded by its own timeout
     },
     (e): string => `sampler not started (${failWhy(e, "bun")})`,
@@ -1036,7 +1094,9 @@ function runSampler(): number {
   }
   using _held: Disposable = {
     [Symbol.dispose]: () => {
-      fromThrowable(() => rmdirSync(GPU_LOCK))();
+      fromThrowable(() => {
+        rmdirSync(GPU_LOCK);
+      })();
     },
   };
   const good = readJson(GPU_CACHE, GpuCacheSchema)?.good;
@@ -1076,8 +1136,10 @@ function vramFrac(): Result<MemReading, string> {
   const fresh =
     cached.at !== undefined &&
     within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
-    (cached.reading != null || cached.why !== undefined);
-  if (fresh && cached.reading) return ok(cached.reading);
+    ((cached.reading !== null && cached.reading !== undefined) ||
+      cached.why !== undefined);
+  if (fresh && cached.reading !== null && cached.reading !== undefined)
+    return ok(cached.reading);
   // Expired: refresh in the background and answer from what is cached NOW. A cached miss inside
   // the TTL is served as-is, without starting another sampler (one attempt per TTL, not per render).
   const started = fresh ? ok(undefined) : ensureSampler();
@@ -1094,7 +1156,7 @@ function vramFrac(): Result<MemReading, string> {
 }
 // `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits`: the first GPU's
 // line, "<used MiB>, <total MiB>". Whole numbers only — an empty field must not read as 0.
-const MiB = z.string().trim().regex(/^\d+$/).transform(Number);
+const MiB = z.string().trim().regex(/^\d+$/u).transform(Number);
 const NvidiaSmiSchema = z
   .string()
   .transform((out) => (out.split("\n")[0] ?? "").split(","))
@@ -1116,7 +1178,7 @@ function sampleVram(): Result<MemReading, ExecFailure> {
     if (!parsed.success) return err(unparsable);
     const [used, total] = parsed.data;
     const reading = memReading(used / 1024, total / 1024);
-    return reading ? ok(reading) : err(unparsable);
+    return reading !== undefined ? ok(reading) : err(unparsable);
   });
 }
 
@@ -1128,16 +1190,16 @@ function sampleVram(): Result<MemReading, ExecFailure> {
 // wired + compressed — NOT total minus "Pages free": macOS keeps free pages near zero by caching
 // files, so that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`:
 // its PhysMem "used" counts that file cache too, and it costs a full process-table pass.
-const VmStatPage = z.string().regex(/^\d+$/).transform(Number);
+const VmStatPage = z.string().regex(/^\d+$/u).transform(Number);
 function macRam(): Result<MemReading, string> {
   return execBounded("vm_stat", "vm_stat", [], ENRICHMENT_TIMEOUT_MS)
     .mapErr((f) => f.why)
     .andThen((raw) => {
-      const size = raw.match(/page size of (\d+) bytes/)?.[1];
+      const size = raw.match(/page size of (\d+) bytes/u)?.[1];
       const pages = (label: string): number | undefined => {
         const line = raw.split("\n").find((l) => l.startsWith(`${label}:`));
         const v = VmStatPage.safeParse(
-          line?.split(/\s+/).pop()?.replace(/\.$/, ""),
+          line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
         );
         return v.success ? v.data : undefined;
       };
@@ -1158,7 +1220,9 @@ function macRam(): Result<MemReading, string> {
         Number(size);
       const GiB = 1024 ** 3;
       const reading = memReading(usedBytes / GiB, totalmem() / GiB);
-      return reading ? ok(reading) : err("vm_stat output unparsable");
+      return reading !== undefined
+        ? ok(reading)
+        : err("vm_stat output unparsable");
     });
 }
 // macOS has no /proc: see macRam().
@@ -1171,16 +1235,16 @@ function ramFrac(): Result<MemReading, string> {
     let totalKb: number | undefined;
     let availKb: number | undefined;
     for (const line of raw.split("\n")) {
-      if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/)[1]);
+      if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
       else if (line.startsWith("MemAvailable:"))
-        availKb = Number(line.split(/\s+/)[1]);
-      if (totalKb != null && availKb != null) break;
+        availKb = Number(line.split(/\s+/u)[1]);
+      if (totalKb !== undefined && availKb !== undefined) break;
     }
-    if (totalKb == null || availKb == null)
+    if (totalKb === undefined || availKb === undefined)
       return err("meminfo lacks MemTotal/MemAvailable");
     const usedKb = totalKb - availKb;
     const reading = memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
-    return reading ? ok(reading) : err("meminfo unparsable");
+    return reading !== undefined ? ok(reading) : err("meminfo unparsable");
   });
 }
 
@@ -1222,8 +1286,9 @@ function readCpuSample(): Result<CpuSample, string> {
     () => "no /proc/stat",
   )().andThen((raw) => {
     const line = raw.split("\n").find((l) => l.startsWith("cpu "));
-    if (!line) return err("/proc/stat has no cpu line");
-    const fields = line.trim().split(/\s+/).slice(1).map(Number);
+    if (line === undefined || line === "")
+      return err("/proc/stat has no cpu line");
+    const fields = line.trim().split(/\s+/u).slice(1).map(Number);
     const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
     const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
     return Number.isFinite(idle) && total > 0
@@ -1265,16 +1330,34 @@ const dur = (s: number) =>
   s >= 3600
     ? `${Math.floor(s / 3600)}h${pad2(Math.floor((s % 3600) / 60))}m`
     : `${Math.floor(s / 60)}m${pad2(s % 60)}s`;
+function tokenLabel(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+function firstNonEmpty(primary: string | undefined, fallback: string): string {
+  return primary !== undefined && primary !== "" ? primary : fallback;
+}
 
 // --- buildDataframe: stdin -> every displayable value, already computed. No ANSI, no rows. ---
 async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // || (not ??): an empty cwd string must ALSO fall through to PWD, matching the old sh's
   // `[ -n "$cwd" ] || cwd=$PWD` guard — "" is never a real working directory.
-  const cwd = data.cwd || data.workspace?.current_dir || process.env.PWD || "";
-  const sid = data.session_id || undefined; // "" is not an id either
+  const workspaceDir = data.workspace?.current_dir;
+  const cwdCandidate = firstNonEmpty(
+    data.cwd,
+    firstNonEmpty(workspaceDir, process.env.PWD ?? ""),
+  );
+  const cwd = cwdCandidate;
+  const sid =
+    data.session_id !== undefined && data.session_id !== ""
+      ? data.session_id
+      : undefined; // "" is not an id either
+  const sessionNameHint =
+    data.session_name !== undefined && data.session_name !== ""
+      ? data.session_name
+      : undefined;
   const nameResult =
-    sid != null
-      ? agentName(sid, data.session_name || undefined)
+    sid !== undefined
+      ? agentName(sid, sessionNameHint)
       : ok<string | undefined, string>(undefined);
   const sessionName = nameResult.unwrapOr(undefined);
   const sessionNameWhy = nameResult.isErr() ? nameResult.error : undefined;
@@ -1290,19 +1373,19 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const modelId = data.model?.id ?? "";
   // model name (guarantee e.g. "Opus 4.8"): keep display_name if it already has a version,
   // else derive "Family X.Y" from the id (claude-opus-4-8[1m] -> Opus 4.8).
-  if (!/[0-9]/.test(model)) {
+  if (!/[0-9]/u.test(model)) {
     // String.split always returns at least one element, so this is never actually undefined;
     // the fallback is only to satisfy noUncheckedIndexedAccess.
-    const base = modelId.replace(/^claude-/, "").split("[")[0] ?? "";
+    const base = modelId.replace(/^claude-/u, "").split("[")[0] ?? "";
     const dash = base.indexOf("-");
     const fam = dash === -1 ? base : base.slice(0, dash);
-    const ver = (dash === -1 ? "" : base.slice(dash + 1)).replace(/-/g, ".");
-    if (fam) {
+    const ver = (dash === -1 ? "" : base.slice(dash + 1)).replaceAll("-", ".");
+    if (fam !== "") {
       const famCap = fam.charAt(0).toUpperCase() + fam.slice(1);
-      model = ver ? `${famCap} ${ver}` : famCap;
+      model = ver !== "" ? `${famCap} ${ver}` : famCap;
     }
   }
-  if (!model) model = "?";
+  if (model === "") model = "?";
   // Trim the verbose extended-context tag: "Opus 4.8 (1M context)" -> "Opus 4.8 (1M)".
   if (model.endsWith(" context)"))
     model = `${model.slice(0, -" context)".length)})`;
@@ -1329,7 +1412,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   // reconnect. So a render reads the current state, not a launch-time snapshot (the claude
   // process's own /proc environ never carries it at all).
   const rc = rcState();
-  const effortDisplay = effort ? `${effort}${wfSuffix}` : effort;
+  const effortDisplay =
+    effort !== undefined && effort !== "" ? `${effort}${wfSuffix}` : effort;
 
   await reportToHerdr(model, sessionName, effortDisplay);
 
@@ -1337,8 +1421,6 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const ctxTok =
     data.context_window?.total_input_tokens ??
     data.context_window?.current_usage?.input_tokens;
-  const tokenLabel = (n: number) =>
-    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
   const ctx = ctxTok === undefined ? undefined : tokenLabel(ctxTok);
 
   // git branch from cwd — see the top-of-file Tiger-Style note for why this call is bounded.
@@ -1361,12 +1443,12 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
   const gitReason = branchResult.isErr()
     ? branchResult.error.stderr
         .split("\n")[0]
-        ?.replace(/^fatal: /, "")
+        ?.replace(/^fatal: /u, "")
         .slice(0, 60)
     : undefined;
   const branchWhy =
     branchResult.isErr() && !notRepo
-      ? gitReason || branchResult.error.why
+      ? firstNonEmpty(gitReason, branchResult.error.why)
       : undefined;
 
   const scan = scanOutOfHarness();
@@ -1405,6 +1487,7 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
     jobs,
     orphans,
     jobScanWhy: scan.failed,
+    routes: routeRuns(),
     vram,
     disks,
     cpuPct: cpu,
@@ -1447,14 +1530,14 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 function rl5Segment(rl5: number, rl5Reset: number | undefined): string {
   const { pct, col } = pctFmt(rl5);
   let seg = `5h ${ESC}[${col}m${pct}%${RST}`;
-  if (rl5Reset != null) seg += ` ${DIM}${reset5(rl5Reset)}${RST}`;
+  if (rl5Reset !== undefined) seg += ` ${DIM}${reset5(rl5Reset)}${RST}`;
   return seg;
 }
 // Rate row, 7d window: same shape as rl5Segment.
 function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
   const { pct, col } = pctFmt(rl7);
   let seg = `7d ${ESC}[${col}m${pct}%${RST}`;
-  if (rl7Reset != null) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
+  if (rl7Reset !== undefined) seg += ` ${DIM}${reset7(rl7Reset)}${RST}`;
   return seg;
 }
 // Rate row, per-model weekly cap (e.g. "Fable 100% ⟳reset") — same reset7 shape as the 7d
@@ -1462,7 +1545,7 @@ function rl7Segment(rl7: number, rl7Reset: number | undefined): string {
 function rlModelSegment(m: ModelLimit): string {
   const { pct, col } = pctFmt(m.pct);
   let seg = `${m.name} ${ESC}[${col}m${pct}%${RST}`;
-  if (m.resetEpoch != null) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
+  if (m.resetEpoch !== undefined) seg += ` ${DIM}${reset7(m.resetEpoch)}${RST}`;
   return seg;
 }
 // Ctx segment: "Ctx: <tokens> NN%". One builder for the bar's agent row and the snapshot.
@@ -1470,11 +1553,11 @@ function ctxSegment(df: Pick<Dataframe, "ctx" | "ctxPct">): string {
   const label = `${ESC}[38;5;66mCtx:${RST}`;
   const na = `${NA_COLOR}n/a${RST}`;
   // Neither figure in the payload (before the first API response): one n/a, not two.
-  if (df.ctx === undefined && df.ctxPct == null) return `${label} ${na}`;
+  if (df.ctx === undefined && df.ctxPct === null) return `${label} ${na}`;
   let seg = `${label} ${df.ctx ?? na}`;
   // No MID here on purpose — see render()'s header note: this is one fact (context usage)
   // shown two ways, not two sibling facts, so a bare space separates them, not the middot.
-  if (df.ctxPct != null) {
+  if (df.ctxPct !== null && df.ctxPct !== undefined) {
     const { pct, col } = pctFmt(df.ctxPct);
     seg += ` ${ESC}[${col}m${pct}%${RST}`;
   } else {
@@ -1493,21 +1576,23 @@ function rateRow(
   >,
 ): string {
   const label = `${ESC}[38;5;108mRate:${RST}`;
-  if (df.rl5 == null && df.rl7 == null && df.rlModel.length === 0)
+  if (
+    (df.rl5 === null || df.rl5 === undefined) &&
+    (df.rl7 === null || df.rl7 === undefined) &&
+    df.rlModel.length === 0
+  )
     return `${label} ${NA_COLOR}n/a${RST} ${DIM}(no rate_limits in the payload)${RST}`;
-  const parts: string[] = [];
-  parts.push(
-    df.rl5 != null
+  const parts: string[] = [
+    df.rl5 !== null && df.rl5 !== undefined
       ? rl5Segment(df.rl5, df.rl5Reset)
       : `5h ${NA_COLOR}n/a${RST}`,
-  );
-  parts.push(
-    df.rl7 != null
+    df.rl7 !== null && df.rl7 !== undefined
       ? rl7Segment(df.rl7, df.rl7Reset)
       : `7d ${NA_COLOR}n/a${RST}`,
-  );
+  ];
   for (const m of df.rlModel) parts.push(rlModelSegment(m));
-  if (df.modelCapsWhy) parts.push(naSegment("model caps", df.modelCapsWhy));
+  if (df.modelCapsWhy !== undefined && df.modelCapsWhy !== "")
+    parts.push(naSegment("model caps", df.modelCapsWhy));
   // Independent sibling windows, so the middot (see render()'s header note on MID).
   return `${label} ${parts.join(` ${DIM}${MID}${RST} `)}`;
 }
@@ -1525,6 +1610,72 @@ function admittedJobSegment(jobs: Admitted[], orphans: number): string {
   if (orphans > 0) seg += ` ${DIM}orphan×${orphans}${RST}`;
   return seg;
 }
+// Run row source: one marker per worker agent-router started (agents/routing-control/state.ts).
+// A marker is written at start and removed at exit, so a marker whose process is gone means
+// agent-router itself was killed — counted as stale, never dropped (EXPLICIT-ABSENCE).
+interface RouteRun {
+  choice: string;
+  label: string;
+  secs: number;
+  alive: boolean;
+}
+const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
+const sinceSecs = fromThrowable((iso: string) =>
+  Math.max(
+    0,
+    Math.floor(
+      Temporal.Now.instant().since(Temporal.Instant.from(iso)).total("seconds"),
+    ),
+  ),
+);
+const listDir = fromThrowable((dir: string) => readdirSync(dir));
+function routeRuns(): Result<RouteRun[], string> | undefined {
+  const dir = activeDir();
+  if (!existsSync(dir)) return undefined;
+  const names = listDir(dir);
+  if (names.isErr()) return err(`cannot list ${dir}`);
+  return ok(
+    names.value
+      .filter((n) => n.endsWith(".json"))
+      .flatMap((n) => {
+        const parsed = jsonOf(ActiveSchema).safeParse(
+          readFileSync(join(dir, n), "utf8"),
+        );
+        if (!parsed.success) return [];
+        const a = parsed.data;
+        return [
+          {
+            choice: a.choice,
+            label: a.label,
+            secs: sinceSecs(a.started_at).unwrapOr(0),
+            alive: pidAlive(a.pid).isOk(),
+          },
+        ];
+      }),
+  );
+}
+// Run rows: one line per worker, like Claude Code's own background panel — "Run: <row> <elapsed>
+// <label>" on the first, the rest aligned under it. Capped at RUN_LINES so a wide fan-out cannot
+// push the other rows off screen; the cap is SAID (+N more), never silent. Stale markers get their
+// own line.
+const RUN_LINES = 6;
+const RUN_LABEL = `${ESC}[38;5;109mRun:${RST}`;
+const RUN_INDENT = "     ";
+function routeLines(runs: RouteRun[]): string[] {
+  const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
+  const stale = runs.length - live.length;
+  const lines = live
+    .slice(0, RUN_LINES)
+    .map(
+      (r) => `${r.choice} ${dur(r.secs)} ${DIM}${r.label.slice(0, 48)}${RST}`,
+    );
+  if (live.length > RUN_LINES)
+    lines.push(`${DIM}+${live.length - RUN_LINES} more${RST}`);
+  if (stale > 0) lines.push(`${ESC}[38;5;167mstale×${stale}${RST}`);
+  return lines.map((l, i) =>
+    i === 0 ? `${RUN_LABEL} ${l}` : `${RUN_INDENT}${l}`,
+  );
+}
 // Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) · VRAM NN% (X.X/Y.YG) · Disk …" — each reading a value
 // or `n/a (<why>)` — host resource usage, always its own row like Job (never folded into Rate, which is API budget, not host load). All three
 // percentages share the same green/yellow/red pctFmt threshold as every other percentage in
@@ -1537,7 +1688,7 @@ function memSegment(label: string, m: MemReading): string {
   // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
   // and one session sampling for all, a reading tens of seconds old is the normal case, and the
   // marker there was noise that buried the cases that matter.
-  if (m.stale && m.stale.secs >= STALE_SHOW_S)
+  if (m.stale !== undefined && m.stale.secs >= STALE_SHOW_S)
     seg += ` ${NA_COLOR}stale ${m.stale.secs}s${RST} ${DIM}(${m.stale.why})${RST}`;
   return seg;
 }
@@ -1563,11 +1714,11 @@ interface DiskReading {
 // "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
 // "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
 const IS_WSL = fromThrowable(() =>
-  /microsoft/i.test(readFileSync("/proc/version", "utf8")),
+  /microsoft/iu.test(readFileSync("/proc/version", "utf8")),
 )().unwrapOr(false);
 function diskLabel(path: string): string {
-  const m = path.match(/^\/mnt\/([a-z])$/); // String.match: this file imports child_process (BG floor F4)
-  if (m?.[1]) return `Disk ${m[1].toUpperCase()}:`;
+  const m = path.match(/^\/mnt\/([a-z])$/u); // String.match: this file imports child_process (BG floor F4)
+  if (m?.[1] !== undefined && m[1] !== "") return `Disk ${m[1].toUpperCase()}:`;
   if (path === "/" && IS_WSL) return "Disk WSL";
   return `Disk ${path}`;
 }
@@ -1679,7 +1830,7 @@ function sysSegment(
           ),
         ]),
     ...disks.match(
-      (ds) => ds.map(diskSegment),
+      (ds) => ds.map((disk) => diskSegment(disk)),
       (why) => [naSegment("Disk", why)],
     ),
   ];
@@ -1698,28 +1849,28 @@ function coloredHead(p: PromptParts): string {
   );
 }
 function render(df: Dataframe): string {
-  const join = (t: string, seg: string) => (t ? t + SEP : "") + seg;
+  const joinText = (t: string, seg: string) => (t !== "" ? t + SEP : "") + seg;
 
   const line1 = coloredHead(promptParts(df.cwd));
 
   let identityLine = "";
-  if (df.email != null)
-    identityLine = join(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
-  else if (df.accountWhy)
-    identityLine = join(identityLine, naSegment("account", df.accountWhy));
-  if (df.sid != null)
-    identityLine = join(
+  if (df.email !== null && df.email !== undefined)
+    identityLine = joinText(identityLine, `${ESC}[38;5;103m${df.email}${RST}`);
+  else if (df.accountWhy !== undefined && df.accountWhy !== "")
+    identityLine = joinText(identityLine, naSegment("account", df.accountWhy));
+  if (df.sid !== null && df.sid !== undefined)
+    identityLine = joinText(
       identityLine,
       `${ESC}[38;5;103mSession:${RST} ${DIM}${df.sid}${RST}`,
     );
 
   let agentLine = "";
-  if (df.sessionName != null)
-    agentLine = join(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
-  else if (df.sessionNameWhy)
-    agentLine = join(agentLine, naSegment("name", df.sessionNameWhy));
-  agentLine = join(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
-  if (df.effort) {
+  if (df.sessionName !== null && df.sessionName !== undefined)
+    agentLine = joinText(agentLine, `${ESC}[38;5;214m${df.sessionName}${RST}`);
+  else if (df.sessionNameWhy !== undefined && df.sessionNameWhy !== "")
+    agentLine = joinText(agentLine, naSegment("name", df.sessionNameWhy));
+  agentLine = joinText(agentLine, `${ESC}[38;5;30m${df.model}${RST}`);
+  if (df.effort !== undefined && df.effort !== "") {
     agentLine += `${SEP}${ESC}[38;5;209m${df.effort}${RST}`;
     // Tailwind violet-500 (#8b5cf6), matched 2026-09-11 against Claude Code's own /effort
     // slider "ultracode" label. truecolor (38;2;r;g;b), not the 256-palette used elsewhere in
@@ -1733,22 +1884,23 @@ function render(df: Dataframe): string {
   else if (df.rc === "off") agentLine += `${SEP}${DIM}rc:off${RST}`;
   else agentLine += `${SEP}${ESC}[38;5;178mrc:?${RST}`;
 
-  agentLine = join(agentLine, ctxSegment(df));
+  agentLine = joinText(agentLine, ctxSegment(df));
 
   const rateLine = rateRow(df);
 
   let repoLine = "";
-  if (df.branch)
-    repoLine = join(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
-  else if (df.branchWhy)
-    repoLine = join(repoLine, `${BR} ${naSegment("branch", df.branchWhy)}`);
-  repoLine = join(
+  if (df.branch !== undefined && df.branch !== "")
+    repoLine = joinText(repoLine, `${ESC}[38;5;96m${BR} ${df.branch}${RST}`);
+  else if (df.branchWhy !== undefined && df.branchWhy !== "")
+    repoLine = joinText(repoLine, `${BR} ${naSegment("branch", df.branchWhy)}`);
+  repoLine = joinText(
     repoLine,
     df.add === undefined || df.del === undefined
       ? naSegment("diff", "payload has no cost block")
       : `${ESC}[38;5;178m(+${df.add},-${df.del})${RST}`,
   );
-  if (df.wt) repoLine = join(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
+  if (df.wt !== undefined && df.wt !== "")
+    repoLine = joinText(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 
   // Always present: every reading in it is either a value or an explicit n/a.
   const sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSegment(df.cpuPct, df.ram, df.vram, df.disks)}`;
@@ -1768,15 +1920,22 @@ function render(df: Dataframe): string {
     }
   }
 
+  // Run rows: present while agent-router has workers (or stale markers); n/a when unreadable.
+  let runLines: string[] = [];
+  if (df.routes !== undefined && df.routes.isErr())
+    runLines = [`${RUN_LABEL} ${naSegment("agent-router", df.routes.error)}`];
+  else if (df.routes !== undefined) runLines = routeLines(df.routes.value);
+
   return [
-    join(line1, repoLine),
+    joinText(line1, repoLine),
     identityLine,
     agentLine,
     rateLine,
     sysLine,
     jobLine,
+    ...runLines,
   ]
-    .flatMap((r) => (r ? [r] : [])) // drops undefined and "" without an `r is string` guard
+    .flatMap((r) => (r !== undefined && r !== "" ? [r] : [])) // drops undefined and "" without an `r is string` guard
     .join("\n");
 }
 
@@ -1809,7 +1968,8 @@ if (!json.success) {
 const payload = StatusInputSchema.safeParse(json.data);
 if (!payload.success) {
   const issue = payload.error.issues[0];
-  const where = (issue?.path ?? []).map(String).join(".") || "(root)";
+  const path = (issue?.path ?? []).map(String).join(".");
+  const where = path !== "" ? path : "(root)";
   process.stdout.write(`${coloredHead(promptParts(process.env.PWD ?? ""))}\n`);
   process.stdout.write(
     `${DIM}Model: ? | invalid statusline payload: ${where}: ${issue?.message ?? "?"}${RST}`,
@@ -1825,9 +1985,9 @@ process.stdout.write(render(df));
 // latest line, so a tool call never pays for a sample. Host-wide values, so one file serves
 // every session. Best-effort: a failed write only means the next hook firing finds it stale.
 const SYS_CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
-const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const sysColored = sysSegment(df.cpuPct, df.ram, df.vram, df.disks);
-const sysPlain = sysColored.replace(ANSI, "");
+const sysPlain = sysColored.replaceAll(ANSI, "");
 // Never empty: every Sys reading is a value or an explicit n/a (see the EXPLICIT-ABSENCE law).
 writeCache(SYS_CACHE, {
   at: Temporal.Now.instant().epochMilliseconds,
@@ -1841,11 +2001,11 @@ writeCache(SYS_CACHE, {
 // shared file let an idle session's older Rate overwrite a fresh one (observed 2026-10-01: 7d 60%
 // then 51% with the same reset). One file per session; the hook reads its own and inserts the
 // rows as given.
-const sid = (payload.data.session_id ?? "").replace(/[^A-Za-z0-9_-]/g, "_");
+const sid = (payload.data.session_id ?? "").replaceAll(/[^A-Za-z0-9_-]/gu, "_");
 if (sid !== "") {
   const rows = [ctxSegment(df), rateRow(df)]; // neither is ever empty: a value or an explicit n/a
   writeCache(`${HOME}/.cache/claude/statusline-session/${sid}.json`, {
     at: Temporal.Now.instant().epochMilliseconds,
-    rows: rows.map((ansi) => ({ line: ansi.replace(ANSI, ""), ansi })),
+    rows: rows.map((ansi) => ({ line: ansi.replaceAll(ANSI, ""), ansi })),
   });
 }

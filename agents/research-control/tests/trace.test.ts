@@ -327,20 +327,22 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
   const files: Record<string, string> = {
     "valid-intent-receipt-learning.json": make(() => {}),
     "valid-exact-blocker.json": make(blocker),
-    "role-switch.json": make((v) =>
+    "role-switch.json": make((v) => {
       v.roleGrants.push({
         grantId: "d2",
         actorInstanceId: "director",
         role: "section-director",
-      }),
-    ),
-    "transient-scientific-evidence.json": make((v) =>
-      patchEvidence(eventAt(v, 5), { locator: "/x/.agent-state/y" }),
-    ),
-    "receipt-without-intent.json": make(
-      (v) => (eventAt(v, 5).intentId = "missing"),
-    ),
-    "learn-without-new-receipt.json": make((v) => delete eventAt(v, 6).delta),
+      });
+    }),
+    "transient-scientific-evidence.json": make((v) => {
+      patchEvidence(eventAt(v, 5), { locator: "/x/.agent-state/y" });
+    }),
+    "receipt-without-intent.json": make((v) => {
+      eventAt(v, 5).intentId = "missing";
+    }),
+    "learn-without-new-receipt.json": make((v) => {
+      delete eventAt(v, 6).delta;
+    }),
     "next-search-before-learning.json": make((v) => {
       events(v).splice(6);
       events(v).push({ ...eventAt(v, 4), id: "i2", at: at(7) });
@@ -353,9 +355,9 @@ if (process.env.WRITE_WIRE_FIXTURES === "1") {
       eventAt(v, 1).grantId = "d";
       eventAt(v, 1).actorInstanceId = "director";
     }),
-    "invalid-intent-does-not-release-wip.json": make(
-      (v) => (eventAt(v, 4).executableSpecificationSha256 = digest("0")),
-    ),
+    "invalid-intent-does-not-release-wip.json": make((v) => {
+      eventAt(v, 4).executableSpecificationSha256 = digest("0");
+    }),
     "proposal-only-100m.json": make((v) => {
       events(v).splice(2);
       events(v).push(
@@ -458,8 +460,9 @@ describe("research-section-trace/v2 exact wire", () => {
     ])
       expectCode(value, code);
   });
-  test("green receipt chain passes", () =>
-    expect(checkTrace(trace()).ok).toBe(true));
+  test("green receipt chain passes", () => {
+    expect(checkTrace(trace()).ok).toBe(true);
+  });
   test("missing authority lineage is rejected before event indexing", () => {
     const value = trace();
     delete value.authority.openIssue;

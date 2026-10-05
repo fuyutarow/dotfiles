@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 export const MAX_PACKET_BYTES = 256 * 1024;
 export const MAX_PACKET_COUNT = 1024;
-export const HEX_SHA256 = /^[a-f0-9]{64}$/;
-export const STABLE_ID = /^[A-Za-z][A-Za-z0-9._-]{0,127}$/;
+export const HEX_SHA256 = /^[a-f0-9]{64}$/u;
+export const STABLE_ID = /^[A-Za-z][A-Za-z0-9._-]{0,127}$/u;
 
 export const INTENT_KEYS = [
   "SCHEMA",
@@ -115,23 +115,23 @@ export const REQUIRED_LENS_IDS = [
 ];
 
 export const PLACEHOLDER =
-  /^\s*(?:<[^>\n]+>|\[(?:\.{3}|…|\s*)\]|(?:TBD|TODO|FIXME|N\/?A)|未記入|未定|要記入)\s*$/i;
+  /^\s*(?:<[^>\n]+>|\[(?:\.{3}|…|\s*)\]|(?:TBD|TODO|FIXME|N\/?A)|未記入|未定|要記入)\s*$/iu;
 export const PRIVATE_REASONING =
-  /(?:<\/?(?:thinking|analysis)>|(?:^|\n)\s*#{1,6}\s*(?:chain[- _]of[- _]thought|internal reasoning|hidden reasoning|private reasoning|raw reasoning)\s*$)/im;
+  /(?:<\/?(?:thinking|analysis)>|(?:^|\n)\s*#{1,6}\s*(?:chain[- _]of[- _]thought|internal reasoning|hidden reasoning|private reasoning|raw reasoning)\s*$)/imu;
 export const CONTROL_ARTIFACT =
-  /(?:<\/?(?:system|developer|assistant|user)>|(?:^|\n)\s*#{1,6}\s*(?:system|developer|assistant|user)(?: prompt| message)?\s*$|BEGIN (?:SYSTEM |DEVELOPER |ASSISTANT |USER )?(?:PROMPT|MESSAGE|CONTROL)|```(?:transcript|prompt|control|chat)\b)/im;
+  /(?:<\/?(?:system|developer|assistant|user)>|(?:^|\n)\s*#{1,6}\s*(?:system|developer|assistant|user)(?: prompt| message)?\s*$|BEGIN (?:SYSTEM |DEVELOPER |ASSISTANT |USER )?(?:PROMPT|MESSAGE|CONTROL)|```(?:transcript|prompt|control|chat)\b)/imu;
 export const SCALAR_CREATIVITY =
-  /(?:\b(?:creativity|novelty)(?:[_ -]+quality)?[_ -]+score\b|創造性.{0,8}スコア)\s*(?::|=|\bis\b|\bwas\b|\bof\b)\s*[-+]?(?:\d+(?:\.\d+)?|\.\d+)/i;
+  /(?:\b(?:creativity|novelty)(?:[_ -]+quality)?[_ -]+score\b|創造性.{0,8}スコア)\s*(?::|=|\bis\b|\bwas\b|\bof\b)\s*[-+]?(?:\d+(?:\.\d+)?|\.\d+)/iu;
 export const RECEIPT_INTERPRETATION =
-  /(?:\b(?:proves?|demonstrates?|therefore|establishes? that|confirms? that)\b|証明|示す|示している)/i;
+  /(?:\b(?:proves?|demonstrates?|therefore|establishes? that|confirms? that)\b|証明|示す|示している)/iu;
 export const SECRET_PATTERNS = [
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /\b(?:sk|rk|pk)-(?:live|test|proj)-[A-Za-z0-9_-]{12,}\b/,
-  /\bgh[opusr]_[A-Za-z0-9]{20,}\b/,
-  /\bxox[baprs]-[A-Za-z0-9-]{12,}\b/,
-  /\bAKIA[0-9A-Z]{16}\b/,
-  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/i,
-  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|cookie|authorization)\s*[:=]\s*(?!<?redacted>?|\[redacted\]|(?:secret-manager|vault|env):)[^\s]{8,}/i,
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
+  /\b(?:sk|rk|pk)-(?:live|test|proj)-[A-Za-z0-9_-]{12,}\b/u,
+  /\bgh[opusr]_[A-Za-z0-9]{20,}\b/u,
+  /\bxox[baprs]-[A-Za-z0-9-]{12,}\b/u,
+  /\bAKIA[0-9A-Z]{16}\b/u,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/iu,
+  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|cookie|authorization)\s*[:=]\s*(?!<?redacted>?|\[redacted\]|(?:secret-manager|vault|env):)[^\s]{8,}/iu,
 ];
 
 export type PacketKind = "intent" | "judgment" | "receipt";
@@ -149,7 +149,7 @@ export type Timestamp =
   | Readonly<{ epochNanoseconds: bigint; kind: "value" }>;
 
 export function withoutComments(text: string): string {
-  return text.replaceAll(/<!--[\s\S]*?-->/g, "");
+  return text.replaceAll(/<!--[\s\S]*?-->/gu, "");
 }
 
 export function sha256(value: Uint8Array | string): string {
@@ -157,7 +157,7 @@ export function sha256(value: Uint8Array | string): string {
 }
 
 export function denominatorDigest(runIds: readonly string[]): string {
-  return sha256(`${[...new Set(runIds)].sort().join("\n")}\n`);
+  return sha256(`${[...new Set(runIds)].toSorted().join("\n")}\n`);
 }
 
 export function addFinding(

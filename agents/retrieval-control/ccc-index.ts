@@ -105,7 +105,7 @@ type Watermark = {
 };
 
 const WatermarkSchema = z.object({
-  head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/i)]),
+  head: z.union([z.null(), z.string().regex(/^[0-9a-f]{40}$/iu)]),
   indexedAt: z.string(),
   source: z.enum(["index", "stamp"]),
 });
@@ -395,7 +395,7 @@ export async function checkIndexFreshness(
     // the shared daemon is busy and never retries, so searches there answered NO_INDEX for
     // stretches, and a pipeline filtering for hits read that as "no hits" (2026-09-25).
     const catchUp = allowCatchUp ? await autoCatchUp(project) : null;
-    if (catchUp?.ok) return checkIndexFreshness(project, route, false);
+    if (catchUp?.ok === true) return checkIndexFreshness(project, route, false);
     return {
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
@@ -446,7 +446,11 @@ async function reindexCertified(
 ): Promise<{ code: number; head: string | null }> {
   let head: string | null = null;
   let certified = false;
-  for (let attempt = 1; attempt <= INDEX_ATTEMPTS && !certified; attempt++) {
+  for (
+    let indexAttempt = 1;
+    indexAttempt <= INDEX_ATTEMPTS && !certified;
+    indexAttempt++
+  ) {
     const headBefore = await gitHead(project);
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
@@ -485,7 +489,7 @@ async function reindexCertified(
         (drift === null
           ? "; index scope could not be decided"
           : `; ${drift.inScope.length} in-scope path(s) changed`) +
-        ` — attempt ${attempt}/${INDEX_ATTEMPTS}\n`,
+        ` — attempt ${indexAttempt}/${INDEX_ATTEMPTS}\n`,
     );
   }
   if (!certified) {
@@ -553,7 +557,7 @@ async function runChildToStderr(
 // run `repo-retrieve index`, which reindexes AND records the result in one step.
 export async function runIndexWrapper(timeoutMs: number): Promise<number> {
   const project = findRegisteredProject(process.cwd());
-  if (!project) {
+  if (project === undefined || project === null || project === "") {
     throw new Error(
       `index requested, but ${process.cwd()} is not ccc-registered`,
     );

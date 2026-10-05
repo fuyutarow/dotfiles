@@ -25,7 +25,7 @@ async function cccPython(ccc: string): Promise<string | null> {
     : "";
   // Only a Python interpreter can import cocoindex_code; anything else (a test double, a
   // wrapper script) cannot answer, and running ccc_scope.py under it would be meaningless.
-  return /\/python[0-9.]*$/.test(interpreter) ? interpreter : null;
+  return /\/python[0-9.]*$/u.test(interpreter) ? interpreter : null;
 }
 
 async function capture(

@@ -16,6 +16,8 @@ TOOLS=(
   shfmt shellcheck
   # BibLaTeX backend (`compiling-latex`); system monitor (tmux prefix+shift+B popup)
   biber btop
+  # Secrets: fnox over Keychain (mac) / age (WSL)
+  fnox age
 )
 # Linux-only entries mirror the Brewfile's `if OS.linux?` block.
 if [[ "$(uname -s)" == Linux ]]; then

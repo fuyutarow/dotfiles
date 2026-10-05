@@ -13,6 +13,21 @@ import {
   type ComputeProcess,
 } from "../wsl-capacity-recover.ts";
 
+const p = (
+  pid: number,
+  comm: string,
+  cgroup: string,
+  uid = 1002,
+): ComputeProcess => ({ pid, uid, comm, cgroup, startTicks: String(pid * 10) });
+
+const buildProcessRecord = (uid: number, comm: string): ComputeProcess => ({
+  pid: 10,
+  uid,
+  comm,
+  startTicks: "100",
+  cgroup: "0::/",
+});
+
 const GiB = 1024 ** 3;
 const policy = { denyBytes: 60 * GiB, stopBytes: 30 * GiB };
 
@@ -55,18 +70,6 @@ describe("WSL capacity recovery decisions", () => {
   });
 
   test("only this user's compute work is selected; dedicated units are stopped whole", () => {
-    const p = (
-      pid: number,
-      comm: string,
-      cgroup: string,
-      uid = 1002,
-    ): ComputeProcess => ({
-      pid,
-      uid,
-      comm,
-      cgroup,
-      startTicks: String(pid * 10),
-    });
     const targets = selectStopTargets(
       [
         p(
@@ -113,18 +116,18 @@ describe("WSL capacity recovery decisions", () => {
   });
 
   test("build cleanup remains closed while this user's compiler is running", () => {
-    const p = (uid: number, comm: string): ComputeProcess => ({
-      pid: 10,
-      uid,
-      comm,
-      startTicks: "100",
-      cgroup: "0::/",
-    });
     expect(
-      hasLiveBuildProcess([p(1001, "rustc"), p(1002, "julia")], 1002),
+      hasLiveBuildProcess(
+        [buildProcessRecord(1001, "rustc"), buildProcessRecord(1002, "julia")],
+        1002,
+      ),
     ).toBe(false);
-    expect(hasLiveBuildProcess([p(1002, "cargo")], 1002)).toBe(true);
-    expect(hasLiveBuildProcess([p(1002, "clippy-driver")], 1002)).toBe(true);
+    expect(hasLiveBuildProcess([buildProcessRecord(1002, "cargo")], 1002)).toBe(
+      true,
+    );
+    expect(
+      hasLiveBuildProcess([buildProcessRecord(1002, "clippy-driver")], 1002),
+    ).toBe(true);
   });
 
   test("raw process stop checks starttime and terminates only the selected PID", async () => {

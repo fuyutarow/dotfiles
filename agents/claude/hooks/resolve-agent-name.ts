@@ -25,7 +25,7 @@ const AGENT_NAME_CACHE = `${HOME}/.cache/claude/statusline-agent-names.json`;
 // rare extra `claude agents --json` call it now costs. See statusline-command.ts's agentName()
 // for the fuller writeup — same cache file, same fix, kept in sync deliberately.
 const AGENT_NAME_TTL_MS = 30_000;
-const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH || "claude";
+const CLAUDE_BIN = process.env.CLAUDE_CODE_EXECPATH ?? "claude";
 
 type Entry = { name?: string; at: number };
 
@@ -53,7 +53,7 @@ function buildEntries(
 ): Record<string, Entry> {
   const next: Record<string, Entry> = {};
   for (const a of list) {
-    if (!a.sessionId) continue;
+    if (a.sessionId === undefined || a.sessionId === "") continue;
     // exactOptionalPropertyTypes: omit `name` entirely when absent rather than
     // assigning an explicit `undefined` into the optional slot (JSON.stringify would
     // drop it either way). name-then-at keeps the on-disk key order this file has
@@ -100,7 +100,7 @@ async function agentName(sid: string): Promise<string | undefined> {
 }
 
 const sid = process.env.AGENT_NAME_SESSION_ID;
-if (sid) {
+if (sid !== undefined && sid !== "") {
   const name = await agentName(sid);
-  if (name) process.stdout.write(name);
+  if (name !== undefined && name !== "") process.stdout.write(name);
 }

@@ -20,8 +20,8 @@ type Envelope = z.output<typeof EnvelopeSchema>;
 type BusFinding = Finding & { artifactId?: string };
 
 const RFC3339 =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
-const SHA = /^[a-f0-9]{64}$/;
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+const SHA = /^[a-f0-9]{64}$/u;
 const DELTAS = new Set([
   "supports",
   "weakens",
@@ -32,8 +32,8 @@ const DELTAS = new Set([
 ]);
 const ADMISSIONS = new Set(["ADOPT", "REJECT", "DEFER"]);
 const BARRIERS =
-  /(?:^|[_-])(?:ACK(?:NOWLEDG(?:EMENT)?)?|QUORUM|WAVE|ALL[_-]?RECIPIENT|GLOBAL)(?:$|[_-])/i;
-const SUPERVISOR = /(?:SUPERVISOR|VERIFIER|PROGRAMME)/i;
+  /(?:^|[_-])(?:ACK(?:NOWLEDG(?:EMENT)?)?|QUORUM|WAVE|ALL[_-]?RECIPIENT|GLOBAL)(?:$|[_-])/iu;
+const SUPERVISOR = /(?:SUPERVISOR|VERIFIER|PROGRAMME)/iu;
 
 // z.looseObject({}) accepts exactly an object that is not null and not an array, and keeps every
 // own key: the parsed copy is what callers use.
@@ -91,10 +91,10 @@ function strings(value: unknown, allowEmpty = false): boolean {
   return stringList(value, allowEmpty) !== undefined;
 }
 function exactKeys(value: RecordValue, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
+  const actual = Object.keys(value).toSorted();
   return (
     actual.length === keys.length &&
-    actual.every((key, i) => key === [...keys].sort()[i])
+    actual.every((key, i) => key === keys.toSorted()[i])
   );
 }
 
@@ -109,7 +109,7 @@ export function canonicalJson(value: unknown): string | undefined {
   if (typeof value === "number")
     return Number.isFinite(value) ? JSON.stringify(value) : undefined;
   if (Array.isArray(value)) {
-    const entries = value.map(canonicalJson);
+    const entries = value.map((entry) => canonicalJson(entry));
     return entries.some((entry) => entry === undefined)
       ? undefined
       : `[${entries.join(",")}]`;
@@ -117,7 +117,7 @@ export function canonicalJson(value: unknown): string | undefined {
   const object = record(value);
   if (object === undefined) return undefined;
   const entries: string[] = [];
-  for (const key of Object.keys(object).sort()) {
+  for (const key of Object.keys(object).toSorted()) {
     const entry = canonicalJson(object[key]);
     if (entry === undefined) return undefined;
     entries.push(`${JSON.stringify(key)}:${entry}`);
@@ -161,10 +161,10 @@ function dependencySet(deps: Dependency[], expected: Dependency[]): boolean {
   if (deps.length !== expected.length) return false;
   const actual = deps
     .map((d) => `${d.kind}\u0000${d.id}\u0000${d.sha256}`)
-    .sort();
+    .toSorted();
   const wanted = expected
     .map((d) => `${d.kind}\u0000${d.id}\u0000${d.sha256}`)
-    .sort();
+    .toSorted();
   return actual.every((value, index) => value === wanted[index]);
 }
 function hasForbiddenDependency(
@@ -502,9 +502,9 @@ export function nearestRankPercentile(
   percentile: number,
 ): number | null {
   if (values.length === 0) return null;
-  const sorted = [...values].sort((left, right) => left - right);
+  const sorted = values.toSorted((left, right) => left - right);
   const value = sorted[Math.ceil(percentile * sorted.length) - 1];
-  return value === undefined ? null : value;
+  return value ?? null;
 }
 
 export type LearningBusResult = {
@@ -573,7 +573,9 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
   }
   if (
     Object.keys(input).some((key) =>
-      /(?:searchReceipts|learningCommits|searchPerHour|learnPerHour)/.test(key),
+      /(?:searchReceipts|learningCommits|searchPerHour|learnPerHour)/u.test(
+        key,
+      ),
     )
   )
     add(
@@ -752,8 +754,8 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     }
     seenDeliveryKeys.add(key);
     if (
-      !packet ||
-      !subscription ||
+      packet === undefined ||
+      subscription === undefined ||
       body.transferLocus !== packet.locator ||
       body.subscriptionLocus !== subscription.locator ||
       body.recipientSectionId !== subscription.body.recipientSectionId ||
@@ -821,9 +823,9 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
       continue;
     }
     if (
-      !delivery ||
-      !packet ||
-      !subscription ||
+      delivery === undefined ||
+      packet === undefined ||
+      subscription === undefined ||
       timestamp(body.decidedAt)! < timestamp(delivery.body.deliveredAt)! ||
       body.recipientSectionId !== delivery.body.recipientSectionId ||
       body.recipientDirectorInstanceId !==
@@ -891,8 +893,8 @@ export function checkLearningBus(rawInput: unknown): LearningBusResult {
     }
     seenCommitKeys.add(key);
     if (
-      !admission ||
-      !packet ||
+      admission === undefined ||
+      packet === undefined ||
       admission.body.decision !== "ADOPT" ||
       body.recipientSectionId !== admission.body.recipientSectionId ||
       body.recipientDirectorInstanceId !==

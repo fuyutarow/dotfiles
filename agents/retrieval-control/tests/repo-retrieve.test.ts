@@ -1268,7 +1268,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toMatch(/usage:/i);
+    expect(result.stdout).toMatch(/usage:/iu);
     // Intent names (2026-10-01); the old engine names remain aliases (tested below).
     for (const name of [
       "about",
@@ -1281,7 +1281,7 @@ describe("repo-retrieve route contract", () => {
       "index",
     ])
       expect(result.stdout).toContain(name);
-    expect(result.stdout).not.toMatch(/\bstamp\b/);
+    expect(result.stdout).not.toMatch(/\bstamp\b/u);
     expect(result.log).toBe("");
   });
 
@@ -1306,7 +1306,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "--help", "--wat"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toMatch(/usage:/i);
+    expect(result.stdout).toMatch(/usage:/iu);
     expect(result.log).toBe("");
   });
 
@@ -1314,7 +1314,7 @@ describe("repo-retrieve route contract", () => {
     const result = run(registerProject(), ["literal", "extra", "--help"]);
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toMatch(/usage:/i);
+    expect(result.stdout).toMatch(/usage:/iu);
     expect(result.log).toBe("");
   });
 
@@ -1336,7 +1336,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), [...args]);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toMatch(/usage:/i);
+      expect(result.stdout).toMatch(/usage:/iu);
       expect(result.log).toBe("");
     });
   }
@@ -1406,7 +1406,7 @@ describe("repo-retrieve route contract", () => {
       const result = run(registerProject(), args);
 
       expect(result.code).toBe(0);
-      expect(result.stdout).toMatch(/usage:/i);
+      expect(result.stdout).toMatch(/usage:/iu);
       expect(result.log).toBe("");
     });
   }

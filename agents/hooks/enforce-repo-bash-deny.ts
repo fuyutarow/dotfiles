@@ -28,7 +28,7 @@ import { arr, at, parseJson, str, strAt } from "./narrow.ts";
 
 type Rule = { text: string; prefix: string; exact: boolean };
 
-const SEGMENT_SPLIT = /&&|\|\||[;|\n]|\$\(|`|\(|\)/;
+const SEGMENT_SPLIT = /&&|\|\||[;|\n]|\$\(|`|\(|\)/u;
 
 function settingsRoot(start: string): string | null {
   const st = statSync(start, { throwIfNoEntry: false });
@@ -47,7 +47,7 @@ function settingsRoot(start: string): string | null {
 function ruleOf(entry: unknown): Rule | undefined {
   const text = str(entry);
   const body =
-    text === undefined ? undefined : /^Bash\((.+)\)$/.exec(text)?.[1];
+    text === undefined ? undefined : /^Bash\((.+)\)$/u.exec(text)?.[1];
   if (text === undefined || body === undefined) return undefined;
   if (body.endsWith(":*"))
     return { text, prefix: body.slice(0, -2), exact: false };
@@ -77,7 +77,7 @@ function hits(seg: string, rule: Rule): boolean {
 export function matchingRules(command: string, rules: Rule[]): Rule[] {
   const hit = new Set<Rule>();
   for (const raw of command.split(SEGMENT_SPLIT)) {
-    const seg = raw.trim().replace(/\s+/g, " ");
+    const seg = raw.trim().replaceAll(/\s+/gu, " ");
     if (seg === "") continue;
     for (const r of rules.filter((rule) => hits(seg, rule))) hit.add(r);
   }
@@ -87,7 +87,7 @@ export function matchingRules(command: string, rules: Rule[]): Rule[] {
 function jjAdvice(root: string, rules: Rule[]): string {
   if (
     !existsSync(join(root, ".jj")) ||
-    !rules.some((r) => /\bgit\b/.test(r.prefix))
+    !rules.some((r) => /\bgit\b/u.test(r.prefix))
   )
     return "";
   return (

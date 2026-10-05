@@ -19,6 +19,29 @@ import {
 
 afterEach(cleanupTemporaryRoots);
 
+function timedRun(registered: string, started: string, ended: string) {
+  const directory = temporaryRoot();
+  const intentText = intent("run-a", { REGISTERED_AT: registered });
+  const intentPath = write(directory, "timed.intent.md", intentText);
+  const receiptPath = write(
+    directory,
+    "timed.receipt.md",
+    receipt("run-a", sha256(intentText), "succeeded", {
+      ENDED_AT: ended,
+      STARTED_AT: started,
+    }),
+  );
+  const judgmentPath = write(directory, "timed.md", judgment(["run-a"]));
+  return run([
+    "--intent",
+    intentPath,
+    "--receipt",
+    receiptPath,
+    "--judgment",
+    judgmentPath,
+  ]);
+}
+
 describe("research-run-check adversarial inputs", () => {
   test("rejects interpretation laundered into a receipt", () => {
     const scenario = completeScenario();
@@ -184,29 +207,6 @@ describe("research-run-check adversarial inputs", () => {
   });
 
   test("orders one-to-nine-digit fractional timestamps exactly across offsets", () => {
-    const timedRun = (registered: string, started: string, ended: string) => {
-      const directory = temporaryRoot();
-      const intentText = intent("run-a", { REGISTERED_AT: registered });
-      const intentPath = write(directory, "timed.intent.md", intentText);
-      const receiptPath = write(
-        directory,
-        "timed.receipt.md",
-        receipt("run-a", sha256(intentText), "succeeded", {
-          ENDED_AT: ended,
-          STARTED_AT: started,
-        }),
-      );
-      const judgmentPath = write(directory, "timed.md", judgment(["run-a"]));
-      return run([
-        "--intent",
-        intentPath,
-        "--receipt",
-        receiptPath,
-        "--judgment",
-        judgmentPath,
-      ]);
-    };
-
     expect(
       timedRun(
         "2026-08-02T10:00:00.0009Z",

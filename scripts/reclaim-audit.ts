@@ -11,7 +11,7 @@ import { existingGraveyards, graveyardCandidates } from "./graveyards";
 
 const staleDays = Number(process.env.STALE_DAYS ?? "180");
 const now = Math.floor(Temporal.Now.instant().epochMilliseconds / 1000);
-const home = homedir();
+const userHome = homedir();
 
 // GNU then BSD
 async function mtime(path: string): Promise<number | null> {
@@ -43,9 +43,9 @@ async function duH(path: string): Promise<string> {
 
 console.log(`== 1. ~/ の隠しディレクトリ: 最終更新が ${staleDays} 日以上前 ==`);
 // Shell glob expansion returns entries in sorted order; readdirSync does not.
-for (const name of readdirSync(home).sort()) {
+for (const name of readdirSync(userHome).toSorted()) {
   if (!(name.length >= 2 && name[0] === "." && name[1] !== ".")) continue;
-  const d = `${home}/${name}`;
+  const d = `${userHome}/${name}`;
   // statSync is overloaded (bigint/throwIfNoEntry variants); wrapping the CALL rather than the
   // bare function keeps this single-argument overload's plain-Stats return through fromThrowable.
   const statResult = fromThrowable(() => statSync(d))();
@@ -65,13 +65,13 @@ console.log(
   "   更新を反映しないので ~/.local や ~/.rustup のような現役も並ぶ。§2〜§4 で裏を取れ)",
 );
 
-async function auditRustToolchainPins(home: string): Promise<void> {
+async function auditRustToolchainPins(searchHome: string): Promise<void> {
   console.log("  -- rust-toolchain で固定しているプロジェクト --");
-  if (!Bun.which("fd")) {
+  if (Bun.which("fd") === undefined) {
     console.log("  fd 不在のため未検索");
     return;
   }
-  const projects = process.env.AUDIT_PROJECTS ?? `${home}/Workspace`;
+  const projects = process.env.AUDIT_PROJECTS ?? `${searchHome}/Workspace`;
   const fdRes = await $`fd -H -t f "^rust-toolchain(\\.toml)?$" ${projects}`
     .quiet()
     .nothrow();
@@ -80,8 +80,8 @@ async function auditRustToolchainPins(home: string): Promise<void> {
     const grepRes = await $`grep -h channel ${f}`.quiet().nothrow();
     const channel = grepRes.stdout
       .toString()
-      .replace(/ /g, "")
-      .replace(/\n+$/, "");
+      .replaceAll(" ", "")
+      .replace(/\n+$/u, "");
     console.log(`  ${f} → ${channel}`);
   }
   console.log(
@@ -91,16 +91,16 @@ async function auditRustToolchainPins(home: string): Promise<void> {
 
 console.log();
 console.log("== 2. rustup toolchain: 既定と、プロジェクトによる固定の有無 ==");
-if (Bun.which("rustup")) {
+if (Bun.which("rustup") !== undefined) {
   const list = await $`rustup toolchain list`.text();
-  for (const line of list.replace(/\n$/, "").split("\n")) {
+  for (const line of list.replace(/\n$/u, "").split("\n")) {
     console.log(`  ${line}`);
   }
-  await auditRustToolchainPins(home);
+  await auditRustToolchainPins(userHome);
 }
 
 async function auditVscodeServerVersions(serversDir: string): Promise<void> {
-  for (const name of readdirSync(serversDir).sort()) {
+  for (const name of readdirSync(serversDir).toSorted()) {
     if (!name.startsWith("Stable-")) continue;
     const v = `${serversDir}/${name}`;
     if (!existsSync(v)) continue;
@@ -111,19 +111,19 @@ async function auditVscodeServerVersions(serversDir: string): Promise<void> {
 
 console.log();
 console.log("== 3. vscode-server: 現行版以外は再接続で取り直される ==");
-const serversDir = `${home}/.vscode-server/cli/servers`;
+const serversDir = `${userHome}/.vscode-server/cli/servers`;
 if (existsSync(serversDir) && statSync(serversDir).isDirectory()) {
   await auditVscodeServerVersions(serversDir);
 }
 
 async function auditCacheBreakdown(
   cacheDir: string,
-  home: string,
+  cacheHome: string,
 ): Promise<void> {
   // Shell glob expansion (`.cache/*`) is sorted; readdirSync is not — match it so a size tie
   // in `sort -rh` breaks the same way.
   const entries = readdirSync(cacheDir)
-    .sort()
+    .toSorted()
     .map((n) => `${cacheDir}/${n}`);
   if (entries.length === 0) return;
   const duRaw = (
@@ -131,15 +131,15 @@ async function auditCacheBreakdown(
   ).stdout.toString();
   const sorted = await $`echo ${duRaw} | sort -rh | head -12`.text();
   for (const line of sorted.split("\n").filter(Boolean)) {
-    console.log(`  ${line.replace(home, "~")}`);
+    console.log(`  ${line.replace(cacheHome, "~")}`);
   }
 }
 
 console.log();
 console.log("== 4. ~/.cache 内訳(降順) ==");
-const cacheDir = `${home}/.cache`;
+const cacheDir = `${userHome}/.cache`;
 if (existsSync(cacheDir)) {
-  await auditCacheBreakdown(cacheDir, home);
+  await auditCacheBreakdown(cacheDir, userHome);
 }
 
 console.log();
@@ -147,19 +147,19 @@ console.log("== 5. graveyard(削除済み・まだ空きは増えていない) =
 // EVERY mechanism, not the first one found. Reporting only rip's graveyard is what hid 33 GB of
 // trashed agent worktrees in the XDG trash beside it on r99 (2026-09-21) — see graveyards.ts.
 const graves = existingGraveyards(
-  graveyardCandidates(process.env, home),
+  graveyardCandidates(process.env, userHome),
   (p) => existsSync(p) && statSync(p).isDirectory(),
 );
 if (graves.length === 0) console.log("  無し");
 for (const g of graves) {
   const size = await duH(g.path);
   console.log(
-    `  ${size.padEnd(8)} ${g.path.replace(home, "~").padEnd(40)} ${g.label}`,
+    `  ${size.padEnd(8)} ${g.path.replace(userHome, "~").padEnd(40)} ${g.label}`,
   );
 }
 console.log();
 const dfLine =
-  await $`df -h ${home} | awk 'NR==2{print $4" free / "$2}'`.text();
+  await $`df -h ${userHome} | awk 'NR==2{print $4" free / "$2}'`.text();
 console.log(`df: ${dfLine.trim()}`);
 console.log(
   "→ 判断が要らない分は reclaim:clean(tool-native gc) / rustup・vscode-server は reclaim:toolchains(述語) / 受け入れた候補は rip / 空きが増えるのは reclaim:purge だけ",

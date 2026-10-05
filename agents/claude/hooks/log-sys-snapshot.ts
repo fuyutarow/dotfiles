@@ -32,10 +32,14 @@ const STATE_DIR = `${HOME}/.cache/claude/sys-log`;
 // older Rate show here (2026-10-01: 7d 60% then 51%, same reset).
 const SESSION_DIR = `${HOME}/.cache/claude/statusline-session`;
 const STALE_MS = 120_000;
-const RST = "\x1b[0m";
-const DIM = "\x1b[2m";
+const RST = "\u001B[0m";
+const DIM = "\u001B[2m";
 const SEP = ` ${DIM}|${RST} `; // the statusline's own separator
 const MIN_GAP_MS = 60_000;
+
+function p2(n: number): string {
+  return String(n).padStart(2, "0");
+}
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
@@ -54,7 +58,7 @@ async function main(): Promise<void> {
   const sys = strAt(cached, "ansi") ?? cachedLine;
   if (now - cachedAt > STALE_MS) return;
 
-  const key = sid.replace(/[^A-Za-z0-9_-]/g, "_");
+  const key = sid.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
   // This session's rows, as the statusline ordered them. Missing or stale -> none.
   const read = await attempt(() =>
     parseJson(readFileSync(`${SESSION_DIR}/${key}.json`, "utf8")),
@@ -70,7 +74,6 @@ async function main(): Promise<void> {
   // One record per line: "MM-DD HH:MM | Ctx: … | Rate: … | Sys: …" — the time is this event's (the
   // mobile app shows none), the separator is the bar's SEP.
   const t = Temporal.Now.plainDateTimeISO();
-  const p2 = (n: number) => String(n).padStart(2, "0");
   const time = `${p2(t.month)}-${p2(t.day)} ${p2(t.hour)}:${p2(t.minute)}`;
   const shown = [`${DIM}${time}${RST}`, ...rows, sys].join(SEP);
 

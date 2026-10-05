@@ -54,8 +54,8 @@ const parsed = cli(
 );
 const { records, push } = parsed.flags;
 const named: string[] = [...parsed._];
-const msg = parsed.flags.file ? await Bun.file(parsed.flags.file).text() : parsed.flags.message;
-if (!msg.trim()) die("-m <message> or -F <file> is required");
+const msg = parsed.flags.file !== "" ? await Bun.file(parsed.flags.file).text() : parsed.flags.message;
+if (msg.trim() === "") die("-m <message> or -F <file> is required");
 
 // snapshot, then the paths changed in @ relative to @-
 // jj silently leaves new files above snapshot.max-new-file-size untracked (only a warning on
@@ -68,19 +68,27 @@ if (snap.stderr.toString().includes("Refused to snapshot"))
 const changed = summaryPaths(await $`jj diff -r @ --summary`.text());
 
 const wanted = new Set<string>();
-if (records) {
-  for (const p of changed) {
-    const m = p.match(/^research_record\/runs\/([^/]+)\//);
-    if (m) {
-      if (existsSync(`research_record/runs/${m[1]}.json`)) wanted.add(p);
-    } else if (p.startsWith("research_record/")) wanted.add(p);
+function addRecordPaths(): void {
+  for (const path of changed) {
+    if (!path.startsWith("research_record/")) continue;
+    const match = path.match(/^research_record\/runs\/([^/]+)\//u);
+    if (match === null) {
+      wanted.add(path);
+      continue;
+    }
+    if (existsSync(`research_record/runs/${match[1]}.json`)) wanted.add(path);
   }
 }
-for (const raw of named) {
-  const p = raw.replace(/\/+$/, "");
-  for (const c of changed) if (c === p || c.startsWith(`${p}/`)) wanted.add(c);
+function addNamedPaths(path: string): void {
+  const normalized = path.replace(/\/+$/u, "");
+  for (const candidate of changed) {
+    if (candidate === normalized || candidate.startsWith(`${normalized}/`))
+      wanted.add(candidate);
+  }
 }
-const sel = [...wanted].sort();
+if (records) addRecordPaths();
+for (const raw of named) addNamedPaths(raw);
+const sel = [...wanted].toSorted();
 if (sel.length === 0) die("no changed path selected (name paths after -- or use --records)");
 console.log(`jj-commit: ${sel.length} path(s)`);
 

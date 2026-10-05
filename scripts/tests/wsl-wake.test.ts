@@ -20,12 +20,13 @@ describe("hostCandidates — pin vs fallback", () => {
   });
 });
 
-describe("firstReachable — order, fallback, and the false-win guard", () => {
-  const probeFrom =
-    (answers: Record<string, string | null>) =>
-    (host: string): Promise<string | null> =>
-      Promise.resolve(answers[host] ?? null);
+function probeFrom(
+  answers: Record<string, string | null>,
+): (host: string) => Promise<string | null> {
+  return (host) => Promise.resolve(answers[host] ?? null);
+}
 
+describe("firstReachable — order, fallback, and the false-win guard", () => {
   test("the first reachable host wins and later hosts are not probed", async () => {
     const probed: string[] = [];
     const probe = (host: string): Promise<string | null> => {

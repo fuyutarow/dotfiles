@@ -80,7 +80,7 @@ function run(args: string[], env: Record<string, string>, prompt = "Audit this."
   );
   const stdout = p.stdout.toString();
   const lines = stdout.trim().split("\n");
-  return { code: p.exitCode ?? -1, receipt: jsonOf(Receipt).parse(lines[lines.length - 1] ?? ""), stdout, stderr: p.stderr.toString() };
+  return { code: p.exitCode ?? -1, receipt: jsonOf(Receipt).parse(lines.at(-1) ?? ""), stdout, stderr: p.stderr.toString() };
 }
 const FULL = ["--model", "gpt-6-luna", "--effort", "medium", "--sandbox", "read-only", "--cd", tmpdir()];
 
@@ -106,7 +106,7 @@ describe("codex-run", () => {
     for (const w of ["exec", "--json", "--skip-git-repo-check", "-m", "gpt-6-luna", "read-only", 'model_reasoning_effort="medium"', "-o"])
       expect(argv).toContain(w);
     expect(r.stderr).toContain("codex-run: started gpt-6-luna effort=medium sandbox=read-only");
-    expect(r.stderr).toMatch(/codex-run: ok after \d+(\.\d)? s — receipt /);
+    expect(r.stderr).toMatch(/codex-run: ok after \d+(\.\d)? s — receipt /u);
   });
 
   test.each([
@@ -220,6 +220,6 @@ describe("codex-run", () => {
     expect(r.code).toBe(3);
     expect(r.receipt.outcome).toBe("timeout");
     expect(r.receipt.why).toContain("3 s bound");
-    expect(r.stderr).toMatch(/codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/);
+    expect(r.stderr).toMatch(/codex-run: waiting for gpt-6-luna \(\d+(\.\d)? s of 3 s\)…/u);
   }, 20_000);
 });

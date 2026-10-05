@@ -17,7 +17,7 @@ import { jsonText, z } from "../agents/hooks/zod.ts";
 
 const text = fromThrowable(() => readFileSync(".oxlintrc.json", "utf8"))();
 const config = text.isOk() ? jsonText.safeParse(text.value) : undefined;
-if (!config?.success) {
+if (config?.success !== true) {
   console.error("lint:ts-ratchet: .oxlintrc.json is unreadable");
   process.exit(2);
 }

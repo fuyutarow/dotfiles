@@ -19,21 +19,21 @@ import { bashCwd, decidePre, findExe, readStdinJson } from "./lib.ts";
 import { strAt } from "./narrow.ts";
 
 const GREP_SEARCH =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/u;
 const GIT_GREP =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*git(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?\s+grep\b/;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*git(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?\s+grep\b/u;
 const CCC_SEARCH =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?ccc\s+(search|grep)\b/;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:(?:sudo|command|time|nice)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|timeout(?:\s+--\S+)*\s+\S+\s+)*(?:\S*\/)?ccc\s+(search|grep)\b/u;
 const FILE_ENUMERATION =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(sudo\s+|command\s+|time\s+)*(?:\S*\/)?(fd|fdfind|tree)\b|(^|[|;&(]|&&|\|\|)\s*(sudo\s+)*(?:\S*\/)?find\b/;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(sudo\s+|command\s+|time\s+)*(?:\S*\/)?(fd|fdfind|tree)\b|(^|[|;&(]|&&|\|\|)\s*(sudo\s+)*(?:\S*\/)?find\b/u;
 const XARGS_SEARCH =
-  /(^|[|;&(]|&&|\|\|)\s*xargs\b[^|;&]*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/;
+  /(^|[|;&(]|&&|\|\|)\s*xargs\b[^|;&]*(?:\S*\/)?(grep|egrep|fgrep|rg|ripgrep|ag|ack|ugrep)\b/u;
 const NESTED_SHELL_SEARCH =
-  /\b(?:ba|z|da)?sh\s+-c\s+(?:"[^"\n]*\b(?:grep|rg|ccc\s+(?:search|grep))\b|'[^'\n]*\b(?:grep|rg|ccc\s+(?:search|grep))\b)/;
+  /\b(?:ba|z|da)?sh\s+-c\s+(?:"[^"\n]*\b(?:grep|rg|ccc\s+(?:search|grep))\b|'[^'\n]*\b(?:grep|rg|ccc\s+(?:search|grep))\b)/u;
 const INLINE_RUNTIME =
-  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:uv\s+run(?:\s+--[^\s]+(?:=\S+)?)*\s+)?(?:\S*\/)?(python(?:3(?:\.\d+)?)?|node|bun|ruby|perl)\b[^|;&]*(?:\s-(?:c|e)\b|\s-\s*(?:$|<<)|<<)/;
+  /(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*(?:uv\s+run(?:\s+--[^\s]+(?:=\S+)?)*\s+)?(?:\S*\/)?(python(?:3(?:\.\d+)?)?|node|bun|ruby|perl)\b[^|;&]*(?:\s-(?:c|e)\b|\s-\s*(?:$|<<)|<<)/u;
 const FILE_SCAN_PRIMITIVE =
-  /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/;
+  /\b(?:os\.(?:walk|scandir|listdir)|Path\s*\([^)]*\)\.(?:r?glob)|glob\.(?:i?glob)|(?:readdir|readdirSync|opendir|opendirSync)\s*\(|Bun\.Glob|(?:fast-)?glob(?:Sync)?\s*\()/u;
 // A single grep/rg over an already classified router stream is display filtering, not a
 // second repository search. The accepted shape, every part optional except the router and the
 // filter:
@@ -43,15 +43,19 @@ const FILE_SCAN_PRIMITIVE =
 // shown. Widened 2026-10-01 (firedancer report): the deny message recommended this form while the
 // gate rejected `2>&1`, `-e`, and `| head` — three denials in one day for following the advice.
 const ROUTER_INVOCATION = String.raw`(?:rr|repo-retrieve|bun\s+(?:~\/\.claude\/hooks\/repo-retrieve\.ts|\/[^\s|;&]+\/repo-retrieve\.ts))`;
-const FILTER_PATTERN = String.raw`(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s|;&<>\`$'"-][^\s|;&<>\`$'"]*)`;
+// A literal backtick for the String.raw patterns below: `\`` would reach the RegExp as an
+// escaped backtick, which the u flag rejects (the hook then fails to load and denies everything).
+const BT = "`";
+const FILTER_PATTERN = String.raw`(?:'[^'\n]*'|"[^"${BT}$\n]*"|[^\s|;&<>${BT}$'"-][^\s|;&<>${BT}$'"]*)`;
 const ROUTED_STREAM_FILTER = new RegExp(
-  String.raw`^\s*(?:cd\s+(?:'[^'\n]*'|"[^"\`$\n]*"|[^\s;&|\`$]+)\s*&&\s*)?` +
+  String.raw`^\s*(?:cd\s+(?:'[^'\n]*'|"[^"${BT}$\n]*"|[^\s;&|${BT}$]+)\s*&&\s*)?` +
     ROUTER_INVOCATION +
-    String.raw`\s+(?:about|absent|text|regex|files|shape|exists|concept|battery|literal|exhaustive|structural|definition)\b[^|;&\n\`$<>]*` +
+    String.raw`\s+(?:about|absent|text|regex|files|shape|exists|concept|battery|literal|exhaustive|structural|definition)\b[^|;&\n${BT}$<>]*` +
     String.raw`(?:\s2>(?:&1|\/dev\/null))?\s*` +
     String.raw`\|\s*(?:grep|rg)(?:\s+-[Fivwnc]+)*\s+(?:--|-e)\s+` +
     FILTER_PATTERN +
     String.raw`(?:\s*\|\s*(?:head|tail)(?:\s+-n\s*\d+|\s+-\d+)?)?\s*$`,
+  "u",
 );
 // Resolved through the real path: the hook runs from ~/.agents/hooks (a symlink to this dir), and
 // the router is a sibling package of this directory, not of the link.
@@ -172,10 +176,11 @@ function main(): void {
   // **A governed repo owns its own search policy.** See `governedRepo` above — one act, one
   // authoritative judgment. This is checked before the ccc registration so a repo that is both
   // governed and ccc-registered falls to its own gate.
-  if (governedRepo(startPath(payload))) return;
+  const governed = governedRepo(startPath(payload));
+  if (governed !== null && governed !== "") return;
 
   const project = registeredProject(startPath(payload));
-  if (!project || !cccIsAvailable()) return;
+  if (project === undefined || project === null || !cccIsAvailable()) return;
 
   if (!existsSync(ROUTER)) {
     // FATAL: without the router there is no route to advise, so the normal deny cannot be built.

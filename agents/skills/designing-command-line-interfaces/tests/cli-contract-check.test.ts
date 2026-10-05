@@ -47,23 +47,23 @@ describe("cli-contract-check", () => {
 	});
 
 	test("rejects a missing required receipt", () => {
-		const result = run(fixture(validContract().replace(/- Negative receipt:.*\n/, "")));
+		const result = run(fixture(validContract().replace(/- Negative receipt:.*\n/u, "")));
 		expect(result.exitCode).toBe(1);
 		expect(result.stdout).toContain("required field: Negative receipt");
 	});
 
 	test("rejects a contract that never says what a human sees during a wait", () => {
-		const result = run(fixture(validContract().replace(/- Waits \/ liveness:.*\n/, "")));
+		const result = run(fixture(validContract().replace(/- Waits \/ liveness:.*\n/u, "")));
 		expect(result.exitCode).toBe(1);
 		expect(result.stdout).toContain("required field: Waits / liveness");
 	});
 
 	test("rejects a placeholder where fallbacks and handoffs belong; an explicit none passes", () => {
-		const placeholder = validContract().replace(/- Fallbacks \/ handoffs:.*\n/, "- Fallbacks / handoffs: TBD\n");
+		const placeholder = validContract().replace(/- Fallbacks \/ handoffs:.*\n/u, "- Fallbacks / handoffs: TBD\n");
 		const result = run(fixture(placeholder));
 		expect(result.exitCode).toBe(1);
 		expect(result.stdout).toContain("placeholder value: Fallbacks / handoffs");
-		const none = validContract().replace(/- Fallbacks \/ handoffs:.*\n/, "- Fallbacks / handoffs: none\n");
+		const none = validContract().replace(/- Fallbacks \/ handoffs:.*\n/u, "- Fallbacks / handoffs: none\n");
 		expect(run(fixture(none)).exitCode).toBe(0);
 	});
 
@@ -102,8 +102,8 @@ describe("cli-contract-check", () => {
 			fixture(
 				validContract()
 					.replace("Effects / recovery: inspect reads local files only; apply writes selected records; dry-run predicts selected writes; force bypasses an existing-target guard; partial writes remain named; retry requires the same input snapshot; SIGINT stops future writes.", "Effects / recovery: none")
-					.replace(/- Positive receipt:.*\n/, "- Positive receipt: none\n")
-					.replace(/- Negative receipt:.*\n/, "- Negative receipt: none\n"),
+					.replace(/- Positive receipt:.*\n/u, "- Positive receipt: none\n")
+					.replace(/- Negative receipt:.*\n/u, "- Negative receipt: none\n"),
 			),
 		);
 		expect(result.exitCode).toBe(1);
@@ -119,7 +119,7 @@ describe("cli-contract-check", () => {
 	});
 
 	test("ignores fenced decoy fields", () => {
-		const fence = String.fromCharCode(96).repeat(3);
+		const fence = String.fromCodePoint(96).repeat(3);
 		const result = run(fixture(fence + "\n- Consumer regimes: dashboard\n" + fence + "\n\n" + validContract()));
 		expect(result.exitCode).toBe(0);
 		expect(result.stdout).toContain("CLI CONTRACT: FAIL=0");
@@ -151,4 +151,3 @@ describe("cli-contract-check", () => {
 		expect(result.stdout).toContain("required section: C5 EVOLUTION");
 	});
 });
-

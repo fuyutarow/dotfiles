@@ -195,12 +195,12 @@ describe("resource manifest", () => {
     expect(validateJobId("firedancer-ticket-42", "--job-id")).toBe(
       "firedancer-ticket-42",
     );
-    expect(() => validateJobId("", "--job-id")).toThrow(/--job-id/);
+    expect(() => validateJobId("", "--job-id")).toThrow(/--job-id/u);
     expect(() => validateJobId("has spaces", "--job-id")).toThrow(
-      /--job-id must contain only/,
+      /--job-id must contain only/u,
     );
     expect(() => validateJobId("-leading-hyphen", "--job-id")).toThrow(
-      /--job-id must contain only/,
+      /--job-id must contain only/u,
     );
     expect(() => validateJobId("a".repeat(81), "--job-id")).toThrow();
   });
@@ -211,10 +211,10 @@ describe("resource manifest", () => {
         ...cpuManifest(),
         memory_bound: "",
       }),
-    ).toThrow(/memory_bound/);
+    ).toThrow(/memory_bound/u);
     expect(() =>
       validateManifest({ ...cpuManifest(), child_fanout: 1 }),
-    ).toThrow(/child_fanout/);
+    ).toThrow(/child_fanout/u);
   });
 });
 
@@ -487,6 +487,17 @@ describe("admission", () => {
   });
 });
 
+function withKey(key: string, value: string): (text: string) => string {
+  return (text) => {
+    const pattern = new RegExp(`^${key} = .*$`, "mu");
+    expect(pattern.test(text)).toBe(true);
+    return text.replace(pattern, `${key} = ${value}`);
+  };
+}
+
+const digestFor = (payload: string): string =>
+  createHash("sha256").update(payload).digest("hex");
+
 describe("resource policy", () => {
   const shippedPolicyPath = resolve(
     import.meta.dir,
@@ -500,14 +511,6 @@ describe("resource policy", () => {
     const path = join(temporaryStateDirectory(), "resource-policy.toml");
     writeFileSync(path, edit(readFileSync(shippedPolicyPath, "utf8")));
     return path;
-  }
-
-  function withKey(key: string, value: string): (text: string) => string {
-    return (text) => {
-      const pattern = new RegExp(`^${key} = .*$`, "m");
-      expect(pattern.test(text)).toBe(true);
-      return text.replace(pattern, `${key} = ${value}`);
-    };
   }
 
   test("the shipped TOML carries exactly the former hardcoded thresholds", () => {
@@ -576,7 +579,7 @@ describe("resource policy", () => {
 
   test("a missing key fails closed and names the key and file", () => {
     const fixture = policyFixture((text) =>
-      text.replace(/^gpu_max_concurrent_jobs = .*$/m, ""),
+      text.replace(/^gpu_max_concurrent_jobs = .*$/mu, ""),
     );
     expect(() => loadResourcePolicy(fixture)).toThrow(
       "gpu_max_concurrent_jobs: required key is missing (expected a positive integer)",
@@ -626,7 +629,7 @@ describe("resource policy", () => {
 
   test("the CLI refuses with USAGE exit 2 when the policy is invalid", () => {
     const fixture = policyFixture((text) =>
-      text.replace(/^gpu_max_concurrent_jobs = .*$/m, ""),
+      text.replace(/^gpu_max_concurrent_jobs = .*$/mu, ""),
     );
     const run = Bun.spawnSync(
       [process.execPath, scriptPath, "--manifest", "/nonexistent.json"],
@@ -907,8 +910,6 @@ describe("admission receipt", () => {
       device: { kind: "cpu" },
       started_at: "2026-08-21T01:02:03.000Z",
     };
-    const digestFor = (payload: string): string =>
-      createHash("sha256").update(payload).digest("hex");
     const invalidPayloads = [
       "{",
       JSON.stringify({ ...validPayload, unexpected: true }),
@@ -957,7 +958,9 @@ describe("admission receipt", () => {
       stateDirectory: temporaryStateDirectory(),
       snapshot: hostSnapshot(),
       kernelEnforcement: { available: true },
-      report: (line) => reports.push(line),
+      report: (line) => {
+        reports.push(line);
+      },
     });
     expect(result).toMatchObject({ ok: true, exitCode: 0 });
     expect(reports.join("\n")).toContain("check_only=true");
@@ -1034,7 +1037,7 @@ describe("admission receipt", () => {
         typeof outerPayload !== "string" ||
         typeof outerReceiptSha256 !== "string"
       ) {
-        throw new Error(
+        throw new TypeError(
           "the outer test envelope did not provide an admission receipt",
         );
       }
@@ -1092,7 +1095,9 @@ describe("admission receipt", () => {
           snapshot: probeHostSnapshot(process.cwd()),
           monitorIntervalMs: 25,
           manifestSource,
-          report: (line) => reports.push(line),
+          report: (line) => {
+            reports.push(line);
+          },
         },
       );
       expect(result).toMatchObject({ ok: true, exitCode: 0 });
@@ -1130,7 +1135,9 @@ describe("admission receipt", () => {
         typeof innerPayload !== "string" ||
         typeof innerReceiptSha256 !== "string"
       ) {
-        throw new Error("the inner child did not receive an admission receipt");
+        throw new TypeError(
+          "the inner child did not receive an admission receipt",
+        );
       }
       expect(innerReceiptSha256).toBe(
         createHash("sha256").update(innerPayload).digest("hex"),
@@ -1188,7 +1195,9 @@ describe("bounded execution", () => {
         available: false,
         reason: "fixture user manager unavailable",
       },
-      report: (line) => reports.push(line),
+      report: (line) => {
+        reports.push(line);
+      },
     });
     expect(result).toMatchObject({
       ok: false,
@@ -1256,15 +1265,17 @@ describe("bounded execution", () => {
         snapshot: probeHostSnapshot(process.cwd()),
         monitorIntervalMs: 25,
         manifestSource,
-        report: (line) => reports.push(line),
+        report: (line) => {
+          reports.push(line);
+        },
       },
     );
     expect(result).toMatchObject({ ok: true, exitCode: 0 });
 
     const release = reports.find((line) => line.startsWith("RELEASE "));
     expect(release).toContain(`job=${manifest.job_id}`);
-    expect(release).toMatch(/ram_peak_measured_bytes=\d+/);
-    expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/);
+    expect(release).toMatch(/ram_peak_measured_bytes=\d+/u);
+    expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/u);
     expect(release).toContain("released_at=");
     // A CPU-only manifest never samples VRAM — see executeJob's onSample.
     expect(release).not.toContain("vram_peak_measured_bytes=");
@@ -1276,7 +1287,7 @@ describe("bounded execution", () => {
       schema: 1,
       job_id: manifest.job_id,
     });
-    expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/);
+    expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/u);
     expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
     rmSync(peakPath);
   });
@@ -1403,9 +1414,9 @@ describe("bounded execution", () => {
     expect(readdirSync(stateDirectory)).toEqual(["escaped.pid"]);
   });
 
-  test("fails closed when systemd scope cleanup cannot be verified", async () => {
+  test("fails closed when systemd scope cleanup cannot be verified", () => {
     const stateDirectory = temporaryStateDirectory();
-    await expect(
+    expect(
       executeJob(cpuManifest(), ["true"], {
         stateDirectory,
         snapshot: probeHostSnapshot(process.cwd()),

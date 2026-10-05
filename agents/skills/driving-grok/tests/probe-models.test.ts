@@ -233,8 +233,8 @@ describe("probe-models.ts — GROK-not-found FATAL path", () => {
     const env: Record<string, string | undefined> = {
       ...process.env,
       PATH: filteredPath,
+      GROK: undefined,
     };
-    env.GROK = undefined;
     const child = Bun.spawn([BUN_BIN, SCRIPT], {
       env,
       stdin: "ignore",

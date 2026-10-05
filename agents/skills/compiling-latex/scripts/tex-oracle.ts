@@ -23,7 +23,7 @@ const stripLineComment = (line: string): string => {
   }
   return line;
 };
-const stripComments = (s: string) => s.split("\n").map(stripLineComment).join("\n");
+const stripComments = (s: string) => s.split("\n").map((line) => stripLineComment(line)).join("\n");
 const bodyOf = (s: string) => {
   const i = s.indexOf("\\begin{document}");
   return i >= 0 ? s.slice(i) : "";
@@ -33,14 +33,14 @@ async function census(files: string[]): Promise<number> {
   type Def = { name: string; kind: string; at: string };
   const defs: Def[] = [];
   const pats: [string, RegExp][] = [
-    ["newcommand", /\\(?:re)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?/g],
-    ["def", /\\[egx]?def\s*\\([A-Za-z]+)/g],
-    ["xparse", /\\(?:Declare|New|Renew|Provide)DocumentCommand\s*\{?\\([A-Za-z]+)\}?/g],
-    ["operator", /\\DeclareMathOperator\*?\s*\{?\\([A-Za-z]+)\}?/g],
-    ["delimiter", /\\DeclarePairedDelimiter(?:X|XPP)?\s*\{?\\([A-Za-z]+)\}?/g],
-    ["robust", /\\DeclareRobustCommand\*?\s*\{?\\([A-Za-z]+)\}?/g],
-    ["environment", /\\(?:re)?newenvironment\s*\{([A-Za-z*]+)\}/g],
-    ["theorem", /\\newtheorem\s*\{([A-Za-z]+)\}/g],
+    ["newcommand", /\\(?:re)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?/gu],
+    ["def", /\\[egx]?def\s*\\([A-Za-z]+)/gu],
+    ["xparse", /\\(?:Declare|New|Renew|Provide)DocumentCommand\s*\{?\\([A-Za-z]+)\}?/gu],
+    ["operator", /\\DeclareMathOperator\*?\s*\{?\\([A-Za-z]+)\}?/gu],
+    ["delimiter", /\\DeclarePairedDelimiter(?:X|XPP)?\s*\{?\\([A-Za-z]+)\}?/gu],
+    ["robust", /\\DeclareRobustCommand\*?\s*\{?\\([A-Za-z]+)\}?/gu],
+    ["environment", /\\(?:re)?newenvironment\s*\{([A-Za-z*]+)\}/gu],
+    ["theorem", /\\newtheorem\s*\{([A-Za-z]+)\}/gu],
   ];
   let body = "";
   for (const f of files) {
@@ -49,19 +49,19 @@ async function census(files: string[]): Promise<number> {
     const pre = s.includes("\\begin{document}") ? s.slice(0, s.indexOf("\\begin{document}")) : s;
     pre.split("\n").forEach((line, i) => {
       for (const [kind, re] of pats) for (const m of line.matchAll(re)) defs.push({ name: m[1] ?? "", kind, at: `${f.split("/").pop()}:${i + 1}` });
-      const delim = line.match(/\\def\s*\\([A-Za-z]+)([0-9]+)\s*\{/);
-      if (delim) console.log(`TRAP  \\def\\${delim[1]}${delim[2]} is a DELIMITED macro (\\${delim[1]} must be followed by "${delim[2]}"), not a name with a digit  [${f}:${i + 1}]`);
+      const delim = line.match(/\\def\s*\\([A-Za-z]+)([0-9]+)\s*\{/u);
+      if (delim !== null) console.log(`TRAP  \\def\\${delim[1]}${delim[2]} is a DELIMITED macro (\\${delim[1]} must be followed by "${delim[2]}"), not a name with a digit  [${f}:${i + 1}]`);
     });
   }
   const uses = (d: Def) => {
     const re = d.kind === "environment" || d.kind === "theorem"
-      ? new RegExp(`\\\\begin\\{${d.name.replace("*", "\\*")}\\}`, "g")
-      : new RegExp(`\\\\${d.name}(?![A-Za-z])`, "g");
-    return (body.match(re) || []).length;
+      ? new RegExp(`\\\\begin\\{${d.name.replace("*", "\\*")}\\}`, "gu")
+      : new RegExp(`\\\\${d.name}(?![A-Za-z])`, "gu");
+    return (body.match(re) ?? []).length;
   };
   const byName = new Map<string, Def[]>();
-  for (const d of defs) byName.set(d.name, [...(byName.get(d.name) || []), d]);
-  const rows = [...byName.entries()].map(([name, ds]) => ({ name, ds, n: ds[0] === undefined ? 0 : uses(ds[0]) })).sort((a, b) => a.n - b.n || a.name.localeCompare(b.name));
+  for (const d of defs) byName.set(d.name, [...(byName.get(d.name) ?? []), d]);
+  const rows = [...byName.entries()].map(([name, ds]) => ({ name, ds, n: ds[0] === undefined ? 0 : uses(ds[0]) })).toSorted((a, b) => a.n - b.n !== 0 ? a.n - b.n : a.name.localeCompare(b.name));
   for (const r of rows) {
     const re = r.ds.length > 1 ? `  REDEFINED x${r.ds.length} (last wins: ${r.ds.at(-1)!.at})` : "";
     console.log(`${String(r.n).padStart(4)}  \\${r.name}  ${r.ds.map((d) => `${d.kind}@${d.at}`).join(", ")}${re}`);
@@ -77,8 +77,8 @@ async function bboxWords(pdf: string): Promise<Word[]> {
   let page = 0;
   for (const line of html.split("\n")) {
     if (line.includes("<page ")) page++;
-    const m = line.match(/xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*)<\/word>/);
-    if (m) out.push({ page, x: Number(m[1]), y: Number(m[2]), t: m[3] ?? "" });
+    const m = line.match(/xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*)<\/word>/u);
+    if (m !== null) out.push({ page, x: Number(m[1]), y: Number(m[2]), t: m[3] ?? "" });
   }
   return out;
 }
@@ -91,42 +91,41 @@ async function boxes(a: string, b: string): Promise<number> {
     const A = wa[i], B = wb[i];
     if (A === undefined || B === undefined) continue;
     const dx = B.x - A.x, dy = B.y - A.y;
-    if (A.t !== B.t || Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
-      if (bad++ < 30) console.log(`p${A.page} "${A.t}"${A.t !== B.t ? ` -> "${B.t}"` : ""} dx=${dx.toFixed(3)} dy=${dy.toFixed(3)}`);
-    }
+    if ((A.t !== B.t || Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) && bad++ < 30) console.log(`p${A.page} "${A.t}"${A.t !== B.t ? ` -> "${B.t}"` : ""} dx=${dx.toFixed(3)} dy=${dy.toFixed(3)}`);
   }
   if (wa.length !== wb.length) bad++;
-  console.log(bad ? `BOXES DIFFER (${bad})` : "BOXES IDENTICAL");
-  return bad ? 1 : 0;
+  console.log(bad !== 0 ? `BOXES DIFFER (${bad})` : "BOXES IDENTICAL");
+  return bad !== 0 ? 1 : 0;
 }
 
 async function proseWords(pdf: string): Promise<string[]> {
   let t = await $`pdftotext ${pdf} -`.text();
   for (const [k, v] of Object.entries(LIGATURES)) t = t.replaceAll(k, v);
-  t = t.replace(/-\n/g, "");
-  return t.match(/\b[A-Za-z]{3,}\b/g) ?? [];
+  t = t.replaceAll("-\n", "");
+  return t.match(/\b[A-Za-z]{3,}\b/gu) ?? [];
 }
 
 async function words(a: string, b: string): Promise<number> {
   const [wa, wb] = await Promise.all([proseWords(a), proseWords(b)]);
-  const count = (ws: string[]) => ws.reduce((m, w) => m.set(w, (m.get(w) ?? 0) + 1), new Map<string, number>());
-  const [ca, cb] = [count(wa), count(wb)];
-  const minus = (x: Map<string, number>, y: Map<string, number>) =>
-    [...x].flatMap(([w, n]) => (n > (y.get(w) ?? 0) ? [`${w}×${n - (y.get(w) ?? 0)}`] : []));
-  const onlyA = minus(ca, cb), onlyB = minus(cb, ca);
+  const [ca, cb] = [countWords(wa), countWords(wb)];
+  const onlyA = subtractWords(ca, cb), onlyB = subtractWords(cb, ca);
   console.log(`prose words: ${wa.length} vs ${wb.length}`);
-  console.log(`only in A: ${onlyA.join(" ") || "-"}`);
-  console.log(`only in B: ${onlyB.join(" ") || "-"}`);
-  return onlyA.length + onlyB.length ? 1 : 0;
+  console.log(`only in A: ${onlyA.join(" ") !== "" ? onlyA.join(" ") : "-"}`);
+  console.log(`only in B: ${onlyB.join(" ") !== "" ? onlyB.join(" ") : "-"}`);
+  return onlyA.length + onlyB.length !== 0 ? 1 : 0;
 }
+
+const countWords = (ws: string[]) => ws.reduce((m, w) => m.set(w, (m.get(w) ?? 0) + 1), new Map<string, number>());
+const subtractWords = (x: Map<string, number>, y: Map<string, number>) =>
+	[...x].flatMap(([w, n]) => (n > (y.get(w) ?? 0) ? [`${w}×${n - (y.get(w) ?? 0)}`] : []));
 
 async function paras(a: string, b: string): Promise<number> {
   const blocks = async (f: string) => {
-    const body = bodyOf(await Bun.file(f).text()).split("\n").filter((l) => !/^\s*%/.test(l)).join("\n");
+    const body = bodyOf(await Bun.file(f).text()).split("\n").filter((l) => !/^\s*%/u.test(l)).join("\n");
     return body
-      .split(/\n[ \t]*\n/)
-      .map((blk) => (blk.replace(/\$[^$]*\$|\\[A-Za-z]+\*?(\[[^\]]*\])?(\{[^{}]*\})?(\[[^\]]*\])?/g, " ").match(/\b[A-Za-z]{3,}\b/g) ?? []).slice(0, 5).join(" "))
-      .filter(Boolean);
+      .split(/\n[ \t]*\n/u)
+      .map((blk) => (blk.replaceAll(/\$[^$]*\$|\\[A-Za-z]+\*?(\[[^\]]*\])?(\{[^{}]*\})?(\[[^\]]*\])?/gu, " ").match(/\b[A-Za-z]{3,}\b/gu) ?? []).slice(0, 5).join(" "))
+      .filter((paragraph) => paragraph !== "");
   };
   const [pa, pb] = await Promise.all([blocks(a), blocks(b)]);
   console.log(`paragraphs: ${pa.length} vs ${pb.length}`);
@@ -152,10 +151,10 @@ const usageError = (message: string): number => {
 };
 
 function forbiddenBlock(lines: string[]): ForbiddenBlock | ContractError {
-  const opens = lines.flatMap((l, i) => (/^```forbidden\s*$/.test(l) ? [i] : []));
+  const opens = lines.flatMap((l, i) => (/^```forbidden\s*$/u.test(l) ? [i] : []));
   if (opens.length !== 1) return contractError((opens[1] ?? 0) + 1, `need exactly one \`\`\`forbidden block, found ${opens.length}`);
   const start = opens[0] ?? 0;
-  const close = lines.findIndex((l, i) => i > start && /^```\s*$/.test(l));
+  const close = lines.findIndex((l, i) => i > start && /^```\s*$/u.test(l));
   if (close < 0) return contractError(start + 1, "the ```forbidden block is never closed");
   return { kind: "block", start, body: lines.slice(start + 1, close) };
 }
@@ -164,8 +163,8 @@ async function compileRule(line: string, n: number, lineNo: number): Promise<Rul
   const tab = line.indexOf("\t");
   const source = tab < 0 ? "" : line.slice(0, tab);
   const reason = tab < 0 ? "" : line.slice(tab + 1).trim();
-  if (!source || !reason) return contractError(lineNo, "a rule line is <regex><TAB><reason>, both non-empty");
-  const re = await Promise.try(() => new RegExp(source, "g")).then(
+  if (source === "" || reason === "") return contractError(lineNo, "a rule line is <regex><TAB><reason>, both non-empty");
+  const re = await Promise.try(() => new RegExp(source, "gu")).then(
     (ok) => ok,
     (e: Error) => e.message,
   );
@@ -201,11 +200,11 @@ async function texClosure(main: string): Promise<TexFile[] | string> {
     if (!(await Bun.file(path).exists())) return `missing input file ${relative(process.cwd(), path)}`;
     const lines = stripComments(await Bun.file(path).text()).split("\n");
     out.push({ path, lines });
-    const names = [...lines.join("\n").matchAll(/\\(?:input|include)\s*\{([^}]+)\}/g)].map((m) => resolve(root, (m[1] ?? "").trim()));
+    const names = [...lines.join("\n").matchAll(/\\(?:input|include)\s*\{([^}]+)\}/gu)].map((m) => resolve(root, (m[1] ?? "").trim()));
     for (const name of names) {
       const target = (await Bun.file(`${name}.tex`).exists()) ? `${name}.tex` : name;
       const problem = await visit(target);
-      if (problem) return problem;
+      if (problem !== undefined) return problem;
     }
     return undefined;
   };
@@ -215,7 +214,7 @@ async function texClosure(main: string): Promise<TexFile[] | string> {
 
 // Non-ASCII and control characters print as <U+XXXX>, so an invisible hit (NBSP, a stray tab) is legible.
 const visible = (text: string): string =>
-  Array.from(text).map((c) => (/[\x20-\x7E]/.test(c) ? c : `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`)).join("");
+  Array.from(text).map((c) => (/[\u0020-\u007E]/u.test(c) ? c : `<U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}>`)).join("");
 
 function lintHits(file: TexFile, rules: Rule[]): string[] {
   const shown = relative(process.cwd(), file.path);
@@ -235,15 +234,15 @@ async function lint(main: string, contract: string): Promise<number> {
   const hits = files.flatMap((f) => lintHits(f, rules));
   for (const h of hits) console.log(h);
   const scope = `${rules.length} rules, ${files.length} files`;
-  console.log(hits.length ? `LINT FAILED: ${hits.length} hits (${scope})` : `LINT CLEAN (${scope})`);
-  return hits.length ? 1 : 0;
+  console.log(hits.length > 0 ? `LINT FAILED: ${hits.length} hits (${scope})` : `LINT CLEAN (${scope})`);
+  return hits.length > 0 ? 1 : 0;
 }
 
 // A present --contract with no value must stop at the boundary (exit 2), never become "".
 const requiredPath = (value: string): string => {
-  if (value) return value;
+  if (value !== "") return value;
   console.error("tex-oracle: --contract needs a path");
-  process.exit(2);
+  return process.exit(2);
 };
 
 // strictFlags alone lets --__proto__ reach type-flag before the unknown-flag check (BG1), and its
@@ -285,7 +284,7 @@ const run = async (): Promise<number | undefined> => {
   if (argv.command === "lint") {
     const contract = argv.flags.contract;
     if (argv._.length !== 1) return usageError("lint takes exactly one <main.tex>");
-    if (!contract) return usageError("lint needs --contract <NOTATION.md>");
+    if (contract === undefined || contract === "") return usageError("lint needs --contract <NOTATION.md>");
     return lint(argv._.main, contract);
   }
   return undefined;

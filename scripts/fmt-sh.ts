@@ -4,7 +4,7 @@ import { $ } from "bun";
 const files = (
   await $`shfmt -f scripts tmux/scripts agents/claude lazygit macos .githooks`.text()
 ).trim();
-if (!files) {
+if (files === "") {
   console.log("no shell files");
   process.exit(0);
 }

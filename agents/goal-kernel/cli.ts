@@ -138,7 +138,7 @@ async function main(): Promise<void> {
               "Goal contract",
             );
             const result = await activateGoal(root, contract);
-            if (parsed.flags.json) {
+            if (parsed.flags.json === true) {
               jsonLine({ ok: true, command: "activate", ...result });
             } else {
               process.stdout.write(
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
             const status = await readGoalStatus(
               await workspaceRoot(parsed.flags.root),
             );
-            if (parsed.flags.json) {
+            if (parsed.flags.json === true) {
               jsonLine({ ok: status.configured, command: "status", ...status });
             } else {
               printStatus(status);
@@ -198,7 +198,7 @@ async function main(): Promise<void> {
               parsed._.runId,
               decision,
             );
-            if (parsed.flags.json) {
+            if (parsed.flags.json === true) {
               jsonLine({ ok: true, command: "decide", event });
             } else {
               const recorded = RecordedDecisionSchema.safeParse(event.decision);
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
                 ? {}
                 : { include_transcript: parsed.flags.includeTranscript },
             );
-            if (parsed.flags.json) {
+            if (parsed.flags.json === true) {
               jsonLine({
                 ok: report.findings.length === 0,
                 command: "postmortem",
@@ -262,7 +262,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().catch((error) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );

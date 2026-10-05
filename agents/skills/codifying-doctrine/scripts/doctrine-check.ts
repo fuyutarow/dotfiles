@@ -28,8 +28,8 @@ const SURFACE_TOKENS = [
   "DEFAULT-NON-EXTENSION", "PROGRAM-DENIES", "ADVISORY",
 ];
 
-const TRADE_FORM = /(?:^|[^-<>=])[>＞](?:[^-<>=]|$)/;
-const TABLE_SEPARATOR = /^\|[\s:|-]+\|?$/;
+const TRADE_FORM = /(?:^|[^-<>=])[>＞](?:[^-<>=]|$)/u;
+const TABLE_SEPARATOR = /^\|[\s:|-]+\|?$/u;
 
 let failures = 0;
 
@@ -53,6 +53,17 @@ const findColumn = (header: string[], pattern: RegExp): number =>
 
 type RuleTable = { header: string[]; rows: string[][] };
 
+function tableRowsAfter(lines: string[], start: number): string[][] {
+	const rows: string[][] = [];
+	for (let index = start + 2; index < lines.length; index += 1) {
+		const row = lines[index] ?? "";
+		if (!row.trim().startsWith("|")) break;
+		if (TABLE_SEPARATOR.test(row.trim())) continue;
+		rows.push(cells(row));
+	}
+	return rows;
+}
+
 // A rule table is a markdown table whose header names both a rule column and a
 // defeated-value column. Anything else in the document is ignored.
 function findRuleTable(lines: string[]): RuleTable | undefined {
@@ -61,16 +72,9 @@ function findRuleTable(lines: string[]): RuleTable | undefined {
     if (!line.trim().startsWith("|")) continue;
     if (!TABLE_SEPARATOR.test((lines[i + 1] ?? "").trim())) continue;
     const header = cells(line);
-    if (findColumn(header, /rule|規則|原則|条/i) === -1) continue;
-    if (findColumn(header, /defeat|sacrific|犠牲|捨て|失う/i) === -1) continue;
-    const rows: string[][] = [];
-    for (let j = i + 2; j < lines.length; j += 1) {
-      const row = lines[j] ?? "";
-      if (!row.trim().startsWith("|")) break;
-      if (TABLE_SEPARATOR.test(row.trim())) continue;
-      rows.push(cells(row));
-    }
-    return { header, rows };
+    if (findColumn(header, /rule|規則|原則|条/iu) === -1) continue;
+    if (findColumn(header, /defeat|sacrific|犠牲|捨て|失う/iu) === -1) continue;
+    return { header, rows: tableRowsAfter(lines, i) };
   }
   return undefined;
 }
@@ -78,35 +82,35 @@ function findRuleTable(lines: string[]): RuleTable | undefined {
 async function checkFile(file: string): Promise<void> {
   // No try/catch (audited *.ts ban): Promise.try turns an unreadable-file throw into a
   // rejection this `.then` maps to `undefined`, same outward result as the old catch branch.
-  const text: string | undefined = await Promise.try(() =>
+  const text: string | null = await Promise.try(() =>
     Bun.file(file).text(),
   ).then(
     (ok) => ok,
-    () => undefined,
+    () => null,
   );
-  if (text === undefined) {
+  if (text === null) {
     fail(file, "cannot read file");
     return;
   }
   const lines = text.split("\n");
 
   // --- document-level requirements (D2, D6, D7) ---
-  if (!/custodian|CUSTODIAN|管理者|所管/.test(text)) {
+  if (!/custodian|CUSTODIAN|管理者|所管/u.test(text)) {
     fail(file, "no CUSTODIAN named — D2 requires one owner who may change this");
   }
-  if (!/review-by|REVIEW-BY|next review|次回レビュー|レビュー期限/i.test(text)) {
+  if (!/review-by|REVIEW-BY|next review|次回レビュー|レビュー期限/iu.test(text)) {
     fail(file, "no review-by date — D2 requires a review commitment at publication");
   }
-  if (!/retirement trigger|RETIREMENT TRIGGER|失効条件|撤回条件/i.test(text)) {
+  if (!/retirement trigger|RETIREMENT TRIGGER|失効条件|撤回条件/iu.test(text)) {
     fail(file, "no RETIREMENT TRIGGER — D2 requires the observable that retires a rule");
   }
-  if (!/deviation log|DEVIATION LOG|逸脱台帳|例外台帳/i.test(text)) {
+  if (!/deviation log|DEVIATION LOG|逸脱台帳|例外台帳/iu.test(text)) {
     warn(file, "no DEVIATION LOG — D6 expects legitimate deviation to have a home");
   }
-  if (!/advance non-compliance|ADVANCE NON-COMPLIANCE|事前非遵守|事前宣言/i.test(text)) {
+  if (!/advance non-compliance|ADVANCE NON-COMPLIANCE|事前非遵守|事前宣言/iu.test(text)) {
     warn(file, "no ADVANCE NON-COMPLIANCE section — D6's advance-declaration instrument is absent");
   }
-  if (!/divergence probe|DIVERGENCE PROBE|分岐テスト|分岐率/i.test(text)) {
+  if (!/divergence probe|DIVERGENCE PROBE|分岐テスト|分岐率/iu.test(text)) {
     warn(file, "no DIVERGENCE PROBE recorded — D7 is unpassed until it runs");
   }
 
@@ -117,9 +121,9 @@ async function checkFile(file: string): Promise<void> {
     return;
   }
 
-  const ruleColumn = findColumn(table.header, /rule|規則|原則|条/i);
-  const defeatedColumn = findColumn(table.header, /defeat|sacrific|犠牲|捨て|失う/i);
-  const surfaceColumn = findColumn(table.header, /surface|拘束面|機構|enforce/i);
+  const ruleColumn = findColumn(table.header, /rule|規則|原則|条/iu);
+  const defeatedColumn = findColumn(table.header, /defeat|sacrific|犠牲|捨て|失う/iu);
+  const surfaceColumn = findColumn(table.header, /surface|拘束面|機構|enforce/iu);
   if (surfaceColumn === -1) {
     fail(file, "rule table has no binding-surface column — D5 cannot be checked");
   }
@@ -141,32 +145,30 @@ async function checkFile(file: string): Promise<void> {
       fail(file, `${label}: empty rule cell`);
       continue;
     }
-    if (!TRADE_FORM.test(rule)) {
+      if (!TRADE_FORM.test(rule)) {
       fail(file, `${label}: no "A > B" trade form in the rule cell — D1`);
     }
     if (defeated === "" || defeated === "-" || defeated === "—") {
       fail(file, `${label}: no defeated value named — D1`);
     }
     const lowered = rule.toLowerCase();
-    for (const word of UNFALSIFIABLE) {
-      if (lowered.includes(word.toLowerCase()) && !TRADE_FORM.test(rule)) {
-        fail(file, `${label}: bare value "${word}" with no trade — fails the negation test (D1)`);
-        break;
-      }
+    const bareValue = UNFALSIFIABLE.find(
+      (word) => lowered.includes(word.toLowerCase()) && !TRADE_FORM.test(rule),
+    );
+    if (bareValue !== undefined) {
+      fail(file, `${label}: bare value "${bareValue}" with no trade — fails the negation test (D1)`);
     }
-    if (/\bboth\b|も.*も大事|両立/.test(rule)) {
+    if (/\bboth\b|も.*も大事|両立/u.test(rule)) {
       fail(file, `${label}: "both" with no ordering — trade-off erasure (D1)`);
     }
-    if (surfaceColumn !== -1) {
-      const surface = row[surfaceColumn] ?? "";
-      if (surface === "" || surface === "-" || surface === "—") {
-        fail(file, `${label}: no binding surface named and not marked ADVISORY — D5`);
-      } else if (!SURFACE_TOKENS.some((t) => surface.toUpperCase().includes(t))) {
-        warn(
-          file,
-          `${label}: binding surface "${surface}" is not one of the named types or ADVISORY — check it is a real mechanism`,
-        );
-      }
+    const surface = surfaceColumn === -1 ? undefined : row[surfaceColumn] ?? "";
+    if (surface !== undefined && (surface === "" || surface === "-" || surface === "—")) {
+      fail(file, `${label}: no binding surface named and not marked ADVISORY — D5`);
+    } else if (
+      surface !== undefined &&
+      !SURFACE_TOKENS.some((t) => surface.toUpperCase().includes(t))
+    ) {
+      warn(file, `${label}: binding surface "${surface}" is not one of the named types or ADVISORY — check it is a real mechanism`);
     }
   }
 }
@@ -194,7 +196,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().then(undefined, (error: unknown) => {
     process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(2);
   });

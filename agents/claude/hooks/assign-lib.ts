@@ -20,7 +20,7 @@ import { at, obj, str } from "../../hooks/narrow.ts";
 // Lowercase letters/digits, starting with a letter, capped at 12: generous enough for every
 // role token seen live so far (obs, dtr, pi, gpu, ...) without accepting something that would
 // make an ugly session name.
-const ROLE_RE = /^[a-z][a-z0-9]{0,11}$/;
+const ROLE_RE = /^[a-z][a-z0-9]{0,11}$/u;
 
 export function isValidRole(role: string): boolean {
   return ROLE_RE.test(role);
@@ -48,7 +48,7 @@ export function randomSuffix(
 // own "agentic-rnd-agt_bvxj" — same fix applied there in zsh/aliases.zsh). Keeping the ONE
 // hyphen unambiguous as "where the project ends" is the point, not cosmetic preference.
 export function sessionName(cwd: string, role: string, suffix: string): string {
-  const project = basename(cwd).toLowerCase().replace(/-/g, "_");
+  const project = basename(cwd).toLowerCase().replaceAll("-", "_");
   return `${project}-${role}_${suffix}`;
 }
 
@@ -102,7 +102,7 @@ export async function loadFleetPolicy(
   cwd: string,
 ): Promise<Record<string, RoleConfig>> {
   const projectPolicy = await readPolicyFile(join(cwd, "fleet_policy.toml"));
-  if (projectPolicy) return projectPolicy;
+  if (projectPolicy !== null) return projectPolicy;
 
   const shippedDefault = await readPolicyFile(defaultPolicyPath());
   return shippedDefault ?? {};

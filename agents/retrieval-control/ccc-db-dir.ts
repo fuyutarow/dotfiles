@@ -51,7 +51,7 @@ function resolveLikePython(path: string): string {
   const tail: string[] = [];
   while (true) {
     if (existsSync(head)) {
-      return join(realpathSync(head), ...tail.reverse());
+      return join(realpathSync(head), ...tail.toReversed());
     }
     const parent = dirname(head);
     if (parent === head) return absolute;

@@ -124,7 +124,7 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     ? { claude: decoded.data, parseError: undefined }
     : {
         claude: undefined,
-        parseError: (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, ""),
+        parseError: (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, ""),
       };
   const claude = parsed.claude;
   const parseError = parsed.parseError;
@@ -316,13 +316,14 @@ async function main(): Promise<void> {
   const run = await runClaude(config);
   const relay = toRelay(run);
   process.stdout.write(`${JSON.stringify(relay)}\n`);
-  process.exit(
-    run.exitCode === 0 && asRecord(run.claude) !== undefined ? 0 : run.exitCode || 1,
-  );
+  let exitCode = run.exitCode;
+  if (exitCode === 0 && asRecord(run.claude) !== undefined) exitCode = 0;
+  else if (exitCode === 0) exitCode = 1;
+  process.exit(exitCode);
 }
 
-if (import.meta.main) {
-  main().catch((error) => {
+async function runMain(): Promise<void> {
+  await main().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(
       `${JSON.stringify({ exit_code: 2, error: message })}\n`,
@@ -330,3 +331,5 @@ if (import.meta.main) {
     process.exit(2);
   });
 }
+
+if (import.meta.main) await runMain();

@@ -130,29 +130,29 @@ function redactText(input: string): Readonly<{ text: string; count: number }> {
   };
 
   replace(
-    /-----BEGIN ([A-Z ]+?)-----[\s\S]*?-----END \1-----/g,
+    /-----BEGIN ([A-Z ]+?)-----[\s\S]*?-----END \1-----/gu,
     (_match, label) =>
       `-----BEGIN ${label}-----\n[REDACTED]\n-----END ${label}-----`,
   );
-  replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, () => "Bearer [REDACTED]");
+  replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/giu, () => "Bearer [REDACTED]");
   replace(
-    /\b(?:sk-(?:ant-)?|rk-|ghp_|github_pat_|glpat-)[A-Za-z0-9_-]{10,}\b/g,
+    /\b(?:sk-(?:ant-)?|rk-|ghp_|github_pat_|glpat-)[A-Za-z0-9_-]{10,}\b/gu,
     () => "[REDACTED]",
   );
   replace(
-    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,}\b/g,
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{8,}\b/gu,
     () => "[REDACTED]",
   );
   replace(
-    /\b([A-Z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|AUTHORIZATION|CREDENTIAL|PRIVATE_KEY|ACCESS_KEY|SESSION_KEY|COOKIE)[A-Z0-9_]*)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+    /\b([A-Z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|AUTHORIZATION|CREDENTIAL|PRIVATE_KEY|ACCESS_KEY|SESSION_KEY|COOKIE)[A-Z0-9_]*)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
     (_match, key) => `${key}=[REDACTED]`,
   );
   replace(
-    /"(password|passwd|token|secret|api[_ -]?key|authorization|credential|private[_ -]?key|access[_ -]?key|session[_ -]?key|cookie)"\s*:\s*(?:"(?:\\.|[^"\\])*"|[^,}\s]+)/gi,
+    /"(password|passwd|token|secret|api[_ -]?key|authorization|credential|private[_ -]?key|access[_ -]?key|session[_ -]?key|cookie)"\s*:\s*(?:"(?:\\.|[^"\\])*"|[^,}\s]+)/giu,
     (_match, key) => `"${key}":"[REDACTED]"`,
   );
   replace(
-    /\b(password|passwd|token|secret|api[_ -]?key|authorization|credential|private[_ -]?key|access[_ -]?key|session[_ -]?key|cookie)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+    /\b(password|passwd|token|secret|api[_ -]?key|authorization|credential|private[_ -]?key|access[_ -]?key|session[_ -]?key|cookie)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/giu,
     (_match, key, separator) => `${key}${separator}[REDACTED]`,
   );
   return { text, count };
@@ -478,7 +478,7 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
             typeof path === "string" ? [path] : [],
           ),
         ]),
-      ].sort();
+      ].toSorted();
     }
     if (event.event_type === "tool.requested") {
       applyToolRequested(trace, event);
@@ -489,7 +489,7 @@ function toolTraces(events: readonly RunEvent[]): ToolTrace[] {
     }
     traces.set(toolUseId, trace);
   }
-  return [...traces.values()].sort((left, right) =>
+  return [...traces.values()].toSorted((left, right) =>
     (left.requested_at ?? left.completed_at ?? "").localeCompare(
       right.requested_at ?? right.completed_at ?? "",
     ),
@@ -555,14 +555,17 @@ export async function buildPostmortem(
       // the conditional spread below — exactOptionalPropertyTypes forbids the alternative.
       const turnId = optionalString(event.turn_id);
       const promptSha256 = optionalString(event.prompt_sha256);
-      return {
-        occurred_at: event.occurred_at,
-        ...(turnId === undefined ? {} : { turn_id: turnId }),
-        ...(promptSha256 === undefined ? {} : { prompt_sha256: promptSha256 }),
-        ...(typeof event.prompt_bytes === "number"
-          ? { prompt_bytes: event.prompt_bytes }
-          : {}),
-      };
+      const prompt: {
+        occurred_at: string;
+        turn_id?: string;
+        prompt_sha256?: string;
+        prompt_bytes?: number;
+      } = { occurred_at: event.occurred_at };
+      if (turnId !== undefined) prompt.turn_id = turnId;
+      if (promptSha256 !== undefined) prompt.prompt_sha256 = promptSha256;
+      if (typeof event.prompt_bytes === "number")
+        prompt.prompt_bytes = event.prompt_bytes;
+      return prompt;
     });
 
   let transcript: TranscriptReadout | undefined;

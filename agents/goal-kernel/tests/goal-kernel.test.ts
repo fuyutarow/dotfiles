@@ -117,9 +117,9 @@ describe("immutable Goal authority", () => {
     );
     expect(snapshot.north_star).toContain("run id reconstructs");
     expect(snapshot.north_star).not.toContain("mutated");
-    expect(first.goal_digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.goal_digest).toMatch(/^[a-f0-9]{64}$/u);
 
-    await expect(
+    expect(
       activateGoal(root, goal({ north_star: "conflict" })),
     ).rejects.toThrow("already has a different digest");
   });
@@ -166,7 +166,7 @@ describe("immutable Goal authority", () => {
     mkdirSync(state, { recursive: true, mode: 0o700 });
     const lock = join(state, ".activation.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    await expect(activateGoal(root, goal())).rejects.toThrow("GK_BUSY");
+    expect(activateGoal(root, goal())).rejects.toThrow("GK_BUSY");
     unlinkSync(lock);
     expect((await activateGoal(root, goal())).goal_version).toBe(1);
   });
@@ -330,7 +330,7 @@ describe("hook enforcement and privacy", () => {
     expect(encoded).not.toContain(secret);
     expect(encoded).not.toContain("password=");
     expect(encoded).not.toContain("Authorization");
-    expect(encoded.match(/[a-f0-9]{64}/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(encoded.match(/[a-f0-9]{64}/gu)?.length).toBeGreaterThanOrEqual(3);
   });
 
   test("post-hoc event edits fail content-digest verification", async () => {
@@ -353,7 +353,7 @@ describe("hook enforcement and privacy", () => {
     );
     event.event_type = "tampered";
     writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
-    await expect(listRunEvents(root, requiredRunId(start))).rejects.toThrow(
+    expect(listRunEvents(root, requiredRunId(start))).rejects.toThrow(
       "digest mismatch",
     );
   });
@@ -457,7 +457,7 @@ describe("decision lineage and postmortem reconstruction", () => {
     expect(JSON.stringify(report)).not.toContain("plain-json-secret");
     expect(JSON.stringify(report)).not.toContain("opaque-tool-secret");
     expect(report.transcript?.tool_calls[0]?.input_sha256).toMatch(
-      /^[a-f0-9]{64}$/,
+      /^[a-f0-9]{64}$/u,
     );
   });
 
@@ -483,13 +483,11 @@ describe("decision lineage and postmortem reconstruction", () => {
     };
     const lock = join(goalKernelPaths(root).runs, runId, ".decision.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    await expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
-      "GK_BUSY",
-    );
+    expect(recordRunDecision(root, runId, decision)).rejects.toThrow("GK_BUSY");
     unlinkSync(lock);
 
     await recordRunDecision(root, runId, decision);
-    await expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
+    expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
       "already exists",
     );
     expect(
@@ -554,7 +552,7 @@ describe("decision lineage and postmortem reconstruction", () => {
       "assistant",
     ]);
     expect(report.transcript?.tool_calls[0]?.input_sha256).toMatch(
-      /^[a-f0-9]{64}$/,
+      /^[a-f0-9]{64}$/u,
     );
     expect(JSON.stringify(report)).not.toContain("codex-opaque-secret");
   });

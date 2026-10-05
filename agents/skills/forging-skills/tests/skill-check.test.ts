@@ -265,20 +265,20 @@ describe("skill-check floor", () => {
     // characterizes is the SHAPE: exit 0, nothing but WARN/LISTING lines (no FAIL), the
     // technical-communication WARN present for each directory, and one LISTING budget line.
     const lines = out.trimEnd().split("\n");
-    expect(lines.every((l) => /^(WARN|LISTING) /.test(l))).toBe(true);
+    expect(lines.every((l) => /^(WARN|LISTING) /u.test(l))).toBe(true);
     for (const dir of [wbs, wmt]) {
       expect(
         lines.some(
           (l) =>
             l.startsWith(`WARN ${dir}: `) &&
-            /\d+ prose sentences >120 chars/.test(l),
+            /\d+ prose sentences >120 chars/u.test(l),
         ),
       ).toBe(true);
     }
     const listing = lines.filter((l) => l.startsWith("LISTING "));
     expect(listing).toHaveLength(1);
     expect(listing[0]).toMatch(
-      /^LISTING 2 skills, \d+ name\+description chars \(static proxy\)$/,
+      /^LISTING 2 skills, \d+ name\+description chars \(static proxy\)$/u,
     );
     expect(code).toBe(0);
   });

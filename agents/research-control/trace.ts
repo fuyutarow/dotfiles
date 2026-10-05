@@ -14,8 +14,8 @@ type E = R & {
 type G = { grantId: string; actorInstanceId: string; role: string };
 
 const RFC3339 =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
-const SHA = /^[a-f0-9]{64}$/;
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+const SHA = /^[a-f0-9]{64}$/u;
 const knownResultDispositions = new Set([
   "NOVEL_GAP",
   "REGISTERED_REPLICATION",
@@ -150,7 +150,7 @@ function evidence(value: unknown): boolean {
     item.tracked === true &&
     item.ignored === false &&
     locator !== ".agent-state" &&
-    !/(?:^|\/)\.agent-state(?:\/|$)/.test(locator)
+    !/(?:^|\/)\.agent-state(?:\/|$)/u.test(locator)
   );
 }
 function dispositionMatchesKnownResult(
@@ -520,10 +520,12 @@ export function checkTrace(rawInput: unknown): TraceResult {
   const admissions = events.filter((event) => event.kind === "ADMISSION");
   const specs = events.filter((event) => event.kind === "EXECUTABLE_SPEC");
   const intents = events.filter((event) => event.kind === "INTENT");
-  const invalidIntent = (event: E, message: string): void =>
+  const invalidIntent = (event: E, message: string): void => {
     add(findings, "INTENT_NOT_EXECUTABLE", message, event.id);
-  const digestMismatch = (event: E, message: string): void =>
+  };
+  const digestMismatch = (event: E, message: string): void => {
     add(findings, "DIGEST_JOIN_MISMATCH", message, event.id);
+  };
   const candidateAuthorityJoin = (event: E): boolean =>
     authorityValid &&
     lineageNames.every((name) => {
@@ -619,7 +621,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
         "candidate lacks required fields, authority, or mandate ordering",
       );
   }
-  const validCandidates = candidates.filter(candidateValid);
+  const validCandidates = candidates.filter((event) => candidateValid(event));
   const validAdmission = (event: E): boolean => {
     const candidate = lookup(byId, event.candidateEventId);
     const good =
@@ -649,7 +651,9 @@ export function checkTrace(rawInput: unknown): TraceResult {
     return good;
   };
   const admissionOk = new Set(
-    admissions.filter(validAdmission).map((event) => event.id),
+    admissions
+      .filter((event) => validAdmission(event))
+      .map((event) => event.id),
   );
   const validSpec = (event: E): boolean => {
     const admission = lookup(byId, event.admissionId);
@@ -693,7 +697,9 @@ export function checkTrace(rawInput: unknown): TraceResult {
       invalidIntent(event, "executable spec does not exactly join admission");
     return good;
   };
-  const specOk = new Set(specs.filter(validSpec).map((event) => event.id));
+  const specOk = new Set(
+    specs.filter((event) => validSpec(event)).map((event) => event.id),
+  );
   const validIntent = (event: E): boolean => {
     const admission = lookup(byId, event.admissionId);
     const spec = lookup(byId, event.executableSpecificationId);
@@ -741,7 +747,7 @@ export function checkTrace(rawInput: unknown): TraceResult {
       );
     return good;
   };
-  const validIntents = intents.filter(validIntent);
+  const validIntents = intents.filter((event) => validIntent(event));
   const validIntentIds = new Set(validIntents.map((event) => event.id));
   const firstIntent = validIntents[0];
   if (
@@ -1075,10 +1081,10 @@ export function checkTrace(rawInput: unknown): TraceResult {
   );
   const creditableScientificCommits = new Map(
     [...scientificCommits].filter(([, commit]) => {
-      const learning = lookup(validLearning, commit.learningId);
+      const learningEvent = lookup(validLearning, commit.learningId);
       return (
-        learning !== undefined &&
-        creditableScientificReceipts.has(String(learning.receiptId))
+        learningEvent !== undefined &&
+        creditableScientificReceipts.has(String(learningEvent.receiptId))
       );
     }),
   );

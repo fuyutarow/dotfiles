@@ -58,6 +58,19 @@ type FileResult = {
   loadBearing: number;
 };
 
+function reportRelationTarget(
+  node: ClaimNode,
+  target: string,
+  nodes: Map<string, ClaimNode>,
+  report: (line: number, message: string) => void,
+): void {
+  if (target === node.id) {
+    report(node.line, `relation target must reference another row: ${node.id}`);
+  } else if (!nodes.has(target)) {
+    report(node.line, `unresolved relation target: ${node.id} -> ${target}`);
+  }
+}
+
 const RecordSchema = z.record(z.string(), z.unknown());
 const NonemptyStringSchema = z.string().refine((text) => text.trim().length > 0);
 
@@ -207,69 +220,75 @@ const validateRelations = (
   return targets;
 };
 
+function reportCycle(
+  dependency: string,
+  stack: readonly { dependencyIndex: number; id: string }[],
+  activeIndexes: Map<string, number>,
+  nodes: Map<string, ClaimNode>,
+  reported: Set<string>,
+  report: (line: number, message: string) => void,
+): void {
+  const cycleStart = activeIndexes.get(dependency) ?? 0;
+  const cycle = [...stack.slice(cycleStart).map((item) => item.id), dependency];
+  const key = [...new Set(cycle)].toSorted().join("|");
+  if (reported.has(key)) return;
+  const node = nodes.get(dependency);
+  report(node?.line ?? 1, `derivation cycle: ${cycle.join(" -> ")}`);
+  reported.add(key);
+}
+
+function visitDependencies(
+  start: string,
+  nodes: Map<string, ClaimNode>,
+  states: Map<string, "visiting" | "visited">,
+  reported: Set<string>,
+  report: (line: number, message: string) => void,
+): void {
+  const stack = [{ dependencyIndex: 0, id: start }];
+  const activeIndexes = new Map([[start, 0]]);
+  states.set(start, "visiting");
+
+  while (stack.length > 0) {
+    const frame = stack.at(-1) ?? { dependencyIndex: 0, id: "" };
+    const dependencies = nodes.get(frame.id)?.derivedFrom ?? [];
+    if (frame.dependencyIndex >= dependencies.length) {
+      states.set(frame.id, "visited");
+      activeIndexes.delete(frame.id);
+      stack.pop();
+      continue;
+    }
+
+    const dependency = dependencies[frame.dependencyIndex];
+    frame.dependencyIndex += 1;
+    if (dependency === undefined || !nodes.has(dependency)) continue;
+
+    const state = states.get(dependency);
+    if (state === "visited") continue;
+    if (state === "visiting") {
+      reportCycle(dependency, stack, activeIndexes, nodes, reported, report);
+      continue;
+    }
+
+    activeIndexes.set(dependency, stack.length);
+    states.set(dependency, "visiting");
+    stack.push({ dependencyIndex: 0, id: dependency });
+  }
+}
+
 const findCycles = (
   nodes: Map<string, ClaimNode>,
   report: (line: number, message: string) => void,
 ): void => {
   const states = new Map<string, "visiting" | "visited">();
   const reported = new Set<string>();
-
   for (const start of nodes.keys()) {
-    if (states.has(start)) {
-      continue;
-    }
-
-    const stack = [{ dependencyIndex: 0, id: start }];
-    const activeIndexes = new Map([[start, 0]]);
-    states.set(start, "visiting");
-
-    while (stack.length > 0) {
-      const frame = stack.at(-1);
-      if (frame === undefined) {
-        break;
-      }
-      const dependencies = nodes.get(frame.id)?.derivedFrom ?? [];
-      if (frame.dependencyIndex >= dependencies.length) {
-        states.set(frame.id, "visited");
-        activeIndexes.delete(frame.id);
-        stack.pop();
-        continue;
-      }
-
-      const dependency = dependencies[frame.dependencyIndex];
-      frame.dependencyIndex += 1;
-      if (dependency === undefined || !nodes.has(dependency)) {
-        continue;
-      }
-
-      const state = states.get(dependency);
-      if (state === "visited") {
-        continue;
-      }
-      if (state === "visiting") {
-        const cycleStart = activeIndexes.get(dependency) ?? 0;
-        const cycle = [
-          ...stack.slice(cycleStart).map((item) => item.id),
-          dependency,
-        ];
-        const key = [...new Set(cycle)].sort().join("|");
-        if (!reported.has(key)) {
-          const node = nodes.get(dependency);
-          report(node?.line ?? 1, `derivation cycle: ${cycle.join(" -> ")}`);
-          reported.add(key);
-        }
-        continue;
-      }
-
-      activeIndexes.set(dependency, stack.length);
-      states.set(dependency, "visiting");
-      stack.push({ dependencyIndex: 0, id: dependency });
-    }
+    if (states.has(start)) continue;
+    visitDependencies(start, nodes, states, reported, report);
   }
 };
 
 const checkFile = async (path: string): Promise<FileResult> => {
-  const lines = (await Bun.file(path).text()).split(/\r?\n/);
+  const lines = (await Bun.file(path).text()).split(/\r?\n/u);
   const nodes = new Map<string, ClaimNode>();
   let findings = 0;
   let loadBearing = 0;
@@ -297,7 +316,7 @@ const checkFile = async (path: string): Promise<FileResult> => {
       continue;
     }
 
-    const rowReport = (message: string): void => report(line, message);
+    const rowReport = (message: string): void =>{  report(line, message); };
     const claimId = nonemptyString(row.claim_id);
     if (claimId === undefined) {
       rowReport("claim_id must be a non-empty string");
@@ -355,27 +374,13 @@ const checkFile = async (path: string): Promise<FileResult> => {
   }
 
   for (const node of nodes.values()) {
-    for (const dependency of node.derivedFrom) {
-      if (!nodes.has(dependency)) {
-        report(
-          node.line,
-          `unresolved derived_from reference: ${node.id} -> ${dependency}`,
-        );
-      }
-    }
-    for (const target of node.relationTargets) {
-      if (target === node.id) {
-        report(
-          node.line,
-          `relation target must reference another row: ${node.id}`,
-        );
-      } else if (!nodes.has(target)) {
-        report(
-          node.line,
-          `unresolved relation target: ${node.id} -> ${target}`,
-        );
-      }
-    }
+    for (const dependency of node.derivedFrom.filter((id) => !nodes.has(id)))
+      report(
+        node.line,
+        `unresolved derived_from reference: ${node.id} -> ${dependency}`,
+      );
+    for (const target of node.relationTargets)
+      reportRelationTarget(node, target, nodes, report);
   }
 
   findCycles(nodes, report);
@@ -426,7 +431,7 @@ const main = async (): Promise<void> => {
   process.stdout.write(`RESULT: PASS claims=${result.claims}\n`);
 };
 
-main().catch((error: unknown) => {
+await main().catch((error: unknown) => {
   process.stderr.write(`check-ledger: ${messageFrom(error)}\n`);
   process.exitCode = 2;
 });

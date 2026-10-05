@@ -58,7 +58,7 @@ function nonEmpty(value: string): string {
 }
 
 function positiveInteger(value: string): number {
-	if (!/^[1-9]\d*$/.test(value)) {
+	if (!/^[1-9]\d*$/u.test(value)) {
 		throw new TransactionError(
 			"TCR39",
 			"--base-revision requires a positive integer",
@@ -69,7 +69,7 @@ function positiveInteger(value: string): number {
 }
 
 function sha256Value(value: string): string {
-	if (!/^[a-f0-9]{64}$/.test(value)) {
+	if (!/^[a-f0-9]{64}$/u.test(value)) {
 		throw new TransactionError(
 			"TCR39",
 			"--base-sha256 requires 64 lowercase hex characters",
@@ -80,7 +80,7 @@ function sha256Value(value: string): string {
 }
 
 function metadata(text: string, key: string): string {
-	const values = [...text.matchAll(new RegExp(`^${key}:\\s*(.*)$`, "gm"))].map(
+	const values = [...text.matchAll(new RegExp(`^${key}:\\s*(.*)$`, "gmu"))].map(
 		(match) => match[1]?.trim() ?? "",
 	);
 	const only = values[0];
@@ -267,8 +267,9 @@ function createProposal(path: string, output: string, text: string): string {
 			"proposal must be a distinct file beside the canonical record",
 		);
 	}
-	const written = fromThrowable(() =>
-		writeFileSync(proposal, text, { flag: "wx", mode: 0o600 }),
+	const written = fromThrowable(() => {
+		writeFileSync(proposal, text, { flag: "wx", mode: 0o600 });
+	},
 	)();
 	if (written.isErr()) {
 		throw new TransactionError(
@@ -301,23 +302,24 @@ function applyCheckpoint(args: {
 	_cleanup.defer(() => {
 		if (lockHeld) {
 			// Fail closed on the next update; stale locks require human inspection.
-			fromThrowable(() => unlinkSync(lock))();
+			fromThrowable(() => { unlinkSync(lock); })();
 		}
 	});
 	_cleanup.defer(() => {
 		if (temporary !== undefined) {
 			// The randomized incomplete file is never a canonical record.
 			const leftover = temporary;
-			fromThrowable(() => unlinkSync(leftover))();
+			fromThrowable(() => { unlinkSync(leftover); })();
 		}
 	});
 
-	const lockWritten = fromThrowable(() =>
+	const lockWritten = fromThrowable(() => {
 		writeFileSync(
 			lock,
 			`${JSON.stringify({ pid: process.pid, started_at: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }), transaction: randomUUID() })}\n`,
 			{ flag: "wx", mode: 0o600 },
-		),
+		);
+	},
 	)();
 	if (lockWritten.isErr()) {
 		throw new TransactionError(
@@ -367,13 +369,14 @@ function applyCheckpoint(args: {
 	const mode = lstatSync(path).mode & 0o777;
 	writeFileSync(temporary, candidateText, { flag: "wx", mode });
 	const descriptor = openSync(temporary, constants.O_RDONLY);
-	using _closeDescriptor = { [Symbol.dispose]: () => closeSync(descriptor) };
+	using _closeDescriptor = { [Symbol.dispose]: () => { closeSync(descriptor); } };
 	fsyncSync(descriptor);
 	renameSync(temporary, path);
 	temporary = undefined;
 
-	const proposalRemoved = fromThrowable(() =>
-		unlinkSync(resolve(args.proposal)),
+	const proposalRemoved = fromThrowable(() => {
+		unlinkSync(resolve(args.proposal));
+	},
 	)().isOk();
 	process.stdout.write(
 		`${JSON.stringify({

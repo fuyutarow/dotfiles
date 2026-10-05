@@ -33,13 +33,15 @@
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
 // scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
 import { jsonOf, z } from "../hooks/zod.ts";
+const recoverInvalid = <T extends z.ZodType>(schema: T) =>
+  schema.optional().catch(undefined);
 
 const CODEX = "codex";
 
 // A field that is absent or not a string reads as undefined; a non-object payload is "no version".
 const DaemonVersionSchema = z.object({
-  appServerVersion: z.string().optional().catch(undefined),
-  managedCodexVersion: z.string().optional().catch(undefined),
+  appServerVersion: recoverInvalid(z.string()),
+  managedCodexVersion: recoverInvalid(z.string()),
 });
 type DaemonVersion = z.output<typeof DaemonVersionSchema>;
 
@@ -76,7 +78,7 @@ async function daemonVersion(): Promise<DaemonVersion | null> {
 }
 
 // Shared with macOS, where codex may simply be absent: skip, never fail the topgrade run.
-if (!Bun.which(CODEX)) {
+if (Bun.which(CODEX) === null) {
   console.log("codex absent — skipped");
   process.exit(0);
 }
@@ -88,7 +90,7 @@ const v = await daemonVersion();
 const running = v?.appServerVersion;
 const current = v?.managedCodexVersion;
 
-if (running && current && running !== current) {
+if (running !== undefined && current !== undefined && running !== current) {
   console.log(
     `codex: app-server ${running} != current ${current} — restarting daemon`,
   );

@@ -51,7 +51,16 @@ async function runProbe(
 
 async function withProbeDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "probe-models-test-"));
-  return fn(dir).finally(() => rm(dir, { recursive: true, force: true }));
+  return fn(dir).then(
+    async (value) => {
+      await rm(dir, { recursive: true, force: true });
+      return value;
+    },
+    async (error: unknown) => {
+      await rm(dir, { recursive: true, force: true });
+      throw error;
+    },
+  );
 }
 
 describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)", () => {

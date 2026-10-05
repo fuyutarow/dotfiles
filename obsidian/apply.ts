@@ -103,7 +103,7 @@ const assetCache = new Map<string, Uint8Array>();
 async function asset(p: Plugin, file: string): Promise<Uint8Array> {
   const url = `https://github.com/${p.repo}/releases/download/${p.version}/${file}`;
   const hit = assetCache.get(url);
-  if (hit) return hit;
+  if (hit !== undefined) return hit;
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_MS) });
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
     );
 }
 
-main().catch((e: unknown) => {
+await main().catch((e: unknown) => {
   const msg = e instanceof Error ? e.message : String(e);
   process.stderr.write(`FATAL: ${msg}\n`);
   process.exit(2);

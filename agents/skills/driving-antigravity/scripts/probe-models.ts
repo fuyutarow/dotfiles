@@ -53,6 +53,15 @@ function atLeast(actual: string, floor: string): boolean {
   return true;
 }
 
+function writeDiagnosticLines(output: string): void {
+  for (const line of output
+    .split("\n")
+    .filter((entry) => /Error|error|denied|quota|auth/u.test(entry))
+    .slice(0, 2)) {
+    process.stdout.write(`  ${line}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -72,7 +81,7 @@ async function main(): Promise<void> {
       "agy not on PATH — environment problem, not a model result",
     );
   const version = await run([agy, "--version"], 30_000);
-  const foundVersion = version.output.match(/\d+\.\d+\.\d+/)?.[0];
+  const foundVersion = version.output.match(/\d+\.\d+\.\d+/u)?.[0];
   if (foundVersion !== undefined && !atLeast(foundVersion, "1.1.2")) {
     process.stderr.write(
       `WARNING: agy ${foundVersion} is below the 1.1.2 floor — invalid-model downgrade + empty-stdout-swallow bugs may make probes unreliable (SKILL.md A1)\n`,
@@ -108,30 +117,21 @@ async function main(): Promise<void> {
       process.stdout.write(
         `RESULT: INVALID_NAME ${model} (exit ${result.exitCode}) — not an EXACT \`agy models\` display name; copy it verbatim incl. spaces/parens/capitalization\n`,
       );
-    } else {
-      let note: string;
-      if (result.timedOut) {
-        note = "timeout — not a catalog verdict";
-      } else if (result.exitCode === 0) {
-        note =
-          "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)";
-      } else {
-        note = `rc=${result.exitCode}`;
-      }
-      process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
-      for (const line of result.output
-        .split("\n")
-        .filter((entry) => /Error|error|denied|quota|auth/.test(entry))
-        .slice(0, 2)) {
-        process.stdout.write(`  ${line}\n`);
-      }
+      failures += 1;
+      continue;
     }
+    let note = `rc=${result.exitCode}`;
+    if (result.exitCode === 0)
+      note = "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)";
+    if (result.timedOut) note = "timeout — not a catalog verdict";
+    process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
+    writeDiagnosticLines(result.output);
     failures += 1;
   }
   process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
   );

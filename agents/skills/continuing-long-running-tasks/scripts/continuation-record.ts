@@ -79,39 +79,39 @@ const requiredHeadings = [
 ] as const;
 
 const secretPatterns = [
-	/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-	/\b(?:sk|rk|pk)-(?:live|test|proj)-[A-Za-z0-9_-]{12,}\b/,
-	/\bgh[opusr]_[A-Za-z0-9]{20,}\b/,
-	/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/,
-	/\bAKIA[0-9A-Z]{16}\b/,
-	/\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/i,
-	/\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|cookie|authorization)\s*[:=]\s*(?!<?redacted>?|\[redacted\]|(?:secret-manager|vault|env):)[^\s]{8,}/i,
-	/\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*(?!<?REDACTED>?|\[REDACTED\]|(?:SECRET_MANAGER|VAULT|ENV):)[^\s]{8,}/,
+	/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
+	/\b(?:sk|rk|pk)-(?:live|test|proj)-[A-Za-z0-9_-]{12,}\b/u,
+	/\bgh[opusr]_[A-Za-z0-9]{20,}\b/u,
+	/\bxox[baprs]-[A-Za-z0-9-]{12,}\b/u,
+	/\bAKIA[0-9A-Z]{16}\b/u,
+	/\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*\b/iu,
+	/\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|cookie|authorization)\s*[:=]\s*(?!<?redacted>?|\[redacted\]|(?:secret-manager|vault|env):)[^\s]{8,}/iu,
+	/\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*(?!<?REDACTED>?|\[REDACTED\]|(?:SECRET_MANAGER|VAULT|ENV):)[^\s]{8,}/u,
 ] satisfies RegExp[];
 
 const unsafeReasoningHeading =
-	/^#{1,6}\s*(?:chain[- ]of[- ]thought|internal (?:thoughts?|reasoning)|private reasoning|思考過程|内部思考|頭の中)\s*$/im;
+	/^#{1,6}\s*(?:chain[- ]of[- ]thought|internal (?:thoughts?|reasoning)|private reasoning|思考過程|内部思考|頭の中)\s*$/imu;
 
 const unsafeControlArtifact =
-	/```|<\/?(?:system|developer|assistant|tool|invoke|thinking)\b|^\s*(?:system|developer|assistant|tool)\s*:|\b(?:ignore|disregard|override)\b.{0,40}\b(?:instructions?|prompts?|rules?)\b/im;
+	/```|<\/?(?:system|developer|assistant|tool|invoke|thinking)\b|^\s*(?:system|developer|assistant|tool)\s*:|\b(?:ignore|disregard|override)\b.{0,40}\b(?:instructions?|prompts?|rules?)\b/imu;
 
 function metadataValues(text: string, key: string): string[] {
-	const pattern = new RegExp(`^${key}:\\s*(.*)$`, "gm");
+		const pattern = new RegExp(`^${key}:\\s*(.*)$`, "gmu");
 	return [...text.matchAll(pattern)].map((match) => match[1]?.trim() ?? "");
 }
 
 function bulletValues(text: string, key: string): string[] {
-	const pattern = new RegExp(`^\\s*-\\s*${key}:\\s*(.*)$`, "gm");
+		const pattern = new RegExp(`^\\s*-\\s*${key}:\\s*(.*)$`, "gmu");
 	return [...text.matchAll(pattern)].map((match) => match[1]?.trim() ?? "");
 }
 
 function isPlaceholder(value: string): boolean {
-	return value === "" || /<[^>]+>|\b(?:TBD|TODO|FIXME)\b|^\[.*\]$/i.test(value);
+	return value === "" || /<[^>]+>|\b(?:TBD|TODO|FIXME)\b|^\[.*\]$/iu.test(value);
 }
 
 function isoTimestamp(value: string): boolean {
 	const match = value.match(
-		/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))\s+(.+)$/,
+		/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))\s+(.+)$/u,
 	);
 	return (
 		match?.[1] !== undefined &&
@@ -182,7 +182,7 @@ export function validateContinuationRecord(
 		});
 	}
 
-	const presentHeadings = text.match(/^#{1,6}\s+.*$/gm) ?? [];
+	const presentHeadings = text.match(/^#{1,6}\s+.*$/gmu) ?? [];
 	let previousIndex = -1;
 	for (const heading of requiredHeadings) {
 		const occurrences = presentHeadings.filter(
@@ -221,7 +221,7 @@ export function validateContinuationRecord(
 	const taskId = oneMetadata(findings, text, "TASK_ID");
 	if (
 		taskId !== undefined &&
-		!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(taskId)
+		!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(taskId)
 	) {
 		findings.push({
 			code: "TCR08",
@@ -238,7 +238,7 @@ export function validateContinuationRecord(
 	}
 
 	const revision = oneMetadata(findings, text, "REVISION");
-	if (revision !== undefined && !/^[1-9]\d*$/.test(revision)) {
+	if (revision !== undefined && !/^[1-9]\d*$/u.test(revision)) {
 		findings.push({
 			code: "TCR10",
 			message: "REVISION must be a positive integer",
@@ -270,7 +270,7 @@ export function validateContinuationRecord(
 	if (
 		writer !== undefined &&
 		writer !== "none" &&
-		!/^session:(?:claude|codex)-[a-f0-9]{16}$/.test(writer)
+		!/^session:(?:claude|codex)-[a-f0-9]{16}$/u.test(writer)
 	) {
 		findings.push({
 			code: "TCR33",
@@ -294,7 +294,7 @@ export function validateContinuationRecord(
 		});
 	}
 
-	if (!/^\s+Evidence:\s*\S+/m.test(text)) {
+	if (!/^\s+Evidence:\s*\S+/mu.test(text)) {
 		findings.push({
 			code: "TCR13",
 			message: "at least one evidence locator is required",
@@ -303,7 +303,7 @@ export function validateContinuationRecord(
 
 	const verify = oneBullet(findings, text, "VERIFY");
 	const result = oneBullet(findings, text, "RESULT");
-	if (result !== undefined && !/^(?:pass|fail|not-run)\b/i.test(result)) {
+	if (result !== undefined && !/^(?:pass|fail|not-run)\b/iu.test(result)) {
 		findings.push({
 			code: "TCR14",
 			message: "RESULT must begin with pass, fail, or not-run",
@@ -437,8 +437,8 @@ function unsafeAncestor(
 	for (const component of relative(root, parent).split(sep)) {
 		current = join(current, component);
 		const result = statPath(current);
+		if (result.isErr() && result.error === "ENOENT" && !requireExisting) return undefined;
 		if (result.isErr()) {
-			if (result.error === "ENOENT" && !requireExisting) return undefined;
 			return {
 				code: "TCR28",
 				message: "continuation path ancestors could not be inspected safely",
@@ -460,7 +460,7 @@ export function continuationWorkspaceRootFromSlot(
 ): string | undefined {
 	if (basename(slot) !== "ACTIVE") return undefined;
 	const sessionDirectory = dirname(slot);
-	if (!/^(?:claude|codex)-[a-f0-9]{16}$/.test(basename(sessionDirectory))) {
+	if (!/^(?:claude|codex)-[a-f0-9]{16}$/u.test(basename(sessionDirectory))) {
 		return undefined;
 	}
 	const continuationsDirectory = dirname(sessionDirectory);
@@ -517,7 +517,7 @@ export function readContinuationBindingAtSlot(
 	}
 	const readResult = readPath(slot);
 	if (readResult.isErr()) return fatalBinding(readResult.error);
-	const match = readResult.value.match(/^TCR_PATH:\s*(\S+)\s*$/);
+	const match = readResult.value.match(/^TCR_PATH:\s*(\S+)\s*$/u);
 	const relativeRecord = match?.[1];
 	if (
 		relativeRecord === undefined ||
@@ -638,7 +638,7 @@ export function bindContinuationSlot(
 	if (result.isOk()) return result.value;
 	// Best effort: the exact randomized temporary path is never a binding.
 	const leftover = temporary.path;
-	if (leftover !== undefined) fromThrowable(() => unlinkSync(leftover))();
+	if (leftover !== undefined) fromThrowable(() => { unlinkSync(leftover); })();
 	return [
 		{
 			code: "TCR26",
@@ -647,21 +647,21 @@ export function bindContinuationSlot(
 	];
 }
 
+function fatalInspection(code: string | undefined): RecordInspection {
+	return code === "ENOENT"
+		? { status: "absent" }
+		: {
+				status: "invalid",
+				findings: [
+					{ code: "TCR20", message: "record could not be inspected safely" },
+				],
+			};
+}
+
 export function inspectContinuationRecord(
 	path: string,
 	workspaceRoot?: string,
 ): RecordInspection {
-	function fatalInspection(code: string | undefined): RecordInspection {
-		return code === "ENOENT"
-			? { status: "absent" }
-			: {
-					status: "invalid",
-					findings: [
-						{ code: "TCR20", message: "record could not be inspected safely" },
-					],
-				};
-	}
-
 	const absolutePath = resolve(path);
 	const validationRoot =
 		workspaceRoot ?? continuationProjectRoot(dirname(absolutePath));

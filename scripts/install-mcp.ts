@@ -102,18 +102,52 @@ function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
+function shellString(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return value.join(",");
+  if (typeof value === "object") return "[object Object]";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string") return value;
+  if (
+    typeof value !== "number" &&
+    typeof value !== "boolean" &&
+    typeof value !== "bigint" &&
+    typeof value !== "symbol"
+  ) {
+    return "";
+  }
+  return String(value);
+}
+
+function isUnavailable(available: boolean | undefined): boolean {
+  if (available === undefined) return true;
+  return !available;
+}
+
 // jq's `//` alternative operator falls back to its right-hand side for null AND false, not just
 // "absent" — mirrored here rather than JS `??` (null/undefined only), though in practice these
 // fields are never boolean in .mcp.json.
 export function jqOr(value: unknown, fallback: string): string {
   if (value === undefined || value === null || value === false) return fallback;
-  return String(value);
+  if (typeof value === "object") {
+    return Array.isArray(value) ? value.join(",") : "[object Object]";
+  }
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint" ||
+    typeof value === "symbol"
+  ) {
+    return String(value);
+  }
+  return fallback;
 }
 
 // Mirrors unquoted `$var` word-splitting on IFS whitespace: leading/trailing/repeated
 // separators produce no empty tokens, and an empty/unset var contributes zero words.
 export function shellWords(s: string): string[] {
-  return s.split(/\s+/).filter((w) => w.length > 0);
+  return s.split(/\s+/u).filter((w) => w.length > 0);
 }
 
 // `comm -13 <(sorted A) <(sorted B)`: lines present in B that a one-for-one merge against A
@@ -160,7 +194,7 @@ export function loadMcpServers(
   const parsed = fromThrowable(() => readFileSync(mcpJsonPath, "utf8"))()
     .map((text) => jsonOf(McpJsonSchema).safeParse(text))
     .unwrapOr(undefined);
-  return parsed?.success ? (parsed.data.mcpServers ?? {}) : {};
+  return parsed?.success === true ? (parsed.data.mcpServers ?? {}) : {};
 }
 
 export function buildPlan(name: string, entry: ServerEntry): Plan {
@@ -168,7 +202,7 @@ export function buildPlan(name: string, entry: ServerEntry): Plan {
   const url = jqOr(entry.url, "");
   const cmd = jqOr(entry.command, "");
   const argsArray = Array.isArray(entry.args)
-    ? entry.args.map((x) => String(x))
+    ? entry.args.map((x) => shellString(x))
     : [];
   const argsJoined = argsArray.join(" ");
   // `${url:-$cmd $args}` inside the echo's double quotes: parameter-expansion defaulting, NOT
@@ -264,13 +298,11 @@ function registerWithCodex(
     runIgnoringFailure(codexBin, ["mcp", "remove", plan.name]);
   }
 
-  if (plan.url !== "") {
-    const addArgs = ["mcp", "add", plan.name, "--url", plan.url];
-    runOrPrintAdd(codexBin, addArgs, dryRun);
-  } else {
-    const addArgs = ["mcp", "add", plan.name, "--", ...plan.execTokens];
-    runOrPrintAdd(codexBin, addArgs, dryRun);
-  }
+  const addArgs =
+    plan.url !== ""
+      ? ["mcp", "add", plan.name, "--url", plan.url]
+      : ["mcp", "add", plan.name, "--", ...plan.execTokens];
+  runOrPrintAdd(codexBin, addArgs, dryRun);
 }
 
 /** One undeclared-but-live server's removal for MCP_PRUNE=1 — claude first, then codex when a
@@ -359,7 +391,7 @@ function main(): void {
   }
 
   const values = parsed.flags;
-  const dryRun = values.dryRun === true;
+  const dryRun = values.dryRun;
   // `${DOTFILES:-$HOME/dotfiles}` (bash `:-`) applies ONLY to DOTFILES — the nested $HOME is a
   // bare, unguarded expansion with no empty-check of its own. So DOTFILES needs the
   // empty-normalizes-to-undefined trick (JS `??` is null/undefined only, unlike bash `:-`) to
@@ -369,7 +401,10 @@ function main(): void {
   // not `${homedir()}/dotfiles`), exactly like bash's own bare `$HOME` expansion.
   const envHome = process.env.HOME;
   const home = values.home ?? envHome ?? homedir();
-  const envDotfiles = process.env.DOTFILES || undefined;
+  const envDotfiles =
+    process.env.DOTFILES !== undefined && process.env.DOTFILES !== ""
+      ? process.env.DOTFILES
+      : undefined;
   const dotfiles = values.dotfiles ?? envDotfiles ?? `${home}/dotfiles`;
   const claudeBin = values.claudeBin ?? "claude";
   const codexBin = values.codexBin ?? "codex";
@@ -381,7 +416,8 @@ function main(): void {
   // cocoindex-code's MCP server is the binary `ccc` (a separate uv tool); ensure it exists.
   // Unguarded in the original (`command -v ccc || uv tool install …`) — a failed install aborts
   // the whole task before a single server is touched.
-  if (!which(cccBin)) {
+  const cccAvailable = which(cccBin);
+  if (isUnavailable(cccAvailable)) {
     const uvArgs = ["tool", "install", "--upgrade", "cocoindex-code[full]"];
     if (dryRun) {
       print(`[dry-run] would run: ${uvBin} ${uvArgs.join(" ")}`);
@@ -391,7 +427,7 @@ function main(): void {
   }
 
   const servers = loadMcpServers(mcpJsonPath);
-  const names = Object.keys(servers).sort();
+  const names = Object.keys(servers).toSorted();
 
   for (const name of names) {
     const plan = buildPlan(name, servers[name] ?? {});
@@ -404,30 +440,11 @@ function main(): void {
       runIgnoringFailure(claudeBin, ["mcp", "remove", "-s", "user", name]);
     }
 
-    if (plan.url !== "") {
-      const addArgs = [
-        "mcp",
-        "add",
-        "-s",
-        "user",
-        "--transport",
-        plan.type,
-        name,
-        plan.url,
-      ];
-      runOrPrintAdd(claudeBin, addArgs, dryRun);
-    } else {
-      const addArgs = [
-        "mcp",
-        "add",
-        "-s",
-        "user",
-        name,
-        "--",
-        ...plan.execTokens,
-      ];
-      runOrPrintAdd(claudeBin, addArgs, dryRun);
-    }
+    const addArgs =
+      plan.url !== ""
+        ? ["mcp", "add", "-s", "user", "--transport", plan.type, name, plan.url]
+        : ["mcp", "add", "-s", "user", name, "--", ...plan.execTokens];
+    runOrPrintAdd(claudeBin, addArgs, dryRun);
 
     if (which(codexBin)) {
       registerWithCodex(codexBin, plan, dryRun);
@@ -452,13 +469,13 @@ function main(): void {
     .unwrapOr("");
   const liveNames = liveText
     .split("\n")
-    .map((line) => /^([a-zA-Z0-9_-]*): /.exec(line)?.[1])
+    .map((line) => /^([a-zA-Z0-9_-]*): /u.exec(line)?.[1])
     // sed's `s/^\([a-zA-Z0-9_-]*\): .*/\1/p` has no length check on the captured group — a
     // pathological line starting with just ": " captures a ZERO-length name, and sed still
     // emits (and `sort`/`comm` still process) that blank line. Only DROP entries the regex
     // didn't match at all (undefined); keep an empty-string capture, matching sed verbatim.
     .flatMap((n) => (n === undefined ? [] : [n]))
-    .sort();
+    .toSorted();
 
   printDriftReport(declared, liveNames, claudeBin, codexBin, dryRun, prune);
 

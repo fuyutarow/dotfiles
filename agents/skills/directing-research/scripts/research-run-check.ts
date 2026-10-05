@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\nRun 'bun research-run-check.ts --help' for usage.\n`,
   );

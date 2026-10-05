@@ -35,7 +35,7 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 function fields(text: string): Map<string, string> {
   const cardFields = new Map<string, string>();
   for (const line of text.split("\n")) {
-    const match = line.match(/^([^:#][^:]*):\s*(.+)$/);
+    const match = line.match(/^([^:#][^:]*):\s*(.+)$/u);
     if (match?.[1] !== undefined && match[2] !== undefined) {
       cardFields.set(match[1].trim(), match[2].trim());
     }
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().then(undefined, (error: unknown) => {
     process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(2);
   });

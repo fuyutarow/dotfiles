@@ -141,7 +141,7 @@ function isSymlinkOrAbsent(p: string): boolean {
  */
 function listEntries(dir: string): string[] {
   return fromThrowable((path: string) => readdirSync(path))(dir)
-    .map((names) => names.filter((n) => !n.startsWith(".")).sort())
+    .map((names) => names.filter((n) => !n.startsWith(".")).toSorted())
     .unwrapOr([]);
 }
 
@@ -159,18 +159,24 @@ function linkPath(src: string, dst: string, dryRun: boolean): void {
   if (!dryRun) {
     // `mkdir -p "$(dirname "$dst")"` has no `&&`/`set -e` gate in the original — a failure
     // prints its own stderr and falls through to the next line regardless.
-    tryOp(() => mkdirSync(dirname(dst), { recursive: true }));
+    tryOp(() => {
+      mkdirSync(dirname(dst), { recursive: true });
+    });
   }
   if (isSymlinkOrAbsent(dst)) {
     if (dryRun) {
       print(`[dry-run] would link: ${dst} -> ${src}`);
       return;
     }
-    tryOp(() => unlinkSync(dst)); // dst didn't exist — nothing to remove, matches `ln -f`.
+    tryOp(() => {
+      unlinkSync(dst);
+    }); // dst didn't exist — nothing to remove, matches `ln -f`.
     // `ln -sfn "$src" "$dst"` failing doesn't stop the original: the very next line,
     // `echo "linked: $dst -> $src"`, has no `&&` gate on the `ln`, so it prints
     // unconditionally even when `ln` itself failed — preserved verbatim, not fixed.
-    tryOp(() => symlinkSync(src, dst));
+    tryOp(() => {
+      symlinkSync(src, dst);
+    });
     print(`linked: ${dst} -> ${src}`);
   } else {
     print(`skip (exists, not symlink): ${dst}`);
@@ -222,7 +228,9 @@ function linkOrExcludeSkill(
   }
   // Same unconditional-echo shape as PRUNE (a)/(d): no `&&` gates the `unlink` in
   // the original, so the message prints even if `unlink` itself failed.
-  tryOp(() => unlinkSync(dst));
+  tryOp(() => {
+    unlinkSync(dst);
+  });
   print(`excluded (Codex-only): ${dst}`);
 }
 
@@ -284,7 +292,7 @@ function main(): void {
     return;
   }
 
-  const dryRun = parsed.flags.dryRun === true;
+  const dryRun = parsed.flags.dryRun;
   const home = parsed.flags.home ?? process.env.HOME ?? homedir();
   const dotfiles =
     parsed.flags.dotfiles ?? process.env.DOTFILES ?? `${home}/dotfiles`;
@@ -305,7 +313,10 @@ function main(): void {
   }
 
   // Claude Code — slash commands
-  if (!dryRun) tryOp(() => mkdirSync(`${home}/.claude`, { recursive: true }));
+  if (!dryRun)
+    tryOp(() => {
+      mkdirSync(`${home}/.claude`, { recursive: true });
+    });
   linkPath(`${dotfiles}/agents/commands`, `${home}/.claude/commands`, dryRun);
 
   // Claude Code — skills: link each skill INDIVIDUALLY. Claude Code itself populates
@@ -321,11 +332,16 @@ function main(): void {
     } else {
       // `unlink` failing doesn't stop the original: its `echo` on the next line has no `&&`
       // gate, so it prints unconditionally even when `unlink` itself failed.
-      tryOp(() => unlinkSync(claudeSkillsDir));
+      tryOp(() => {
+        unlinkSync(claudeSkillsDir);
+      });
       print(`removed whole-dir symlink: ~/.claude/skills -> ${wholeDirTarget}`);
     }
   }
-  if (!dryRun) tryOp(() => mkdirSync(claudeSkillsDir, { recursive: true }));
+  if (!dryRun)
+    tryOp(() => {
+      mkdirSync(claudeSkillsDir, { recursive: true });
+    });
 
   const dotfilesSkillsDir = `${dotfiles}/agents/skills`;
   if (isDir(dotfilesSkillsDir)) {
@@ -347,8 +363,12 @@ function main(): void {
 
   // Codex — global guidance, skills, and legacy markdown prompts
   if (!dryRun) {
-    tryOp(() => mkdirSync(`${home}/.codex`, { recursive: true }));
-    tryOp(() => mkdirSync(`${home}/.agents`, { recursive: true }));
+    tryOp(() => {
+      mkdirSync(`${home}/.codex`, { recursive: true });
+    });
+    tryOp(() => {
+      mkdirSync(`${home}/.agents`, { recursive: true });
+    });
   }
   linkPath(
     `${dotfiles}/agents/codex/AGENTS.md`,
@@ -368,14 +388,18 @@ function main(): void {
       );
     } else {
       // Unconditional echo, same shape as PRUNE (a)/(c) — no `&&` gates the `unlink`.
-      tryOp(() => unlinkSync(codexSkillsDst));
+      tryOp(() => {
+        unlinkSync(codexSkillsDst);
+      });
       print(`removed stale: ~/.codex/skills -> ${staleExpected}`);
     }
   }
 
   // Gemini — global_workflows
   if (!dryRun) {
-    tryOp(() => mkdirSync(`${home}/.gemini/antigravity`, { recursive: true }));
+    tryOp(() => {
+      mkdirSync(`${home}/.gemini/antigravity`, { recursive: true });
+    });
   }
   linkPath(
     `${dotfiles}/agents/commands`,

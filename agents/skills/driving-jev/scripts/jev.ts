@@ -101,17 +101,16 @@ function validateQuestion(id: string, question: unknown): void {
     }
   }
 
-  if (type === "score") {
-    if (
-      !Array.isArray(value.criteria) ||
+  if (
+    type === "score" &&
+    (!Array.isArray(value.criteria) ||
       value.criteria.length < 2 ||
-      value.criteria.length > 10
-    ) {
-      throw new JevCliError(
-        2,
-        `score question '${id}' requires 2..10 ordered levels`,
-      );
-    }
+      value.criteria.length > 10)
+  ) {
+    throw new JevCliError(
+      2,
+      `score question '${id}' requires 2..10 ordered levels`,
+    );
   }
 
   if (
@@ -176,17 +175,17 @@ async function readRequest(path: string): Promise<unknown> {
     if (process.stdin.isTTY)
       throw new JevCliError(2, "request '-' requires non-interactive stdin");
     const text = await new Response(Bun.stdin.stream()).text();
-    return await parseRequestJson(text);
+    return parseRequestJson(text);
   }
   if (!existsSync(path))
     throw new JevCliError(2, `request file not found: ${path}`);
-  return await parseRequestJson(await Bun.file(path).text());
+  return parseRequestJson(await Bun.file(path).text());
 }
 
-async function parseRequestJson(text: string): Promise<unknown> {
+function parseRequestJson(text: string): unknown {
   const decoded = jsonText.safeParse(text);
   if (!decoded.success) {
-    const message = (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, "");
+    const message = (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, "");
     throw new JevCliError(2, `request is not valid JSON: ${message}`);
   }
   const parsed = decoded.data;
@@ -274,7 +273,7 @@ async function main(): Promise<void> {
 
   const decodedResult = jsonText.safeParse(body);
   if (!decodedResult.success) {
-    const message = (decodedResult.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, "");
+    const message = (decodedResult.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, "");
     throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
   }
   const result = decodedResult.data;
@@ -293,7 +292,7 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   const exitCode = error instanceof JevCliError ? error.exitCode : 2;
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`FATAL: ${boundedDiagnostic(message)}\n`);

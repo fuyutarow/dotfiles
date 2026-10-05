@@ -57,6 +57,34 @@ function makeStub(dir: string, name: string, exitCode = 0): void {
   chmodSync(path, 0o755);
 }
 
+function makeTempDir(): string {
+  return mkdtempSync(join(tmpdir(), "cache-clean-cleanup-"));
+}
+
+function captureLog(fn: () => void): string[] {
+  const logs: string[] = [];
+  const orig = console.log;
+  using _restoreLog = {
+    [Symbol.dispose]: () => {
+      console.log = orig;
+    },
+  };
+  console.log = (...a: unknown[]) => {
+    logs.push(a.join(" "));
+  };
+  fn();
+  return logs;
+}
+
+function makeUvStub(dir: string, echoToStderr: boolean): void {
+  const redirect = echoToStderr ? " >&2" : "";
+  writeFileSync(
+    join(dir, "uv"),
+    `#!/bin/sh\necho "UV CALLED: $@"${redirect}\nexit 0\n`,
+  );
+  chmodSync(join(dir, "uv"), 0o755);
+}
+
 function runScript(
   args: string[],
   opts: {
@@ -196,10 +224,6 @@ describe("isJuliaBusy", () => {
 // ---- unit: cleanupTempDir (rip-then-rm fallback) -----------------------------------------------
 
 describe("cleanupTempDir", () => {
-  function makeTempDir(): string {
-    return mkdtempSync(join(tmpdir(), "cache-clean-cleanup-"));
-  }
-
   test("rip available and succeeds -> rmSync fallback is NOT taken (dir left for rip to have handled)", () => {
     const dir = makeTempDir();
     const fakeSpawn = fakeSpawnSync(() => ({
@@ -282,48 +306,33 @@ describe("toolAvailable", () => {
 // ---- unit: runSimpleStep (skip / dry-run / label-vs-command divergence / error swallow) -------
 
 describe("runSimpleStep", () => {
-  function captureLog(fn: () => void): string[] {
-    const logs: string[] = [];
-    const orig = console.log;
-    using _restoreLog = {
-      [Symbol.dispose]: () => {
-        console.log = orig;
-      },
-    };
-    console.log = (...a: unknown[]) => {
-      logs.push(a.join(" "));
-    };
-    fn();
-    return logs;
-  }
-
   test("absent tool -> completely silent, nothing runs", () => {
-    const logs = captureLog(() =>
+    const logs = captureLog(() => {
       runSimpleStep(
         { tool: "definitely-not-a-real-tool-xyz123", label: "x", cmd: ["x"] },
         false,
-      ),
-    );
+      );
+    });
     expect(logs).toEqual([]);
   });
 
   test("dry-run prints the full real command line (not the shorter echo label)", () => {
-    const logs = captureLog(() =>
+    const logs = captureLog(() => {
       runSimpleStep(
         { tool: "sh", label: "shell noop", cmd: ["sh", "-c", "exit 0"] },
         true,
-      ),
-    );
+      );
+    });
     expect(logs).toEqual(["[dry-run] would run: sh -c exit 0"]);
   });
 
   test("real run prints the short '• label' line, then executes, swallowing a nonzero exit", () => {
-    const logs = captureLog(() =>
+    const logs = captureLog(() => {
       runSimpleStep(
         { tool: "sh", label: "shell noop", cmd: ["sh", "-c", "exit 1"] },
         false,
-      ),
-    );
+      );
+    });
     expect(logs).toEqual(["• shell noop"]);
   });
 
@@ -417,9 +426,9 @@ describe("reclaim-clean.ts CLI", () => {
     expect(code).toBe(0);
     const lines = out.trimEnd().split("\n");
 
-    expect(lines[0]).toMatch(/^before: /);
-    expect(lines[lines.length - 2]).toMatch(/^after: {2}/);
-    expect(lines[lines.length - 1]).toBe(
+    expect(lines[0]).toMatch(/^before: /u);
+    expect(lines.at(-2)).toMatch(/^after: {2}/u);
+    expect(lines.at(-1)).toBe(
       "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
 
@@ -458,8 +467,8 @@ describe("reclaim-clean.ts CLI", () => {
     expect(code).toBe(0);
     const lines = out.trimEnd().split("\n");
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^before: /);
-    expect(lines[1]).toMatch(/^after: {2}/);
+    expect(lines[0]).toMatch(/^before: /u);
+    expect(lines[1]).toMatch(/^after: {2}/u);
     expect(lines[2]).toBe(
       "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
@@ -474,8 +483,8 @@ describe("reclaim-clean.ts CLI", () => {
     expect(code).toBe(0);
     expect(err).not.toContain("FATAL");
     const lines = out.trimEnd().split("\n");
-    expect(lines[0]).toMatch(/^before: /);
-    expect(lines[1]).toMatch(/^after: {2}/);
+    expect(lines[0]).toMatch(/^before: /u);
+    expect(lines[1]).toMatch(/^after: {2}/u);
     expect(lines[2]).toBe(
       "✅ reclaim:clean done. Project build artifacts (node_modules/target/…) → mise run reclaim:pick. rustup/vscode-server → mise run reclaim:toolchains",
     );
@@ -484,7 +493,9 @@ describe("reclaim-clean.ts CLI", () => {
   test("real run (no --dry-run) against fixture stubs: prints '• label' lines and swallows a failing tool", () => {
     const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-real-"));
     using _cleanupStubDir = {
-      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(stubDir, { recursive: true, force: true });
+      },
     };
     makeStub(stubDir, "brew", 0);
     makeStub(stubDir, "npm", 1); // fake npm FAILS -- must not abort the rest of the pass
@@ -512,7 +523,9 @@ describe("reclaim-clean.ts CLI", () => {
     );
     // badTmpdir was never created — nothing to clean up
     using _cleanupStubDir = {
-      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(stubDir, { recursive: true, force: true });
+      },
     };
     makeStub(stubDir, "bun", 0);
     makeStub(stubDir, "npm", 0); // proves steps AFTER the failing bun step still run
@@ -534,7 +547,9 @@ describe("reclaim-clean.ts CLI", () => {
       join(tmpdir(), "cache-clean-stubs-cargo-only-"),
     );
     using _cleanupStubDir = {
-      [Symbol.dispose]: () => rmSync(stubDir, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(stubDir, { recursive: true, force: true });
+      },
     };
     makeStub(stubDir, "cargo", 0);
     const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
@@ -547,20 +562,12 @@ describe("reclaim-clean.ts CLI", () => {
   // Isolated fixture PATH with only a stub "uv" — deliberately NOT added to stubAll (that set
   // stays uv-free for the same isUvBusy-determinism reason documented above).
   describe("runHuggingfaceStep (isolated stub)", () => {
-    function makeUvStub(dir: string, echoToStderr: boolean): void {
-      const redirect = echoToStderr ? " >&2" : "";
-      writeFileSync(
-        join(dir, "uv"),
-        `#!/bin/sh\necho "UV CALLED: $@"${redirect}\nexit 0\n`,
-      );
-      chmodSync(join(dir, "uv"), 0o755);
-    }
-
     test("dry-run prints the command and never invokes uv", () => {
       const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-dry-"));
       using _cleanupStubDir = {
-        [Symbol.dispose]: () =>
-          rmSync(stubDir, { recursive: true, force: true }),
+        [Symbol.dispose]: () => {
+          rmSync(stubDir, { recursive: true, force: true });
+        },
       };
       makeUvStub(stubDir, true);
       const { out, err, code } = runScript(
@@ -577,8 +584,9 @@ describe("reclaim-clean.ts CLI", () => {
     test("real run invokes `uv run <script>`", () => {
       const stubDir = mkdtempSync(join(tmpdir(), "cache-clean-stubs-hf-real-"));
       using _cleanupStubDir = {
-        [Symbol.dispose]: () =>
-          rmSync(stubDir, { recursive: true, force: true }),
+        [Symbol.dispose]: () => {
+          rmSync(stubDir, { recursive: true, force: true });
+        },
       };
       makeUvStub(stubDir, false);
       const { out, code } = runScript(["--home", fixtureHome], {

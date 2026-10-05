@@ -49,7 +49,9 @@ console.log(
 process.stdout.write("続けるなら yes と入力: ");
 const ans = (
   await new Promise<string>((resolve) => {
-    process.stdin.once("data", (d) => resolve(d.toString()));
+    process.stdin.once("data", (d) => {
+      resolve(d.toString());
+    });
   })
 ).trim();
 

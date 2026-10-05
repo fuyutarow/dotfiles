@@ -141,6 +141,23 @@ type BaseDocumentIdentity = {
 	path: string;
 };
 
+type AddFinding = (
+	layer: Layer,
+	code: string,
+	path: string,
+	message: string,
+) => void;
+
+type RoleValidationContext = {
+	add: AddFinding;
+	conceptByAbsolute: Map<string, Concept>;
+	rawRoot: string;
+	resolvedSources: Map<string, Map<string, LocalReference>>;
+	root: string;
+	today: string;
+	verifiedByPath: Map<string, Array<{ at: string; by: string }>>;
+};
+
 type RdTypeRegistryParse = {
 	findings: Array<{ code: string; message: string }>;
 	registry?: ReadonlyMap<string, string>;
@@ -221,6 +238,49 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined => {
 // the call site and this only decides blankness.
 const nonemptyText = (value: string): boolean => value.trim().length > 0;
 
+const documentIdentityKey = (identity: RdDocumentIdentity): string =>
+	`${identity.code}\0${identity.yearMonth}`;
+
+const compareFindings = (
+	left: ResearchDocsFinding,
+	right: ResearchDocsFinding,
+): number => {
+	const layerDifference = layerOrder[left.layer] - layerOrder[right.layer];
+	if (layerDifference !== 0) return layerDifference;
+	const pathDifference = left.path.localeCompare(right.path);
+	if (pathDifference !== 0) return pathDifference;
+	const codeDifference = left.code.localeCompare(right.code);
+	if (codeDifference !== 0) return codeDifference;
+	return left.message.localeCompare(right.message);
+};
+
+const compareOkfFindings = (
+	left: ResearchDocsFinding,
+	right: ResearchDocsFinding,
+): number => {
+	const pathDifference = left.path.localeCompare(right.path);
+	if (pathDifference !== 0) return pathDifference;
+	return left.code.localeCompare(right.code);
+};
+
+const reportForbiddenFields = (
+	concept: Concept,
+	role: Role,
+	fields: string[],
+	add: AddFinding,
+): void => {
+	for (const field of fields) {
+		if (concept.meta[field] !== undefined) {
+			add(
+				"RD_SCHEMA",
+				"RDS050",
+				concept.path,
+				`${field} is forbidden for rd_role: ${role}`,
+			);
+		}
+	}
+};
+
 const posixPath = (value: string): string => value.split(sep).join("/");
 
 const insideOrEqual = (root: string, candidate: string): boolean => {
@@ -248,7 +308,7 @@ const daysInMonth = (year: number, month: number): number => {
 };
 
 const validDate = (value: string): boolean => {
-	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
 	if (
 		match?.[1] === undefined ||
 		match[2] === undefined ||
@@ -256,9 +316,9 @@ const validDate = (value: string): boolean => {
 	) {
 		return false;
 	}
-	const year = Number.parseInt(match[1], 10);
-	const month = Number.parseInt(match[2], 10);
-	const day = Number.parseInt(match[3], 10);
+	const year = Math.trunc(Number(match[1]));
+	const month = Math.trunc(Number(match[2]));
+	const day = Math.trunc(Number(match[3]));
 	return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
 };
 
@@ -269,29 +329,29 @@ const validDateTime = (value: string): boolean => {
 	// `!Number.isNaN(Date.parse(value))` conjunct could never be false and is
 	// dropped rather than reintroducing Date.
 	const match =
-		/^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(
+		/^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u.exec(
 			value,
 		);
 	return match !== null && match[1] !== undefined && validDate(match[1]);
 };
 
 const validActor = (value: string): boolean =>
-	/^(?:human|process):[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(value) ||
-	/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:+-]*$/.test(value);
+	/^(?:human|process):[A-Za-z0-9][A-Za-z0-9._@-]*$/u.test(value) ||
+	/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:+-]*$/u.test(value);
 
 const validOwner = (value: string): boolean =>
-	/^(?:human|process):[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(value);
+	/^(?:human|process):[A-Za-z0-9][A-Za-z0-9._@-]*$/u.test(value);
 
 const validAuthorityKey = (value: string): boolean =>
-	/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/.test(
+	/^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/u.test(
 		value,
 	);
 
-const rdTypeCodePattern = /^[a-z]{2,8}$/;
+const rdTypeCodePattern = /^[a-z]{2,8}$/u;
 const rdDocumentIdPattern =
-	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))$/;
+	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))$/u;
 const rdDocumentFilenamePattern =
-	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))-([a-z0-9]+(?:_[a-z0-9]+)*)\.md$/;
+	/^([a-z]{2,8})([1-9]\d{3}(?:0[1-9]|1[0-2]))_((?:00[1-9]|0[1-9]\d|[1-9]\d{2}))-([a-z0-9]+(?:_[a-z0-9]+)*)\.md$/u;
 
 const parseRdDocumentId = (value: string): RdDocumentIdentity | undefined => {
 	const match = rdDocumentIdPattern.exec(value);
@@ -335,10 +395,10 @@ const parseRdDocumentFilename = (
 
 const parseEvidenceLocator = (value: string): EvidenceLocator | undefined => {
 	if (value === "whole") return { kind: "whole" };
-	const line = /^line:([1-9]\d*)(?:-([1-9]\d*))?$/.exec(value);
+	const line = /^line:([1-9]\d*)(?:-([1-9]\d*))?$/u.exec(value);
 	if (line?.[1] !== undefined) {
-		const start = Number.parseInt(line[1], 10);
-		const end = Number.parseInt(line[2] ?? line[1], 10);
+		const start = Math.trunc(Number(line[1]));
+		const end = Math.trunc(Number(line[2] ?? line[1]));
 		if (end >= start) return { end, kind: "line", start };
 		return undefined;
 	}
@@ -348,7 +408,7 @@ const parseEvidenceLocator = (value: string): EvidenceLocator | undefined => {
 	if (!pointer.startsWith("/")) return undefined;
 	const tokens: string[] = [];
 	for (const token of pointer.slice(1).split("/")) {
-		if (/~(?:[^01]|$)/.test(token)) return undefined;
+		if (/~(?:[^01]|$)/u.test(token)) return undefined;
 		tokens.push(token.replaceAll("~1", "/").replaceAll("~0", "~"));
 	}
 	return { kind: "json-pointer", tokens };
@@ -361,7 +421,7 @@ const locatorResolutionError = async (
 	if (locator.kind === "whole") return undefined;
 	const content = await Bun.file(path).text();
 	if (locator.kind === "line") {
-		const lines = content.split(/\r?\n/);
+		const lines = content.split(/\r?\n/u);
 		if (lines.at(-1) === "") lines.pop();
 		if (locator.end > lines.length) {
 			return `line range ${locator.start}-${locator.end} exceeds ${lines.length} lines`;
@@ -375,13 +435,17 @@ const locatorResolutionError = async (
 	}
 	let current: unknown = decoded.data;
 	for (const token of locator.tokens) {
+		if (
+			Array.isArray(current) &&
+			!/^(?:0|[1-9]\d*)$/u.test(token)
+		) {
+			return `JSON array token is not an index: ${token}`;
+		}
+		const index = Math.trunc(Number(token));
+		if (Array.isArray(current) && index >= current.length) {
+			return `JSON array index is absent: ${token}`;
+		}
 		if (Array.isArray(current)) {
-			if (!/^(?:0|[1-9]\d*)$/.test(token)) {
-				return `JSON array token is not an index: ${token}`;
-			}
-			const index = Number.parseInt(token, 10);
-			if (index >= current.length)
-				return `JSON array index is absent: ${token}`;
 			current = current[index];
 			continue;
 		}
@@ -401,7 +465,7 @@ const parseMarkdown = async (
 	content: string,
 	onError: (code: string, message: string) => void,
 ): Promise<ParsedMarkdown> => {
-	const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
+	const lines = content.replace(/^\uFEFF/u, "").split(/\r?\n/u);
 	if (lines[0] !== "---") return { body: content };
 
 	const close = lines.slice(1).indexOf("---");
@@ -413,7 +477,7 @@ const parseMarkdown = async (
 	const end = close + 1;
 	const frontmatterText = lines.slice(1, end).join("\n");
 	const body = lines.slice(end + 1).join("\n");
-	const parsedAttempt = await attempt<Record<string, unknown> | undefined>(
+	const parsedAttempt = await attempt<Record<string, unknown> | null>(
 		() => {
 			const document = parseDocument(frontmatterText, {
 				prettyErrors: true,
@@ -431,13 +495,13 @@ const parseMarkdown = async (
 					duplicate === undefined ? "OKF004" : "OKF003",
 					`frontmatter is not parseable YAML: ${error?.message ?? "unknown YAML error"}`,
 				);
-				return undefined;
+				return null;
 			}
 			const value: unknown = document.toJS({ maxAliasCount: 100 });
 			const record = asRecord(value);
 			if (record === undefined) {
 				onError("OKF005", "frontmatter must parse to a YAML mapping");
-				return undefined;
+				return null;
 			}
 			return record;
 		},
@@ -449,7 +513,7 @@ const parseMarkdown = async (
 		);
 		return { body, frontmatterText };
 	}
-	if (parsedAttempt.value === undefined) {
+	if (parsedAttempt.value === null) {
 		return { body, frontmatterText };
 	}
 	return { body, frontmatterText, meta: parsedAttempt.value };
@@ -458,40 +522,39 @@ const parseMarkdown = async (
 const stripCode = (body: string): string => {
 	let inFence = false;
 	return body
-		.split(/\r?\n/)
+		.split(/\r?\n/u)
 		.map((line) => {
-			if (/^\s*(```|~~~)/.test(line)) {
+			if (/^\s*(```|~~~)/u.test(line)) {
 				inFence = !inFence;
 				return "";
 			}
 			if (inFence) return "";
-			return line.replace(/`[^`\n]*`/g, "");
+			return line.replaceAll(/`[^`\n]*`/gu, "");
 		})
 		.join("\n");
 };
 
+const normalizeLabel = (value: string): string =>
+	value.trim().replaceAll(/\s+/gu, " ").toLowerCase();
+
 const markdownLinkTargets = (body: string): string[] => {
 	const targets: string[] = [];
 	const text = stripCode(body);
-	const inlinePattern = /!?\[[^\]]*\]\(([^)]+)\)/g;
+	const inlinePattern = /!?\[[^\]]*\]\(([^)]+)\)/gu;
 	for (const match of text.matchAll(inlinePattern)) {
 		const raw = match[1]?.trim();
 		if (raw === undefined || raw === "") continue;
-		if (raw.startsWith("<")) {
-			const close = raw.indexOf(">");
-			if (close > 1) targets.push(raw.slice(1, close));
-			continue;
-		}
-		const target = raw.split(/\s+/)[0];
+		const close = raw.indexOf(">");
+		if (raw.startsWith("<") && close > 1) targets.push(raw.slice(1, close));
+		if (raw.startsWith("<")) continue;
+		const target = raw.split(/\s+/u)[0];
 		if (target !== undefined) targets.push(target);
 	}
-	const normalizeLabel = (value: string): string =>
-		value.trim().replace(/\s+/g, " ").toLowerCase();
 	const definitions = new Map<string, string>();
 	const bodyWithoutDefinitions = text
-		.split(/\r?\n/)
+		.split(/\r?\n/u)
 		.map((line) => {
-			const definition = /^\s*\[(?!\^)([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))/.exec(
+			const definition = /^\s*\[(?!\^)([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))/u.exec(
 				line,
 			);
 			const label = definition?.[1];
@@ -503,8 +566,8 @@ const markdownLinkTargets = (body: string): string[] => {
 		.join("\n");
 
 	const referencedLabels = new Set<string>();
-	const withoutExplicitReferences = bodyWithoutDefinitions.replace(
-		/!?\[([^\]]+)\]\[([^\]]*)\]/g,
+	const withoutExplicitReferences = bodyWithoutDefinitions.replaceAll(
+		/!?\[([^\]]+)\]\[([^\]]*)\]/gu,
 		(_match, label: string, reference: string) => {
 			referencedLabels.add(
 				normalizeLabel(reference === "" ? label : reference),
@@ -512,11 +575,11 @@ const markdownLinkTargets = (body: string): string[] => {
 			return "";
 		},
 	);
-	const withoutInlineLinks = withoutExplicitReferences.replace(
-		/!?\[[^\]]*\]\([^)]+\)/g,
+	const withoutInlineLinks = withoutExplicitReferences.replaceAll(
+		/!?\[[^\]]*\]\([^)]+\)/gu,
 		"",
 	);
-	for (const match of withoutInlineLinks.matchAll(/!?\[(?!\^)([^\]]+)\]/g)) {
+	for (const match of withoutInlineLinks.matchAll(/!?\[(?!\^)([^\]]+)\]/gu)) {
 		const label = match[1];
 		if (label !== undefined) referencedLabels.add(normalizeLabel(label));
 	}
@@ -530,18 +593,18 @@ const markdownLinkTargets = (body: string): string[] => {
 const nonstandardLinkSyntax = (body: string): string[] => {
 	const text = stripCode(body);
 	const findings: string[] = [];
-	if (/\[\[[^\]]+\]\]/.test(text)) findings.push("Obsidian/wiki link");
-	if (/<a\s+[^>]*href\s*=/i.test(text)) findings.push("raw HTML anchor");
+	if (/\[\[[^\]]+\]\]/u.test(text)) findings.push("Obsidian/wiki link");
+	if (/<a\s+[^>]*href\s*=/iu.test(text)) findings.push("raw HTML anchor");
 	return findings;
 };
 
 const inlineCitationIds = (body: string): Set<string> => {
 	const ids = new Set<string>();
 	const text = stripCode(body)
-		.split(/\r?\n/)
-		.filter((line) => !/^\s*\[\^[^\]]+\]:/.test(line))
+		.split(/\r?\n/u)
+		.filter((line) => !/^\s*\[\^[^\]]+\]:/u.test(line))
 		.join("\n");
-	for (const match of text.matchAll(/\[\^([^\]\s]+)\]/g)) {
+	for (const match of text.matchAll(/\[\^([^\]\s]+)\]/gu)) {
 		const id = match[1];
 		if (id !== undefined) ids.add(id);
 	}
@@ -550,7 +613,7 @@ const inlineCitationIds = (body: string): Set<string> => {
 
 const allCitationIds = (body: string): Set<string> => {
 	const ids = new Set<string>();
-	for (const match of stripCode(body).matchAll(/\[\^([^\]\s]+)\]/g)) {
+	for (const match of stripCode(body).matchAll(/\[\^([^\]\s]+)\]/gu)) {
 		const id = match[1];
 		if (id !== undefined) ids.add(id);
 	}
@@ -559,8 +622,8 @@ const allCitationIds = (body: string): Set<string> => {
 
 const citationDefinitions = (body: string): Set<string> => {
 	const ids = new Set<string>();
-	for (const line of stripCode(body).split(/\r?\n/)) {
-		const id = /^\s*\[\^([^\]]+)\]:/.exec(line)?.[1];
+	for (const line of stripCode(body).split(/\r?\n/u)) {
+		const id = /^\s*\[\^([^\]]+)\]:/u.exec(line)?.[1];
 		if (id !== undefined) ids.add(id);
 	}
 	return ids;
@@ -576,12 +639,12 @@ const localReference = async (
 	if (value === "" || value.startsWith("#")) {
 		return { absolutePath: ownerPath, kind: "bundle" };
 	}
-	if (/^file:/i.test(value)) return { kind: "outside" };
-	if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value) || value.startsWith("//")) {
+	if (/^file:/iu.test(value)) return { kind: "outside" };
+	if (/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(value) || value.startsWith("//")) {
 		return { kind: "external" };
 	}
 
-	const pathPart = value.split(/[?#]/, 1)[0] ?? "";
+	const pathPart = value.split(/[?#]/u, 1)[0] ?? "";
 	const decodedAttempt = await attempt(() => decodeURIComponent(pathPart));
 	if (!decodedAttempt.ok) return { kind: "outside" };
 	const decoded = decodedAttempt.value;
@@ -687,7 +750,7 @@ const parseSources = (
 		}
 		if (
 			(typeof item.id !== "string" || !nonemptyText(item.id)) ||
-			!/^[A-Za-z][A-Za-z0-9._-]*$/.test(item.id)
+			!/^[A-Za-z][A-Za-z0-9._-]*$/u.test(item.id)
 		) {
 			report(
 				"RDS042",
@@ -736,7 +799,7 @@ const parseReview = (
 	}
 	if (
 		(typeof candidateSha256 !== "string" || !nonemptyText(candidateSha256)) ||
-		!/^[a-f0-9]{64}$/.test(candidateSha256)
+		!/^[a-f0-9]{64}$/u.test(candidateSha256)
 	) {
 		report(
 			"RDS113",
@@ -756,10 +819,11 @@ const parseReview = (
 
 	const questions: ReviewQuestion[] = [];
 	const questionIds = new Set<string>();
-	if (!Array.isArray(value.questions) || value.questions.length === 0) {
+	const questionItems = Array.isArray(value.questions) ? value.questions : [];
+	if (!Array.isArray(value.questions) || questionItems.length === 0) {
 		report("RDS105", "rd_review.questions must be a non-empty array");
-	} else {
-		for (const [index, rawItem] of value.questions.entries()) {
+	}
+	for (const [index, rawItem] of questionItems.entries()) {
 			const item = asRecord(rawItem);
 			if (item === undefined) {
 				report("RDS106", `rd_review.questions[${index}] must be a mapping`);
@@ -773,7 +837,7 @@ const parseReview = (
 				`rd_review.questions[${index}].evidence`,
 				report,
 			);
-			if ((typeof id !== "string" || !nonemptyText(id)) || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(id)) {
+			if ((typeof id !== "string" || !nonemptyText(id)) || !/^[A-Za-z][A-Za-z0-9._-]*$/u.test(id)) {
 				report(
 					"RDS107",
 					`rd_review.questions[${index}].id must be a stable key`,
@@ -803,7 +867,6 @@ const parseReview = (
 			) {
 				questions.push({ acceptIf, evidence, id, question });
 			}
-		}
 	}
 
 	const decidedAt = value.decided_at;
@@ -822,7 +885,7 @@ const parseReview = (
 		parsedState === undefined ||
 		(typeof candidate !== "string" || !nonemptyText(candidate)) ||
 		(typeof candidateSha256 !== "string" || !nonemptyText(candidateSha256)) ||
-		!/^[a-f0-9]{64}$/.test(candidateSha256) ||
+		!/^[a-f0-9]{64}$/u.test(candidateSha256) ||
 		(typeof reviewer !== "string" || !nonemptyText(reviewer)) ||
 		!reviewer.startsWith("human:") ||
 		!validActor(reviewer) ||
@@ -862,12 +925,10 @@ const readAllMarkdown = async (root: string): Promise<string[]> => {
 		if (path.endsWith(".md") || /\.md\p{White_Space}+$/u.test(path))
 			paths.push(path);
 	}
-	return paths.sort();
+	return paths.toSorted();
 };
 
-const parseRdTypeRegistryText = async (
-	source: string,
-): Promise<RdTypeRegistryParse> => {
+const parseRdTypeRegistryText = (source: string): RdTypeRegistryParse => {
 	const decoded = jsonText.safeParse(source);
 	if (!decoded.success) {
 		return {
@@ -899,7 +960,7 @@ const parseRdTypeRegistryText = async (
 		parsed === undefined ||
 		parsed.schema !== "rd-document-types/v1" ||
 		typeCodes === undefined ||
-		Object.keys(parsed).sort().join(",") !== "schema,type_codes"
+		Object.keys(parsed).toSorted().join(",") !== "schema,type_codes"
 	) {
 		return {
 			findings: [
@@ -980,7 +1041,7 @@ const readRdTypeRegistry = async (
 		return undefined;
 	}
 
-	const parsed = await parseRdTypeRegistryText(
+	const parsed = parseRdTypeRegistryText(
 		await Bun.file(registryPath).text(),
 	);
 	for (const finding of parsed.findings) {
@@ -1012,7 +1073,7 @@ const gitRoot = async (root: string): Promise<string> => {
 	const result = await gitOutput(root, ["git", "rev-parse", "--show-toplevel"]);
 	if (result.exitCode !== 0 || result.stdout.trim() === "") {
 		throw new UsageError(
-			`--base requires a Git worktree: ${result.stderr.trim() || root}`,
+		`--base requires a Git worktree: ${result.stderr.trim() !== "" ? result.stderr.trim() : root}`,
 		);
 	}
 	return realpathSync(result.stdout.trim());
@@ -1044,7 +1105,7 @@ const parseNameStatusZ = (output: string): GitChange[] => {
 		}
 		if (firstPath === undefined || firstPath === "") continue;
 
-		if (/^[RC]/.test(status)) {
+		if (/^[RC]/u.test(status)) {
 			const newPath = fields[index];
 			index += 1;
 			changes.push({ newPath, oldPath: firstPath, status });
@@ -1066,7 +1127,7 @@ const baseDocument = async (
 		`${base}:${path}`,
 	]);
 	if (result.exitCode !== 0) return undefined;
-	return parseMarkdown(result.stdout, () => undefined);
+	return parseMarkdown(result.stdout, () => {});
 };
 
 const gitBatchText = async (
@@ -1096,7 +1157,7 @@ const gitBatchText = async (
 	}
 	if (exitCode !== 0) {
 		throw new UsageError(
-			`git cat-file failed: ${stderr.trim().slice(0, 4_000) || `exit ${exitCode}`}`,
+			`git cat-file failed: ${stderr.trim().slice(0, 4_000) !== "" ? stderr.trim().slice(0, 4_000) : `exit ${exitCode}`}`,
 		);
 	}
 
@@ -1110,13 +1171,13 @@ const gitBatchText = async (
 			throw new UsageError(`git cat-file returned no header for ${object}`);
 		}
 		const header = decoder.decode(bytes.subarray(offset, headerEnd));
-		const match = /^[0-9a-f]+ blob ([0-9]+)$/.exec(header);
+		const match = /^[0-9a-f]+ blob ([0-9]+)$/u.exec(header);
 		if (match?.[1] === undefined) {
 			throw new UsageError(
 				`git cat-file returned an invalid blob header for ${object}: ${header}`,
 			);
 		}
-		const size = Number.parseInt(match[1], 10);
+		const size = Math.trunc(Number(match[1]));
 		const contentStart = headerEnd + 1;
 		const contentEnd = contentStart + size;
 		if (contentEnd >= bytes.length || bytes[contentEnd] !== 0) {
@@ -1142,7 +1203,7 @@ const readBaseDocumentIdentities = async (
 	if (rootPath !== "") args.push("--", rootPath);
 	const tree = await gitOutput(repositoryRoot, args);
 	if (tree.exitCode !== 0) {
-		throw new UsageError(`git ls-tree failed: ${tree.stderr.trim() || base}`);
+		throw new UsageError(`git ls-tree failed: ${tree.stderr.trim() !== "" ? tree.stderr.trim() : base}`);
 	}
 
 	const paths = tree.stdout
@@ -1158,7 +1219,7 @@ const readBaseDocumentIdentities = async (
 	);
 	const identities: BaseDocumentIdentity[] = [];
 	for (const [index, path] of paths.entries()) {
-		const document = await parseMarkdown(sources[index] ?? "", () => undefined);
+		const document = await parseMarkdown(sources[index] ?? "", () => {});
 		const value = document?.meta?.rd_document_id;
 		if ((typeof value !== "string" || !nonemptyText(value))) continue;
 		const identity = parseRdDocumentId(value);
@@ -1167,20 +1228,50 @@ const readBaseDocumentIdentities = async (
 	return identities;
 };
 
+const validateSequenceAdditions = (
+	additions: Array<{ concept: Concept; identity: RdDocumentIdentity }>,
+	baseMaximum: number,
+	add: AddFinding,
+): void => {
+	const sortedAdditions = additions.toSorted((left, right) => {
+		const sequenceDifference =
+			Math.trunc(Number(left.identity.sequence)) -
+			Math.trunc(Number(right.identity.sequence));
+		if (sequenceDifference !== 0) return sequenceDifference;
+		return left.concept.path.localeCompare(right.concept.path);
+	});
+	let expected = baseMaximum + 1;
+	for (const { concept, identity } of sortedAdditions) {
+		const actual = Math.trunc(Number(identity.sequence));
+		if (actual !== expected) {
+			const expectedId = expected <= 999
+				? `${identity.code}${identity.yearMonth}_${expected
+						.toString()
+						.padStart(3, "0")}`
+				: "no ID because sequence 999 is exhausted";
+			add(
+				"RD_INTEGRITY",
+				"RDI013",
+				concept.path,
+				`new rd_document_id ${identity.id} must extend the Git-base sequence without gaps; expected ${expectedId}`,
+			);
+		}
+		expected += 1;
+	}
+};
+
 const checkDocumentSequenceAllocations = (
 	baseIdentities: BaseDocumentIdentity[],
 	concepts: Concept[],
 	rootPath: string,
 	add: (layer: Layer, code: string, path: string, message: string) => void,
 ): void => {
-	const keyFor = (identity: RdDocumentIdentity): string =>
-		`${identity.code}\0${identity.yearMonth}`;
 	const baseIds = new Set(baseIdentities.map(({ identity }) => identity.id));
 	const basePaths = new Set(baseIdentities.map(({ path }) => path));
 	const baseMaximumByKey = new Map<string, number>();
 	for (const { identity } of baseIdentities) {
-		const key = keyFor(identity);
-		const sequence = Number.parseInt(identity.sequence, 10);
+		const key = documentIdentityKey(identity);
+		const sequence = Math.trunc(Number(identity.sequence));
 		baseMaximumByKey.set(
 			key,
 			Math.max(baseMaximumByKey.get(key) ?? 0, sequence),
@@ -1202,51 +1293,28 @@ const checkDocumentSequenceAllocations = (
 			continue;
 		const identity = parseRdDocumentId(concept.documentId);
 		if (identity === undefined) continue;
-		const key = keyFor(identity);
+		const key = documentIdentityKey(identity);
 		const additions = additionsByKey.get(key) ?? [];
 		additions.push({ concept, identity });
 		additionsByKey.set(key, additions);
 	}
 
 	for (const [key, additions] of additionsByKey) {
-		additions.sort((left, right) => {
-			const sequenceDifference =
-				Number.parseInt(left.identity.sequence, 10) -
-				Number.parseInt(right.identity.sequence, 10);
-			return (
-				sequenceDifference ||
-				left.concept.path.localeCompare(right.concept.path)
-			);
-		});
-		let expected = (baseMaximumByKey.get(key) ?? 0) + 1;
-		for (const { concept, identity } of additions) {
-			const actual = Number.parseInt(identity.sequence, 10);
-			if (actual !== expected) {
-				const expectedId =
-					expected <= 999
-						? `${identity.code}${identity.yearMonth}_${expected
-								.toString()
-								.padStart(3, "0")}`
-						: "no ID because sequence 999 is exhausted";
-				add(
-					"RD_INTEGRITY",
-					"RDI013",
-					concept.path,
-					`new rd_document_id ${identity.id} must extend the Git-base sequence without gaps; expected ${expectedId}`,
-				);
-			}
-			expected += 1;
-		}
+		validateSequenceAdditions(
+			additions,
+			baseMaximumByKey.get(key) ?? 0,
+			add,
+		);
 	}
 };
 
 const stableValue = (value: unknown): unknown => {
-	if (Array.isArray(value)) return value.map(stableValue);
+	if (Array.isArray(value)) return value.map((item) => stableValue(item));
 	const record = asRecord(value);
 	if (record === undefined) return value;
 	return Object.fromEntries(
 		Object.entries(record)
-			.sort(([left], [right]) => left.localeCompare(right))
+			.toSorted(([left], [right]) => left.localeCompare(right))
 			.map(([key, item]) => [key, stableValue(item)]),
 	);
 };
@@ -1266,6 +1334,215 @@ const canonicalContentFingerprint = (document: ParsedMarkdown): string => {
 	return JSON.stringify(
 		stableValue({ body: document.body, meta: contentMeta }),
 	);
+};
+
+type GitChangeValidationContext = {
+	add: AddFinding;
+	base: string;
+	baseTypeRegistry: ReadonlyMap<string, string> | undefined;
+	currentPathsByDocumentId: Map<string, string[]>;
+	rawRoot: string;
+	registryPath: string;
+	repositoryRoot: string;
+	root: string;
+	typeRegistry: ReadonlyMap<string, string> | undefined;
+};
+
+const canonicalContentNeedsNewTimestamp = (
+	oldDocument: ParsedMarkdown,
+	currentDocument: ParsedMarkdown,
+): boolean => {
+	if (currentDocument.meta === undefined) return false;
+	if (
+		canonicalContentFingerprint(currentDocument) ===
+		canonicalContentFingerprint(oldDocument)
+	) {
+		return false;
+	}
+	const oldGenerated = asRecord(oldDocument.meta?.generated)?.at;
+	const currentGenerated = asRecord(currentDocument.meta.generated)?.at;
+	return (
+		typeof oldGenerated !== "string" ||
+		!nonemptyText(oldGenerated) ||
+		!validDateTime(oldGenerated) ||
+		typeof currentGenerated !== "string" ||
+		!nonemptyText(currentGenerated) ||
+		!validDateTime(currentGenerated) ||
+		Temporal.Instant.from(currentGenerated).epochMilliseconds <=
+			Temporal.Instant.from(oldGenerated).epochMilliseconds
+	);
+};
+
+const validateGitChange = async (
+	change: GitChange,
+	context: GitChangeValidationContext,
+): Promise<void> => {
+	const { add, base, baseTypeRegistry, currentPathsByDocumentId, rawRoot, registryPath, repositoryRoot, root, typeRegistry } = context;
+	const status = change.status[0] ?? "";
+	const oldPath = posixPath(change.oldPath);
+	const isRawPath = insideOrEqual(rawRoot, resolve(repositoryRoot, oldPath));
+	if (isRawPath && status !== "A") {
+		add(
+			"RD_INTEGRITY",
+			"RDI001",
+			oldPath,
+			`raw artifacts are append-only; Git status ${change.status} is forbidden`,
+		);
+	}
+	if (isRawPath) return;
+	if (
+		!insideOrEqual(root, resolve(repositoryRoot, oldPath)) ||
+		status === "A"
+	) {
+		return;
+	}
+
+	const oldDocument = await baseDocument(repositoryRoot, base, oldPath);
+	const oldMeta = oldDocument?.meta;
+	const oldRole = typeof oldMeta?.rd_role === "string" && nonemptyText(oldMeta.rd_role)
+		? roleType(oldMeta.rd_role)
+		: undefined;
+	const oldStatus = typeof oldMeta?.status === "string" && nonemptyText(oldMeta.status)
+		? statusType(oldMeta.status)
+		: undefined;
+	const oldReview = asRecord(oldMeta?.rd_review)?.state;
+	const oldDocumentId = typeof oldMeta?.rd_document_id === "string" &&
+		nonemptyText(oldMeta.rd_document_id)
+		? oldMeta.rd_document_id
+		: undefined;
+	for (const currentPath of oldDocumentId === undefined
+		? []
+		: currentPathsByDocumentId.get(oldDocumentId) ?? []) {
+		if (currentPath === oldPath) continue;
+		add(
+			"RD_INTEGRITY",
+			"RDI011",
+			oldPath,
+			`rd_document_id ${oldDocumentId} remains bound to its original path; ${currentPath} requires a new ID`,
+		);
+	}
+	const oldType = oldMeta?.type;
+	const hasOldType = typeof oldType === "string" && nonemptyText(oldType);
+	const baseCode = hasOldType && baseTypeRegistry !== undefined
+		? baseTypeRegistry.get(oldType)
+		: undefined;
+	if (
+		hasOldType &&
+		baseCode !== undefined &&
+		typeRegistry !== undefined &&
+		typeRegistry.get(oldType) !== baseCode
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI012",
+			registryPath,
+			`type-code mapping ${oldType} -> ${baseCode} was used by ${oldPath} and cannot be reassigned`,
+		);
+	}
+	const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
+	let currentDocument: ParsedMarkdown | undefined;
+	if (status === "M" && oldDocument !== undefined && existsSync(currentPath)) {
+		currentDocument = await parseMarkdown(
+			await Bun.file(currentPath).text(),
+			() => {},
+		);
+	}
+	if (
+		status === "M" &&
+		currentDocument !== undefined &&
+		typeof oldMeta?.rd_document_id === "string" &&
+		nonemptyText(oldMeta.rd_document_id) &&
+		currentDocument.meta?.rd_document_id !== oldMeta.rd_document_id
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI007",
+			oldPath,
+			"admitted rd_document_id is immutable; update content without reissuing identity",
+		);
+	}
+	if (
+		status === "M" &&
+		currentDocument !== undefined &&
+		typeof oldMeta?.type === "string" &&
+		nonemptyText(oldMeta.type) &&
+		currentDocument.meta?.type !== oldMeta.type
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI008",
+			oldPath,
+			"admitted type is identity-bearing and immutable; retire or delete before a new admission",
+		);
+	}
+	if (
+		status === "M" &&
+		currentDocument !== undefined &&
+		oldRole !== undefined &&
+		currentDocument.meta?.rd_role !== oldRole
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI009",
+			oldPath,
+			"rd_role is immutable for an admitted identity; retire or delete before a new admission",
+		);
+	}
+	if (oldRole === "evidence" && status !== "A") {
+		add(
+			"RD_INTEGRITY",
+			"RDI002",
+			oldPath,
+			`evidence records are append-only; Git status ${change.status} is forbidden`,
+		);
+	}
+	if (
+		(status === "D" || status === "R" || status === "T") &&
+		oldRole !== "generated_view"
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI003",
+			oldPath,
+			"durable concepts must be deprecated or superseded, not deleted, renamed, or type-changed",
+		);
+	}
+	if (status === "M" && oldRole === "canonical" && oldStatus === "deprecated") {
+		add(
+			"RD_INTEGRITY",
+			"RDI004",
+			oldPath,
+			"a previously deprecated canonical is immutable",
+		);
+	}
+	if (
+		status === "M" &&
+		oldRole === "review_request" &&
+		typeof oldReview === "string" &&
+		nonemptyText(oldReview) &&
+		oldReview !== "open"
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI005",
+			oldPath,
+			"a closed review decision is immutable; open a new request instead",
+		);
+	}
+	if (
+		status === "M" &&
+		oldRole === "canonical" &&
+		oldDocument !== undefined &&
+		currentDocument !== undefined &&
+		canonicalContentNeedsNewTimestamp(oldDocument, currentDocument)
+	) {
+		add(
+			"RD_INTEGRITY",
+			"RDI006",
+			oldPath,
+			"canonical content changed without a strictly newer generated.at",
+		);
+	}
 };
 
 const checkGitIntegrity = async (
@@ -1316,7 +1593,7 @@ const checkGitIntegrity = async (
 	]);
 	const baseTypeRegistry =
 		baseRegistrySource.exitCode === 0
-			? (await parseRdTypeRegistryText(baseRegistrySource.stdout)).registry
+			? parseRdTypeRegistryText(baseRegistrySource.stdout).registry
 			: undefined;
 	const currentPathsByDocumentId = new Map<string, string[]>();
 	for (const concept of concepts) {
@@ -1337,196 +1614,1216 @@ const checkGitIntegrity = async (
 		rawPath,
 	]);
 	if (diff.exitCode !== 0) {
-		throw new UsageError(`git diff failed: ${diff.stderr.trim() || base}`);
+		throw new UsageError(`git diff failed: ${diff.stderr.trim() !== "" ? diff.stderr.trim() : base}`);
 	}
 
+	const changeContext: GitChangeValidationContext = {
+		add,
+		base,
+		baseTypeRegistry,
+		currentPathsByDocumentId,
+		rawRoot,
+		registryPath,
+		repositoryRoot,
+		root,
+		typeRegistry,
+	};
 	for (const change of parseNameStatusZ(diff.stdout)) {
-		const status = change.status[0] ?? "";
-		const oldPath = posixPath(change.oldPath);
-		if (insideOrEqual(rawRoot, resolve(repositoryRoot, oldPath))) {
-			if (status !== "A") {
-				add(
-					"RD_INTEGRITY",
-					"RDI001",
-					oldPath,
-					`raw artifacts are append-only; Git status ${change.status} is forbidden`,
-				);
-			}
-			continue;
-		}
-		if (
-			!insideOrEqual(root, resolve(repositoryRoot, oldPath)) ||
-			status === "A"
-		) {
-			continue;
-		}
+		await validateGitChange(change, changeContext);
+	}
+};
 
-		const oldDocument = await baseDocument(repositoryRoot, base, oldPath);
-		const oldMeta = oldDocument?.meta;
-		const oldRole = (typeof oldMeta?.rd_role === "string" && nonemptyText(oldMeta?.rd_role))
-			? roleType(oldMeta.rd_role)
-			: undefined;
-		const oldStatus = (typeof oldMeta?.status === "string" && nonemptyText(oldMeta?.status))
-			? statusType(oldMeta.status)
-			: undefined;
-		const oldReview = asRecord(oldMeta?.rd_review)?.state;
-		const oldDocumentId = (typeof oldMeta?.rd_document_id === "string" && nonemptyText(oldMeta?.rd_document_id))
-			? oldMeta.rd_document_id
-			: undefined;
-		if (oldDocumentId !== undefined) {
-			for (const currentPath of currentPathsByDocumentId.get(oldDocumentId) ??
-				[]) {
-				if (currentPath === oldPath) continue;
-				add(
-					"RD_INTEGRITY",
-					"RDI011",
-					oldPath,
-					`rd_document_id ${oldDocumentId} remains bound to its original path; ${currentPath} requires a new ID`,
-				);
-			}
-		}
-		if (
-			(typeof oldMeta?.type === "string" && nonemptyText(oldMeta?.type)) &&
-			baseTypeRegistry !== undefined &&
-			typeRegistry !== undefined
-		) {
-			const baseCode = baseTypeRegistry.get(oldMeta.type);
-			if (
-				baseCode !== undefined &&
-				typeRegistry.get(oldMeta.type) !== baseCode
-			) {
-				add(
-					"RD_INTEGRITY",
-					"RDI012",
-					registryPath,
-					`type-code mapping ${oldMeta.type} -> ${baseCode} was used by ${oldPath} and cannot be reassigned`,
-				);
-			}
-		}
-		let currentDocument: ParsedMarkdown | undefined;
-		if (status === "M" && oldDocument !== undefined) {
-			const currentPath = resolve(repositoryRoot, change.newPath ?? oldPath);
-			if (existsSync(currentPath)) {
-				currentDocument = await parseMarkdown(
-					await Bun.file(currentPath).text(),
-					() => undefined,
-				);
-			}
-		}
-		if (
-			status === "M" &&
-			currentDocument !== undefined &&
-			(typeof oldMeta?.rd_document_id === "string" && nonemptyText(oldMeta?.rd_document_id)) &&
-			currentDocument?.meta?.rd_document_id !== oldMeta.rd_document_id
-		) {
+const validateIndexDocument = (
+	document: ReservedDocument,
+	add: AddFinding,
+): void => {
+	if (document.path !== "index.md") {
+		if (document.meta !== undefined) {
 			add(
-				"RD_INTEGRITY",
-				"RDI007",
-				oldPath,
-				"admitted rd_document_id is immutable; update content without reissuing identity",
+				"OKF",
+				"OKF010",
+				document.path,
+				"a non-root index.md must not have frontmatter",
 			);
 		}
-		if (
-			status === "M" &&
-			currentDocument !== undefined &&
-			(typeof oldMeta?.type === "string" && nonemptyText(oldMeta?.type)) &&
-			currentDocument?.meta?.type !== oldMeta.type
-		) {
-			add(
-				"RD_INTEGRITY",
-				"RDI008",
-				oldPath,
-				"admitted type is identity-bearing and immutable; retire or delete before a new admission",
-			);
-		}
-		if (
-			status === "M" &&
-			currentDocument !== undefined &&
-			oldRole !== undefined &&
-			currentDocument.meta?.rd_role !== oldRole
-		) {
-			add(
-				"RD_INTEGRITY",
-				"RDI009",
-				oldPath,
-				"rd_role is immutable for an admitted identity; retire or delete before a new admission",
-			);
-		}
+		return;
+	}
+	if (document.meta === undefined) return;
+	const keys = Object.keys(document.meta);
+	if (keys.length !== 1 || keys[0] !== "okf_version") {
+		add(
+			"OKF",
+			"OKF011",
+			document.path,
+			"root index frontmatter may contain only okf_version",
+		);
+	}
+	if (document.meta.okf_version !== "0.2") {
+		add(
+			"OKF",
+			"OKF012",
+			document.path,
+			'root index okf_version must be the string "0.2"',
+		);
+	}
+};
 
-		if (oldRole === "evidence" && status !== "A") {
+const validateLogDocument = (
+	document: ReservedDocument,
+	add: AddFinding,
+): void => {
+	if (document.meta !== undefined) {
+		add("OKF", "OKF013", document.path, "log.md must not have frontmatter");
+	}
+	for (const line of document.body.split(/\r?\n/u)) {
+		const heading = /^##\s+(.+?)\s*$/u.exec(line)?.[1];
+		if (heading !== undefined && !validDate(heading)) {
 			add(
-				"RD_INTEGRITY",
-				"RDI002",
-				oldPath,
-				`evidence records are append-only; Git status ${change.status} is forbidden`,
+				"OKF",
+				"OKF014",
+				document.path,
+				`level-two log heading must be YYYY-MM-DD: ${heading}`,
 			);
-		}
-		if (
-			(status === "D" || status === "R" || status === "T") &&
-			oldRole !== "generated_view"
-		) {
-			add(
-				"RD_INTEGRITY",
-				"RDI003",
-				oldPath,
-				"durable concepts must be deprecated or superseded, not deleted, renamed, or type-changed",
-			);
-		}
-		if (
-			status === "M" &&
-			oldRole === "canonical" &&
-			oldStatus === "deprecated"
-		) {
-			add(
-				"RD_INTEGRITY",
-				"RDI004",
-				oldPath,
-				"a previously deprecated canonical is immutable",
-			);
-		}
-		if (
-			status === "M" &&
-			oldRole === "review_request" &&
-			(typeof oldReview === "string" && nonemptyText(oldReview)) &&
-			oldReview !== "open"
-		) {
-			add(
-				"RD_INTEGRITY",
-				"RDI005",
-				oldPath,
-				"a closed review decision is immutable; open a new request instead",
-			);
-		}
-		if (
-			status === "M" &&
-			oldRole === "canonical" &&
-			oldDocument !== undefined &&
-			currentDocument?.meta !== undefined
-		) {
-			if (
-				canonicalContentFingerprint(currentDocument) !==
-				canonicalContentFingerprint(oldDocument)
-			) {
-				const oldGenerated = asRecord(oldMeta?.generated)?.at;
-				const currentGenerated = asRecord(currentDocument.meta.generated)?.at;
-				if (
-					(typeof oldGenerated !== "string" || !nonemptyText(oldGenerated)) ||
-					!validDateTime(oldGenerated) ||
-					(typeof currentGenerated !== "string" || !nonemptyText(currentGenerated)) ||
-					!validDateTime(currentGenerated) ||
-					Temporal.Instant.from(currentGenerated).epochMilliseconds <=
-						Temporal.Instant.from(oldGenerated).epochMilliseconds
-				) {
-					add(
-						"RD_INTEGRITY",
-						"RDI006",
-						oldPath,
-						"canonical content changed without a strictly newer generated.at",
-					);
-				}
-			}
 		}
 	}
+};
+
+const validateRegisteredType = (
+	concept: Concept,
+	typeRegistry: ReadonlyMap<string, string> | undefined,
+	add: AddFinding,
+): void => {
+	const type = concept.meta.type;
+	if (
+		typeRegistry === undefined ||
+		typeof type !== "string" ||
+		!nonemptyText(type)
+	) {
+		return;
+	}
+	const expectedCode = typeRegistry.get(type);
+	if (expectedCode === undefined) {
+		add(
+			"RD_NAMING",
+			"RDN010",
+			concept.path,
+			`type ${type} is not registered in rd-types.json`,
+		);
+		return;
+	}
+	const parsedFilename = parseRdDocumentFilename(basename(concept.path));
+	const documentId = (typeof concept.meta.rd_document_id === "string" &&
+		nonemptyText(concept.meta.rd_document_id))
+		? parseRdDocumentId(concept.meta.rd_document_id)
+		: undefined;
+	const usedCode = parsedFilename?.code ?? documentId?.code;
+	if (usedCode !== undefined && usedCode !== expectedCode) {
+		add(
+			"RD_NAMING",
+			"RDN014",
+			concept.path,
+			`type ${type} requires code ${expectedCode}; concept uses ${usedCode}`,
+		);
+	}
+};
+
+const validateProfileFieldNames = (
+	meta: Record<string, unknown>,
+	report: (code: string, message: string) => void,
+): void => {
+	for (const key of Object.keys(meta)) {
+		if (key === "timestamp") {
+			report(
+				"RDS005",
+				"timestamp is legacy v0.1; use generated.at in OKF v0.2",
+			);
+		} else if (!standardFields.has(key) && !profileFields.has(key)) {
+			report(
+				"RDS006",
+				`unknown profile field ${key}; local extensions must be declared rd_ fields`,
+			);
+		}
+	}
+};
+
+const validateGeneratedMetadata = (
+	concept: Concept,
+	generatedMeta: Record<string, unknown>,
+	report: (code: string, message: string) => void,
+): void => {
+	if (
+		(typeof generatedMeta.by !== "string" || !nonemptyText(generatedMeta.by)) ||
+		!validActor(generatedMeta.by)
+	) {
+		report("RDS012", "generated.by must use the OKF actor convention");
+	}
+	if (
+		(typeof generatedMeta.at !== "string" || !nonemptyText(generatedMeta.at)) ||
+		!validDateTime(generatedMeta.at)
+	) {
+		report(
+			"RDS013",
+			"generated.at must be an ISO-8601 datetime with timezone",
+		);
+	} else {
+		concept.generatedAt = generatedMeta.at;
+	}
+};
+
+const validateCanonicalConcept = (
+	concept: Concept,
+	status: Status,
+	context: RoleValidationContext,
+): void => {
+	const { add } = context;
+	const { meta, path } = concept;
+	reportForbiddenFields(
+		concept,
+		"canonical",
+		["rd_evidence", "rd_expires_at", "rd_generated_from", "rd_review"],
+		add,
+	);
+	if (
+		(typeof meta.rd_authority_key !== "string" ||
+			!nonemptyText(meta.rd_authority_key)) ||
+		!validAuthorityKey(meta.rd_authority_key)
+	) {
+		add(
+			"RD_SCHEMA",
+			"RDS051",
+			path,
+			"canonical requires rd_authority_key as a normalized lowercase slug",
+		);
+	}
+	if (
+		(typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) ||
+		!validOwner(meta.rd_owner)
+	) {
+		add(
+			"RD_SCHEMA",
+			"RDS052",
+			path,
+			"canonical rd_owner must be a human:<id> or process:<id> actor",
+		);
+	}
+	if (typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when)) {
+		add(
+			"RD_SCHEMA",
+			"RDS053",
+			path,
+			"canonical requires an observable rd_retire_when condition",
+		);
+	}
+	if (concept.sources.length === 0) {
+		add(
+			"RD_SCHEMA",
+			"RDS054",
+			path,
+			"canonical requires at least one evidence source",
+		);
+	}
+	if (
+		status !== "deprecated" &&
+		((typeof meta.stale_after !== "string" ||
+			!nonemptyText(meta.stale_after)) ||
+			!validDate(meta.stale_after))
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL001",
+			path,
+			"an active canonical requires stale_after",
+		);
+	}
+	if (
+		status !== "deprecated" &&
+		typeof meta.stale_after === "string" &&
+		nonemptyText(meta.stale_after) &&
+		validDate(meta.stale_after) &&
+		context.today >= meta.stale_after
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL002",
+			path,
+			`canonical is stale on ${meta.stale_after}; evaluated ${context.today}`,
+		);
+	}
+	const sourceMap = context.resolvedSources.get(concept.absolutePath) ??
+		new Map<string, LocalReference>();
+	for (const source of concept.sources) {
+		const target = sourceMap.get(source.id);
+		const targetConcept =
+			target?.absolutePath === undefined
+				? undefined
+				: context.conceptByAbsolute.get(target.absolutePath);
+		if (
+			target?.kind !== "bundle" ||
+			targetConcept?.role !== "evidence" ||
+			targetConcept.status !== "stable"
+		) {
+			add(
+				"RD_REFERENCE",
+				"RDR010",
+				path,
+				`canonical source ${source.id} must resolve to stable evidence`,
+			);
+		}
+	}
+	const inline = inlineCitationIds(concept.body);
+	for (const source of concept.sources) {
+		if (!inline.has(source.id)) {
+			add(
+				"RD_REFERENCE",
+				"RDR011",
+				path,
+				`canonical source ${source.id} is not cited by a body claim`,
+			);
+		}
+	}
+	if (status === "stable" && concept.generatedAt !== undefined) {
+		const currentGeneratedAt = Temporal.Instant.from(
+			concept.generatedAt,
+		).epochMilliseconds;
+		const hasCurrentHumanVerification = (
+			context.verifiedByPath.get(concept.absolutePath) ?? []
+		).some(
+			(event) =>
+				event.by.startsWith("human:") &&
+				Temporal.Instant.from(event.at).epochMilliseconds >= currentGeneratedAt,
+		);
+		if (!hasCurrentHumanVerification) {
+			add(
+				"RD_LIFECYCLE",
+				"RDL003",
+				path,
+				"stable canonical requires human verification at or after generated.at",
+			);
+		}
+	}
+};
+
+const validateEvidenceRawTarget = async (
+	concept: Concept,
+	target: LocalReference | undefined,
+	digest: unknown,
+	locator: EvidenceLocator | undefined,
+	add: AddFinding,
+): Promise<void> => {
+	if (target?.kind !== "raw" || target.absolutePath === undefined) {
+		add(
+			"RD_REFERENCE",
+			"RDR021",
+			concept.path,
+			"evidence source must resolve inside the raw root",
+		);
+		return;
+	}
+	const absolutePath = target.absolutePath;
+	if (!existsSync(absolutePath)) return;
+	if (!statSync(absolutePath).isFile()) {
+		add(
+			"RD_REFERENCE",
+			"RDR023",
+			concept.path,
+			"evidence source must resolve to a regular raw artifact file",
+		);
+		return;
+	}
+	if (typeof digest === "string" && nonemptyText(digest)) {
+		const actual = await sha256File(absolutePath);
+		if (actual !== digest) {
+			add(
+				"RD_INTEGRITY",
+				"RDI010",
+				concept.path,
+				`raw artifact SHA-256 mismatch: expected ${digest}, got ${actual}`,
+			);
+		}
+	}
+	if (locator !== undefined) {
+		const locatorError = await locatorResolutionError(absolutePath, locator);
+		if (locatorError !== undefined) {
+			add(
+				"RD_REFERENCE",
+				"RDR024",
+				concept.path,
+				`evidence locator does not resolve: ${locatorError}`,
+			);
+		}
+	}
+};
+
+const validateEvidenceMetadata = async (
+	concept: Concept,
+	evidenceMeta: Record<string, unknown> | undefined,
+	context: RoleValidationContext,
+): Promise<void> => {
+	const { add } = context;
+	if (evidenceMeta === undefined) {
+		add(
+			"RD_SCHEMA",
+			"RDS063",
+			concept.path,
+			"evidence requires rd_evidence with source_id, sha256, and locator",
+		);
+		return;
+	}
+	const sourceId = evidenceMeta.source_id;
+	const digest = evidenceMeta.sha256;
+	const locator = evidenceMeta.locator;
+	const locatorSpec = typeof locator === "string" && nonemptyText(locator)
+		? parseEvidenceLocator(locator)
+		: undefined;
+	if (typeof sourceId !== "string" || !nonemptyText(sourceId)) {
+		add("RD_SCHEMA", "RDS064", concept.path, "rd_evidence.source_id is required");
+	}
+	if (
+		(typeof digest !== "string" || !nonemptyText(digest)) ||
+		!/^[a-f0-9]{64}$/u.test(digest)
+	) {
+		add(
+			"RD_SCHEMA",
+			"RDS065",
+			concept.path,
+			"rd_evidence.sha256 must be 64 lowercase hex characters",
+		);
+	}
+	if (locatorSpec === undefined) {
+		add(
+			"RD_SCHEMA",
+			"RDS066",
+			concept.path,
+			"rd_evidence.locator must be whole, line:<N>[-<M>], or json-pointer:<RFC6901 pointer>",
+		);
+	}
+	const source = typeof sourceId === "string" && nonemptyText(sourceId)
+		? concept.sources.find((item) => item.id === sourceId)
+		: undefined;
+	if (source === undefined) {
+		add(
+			"RD_REFERENCE",
+			"RDR020",
+			concept.path,
+			"rd_evidence.source_id must match the sole sources[].id",
+		);
+	}
+	if (source !== undefined) {
+		const target = context.resolvedSources.get(concept.absolutePath)?.get(source.id);
+		await validateEvidenceRawTarget(
+			concept,
+			target,
+			digest,
+			locatorSpec,
+			add,
+		);
+		if (!inlineCitationIds(concept.body).has(source.id)) {
+			add(
+				"RD_REFERENCE",
+				"RDR022",
+				concept.path,
+				`evidence source ${source.id} is not cited by the observation`,
+			);
+		}
+	}
+};
+
+const validateEvidenceConcept = async (
+	concept: Concept,
+	status: Status,
+	context: RoleValidationContext,
+): Promise<void> => {
+	const { add } = context;
+	const { meta, path } = concept;
+	reportForbiddenFields(
+		concept,
+		"evidence",
+		[
+			"rd_authority_key",
+			"rd_expires_at",
+			"rd_generated_from",
+			"rd_retire_when",
+			"rd_retired_reason",
+			"rd_review",
+			"rd_supersedes",
+		],
+		add,
+	);
+	if (status !== "stable") {
+		add("RD_SCHEMA", "RDS060", path, "evidence must have status: stable");
+	}
+	if (meta.stale_after !== undefined) {
+		add(
+			"RD_SCHEMA",
+			"RDS061",
+			path,
+			"evidence records do not expire; correct them additively",
+		);
+	}
+	if (concept.sources.length !== 1) {
+		add(
+			"RD_SCHEMA",
+			"RDS062",
+			path,
+			"an evidence record must bind exactly one raw artifact",
+		);
+	}
+	await validateEvidenceMetadata(concept, asRecord(meta.rd_evidence), context);
+};
+
+const validateReviewRequestConcept = (
+	concept: Concept,
+	status: Status,
+	context: RoleValidationContext,
+): void => {
+	const { add, today } = context;
+	const { meta, path } = concept;
+	reportForbiddenFields(
+		concept,
+		"review_request",
+		[
+			"rd_authority_key",
+			"rd_evidence",
+			"rd_expires_at",
+			"rd_generated_from",
+			"rd_retired_reason",
+			"rd_supersedes",
+		],
+		add,
+	);
+	if (
+		(typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) ||
+		!validOwner(meta.rd_owner)
+	) {
+		add(
+			"RD_SCHEMA",
+			"RDS070",
+			path,
+			"review rd_owner must be a human:<id> or process:<id> actor",
+		);
+	}
+	if (typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when)) {
+		add("RD_SCHEMA", "RDS071", path, "review request requires rd_retire_when");
+	}
+	if (concept.sources.length === 0) {
+		add(
+			"RD_SCHEMA",
+			"RDS072",
+			path,
+			"review request requires candidate/evidence sources",
+		);
+	}
+	concept.review = parseReview(meta.rd_review, (code, message) => {
+		add("RD_SCHEMA", code, path, message);
+	});
+	const reviewState = concept.review?.state;
+	if (reviewState === "open" && status !== "draft") {
+		add(
+			"RD_LIFECYCLE",
+			"RDL010",
+			path,
+			"an open review request must have status: draft",
+		);
+	}
+	if (
+		reviewState === "open" &&
+		((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
+			!validDate(meta.stale_after))
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL011",
+			path,
+			"an open review request requires stale_after",
+		);
+	}
+	if (
+		reviewState === "open" &&
+		typeof meta.stale_after === "string" &&
+		nonemptyText(meta.stale_after) &&
+		validDate(meta.stale_after) &&
+		today >= meta.stale_after
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL012",
+			path,
+			`open review request expired on ${meta.stale_after}`,
+		);
+	}
+	if (reviewState === "withdrawn" && status !== "deprecated") {
+		add(
+			"RD_LIFECYCLE",
+			"RDL013",
+			path,
+			"a withdrawn review request must have status: deprecated",
+		);
+	}
+	if (
+		concept.review !== undefined &&
+		reviewState !== "open" &&
+		reviewState !== "withdrawn" &&
+		status !== "stable"
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL014",
+			path,
+			"a decided review request must have status: stable",
+		);
+	}
+};
+
+const validateGeneratedViewConcept = async (
+	concept: Concept,
+	status: Status,
+	context: RoleValidationContext,
+): Promise<void> => {
+	const { add, conceptByAbsolute, rawRoot, root, today } = context;
+	const { meta, path } = concept;
+	reportForbiddenFields(
+		concept,
+		"generated_view",
+		[
+			"rd_authority_key",
+			"rd_evidence",
+			"rd_owner",
+			"rd_retire_when",
+			"rd_retired_reason",
+			"rd_review",
+			"rd_supersedes",
+		],
+		add,
+	);
+	if (status !== "draft") {
+		add(
+			"RD_SCHEMA",
+			"RDS080",
+			path,
+			"generated_view must always have status: draft",
+		);
+	}
+	if (meta.verified !== undefined) {
+		add(
+			"RD_SCHEMA",
+			"RDS081",
+			path,
+			"generated_view must not carry verified; verify the canonical instead",
+		);
+	}
+	const generatedFrom = stringArray(
+		meta.rd_generated_from,
+		"rd_generated_from",
+		(code, message) => {
+			add("RD_SCHEMA", code, path, message);
+		},
+	);
+	if (generatedFrom.length === 0) {
+		add(
+			"RD_SCHEMA",
+			"RDS082",
+			path,
+			"generated_view requires non-empty rd_generated_from",
+		);
+	}
+	if (
+		(typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
+		!validDate(meta.stale_after)
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL020",
+			path,
+			"generated_view requires stale_after",
+		);
+	}
+	if (
+		(typeof meta.rd_expires_at !== "string" ||
+			!nonemptyText(meta.rd_expires_at)) ||
+		!validDate(meta.rd_expires_at)
+	) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL021",
+			path,
+			"generated_view requires rd_expires_at as YYYY-MM-DD",
+		);
+	} else if (meta.stale_after !== meta.rd_expires_at) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL022",
+			path,
+			"stale_after and rd_expires_at must be identical",
+		);
+	}
+	if (
+		typeof meta.rd_expires_at === "string" &&
+		nonemptyText(meta.rd_expires_at) &&
+		validDate(meta.rd_expires_at) &&
+		concept.generatedAt !== undefined
+	) {
+		const created = Temporal.Instant.from(
+			concept.generatedAt,
+		).epochMilliseconds;
+		const expires = Temporal.Instant.from(
+			`${meta.rd_expires_at}T00:00:00Z`,
+		).epochMilliseconds;
+		const days = (expires - created) / 86_400_000;
+		if (days < 0 || days > 30) {
+			add(
+				"RD_LIFECYCLE",
+				"RDL023",
+				path,
+				"generated_view expiry must be within 30 days of generated.at",
+			);
+		}
+		if (today >= meta.rd_expires_at) {
+			add(
+				"RD_LIFECYCLE",
+				"RDL024",
+				path,
+				`generated_view expired on ${meta.rd_expires_at}`,
+			);
+		}
+	}
+	if (concept.sources.length === 0) {
+		add("RD_SCHEMA", "RDS083", path, "generated_view requires sources");
+	}
+	const sourceTargets = new Set<string>();
+	for (const source of concept.sources) {
+		const target = context.resolvedSources.get(concept.absolutePath)?.get(source.id);
+		if (target?.kind !== "bundle" || target.absolutePath === undefined) {
+			add(
+				"RD_REFERENCE",
+				"RDR030",
+				path,
+				`generated_view source ${source.id} must be a durable bundle concept`,
+			);
+			continue;
+		}
+		const targetConcept = conceptByAbsolute.get(target.absolutePath);
+		if (
+			targetConcept === undefined ||
+			targetConcept.role === "generated_view"
+		) {
+			add(
+				"RD_REFERENCE",
+				"RDR031",
+				path,
+				`generated_view source ${source.id} cannot be another generated view`,
+			);
+		}
+		sourceTargets.add(target.absolutePath);
+	}
+	const derivedTargets = new Set<string>();
+	for (const targetPath of generatedFrom) {
+		const target = await localReference(
+			concept.absolutePath,
+			targetPath,
+			root,
+			rawRoot,
+		);
+		if (target.kind !== "bundle" || target.absolutePath === undefined) {
+			add(
+				"RD_REFERENCE",
+				"RDR032",
+				path,
+				`rd_generated_from must point to a durable bundle concept: ${targetPath}`,
+			);
+			continue;
+		}
+		const targetConcept = conceptByAbsolute.get(target.absolutePath);
+		if (
+			targetConcept === undefined ||
+			targetConcept.role === "generated_view"
+		) {
+			add(
+				"RD_REFERENCE",
+				"RDR033",
+				path,
+				`rd_generated_from cannot point to a generated view: ${targetPath}`,
+			);
+		}
+		derivedTargets.add(target.absolutePath);
+	}
+	if (
+		[...sourceTargets].some((targetPath) => !derivedTargets.has(targetPath)) ||
+		[...derivedTargets].some((targetPath) => !sourceTargets.has(targetPath))
+	) {
+		add(
+			"RD_REFERENCE",
+			"RDR034",
+			path,
+			"sources and rd_generated_from must resolve to the same inputs",
+		);
+	}
+};
+
+const validateRoleConcept = async (
+	concept: Concept,
+	context: RoleValidationContext,
+): Promise<void> => {
+	const role = concept.role;
+	const status = concept.status;
+	if (role === undefined || status === undefined) return;
+	if (role === "canonical") {
+		validateCanonicalConcept(concept, status, context);
+		return;
+	}
+	if (role === "evidence") {
+		await validateEvidenceConcept(concept, status, context);
+		return;
+	}
+	if (role === "review_request") {
+		validateReviewRequestConcept(concept, status, context);
+		return;
+	}
+	await validateGeneratedViewConcept(concept, status, context);
+};
+
+const resolveConceptReferencesForConcept = async (
+	concept: Concept,
+	root: string,
+	rawRoot: string,
+	add: AddFinding,
+	resolvedSources: Map<string, Map<string, LocalReference>>,
+): Promise<void> => {
+	const byId = new Map<string, LocalReference>();
+	for (const source of concept.sources) {
+		const resolved = await localReference(
+			concept.absolutePath,
+			source.resource,
+			root,
+			rawRoot,
+		);
+		byId.set(source.id, resolved);
+		if (resolved.kind === "outside") {
+			add(
+				"RD_REFERENCE",
+				"RDR001",
+				concept.path,
+				`source ${source.id} escapes the bundle and raw roots: ${source.resource}`,
+			);
+		} else if (
+			resolved.kind !== "external" &&
+			(resolved.absolutePath === undefined || !existsSync(resolved.absolutePath))
+		) {
+			add(
+				"RD_REFERENCE",
+				"RDR002",
+				concept.path,
+				`source ${source.id} does not resolve: ${source.resource}`,
+			);
+		}
+	}
+	resolvedSources.set(concept.absolutePath, byId);
+
+	const sourceIds = new Set(concept.sources.map((source) => source.id));
+	for (const citation of allCitationIds(concept.body)) {
+		if (!sourceIds.has(citation)) {
+			add(
+				"RD_REFERENCE",
+				"RDR003",
+				concept.path,
+				`footnote [^${citation}] has no matching sources[].id`,
+			);
+		}
+	}
+	const definitions = citationDefinitions(concept.body);
+	for (const citation of inlineCitationIds(concept.body)) {
+		if (!definitions.has(citation)) {
+			add(
+				"RD_REFERENCE",
+				"RDR004",
+				concept.path,
+				`inline citation [^${citation}] has no footnote definition`,
+			);
+		}
+	}
+};
+
+const resolveConceptReferences = async (
+	concepts: Concept[],
+	root: string,
+	rawRoot: string,
+	add: AddFinding,
+): Promise<Map<string, Map<string, LocalReference>>> => {
+	const resolvedSources = new Map<string, Map<string, LocalReference>>();
+	for (const concept of concepts) {
+		await resolveConceptReferencesForConcept(
+			concept,
+			root,
+			rawRoot,
+			add,
+			resolvedSources,
+		);
+	}
+	return resolvedSources;
+};
+
+const addReviewQuestionTargets = async (
+	concept: Concept,
+	question: ReviewQuestion,
+	context: RoleValidationContext,
+	requiredTargets: Set<string>,
+): Promise<void> => {
+	for (const evidencePath of question.evidence) {
+		const evidenceRef = await localReference(
+			concept.absolutePath,
+			evidencePath,
+			context.root,
+			context.rawRoot,
+		);
+		const evidence = evidenceRef.absolutePath === undefined
+			? undefined
+			: context.conceptByAbsolute.get(evidenceRef.absolutePath);
+		if (
+			evidenceRef.kind !== "bundle" ||
+			evidence?.role !== "evidence" ||
+			evidence.status !== "stable"
+		) {
+			context.add(
+				"RD_REFERENCE",
+				"RDR041",
+				concept.path,
+				`review question ${question.id} evidence must resolve to stable evidence: ${evidencePath}`,
+			);
+		}
+		if (evidenceRef.absolutePath !== undefined) {
+			requiredTargets.add(evidenceRef.absolutePath);
+		}
+	}
+};
+
+const validateReviewRequestReferences = async (
+	concept: Concept,
+	context: RoleValidationContext,
+): Promise<void> => {
+	const review = concept.review;
+	if (review === undefined) return;
+	const { add, conceptByAbsolute, rawRoot, root, resolvedSources } = context;
+	const candidateRef = await localReference(
+		concept.absolutePath,
+		review.candidate,
+		root,
+		rawRoot,
+	);
+	const candidate = candidateRef.absolutePath === undefined
+		? undefined
+		: conceptByAbsolute.get(candidateRef.absolutePath);
+	if (candidateRef.kind !== "bundle" || candidate?.role !== "canonical") {
+		add(
+			"RD_REFERENCE",
+			"RDR040",
+			concept.path,
+			"rd_review.candidate must resolve to a canonical concept",
+		);
+	} else {
+		const candidateDigest = await sha256File(candidate.absolutePath);
+		if (
+			review.state === "open" &&
+			candidateDigest !== review.candidateSha256
+		) {
+			add(
+				"RD_INTEGRITY",
+				"RDI020",
+				concept.path,
+				`review candidate SHA-256 mismatch: expected ${review.candidateSha256}, got ${candidateDigest}`,
+			);
+		}
+	}
+	const requiredTargets = new Set<string>();
+	if (candidateRef.absolutePath !== undefined) {
+		requiredTargets.add(candidateRef.absolutePath);
+	}
+	for (const question of review.questions) {
+		await addReviewQuestionTargets(concept, question, context, requiredTargets);
+	}
+	const sourceTargets = new Set<string>();
+	for (const source of concept.sources) {
+		const target = resolvedSources.get(concept.absolutePath)?.get(source.id);
+		if (target?.kind !== "bundle" || target.absolutePath === undefined) {
+			add(
+				"RD_REFERENCE",
+				"RDR042",
+				concept.path,
+				`review source ${source.id} must resolve inside the bundle`,
+			);
+			continue;
+		}
+		const targetConcept = conceptByAbsolute.get(target.absolutePath);
+		if (targetConcept?.role === "generated_view") {
+			add(
+				"RD_REFERENCE",
+				"RDR043",
+				concept.path,
+				`review source ${source.id} cannot be a generated view`,
+			);
+		}
+		sourceTargets.add(target.absolutePath);
+	}
+	if (
+		[...requiredTargets].some((path) => !sourceTargets.has(path)) ||
+		[...sourceTargets].some((path) => !requiredTargets.has(path))
+	) {
+		add(
+			"RD_REFERENCE",
+			"RDR044",
+			concept.path,
+			"review sources must exactly match candidate plus question evidence",
+		);
+	}
+};
+
+const validateConceptMarkdownLinks = async (
+	concept: Concept,
+	context: RoleValidationContext,
+): Promise<void> => {
+	for (const syntax of nonstandardLinkSyntax(concept.body)) {
+		context.add(
+			"RD_REFERENCE",
+			"RDR052",
+			concept.path,
+			`${syntax} is outside this OKF profile; use a standard Markdown link`,
+		);
+	}
+	for (const targetValue of markdownLinkTargets(concept.body)) {
+		const target = await localReference(
+			concept.absolutePath,
+			targetValue,
+			context.root,
+			context.rawRoot,
+		);
+		if (target.kind === "external") continue;
+		if (
+			target.kind === "outside" ||
+			target.absolutePath === undefined ||
+			!existsSync(target.absolutePath)
+		) {
+			context.add(
+				"RD_REFERENCE",
+				"RDR050",
+				concept.path,
+				`broken or escaping Markdown link: ${targetValue}`,
+			);
+			continue;
+		}
+		const targetConcept = context.conceptByAbsolute.get(target.absolutePath);
+		if (
+			concept.role !== "generated_view" &&
+			targetConcept?.role === "generated_view"
+		) {
+			context.add(
+				"RD_REFERENCE",
+				"RDR051",
+				concept.path,
+				`durable concept must not depend on generated view: ${targetValue}`,
+			);
+		}
+	}
+};
+
+const validateSuccessorsForConcept = async (
+	concept: Concept,
+	root: string,
+	rawRoot: string,
+	conceptByAbsolute: Map<string, Concept>,
+	successorIncoming: Map<string, Concept[]>,
+	successorEdges: Map<string, string[]>,
+	add: AddFinding,
+): Promise<void> => {
+	const edges: string[] = [];
+	for (const targetPath of concept.supersedes) {
+		const targetRef = await localReference(
+			concept.absolutePath,
+			targetPath,
+			root,
+			rawRoot,
+		);
+		const target = targetRef.absolutePath === undefined
+			? undefined
+			: conceptByAbsolute.get(targetRef.absolutePath);
+		if (targetRef.kind !== "bundle" || target?.role !== "canonical") {
+			add(
+				"RD_REFERENCE",
+				"RDR060",
+				concept.path,
+				`rd_supersedes must resolve to a canonical: ${targetPath}`,
+			);
+			continue;
+		}
+		if (target.status !== "deprecated") {
+			add(
+				"RD_LIFECYCLE",
+				"RDL031",
+				concept.path,
+				`rd_supersedes target must be deprecated: ${target.path}`,
+			);
+		}
+		if (target.meta.rd_authority_key !== concept.meta.rd_authority_key) {
+			add(
+				"RD_LIFECYCLE",
+				"RDL032",
+				concept.path,
+				`rd_supersedes target has a different authority key: ${target.path}`,
+			);
+		}
+		edges.push(target.absolutePath);
+		const incoming = successorIncoming.get(target.absolutePath) ?? [];
+		incoming.push(concept);
+		successorIncoming.set(target.absolutePath, incoming);
+	}
+	successorEdges.set(concept.absolutePath, edges);
+};
+
+const validateRetiredCanonical = (
+	concept: Concept,
+	successorIncoming: Map<string, Concept[]>,
+	add: AddFinding,
+): void => {
+	const incoming = successorIncoming.get(concept.absolutePath) ?? [];
+	const hasReason =
+		typeof concept.meta.rd_retired_reason === "string" &&
+		nonemptyText(concept.meta.rd_retired_reason);
+	if (incoming.length === 0 && !hasReason) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL034",
+			concept.path,
+			"deprecated canonical needs exactly one successor or rd_retired_reason",
+		);
+	}
+	if (incoming.length > 1) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL035",
+			concept.path,
+			`deprecated canonical has ${incoming.length} successors`,
+		);
+	}
+	if (incoming.length > 0 && hasReason) {
+		add(
+			"RD_LIFECYCLE",
+			"RDL036",
+			concept.path,
+			"deprecated canonical must use a successor or retirement reason, not both",
+		);
+	}
+};
+
+const validateCanonicalAdmission = async (
+	concept: Concept,
+	reviews: Concept[],
+	add: AddFinding,
+): Promise<void> => {
+	const candidateDigest = await sha256File(concept.absolutePath);
+	if (concept.status === "draft") {
+		const open = reviews.filter(
+			(item) =>
+				item.review?.state === "open" &&
+				item.review.candidateSha256 === candidateDigest,
+		);
+		if (open.length !== 1) {
+			add(
+				"RD_ADMISSION",
+				"RDA001",
+				concept.path,
+				`draft canonical requires exactly one open review request for its current SHA-256; found ${open.length}`,
+			);
+		}
+	}
+	if (concept.status === "stable" && concept.generatedAt !== undefined) {
+		const generatedAt = Temporal.Instant.from(
+			concept.generatedAt,
+		).epochMilliseconds;
+		const accepted = reviews.filter(
+			(item) =>
+				item.review?.state === "accepted" &&
+				item.review.candidateSha256 === candidateDigest &&
+				item.review.decidedAt !== undefined &&
+				Temporal.Instant.from(item.review.decidedAt).epochMilliseconds >=
+					generatedAt,
+		);
+		if (accepted.length === 0) {
+			add(
+				"RD_ADMISSION",
+				"RDA002",
+				concept.path,
+				"stable canonical requires an accepted review for its current SHA-256 decided at or after generated.at",
+			);
+		}
+	}
+};
+
+const addIndexLinkTargets = async (
+	index: ReservedDocument,
+	queue: string[],
+	context: RoleValidationContext,
+	reservedByAbsolute: Map<string, ReservedDocument>,
+): Promise<Set<string>> => {
+	const reachableConcepts = new Set<string>();
+	for (const syntax of nonstandardLinkSyntax(index.body)) {
+		context.add(
+			"RD_REFERENCE",
+			"RDR052",
+			index.path,
+			`${syntax} is outside this OKF profile; use a standard Markdown link`,
+		);
+	}
+	for (const targetValue of markdownLinkTargets(index.body)) {
+		const target = await localReference(
+			index.absolutePath,
+			targetValue,
+			context.root,
+			context.rawRoot,
+		);
+		if (target.kind === "external") continue;
+		if (
+			target.kind !== "bundle" ||
+			target.absolutePath === undefined ||
+			!existsSync(target.absolutePath)
+		) {
+			context.add(
+				"RD_REFERENCE",
+				"RDR070",
+				index.path,
+				`index link does not resolve inside the bundle: ${targetValue}`,
+			);
+			continue;
+		}
+		const reservedTarget = reservedByAbsolute.get(target.absolutePath);
+		if (reservedTarget?.kind === "index") queue.push(target.absolutePath);
+		if (context.conceptByAbsolute.has(target.absolutePath)) {
+			reachableConcepts.add(target.absolutePath);
+		}
+	}
+	return reachableConcepts;
+};
+
+const collectReachableConcepts = async (
+	rootIndex: ReservedDocument | undefined,
+	reservedByAbsolute: Map<string, ReservedDocument>,
+	context: RoleValidationContext,
+): Promise<Set<string>> => {
+	const reachableConcepts = new Set<string>();
+	if (rootIndex === undefined) return reachableConcepts;
+	const seenIndexes = new Set<string>();
+	const queue = [rootIndex.absolutePath];
+	while (queue.length > 0) {
+		const indexPath = queue.shift();
+		if (indexPath === undefined || seenIndexes.has(indexPath)) continue;
+		seenIndexes.add(indexPath);
+		const index = reservedByAbsolute.get(indexPath);
+		if (index?.kind !== "index") continue;
+		const currentReachable = await addIndexLinkTargets(
+			index,
+			queue,
+			context,
+			reservedByAbsolute,
+		);
+		for (const path of currentReachable) reachableConcepts.add(path);
+	}
+	return reachableConcepts;
 };
 
 export async function inspectResearchDocs(
@@ -1579,7 +2876,7 @@ export async function inspectResearchDocs(
 		const name = basename(path);
 		const parsed = await parseMarkdown(
 			await Bun.file(absolutePath).text(),
-			(code, message) => add("OKF", code, path, message),
+			(code, message) =>{  add("OKF", code, path, message); },
 		);
 
 		if (name === "index.md" || name === "log.md") {
@@ -1611,59 +2908,13 @@ export async function inspectResearchDocs(
 
 	const rootIndex = reserved.find((item) => item.path === "index.md");
 	for (const document of reserved) {
-		if (document.kind === "index") {
-			if (document.path !== "index.md" && document.meta !== undefined) {
-				add(
-					"OKF",
-					"OKF010",
-					document.path,
-					"a non-root index.md must not have frontmatter",
-				);
-			}
-			if (document.path === "index.md" && document.meta !== undefined) {
-				const keys = Object.keys(document.meta);
-				if (keys.length !== 1 || keys[0] !== "okf_version") {
-					add(
-						"OKF",
-						"OKF011",
-						document.path,
-						"root index frontmatter may contain only okf_version",
-					);
-				}
-				if (document.meta.okf_version !== "0.2") {
-					add(
-						"OKF",
-						"OKF012",
-						document.path,
-						'root index okf_version must be the string "0.2"',
-					);
-				}
-			}
-		} else {
-			if (document.meta !== undefined) {
-				add("OKF", "OKF013", document.path, "log.md must not have frontmatter");
-			}
-			for (const line of document.body.split(/\r?\n/)) {
-				const heading = /^##\s+(.+?)\s*$/.exec(line)?.[1];
-				if (heading !== undefined && !validDate(heading)) {
-					add(
-						"OKF",
-						"OKF014",
-						document.path,
-						`level-two log heading must be YYYY-MM-DD: ${heading}`,
-					);
-				}
-			}
-		}
+		if (document.kind === "index") validateIndexDocument(document, add);
+		else validateLogDocument(document, add);
 	}
 
 	if (mode === "okf") {
-		findings.sort(
-			(left, right) =>
-				left.path.localeCompare(right.path) ||
-				left.code.localeCompare(right.code),
-		);
-		return { concepts: concepts.length, findings, mode, root };
+		const sortedFindings = findings.toSorted(compareOkfFindings);
+		return { concepts: concepts.length, findings: sortedFindings, mode, root };
 	}
 	const typeRegistry = await readRdTypeRegistry(root, add);
 
@@ -1695,8 +2946,8 @@ export async function inspectResearchDocs(
 	}
 	const verifiedByPath = new Map<string, Array<{ at: string; by: string }>>();
 	for (const concept of concepts) {
-		const report = (code: string, message: string): void =>
-			add("RD_SCHEMA", code, concept.path, message);
+		const report = (code: string, message: string): void =>{ 
+			add("RD_SCHEMA", code, concept.path, message); };
 		const meta = concept.meta;
 		const parsedFilename = parseRdDocumentFilename(basename(concept.path));
 		if (parsedFilename === undefined) {
@@ -1732,40 +2983,8 @@ export async function inspectResearchDocs(
 				`filename ID ${parsedFilename.id} does not match rd_document_id ${parsedDocumentId.id}`,
 			);
 		}
-		if (typeRegistry !== undefined && (typeof meta.type === "string" && nonemptyText(meta.type))) {
-			const expectedCode = typeRegistry.get(meta.type);
-			if (expectedCode === undefined) {
-				add(
-					"RD_NAMING",
-					"RDN010",
-					concept.path,
-					`type ${meta.type} is not registered in rd-types.json`,
-				);
-			} else {
-				const usedCode = parsedFilename?.code ?? parsedDocumentId?.code;
-				if (usedCode !== undefined && usedCode !== expectedCode) {
-					add(
-						"RD_NAMING",
-						"RDN014",
-						concept.path,
-						`type ${meta.type} requires code ${expectedCode}; concept uses ${usedCode}`,
-					);
-				}
-			}
-		}
-		for (const key of Object.keys(meta)) {
-			if (key === "timestamp") {
-				report(
-					"RDS005",
-					"timestamp is legacy v0.1; use generated.at in OKF v0.2",
-				);
-			} else if (!standardFields.has(key) && !profileFields.has(key)) {
-				report(
-					"RDS006",
-					`unknown profile field ${key}; local extensions must be declared rd_ fields`,
-				);
-			}
-		}
+		validateRegisteredType(concept, typeRegistry, add);
+		validateProfileFieldNames(meta, report);
 		if ((typeof meta.title !== "string" || !nonemptyText(meta.title))) {
 			report("RDS007", "profile requires a non-empty title");
 		}
@@ -1794,29 +3013,16 @@ export async function inspectResearchDocs(
 		const generatedMeta = asRecord(meta.generated);
 		if (generatedMeta === undefined) {
 			report("RDS011", "generated must be a mapping with by and at");
-		} else {
-			if (
-				(typeof generatedMeta.by !== "string" || !nonemptyText(generatedMeta.by)) ||
-				!validActor(generatedMeta.by)
-			) {
-				report("RDS012", "generated.by must use the OKF actor convention");
-			}
-			if (
-				(typeof generatedMeta.at !== "string" || !nonemptyText(generatedMeta.at)) ||
-				!validDateTime(generatedMeta.at)
-			) {
-				report(
-					"RDS013",
-					"generated.at must be an ISO-8601 datetime with timezone",
-				);
-			} else {
-				concept.generatedAt = generatedMeta.at;
-			}
 		}
-		if (meta.stale_after !== undefined) {
-			if ((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) || !validDate(meta.stale_after)) {
-				report("RDS014", "stale_after must be YYYY-MM-DD");
-			}
+		if (generatedMeta !== undefined) {
+			validateGeneratedMetadata(concept, generatedMeta, report);
+		}
+		if (
+			meta.stale_after !== undefined &&
+			((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
+				!validDate(meta.stale_after))
+		) {
+			report("RDS014", "stale_after must be YYYY-MM-DD");
 		}
 		concept.sources = parseSources(meta.sources, report);
 		verifiedByPath.set(
@@ -1839,8 +3045,7 @@ export async function inspectResearchDocs(
 		conceptsByDocumentId.set(concept.documentId, entries);
 	}
 	for (const [documentId, entries] of conceptsByDocumentId) {
-		if (entries.length < 2) continue;
-		for (const concept of entries) {
+		for (const concept of entries.length < 2 ? [] : entries) {
 			add(
 				"RD_NAMING",
 				"RDN015",
@@ -1854,746 +3059,34 @@ export async function inspectResearchDocs(
 		concepts.map((concept) => [concept.absolutePath, concept]),
 	);
 
-	const resolvedSources = new Map<string, Map<string, LocalReference>>();
+	const resolvedSources = await resolveConceptReferences(
+		concepts,
+		root,
+		rawRoot,
+		add,
+	);
+
+	const roleContext: RoleValidationContext = {
+		add,
+		conceptByAbsolute,
+		rawRoot,
+		resolvedSources,
+		root,
+		today,
+		verifiedByPath,
+	};
 	for (const concept of concepts) {
-		const byId = new Map<string, LocalReference>();
-		for (const source of concept.sources) {
-			const resolved = await localReference(
-				concept.absolutePath,
-				source.resource,
-				root,
-				rawRoot,
-			);
-			byId.set(source.id, resolved);
-			if (resolved.kind === "outside") {
-				add(
-					"RD_REFERENCE",
-					"RDR001",
-					concept.path,
-					`source ${source.id} escapes the bundle and raw roots: ${source.resource}`,
-				);
-			} else if (
-				resolved.kind !== "external" &&
-				(resolved.absolutePath === undefined ||
-					!existsSync(resolved.absolutePath))
-			) {
-				add(
-					"RD_REFERENCE",
-					"RDR002",
-					concept.path,
-					`source ${source.id} does not resolve: ${source.resource}`,
-				);
-			}
-		}
-		resolvedSources.set(concept.absolutePath, byId);
-
-		const sourceIds = new Set(concept.sources.map((source) => source.id));
-		for (const citation of allCitationIds(concept.body)) {
-			if (!sourceIds.has(citation)) {
-				add(
-					"RD_REFERENCE",
-					"RDR003",
-					concept.path,
-					`footnote [^${citation}] has no matching sources[].id`,
-				);
-			}
-		}
-		const definitions = citationDefinitions(concept.body);
-		for (const citation of inlineCitationIds(concept.body)) {
-			if (!definitions.has(citation)) {
-				add(
-					"RD_REFERENCE",
-					"RDR004",
-					concept.path,
-					`inline citation [^${citation}] has no footnote definition`,
-				);
-			}
-		}
-	}
-
-	for (const concept of concepts) {
-		const meta = concept.meta;
-		const role = concept.role;
-		const status = concept.status;
-		if (role === undefined || status === undefined) continue;
-
-		const forbidden = (fields: string[]): void => {
-			for (const field of fields) {
-				if (meta[field] !== undefined) {
-					add(
-						"RD_SCHEMA",
-						"RDS050",
-						concept.path,
-						`${field} is forbidden for rd_role: ${role}`,
-					);
-				}
-			}
-		};
-
-		if (role === "canonical") {
-			forbidden([
-				"rd_evidence",
-				"rd_expires_at",
-				"rd_generated_from",
-				"rd_review",
-			]);
-			if (
-				(typeof meta.rd_authority_key !== "string" || !nonemptyText(meta.rd_authority_key)) ||
-				!validAuthorityKey(meta.rd_authority_key)
-			) {
-				add(
-					"RD_SCHEMA",
-					"RDS051",
-					concept.path,
-					"canonical requires rd_authority_key as a normalized lowercase slug",
-				);
-			}
-			if ((typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) || !validOwner(meta.rd_owner)) {
-				add(
-					"RD_SCHEMA",
-					"RDS052",
-					concept.path,
-					"canonical rd_owner must be a human:<id> or process:<id> actor",
-				);
-			}
-			if ((typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when))) {
-				add(
-					"RD_SCHEMA",
-					"RDS053",
-					concept.path,
-					"canonical requires an observable rd_retire_when condition",
-				);
-			}
-			if (concept.sources.length === 0) {
-				add(
-					"RD_SCHEMA",
-					"RDS054",
-					concept.path,
-					"canonical requires at least one evidence source",
-				);
-			}
-			if (status !== "deprecated") {
-				if (
-					(typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
-					!validDate(meta.stale_after)
-				) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL001",
-						concept.path,
-						"an active canonical requires stale_after",
-					);
-				} else if (today >= meta.stale_after) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL002",
-						concept.path,
-						`canonical is stale on ${meta.stale_after}; evaluated ${today}`,
-					);
-				}
-			}
-			const sourceMap = resolvedSources.get(concept.absolutePath) ??
-				new Map<string, LocalReference>();
-			for (const source of concept.sources) {
-				const target = sourceMap.get(source.id);
-				const targetConcept =
-					target?.absolutePath === undefined
-						? undefined
-						: conceptByAbsolute.get(target.absolutePath);
-				if (
-					target?.kind !== "bundle" ||
-					targetConcept?.role !== "evidence" ||
-					targetConcept.status !== "stable"
-				) {
-					add(
-						"RD_REFERENCE",
-						"RDR010",
-						concept.path,
-						`canonical source ${source.id} must resolve to stable evidence`,
-					);
-				}
-			}
-			const inline = inlineCitationIds(concept.body);
-			for (const source of concept.sources) {
-				if (!inline.has(source.id)) {
-					add(
-						"RD_REFERENCE",
-						"RDR011",
-						concept.path,
-						`canonical source ${source.id} is not cited by a body claim`,
-					);
-				}
-			}
-			if (status === "stable" && concept.generatedAt !== undefined) {
-				const currentGeneratedAt = Temporal.Instant.from(
-					concept.generatedAt,
-				).epochMilliseconds;
-				const hasCurrentHumanVerification = (
-					verifiedByPath.get(concept.absolutePath) ?? []
-				).some(
-					(event) =>
-						event.by.startsWith("human:") &&
-						Temporal.Instant.from(event.at).epochMilliseconds >=
-							currentGeneratedAt,
-				);
-				if (!hasCurrentHumanVerification) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL003",
-						concept.path,
-						"stable canonical requires human verification at or after generated.at",
-					);
-				}
-			}
-		}
-
-		if (role === "evidence") {
-			forbidden([
-				"rd_authority_key",
-				"rd_expires_at",
-				"rd_generated_from",
-				"rd_retire_when",
-				"rd_retired_reason",
-				"rd_review",
-				"rd_supersedes",
-			]);
-			if (status !== "stable") {
-				add(
-					"RD_SCHEMA",
-					"RDS060",
-					concept.path,
-					"evidence must have status: stable",
-				);
-			}
-			if (meta.stale_after !== undefined) {
-				add(
-					"RD_SCHEMA",
-					"RDS061",
-					concept.path,
-					"evidence records do not expire; correct them additively",
-				);
-			}
-			if (concept.sources.length !== 1) {
-				add(
-					"RD_SCHEMA",
-					"RDS062",
-					concept.path,
-					"an evidence record must bind exactly one raw artifact",
-				);
-			}
-			const evidenceMeta = asRecord(meta.rd_evidence);
-			if (evidenceMeta === undefined) {
-				add(
-					"RD_SCHEMA",
-					"RDS063",
-					concept.path,
-					"evidence requires rd_evidence with source_id, sha256, and locator",
-				);
-			} else {
-				const sourceId = evidenceMeta.source_id;
-				const digest = evidenceMeta.sha256;
-				const locator = evidenceMeta.locator;
-				const locatorSpec = (typeof locator === "string" && nonemptyText(locator))
-					? parseEvidenceLocator(locator)
-					: undefined;
-				if ((typeof sourceId !== "string" || !nonemptyText(sourceId))) {
-					add(
-						"RD_SCHEMA",
-						"RDS064",
-						concept.path,
-						"rd_evidence.source_id is required",
-					);
-				}
-				if ((typeof digest !== "string" || !nonemptyText(digest)) || !/^[a-f0-9]{64}$/.test(digest)) {
-					add(
-						"RD_SCHEMA",
-						"RDS065",
-						concept.path,
-						"rd_evidence.sha256 must be 64 lowercase hex characters",
-					);
-				}
-				if (locatorSpec === undefined) {
-					add(
-						"RD_SCHEMA",
-						"RDS066",
-						concept.path,
-						"rd_evidence.locator must be whole, line:<N>[-<M>], or json-pointer:<RFC6901 pointer>",
-					);
-				}
-				const source = (typeof sourceId === "string" && nonemptyText(sourceId))
-					? concept.sources.find((item) => item.id === sourceId)
-					: undefined;
-				if (source === undefined) {
-					add(
-						"RD_REFERENCE",
-						"RDR020",
-						concept.path,
-						"rd_evidence.source_id must match the sole sources[].id",
-					);
-				} else {
-					const target = resolvedSources
-						.get(concept.absolutePath)
-						?.get(source.id);
-					if (target?.kind !== "raw" || target.absolutePath === undefined) {
-						add(
-							"RD_REFERENCE",
-							"RDR021",
-							concept.path,
-							"evidence source must resolve inside the raw root",
-						);
-					} else if (existsSync(target.absolutePath)) {
-						if (!statSync(target.absolutePath).isFile()) {
-							add(
-								"RD_REFERENCE",
-								"RDR023",
-								concept.path,
-								"evidence source must resolve to a regular raw artifact file",
-							);
-						} else {
-							if ((typeof digest === "string" && nonemptyText(digest))) {
-								const actual = await sha256File(target.absolutePath);
-								if (actual !== digest) {
-									add(
-										"RD_INTEGRITY",
-										"RDI010",
-										concept.path,
-										`raw artifact SHA-256 mismatch: expected ${digest}, got ${actual}`,
-									);
-								}
-							}
-							if (locatorSpec !== undefined) {
-								const locatorError = await locatorResolutionError(
-									target.absolutePath,
-									locatorSpec,
-								);
-								if (locatorError !== undefined) {
-									add(
-										"RD_REFERENCE",
-										"RDR024",
-										concept.path,
-										`evidence locator does not resolve: ${locatorError}`,
-									);
-								}
-							}
-						}
-					}
-					if (!inlineCitationIds(concept.body).has(source.id)) {
-						add(
-							"RD_REFERENCE",
-							"RDR022",
-							concept.path,
-							`evidence source ${source.id} is not cited by the observation`,
-						);
-					}
-				}
-			}
-		}
-
-		if (role === "review_request") {
-			forbidden([
-				"rd_authority_key",
-				"rd_evidence",
-				"rd_expires_at",
-				"rd_generated_from",
-				"rd_retired_reason",
-				"rd_supersedes",
-			]);
-			if ((typeof meta.rd_owner !== "string" || !nonemptyText(meta.rd_owner)) || !validOwner(meta.rd_owner)) {
-				add(
-					"RD_SCHEMA",
-					"RDS070",
-					concept.path,
-					"review rd_owner must be a human:<id> or process:<id> actor",
-				);
-			}
-			if ((typeof meta.rd_retire_when !== "string" || !nonemptyText(meta.rd_retire_when))) {
-				add(
-					"RD_SCHEMA",
-					"RDS071",
-					concept.path,
-					"review request requires rd_retire_when",
-				);
-			}
-			if (concept.sources.length === 0) {
-				add(
-					"RD_SCHEMA",
-					"RDS072",
-					concept.path,
-					"review request requires candidate/evidence sources",
-				);
-			}
-			concept.review = parseReview(meta.rd_review, (code, message) =>
-				add("RD_SCHEMA", code, concept.path, message),
-			);
-			if (concept.review?.state === "open") {
-				if (status !== "draft") {
-					add(
-						"RD_LIFECYCLE",
-						"RDL010",
-						concept.path,
-						"an open review request must have status: draft",
-					);
-				}
-				if (
-					(typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) ||
-					!validDate(meta.stale_after)
-				) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL011",
-						concept.path,
-						"an open review request requires stale_after",
-					);
-				} else if (today >= meta.stale_after) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL012",
-						concept.path,
-						`open review request expired on ${meta.stale_after}`,
-					);
-				}
-			} else if (concept.review?.state === "withdrawn") {
-				if (status !== "deprecated") {
-					add(
-						"RD_LIFECYCLE",
-						"RDL013",
-						concept.path,
-						"a withdrawn review request must have status: deprecated",
-					);
-				}
-			} else if (concept.review !== undefined && status !== "stable") {
-				add(
-					"RD_LIFECYCLE",
-					"RDL014",
-					concept.path,
-					"a decided review request must have status: stable",
-				);
-			}
-		}
-
-		if (role === "generated_view") {
-			forbidden([
-				"rd_authority_key",
-				"rd_evidence",
-				"rd_owner",
-				"rd_retire_when",
-				"rd_retired_reason",
-				"rd_review",
-				"rd_supersedes",
-			]);
-			if (status !== "draft") {
-				add(
-					"RD_SCHEMA",
-					"RDS080",
-					concept.path,
-					"generated_view must always have status: draft",
-				);
-			}
-			if (meta.verified !== undefined) {
-				add(
-					"RD_SCHEMA",
-					"RDS081",
-					concept.path,
-					"generated_view must not carry verified; verify the canonical instead",
-				);
-			}
-			const generatedFrom = stringArray(
-				meta.rd_generated_from,
-				"rd_generated_from",
-				(code, message) => add("RD_SCHEMA", code, concept.path, message),
-			);
-			if (generatedFrom.length === 0) {
-				add(
-					"RD_SCHEMA",
-					"RDS082",
-					concept.path,
-					"generated_view requires non-empty rd_generated_from",
-				);
-			}
-			if ((typeof meta.stale_after !== "string" || !nonemptyText(meta.stale_after)) || !validDate(meta.stale_after)) {
-				add(
-					"RD_LIFECYCLE",
-					"RDL020",
-					concept.path,
-					"generated_view requires stale_after",
-				);
-			}
-			if (
-				(typeof meta.rd_expires_at !== "string" || !nonemptyText(meta.rd_expires_at)) ||
-				!validDate(meta.rd_expires_at)
-			) {
-				add(
-					"RD_LIFECYCLE",
-					"RDL021",
-					concept.path,
-					"generated_view requires rd_expires_at as YYYY-MM-DD",
-				);
-			} else if (meta.stale_after !== meta.rd_expires_at) {
-				add(
-					"RD_LIFECYCLE",
-					"RDL022",
-					concept.path,
-					"stale_after and rd_expires_at must be identical",
-				);
-			}
-			if (
-				(typeof meta.rd_expires_at === "string" && nonemptyText(meta.rd_expires_at)) &&
-				validDate(meta.rd_expires_at) &&
-				concept.generatedAt !== undefined
-			) {
-				const created = Temporal.Instant.from(
-					concept.generatedAt,
-				).epochMilliseconds;
-				const expires = Temporal.Instant.from(
-					`${meta.rd_expires_at}T00:00:00Z`,
-				).epochMilliseconds;
-				const days = (expires - created) / 86_400_000;
-				if (days < 0 || days > 30) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL023",
-						concept.path,
-						"generated_view expiry must be within 30 days of generated.at",
-					);
-				}
-				if (today >= meta.rd_expires_at) {
-					add(
-						"RD_LIFECYCLE",
-						"RDL024",
-						concept.path,
-						`generated_view expired on ${meta.rd_expires_at}`,
-					);
-				}
-			}
-			if (concept.sources.length === 0) {
-				add(
-					"RD_SCHEMA",
-					"RDS083",
-					concept.path,
-					"generated_view requires sources",
-				);
-			}
-			const sourceTargets = new Set<string>();
-			for (const source of concept.sources) {
-				const target = resolvedSources
-					.get(concept.absolutePath)
-					?.get(source.id);
-				if (target?.kind !== "bundle" || target.absolutePath === undefined) {
-					add(
-						"RD_REFERENCE",
-						"RDR030",
-						concept.path,
-						`generated_view source ${source.id} must be a durable bundle concept`,
-					);
-					continue;
-				}
-				const targetConcept = conceptByAbsolute.get(target.absolutePath);
-				if (
-					targetConcept === undefined ||
-					targetConcept.role === "generated_view"
-				) {
-					add(
-						"RD_REFERENCE",
-						"RDR031",
-						concept.path,
-						`generated_view source ${source.id} cannot be another generated view`,
-					);
-				}
-				sourceTargets.add(target.absolutePath);
-			}
-			const derivedTargets = new Set<string>();
-			for (const path of generatedFrom) {
-				const target = await localReference(
-					concept.absolutePath,
-					path,
-					root,
-					rawRoot,
-				);
-				if (target.kind !== "bundle" || target.absolutePath === undefined) {
-					add(
-						"RD_REFERENCE",
-						"RDR032",
-						concept.path,
-						`rd_generated_from must point to a durable bundle concept: ${path}`,
-					);
-					continue;
-				}
-				const targetConcept = conceptByAbsolute.get(target.absolutePath);
-				if (
-					targetConcept === undefined ||
-					targetConcept.role === "generated_view"
-				) {
-					add(
-						"RD_REFERENCE",
-						"RDR033",
-						concept.path,
-						`rd_generated_from cannot point to a generated view: ${path}`,
-					);
-				}
-				derivedTargets.add(target.absolutePath);
-			}
-			if (
-				[...sourceTargets].some((path) => !derivedTargets.has(path)) ||
-				[...derivedTargets].some((path) => !sourceTargets.has(path))
-			) {
-				add(
-					"RD_REFERENCE",
-					"RDR034",
-					concept.path,
-					"sources and rd_generated_from must resolve to the same inputs",
-				);
-			}
-		}
+		await validateRoleConcept(concept, roleContext);
 	}
 
 	for (const concept of concepts.filter(
 		(item) => item.role === "review_request",
 	)) {
-		const review = concept.review;
-		if (review === undefined) continue;
-		const candidateRef = await localReference(
-			concept.absolutePath,
-			review.candidate,
-			root,
-			rawRoot,
-		);
-		const candidate =
-			candidateRef.absolutePath === undefined
-				? undefined
-				: conceptByAbsolute.get(candidateRef.absolutePath);
-		if (candidateRef.kind !== "bundle" || candidate?.role !== "canonical") {
-			add(
-				"RD_REFERENCE",
-				"RDR040",
-				concept.path,
-				"rd_review.candidate must resolve to a canonical concept",
-			);
-		} else {
-			const candidateDigest = await sha256File(candidate.absolutePath);
-			if (
-				review.state === "open" &&
-				candidateDigest !== review.candidateSha256
-			) {
-				add(
-					"RD_INTEGRITY",
-					"RDI020",
-					concept.path,
-					`review candidate SHA-256 mismatch: expected ${review.candidateSha256}, got ${candidateDigest}`,
-				);
-			}
-		}
-		const requiredTargets = new Set<string>();
-		if (candidateRef.absolutePath !== undefined) {
-			requiredTargets.add(candidateRef.absolutePath);
-		}
-		for (const question of review.questions) {
-			for (const evidencePath of question.evidence) {
-				const evidenceRef = await localReference(
-					concept.absolutePath,
-					evidencePath,
-					root,
-					rawRoot,
-				);
-				const evidence =
-					evidenceRef.absolutePath === undefined
-						? undefined
-						: conceptByAbsolute.get(evidenceRef.absolutePath);
-				if (
-					evidenceRef.kind !== "bundle" ||
-					evidence?.role !== "evidence" ||
-					evidence.status !== "stable"
-				) {
-					add(
-						"RD_REFERENCE",
-						"RDR041",
-						concept.path,
-						`review question ${question.id} evidence must resolve to stable evidence: ${evidencePath}`,
-					);
-				}
-				if (evidenceRef.absolutePath !== undefined) {
-					requiredTargets.add(evidenceRef.absolutePath);
-				}
-			}
-		}
-		const sourceTargets = new Set<string>();
-		for (const source of concept.sources) {
-			const target = resolvedSources.get(concept.absolutePath)?.get(source.id);
-			if (target?.kind !== "bundle" || target.absolutePath === undefined) {
-				add(
-					"RD_REFERENCE",
-					"RDR042",
-					concept.path,
-					`review source ${source.id} must resolve inside the bundle`,
-				);
-				continue;
-			}
-			const targetConcept = conceptByAbsolute.get(target.absolutePath);
-			if (targetConcept?.role === "generated_view") {
-				add(
-					"RD_REFERENCE",
-					"RDR043",
-					concept.path,
-					`review source ${source.id} cannot be a generated view`,
-				);
-			}
-			sourceTargets.add(target.absolutePath);
-		}
-		if (
-			[...requiredTargets].some((path) => !sourceTargets.has(path)) ||
-			[...sourceTargets].some((path) => !requiredTargets.has(path))
-		) {
-			add(
-				"RD_REFERENCE",
-				"RDR044",
-				concept.path,
-				"review sources must exactly match candidate plus question evidence",
-			);
-		}
+		await validateReviewRequestReferences(concept, roleContext);
 	}
 
 	for (const concept of concepts) {
-		for (const syntax of nonstandardLinkSyntax(concept.body)) {
-			add(
-				"RD_REFERENCE",
-				"RDR052",
-				concept.path,
-				`${syntax} is outside this OKF profile; use a standard Markdown link`,
-			);
-		}
-		for (const targetValue of markdownLinkTargets(concept.body)) {
-			const target = await localReference(
-				concept.absolutePath,
-				targetValue,
-				root,
-				rawRoot,
-			);
-			if (target.kind === "external") continue;
-			if (
-				target.kind === "outside" ||
-				target.absolutePath === undefined ||
-				!existsSync(target.absolutePath)
-			) {
-				add(
-					"RD_REFERENCE",
-					"RDR050",
-					concept.path,
-					`broken or escaping Markdown link: ${targetValue}`,
-				);
-				continue;
-			}
-			const targetConcept = conceptByAbsolute.get(target.absolutePath);
-			if (
-				concept.role !== "generated_view" &&
-				targetConcept?.role === "generated_view"
-			) {
-				add(
-					"RD_REFERENCE",
-					"RDR051",
-					concept.path,
-					`durable concept must not depend on generated view: ${targetValue}`,
-				);
-			}
-		}
+		await validateConceptMarkdownLinks(concept, roleContext);
 	}
 
 	const activeByAuthority = new Map<string, Concept[]>();
@@ -2610,64 +3103,28 @@ export async function inspectResearchDocs(
 		activeByAuthority.set(concept.meta.rd_authority_key, entries);
 	}
 	for (const [key, entries] of activeByAuthority) {
-		if (entries.length > 1) {
-			for (const concept of entries) {
-				add(
-					"RD_LIFECYCLE",
-					"RDL030",
-					concept.path,
-					`authority key ${key} has ${entries.length} active canonicals`,
-				);
-			}
+		for (const concept of entries.length > 1 ? entries : []) {
+			add(
+				"RD_LIFECYCLE",
+				"RDL030",
+				concept.path,
+				`authority key ${key} has ${entries.length} active canonicals`,
+			);
 		}
 	}
 
 	const successorIncoming = new Map<string, Concept[]>();
 	const successorEdges = new Map<string, string[]>();
 	for (const concept of concepts.filter((item) => item.role === "canonical")) {
-		const edges: string[] = [];
-		for (const targetPath of concept.supersedes) {
-			const targetRef = await localReference(
-				concept.absolutePath,
-				targetPath,
-				root,
-				rawRoot,
-			);
-			const target =
-				targetRef.absolutePath === undefined
-					? undefined
-					: conceptByAbsolute.get(targetRef.absolutePath);
-			if (targetRef.kind !== "bundle" || target?.role !== "canonical") {
-				add(
-					"RD_REFERENCE",
-					"RDR060",
-					concept.path,
-					`rd_supersedes must resolve to a canonical: ${targetPath}`,
-				);
-				continue;
-			}
-			if (target.status !== "deprecated") {
-				add(
-					"RD_LIFECYCLE",
-					"RDL031",
-					concept.path,
-					`rd_supersedes target must be deprecated: ${target.path}`,
-				);
-			}
-			if (target.meta.rd_authority_key !== concept.meta.rd_authority_key) {
-				add(
-					"RD_LIFECYCLE",
-					"RDL032",
-					concept.path,
-					`rd_supersedes target has a different authority key: ${target.path}`,
-				);
-			}
-			edges.push(target.absolutePath);
-			const incoming = successorIncoming.get(target.absolutePath) ?? [];
-			incoming.push(concept);
-			successorIncoming.set(target.absolutePath, incoming);
-		}
-		successorEdges.set(concept.absolutePath, edges);
+		await validateSuccessorsForConcept(
+			concept,
+			root,
+			rawRoot,
+			conceptByAbsolute,
+			successorIncoming,
+			successorEdges,
+			add,
+		);
 	}
 
 	const visitState = new Map<string, "done" | "visiting">();
@@ -2697,32 +3154,7 @@ export async function inspectResearchDocs(
 	for (const concept of concepts.filter(
 		(item) => item.role === "canonical" && item.status === "deprecated",
 	)) {
-		const incoming = successorIncoming.get(concept.absolutePath) ?? [];
-		const hasReason = (typeof concept.meta.rd_retired_reason === "string" && nonemptyText(concept.meta.rd_retired_reason));
-		if (incoming.length === 0 && !hasReason) {
-			add(
-				"RD_LIFECYCLE",
-				"RDL034",
-				concept.path,
-				"deprecated canonical needs exactly one successor or rd_retired_reason",
-			);
-		}
-		if (incoming.length > 1) {
-			add(
-				"RD_LIFECYCLE",
-				"RDL035",
-				concept.path,
-				`deprecated canonical has ${incoming.length} successors`,
-			);
-		}
-		if (incoming.length > 0 && hasReason) {
-			add(
-				"RD_LIFECYCLE",
-				"RDL036",
-				concept.path,
-				"deprecated canonical must use a successor or retirement reason, not both",
-			);
-		}
+		validateRetiredCanonical(concept, successorIncoming, add);
 	}
 
 	const reviewsByCandidate = new Map<string, Concept[]>();
@@ -2739,95 +3171,17 @@ export async function inspectResearchDocs(
 	}
 	for (const concept of concepts.filter((item) => item.role === "canonical")) {
 		const reviews = reviewsByCandidate.get(concept.absolutePath) ?? [];
-		const candidateDigest = await sha256File(concept.absolutePath);
-		if (concept.status === "draft") {
-			const open = reviews.filter(
-				(item) =>
-					item.review?.state === "open" &&
-					item.review.candidateSha256 === candidateDigest,
-			);
-			if (open.length !== 1) {
-				add(
-					"RD_ADMISSION",
-					"RDA001",
-					concept.path,
-					`draft canonical requires exactly one open review request for its current SHA-256; found ${open.length}`,
-				);
-			}
-		}
-		if (concept.status === "stable" && concept.generatedAt !== undefined) {
-			const generatedAt = Temporal.Instant.from(
-				concept.generatedAt,
-			).epochMilliseconds;
-			const accepted = reviews.filter(
-				(item) =>
-					item.review?.state === "accepted" &&
-					item.review.candidateSha256 === candidateDigest &&
-					item.review.decidedAt !== undefined &&
-					Temporal.Instant.from(item.review.decidedAt).epochMilliseconds >=
-						generatedAt,
-			);
-			if (accepted.length === 0) {
-				add(
-					"RD_ADMISSION",
-					"RDA002",
-					concept.path,
-					"stable canonical requires an accepted review for its current SHA-256 decided at or after generated.at",
-				);
-			}
-		}
+		await validateCanonicalAdmission(concept, reviews, add);
 	}
 
 	const reservedByAbsolute = new Map(
 		reserved.map((document) => [document.absolutePath, document]),
 	);
-	const reachableConcepts = new Set<string>();
-	if (rootIndex !== undefined) {
-		const seenIndexes = new Set<string>();
-		const queue = [rootIndex.absolutePath];
-		while (queue.length > 0) {
-			const indexPath = queue.shift();
-			if (indexPath === undefined || seenIndexes.has(indexPath)) continue;
-			seenIndexes.add(indexPath);
-			const index = reservedByAbsolute.get(indexPath);
-			if (index?.kind !== "index") continue;
-			for (const syntax of nonstandardLinkSyntax(index.body)) {
-				add(
-					"RD_REFERENCE",
-					"RDR052",
-					index.path,
-					`${syntax} is outside this OKF profile; use a standard Markdown link`,
-				);
-			}
-			for (const targetValue of markdownLinkTargets(index.body)) {
-				const target = await localReference(
-					index.absolutePath,
-					targetValue,
-					root,
-					rawRoot,
-				);
-				if (target.kind === "external") continue;
-				if (
-					target.kind !== "bundle" ||
-					target.absolutePath === undefined ||
-					!existsSync(target.absolutePath)
-				) {
-					add(
-						"RD_REFERENCE",
-						"RDR070",
-						index.path,
-						`index link does not resolve inside the bundle: ${targetValue}`,
-					);
-					continue;
-				}
-				const reservedTarget = reservedByAbsolute.get(target.absolutePath);
-				if (reservedTarget?.kind === "index") queue.push(target.absolutePath);
-				if (conceptByAbsolute.has(target.absolutePath)) {
-					reachableConcepts.add(target.absolutePath);
-				}
-			}
-		}
-	}
+	const reachableConcepts = await collectReachableConcepts(
+		rootIndex,
+		reservedByAbsolute,
+		roleContext,
+	);
 	for (const concept of concepts) {
 		if (
 			concept.role !== "generated_view" &&
@@ -2853,14 +3207,8 @@ export async function inspectResearchDocs(
 		);
 	}
 
-	findings.sort(
-		(left, right) =>
-			layerOrder[left.layer] - layerOrder[right.layer] ||
-			left.path.localeCompare(right.path) ||
-			left.code.localeCompare(right.code) ||
-			left.message.localeCompare(right.message),
-	);
-	return { concepts: concepts.length, findings, mode, root };
+	const sortedFindings = findings.toSorted(compareFindings);
+	return { concepts: concepts.length, findings: sortedFindings, mode, root };
 }
 
 function rejectPrototypeFlag(type: string, flag: string): void {
@@ -2938,11 +3286,13 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-	main().catch((error) => {
+	const mainAttempt = await attempt(main);
+	if (!mainAttempt.ok) {
+		const error = mainAttempt.error;
 		process.stderr.write(
 			`FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
 				"usage: bun research-docs-check.ts --root <knowledge-bundle> [--raw-root <raw>] [--mode okf|profile] [--today YYYY-MM-DD] [--base <commit-ish>]\n",
 		);
 		process.exitCode = 2;
-	});
+	}
 }

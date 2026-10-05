@@ -177,12 +177,12 @@ function scrubLedger(dotfiles: string, names: string[]): void {
   const kept = Object.fromEntries(
     Object.entries(skills.data).filter(([key]) => !names.includes(key)),
   );
-  fromThrowable(() =>
+  fromThrowable(() => {
     writeFileSync(
       path,
       `${JSON.stringify({ ...doc.data, skills: kept }, null, 2)}\n`,
-    ),
-  )();
+    );
+  })();
 }
 
 function main(): void {
@@ -310,9 +310,9 @@ function main(): void {
   );
   if (stowaways.length > 0) {
     for (const n of stowaways) {
-      fromThrowable(() =>
-        rmSync(`${skillsDir}/${n}`, { recursive: true, force: true }),
-      )();
+      fromThrowable(() => {
+        rmSync(`${skillsDir}/${n}`, { recursive: true, force: true });
+      })();
       print(
         `STOWAWAY: removed ${skillsDir}/${n} — the CLI installed it without being asked ` +
           "(see vendor-skill.ts header note 4)",

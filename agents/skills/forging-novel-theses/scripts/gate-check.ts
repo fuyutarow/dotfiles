@@ -41,7 +41,7 @@ const operationValues = [
 const groundedControl = "NONE — grounded control";
 const collapseRecovery =
 	"ONE targeted regeneration in an unoccupied legitimate cell; then COVERAGE GAP";
-const humanAttestationPattern = /^HUMAN:[^@\s]+@[^@\s]+$/i;
+const humanAttestationPattern = /^HUMAN:[^@\s]+@[^@\s]+$/iu;
 const donorCheckPath = resolvePath(
 	import.meta.dir,
 	"../../systematizing-knowledge/scripts/check-donor-set.ts",
@@ -91,7 +91,7 @@ type Gate = Readonly<{
 
 type ArgvType = "known-flag" | "unknown-flag" | "argument";
 
-function rejectPrototypeFlag(
+function rejectPrototypeFlagBase(
 	type: ArgvType,
 	flag: string,
 	_flagValue?: string,
@@ -105,13 +105,13 @@ const legacyV1Flag = "legacy-v1";
 const legacyV1FlagError =
 	"legacy v1 compatibility requires exactly one bare --legacy-v1 token";
 
-function createGateCheckArgvGuard(): typeof rejectPrototypeFlag {
+function createGateCheckArgvGuard(): typeof rejectPrototypeFlagBase {
 	let legacyV1Seen = false;
 	return (type, flag, flagValue) => {
-		rejectPrototypeFlag(type, flag, flagValue);
+		rejectPrototypeFlagBase(type, flag, flagValue);
 		if (type === "argument") return;
 		const normalized = `${flag}${flagValue ?? ""}`
-			.replace(/[^A-Za-z0-9]/g, "")
+			.replaceAll(/[^A-Za-z0-9]/gu, "")
 			.toLowerCase();
 		if (!normalized.includes("legacyv1")) return;
 		if (
@@ -127,23 +127,23 @@ function createGateCheckArgvGuard(): typeof rejectPrototypeFlag {
 }
 
 function fieldPattern(label: string): RegExp {
-	const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 	return new RegExp(
 		String.raw`^\s*(?:[-*+]\s+|#{1,6}\s+)?(?:\*\*|__)?${escaped}(?:(?:\*\*|__)\s*[：:]|\s*[：:](?:\*\*|__)?)`,
-		"i",
+		"iu",
 	);
 }
 
 function valueAfterColon(line: string): string {
-	const normalized = line.replace(/←.*$/, "").replaceAll("：", ":");
+	const normalized = line.replace(/←.*$/u, "").replaceAll("：", ":");
 	const index = normalized.indexOf(":");
 	return index === -1
 		? ""
 		: normalized
 				.slice(index + 1)
 				.trim()
-				.replace(/^(?:\*\*|__)\s*/, "")
-				.replace(/^　+|　+$/g, "");
+				.replace(/^(?:\*\*|__)\s*/u, "")
+				.replaceAll(/^　+|　+$/gu, "");
 }
 
 function readField(
@@ -168,17 +168,17 @@ function duplicateFields(
 function placeholder(value: string): boolean {
 	return (
 		value === "" ||
-		/\[\.\.\.\]|\[…\]|\[ *\]/.test(value) ||
-		/^(未回答|未記入|未定|TBD|N\/?A|NA|-|—|ー|―|\?+)$/i.test(value)
+		/\[\.\.\.\]|\[…\]|\[ *\]/u.test(value) ||
+		/^(未回答|未記入|未定|TBD|N\/?A|NA|-|—|ー|―|\?+)$/iu.test(value)
 	);
 }
 
 function located(value: string): boolean {
 	const fileLine =
-		/(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/i.test(value);
-	const externalSource = /\bdoi:\S+|https?:\/\/\S+/i.test(value);
+		/(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/iu.test(value);
+	const externalSource = /\bdoi:\S+|https?:\/\/\S+/iu.test(value);
 	const externalAnchor =
-		/#[A-Za-z0-9._:-]+|\b(?:p{1,2}\.\s*|p{1,2}\s+|pages?\s+|§\s*|section\s+|table\s+|figure\s+|fig\.\s*)[A-Za-z0-9.-]+/i.test(
+		/#[A-Za-z0-9._:-]+|\b(?:p{1,2}\.\s*|p{1,2}\s+|pages?\s+|§\s*|section\s+|table\s+|figure\s+|fig\.\s*)[A-Za-z0-9.-]+/iu.test(
 			value,
 		);
 	return fileLine || (externalSource && externalAnchor);
@@ -190,7 +190,7 @@ function sameResolvedFile(first: string, second: string): boolean {
 }
 
 function stableId(value: string): boolean {
-	return /^[A-Za-z][A-Za-z0-9._-]*$/.test(value);
+	return /^[A-Za-z][A-Za-z0-9._-]*$/u.test(value);
 }
 
 function commaSeparatedIds(value: string): readonly string[] | undefined {
@@ -206,7 +206,7 @@ function coordinateParts(
 	value: string,
 ): Readonly<{ detail?: string; token: string }> | undefined {
 	const match = value.match(
-		/^([A-Z]+(?:-[A-Z]+)*)(?:\s*(?:—|–|:|\s-\s)\s*(.+))?$/i,
+		/^([A-Z]+(?:-[A-Z]+)*)(?:\s*(?:—|–|:|\s-\s)\s*(.+))?$/iu,
 	);
 	if (match === null) return undefined;
 	const token = match[1]?.toUpperCase();
@@ -227,7 +227,7 @@ function validateCoordinate(
 		if (parts.token === "OTHER" && placeholder(parts.detail ?? "")) {
 			return `${field}: OTHER must name the open-set value`;
 		}
-		return undefined;
+		return void 0;
 	};
 }
 
@@ -244,12 +244,12 @@ function validateSeedProvenance(value: string): string | undefined {
 		return "Seed provenance must name the specific seed or source after the token";
 	}
 	if (parts?.token !== "TACIT") return undefined;
-	if (/\bUNELICITED\b/i.test(detail)) {
+	if (/\bUNELICITED\b/iu.test(detail)) {
 		return "TACIT seed cannot cite an UNELICITED answer";
 	}
-	const citesPacket = /blind[- ]spot packet/i.test(detail);
-	const citesProbe = /\b(?:probe\s*)?P\d+\b/i.test(detail);
-	const humanTokens = detail.match(/\bHUMAN:[^\s,;]+/gi) ?? [];
+	const citesPacket = /blind[- ]spot packet/iu.test(detail);
+	const citesProbe = /\b(?:probe\s*)?P\d+\b/iu.test(detail);
+	const humanTokens = detail.match(/\bHUMAN:[^\s,;]+/giu) ?? [];
 	const citesHuman =
 		humanTokens.length === 1 &&
 		humanAttestationPattern.test(humanTokens[0] ?? "");
@@ -261,15 +261,15 @@ function validateSeedProvenance(value: string): string | undefined {
 
 function validatePremise(value: string): string | undefined {
 	if (value === groundedControl) return undefined;
-	if (/^NONE\b/i.test(value)) {
+	if (/^NONE\b/iu.test(value)) {
 		return `Premise challenged must be specific or exactly ${groundedControl}`;
 	}
 	if (value.length < 10) return "Premise challenged is too vague to audit";
 	if (
-		/^(?:a |the )?(?:premise|assumption|default|status quo|conventional wisdom|current approach)(?: is (?:wrong|false))?\.?$/i.test(
+		/^(?:a |the )?(?:premise|assumption|default|status quo|conventional wisdom|current approach)(?: is (?:wrong|false))?\.?$/iu.test(
 			value,
 		) ||
-		/^(?:前提|仮定|常識|従来手法)(?:を疑う|が間違い)?$/.test(value)
+		/^(?:前提|仮定|常識|従来手法)(?:を疑う|が間違い)?$/u.test(value)
 	) {
 		return "Premise challenged names a category, not a specific premise";
 	}
@@ -278,7 +278,7 @@ function validatePremise(value: string): string | undefined {
 
 function validateTransformationTrace(value: string): string | undefined {
 	if (
-		/^(?:use|apply|take|adopt)?\s*(?:a\s+)?(?:more\s+)?(?:innovative|holistic|novel|creative|adaptive|ai[- ]powered)(?:\s+and\s+(?:innovative|holistic|novel|creative|adaptive|ai[- ]powered))*\s+(?:approach|method|strategy)\.?$/i.test(
+		/^(?:use|apply|take|adopt)?\s*(?:a\s+)?(?:more\s+)?(?:innovative|holistic|novel|creative|adaptive|ai[- ]powered)(?:\s+and\s+(?:innovative|holistic|novel|creative|adaptive|ai[- ]powered))*\s+(?:approach|method|strategy)\.?$/iu.test(
 			value,
 		)
 	) {
@@ -288,7 +288,7 @@ function validateTransformationTrace(value: string): string | undefined {
 		return "Transformation trace must expose a before-state, operation, and after-state";
 	}
 	if (
-		!/(?:->|→|=>|\breplac|\btransform|\bremove|\bsubstitut|\btransfer|\bdecompos|\bcoupl|\bgenerali[sz]|\bbound|\bfrom\b.+\bto\b|置換|変換|除去|転移|分解|結合|一般化|境界)/i.test(
+		!/(?:->|→|=>|\breplac|\btransform|\bremove|\bsubstitut|\btransfer|\bdecompos|\bcoupl|\bgenerali[sz]|\bbound|\bfrom\b.+\bto\b|置換|変換|除去|転移|分解|結合|一般化|境界)/iu.test(
 			value,
 		)
 	) {
@@ -300,7 +300,7 @@ function validateTransformationTrace(value: string): string | undefined {
 function validateClaim(value: string): string | undefined {
 	if (value.length < 20) return "Thesis claim is too vague to inspect";
 	if (
-		/^(?:use|apply|adopt)\s+(?:an?\s+)?(?:innovative|holistic|novel|creative).+$/i.test(
+		/^(?:use|apply|adopt)\s+(?:an?\s+)?(?:innovative|holistic|novel|creative).+$/iu.test(
 			value,
 		)
 	) {
@@ -312,10 +312,10 @@ function validateClaim(value: string): string | undefined {
 function validatePrediction(value: string): string | undefined {
 	if (value.length < 20) return "New testable prediction is too vague";
 	if (
-		/^(?:research\s+)?(?:results?|outcomes?|performance|quality|accuracy)\s+(?:will\s+)?(?:improve|increase|be better)\.?$/i.test(
+		/^(?:research\s+)?(?:results?|outcomes?|performance|quality|accuracy)\s+(?:will\s+)?(?:improve|increase|be better)\.?$/iu.test(
 			value,
 		) ||
-		/^(?:研究)?(?:結果|成果|性能|品質|精度)(?:が|は)?(?:改善|向上)する。?$/.test(
+		/^(?:研究)?(?:結果|成果|性能|品質|精度)(?:が|は)?(?:改善|向上)する。?$/u.test(
 			value,
 		)
 	) {
@@ -327,14 +327,14 @@ function validatePrediction(value: string): string | undefined {
 function validateDiscriminator(value: string): string | undefined {
 	if (value.length < 24) return "New discriminator is too vague";
 	if (
-		/^(?:results?|outcomes?|performance)\s+(?:will\s+)?(?:differ|be different|improve|be better)\.?$/i.test(
+		/^(?:results?|outcomes?|performance)\s+(?:will\s+)?(?:differ|be different|improve|be better)\.?$/iu.test(
 			value,
 		)
 	) {
 		return "New discriminator states only difference or improvement";
 	}
 	if (
-		!/(?:\bvs\.?\b|\bversus\b|\bwhereas\b|\brather than\b|\bwhile\b|\bbut\b|\bcompared\b|\bonly\b|\bif\b.+\bthen\b|に対して|一方|なら|比較|有無|差)/i.test(
+		!/(?:\bvs\.?\b|\bversus\b|\bwhereas\b|\brather than\b|\bwhile\b|\bbut\b|\bcompared\b|\bonly\b|\bif\b.+\bthen\b|に対して|一方|なら|比較|有無|差)/iu.test(
 			value,
 		)
 	) {
@@ -344,8 +344,8 @@ function validateDiscriminator(value: string): string | undefined {
 }
 
 function validateFrameUpdate(value: string): string | undefined {
-	if (/^NO$/i.test(value)) return undefined;
-	if (/^YES\s*(?:—|–|:|\s-\s)\s*\S.+$/i.test(value)) return undefined;
+	if (/^NO$/iu.test(value)) return undefined;
+	if (/^YES\s*(?:—|–|:|\s-\s)\s*\S.+$/iu.test(value)) return undefined;
 	return "Frame update flag must be NO or YES with the frame change";
 }
 
@@ -356,7 +356,7 @@ function validateDonorSet(value: string): string | undefined {
 }
 
 function frozenReference(value: string): FrozenReference | undefined {
-	const match = value.match(/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/);
+	const match = value.match(/^path=(\S.+?)\s*;\s*sha256=([a-f0-9]{64})$/u);
 	const path = match?.[1]?.trim();
 	const digest = match?.[2];
 	if (path === undefined || digest === undefined || path.length < 3) {
@@ -374,11 +374,11 @@ function validateDonorIds(value: string): string | undefined {
 }
 
 function validateSourceComparison(value: string): string | undefined {
-	if (/^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/.test(value)) {
+	if (/^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/u.test(value)) {
 		if (
-			/hypothesis seed/i.test(value) &&
-			/no abstract schema|not (?:an? )?schema/i.test(value) &&
-			/no(?: [^;,.]+)? target transport|target transport.*not established/i.test(
+			/hypothesis seed/iu.test(value) &&
+			/no abstract schema|not (?:an? )?schema/iu.test(value) &&
+			/no(?: [^;,.]+)? target transport|target transport.*not established/iu.test(
 				value,
 			)
 		) {
@@ -387,7 +387,7 @@ function validateSourceComparison(value: string): string | undefined {
 		return "SINGLE-DONOR LIMIT must retain hypothesis-seed, no-schema, and no-target-transport limits";
 	}
 	if (
-		/compar(?:e|ed|ison)|common relation|共通.*関係|比較/i.test(value) &&
+		/compar(?:e|ed|ison)|common relation|共通.*関係|比較/iu.test(value) &&
 		value.length >= 32
 	) {
 		return undefined;
@@ -404,8 +404,8 @@ function validateSourceRelation(value: string): string | undefined {
 
 function validateCorrespondence(value: string): string | undefined {
 	const pairs = value
-		.split(/\s*;\s*/)
-		.filter((part) => /(?:=|->|→)/.test(part));
+		.split(/\s*;\s*/u)
+		.filter((part) => /(?:=|->|→)/u.test(part));
 	if (pairs.length < 2) {
 		return "Correspondence map needs at least two explicit source-role to target-role pairs";
 	}
@@ -413,7 +413,7 @@ function validateCorrespondence(value: string): string | undefined {
 }
 
 function validatePreservedRelation(value: string): string | undefined {
-	if (value.length < 24 || /^(?:everything|all|same|identical)$/i.test(value)) {
+	if (value.length < 24 || /^(?:everything|all|same|identical)$/iu.test(value)) {
 		return "Preserved relation must name the bounded relation, not claim universal identity";
 	}
 	return undefined;
@@ -422,7 +422,7 @@ function validatePreservedRelation(value: string): string | undefined {
 function validateNonCorrespondence(value: string): string | undefined {
 	if (
 		value.length < 24 ||
-		/^(?:none|n\/a|domains? differ|different domains?)\.?$/i.test(value)
+		/^(?:none|n\/a|domains? differ|different domains?)\.?$/iu.test(value)
 	) {
 		return "Non-correspondence must name a concrete unmapped property or constraint";
 	}
@@ -432,7 +432,7 @@ function validateNonCorrespondence(value: string): string | undefined {
 function validateTransferBoundary(value: string): string | undefined {
 	if (value.length < 24) return "Transfer boundary is too vague";
 	if (
-		!/(?:\bwhen\b|\bif\b|\bunless\b|\bwhere\b|breaks?|fails?|境界|場合|なら|とき|破綻|失敗)/i.test(
+		!/(?:\bwhen\b|\bif\b|\bunless\b|\bwhere\b|breaks?|fails?|境界|場合|なら|とき|破綻|失敗)/iu.test(
 			value,
 		)
 	) {
@@ -442,7 +442,7 @@ function validateTransferBoundary(value: string): string | undefined {
 }
 
 function validatePrecisionLoss(value: string): string | undefined {
-	if (value.length < 20 || /^(?:none|n\/a|no loss)$/i.test(value)) {
+	if (value.length < 20 || /^(?:none|n\/a|no loss)$/iu.test(value)) {
 		return "Precision loss must state what becomes weaker, approximate, or unidentifiable";
 	}
 	return undefined;
@@ -450,7 +450,7 @@ function validatePrecisionLoss(value: string): string | undefined {
 
 function validateTargetCounterexample(value: string): string | undefined {
 	if (value.length < 24) return "Target-side counterexample is too vague";
-	if (/donor|source[- ]domain success|worked in the source/i.test(value)) {
+	if (/donor|source[- ]domain success|worked in the source/iu.test(value)) {
 		return "Target-side counterexample must be target-side; donor success is not target evidence";
 	}
 	return undefined;
@@ -508,7 +508,7 @@ const transferCandidateGates = [
 ] satisfies readonly Gate[];
 
 function handoffOwner(value: string): string | undefined {
-	return value.match(/^([A-Za-z][A-Za-z0-9-]*)(?=\s|$|[—–:])/)?.[1];
+	return value.match(/^([A-Za-z][A-Za-z0-9-]*)(?=\s|$|[—–:])/u)?.[1];
 }
 
 function mappingBreakHandoffFailure(
@@ -519,8 +519,8 @@ function mappingBreakHandoffFailure(
 		? "directing-research"
 		: "directing-research-sections";
 	return handoffOwner(value) === expectedOwner &&
-		/TRANSFER DISPOSITION|denominator|preserv/i.test(value) &&
-		!/\b(?:ADOPT|RETIRE|TEST|REOPEN)\b/.test(value)
+		/TRANSFER DISPOSITION|denominator|preserv/iu.test(value) &&
+		!/\b(?:ADOPT|RETIRE|TEST|REOPEN)\b/u.test(value)
 		? undefined
 		: `MAPPING-BREAK handoff must begin with the exact ${expectedOwner} owner, preserve the attempt, and not decide its disposition`;
 }
@@ -562,7 +562,7 @@ const mappingBreakGates = [
 		id: "M9",
 		label: "Non-correspondence axis",
 		validate: (value: string) =>
-			/^(?:OBJECT|RELATION|REPRESENTATION|REGIME|EVIDENCE|CONSTRAINT|OTHER)\s*(?:—|–|:|\s-\s)\s*\S.+$/.test(
+			/^(?:OBJECT|RELATION|REPRESENTATION|REGIME|EVIDENCE|CONSTRAINT|OTHER)\s*(?:—|–|:|\s-\s)\s*\S.+$/u.test(
 				value,
 			)
 				? undefined
@@ -655,7 +655,7 @@ const candidateGates = [
 		id: "C10",
 		label: "Nearest prior / novelty delta",
 		warn: (value: string) =>
-			/\bUNVERIFIED\b/i.test(value)
+			/\bUNVERIFIED\b/iu.test(value)
 				? "UNVERIFIED is explicit; verify the nearest prior before selection"
 				: undefined,
 	},
@@ -675,7 +675,7 @@ const candidateGates = [
 ] satisfies readonly Gate[];
 
 function normalizeCandidateId(value: string): string {
-	return value.trim().replace(/^\[/, "").replace(/\]$/, "");
+	return value.trim().replace(/^\[/u, "").replace(/\]$/u, "");
 }
 
 function artifactSections(text: string): readonly ArtifactSection[] {
@@ -686,7 +686,7 @@ function artifactSections(text: string): readonly ArtifactSection[] {
 		line: number;
 	}[] = [];
 	const heading =
-		/^\s*##\s+(Candidate|MAPPING-BREAK)(?:\s+\[([^\]]+)\]|\s+(.+?))\s*$/i;
+		/^\s*##\s+(Candidate|MAPPING-BREAK)(?:\s+\[([^\]]+)\]|\s+(.+?))\s*$/iu;
 
 	for (const [line, value] of lines.entries()) {
 		const match = value.match(heading);
@@ -706,7 +706,7 @@ function artifactSections(text: string): readonly ArtifactSection[] {
 	return starts.map((start) => {
 		const boundaryOffset = lines
 			.slice(start.line + 1)
-			.findIndex((line) => /^\s*#{1,6}\s+/.test(line));
+			.findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
 		const end =
 			boundaryOffset === -1 ? lines.length : start.line + 1 + boundaryOffset;
 		return {
@@ -715,6 +715,34 @@ function artifactSections(text: string): readonly ArtifactSection[] {
 			kind: start.kind,
 		};
 	});
+}
+
+function validateTransferCandidateGates(
+	lines: string[],
+	section: ArtifactSection,
+	report: Reporter,
+): string | undefined {
+	let transferAttemptId: string | undefined;
+	for (const gate of transferCandidateGates) {
+		const value = readField(lines, gate.label);
+		const prefix = `${section.id}/${gate.id}`;
+		if (value === undefined) {
+			report(prefix, "MISSING", `${gate.label}: required for Operation TRANSFER`);
+			continue;
+		}
+		if (placeholder(value)) {
+			report(prefix, "FAIL", `${gate.label}: value is blank or a placeholder`);
+			continue;
+		}
+		const failure = gate.validate?.(value);
+		if (failure !== undefined) {
+			report(prefix, "FAIL", failure);
+			continue;
+		}
+		report(prefix, "PASS", `${gate.label}: present`);
+		if (gate.label === "Transfer attempt ID") transferAttemptId = value;
+	}
+	return transferAttemptId;
 }
 
 function validateCandidate(
@@ -763,38 +791,12 @@ function validateCandidate(
 	const transfer = normalizedCoordinate(operation) === "TRANSFER";
 	let transferAttemptId: string | undefined;
 	if (transfer) {
-		for (const gate of transferCandidateGates) {
-			const value = readField(lines, gate.label);
-			const prefix = `${section.id}/${gate.id}`;
-			if (value === undefined) {
-				report(
-					prefix,
-					"MISSING",
-					`${gate.label}: required for Operation TRANSFER`,
-				);
-				continue;
-			}
-			if (placeholder(value)) {
-				report(
-					prefix,
-					"FAIL",
-					`${gate.label}: value is blank or a placeholder`,
-				);
-				continue;
-			}
-			const failure = gate.validate?.(value);
-			if (failure !== undefined) {
-				report(prefix, "FAIL", failure);
-				continue;
-			}
-			report(prefix, "PASS", `${gate.label}: present`);
-			if (gate.label === "Transfer attempt ID") transferAttemptId = value;
-		}
+		transferAttemptId = validateTransferCandidateGates(lines, section, report);
 
 		const donorIds =
 			commaSeparatedIds(readField(lines, "Donor IDs") ?? "") ?? [];
 		const comparison = readField(lines, "Source comparison") ?? "";
-		if (donorIds.length === 1 && !/^SINGLE-DONOR LIMIT\b/.test(comparison)) {
+		if (donorIds.length === 1 && !/^SINGLE-DONOR LIMIT\b/u.test(comparison)) {
 			report(
 				`${section.id}/T14`,
 				"FAIL",
@@ -802,7 +804,7 @@ function validateCandidate(
 			);
 		} else if (
 			donorIds.length > 1 &&
-			/^SINGLE-DONOR LIMIT\b/.test(comparison)
+			/^SINGLE-DONOR LIMIT\b/u.test(comparison)
 		) {
 			report(
 				`${section.id}/T14`,
@@ -891,13 +893,13 @@ function validateMappingBreak(
 
 	const donorIds = commaSeparatedIds(values.get("Donor IDs") ?? "") ?? [];
 	const comparison = values.get("Source comparison") ?? "";
-	if (donorIds.length === 1 && !/^SINGLE-DONOR LIMIT\b/.test(comparison)) {
+	if (donorIds.length === 1 && !/^SINGLE-DONOR LIMIT\b/u.test(comparison)) {
 		report(
 			`${section.id}/M16`,
 			"FAIL",
 			"MAPPING-BREAK must preserve the donor-set single-donor limit",
 		);
-	} else if (donorIds.length > 1 && /^SINGLE-DONOR LIMIT\b/.test(comparison)) {
+	} else if (donorIds.length > 1 && /^SINGLE-DONOR LIMIT\b/u.test(comparison)) {
 		report(
 			`${section.id}/M16`,
 			"FAIL",
@@ -915,7 +917,7 @@ function validateMappingBreak(
 }
 
 function preciseExemption(value: string): boolean {
-	if (!/^EXEMPT\s*(?:—|–|:|\s-\s)\s*\S/i.test(value)) return false;
+	if (!/^EXEMPT\s*(?:—|–|:|\s-\s)\s*\S/iu.test(value)) return false;
 	return value.length >= 32 && !placeholder(value);
 }
 
@@ -924,7 +926,7 @@ function normalizedCoordinate(value: string): string {
 }
 
 function normalizedText(value: string): string {
-	return value.trim().replace(/\s+/g, " ").toLowerCase();
+	return value.trim().replaceAll(/\s+/gu, " ").toLowerCase();
 }
 
 function validateBatch(
@@ -935,7 +937,7 @@ function validateBatch(
 	const lines = text.split("\n");
 	const requestedRaw = readField(lines, "Requested candidate count");
 	const requested =
-		requestedRaw !== undefined && /^[1-9]\d*$/.test(requestedRaw)
+		requestedRaw !== undefined && /^[1-9]\d*$/u.test(requestedRaw)
 			? Number(requestedRaw)
 			: undefined;
 
@@ -1141,8 +1143,8 @@ function markdownCells(line: string): readonly string[] {
 	const trimmed = line.trim();
 	if (!trimmed.startsWith("|")) return [];
 	return trimmed
-		.replace(/^\|/, "")
-		.replace(/\|$/, "")
+		.replace(/^\|/u, "")
+		.replace(/\|$/u, "")
 		.split("|")
 		.map((cell) => cell.trim());
 }
@@ -1150,8 +1152,8 @@ function markdownCells(line: string): readonly string[] {
 function donorRecordsFromSet(
 	text: string,
 ): ReadonlyMap<string, string> | undefined {
-	if (!/^\s*#\s+DONOR SET\s*$/im.test(text)) return undefined;
-	const lines = text.split(/\r?\n/);
+	if (!/^\s*#\s+DONOR SET\s*$/imu.test(text)) return undefined;
+	const lines = text.split(/\r?\n/u);
 	const headerIndex = lines.findIndex(
 		(line) => markdownCells(line)[0]?.toLowerCase() === "donor id",
 	);
@@ -1159,11 +1161,11 @@ function donorRecordsFromSet(
 
 	const records = new Map<string, string>();
 	for (const line of lines.slice(headerIndex + 1)) {
-		if (/^\s*#{1,6}\s+/.test(line)) break;
+		if (/^\s*#{1,6}\s+/u.test(line)) break;
 		const cells = markdownCells(line);
 		const id = cells[0];
 		const locator = cells[1];
-		if (cells.length === 0 || cells.every((cell) => /^:?-{3,}:?$/.test(cell))) {
+		if (cells.every((cell) => /^:?-{3,}:?$/u.test(cell))) {
 			continue;
 		}
 		if (
@@ -1172,7 +1174,7 @@ function donorRecordsFromSet(
 			stableId(id) &&
 			locator !== ""
 		) {
-			records.set(id, locator.replace(/\s+/g, " ").trim());
+			records.set(id, locator.replaceAll(/\s+/gu, " ").trim());
 		}
 	}
 	return records.size === 0 ? undefined : records;
@@ -1226,19 +1228,19 @@ async function verifyFrozenDonorSet(
 	});
 	if (upstream.exitCode === 2) {
 		throw new Error(
-			`check-donor-set failed: ${upstream.stderr.toString().trim() || "fatal upstream validator error"}`,
+			`check-donor-set failed: ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "fatal upstream validator error"}`,
 		);
 	}
 	if (upstream.exitCode !== 0 && upstream.exitCode !== 1) {
 		throw new Error(
-			`check-donor-set could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() || "upstream validator unavailable or timed out"}`,
+			`check-donor-set could not complete (exit ${String(upstream.exitCode)}): ${upstream.stderr.toString().trim() !== "" ? upstream.stderr.toString().trim() : "upstream validator unavailable or timed out"}`,
 		);
 	}
 	if (upstream.exitCode !== 0) {
 		const findings = upstream.stdout
 			.toString()
-			.split(/\r?\n/)
-			.filter((line) => /\s(?:FAIL|MISSING)\s/.test(line))
+			.split(/\r?\n/u)
+			.filter((line) => /\s(?:FAIL|MISSING)\s/u.test(line))
 			.slice(0, 3)
 			.join(" | ");
 		report(
@@ -1282,9 +1284,9 @@ async function verifyFrozenDonorSet(
 		}
 		const declaredIds = commaSeparatedIds(readField(lines, "Donor IDs") ?? "");
 		const sourceRelation = (readField(lines, "Source relation / locator") ?? "")
-			.replace(/\s+/g, " ")
+			.replaceAll(/\s+/gu, " ")
 			.trim();
-		for (const id of declaredIds ?? []) {
+		(declaredIds ?? []).forEach((id) => {
 			const frozenLocator = donorRecords.get(id);
 			if (frozenLocator === undefined) {
 				fail(
@@ -1297,7 +1299,7 @@ async function verifyFrozenDonorSet(
 					`Source relation / locator does not carry the frozen source locator for Donor ID ${id}`,
 				);
 			}
-		}
+		});
 	}
 
 	if (verificationFailures === 0) {
@@ -1414,7 +1416,7 @@ async function main(): Promise<void> {
 
 	const batch =
 		candidateSections.length >= 2 ||
-		/^\s*#{1,6}\s+Batch contract\s*$/im.test(text) ||
+		/^\s*#{1,6}\s+Batch contract\s*$/imu.test(text) ||
 		readField(text.split("\n"), "Requested candidate count") !== undefined;
 	if (batch) validateBatch(text, candidates, report);
 
@@ -1432,7 +1434,7 @@ async function main(): Promise<void> {
 	process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
 	process.stderr.write(
 		`FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
 	);

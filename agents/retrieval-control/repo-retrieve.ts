@@ -149,7 +149,7 @@ function rejectPrototypeFlag(
   }
 }
 
-const GLOB_MAGIC = /[*?[\]{}]/;
+const GLOB_MAGIC = /[*?[\]{}]/u;
 
 // ccc's --path consumes a file-path glob, not a directory name. Preserve a caller's explicit
 // glob and file path exactly, but turn an existing directory inside the selected project into
@@ -174,7 +174,7 @@ async function cccSearchPath(project: string, path: string): Promise<string> {
     ) {
       return path;
     }
-    return `${insideProject || "."}/**`;
+    return `${insideProject !== "" ? insideProject : "."}/**`;
   });
   return r.ok ? r.value : path;
 }
@@ -205,7 +205,7 @@ function targetProject(path: string | undefined): string {
 }
 
 function cccResultCount(stdout: string): number {
-  return stdout.match(/^--- Result \d+ \(/gm)?.length ?? 0;
+  return stdout.match(/^--- Result \d+ \(/gmu)?.length ?? 0;
 }
 
 // Same `| undefined` reasoning as SearchFlags above: this is always called with a SearchFlags
@@ -221,18 +221,18 @@ function rgFlags(values: {
   multiline?: boolean | undefined;
   multilineDotall?: boolean | undefined;
 }): string[] {
-  if (values.filesWithMatches && values.count) {
+  if (values.filesWithMatches === true && values.count === true) {
     throw new Error("--files-with-matches and --count are mutually exclusive");
   }
 
   const flags: string[] = ["--color", "never"];
-  if (values.ignoreCase) flags.push("--ignore-case");
-  if (values.hidden) flags.push("--hidden");
+  if (values.ignoreCase === true) flags.push("--ignore-case");
+  if (values.hidden === true) flags.push("--hidden");
   if (values.context !== undefined) {
     flags.push("--context", String(values.context));
   }
-  if (values.filesWithMatches) flags.push("--files-with-matches");
-  if (values.count) flags.push("--count");
+  if (values.filesWithMatches === true) flags.push("--files-with-matches");
+  if (values.count === true) flags.push("--count");
   // `-U`/`--multiline`, exposed 2026-09-17 after a measured miss (soks corpus, hard-wrapped
   // knowledge/ prose): a phrase whose file has a real line break INSIDE it can never match
   // `literal`/`exhaustive` without this, because rg matches per physical line by default. This
@@ -247,8 +247,8 @@ function rgFlags(values: {
   // let a literal string absorb a newline it never asked for. `--multiline-dotall` only changes
   // `.`'s behavior and rg itself documents it as a no-op without `-U` first (checked live), so no
   // extra validation is added here beyond what rgSearchFlags() already wires straight through.
-  if (values.multiline) flags.push("--multiline");
-  if (values.multilineDotall) flags.push("--multiline-dotall");
+  if (values.multiline === true) flags.push("--multiline");
+  if (values.multilineDotall === true) flags.push("--multiline-dotall");
   // **`literal`/`exhaustive` に `--limit` が無かった**(2026-09-02、腕 0a の報告)。
   //   `concept`/`battery` は最初から `--limit` を持つのに、語彙 route だけ rg の
   //   `-m/--max-count` を露出していなかった——広い正規表現が大きな repo で無制限に
@@ -270,7 +270,7 @@ async function runCccSearch(
   explicitProject: boolean,
 ): Promise<number> {
   const project = findRegisteredProject(cwd);
-  if (!project || (explicitProject && project !== cwd)) {
+  if (project === null || (explicitProject && project !== cwd)) {
     throw new Error(
       `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
         "run ccc init/index or use an explicitly lexical route",
@@ -337,14 +337,14 @@ async function runCccSearch(
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
-    const command = [ccc, "search", query, "--limit", String(limit)];
-    if (cccPath !== undefined) command.push("--path", cccPath);
-    if (refresh && index === 0) command.push("--refresh");
+    const searchArgs = [ccc, "search", query, "--limit", String(limit)];
+    if (cccPath !== undefined) searchArgs.push("--path", cccPath);
+    if (refresh && index === 0) searchArgs.push("--refresh");
 
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
-    const result = await runChildCaptured(command, timeoutMs, true, project);
+    const result = await runChildCaptured(searchArgs, timeoutMs, true, project);
     if (result.exitCode !== 0) return result.exitCode;
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
@@ -373,12 +373,12 @@ async function runRg(
   cwd: string,
 ): Promise<number> {
   const rg = requireExecutable("rg");
-  let command: string[];
+  let rgArgs: string[];
   if (route === "files") {
-    command = [rg, "--files", ...rgFlags(values), ...paths];
+    rgArgs = [rg, "--files", ...rgFlags(values), ...paths];
   } else {
     const fixedStrings = route === "literal" ? ["--fixed-strings"] : [];
-    command = [
+    rgArgs = [
       rg,
       ...fixedStrings,
       "--line-number",
@@ -390,7 +390,7 @@ async function runRg(
   }
 
   process.stderr.write(`ROUTE: ${route} -> rg project=${cwd}\n`);
-  const exitCode = await runChild(command, timeoutMs, cwd);
+  const exitCode = await runChild(rgArgs, timeoutMs, cwd);
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
   } else if (exitCode === 1) {
@@ -406,10 +406,10 @@ async function runCccGrep(
   cwd: string,
 ): Promise<number> {
   const ccc = requireExecutable("ccc");
-  const command = [ccc, "grep", query];
-  if (path !== undefined) command.push("--path", path);
+  const grepArgs = [ccc, "grep", query];
+  if (path !== undefined) grepArgs.push("--path", path);
   process.stderr.write(`ROUTE: structural -> ccc grep project=${cwd}\n`);
-  const result = await runChildCaptured(command, timeoutMs, true, cwd);
+  const result = await runChildCaptured(grepArgs, timeoutMs, true, cwd);
   if (result.exitCode !== 0) return result.exitCode;
   // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
   // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
@@ -787,7 +787,7 @@ async function runDefinition(
   json: boolean,
 ): Promise<number> {
   const project = findRegisteredProject(cwd);
-  if (!project) {
+  if (project === null || project === "") {
     throw new Error(
       `definition requested, but ${cwd} is not inside a ccc-registered project`,
     );
@@ -888,7 +888,7 @@ function indexCommand() {
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
       const project = findRegisteredProject(process.cwd());
-      if (process.exitCode === 0 && project) {
+      if (process.exitCode === 0 && project !== null && project !== "") {
         const notes: string[] = [];
         const warmed = await attempt(() => refreshCatalog(project, notes));
         for (const n of notes) process.stderr.write(`NOTE: ${n}\n`);
@@ -913,7 +913,7 @@ async function main(): Promise<void> {
           "Declare a repository-search shape and route it to ccc, rg, or Serena.",
       },
       commands: [
-        ...ROUTES.map(routeCommand),
+        ...ROUTES.map((route) => routeCommand(route)),
         definitionCommand(),
         indexCommand(),
       ],
@@ -936,7 +936,7 @@ if (import.meta.main) {
     if (ErrnoSchema.safeParse(error).data?.code === "EPIPE") process.exit(0);
     throw error;
   });
-  main().catch((error) => {
+  await main().then(undefined, (error: unknown) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
         "Run 'repo-retrieve --help' for usage.\n",

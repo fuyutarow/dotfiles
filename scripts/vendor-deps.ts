@@ -62,7 +62,7 @@ function version(pkg: string): string {
     join(ROOT, "node_modules", pkg, "package.json"),
     "utf8",
   );
-  const m = text.match(/"version"\s*:\s*"([^"]+)"/);
+  const m = text.match(/"version"\s*:\s*"([^"]+)"/u);
   if (m?.[1] === undefined)
     throw new Error(`cannot read ${pkg}'s version from node_modules`);
   return m[1];
@@ -80,11 +80,11 @@ const built = await Bun.build({
       setup(b) {
         // The entry exists only in memory; placing it at the repo root makes its imports resolve
         // from the repo's node_modules.
-        b.onResolve({ filter: /^virtual:vendor-deps$/ }, () => ({
+        b.onResolve({ filter: /^virtual:vendor-deps$/u }, () => ({
           path: entryPath,
           namespace: "file",
         }));
-        b.onLoad({ filter: /__vendor_deps_entry__\.ts$/ }, () => ({
+        b.onLoad({ filter: /__vendor_deps_entry__\.ts$/u }, () => ({
           contents: ENTRY,
           loader: "ts",
         }));
@@ -105,7 +105,7 @@ const files = [
 ];
 const drift = files.filter((f) => {
   const have = Bun.file(f.path);
-  return !have.size || readFileSync(f.path, "utf8") !== f.text;
+  return have.size === 0 || readFileSync(f.path, "utf8") !== f.text;
 });
 
 if (argv.flags.check) {

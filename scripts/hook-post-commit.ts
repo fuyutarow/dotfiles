@@ -13,7 +13,7 @@ import { join } from "node:path";
 // so every commit advanced HEAD past the watermark and concept/battery answered NO_INDEX while the
 // index itself was current. firedancer measured and fixed the same defect in its own hook on
 // 2026-09-02; this body had kept the old form until 2026-09-22.
-if (!Bun.which("ccc")) {
+if (Bun.which("ccc") === undefined) {
   process.exit(0);
 }
 

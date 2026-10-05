@@ -1,11 +1,26 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc"
+  ],
   "jsPlugins": [
     {
       "name": "eslint-js",
       "specifier": "oxlint-plugin-eslint"
     }
   ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "restriction": "off",
+    "style": "off",
+    "nursery": "off"
+  },
   "ignorePatterns": [
     "node_modules",
     "archives",
@@ -13,8 +28,44 @@
     "agents/hooks/vendor"
   ],
   "rules": {
-    "max-depth": ["warn", 2],
-    "no-restricted-globals": [
+    "typescript/prefer-readonly-parameter-types": "off",
+    "eslint/max-lines-per-function": "off",
+    "eslint/max-lines": "off",
+    "eslint/max-classes-per-file": "off",
+    "eslint/no-inline-comments": "off",
+    "eslint/no-await-in-loop": "off",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-negated-condition": "off",
+    "unicorn/no-negated-condition": "off",
+    "eslint/sort-vars": "off",
+    "eslint/no-redeclare": "off",
+    "eslint/require-await": "off",
+    "unicorn/require-module-specifiers": "off",
+    "unicorn/no-useless-undefined": [
+      "error",
+      {
+        "checkArguments": false,
+        "checkArrowFunctionBody": true
+      }
+    ],
+    "eslint/max-depth": [
+      "error",
+      2
+    ],
+    "typescript/strict-boolean-expressions": [
+      "error",
+      {
+        "allowString": false,
+        "allowNumber": false,
+        "allowNullableObject": false,
+        "allowNullableBoolean": false,
+        "allowNullableString": false,
+        "allowNullableNumber": false,
+        "allowAny": false
+      }
+    ],
+    "typescript/no-explicit-any": "error",
+    "eslint/no-restricted-globals": [
       "error",
       {
         "name": "Date",
@@ -60,13 +111,7 @@
         "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
       }
     ],
-    "typescript/no-unsafe-assignment": "error",
-    "typescript/no-unsafe-return": "error",
-    "typescript/no-unsafe-argument": "error",
-    "typescript/no-unsafe-member-access": "error",
-    "typescript/no-unsafe-type-assertion": "error",
-    "typescript/no-explicit-any": "error",
-    "no-restricted-imports": [
+    "eslint/no-restricted-imports": [
       "error",
       {
         "paths": [
@@ -77,7 +122,9 @@
         ],
         "patterns": [
           {
-            "group": ["zod/*"],
+            "group": [
+              "zod/*"
+            ],
             "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
           }
         ]

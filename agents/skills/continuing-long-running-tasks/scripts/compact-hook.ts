@@ -90,7 +90,7 @@ export function handleCompactHook(
 
   if (event === "SessionStart") {
     const source = stringField(input, "source");
-    if (!source || !["startup", "resume", "compact"].includes(source)) {
+    if (source === undefined || source === "" || !["startup", "resume", "compact"].includes(source)) {
       return undefined;
     }
     return JSON.stringify({
@@ -106,7 +106,7 @@ export function handleCompactHook(
 
   if (event !== "PreCompact") return undefined;
   const trigger = stringField(input, "trigger");
-  if (!trigger || !["manual", "auto"].includes(trigger)) return undefined;
+  if (trigger === undefined || trigger === "" || !["manual", "auto"].includes(trigger)) return undefined;
 
   if (binding.status === "unbound") return undefined;
   const status =

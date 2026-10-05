@@ -86,7 +86,7 @@ export function validateLocatorField(
   if (
     value !== undefined &&
     (value.length > 1024 ||
-      [...value].some((character) => {
+      Array.from(value).some((character) => {
         const codePoint = character.codePointAt(0) ?? 0;
         return codePoint <= 31 || codePoint === 127;
       }))
@@ -106,7 +106,7 @@ export function parseTimestamp(
   if (value === undefined) return { kind: "invalid" };
   if (allowNone && value === "NONE") return { kind: "none" };
   const match = value.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/,
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/u,
   );
   if (match === null) return { kind: "invalid" };
   const year = Number(match[1] ?? "");

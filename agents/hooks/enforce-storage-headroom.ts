@@ -225,7 +225,10 @@ function parseLauncher(l: unknown, i: number, errors: string[]): Launcher {
   onlyKeys(t, ["command", "subcommands", "tasks"], where, errors);
   const rawCommand = at(t, "command");
   const command = nonEmptyString(rawCommand, `${where}.command`, errors);
-  if (typeof rawCommand === "string" && !/^[A-Za-z0-9._-]+$/.test(rawCommand)) {
+  if (
+    typeof rawCommand === "string" &&
+    !/^[A-Za-z0-9._-]+$/u.test(rawCommand)
+  ) {
     errors.push(`${where}.command: '${rawCommand}' is not a bare command name`);
   }
   const rawSubcommands = at(t, "subcommands");
@@ -293,7 +296,7 @@ function parseBudget(
       );
   }
   const rawLocate = at(t, "locate");
-  const locate = rawLocate === "cargo-target" ? rawLocate : "path";
+  const locateMode = rawLocate === "cargo-target" ? rawLocate : "path";
   if (rawLocate !== "path" && rawLocate !== "cargo-target") {
     errors.push(`${where}.locate: expected "path" or "cargo-target"`);
   }
@@ -321,7 +324,7 @@ function parseBudget(
   return {
     name,
     launchers,
-    locate,
+    locate: locateMode,
     warn_gib: warn,
     advice,
     ...(path === undefined ? {} : { path }),
@@ -421,7 +424,7 @@ async function loadConfig(): Promise<{
 
 const POS = String.raw`(^|[|;&(]|&&|\|\||\bthen\b|\bdo\b)\s*`;
 const PREFIX = String.raw`(?:(?:sudo|command|time|nice|exec|timeout\s+\S+)\s+|(?:\S*\/)?env(?:\s+[A-Za-z_]\w*=\S+)*\s+|[A-Za-z_]\w*=\S+\s+)*`;
-const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const esc = (s: string) => s.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 // Every launcher takes PREFIX: `RUSTFLAGS=-C... cargo build` and `env X=1 julia` are the
 // common spellings, and a gate that misses them is decoration (caught by the test suite on
@@ -431,20 +434,23 @@ function matchLauncher(
   launchers: Launcher[],
 ): { command: string; label: string } | null {
   for (const l of launchers) {
-    const sub = l.subcommands
-      ? String.raw`\s+(?<sub>${l.subcommands.map(esc).join("|")})\b`
-      : "";
-    const task = l.tasks
-      ? String.raw`\s+(?<task>${l.tasks.map(esc).join("|")})\b`
-      : "";
+    const sub =
+      l.subcommands !== undefined
+        ? String.raw`\s+(?<sub>${l.subcommands.map(esc).join("|")})\b`
+        : "";
+    const task =
+      l.tasks !== undefined
+        ? String.raw`\s+(?<task>${l.tasks.map(esc).join("|")})\b`
+        : "";
     const m = new RegExp(
       `${POS}${PREFIX}(?:\\S*\\/)?${esc(l.command)}\\b${sub}${task}`,
+      "u",
     ).exec(command);
-    if (m)
+    if (m !== null)
       return {
         command: l.command,
         label: [l.command, m.groups?.sub, m.groups?.task]
-          .filter(Boolean)
+          .filter((part) => part !== undefined)
           .join(" "),
       };
   }
@@ -456,7 +462,7 @@ function matchLauncher(
 async function freeBytes(path: string): Promise<number | null> {
   return attemptOr(() => {
     const s = statfsSync(path);
-    return Number(s.bavail) * Number(s.bsize);
+    return s.bavail * s.bsize;
   }, null);
 }
 
@@ -571,26 +577,26 @@ function duBytes(path: string, m: Config["measure"]): number | null {
     stderr: "ignore",
   });
   if (r.exitCode !== 0 && r.stdout.length === 0) return null;
-  const kib = Number(r.stdout.toString().split(/\s/)[0]);
+  const kib = Number(r.stdout.toString().split(/\s/u)[0]);
   return Number.isFinite(kib) && kib > 0 ? kib * 1024 : null;
 }
 
 // --- Locating an artifact ---------------------------------------------------------------------
 
 const expand = (p: string) =>
-  p.replace(/^~(?=\/|$)/, homedir()).replace(/^["']|["']$/g, "");
+  p.replace(/^~(?=\/|$)/u, homedir()).replaceAll(/^["']|["']$/gu, "");
 
 // The target dir cargo will use: CARGO_TARGET_DIR (command text, then env), else the workspace
 // root's .cargo/config.toml `target-dir`, else <workspace root>/target. The start dir honours a
 // leading `cd <dir>` and `--manifest-path`, the two ways an agent points cargo elsewhere.
 function cargoTargetDir(command: string, cwd: string): string | null {
   const envDir =
-    /\bCARGO_TARGET_DIR=(\S+)/.exec(command)?.[1] ??
+    /\bCARGO_TARGET_DIR=(\S+)/u.exec(command)?.[1] ??
     process.env.CARGO_TARGET_DIR;
   let start = cwd;
-  const cd = /(?:^|[;&|(]\s*)cd\s+(\S+)/.exec(command)?.[1];
+  const cd = /(?:^|[;&|(]\s*)cd\s+(\S+)/u.exec(command)?.[1];
   if (cd !== undefined) start = resolve(cwd, expand(cd));
-  const manifest = /--manifest-path[=\s]+(\S+)/.exec(command)?.[1];
+  const manifest = /--manifest-path[=\s]+(\S+)/u.exec(command)?.[1];
   if (manifest !== undefined) start = dirname(resolve(start, expand(manifest)));
   if (envDir !== undefined) return resolve(start, expand(envDir));
 
@@ -604,7 +610,7 @@ function cargoTargetDir(command: string, cwd: string): string | null {
   if (dir === null) return null;
   const config = join(dir, ".cargo", "config.toml");
   if (existsSync(config)) {
-    const td = /^\s*target-dir\s*=\s*"([^"]+)"/m.exec(
+    const td = /^\s*target-dir\s*=\s*"([^"]+)"/mu.exec(
       readFileSync(config, "utf8"),
     )?.[1];
     if (td !== undefined) return resolve(dir, expand(td));
@@ -613,7 +619,7 @@ function cargoTargetDir(command: string, cwd: string): string | null {
 }
 
 function isWorkspace(toml: string): boolean {
-  return /^\s*\[workspace\]/m.test(readFileSync(toml, "utf8"));
+  return /^\s*\[workspace\]/mu.test(readFileSync(toml, "utf8"));
 }
 
 function locate(b: Budget, command: string, cwd: string): string | null {
@@ -670,7 +676,7 @@ async function main(): Promise<void> {
   if (strAt(payload, "tool_name") !== "Bash") return;
   const command = strAt(payload, "tool_input", "command");
   if (command === undefined || command === "") return;
-  if (/\bSTORAGE_ASSERT_OVERRIDE=1\b/.test(command)) return;
+  if (/\bSTORAGE_ASSERT_OVERRIDE=1\b/u.test(command)) return;
 
   const { config, errors } = await loadConfig();
   if (config === null) {
@@ -685,13 +691,12 @@ async function main(): Promise<void> {
   }
 
   const hit = matchLauncher(command, config.launcher);
-  if (!hit) return;
+  if (hit === null) return;
 
   const drives = await Promise.all(
-    Object.values(config.drive).map(async (d) => ({
-      ...d,
-      free: await freeBytes(d.path),
-    })),
+    Object.values(config.drive).map(async (d) =>
+      Object.assign({}, d, { free: await freeBytes(d.path) }),
+    ),
   );
   const low = drives.filter(
     (d) => d.free !== null && d.free < d.deny_gib * GiB,
@@ -745,7 +750,7 @@ async function main(): Promise<void> {
         .join(", ");
       warnings.push(
         `storage-headroom: WARNING ${d.label} free ${gib(d.free)} (< ${gib(d.warn_gib * GiB)})` +
-          `${others ? `; ${others}` : ""}. Launching ${hit.label} anyway — reclaim before it drops ` +
+          `${others !== "" ? `; ${others}` : ""}. Launching ${hit.label} anyway — reclaim before it drops ` +
           `below ${gib(d.deny_gib * GiB)}.`,
       );
     }

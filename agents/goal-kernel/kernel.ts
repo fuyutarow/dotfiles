@@ -120,10 +120,10 @@ const POLICY_DIGEST = sha256Text(
     state_integrity: "content-digest",
   }),
 );
-const SHA256_RE = /^[a-f0-9]{64}$/;
-const GOAL_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const DECISION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/;
-const RUN_ID_RE = /^gk-(claude|codex)-[a-f0-9]{24}$/;
+const SHA256_RE = /^[a-f0-9]{64}$/u;
+const GOAL_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+const DECISION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u;
+const RUN_ID_RE = /^gk-(claude|codex)-[a-f0-9]{24}$/u;
 
 class GoalKernelError extends Error {
   constructor(
@@ -457,12 +457,12 @@ export async function parseRunDecision(input: unknown): Promise<RunDecision> {
 }
 
 function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
+  if (Array.isArray(value)) return value.map((item) => canonicalize(item));
   const record = asRecord(value);
   if (record === undefined) return value;
   return Object.fromEntries(
     Object.keys(record)
-      .sort()
+      .toSorted()
       .filter((key) => record[key] !== undefined)
       .map((key) => [key, canonicalize(record[key])]),
   );
@@ -586,7 +586,7 @@ async function withExclusiveStateLock<T>(
   purpose: string,
   operation: () => T | Promise<T>,
 ): Promise<T> {
-  const written = await attempt(() =>
+  const written = await attempt(() => {
     writeJsonExclusive(path, {
       schema_version: STATE_SCHEMA,
       purpose,
@@ -594,8 +594,8 @@ async function withExclusiveStateLock<T>(
         fractionalSecondDigits: 3,
       }),
       pid: process.pid,
-    }),
-  );
+    });
+  });
   if (!written.ok) {
     if (!existsSync(path)) throw written.error;
     throw new GoalKernelError(
@@ -605,7 +605,11 @@ async function withExclusiveStateLock<T>(
   }
   // Cleanup runs on return AND on throw, same as the prior try/finally: the lock file is
   // unlinked once this block ends, in either case. The atomic 'wx' create above is unchanged.
-  using _lock = { [Symbol.dispose]: () => unlinkSync(path) };
+  using _lock = {
+    [Symbol.dispose]: () => {
+      unlinkSync(path);
+    },
+  };
   return await operation();
 }
 
@@ -1034,7 +1038,9 @@ async function ensureRunBinding(
     ...bindingBody,
     binding_sha256: sha256Value(bindingBody),
   };
-  const written = await attempt(() => writeJsonExclusive(bindingPath, binding));
+  const written = await attempt(() => {
+    writeJsonExclusive(bindingPath, binding);
+  });
   if (!written.ok) {
     if (!existsSync(bindingPath)) throw written.error;
     const raced = parseBinding(
@@ -1064,8 +1070,14 @@ function appendRunEvent(
     event_id: ids.id,
     run_id: binding.run_id,
     provider: binding.provider,
-    event_type: String(event.event_type ?? "provider.event"),
-    provider_event: String(event.provider_event ?? "unknown"),
+    event_type:
+      typeof event.event_type === "string"
+        ? event.event_type
+        : "provider.event",
+    provider_event:
+      typeof event.provider_event === "string"
+        ? event.provider_event
+        : "unknown",
     occurred_at: ids.at,
     goal_id: binding.goal_id,
     goal_version: binding.goal_version,
@@ -1092,14 +1104,14 @@ export async function listRunEvents(
   const events: RunEvent[] = [];
   for (const name of readdirSync(directory)
     .filter((entry) => entry.endsWith(".json"))
-    .sort()) {
+    .toSorted()) {
     // Read in filename order (sorted above) so event identity is deterministic.
     const stored = await readJson(join(directory, name), `event ${name}`);
     const value = asRecord(stored);
     if (value === undefined) {
       throw new GoalKernelError("GK_STATE", `event ${name} must be an object`);
     }
-    const filenameDigest = name.match(/-([a-f0-9]{64})\.json$/)?.[1];
+    const filenameDigest = name.match(/-([a-f0-9]{64})\.json$/u)?.[1];
     const eventDigest = value.event_sha256;
     if (
       filenameDigest === undefined ||
@@ -1198,14 +1210,14 @@ function toolWorkspacePaths(
   if (typeof command === "string" && command.includes("*** Begin Patch")) {
     paths.push(...patchFilePaths(command, workspaceRoot));
   }
-  return [...new Set(paths)].sort();
+  return [...new Set(paths)].toSorted();
 }
 
 /** Paths touched by an apply_patch-style "*** Begin Patch" command body. */
 function patchFilePaths(command: string, workspaceRoot: string): string[] {
   const paths: string[] = [];
   for (const match of command.matchAll(
-    /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm,
+    /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gmu,
   )) {
     const path = match[1]?.trim();
     if (path === undefined || path === "") continue;
@@ -1484,7 +1496,7 @@ export async function runGoalKernelHook(provider: Provider): Promise<void> {
   const stdin = await attempt(() => readFileSync(0, "utf8"));
   const failure = stdin.ok ? undefined : errorMessage(stdin.error);
   const parsed = stdin.ok ? jsonText.safeParse(stdin.value) : undefined;
-  if (failure !== undefined || !parsed?.success) {
+  if (failure !== undefined || parsed?.success !== true) {
     const reason =
       failure ?? parsed?.error?.issues.map((i) => i.message).join("; ") ?? "";
     process.stderr.write(`goal-kernel: malformed hook JSON: ${reason}\n`);
@@ -1579,7 +1591,7 @@ export async function readGoalStatus(workspaceRoot: string): Promise<
             .map((name) => readRunBinding(paths.root, name)),
         )
       )
-        .sort((left, right) => right.bound_at.localeCompare(left.bound_at))
+        .toSorted((left, right) => right.bound_at.localeCompare(left.bound_at))
         .map((binding) => ({
           run_id: binding.run_id,
           provider: binding.provider,

@@ -194,7 +194,7 @@ describe("configuration-contract-check", () => {
 	});
 
 	test("ignores fields inside a Markdown code fence", () => {
-		const fence = String.fromCharCode(96).repeat(3);
+		const fence = String.fromCodePoint(96).repeat(3);
 		const result = run(
 			fixture(
 				fence +
@@ -221,7 +221,7 @@ describe("configuration-contract-check", () => {
 	});
 
 	test("keeps a fence open when a would-be closing fence has trailing code", () => {
-		const fence = String.fromCharCode(96).repeat(4);
+		const fence = String.fromCodePoint(96).repeat(4);
 		const result = run(
 			fixture(
 				fence +

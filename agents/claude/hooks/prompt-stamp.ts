@@ -37,7 +37,8 @@ export const nowEpochSec = (): number =>
 /** zsh %~ : leading $HOME -> ~ */
 export function tildePath(p: string, home = process.env.HOME ?? ""): string {
   if (p === home) return "~";
-  if (home && p.startsWith(`${home}/`)) return `~${p.slice(home.length)}`;
+  if (home !== "" && p.startsWith(`${home}/`))
+    return `~${p.slice(home.length)}`;
   return p;
 }
 

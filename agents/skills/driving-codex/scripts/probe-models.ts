@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     if (result.exitCode === 0) {
       const tokens =
         result.output
-          .match(/tokens used\s*\n\s*([^\n]+)/i)?.[1]
+          .match(/tokens used\s*\n\s*([^\n]+)/iu)?.[1]
           ?.replaceAll(" ", "") ?? "?";
       process.stdout.write(`RESULT: AVAILABLE ${model} (${tokens} tokens)\n`);
       continue;
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
     );
     for (const line of firstMatches(
       result.output,
-      /ERROR|error|Not inside a trusted|stream/,
+      /ERROR|error|Not inside a trusted|stream/u,
       2,
     )) {
       process.stdout.write(`  ${line}\n`);
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
   );

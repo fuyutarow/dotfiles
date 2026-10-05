@@ -58,15 +58,15 @@ const allowedProbeTargets = new Set([
   "DISSENT",
 ]);
 
-const humanProvenancePattern = /^HUMAN:[^@\s]+@\S+$/i;
+const humanProvenancePattern = /^HUMAN:[^@\s]+@\S+$/iu;
 const syntheticAnswerPattern =
-  /\b(?:MODEL[- ]SIMULATED|SIMULATED[- ]HUMAN|ROLE[- ]PLAYED|FABRICATED)\b/i;
+  /\b(?:MODEL[- ]SIMULATED|SIMULATED[- ]HUMAN|ROLE[- ]PLAYED|FABRICATED)\b/iu;
 
 function cleanInline(value: string): string {
   return value
     .trim()
-    .replace(/^`|`$/g, "")
-    .replace(/^(?:\*\*|__)|(?:\*\*|__)$/g, "")
+    .replaceAll(/^`|`$/gu, "")
+    .replaceAll(/^(?:\*\*|__)|(?:\*\*|__)$/gu, "")
     .trim();
 }
 
@@ -74,18 +74,18 @@ function placeholder(value: string): boolean {
   const normalized = cleanInline(value);
   return (
     normalized === "" ||
-    /^\[(?:\.\.\.|…| *)\]$/.test(normalized) ||
-    /^(?:TBD|N\/?A|NA|未回答|未記入|未定|-|—|ー|―|\?+)$/i.test(normalized)
+    /^\[(?:\.\.\.|…| *)\]$/u.test(normalized) ||
+    /^(?:TBD|N\/?A|NA|未回答|未記入|未定|-|—|ー|―|\?+)$/iu.test(normalized)
   );
 }
 
 function headingLabel(line: string): string | undefined {
-  const match = line.match(/^#{1,6}\s+(.+?)\s*$/);
+  const match = line.match(/^#{1,6}\s+(.+?)\s*$/u);
   return match?.[1] === undefined ? undefined : cleanInline(match[1]);
 }
 
 function sectionBody(text: string, label: string): string | undefined {
-  const lines = text.split(/\r?\n/);
+  const lines = text.split(/\r?\n/u);
   const start = lines.findIndex((line) => headingLabel(line) === label);
   if (start === -1) return undefined;
   const relativeEnd = lines
@@ -96,25 +96,25 @@ function sectionBody(text: string, label: string): string | undefined {
 }
 
 function tableCells(line: string): string[] {
-  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  return trimmed.split("|").map(cleanInline);
+  const trimmed = line.trim().replace(/^\|/u, "").replace(/\|$/u, "");
+  return trimmed.split("|").map((cellText) => cleanInline(cellText));
 }
 
 function separatorRow(cells: readonly string[]): boolean {
   return (
     cells.length > 0 &&
-    cells.every((cell) => /^:?-{3,}:?$/.test(cell.replaceAll(" ", "")))
+    cells.every((cellText) => /^:?-{3,}:?$/u.test(cellText.replaceAll(" ", "")))
   );
 }
 
 function parseTable(body: string | undefined): Table | undefined {
   if (body === undefined) return undefined;
-  const lines = body.split(/\r?\n/).filter((line) => line.includes("|"));
+  const lines = body.split(/\r?\n/u).filter((line) => line.includes("|"));
   if (lines.length < 2) return undefined;
   const headers = tableCells(lines[0] ?? "");
   const rows = lines
     .slice(1)
-    .map(tableCells)
+    .map((line) => tableCells(line))
     .filter((cells) => !separatorRow(cells));
   if (rows.length === 0) return undefined;
   return { headers, rows };
@@ -136,12 +136,12 @@ function cell(
 
 function fieldValue(body: string | undefined, label: string): string | undefined {
   if (body === undefined) return undefined;
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const pattern = new RegExp(
     String.raw`^\s*(?:[-*+]\s+)?(?:\*\*|__)?${escaped}(?:\*\*|__)?\s*[：:]\s*(.+?)\s*$`,
-    "i",
+    "iu",
   );
-  for (const line of body.split(/\r?\n/)) {
+  for (const line of body.split(/\r?\n/u)) {
     const value = line.match(pattern)?.[1];
     if (value !== undefined) return cleanInline(value);
   }
@@ -150,11 +150,11 @@ function fieldValue(body: string | undefined, label: string): string | undefined
 
 function provenance(value: string): "HUMAN" | "ARTIFACT" | "INFERENCE" | "UNELICITED" | undefined {
   const normalized = cleanInline(value);
-  const token = normalized.split(/\s+(?:—|-|:)\s+/, 1)[0] ?? normalized;
+  const token = normalized.split(/\s+(?:—|-|:)\s+/u, 1)[0] ?? normalized;
   if (humanProvenancePattern.test(token)) return "HUMAN";
-  if (/^ARTIFACT:.+/i.test(normalized)) return "ARTIFACT";
-  if (/^INFERENCE(?:\s*(?:—|-|:).*)?$/i.test(normalized)) return "INFERENCE";
-  if (/^UNELICITED(?:\s*(?:—|-|:).*)?$/i.test(normalized))
+  if (/^ARTIFACT:.+/iu.test(normalized)) return "ARTIFACT";
+  if (/^INFERENCE(?:\s*(?:—|-|:).*)?$/iu.test(normalized)) return "INFERENCE";
+  if (/^UNELICITED(?:\s*(?:—|-|:).*)?$/iu.test(normalized))
     return "UNELICITED";
   return undefined;
 }
@@ -175,7 +175,7 @@ function checkSections(text: string): Verdict {
   });
   const budget = sectionBody(text, "Search budget") ?? "";
   const unboundedBudget =
-    /\b(?:unlimited|unbounded|exhaustive|until (?:complete|everything)|no limit)\b|無制限|網羅するまで/i.test(
+    /\b(?:unlimited|unbounded|exhaustive|until (?:complete|everything)|no limit)\b|無制限|網羅するまで/iu.test(
       budget,
     );
   if (unboundedBudget) {
@@ -271,14 +271,12 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
     if (placeholder(assumption))
       typedProblems.push(`row ${displayRow}: Assumption is blank`);
 
-    if (crossTags !== "NONE") {
-      const tags = crossTags.split(",").map((tag) => tag.trim());
-      if (tags.some((tag) => !primarySlots.includes(tag)))
-        typedProblems.push(`row ${displayRow}: Cross-tags contain an unknown slot`);
-    }
+    const tags = crossTags.split(",").map((tag) => tag.trim());
+    if (crossTags !== "NONE" && tags.some((tag) => !primarySlots.includes(tag)))
+      typedProblems.push(`row ${displayRow}: Cross-tags contain an unknown slot`);
 
     if (
-      !/^(?:ARTIFACT:.+|INFERENCE|NONE)$/i.test(evidence) &&
+      !/^(?:ARTIFACT:.+|INFERENCE|NONE)$/iu.test(evidence) &&
       !humanProvenancePattern.test(evidence)
     )
       axisProblems.push(`row ${displayRow}: invalid Evidence`);
@@ -289,10 +287,11 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
     if (!["NOW", "BOUNDED", "EXTERNAL", "INACCESSIBLE"].includes(cost))
       axisProblems.push(`row ${displayRow}: invalid Search cost`);
 
-    if (selection === "LOAD-BEARING") {
-      if (/^NONE SURFACED\b/i.test(assumption))
-        typedProblems.push(`row ${displayRow}: NONE SURFACED cannot be LOAD-BEARING`);
-      if (!placeholder(id)) loadBearingIds.add(id);
+    if (selection === "LOAD-BEARING" && /^NONE SURFACED\b/iu.test(assumption)) {
+      typedProblems.push(`row ${displayRow}: NONE SURFACED cannot be LOAD-BEARING`);
+    }
+    if (selection === "LOAD-BEARING" && !placeholder(id)) {
+      loadBearingIds.add(id);
     } else if (selection !== "NOT-SELECTED") {
       typedProblems.push(
         `row ${displayRow}: Selection must be LOAD-BEARING or NOT-SELECTED`,
@@ -306,10 +305,10 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
   if (missingColumns.length > 0)
     typedProblems.push(`missing columns: ${missingColumns.join(", ")}`);
 
-  if (table.headers.some((header) => /\bscore\b/i.test(header)))
+  if (table.headers.some((header) => /\bscore\b/iu.test(header)))
     axisProblems.push("scalar Score column is forbidden");
   if (
-    /\b(?:overall|aggregate|weighted|combined)\s+(?:risk\s+|priority\s+)?score\b|\b(?:risk|priority)\s+score\s*[:=]/i.test(
+    /\b(?:overall|aggregate|weighted|combined)\s+(?:risk\s+|priority\s+)?score\b|\b(?:risk|priority)\s+score\s*[:=]/iu.test(
       fullText,
     )
   )
@@ -396,7 +395,7 @@ function checkProbes(body: string | undefined): ProbeState {
   let hasHumanAnswer = false;
   let unelicitedCount = 0;
 
-  if (table.rows.length < 1 || table.rows.length > 3)
+  if (table.rows.length === 0 || table.rows.length > 3)
     problems.push(`expected 1-3 probes; found ${table.rows.length}`);
   if (missing.length > 0) problems.push(`missing columns: ${missing.join(", ")}`);
 
@@ -413,7 +412,7 @@ function checkProbes(body: string | undefined): ProbeState {
     if (placeholder(question))
       problems.push(`row ${displayRow}: Contrastive question is blank`);
     else if (
-      !/\b(?:if|whether|versus|instead|rather than|otherwise|would|which)\b|なら|場合|どちら|対して|一方/i.test(
+      !/\b(?:if|whether|versus|instead|rather than|otherwise|would|which)\b|なら|場合|どちら|対して|一方/iu.test(
         question,
       )
     )
@@ -423,27 +422,33 @@ function checkProbes(body: string | undefined): ProbeState {
     if (placeholder(change))
       problems.push(`row ${displayRow}: Decision change is blank`);
     else if (
-      /^(?:nothing|none|no change|unchanged|nothing changes|変わらない|変更なし)[.!。]?$/i.test(
+      /^(?:nothing|none|no change|unchanged|nothing changes|変わらない|変更なし)[.!。]?$/iu.test(
         change,
       )
     )
       problems.push(`row ${displayRow}: Decision change says no branch can change`);
 
-    if (humanProvenancePattern.test(source)) {
-      if (placeholder(answer) || /^UNELICITED$/i.test(answer))
-        problems.push(`row ${displayRow}: HUMAN provenance requires a real answer`);
-      else if (syntheticAnswerPattern.test(answer))
-        problems.push(`row ${displayRow}: HUMAN answer is explicitly synthetic`);
-      else hasHumanAnswer = true;
-    } else if (/^UNELICITED$/i.test(source)) {
+    if (
+      humanProvenancePattern.test(source) &&
+      (placeholder(answer) || /^UNELICITED$/iu.test(answer))
+    ) {
+      problems.push(`row ${displayRow}: HUMAN provenance requires a real answer`);
+    } else if (humanProvenancePattern.test(source) && syntheticAnswerPattern.test(answer)) {
+      problems.push(`row ${displayRow}: HUMAN answer is explicitly synthetic`);
+    } else if (humanProvenancePattern.test(source)) {
+      hasHumanAnswer = true;
+    } else if (/^UNELICITED$/iu.test(source)) {
       unelicitedCount += 1;
-      if (!/^UNELICITED$/i.test(answer))
-        problems.push(`row ${displayRow}: UNELICITED provenance requires UNELICITED answer`);
     } else {
       problems.push(
         `row ${displayRow}: Provenance must be HUMAN:<owner>@<attestation-locus> or UNELICITED`,
       );
     }
+    if (
+      /^UNELICITED$/iu.test(source) &&
+      !/^UNELICITED$/iu.test(answer)
+    )
+      problems.push(`row ${displayRow}: UNELICITED provenance requires UNELICITED answer`);
   }
 
   const allUnelicited =
@@ -485,7 +490,7 @@ function checkDepth(
   const problems: string[] = [];
   const hasDepthContent = (value: string | undefined): boolean =>
     value !== undefined &&
-    /\s+(?:—|-)\s+\S.{7,}$/.test(value) &&
+    /\s+(?:—|-)\s+\S.{7,}$/u.test(value) &&
     !syntheticAnswerPattern.test(value);
 
   if (root === undefined || !loadBearingIds.has(root))
@@ -525,8 +530,8 @@ function checkOpenResidual(body: string | undefined): Verdict {
   const normalized = body ?? "";
   const problems: string[] = [];
   if (placeholder(normalized)) problems.push("Open-set residual is blank");
-  if (!/\bOPEN\b/.test(normalized)) problems.push("literal OPEN marker missing");
-  if (!/\bNON-EXHAUSTIVE\b/.test(normalized))
+  if (!/\bOPEN\b/u.test(normalized)) problems.push("literal OPEN marker missing");
+  if (!/\bNON-EXHAUSTIVE\b/u.test(normalized))
     problems.push("literal NON-EXHAUSTIVE marker missing");
   return problems.length === 0
     ? verdict(
@@ -541,7 +546,7 @@ function checkOpenResidual(body: string | undefined): Verdict {
 function stopCode(body: string | undefined): string | undefined {
   if (body === undefined) return undefined;
   return body.match(
-    /\b(DECISION-INSENSITIVE|BUDGET-SPENT|HUMAN-UNAVAILABLE)\b/,
+    /\b(DECISION-INSENSITIVE|BUDGET-SPENT|HUMAN-UNAVAILABLE)\b/u,
   )?.[1];
 }
 
@@ -556,10 +561,10 @@ function checkStop(
   if (code === undefined) problems.push("canonical strategic stop code missing");
   if (
     code === "DECISION-INSENSITIVE" &&
-    (!/\b(?:no|cannot|can't|would not|does not|without)\b.{0,50}\b(?:change|alter|reopen)\b|変わらない|変更しない|再開しない/i.test(
+    (!/\b(?:no|cannot|can't|would not|does not|without)\b.{0,50}\b(?:change|alter|reopen)\b|変わらない|変更しない|再開しない/iu.test(
       rationale,
     ) ||
-      /\b(?:would|could|will)\s+change\b.{0,50}\b(?:continue|ask more)\b|\bcontinue\b|変わるので続け/i.test(
+      /\b(?:would|could|will)\s+change\b.{0,50}\b(?:continue|ask more)\b|\bcontinue\b|変わるので続け/iu.test(
         rationale,
       ))
   )
@@ -568,7 +573,7 @@ function checkStop(
     );
   if (
     code === "BUDGET-SPENT" &&
-    !/\b(?:budget|cap|limit|time|token|question|source pass).{0,40}\b(?:spent|exhaust|reached|used)\b|予算|上限|時間切れ/i.test(
+    !/\b(?:budget|cap|limit|time|token|question|source pass).{0,40}\b(?:spent|exhaust|reached|used)\b|予算|上限|時間切れ/iu.test(
       rationale,
     )
   )
@@ -576,18 +581,18 @@ function checkStop(
   if (
     code === "HUMAN-UNAVAILABLE" &&
     !(
-      /\b(?:human|owner|operator|expert|researcher).{0,40}\b(?:unavailable|absent|missing|not available)\b/i.test(
+      /\b(?:human|owner|operator|expert|researcher).{0,40}\b(?:unavailable|absent|missing|not available)\b/iu.test(
         rationale,
       ) ||
-      /\b(?:unavailable|absent|missing|not available).{0,40}\b(?:human|owner|operator|expert|researcher)\b/i.test(
+      /\b(?:unavailable|absent|missing|not available).{0,40}\b(?:human|owner|operator|expert|researcher)\b/iu.test(
         rationale,
       ) ||
-      /人間|担当者|不在/.test(rationale)
+      /人間|担当者|不在/u.test(rationale)
     )
   )
     problems.push("HUMAN-UNAVAILABLE needs the absent human owner in its rationale");
   if (
-    (allUnelicited || /\bUNELICITED\b/.test(depthBody ?? "")) &&
+    (allUnelicited || /\bUNELICITED\b/u.test(depthBody ?? "")) &&
     code === "DECISION-INSENSITIVE"
   )
     problems.push(
@@ -622,7 +627,7 @@ function checkDiscoveries(body: string | undefined): Verdict {
     if (placeholder(discovery))
       problems.push(`row ${displayRow}: Discovery is blank`);
     if (
-      !/^(?:ARTIFACT:.+|INFERENCE)$/i.test(source) &&
+      !/^(?:ARTIFACT:.+|INFERENCE)$/iu.test(source) &&
       !humanProvenancePattern.test(source)
     )
       problems.push(`row ${displayRow}: Source provenance is invalid`);
@@ -655,36 +660,36 @@ function checkBoundary(text: string): Verdict {
     "kill decision",
   ]);
   const headings = text
-    .split(/\r?\n/)
-    .map(headingLabel)
+    .split(/\r?\n/u)
+    .map((line) => headingLabel(line))
     .filter((label) => label !== undefined);
   const leaked = headings.filter((label) =>
     forbidden.has(label.toLowerCase()),
   );
   const closureSurface = text
-    .replace(/\bnot all (?:blind spots?|unknown unknowns).{0,50}\b(?:were )?(?:found|covered|enumerated|eliminated)\b/gi, "")
-    .replace(/\b(?:did|does|do|can|could|will|would) not .{0,50}\b(?:all|every) (?:blind spots?|unknown unknowns)\b/gi, "");
+    .replaceAll(/\bnot all (?:blind spots?|unknown unknowns).{0,50}\b(?:were )?(?:found|covered|enumerated|eliminated)\b/giu, "")
+    .replaceAll(/\b(?:did|does|do|can|could|will|would) not .{0,50}\b(?:all|every) (?:blind spots?|unknown unknowns)\b/giu, "");
   const closureClaim =
-    /\b(?:all|every)\s+(?:blind spots?|unknown unknowns).{0,40}\b(?:found|covered|enumerated|eliminated)\b/i.test(
+    /\b(?:all|every)\s+(?:blind spots?|unknown unknowns).{0,40}\b(?:found|covered|enumerated|eliminated)\b/iu.test(
       closureSurface,
     ) ||
-    /\bno\s+(?:material\s+|meaningful\s+|remaining\s+)?blind spots?\s+remain\b|\b(?:this\s+)?inventory\s+is\s+(?:complete|exhaustive)\b|\bnothing\s+(?:else\s+)?remains\s+to\s+(?:ask|consider|discover)\b/i.test(
+    /\bno\s+(?:material\s+|meaningful\s+|remaining\s+)?blind spots?\s+remain\b|\b(?:this\s+)?inventory\s+is\s+(?:complete|exhaustive)\b|\bnothing\s+(?:else\s+)?remains\s+to\s+(?:ask|consider|discover)\b/iu.test(
       closureSurface,
     ) ||
-    /(?:盲点|未知).{0,20}(?:完全に|すべて|全て).{0,20}(?:網羅|解消)/.test(
+    /(?:盲点|未知).{0,20}(?:完全に|すべて|全て).{0,20}(?:網羅|解消)/u.test(
       closureSurface,
     );
   const readOrderViolation =
-    /\b(?:did not|didn't|without)\s+read\b.{0,80}\b(?:ask|question)|\basked?\s+(?:first|before reading)\b|読まずに質問/i.test(
+    /\b(?:did not|didn't|without)\s+read\b.{0,80}\b(?:ask|question)|\basked?\s+(?:first|before reading)\b|読まずに質問/iu.test(
       text,
     );
   const handoff = sectionBody(text, "Handoff") ?? "";
   const handoffOwner =
-    /\b(?:supervising-research-programmes|forging-novel-theses|raising-resolution|acting-on-hypotheses|systematizing-knowledge|arguing-research-papers|forging-skills|orchestrating-agents|NONE)\b/i.test(
+    /\b(?:supervising-research-programmes|forging-novel-theses|raising-resolution|acting-on-hypotheses|systematizing-knowledge|arguing-research-papers|forging-skills|orchestrating-agents|NONE)\b/iu.test(
       handoff,
     );
   const handoffDecisionLeak =
-    /\b(?:recommend|choose|select|adopt|implement|solution|thesis|commit|kill)\b|推奨|選択|解決策|仮説を生成|実装/i.test(
+    /\b(?:recommend|choose|select|adopt|implement|solution|thesis|commit|kill)\b|推奨|選択|解決策|仮説を生成|実装/iu.test(
       handoff,
     );
   if (
@@ -769,7 +774,7 @@ async function main(): Promise<void> {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
   process.stderr.write(
     `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
   );

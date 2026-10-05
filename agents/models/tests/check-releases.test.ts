@@ -22,7 +22,7 @@ describe("check-releases floor", () => {
 
   test("counts every vendor and model in the SSOT", () => {
     const r = run(["--today", "2026-07-25"]);
-    expect(r.out).toMatch(/checked \d+ models across 4 vendors/);
+    expect(r.out).toMatch(/checked \d+ models across 4 vendors/u);
   });
 
   // F1 — a stale sweep is the same defect as a stale catalog, in one file.

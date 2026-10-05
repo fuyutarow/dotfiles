@@ -69,10 +69,6 @@ export type Method = {
 // and carries documented data-corruption reports (microsoft/WSL#13075), so that is a decision for
 // the operator, not a step this planner prints.
 export function pickMethod(optimizeVhdAvailable: boolean): Method {
-  const clearSparse = (d: string): string[] => [
-    "wsl.exe --shutdown",
-    `wsl.exe --manage ${d} --set-sparse false`,
-  ];
   if (optimizeVhdAvailable) {
     return {
       name: "Optimize-VHD",
@@ -91,6 +87,13 @@ export function pickMethod(optimizeVhdAvailable: boolean): Method {
       `'select vdisk file="${v}"','attach vdisk readonly','compact vdisk','detach vdisk' | Set-Content -Encoding ASCII "$env:TEMP\\compact.txt"; diskpart /s "$env:TEMP\\compact.txt"`,
     ],
   };
+}
+
+function clearSparse(distro: string): string[] {
+  return [
+    "wsl.exe --shutdown",
+    `wsl.exe --manage ${distro} --set-sparse false`,
+  ];
 }
 
 function gb(bytes: number): string {
@@ -124,7 +127,7 @@ foreach ($k in $lx) {
 function parseHost(out: string): Map<string, string> {
   const kv = new Map<string, string>();
   for (const line of out.split("\n")) {
-    const [, key, value] = /^([a-z_]+)=(.*)$/.exec(line.trim()) ?? [];
+    const [, key, value] = /^([a-z_]+)=(.*)$/u.exec(line.trim()) ?? [];
     if (key !== undefined && value !== undefined && !kv.has(key))
       kv.set(key, value);
   }
@@ -170,7 +173,7 @@ export function probeFailure(
   if (r.timedOut) return `cannot reach the host: ${where} timed out`;
   const said = r.out.trim().split("\n").slice(0, 5).join("\n  ");
   if (r.code !== 0) {
-    return `cannot reach the host: ${where} exited ${r.code}${said ? `:\n  ${said}` : ""}`;
+    return `cannot reach the host: ${where} exited ${r.code}${said !== "" ? `:\n  ${said}` : ""}`;
   }
   if (said === "") return `cannot reach the host: ${where} returned nothing`;
   return null;
@@ -204,7 +207,7 @@ async function main(): Promise<void> {
   const hostLeg: Leg = host === "local" ? null : host;
   const guestLeg: Leg = guest === "local" ? null : guest;
 
-  if ((hostLeg !== null || guestLeg !== null) && !Bun.which("ssh")) {
+  if ((hostLeg !== null || guestLeg !== null) && Bun.which("ssh") === null) {
     console.log(
       "no ssh on PATH (inside the distro, use --host local --guest local)",
     );
@@ -269,7 +272,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
+  await main().then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

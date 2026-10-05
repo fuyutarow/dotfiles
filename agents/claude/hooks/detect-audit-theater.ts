@@ -28,7 +28,7 @@ import {
 
 async function main(): Promise<number> {
   const payload = readStdinJson();
-  if (at(payload, "stop_hook_active")) return 0;
+  if (at(payload, "stop_hook_active") === true) return 0;
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return 0;
 
@@ -38,21 +38,21 @@ async function main(): Promise<number> {
 
   const user = lastUserText(entries);
   const ctx =
-    /prose audit|prose review|文体|style (review|rewrite)|skill ?review|skill ?レビュー|レビュー|audit|監査/i.test(
+    /prose audit|prose review|文体|style (review|rewrite)|skill ?review|skill ?レビュー|レビュー|audit|監査/iu.test(
       user,
     ) ||
     // old skill names kept as back-compat alternates: older transcripts may still carry them
-    /linting-prose|grounding-prose|auditing-audience-facing-prose/.test(turn);
+    /linting-prose|grounding-prose|auditing-audience-facing-prose/u.test(turn);
   if (!ctx) return 0;
 
   const stripped = stripCode(turn, { blockquotes: true });
 
-  let hit = /監査完了|核は stable|私の起因でない|好例|gate を通過/.test(
+  let hit = /監査完了|核は stable|私の起因でない|好例|gate を通過/u.test(
     stripped,
   );
-  if (!hit && /\b(PASS|GREEN)\b/.test(stripped)) {
+  if (!hit && /\b(PASS|GREEN)\b/u.test(stripped)) {
     hit =
-      !/検査|チェック|scan|checked|未検査|not checked|未確認|remains|残/i.test(
+      !/検査|チェック|scan|checked|未検査|not checked|未確認|remains|残/iu.test(
         stripped,
       );
   }

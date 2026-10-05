@@ -28,46 +28,46 @@ const MIN_LINES = 8;
 // CLAIM tokens — grounding-required assertions that demand a denominator. Regex list is
 // fixed by spec; do not extend beyond what's named there.
 const CLAIM_TOKENS: Array<{ name: string; re: RegExp }> = [
-  { name: "達成", re: /達成/ },
-  { name: "決着", re: /決着/ },
-  { name: "確定", re: /確定/ },
-  { name: "実証", re: /実証/ },
-  { name: "合格", re: /合格/ },
-  { name: "新規性", re: /新規性/ },
-  { name: "前例がない", re: /前例が(?:ない|無い)/ },
+  { name: "達成", re: /達成/u },
+  { name: "決着", re: /決着/u },
+  { name: "確定", re: /確定/u },
+  { name: "実証", re: /実証/u },
+  { name: "合格", re: /合格/u },
+  { name: "新規性", re: /新規性/u },
+  { name: "前例がない", re: /前例が(?:ない|無い)/u },
   {
     name: "存在しない/見つからなかった",
-    re: /(?:存在しない|見つからなかった)/,
+    re: /(?:存在しない|見つからなかった)/u,
   },
-  { name: "frontier", re: /\bfrontier\b/i },
-  { name: "初の", re: /初の/ },
-  { name: "世界初", re: /世界初/ },
-  { name: "全て…済み", re: /全て[\s\S]{0,30}済(?:み|んだ)/ },
+  { name: "frontier", re: /\bfrontier\b/iu },
+  { name: "初の", re: /初の/u },
+  { name: "世界初", re: /世界初/u },
+  { name: "全て…済み", re: /全て[\s\S]{0,30}済(?:み|んだ)/u },
 ];
 
 // path:line citation regex — extended (per spec's explicit allowance) beyond the example
 // extensions for robustness in this TS/JS-heavy repo; the TOKEN LISTS above/below are not
 // extended, only this pattern's file-extension alternation.
-const PATH_LINE_RE = /[\w./-]+\.(?:md|ts|tsx|js|jsx|py|jl|rs|go|rb|sh):\d+/;
+const PATH_LINE_RE = /[\w./-]+\.(?:md|ts|tsx|js|jsx|py|jl|rs|go|rb|sh):\d+/u;
 
 // DENOMINATOR tokens — any ONE of these in the same (code-stripped) message satisfies.
 const DENOMINATOR_PATTERNS: RegExp[] = [
-  /分母/,
-  /照合/,
-  /ccc\s+search/i,
-  /ccc\s+grep/i,
-  /\brecall\b/i,
-  /正本/,
-  /git\s+(?:show|log|diff)\b/i,
-  /https?:\/\/\S+/,
-  /検証手段/,
-  /監査/,
+  /分母/u,
+  /照合/u,
+  /ccc\s+search/iu,
+  /ccc\s+grep/iu,
+  /\brecall\b/iu,
+  /正本/u,
+  /git\s+(?:show|log|diff)\b/iu,
+  /https?:\/\/\S+/u,
+  /検証手段/u,
+  /監査/u,
   PATH_LINE_RE,
 ];
 
 async function main(): Promise<number> {
   const payload = readStdinJson();
-  if (at(payload, "stop_hook_active")) return 0;
+  if (at(payload, "stop_hook_active") === true) return 0;
   const transcript = strAt(payload, "transcript_path");
   if (transcript === undefined || transcript === "") return 0;
 
@@ -81,7 +81,7 @@ async function main(): Promise<number> {
   const stripped = stripCode(turn, { blockquotes: true });
 
   const claimHit = CLAIM_TOKENS.find((c) => c.re.test(stripped));
-  if (!claimHit) return 0;
+  if (claimHit === undefined) return 0;
 
   const hasDenominator = DENOMINATOR_PATTERNS.some((re) => re.test(stripped));
   if (hasDenominator) return 0;

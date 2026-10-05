@@ -40,12 +40,12 @@ import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
 
 // PreToolUse gates only — the decidePre JSON channel. See the header note on detect-*.ts.
-const GATE = /^enforce-.*\.ts$/;
+const GATE = /^enforce-.*\.ts$/u;
 
 // A declaration is two non-empty fields, like the LOW-EFFORT / RESOURCE-CLASS markers this repo
 // already uses: the kind (with its parenthesised detail, where it takes one) and a reason.
 const DECLARATION =
-  /\/\/\s*(FATAL|SINGLE-AXIS|BATCHED\s*\(([^)]*)\))\s*:(.*)$/;
+  /\/\/\s*(FATAL|SINGLE-AXIS|BATCHED\s*\(([^)]*)\))\s*:(.*)$/u;
 
 // How far above a deny site a declaration may sit. Generous enough for a guard + a blank line.
 const LOOKBEHIND = 6;
@@ -64,15 +64,15 @@ type Finding = { file: string; line: number; problem: string };
 
 // existsSync never throws for a plain missing-path check (unlike `stat`), so there is no
 // throw to catch here.
-async function exists(p: string): Promise<boolean> {
-  return existsSync(p);
+function exists(p: string): Promise<boolean> {
+  return Promise.resolve(existsSync(p));
 }
 
 // A deny site is `decidePre(` whose FIRST argument is the literal "deny". Both the one-line and
 // the formatter's exploded form are matched; `decidePre("allow", …)` is not a gate decision.
 function denyLines(source: string): number[] {
   const lines: number[] = [];
-  const call = /\bdecidePre\s*\(/g;
+  const call = /\bdecidePre\s*\(/gu;
   let match: RegExpExecArray | null;
   while ((match = call.exec(source)) !== null) {
     const head = source.slice(match.index + match[0].length).trimStart();
@@ -86,7 +86,7 @@ function denyLines(source: string): number[] {
 function catchStart(source: string): number {
   const lines = source.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (/^\}\s*catch\b/.test(lines[i] ?? "")) return i + 1;
+    if (/^\}\s*catch\b/u.test(lines[i] ?? "")) return i + 1;
   }
   return Number.POSITIVE_INFINITY;
 }
@@ -178,7 +178,7 @@ async function main(): Promise<number> {
   const gates = (await readdir(root, { withFileTypes: true }))
     .filter((entry) => !entry.isDirectory() && GATE.test(entry.name))
     .map((entry) => join(root, entry.name))
-    .sort();
+    .toSorted();
   if (gates.length === 0) {
     process.stdout.write(`RESULT: no enforce-*.ts gates under ${root}\n`);
     return 0;
@@ -206,11 +206,10 @@ async function main(): Promise<number> {
   return 1;
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((error: unknown) => {
+const code = await main().catch((error: unknown) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(2);
+    return 2;
   });
+process.exit(code);

@@ -40,10 +40,10 @@ function rejectPrototypeFlag(
 }
 
 function fieldPattern(label: string): RegExp {
-	const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 	return new RegExp(
 		String.raw`^\s*(?:[-*+]\s+|#{1,6}\s+)?(?:\*\*|__)?${escaped}(?:(?:\*\*|__)\s*[：:]|\s*[：:](?:\*\*|__)?)`,
-		"i",
+		"iu",
 	);
 }
 
@@ -55,7 +55,7 @@ function valueAfterColon(line: string): string {
 		: normalized
 				.slice(index + 1)
 				.trim()
-				.replace(/^(?:\*\*|__)\s*/, "");
+				.replace(/^(?:\*\*|__)\s*/u, "");
 }
 
 function readField(
@@ -71,8 +71,8 @@ function sectionBody(
 	lines: readonly string[],
 	heading: string,
 ): Readonly<{ count: number; lines: readonly string[] }> {
-	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const pattern = new RegExp(`^\\s*##\\s+${escaped}\\s*$`, "i");
+	const escaped = heading.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+	const pattern = new RegExp(`^\\s*##\\s+${escaped}\\s*$`, "iu");
 	const indices = lines.flatMap((line, index) =>
 		pattern.test(line) ? [index] : [],
 	);
@@ -80,7 +80,7 @@ function sectionBody(
 	if (start === undefined) return { count: 0, lines: [] };
 	const relativeEnd = lines
 		.slice(start + 1)
-		.findIndex((line) => /^\s*#{1,6}\s+/.test(line));
+		.findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
 	const end = relativeEnd === -1 ? lines.length : start + 1 + relativeEnd;
 	return { count: indices.length, lines: lines.slice(start + 1, end) };
 }
@@ -88,8 +88,8 @@ function sectionBody(
 function placeholder(value: string): boolean {
 	return (
 		value.trim() === "" ||
-		/\[\.\.\.\]|\[…\]|\[ *\]/.test(value) ||
-		/^(?:TBD|N\/?A|NA|未定|未記入|-|—|\?+)$/i.test(value.trim())
+		/\[\.\.\.\]|\[…\]|\[ *\]/u.test(value) ||
+		/^(?:TBD|N\/?A|NA|未定|未記入|-|—|\?+)$/iu.test(value.trim())
 	);
 }
 
@@ -97,14 +97,14 @@ function tableCells(line: string): string[] {
 	const trimmed = line.trim();
 	if (!trimmed.startsWith("|")) return [];
 	return trimmed
-		.replace(/^\|/, "")
-		.replace(/\|$/, "")
+		.replace(/^\|/u, "")
+		.replace(/\|$/u, "")
 		.split("|")
 		.map((cell) => cell.trim());
 }
 
 function separatorRow(cells: readonly string[]): boolean {
-	return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+	return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell));
 }
 
 function donorRecords(lines: readonly string[]): Readonly<{
@@ -135,7 +135,7 @@ function donorRecords(lines: readonly string[]): Readonly<{
 
 	const records: DonorRecord[] = [];
 	for (const line of lines.slice(headerIndex + 1)) {
-		if (/^\s*#{1,6}\s+/.test(line)) break;
+		if (/^\s*#{1,6}\s+/u.test(line)) break;
 		const cells = tableCells(line);
 		if (cells.length === 0 || separatorRow(cells)) continue;
 		if (cells.length !== requiredColumns.length) {
@@ -144,7 +144,7 @@ function donorRecords(lines: readonly string[]): Readonly<{
 			);
 			continue;
 		}
-		if (cells.some(placeholder)) {
+		if (cells.some((cell) => placeholder(cell))) {
 			findings.push(
 				"Every donor record cell must be non-empty and non-placeholder",
 			);
@@ -194,58 +194,58 @@ function donorRecords(lines: readonly string[]): Readonly<{
 
 function located(value: string): boolean {
 	const fileLine =
-		/(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/i.test(value);
+		/(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/iu.test(value);
 	if (fileLine) return true;
 
-	const source = /\bdoi:\S+|https?:\/\/\S+/i.test(value);
+	const source = /\bdoi:\S+|https?:\/\/\S+/iu.test(value);
 	const localizer =
-		/(?:\b(?:p{1,2}\.?\s*\d+(?:-\d+)?|pages?\s+\d+(?:-\d+)?|§\s*[A-Za-z0-9.-]+|section\s+[A-Za-z0-9.-]+|table\s+[A-Za-z0-9.-]+|figure\s+[A-Za-z0-9.-]+|fig\.\s*[A-Za-z0-9.-]+)\b|#[A-Za-z0-9._-]+)/i.test(
+		/(?:\b(?:p{1,2}\.?\s*\d+(?:-\d+)?|pages?\s+\d+(?:-\d+)?|§\s*[A-Za-z0-9.-]+|section\s+[A-Za-z0-9.-]+|table\s+[A-Za-z0-9.-]+|figure\s+[A-Za-z0-9.-]+|fig\.\s*[A-Za-z0-9.-]+)\b|#[A-Za-z0-9._-]+)/iu.test(
 			value,
 		);
 	return source && localizer;
 }
 
 function stableDonorId(value: string): boolean {
-	return /^[A-Za-z][A-Za-z0-9._-]*$/.test(value);
+	return /^[A-Za-z][A-Za-z0-9._-]*$/u.test(value);
 }
 
 type TargetLeak = "mapping" | "prediction" | "support" | "thesis";
 
 function positiveTargetLeaks(line: string): readonly TargetLeak[] {
-	const value = line.replace(/[*_`]/g, " ").replace(/\s+/g, " ").trim();
+	const value = line.replaceAll(/[*_`]/gu, " ").replaceAll(/\s+/gu, " ").trim();
 	const leaks: TargetLeak[] = [];
 
 	if (
-		/(?:\btarget\s+(?:mapping|correspondence)\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+(?:mapping|correspondence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:source|donor|role|relation)\b.{0,80}\bmaps?\s+(?:onto|to)\s+(?:the\s+)?target\b)/i.test(
+		/(?:\btarget\s+(?:mapping|correspondence)\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+(?:mapping|correspondence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:source|donor|role|relation)\b.{0,80}\bmaps?\s+(?:onto|to)\s+(?:the\s+)?target\b)/iu.test(
 			value,
 		) ||
-		/対象(?:への|の)?(?:対応付け|写像|マッピング).{0,80}(?:成立|妥当|支持|確認|実証)|(?:ソース|ドナー|役割|関係).{0,80}対象(?:へ|に)(?:対応付け|写像|マッピング)/.test(
+		/対象(?:への|の)?(?:対応付け|写像|マッピング).{0,80}(?:成立|妥当|支持|確認|実証)|(?:ソース|ドナー|役割|関係).{0,80}対象(?:へ|に)(?:対応付け|写像|マッピング)/u.test(
 			value,
 		)
 	) {
 		leaks.push("mapping");
 	}
 	if (
-		/(?:\btarget\s+prediction\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+prediction\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|confirmed|validated|demonstrated)\b|\bpredicts?\b.{0,80}\btarget\b)/i.test(
+		/(?:\btarget\s+prediction\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+prediction\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|confirmed|validated|demonstrated)\b|\bpredicts?\b.{0,80}\btarget\b)/iu.test(
 			value,
 		) ||
-		/対象(?:への|の)?予測.{0,80}(?:示す|予測|成立|支持|確認)/.test(value)
+		/対象(?:への|の)?予測.{0,80}(?:示す|予測|成立|支持|確認)/u.test(value)
 	) {
 		leaks.push("prediction");
 	}
 	if (
-		/\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|established|demonstrated|confirmed|validated)\b|\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s*(?::|=)\s*(?:SUPPORTED|ESTABLISHED|CONFIRMED|VALIDATED)\b/i.test(
+		/\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|established|demonstrated|confirmed|validated)\b|\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s*(?::|=)\s*(?:SUPPORTED|ESTABLISHED|CONFIRMED|VALIDATED)\b/iu.test(
 			value,
 		) ||
-		/対象側(?:の)?(?:支持|証拠).{0,80}(?:支持|確立|実証|確認|検証)/.test(value)
+		/対象側(?:の)?(?:支持|証拠).{0,80}(?:支持|確立|実証|確認|検証)/u.test(value)
 	) {
 		leaks.push("support");
 	}
 	if (
-		/(?:\b(?:target\s+)?thesis(?:\s+claim)?\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:argues?|shows?|supports?|will)\b)/i.test(
+		/(?:\b(?:target\s+)?thesis(?:\s+claim)?\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:argues?|shows?|supports?|will)\b)/iu.test(
 			value,
 		) ||
-		/(?:対象(?:への|の)?仮説|仮説(?:主張)?).{0,80}(?:成立|主張|示す|支持|確認)/.test(
+		/(?:対象(?:への|の)?仮説|仮説(?:主張)?).{0,80}(?:成立|主張|示す|支持|確認)/u.test(
 			value,
 		)
 	) {
@@ -280,7 +280,7 @@ async function input(): Promise<string> {
 
 async function main(): Promise<void> {
 	const text = await input();
-	const documentLines = text.split(/\r?\n/);
+	const documentLines = text.split(/\r?\n/u);
 	let failures = 0;
 	let warnings = 0;
 	const report = (id: string, severity: Severity, message: string): void => {
@@ -290,7 +290,7 @@ async function main(): Promise<void> {
 	};
 
 	const donorSetHeadings = documentLines.flatMap((line, index) =>
-		/^\s*#\s+DONOR SET\s*$/i.test(line) ? [index] : [],
+		/^\s*#\s+DONOR SET\s*$/iu.test(line) ? [index] : [],
 	);
 	const headingIndex = donorSetHeadings[0];
 	let lineOffset = 1;
@@ -305,7 +305,7 @@ async function main(): Promise<void> {
 		}
 		const relativeEnd = documentLines
 			.slice(headingIndex + 1)
-			.findIndex((line) => /^\s*#\s+/.test(line));
+			.findIndex((line) => /^\s*#\s+/u.test(line));
 		const end =
 			relativeEnd === -1
 				? documentLines.length
@@ -314,7 +314,7 @@ async function main(): Promise<void> {
 		lineOffset = headingIndex + 2;
 	}
 
-	const firstSection = lines.findIndex((line) => /^\s*##\s+/.test(line));
+	const firstSection = lines.findIndex((line) => /^\s*##\s+/u.test(line));
 	const preamble = firstSection === -1 ? lines : lines.slice(0, firstSection);
 	const donorSection = sectionBody(lines, "Donor records");
 	const comparisonSection = sectionBody(lines, "Comparison");
@@ -365,11 +365,11 @@ async function main(): Promise<void> {
 
 	const selection = values.get("Selection rule") ?? "";
 	if (
-		!/(?:relation|relationship|constraint|関係|制約)/i.test(selection) ||
-		!/(?:\bnot\b|rather than|reject|instead of|ではなく|除外|拒否)/i.test(
+		!/(?:relation|relationship|constraint|関係|制約)/iu.test(selection) ||
+		!/(?:\bnot\b|rather than|reject|instead of|ではなく|除外|拒否)/iu.test(
 			selection,
 		) ||
-		!/(?:surface|object name|vocabular|terminology|distance|表層|名称|語彙|距離)/i.test(
+		!/(?:surface|object name|vocabular|terminology|distance|表層|名称|語彙|距離)/iu.test(
 			selection,
 		)
 	) {
@@ -446,13 +446,13 @@ async function main(): Promise<void> {
 	const commonSchema = values.get("Common relational schema") ?? "";
 	if (table.records.length === 1) {
 		const bounded =
-			/^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/.test(singleLimit) &&
-			/hypothesis seed/i.test(singleLimit) &&
-			/no abstract schema|not (?:an? )?schema/i.test(singleLimit) &&
-			/no(?: [^;,.]+)? target transport|target transport.*not established/i.test(
+			/^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/u.test(singleLimit) &&
+			/hypothesis seed/iu.test(singleLimit) &&
+			/no abstract schema|not (?:an? )?schema/iu.test(singleLimit) &&
+			/no(?: [^;,.]+)? target transport|target transport.*not established/iu.test(
 				singleLimit,
 			) &&
-			/^HYPOTHESIS SEED\s*(?:—|–|:|\s-\s)/.test(commonSchema);
+			/^HYPOTHESIS SEED\s*(?:—|–|:|\s-\s)/u.test(commonSchema);
 		if (!bounded) {
 			report(
 				"D20",
@@ -468,7 +468,7 @@ async function main(): Promise<void> {
 		}
 	} else if (
 		table.records.length >= 2 &&
-		!/^NONE\s*(?:—|–|:|\s-\s).*(?:two|2|distinct|compared|複数|比較)/i.test(
+		!/^NONE\s*(?:—|–|:|\s-\s).*(?:two|2|distinct|compared|複数|比較)/iu.test(
 			singleLimit,
 		)
 	) {
@@ -543,11 +543,11 @@ async function main(): Promise<void> {
 
 	const handoff = values.get("Handoff") ?? "";
 	if (
-		!/forging-novel-theses/i.test(handoff) ||
-		!/no target mapping/i.test(handoff) ||
-		!/no .*target prediction/i.test(handoff) ||
-		!/no .*thesis/i.test(handoff) ||
-		!/no .*test verdict/i.test(handoff)
+		!/forging-novel-theses/iu.test(handoff) ||
+		!/no target mapping/iu.test(handoff) ||
+		!/no .*target prediction/iu.test(handoff) ||
+		!/no .*thesis/iu.test(handoff) ||
+		!/no .*test verdict/iu.test(handoff)
 	) {
 		report(
 			"D23",
@@ -565,7 +565,7 @@ async function main(): Promise<void> {
 	process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
 	process.stderr.write(
 		`FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
 	);

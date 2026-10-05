@@ -101,20 +101,22 @@ if (existsSync(overlayPath)) {
     process.exit(1);
   }
   overlay = overlayRead.value;
-  overlayKeys = Object.keys(overlay).sort();
+  overlayKeys = Object.keys(overlay).toSorted();
 }
 
 const merged = { ...base, ...overlay };
 const rendered = `${JSON.stringify(merged, null, 2)}\n`;
 
 // Already current → no write, no churn (this runs on every pull via the post-merge hook).
-if (existsSync(destPath) && lstatSync(destPath).isFile()) {
-  if ((await Bun.file(destPath).text()) === rendered) {
-    print(
-      `settings current: ${destPath}${overlayKeys.length > 0 ? ` (private: ${overlayKeys.join(", ")})` : ""}`,
-    );
-    process.exit(0);
-  }
+if (
+  existsSync(destPath) &&
+  lstatSync(destPath).isFile() &&
+  (await Bun.file(destPath).text()) === rendered
+) {
+  print(
+    `settings current: ${destPath}${overlayKeys.length > 0 ? ` (private: ${overlayKeys.join(", ")})` : ""}`,
+  );
+  process.exit(0);
 }
 
 mkdirSync(`${home}/.claude`, { recursive: true });

@@ -343,8 +343,9 @@ describe("reclaim-toolchains.ts CLI", () => {
       join(tmpdir(), "cache-toolchains-stubs-none-"),
     );
     using _cleanupEmptyStubs = {
-      [Symbol.dispose]: () =>
-        rmSync(emptyStubs, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(emptyStubs, { recursive: true, force: true });
+      },
     };
     const { out, code } = runScript(["--dry-run", "--home", fixtureHome], {
       pathDirs: [emptyStubs],
@@ -362,7 +363,9 @@ describe("reclaim-toolchains.ts CLI", () => {
       join(tmpdir(), "cache-toolchains-stubs-rustup-only-"),
     );
     using _cleanupStubs = {
-      [Symbol.dispose]: () => rmSync(stubs, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(stubs, { recursive: true, force: true });
+      },
     };
     makeStub(
       stubs,
@@ -390,14 +393,17 @@ describe("reclaim-toolchains.ts CLI", () => {
       Temporal.Now.instant().epochMilliseconds / 1000 - 100 * 86400;
     utimesSync(oldDir, longAgo, longAgo);
     using _cleanupHome = {
-      [Symbol.dispose]: () => rmSync(home, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(home, { recursive: true, force: true });
+      },
     };
     const emptyStubs = mkdtempSync(
       join(tmpdir(), "cache-toolchains-stubs-vsc-"),
     );
     using _cleanupEmptyStubs = {
-      [Symbol.dispose]: () =>
-        rmSync(emptyStubs, { recursive: true, force: true }),
+      [Symbol.dispose]: () => {
+        rmSync(emptyStubs, { recursive: true, force: true });
+      },
     };
     const { out, code } = runScript(["--dry-run", "--home", home], {
       pathDirs: [emptyStubs],

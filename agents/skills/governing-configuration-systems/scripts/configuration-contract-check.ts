@@ -53,7 +53,7 @@ type RegimeParse = Readonly<{
 	values: readonly string[];
 }>;
 
-const backtick = String.fromCharCode(96);
+const backtick = String.fromCodePoint(96);
 
 function rejectPrototypeFlag(
 	type: ArgvType,
@@ -68,32 +68,32 @@ function rejectPrototypeFlag(
 function fieldValue(line: string, label: string): string | undefined {
 	const normalized = line
 		.trim()
-		.replace(/^[-*+]\s+/, "")
-		.replace(/^(?:\*\*|__)/, "")
+		.replace(/^[-*+]\s+/u, "")
+		.replace(/^(?:\*\*|__)/u, "")
 		.replaceAll("：", ":");
 	if (!normalized.toLowerCase().startsWith(label.toLowerCase())) {
 		return undefined;
 	}
 	const suffix = normalized
 		.slice(label.length)
-		.replace(/^(?:\*\*|__)/, "")
+		.replace(/^(?:\*\*|__)/u, "")
 		.trimStart();
 	if (!suffix.startsWith(":")) return undefined;
-	return suffix.slice(1).trim().replace(/^(?:\*\*|__)/, "").trim();
+	return suffix.slice(1).trim().replace(/^(?:\*\*|__)/u, "").trim();
 }
 
 function isPlaceholder(value: string | undefined): boolean {
 	if (value === undefined || value.trim() === "") return true;
 	const normalized = value.trim();
 	return (
-		/<[^>]*>/.test(normalized) ||
-		/^(?:tbd|todo|unknown|unresolved|未定|未記入|\?+)$/i.test(normalized)
+		/<[^>]*>/u.test(normalized) ||
+		/^(?:tbd|todo|unknown|unresolved|未定|未記入|\?+)$/iu.test(normalized)
 	);
 }
 
 function isMeaningful(value: string | undefined): boolean {
 	if (isPlaceholder(value)) return false;
-	return !/^(?:n\/?a|none|not applicable|なし|不要)(?:\b|\s|[(:：])/i.test(
+	return !/^(?:n\/?a|none|not applicable|なし|不要)(?:\b|\s|[(:：])/iu.test(
 		value?.trim() ?? "",
 	);
 }
@@ -102,7 +102,7 @@ function boundaryPayload(
 	value: string | undefined,
 	kind: "canonical" | "raw-byte",
 ): string | undefined {
-	const match = value?.match(new RegExp("^" + kind + ":\\s*(.+)$", "i"));
+	const match = value?.match(new RegExp("^" + kind + ":\\s*(.+)$", "iu"));
 	const payload = match?.[1]?.trim();
 	return isMeaningful(payload) ? payload : undefined;
 }
@@ -111,7 +111,7 @@ function disposition(
 	value: string | undefined,
 	allowed: readonly string[],
 ): string | undefined {
-	const match = value?.match(/^([a-z-]+):\s*(.+)$/i);
+	const match = value?.match(/^([a-z-]+):\s*(.+)$/iu);
 	const kind = match?.[1]?.toLowerCase();
 	const payload = match?.[2]?.trim();
 	if (kind === undefined || payload === undefined || !allowed.includes(kind)) {
@@ -124,7 +124,7 @@ function markdownFence(
 	line: string,
 ): Readonly<{ marker: string; suffix: string }> | undefined {
 	const match = line.match(
-		new RegExp("^(" + backtick + "{3,}|~{3,})(.*)$"),
+		new RegExp("^(" + backtick + "{3,}|~{3,})(.*)$", "u"),
 	);
 	if (match?.[1] === undefined || match[2] === undefined) return undefined;
 	return { marker: match[1], suffix: match[2] };
@@ -138,47 +138,55 @@ function extractFields(text: string): ReadonlyMap<string, readonly string[]> {
 		let line = original;
 		let trimmed = line.trim();
 		const marker = markdownFence(trimmed);
-		if (activeFence !== undefined) {
-			if (
-				marker !== undefined &&
-				marker.marker[0] === activeFence[0] &&
-				marker.marker.length >= activeFence.length &&
-				marker.suffix.trim() === ""
-			) {
-				activeFence = undefined;
-			}
-			continue;
-		}
+		const wasInFence = activeFence !== undefined;
+		if (wasInFence) activeFence = isClosingFence(marker, activeFence ?? "") ? undefined : activeFence;
+		if (wasInFence) continue;
 		if (marker !== undefined) {
 			activeFence = marker.marker;
 			continue;
 		}
+		const priorCommentEnd = line.indexOf("-->");
+		if (inComment && priorCommentEnd === -1) continue;
 		if (inComment) {
-			const commentEnd = line.indexOf("-->");
-			if (commentEnd === -1) continue;
 			inComment = false;
-			line = line.slice(commentEnd + 3);
+			line = line.slice(priorCommentEnd + 3);
 			trimmed = line.trim();
 		}
 		const commentStart = line.indexOf("<!--");
-		if (commentStart !== -1) {
-			const commentEnd = line.indexOf("-->", commentStart + 4);
-			if (commentEnd === -1) {
-				inComment = true;
-				continue;
-			}
-			line = line.slice(0, commentStart) + line.slice(commentEnd + 3);
+		const currentCommentEnd = line.indexOf("-->", commentStart + 4);
+		if (commentStart !== -1 && currentCommentEnd === -1) {
+			inComment = true;
+			continue;
 		}
-		if (/^(?: {4}|\t)/.test(line)) continue;
+		if (commentStart !== -1) {
+			line = line.slice(0, commentStart) + line.slice(currentCommentEnd + 3);
+		}
+		if (/^(?: {4}|\t)/u.test(line)) continue;
 		for (const label of requiredFields) {
-			const value = fieldValue(line, label);
-			if (value === undefined) continue;
-			const values = fields.get(label) ?? [];
-			values.push(value);
-			fields.set(label, values);
+			addFieldValue(fields, line, label);
 		}
 	}
 	return fields;
+}
+
+function addFieldValue(fields: Map<string, string[]>, line: string, label: string): void {
+	const value = fieldValue(line, label);
+	if (value === undefined) return;
+	const values = fields.get(label) ?? [];
+	values.push(value);
+	fields.set(label, values);
+}
+
+function isClosingFence(
+	marker: Readonly<{ marker: string; suffix: string }> | undefined,
+	activeFence: string,
+): boolean {
+	return (
+		marker !== undefined &&
+		marker.marker[0] === activeFence[0] &&
+		marker.marker.length >= activeFence.length &&
+		marker.suffix.trim() === ""
+	);
 }
 
 function regimes(value: string | undefined): RegimeParse {
@@ -258,16 +266,18 @@ async function main(): Promise<void> {
 	const signatureInput = fields.get("Signature / digest input")?.[0];
 	const canonicalization = fields.get("Canonicalization profile")?.[0];
 	if (selectedRegimes.includes("signed-raw")) {
-		if (boundaryPayload(signatureInput, "raw-byte") === undefined) {
-			report("C2", "FAIL", "signed-raw requires a raw-byte signature/digest input");
-		} else {
-			report("C2", "PASS", "raw-byte boundary named");
-		}
+		report(
+			"C2",
+			boundaryPayload(signatureInput, "raw-byte") === undefined ? "FAIL" : "PASS",
+			boundaryPayload(signatureInput, "raw-byte") === undefined
+				? "signed-raw requires a raw-byte signature/digest input"
+				: "raw-byte boundary named",
+		);
 	}
 	if (selectedRegimes.includes("signed-canonical")) {
 		if (!isMeaningful(canonicalization)) {
 			report("C2", "FAIL", "signed-canonical requires a named canonicalization profile");
-		} else if (/^strict\s+json(?:\s|$)/i.test(canonicalization?.trim() ?? "")) {
+		} else if (/^strict\s+json(?:\s|$)/iu.test(canonicalization?.trim() ?? "")) {
 			report("C2", "FAIL", "strict JSON is not a named canonicalization profile");
 		} else {
 			report("C2", "PASS", "canonicalization profile: " + canonicalization);
@@ -285,15 +295,10 @@ async function main(): Promise<void> {
 			"encoded",
 			"none",
 		]);
-		if (decision === undefined) {
-			report("C3", "FAIL", "gated-decision requires Decision record: record: or none:");
-		}
-		if (exception === undefined) {
-			report("C3", "FAIL", "gated-decision requires Exception encoding: encoded: or none:");
-		}
-		if (decision !== undefined && exception !== undefined) {
+		if (decision === undefined) report("C3", "FAIL", "gated-decision requires Decision record: record: or none:");
+		if (exception === undefined) report("C3", "FAIL", "gated-decision requires Exception encoding: encoded: or none:");
+		if (decision !== undefined && exception !== undefined)
 			report("C3", "PASS", "decision and exception dispositions are explicit");
-		}
 	}
 
 	process.stdout.write("----\n");
@@ -305,7 +310,7 @@ async function main(): Promise<void> {
 	process.exit(failures === 0 ? 0 : 1);
 }
 
-main().catch((error) => {
+await main().catch((error) => {
 	process.stderr.write(
 		"FATAL: " + (error instanceof Error ? error.message : String(error)) + "\n",
 	);

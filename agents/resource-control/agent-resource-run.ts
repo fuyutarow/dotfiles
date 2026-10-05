@@ -522,7 +522,7 @@ function nonEmpty(value: unknown, label: string, maximum = 2_000): string {
 // in reservation/receipt filenames and systemd unit names elsewhere in this file.
 export function validateJobId(value: unknown, label: string): string {
   const jobId = nonEmpty(value, label, 80);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(jobId)) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/u.test(jobId)) {
     throw new UsageError(
       `${label} must contain only letters, digits, dot, underscore, or hyphen`,
     );
@@ -535,7 +535,7 @@ function sha256Hex(bytes: Uint8Array): string {
 }
 
 function isSha256Hex(value: string): boolean {
-  return /^[0-9a-f]{64}$/.test(value);
+  return /^[0-9a-f]{64}$/u.test(value);
 }
 
 export function manifestSourceFromBytes(
@@ -706,21 +706,21 @@ export function parseCpuList(text: string): number[] {
   for (const rawPart of text.trim().split(",")) {
     const part = rawPart.trim();
     if (part === "") continue;
-    const range = /^(\d+)-(\d+)$/.exec(part);
+    const range = /^(\d+)-(\d+)$/u.exec(part);
     if (range !== null) {
       addCpuRange(range, part, cpus);
       continue;
     }
-    if (!/^\d+$/.test(part)) throw new StateError(`invalid CPU id '${part}'`);
+    if (!/^\d+$/u.test(part)) throw new StateError(`invalid CPU id '${part}'`);
     cpus.add(Number(part));
   }
-  const result = [...cpus].sort((a, b) => a - b);
+  const result = [...cpus].toSorted((a, b) => a - b);
   if (result.length === 0) throw new StateError("allowed CPU list is empty");
   return result;
 }
 
 function meminfoBytes(text: string, key: string): number {
-  const match = new RegExp(`^${key}:\\s+(\\d+)\\s+kB$`, "m").exec(text);
+  const match = new RegExp(`^${key}:\\s+(\\d+)\\s+kB$`, "mu").exec(text);
   if (match === null) throw new StateError(`/proc/meminfo lacks ${key}`);
   return Number(match[1]) * KiB;
 }
@@ -792,8 +792,10 @@ function probeGpus(): GpuSnapshot[] {
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map(parseNvidiaSmiGpuRow)
-    .map((gpu) => (rerankActive ? { ...gpu, rerank_active: true } : gpu));
+    .map((row) => parseNvidiaSmiGpuRow(row))
+    .map((gpu) =>
+      rerankActive ? Object.assign({}, gpu, { rerank_active: true }) : gpu,
+    );
 }
 
 // The reranker is socket-activated and idle-exits, so its partition is held only while it runs.
@@ -827,7 +829,7 @@ export function probeHostSnapshot(cwd: string): HostSnapshot {
     );
   }
   const status = readFileSync("/proc/self/status", "utf8");
-  const allowed = /^Cpus_allowed_list:\s*(.+)$/m.exec(status)?.[1];
+  const allowed = /^Cpus_allowed_list:\s*(.+)$/mu.exec(status)?.[1];
   if (allowed === undefined) {
     throw new StateError("/proc/self/status lacks Cpus_allowed_list");
   }
@@ -837,13 +839,13 @@ export function probeHostSnapshot(cwd: string): HostSnapshot {
     allowed_cpu_ids: parseCpuList(allowed),
     mem_total_bytes: meminfoBytes(meminfo, "MemTotal"),
     mem_available_bytes: meminfoBytes(meminfo, "MemAvailable"),
-    scratch_available_bytes: Number(fs.bavail) * Number(fs.bsize),
+    scratch_available_bytes: fs.bavail * fs.bsize,
     gpus: probeGpus(),
   };
 }
 
 function oneLineDiagnostic(text: string): string {
-  return text.trim().replace(/\s+/g, " ").slice(0, 400);
+  return text.trim().replaceAll(/\s+/gu, " ").slice(0, 400);
 }
 
 export function probeKernelEnforcement(): KernelEnforcement {
@@ -1191,11 +1193,15 @@ function pidIsAlive(pid: number): boolean {
 
 function releaseLockDirectory(lockDirectory: string): void {
   const owner = join(lockDirectory, "owner.json");
-  const unlinkResult = fromThrowable(() => unlinkSync(owner))();
+  const unlinkResult = fromThrowable(() => {
+    unlinkSync(owner);
+  })();
   if (unlinkResult.isErr() && errorCode(unlinkResult.error) !== "ENOENT") {
     throw unlinkResult.error;
   }
-  const rmdirResult = fromThrowable(() => rmdirSync(lockDirectory))();
+  const rmdirResult = fromThrowable(() => {
+    rmdirSync(lockDirectory);
+  })();
   if (rmdirResult.isErr() && errorCode(rmdirResult.error) !== "ENOENT") {
     throw rmdirResult.error;
   }
@@ -1207,7 +1213,9 @@ function handleLockAcquisitionError(
 ): void {
   if (errorCode(error) === "EEXIST") return;
   // Preserve the original lock/setup error: discard whatever releaseLockDirectory reports.
-  fromThrowable(() => releaseLockDirectory(lockDirectory))();
+  fromThrowable(() => {
+    releaseLockDirectory(lockDirectory);
+  })();
   throw new StateError(
     `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
   );
@@ -1255,7 +1263,9 @@ async function acquireStateLock(stateDirectory: string): Promise<() => void> {
       );
     })();
     if (created.isOk()) {
-      return () => releaseLockDirectory(lockDirectory);
+      return () => {
+        releaseLockDirectory(lockDirectory);
+      };
     }
     handleLockAcquisitionError(created.error, lockDirectory);
 
@@ -1294,7 +1304,9 @@ function reservationFrom(value: unknown): Reservation | null {
 }
 
 function unlinkIgnoringMissing(path: string): void {
-  const result = fromThrowable(() => unlinkSync(path))();
+  const result = fromThrowable(() => {
+    unlinkSync(path);
+  })();
   if (result.isErr() && errorCode(result.error) !== "ENOENT") {
     throw result.error;
   }
@@ -1352,7 +1364,11 @@ async function acquireLease(
     `${reservationId}.reservation.json`,
   );
   const fd = openSync(reservationPath, "wx", 0o600);
-  using _fd = { [Symbol.dispose]: () => closeSync(fd) };
+  using _fd = {
+    [Symbol.dispose]: () => {
+      closeSync(fd);
+    },
+  };
   writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
   return { ok: true, reservation, reservationPath, stateDirectory };
 }
@@ -1389,7 +1405,7 @@ function sampleProcessGroupMember(
     readFileSync(join("/proc", entry, "status"), "utf8"),
   )();
   if (statusResult.isErr()) return { rssBytes: 0 };
-  const rss = /^VmRSS:\s+(\d+)\s+kB$/m.exec(statusResult.value)?.[1];
+  const rss = /^VmRSS:\s+(\d+)\s+kB$/mu.exec(statusResult.value)?.[1];
   return { rssBytes: rss !== undefined ? Number(rss) * KiB : 0 };
 }
 
@@ -1398,7 +1414,7 @@ function processGroupUsage(pgid: number): GroupUsage {
   let rssBytes = 0;
   const pids: number[] = [];
   for (const entry of readdirSync("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
+    if (!/^\d+$/u.test(entry)) continue;
     const sample = sampleProcessGroupMember(entry, pgid);
     if (sample === null) continue;
     processes += 1;
@@ -1462,7 +1478,7 @@ function sampleGpuComputeApps(): Map<number, number> {
     .trim()
     .split("\n")
     .filter(Boolean)
-    .map(parseNvidiaSmiComputeAppRow)
+    .map((row) => parseNvidiaSmiComputeAppRow(row))
     .flatMap((row) => (row === null ? [] : [row]));
   for (const row of rows) usage.set(row.pid, row.usedBytes);
   return usage;
@@ -1523,11 +1539,11 @@ function releaseDescription(peak: MeasuredPeak): string {
 // still gets the same data from the RELEASE line, so a write failure here is silent, not fatal.
 function writePeakArtifact(manifestPath: string, peak: MeasuredPeak): void {
   // Best-effort — see the header comment above: discard any write failure.
-  fromThrowable(() =>
+  fromThrowable(() => {
     writeFileSync(`${manifestPath}.peak.json`, `${JSON.stringify(peak)}\n`, {
       mode: 0o600,
-    }),
-  )();
+    });
+  })();
 }
 
 function signalProcessGroup(pgid: number, signal: NodeJS.Signals): void {
@@ -2240,18 +2256,17 @@ async function main(): Promise<void> {
           job_id: validateJobId(parsed.flags.jobId, "--job-id"),
         };
   const command = parsed._.map(String);
-  if (parsed.flags.checkOnly === true && command.length > 0) {
+  if (parsed.flags.checkOnly && command.length > 0) {
     throw new UsageError("--check-only does not accept a command");
   }
-  const result =
-    parsed.flags.checkOnly === true
-      ? await checkJob(manifest)
-      : await executeJob(manifest, command, { manifestSource });
+  const result = parsed.flags.checkOnly
+    ? await checkJob(manifest)
+    : await executeJob(manifest, command, { manifestSource });
   process.exitCode = result.exitCode;
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().catch((error) => {
     const usage = error instanceof UsageError;
     process.stderr.write(
       `${usage ? "USAGE" : "ERROR"}: ${

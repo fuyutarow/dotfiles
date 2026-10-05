@@ -66,26 +66,34 @@ function shellQuote(value: string): string {
 
 function downloadCommand(file: string): string | undefined {
   const configuredTarget = process.env.QUOTE_DOWNLOAD_SSH_TARGET?.trim();
-  const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/);
+  const connection = process.env.SSH_CONNECTION?.trim().split(/\s+/u);
   const serverIp = connection?.[2];
   const serverPort = connection?.[3];
   let inferredTarget: string | undefined;
-  if (serverIp && isIP(serverIp)) {
+  if (serverIp !== undefined && serverIp !== "" && isIP(serverIp) !== 0) {
     const host = isIP(serverIp) === 6 ? `[${serverIp}]` : serverIp;
     inferredTarget = `${userInfo().username}@${host}`;
   }
-  const target = configuredTarget || inferredTarget;
-  if (!target) return undefined;
-  const port =
-    process.env.QUOTE_DOWNLOAD_SSH_PORT?.trim() ||
-    (configuredTarget ? undefined : serverPort);
+  const target =
+    configuredTarget !== undefined && configuredTarget !== ""
+      ? configuredTarget
+      : inferredTarget;
+  if (target === undefined || target === "") return undefined;
+  const configuredPort = process.env.QUOTE_DOWNLOAD_SSH_PORT?.trim();
+  let port = serverPort;
+  if (configuredPort !== undefined && configuredPort !== "") {
+    port = configuredPort;
+  } else if (configuredTarget !== undefined && configuredTarget !== "") {
+    port = undefined;
+  }
   if (
-    port &&
-    (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+    port !== undefined &&
+    port !== "" &&
+    (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65535)
   ) {
     return undefined;
   }
-  const portFlag = port ? `-P ${port} ` : "";
+  const portFlag = port !== undefined && port !== "" ? `-P ${port} ` : "";
   return `scp ${portFlag}${shellQuote(`${target}:${file}`)} .`;
 }
 
@@ -109,13 +117,13 @@ if (!stdinRead.ok) {
 // but isn't a clean positive whole number is rejected rather than coerced: a mistyped count
 // should say so, not silently copy something the user didn't ask for.
 if (rawArgs !== "") {
-  if (!/^\d+$/.test(rawArgs)) {
+  if (!/^\d+$/u.test(rawArgs)) {
     block(
       `/quote's argument must be a whole number of turns, or omitted entirely. Got "${rawArgs}". ` +
         `Try "/quote" for the last turn, or "/quote 3" for the last 3.`,
     );
   }
-  const n = Number.parseInt(rawArgs, 10);
+  const n = Math.trunc(Number(rawArgs));
   if (n < 1 || n > MAX_TURNS) {
     block(
       `/quote N must be between 1 and ${MAX_TURNS} — capture-last-response.ts only keeps the ` +
@@ -160,7 +168,7 @@ const resolvedName = await attempt(() =>
     timeout: 5000,
   }).trim(),
 );
-if (resolvedName.ok && resolvedName.value) name = resolvedName.value;
+if (resolvedName.ok && resolvedName.value !== "") name = resolvedName.value;
 
 // Header carries what the reader needs to place the quote without asking: which session said it;
 // when it was quoted (`MM-DD HH:MM`, the prompt's own stamp — one home: prompt-stamp.ts); how many
@@ -196,7 +204,7 @@ if (count > CLIPBOARD_TURN_LIMIT) {
   }
   const file = saved.value;
   const command = downloadCommand(file);
-  if (!command) {
+  if (command === undefined || command === "") {
     block(
       `Quote saved at ${file}${short}. No SSH download target is available. ` +
         "If this is a remote Herdr session, set QUOTE_DOWNLOAD_SSH_TARGET to its SSH host alias and retry.",

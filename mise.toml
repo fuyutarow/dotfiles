@@ -128,6 +128,7 @@ depends = [
   "lint:bun",
   "lint:ts",
   "lint:ts-ratchet",
+  "lint:oxlint-policy",
   "vendor:deps:check",
   "lint:roster",
   "typecheck",
@@ -192,6 +193,19 @@ run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts
 dir = "{{config_root}}"
 description = "Render agents/models/dispatch-roster.toml (the radio table of dispatch choices, luna first) into agents/claude/CLAUDE.md"
 run = "bun scripts/render-roster.ts --write"
+
+# The TS lint policy lives in oxlint-policy.toml (rules, reasons, custom bans with bad/good
+# snippets); .oxlintrc.json is generated from it. scripts/tests/oxlint-policy.test.ts (test:scripts)
+# proves each custom ban fires on its bad snippet and is silent on its good one.
+[tasks."oxlint:render"]
+dir = "{{config_root}}"
+description = "Render oxlint-policy.toml (the one home of the TS lint policy) into .oxlintrc.json"
+run = "bun scripts/render-oxlintrc.ts --write"
+
+[tasks."lint:oxlint-policy"]
+dir = "{{config_root}}"
+description = "Fail when .oxlintrc.json is not a fresh render of oxlint-policy.toml"
+run = "bun scripts/render-oxlintrc.ts --check"
 
 [tasks."lint:roster"]
 dir = "{{config_root}}"
@@ -269,7 +283,7 @@ git ls-files -z -- \
 # tsconfig.json's exclude).
 [tasks."lint:ts"]
 dir = "{{config_root}}"
-description = "oxlint --type-aware the repo's TS (.oxlintrc.json): Date -> Temporal, switch/nested ternary/try, and the trust-boundary bans (type-predicate guards, `in` probing, `as` casts, un-parsed JSON.parse, unsafe any) are errors on every file, with no ledger and no override; max-depth 2 warns; no disable comments"
+description = "oxlint --type-aware the repo's TS against .oxlintrc.json, generated from oxlint-policy.toml: every rule an error (no warn level), no override, no disable comment"
 # These CLI wrappers have Node shebangs; run them with the Bun runtime declared above.
 depends = ["lint:ts-no-disable"]
 run = "bunx --bun oxlint --type-aware"
@@ -305,7 +319,7 @@ run = "bunx --bun tsgo --noEmit"
 [tasks.test]
 alias = "t"
 description = "Test the repo: hooks, resource control, repo-retrieve, Bun script floor, zsh terminal hygiene, and toolchain scope"
-depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "test:scripts", "test:android", "test:zsh", "test:mise-scope"]
+depends = ["test:hooks", "test:resource-control", "test:retrieval-control", "test:agent-router", "test:scripts", "test:android", "test:zsh", "test:mise-scope"]
 
 [tasks."test:android"]
 dir = "{{config_root}}"
@@ -335,6 +349,11 @@ run = "bun ~/dotfiles/scripts/test-resource-control.ts"
 dir = "{{config_root}}"
 description = "repo-retrieve route and CLI contract tests (fake ccc/rg executables)"
 run = "bun test agents/retrieval-control/tests"
+
+[tasks."test:agent-router"]
+dir = "{{config_root}}"
+description = "dispatch (the one worker entry point) tests: fake codex-run, fake Jev, scratch state dir"
+run = "bun test agents/routing-control/tests"
 
 [tasks."test:scripts"]
 dir = "{{config_root}}"
@@ -650,6 +669,12 @@ run = 'bun ~/dotfiles/scripts/doctor.ts'
 [tasks."models:audit"]
 description = "Model-release SSOT floor (agents/models/releases.toml): staleness, retirements, dead refs"
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
+
+# A throwaway Linux box (rented GPU container, fresh VM): run scripts/bootstrap-linux.sh as root
+# (it ends by calling this as the target user). Only Brewfile entries marked @remote; no systemd.
+[tasks."linux:init"]
+description = "Slim dotfiles env for a throwaway Linux box: Brewfile @remote entries, dotfile links, herdr/mise/jj/bun on the non-interactive PATH (for herdr --remote). Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root"
+run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 [tasks."wsl:init"]
 description = "Initialize WSL environment (after: install linuxbrew, brew install mise)"

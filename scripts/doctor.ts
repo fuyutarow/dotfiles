@@ -91,6 +91,20 @@ export type Ctx = {
 // link among 22 fresh-machine drifts. Past the cap the overflow is counted, never silently dropped.
 const LIST_CAP = 40;
 
+function effectiveConfig(s: string): string {
+  return s
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("#"))
+    .join("\n");
+}
+
+function editorTarget(lines: string[]): string[] {
+  return ["hostname", "port", "user"].map(
+    (k) => lines.find((l) => l.startsWith(`${k} `)) ?? `${k} ?`,
+  );
+}
+
 // Bounded child: native AbortSignal timeout, both pipes drained in ONE Promise.all (a sequential
 // drain deadlocks on the unread pipe), timeout read off the signal (writing-bun-scripts BG2).
 async function run(
@@ -103,7 +117,7 @@ async function run(
   timedOut: boolean;
   missing: boolean;
 }> {
-  if (!Bun.which(cmd[0] ?? "")) {
+  if (Bun.which(cmd[0] ?? "") === undefined) {
     return { code: 127, out: "", err: "", timedOut: false, missing: true };
   }
   const sig = AbortSignal.timeout(opts.ms);
@@ -113,7 +127,7 @@ async function run(
     stdin: "ignore",
     signal: sig,
     env: { ...process.env, ...opts.env },
-    ...(opts.cwd ? { cwd: opts.cwd } : {}),
+    ...(opts.cwd !== undefined && opts.cwd !== "" ? { cwd: opts.cwd } : {}),
   });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -174,14 +188,14 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   );
   if (r.timedOut)
     return warn("links", "link-dots.sh --check timed out after 30s");
-  const drift = r.out.split("\n").filter((l) => l.startsWith("drift: "));
-  if (r.code === 0 && drift.length === 0) {
+  const driftLines = r.out.split("\n").filter((l) => l.startsWith("drift: "));
+  if (r.code === 0 && driftLines.length === 0) {
     return pass(
       "links",
       "every link declared in scripts/link-dots.sh is realized",
     );
   }
-  if (drift.length === 0) {
+  if (driftLines.length === 0) {
     return warn(
       "links",
       `link-dots.sh --check exited ${r.code} without a drift line`,
@@ -189,9 +203,9 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   }
   return fail(
     "links",
-    `${drift.length} declared link(s) not realized`,
+    `${driftLines.length} declared link(s) not realized`,
     "mise run link:dots",
-    drift.map((l) => l.slice("drift: ".length)),
+    driftLines.map((l) => l.slice("drift: ".length)),
   );
 }
 
@@ -204,7 +218,9 @@ export async function checkSettings(ctx: Ctx): Promise<Finding> {
   // Cleanup runs on return AND on throw, same as the prior try/finally: the scratch directory is
   // removed once this block ends, in either case.
   using _scratch = {
-    [Symbol.dispose]: () => rmSync(scratch, { recursive: true, force: true }),
+    [Symbol.dispose]: () => {
+      rmSync(scratch, { recursive: true, force: true });
+    },
   };
   const r = await run(
     ["bun", join(ctx.dotfiles, "scripts/render-claude-settings.ts")],
@@ -270,7 +286,7 @@ export async function checkSkills(ctx: Ctx): Promise<Finding> {
     return pass("skills", "no shadowed skill; wiring and ledger intact");
   const bad = (r.out + r.err)
     .split("\n")
-    .filter((l) => /FAIL|❌|shadow/i.test(l));
+    .filter((l) => /FAIL|❌|shadow/iu.test(l));
   return fail(
     "skills",
     "skills-doctor.ts reports drift",
@@ -300,10 +316,10 @@ export async function checkBrew(ctx: Ctx): Promise<Finding> {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.startsWith("→"))
-    .map((l) => l.replace(/^→\s*/, ""));
+    .map((l) => l.replace(/^→\s*/u, ""));
   return fail(
     "brew",
-    `${missing.length || "some"} Brewfile entr(y/ies) not installed`,
+    `${missing.length > 0 ? missing.length : "some"} Brewfile entr(y/ies) not installed`,
     "mise run install:tools",
     missing,
   );
@@ -349,18 +365,16 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
   const problems: string[] = [];
   // existsSync already swallows every stat failure (missing path, dangling symlink target,
   // permission error) and reports false, so a prior real path is safe to resolve unconditionally.
-  const resolved = (p: string): string | null =>
-    existsSync(p) ? realpathSync(p) : null;
   const bins = obj(obj(pkg)?.bin) ?? {};
   const declaredBins = Object.entries(bins).flatMap(
     ([n, r]): [string, string][] => (typeof r === "string" ? [[n, r]] : []),
   );
   for (const [name, rel] of declaredBins) {
     const link = join(binDir, name);
-    const have = resolved(link);
+    const have = resolveExisting(link);
     if (have === null) {
       problems.push(`${link} is missing or dangling (declared: ${rel})`);
-    } else if (have !== resolved(join(ctx.dotfiles, rel))) {
+    } else if (have !== resolveExisting(join(ctx.dotfiles, rel))) {
       problems.push(`${link} resolves to ${have}, not ${rel}`);
     }
   }
@@ -389,6 +403,10 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
         "mise run deps (then rip any dangling link listed)",
         problems,
       );
+}
+
+function resolveExisting(path: string): string | null {
+  return existsSync(path) ? realpathSync(path) : null;
 }
 
 export async function checkGitHooks(ctx: Ctx): Promise<Finding> {
@@ -443,7 +461,7 @@ export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
     .map((l) => l.slice(7));
   return fail(
     "mise-scope",
-    `${failed.length || "some"} INV-6 check(s) fail`,
+    `${failed.length > 0 ? failed.length : "some"} INV-6 check(s) fail`,
     "mise run test:mise-scope (read each [FAIL])",
     failed,
   );
@@ -475,7 +493,7 @@ export async function checkMcp(ctx: Ctx): Promise<Finding> {
   const codex = await run(["codex", "mcp", "list"], { ms: 30_000 });
   if (!codex.missing && !codex.timedOut) {
     const codexNames = new Set(
-      codex.out.split("\n").map((l) => l.trim().split(/\s+/)[0] ?? ""),
+      codex.out.split("\n").map((l) => l.trim().split(/\s+/u)[0] ?? ""),
     );
     missing.push(
       ...declared
@@ -512,7 +530,7 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
     ],
     { ms: 20_000, cwd: "/mnt/c" },
   );
-  const profile = r.out.replace(/\r/g, "").trim();
+  const profile = r.out.replaceAll("\r", "").trim();
   if (r.missing || r.timedOut || profile === "") {
     return warn(
       "wslconfig",
@@ -523,16 +541,10 @@ export async function checkWslconfig(ctx: Ctx): Promise<Finding> {
   const dst = join(w.out.trim(), ".wslconfig");
   if (!existsSync(dst))
     return fail("wslconfig", `${dst} does not exist`, "mise run wsl:wslconfig");
-  const have = readFileSync(dst, "utf8").replace(/\r/g, "");
-  const want = readFileSync(src, "utf8").replace(/\r/g, "");
+  const have = readFileSync(dst, "utf8").replaceAll("\r", "");
+  const want = readFileSync(src, "utf8").replaceAll("\r", "");
   // .wslconfig comments are `#`; a copy that differs only there is stale prose, not stale config.
-  const effective = (s: string) =>
-    s
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l !== "" && !l.startsWith("#"))
-      .join("\n");
-  if (have !== want && effective(have) === effective(want)) {
+  if (have !== want && effectiveConfig(have) === effectiveConfig(want)) {
     return warn(
       "wslconfig",
       `${dst} differs from wsl/wslconfig.win in comments only — effective settings identical (mise run wsl:wslconfig to refresh)`,
@@ -554,11 +566,12 @@ export async function checkCccDaemon(_ctx: Ctx): Promise<Finding> {
   );
   const state = r.out.trim();
   if (r.missing) return skip("ccc-daemon", "no systemctl on this host");
+  const stateLabel = state === "" ? "unknown" : state;
   return state === "active"
     ? pass("ccc-daemon", "ccc-daemon.service is active (capped by its unit)")
     : fail(
         "ccc-daemon",
-        `ccc-daemon.service is ${state || "unknown"} — a client will spawn it uncapped`,
+        `ccc-daemon.service is ${stateLabel} — a client will spawn it uncapped`,
         "mise run wsl:ccc-daemon",
       );
 }
@@ -585,9 +598,11 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
   if (enabled && active.out.trim() === "active") {
     return pass("capacity-guard", `${unit} is enabled and active`);
   }
+  const activeLabel =
+    active.out.trim() === "" ? "not active" : active.out.trim();
   return fail(
     "capacity-guard",
-    `${unit} is ${enabled ? "enabled" : "not enabled"} / ${active.out.trim() || "not active"}`,
+    `${unit} is ${enabled ? "enabled" : "not enabled"} / ${activeLabel}`,
     "mise run wsl:capacity:enable",
   );
 }
@@ -598,7 +613,8 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
 // cocoindex/ccc-daemon.service.wsl the daemon's; a daemon started before either changed keeps
 // the old one until restarted. `ccc doctor` is the only CLI that reports the daemon's mapping.
 export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
-  if (!Bun.which("ccc")) return skip("ccc-db-map", "ccc is not installed");
+  if (Bun.which("ccc") === undefined)
+    return skip("ccc-db-map", "ccc is not installed");
   const parsed = await attempt(() =>
     parseMapping(process.env[MAPPING_ENV]).map(
       (m) => `${m.source}=${m.target}`,
@@ -625,8 +641,8 @@ export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
   const start = lines.findIndex((l) => l.trim() === "DB path mappings:");
   const daemon: string[] = [];
   for (const l of start < 0 ? [] : lines.slice(start + 1)) {
-    const m = l.match(/^ {4}(\S.*?) \u2192 (\S.*)$/);
-    if (!m) break;
+    const m = l.match(/^ {4}(\S.*?) \u2192 (\S.*)$/u);
+    if (m === null) break;
     daemon.push(`${m[1]}=${m[2]}`);
   }
   if (start < 0 && !r.out.includes("Loaded projects:")) {
@@ -637,11 +653,12 @@ export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
   const restartFix = ctx.isWsl
     ? "systemctl --user daemon-reload && systemctl --user restart ccc-daemon"
     : "ccc daemon restart (from a shell that exports the mapping)";
+  const daemonLabel = daemon.join(",") === "" ? "nothing" : daemon.join(",");
   return same
     ? pass("ccc-db-map", `daemon and this shell both map ${client.join(",")}`)
     : fail(
         "ccc-db-map",
-        `daemon maps ${daemon.join(",") || "nothing"}, this shell maps ${client.join(",")}`,
+        `daemon maps ${daemonLabel}, this shell maps ${client.join(",")}`,
         restartFix,
       );
 }
@@ -651,13 +668,14 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
     ["defaults", "read", "com.googlecode.iterm2", "PrefsCustomFolder"],
     { ms: 10_000 },
   );
-  const have = r.out.trim().replace(/^~/, ctx.home);
+  const have = r.out.trim().replace(/^~/u, ctx.home);
   const want = join(ctx.dotfiles, "iterm2");
+  const haveLabel = have === "" ? "unset" : have;
   return have === want
     ? pass("iterm2", "iTerm2 loads its prefs from iterm2/")
     : fail(
         "iterm2",
-        `iTerm2 prefs folder is ${have || "unset"}, not ${want}`,
+        `iTerm2 prefs folder is ${haveLabel}, not ${want}`,
         "mise run mac:iterm2",
       );
 }
@@ -670,18 +688,18 @@ export async function checkIterm2(ctx: Ctx): Promise<Finding> {
 // the installs a frozen PATH could land on, and the tracked pins that would re-summon them.
 const BUN_FLOOR: readonly [number, number] = [1, 4];
 function belowFloor(v: string): boolean {
-  const m = /^(\d+)\.(\d+)/.exec(v);
-  if (!m) return false; // "latest", "1", a ref — not a sub-1.4 claim
+  const m = /^(\d+)\.(\d+)/u.exec(v);
+  if (m === null) return false; // "latest", "1", a ref — not a sub-1.4 claim
   const [maj, min] = [Number(m[1]), Number(m[2])];
   return maj < BUN_FLOOR[0] || (maj === BUN_FLOOR[0] && min < BUN_FLOOR[1]);
 }
 function trackedBunPin(file: string): string | undefined {
   let section = "";
   for (const line of readFileSync(file, "utf8").split("\n")) {
-    const header = /^\s*\[([^\]]+)\]/.exec(line);
-    if (header) section = header[1] ?? "";
-    const pin = /^\s*"?bun"?\s*=\s*"([^"]+)"/.exec(line);
-    if (section === "tools" && pin) return pin[1];
+    const header = /^\s*\[([^\]]+)\]/u.exec(line);
+    if (header !== null) section = header[1] ?? "";
+    const pin = /^\s*"?bun"?\s*=\s*"([^"]+)"/u.exec(line);
+    if (section === "tools" && pin !== null) return pin[1];
   }
   return undefined;
 }
@@ -691,11 +709,11 @@ async function trackedOldPin(link: string): Promise<string | undefined> {
   // can be a live pin on this machine, so a failure anywhere in this read is just "no pin here".
   const read = await attempt(() => {
     const file = realpathSync(link);
-    if (!file.endsWith(".toml")) return undefined;
+    if (!file.endsWith(".toml")) return null;
     const pin = trackedBunPin(file);
     return { file, pin };
   });
-  if (!read.ok || read.value === undefined) return undefined;
+  if (!read.ok || read.value === null) return undefined;
   const { file, pin } = read.value;
   return pin !== undefined && belowFloor(pin)
     ? `pinned: ${file} (bun = "${pin}")`
@@ -713,7 +731,7 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
         (v) => !lstatSync(join(installs, v)).isSymbolicLink(),
       )
     : [];
-  oldVersions.push(...installed.filter(belowFloor));
+  oldVersions.push(...installed.filter((version) => belowFloor(version)));
   old.push(...oldVersions.map((v) => `installed: bun ${v}`));
   const links = existsSync(tracked) ? readdirSync(tracked) : [];
   for (const link of links) {
@@ -737,7 +755,8 @@ export async function checkBunFloor(ctx: Ctx): Promise<Finding> {
 }
 
 export async function checkCodexRemote(ctx: Ctx): Promise<Finding> {
-  if (!Bun.which("codex")) return skip("codex-remote", "codex not installed");
+  if (Bun.which("codex") === undefined)
+    return skip("codex-remote", "codex not installed");
   const declared = await readDeclared(ctx.dotfiles);
   if (declared instanceof Error)
     return fail(
@@ -778,7 +797,7 @@ export async function checkEdgePolicy(ctx: Ctx): Promise<Finding> {
     r.out.split("\n").find((l) => l.startsWith("FAIL")) ?? `exit ${r.code}`;
   return fail(
     "edge-policy",
-    detail.replace(/^FAIL edge-policy: /, ""),
+    detail.replace(/^FAIL edge-policy: /u, ""),
     "mise run edge:policy (asks for sudo)",
   );
 }
@@ -844,10 +863,7 @@ async function checkEditorAlias(
       "smart-open",
       `ssh -G ${editor} did not resolve (exit ${r.code})`,
     );
-  const target = (lines: string[]) =>
-    ["hostname", "port", "user"].map(
-      (k) => lines.find((l) => l.startsWith(`${k} `)) ?? `${k} ?`,
-    );
+  const target = editorTarget;
   const code = r.out.split("\n");
   const same = target(code).join(" ") === target(attach).join(" ");
   const forwards = code.some(
@@ -952,11 +968,12 @@ export function render(findings: Finding[]): string {
   for (const f of findings) {
     out.push(`${f.verdict.padEnd(4)}  ${f.name.padEnd(width)}  ${f.detail}`);
     for (const l of f.lines ?? []) out.push(`${" ".repeat(width + 8)}- ${l}`);
-    if (f.fix) out.push(`${" ".repeat(width + 8)}fix: ${f.fix}`);
+    if (f.fix !== undefined && f.fix !== "")
+      out.push(`${" ".repeat(width + 8)}fix: ${f.fix}`);
   }
-  const n = (v: Verdict) => findings.filter((f) => f.verdict === v).length;
+  const count = (v: Verdict) => findings.filter((f) => f.verdict === v).length;
   out.push(
-    `RESULT: ${n("FAIL") ? "FAIL" : "PASS"} · FAIL ${n("FAIL")} · WARN ${n("WARN")} · PASS ${n("PASS")} · SKIP ${n("SKIP")}`,
+    `RESULT: ${count("FAIL") > 0 ? "FAIL" : "PASS"} · FAIL ${count("FAIL")} · WARN ${count("WARN")} · PASS ${count("PASS")} · SKIP ${count("SKIP")}`,
   );
   return `${out.join("\n")}\n`;
 }
@@ -967,7 +984,7 @@ async function main(): Promise<void> {
     home,
     dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
     isMac: process.platform === "darwin",
-    isWsl: /microsoft/i.test(release()), // same test as link-dots.sh: `uname -r`
+    isWsl: /microsoft/iu.test(release()), // same test as link-dots.sh: `uname -r`
   };
   const only = (process.env.DOCTOR_ONLY ?? "")
     .split(",")
@@ -998,10 +1015,9 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((e: unknown) => {
-    process.stderr.write(
-      `FATAL: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
+  const result = await attempt(main);
+  if (!result.ok) {
+    process.stderr.write(`FATAL: ${errorMessage(result.error)}\n`);
     process.exitCode = 2;
-  });
+  }
 }

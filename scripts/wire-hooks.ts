@@ -47,14 +47,20 @@ const toMatcherGroup = (v: unknown): MatcherGroup => {
   const rec = JsonObject.parse(v);
   return {
     ...rec,
-    hooks: z.array(z.unknown()).parse(rec.hooks).map(toHookCommand),
+    hooks: z
+      .array(z.unknown())
+      .parse(rec.hooks)
+      .map((command) => toHookCommand(command)),
   };
 };
 const toHooksConfig = (v: unknown): HooksConfig =>
   Object.fromEntries(
     Object.entries(JsonObject.parse(v)).map(([event, groups]) => [
       event,
-      z.array(z.unknown()).parse(groups).map(toMatcherGroup),
+      z
+        .array(z.unknown())
+        .parse(groups)
+        .map((group) => toMatcherGroup(group)),
     ]),
   );
 
@@ -97,7 +103,7 @@ export function parseRegistry(
     const h = JsonObject.catch({}).parse(entry);
     const { script, event, matcher, timeout, vendors } = h;
     const failClosed = h.fail_closed;
-    if (typeof script !== "string" || !/^[\w.-]+\.ts$/.test(script))
+    if (typeof script !== "string" || !/^[\w.-]+\.ts$/u.test(script))
       errors.push(`${at}.script must be a bare <name>.ts`);
     else if (!scriptExists(script))
       errors.push(`${at}.script ${script} is not in agents/hooks`);
@@ -151,7 +157,11 @@ export function wire(
   const out: HooksConfig = {};
   for (const [event, groups] of Object.entries(hooks)) {
     const kept = groups
-      .map((g) => ({ ...g, hooks: g.hooks.filter((h) => !owned(h)) }))
+      .map((g) => {
+        const filteredGroup = Object.assign({}, g);
+        filteredGroup.hooks = g.hooks.filter((h) => !owned(h));
+        return filteredGroup;
+      })
       .filter((g) => g.hooks.length > 0);
     if (kept.length > 0) out[event] = kept;
   }
@@ -223,7 +233,7 @@ async function main(): Promise<number> {
     const text = await Bun.file(path).text();
     const config = jsonOf(JsonObject).parse(text);
     const next = `${JSON.stringify({ ...config, hooks: wire(toHooksConfig(config.hooks ?? {}), specs, vendor) }, null, 2)}\n`;
-    const rel = path.slice(root.length).replace(/^\//, "");
+    const rel = path.slice(root.length).replace(/^\//u, "");
     if (next === text) {
       process.stdout.write(`current: ${rel}\n`);
       continue;
@@ -240,12 +250,11 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  main()
-    .then((code) => process.exit(code))
-    .catch((err: unknown) => {
-      process.stderr.write(
-        `${err instanceof UsageError ? "usage" : "FATAL"}: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
-      process.exit(2);
-    });
+  const code = await main().catch((err: unknown) => {
+    process.stderr.write(
+      `${err instanceof UsageError ? "usage" : "FATAL"}: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 2;
+  });
+  process.exit(code);
 }

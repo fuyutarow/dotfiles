@@ -21,7 +21,8 @@ const HOME = process.env.HOME ?? "";
 const KEEP = MAX_QUOTE_TURNS; // deepest `/quote N` worth supporting; bounds the file for a long session
 
 async function recordResponse(sid: unknown, text: unknown): Promise<void> {
-  if (!(typeof sid === "string" && sid && typeof text === "string")) return;
+  if (!(typeof sid === "string" && sid !== "" && typeof text === "string"))
+    return;
   const dir = `${HOME}/.cache/claude/last-response`;
   const file = `${dir}/${sid}.jsonl`;
 

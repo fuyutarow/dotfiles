@@ -22,7 +22,8 @@ const copyFile = fromThrowable(copyFileSync);
 // interop goes through Bun.spawn with a native AbortSignal, and the overrun is read off the
 // SIGNAL — proc.killed is true after any clean exit and cannot answer "did this overrun?".
 async function capture(cmd: string[], ms: number): Promise<string> {
-  if (!Bun.which(cmd[0] ?? "")) return "";
+  const executable = cmd[0] ?? "";
+  if (executable === "" || Bun.which(executable) === null) return "";
   const sig = AbortSignal.timeout(ms);
   const proc = Bun.spawn(cmd, {
     stdout: "pipe",
@@ -33,7 +34,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
     new Response(proc.stdout).text(),
     proc.exited,
   ]);
-  return sig.aborted ? "" : out.replace(/\r/g, "").trim();
+  return sig.aborted ? "" : out.replaceAll("\r", "").trim();
 }
 
 // Deploy wsl/wslconfig.win to the Windows profile as %USERPROFILE%\.wslconfig.
@@ -115,7 +116,7 @@ const dest = `${profile}/.wslconfig`;
 // The sizing guard. Windows reports total RAM in bytes; compare against the memory= this file
 // actually asks for, and refuse rather than deploy a config that over-commits the host.
 const wanted = (await Bun.file(src).text()).match(
-  /^\s*memory\s*=\s*(\d+)\s*GB/im,
+  /^\s*memory\s*=\s*(\d+)\s*GB/imu,
 );
 const totalRaw = await capture(
   [
@@ -159,7 +160,9 @@ if (existsSync(dest)) {
   // failed replace, so a run that could not write it must not go on to replace anything.
   const saved = copyFile(dest, backup);
   if (saved.isErr()) {
-    console.log(`could not back up ${dest} to ${backup}: ${saved.error}`);
+    console.log(
+      `could not back up ${dest} to ${backup}: ${String(saved.error)}`,
+    );
     console.log("host copy left untouched — nothing was written.");
     process.exit(1);
   }
@@ -171,7 +174,7 @@ if (existsSync(dest)) {
 // through a stack trace that says nothing about what to do next.
 const wroteRes = copyFile(src, dest);
 if (wroteRes.isErr()) {
-  console.log(`could not write ${dest}: ${wroteRes.error}`);
+  console.log(`could not write ${dest}: ${String(wroteRes.error)}`);
   console.log(
     "If this is ENOSPC, free space on C: first — the .bak (if any) still holds the",
   );

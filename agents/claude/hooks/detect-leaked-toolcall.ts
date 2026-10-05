@@ -29,17 +29,24 @@ async function main(): Promise<void> {
   if (turn === "") return;
 
   const stripped = stripCode(turn);
-  if (!/<(antml:)?invoke name=|<(antml:)?function_calls/.test(stripped)) return;
+  if (!/<(antml:)?invoke name=|<(antml:)?function_calls/u.test(stripped))
+    return;
 
-  await attempt(() =>
+  await attempt(() => {
     appendFileSync(
       `${process.env.HOME ?? ""}/.claude/leaked-toolcall.log`,
       `${Temporal.Now.instant().toString({ fractionalSecondDigits: 3 })}  leaked-toolcall  ${transcript}\n`,
-    ),
-  ); // best-effort
+    );
+  }); // best-effort
 
-  if (process.env.CLAUDE_HOOK_QUIET) return; // tests: skip bell + desktop notification
-  await attempt(() => writeFileSync("/dev/tty", "\u0007")); // terminal bell (best-effort; no tty)
+  if (
+    process.env.CLAUDE_HOOK_QUIET !== undefined &&
+    process.env.CLAUDE_HOOK_QUIET !== ""
+  )
+    return; // tests: skip bell + desktop notification
+  await attempt(() => {
+    writeFileSync("/dev/tty", "\u0007");
+  }); // terminal bell (best-effort; no tty)
   const msg = "tool-call が漏れました — Esc Esc で /rewind を";
   await attempt(() => {
     if (process.platform === "darwin") {

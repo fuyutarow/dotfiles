@@ -45,24 +45,22 @@ function parseFields(
       "scalar creativity scores are forbidden; preserve typed process lenses",
     );
   const fields = new Map<string, string>();
-  for (const [index, line] of content.split(/\r?\n/).entries()) {
-    const match = line.match(/^([A-Z][A-Z0-9_]*):\s*(.*)$/);
-    if (match?.[1] !== undefined && match[2] !== undefined) {
-      const key = match[1];
-      if (fields.has(key))
-        addFinding(
-          findings,
-          "RR002",
-          path,
-          `duplicate key ${key} at line ${index + 1}`,
-        );
-      else fields.set(key, match[2].trim());
-      continue;
-    }
+  for (const [index, line] of content.split(/\r?\n/u).entries()) {
+    const match = line.match(/^([A-Z][A-Z0-9_]*):\s*(.*)$/u);
+    if (match?.[1] === undefined || match[2] === undefined) continue;
+    const key = match[1];
+    if (fields.has(key))
+      addFinding(
+        findings,
+        "RR002",
+        path,
+        `duplicate key ${key} at line ${index + 1}`,
+      );
+    else fields.set(key, match[2].trim());
     if (
       line.trim() !== "" &&
-      !/^\s*#{1,6}\s+/.test(line) &&
-      !/^\s*\|.*\|\s*$/.test(line)
+      !/^\s*#{1,6}\s+/u.test(line) &&
+      !/^\s*\|.*\|\s*$/u.test(line)
     )
       addFinding(
         findings,

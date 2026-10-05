@@ -39,7 +39,7 @@ describe("assign-command: usage errors block without a model turn", () => {
     expect(r.code).toBe(0);
     const out = Block.parse(parseJson(r.stdout));
     expect(out.decision).toBe("block");
-    expect(out.reason).toMatch(/usage/i);
+    expect(out.reason).toMatch(/usage/iu);
   });
 
   test("/assign with a malformed role -> block, shape reason", () => {
@@ -57,7 +57,7 @@ describe("assign-command: valid role renames the session", () => {
     expect(r.code).toBe(0);
     const out = decisionOf(r.stdout);
     expect(out.hookEventName).toBe("UserPromptSubmit");
-    expect(out.sessionTitle).toMatch(/^myproj-gpu_[0-9a-hj-km-np-tv-z]{4}$/);
+    expect(out.sessionTitle).toMatch(/^myproj-gpu_[0-9a-hj-km-np-tv-z]{4}$/u);
     expect(out.additionalContext).toBeUndefined();
   });
 
@@ -65,7 +65,7 @@ describe("assign-command: valid role renames the session", () => {
     const r = runHook(HOOK, payload("/assign obs"));
     expect(r.code).toBe(0);
     const out = decisionOf(r.stdout);
-    expect(out.sessionTitle).toMatch(/^myproj-obs_[0-9a-hj-km-np-tv-z]{4}$/);
+    expect(out.sessionTitle).toMatch(/^myproj-obs_[0-9a-hj-km-np-tv-z]{4}$/u);
     expect(typeof out.additionalContext).toBe("string");
     expect(out.additionalContext?.length).toBeGreaterThan(0);
   });
@@ -76,7 +76,7 @@ describe("assign-command: valid role renames the session", () => {
       payload("/assign pi", "/home/fuyu/Workspace/DotFiles"),
     );
     const out = decisionOf(r.stdout);
-    expect(out.sessionTitle).toMatch(/^dotfiles-pi_/);
+    expect(out.sessionTitle).toMatch(/^dotfiles-pi_/u);
   });
 
   test("snake_cases a hyphenated project (only one hyphen in the final name)", () => {
@@ -86,7 +86,7 @@ describe("assign-command: valid role renames the session", () => {
     );
     const out = decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(
-      /^agentic_rnd-gpu_[0-9a-hj-km-np-tv-z]{4}$/,
+      /^agentic_rnd-gpu_[0-9a-hj-km-np-tv-z]{4}$/u,
     );
   });
 
@@ -94,7 +94,7 @@ describe("assign-command: valid role renames the session", () => {
     const r = runHook(HOOK, payload("/assign gpu please hurry"));
     expect(r.code).toBe(0);
     const out = decisionOf(r.stdout);
-    expect(out.sessionTitle).toMatch(/^myproj-gpu_/);
+    expect(out.sessionTitle).toMatch(/^myproj-gpu_/u);
   });
 });
 

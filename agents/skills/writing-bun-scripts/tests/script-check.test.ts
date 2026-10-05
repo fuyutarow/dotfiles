@@ -4,6 +4,15 @@
 // NOTE: this file embeds known-bad fixture SOURCE STRINGS — running the floor over this
 // test file flags them by design; the floor's targets are scripts, not tests.
 import { describe, expect, test } from "bun:test";
+
+function rejectPrototypeFlag(
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
+): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    throw new Error("prototype");
+  }
+}
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -548,14 +557,6 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
   });
 
   test("Cleye maps declared positional schemas and the local guard rejects __proto__ before mutation", () => {
-    function rejectPrototypeFlag(
-      type: "known-flag" | "unknown-flag" | "argument",
-      flag: string,
-    ): void {
-      if (type === "unknown-flag" && flag === "__proto__") {
-        throw new Error("prototype");
-      }
-    }
     const parsed = cli(
       {
         name: "fixture",

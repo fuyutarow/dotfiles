@@ -99,9 +99,9 @@ export function parseProbe(out: string): {
   const servicePids = new Set<number>();
   const procs: SshdProc[] = [];
   let sockOk = false;
-  for (const line of out.replace(/\r/g, "").split("\n")) {
+  for (const line of out.replaceAll("\r", "").split("\n")) {
     const t = line.trim();
-    const svc = /^svc=(\d+)$/.exec(t);
+    const svc = /^svc=(\d+)$/u.exec(t);
     if (svc !== null) {
       servicePids.add(Number(svc[1]));
       continue;
@@ -111,7 +111,7 @@ export function parseProbe(out: string): {
       continue;
     }
     const m =
-      /^proc=(sshd(?:-session)?\.exe)\|(\d+)\|(\d+)\|([01])\|([01])\|([01])\|(\d+)\|(\d+)$/i.exec(
+      /^proc=(sshd(?:-session)?\.exe)\|(\d+)\|(\d+)\|([01])\|([01])\|([01])\|(\d+)\|(\d+)$/iu.exec(
         t,
       );
     const name = m?.[1];
@@ -156,7 +156,13 @@ async function run(cmd: string[], ms: number): Promise<Ran> {
     proc.exited,
   ]).then(([out, err, code]) => ({ code, out: `${out}${err}` }));
   const aborted = new Promise<null>((resolve) => {
-    sig.addEventListener("abort", () => resolve(null), { once: true });
+    sig.addEventListener(
+      "abort",
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
   });
   const done = await Promise.race([work, aborted]);
   if (done === null) return { code: -1, out: "", timedOut: true };
@@ -190,7 +196,7 @@ function describe(o: SshdProc, now: number): string {
 
 async function probe(host: string) {
   const r = await ps(host, PROBE);
-  if (r.timedOut || !/sock_ok=/.test(r.out)) return null;
+  if (r.timedOut || !/sock_ok=/u.test(r.out)) return null;
   const parsed = parseProbe(r.out);
   return {
     ...parsed,
@@ -225,7 +231,7 @@ async function main(): Promise<number> {
     throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
   }
   const { host, execute } = parsed.flags;
-  if (!Bun.which("ssh")) throw new UsageError("no ssh on PATH");
+  if (Bun.which("ssh") === undefined) throw new UsageError("no ssh on PATH");
 
   const before = await probe(host);
   if (before === null) {
@@ -234,7 +240,7 @@ async function main(): Promise<number> {
   }
   const now = Temporal.Now.instant().epochMilliseconds;
   say(
-    `${host}: ${before.procs.length} sshd process(es), service pid(s) ${[...before.servicePids].join(",") || "none"}`,
+    `${host}: ${before.procs.length} sshd process(es), service pid(s) ${[...before.servicePids].join(",") !== "" ? [...before.servicePids].join(",") : "none"}`,
   );
   if (before.orphans.length === 0) {
     say("no orphaned sshd -R");
@@ -279,7 +285,7 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  main()
+  await main()
     .then((code) => process.exit(code))
     .catch((err: unknown) => {
       process.stderr.write(

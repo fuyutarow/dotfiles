@@ -68,11 +68,11 @@ export function freeSpace(home: string, spawn = Bun.spawnSync): string {
   if (result.isErr()) return "";
   const out = result.value.stdout.toString();
   const rawLines = out.split("\n");
-  if (rawLines[rawLines.length - 1] === "") rawLines.pop(); // drop trailing-newline artifact
+  if (rawLines.at(-1) === "") rawLines.pop(); // drop trailing-newline artifact
   if (rawLines.length < 2) return ""; // awk's NR==2 never fires -> no output at all
   const filesystemLine = rawLines[1];
   if (filesystemLine === undefined) return "";
-  const fields = filesystemLine.trim().split(/\s+/).filter(Boolean);
+  const fields = filesystemLine.trim().split(/\s+/u).filter(Boolean);
   const avail = fields[3] ?? "";
   return `${avail} free`;
 }
@@ -156,7 +156,7 @@ export function runSimpleStep(step: SimpleStep, dryRun: boolean): StepOutcome {
   // REPORTED, never acted on: a thrown OR a nonzero exit are still both `|| true` here.
   return fromThrowable(Bun.spawnSync)(step.cmd, {
     stdout: "inherit",
-    stderr: step.suppressStderr ? "ignore" : "inherit",
+    stderr: step.suppressStderr === true ? "ignore" : "inherit",
   })
     .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
     .unwrapOr("failed");
@@ -337,7 +337,7 @@ export function resolveHome(homeArg: string | undefined): string {
   return homeArg ?? process.env.HOME ?? "";
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const parsed = cli(
     {
       name: "reclaim-clean.ts",
@@ -367,7 +367,7 @@ async function main(): Promise<void> {
   // `df -h "$HOME"` and the cargo-path joins, degrading gracefully rather than aborting; no
   // hard-fail here would have an analogue in the shell (see resolveHome's doc comment).
   const home = resolveHome(parsed.flags.home);
-  const dryRun = parsed.flags.dryRun === true;
+  const dryRun = parsed.flags.dryRun;
 
   console.log(`before: ${freeSpace(home)}`);
 
@@ -490,7 +490,9 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((err) => {
+  await Promise.try(() => {
+    main();
+  }).then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(err instanceof UsageError ? 2 : 1);
   });

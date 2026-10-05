@@ -37,12 +37,12 @@ export function remoteForwards(
     const alias = name.slice(prefix.length, -".sock".length);
     const socket = join(dir, name);
     const s = lstatSync(socket, { throwIfNoEntry: false });
-    return alias !== "" && s?.isSocket()
+    return alias !== "" && s?.isSocket() === true
       ? [{ socket, alias, mtime: s.mtimeMs }]
       : [];
   });
   return bound
-    .sort((a, b) => b.mtime - a.mtime)
+    .toSorted((a, b) => b.mtime - a.mtime)
     .map(({ socket, alias }) => ({ socket, alias }));
 }
 
@@ -100,5 +100,9 @@ export async function unlinkIfSame(
   const now = fileKey(path);
   if (now === undefined || now.dev !== seen.dev || now.ino !== seen.ino)
     return false;
-  return (await attempt(() => unlinkSync(path))).ok;
+  return (
+    await attempt(() => {
+      unlinkSync(path);
+    })
+  ).ok;
 }

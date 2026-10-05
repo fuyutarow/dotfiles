@@ -38,7 +38,7 @@ describe("classifySwaps — newest is live, the rest are orphans", () => {
     const dead2 = swap("old2", 200, 2 * 1024 ** 3);
     const r = classifySwaps([dead1, live, dead2]);
     expect(r.live).toBe(live);
-    expect(r.orphans.map((o) => o.path).sort()).toEqual(["old1", "old2"]);
+    expect(r.orphans.map((o) => o.path).toSorted()).toEqual(["old1", "old2"]);
     expect(r.reclaimBytes).toBe(17 * 1024 ** 3);
   });
 

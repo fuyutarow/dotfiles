@@ -15,7 +15,7 @@
 import { cli } from "cleye";
 import { z } from "../../../hooks/zod.ts";
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 const REQUIRED = ["tm", "title", "date", "author", "authority", "release", "to"] as const;
 
 const FrontSchema = z.record(z.string(), z.unknown());
@@ -43,7 +43,7 @@ const splitFrontmatter = async (text: string): Promise<[Front | null, string]> =
 const nonEmpty = (v: unknown): boolean => {
   if (Array.isArray(v)) return v.length > 0;
   if (typeof v === "string") return v.trim().length > 0;
-  return v != null;
+  return v !== undefined && v !== null;
 };
 
 /**
@@ -58,20 +58,20 @@ const nonEmpty = (v: unknown): boolean => {
  * are exempt — that is the correct way to talk about it.
  */
 const GENRE =
-  /\b(technical\s+memorand(um|a)|technical\s+memos?|\bTMs?\b)\b|テクニカルメモ|技術メモ|技術文書|社内文書|メモランダム|覚書/i;
+  /\b(technical\s+memorand(um|a)|technical\s+memos?|\bTMs?\b)\b|テクニカルメモ|技術メモ|技術文書|社内文書|メモランダム|覚書/iu;
 const FORM =
-  /\b(format|structure|template|sections?|layout|skeleton|outline)\b|形式|書式|様式|構成|テンプレート|章立て|節構成/i;
+  /\b(format|structure|template|sections?|layout|skeleton|outline)\b|形式|書式|様式|構成|テンプレート|章立て|節構成/iu;
 const ATTRIBUTION =
-  /\b(standard|canonical|official|traditional|classic|conventional(ly)?|customar(y|ily)|typical(ly)?|usual(ly)?|always|invariably|historically|prescribed|mandated|the\s+norm|by\s+convention|follows?\s+the)\b|標準|正式|公式|伝統的|古典的|定番|通例|慣例|一般的|決まって|とされて/i;
+  /\b(standard|canonical|official|traditional|classic|conventional(ly)?|customar(y|ily)|typical(ly)?|usual(ly)?|always|invariably|historically|prescribed|mandated|the\s+norm|by\s+convention|follows?\s+the)\b|標準|正式|公式|伝統的|古典的|定番|通例|慣例|一般的|決まって|とされて/iu;
 
 /** The two section triads this genre is repeatedly and wrongly credited with. */
 const RETRO_TRIAD = [
-  /(background|背景)[^\n]{0,40}(hypothes[ei]s|仮説)[^\n]{0,40}(data|データ)[^\n]{0,40}(conclusion|結論)/i,
-  /(observed\s+facts?|観察[^\n]{0,6}事実)[^\n]{0,50}(working\s+model|作業モデル)[^\n]{0,50}(speculation|推測)/i,
+  /(background|背景)[^\n]{0,40}(hypothes[ei]s|仮説)[^\n]{0,40}(data|データ)[^\n]{0,40}(conclusion|結論)/iu,
+  /(observed\s+facts?|観察[^\n]{0,6}事実)[^\n]{0,50}(working\s+model|作業モデル)[^\n]{0,50}(speculation|推測)/iu,
 ];
 
 const EXEMPT =
-  /no primary source|not a standard|isn't a standard|retro-attribut|my own call|my call for this|標準では?ない|一次資料は?(無|な)い|自分の判断|独自の/i;
+  /no primary source|not a standard|isn't a standard|retro-attribut|my own call|my call for this|標準では?ない|一次資料は?(無|な)い|自分の判断|独自の/iu;
 
 // Argv goes through Cleye rather than being read raw: it is what gives this script `--help`,
 // rejection of a typo'd flag before any file is opened, and the house floor's BG1 boundary.
@@ -119,7 +119,7 @@ async function parseArgv() {
 }
 
 const files: string[] = (await parseArgv())._.files;
-if (!files.length) {
+if (files.length === 0) {
   console.error("usage: bun scripts/tm-check.ts <file.md> [...]");
   process.exit(2);
 }
@@ -132,6 +132,12 @@ const say = (kind: "FAIL" | "WARN", where: string, msg: string) => {
   console.log(`${kind} [${where}] ${msg}`);
 };
 
+const reportMissingCoverKeys = (front: Record<string, unknown>, path: string): void => {
+  for (const key of REQUIRED.filter((required) => !nonEmpty(front[required]))) {
+    say("FAIL", path, `cover key '${key}' is missing or empty (T1)`);
+  }
+};
+
 for (const path of files) {
   const file = Bun.file(path);
   if (!(await file.exists())) {
@@ -142,29 +148,28 @@ for (const path of files) {
   const [front, body] = await splitFrontmatter(text);
 
   // ---------------------------------------------------------------- T1 COVER
-  if (!front) {
+  if (front === undefined || front === null) {
     say("FAIL", path, "no parseable cover block; a memorandum opens with YAML front matter (T1)");
     continue;
   }
-  for (const key of REQUIRED) {
-    if (!nonEmpty(front[key]))
-      say("FAIL", path, `cover key '${key}' is missing or empty (T1)`);
-  }
+  reportMissingCoverKeys(front, path);
   if (typeof front.date === "string" && !ISO_DATE.test(front.date))
     say("FAIL", path, `date '${front.date}' is not YYYY-MM-DD (T1)`);
-  if (typeof front.tm === "string" && /\s/.test(front.tm))
+  if (typeof front.tm === "string" && /\s/u.test(front.tm))
     say("FAIL", path, "the stable id 'tm' must not contain whitespace; it is a citation key (T1)");
 
   // author must carry a reachable contact, not just a name
-  if (typeof front.author === "string" && !/[@\/]|ext\.?\s*\d|#[\w-]/i.test(front.author))
+  if (typeof front.author === "string" && !/[@/]|ext\.?\s*\d|#[\w-]/iu.test(front.author))
     say("WARN", path, "'author' carries no reachable contact (mail, handle, channel, extension) (T1)");
 
   if (!nonEmpty(front.size))
     say("WARN", path, "'size' absent: the reader's cost estimate is missing. Fill it or drop the key deliberately (T1)");
 
   // ------------------------------------------------------------ T2 AUTHORITY
-  const authority = String(front.authority ?? "");
-  if (authority && !/^personal$/.test(authority) && !/^organizational:\s*\S/.test(authority))
+  const authority = typeof front.authority === "string"
+    ? front.authority
+    : JSON.stringify(front.authority) ?? "";
+  if (authority !== "" && !/^personal$/u.test(authority) && !/^organizational:\s*\S/u.test(authority))
     say(
       "FAIL",
       path,
@@ -172,8 +177,10 @@ for (const path of files) {
     );
 
   // ------------------------------------------------ T3 ADDRESSEE and RELEASE
-  const release = String(front.release ?? "");
-  if (release && !/^internal$/.test(release) && !/^cleared:\s*\S+\/\S+\/\d{4}-\d{2}-\d{2}$/.test(release))
+  const release = typeof front.release === "string"
+    ? front.release
+    : JSON.stringify(front.release) ?? "";
+  if (release !== "" && !/^internal$/u.test(release) && !/^cleared:\s*\S+\/\S+\/\d{4}-\d{2}-\d{2}$/u.test(release))
     say(
       "FAIL",
       path,
@@ -181,15 +188,15 @@ for (const path of files) {
     );
 
   // cover-only recipients need a stated pull path, or they are a dead end
-  if (nonEmpty(front.cc) && !/\bcc\b[^\n]*full text|full text[^\n]*\b(request|ask|reply|link)/i.test(body))
+  if (nonEmpty(front.cc) && !/\bcc\b[^\n]*full text|full text[^\n]*\b(request|ask|reply|link)/iu.test(body))
     say("WARN", path, "'cc' lists cover-only recipients but the body states no path to the full text (T3)");
 
   // ------------------------------------------------------------ abstract
   // `$(?![\s\S])` is end-of-input under the `m` flag, where a bare `$` would only mean end-of-line.
-  const abstract = /^##\s+Abstract\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/im.exec(body);
-  if (!abstract || !abstract[1] || abstract[1].trim().length === 0)
+  const abstract = /^##\s+Abstract\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/imu.exec(body);
+  if (abstract === null || abstract[1] === undefined || abstract[1] === "" || abstract[1].trim().length === 0)
     say("FAIL", path, "no non-empty '## Abstract' section; the cover must be readable alone (T1)");
-  else if (abstract[1].trim().split(/\s+/).length > 220)
+  else if (abstract[1].trim().split(/\s+/u).length > 220)
     say("WARN", path, "abstract exceeds ~220 words; it is a scanning surface, not a summary (T1)");
 
   // ------------------------------------------------- the fabrication guard
@@ -211,4 +218,4 @@ for (const path of files) {
 }
 
 console.log(`\nFAIL=${fails} WARN=${warns}`);
-process.exit(fails ? 1 : 0);
+process.exit(fails !== 0 ? 1 : 0);

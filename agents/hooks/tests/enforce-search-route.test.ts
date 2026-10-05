@@ -91,7 +91,7 @@ describe("enforce-search-route", () => {
     // The shortest installed name of this router (rr, repo-retrieve), else the long path; routes by
     // intent name.
     expect(decision?.permissionDecisionReason).toMatch(
-      /(?:^|[\s:;])(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
+      /(?:^|[\s:;])(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/u,
     );
     expect(decision?.permissionDecisionReason).toContain(" text '");
     expect(decision?.permissionDecisionReason).toContain(" exists '");
@@ -195,7 +195,7 @@ describe("enforce-search-route", () => {
 
       expect(decision?.permissionDecision).toBe("deny");
       expect(decision?.permissionDecisionReason).toMatch(
-        /(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/,
+        /(?:rr|repo-retrieve|bun ~\/\.claude\/hooks\/repo-retrieve\.ts) about '/u,
       );
     }
   });

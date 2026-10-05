@@ -14,7 +14,7 @@ if (!unitLinked) {
 // Without the binary the unit would crash-loop into systemd's start limit and stay dead,
 // while zsh/zshenv has already forbidden clients from spawning their own — fail loudly
 // instead.
-if (!Bun.which("ccc")) {
+if (Bun.which("ccc") === undefined) {
   console.log(
     "ccc not on PATH — install it first (uv tool install cocoindex-code)",
   );

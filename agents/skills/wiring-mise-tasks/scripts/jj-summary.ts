@@ -4,16 +4,16 @@
 export function summaryPaths(summary: string): string[] {
   const out: string[] = [];
   for (const line of summary.split("\n")) {
-    const m = /^([A-Z]) (.+)$/.exec(line);
-    if (!m) continue;
+    const m = /^([A-Z]) (.+)$/u.exec(line);
+    if (m === null) continue;
     const [, kind = "", spec = ""] = m;
-    const brace = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(spec);
-    if (!brace) {
+    const brace = /^(.*)\{(.*) => (.*)\}(.*)$/u.exec(spec);
+    if (brace === null) {
       out.push(spec);
       continue;
     }
     const [, pre = "", from = "", to = "", post = ""] = brace;
-    const join = (mid: string) => `${pre}${mid}${post}`.replace(/\/{2,}/g, "/").replace(/^\//, "");
+    const join = (mid: string) => `${pre}${mid}${post}`.replaceAll(/\/{2,}/gu, "/").replace(/^\//u, "");
     if (kind === "R") out.push(join(from));
     out.push(join(to));
   }

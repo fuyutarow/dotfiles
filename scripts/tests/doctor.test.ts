@@ -63,7 +63,7 @@ describe("doctor", () => {
     const r = doctor("links", { HOME: home, DOTFILES: REPO });
     expect(r.code).toBe(1);
     expect(r.out).toMatch(
-      /^FAIL {2}links {2}\d+ declared link\(s\) not realized/m,
+      /^FAIL {2}links {2}\d+ declared link\(s\) not realized/mu,
     );
     expect(r.out).toContain(".zshrc (want -> ");
     expect(r.out).toContain("fix: mise run link:dots");
@@ -94,7 +94,7 @@ describe("doctor", () => {
 
     symlinkSync(join(dotfiles, "tools", "hello.ts"), join(binDir, "hello"));
     expect(doctor("bins", { HOME: home, DOTFILES: dotfiles }).out).toMatch(
-      /^PASS {2}bins/m,
+      /^PASS {2}bins/mu,
     );
 
     // The shape bun leaves after a bin rename: a link through its global node_modules/dotfiles.
@@ -130,7 +130,7 @@ describe("doctor", () => {
     );
     const ok = doctor("deps", { HOME: home, DOTFILES: dotfiles });
     expect(ok.code).toBe(0);
-    expect(ok.out).toMatch(/^PASS {2}deps/m);
+    expect(ok.out).toMatch(/^PASS {2}deps/mu);
   });
 
   test("git-hooks: unset core.hooksPath FAILs with the exact repair; .githooks PASSes", () => {
@@ -217,7 +217,7 @@ describe("doctor", () => {
       DOTFILES: fixtureSshConfig(`${remote} ${receiver}`),
     });
     expect(pass.code).toBe(0);
-    expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /m);
+    expect(pass.out).toMatch(/^PASS {2}smart-open {2}r99-wsl forwards /mu);
 
     for (const [name, forward] of [
       ["remote path drifted", `/tmp/smart-open-other.sock ${receiver}`],
@@ -304,18 +304,18 @@ describe("doctor", () => {
     });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(
-      /^SKIP {2}smart-open {2}no ssh\/config in this checkout/m,
+      /^SKIP {2}smart-open {2}no ssh\/config in this checkout/mu,
     );
   });
 
   test("smart-open: the repo's own ssh/config agrees with smart-open/sockets.ts", () => {
-    if (!Bun.which("ssh")) return; // the check SKIPs without ssh; nothing to assert
+    if (Bun.which("ssh") === null) return; // the check SKIPs without ssh; nothing to assert
     // ssh expands %d from the passwd entry, so the real account's home is the HOME that must agree.
     const r = doctor("smart-open", {
       HOME: userInfo().homedir,
       DOTFILES: REPO,
     });
-    expect(r.out).toMatch(/^PASS {2}smart-open /m);
+    expect(r.out).toMatch(/^PASS {2}smart-open /mu);
     expect(r.code).toBe(0);
   });
 
@@ -324,8 +324,8 @@ describe("doctor", () => {
     const home = tmp("doctor-home-");
     const r = doctor("deps,bins", { HOME: home, DOTFILES: dotfiles });
     expect(r.code).toBe(1);
-    expect(r.out).toMatch(/^FAIL {2}deps/m);
-    expect(r.out).toMatch(/^FAIL {2}bins/m);
+    expect(r.out).toMatch(/^FAIL {2}deps/mu);
+    expect(r.out).toMatch(/^FAIL {2}bins/mu);
     expect(r.out).toContain("RESULT: FAIL · FAIL 2 · WARN 0 · PASS 0 · SKIP 0");
   });
 
@@ -358,7 +358,7 @@ describe("doctor", () => {
     const home = fixtureBunHome(["1.4.2", "1.3.14"], "1.2.22");
     const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
     expect(r.code).toBe(1);
-    expect(r.out).toMatch(/^FAIL {2}bun-floor {2}2 bun < 1\.4 /m);
+    expect(r.out).toMatch(/^FAIL {2}bun-floor {2}2 bun < 1\.4 /mu);
     expect(r.out).toContain("installed: bun 1.3.14");
     expect(r.out).toContain('(bun = "1.2.22")');
     expect(r.out).toContain("mise uninstall bun@1.3.14");
@@ -368,6 +368,6 @@ describe("doctor", () => {
     const home = fixtureBunHome(["1.4.2", "1.4.0"], "1.4");
     const r = doctor("bun-floor", { HOME: home, DOTFILES: REPO });
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/^PASS {2}bun-floor {2}no bun < 1\.4/m);
+    expect(r.out).toMatch(/^PASS {2}bun-floor {2}no bun < 1\.4/mu);
   });
 });

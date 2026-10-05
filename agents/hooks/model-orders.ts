@@ -20,8 +20,8 @@ import { arr, num, obj, str } from "./narrow.ts";
 export type Cli = "codex" | "grok" | "claude" | "agy";
 export type Vendor = "openai" | "xai" | "anthropic" | "google";
 
-const CLIS: readonly string[] = ["codex", "grok", "claude", "agy"];
-const VENDORS: readonly string[] = ["openai", "xai", "anthropic", "google"];
+const CLIS = new Set(["codex", "grok", "claude", "agy"]);
+const VENDORS = new Set(["openai", "xai", "anthropic", "google"]);
 
 /** What the command says about the model: nothing, a literal slug, or something not inspectable. */
 export type ModelRef =
@@ -131,7 +131,7 @@ function readHeredocOpener(s: Scan): void {
     delimiter = s.src.slice(j + 1, stop);
     j = stop + 1;
   } else {
-    while (j < s.src.length && !/[\s;&|()<>]/.test(s.src.charAt(j))) {
+    while (j < s.src.length && !/[\s;&|()<>]/u.test(s.src.charAt(j))) {
       delimiter += s.src.charAt(j);
       j += 1;
     }
@@ -150,7 +150,7 @@ function skipHeredocBodies(s: Scan): void {
       const stop = eol === -1 ? s.src.length : eol;
       const line = s.src.slice(s.i, stop);
       s.i = eol === -1 ? s.src.length : eol + 1;
-      closed = (h.stripTabs ? line.replace(/^\t+/, "") : line) === h.delimiter;
+      closed = (h.stripTabs ? line.replace(/^\t+/u, "") : line) === h.delimiter;
     }
   }
   s.heredocs.length = 0;
@@ -164,16 +164,29 @@ function readSeparator(s: Scan, c: string): void {
 
 function step(s: Scan): void {
   const c = s.src.charAt(s.i);
-  if (c === "\\") return readBackslash(s);
-  if (c === "'") return readSingleQuoted(s);
-  if (c === '"') return readDoubleQuoted(s);
-  if (c === "#" && !s.inWord) return skipComment(s);
+  if (c === "\\") {
+    readBackslash(s);
+    return;
+  }
+  if (c === "'") {
+    readSingleQuoted(s);
+    return;
+  }
+  if (c === '"') {
+    readDoubleQuoted(s);
+    return;
+  }
+  if (c === "#" && !s.inWord) {
+    skipComment(s);
+    return;
+  }
   if (
     c === "<" &&
     s.src.startsWith("<<", s.i) &&
     s.src.charAt(s.i + 2) !== "<"
   ) {
-    return readHeredocOpener(s);
+    readHeredocOpener(s);
+    return;
   }
   if (c === "$" && s.src.charAt(s.i + 1) === "(") {
     endCommand(s);
@@ -185,7 +198,10 @@ function step(s: Scan): void {
     s.i += 1;
     return;
   }
-  if (COMMAND_END.has(c)) return readSeparator(s, c);
+  if (COMMAND_END.has(c)) {
+    readSeparator(s, c);
+    return;
+  }
   append(s, c);
   s.i += 1;
 }
@@ -210,7 +226,7 @@ export function simpleCommands(command: string): string[][] {
 // 2. Which executable is being run, through its wrappers, and what model it was told to use
 // ---------------------------------------------------------------------------------------------
 
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 const SHELLS = new Set(["bash", "sh", "zsh", "dash"]);
 // Wrappers that take no argument of their own before the real command (flags are skipped).
 const PLAIN_WRAPPERS = new Set([
@@ -233,8 +249,8 @@ const basename = (word: string): string =>
   word.slice(word.lastIndexOf("/") + 1);
 
 function substitute(value: string, env: Map<string, string>): string {
-  return value.replace(
-    /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g,
+  return value.replaceAll(
+    /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/gu,
     (whole, braced, bare) => {
       // Exactly one of the two groups matched: ${NAME} or $NAME.
       const name = typeof braced === "string" ? braced : String(bare);
@@ -246,9 +262,9 @@ function substitute(value: string, env: Map<string, string>): string {
 function modelRef(raw: string | undefined, env: Map<string, string>): ModelRef {
   if (raw === undefined) return { kind: "absent" };
   // `-c model="gpt-6.1-sol"` carries TOML quotes through the shell: strip one matching pair.
-  const unquoted = raw.replace(/^(["'])(.*)\1$/, "$2");
+  const unquoted = raw.replace(/^(["'])(.*)\1$/u, "$2");
   const value = substitute(unquoted, env);
-  if (value === "" || /[$`{}*?<>|;&]/.test(value))
+  if (value === "" || /[$`{}*?<>|;&]/u.test(value))
     return { kind: "unresolved", raw };
   return { kind: "literal", slug: value };
 }
@@ -336,7 +352,7 @@ function readCodexArg(
   if (CODEX_VALUE_FLAGS.has(a)) return k + 2;
   if (!a.startsWith("-")) {
     if (into.sub === undefined) into.sub = a;
-    else if (into.subSub === undefined) into.subSub = a;
+    else into.subSub ??= a;
   }
   return k + 1;
 }
@@ -508,7 +524,7 @@ function ordersInShellScript(
   out: Order[],
 ): void {
   const flagAt = words.findIndex(
-    (w, k) => k > shellAt && /^-[a-z]*c[a-z]*$/.test(w),
+    (w, k) => k > shellAt && /^-[a-z]*c[a-z]*$/u.test(w),
   );
   const script = flagAt === -1 ? undefined : words[flagAt + 1];
   if (script !== undefined) ordersIn(script, out, env);
@@ -525,7 +541,7 @@ function ordersInWords(
     const word = words[i];
     if (word === undefined) return;
     const base = basename(word);
-    if (CLIS.includes(base)) {
+    if (CLIS.has(base)) {
       addOrder(out, orderOf(base, words.slice(i + 1), env));
       return;
     }
@@ -553,7 +569,7 @@ export function ordersIn(
 // 3. Model names: vendor, family, generation
 // ---------------------------------------------------------------------------------------------
 
-const VERSION = /^\d+(?:\.\d+)*$/;
+const VERSION = /^\d+(?:\.\d+)*$/u;
 
 /** Compare dotted versions numerically, padding with zeros: 6 < 6.1 < 6.2 < 7, and 6 === 6.0. */
 export function compareVersions(a: string, b: string): number {
@@ -585,17 +601,17 @@ const CLAUDE_ALIASES = new Set([
   "best",
 ]);
 
-const OPENAI = /^gpt-(\d+(?:\.\d+)*)-([a-z][a-z0-9]*)$/;
-const XAI = /^grok-(\d+(?:\.\d+)*)(?:-[a-z0-9.-]+)?$/;
+const OPENAI = /^gpt-(\d+(?:\.\d+)*)-([a-z][a-z0-9]*)$/u;
+const XAI = /^grok-(\d+(?:\.\d+)*)(?:-[a-z0-9.-]+)?$/u;
 // claude-opus-5-5, claude-haiku-4-5-20251001, claude-opus-4-6-thinking, claude-opus-5[1m]
 const ANTHROPIC_NEW =
-  /^claude-(opus|sonnet|haiku|fable|mythos)-(\d+(?:-\d{1,2})?)(?:-\d{8})?(?:-thinking)?(?:\[[a-z0-9]+\])?$/;
+  /^claude-(opus|sonnet|haiku|fable|mythos)-(\d+(?:-\d{1,2})?)(?:-\d{8})?(?:-thinking)?(?:\[[a-z0-9]+\])?$/u;
 // claude-3-5-sonnet-20241022, claude-3-opus-20240229
 const ANTHROPIC_OLD =
-  /^claude-(\d+(?:-\d{1,2})?)-(opus|sonnet|haiku)(?:-\d{8})?$/;
+  /^claude-(\d+(?:-\d{1,2})?)-(opus|sonnet|haiku)(?:-\d{8})?$/u;
 // gemini-3.6-flash-high, gemini-3.1-pro-preview, gemini-3.5-flash-lite
 const GOOGLE =
-  /^gemini-(\d+(?:\.\d+)*)-(flash-lite|flash|pro)(?:-(?:minimal|low|medium|high|xhigh))?(?:-preview)?$/;
+  /^gemini-(\d+(?:\.\d+)*)-(flash-lite|flash|pro)(?:-(?:minimal|low|medium|high|xhigh))?(?:-preview)?$/u;
 
 const dotted = (dashed: string): string => dashed.replace("-", ".");
 
@@ -603,11 +619,11 @@ const dotted = (dashed: string): string => dashed.replace("-", ".");
 function agyForm(slug: string): string {
   return slug
     .toLowerCase()
-    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/\s*\([^)]*\)\s*$/u, "")
     .trim()
-    .replace(/\s+/g, "-")
+    .replaceAll(/\s+/gu, "-")
     .replace(
-      /^(claude-(?:opus|sonnet|haiku|fable|mythos))-(\d+)\.(\d+)$/,
+      /^(claude-(?:opus|sonnet|haiku|fable|mythos))-(\d+)\.(\d+)$/u,
       "$1-$2-$3",
     );
 }
@@ -681,8 +697,8 @@ function parseRow(row: unknown, where: string): FloorRow | string {
   const family = str(r?.["family"]);
   const min = str(r?.["min"]);
   if (vendor === undefined)
-    return `${where}: \`vendor\` must be one of ${VENDORS.join(", ")}`;
-  if (family === undefined || !/^[a-z][a-z0-9-]*$/.test(family)) {
+    return `${where}: \`vendor\` must be one of ${[...VENDORS].join(", ")}`;
+  if (family === undefined || !/^[a-z][a-z0-9-]*$/u.test(family)) {
     return `${where}: \`family\` must be a lowercase word`;
   }
   if (min === undefined || !VERSION.test(min)) {
@@ -776,7 +792,7 @@ export function judge(order: Order, floors: Floors): string | undefined {
   }
   if (
     order.cli === "claude" &&
-    CLAUDE_ALIASES.has(model.slug.replace(/\[[a-z0-9]+\]$/, ""))
+    CLAUDE_ALIASES.has(model.slug.replace(/\[[a-z0-9]+\]$/u, ""))
   ) {
     return undefined;
   }

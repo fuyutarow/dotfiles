@@ -151,6 +151,7 @@ qualify the result, and revise the affected theory. These are feedback loops, no
 
 - [`governing-configuration-systems`](governing-configuration-systems/) — Design or audit executable configuration: consumer/trust regime, canonical bytes, authority, exceptions, and target validation.
 - [`operating-wsl2-on-windows`](operating-wsl2-on-windows/) — Operate a WSL2 compute host on Windows: why C: fills while the guest looks healthy, the disk-reclaim levers, the host-number measurement traps, and recovery when the box wedges.
+- [`renting-cloud-gpus`](renting-cloud-gpus/) — Rent a cloud GPU (Vast.ai first) for an experiment and leave nothing behind: destroy, never stop; ship only what runs; secrecy tiers; budget in the query.
 
 ### People & media
 

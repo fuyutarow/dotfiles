@@ -66,7 +66,8 @@ function setup(opts: { apps: number[]; status?: string; state?: object }) {
   writeFileSync(join(dir, "apps"), opts.apps.map((p) => `${p}\n`).join(""));
   writeFileSync(join(dir, "status"), opts.status ?? INDEXING);
   writeFileSync(join(dir, "smi.log"), "");
-  if (opts.state) writeFileSync(state, JSON.stringify(opts.state));
+  if (opts.state !== undefined)
+    writeFileSync(state, JSON.stringify(opts.state));
   const env = {
     CCC_GPU_HOLD_STATE: state,
     CCC_GPU_HOLD_NVIDIA_SMI: join(dir, "nvidia-smi"),

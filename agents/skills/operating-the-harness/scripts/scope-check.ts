@@ -39,14 +39,14 @@ function rejectPrototypeFlag(type: string, flag: string): void {
 
 // An absolute path literal under the user's home directory. `~/…` and `$HOME/…` forms are
 // deliberately NOT matched: they are portable and are the spelling P3 asks for.
-const HOME_ABS = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"'`)\]}]+/g;
+const HOME_ABS = /(?:\/Users|\/home)\/[^/\s"']+\/[^\s"'`)\]}]+/gu;
 
 type Finding = { file: string; line: number; path: string };
 
 // existsSync never throws for a plain missing-path check (unlike `stat`), so there is no
 // throw to catch here.
-async function exists(p: string): Promise<boolean> {
-  return existsSync(p);
+function exists(p: string): Promise<boolean> {
+  return Promise.resolve(existsSync(p));
 }
 
 // Files whose realpath lands inside the user-scope root are that root's OWN plumbing —
@@ -77,12 +77,11 @@ async function collect(root: string): Promise<string[]> {
     if (await exists(p)) files.push(p);
   }
   const hooks = join(root, "hooks");
-  if (await exists(hooks)) {
-    for (const entry of await readdir(hooks, { withFileTypes: true })) {
-      if (entry.isDirectory()) continue;
-      if (/\.(ts|js|sh|mjs)$/.test(entry.name))
-        files.push(join(hooks, entry.name));
-    }
+  if (!(await exists(hooks))) return files;
+  for (const entry of await readdir(hooks, { withFileTypes: true })) {
+    if (entry.isDirectory()) continue;
+    if (/\.(ts|js|sh|mjs)$/u.test(entry.name))
+      files.push(join(hooks, entry.name));
   }
   return files;
 }
@@ -156,11 +155,10 @@ async function main(): Promise<number> {
   return 1;
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((error: unknown) => {
+const code = await main().catch((error: unknown) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(2);
+    return 2;
   });
+process.exit(code);

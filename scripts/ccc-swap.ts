@@ -139,7 +139,7 @@ const DEFAULT_KEEP = 1;
 
 export function resolveHome(homeFlag: string | undefined): string {
   const home = homeFlag ?? process.env.HOME ?? homedir();
-  if (!home) throw new Error("cannot resolve $HOME (pass --home)");
+  if (home === "") throw new Error("cannot resolve $HOME (pass --home)");
   return resolve(home);
 }
 
@@ -203,7 +203,7 @@ export function discoverProjects(
 
   const root = resolve(searchRoot);
   if (!isPruned(root)) walk(root);
-  return found.sort();
+  return found.toSorted();
 }
 
 /** One `readdirSync` entry's contribution to {@link dirSizeBytes}: bytes to add, dirs pushed onto `stack`. */
@@ -297,7 +297,11 @@ export function computeIndexDimension(
   const db = dbResult.value;
   // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
   // once this block ends, in either case.
-  using _db = { [Symbol.dispose]: () => db.close() };
+  using _db = {
+    [Symbol.dispose]: () => {
+      db.close();
+    },
+  };
   return fromThrowable(() => {
     const row = SqliteMasterRowSchema.safeParse(
       db
@@ -306,11 +310,16 @@ export function computeIndexDimension(
         )
         .get(),
     );
-    const match = row.success
-      ? row.data.sql?.match(/embedding\s+float\[(\d+)\]/)
+    const dimensionMatch = row.success
+      ? row.data.sql?.match(/embedding\s+float\[(\d+)\]/u)
       : null;
-    if (!match?.[1]) return null;
-    const dim = Number(match[1]);
+    if (
+      dimensionMatch === null ||
+      dimensionMatch?.[1] === undefined ||
+      dimensionMatch[1] === ""
+    )
+      return null;
+    const dim = Number(dimensionMatch[1]);
     return Number.isFinite(dim) ? dim : null;
   })().unwrapOr(null);
 }
@@ -325,7 +334,11 @@ export function countIndexedRows(targetSqliteDbPath: string): number | null {
   const db = dbResult.value;
   // Cleanup runs on return AND on throw, same as the prior try/finally: the sqlite handle closes
   // once this block ends, in either case.
-  using _db = { [Symbol.dispose]: () => db.close() };
+  using _db = {
+    [Symbol.dispose]: () => {
+      db.close();
+    },
+  };
   return fromThrowable(() => {
     const row = CountRowSchema.safeParse(
       db.query("SELECT COUNT(*) as n FROM code_chunks_vec_rowids").get(),
@@ -343,7 +356,7 @@ export function pickModeDimension(dims: Array<number | null>): number | null {
   }
   let best: number | null = null;
   let bestCount = -1;
-  for (const [dim, count] of [...counts.entries()].sort(
+  for (const [dim, count] of [...counts.entries()].toSorted(
     (a, b) => a[0] - b[0],
   )) {
     if (count > bestCount) {
@@ -356,8 +369,8 @@ export function pickModeDimension(dims: Array<number | null>): number | null {
 
 function isTopLevelKeyLine(line: string): string | null {
   if (line.startsWith("#")) return null;
-  const match = line.match(/^(\S.*):\s*$/);
-  return match?.[1] ?? null;
+  const topKeyMatch = line.match(/^(\S.*):\s*$/u);
+  return topKeyMatch?.[1] ?? null;
 }
 
 /**
@@ -375,7 +388,7 @@ export function readEmbeddingModel(yamlText: string): string | null {
       continue;
     }
     if (!inEmbeddingBlock) continue;
-    const modelMatch = line.match(/^\s*model:\s*(.*)$/);
+    const modelMatch = line.match(/^\s*model:\s*(.*)$/u);
     if (modelMatch?.[1] !== undefined) return modelMatch[1].trim();
   }
   return null;
@@ -396,7 +409,7 @@ export function replaceEmbeddingModel(
       return line;
     }
     if (!inEmbeddingBlock) return line;
-    const modelMatch = line.match(/^(\s*model:\s*)(.*)$/);
+    const modelMatch = line.match(/^(\s*model:\s*)(.*)$/u);
     if (modelMatch?.[1] !== undefined) {
       replaced = true;
       return `${modelMatch[1]}${newModel}`;
@@ -415,11 +428,17 @@ export function parseChunksAndFiles(stdout: string): {
   chunks: number | null;
   files: number | null;
 } {
-  const chunksMatch = stdout.match(/Chunks:\s*(\d+)/);
-  const filesMatch = stdout.match(/Files:\s*(\d+)/);
+  const chunksMatch = stdout.match(/Chunks:\s*(\d+)/u);
+  const filesMatch = stdout.match(/Files:\s*(\d+)/u);
   return {
-    chunks: chunksMatch?.[1] ? Number(chunksMatch[1]) : null,
-    files: filesMatch?.[1] ? Number(filesMatch[1]) : null,
+    chunks:
+      chunksMatch?.[1] !== undefined && chunksMatch[1] !== ""
+        ? Number(chunksMatch[1])
+        : null,
+    files:
+      filesMatch?.[1] !== undefined && filesMatch[1] !== ""
+        ? Number(filesMatch[1])
+        : null,
   };
 }
 
@@ -442,6 +461,18 @@ export interface FileSnapshot {
   mtimeMs: number;
 }
 
+function snapshotFile(
+  snap: Map<string, FileSnapshot>,
+  dir: string,
+  full: string,
+): void {
+  const statResult = fromThrowable(() => statSync(full))();
+  if (statResult.isOk()) {
+    const st = statResult.value;
+    snap.set(relative(dir, full), { size: st.size, mtimeMs: st.mtimeMs });
+  }
+}
+
 /** Recursive (relative-path -> size/mtime) snapshot, for the before/after safety diff. */
 export function snapshotDir(dir: string): Map<string, FileSnapshot> {
   const snap = new Map<string, FileSnapshot>();
@@ -458,9 +489,7 @@ export function snapshotDir(dir: string): Map<string, FileSnapshot> {
         walk(full);
       } else if (entry.isFile()) {
         // vanished mid-walk
-        fromThrowable(() => statSync(full))().map((st) => {
-          snap.set(relative(dir, full), { size: st.size, mtimeMs: st.mtimeMs });
-        });
+        snapshotFile(snap, dir, full);
       }
     }
   };
@@ -477,10 +506,15 @@ export function diffSnapshots(
   for (const key of keys) {
     const b = before.get(key);
     const a = after.get(key);
-    if (!b || !a || b.size !== a.size || b.mtimeMs !== a.mtimeMs)
+    if (
+      b === undefined ||
+      a === undefined ||
+      b.size !== a.size ||
+      b.mtimeMs !== a.mtimeMs
+    )
       changed.push(key);
   }
-  return changed.sort();
+  return changed.toSorted();
 }
 
 /**
@@ -491,19 +525,29 @@ export function diffSnapshots(
 export function snapshotDbArtifacts(dbDir: string): Map<string, FileSnapshot> {
   const snap = new Map<string, FileSnapshot>();
   for (const name of DB_ARTIFACTS) {
-    const full = join(dbDir, name);
-    const statResult = fromThrowable(() => statSync(full))();
-    if (statResult.isErr()) continue;
-    if (statResult.value.isDirectory()) {
-      for (const [rel, s] of snapshotDir(full)) snap.set(join(name, rel), s);
-      continue;
-    }
-    snap.set(name, {
-      size: statResult.value.size,
-      mtimeMs: statResult.value.mtimeMs,
-    });
+    snapshotDbArtifact(snap, dbDir, name);
   }
   return snap;
+}
+
+function snapshotDbArtifact(
+  snap: Map<string, FileSnapshot>,
+  dbDir: string,
+  name: string,
+): void {
+  const full = join(dbDir, name);
+  const statResult = fromThrowable(() => statSync(full))();
+  if (statResult.isErr()) return;
+  if (statResult.value.isDirectory()) {
+    for (const [rel, snapshot] of snapshotDir(full)) {
+      snap.set(join(name, rel), snapshot);
+    }
+    return;
+  }
+  snap.set(name, {
+    size: statResult.value.size,
+    mtimeMs: statResult.value.mtimeMs,
+  });
 }
 
 export interface PrevGeneration {
@@ -513,7 +557,7 @@ export interface PrevGeneration {
 }
 
 function escapeRegExp(literal: string): string {
-  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return literal.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 /** `<basename(dbDir)>.prev-<digits>` siblings of `dbDir`, newest first.
@@ -525,7 +569,10 @@ function escapeRegExp(literal: string): string {
  */
 export function listPrevGenerations(dbDir: string): PrevGeneration[] {
   const parent = dirname(dbDir);
-  const re = new RegExp(`^${escapeRegExp(basename(dbDir))}\\.prev-(\\d+)$`);
+  const re = new RegExp(
+    `^${escapeRegExp(basename(dbDir))}\\.prev-(\\d+)$`,
+    "u",
+  );
   const entriesResult = fromThrowable(() =>
     readdirSync(parent, { withFileTypes: true }),
   )();
@@ -533,15 +580,16 @@ export function listPrevGenerations(dbDir: string): PrevGeneration[] {
   const gens: PrevGeneration[] = [];
   for (const entry of entriesResult.value) {
     if (!entry.isDirectory()) continue;
-    const match = entry.name.match(re);
-    if (!match?.[1]) continue;
+    const generationMatch = entry.name.match(re);
+    if (generationMatch?.[1] === undefined || generationMatch[1] === "")
+      continue;
     gens.push({
       dirName: entry.name,
-      timestamp: Number(match[1]),
+      timestamp: Number(generationMatch[1]),
       path: join(parent, entry.name),
     });
   }
-  return gens.sort((a, b) => b.timestamp - a.timestamp);
+  return gens.toSorted((a, b) => b.timestamp - a.timestamp);
 }
 
 /**
@@ -692,6 +740,16 @@ export async function moveDbArtifact(
   return { ok: true };
 }
 
+async function moveDbArtifactIfPresent(
+  src: string,
+  dst: string,
+  onFailure: (error: string | undefined) => void,
+): Promise<void> {
+  if (!existsSync(src)) return;
+  const moved = await moveDbArtifact(src, dst);
+  if (!moved.ok) onFailure(moved.error);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------------------------
@@ -714,7 +772,7 @@ interface Ctx {
   env: Record<string, string | undefined>;
 }
 
-async function cmdDiscover(ctx: Ctx): Promise<number> {
+function cmdDiscover(ctx: Ctx): number {
   const projects = discoverProjects(ctx.home, {
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
@@ -837,7 +895,7 @@ async function cmdBuild(
     );
     return 0;
   }
-  if (!ctx.cccBin) {
+  if (ctx.cccBin === null) {
     process.stderr.write(
       "FATAL: ccc executable not found (PATH or --ccc-bin)\n",
     );
@@ -923,7 +981,7 @@ async function cmdBuild(
   const liveTouched: string[] = [];
   for (const root of projects) {
     const before = liveSnapshots.get(root);
-    if (!before) continue;
+    if (before === undefined) continue;
     const diff = diffSnapshots(
       before,
       snapshotDbArtifacts(resolveDbDir(root, ctx.env)),
@@ -966,7 +1024,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   }
   const shadowYaml = await readFile(shadowYamlPath, "utf8");
   const newModel = readEmbeddingModel(shadowYaml);
-  if (!newModel) {
+  if (newModel === null || newModel === "") {
     process.stderr.write(
       `FATAL: could not read embedding.model from ${shadowYamlPath}\n`,
     );
@@ -1044,7 +1102,7 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     );
     return 0;
   }
-  if (!ctx.cccBin) {
+  if (ctx.cccBin === null) {
     process.stderr.write(
       "FATAL: ccc executable not found (PATH or --ccc-bin)\n",
     );
@@ -1074,20 +1132,16 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     await mkdir(prevDir, { recursive: true });
     for (const name of DB_ARTIFACTS) {
       const src = join(c.liveDbDir, name);
-      if (!existsSync(src)) continue;
-      const moved = await moveDbArtifact(src, join(prevDir, name));
-      if (!moved.ok) {
-        cutoverFailures.push(`${c.root}: parking ${name}: ${moved.error}`);
-      }
+      await moveDbArtifactIfPresent(src, join(prevDir, name), (error) => {
+        cutoverFailures.push(`${c.root}: parking ${name}: ${error}`);
+      });
     }
     await mkdir(c.liveDbDir, { recursive: true });
     for (const name of DB_ARTIFACTS) {
       const src = join(c.shadowDbDir, name);
-      if (!existsSync(src)) continue;
-      const moved = await moveDbArtifact(src, join(c.liveDbDir, name));
-      if (!moved.ok) {
-        cutoverFailures.push(`${c.root}: promoting ${name}: ${moved.error}`);
-      }
+      await moveDbArtifactIfPresent(src, join(c.liveDbDir, name), (error) => {
+        cutoverFailures.push(`${c.root}: promoting ${name}: ${error}`);
+      });
     }
     process.stdout.write(
       `CUTOVER ${c.root}: live artifacts -> ${prevDir}, shadow artifacts -> ${c.liveDbDir}\n`,
@@ -1213,7 +1267,7 @@ async function cmdRollback(
     if (markerResult.isOk()) previousModel = markerResult.value;
   }
   process.stdout.write(
-    previousModel
+    previousModel !== null && previousModel !== ""
       ? `PLAN: restore ${liveGlobalSettingsPath} embedding.model -> ${previousModel}\n`
       : `PLAN: no cutover-${targetTs}.json marker found — embedding.model line will be left untouched\n`,
   );
@@ -1224,7 +1278,7 @@ async function cmdRollback(
     );
     return 0;
   }
-  if (!ctx.cccBin) {
+  if (ctx.cccBin === null) {
     process.stderr.write(
       "FATAL: ccc executable not found (PATH or --ccc-bin)\n",
     );
@@ -1239,11 +1293,9 @@ async function cmdRollback(
     await mkdir(parkedDir, { recursive: true });
     for (const name of DB_ARTIFACTS) {
       const src = join(u.liveDbDir, name);
-      if (!existsSync(src)) continue;
-      const moved = await moveDbArtifact(src, join(parkedDir, name));
-      if (!moved.ok) {
-        rollbackFailures.push(`${u.root}: parking ${name}: ${moved.error}`);
-      }
+      await moveDbArtifactIfPresent(src, join(parkedDir, name), (error) => {
+        rollbackFailures.push(`${u.root}: parking ${name}: ${error}`);
+      });
     }
     await mkdir(u.liveDbDir, { recursive: true });
     // `u.gen.path` may be an OLD-FORMAT generation (a whole renamed `.cocoindex_code`, still
@@ -1251,11 +1303,9 @@ async function cmdRollback(
     // settings.yml inside `u.gen.path` untouched, orphaned in the now-consumed generation dir.
     for (const name of DB_ARTIFACTS) {
       const src = join(u.gen.path, name);
-      if (!existsSync(src)) continue;
-      const moved = await moveDbArtifact(src, join(u.liveDbDir, name));
-      if (!moved.ok) {
-        rollbackFailures.push(`${u.root}: restoring ${name}: ${moved.error}`);
-      }
+      await moveDbArtifactIfPresent(src, join(u.liveDbDir, name), (error) => {
+        rollbackFailures.push(`${u.root}: restoring ${name}: ${error}`);
+      });
     }
     // A generation is CONSUMED, not merely drained: reclaim its now-empty husk so the net
     // `.prev-*` count stays flat (park one, consume one) the way the old whole-dir rename did.
@@ -1276,7 +1326,11 @@ async function cmdRollback(
     return 2;
   }
 
-  if (previousModel && existsSync(liveGlobalSettingsPath)) {
+  if (
+    previousModel !== null &&
+    previousModel !== "" &&
+    existsSync(liveGlobalSettingsPath)
+  ) {
     const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
     await writeFile(
       liveGlobalSettingsPath,
@@ -1357,9 +1411,9 @@ async function cmdGc(
   await fromAsyncThrowable(async () => {
     for (const entry of readdirSync(ctx.shadowDir, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
-      const match = entry.name.match(/^cutover-(\d+)\.json$/);
-      if (!match?.[1]) continue;
-      if (!survivingTs.has(Number(match[1]))) {
+      const markerMatch = entry.name.match(/^cutover-(\d+)\.json$/u);
+      if (markerMatch?.[1] === undefined || markerMatch[1] === "") continue;
+      if (!survivingTs.has(Number(markerMatch[1]))) {
         await rm(join(ctx.shadowDir, entry.name), { force: true });
       }
     }
@@ -1480,8 +1534,13 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     await mkdir(w.to, { recursive: true });
     const errors: string[] = [];
     for (const name of w.artifacts) {
-      const result = await moveDbArtifact(join(w.from, name), join(w.to, name));
-      if (!result.ok) errors.push(`${name}: ${result.error}`);
+      await moveDbArtifactIfPresent(
+        join(w.from, name),
+        join(w.to, name),
+        (error) => {
+          errors.push(`${name}: ${error}`);
+        },
+      );
     }
     if (errors.length > 0) {
       failed += 1;
@@ -1584,7 +1643,9 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
   return match(verb)
     .with("discover", () => cmdDiscover(ctx))
     .with("build", () => {
-      if (!flags.model) throw new Error("build requires --model <hf-id>");
+      if (flags.model === undefined || flags.model === "") {
+        throw new Error("build requires --model <hf-id>");
+      }
       return cmdBuild(ctx, {
         model: flags.model,
         force: flags.force,
@@ -1644,7 +1705,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  main().catch((error) => {
+  await main().catch((error) => {
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );

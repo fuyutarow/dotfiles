@@ -41,8 +41,8 @@ async function run(
     stderr: "pipe",
     env: { ...process.env, TYPESAFE_API_KEY: "fixture-key", ...env },
   });
-  child.stdin.write(stdin);
-  child.stdin.end();
+  await child.stdin.write(stdin);
+  await child.stdin.end();
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

@@ -7,6 +7,28 @@ import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "enforce-storage-headroom.ts";
 
+// A fixture workspace with a sparse-free, real 2 MiB target/ file, so `du` measures it.
+function workspace(): { root: string; home: string } {
+  const root = mkdtempSync(join(tmpdir(), "cargo-ws-"));
+  writeFileSync(
+    join(root, "Cargo.toml"),
+    '[workspace]\nmembers = ["crates/a"]\n',
+  );
+  mkdirSync(join(root, "crates", "a"), { recursive: true });
+  writeFileSync(
+    join(root, "crates", "a", "Cargo.toml"),
+    '[package]\nname = "a"\n',
+  );
+  mkdirSync(join(root, "target", "debug", "incremental"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(root, "target", "debug", "incremental", "blob"),
+    Buffer.alloc(2 * 1024 * 1024, 1),
+  );
+  return { root, home: mkdtempSync(join(tmpdir(), "cargo-home-")) };
+}
+
 const bash = (command: string) => ({
   tool_name: "Bash",
   tool_input: { command },
@@ -113,7 +135,7 @@ describe("enforce-storage-headroom", () => {
       expect(d?.permissionDecision).toBe("deny");
       expect(d?.permissionDecisionReason).toContain("storage-headroom");
       expect(d?.permissionDecisionReason).toMatch(
-        /free \d+\.\d GiB|unmeasured/,
+        /free \d+\.\d GiB|unmeasured/u,
       );
     }
   });
@@ -178,27 +200,6 @@ describe("enforce-storage-headroom", () => {
   });
 
   describe("cargo target budget", () => {
-    // A fixture workspace with a sparse-free, real 2 MiB target/ file, so `du` measures it.
-    function workspace(): { root: string; home: string } {
-      const root = mkdtempSync(join(tmpdir(), "cargo-ws-"));
-      writeFileSync(
-        join(root, "Cargo.toml"),
-        '[workspace]\nmembers = ["crates/a"]\n',
-      );
-      mkdirSync(join(root, "crates", "a"), { recursive: true });
-      writeFileSync(
-        join(root, "crates", "a", "Cargo.toml"),
-        '[package]\nname = "a"\n',
-      );
-      mkdirSync(join(root, "target", "debug", "incremental"), {
-        recursive: true,
-      });
-      writeFileSync(
-        join(root, "target", "debug", "incremental", "blob"),
-        Buffer.alloc(2 * 1024 * 1024, 1),
-      );
-      return { root, home: mkdtempSync(join(tmpdir(), "cargo-home-")) };
-    }
     const budget = (warn: number, hostWarn = 0) =>
       config((c) => {
         drives(0, 0, hostWarn)(c);

@@ -514,7 +514,7 @@ Capital fit: One-quarter budget.
 			"Precision loss",
 		]) {
 			const invalid = validTransferCandidate(donor.path, donor.digest).replace(
-				new RegExp(`^- ${field}:.*$`, "m"),
+				new RegExp(`^- ${field}:.*$`, "mu"),
 				"",
 			);
 			const result = run("--donor-set", donor.path, fixture(invalid));
@@ -784,7 +784,7 @@ Capital fit: One-quarter budget.
 
 	test("rejects a frozen donor file that never passed the SoK DONOR SET contract", () => {
 		const invalidDonorPath = fixture(
-			donorSet.replace(/^- Transfer search question:.*$/m, ""),
+			donorSet.replace(/^- Transfer search question:.*$/mu, ""),
 		);
 		const digest = createHash("sha256")
 			.update(readFileSync(invalidDonorPath))
@@ -819,7 +819,7 @@ Capital fit: One-quarter budget.
 	test("requires a base source plus an exact anchor for a source relation", () => {
 		const donor = frozenDonorSet();
 		const invalid = validTransferCandidate(donor.path, donor.digest).replace(
-			/- Source relation \/ locator:.*$/m,
+			/- Source relation \/ locator:.*$/mu,
 			"- Source relation / locator: recoverability is described only at p. 4 without a base source identifier",
 		);
 		const result = run("--donor-set", donor.path, fixture(invalid));
@@ -841,7 +841,7 @@ Capital fit: One-quarter budget.
 				donor.path,
 				donor.digest,
 			).replace(
-				/^- Target-side evidence:.*$/m,
+				/^- Target-side evidence:.*$/mu,
 				"",
 			)}\n${heading} Notes\n- Target-side evidence: UNTESTED`;
 			const missingResult = run("--donor-set", donor.path, fixture(missing));

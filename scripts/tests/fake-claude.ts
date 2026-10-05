@@ -33,7 +33,7 @@ function csv(name: string): string[] {
 function nameArg(): string {
   if (verb === "remove") {
     // ["mcp","remove","-s","user",NAME]
-    return args[args.length - 1] ?? "";
+    return args.at(-1) ?? "";
   }
   if (verb === "add") {
     if (args.includes("--transport")) {

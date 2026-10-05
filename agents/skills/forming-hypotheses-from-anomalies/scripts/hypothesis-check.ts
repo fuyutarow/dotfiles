@@ -47,27 +47,27 @@ const FOIL_MARKERS =
   " not | should have | vs | versus | ではなく | でなく | じゃなく | のに | はず | 想定 | 期待 | 予想 |" +
   " 本来 | 通常 | 一方 | 他方 | に対して | に対し | 他 | だけ | のみ | 残り";
 const FOIL_MARKER =
-  /\b(?:expected|predicted|foil|rather than|instead of|unlike|whereas|while|but|only|not|should have|vs\.?|versus)\b|ではなく|でなく|じゃなく|のに|はず|想定|期待|予想|本来|通常|一方|他方|に対して|に対し|他|だけ|のみ|残り/i;
+  /\b(?:expected|predicted|foil|rather than|instead of|unlike|whereas|while|but|only|not|should have|vs\.?|versus)\b|ではなく|でなく|じゃなく|のに|はず|想定|期待|予想|本来|通常|一方|他方|に対して|に対し|他|だけ|のみ|残り/iu;
 // Structural fallback for A1. The contract asks for `P observed, Q expected` — a PAIR — so a row
 // that IS a pair of substantial clauses passes even carrying none of the listed connectives. Two
 // real contrasts were rejected without this: `the ARM build crashes at link time; the x86 build
 // completes cleanly` and 「b7でハングし、6台では90秒で完了する」 (ledger §8). A false FAIL blocks a
 // legitimate packet; a false PASS only fails to catch what a reader must judge anyway.
-const CLAUSE_SPLIT = /[;；,，、]/;
+const CLAUSE_SPLIT = /[;；,，、]/u;
 const isClausePair = (v: string): boolean =>
   v.split(CLAUSE_SPLIT).filter((c) => c.trim().length >= 6).length >= 2;
-const PLACEHOLDER = /^\s*(?:\[[^\]]*\]|—|-|–|TBD|n\/a|なし|未定|\.\.\.)?\s*$/i;
-const norm = (s: string): string => s.toLowerCase().replace(/[\s、。,.]/g, "");
+const PLACEHOLDER = /^\s*(?:\[[^\]]*\]|—|-|–|TBD|n\/a|なし|未定|\.\.\.)?\s*$/iu;
+const norm = (s: string): string => s.toLowerCase().replaceAll(/[\s、。,.]/gu, "");
 /** Latin words of 4+ chars, used to ask whether two rows talk about the same thing at all. */
 const wordsOf = (v: string): string[] =>
-  (v.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []);
+  (v.toLowerCase().match(/[a-z][a-z-]{3,}/gu) ?? []);
 
 type Finding = { file: string; rung: string; detail: string };
 
 function rowsOf(text: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const line of text.split("\n")) {
-    const m = /^\s*[-*]\s*([A-Z][A-Za-z ]*?)\s*:\s*(.*)$/.exec(line);
+    const m = /^\s*[-*]\s*([A-Z][A-Za-z ]*?)\s*:\s*(.*)$/u.exec(line);
     const key = m?.[1];
     const value = m?.[2];
     if (key !== undefined && value !== undefined) out.set(key.trim(), value.trim());
@@ -76,15 +76,17 @@ function rowsOf(text: string): Map<string, string> {
 }
 
 // A value may be `TOKEN` or `TOKEN — free text`; take the leading token only.
-const token = (v: string): string => (v.split(/\s+—|\s+--|\s*\|/)[0] ?? "").trim().toUpperCase();
-const tail = (v: string): string => v.slice(token(v).length).replace(/^[\s—-]+/, "").trim();
+const token = (v: string): string => (v.split(/\s+—|\s+--|\s*\|/u)[0] ?? "").trim().toUpperCase();
+const tail = (v: string): string => v.slice(token(v).length).replace(/^[\s—-]+/u, "").trim();
 
 export function checkPacket(file: string, text: string): Finding[] {
   const f: Finding[] = [];
-  const add = (rung: string, detail: string) => f.push({ file, rung, detail });
+  const add = (rung: string, detail: string): void => {
+    f.push({ file, rung, detail });
+  };
   const r = rowsOf(text);
 
-  if (!/^##\s+HYPOTHESIS\b/m.test(text))
+  if (!/^##\s+HYPOTHESIS\b/mu.test(text))
     add("SHAPE", "no '## HYPOTHESIS <ID>' heading — this is not a packet");
 
   for (const name of ROWS) {
@@ -95,7 +97,7 @@ export function checkPacket(file: string, text: string): Finding[] {
 
   const contrast = r.get("Contrast") ?? "";
   if (
-    contrast && !PLACEHOLDER.test(contrast) &&
+    contrast !== "" && !PLACEHOLDER.test(contrast) &&
     !FOIL_MARKER.test(contrast) && !isClausePair(contrast)
   )
     add(
@@ -105,36 +107,36 @@ export function checkPacket(file: string, text: string): Finding[] {
     );
 
   const cs = token(r.get("Contrast source") ?? "");
-  if (cs && !CONTRAST_SOURCE.has(cs))
+  if (cs !== "" && !CONTRAST_SOURCE.has(cs))
     add("A1", `Contrast source '${cs}' not one of ${[...CONTRAST_SOURCE].join(" | ")}`);
 
   const hole = token(r.get("Hole type") ?? "");
-  if (hole && !HOLE_TYPE.has(hole))
+  if (hole !== "" && !HOLE_TYPE.has(hole))
     add("A1", `Hole type '${hole}' not one of ${[...HOLE_TYPE].join(" | ")}`);
 
   const closed = r.get("Closed route") ?? "";
   const closedTok = token(closed);
-  if (closed && !CLOSED_ROUTE.includes(closedTok))
+  if (closed !== "" && !CLOSED_ROUTE.includes(closedTok))
     add("A3", `Closed route must start with ${CLOSED_ROUTE.join(" or ")}`);
-  else if (closed && tail(closed).length < 12)
+  else if (closed !== "" && tail(closed).length < 12)
     add("A3", `Closed route is '${closedTok}' with no account of what it produced, what was tried, or why not`);
 
   const intro = r.get("Introduction type") ?? "";
   const introTok = token(intro);
-  const isOther = /^OTHER\b/i.test(introTok);
-  if (intro && !INTRO_TYPE.has(introTok) && !isOther)
+  const isOther = /^OTHER\b/iu.test(introTok);
+  if (intro !== "" && !INTRO_TYPE.has(introTok) && !isOther)
     add("A2", `Introduction type '${introTok}' not one of ${[...INTRO_TYPE].join(" | ")} | OTHER — <named>`);
   if (isOther && tail(intro).length < 3)
     add("A2", "Introduction type OTHER must be named — an unnamed OTHER closes the open set by stealth");
 
   const st = token(r.get("Status") ?? "");
-  if (st && !STATUS.has(st)) add("SHAPE", `Status '${st}' not one of ${[...STATUS].join(" | ")}`);
+  if (st !== "" && !STATUS.has(st)) add("SHAPE", `Status '${st}' not one of ${[...STATUS].join(" | ")}`);
 
   // The hypothesis is the product, so it gets its own rung: it must say something, and it must say
   // something OTHER than the anomaly. Restating the observation is the rename failure A4 names,
   // and it is the one form of that failure a script can actually see.
   const hyp = r.get("Hypothesis") ?? "";
-  if (hyp && !PLACEHOLDER.test(hyp)) {
+  if (hyp !== "" && !PLACEHOLDER.test(hyp)) {
     if (hyp.length < 12) add("A4", "Hypothesis row is too short to be a claim about what is happening");
     else if (norm(hyp) === norm(r.get("Anomaly") ?? " "))
       add("A4", "Hypothesis restates the Anomaly verbatim — that is the observation, not an explanation of it");
@@ -148,40 +150,27 @@ export function checkPacket(file: string, text: string): Finding[] {
   if (closedTok === "SUCCEEDED") {
     if (introducing)
       add("A3", `Closed route SUCCEEDED but Introduction type is ${introTok} — a route that worked introduced nothing`);
-    if (st && st !== "CLOSED-VOCABULARY")
+    if (st !== "" && st !== "CLOSED-VOCABULARY")
       add("A3", `Closed route SUCCEEDED but Status is ${st} — the closed-vocabulary branch ends at CLOSED-VOCABULARY`);
   }
   if (st === "CLOSED-VOCABULARY") {
     if (introducing) add("A3", `Status CLOSED-VOCABULARY with Introduction type ${introTok} — pick one`);
-    if (closedTok && closedTok !== "SUCCEEDED")
+    if (closedTok !== "" && closedTok !== "SUCCEEDED")
       add("A3", `Status CLOSED-VOCABULARY but Closed route is ${closedTok} — nothing explained the contrast`);
   }
-  if (st === "LICENSED" && intro && !introducing)
+  if (st === "LICENSED" && intro !== "" && !introducing)
     add("A3", "Status LICENSED with Introduction type NONE — nothing was introduced, so nothing was licensed");
   if (introducing) {
     if (closedTok === "") add("A3", "a vocabulary-introducing packet with no Closed route row is NO-LICENSE");
     const terms = r.get("Introduced terms") ?? "";
     if (token(terms) === "NONE")
       add("A2", `Introduction type is ${introTok} but Introduced terms is NONE — name the words, or the type is NONE`);
-    else if (terms && !PLACEHOLDER.test(terms) && hyp && !PLACEHOLDER.test(hyp)) {
-      // The introduced terms and the claim must be about the same thing. Word-level, not
-      // phrase-level: a term is normally inflected or expanded when it reaches the sentence.
-      const tw = wordsOf(terms);
-      const shares = tw.length
-        ? tw.some((w) => hyp.toLowerCase().includes(w))
-        : norm(hyp).includes(norm(terms));
-      if (!shares)
-        add("A4", "Introduced terms share no word with the Hypothesis row — one of the two rows is about something else");
-    }
-    for (const need of ["Discriminator", "Kill condition"] as const) {
-      const v = r.get(need) ?? "";
-      if (PLACEHOLDER.test(v))
-        add("A4", `Introduction type is ${introTok} but ${need} is empty — the term buys no observation`);
-    }
+    checkIntroducedTerms(add, terms, hyp);
+    checkRequiredRows(add, r, introTok);
   }
 
   const min = token(r.get("Minimality claim") ?? "");
-  if (min && !MINIMALITY.has(min))
+  if (min !== "" && !MINIMALITY.has(min))
     add("A4", `Minimality claim '${min}' not one of ${[...MINIMALITY].join(" | ")}`);
   if (min === "GLOBAL" && tail(r.get("Minimality claim") ?? "").length < 12)
     add("A4", "a GLOBAL minimality claim needs its own argument — 'nothing smaller works' is not 'no element is removable'");
@@ -190,6 +179,34 @@ export function checkPacket(file: string, text: string): Finding[] {
     add("SHAPE", `Status ${st} while a gate row is malformed — emit NO-LICENSE instead`);
 
   return f;
+}
+
+function checkIntroducedTerms(
+  add: (rung: string, detail: string) => void,
+  terms: string,
+  hyp: string,
+): void {
+  if (terms === "" || PLACEHOLDER.test(terms) || hyp === "" || PLACEHOLDER.test(hyp)) return;
+  // The introduced terms and the claim must be about the same thing. Word-level, not
+  // phrase-level: a term is normally inflected or expanded when it reaches the sentence.
+  const tw = wordsOf(terms);
+  const shares = tw.length > 0
+    ? tw.some((w) => hyp.toLowerCase().includes(w))
+    : norm(hyp).includes(norm(terms));
+  if (!shares)
+    add("A4", "Introduced terms share no word with the Hypothesis row — one of the two rows is about something else");
+}
+
+function checkRequiredRows(
+  add: (rung: string, detail: string) => void,
+  rows: ReadonlyMap<string, string>,
+  introTok: string,
+): void {
+  for (const need of ["Discriminator", "Kill condition"] as const) {
+    const value = rows.get(need) ?? "";
+    if (PLACEHOLDER.test(value))
+      add("A4", `Introduction type is ${introTok} but ${need} is empty — the term buys no observation`);
+  }
 }
 
 const BAD = `## HYPOTHESIS X1
@@ -361,15 +378,15 @@ async function main(): Promise<void> {
     const want = ["A1", "A2", "A3", "A4", "SHAPE"];
     const missing = want.filter((w) => !found.some((x) => x.rung === w));
     for (const x of found) console.log(`  ${x.file} ${x.rung}: ${x.detail}`);
-    if (missing.length) {
+    if (missing.length > 0) {
       console.error(`SELF-TEST FAILED: the known-bad packets did not trip ${missing.join(", ")}`);
       failed = true;
     }
-    if (!badBranch.length) {
+    if (badBranch.length === 0) {
       console.error("SELF-TEST FAILED: an incoherent SUCCEEDED/NEW-PREDICATE packet passed");
       failed = true;
     }
-    if (!badLicense.length) {
+    if (badLicense.length === 0) {
       console.error("SELF-TEST FAILED: a LICENSED packet that introduced nothing passed");
       failed = true;
     }
@@ -378,20 +395,13 @@ async function main(): Promise<void> {
       ["licensed", GOOD_LICENSED],
       ["marker-free contrast", GOOD_PLAIN],
     ] as const;
-    for (const [name, good] of goods) {
-      const noise = checkPacket(`<good-${name}>`, good);
-      for (const x of noise) console.error(`  FALSE POSITIVE ${x.file} ${x.rung}: ${x.detail}`);
-      if (noise.length) {
-        console.error(`SELF-TEST FAILED: the good ${name} packet tripped ${noise.length} finding(s)`);
-        failed = true;
-      }
-    }
+    if (checkGoodPackets(goods)) failed = true;
     if (failed) process.exit(1);
     console.log(`SELF-TEST OK — bad packets tripped ${found.length} findings across every rung; all ${goods.length} good packets clean`);
     return;
   }
   const files: string[] = argv._.files;
-  if (!files.length) {
+  if (files.length === 0) {
     console.error("usage: bun scripts/hypothesis-check.ts <packet.md> [...]  |  --self-test");
     process.exit(2);
   }
@@ -403,6 +413,20 @@ async function main(): Promise<void> {
   }
   console.log(bad === 0 ? `PASS ${files.length} packet(s)` : `FAIL ${bad} finding(s)`);
   process.exit(bad === 0 ? 0 : 1);
+}
+
+function checkGoodPackets(goods: readonly (readonly [string, string])[]): boolean {
+  let failed = false;
+  for (const [name, good] of goods) {
+    const noise = checkPacket(`<good-${name}>`, good);
+    for (const finding of noise)
+      console.error(`  FALSE POSITIVE ${finding.file} ${finding.rung}: ${finding.detail}`);
+    if (noise.length > 0) {
+      console.error(`SELF-TEST FAILED: the good ${name} packet tripped ${noise.length} finding(s)`);
+      failed = true;
+    }
+  }
+  return failed;
 }
 
 if (import.meta.main) await main();

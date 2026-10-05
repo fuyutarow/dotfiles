@@ -4,7 +4,7 @@ import { $ } from "bun";
 // timeout is an assertion here too — the last case boots the user's whole login chain.
 const to = Bun.which("timeout") ?? Bun.which("gtimeout");
 
-if (!to) {
+if (to === null) {
   console.log(
     "⚠️  no timeout(1) on PATH — running unbounded; a wedged login shell will block instead of failing",
   );

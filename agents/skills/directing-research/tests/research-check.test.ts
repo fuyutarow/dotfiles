@@ -581,7 +581,7 @@ describe("research-check", () => {
 		const missingThresholds = ["##", "###", "####", "######"].map((heading) => {
 			const missingThresholdPath = fixture(
 				`${targetResult(transferPath, transferDigest).replace(
-					/^- Prewritten threshold:.*$/m,
+					/^- Prewritten threshold:.*$/mu,
 					"",
 				)}\n${heading} Notes\n- Prewritten threshold: PASS if this later note is borrowed`,
 			);
@@ -700,14 +700,14 @@ describe("research-check", () => {
 			},
 			{
 				artifact: base.replace(
-					/^- Prewritten threshold:.*$/m,
+					/^- Prewritten threshold:.*$/mu,
 					"- Prewritten threshold: yes",
 				),
 				finding: "Prewritten threshold must name",
 			},
 			{
 				artifact: base.replace(
-					/^- Prewritten threshold:.*$/m,
+					/^- Prewritten threshold:.*$/mu,
 					"- Prewritten threshold: PASS if 0 of 0 outcomes are distinguished before target observation",
 				),
 				finding: "Prewritten threshold ratio needs a positive denominator",

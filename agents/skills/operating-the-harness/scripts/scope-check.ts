@@ -31,11 +31,7 @@ import { cli } from "cleye";
 
 const HOME = homedir();
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
-}
+// Cleye parses raw arguments before the entry point validates unknown options.
 
 // An absolute path literal under the user's home directory. `~/…` and `$HOME/…` forms are
 // deliberately NOT matched: they are portable and are the spelling P3 asks for.
@@ -104,19 +100,27 @@ async function scan(file: string, allowed: string[]): Promise<Finding[]> {
   return findings;
 }
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<number> {
   const parsed = cli(
     {
       name: "scope-check.ts",
       parameters: ["[user-scope-root]"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
   if (parsed._.length > 1) {
-    throw new Error(`unexpected argument '${parsed._[1]}'`);
+    process.stderr.write(`FATAL: unexpected argument '${parsed._[1]}'\n`);
+    return 2;
   }
   const root = resolve(parsed._[0] ?? join(HOME, ".claude"));
   if (!(await exists(root))) {
@@ -156,9 +160,9 @@ async function main(): Promise<number> {
 }
 
 const code = await main().catch((error: unknown) => {
-    process.stderr.write(
-      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    return 2;
-  });
+  process.stderr.write(
+    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  return 2;
+});
 process.exit(code);

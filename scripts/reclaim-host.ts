@@ -26,14 +26,13 @@ import { cli } from "cleye";
 const HOST_DEFAULT = "r99";
 const HOST_MS = 90_000; // a Get-ChildItem over %TEMP% + a few Remove-Item; 90s is a hang bound
 
-class UsageError extends Error {}
-
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -147,7 +146,7 @@ function parseProbe(out: string): {
   return { swaps, cFree, cTotal, wingetCache };
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<number | { error: string; code: number }> {
   const parsed = cli(
     {
       name: "reclaim-host.ts",
@@ -171,19 +170,19 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
+    return { error: `Unexpected argument '${parsed._[0]}'`, code: 2 };
   }
   const { host } = parsed.flags;
 
   if (Bun.which("ssh") === null) {
     console.log("no ssh on PATH");
-    process.exit(1);
+    return 1;
   }
 
   const probe = await ps(host, PROBE);
   if (probe.timedOut || probe.out.trim() === "") {
     console.log(`cannot reach ${host} (ssh timed out or returned nothing)`);
-    process.exit(2);
+    return 2;
   }
   const { swaps, cFree, cTotal, wingetCache } = parseProbe(probe.out);
   const { live, orphans, reclaimBytes } = classifySwaps(swaps);
@@ -208,12 +207,12 @@ async function main(): Promise<void> {
     console.log(
       "read-only plan; re-run with --execute to free the orphans and the winget cache",
     );
-    return;
+    return 0;
   }
 
   if (orphans.length === 0 && (wingetCache ?? 0) === 0) {
     console.log("nothing to reclaim");
-    return;
+    return 0;
   }
 
   // Delete, not rip: a graveyard on C: frees no C:. The OS lock protects the live swap even if the
@@ -244,11 +243,20 @@ $c = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
   } else {
     console.log("done — re-run --plan or wsl:audit to confirm C: free");
   }
+  return 0;
 }
 
 if (import.meta.main) {
-  await main().then(undefined, (err: unknown) => {
-    console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
-  });
+  const result = await Promise.try(main).then(
+    (code) => code,
+    (err: unknown) => {
+      console.error(
+        `FATAL: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 1;
+    },
+  );
+  if (typeof result === "number") process.exit(result);
+  console.error(result.error);
+  process.exit(result.code);
 }

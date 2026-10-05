@@ -715,6 +715,11 @@ async function budgetStatus(
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
+  if (payload === undefined) {
+    process.stderr.write("storage-headroom: invalid JSON payload\n");
+    process.exitCode = 1;
+    return;
+  }
   if (strAt(payload, "tool_name") !== "Bash") return;
   const command = strAt(payload, "tool_input", "command");
   if (command === undefined || command === "") return;

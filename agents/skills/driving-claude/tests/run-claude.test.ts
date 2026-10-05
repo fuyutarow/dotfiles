@@ -31,14 +31,14 @@ function runCli(
 
 async function withTarget<T>(fn: (target: string) => Promise<T>): Promise<T> {
   const target = await mkdtemp(join(tmpdir(), "driving-claude-test-"));
-  return fn(target).then(
+  return Promise.try(() => fn(target)).then(
     async (value) => {
       await rm(target, { recursive: true, force: true });
       return value;
     },
     async (error: unknown) => {
       await rm(target, { recursive: true, force: true });
-      throw error;
+      return expect.unreachable(`withTarget callback failed: ${String(error)}`);
     },
   );
 }

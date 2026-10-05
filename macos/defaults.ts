@@ -7,14 +7,14 @@ import { existsSync, mkdirSync } from "node:fs";
 // macOS-only topic dir (like karabiner/); a no-op elsewhere. Migrated from defaults.sh 2026-09-29
 // (NO-NEW-BASH: the .sh could not grow).
 
-class UsageError extends Error {}
+let prototypeFlagError: string | undefined;
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    prototypeFlagError = `Unknown option '--${flag}'`;
   }
 }
 
@@ -116,8 +116,14 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 0)
-    throw new UsageError(`unexpected argument: ${parsed._.join(" ")}`);
+  if (prototypeFlagError !== undefined) {
+    process.stderr.write(`FATAL: ${prototypeFlagError}\n`);
+    process.exit(2);
+  }
+  if (parsed._.length > 0) {
+    process.stderr.write(`FATAL: unexpected argument: ${parsed._.join(" ")}\n`);
+    process.exit(2);
+  }
 
   if (process.platform !== "darwin") {
     process.stdout.write("skip: not macOS\n");

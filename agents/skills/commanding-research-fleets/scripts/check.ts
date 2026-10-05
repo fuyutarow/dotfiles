@@ -24,9 +24,10 @@ import { cli } from "cleye";
 // script-check.ts parsing quirk: its executableCode() scanner mis-tokenizes the shebang line's
 // slashes as a regex literal and swallows the next source line with it, which happened to be
 // this exact `process.argv[2]` read. Removing the (unused, BG1) shebang unmasked the real F8 gap.
+let prototypeFlagSeen = false;
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    prototypeFlagSeen = true;
   }
 }
 
@@ -45,29 +46,43 @@ function reportDescriptionLabel(raw: string, label: string, re: RegExp): void {
 }
 
 function checkFrontmatter(skillMd: string): void {
-	const fmMatch = /^---\n([\s\S]*?)\n---/u.exec(skillMd);
-	if (fmMatch === null) {
-		fail("no YAML frontmatter block found");
-		return;
-	}
-	const fm = fmMatch[1] ?? "";
-	if (!/^name:\s*commanding-research-fleets\s*$/mu.test(fm)) fail("frontmatter name: must be exactly 'commanding-research-fleets'");
-	else ok("frontmatter name matches dir");
-	const descMatch = /^description:\s*>-\n([\s\S]*)$/mu.exec(fm);
-	if (descMatch === null) {
-		fail("description: must use block scalar '>-' — a plain scalar breaks on any 'X: ' inside");
-		return;
-	}
-	const raw = (descMatch[1] ?? "").split("\n").map((line) => line.trim()).join(" ").trim();
-	ok(`description block-scalar found, ~${raw.length} chars (cap 1500, hard 1024 API-deploy)`);
-	if (raw.length > 1500) fail(`description ~${raw.length} chars exceeds the 1500 house ceiling`);
-	if (raw.length > 1024) console.warn(`WARN: description ~${raw.length} chars exceeds the 1024 platform hard cap for API deployment (Claude Code's own listing cap differs — operating-the-harness owns that number)`);
-	if (!/English skill; respond in the user's language/u.test(raw)) fail("description must end with the language directive, verbatim");
-	const labels = [
-		["Director/PI/Researcher role names", /Director.*PI.*Researcher/u],
-		["a DECISIVE or PURPOSE cut label", /(DECISIVE|CARDINALITY|PURPOSE):/u],
-	] as const;
-	for (const [label, re] of labels) reportDescriptionLabel(raw, label, re);
+  const fmMatch = /^---\n([\s\S]*?)\n---/u.exec(skillMd);
+  if (fmMatch === null) {
+    fail("no YAML frontmatter block found");
+    return;
+  }
+  const fm = fmMatch[1] ?? "";
+  if (!/^name:\s*commanding-research-fleets\s*$/mu.test(fm))
+    fail("frontmatter name: must be exactly 'commanding-research-fleets'");
+  else ok("frontmatter name matches dir");
+  const descMatch = /^description:\s*>-\n([\s\S]*)$/mu.exec(fm);
+  if (descMatch === null) {
+    fail(
+      "description: must use block scalar '>-' — a plain scalar breaks on any 'X: ' inside",
+    );
+    return;
+  }
+  const raw = (descMatch[1] ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .join(" ")
+    .trim();
+  ok(
+    `description block-scalar found, ~${raw.length} chars (cap 1500, hard 1024 API-deploy)`,
+  );
+  if (raw.length > 1500)
+    fail(`description ~${raw.length} chars exceeds the 1500 house ceiling`);
+  if (raw.length > 1024)
+    console.warn(
+      `WARN: description ~${raw.length} chars exceeds the 1024 platform hard cap for API deployment (Claude Code's own listing cap differs — operating-the-harness owns that number)`,
+    );
+  if (!/English skill; respond in the user's language/u.test(raw))
+    fail("description must end with the language directive, verbatim");
+  const labels = [
+    ["Director/PI/Researcher role names", /Director.*PI.*Researcher/u],
+    ["a DECISIVE or PURPOSE cut label", /(DECISIVE|CARDINALITY|PURPOSE):/u],
+  ] as const;
+  for (const [label, re] of labels) reportDescriptionLabel(raw, label, re);
 }
 
 function countTableRows(source: string, headerRe: RegExp): number {
@@ -100,10 +115,16 @@ function main(): number {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 1) {
-    throw new Error(`unexpected argument '${parsed._[1]}'`);
+  if (prototypeFlagSeen) {
+    console.error("FATAL: unknown option '--__proto__'");
+    return 2;
   }
-  const dir = parsed._[0] ?? join(dirname(new URL(import.meta.url).pathname), "..");
+  if (parsed._.length > 1) {
+    console.error(`FATAL: unexpected argument '${parsed._[1]}'`);
+    return 2;
+  }
+  const dir =
+    parsed._[0] ?? join(dirname(new URL(import.meta.url).pathname), "..");
   const skillMdPath = join(dir, "SKILL.md");
 
   if (!existsSync(skillMdPath)) {
@@ -130,32 +151,63 @@ function main(): number {
   }
 
   // --- no README/CHANGELOG/etc (architecture.md §1's exclusion rule) --------------------------
-  for (const stray of ["README.md", "CHANGELOG.md", "INSTALL.md", "QUICK_REFERENCE.md"]) {
-    if (existsSync(join(dir, stray))) fail(`stray ${stray} present — a skill's only readers are the model and the interpreter`);
+  for (const stray of [
+    "README.md",
+    "CHANGELOG.md",
+    "INSTALL.md",
+    "QUICK_REFERENCE.md",
+  ]) {
+    if (existsSync(join(dir, stray)))
+      fail(
+        `stray ${stray} present — a skill's only readers are the model and the interpreter`,
+      );
   }
 
   // --- content counts (greppable, per architecture.md §5) -------------------------------------
   const checklist = readFileSync(join(dir, "SKILL.md"), "utf8");
-  const checklistRows = countTableRows(checklist, /\| # \| Check \| Artifact \|/u);
-  if (checklistRows !== 8) fail(`launch checklist has ${checklistRows} rows, expected exactly 8`);
+  const checklistRows = countTableRows(
+    checklist,
+    /\| # \| Check \| Artifact \|/u,
+  );
+  if (checklistRows !== 8)
+    fail(`launch checklist has ${checklistRows} rows, expected exactly 8`);
   else ok("launch checklist has exactly 8 rows");
 
-  const opRulesRows = countTableRows(checklist, /\| # \| Rule \|\n\|---\|---\|\n\| 1 \| A frozen plan/u);
-  if (opRulesRows !== 8) fail(`operating rules has ${opRulesRows} rows, expected exactly 8`);
+  const opRulesRows = countTableRows(
+    checklist,
+    /\| # \| Rule \|\n\|---\|---\|\n\| 1 \| A frozen plan/u,
+  );
+  if (opRulesRows !== 8)
+    fail(`operating rules has ${opRulesRows} rows, expected exactly 8`);
   else ok("operating rules has exactly 8 rows");
 
-  const vocabAndLaw = readFileSync(join(dir, "references/vocabulary-and-law.md"), "utf8");
-  const stuckRows = countTableRows(vocabAndLaw, /\| # \| Prompt \(verbatim\) \|/u);
-  if (stuckRows !== 5) fail(`stuck-question prompts has ${stuckRows} rows, expected exactly 5`);
+  const vocabAndLaw = readFileSync(
+    join(dir, "references/vocabulary-and-law.md"),
+    "utf8",
+  );
+  const stuckRows = countTableRows(
+    vocabAndLaw,
+    /\| # \| Prompt \(verbatim\) \|/u,
+  );
+  if (stuckRows !== 5)
+    fail(`stuck-question prompts has ${stuckRows} rows, expected exactly 5`);
   else ok("stuck-question prompts has exactly 5 rows");
 
-  const lawCandidateRows = countTableRows(vocabAndLaw, /\| # \| Candidate rule \|/u);
-  if (lawCandidateRows !== 9) fail(`LAW-candidate table has ${lawCandidateRows} rows, expected exactly 9`);
+  const lawCandidateRows = countTableRows(
+    vocabAndLaw,
+    /\| # \| Candidate rule \|/u,
+  );
+  if (lawCandidateRows !== 9)
+    fail(
+      `LAW-candidate table has ${lawCandidateRows} rows, expected exactly 9`,
+    );
   else ok("LAW-candidate table has exactly 9 rows");
 
   // LAW candidates must never read as binding — the file must keep saying so.
   if (!/NOT yet binding/u.test(vocabAndLaw))
-    fail("vocabulary-and-law.md must keep the LAW candidates marked NOT yet binding");
+    fail(
+      "vocabulary-and-law.md must keep the LAW candidates marked NOT yet binding",
+    );
   else ok("LAW candidates explicitly marked not-yet-binding");
 
   // --- sibling names actually exist on disk (catches a typo'd sibling cut) --------------------
@@ -170,7 +222,9 @@ function main(): number {
     "forging-skills",
   ]) {
     if (!existsSync(join(skillsRoot, sib)))
-      fail(`sibling cut names '${sib}', which does not exist under ${skillsRoot}`);
+      fail(
+        `sibling cut names '${sib}', which does not exist under ${skillsRoot}`,
+      );
   }
   ok("all named siblings exist on disk");
 
@@ -182,7 +236,10 @@ const result = await Promise.try(main).then(
   (error: unknown) => ({ ok: false as const, error }),
 );
 if (!result.ok) {
-  process.stderr.write(`FATAL: ${result.error instanceof Error ? result.error.message : String(result.error)}\n`);
-  process.exit(2);
+  process.stderr.write(
+    `FATAL: ${result.error instanceof Error ? result.error.message : String(result.error)}\n`,
+  );
+  process.exitCode = 2;
+} else {
+  process.exitCode = result.code;
 }
-process.exit(result.code);

@@ -42,13 +42,20 @@ const DecisionEnvelope = z.looseObject({ hookSpecificOutput: DecisionSchema });
 // PreToolUse hooks print one decision JSON on stdout (or nothing = silent pass). A caller of
 // decisionOf expects a decision: it used to get null on empty stdout and then die on the first
 // property read; it now dies here, naming the cause.
-export function decisionOf(stdout: string): Decision {
+export async function decisionOf(
+  stdout: string,
+): Promise<{ ok: true; value: Decision } | { ok: false; error: string }> {
   if (stdout.trim() === "") {
-    throw new Error(
-      "decisionOf: the hook printed nothing (silent pass), so there is no decision",
-    );
+    return {
+      ok: false,
+      error:
+        "decisionOf: the hook printed nothing (silent pass), so there is no decision",
+    };
   }
-  return decoded(DecisionEnvelope, parseJson(stdout)).hookSpecificOutput;
+  return Promise.try(() => decoded(DecisionEnvelope, parseJson(stdout))).then(
+    (value) => ({ ok: true as const, value: value.hookSpecificOutput }),
+    (error: unknown) => ({ ok: false as const, error: String(error) }),
+  );
 }
 
 export function tempDir(prefix: string): string {

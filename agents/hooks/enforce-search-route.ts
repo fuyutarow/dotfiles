@@ -163,6 +163,14 @@ function cccIsAvailable(): boolean {
 
 function main(): void {
   const payload = readStdinJson();
+  if (payload === undefined) {
+    // FATAL: the payload is not JSON, so no axis could be evaluated; fail closed with the one fix
+    decidePre(
+      "deny",
+      "search-route: hook error while classifying search (invalid JSON payload) — failing closed. " +
+        "Fix agents/hooks/enforce-search-route.ts in dotfiles before retrying raw search.",
+    );
+  }
   const tool = strAt(payload, "tool_name");
   if (tool !== "Grep" && tool !== "Bash") return;
 

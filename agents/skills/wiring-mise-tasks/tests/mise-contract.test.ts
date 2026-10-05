@@ -26,7 +26,11 @@ function resolveRealBun(): string {
     if (!existsSync(candidate)) continue;
     if (!realpathSync(candidate).includes("mise")) return candidate;
   }
-  throw new Error("no non-mise-shim `bun` found on PATH for the test harness");
+  expect(
+    false,
+    "no non-mise-shim `bun` found on PATH for the test harness",
+  ).toBe(true);
+  return "bun";
 }
 
 const CONTRACT = new URL("../scripts/mise-contract.ts", import.meta.url)
@@ -118,7 +122,8 @@ describe("mise-contract floor", () => {
     );
     mkdirSync(join(ok, ".jj"));
     expect(run(ok).out).toContain("OK    commit (jj repo)");
-    for (const d of [plain, jjRepo, ok]) rmSync(d, { recursive: true, force: true });
+    for (const d of [plain, jjRepo, ok])
+      rmSync(d, { recursive: true, force: true });
   });
 
   test("mise.toml has no [tasks] at all: FAIL 'no local mise tasks', exit 1", () => {
@@ -163,7 +168,7 @@ describe("mise-contract floor", () => {
 
   test("reasonless waiver is inert (no reason ⇒ warning, token still unresolved)", () => {
     const dir = makeRoot(
-      "# mise-contract: waive bogus-token\n\n[tasks.fmt]\nrun = \"true\"\n",
+      '# mise-contract: waive bogus-token\n\n[tasks.fmt]\nrun = "true"\n',
     );
     const { out, code } = run(dir);
     expect(out).toContain(
@@ -258,7 +263,9 @@ describe("mise-contract floor", () => {
     });
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(out).toContain("FAIL  fmt — unresolved");
-    expect(out).toContain(`—     mise-contract: 7 hard, 7 warn (${dir})\n`);
+    expect(out).toContain(
+      `—     mise-contract: 7 hard, 7 warn (${realpathSync(dir)})\n`,
+    );
     expect(proc.exitCode).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });

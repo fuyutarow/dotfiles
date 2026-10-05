@@ -4,11 +4,7 @@ import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { jsonText, z } from "../../../hooks/zod.ts";
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
-}
+// Cleye handles unknown options after parsing their raw spelling.
 
 const hard = ["fmt", "f", "fmt:check", "lint", "test", "up", "check"];
 const soft = ["setup", "i", "fmt:staged", "l", "t", "u", "c"];
@@ -190,7 +186,9 @@ function taskBodies(source: string): Array<{ name: string; body: string }> {
       closer = handled.closer;
       continue;
     }
-    const header = /^\s*\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]/u.exec(line);
+    const header = /^\s*\[tasks\.(?:"([^"]+)"|([A-Za-z0-9_:.-]+))\]/u.exec(
+      line,
+    );
     if (header !== null) {
       name = header[1] ?? header[2];
       continue;
@@ -392,7 +390,11 @@ function checkBodies(source: string): [number, number] {
   return [failures, warnings];
 }
 
-function recordRuntimeUsers(command: string, taskName: string, needed: Map<string, string[]>): void {
+function recordRuntimeUsers(
+  command: string,
+  taskName: string,
+  needed: Map<string, string[]>,
+): void {
   for (const [pattern, tool] of RUNTIMES) {
     if (!pattern.test(command)) continue;
     const users = needed.get(tool);
@@ -450,8 +452,10 @@ async function check(
       );
     return { failures: 0, environmentFailure: true };
   }
-  const local = listed.tasks.filter((task) =>
-    task.source.startsWith(`${realRoot}/`) || task.source.startsWith(`${root}/`),
+  const local = listed.tasks.filter(
+    (task) =>
+      task.source.startsWith(`${realRoot}/`) ||
+      task.source.startsWith(`${root}/`),
   );
   if (local.length === 0) {
     process.stdout.write(
@@ -501,7 +505,8 @@ async function check(
       warnings += 1;
     }
   }
-  if (existsSync(`${root}/.jj`)) failures += reportJjTokens(jj, resolved, waiver.active);
+  if (existsSync(`${root}/.jj`))
+    failures += reportJjTokens(jj, resolved, waiver.active);
   if (existsSync(tomlPath)) {
     const source = await readFile(tomlPath, "utf8");
     const [bodyFailures, bodyWarnings] = checkBodies(source);
@@ -516,16 +521,37 @@ async function check(
   // hook:pre-commit), so the hyphen is git's, not a separator. Exempt ONLY git's documented hook
   // names (githooks(5)); `hook:my-thing` still warns. Shape of these tasks: wiring-repositories HOOK-1.
   const GIT_HOOKS = new Set([
-    "applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit",
-    "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout", "post-merge",
-    "pre-push", "pre-receive", "update", "proc-receive", "post-receive", "post-update",
-    "reference-transaction", "push-to-checkout", "pre-auto-gc", "post-rewrite",
-    "sendemail-validate", "fsmonitor-watchman", "post-index-change",
+    "applypatch-msg",
+    "pre-applypatch",
+    "post-applypatch",
+    "pre-commit",
+    "pre-merge-commit",
+    "prepare-commit-msg",
+    "commit-msg",
+    "post-commit",
+    "pre-rebase",
+    "post-checkout",
+    "post-merge",
+    "pre-push",
+    "pre-receive",
+    "update",
+    "proc-receive",
+    "post-receive",
+    "post-update",
+    "reference-transaction",
+    "push-to-checkout",
+    "pre-auto-gc",
+    "post-rewrite",
+    "sendemail-validate",
+    "fsmonitor-watchman",
+    "post-index-change",
   ]);
   const hyphens = local
     .map((task) => task.name)
     .filter((name) => name.includes("-"))
-    .filter((name) => !(name.startsWith("hook:") && GIT_HOOKS.has(name.slice(5))));
+    .filter(
+      (name) => !(name.startsWith("hook:") && GIT_HOOKS.has(name.slice(5))),
+    );
   if (hyphens.length > 0) {
     process.stdout.write(
       `WARN  grammar: hyphen in task name (colon-only rule): ${hyphens.join(" ")}\n`,
@@ -557,18 +583,24 @@ async function check(
   return { failures, environmentFailure: false };
 }
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
       name: "mise-contract.ts",
       parameters: ["[roots...]"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
-
   if (Bun.which("mise") === null) {
     process.stdout.write("ENV mise not installed\n");
     process.exit(2);

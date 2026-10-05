@@ -1,6 +1,7 @@
 import { cli } from "cleye";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
@@ -32,15 +33,14 @@ const REGISTRY = join(
 );
 const FETCH_MS = 30_000;
 
-class UsageError extends Error {}
-
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
-): void {
+): boolean {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    return true;
   }
+  return false;
 }
 
 const RecordSchema = z.record(z.string(), z.unknown());
@@ -60,32 +60,36 @@ function jsonFailure(path: string, what: string, error: z.ZodError): Error {
   return new Error(`${path}: ${syntax?.message ?? `not a ${what}`}`);
 }
 
-async function readJsonObject(path: string): Promise<Record<string, unknown>> {
+async function readJsonObject(
+  path: string,
+): Promise<Result<Record<string, unknown>, string>> {
   const record = jsonOf(RecordSchema).safeParse(await Bun.file(path).text());
-  if (!record.success) throw jsonFailure(path, "JSON object", record.error);
-  return record.data;
+  if (!record.success)
+    return err(jsonFailure(path, "JSON object", record.error).message);
+  return ok(record.data);
 }
 
-function asPlugin(id: string, v: unknown): Plugin {
+function asPlugin(id: string, v: unknown): Result<Plugin, string> {
   const plugin = PluginSchema.safeParse(v);
   if (!plugin.success)
-    throw new Error(
-      `plugins.json: ${id}: needs repo, version, sha256{file: hash}`,
-    );
-  return plugin.data;
+    return err(`plugins.json: ${id}: needs repo, version, sha256{file: hash}`);
+  return ok(plugin.data);
 }
 
-async function vaultPaths(): Promise<string[]> {
-  if (!existsSync(REGISTRY)) return [];
+async function vaultPaths(): Promise<Result<string[], string>> {
+  if (!existsSync(REGISTRY)) return ok([]);
   const reg = await readJsonObject(REGISTRY);
-  const vaultsRecord = RecordSchema.safeParse(reg.vaults);
+  if (reg.isErr()) return err(reg.error);
+  const vaultsRecord = RecordSchema.safeParse(reg.value.vaults);
   const vaults: Record<string, unknown> = vaultsRecord.success
     ? vaultsRecord.data
     : {};
-  return Object.values(vaults).flatMap((v) => {
-    const vault = VaultSchema.safeParse(v);
-    return vault.success ? [vault.data.path] : [];
-  });
+  return ok(
+    Object.values(vaults).flatMap((v) => {
+      const vault = VaultSchema.safeParse(v);
+      return vault.success ? [vault.data.path] : [];
+    }),
+  );
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -100,37 +104,44 @@ async function fileHash(path: string): Promise<string | null> {
 // One download per asset per run, verified before any vault sees it.
 const assetCache = new Map<string, Uint8Array>();
 
-async function asset(p: Plugin, file: string): Promise<Uint8Array> {
+async function asset(
+  p: Plugin,
+  file: string,
+): Promise<Result<Uint8Array, string>> {
   const url = `https://github.com/${p.repo}/releases/download/${p.version}/${file}`;
   const hit = assetCache.get(url);
-  if (hit !== undefined) return hit;
+  if (hit !== undefined) return ok(hit);
   const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_MS) });
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  if (!res.ok) return err(`${url}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const got = sha256(bytes);
   if (got !== p.sha256[file]) {
-    throw new Error(
+    return err(
       `${url}: sha256 ${got} != pinned ${p.sha256[file]} — refusing to install`,
     );
   }
   assetCache.set(url, bytes);
-  return bytes;
+  return ok(bytes);
 }
 
 // Each Fix names what drifted and how to repair it; --check only prints the names.
-type Fix = { what: string; apply: () => Promise<void> };
+type Fix = { what: string; apply: () => Promise<Result<void, string>> };
 
 async function appFixes(
   dir: string,
   want: Record<string, unknown>,
-): Promise<Fix[]> {
+): Promise<Result<Fix[], string>> {
   const target = join(dir, "app.json");
-  const have = existsSync(target) ? await readJsonObject(target) : {};
+  const haveResult = existsSync(target)
+    ? await readJsonObject(target)
+    : ok<Record<string, unknown>>({});
+  if (haveResult.isErr()) return err(haveResult.error);
+  const have = haveResult.value;
   const changed = Object.keys(want).filter(
     (k) => JSON.stringify(have[k]) !== JSON.stringify(want[k]),
   );
-  if (changed.length === 0) return [];
-  return [
+  if (changed.length === 0) return ok([]);
+  return ok([
     {
       what: `app.json(${changed.join(",")})`,
       apply: async () => {
@@ -138,12 +149,17 @@ async function appFixes(
           target,
           `${JSON.stringify({ ...have, ...want }, null, 2)}\n`,
         );
+        return ok(undefined);
       },
     },
-  ];
+  ]);
 }
 
-async function pluginFixes(dir: string, id: string, p: Plugin): Promise<Fix[]> {
+async function pluginFixes(
+  dir: string,
+  id: string,
+  p: Plugin,
+): Promise<Result<Fix[], string>> {
   const pdir = join(dir, "plugins", id);
   const fixes: Fix[] = [];
   for (const [file, hash] of Object.entries(p.sha256)) {
@@ -153,23 +169,29 @@ async function pluginFixes(dir: string, id: string, p: Plugin): Promise<Fix[]> {
       apply: async () => {
         // Verify first: a refused asset must leave no plugin dir behind.
         const bytes = await asset(p, file);
+        if (bytes.isErr()) return err(bytes.error);
         mkdirSync(pdir, { recursive: true });
-        await Bun.write(join(pdir, file), bytes);
+        await Bun.write(join(pdir, file), bytes.value);
+        return ok(undefined);
       },
     });
   }
-  return fixes;
+  return ok(fixes);
 }
 
-async function enableFix(dir: string, ids: string[]): Promise<Fix[]> {
+async function enableFix(
+  dir: string,
+  ids: string[],
+): Promise<Result<Fix[], string>> {
   const target = join(dir, "community-plugins.json");
   const text = existsSync(target) ? await Bun.file(target).text() : "[]";
   const list = jsonOf(z.array(z.unknown())).safeParse(text);
-  if (!list.success) throw jsonFailure(target, "JSON array", list.error);
+  if (!list.success)
+    return err(jsonFailure(target, "JSON array", list.error).message);
   const current = list.data;
   const missing = ids.filter((id) => !current.includes(id));
-  if (missing.length === 0) return [];
-  return [
+  if (missing.length === 0) return ok([]);
+  return ok([
     {
       what: `enable(${missing.join(",")})`,
       apply: async () => {
@@ -177,17 +199,29 @@ async function enableFix(dir: string, ids: string[]): Promise<Fix[]> {
           target,
           `${JSON.stringify([...current, ...missing], null, 2)}\n`,
         );
+        return ok(undefined);
       },
     },
-  ];
+  ]);
 }
 
-async function main(): Promise<void> {
+async function applyFixes(fixes: Fix[]): Promise<Result<void, string>> {
+  for (const fix of fixes) {
+    const result = await fix.apply();
+    if (result.isErr()) return result;
+  }
+  return ok(undefined);
+}
+
+async function main(): Promise<Result<void, string>> {
+  let prototypeFlag = false;
   const parsed = cli(
     {
       name: "apply.ts",
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+      ignoreArgv: (type, flag) => {
+        prototypeFlag = rejectPrototypeFlag(type, flag) || prototypeFlag;
+      },
       parameters: [],
       help: {
         description:
@@ -204,35 +238,54 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
+  if (prototypeFlag) return err("Unknown option '--__proto__'");
   if (parsed._.length > 0)
-    throw new UsageError(`unexpected argument: ${parsed._.join(" ")}`);
+    return err(`unexpected argument: ${parsed._.join(" ")}`);
 
-  const wantApp = await readJsonObject(APP_SOURCE);
-  const plugins = Object.entries(await readJsonObject(PLUGINS_SOURCE)).map(
+  const wantAppResult = await readJsonObject(APP_SOURCE);
+  if (wantAppResult.isErr()) return err(wantAppResult.error);
+  const pluginsResult = await readJsonObject(PLUGINS_SOURCE);
+  if (pluginsResult.isErr()) return err(pluginsResult.error);
+  const plugins = Object.entries(pluginsResult.value).map(
     ([id, v]) => [id, asPlugin(id, v)] as const,
   );
+  const invalidPlugin = plugins.find(([, plugin]) => plugin.isErr());
+  if (invalidPlugin !== undefined && invalidPlugin[1].isErr())
+    return err(invalidPlugin[1].error);
+  const validPlugins = plugins.flatMap(([id, plugin]) =>
+    plugin.isOk() ? [[id, plugin.value] as const] : [],
+  );
   const paths = await vaultPaths();
-  if (paths.length === 0) {
+  if (paths.isErr()) return err(paths.error);
+  if (paths.value.length === 0) {
     process.stdout.write(`skip: no Obsidian vault registry at ${REGISTRY}\n`);
-    return;
+    return ok(undefined);
   }
 
   let drift = 0;
-  for (const vault of paths) {
+  for (const vault of paths.value) {
     const dir = join(vault, ".obsidian");
     if (!existsSync(dir)) {
       process.stdout.write(`SKIP  ${vault} (no .obsidian/)\n`);
       continue;
     }
+    const app = await appFixes(dir, wantAppResult.value);
+    if (app.isErr()) return err(app.error);
+    const pluginResults = await Promise.all(
+      validPlugins.map(([id, p]) => pluginFixes(dir, id, p)),
+    );
+    const pluginError = pluginResults.find((result) => result.isErr());
+    if (pluginError !== undefined && pluginError.isErr())
+      return err(pluginError.error);
+    const enabled = await enableFix(
+      dir,
+      validPlugins.map(([id]) => id),
+    );
+    if (enabled.isErr()) return err(enabled.error);
     const fixes = [
-      ...(await appFixes(dir, wantApp)),
-      ...(
-        await Promise.all(plugins.map(([id, p]) => pluginFixes(dir, id, p)))
-      ).flat(),
-      ...(await enableFix(
-        dir,
-        plugins.map(([id]) => id),
-      )),
+      ...app.value,
+      ...pluginResults.flatMap((result) => (result.isOk() ? result.value : [])),
+      ...enabled.value,
     ];
     if (fixes.length === 0) {
       process.stdout.write(`OK    ${vault}\n`);
@@ -244,7 +297,8 @@ async function main(): Promise<void> {
       process.stdout.write(`DRIFT ${vault}: ${names}\n`);
       continue;
     }
-    for (const f of fixes) await f.apply();
+    const applied = await applyFixes(fixes);
+    if (applied.isErr()) return applied;
     process.stdout.write(`SET   ${vault}: ${names}\n`);
   }
 
@@ -253,10 +307,18 @@ async function main(): Promise<void> {
     process.stdout.write(
       "   Reload Obsidian (Cmd+P → Reload app without saving). Plugins stay inert until Restricted mode is off (Settings → Community plugins), once per vault.\n",
     );
+  return ok(undefined);
 }
 
-await main().catch((e: unknown) => {
-  const msg = e instanceof Error ? e.message : String(e);
-  process.stderr.write(`FATAL: ${msg}\n`);
-  process.exit(2);
-});
+const outcome = await Promise.try(main).then(
+  (result) => result,
+  (error: unknown) =>
+    err(error instanceof Error ? error.message : String(error)),
+);
+outcome.match(
+  () => process.exit(process.exitCode ?? 0),
+  (message) => {
+    process.stderr.write(`FATAL: ${message}\n`);
+    process.exit(2);
+  },
+);

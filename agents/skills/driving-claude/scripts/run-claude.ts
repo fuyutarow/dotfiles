@@ -1,16 +1,20 @@
 import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
+import { err, ok, type Result } from "neverthrow";
 import { jsonText, z } from "../../../hooks/zod.ts";
+
+let emptyStringFlag: string | undefined;
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`Unknown option '--${flag}'`);
+    process.stdout.write(`${JSON.stringify({ exit_code: 2, error: `Unknown option '--${flag}'` })}\n`);
+    process.exit(2);
   }
 }
 
 function nonEmptyString(flag: string): (value: string) => string {
   return (value) => {
-    if (value === "") throw new Error(`${flag} requires a value`);
+    if (value === "") emptyStringFlag = flag;
     return value;
   };
 }
@@ -124,7 +128,10 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
     ? { claude: decoded.data, parseError: undefined }
     : {
         claude: undefined,
-        parseError: (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, ""),
+        parseError: (decoded.error.issues[0]?.message ?? "").replace(
+          /^not valid JSON: /u,
+          "",
+        ),
       };
   const claude = parsed.claude;
   const parseError = parsed.parseError;
@@ -193,11 +200,15 @@ export function toRelay(run: RunResult): Relay {
   };
 }
 
-function requiredValue(value: string | undefined, option: string): string {
-  if (value === undefined || value === "") {
-    throw new Error(`${option} is required`);
+function requiredValue(
+  value: string | undefined,
+  option: string,
+): Result<string, Error> {
+  if (value === "") return err(new Error(`${option} requires a value`));
+  if (value === undefined) {
+    return err(new Error(`${option} is required`));
   }
-  return value;
+  return ok(value);
 }
 
 // Cleye's Number flag parser never throws on malformed input: it hands back a non-finite
@@ -207,33 +218,35 @@ function requiredValue(value: string | undefined, option: string): string {
 function positiveNumber(
   value: number | null | undefined,
   label: string,
-): number {
+): Result<number, Error> {
   if (
     value === null ||
     value === undefined ||
     !Number.isFinite(value) ||
     value <= 0
   )
-    throw new Error(`${label} must be a positive number`);
-  return value;
+    return err(new Error(`${label} must be a positive number`));
+  return ok(value);
 }
 
 function positiveInteger(
   value: number | null | undefined,
   label: string,
-): number {
+): Result<number, Error> {
   const parsed = positiveNumber(value, label);
-  if (!Number.isInteger(parsed)) throw new Error(`${label} must be an integer`);
+  if (parsed.isErr()) return parsed;
+  if (!Number.isInteger(parsed.value))
+    return err(new Error(`${label} must be an integer`));
   return parsed;
 }
 
-function directory(path: string): string {
+function directory(path: string): Result<string, Error> {
   if (!existsSync(path) || !statSync(path).isDirectory())
-    throw new Error(`target is not a directory: ${path}`);
-  return path;
+    return err(new Error(`target is not a directory: ${path}`));
+  return ok(path);
 }
 
-async function configFromCli(): Promise<RunConfig> {
+async function configFromCli(): Promise<Result<RunConfig, Error>> {
   // Schema keys are camelCase; Cleye accepts the kebab-case spelling on the command
   // line (e.g. `promptFile` here is set by `--prompt-file`) — the CLI spelling is unchanged.
   const parsed = cli(
@@ -245,9 +258,9 @@ async function configFromCli(): Promise<RunConfig> {
         promptFile: nonEmptyString("--prompt-file"),
         model: nonEmptyString("--model"),
         permissionMode: nonEmptyString("--permission-mode"),
-        maxTurns: Number,
-        timeoutMs: Number,
-        maxBudgetUsd: Number,
+        maxTurns: String,
+        timeoutMs: String,
+        maxBudgetUsd: String,
         allowedTools: nonEmptyString("--allowed-tools"),
         jsonSchemaFile: nonEmptyString("--json-schema-file"),
         claudeBin: nonEmptyString("--claude-bin"),
@@ -261,27 +274,49 @@ async function configFromCli(): Promise<RunConfig> {
     Bun.argv.slice(2),
   );
 
+  if (emptyStringFlag !== undefined)
+    return err(new Error(`${emptyStringFlag} requires a value`));
+
   if (parsed._.length > 0) {
-    throw new Error(
-      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    return err(
+      new Error(
+        `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+      ),
     );
   }
 
   const values = parsed.flags;
-  const target = directory(requiredValue(values.target, "--target"));
-  const promptFile = requiredValue(values.promptFile, "--prompt-file");
+  const targetValue = requiredValue(values.target, "--target");
+  if (targetValue.isErr()) return err(targetValue.error);
+  const target = directory(targetValue.value);
+  if (target.isErr()) return err(target.error);
+  const promptFileValue = requiredValue(values.promptFile, "--prompt-file");
+  if (promptFileValue.isErr()) return err(promptFileValue.error);
+  const promptFile = promptFileValue.value;
   if (!existsSync(promptFile))
-    throw new Error(`prompt file does not exist: ${promptFile}`);
-  const model = requiredValue(values.model, "--model");
+    return err(new Error(`prompt file does not exist: ${promptFile}`));
+  const modelValue = requiredValue(values.model, "--model");
+  if (modelValue.isErr()) return err(modelValue.error);
+  const model = modelValue.value;
   const permissionMode = values.permissionMode ?? "plan";
   if (!permissionModes.has(permissionMode))
-    throw new Error(`unsupported permission mode: ${permissionMode}`);
-  const maxTurns = positiveInteger(values.maxTurns ?? 12, "--max-turns");
-  const timeoutMs = positiveInteger(values.timeoutMs ?? 300_000, "--timeout-ms");
-  const maxBudgetUsd =
+    return err(new Error(`unsupported permission mode: ${permissionMode}`));
+  const maxTurnsResult = positiveInteger(
+    Number(values.maxTurns ?? "12"),
+    "--max-turns",
+  );
+  if (maxTurnsResult.isErr()) return err(maxTurnsResult.error);
+  const timeoutResult = positiveInteger(
+    Number(values.timeoutMs ?? "300000"),
+    "--timeout-ms",
+  );
+  if (timeoutResult.isErr()) return err(timeoutResult.error);
+  const maxBudgetResult =
     values.maxBudgetUsd === undefined
       ? undefined
-      : positiveNumber(values.maxBudgetUsd, "--max-budget-usd");
+      : positiveNumber(Number(values.maxBudgetUsd), "--max-budget-usd");
+  if (maxBudgetResult !== undefined && maxBudgetResult.isErr())
+    return err(maxBudgetResult.error);
   const jsonSchemaFile = values.jsonSchemaFile;
   const jsonSchema =
     jsonSchemaFile === undefined
@@ -289,30 +324,40 @@ async function configFromCli(): Promise<RunConfig> {
       : await Bun.file(jsonSchemaFile).text();
   const claudeBin = values.claudeBin ?? "claude";
   if (Bun.which(claudeBin) === null)
-    throw new Error(`claude binary is not runnable: ${claudeBin}`);
+    return err(new Error(`claude binary is not runnable: ${claudeBin}`));
   const bare = values.bare ?? false;
   const safeMode = values.safeMode ?? false;
   if (bare && safeMode)
-    throw new Error("--bare and --safe-mode are mutually exclusive");
+    return err(new Error("--bare and --safe-mode are mutually exclusive"));
 
-  return {
-    target,
-    prompt: await Bun.file(promptFile).text(),
+  const prompt = await Bun.file(promptFile).text();
+  return ok({
+    target: target.value,
+    prompt,
     model,
     permissionMode,
-    maxTurns,
-    timeoutMs,
-    maxBudgetUsd,
+    maxTurns: maxTurnsResult.value,
+    timeoutMs: timeoutResult.value,
+    ...(maxBudgetResult !== undefined
+      ? { maxBudgetUsd: maxBudgetResult.value }
+      : {}),
     safeMode,
     bare,
     allowedTools: values.allowedTools,
     jsonSchema,
     claudeBin,
-  };
+  });
 }
 
 async function main(): Promise<void> {
-  const config = await configFromCli();
+  const configResult = await configFromCli();
+  if (configResult.isErr()) {
+    process.stdout.write(
+      `${JSON.stringify({ exit_code: 2, error: configResult.error.message })}\n`,
+    );
+    process.exit(2);
+  }
+  const config = configResult.value;
   const run = await runClaude(config);
   const relay = toRelay(run);
   process.stdout.write(`${JSON.stringify(relay)}\n`);
@@ -323,7 +368,7 @@ async function main(): Promise<void> {
 }
 
 async function runMain(): Promise<void> {
-  await main().catch((error) => {
+  await Promise.try(main).then(undefined, (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(
       `${JSON.stringify({ exit_code: 2, error: message })}\n`,

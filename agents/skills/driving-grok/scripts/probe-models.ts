@@ -6,9 +6,10 @@ import { jsonText, z } from "../../../hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 
+let prototypeFlagError: string | undefined;
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    prototypeFlagError = `unknown option '--${flag}'`;
   }
 }
 
@@ -55,7 +56,10 @@ function jsonRecord(value: string): Record<string, unknown> | undefined {
   return record.success ? record.data : undefined;
 }
 
-async function probeAll(models: readonly string[], grok: string): Promise<number> {
+async function probeAll(
+  models: readonly string[],
+  grok: string,
+): Promise<number> {
   const probeDir = await mkdtemp(join(tmpdir(), "driving-grok-"));
   // Disposal runs when this function returns or throws, before `main` calls
   // process.exit — same order the old try/finally guaranteed.
@@ -102,7 +106,8 @@ async function probeAll(models: readonly string[], grok: string): Promise<number
     }
     let note = `rc=${result.exitCode}`;
     if (result.exitCode === 0)
-      note = 'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
+      note =
+        'rc=0 but .text != "OK" (empty/malformed json, or a genuinely different reply) — not a clean AVAILABLE';
     if (result.timedOut) note = "timeout — not a catalog verdict";
     process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
     writeDiagnosticLines(result.output);
@@ -131,13 +136,21 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
+  if (prototypeFlagError !== undefined) {
+    process.stderr.write(`FATAL: ${prototypeFlagError}\n`);
+    process.exitCode = 2;
+    return;
+  }
   const models = parsed._;
 
   const grok = Bun.which(process.env.GROK ?? "grok");
-  if (grok === null)
-    throw new Error(
-      `${process.env.GROK ?? "grok"} not on PATH — environment problem, not a model result`,
+  if (grok === null) {
+    process.stderr.write(
+      `FATAL: ${process.env.GROK ?? "grok"} not on PATH — environment problem, not a model result\n`,
     );
+    process.exitCode = 2;
+    return;
+  }
   if (models.length === 0) {
     const version = await run([grok, "--version"], undefined, 30_000);
     const roster = await run([grok, "models"], undefined, 60_000);

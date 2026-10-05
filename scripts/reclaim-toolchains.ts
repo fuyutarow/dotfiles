@@ -27,7 +27,7 @@ import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 
-class UsageError extends Error {}
+let prototypeFlagError: string | undefined;
 
 // Same prototype-flag hole as reclaim-clean.ts (Cleye 2.6.0's strictFlags misses --__proto__).
 function rejectPrototypeFlag(
@@ -35,13 +35,12 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    prototypeFlagError = `Unknown option '--${flag}'`;
   }
 }
 
-function nonEmptyString(flag: string): (value: string) => string {
+function nonEmptyString(_flag: string): (value: string) => string {
   return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
     return value;
   };
 }
@@ -283,10 +282,19 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
 
+  if (prototypeFlagError !== undefined || parsed.flags.home === "") {
+    const message = prototypeFlagError ?? "--home requires a value";
+    console.error(`FATAL: ${message}`);
+    process.exitCode = 2;
+    return;
+  }
+
   if (parsed._.length > 0) {
-    throw new Error(
-      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    console.error(
+      `FATAL: Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
     );
+    process.exitCode = 1;
+    return;
   }
 
   const home = resolveHome(parsed.flags.home);
@@ -304,6 +312,6 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main().then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
+    process.exit(err instanceof Error && err.message.includes("Usage") ? 2 : 1);
   });
 }

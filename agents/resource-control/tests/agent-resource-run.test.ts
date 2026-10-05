@@ -11,32 +11,32 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fromThrowable } from "neverthrow";
+import { fromThrowable, type Result } from "neverthrow";
 import { z } from "../../hooks/zod.ts";
 import {
   buildSampledLaunch,
   buildSystemdLaunch,
-  readHostOptIn,
-  resolveEnforcement,
-  commandEnvironment,
+  readHostOptIn as readHostOptInResult,
+  resolveEnforcement as resolveEnforcementResult,
+  commandEnvironment as commandEnvironmentResult,
   createAdmissionReceipt,
-  decideAdmission,
-  hasUnmanagedGpuLoad,
+  decideAdmission as decideAdmissionResult,
+  hasUnmanagedGpuLoad as hasUnmanagedGpuLoadResult,
   parseNvidiaSmiComputeAppRow,
-  parseNvidiaSmiGpuRow,
-  checkJob,
-  executeJob,
+  parseNvidiaSmiGpuRow as parseNvidiaSmiGpuRowResult,
+  checkJob as checkJobResult,
+  executeJob as executeJobResult,
   kernelTasksMax,
-  loadResourcePolicy,
-  parseCpuList,
-  resourcePolicy,
-  resourcePolicyPath,
-  probeKernelEnforcement,
-  probeHostSnapshot,
+  loadResourcePolicy as loadResourcePolicyResult,
+  parseCpuList as parseCpuListResult,
+  resourcePolicy as resourcePolicyResult,
+  resourcePolicyPath as resourcePolicyPathResult,
+  probeKernelEnforcement as probeKernelEnforcementResult,
+  probeHostSnapshot as probeHostSnapshotResult,
   manifestSourceFromBytes,
   scopeUnitFor,
-  validateJobId,
-  validateManifest,
+  validateJobId as validateJobIdResult,
+  validateManifest as validateManifestResult,
   verifyAdmissionReceipt,
   type AdmissionFailure,
   type AdmissionResult,
@@ -51,12 +51,49 @@ import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 // container has no user systemd).
 const NO_UTIL_LINUX =
   Bun.which("taskset") === null || Bun.which("setsid") === null;
-const NO_CGROUP_SCOPES = NO_UTIL_LINUX || !probeKernelEnforcement().available;
+const NO_CGROUP_SCOPES =
+  NO_UTIL_LINUX || !valueOf(probeKernelEnforcementResult()).available;
 
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
 
 const parseJson = (text: string): unknown => decodedJson(z.json(), text);
+
+function valueOf<T, E>(result: Result<T, E>): T {
+  return result._unsafeUnwrap();
+}
+
+const parseCpuList = (text: string) => valueOf(parseCpuListResult(text));
+const validateJobId = (value: unknown, label: string) =>
+  valueOf(validateJobIdResult(value, label));
+const validateManifest = (value: unknown) =>
+  valueOf(validateManifestResult(value));
+const parseNvidiaSmiGpuRow = (line: string) =>
+  valueOf(parseNvidiaSmiGpuRowResult(line));
+const loadResourcePolicy = (path?: string) =>
+  valueOf(loadResourcePolicyResult(path));
+const resourcePolicyPath = () => valueOf(resourcePolicyPathResult());
+const resourcePolicy = () => valueOf(resourcePolicyResult());
+const hasUnmanagedGpuLoad = (
+  gpu: Parameters<typeof hasUnmanagedGpuLoadResult>[0],
+) => valueOf(hasUnmanagedGpuLoadResult(gpu));
+const decideAdmission = (...args: Parameters<typeof decideAdmissionResult>) =>
+  valueOf(decideAdmissionResult(...args));
+const commandEnvironment = (
+  ...args: Parameters<typeof commandEnvironmentResult>
+) => valueOf(commandEnvironmentResult(...args));
+const readHostOptIn = (...args: Parameters<typeof readHostOptInResult>) =>
+  valueOf(readHostOptInResult(...args));
+const resolveEnforcement = (
+  ...args: Parameters<typeof resolveEnforcementResult>
+) => valueOf(resolveEnforcementResult(...args));
+const probeHostSnapshot = (cwd: string) =>
+  valueOf(probeHostSnapshotResult(cwd));
+const probeKernelEnforcement = () => valueOf(probeKernelEnforcementResult());
+const checkJob = async (...args: Parameters<typeof checkJobResult>) =>
+  valueOf(await checkJobResult(...args));
+const executeJob = async (...args: Parameters<typeof executeJobResult>) =>
+  valueOf(await executeJobResult(...args));
 
 // The fields of an admission receipt the tests read directly. Assertions on the whole receipt
 // (JSON.stringify round-trip, toMatchObject) stay on the unparsed value, whose key order is the
@@ -163,8 +200,9 @@ function gpuReservation(
  * narrows the result so `.reason` is available afterward. */
 function denied(result: AdmissionResult): AdmissionFailure {
   expect(result.ok).toBe(false);
-  if (result.ok) throw new Error("expected admission to be denied");
-  return result;
+  return result.ok
+    ? { ok: false, reason: "expected admission to be denied" }
+    : result;
 }
 
 function manifestSourceFor(manifest: ResourceManifest) {
@@ -206,26 +244,36 @@ describe("resource manifest", () => {
     expect(validateJobId("firedancer-ticket-42", "--job-id")).toBe(
       "firedancer-ticket-42",
     );
-    expect(() => validateJobId("", "--job-id")).toThrow(/--job-id/u);
-    expect(() => validateJobId("has spaces", "--job-id")).toThrow(
-      /--job-id must contain only/u,
+    const empty = validateJobIdResult("", "--job-id");
+    expect(empty.isErr()).toBe(true);
+    expect(empty._unsafeUnwrapErr().message).toMatch(/--job-id/u);
+    const spaces = validateJobIdResult("has spaces", "--job-id");
+    expect(spaces.isErr()).toBe(true);
+    expect(spaces._unsafeUnwrapErr().message).toContain(
+      "--job-id must contain only",
     );
-    expect(() => validateJobId("-leading-hyphen", "--job-id")).toThrow(
-      /--job-id must contain only/u,
+    const leading = validateJobIdResult("-leading-hyphen", "--job-id");
+    expect(leading.isErr()).toBe(true);
+    expect(leading._unsafeUnwrapErr().message).toContain(
+      "--job-id must contain only",
     );
-    expect(() => validateJobId("a".repeat(81), "--job-id")).toThrow();
+    const tooLong = validateJobIdResult("a".repeat(81), "--job-id");
+    expect(tooLong.isErr()).toBe(true);
   });
 
   test("rejects an unbounded memory claim and nested agent fanout", () => {
-    expect(() =>
-      validateManifest({
-        ...cpuManifest(),
-        memory_bound: "",
-      }),
-    ).toThrow(/memory_bound/u);
-    expect(() =>
-      validateManifest({ ...cpuManifest(), child_fanout: 1 }),
-    ).toThrow(/child_fanout/u);
+    const memoryBound = validateManifestResult({
+      ...cpuManifest(),
+      memory_bound: "",
+    });
+    expect(memoryBound.isErr()).toBe(true);
+    expect(memoryBound._unsafeUnwrapErr().message).toMatch(/memory_bound/u);
+    const childFanout = validateManifestResult({
+      ...cpuManifest(),
+      child_fanout: 1,
+    });
+    expect(childFanout.isErr()).toBe(true);
+    expect(childFanout._unsafeUnwrapErr().message).toMatch(/child_fanout/u);
   });
 });
 
@@ -445,8 +493,10 @@ describe("admission", () => {
     expect(
       parseNvidiaSmiGpuRow("0, 12288, 462, 39, [N/A]").power_watts,
     ).toBeUndefined();
-    expect(() => parseNvidiaSmiGpuRow("0, 12288, 462, 39")).toThrow();
-    expect(() => parseNvidiaSmiGpuRow("0, 12288, oops, 39, 16")).toThrow();
+    expect(parseNvidiaSmiGpuRowResult("0, 12288, 462, 39").isErr()).toBe(true);
+    expect(parseNvidiaSmiGpuRowResult("0, 12288, oops, 39, 16").isErr()).toBe(
+      true,
+    );
   });
 
   test("parses a nvidia-smi compute-apps row and rejects malformed ones", () => {
@@ -568,7 +618,7 @@ describe("resource policy", () => {
         process.execPath,
         "-e",
         `import { resourcePolicy } from ${JSON.stringify(scriptPath)};` +
-          "console.log(resourcePolicy().gpu_max_concurrent_jobs);",
+          "const result = resourcePolicy(); if (result.isOk()) console.log(result.value.gpu_max_concurrent_jobs); else process.exit(1);",
       ],
       {
         env: { ...process.env, AGENT_RESOURCE_POLICY: fixture },
@@ -582,7 +632,7 @@ describe("resource policy", () => {
   test("a relative AGENT_RESOURCE_POLICY is refused", () => {
     const saved = process.env.AGENT_RESOURCE_POLICY;
     process.env.AGENT_RESOURCE_POLICY = "resource-policy.toml";
-    const result = fromThrowable(() => resourcePolicyPath())();
+    const result = resourcePolicyPathResult();
     restoreEnvValue("AGENT_RESOURCE_POLICY", saved);
     expect(result.isErr()).toBe(true);
     expect(String(result._unsafeUnwrapErr())).toContain("absolute path");
@@ -592,17 +642,21 @@ describe("resource policy", () => {
     const fixture = policyFixture((text) =>
       text.replace(/^gpu_max_concurrent_jobs = .*$/mu, ""),
     );
-    expect(() => loadResourcePolicy(fixture)).toThrow(
+    const result = loadResourcePolicyResult(fixture);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toContain(
       "gpu_max_concurrent_jobs: required key is missing (expected a positive integer)",
     );
-    expect(() => loadResourcePolicy(fixture)).toThrow(fixture);
+    expect(result._unsafeUnwrapErr().message).toContain(fixture);
   });
 
   test("an unknown key fails closed and names the key", () => {
     const fixture = policyFixture(
       (text) => `${text}\ngpu_max_concurent_jobs = 8\n`,
     );
-    expect(() => loadResourcePolicy(fixture)).toThrow(
+    const result = loadResourcePolicyResult(fixture);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toContain(
       "gpu_max_concurent_jobs: unknown key",
     );
   });
@@ -634,7 +688,9 @@ describe("resource policy", () => {
     ];
     for (const [key, value, message] of cases) {
       const fixture = policyFixture(withKey(key, value));
-      expect(() => loadResourcePolicy(fixture)).toThrow(`${key}: ${message}`);
+      const result = loadResourcePolicyResult(fixture);
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(`${key}: ${message}`);
     }
   });
 
@@ -770,7 +826,9 @@ describe("kernel enforcement", () => {
       reserved,
       "admit-mismatch",
     );
-    expect(() => commandEnvironment(manifest, reserved, receipt)).toThrow(
+    const result = commandEnvironmentResult(manifest, reserved, receipt);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toContain(
       "manifest and reservation resources must match",
     );
   });
@@ -1038,9 +1096,14 @@ describe("admission receipt", () => {
         manifestPath,
         manifestBytes,
       );
-      const outerPayload = process.env.AGENT_RESOURCE_ADMISSION_RECEIPT;
-      const outerReceiptSha256 =
-        process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;
+      const outerPayload = decoded(
+        z.string(),
+        process.env.AGENT_RESOURCE_ADMISSION_RECEIPT,
+      );
+      const outerReceiptSha256 = decoded(
+        z.string(),
+        process.env.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256,
+      );
       const outerCgroup = readFileSync("/proc/self/cgroup", "utf8");
       expect(process.env.AGENT_RESOURCE_MANIFEST_PATH).toBe(outerSource.path);
       expect(process.env.AGENT_RESOURCE_MANIFEST_SHA256).toBe(
@@ -1050,14 +1113,6 @@ describe("admission receipt", () => {
       expect(typeof process.env.AGENT_RESOURCE_RESERVATION_ID).toBe("string");
       expect(typeof outerPayload).toBe("string");
       expect(typeof outerReceiptSha256).toBe("string");
-      if (
-        typeof outerPayload !== "string" ||
-        typeof outerReceiptSha256 !== "string"
-      ) {
-        throw new TypeError(
-          "the outer test envelope did not provide an admission receipt",
-        );
-      }
       expect(outerReceiptSha256).toBe(
         createHash("sha256").update(outerPayload).digest("hex"),
       );
@@ -1131,9 +1186,14 @@ describe("admission receipt", () => {
       );
       expect(saved.verified).toBe(true);
       const innerEnvironment = saved.environment;
-      const innerPayload = innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT;
-      const innerReceiptSha256 =
-        innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256;
+      const innerPayload = decoded(
+        z.string(),
+        innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT,
+      );
+      const innerReceiptSha256 = decoded(
+        z.string(),
+        innerEnvironment.AGENT_RESOURCE_ADMISSION_RECEIPT_SHA256,
+      );
       expect(innerEnvironment.AGENT_RESOURCE_MANIFEST_PATH).toBe(
         manifestSource.path,
       );
@@ -1149,14 +1209,6 @@ describe("admission receipt", () => {
       );
       expect(typeof innerPayload).toBe("string");
       expect(typeof innerReceiptSha256).toBe("string");
-      if (
-        typeof innerPayload !== "string" ||
-        typeof innerReceiptSha256 !== "string"
-      ) {
-        throw new TypeError(
-          "the inner child did not receive an admission receipt",
-        );
-      }
       expect(innerReceiptSha256).toBe(
         createHash("sha256").update(innerPayload).digest("hex"),
       );
@@ -1465,18 +1517,20 @@ describe("bounded execution", () => {
 
   test.skipIf(NO_UTIL_LINUX)(
     "fails closed when systemd scope cleanup cannot be verified",
-    () => {
+    async () => {
       const stateDirectory = temporaryStateDirectory();
-      expect(
-        executeJob(cpuManifest(), ["true"], {
-          stateDirectory,
-          snapshot: probeHostSnapshot(process.cwd()),
-          kernelEnforcement: { available: true },
-          monitorIntervalMs: 25,
-          systemdScopeCleanup: () => false,
-          manifestSource: manifestSourceFor(cpuManifest()),
-        }),
-      ).rejects.toThrow("failed to verify cleanup of systemd scope");
+      const result = await executeJobResult(cpuManifest(), ["true"], {
+        stateDirectory,
+        snapshot: probeHostSnapshot(process.cwd()),
+        kernelEnforcement: { available: true },
+        monitorIntervalMs: 25,
+        systemdScopeCleanup: () => false,
+        manifestSource: manifestSourceFor(cpuManifest()),
+      });
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        "failed to verify cleanup of systemd scope",
+      );
       expect(readdirSync(stateDirectory)).toEqual([]);
     },
   );
@@ -1491,7 +1545,7 @@ const optInFile = (text: string): string => {
 };
 
 describe("sampled enforcement (host opt-in)", () => {
-  test("no file is no opt-in; a valid file carries its reason; an invalid one throws, never ignored", () => {
+  test("no file is no opt-in; a valid file carries its reason; an invalid one returns an error", () => {
     expect(readHostOptIn(join(tmpdir(), "arr-absent", "host.toml"))).toBeNull();
     expect(
       readHostOptIn(
@@ -1502,19 +1556,19 @@ describe("sampled enforcement (host opt-in)", () => {
     ).toEqual({
       sampled_enforcement_reason: "Vast container: no user systemd",
     });
-    expect(() =>
-      readHostOptIn(
-        optInFile('schema = 1\nsampled_enforcement_reason = "  "\n'),
-      ),
-    ).toThrow("is invalid");
-    expect(() =>
-      readHostOptIn(
-        optInFile('schema = 1\nsampled_enforcement_reason = "x"\nextra = 1\n'),
-      ),
-    ).toThrow("is invalid");
-    expect(() => readHostOptIn(optInFile("schema = ["))).toThrow(
-      "not valid TOML",
+    const blankReason = readHostOptInResult(
+      optInFile('schema = 1\nsampled_enforcement_reason = "  "\n'),
     );
+    expect(blankReason.isErr()).toBe(true);
+    expect(blankReason._unsafeUnwrapErr().message).toContain("is invalid");
+    const extraKey = readHostOptInResult(
+      optInFile('schema = 1\nsampled_enforcement_reason = "x"\nextra = 1\n'),
+    );
+    expect(extraKey.isErr()).toBe(true);
+    expect(extraKey._unsafeUnwrapErr().message).toContain("is invalid");
+    const malformed = readHostOptInResult(optInFile("schema = ["));
+    expect(malformed.isErr()).toBe(true);
+    expect(malformed._unsafeUnwrapErr().message).toContain("not valid TOML");
   });
 
   test("cgroups win where they work; without them, no opt-in still refuses; with it, sampled", () => {

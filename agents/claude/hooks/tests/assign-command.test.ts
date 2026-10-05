@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
-import { decisionOf, runHook } from "./helpers.ts";
+import { decisionOf as decisionResult, runHook } from "./helpers.ts";
 import { decoded } from "../../../hooks/tests/decode.ts";
 
 const HOOK = "assign-command.ts";
@@ -13,6 +13,13 @@ const payload = (prompt: string, cwd = "/home/fuyu/Workspace/myproj") => ({
   prompt,
   cwd,
 });
+
+async function decisionOf(stdout: string) {
+  const result = await decisionResult(stdout);
+  expect(result.ok).toBe(true);
+  if (result.ok) return result.value;
+  return {};
+}
 
 describe("assign-command: pass-through for ordinary prompts", () => {
   test("a normal prompt -> exit 0, no output", () => {
@@ -53,48 +60,48 @@ describe("assign-command: usage errors block without a model turn", () => {
 });
 
 describe("assign-command: valid role renames the session", () => {
-  test("an unconfigured role gets a name and no additionalContext", () => {
+  test("an unconfigured role gets a name and no additionalContext", async () => {
     const r = runHook(HOOK, payload("/assign gpu"));
     expect(r.code).toBe(0);
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.hookEventName).toBe("UserPromptSubmit");
     expect(out.sessionTitle).toMatch(/^myproj-gpu_[0-9a-hj-km-np-tv-z]{4}$/u);
     expect(out.additionalContext).toBeUndefined();
   });
 
-  test("a configured role (obs) gets a name AND additionalContext", () => {
+  test("a configured role (obs) gets a name AND additionalContext", async () => {
     const r = runHook(HOOK, payload("/assign obs"));
     expect(r.code).toBe(0);
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(/^myproj-obs_[0-9a-hj-km-np-tv-z]{4}$/u);
     expect(typeof out.additionalContext).toBe("string");
     expect(out.additionalContext?.length).toBeGreaterThan(0);
   });
 
-  test("lowercases the project from cwd's basename", () => {
+  test("lowercases the project from cwd's basename", async () => {
     const r = runHook(
       HOOK,
       payload("/assign pi", "/home/fuyu/Workspace/DotFiles"),
     );
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(/^dotfiles-pi_/u);
   });
 
-  test("snake_cases a hyphenated project (only one hyphen in the final name)", () => {
+  test("snake_cases a hyphenated project (only one hyphen in the final name)", async () => {
     const r = runHook(
       HOOK,
       payload("/assign gpu", "/home/fuyu/Workspace/agentic-RnD"),
     );
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(
       /^agentic_rnd-gpu_[0-9a-hj-km-np-tv-z]{4}$/u,
     );
   });
 
-  test("extra trailing text after the role is ignored, not an error", () => {
+  test("extra trailing text after the role is ignored, not an error", async () => {
     const r = runHook(HOOK, payload("/assign gpu please hurry"));
     expect(r.code).toBe(0);
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.sessionTitle).toMatch(/^myproj-gpu_/u);
   });
 });
@@ -106,7 +113,7 @@ describe("assign-command: fleet_policy.toml resolution (2026-09-07 migration)", 
   // agents/skills/commanding-research-fleets/fleet_policy.toml. This block exercises the
   // OTHER branch — a project root that defines its own file — so both paths in the
   // resolution order are actually run, not just asserted about.
-  test("a project-root fleet_policy.toml overrides the skill-shipped default", () => {
+  test("a project-root fleet_policy.toml overrides the skill-shipped default", async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "assign-cmd-project-"));
     writeFileSync(
       join(projectDir, "fleet_policy.toml"),
@@ -114,11 +121,11 @@ describe("assign-command: fleet_policy.toml resolution (2026-09-07 migration)", 
     );
     const r = runHook(HOOK, payload("/assign dtr", projectDir));
     expect(r.code).toBe(0);
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.additionalContext).toBe("PROJECT-LOCAL CHARTER");
   });
 
-  test("a role absent from the project's own fleet_policy.toml gets no context, even though the skill default configures it", () => {
+  test("a role absent from the project's own fleet_policy.toml gets no context, even though the skill default configures it", async () => {
     const projectDir = mkdtempSync(join(tmpdir(), "assign-cmd-project2-"));
     writeFileSync(
       join(projectDir, "fleet_policy.toml"),
@@ -128,7 +135,7 @@ describe("assign-command: fleet_policy.toml resolution (2026-09-07 migration)", 
     // the project file, once present, is the sole source; there is no per-role merge.
     const r = runHook(HOOK, payload("/assign obs", projectDir));
     expect(r.code).toBe(0);
-    const out = decisionOf(r.stdout);
+    const out = await decisionOf(r.stdout);
     expect(out.additionalContext).toBeUndefined();
   });
 });

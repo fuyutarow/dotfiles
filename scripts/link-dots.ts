@@ -75,19 +75,6 @@ const PRUNE_DIRS = [
   ".ssh/config.d",
 ] as const;
 
-class UsageError extends Error {}
-
-// Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before
-// assignment. Every ordinary unknown remains Cleye strictFlags' responsibility.
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
-  }
-}
-
 function say(line: string): void {
   process.stdout.write(`${line}\n`);
 }
@@ -298,20 +285,22 @@ export function prune(ctx: Ctx): void {
 // Every prune decision is "a dangling link whose target starts with <dotfiles>/", so the root must
 // be THIS checkout, absolute — a relative or foreign DOTFILES would aim the prune at the wrong tree.
 // Checked before anything is touched.
-export function assertRoots(home: string, dotfiles: string): void {
-  if (!isAbsolute(home)) throw new Error(`HOME is not absolute: "${home}"`);
+export function assertRoots(home: string, dotfiles: string): Error | undefined {
+  if (!isAbsolute(home)) return new Error(`HOME is not absolute: "${home}"`);
   if (!isAbsolute(dotfiles))
-    throw new Error(`DOTFILES is not absolute: "${dotfiles}"`);
-  if (!existsSync(join(dotfiles, "scripts/link-dots.ts")))
-    throw new Error(
+    return new Error(`DOTFILES is not absolute: "${dotfiles}"`);
+  if (!existsSync(join(dotfiles, "scripts/link-dots.ts"))) {
+    return new Error(
       `DOTFILES is not a dotfiles checkout (no scripts/link-dots.ts): ${dotfiles}`,
     );
+  }
+  return undefined;
 }
 
-function detectOs(): Os {
+function detectOs(): Os | Error {
   if (process.platform === "darwin") return "mac";
   if (process.platform !== "linux")
-    throw new Error(`unsupported platform: ${process.platform}`);
+    return new Error(`unsupported platform: ${process.platform}`);
   // Same test as zsh/aliases.zsh: the WSL kernel names itself in `uname -r`.
   return /microsoft/iu.test(release()) ? "wsl" : "linux";
 }
@@ -352,7 +341,16 @@ export function ensureToolOwned(ctx: Ctx, p: string): void {
   say(`created (tool-owned, empty): ${p}`);
 }
 
-function main(): void {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(
+      `Unknown option '--${flag}'\nUsage: bun scripts/link-dots.ts\n`,
+    );
+    process.exit(2);
+  }
+}
+
+function main(): Error | void {
   const parsed = cli(
     {
       name: "link-dots.ts",
@@ -380,24 +378,27 @@ function main(): void {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0)
-    throw new UsageError(`unexpected positional argument: ${parsed._[0]}`);
+    return new Error(`unexpected positional argument: ${parsed._[0]}`);
   if (parsed.flags.force && parsed.flags.check)
-    throw new UsageError("--force and --check are mutually exclusive");
+    return new Error("--force and --check are mutually exclusive");
   const home = process.env.HOME ?? homedir();
   // Empty counts as unset, like the .sh's ${DOTFILES:-…} (callers export DOTFILES= in places).
   const envDotfiles = process.env.DOTFILES;
   const mode: Mode = parsed.flags.check ? "check" : "safe";
+  const detectedOs = detectOs();
+  if (detectedOs instanceof Error) return detectedOs;
   const ctx: Ctx = {
     home,
     dotfiles:
       envDotfiles === undefined || envDotfiles === ""
         ? join(home, "dotfiles")
         : envDotfiles,
-    os: detectOs(),
+    os: detectedOs,
     mode: parsed.flags.force ? "force" : mode,
     drift: [],
   };
-  assertRoots(ctx.home, ctx.dotfiles);
+  const rootsError = assertRoots(ctx.home, ctx.dotfiles);
+  if (rootsError !== undefined) return rootsError;
   linkAll(ctx, sshVersion());
   if (ctx.mode === "check") {
     say(`check: ${ctx.drift.length} drift(s)`);
@@ -412,8 +413,15 @@ function main(): void {
 if (import.meta.main) {
   const r = await attempt(main);
   if (!r.ok) {
-    const usage = r.error instanceof UsageError;
     const msg = errorMessage(r.error);
+    process.stderr.write(`FATAL: ${msg}\n`);
+    process.exitCode = 2;
+  } else if (r.value instanceof Error) {
+    const msg = r.value.message;
+    const usage =
+      msg.startsWith("unknown flag(s):") ||
+      msg.startsWith("unexpected positional") ||
+      msg === "--force and --check are mutually exclusive";
     process.stderr.write(
       usage
         ? `${msg}\nUsage: bun scripts/link-dots.ts [--force | --check]\n`

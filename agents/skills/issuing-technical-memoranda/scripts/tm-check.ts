@@ -16,7 +16,15 @@ import { cli } from "cleye";
 import { z } from "../../../hooks/zod.ts";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
-const REQUIRED = ["tm", "title", "date", "author", "authority", "release", "to"] as const;
+const REQUIRED = [
+  "tm",
+  "title",
+  "date",
+  "author",
+  "authority",
+  "release",
+  "to",
+] as const;
 
 const FrontSchema = z.record(z.string(), z.unknown());
 type Front = z.output<typeof FrontSchema>;
@@ -28,12 +36,16 @@ const asRecord = (v: unknown): Front | null => {
 
 // No try/catch (audited *.ts ban): Promise.try turns a YAML.parse throw into a rejection this
 // `.then` maps to `null`, same outward result as the old catch branch.
-const splitFrontmatter = async (text: string): Promise<[Front | null, string]> => {
+const splitFrontmatter = async (
+  text: string,
+): Promise<[Front | null, string]> => {
   if (!text.startsWith("---\n")) return [null, text];
   const end = text.indexOf("\n---", 3);
   if (end === -1) return [null, text];
   const body = text.slice(text.indexOf("\n", end + 1) + 1);
-  const front = await Promise.try(() => Bun.YAML.parse(text.slice(4, end + 1))).then(
+  const front = await Promise.try(() =>
+    Bun.YAML.parse(text.slice(4, end + 1)),
+  ).then(
     (ok) => asRecord(ok),
     () => null,
   );
@@ -82,7 +94,8 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -108,17 +121,21 @@ async function parseArgv() {
       Bun.argv.slice(2),
     ),
   ).then(
-    (ok) => ok,
-    (error: unknown) => {
-      process.stderr.write(
-        `${error instanceof Error ? error.message : String(error)}\n`,
-      );
-      process.exit(2);
-    },
+    (ok) => ({ ok: true as const, value: ok }),
+    (error: unknown) => ({ ok: false as const, error }),
   );
 }
 
-const files: string[] = (await parseArgv())._.files;
+const argvResult = await parseArgv();
+if (!argvResult.ok) {
+  const error = argvResult.error;
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  process.exit(2);
+}
+
+const files: string[] = argvResult.ok ? argvResult.value._.files : [];
 if (files.length === 0) {
   console.error("usage: bun scripts/tm-check.ts <file.md> [...]");
   process.exit(2);
@@ -132,7 +149,10 @@ const say = (kind: "FAIL" | "WARN", where: string, msg: string) => {
   console.log(`${kind} [${where}] ${msg}`);
 };
 
-const reportMissingCoverKeys = (front: Record<string, unknown>, path: string): void => {
+const reportMissingCoverKeys = (
+  front: Record<string, unknown>,
+  path: string,
+): void => {
   for (const key of REQUIRED.filter((required) => !nonEmpty(front[required]))) {
     say("FAIL", path, `cover key '${key}' is missing or empty (T1)`);
   }
@@ -149,27 +169,51 @@ for (const path of files) {
 
   // ---------------------------------------------------------------- T1 COVER
   if (front === undefined || front === null) {
-    say("FAIL", path, "no parseable cover block; a memorandum opens with YAML front matter (T1)");
+    say(
+      "FAIL",
+      path,
+      "no parseable cover block; a memorandum opens with YAML front matter (T1)",
+    );
     continue;
   }
   reportMissingCoverKeys(front, path);
   if (typeof front.date === "string" && !ISO_DATE.test(front.date))
     say("FAIL", path, `date '${front.date}' is not YYYY-MM-DD (T1)`);
   if (typeof front.tm === "string" && /\s/u.test(front.tm))
-    say("FAIL", path, "the stable id 'tm' must not contain whitespace; it is a citation key (T1)");
+    say(
+      "FAIL",
+      path,
+      "the stable id 'tm' must not contain whitespace; it is a citation key (T1)",
+    );
 
   // author must carry a reachable contact, not just a name
-  if (typeof front.author === "string" && !/[@/]|ext\.?\s*\d|#[\w-]/iu.test(front.author))
-    say("WARN", path, "'author' carries no reachable contact (mail, handle, channel, extension) (T1)");
+  if (
+    typeof front.author === "string" &&
+    !/[@/]|ext\.?\s*\d|#[\w-]/iu.test(front.author)
+  )
+    say(
+      "WARN",
+      path,
+      "'author' carries no reachable contact (mail, handle, channel, extension) (T1)",
+    );
 
   if (!nonEmpty(front.size))
-    say("WARN", path, "'size' absent: the reader's cost estimate is missing. Fill it or drop the key deliberately (T1)");
+    say(
+      "WARN",
+      path,
+      "'size' absent: the reader's cost estimate is missing. Fill it or drop the key deliberately (T1)",
+    );
 
   // ------------------------------------------------------------ T2 AUTHORITY
-  const authority = typeof front.authority === "string"
-    ? front.authority
-    : JSON.stringify(front.authority) ?? "";
-  if (authority !== "" && !/^personal$/u.test(authority) && !/^organizational:\s*\S/u.test(authority))
+  const authority =
+    typeof front.authority === "string"
+      ? front.authority
+      : (JSON.stringify(front.authority) ?? "");
+  if (
+    authority !== "" &&
+    !/^personal$/u.test(authority) &&
+    !/^organizational:\s*\S/u.test(authority)
+  )
     say(
       "FAIL",
       path,
@@ -177,10 +221,15 @@ for (const path of files) {
     );
 
   // ------------------------------------------------ T3 ADDRESSEE and RELEASE
-  const release = typeof front.release === "string"
-    ? front.release
-    : JSON.stringify(front.release) ?? "";
-  if (release !== "" && !/^internal$/u.test(release) && !/^cleared:\s*\S+\/\S+\/\d{4}-\d{2}-\d{2}$/u.test(release))
+  const release =
+    typeof front.release === "string"
+      ? front.release
+      : (JSON.stringify(front.release) ?? "");
+  if (
+    release !== "" &&
+    !/^internal$/u.test(release) &&
+    !/^cleared:\s*\S+\/\S+\/\d{4}-\d{2}-\d{2}$/u.test(release)
+  )
     say(
       "FAIL",
       path,
@@ -188,16 +237,40 @@ for (const path of files) {
     );
 
   // cover-only recipients need a stated pull path, or they are a dead end
-  if (nonEmpty(front.cc) && !/\bcc\b[^\n]*full text|full text[^\n]*\b(request|ask|reply|link)/iu.test(body))
-    say("WARN", path, "'cc' lists cover-only recipients but the body states no path to the full text (T3)");
+  if (
+    nonEmpty(front.cc) &&
+    !/\bcc\b[^\n]*full text|full text[^\n]*\b(request|ask|reply|link)/iu.test(
+      body,
+    )
+  )
+    say(
+      "WARN",
+      path,
+      "'cc' lists cover-only recipients but the body states no path to the full text (T3)",
+    );
 
   // ------------------------------------------------------------ abstract
   // `$(?![\s\S])` is end-of-input under the `m` flag, where a bare `$` would only mean end-of-line.
-  const abstract = /^##\s+Abstract\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/imu.exec(body);
-  if (abstract === null || abstract[1] === undefined || abstract[1] === "" || abstract[1].trim().length === 0)
-    say("FAIL", path, "no non-empty '## Abstract' section; the cover must be readable alone (T1)");
+  const abstract = /^##\s+Abstract\s*$([\s\S]*?)(?=^##\s|$(?![\s\S]))/imu.exec(
+    body,
+  );
+  if (
+    abstract === null ||
+    abstract[1] === undefined ||
+    abstract[1] === "" ||
+    abstract[1].trim().length === 0
+  )
+    say(
+      "FAIL",
+      path,
+      "no non-empty '## Abstract' section; the cover must be readable alone (T1)",
+    );
   else if (abstract[1].trim().split(/\s+/u).length > 220)
-    say("WARN", path, "abstract exceeds ~220 words; it is a scanning surface, not a summary (T1)");
+    say(
+      "WARN",
+      path,
+      "abstract exceeds ~220 words; it is a scanning surface, not a summary (T1)",
+    );
 
   // ------------------------------------------------- the fabrication guard
   body.split("\n").forEach((line, i) => {

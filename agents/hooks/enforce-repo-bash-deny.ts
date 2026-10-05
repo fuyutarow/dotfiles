@@ -24,7 +24,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { attempt, errorMessage } from "./attempt.ts";
 import { bashCwd, decidePre, readStdinJson } from "./lib.ts";
-import { arr, at, parseJson, str, strAt } from "./narrow.ts";
+import { arr, at, str, strAt } from "./narrow.ts";
+import { jsonOf, z } from "./zod.ts";
 
 type Rule = { text: string; prefix: string; exact: boolean };
 
@@ -55,13 +56,15 @@ function ruleOf(entry: unknown): Rule | undefined {
   return undefined;
 }
 
-function bashRules(root: string): Rule[] {
+function bashRules(root: string): Rule[] | string {
   const path = join(root, ".claude", "settings.json");
-  const deny = at(parseJson(readFileSync(path, "utf8")), "permissions", "deny");
+  const parsed = jsonOf(z.unknown()).safeParse(readFileSync(path, "utf8"));
+  if (!parsed.success)
+    return `${path}: ${parsed.error.issues[0]?.message ?? "not valid JSON"}`;
+  const deny = at(parsed.data, "permissions", "deny");
   if (deny === undefined) return [];
   const list = arr(deny);
-  if (list === undefined)
-    throw new Error(`${path}: permissions.deny is not a list`);
+  if (list === undefined) return `${path}: permissions.deny is not a list`;
   return list.flatMap((entry) => {
     const rule = ruleOf(entry);
     return rule === undefined ? [] : [rule];
@@ -97,11 +100,18 @@ function jjAdvice(root: string, rules: Rule[]): string {
   );
 }
 
-function main(): void {
+type MainOutcome =
+  | { readonly kind: "deny"; readonly message: string }
+  | { readonly kind: "error"; readonly message: string }
+  | null;
+
+function main(): MainOutcome {
   const payload = readStdinJson();
-  if (strAt(payload, "tool_name") !== "Bash") return;
+  if (payload === undefined)
+    return { kind: "error", message: "invalid JSON payload" };
+  if (strAt(payload, "tool_name") !== "Bash") return null;
   const command = strAt(payload, "tool_input", "command");
-  if (command === undefined || command === "") return;
+  if (command === undefined || command === "") return null;
 
   const cwd = strAt(payload, "cwd");
   const sessionCwd = cwd !== undefined && cwd !== "" ? cwd : process.cwd();
@@ -114,25 +124,38 @@ function main(): void {
   }
   const found: string[] = [];
   for (const root of roots) {
-    const rules = matchingRules(command, bashRules(root));
+    const loaded = bashRules(root);
+    if (typeof loaded === "string") return { kind: "error", message: loaded };
+    const rules = matchingRules(command, loaded);
     if (rules.length === 0) continue;
     found.push(
       `${root}/.claude/settings.json denies ${rules.map((r) => r.text).join(", ")} for agents` +
         jjAdvice(root, rules),
     );
   }
-  if (found.length === 0) return;
+  if (found.length === 0) return null;
   // BATCHED(rules, repos): every rule this command hits, in every repo it touches, in one denial —
   // the caller rewrites the command once instead of discovering the next rule on the retry.
-  decidePre(
-    "deny",
-    `repo-deny: ${found.join(" | ")} ` +
+  return {
+    kind: "deny",
+    message:
+      `repo-deny: ${found.join(" | ")} ` +
       `(Claude enforces these rules natively; this hook applies them to Codex).`,
-  );
+  };
 }
 
 const r = await attempt(main);
-if (!r.ok) {
+if (r.ok && r.value !== null && r.value.kind === "deny") {
+  // SINGLE-AXIS: one question (does a repo deny rule match?); every match is already joined above
+  decidePre("deny", r.value.message);
+} else if (r.ok && r.value !== null && r.value.kind === "error") {
+  // FATAL: the rules could not be read, so nothing could be evaluated; fail closed with the cause
+  decidePre(
+    "deny",
+    `repo-deny: could not evaluate the repo's Bash deny rules (${r.value.message}) — ` +
+      `failing closed. Fix that .claude/settings.json, or agents/hooks/enforce-repo-bash-deny.ts.`,
+  );
+} else if (!r.ok) {
   // FATAL: the rules could not be read, so no command can be judged; fail closed with the error.
   decidePre(
     "deny",

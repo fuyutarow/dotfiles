@@ -7,8 +7,13 @@ import { jsonText, z } from "../../../hooks/zod.ts";
 const officialBaseUrl = "https://api.typesafe.ai";
 const maximumDiagnosticChars = 8_000;
 
-type ArgvType = "known-flag" | "unknown-flag" | "argument";
 type ExitCode = 2 | 3 | 4 | 5;
+type Outcome<T> = { ok: true; value: T } | { ok: false; error: JevCliError };
+const success = <T>(value: T): Outcome<T> => ({ ok: true, value });
+const failure = (message: string, exitCode: ExitCode = 2): Outcome<never> => ({
+  ok: false,
+  error: new JevCliError(exitCode, message),
+});
 
 class JevCliError extends Error {
   readonly exitCode: ExitCode;
@@ -20,38 +25,21 @@ class JevCliError extends Error {
   }
 }
 
-function rejectPrototypeFlag(
-  type: ArgvType,
-  flag: string,
-  _value?: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error("unknown option '--__proto__'");
-  }
-}
-
-function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new Error(`${flag} requires a value`);
-    return value;
-  };
-}
-
 function positiveInteger(
   value: number | null | undefined,
   label: string,
   fallback: number,
-): number {
-  if (value === undefined) return fallback;
+): Outcome<number> {
+  if (value === undefined) return success(fallback);
   if (
     value === null ||
     !Number.isFinite(value) ||
     !Number.isInteger(value) ||
     value <= 0
   ) {
-    throw new JevCliError(2, `${label} must be a positive integer`);
+    return failure(`${label} must be a positive integer`);
   }
-  return value;
+  return success(value);
 }
 
 const RecordSchema = z.record(z.string(), z.unknown());
@@ -69,17 +57,15 @@ function isStructuredText(value: unknown): boolean {
   );
 }
 
-function validateQuestion(id: string, question: unknown): void {
+function validateQuestion(id: string, question: unknown): Outcome<void> {
   const value = asRecord(question);
-  if (value === undefined)
-    throw new JevCliError(2, `question '${id}' must be an object`);
+  if (value === undefined) return failure(`question '${id}' must be an object`);
   const type = value.type;
   if (type !== "noul" && type !== "choice" && type !== "score") {
-    throw new JevCliError(2, `question '${id}' has unsupported type`);
+    return failure(`question '${id}' has unsupported type`);
   }
   if (!isStructuredText(value.instructions)) {
-    throw new JevCliError(
-      2,
+    return failure(
       `question '${id}' requires string/object/array instructions`,
     );
   }
@@ -87,17 +73,11 @@ function validateQuestion(id: string, question: unknown): void {
   if (type === "choice") {
     const criteria = asRecord(value.criteria);
     if (criteria === undefined) {
-      throw new JevCliError(
-        2,
-        `choice question '${id}' requires object criteria`,
-      );
+      return failure(`choice question '${id}' requires object criteria`);
     }
     const options = Object.keys(criteria);
     if (options.length < 2 || options.length > 255) {
-      throw new JevCliError(
-        2,
-        `choice question '${id}' requires 2..255 options`,
-      );
+      return failure(`choice question '${id}' requires 2..255 options`);
     }
   }
 
@@ -107,10 +87,7 @@ function validateQuestion(id: string, question: unknown): void {
       value.criteria.length < 2 ||
       value.criteria.length > 10)
   ) {
-    throw new JevCliError(
-      2,
-      `score question '${id}' requires 2..10 ordered levels`,
-    );
+    return failure(`score question '${id}' requires 2..10 ordered levels`);
   }
 
   if (
@@ -118,75 +95,72 @@ function validateQuestion(id: string, question: unknown): void {
     value.criteria !== undefined &&
     asRecord(value.criteria) === undefined
   ) {
-    throw new JevCliError(
-      2,
+    return failure(
       `noul question '${id}' criteria must be an object when present`,
     );
   }
+  return success(undefined);
 }
 
 // Returns the original parsed value (not the zod copy): it is forwarded verbatim to the provider.
-function validateRequest(raw: unknown): unknown {
+function validateRequest(raw: unknown): Outcome<unknown> {
   const value = asRecord(raw);
-  if (value === undefined)
-    throw new JevCliError(2, "request must be a JSON object");
+  if (value === undefined) return failure("request must be a JSON object");
   if (!isStructuredText(value.state)) {
-    throw new JevCliError(2, "request requires string/object/array state");
+    return failure("request requires string/object/array state");
   }
   if (typeof value.model !== "string" || value.model.trim() === "") {
-    throw new JevCliError(2, "request requires an explicit non-empty model");
+    return failure("request requires an explicit non-empty model");
   }
   const questions = asRecord(value.questions);
   if (questions === undefined || Object.keys(questions).length === 0) {
-    throw new JevCliError(2, "request requires a non-empty questions object");
+    return failure("request requires a non-empty questions object");
   }
-  for (const [id, question] of Object.entries(questions))
-    validateQuestion(id, question);
-  return raw;
+  for (const [id, question] of Object.entries(questions)) {
+    const checked = validateQuestion(id, question);
+    if (!checked.ok) return checked;
+  }
+  return success(raw);
 }
 
-function validateBaseUrl(raw: string, allowCustom: boolean): URL {
+function validateBaseUrl(raw: string, allowCustom: boolean): Outcome<URL> {
   if (!URL.canParse(raw)) {
-    throw new JevCliError(2, "--base-url must be a valid absolute URL");
+    return failure("--base-url must be a valid absolute URL");
   }
   const url = new URL(raw);
   const normalized = url.origin;
   if (normalized !== officialBaseUrl && !allowCustom) {
-    throw new JevCliError(
-      2,
-      "custom --base-url requires --allow-custom-base-url",
-    );
+    return failure("custom --base-url requires --allow-custom-base-url");
   }
   const isLoopback =
     url.hostname === "127.0.0.1" ||
     url.hostname === "localhost" ||
     url.hostname === "::1";
   if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback)) {
-    throw new JevCliError(
-      2,
-      "--base-url requires HTTPS except for loopback testing",
-    );
+    return failure("--base-url requires HTTPS except for loopback testing");
   }
-  return url;
+  return success(url);
 }
 
-async function readRequest(path: string): Promise<unknown> {
+async function readRequest(path: string): Promise<Outcome<unknown>> {
   if (path === "-") {
     if (process.stdin.isTTY)
-      throw new JevCliError(2, "request '-' requires non-interactive stdin");
+      return failure("request '-' requires non-interactive stdin");
     const text = await new Response(Bun.stdin.stream()).text();
     return parseRequestJson(text);
   }
-  if (!existsSync(path))
-    throw new JevCliError(2, `request file not found: ${path}`);
+  if (!existsSync(path)) return failure(`request file not found: ${path}`);
   return parseRequestJson(await Bun.file(path).text());
 }
 
-function parseRequestJson(text: string): unknown {
+function parseRequestJson(text: string): Outcome<unknown> {
   const decoded = jsonText.safeParse(text);
   if (!decoded.success) {
-    const message = (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, "");
-    throw new JevCliError(2, `request is not valid JSON: ${message}`);
+    const message = (decoded.error.issues[0]?.message ?? "").replace(
+      /^not valid JSON: /u,
+      "",
+    );
+    return failure(`request is not valid JSON: ${message}`);
   }
   const parsed = decoded.data;
   return validateRequest(parsed);
@@ -205,76 +179,99 @@ function providerExit(status: number): ExitCode {
   return 5;
 }
 
-async function main(): Promise<void> {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<Outcome<void>> {
   const parsed = cli(
     {
       name: "jev.ts",
       parameters: ["<request>"],
       flags: {
         timeoutMs: Number,
-        baseUrl: nonEmptyString("--base-url"),
+        baseUrl: String,
         allowCustomBaseUrl: Boolean,
       },
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
+  if (parsed.flags.baseUrl === "")
+    return failure("--base-url requires a value");
 
   if (parsed._.length !== 1 || parsed._.request === undefined) {
-    throw new JevCliError(2, "exactly one request path or '-' is required");
+    return failure("exactly one request path or '-' is required");
   }
-  const timeoutMs = positiveInteger(
+  const timeoutResult = positiveInteger(
     parsed.flags.timeoutMs,
     "--timeout-ms",
     15_000,
   );
-  const baseUrl = validateBaseUrl(
+  if (!timeoutResult.ok) return timeoutResult;
+  const baseUrlResult = validateBaseUrl(
     parsed.flags.baseUrl ?? officialBaseUrl,
     parsed.flags.allowCustomBaseUrl ?? false,
   );
+  if (!baseUrlResult.ok) return baseUrlResult;
   const apiKey = process.env.TYPESAFE_API_KEY;
   if (apiKey === undefined || apiKey === "") {
-    throw new JevCliError(2, "TYPESAFE_API_KEY is not set");
+    return failure("TYPESAFE_API_KEY is not set");
   }
-  const request = await readRequest(parsed._.request);
-  const endpoint = new URL("/v1/systemone", baseUrl);
+  const requestResult = await readRequest(parsed._.request);
+  if (!requestResult.ok) return requestResult;
+  const endpoint = new URL("/v1/systemone", baseUrlResult.value);
+  const timeoutMs = timeoutResult.value;
   const signal = AbortSignal.timeout(timeoutMs);
 
-  const response = await Promise.try(() =>
+  const responseResult = await Promise.try(() =>
     fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(requestResult.value),
       signal,
     }),
   ).then(
-    (value) => value,
-    (error: unknown) => {
-      if (signal.aborted) {
-        throw new JevCliError(4, `request timed out after ${timeoutMs} ms`);
-      }
+    (value): Outcome<Response> => success(value),
+    (error: unknown): Outcome<Response> => {
+      if (signal.aborted)
+        return failure(`request timed out after ${timeoutMs} ms`, 4);
       const detail = error instanceof Error ? error.message : String(error);
-      throw new JevCliError(4, `network request failed: ${detail}`);
+      return failure(`network request failed: ${detail}`, 4);
     },
   );
+  if (!responseResult.ok) return responseResult;
+  const response = responseResult.value;
 
-  const body = await response.text();
+  const bodyResult = await Promise.try(() => response.text()).then(
+    (value): Outcome<string> => success(value),
+    (error: unknown): Outcome<string> =>
+      failure(error instanceof Error ? error.message : String(error), 4),
+  );
+  if (!bodyResult.ok) return bodyResult;
+  const body = bodyResult.value;
   if (!response.ok) {
-    throw new JevCliError(
-      providerExit(response.status),
+    return failure(
       `provider HTTP ${response.status}: ${boundedDiagnostic(body)}`,
+      providerExit(response.status),
     );
   }
 
   const decodedResult = jsonText.safeParse(body);
   if (!decodedResult.success) {
-    const message = (decodedResult.error.issues[0]?.message ?? "").replace(/^not valid JSON: /u, "");
-    throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
+    const message = (decodedResult.error.issues[0]?.message ?? "").replace(
+      /^not valid JSON: /u,
+      "",
+    );
+    return failure(`provider returned invalid JSON: ${message}`, 5);
   }
   const result = decodedResult.data;
   const resultRecord = asRecord(result);
@@ -284,17 +281,20 @@ async function main(): Promise<void> {
     asRecord(resultRecord.answers) === undefined ||
     asRecord(resultRecord.usage) === undefined
   ) {
-    throw new JevCliError(
-      5,
-      "provider response is missing model, answers, or usage",
-    );
+    return failure("provider response is missing model, answers, or usage", 5);
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);
+  return success(undefined);
 }
 
-await main().catch((error) => {
-  const exitCode = error instanceof JevCliError ? error.exitCode : 2;
-  const message = error instanceof Error ? error.message : String(error);
+const outcome = await Promise.try(main).then(
+  (value) => value,
+  (error: unknown): Outcome<void> =>
+    failure(error instanceof Error ? error.message : String(error)),
+);
+if (!outcome.ok) {
+  const exitCode = outcome.error.exitCode;
+  const message = outcome.error.message;
   process.stderr.write(`FATAL: ${boundedDiagnostic(message)}\n`);
   process.exit(exitCode);
-});
+}

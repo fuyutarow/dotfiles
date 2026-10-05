@@ -38,14 +38,13 @@ import { cli } from "cleye";
 const HOST_DEFAULT = "r99";
 const HOST_MS = 90_000; // a CIM process walk over ssh; 90 s is a hang bound, not an estimate
 
-class UsageError extends Error {}
-
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -204,7 +203,7 @@ async function probe(host: string) {
   };
 }
 
-async function main(): Promise<number> {
+async function main(): Promise<number | { error: string }> {
   const parsed = cli(
     {
       name: "wsl-reap.ts",
@@ -228,10 +227,10 @@ async function main(): Promise<number> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
+    return { error: `Unexpected argument '${parsed._[0]}'` };
   }
   const { host, execute } = parsed.flags;
-  if (Bun.which("ssh") === undefined) throw new UsageError("no ssh on PATH");
+  if (Bun.which("ssh") === undefined) return { error: "no ssh on PATH" };
 
   const before = await probe(host);
   if (before === null) {
@@ -285,12 +284,16 @@ async function main(): Promise<number> {
 }
 
 if (import.meta.main) {
-  await main()
-    .then((code) => process.exit(code))
-    .catch((err: unknown) => {
+  const result = await Promise.try(main).then(
+    (code) => code,
+    (err: unknown) => {
       process.stderr.write(
         `FATAL: ${err instanceof Error ? err.message : String(err)}\n`,
       );
-      process.exit(2);
-    });
+      return 2;
+    },
+  );
+  if (typeof result === "number") process.exit(result);
+  process.stderr.write(`${result.error}\n`);
+  process.exit(2);
 }

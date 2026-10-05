@@ -21,7 +21,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+  type ResultAsync,
+} from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
 
 const KiB = 1024;
@@ -203,15 +210,17 @@ const POLICY_RULES: Record<string, PolicyRule> = {
 const DEFAULT_POLICY_PATH = join(import.meta.dir, "resource-policy.toml");
 
 /** The policy file this process reads: AGENT_RESOURCE_POLICY (absolute) or the shipped TOML. */
-export function resourcePolicyPath(): string {
+export function resourcePolicyPath(): Result<string, UsageError> {
   const override = process.env.AGENT_RESOURCE_POLICY;
-  if (override === undefined || override === "") return DEFAULT_POLICY_PATH;
+  if (override === undefined || override === "") return ok(DEFAULT_POLICY_PATH);
   if (!isAbsolute(override)) {
-    throw new UsageError(
-      `AGENT_RESOURCE_POLICY must be an absolute path, got '${override}'`,
+    return err(
+      new UsageError(
+        `AGENT_RESOURCE_POLICY must be an absolute path, got '${override}'`,
+      ),
     );
   }
-  return override;
+  return ok(override);
 }
 
 function policyKeyErrors(raw: Record<string, unknown>): string[] {
@@ -244,63 +253,68 @@ function policyKeyErrors(raw: Record<string, unknown>): string[] {
 }
 
 /**
- * Read and validate one policy file. Throws UsageError naming the file and every bad key; there
- * is no default for any key.
+ * Read and validate one policy file. Errors name the file and every bad key; there is no default
+ * for any key.
  */
 export function loadResourcePolicy(
-  path: string = resourcePolicyPath(),
-): ResourcePolicy {
-  const parsed = fromThrowable((): unknown =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
-  )();
-  if (parsed.isErr()) {
-    throw new UsageError(
-      `cannot read resource policy '${path}': ${
-        parsed.error instanceof Error
-          ? parsed.error.message
-          : String(parsed.error)
-      }`,
+  path?: string,
+): Result<ResourcePolicy, UsageError> {
+  const selectedPath = path === undefined ? resourcePolicyPath() : ok(path);
+  return selectedPath.andThen((policyPath) => {
+    const parsed = fromThrowable((): unknown =>
+      Bun.TOML.parse(readFileSync(policyPath, "utf8")),
+    )();
+    if (parsed.isErr()) {
+      return err(
+        new UsageError(
+          `cannot read resource policy '${policyPath}': ${
+            parsed.error instanceof Error
+              ? parsed.error.message
+              : String(parsed.error)
+          }`,
+        ),
+      );
+    }
+    const raw = asRecord(parsed.value);
+    if (raw === undefined) {
+      return err(
+        new UsageError(`resource policy '${policyPath}' must be a TOML table`),
+      );
+    }
+    const errors = policyKeyErrors(raw);
+    if (errors.length > 0) {
+      return err(
+        new UsageError(
+          `resource policy '${policyPath}' is invalid (admission refused, no defaults): ${errors.join("; ")}`,
+        ),
+      );
+    }
+    // Every value was range-checked as a finite number by policyKeyErrors above.
+    const scaled = Object.entries(POLICY_RULES).map(
+      ([key, rule]): [string, number] => {
+        const n = z.number().safeParse(raw[key]);
+        return [rule.field, (n.success ? n.data : Number.NaN) * rule.scale];
+      },
     );
-  }
-  const raw = asRecord(parsed.value);
-  if (raw === undefined) {
-    throw new UsageError(`resource policy '${path}' must be a TOML table`);
-  }
-  const errors = policyKeyErrors(raw);
-  if (errors.length > 0) {
-    throw new UsageError(
-      `resource policy '${path}' is invalid (admission refused, no defaults): ${errors.join("; ")}`,
-    );
-  }
-  // Every value was range-checked as a finite number by policyKeyErrors above.
-  // A non-number cannot reach here; were one to, NaN fails the schema below instead of a throw.
-  const scaled = Object.entries(POLICY_RULES).map(
-    ([key, rule]): [string, number] => {
-      const n = z.number().safeParse(raw[key]);
-      return [rule.field, (n.success ? n.data : Number.NaN) * rule.scale];
-    },
-  );
-  const policy = ResourcePolicySchema.safeParse(Object.fromEntries(scaled));
-  if (!policy.success) {
-    throw new UsageError(
-      `resource policy '${path}' is invalid (admission refused, no defaults): ${policy.error.message}`,
-    );
-  }
-  return policy.data;
+    const policy = ResourcePolicySchema.safeParse(Object.fromEntries(scaled));
+    if (!policy.success) {
+      return err(
+        new UsageError(
+          `resource policy '${policyPath}' is invalid (admission refused, no defaults): ${policy.error.message}`,
+        ),
+      );
+    }
+    return ok(policy.data);
+  });
 }
 
-// Loaded once at startup. A broken policy does not crash the import: it is re-thrown as the
-// UsageError from the first call that needs a threshold, which main() reports as `USAGE:` exit 2.
-const startupPolicy = fromThrowable(
-  () => loadResourcePolicy(),
-  (error) =>
-    error instanceof UsageError ? error : new UsageError(String(error)),
-)();
+// Loaded once at startup. A broken policy does not crash the import; callers receive its error
+// value, which main() reports as `USAGE:` exit 2.
+const startupPolicy = loadResourcePolicy();
 
-/** The policy this process started with; throws its UsageError when the file was invalid. */
-export function resourcePolicy(): ResourcePolicy {
-  if (startupPolicy.isErr()) throw startupPolicy.error;
-  return startupPolicy.value;
+/** The policy this process started with, or its validation error. */
+export function resourcePolicy(): Result<ResourcePolicy, UsageError> {
+  return startupPolicy;
 }
 
 type RunClass = "pilot" | "full" | "test" | "service";
@@ -489,11 +503,14 @@ function exactKeys(
   value: Record<string, unknown>,
   allowed: readonly string[],
   label: string,
-): void {
+): Result<void, UsageError> {
   const extras = Object.keys(value).filter((key) => !allowed.includes(key));
   if (extras.length > 0) {
-    throw new UsageError(`${label} has unknown field(s): ${extras.join(", ")}`);
+    return err(
+      new UsageError(`${label} has unknown field(s): ${extras.join(", ")}`),
+    );
   }
+  return ok(undefined);
 }
 
 function integer(
@@ -501,43 +518,53 @@ function integer(
   label: string,
   minimum: number,
   maximum = Number.MAX_SAFE_INTEGER,
-): number {
+): Result<number, UsageError> {
   if (
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
     value < minimum ||
     value > maximum
   ) {
-    throw new UsageError(
-      `${label} must be an integer in [${minimum}, ${maximum}]`,
+    return err(
+      new UsageError(`${label} must be an integer in [${minimum}, ${maximum}]`),
     );
   }
-  return value;
+  return ok(value);
 }
 
-function nonEmpty(value: unknown, label: string, maximum = 2_000): string {
+function nonEmpty(
+  value: unknown,
+  label: string,
+  maximum = 2_000,
+): Result<string, UsageError> {
   if (
     typeof value !== "string" ||
     value.trim() === "" ||
     value.length > maximum
   ) {
-    throw new UsageError(`${label} must be a non-empty string`);
+    return err(new UsageError(`${label} must be a non-empty string`));
   }
-  return value.trim();
+  return ok(value.trim());
 }
 
 // Shared by the manifest's own `job_id` field and the CLI's `--job-id` override (main(), below)
 // — one rule, so a caller cannot supply through the flag a value the manifest itself would have
 // rejected. Filesystem-safe (letters/digits/dot/underscore/hyphen only) because job_id ends up
 // in reservation/receipt filenames and systemd unit names elsewhere in this file.
-export function validateJobId(value: unknown, label: string): string {
-  const jobId = nonEmpty(value, label, 80);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/u.test(jobId)) {
-    throw new UsageError(
-      `${label} must contain only letters, digits, dot, underscore, or hyphen`,
-    );
-  }
-  return jobId;
+export function validateJobId(
+  value: unknown,
+  label: string,
+): Result<string, UsageError> {
+  return nonEmpty(value, label, 80).andThen((jobId) => {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/u.test(jobId)) {
+      return err(
+        new UsageError(
+          `${label} must contain only letters, digits, dot, underscore, or hyphen`,
+        ),
+      );
+    }
+    return ok(jobId);
+  });
 }
 
 function sha256Hex(bytes: Uint8Array): string {
@@ -562,19 +589,109 @@ function oneOf<T extends string>(
   value: unknown,
   allowed: readonly T[],
   label: string,
-): T {
+): Result<T, UsageError> {
   const found = allowed.find((item) => item === value);
   if (found === undefined) {
-    throw new UsageError(`${label} must be one of: ${allowed.join(", ")}`);
+    return err(
+      new UsageError(`${label} must be one of: ${allowed.join(", ")}`),
+    );
   }
-  return found;
+  return ok(found);
 }
 
-export function validateManifest(input: unknown): ResourceManifest {
+function validateDevice(
+  input: unknown,
+): Result<CpuDevice | GpuDevice, UsageError> {
+  const rawDevice = asRecord(input);
+  if (rawDevice === undefined)
+    return err(new UsageError("device must be an object"));
+
+  if (rawDevice.kind === "cpu") {
+    const keys = exactKeys(
+      rawDevice,
+      ["kind", "gpu_status", "gpu_vram_peak_bytes", "rationale"],
+      "device",
+    );
+    if (keys.isErr()) return err(keys.error);
+    const gpuStatus = oneOf(
+      rawDevice.gpu_status,
+      ["compatible", "incompatible", "not-beneficial"] as const,
+      "device.gpu_status",
+    );
+    if (gpuStatus.isErr()) return err(gpuStatus.error);
+    const gpuVram =
+      rawDevice.gpu_vram_peak_bytes === undefined
+        ? ok<number | undefined, UsageError>(undefined)
+        : integer(
+            rawDevice.gpu_vram_peak_bytes,
+            "device.gpu_vram_peak_bytes",
+            1,
+          );
+    if (gpuVram.isErr()) return err(gpuVram.error);
+    if (gpuStatus.value === "compatible" && gpuVram.value === undefined) {
+      return err(
+        new UsageError(
+          "device.gpu_vram_peak_bytes is required when gpu_status is compatible",
+        ),
+      );
+    }
+    const rationale = nonEmpty(rawDevice.rationale, "device.rationale");
+    if (rationale.isErr()) return err(rationale.error);
+    return ok({
+      kind: "cpu",
+      gpu_status: gpuStatus.value,
+      ...(gpuVram.value === undefined
+        ? {}
+        : { gpu_vram_peak_bytes: gpuVram.value }),
+      rationale: rationale.value,
+    });
+  }
+
+  if (rawDevice.kind === "gpu") {
+    const keys = exactKeys(
+      rawDevice,
+      ["kind", "gpu_id", "vram_peak_bytes"],
+      "device",
+    );
+    if (keys.isErr()) return err(keys.error);
+    const gpuId = integer(rawDevice.gpu_id, "device.gpu_id", 0, 1_024);
+    if (gpuId.isErr()) return err(gpuId.error);
+    const vram = integer(
+      rawDevice.vram_peak_bytes,
+      "device.vram_peak_bytes",
+      1,
+    );
+    if (vram.isErr()) return err(vram.error);
+    return ok({
+      kind: "gpu",
+      gpu_id: gpuId.value,
+      vram_peak_bytes: vram.value,
+    });
+  }
+  return err(new UsageError("device.kind must be cpu or gpu"));
+}
+
+function validateCleanup(
+  input: unknown,
+): Result<Record<string, unknown>, UsageError> {
+  const cleanup = asRecord(input);
+  if (cleanup === undefined)
+    return err(new UsageError("cleanup must be an object"));
+  const keys = exactKeys(cleanup, ["mode", "grace_seconds"], "cleanup");
+  if (keys.isErr()) return err(keys.error);
+  if (cleanup.mode !== "term-then-kill") {
+    return err(new UsageError("cleanup.mode must be term-then-kill"));
+  }
+  return ok(cleanup);
+}
+
+export function validateManifest(
+  input: unknown,
+): Result<ResourceManifest, UsageError> {
   const value = asRecord(input);
   if (value === undefined)
-    throw new UsageError("manifest must be a JSON object");
-  exactKeys(
+    return err(new UsageError("manifest must be a JSON object"));
+  const keys = exactKeys(
     value,
     [
       "schema",
@@ -592,113 +709,74 @@ export function validateManifest(input: unknown): ResourceManifest {
     ],
     "manifest",
   );
-  if (value.schema !== 1) throw new UsageError("schema must be 1");
+  if (keys.isErr()) return err(keys.error);
+  if (value.schema !== 1) return err(new UsageError("schema must be 1"));
   const jobId = validateJobId(value.job_id, "job_id");
-
-  const rawDevice = asRecord(value.device);
-  if (rawDevice === undefined) {
-    throw new UsageError("device must be an object");
-  }
-  let device: CpuDevice | GpuDevice;
-  if (rawDevice.kind === "cpu") {
-    exactKeys(
-      rawDevice,
-      ["kind", "gpu_status", "gpu_vram_peak_bytes", "rationale"],
-      "device",
-    );
-    const gpuStatus = oneOf(
-      rawDevice.gpu_status,
-      ["compatible", "incompatible", "not-beneficial"] as const,
-      "device.gpu_status",
-    );
-    const gpuVram =
-      rawDevice.gpu_vram_peak_bytes === undefined
-        ? undefined
-        : integer(
-            rawDevice.gpu_vram_peak_bytes,
-            "device.gpu_vram_peak_bytes",
-            1,
-          );
-    if (gpuStatus === "compatible" && gpuVram === undefined) {
-      throw new UsageError(
-        "device.gpu_vram_peak_bytes is required when gpu_status is compatible",
-      );
-    }
-    device = {
-      kind: "cpu",
-      gpu_status: gpuStatus,
-      ...(gpuVram === undefined ? {} : { gpu_vram_peak_bytes: gpuVram }),
-      rationale: nonEmpty(rawDevice.rationale, "device.rationale"),
-    };
-  } else if (rawDevice.kind === "gpu") {
-    exactKeys(rawDevice, ["kind", "gpu_id", "vram_peak_bytes"], "device");
-    device = {
-      kind: "gpu",
-      gpu_id: integer(rawDevice.gpu_id, "device.gpu_id", 0, 1_024),
-      vram_peak_bytes: integer(
-        rawDevice.vram_peak_bytes,
-        "device.vram_peak_bytes",
-        1,
-      ),
-    };
-  } else {
-    throw new UsageError("device.kind must be cpu or gpu");
-  }
-
-  const cleanup = asRecord(value.cleanup);
-  if (cleanup === undefined) {
-    throw new UsageError("cleanup must be an object");
-  }
-  exactKeys(cleanup, ["mode", "grace_seconds"], "cleanup");
-  if (cleanup.mode !== "term-then-kill") {
-    throw new UsageError("cleanup.mode must be term-then-kill");
-  }
+  if (jobId.isErr()) return err(jobId.error);
+  const device = validateDevice(value.device);
+  if (device.isErr()) return err(device.error);
+  const cleanup = validateCleanup(value.cleanup);
+  if (cleanup.isErr()) return err(cleanup.error);
   // Validated to be exactly 0; child_fanout is pinned to the literal type 0 in ResourceManifest
   // (no nested agent fanout is supported yet), so the checked value is used as that literal below.
-  integer(value.child_fanout, "child_fanout", 0, 0);
+  const childFanout = integer(value.child_fanout, "child_fanout", 0, 0);
+  if (childFanout.isErr()) return err(childFanout.error);
+  const runClass = oneOf(
+    value.run_class,
+    ["pilot", "full", "test", "service"] as const,
+    "run_class",
+  );
+  if (runClass.isErr()) return err(runClass.error);
+  const cpuThreads = integer(value.cpu_threads, "cpu_threads", 1, 1_024);
+  if (cpuThreads.isErr()) return err(cpuThreads.error);
+  const processes = integer(value.processes, "processes", 1, 4_096);
+  if (processes.isErr()) return err(processes.error);
+  const hostRamPeak = integer(
+    value.host_ram_peak_bytes,
+    "host_ram_peak_bytes",
+    1,
+  );
+  if (hostRamPeak.isErr()) return err(hostRamPeak.error);
+  const memoryBound = nonEmpty(value.memory_bound, "memory_bound");
+  if (memoryBound.isErr()) return err(memoryBound.error);
+  const scratchBytes = integer(value.scratch_bytes, "scratch_bytes", 0);
+  if (scratchBytes.isErr()) return err(scratchBytes.error);
+  const walltimeSeconds = integer(
+    value.walltime_seconds,
+    "walltime_seconds",
+    1,
+    86_400,
+  );
+  if (walltimeSeconds.isErr()) return err(walltimeSeconds.error);
+  const graceSeconds = integer(
+    cleanup.value.grace_seconds,
+    "cleanup.grace_seconds",
+    1,
+    30,
+  );
+  if (graceSeconds.isErr()) return err(graceSeconds.error);
 
-  return {
+  return ok({
     schema: 1,
-    job_id: jobId,
-    run_class: oneOf(
-      value.run_class,
-      ["pilot", "full", "test", "service"] as const,
-      "run_class",
-    ),
-    cpu_threads: integer(value.cpu_threads, "cpu_threads", 1, 1_024),
-    processes: integer(value.processes, "processes", 1, 4_096),
-    host_ram_peak_bytes: integer(
-      value.host_ram_peak_bytes,
-      "host_ram_peak_bytes",
-      1,
-    ),
-    memory_bound: nonEmpty(value.memory_bound, "memory_bound"),
-    device,
-    scratch_bytes: integer(value.scratch_bytes, "scratch_bytes", 0),
+    job_id: jobId.value,
+    run_class: runClass.value,
+    cpu_threads: cpuThreads.value,
+    processes: processes.value,
+    host_ram_peak_bytes: hostRamPeak.value,
+    memory_bound: memoryBound.value,
+    device: device.value,
+    scratch_bytes: scratchBytes.value,
     child_fanout: 0,
-    walltime_seconds: integer(
-      value.walltime_seconds,
-      "walltime_seconds",
-      1,
-      86_400,
-    ),
-    cleanup: {
-      mode: "term-then-kill",
-      grace_seconds: integer(
-        cleanup.grace_seconds,
-        "cleanup.grace_seconds",
-        1,
-        30,
-      ),
-    },
-  };
+    walltime_seconds: walltimeSeconds.value,
+    cleanup: { mode: "term-then-kill", grace_seconds: graceSeconds.value },
+  });
 }
 
 function addCpuRange(
   range: RegExpExecArray,
   part: string,
   cpus: Set<number>,
-): void {
+): Result<void, StateError> {
   const first = Number(range[1]);
   const last = Number(range[2]);
   if (
@@ -706,39 +784,47 @@ function addCpuRange(
     !Number.isSafeInteger(last) ||
     last < first
   ) {
-    throw new StateError(`invalid CPU range '${part}'`);
+    return err(new StateError(`invalid CPU range '${part}'`));
   }
   for (let cpu = first; cpu <= last; cpu += 1) cpus.add(cpu);
+  return ok(undefined);
 }
 
-export function parseCpuList(text: string): number[] {
+export function parseCpuList(text: string): Result<number[], StateError> {
   const cpus = new Set<number>();
   for (const rawPart of text.trim().split(",")) {
     const part = rawPart.trim();
     if (part === "") continue;
-    const range = /^(\d+)-(\d+)$/u.exec(part);
-    if (range !== null) {
-      addCpuRange(range, part, cpus);
-      continue;
-    }
-    if (!/^\d+$/u.test(part)) throw new StateError(`invalid CPU id '${part}'`);
-    cpus.add(Number(part));
+    const added = addCpuPart(part, cpus);
+    if (added.isErr()) return err(added.error);
   }
   const result = [...cpus].toSorted((a, b) => a - b);
-  if (result.length === 0) throw new StateError("allowed CPU list is empty");
-  return result;
+  if (result.length === 0)
+    return err(new StateError("allowed CPU list is empty"));
+  return ok(result);
 }
 
-function meminfoBytes(text: string, key: string): number {
+function addCpuPart(part: string, cpus: Set<number>): Result<void, StateError> {
+  const range = /^(\d+)-(\d+)$/u.exec(part);
+  if (range !== null) return addCpuRange(range, part, cpus);
+  if (!/^\d+$/u.test(part))
+    return err(new StateError(`invalid CPU id '${part}'`));
+  cpus.add(Number(part));
+  return ok(undefined);
+}
+
+function meminfoBytes(text: string, key: string): Result<number, StateError> {
   const match = new RegExp(`^${key}:\\s+(\\d+)\\s+kB$`, "mu").exec(text);
-  if (match === null) throw new StateError(`/proc/meminfo lacks ${key}`);
-  return Number(match[1]) * KiB;
+  if (match === null) return err(new StateError(`/proc/meminfo lacks ${key}`));
+  return ok(Number(match[1]) * KiB);
 }
 
 // One row of `nvidia-smi --query-gpu=index,memory.total,memory.used,utilization.gpu,power.draw
 // --format=csv,noheader,nounits`. The first four fields are required; power.draw may read
 // "[N/A]" on boards that do not report it, which leaves power_watts undefined.
-export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
+export function parseNvidiaSmiGpuRow(
+  line: string,
+): Result<GpuSnapshot, StateError> {
   const fields = line.split(",").map((field) => Number(field.trim()));
   const [id, totalMiB, usedMiB, utilization, power] = fields;
   if (
@@ -750,7 +836,7 @@ export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
     power === undefined ||
     fields.slice(0, 4).some((field) => !Number.isFinite(field))
   ) {
-    throw new StateError(`unparseable nvidia-smi row: ${line}`);
+    return err(new StateError(`unparseable nvidia-smi row: ${line}`));
   }
   const row: GpuSnapshot = {
     id,
@@ -759,16 +845,13 @@ export function parseNvidiaSmiGpuRow(line: string): GpuSnapshot {
     utilization_percent: utilization,
   };
   if (Number.isFinite(power)) row.power_watts = power;
-  return row;
+  return ok(row);
 }
 
 // Unmanaged load: utilization above the idle threshold, unless the board draws idle power
 // (display-only load, e.g. a WSL2 host's desktop compositor). Unknown power keeps the
 // conservative utilization-only rule.
-export function hasUnmanagedGpuLoad(
-  gpu: GpuSnapshot,
-  policy: ResourcePolicy = resourcePolicy(),
-): boolean {
+function unmanagedGpuLoad(gpu: GpuSnapshot, policy: ResourcePolicy): boolean {
   if (gpu.utilization_percent <= policy.gpu_idle_utilization_percent)
     return false;
   if (
@@ -779,9 +862,19 @@ export function hasUnmanagedGpuLoad(
   return true;
 }
 
-function probeGpus(): GpuSnapshot[] {
+export function hasUnmanagedGpuLoad(
+  gpu: GpuSnapshot,
+  policy?: ResourcePolicy,
+): Result<boolean, UsageError> {
+  const selectedPolicy = policy === undefined ? resourcePolicy() : ok(policy);
+  return selectedPolicy.map((resolvedPolicy) =>
+    unmanagedGpuLoad(gpu, resolvedPolicy),
+  );
+}
+
+function probeGpus(): Result<GpuSnapshot[], StateError> {
   if (Bun.which("nvidia-smi") === null || Bun.which("timeout") === null)
-    return [];
+    return ok([]);
   // bounded: GNU timeout caps the local nvidia-smi probe at five seconds.
   const spawned = fromThrowable(() =>
     Bun.spawnSync(
@@ -795,17 +888,23 @@ function probeGpus(): GpuSnapshot[] {
       { stdout: "pipe", stderr: "ignore" },
     ),
   )();
-  if (spawned.isErr() || spawned.value.exitCode !== 0) return [];
+  if (spawned.isErr() || spawned.value.exitCode !== 0) return ok([]);
   const rerankActive = rerankServiceActive();
-  return spawned.value.stdout
+  const snapshots: GpuSnapshot[] = [];
+  for (const row of spawned.value.stdout
     .toString()
     .trim()
     .split("\n")
-    .filter(Boolean)
-    .map((row) => parseNvidiaSmiGpuRow(row))
-    .map((gpu) =>
-      rerankActive ? Object.assign({}, gpu, { rerank_active: true }) : gpu,
+    .filter(Boolean)) {
+    const parsed = parseNvidiaSmiGpuRow(row);
+    if (parsed.isErr()) return err(parsed.error);
+    snapshots.push(
+      rerankActive
+        ? Object.assign({}, parsed.value, { rerank_active: true })
+        : parsed.value,
     );
+  }
+  return ok(snapshots);
 }
 
 // The reranker is socket-activated and idle-exits, so its partition is held only while it runs.
@@ -832,82 +931,105 @@ function rerankServiceActive(): boolean {
   return probe.isOk() && probe.value.exitCode === 0;
 }
 
-export function probeHostSnapshot(cwd: string): HostSnapshot {
+export function probeHostSnapshot(cwd: string): Result<HostSnapshot, Error> {
   if (process.platform !== "linux") {
-    throw new StateError(
-      `unsupported platform '${process.platform}': affinity/RSS enforcement is Linux-only`,
+    return err(
+      new StateError(
+        `unsupported platform '${process.platform}': affinity/RSS enforcement is Linux-only`,
+      ),
     );
   }
-  const status = readFileSync("/proc/self/status", "utf8");
+  const statusResult = fromThrowable(() =>
+    readFileSync("/proc/self/status", "utf8"),
+  )();
+  if (statusResult.isErr()) return err(asError(statusResult.error));
+  const status = statusResult.value;
   const allowed = /^Cpus_allowed_list:\s*(.+)$/mu.exec(status)?.[1];
   if (allowed === undefined) {
-    throw new StateError("/proc/self/status lacks Cpus_allowed_list");
+    return err(new StateError("/proc/self/status lacks Cpus_allowed_list"));
   }
-  const meminfo = readFileSync("/proc/meminfo", "utf8");
-  const fs = statfsSync(cwd);
-  return {
-    allowed_cpu_ids: parseCpuList(allowed),
-    mem_total_bytes: meminfoBytes(meminfo, "MemTotal"),
-    mem_available_bytes: meminfoBytes(meminfo, "MemAvailable"),
-    scratch_available_bytes: fs.bavail * fs.bsize,
-    gpus: probeGpus(),
-  };
+  const meminfoResult = fromThrowable(() =>
+    readFileSync("/proc/meminfo", "utf8"),
+  )();
+  if (meminfoResult.isErr()) return err(asError(meminfoResult.error));
+  const filesystemResult = fromThrowable(() => statfsSync(cwd))();
+  if (filesystemResult.isErr()) return err(asError(filesystemResult.error));
+  const cpus = parseCpuList(allowed);
+  if (cpus.isErr()) return err(cpus.error);
+  const total = meminfoBytes(meminfoResult.value, "MemTotal");
+  if (total.isErr()) return err(total.error);
+  const available = meminfoBytes(meminfoResult.value, "MemAvailable");
+  if (available.isErr()) return err(available.error);
+  const gpus = probeGpus();
+  if (gpus.isErr()) return err(gpus.error);
+  return ok({
+    allowed_cpu_ids: cpus.value,
+    mem_total_bytes: total.value,
+    mem_available_bytes: available.value,
+    scratch_available_bytes:
+      filesystemResult.value.bavail * filesystemResult.value.bsize,
+    gpus: gpus.value,
+  });
 }
 
 function oneLineDiagnostic(text: string): string {
   return text.trim().replaceAll(/\s+/gu, " ").slice(0, 400);
 }
 
-export function probeKernelEnforcement(): KernelEnforcement {
+export function probeKernelEnforcement(): Result<KernelEnforcement, Error> {
   if (process.platform !== "linux") {
-    return {
+    return ok({
       available: false,
       reason: `user-systemd cgroup enforcement is Linux-only, not '${process.platform}'`,
-    };
+    });
   }
   const required = ["systemd-run", "systemctl", "timeout", "true"] as const;
   for (const command of required) {
     if (Bun.which(command) === null) {
-      return { available: false, reason: `${command} is required` };
+      return ok({ available: false, reason: `${command} is required` });
     }
   }
   const truePath = Bun.which("true");
   if (truePath === null) {
-    return { available: false, reason: "true is required" };
+    return ok({ available: false, reason: "true is required" });
   }
 
   const unit = `agent-resource-probe-${process.pid}-${randomUUID().slice(0, 8)}`;
   // bounded: GNU timeout caps the user-manager/property capability probe at five seconds.
-  const result = Bun.spawnSync(
-    [
-      "timeout",
-      "5s",
-      "systemd-run",
-      "--user",
-      "--scope",
-      "--quiet",
-      "--collect",
-      "--expand-environment=no",
-      `--unit=${unit}`,
-      "--property=CPUQuota=100%",
-      `--property=MemoryMax=${KERNEL_PROBE_MEMORY_BYTES}`,
-      "--property=MemorySwapMax=0",
-      `--property=TasksMax=${MIN_KERNEL_TASKS}`,
-      "--property=OOMPolicy=kill",
-      truePath,
-    ],
-    { stdout: "ignore", stderr: "pipe" },
-  );
+  const spawned = fromThrowable(() =>
+    Bun.spawnSync(
+      [
+        "timeout",
+        "5s",
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--expand-environment=no",
+        `--unit=${unit}`,
+        "--property=CPUQuota=100%",
+        `--property=MemoryMax=${KERNEL_PROBE_MEMORY_BYTES}`,
+        "--property=MemorySwapMax=0",
+        `--property=TasksMax=${MIN_KERNEL_TASKS}`,
+        "--property=OOMPolicy=kill",
+        truePath,
+      ],
+      { stdout: "ignore", stderr: "pipe" },
+    ),
+  )();
+  if (spawned.isErr()) return err(asError(spawned.error));
+  const result = spawned.value;
   if (result.exitCode !== 0) {
     const detail = oneLineDiagnostic(result.stderr.toString());
-    return {
+    return ok({
       available: false,
       reason:
         `user-systemd cgroup probe exited ${result.exitCode}` +
         (detail === "" ? "" : `: ${detail}`),
-    };
+    });
   }
-  return { available: true };
+  return ok({ available: true });
 }
 
 // --- Host opt-in: a machine where cgroup enforcement cannot exist --------------------------------
@@ -929,28 +1051,33 @@ const HostOptInSchema = z.strictObject({
 });
 
 /** ~/.config/agent-resource/host.toml, or the absolute path in AGENT_RESOURCE_HOST (tests). */
-export function hostOptInPath(): string {
+export function hostOptInPath(): Result<string, UsageError> {
   const override = process.env.AGENT_RESOURCE_HOST;
   if (override === undefined || override === "")
-    return join(homedir(), ".config", "agent-resource", "host.toml");
+    return ok(join(homedir(), ".config", "agent-resource", "host.toml"));
   if (!isAbsolute(override)) {
-    throw new UsageError(
-      `AGENT_RESOURCE_HOST must be an absolute path, got '${override}'`,
+    return err(
+      new UsageError(
+        `AGENT_RESOURCE_HOST must be an absolute path, got '${override}'`,
+      ),
     );
   }
-  return override;
+  return ok(override);
 }
 
-/** The host opt-in; null when the file does not exist. A file that exists but is invalid throws. */
-export function readHostOptIn(
-  path: string = hostOptInPath(),
-): HostOptIn | null {
-  if (!existsSync(path)) return null;
+/** The host opt-in; null when the file does not exist. Invalid files return an error. */
+export function readHostOptIn(path?: string): Result<HostOptIn | null, Error> {
+  const selectedPath = path === undefined ? hostOptInPath() : ok(path);
+  if (selectedPath.isErr()) return err(selectedPath.error);
+  const optInPath = selectedPath.value;
+  const exists = fromThrowable(() => existsSync(optInPath))();
+  if (exists.isErr()) return err(asError(exists.error));
+  if (!exists.value) return ok(null);
   const raw = fromThrowable((): unknown =>
-    Bun.TOML.parse(readFileSync(path, "utf8")),
+    Bun.TOML.parse(readFileSync(optInPath, "utf8")),
   )();
   if (raw.isErr())
-    throw new StateError(`host opt-in '${path}' is not valid TOML`);
+    return err(new StateError(`host opt-in '${optInPath}' is not valid TOML`));
   const parsed = HostOptInSchema.safeParse(raw.value);
   if (!parsed.success) {
     const issues = parsed.error.issues
@@ -959,31 +1086,41 @@ export function readHostOptIn(
           `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`,
       )
       .join("; ");
-    throw new StateError(`host opt-in '${path}' is invalid: ${issues}`);
+    return err(
+      new StateError(`host opt-in '${optInPath}' is invalid: ${issues}`),
+    );
   }
-  return { sampled_enforcement_reason: parsed.data.sampled_enforcement_reason };
+  return ok({
+    sampled_enforcement_reason: parsed.data.sampled_enforcement_reason,
+  });
 }
 
 export function resolveEnforcement(
   kernel: KernelEnforcement,
   optIn: HostOptIn | null,
-): { ok: true; enforcement: Enforcement } | { ok: false; reason: string } {
-  if (kernel.available) return { ok: true, enforcement: { kind: "cgroup" } };
+): Result<
+  { ok: true; enforcement: Enforcement } | { ok: false; reason: string },
+  UsageError
+> {
+  if (kernel.available)
+    return ok({ ok: true, enforcement: { kind: "cgroup" } });
   if (optIn === null) {
-    return {
+    const path = hostOptInPath();
+    if (path.isErr()) return err(path.error);
+    return ok({
       ok: false,
       reason:
         `kernel enforcement unavailable: ${kernel.reason} ` +
-        `(a machine that can never have it may opt into sampled enforcement in ${hostOptInPath()}; see README)`,
-    };
+        `(a machine that can never have it may opt into sampled enforcement in ${path.value}; see README)`,
+    });
   }
-  return {
+  return ok({
     ok: true,
     enforcement: {
       kind: "sampled",
       reason: `${kernel.reason}; host opt-in: ${optIn.sampled_enforcement_reason}`,
     },
-  };
+  });
 }
 
 function hostRamSafety(snapshot: HostSnapshot, policy: ResourcePolicy): number {
@@ -1092,7 +1229,7 @@ function gpuHeadroomDenial(
   // Utilization screens UNMANAGED load only. Applying it once we already hold a reservation on
   // this device makes an admitted job block the next admission with its own compute load, which
   // silently degrades the ledger to one job per GPU.
-  if (ledger.jobs === 0 && hasUnmanagedGpuLoad(gpu, policy)) {
+  if (ledger.jobs === 0 && unmanagedGpuLoad(gpu, policy)) {
     return (
       `unmanaged load holds GPU ${gpu.id} at ${gpu.utilization_percent}% utilization` +
       (gpu.power_watts === undefined
@@ -1116,11 +1253,11 @@ function gpuHasHeadroom(
   return gpuHeadroomDenial(gpu, requiredBytes, reservations, policy) === null;
 }
 
-export function decideAdmission(
+function decideAdmissionWithPolicy(
   manifest: ResourceManifest,
   snapshot: HostSnapshot,
   reservations: Reservation[],
-  policy: ResourcePolicy = resourcePolicy(),
+  policy: ResourcePolicy,
 ): AdmissionResult {
   if (reservations.some((item) => item.job_id === manifest.job_id)) {
     return {
@@ -1249,6 +1386,18 @@ export function decideAdmission(
   };
 }
 
+export function decideAdmission(
+  manifest: ResourceManifest,
+  snapshot: HostSnapshot,
+  reservations: Reservation[],
+  policy?: ResourcePolicy,
+): Result<AdmissionResult, UsageError> {
+  const selectedPolicy = policy === undefined ? resourcePolicy() : ok(policy);
+  return selectedPolicy.map((resolvedPolicy) =>
+    decideAdmissionWithPolicy(manifest, snapshot, reservations, resolvedPolicy),
+  );
+}
+
 function defaultStateDirectory(): string {
   const runtime = process.env.XDG_RUNTIME_DIR;
   if (runtime !== undefined && runtime !== "" && isAbsolute(runtime)) {
@@ -1277,33 +1426,38 @@ function pidIsAlive(pid: number): boolean {
   return result.isOk() || errorCode(result.error) === "EPERM";
 }
 
-function releaseLockDirectory(lockDirectory: string): void {
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function releaseLockDirectory(lockDirectory: string): Result<void, Error> {
   const owner = join(lockDirectory, "owner.json");
   const unlinkResult = fromThrowable(() => {
     unlinkSync(owner);
   })();
   if (unlinkResult.isErr() && errorCode(unlinkResult.error) !== "ENOENT") {
-    throw unlinkResult.error;
+    return err(asError(unlinkResult.error));
   }
   const rmdirResult = fromThrowable(() => {
     rmdirSync(lockDirectory);
   })();
   if (rmdirResult.isErr() && errorCode(rmdirResult.error) !== "ENOENT") {
-    throw rmdirResult.error;
+    return err(asError(rmdirResult.error));
   }
+  return ok(undefined);
 }
 
 function handleLockAcquisitionError(
   error: unknown,
   lockDirectory: string,
-): void {
-  if (errorCode(error) === "EEXIST") return;
+): Result<void, StateError> {
+  if (errorCode(error) === "EEXIST") return ok(undefined);
   // Preserve the original lock/setup error: discard whatever releaseLockDirectory reports.
-  fromThrowable(() => {
-    releaseLockDirectory(lockDirectory);
-  })();
-  throw new StateError(
-    `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
+  releaseLockDirectory(lockDirectory);
+  return err(
+    new StateError(
+      `cannot acquire reservation lock: ${error instanceof Error ? error.message : String(error)}`,
+    ),
   );
 }
 
@@ -1329,14 +1483,15 @@ function releaseIfStale(
         statSync(lockDirectory).mtimeMs >=
       LOCK_STALE_MS;
     if (!oldEnough || (ownerPid !== null && pidIsAlive(ownerPid))) return false;
-    releaseLockDirectory(lockDirectory);
-    return true;
+    return releaseLockDirectory(lockDirectory).isOk();
   })();
   // A concurrent owner can release/recreate the bounded lock; retry.
   return result.isOk() ? result.value : false;
 }
 
-async function acquireStateLock(stateDirectory: string): Promise<() => void> {
+async function acquireStateLock(
+  stateDirectory: string,
+): Promise<Result<() => Result<void, Error>, Error>> {
   const lockDirectory = join(stateDirectory, ".lock");
   const deadline = performance.now() + LOCK_WAIT_MS;
   while (performance.now() < deadline) {
@@ -1349,19 +1504,21 @@ async function acquireStateLock(stateDirectory: string): Promise<() => void> {
       );
     })();
     if (created.isOk()) {
-      return () => {
-        releaseLockDirectory(lockDirectory);
-      };
+      return ok(() => releaseLockDirectory(lockDirectory));
     }
-    handleLockAcquisitionError(created.error, lockDirectory);
+    const handled = handleLockAcquisitionError(created.error, lockDirectory);
+    if (handled.isErr()) return err(handled.error);
 
     const ownerPid = readOwnerPid(lockDirectory);
     if (releaseIfStale(lockDirectory, ownerPid)) {
       continue;
     }
-    await Bun.sleep(25);
+    const slept = await fromAsyncThrowable(() => Bun.sleep(25))();
+    if (slept.isErr()) return err(asError(slept.error));
   }
-  throw new StateError(`reservation lock remained busy for ${LOCK_WAIT_MS} ms`);
+  return err(
+    new StateError(`reservation lock remained busy for ${LOCK_WAIT_MS} ms`),
+  );
 }
 
 const anySafeInt = safeIntIn(Number.MIN_SAFE_INTEGER);
@@ -1389,18 +1546,23 @@ function reservationFrom(value: unknown): Reservation | null {
   return parsed.success ? parsed.data : null;
 }
 
-function unlinkIgnoringMissing(path: string): void {
+function unlinkIgnoringMissing(path: string): Result<void, Error> {
   const result = fromThrowable(() => {
     unlinkSync(path);
   })();
   if (result.isErr() && errorCode(result.error) !== "ENOENT") {
-    throw result.error;
+    return err(asError(result.error));
   }
+  return ok(undefined);
 }
 
-function liveReservations(stateDirectory: string): Reservation[] {
+function liveReservations(
+  stateDirectory: string,
+): Result<Reservation[], Error> {
+  const names = fromThrowable(() => readdirSync(stateDirectory))();
+  if (names.isErr()) return err(asError(names.error));
   const result: Reservation[] = [];
-  for (const name of readdirSync(stateDirectory)) {
+  for (const name of names.value) {
     if (!name.endsWith(".reservation.json")) continue;
     const path = join(stateDirectory, name);
     const parsed = fromThrowable(() => {
@@ -1412,58 +1574,76 @@ function liveReservations(stateDirectory: string): Reservation[] {
       result.push(reservation);
       continue;
     }
-    unlinkIgnoringMissing(path);
+    const unlinked = unlinkIgnoringMissing(path);
+    if (unlinked.isErr()) return err(unlinked.error);
   }
-  return result;
+  return ok(result);
 }
 
 async function acquireLease(
   manifest: ResourceManifest,
   snapshot: HostSnapshot,
   requestedStateDirectory?: string,
-): Promise<Lease | AdmissionFailure> {
-  const stateDirectory = ensureStateDirectory(
-    requestedStateDirectory ?? defaultStateDirectory(),
-  );
-  const unlock = await acquireStateLock(stateDirectory);
-  // Cleanup runs on return AND on throw, in the same order the prior try/finally gave: the lock
-  // release always fires last, once this function's own block is left.
-  using _lock = { [Symbol.dispose]: unlock };
-  const reservations = liveReservations(stateDirectory);
-  const admission = decideAdmission(manifest, snapshot, reservations);
-  if (!admission.ok) return admission;
-  const reservationId = `${process.pid}-${randomUUID()}`;
-  const reservation: Reservation = {
-    schema: 1,
-    reservation_id: reservationId,
-    job_id: manifest.job_id,
-    controller_pid: process.pid,
-    cpu_ids: admission.cpu_ids,
-    host_ram_peak_bytes: manifest.host_ram_peak_bytes,
-    scratch_bytes: manifest.scratch_bytes,
-    device: admission.device,
-    started_at: Temporal.Now.instant().toString({
-      fractionalSecondDigits: 3,
-    }),
-  };
-  const reservationPath = join(
-    stateDirectory,
-    `${reservationId}.reservation.json`,
-  );
-  const fd = openSync(reservationPath, "wx", 0o600);
-  using _fd = {
-    [Symbol.dispose]: () => {
-      closeSync(fd);
+): Promise<Result<Lease | AdmissionFailure, Error>> {
+  const directoryResult = fromThrowable(() =>
+    ensureStateDirectory(requestedStateDirectory ?? defaultStateDirectory()),
+  )();
+  if (directoryResult.isErr()) return err(asError(directoryResult.error));
+  const stateDirectory = directoryResult.value;
+  const lockResult = await acquireStateLock(stateDirectory);
+  if (lockResult.isErr()) return err(lockResult.error);
+  const workResult = fromThrowable(
+    (): Result<Lease | AdmissionFailure, Error> => {
+      const reservations = liveReservations(stateDirectory);
+      if (reservations.isErr()) return err(reservations.error);
+      const admissionResult = decideAdmission(
+        manifest,
+        snapshot,
+        reservations.value,
+      );
+      if (admissionResult.isErr()) return err(admissionResult.error);
+      const admission = admissionResult.value;
+      if (!admission.ok) return ok(admission);
+      const reservationId = `${process.pid}-${randomUUID()}`;
+      const reservation: Reservation = {
+        schema: 1,
+        reservation_id: reservationId,
+        job_id: manifest.job_id,
+        controller_pid: process.pid,
+        cpu_ids: admission.cpu_ids,
+        host_ram_peak_bytes: manifest.host_ram_peak_bytes,
+        scratch_bytes: manifest.scratch_bytes,
+        device: admission.device,
+        started_at: Temporal.Now.instant().toString({
+          fractionalSecondDigits: 3,
+        }),
+      };
+      const reservationPath = join(
+        stateDirectory,
+        `${reservationId}.reservation.json`,
+      );
+      const fd = openSync(reservationPath, "wx", 0o600);
+      using _fd = {
+        [Symbol.dispose]: () => {
+          closeSync(fd);
+        },
+      };
+      writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
+      return ok({ ok: true, reservation, reservationPath, stateDirectory });
     },
-  };
-  writeFileSync(fd, `${JSON.stringify(reservation)}\n`);
-  return { ok: true, reservation, reservationPath, stateDirectory };
+  )();
+  const released = lockResult.value();
+  if (released.isErr()) return err(released.error);
+  return workResult.isErr() ? err(asError(workResult.error)) : workResult.value;
 }
 
-async function releaseLease(lease: Lease): Promise<void> {
-  const unlock = await acquireStateLock(lease.stateDirectory);
-  using _lock = { [Symbol.dispose]: unlock };
-  unlinkIgnoringMissing(lease.reservationPath);
+async function releaseLease(lease: Lease): Promise<Result<void, Error>> {
+  const lockResult = await acquireStateLock(lease.stateDirectory);
+  if (lockResult.isErr()) return err(lockResult.error);
+  const unlinked = unlinkIgnoringMissing(lease.reservationPath);
+  const released = lockResult.value();
+  if (released.isErr()) return err(released.error);
+  return unlinked;
 }
 
 /**
@@ -1633,18 +1813,23 @@ function writePeakArtifact(manifestPath: string, peak: MeasuredPeak): void {
   })();
 }
 
-function signalProcessGroup(pgid: number, signal: NodeJS.Signals): void {
+function signalProcessGroup(
+  pgid: number,
+  signal: NodeJS.Signals,
+): Result<void, Error> {
   const result = fromThrowable(() => process.kill(-pgid, signal))();
   if (result.isErr() && errorCode(result.error) !== "ESRCH") {
-    throw result.error;
+    return err(asError(result.error));
   }
+  return ok(undefined);
 }
 
 async function terminateProcessGroup(
   pgid: number,
   graceSeconds: number,
-): Promise<void> {
-  signalProcessGroup(pgid, "SIGTERM");
+): Promise<Result<void, Error>> {
+  const terminated = signalProcessGroup(pgid, "SIGTERM");
+  if (terminated.isErr()) return err(terminated.error);
   const deadline = performance.now() + graceSeconds * 1_000;
   while (
     performance.now() < deadline &&
@@ -1653,8 +1838,10 @@ async function terminateProcessGroup(
     await Bun.sleep(50);
   }
   if (processGroupUsage(pgid).processes > 0) {
-    signalProcessGroup(pgid, "SIGKILL");
+    const killed = signalProcessGroup(pgid, "SIGKILL");
+    if (killed.isErr()) return err(killed.error);
   }
+  return ok(undefined);
 }
 
 /**
@@ -1670,26 +1857,28 @@ async function terminateProcessGroup(
  */
 function gpuBudgetEnvironment(
   device: Reservation["device"],
-): Record<string, string | undefined> {
+): Result<Record<string, string | undefined>, UsageError> {
   if (device.kind !== "gpu") {
     // Clear, don't merely omit: these keys are inherited from the caller's environment, so a CPU
     // job launched from a shell that once held a GPU budget would otherwise run under it.
-    return {
+    return ok({
       CUDA_VISIBLE_DEVICES: "",
       AGENT_RESOURCE_VRAM_BYTES: undefined,
       JULIA_CUDA_HARD_MEMORY_LIMIT: undefined,
       JULIA_CUDA_SOFT_MEMORY_LIMIT: undefined,
-    };
+    });
   }
+  const policy = resourcePolicy();
+  if (policy.isErr()) return err(policy.error);
   const hard = device.vram_peak_bytes;
-  return {
+  return ok({
     CUDA_VISIBLE_DEVICES: String(device.gpu_id),
     AGENT_RESOURCE_VRAM_BYTES: String(hard),
     JULIA_CUDA_HARD_MEMORY_LIMIT: String(hard),
     JULIA_CUDA_SOFT_MEMORY_LIMIT: String(
-      Math.floor(hard * resourcePolicy().gpu_soft_limit_fraction),
+      Math.floor(hard * policy.value.gpu_soft_limit_fraction),
     ),
-  };
+  });
 }
 
 export function createAdmissionReceipt(
@@ -1800,9 +1989,9 @@ export function commandEnvironment(
   manifest: ResourceManifest,
   reservation: Reservation,
   receipt: AdmissionReceipt,
-): Record<string, string | undefined> {
+): Result<Record<string, string | undefined>, Error> {
   if (manifest.job_id !== reservation.job_id) {
-    throw new StateError("manifest and reservation job_id must match");
+    return err(new StateError("manifest and reservation job_id must match"));
   }
   if (
     manifest.cpu_threads !== reservation.cpu_ids.length ||
@@ -1814,12 +2003,16 @@ export function commandEnvironment(
         manifest.device.gpu_id !== reservation.device.gpu_id ||
         manifest.device.vram_peak_bytes !== reservation.device.vram_peak_bytes))
   ) {
-    throw new StateError(
-      "manifest and reservation resources must match before constructing child environment",
+    return err(
+      new StateError(
+        "manifest and reservation resources must match before constructing child environment",
+      ),
     );
   }
+  const gpuEnvironment = gpuBudgetEnvironment(reservation.device);
+  if (gpuEnvironment.isErr()) return err(gpuEnvironment.error);
   const threads = String(manifest.cpu_threads);
-  return {
+  return ok({
     ...process.env,
     // These values are runner-owned. Replacing every key prevents a caller from passing a
     // plausible-looking admission into its child before the real lease exists.
@@ -1842,8 +2035,8 @@ export function commandEnvironment(
     NUMEXPR_NUM_THREADS: threads,
     RAYON_NUM_THREADS: threads,
     POLARS_MAX_THREADS: threads,
-    ...gpuBudgetEnvironment(reservation.device),
-  };
+    ...gpuEnvironment.value,
+  });
 }
 
 export function kernelTasksMax(manifest: ResourceManifest): number {
@@ -1984,43 +2177,63 @@ function admissionDescription(
   );
 }
 
-export async function checkJob(
+async function checkJobResult(
   manifest: ResourceManifest,
   options: ExecuteOptions = {},
-): Promise<ExecutionResult> {
+): Promise<Result<ExecutionResult, Error>> {
   const report = options.report ?? defaultReport;
   if (Bun.which("setsid") === null || Bun.which("taskset") === null) {
     report(
       `DENY job=${manifest.job_id} reason=setsid and taskset are required for enforcement`,
     );
-    return { ok: false, exitCode: 69, reason: "admission" };
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
-  const resolved = resolveEnforcement(
-    options.kernelEnforcement ?? probeKernelEnforcement(),
-    options.hostOptIn === undefined ? readHostOptIn() : options.hostOptIn,
-  );
-  if (!resolved.ok) {
-    report(`DENY job=${manifest.job_id} reason=${resolved.reason}`);
-    return { ok: false, exitCode: 69, reason: "admission" };
+  const hostOptIn =
+    options.hostOptIn === undefined ? readHostOptIn() : ok(options.hostOptIn);
+  if (hostOptIn.isErr()) return err(hostOptIn.error);
+  const kernel =
+    options.kernelEnforcement === undefined
+      ? probeKernelEnforcement()
+      : ok(options.kernelEnforcement);
+  if (kernel.isErr()) return err(kernel.error);
+  const resolved = resolveEnforcement(kernel.value, hostOptIn.value);
+  if (resolved.isErr()) return err(resolved.error);
+  if (!resolved.value.ok) {
+    report(`DENY job=${manifest.job_id} reason=${resolved.value.reason}`);
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
   const cwd = resolve(options.cwd ?? process.cwd());
-  const snapshot = options.snapshot ?? probeHostSnapshot(cwd);
+  const probedSnapshot =
+    options.snapshot === undefined
+      ? probeHostSnapshot(cwd)
+      : ok(options.snapshot);
+  if (probedSnapshot.isErr()) return err(probedSnapshot.error);
   const acquired = await acquireLease(
     manifest,
-    snapshot,
+    probedSnapshot.value,
     options.stateDirectory,
   );
-  if (!acquired.ok) {
-    report(`DENY job=${manifest.job_id} reason=${acquired.reason}`);
-    return { ok: false, exitCode: 69, reason: "admission" };
+  if (acquired.isErr()) return err(acquired.error);
+  if (!acquired.value.ok) {
+    report(`DENY job=${manifest.job_id} reason=${acquired.value.reason}`);
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
-  // Cleanup runs on return AND on throw, in the same order the prior try/finally gave — releaseLease
-  // is async, so this is an AsyncDisposable rather than the sync `using` used above.
-  await using _lease = { [Symbol.asyncDispose]: () => releaseLease(acquired) };
+  const lease = acquired.value;
   report(
-    `${admissionDescription(acquired, resolved.enforcement)} check_only=true`,
+    `${admissionDescription(lease, resolved.value.enforcement)} check_only=true`,
   );
-  return { ok: true, exitCode: 0 };
+  const released = await releaseLease(lease);
+  if (released.isErr()) return err(released.error);
+  return ok({ ok: true, exitCode: 0 });
+}
+
+export function checkJob(
+  manifest: ResourceManifest,
+  options: ExecuteOptions = {},
+): ResultAsync<ExecutionResult, Error> {
+  return fromAsyncThrowable(() => checkJobResult(manifest, options))()
+    .andThen((result) => result)
+    .mapErr(asError);
 }
 
 /**
@@ -2048,19 +2261,23 @@ async function monitorProcessGroup(
   return null;
 }
 
-export async function executeJob(
+async function executeJobResult(
   manifest: ResourceManifest,
   command: string[],
   options: ExecuteOptions = {},
-): Promise<ExecutionResult> {
+): Promise<Result<ExecutionResult, Error>> {
   const report = options.report ?? defaultReport;
   const cwd = resolve(options.cwd ?? process.cwd());
   if (command.length === 0 || command[0]?.trim() === "") {
-    throw new UsageError("a command is required unless --check-only is used");
+    return err(
+      new UsageError("a command is required unless --check-only is used"),
+    );
   }
   if (options.manifestSource === undefined) {
-    throw new UsageError(
-      "executeJob requires manifestSource from the exact manifest bytes read by the runner",
+    return err(
+      new UsageError(
+        "executeJob requires manifestSource from the exact manifest bytes read by the runner",
+      ),
     );
   }
   // Captured into its own binding: TypeScript's narrowing of `options.manifestSource` above does
@@ -2071,29 +2288,46 @@ export async function executeJob(
     report(
       `DENY job=${manifest.job_id} reason=setsid and taskset are required for enforcement`,
     );
-    return { ok: false, exitCode: 69, reason: "admission" };
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
-  const resolved = resolveEnforcement(
-    options.kernelEnforcement ?? probeKernelEnforcement(),
-    options.hostOptIn === undefined ? readHostOptIn() : options.hostOptIn,
-  );
-  if (!resolved.ok) {
-    report(`DENY job=${manifest.job_id} reason=${resolved.reason}`);
-    return { ok: false, exitCode: 69, reason: "admission" };
+  const hostOptIn =
+    options.hostOptIn === undefined ? readHostOptIn() : ok(options.hostOptIn);
+  if (hostOptIn.isErr()) return err(hostOptIn.error);
+  const kernel =
+    options.kernelEnforcement === undefined
+      ? probeKernelEnforcement()
+      : ok(options.kernelEnforcement);
+  if (kernel.isErr()) return err(kernel.error);
+  const resolved = resolveEnforcement(kernel.value, hostOptIn.value);
+  if (resolved.isErr()) return err(resolved.error);
+  if (!resolved.value.ok) {
+    report(`DENY job=${manifest.job_id} reason=${resolved.value.reason}`);
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
-  const enforcement = resolved.enforcement;
-  const snapshot = options.snapshot ?? probeHostSnapshot(cwd);
+  const enforcement = resolved.value.enforcement;
+  const probedSnapshot =
+    options.snapshot === undefined
+      ? probeHostSnapshot(cwd)
+      : ok(options.snapshot);
+  if (probedSnapshot.isErr()) return err(probedSnapshot.error);
   const acquired = await acquireLease(
     manifest,
-    snapshot,
+    probedSnapshot.value,
     options.stateDirectory,
   );
-  if (!acquired.ok) {
-    report(`DENY job=${manifest.job_id} reason=${acquired.reason}`);
-    return { ok: false, exitCode: 69, reason: "admission" };
+  if (acquired.isErr()) return err(acquired.error);
+  if (!acquired.value.ok) {
+    report(`DENY job=${manifest.job_id} reason=${acquired.value.reason}`);
+    return ok({ ok: false, exitCode: 69, reason: "admission" });
   }
 
-  const lease = acquired;
+  const lease = acquired.value;
+  const policy = resourcePolicy();
+  if (policy.isErr()) {
+    const released = await releaseLease(lease);
+    if (released.isErr()) return err(released.error);
+    return err(policy.error);
+  }
   const receipt = createAdmissionReceipt(
     options.manifestSource,
     lease.reservation,
@@ -2110,11 +2344,12 @@ export async function executeJob(
   let peakRssBytes = 0;
   let peakVramBytes: number | undefined;
   let lastGpuSampleAtMs = 0;
+  let signalFailure: Error | undefined;
   const onSample = (usage: GroupUsage): void => {
     peakRssBytes = Math.max(peakRssBytes, usage.rssBytes);
     if (lease.reservation.device.kind !== "gpu") return;
     const now = performance.now();
-    if (now - lastGpuSampleAtMs < resourcePolicy().gpu_vram_sample_interval_ms)
+    if (now - lastGpuSampleAtMs < policy.value.gpu_vram_sample_interval_ms)
       return;
     lastGpuSampleAtMs = now;
     const gpuUsage = sampleGpuComputeApps();
@@ -2126,22 +2361,38 @@ export async function executeJob(
   };
   const onTimeout = (): void => {
     walltimeFired = true;
-    if (pgid !== null) signalProcessGroup(pgid, "SIGTERM");
+    if (pgid !== null) {
+      const signaled = signalProcessGroup(pgid, "SIGTERM");
+      if (signaled.isErr()) signalFailure = signaled.error;
+    }
   };
   const onInterrupt = (): void => {
     interrupted = true;
-    if (pgid !== null) signalProcessGroup(pgid, "SIGTERM");
+    if (pgid !== null) {
+      const signaled = signalProcessGroup(pgid, "SIGTERM");
+      if (signaled.isErr()) signalFailure = signaled.error;
+    }
   };
   timeoutSignal.addEventListener("abort", onTimeout, { once: true });
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onInterrupt);
 
-  // Runs the launched command and returns its result, or `undefined` when nothing broke and the
-  // caller should report PASS. Kept as one nested closure (rather than executeJob's own early
-  // returns) so the cleanup step below can run in a plain `finally` with no control-flow
-  // statement in it: a pending job result here must still be overridable by a cleanup failure —
-  // see `cleanupFailed` below.
-  const runJob = async (): Promise<ExecutionResult | undefined> => {
+  // Runs the command and returns either its result or undefined when the caller should report
+  // PASS. Cleanup runs afterward and can override this result when it cannot release resources.
+  const runJob = async (): Promise<
+    Result<ExecutionResult | undefined, Error>
+  > => {
+    const environment = commandEnvironment(
+      manifest,
+      lease.reservation,
+      receipt,
+    );
+    if (environment.isErr()) {
+      report(
+        `ERROR job=${manifest.job_id} reason=launch detail=${environment.error.message}`,
+      );
+      return ok({ ok: false, exitCode: 70, reason: "launch" });
+    }
     const launched = fromThrowable(() => {
       // Sampled enforcement: no scope (scopeUnit stays null, so cleanup has none to stop and the
       // peak is the sampled one).
@@ -2157,7 +2408,7 @@ export async function executeJob(
       return Bun.spawn(argv, {
         cwd,
         env: {
-          ...commandEnvironment(manifest, lease.reservation, receipt),
+          ...environment.value,
           // What actually bounds this job, for a launcher that records provenance: under
           // "sampled" there is no scope, so the receipt's scope_unit names none (README).
           AGENT_RESOURCE_ENFORCEMENT: enforcement.kind,
@@ -2176,7 +2427,7 @@ export async function executeJob(
             : String(launched.error)
         }`,
       );
-      return { ok: false, exitCode: 70, reason: "launch" };
+      return ok({ ok: false, exitCode: 70, reason: "launch" });
     }
     const child = launched.value;
     const groupPid = child.pid;
@@ -2191,7 +2442,7 @@ export async function executeJob(
     });
     const interval = Math.max(
       10,
-      options.monitorIntervalMs ?? resourcePolicy().default_monitor_interval_ms,
+      options.monitorIntervalMs ?? policy.value.default_monitor_interval_ms,
     );
 
     const breach = await monitorProcessGroup(
@@ -2203,115 +2454,126 @@ export async function executeJob(
       onSample,
     );
 
+    if (signalFailure !== undefined) return err(signalFailure);
     if (walltimeFired || interrupted || breach !== null) {
-      await terminateProcessGroup(groupPid, manifest.cleanup.grace_seconds);
+      const terminated = await terminateProcessGroup(
+        groupPid,
+        manifest.cleanup.grace_seconds,
+      );
+      if (terminated.isErr()) return err(terminated.error);
       await exitedPromise.catch(() => 70);
-      let reason: "walltime" | "interrupt" | "memory" | "processes";
+      let reason: "walltime" | "interrupt" | "memory" | "processes" | undefined;
       if (walltimeFired) reason = "walltime";
       else if (interrupted) reason = "interrupt";
       else if (breach !== null) reason = breach;
-      else throw new StateError("monitor ended without a breach reason");
+      if (reason === undefined)
+        return err(new StateError("monitor ended without a breach reason"));
       const exitCode = reason === "walltime" ? 124 : 137;
       report(`BREACH job=${manifest.job_id} reason=${reason}`);
-      return { ok: false, exitCode, reason };
+      return ok({ ok: false, exitCode, reason });
     }
 
     await exitedPromise;
     if (processGroupUsage(groupPid).processes > 0) {
-      await terminateProcessGroup(groupPid, manifest.cleanup.grace_seconds);
+      const terminated = await terminateProcessGroup(
+        groupPid,
+        manifest.cleanup.grace_seconds,
+      );
+      if (terminated.isErr()) return err(terminated.error);
       report(`BREACH job=${manifest.job_id} reason=cleanup`);
-      return { ok: false, exitCode: 137, reason: "cleanup" };
+      return ok({ ok: false, exitCode: 137, reason: "cleanup" });
     }
     if (commandExitCode !== 0) {
       report(
         `EXIT job=${manifest.job_id} code=${commandExitCode} reason=command-exit`,
       );
-      return {
+      return ok({
         ok: false,
         exitCode: commandExitCode,
         reason: "command-exit",
-      };
+      });
     }
-    return undefined;
+    return ok(undefined);
   };
 
-  let jobResult: ExecutionResult | undefined;
   let cleanupFailed = false;
-  {
-    // Cleanup runs on return AND on throw, in the same order the prior try/finally gave: the
-    // block below is the sole scope `_cleanup` disposes at, so it fires exactly once, right after
-    // `runJob()` settles (normally or by throwing) and strictly before the `cleanupFailed` check
-    // that follows this block — never deferred to executeJob's own return, which would let that
-    // check run against a stale value.
-    await using _cleanup = {
-      [Symbol.asyncDispose]: async () => {
-        timeoutSignal.removeEventListener("abort", onTimeout);
-        process.off("SIGINT", onInterrupt);
-        process.off("SIGTERM", onInterrupt);
-        if (pgid !== null && processGroupUsage(pgid).processes > 0) {
-          await terminateProcessGroup(pgid, manifest.cleanup.grace_seconds);
-        }
-        // Read BEFORE scope teardown: MemoryPeak lives in the scope's cgroup, and stopping the
-        // scope releases that cgroup — see readScopeMemoryPeak's header comment.
-        const cgroupPeakBytes =
-          scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
-        const measuredPeak: MeasuredPeak = {
-          schema: 1,
-          job_id: manifest.job_id,
-          ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
-          ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
-          ...(peakVramBytes === undefined
-            ? {}
-            : {
-                vram_peak_measured_bytes: peakVramBytes,
-                vram_peak_source: "nvidia-smi" as const,
-              }),
-          released_at: Temporal.Now.instant().toString({
-            fractionalSecondDigits: 3,
-          }),
-        };
-        report(releaseDescription(measuredPeak));
-        writePeakArtifact(manifestSource.path, measuredPeak);
-        const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
-        const scopeStopped =
-          scopeUnit === null ? true : scopeCleanup(scopeUnit);
-        await releaseLease(lease);
-        // Overriding the job body's result is the point: a job that PASSED but left its systemd
-        // scope alive must not report success — the cleanup failure outranks the job result.
-        // Recorded here (a plain assignment, not a control-flow statement) and acted on AFTER
-        // this block, so it can override `jobResult` without an unsafe throw-during-disposal.
-        cleanupFailed = !scopeStopped;
-      },
-    };
-    jobResult = await runJob();
-  }
+  const jobResult = await fromAsyncThrowable(() => runJob())();
+  const cleanupResult = await fromAsyncThrowable(
+    async (): Promise<Result<void, Error>> => {
+      timeoutSignal.removeEventListener("abort", onTimeout);
+      process.off("SIGINT", onInterrupt);
+      process.off("SIGTERM", onInterrupt);
+      if (pgid !== null && processGroupUsage(pgid).processes > 0) {
+        const terminated = await terminateProcessGroup(
+          pgid,
+          manifest.cleanup.grace_seconds,
+        );
+        if (terminated.isErr()) return err(terminated.error);
+      }
+      // Read before scope teardown: MemoryPeak lives in the scope's cgroup.
+      const cgroupPeakBytes =
+        scopeUnit === null ? undefined : readScopeMemoryPeak(scopeUnit);
+      const measuredPeak: MeasuredPeak = {
+        schema: 1,
+        job_id: manifest.job_id,
+        ram_peak_measured_bytes: cgroupPeakBytes ?? peakRssBytes,
+        ram_peak_source: cgroupPeakBytes !== undefined ? "cgroup" : "sampled",
+        ...(peakVramBytes === undefined
+          ? {}
+          : {
+              vram_peak_measured_bytes: peakVramBytes,
+              vram_peak_source: "nvidia-smi" as const,
+            }),
+        released_at: Temporal.Now.instant().toString({
+          fractionalSecondDigits: 3,
+        }),
+      };
+      report(releaseDescription(measuredPeak));
+      writePeakArtifact(manifestSource.path, measuredPeak);
+      const scopeCleanup = options.systemdScopeCleanup ?? stopSystemdScope;
+      const scopeStopped = scopeUnit === null ? true : scopeCleanup(scopeUnit);
+      const released = await releaseLease(lease);
+      if (released.isErr()) return err(released.error);
+      cleanupFailed = !scopeStopped;
+      return ok(undefined);
+    },
+  )();
+  if (cleanupResult.isErr()) return err(asError(cleanupResult.error));
+  if (cleanupResult.value.isErr()) return err(cleanupResult.value.error);
   if (cleanupFailed) {
-    throw new StateError(
-      `failed to verify cleanup of systemd scope '${scopeUnit}'`,
+    return err(
+      new StateError(
+        `failed to verify cleanup of systemd scope '${scopeUnit}'`,
+      ),
     );
   }
-  if (jobResult !== undefined) return jobResult;
+  if (jobResult.isErr()) return err(asError(jobResult.error));
+  if (jobResult.value.isErr()) return err(jobResult.value.error);
+  if (jobResult.value.value !== undefined) return ok(jobResult.value.value);
   report(`PASS job=${manifest.job_id} code=0`);
-  return { ok: true, exitCode: 0 };
+  return ok({ ok: true, exitCode: 0 });
 }
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
+export function executeJob(
+  manifest: ResourceManifest,
+  command: string[],
+  options: ExecuteOptions = {},
+): ResultAsync<ExecutionResult, Error> {
+  return fromAsyncThrowable(() =>
+    executeJobResult(manifest, command, options),
+  )()
+    .andThen((result) => result)
+    .mapErr(asError);
+}
+
+function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
-function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
-}
-
-async function main(): Promise<void> {
+async function main(): Promise<Result<number, Error>> {
   const parsed = cli(
     {
       name: "agent-resource-run",
@@ -2323,7 +2585,7 @@ async function main(): Promise<void> {
           "Admit and run one bounded Linux job from a JSON resource envelope.",
       },
       flags: {
-        manifest: { type: nonEmptyString("--manifest") },
+        manifest: { type: String },
         // Lets one shared manifest file stand in for a whole resource CLASS (e.g. a
         // "cpu-8g.resource.json" template) rather than needing a fresh copy per invocation just
         // to get a unique job_id — decideAdmission() refuses two live reservations under the
@@ -2333,7 +2595,7 @@ async function main(): Promise<void> {
         // directory). The manifest's OWN embedded job_id still works unmodified when this flag
         // is omitted; this only overrides it, and validateJobId() applies the exact same
         // filesystem-safety rule the manifest field itself is checked against.
-        jobId: { type: nonEmptyString("--job-id") },
+        jobId: { type: String },
         checkOnly: { type: Boolean, default: false },
       },
     },
@@ -2342,61 +2604,75 @@ async function main(): Promise<void> {
   );
   // Fail closed before any manifest work: an invalid policy refuses every admission (after
   // cli() so --help still answers).
-  resourcePolicy();
+  const policy = resourcePolicy();
+  if (policy.isErr()) return err(policy.error);
   if (parsed.flags.manifest === undefined) {
-    throw new UsageError("--manifest is required");
+    return err(new UsageError("--manifest is required"));
+  }
+  if (parsed.flags.manifest === "") {
+    return err(new UsageError("--manifest requires a value"));
+  }
+  if (parsed.flags.jobId === "") {
+    return err(new UsageError("--job-id requires a value"));
   }
   const manifestPath = resolve(parsed.flags.manifest);
   const readResult = fromThrowable(() => readFileSync(manifestPath))();
   if (readResult.isErr()) {
-    throw new UsageError(
-      `cannot read manifest '${manifestPath}': ${
-        readResult.error instanceof Error
-          ? readResult.error.message
-          : String(readResult.error)
-      }`,
+    return err(
+      new UsageError(
+        `cannot read manifest '${manifestPath}': ${
+          readResult.error instanceof Error
+            ? readResult.error.message
+            : String(readResult.error)
+        }`,
+      ),
     );
   }
   const manifestBytes = readResult.value;
   const rawResult = jsonText.safeParse(manifestBytes.toString());
   if (!rawResult.success) {
-    throw new UsageError(
-      `cannot read manifest '${manifestPath}': ${rawResult.error.issues
-        .map((issue) => issue.message)
-        .join("; ")}`,
+    return err(
+      new UsageError(
+        `cannot read manifest '${manifestPath}': ${rawResult.error.issues
+          .map((issue) => issue.message)
+          .join("; ")}`,
+      ),
     );
   }
   const raw = rawResult.data;
   const parsedManifest = validateManifest(raw);
+  if (parsedManifest.isErr()) return err(parsedManifest.error);
   // manifestSource hashes the TEMPLATE file's own bytes, unmodified by --job-id: the receipt
   // then proves "this exact declared envelope shape" independent of which job identity a given
   // invocation supplied, and the receipt's separate `job_id` field still distinguishes them.
   const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
-  const manifest =
+  const jobId =
     parsed.flags.jobId === undefined
-      ? parsedManifest
-      : {
-          ...parsedManifest,
-          job_id: validateJobId(parsed.flags.jobId, "--job-id"),
-        };
+      ? ok(parsedManifest.value.job_id)
+      : validateJobId(parsed.flags.jobId, "--job-id");
+  if (jobId.isErr()) return err(jobId.error);
+  const manifest = { ...parsedManifest.value, job_id: jobId.value };
   const command = parsed._.map(String);
   if (parsed.flags.checkOnly && command.length > 0) {
-    throw new UsageError("--check-only does not accept a command");
+    return err(new UsageError("--check-only does not accept a command"));
   }
   const result = parsed.flags.checkOnly
     ? await checkJob(manifest)
     : await executeJob(manifest, command, { manifestSource });
-  process.exitCode = result.exitCode;
+  if (result.isErr()) return err(result.error);
+  return ok(result.value.exitCode);
 }
 
 if (import.meta.main) {
-  await main().catch((error) => {
-    const usage = error instanceof UsageError;
-    process.stderr.write(
-      `${usage ? "USAGE" : "ERROR"}: ${
-        error instanceof Error ? error.message : String(error)
-      }\n`,
-    );
-    process.exitCode = usage ? 2 : 70;
-  });
+  const result = await fromAsyncThrowable(() => main())()
+    .andThen((mainResult) => mainResult)
+    .mapErr(asError);
+  result.match(
+    (code) => process.exit(code),
+    (error) => {
+      const usage = error instanceof UsageError;
+      process.stderr.write(`${usage ? "USAGE" : "ERROR"}: ${error.message}\n`);
+      process.exit(usage ? 2 : 70);
+    },
+  );
 }

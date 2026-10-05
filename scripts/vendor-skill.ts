@@ -72,8 +72,6 @@ const USAGE =
   "Usage: bun scripts/vendor-skill.ts <owner/repo> --skill <name> [--skill <name>…] " +
   "[--force] [--dry-run] [--dotfiles <path>] [--home <path>]\n";
 
-class UsageError extends Error {}
-
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
@@ -89,15 +87,9 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
+    process.stderr.write(`unknown flag(s): --${flag}\n${USAGE}`);
+    process.exit(2);
   }
-}
-
-function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
 }
 
 /** Skill names this repo already owns; vendoring over one destroys it (see header note 3). */
@@ -170,13 +162,24 @@ function main(): void {
         skill: { type: [String] },
         force: { type: Boolean, default: false },
         dryRun: { type: Boolean, default: false },
-        dotfiles: { type: nonEmptyString("--dotfiles") },
-        home: { type: nonEmptyString("--home") },
+        dotfiles: { type: String },
+        home: { type: String },
       },
     },
     undefined,
     Bun.argv.slice(2),
   );
+
+  if (parsed.flags.dotfiles === "") {
+    fail(`--dotfiles requires a value\n${USAGE}`);
+    process.exitCode = 2;
+    return;
+  }
+  if (parsed.flags.home === "") {
+    fail(`--home requires a value\n${USAGE}`);
+    process.exitCode = 2;
+    return;
+  }
 
   const source = parsed._.source;
   const names = parsed.flags.skill.filter((n) => n !== "");
@@ -355,17 +358,15 @@ function main(): void {
 // is the sync equivalent of BG1's mandated `main().catch(...)`, a listener registered before
 // main() runs rather than a local try/catch wrapped around the call.
 if (import.meta.main) {
-  process.on("uncaughtException", (error) => {
-    if (error instanceof UsageError) {
-      fail(`${error.message}\n${USAGE}`);
-      process.exitCode = 2;
-    } else {
-      fail(`FATAL: ${error instanceof Error ? error.message : String(error)}`);
-      process.exitCode = 1;
-    }
-    process.exit(process.exitCode ?? 0);
-  });
-
-  main();
+  const outcome = await Promise.try(main).then(
+    () => ({ ok: true as const }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  if (!outcome.ok) {
+    fail(
+      `FATAL: ${outcome.error instanceof Error ? outcome.error.message : String(outcome.error)}`,
+    );
+    process.exit(1);
+  }
   process.exit(process.exitCode ?? 0);
 }

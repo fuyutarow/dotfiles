@@ -34,8 +34,8 @@ function eventAt(
   index: number,
 ): Record<string, unknown> {
   const event = trace.events[index];
-  if (event === undefined)
-    throw new Error(`trace fixture has no event ${index}`);
+  expect(event).toBeDefined();
+  if (event === undefined) return {};
   return event;
 }
 describe("programme-flow/v2", () => {

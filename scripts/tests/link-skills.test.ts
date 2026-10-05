@@ -142,9 +142,10 @@ describe("link-skills: fresh run", () => {
       out.indexOf(`skills/${n} ->`),
     );
     const [alpha, mid, zeta] = positions;
-    if (alpha === undefined || mid === undefined || zeta === undefined) {
-      throw new Error("expected all three fixture skills in the output");
-    }
+    expect(alpha).toBeDefined();
+    expect(mid).toBeDefined();
+    expect(zeta).toBeDefined();
+    if (alpha === undefined || mid === undefined || zeta === undefined) return;
     expect(alpha).toBeLessThan(mid);
     expect(mid).toBeLessThan(zeta);
     cleanup(dotfiles, home);

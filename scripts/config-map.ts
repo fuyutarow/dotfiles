@@ -14,7 +14,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { err, ok, type Result } from "neverthrow";
+import { errorMessage } from "../agents/hooks/attempt.ts";
 import { type Kind, type Surface, surfaces } from "./config-registry.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -62,7 +63,8 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -127,7 +129,7 @@ function render(rows: readonly Surface[]): string {
   return `${out.join("\n").trimStart()}\n`;
 }
 
-function main(): number {
+function main(): Result<number, Error> {
   const parsed = cli(
     {
       name: "config-map.ts",
@@ -155,7 +157,7 @@ function main(): number {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0)
-    throw new UsageError(`unexpected argument: ${parsed._[0]}`);
+    return err(new UsageError(`unexpected argument: ${parsed._[0]}`));
   const rows = surfaces();
   if (parsed.flags.check) {
     // Tracked files only — an untracked cache or editor file is not configuration. The same
@@ -165,7 +167,7 @@ function main(): number {
       timeout: 30_000,
     });
     if (ls.exitCode !== 0)
-      throw new Error(`git ls-files failed: ${ls.stderr.toString()}`);
+      return err(new Error(`git ls-files failed: ${ls.stderr.toString()}`));
     const glob = new Bun.Glob(CONFIG_GLOB);
     const files = ls.stdout
       .toString()
@@ -178,20 +180,24 @@ function main(): number {
         ? `config-map: every config file is registered (${rows.length} surfaces)\n`
         : `config-map: ${found.length} finding(s)\n`,
     );
-    return found.length === 0 ? 0 : 1;
+    return ok(found.length === 0 ? 0 : 1);
   }
   process.stdout.write(
     parsed.flags.json ? `${JSON.stringify(rows, null, 2)}\n` : render(rows),
   );
-  return 0;
+  return ok(0);
 }
 
 if (import.meta.main) {
-  const r = await attempt(main);
-  const code = r.ok ? r.value : 2;
-  if (!r.ok)
-    process.stderr.write(
-      `${r.error instanceof UsageError ? "usage" : "FATAL"}: ${errorMessage(r.error)}\n`,
-    );
+  const r = main();
+  const code = r.match(
+    (value) => value,
+    (error) => {
+      process.stderr.write(
+        `${error instanceof UsageError ? "usage" : "FATAL"}: ${errorMessage(error)}\n`,
+      );
+      return error instanceof UsageError ? 2 : 2;
+    },
+  );
   process.exit(code);
 }

@@ -184,18 +184,14 @@ test("prune: removes only dangling links INTO the repo, and retired links even i
 
 test("assertRoots: relative or foreign roots are refused before any mutation", () => {
   const foreign = tmp("not-a-repo-");
-  expect(() => {
-    assertRoots("/h", "dotfiles");
-  }).toThrow("DOTFILES is not absolute");
-  expect(() => {
-    assertRoots("h", REPO);
-  }).toThrow("HOME is not absolute");
-  expect(() => {
-    assertRoots("/h", foreign);
-  }).toThrow("not a dotfiles checkout");
-  expect(() => {
-    assertRoots("/h", REPO);
-  }).not.toThrow();
+  expect(assertRoots("/h", "dotfiles")?.message).toContain(
+    "DOTFILES is not absolute",
+  );
+  expect(assertRoots("h", REPO)?.message).toContain("HOME is not absolute");
+  expect(assertRoots("/h", foreign)?.message).toContain(
+    "not a dotfiles checkout",
+  );
+  expect(assertRoots("/h", REPO)).toBeUndefined();
 });
 
 describe("CLI", () => {

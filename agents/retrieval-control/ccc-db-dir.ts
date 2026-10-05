@@ -28,6 +28,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { err, ok, type Result } from "neverthrow";
 
 export const MAPPING_ENV = "COCOINDEX_CODE_DB_PATH_MAPPING";
 export const SETTINGS_DIR_NAME = ".cocoindex_code";
@@ -60,10 +61,12 @@ function resolveLikePython(path: string): string {
   }
 }
 
-// Throws on a malformed value, as ccc does — a mapping this module cannot parse is one the
-// daemon also refuses, and guessing past it would split the two apart.
-export function parseMapping(raw: string | undefined): PathMapping[] {
-  if (raw === undefined || raw.trim() === "") return [];
+// Returns an error for malformed values, as ccc does — a mapping this module cannot parse is one
+// the daemon also refuses, and guessing past it would split the two apart.
+export function parseMapping(
+  raw: string | undefined,
+): Result<PathMapping[], Error> {
+  if (raw === undefined || raw.trim() === "") return ok([]);
   const mappings: PathMapping[] = [];
   for (const piece of raw.split(",")) {
     const entry = piece.trim();
@@ -72,34 +75,40 @@ export function parseMapping(raw: string | undefined): PathMapping[] {
     const source = cut < 0 ? "" : entry.slice(0, cut);
     const target = cut < 0 ? "" : entry.slice(cut + 1);
     if (source === "" || target === "") {
-      throw new Error(
-        `${MAPPING_ENV}: invalid entry '${entry}', expected 'source=target'`,
+      return err(
+        new Error(
+          `${MAPPING_ENV}: invalid entry '${entry}', expected 'source=target'`,
+        ),
       );
     }
     if (!isAbsolute(source) || !isAbsolute(target)) {
-      throw new Error(`${MAPPING_ENV}: paths must be absolute, got '${entry}'`);
+      return err(
+        new Error(`${MAPPING_ENV}: paths must be absolute, got '${entry}'`),
+      );
     }
     mappings.push({
       source: resolveLikePython(source),
       target: resolveLikePython(target),
     });
   }
-  return mappings;
+  return ok(mappings);
 }
 
 export function resolveDbDir(
   projectRoot: string,
   env: Record<string, string | undefined> = process.env,
-): string {
+): Result<string, Error> {
   const root = resolveLikePython(projectRoot);
-  for (const { source, target } of parseMapping(env[MAPPING_ENV])) {
-    const rel = relative(source, root);
-    if (
-      rel === "" ||
-      (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel))
-    ) {
-      return rel === "" ? target : join(target, rel);
+  return parseMapping(env[MAPPING_ENV]).map((mappings) => {
+    for (const { source, target } of mappings) {
+      const rel = relative(source, root);
+      if (
+        rel === "" ||
+        (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel))
+      ) {
+        return rel === "" ? target : join(target, rel);
+      }
     }
-  }
-  return join(projectRoot, SETTINGS_DIR_NAME);
+    return join(projectRoot, SETTINGS_DIR_NAME);
+  });
 }

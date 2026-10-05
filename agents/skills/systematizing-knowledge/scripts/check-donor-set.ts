@@ -7,567 +7,583 @@ import { cli } from "cleye";
 type Severity = "PASS" | "WARN" | "FAIL" | "MISSING";
 
 type DonorRecord = Readonly<{
-	boundary: string;
-	consequence: string;
-	domain: string;
-	id: string;
-	locator: string;
-	preconditions: string;
-	relation: string;
-	roles: string;
-	scope: string;
+  boundary: string;
+  consequence: string;
+  domain: string;
+  id: string;
+  locator: string;
+  preconditions: string;
+  relation: string;
+  roles: string;
+  scope: string;
 }>;
 
 const requiredColumns = [
-	"Donor ID",
-	"Source / locator",
-	"Source domain",
-	"Source scope",
-	"Roles / entities",
-	"Relation",
-	"Preconditions",
-	"Observable consequence",
-	"Boundary / failure",
+  "Donor ID",
+  "Source / locator",
+  "Source domain",
+  "Source scope",
+  "Roles / entities",
+  "Relation",
+  "Preconditions",
+  "Observable consequence",
+  "Boundary / failure",
 ] satisfies readonly string[];
 
 function rejectPrototypeFlag(
-	type: "known-flag" | "unknown-flag" | "argument",
-	flag: string,
+  type: "known-flag" | "unknown-flag" | "argument",
+  flag: string,
 ): void {
-	if (type === "unknown-flag" && flag === "__proto__") {
-		throw new Error(`unknown option '--${flag}'`);
-	}
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
 }
 
+type Outcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
+
 function fieldPattern(label: string): RegExp {
-	const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-	return new RegExp(
-		String.raw`^\s*(?:[-*+]\s+|#{1,6}\s+)?(?:\*\*|__)?${escaped}(?:(?:\*\*|__)\s*[：:]|\s*[：:](?:\*\*|__)?)`,
-		"iu",
-	);
+  const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(
+    String.raw`^\s*(?:[-*+]\s+|#{1,6}\s+)?(?:\*\*|__)?${escaped}(?:(?:\*\*|__)\s*[：:]|\s*[：:](?:\*\*|__)?)`,
+    "iu",
+  );
 }
 
 function valueAfterColon(line: string): string {
-	const normalized = line.replaceAll("：", ":");
-	const index = normalized.indexOf(":");
-	return index === -1
-		? ""
-		: normalized
-				.slice(index + 1)
-				.trim()
-				.replace(/^(?:\*\*|__)\s*/u, "");
+  const normalized = line.replaceAll("：", ":");
+  const index = normalized.indexOf(":");
+  return index === -1
+    ? ""
+    : normalized
+        .slice(index + 1)
+        .trim()
+        .replace(/^(?:\*\*|__)\s*/u, "");
 }
 
 function readField(
-	lines: readonly string[],
-	label: string,
+  lines: readonly string[],
+  label: string,
 ): string | undefined {
-	const pattern = fieldPattern(label);
-	const line = lines.find((candidate) => pattern.test(candidate));
-	return line === undefined ? undefined : valueAfterColon(line);
+  const pattern = fieldPattern(label);
+  const line = lines.find((candidate) => pattern.test(candidate));
+  return line === undefined ? undefined : valueAfterColon(line);
 }
 
 function sectionBody(
-	lines: readonly string[],
-	heading: string,
+  lines: readonly string[],
+  heading: string,
 ): Readonly<{ count: number; lines: readonly string[] }> {
-	const escaped = heading.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-	const pattern = new RegExp(`^\\s*##\\s+${escaped}\\s*$`, "iu");
-	const indices = lines.flatMap((line, index) =>
-		pattern.test(line) ? [index] : [],
-	);
-	const start = indices[0];
-	if (start === undefined) return { count: 0, lines: [] };
-	const relativeEnd = lines
-		.slice(start + 1)
-		.findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
-	const end = relativeEnd === -1 ? lines.length : start + 1 + relativeEnd;
-	return { count: indices.length, lines: lines.slice(start + 1, end) };
+  const escaped = heading.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pattern = new RegExp(`^\\s*##\\s+${escaped}\\s*$`, "iu");
+  const indices = lines.flatMap((line, index) =>
+    pattern.test(line) ? [index] : [],
+  );
+  const start = indices[0];
+  if (start === undefined) return { count: 0, lines: [] };
+  const relativeEnd = lines
+    .slice(start + 1)
+    .findIndex((line) => /^\s*#{1,6}\s+/u.test(line));
+  const end = relativeEnd === -1 ? lines.length : start + 1 + relativeEnd;
+  return { count: indices.length, lines: lines.slice(start + 1, end) };
 }
 
 function placeholder(value: string): boolean {
-	return (
-		value.trim() === "" ||
-		/\[\.\.\.\]|\[…\]|\[ *\]/u.test(value) ||
-		/^(?:TBD|N\/?A|NA|未定|未記入|-|—|\?+)$/iu.test(value.trim())
-	);
+  return (
+    value.trim() === "" ||
+    /\[\.\.\.\]|\[…\]|\[ *\]/u.test(value) ||
+    /^(?:TBD|N\/?A|NA|未定|未記入|-|—|\?+)$/iu.test(value.trim())
+  );
 }
 
 function tableCells(line: string): string[] {
-	const trimmed = line.trim();
-	if (!trimmed.startsWith("|")) return [];
-	return trimmed
-		.replace(/^\|/u, "")
-		.replace(/\|$/u, "")
-		.split("|")
-		.map((cell) => cell.trim());
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) return [];
+  return trimmed
+    .replace(/^\|/u, "")
+    .replace(/\|$/u, "")
+    .split("|")
+    .map((cell) => cell.trim());
 }
 
 function separatorRow(cells: readonly string[]): boolean {
-	return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell));
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell));
 }
 
 function donorRecords(lines: readonly string[]): Readonly<{
-	findings: string[];
-	records: DonorRecord[];
+  findings: string[];
+  records: DonorRecord[];
 }> {
-	const findings: string[] = [];
-	const headerIndex = lines.findIndex((line) => {
-		const cells = tableCells(line);
-		return cells[0]?.toLowerCase() === "donor id";
-	});
-	if (headerIndex === -1) {
-		return {
-			findings: ["Donor records table is missing"],
-			records: [],
-		};
-	}
+  const findings: string[] = [];
+  const headerIndex = lines.findIndex((line) => {
+    const cells = tableCells(line);
+    return cells[0]?.toLowerCase() === "donor id";
+  });
+  if (headerIndex === -1) {
+    return {
+      findings: ["Donor records table is missing"],
+      records: [],
+    };
+  }
 
-	const header = tableCells(lines[headerIndex] ?? "");
-	if (
-		header.length !== requiredColumns.length ||
-		header.some((column, index) => column !== requiredColumns[index])
-	) {
-		findings.push(
-			`Donor records columns must be exactly: ${requiredColumns.join(" | ")}`,
-		);
-	}
+  const header = tableCells(lines[headerIndex] ?? "");
+  if (
+    header.length !== requiredColumns.length ||
+    header.some((column, index) => column !== requiredColumns[index])
+  ) {
+    findings.push(
+      `Donor records columns must be exactly: ${requiredColumns.join(" | ")}`,
+    );
+  }
 
-	const records: DonorRecord[] = [];
-	for (const line of lines.slice(headerIndex + 1)) {
-		if (/^\s*#{1,6}\s+/u.test(line)) break;
-		const cells = tableCells(line);
-		if (cells.length === 0 || separatorRow(cells)) continue;
-		if (cells.length !== requiredColumns.length) {
-			findings.push(
-				`Donor record has ${cells.length} cells; expected ${requiredColumns.length}`,
-			);
-			continue;
-		}
-		if (cells.some((cell) => placeholder(cell))) {
-			findings.push(
-				"Every donor record cell must be non-empty and non-placeholder",
-			);
-			continue;
-		}
-		const [
-			id,
-			locator,
-			domain,
-			scope,
-			roles,
-			relation,
-			preconditions,
-			consequence,
-			boundary,
-		] = cells;
-		if (
-			id === undefined ||
-			locator === undefined ||
-			domain === undefined ||
-			scope === undefined ||
-			roles === undefined ||
-			relation === undefined ||
-			preconditions === undefined ||
-			consequence === undefined ||
-			boundary === undefined
-		) {
-			findings.push("Donor record parsing failed despite a complete row");
-			continue;
-		}
-		records.push({
-			boundary,
-			consequence,
-			domain,
-			id,
-			locator,
-			preconditions,
-			relation,
-			roles,
-			scope,
-		});
-	}
-	if (records.length === 0)
-		findings.push("DONOR SET requires at least one donor record");
-	return { findings, records };
+  const records: DonorRecord[] = [];
+  for (const line of lines.slice(headerIndex + 1)) {
+    if (/^\s*#{1,6}\s+/u.test(line)) break;
+    const cells = tableCells(line);
+    if (cells.length === 0 || separatorRow(cells)) continue;
+    if (cells.length !== requiredColumns.length) {
+      findings.push(
+        `Donor record has ${cells.length} cells; expected ${requiredColumns.length}`,
+      );
+      continue;
+    }
+    if (cells.some((cell) => placeholder(cell))) {
+      findings.push(
+        "Every donor record cell must be non-empty and non-placeholder",
+      );
+      continue;
+    }
+    const [
+      id,
+      locator,
+      domain,
+      scope,
+      roles,
+      relation,
+      preconditions,
+      consequence,
+      boundary,
+    ] = cells;
+    if (
+      id === undefined ||
+      locator === undefined ||
+      domain === undefined ||
+      scope === undefined ||
+      roles === undefined ||
+      relation === undefined ||
+      preconditions === undefined ||
+      consequence === undefined ||
+      boundary === undefined
+    ) {
+      findings.push("Donor record parsing failed despite a complete row");
+      continue;
+    }
+    records.push({
+      boundary,
+      consequence,
+      domain,
+      id,
+      locator,
+      preconditions,
+      relation,
+      roles,
+      scope,
+    });
+  }
+  if (records.length === 0)
+    findings.push("DONOR SET requires at least one donor record");
+  return { findings, records };
 }
 
 function located(value: string): boolean {
-	const fileLine =
-		/(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/iu.test(value);
-	if (fileLine) return true;
+  const fileLine =
+    /(?:^|\s)[\w./-]+\.(?:md|txt|json|csv|pdf):\d+(?:-\d+)?\b/iu.test(value);
+  if (fileLine) return true;
 
-	const source = /\bdoi:\S+|https?:\/\/\S+/iu.test(value);
-	const localizer =
-		/(?:\b(?:p{1,2}\.?\s*\d+(?:-\d+)?|pages?\s+\d+(?:-\d+)?|§\s*[A-Za-z0-9.-]+|section\s+[A-Za-z0-9.-]+|table\s+[A-Za-z0-9.-]+|figure\s+[A-Za-z0-9.-]+|fig\.\s*[A-Za-z0-9.-]+)\b|#[A-Za-z0-9._-]+)/iu.test(
-			value,
-		);
-	return source && localizer;
+  const source = /\bdoi:\S+|https?:\/\/\S+/iu.test(value);
+  const localizer =
+    /(?:\b(?:p{1,2}\.?\s*\d+(?:-\d+)?|pages?\s+\d+(?:-\d+)?|§\s*[A-Za-z0-9.-]+|section\s+[A-Za-z0-9.-]+|table\s+[A-Za-z0-9.-]+|figure\s+[A-Za-z0-9.-]+|fig\.\s*[A-Za-z0-9.-]+)\b|#[A-Za-z0-9._-]+)/iu.test(
+      value,
+    );
+  return source && localizer;
 }
 
 function stableDonorId(value: string): boolean {
-	return /^[A-Za-z][A-Za-z0-9._-]*$/u.test(value);
+  return /^[A-Za-z][A-Za-z0-9._-]*$/u.test(value);
 }
 
 type TargetLeak = "mapping" | "prediction" | "support" | "thesis";
 
 function positiveTargetLeaks(line: string): readonly TargetLeak[] {
-	const value = line.replaceAll(/[*_`]/gu, " ").replaceAll(/\s+/gu, " ").trim();
-	const leaks: TargetLeak[] = [];
+  const value = line.replaceAll(/[*_`]/gu, " ").replaceAll(/\s+/gu, " ").trim();
+  const leaks: TargetLeak[] = [];
 
-	if (
-		/(?:\btarget\s+(?:mapping|correspondence)\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+(?:mapping|correspondence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:source|donor|role|relation)\b.{0,80}\bmaps?\s+(?:onto|to)\s+(?:the\s+)?target\b)/iu.test(
-			value,
-		) ||
-		/対象(?:への|の)?(?:対応付け|写像|マッピング).{0,80}(?:成立|妥当|支持|確認|実証)|(?:ソース|ドナー|役割|関係).{0,80}対象(?:へ|に)(?:対応付け|写像|マッピング)/u.test(
-			value,
-		)
-	) {
-		leaks.push("mapping");
-	}
-	if (
-		/(?:\btarget\s+prediction\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+prediction\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|confirmed|validated|demonstrated)\b|\bpredicts?\b.{0,80}\btarget\b)/iu.test(
-			value,
-		) ||
-		/対象(?:への|の)?予測.{0,80}(?:示す|予測|成立|支持|確認)/u.test(value)
-	) {
-		leaks.push("prediction");
-	}
-	if (
-		/\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|established|demonstrated|confirmed|validated)\b|\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s*(?::|=)\s*(?:SUPPORTED|ESTABLISHED|CONFIRMED|VALIDATED)\b/iu.test(
-			value,
-		) ||
-		/対象側(?:の)?(?:支持|証拠).{0,80}(?:支持|確立|実証|確認|検証)/u.test(value)
-	) {
-		leaks.push("support");
-	}
-	if (
-		/(?:\b(?:target\s+)?thesis(?:\s+claim)?\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:argues?|shows?|supports?|will)\b)/iu.test(
-			value,
-		) ||
-		/(?:対象(?:への|の)?仮説|仮説(?:主張)?).{0,80}(?:成立|主張|示す|支持|確認)/u.test(
-			value,
-		)
-	) {
-		leaks.push("thesis");
-	}
-	return leaks;
+  if (
+    /(?:\btarget\s+(?:mapping|correspondence)\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+(?:mapping|correspondence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:source|donor|role|relation)\b.{0,80}\bmaps?\s+(?:onto|to)\s+(?:the\s+)?target\b)/iu.test(
+      value,
+    ) ||
+    /対象(?:への|の)?(?:対応付け|写像|マッピング).{0,80}(?:成立|妥当|支持|確認|実証)|(?:ソース|ドナー|役割|関係).{0,80}対象(?:へ|に)(?:対応付け|写像|マッピング)/u.test(
+      value,
+    )
+  ) {
+    leaks.push("mapping");
+  }
+  if (
+    /(?:\btarget\s+prediction\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\btarget\s+prediction\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|confirmed|validated|demonstrated)\b|\bpredicts?\b.{0,80}\btarget\b)/iu.test(
+      value,
+    ) ||
+    /対象(?:への|の)?予測.{0,80}(?:示す|予測|成立|支持|確認)/u.test(value)
+  ) {
+    leaks.push("prediction");
+  }
+  if (
+    /\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s+(?:is|was|has been)\s+(?:now\s+)?(?:supported|established|demonstrated|confirmed|validated)\b|\b(?:target(?:-side)?\s+(?:support|evidence)|target\s+evidence)\s*(?::|=)\s*(?:SUPPORTED|ESTABLISHED|CONFIRMED|VALIDATED)\b/iu.test(
+      value,
+    ) ||
+    /対象側(?:の)?(?:支持|証拠).{0,80}(?:支持|確立|実証|確認|検証)/u.test(value)
+  ) {
+    leaks.push("support");
+  }
+  if (
+    /(?:\b(?:target\s+)?thesis(?:\s+claim)?\s*(?::|=)\s*(?!(?:no|none|missing|unassessed|untested|unverified|unknown)\b)\S|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:is|was|has been)\s+(?:now\s+)?(?:valid|established|supported|confirmed|demonstrated)\b|\b(?:target\s+)?thesis(?:\s+claim)?\s+(?:argues?|shows?|supports?|will)\b)/iu.test(
+      value,
+    ) ||
+    /(?:対象(?:への|の)?仮説|仮説(?:主張)?).{0,80}(?:成立|主張|示す|支持|確認)/u.test(
+      value,
+    )
+  ) {
+    leaks.push("thesis");
+  }
+  return leaks;
 }
 
-async function input(): Promise<string> {
-	const parsed = cli(
-		{
-			name: "check-donor-set.ts",
-			parameters: ["[donorSet]"],
-			strictFlags: true,
-			ignoreArgv: rejectPrototypeFlag,
-		},
-		undefined,
-		Bun.argv.slice(2),
-	);
-	if (parsed._.length > 1) {
-		throw new Error("check-donor-set.ts accepts at most one donor-set path");
-	}
-	const path = parsed._.donorSet;
-	if (path === undefined || path === "-") {
-		return new Response(Bun.stdin.stream()).text();
-	}
-	if (!existsSync(path)) {
-		throw new Error(`check-donor-set: file not found: ${path}`);
-	}
-	return Bun.file(path).text();
+async function input(): Promise<Outcome<string>> {
+  const parsed = cli(
+    {
+      name: "check-donor-set.ts",
+      parameters: ["[donorSet]"],
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+    },
+    undefined,
+    Bun.argv.slice(2),
+  );
+  if (parsed._.length > 1) {
+    return {
+      ok: false,
+      error: "check-donor-set.ts accepts at most one donor-set path",
+    };
+  }
+  const path = parsed._.donorSet;
+  if (path === undefined || path === "-") {
+    return { ok: true, value: await new Response(Bun.stdin.stream()).text() };
+  }
+  if (!existsSync(path)) {
+    return { ok: false, error: `check-donor-set: file not found: ${path}` };
+  }
+  return { ok: true, value: await Bun.file(path).text() };
 }
 
-async function main(): Promise<void> {
-	const text = await input();
-	const documentLines = text.split(/\r?\n/u);
-	let failures = 0;
-	let warnings = 0;
-	const report = (id: string, severity: Severity, message: string): void => {
-		process.stdout.write(`${id}  ${severity.padEnd(7)}  ${message}\n`);
-		if (severity === "FAIL" || severity === "MISSING") failures += 1;
-		if (severity === "WARN") warnings += 1;
-	};
+async function main(): Promise<Outcome<number>> {
+  const inputResult = await input();
+  if (!inputResult.ok) return { ok: false, error: inputResult.error };
+  const text = inputResult.value;
+  const documentLines = text.split(/\r?\n/u);
+  let failures = 0;
+  let warnings = 0;
+  const report = (id: string, severity: Severity, message: string): void => {
+    process.stdout.write(`${id}  ${severity.padEnd(7)}  ${message}\n`);
+    if (severity === "FAIL" || severity === "MISSING") failures += 1;
+    if (severity === "WARN") warnings += 1;
+  };
 
-	const donorSetHeadings = documentLines.flatMap((line, index) =>
-		/^\s*#\s+DONOR SET\s*$/iu.test(line) ? [index] : [],
-	);
-	const headingIndex = donorSetHeadings[0];
-	let lineOffset = 1;
-	let lines: readonly string[] = [];
-	if (headingIndex === undefined) {
-		report("D0", "MISSING", "DONOR SET heading is required");
-	} else {
-		if (donorSetHeadings.length > 1) {
-			report("D0", "FAIL", "DONOR SET heading must appear exactly once");
-		} else {
-			report("D0", "PASS", "DONOR SET heading present");
-		}
-		const relativeEnd = documentLines
-			.slice(headingIndex + 1)
-			.findIndex((line) => /^\s*#\s+/u.test(line));
-		const end =
-			relativeEnd === -1
-				? documentLines.length
-				: headingIndex + 1 + relativeEnd;
-		lines = documentLines.slice(headingIndex + 1, end);
-		lineOffset = headingIndex + 2;
-	}
+  const donorSetHeadings = documentLines.flatMap((line, index) =>
+    /^\s*#\s+DONOR SET\s*$/iu.test(line) ? [index] : [],
+  );
+  const headingIndex = donorSetHeadings[0];
+  let lineOffset = 1;
+  let lines: readonly string[] = [];
+  if (headingIndex === undefined) {
+    report("D0", "MISSING", "DONOR SET heading is required");
+  } else {
+    if (donorSetHeadings.length > 1) {
+      report("D0", "FAIL", "DONOR SET heading must appear exactly once");
+    } else {
+      report("D0", "PASS", "DONOR SET heading present");
+    }
+    const relativeEnd = documentLines
+      .slice(headingIndex + 1)
+      .findIndex((line) => /^\s*#\s+/u.test(line));
+    const end =
+      relativeEnd === -1
+        ? documentLines.length
+        : headingIndex + 1 + relativeEnd;
+    lines = documentLines.slice(headingIndex + 1, end);
+    lineOffset = headingIndex + 2;
+  }
 
-	const firstSection = lines.findIndex((line) => /^\s*##\s+/u.test(line));
-	const preamble = firstSection === -1 ? lines : lines.slice(0, firstSection);
-	const donorSection = sectionBody(lines, "Donor records");
-	const comparisonSection = sectionBody(lines, "Comparison");
-	const knowledgeSection = sectionBody(lines, "Knowledge state");
-	const handoffSection = sectionBody(lines, "Handoff");
-	for (const [heading, count] of [
-		["Donor records", donorSection.count],
-		["Comparison", comparisonSection.count],
-		["Knowledge state", knowledgeSection.count],
-		["Handoff", handoffSection.count],
-	] satisfies ReadonlyArray<readonly [string, number]>) {
-		if (count !== 1) {
-			report(
-				"D0",
-				count === 0 ? "MISSING" : "FAIL",
-				`${heading} section must appear exactly once`,
-			);
-		}
-	}
+  const firstSection = lines.findIndex((line) => /^\s*##\s+/u.test(line));
+  const preamble = firstSection === -1 ? lines : lines.slice(0, firstSection);
+  const donorSection = sectionBody(lines, "Donor records");
+  const comparisonSection = sectionBody(lines, "Comparison");
+  const knowledgeSection = sectionBody(lines, "Knowledge state");
+  const handoffSection = sectionBody(lines, "Handoff");
+  for (const [heading, count] of [
+    ["Donor records", donorSection.count],
+    ["Comparison", comparisonSection.count],
+    ["Knowledge state", knowledgeSection.count],
+    ["Handoff", handoffSection.count],
+  ] satisfies ReadonlyArray<readonly [string, number]>) {
+    if (count !== 1) {
+      report(
+        "D0",
+        count === 0 ? "MISSING" : "FAIL",
+        `${heading} section must appear exactly once`,
+      );
+    }
+  }
 
-	const requiredFields = [
-		["Transfer search question", preamble],
-		["Coverage contract", preamble],
-		["Selection rule", preamble],
-		["Common relational schema", comparisonSection.lines],
-		["Non-common structure", comparisonSection.lines],
-		["Retrieval-only cues", comparisonSection.lines],
-		["Single-donor limit", comparisonSection.lines],
-		["Known", knowledgeSection.lines],
-		["Uncertain", knowledgeSection.lines],
-		["Disputed", knowledgeSection.lines],
-		["Missing", knowledgeSection.lines],
-		["Handoff", handoffSection.lines],
-	] satisfies ReadonlyArray<readonly [string, readonly string[]]>;
-	const values = new Map<string, string>();
-	for (const [index, [label, fieldLines]] of requiredFields.entries()) {
-		const value = readField(fieldLines, label);
-		const id = `D${index + 1}`;
-		if (value === undefined) {
-			report(id, "MISSING", `${label}: required field not found`);
-		} else if (placeholder(value)) {
-			report(id, "FAIL", `${label}: value is blank or a placeholder`);
-		} else {
-			values.set(label, value);
-			report(id, "PASS", `${label}: present`);
-		}
-	}
+  const requiredFields = [
+    ["Transfer search question", preamble],
+    ["Coverage contract", preamble],
+    ["Selection rule", preamble],
+    ["Common relational schema", comparisonSection.lines],
+    ["Non-common structure", comparisonSection.lines],
+    ["Retrieval-only cues", comparisonSection.lines],
+    ["Single-donor limit", comparisonSection.lines],
+    ["Known", knowledgeSection.lines],
+    ["Uncertain", knowledgeSection.lines],
+    ["Disputed", knowledgeSection.lines],
+    ["Missing", knowledgeSection.lines],
+    ["Handoff", handoffSection.lines],
+  ] satisfies ReadonlyArray<readonly [string, readonly string[]]>;
+  const values = new Map<string, string>();
+  for (const [index, [label, fieldLines]] of requiredFields.entries()) {
+    const value = readField(fieldLines, label);
+    const id = `D${index + 1}`;
+    if (value === undefined) {
+      report(id, "MISSING", `${label}: required field not found`);
+    } else if (placeholder(value)) {
+      report(id, "FAIL", `${label}: value is blank or a placeholder`);
+    } else {
+      values.set(label, value);
+      report(id, "PASS", `${label}: present`);
+    }
+  }
 
-	const selection = values.get("Selection rule") ?? "";
-	if (
-		!/(?:relation|relationship|constraint|関係|制約)/iu.test(selection) ||
-		!/(?:\bnot\b|rather than|reject|instead of|ではなく|除外|拒否)/iu.test(
-			selection,
-		) ||
-		!/(?:surface|object name|vocabular|terminology|distance|表層|名称|語彙|距離)/iu.test(
-			selection,
-		)
-	) {
-		report(
-			"D14",
-			"FAIL",
-			"selection rule must privilege relations and reject surface-only matching",
-		);
-	} else {
-		report(
-			"D14",
-			"PASS",
-			"selection rule separates retrieval cues from relation fit",
-		);
-	}
+  const selection = values.get("Selection rule") ?? "";
+  if (
+    !/(?:relation|relationship|constraint|関係|制約)/iu.test(selection) ||
+    !/(?:\bnot\b|rather than|reject|instead of|ではなく|除外|拒否)/iu.test(
+      selection,
+    ) ||
+    !/(?:surface|object name|vocabular|terminology|distance|表層|名称|語彙|距離)/iu.test(
+      selection,
+    )
+  ) {
+    report(
+      "D14",
+      "FAIL",
+      "selection rule must privilege relations and reject surface-only matching",
+    );
+  } else {
+    report(
+      "D14",
+      "PASS",
+      "selection rule separates retrieval cues from relation fit",
+    );
+  }
 
-	const table = donorRecords(donorSection.lines);
-	for (const finding of table.findings) report("D15", "FAIL", finding);
-	if (table.findings.length === 0) {
-		report("D15", "PASS", `${table.records.length} donor records parsed`);
-	}
+  const table = donorRecords(donorSection.lines);
+  for (const finding of table.findings) report("D15", "FAIL", finding);
+  if (table.findings.length === 0) {
+    report("D15", "PASS", `${table.records.length} donor records parsed`);
+  }
 
-	const ids = new Set<string>();
-	const evidenceUnits = new Set<string>();
-	for (const record of table.records) {
-		if (!stableDonorId(record.id)) {
-			report(
-				"D16",
-				"FAIL",
-				`Donor ID must be a stable identifier: ${record.id}`,
-			);
-		}
-		if (ids.has(record.id)) {
-			report("D16", "FAIL", `duplicate donor ID: ${record.id}`);
-		}
-		ids.add(record.id);
-		const evidenceKey = record.locator.trim().toLowerCase();
-		if (evidenceUnits.has(evidenceKey)) {
-			report(
-				"D17",
-				"FAIL",
-				"donor IDs must resolve to distinct donor evidence units",
-			);
-		}
-		evidenceUnits.add(evidenceKey);
-		if (!located(record.locator)) {
-			report(
-				"D18",
-				"FAIL",
-				`donor relation requires a source locator: ${record.id}`,
-			);
-		}
-		if (
-			record.relation.length < 16 ||
-			record.scope.length < 8 ||
-			record.preconditions.length < 8 ||
-			record.boundary.length < 8
-		) {
-			report(
-				"D19",
-				"FAIL",
-				`donor relation requires a source-located relation and scope: ${record.id}`,
-			);
-		}
-	}
-	if (table.records.length > 0 && ids.size === table.records.length) {
-		report("D16", "PASS", "donor IDs are unique");
-	}
-	if (table.records.length > 0 && evidenceUnits.size === table.records.length) {
-		report("D17", "PASS", "donor evidence units are distinct");
-	}
+  const ids = new Set<string>();
+  const evidenceUnits = new Set<string>();
+  for (const record of table.records) {
+    if (!stableDonorId(record.id)) {
+      report(
+        "D16",
+        "FAIL",
+        `Donor ID must be a stable identifier: ${record.id}`,
+      );
+    }
+    if (ids.has(record.id)) {
+      report("D16", "FAIL", `duplicate donor ID: ${record.id}`);
+    }
+    ids.add(record.id);
+    const evidenceKey = record.locator.trim().toLowerCase();
+    if (evidenceUnits.has(evidenceKey)) {
+      report(
+        "D17",
+        "FAIL",
+        "donor IDs must resolve to distinct donor evidence units",
+      );
+    }
+    evidenceUnits.add(evidenceKey);
+    if (!located(record.locator)) {
+      report(
+        "D18",
+        "FAIL",
+        `donor relation requires a source locator: ${record.id}`,
+      );
+    }
+    if (
+      record.relation.length < 16 ||
+      record.scope.length < 8 ||
+      record.preconditions.length < 8 ||
+      record.boundary.length < 8
+    ) {
+      report(
+        "D19",
+        "FAIL",
+        `donor relation requires a source-located relation and scope: ${record.id}`,
+      );
+    }
+  }
+  if (table.records.length > 0 && ids.size === table.records.length) {
+    report("D16", "PASS", "donor IDs are unique");
+  }
+  if (table.records.length > 0 && evidenceUnits.size === table.records.length) {
+    report("D17", "PASS", "donor evidence units are distinct");
+  }
 
-	const singleLimit = values.get("Single-donor limit") ?? "";
-	const commonSchema = values.get("Common relational schema") ?? "";
-	if (table.records.length === 1) {
-		const bounded =
-			/^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/u.test(singleLimit) &&
-			/hypothesis seed/iu.test(singleLimit) &&
-			/no abstract schema|not (?:an? )?schema/iu.test(singleLimit) &&
-			/no(?: [^;,.]+)? target transport|target transport.*not established/iu.test(
-				singleLimit,
-			) &&
-			/^HYPOTHESIS SEED\s*(?:—|–|:|\s-\s)/u.test(commonSchema);
-		if (!bounded) {
-			report(
-				"D20",
-				"FAIL",
-				"single-donor DONOR SET requires an explicit non-generalization limit",
-			);
-		} else {
-			report(
-				"D20",
-				"WARN",
-				"single-donor limit retained; hypothesis seed only",
-			);
-		}
-	} else if (
-		table.records.length >= 2 &&
-		!/^NONE\s*(?:—|–|:|\s-\s).*(?:two|2|distinct|compared|複数|比較)/iu.test(
-			singleLimit,
-		)
-	) {
-		report(
-			"D20",
-			"FAIL",
-			"multi-donor DONOR SET must state why the single-donor limit does not apply",
-		);
-	} else if (table.records.length >= 2) {
-		report("D20", "PASS", "multiple donor evidence units compared");
-	}
+  const singleLimit = values.get("Single-donor limit") ?? "";
+  const commonSchema = values.get("Common relational schema") ?? "";
+  if (table.records.length === 1) {
+    const bounded =
+      /^SINGLE-DONOR LIMIT\s*(?:—|–|:|\s-\s)/u.test(singleLimit) &&
+      /hypothesis seed/iu.test(singleLimit) &&
+      /no abstract schema|not (?:an? )?schema/iu.test(singleLimit) &&
+      /no(?: [^;,.]+)? target transport|target transport.*not established/iu.test(
+        singleLimit,
+      ) &&
+      /^HYPOTHESIS SEED\s*(?:—|–|:|\s-\s)/u.test(commonSchema);
+    if (!bounded) {
+      report(
+        "D20",
+        "FAIL",
+        "single-donor DONOR SET requires an explicit non-generalization limit",
+      );
+    } else {
+      report(
+        "D20",
+        "WARN",
+        "single-donor limit retained; hypothesis seed only",
+      );
+    }
+  } else if (
+    table.records.length >= 2 &&
+    !/^NONE\s*(?:—|–|:|\s-\s).*(?:two|2|distinct|compared|複数|比較)/iu.test(
+      singleLimit,
+    )
+  ) {
+    report(
+      "D20",
+      "FAIL",
+      "multi-donor DONOR SET must state why the single-donor limit does not apply",
+    );
+  } else if (table.records.length >= 2) {
+    report("D20", "PASS", "multiple donor evidence units compared");
+  }
 
-	const targetMappingField = lines.some(
-		(line) =>
-			fieldPattern("Target mapping").test(line) ||
-			fieldPattern("Target relation").test(line) ||
-			fieldPattern("Target correspondence").test(line) ||
-			fieldPattern("Correspondence map").test(line) ||
-			fieldPattern("Attempted correspondence").test(line) ||
-			fieldPattern("Target prediction").test(line) ||
-			fieldPattern("Target-side prediction").test(line) ||
-			fieldPattern("Thesis claim").test(line) ||
-			fieldPattern("Target thesis").test(line),
-	);
-	const targetLeaks = lines.flatMap((line, index) =>
-		positiveTargetLeaks(line).map((kind) => ({
-			kind,
-			line: index + lineOffset,
-		})),
-	);
-	const mappingLeak = targetLeaks.some(
-		(leak) =>
-			leak.kind === "mapping" ||
-			leak.kind === "prediction" ||
-			leak.kind === "thesis",
-	);
-	if (targetMappingField || mappingLeak) {
-		const loci = targetLeaks
-			.filter((leak) => leak.kind !== "support")
-			.map((leak) => `${leak.kind}@line${leak.line}`)
-			.join(", ");
-		report(
-			"D21",
-			"FAIL",
-			`DONOR SET ends at donor relation; target mapping belongs to forging-novel-theses, as do target prediction and thesis claims${loci === "" ? "" : ` (${loci})`}`,
-		);
-	} else {
-		report(
-			"D21",
-			"PASS",
-			"DONOR SET contains no target mapping, prediction, or thesis claim",
-		);
-	}
+  const targetMappingField = lines.some(
+    (line) =>
+      fieldPattern("Target mapping").test(line) ||
+      fieldPattern("Target relation").test(line) ||
+      fieldPattern("Target correspondence").test(line) ||
+      fieldPattern("Correspondence map").test(line) ||
+      fieldPattern("Attempted correspondence").test(line) ||
+      fieldPattern("Target prediction").test(line) ||
+      fieldPattern("Target-side prediction").test(line) ||
+      fieldPattern("Thesis claim").test(line) ||
+      fieldPattern("Target thesis").test(line),
+  );
+  const targetLeaks = lines.flatMap((line, index) =>
+    positiveTargetLeaks(line).map((kind) => ({
+      kind,
+      line: index + lineOffset,
+    })),
+  );
+  const mappingLeak = targetLeaks.some(
+    (leak) =>
+      leak.kind === "mapping" ||
+      leak.kind === "prediction" ||
+      leak.kind === "thesis",
+  );
+  if (targetMappingField || mappingLeak) {
+    const loci = targetLeaks
+      .filter((leak) => leak.kind !== "support")
+      .map((leak) => `${leak.kind}@line${leak.line}`)
+      .join(", ");
+    report(
+      "D21",
+      "FAIL",
+      `DONOR SET ends at donor relation; target mapping belongs to forging-novel-theses, as do target prediction and thesis claims${loci === "" ? "" : ` (${loci})`}`,
+    );
+  } else {
+    report(
+      "D21",
+      "PASS",
+      "DONOR SET contains no target mapping, prediction, or thesis claim",
+    );
+  }
 
-	const targetSupport = lines.some(
-		(line) =>
-			fieldPattern("Target support").test(line) ||
-			fieldPattern("Target-side support").test(line) ||
-			fieldPattern("Target-side evidence").test(line) ||
-			fieldPattern("Target evidence").test(line),
-	);
-	const supportLeak = targetLeaks.some((leak) => leak.kind === "support");
-	if (targetSupport || supportLeak) {
-		report(
-			"D22",
-			"FAIL",
-			"source-side success cannot establish target-side support",
-		);
-	} else {
-		report("D22", "PASS", "target-side support is not asserted in DONOR SET");
-	}
+  const targetSupport = lines.some(
+    (line) =>
+      fieldPattern("Target support").test(line) ||
+      fieldPattern("Target-side support").test(line) ||
+      fieldPattern("Target-side evidence").test(line) ||
+      fieldPattern("Target evidence").test(line),
+  );
+  const supportLeak = targetLeaks.some((leak) => leak.kind === "support");
+  if (targetSupport || supportLeak) {
+    report(
+      "D22",
+      "FAIL",
+      "source-side success cannot establish target-side support",
+    );
+  } else {
+    report("D22", "PASS", "target-side support is not asserted in DONOR SET");
+  }
 
-	const handoff = values.get("Handoff") ?? "";
-	if (
-		!/forging-novel-theses/iu.test(handoff) ||
-		!/no target mapping/iu.test(handoff) ||
-		!/no .*target prediction/iu.test(handoff) ||
-		!/no .*thesis/iu.test(handoff) ||
-		!/no .*test verdict/iu.test(handoff)
-	) {
-		report(
-			"D23",
-			"FAIL",
-			"handoff must stop before target mapping, prediction, thesis, and test verdict",
-		);
-	} else {
-		report("D23", "PASS", "handoff stops at forging-novel-theses input");
-	}
+  const handoff = values.get("Handoff") ?? "";
+  if (
+    !/forging-novel-theses/iu.test(handoff) ||
+    !/no target mapping/iu.test(handoff) ||
+    !/no .*target prediction/iu.test(handoff) ||
+    !/no .*thesis/iu.test(handoff) ||
+    !/no .*test verdict/iu.test(handoff)
+  ) {
+    report(
+      "D23",
+      "FAIL",
+      "handoff must stop before target mapping, prediction, thesis, and test verdict",
+    );
+  } else {
+    report("D23", "PASS", "handoff stops at forging-novel-theses input");
+  }
 
-	process.stdout.write("----\n");
-	process.stdout.write(
-		`DONOR SET: FAIL=${failures} WARN=${warnings} donors=${table.records.length} (structural/mechanical floor only; does not establish schema quality or target fit)\n`,
-	);
-	process.exit(failures === 0 ? 0 : 1);
+  process.stdout.write("----\n");
+  process.stdout.write(
+    `DONOR SET: FAIL=${failures} WARN=${warnings} donors=${table.records.length} (structural/mechanical floor only; does not establish schema quality or target fit)\n`,
+  );
+  return { ok: true, value: failures === 0 ? 0 : 1 };
 }
 
-await main().catch((error) => {
-	process.stderr.write(
-		`FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-	);
-	process.exit(2);
-});
+const result = await Promise.try(main).then(
+  (value): Outcome<number> => value,
+  (error: unknown): Outcome<number> => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  }),
+);
+if (!result.ok) {
+  process.stderr.write(`FATAL: ${result.error}\n`);
+  process.exit(2);
+}
+process.exit(result.value);

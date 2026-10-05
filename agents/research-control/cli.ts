@@ -4,12 +4,16 @@ import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { jsonText } from "../hooks/zod.ts";
 import { checkTrace } from "./trace.ts";
 
-class UsageError extends Error {}
+let argvError: string | undefined;
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__")
-    throw new UsageError(`unknown option '--${flag}'`);
+    argvError = `unknown option '--${flag}'`;
 }
 async function main(): Promise<void> {
+  if (Bun.argv.slice(2).includes("--__proto__")) {
+    process.stderr.write("FATAL: unknown option '--__proto__'\n");
+    process.exit(2);
+  }
   const parsed = cli(
     {
       name: "research-section-trace",
@@ -20,23 +24,35 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length !== 1)
-    throw new UsageError(
-      "research-section-trace accepts exactly one trace path",
+  if (argvError !== undefined) {
+    process.stderr.write(`FATAL: ${argvError}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  if (parsed._.length !== 1) {
+    process.stderr.write(
+      "FATAL: research-section-trace accepts exactly one trace path\n",
     );
+    process.exitCode = 2;
+    return;
+  }
   const traceText = await attempt(() =>
     Bun.file(resolve(parsed._.trace)).text(),
   );
   if (!traceText.ok) {
-    throw new UsageError(
-      `trace is unreadable JSON: ${errorMessage(traceText.error)}`,
+    process.stderr.write(
+      `FATAL: trace is unreadable JSON: ${errorMessage(traceText.error)}\n`,
     );
+    process.exitCode = 2;
+    return;
   }
   const parsedTrace = jsonText.safeParse(traceText.value);
   if (!parsedTrace.success) {
-    throw new UsageError(
-      `trace is unreadable JSON: ${parsedTrace.error.issues[0]?.message ?? "invalid JSON"}`,
+    process.stderr.write(
+      `FATAL: trace is unreadable JSON: ${parsedTrace.error.issues[0]?.message ?? "invalid JSON"}\n`,
     );
+    process.exitCode = 2;
+    return;
   }
   const result = checkTrace(parsedTrace.data);
   process.stdout.write(`${JSON.stringify(result)}\n`);

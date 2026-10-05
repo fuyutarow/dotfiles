@@ -41,3 +41,5 @@ brew "tldr"         # better man (h)
 brew "shfmt"        # shell formatter — `mise run fmt:sh` / `fmt:check` / `lint:sh` (file discovery); core
                     # since 2026-10-06: every machine that edits dotfiles runs `mise run lint`
 brew "shellcheck"   # bash static analysis — `mise run lint:sh`; core with shfmt (same reason)
+brew "kondo"        # build-artifact reclaim (`mise run reclaim:builds|pick`); core since 2026-10-06: rented boxes
+                    # are the ones that fill up, and `mise run reclaim` failed on Vast with "kondo: not found"

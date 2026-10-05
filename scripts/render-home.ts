@@ -97,13 +97,13 @@ const overlayPath =
   process.env.CLAUDE_SETTINGS_PRIVATE ??
   `${home}/.claude/settings.private.json`;
 
-function readJson(path: string): Record<string, unknown> {
+function readJson(path: string): Record<string, unknown> | Error {
   const decoded = jsonText.safeParse(readFileSync(path, "utf8"));
   if (!decoded.success) {
-    throw new Error(decoded.error.issues.map((i) => i.message).join("; "));
+    return new Error(decoded.error.issues.map((i) => i.message).join("; "));
   }
   const parsed = obj(decoded.data);
-  if (parsed === undefined) throw new Error("not a JSON object");
+  if (parsed === undefined) return new Error("not a JSON object");
   return parsed;
 }
 
@@ -130,9 +130,10 @@ type Output = { dest: string; text: string; from: string };
 
 // ── inputs ───────────────────────────────────────────────────────────────────────────────────
 const baseRead = await attempt(() => readJson(basePath));
-if (!baseRead.ok) {
+if (!baseRead.ok || baseRead.value instanceof Error) {
+  const error = baseRead.ok ? baseRead.value : baseRead.error;
   fatal(
-    `FATAL: cannot read base settings ${basePath} — ${errorMessage(baseRead.error)}`,
+    `FATAL: cannot read base settings ${basePath} — ${errorMessage(error)}`,
   );
 }
 
@@ -142,12 +143,17 @@ if (existsSync(overlayPath)) {
   const overlayRead = await attempt(() => readJson(overlayPath));
   // Hard failure, not a skip: a malformed overlay means the private rules (which include
   // soft_deny entries protecting a court-of-record file) would vanish without a word.
-  if (!overlayRead.ok) {
+  if (!overlayRead.ok || overlayRead.value instanceof Error) {
+    const error = overlayRead.ok ? overlayRead.value : overlayRead.error;
     fatal(
-      `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(overlayRead.error)}`,
+      `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(error)}`,
       "  refusing to render settings that would silently drop the private rules",
     );
   }
+  if (overlayRead.value instanceof Error)
+    fatal(
+      `FATAL: private overlay ${overlayPath} is not readable JSON — ${errorMessage(overlayRead.value)}`,
+    );
   overlay = overlayRead.value;
   overlayKeys = Object.keys(overlay).toSorted();
 }
@@ -198,8 +204,9 @@ const outputs: Output[] = [
 // ── ~/.codex/hooks.json ──────────────────────────────────────────────────────────────────────
 const codexPath = `${dotfiles}/agents/codex/hooks.json`;
 const codex = await attempt(() => readJson(codexPath));
-if (!codex.ok) {
-  fatal(`FATAL: cannot read ${codexPath} — ${errorMessage(codex.error)}`);
+if (!codex.ok || codex.value instanceof Error) {
+  const error = codex.ok ? codex.value : codex.error;
+  fatal(`FATAL: cannot read ${codexPath} — ${errorMessage(error)}`);
 }
 outputs.push({
   dest: `${home}/.codex/hooks.json`,

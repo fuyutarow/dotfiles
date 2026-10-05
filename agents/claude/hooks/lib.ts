@@ -9,7 +9,6 @@
 //   - Stop guard block    = exit 2 + stderr; never mix the two channels
 
 import { readFileSync } from "node:fs";
-import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 
 // The protocol primitives are vendor-neutral and live with the portable hooks; re-exported so
@@ -31,14 +30,16 @@ function entryOf(line: unknown): TranscriptEntry {
 
 // Transcript is JSONL; skip malformed lines rather than fail the whole read. An unreadable
 // file still throws (rejects), exactly as the synchronous read did.
-export async function readTranscript(path: string): Promise<TranscriptEntry[]> {
-  const entries: TranscriptEntry[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (line.trim() === "") continue;
-    const parsed = await attempt(() => parseJson(line));
-    if (parsed.ok) entries.push(entryOf(parsed.value));
-  }
-  return entries;
+export function readTranscript(path: string): Promise<TranscriptEntry[]> {
+  return Promise.try(() => {
+    const entries: TranscriptEntry[] = [];
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (line.trim() === "") continue;
+      const parsed = parseJson(line);
+      if (parsed !== undefined) entries.push(entryOf(parsed));
+    }
+    return entries;
+  });
 }
 
 function textBlocks(content: unknown): string[] {

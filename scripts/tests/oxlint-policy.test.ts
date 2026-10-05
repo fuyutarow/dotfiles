@@ -24,7 +24,7 @@ const Report = z.looseObject({
 });
 
 const loaded = await loadPolicy();
-if (!loaded.ok) throw new Error(`oxlint-policy.toml: ${loaded.error}`);
+if (!loaded.ok) expect.unreachable(`oxlint-policy.toml: ${loaded.error}`);
 const policy = loaded.value;
 const scratch = mkdtempSync(join(tmpdir(), "oxlint-policy-"));
 afterAll(() => {
@@ -40,7 +40,7 @@ function lint(rule: CustomRule, which: "bad" | "good", i: number) {
   );
   const parsed = jsonOf(Report).safeParse(r.stdout.toString());
   if (!parsed.success)
-    throw new Error(
+    return expect.unreachable(
       `oxlint gave no JSON report (exit ${r.exitCode}): ${r.stderr.toString()}`,
     );
   return {

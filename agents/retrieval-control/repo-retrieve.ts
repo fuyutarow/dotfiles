@@ -58,6 +58,13 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
 import { z } from "../hooks/zod.ts";
 import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
+import {
   checkIndexFreshness,
   citationToken,
   findRegisteredProject,
@@ -66,7 +73,9 @@ import {
 } from "./ccc-index.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
 import { findDefinitions, refreshCatalog, renderCards } from "./definitions.ts";
-import { attempt } from "../hooks/attempt.ts";
+
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
 
 const ROUTES = [
   "concept",
@@ -118,23 +127,71 @@ type RgRoute = "literal" | "exhaustive" | "files";
 // See runCccGrep for why exact-whole-output equality is used instead of a substring test.
 const CCC_GREP_NO_MATCH_TEXT = "No matches found.";
 
-function positiveInteger(name: string): (value: string) => number {
-  return (value) => {
-    const parsed = Number(value);
-    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-      throw new Error(`--${name} must be a positive integer`);
+const rawString = (value: string): string => value;
+
+const VALUE_FLAGS: Record<string, string> = {
+  "--query": "query",
+  "-q": "query",
+  "--path": "path",
+  "-p": "path",
+  "--project": "project",
+  "--glob": "glob",
+  "-g": "glob",
+  "--limit": "limit",
+  "--timeout-ms": "timeout-ms",
+  "--timeoutMs": "timeout-ms",
+  "--context": "context",
+};
+const NUMERIC_VALUE_FLAGS = new Set([
+  "--limit",
+  "--timeout-ms",
+  "--timeoutMs",
+  "--context",
+]);
+
+function normalizeNegativeNumericValues(argv: string[]): string[] {
+  const normalized: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? "";
+    const next = argv[index + 1];
+    if (
+      NUMERIC_VALUE_FLAGS.has(token) &&
+      next !== undefined &&
+      /^-\d+$/u.test(next)
+    ) {
+      normalized.push(`${token}=${next}`);
+      index += 1;
+      continue;
     }
-    return parsed;
-  };
+    normalized.push(token);
+  }
+  return normalized;
 }
 
-function nonEmptyString(name: string): (value: string) => string {
-  return (value) => {
-    if (value === "") {
-      throw new Error(`--${name} requires a value`);
+function missingFlagValue(argv: string[]): Error | undefined {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? "";
+    if (token === "--") break;
+    const name = VALUE_FLAGS[token];
+    if (name === undefined) continue;
+    const value = argv[index + 1];
+    if (
+      value === undefined ||
+      (value.startsWith("-") && !NUMERIC_VALUE_FLAGS.has(token))
+    ) {
+      return new Error(`--${name} requires a value`);
     }
-    return value;
-  };
+  }
+  return undefined;
+}
+
+let argumentError: Error | undefined;
+let commandResult: Result<number, Error> = ok(0);
+
+async function recordResult(
+  result: Promise<Result<number, Error>>,
+): Promise<void> {
+  commandResult = await result;
 }
 
 // Cleye 2.6.0's strictFlags misses --__proto__; reject only that prototype-sensitive name before
@@ -145,7 +202,7 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    argumentError = new Error(`unknown option '--${flag}'`);
   }
 }
 
@@ -157,12 +214,12 @@ const GLOB_MAGIC = /[*?[\]{}]/u;
 // symlink to an outside directory from accidentally widening the search scope.
 // This is accidental-scope normalization, not a hostile TOCTOU security boundary: the filesystem
 // may change after these checks and before ccc consumes the resulting glob.
-async function cccSearchPath(project: string, path: string): Promise<string> {
+function cccSearchPath(project: string, path: string): string {
   if (GLOB_MAGIC.test(path)) return path;
 
   // A nonexistent path is still a caller-supplied file/path glob. Do not invent a broader
   // recursive scope for it.
-  const r = await attempt(() => {
+  const r = fromThrowable(() => {
     const projectPath = realpathSync(project);
     const candidate = realpathSync(resolve(projectPath, path));
     const insideProject = relative(projectPath, candidate);
@@ -175,33 +232,42 @@ async function cccSearchPath(project: string, path: string): Promise<string> {
       return path;
     }
     return `${insideProject !== "" ? insideProject : "."}/**`;
-  });
-  return r.ok ? r.value : path;
+  }, asError)();
+  return r.match(
+    (value) => value,
+    () => path,
+  );
 }
 
-function exactlyOneQuery(route: string, queries: string[]): string {
+function exactlyOneQuery(
+  route: string,
+  queries: string[],
+): Result<string, Error> {
   const query = queries[0];
   if (queries.length !== 1 || query === undefined || query.trim() === "") {
-    throw new Error(`${route} requires exactly one non-empty --query`);
+    return err(new Error(`${route} requires exactly one non-empty --query`));
   }
-  return query;
+  return ok(query);
 }
 
-function atMostOnePath(route: string, paths: string[]): void {
+function atMostOnePath(route: string, paths: string[]): Result<void, Error> {
   if (paths.length > 1) {
-    throw new Error(`${route} accepts at most one --path glob`);
+    return err(new Error(`${route} accepts at most one --path glob`));
   }
+  return ok();
 }
 
 // --project selects the working directory for the backend. --path remains a filter INSIDE it.
 // Keep the default cwd behavior for callers that do not select another project.
-function targetProject(path: string | undefined): string {
-  if (path === undefined) return process.cwd();
-  const target = realpathSync(resolve(path));
-  if (!statSync(target).isDirectory()) {
-    throw new Error(`--project must name a directory: ${path}`);
-  }
-  return target;
+function targetProject(path: string | undefined): Result<string, Error> {
+  if (path === undefined) return ok(process.cwd());
+  const target = fromThrowable(() => realpathSync(resolve(path)), asError)();
+  if (target.isErr()) return err(target.error);
+  const stat = fromThrowable(() => statSync(target.value), asError)();
+  if (stat.isErr()) return err(stat.error);
+  if (!stat.value.isDirectory())
+    return err(new Error(`--project must name a directory: ${path}`));
+  return ok(target.value);
 }
 
 function cccResultCount(stdout: string): number {
@@ -220,9 +286,11 @@ function rgFlags(values: {
   limit?: number | undefined;
   multiline?: boolean | undefined;
   multilineDotall?: boolean | undefined;
-}): string[] {
+}): Result<string[], Error> {
   if (values.filesWithMatches === true && values.count === true) {
-    throw new Error("--files-with-matches and --count are mutually exclusive");
+    return err(
+      new Error("--files-with-matches and --count are mutually exclusive"),
+    );
   }
 
   const flags: string[] = ["--color", "never"];
@@ -256,7 +324,7 @@ function rgFlags(values: {
   if (values.limit !== undefined)
     flags.push("--max-count", String(values.limit));
   for (const glob of values.glob ?? []) flags.push("--glob", glob);
-  return flags;
+  return ok(flags);
 }
 
 async function runCccSearch(
@@ -268,19 +336,23 @@ async function runCccSearch(
   refresh: boolean,
   cwd: string,
   explicitProject: boolean,
-): Promise<number> {
+): Promise<Result<number, Error>> {
   const project = findRegisteredProject(cwd);
   if (project === null || (explicitProject && project !== cwd)) {
-    throw new Error(
-      `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
-        "run ccc init/index or use an explicitly lexical route",
+    return err(
+      new Error(
+        `${route} requested, but ${cwd} is not ccc-registered at that project root; ` +
+          "run ccc init/index or use an explicitly lexical route",
+      ),
     );
   }
 
-  const freshness = await checkIndexFreshness(project, route);
+  const freshnessResult = await checkIndexFreshness(project, route);
+  if (freshnessResult.isErr()) return err(freshnessResult.error);
+  const freshness = freshnessResult.value;
   if (freshness.status === "stale") {
     process.stderr.write(freshness.message);
-    return 3;
+    return ok(3);
   }
   // freshness.status === "fresh" here -- the branch above returns unconditionally. A watermark
   // can only reach this point if checkIndexFreshness confirmed source === "index" (a legacy
@@ -312,40 +384,51 @@ async function runCccSearch(
     `head=${headLabel(freshness.watermark.head)} cite=${citationToken(freshness.watermark)}`;
 
   const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return err(ccc.error);
   const statusTimeoutMs = Math.min(timeoutMs, 5_000);
-  const status = await runChildCaptured(
-    [ccc, "daemon", "status"],
-    statusTimeoutMs,
-    false,
-    project,
-  );
+  const statusResult = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [ccc.value, "daemon", "status"],
+        statusTimeoutMs,
+        false,
+        project,
+      ),
+    asError,
+  )();
+  if (statusResult.isErr()) return err(statusResult.error);
+  const status = statusResult.value;
   if (status.exitCode !== 0) {
     process.stderr.write(
       `FATAL: could not read ccc daemon status before ${route} search\n`,
     );
-    return status.exitCode;
+    return ok(status.exitCode);
   }
   if (status.stdout.includes(`${project} [indexing]`)) {
     process.stderr.write(
       `RESULT: INDEXING route=${route} engine=ccc project=${project}; ` +
         "wait for ccc daemon status to report [idle], then retry\n",
     );
-    return 75;
+    return ok(75);
   }
-  const cccPath =
-    path === undefined ? undefined : await cccSearchPath(project, path);
+  const cccPath = path === undefined ? undefined : cccSearchPath(project, path);
   let matchedQueries = 0;
 
   for (const [index, query] of queries.entries()) {
-    const searchArgs = [ccc, "search", query, "--limit", String(limit)];
+    const searchArgs = [ccc.value, "search", query, "--limit", String(limit)];
     if (cccPath !== undefined) searchArgs.push("--path", cccPath);
     if (refresh && index === 0) searchArgs.push("--refresh");
 
     process.stderr.write(
       `ROUTE: ${route} -> ccc search (${index + 1}/${queries.length}) project=${project}\n`,
     );
-    const result = await runChildCaptured(searchArgs, timeoutMs, true, project);
-    if (result.exitCode !== 0) return result.exitCode;
+    const searchResult = await fromAsyncThrowable(
+      () => runChildCaptured(searchArgs, timeoutMs, true, project),
+      asError,
+    )();
+    if (searchResult.isErr()) return err(searchResult.error);
+    const result = searchResult.value;
+    if (result.exitCode !== 0) return ok(result.exitCode);
     if (cccResultCount(result.stdout) > 0) matchedQueries += 1;
   }
 
@@ -355,13 +438,13 @@ async function runCccSearch(
         `exit 0 with no result blocks is not PASS and does not by itself prove absence; ` +
         `${confidence}\n`,
     );
-    return 1;
+    return ok(1);
   }
   process.stdout.write(
     `RESULT: PASS route=${route} engine=ccc queries=${queries.length} ` +
       `queries_with_hits=${matchedQueries} ${confidence}\n`,
   );
-  return 0;
+  return ok(0);
 }
 
 async function runRg(
@@ -371,18 +454,21 @@ async function runRg(
   values: Parameters<typeof rgFlags>[0],
   timeoutMs: number,
   cwd: string,
-): Promise<number> {
+): Promise<Result<number, Error>> {
   const rg = requireExecutable("rg");
+  if (rg.isErr()) return err(rg.error);
+  const flags = rgFlags(values);
+  if (flags.isErr()) return err(flags.error);
   let rgArgs: string[];
   if (route === "files") {
-    rgArgs = [rg, "--files", ...rgFlags(values), ...paths];
+    rgArgs = [rg.value, "--files", ...flags.value, ...paths];
   } else {
     const fixedStrings = route === "literal" ? ["--fixed-strings"] : [];
     rgArgs = [
-      rg,
+      rg.value,
       ...fixedStrings,
       "--line-number",
-      ...rgFlags(values),
+      ...flags.value,
       "--",
       query ?? "",
       ...paths,
@@ -390,13 +476,18 @@ async function runRg(
   }
 
   process.stderr.write(`ROUTE: ${route} -> rg project=${cwd}\n`);
-  const exitCode = await runChild(rgArgs, timeoutMs, cwd);
+  const child = await fromAsyncThrowable(
+    () => runChild(rgArgs, timeoutMs, cwd),
+    asError,
+  )();
+  if (child.isErr()) return err(child.error);
+  const exitCode = child.value;
   if (exitCode === 0) {
     process.stdout.write(`RESULT: PASS route=${route} engine=rg\n`);
   } else if (exitCode === 1) {
     process.stderr.write(lexicalMissLine(route, query));
   }
-  return exitCode;
+  return ok(exitCode);
 }
 
 async function runCccGrep(
@@ -404,13 +495,19 @@ async function runCccGrep(
   path: string | undefined,
   timeoutMs: number,
   cwd: string,
-): Promise<number> {
+): Promise<Result<number, Error>> {
   const ccc = requireExecutable("ccc");
-  const grepArgs = [ccc, "grep", query];
+  if (ccc.isErr()) return err(ccc.error);
+  const grepArgs = [ccc.value, "grep", query];
   if (path !== undefined) grepArgs.push("--path", path);
   process.stderr.write(`ROUTE: structural -> ccc grep project=${cwd}\n`);
-  const result = await runChildCaptured(grepArgs, timeoutMs, true, cwd);
-  if (result.exitCode !== 0) return result.exitCode;
+  const child = await fromAsyncThrowable(
+    () => runChildCaptured(grepArgs, timeoutMs, true, cwd),
+    asError,
+  )();
+  if (child.isErr()) return err(child.error);
+  const result = child.value;
+  if (result.exitCode !== 0) return ok(result.exitCode);
   // `ccc grep` (checked: v0.2.41, `ccc grep --help`) prints exactly the sentence
   // "No matches found." and nothing else on a genuine no-match, exit 0 -- there is no --json,
   // --count, or other machine-readable signal for this subcommand (search has --json; grep
@@ -430,7 +527,7 @@ async function runCccGrep(
     process.stderr.write(
       "RESULT: NO_MATCH route=structural engine=ccc-grep; ccc reported no matches\n",
     );
-    return 1;
+    return ok(1);
   }
   if (result.stdout.trim() === "") {
     // Not observed on the checked ccc version, but cheap defensive coverage in case a
@@ -439,10 +536,10 @@ async function runCccGrep(
     process.stderr.write(
       "RESULT: NO_MATCH route=structural engine=ccc-grep; empty output is not PASS\n",
     );
-    return 1;
+    return ok(1);
   }
   process.stdout.write("RESULT: PASS route=structural engine=ccc-grep\n");
-  return 0;
+  return ok(0);
 }
 
 /**
@@ -523,13 +620,60 @@ type SearchFlags = {
   multilineDotall?: boolean | undefined;
 };
 
+type RawSearchFlags = Omit<SearchFlags, "limit" | "timeoutMs" | "context"> & {
+  limit?: string | undefined;
+  timeoutMs?: string | undefined;
+  context?: string | undefined;
+};
+
+function positiveInteger(
+  value: string | undefined,
+  name: string,
+): Result<number | undefined, Error> {
+  if (value === undefined) return ok(undefined);
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? ok(parsed)
+    : err(new Error(`--${name} must be a positive integer`));
+}
+
+function validateNonEmpty(
+  values: string[] | undefined,
+  name: string,
+): Error | undefined {
+  return values?.some((value) => value === "") === true
+    ? new Error(`--${name} requires a value`)
+    : undefined;
+}
+
+function validateSearchFlags(raw: RawSearchFlags): Result<SearchFlags, Error> {
+  const empty =
+    validateNonEmpty(raw.query, "query") ??
+    validateNonEmpty(raw.path, "path") ??
+    validateNonEmpty(raw.glob, "glob");
+  if (empty !== undefined) return err(empty);
+  if (raw.project === "") return err(new Error("--project requires a value"));
+  const limit = positiveInteger(raw.limit, "limit");
+  if (limit.isErr()) return err(limit.error);
+  const timeoutMs = positiveInteger(raw.timeoutMs, "timeout-ms");
+  if (timeoutMs.isErr()) return err(timeoutMs.error);
+  const context = positiveInteger(raw.context, "context");
+  if (context.isErr()) return err(context.error);
+  return ok({
+    ...raw,
+    limit: limit.value,
+    timeoutMs: timeoutMs.value,
+    context: context.value,
+  });
+}
+
 function queryFlag() {
   return {
     // `as const` marks this a fixed 1-element tuple (cleye's FlagType wants `readonly
     // [TypeFunction]` for a repeatable flag), not a variable-length array -- without it TS infers
     // a plain mutable array type, which a tuple type can never accept.
     query: {
-      type: [nonEmptyString("query")] as const,
+      type: [rawString] as const,
       alias: "q",
       default: () => [],
     },
@@ -539,7 +683,7 @@ function queryFlag() {
 function pathFlag() {
   return {
     path: {
-      type: [nonEmptyString("path")] as const,
+      type: [rawString] as const,
       alias: "p",
       default: () => [],
     },
@@ -547,13 +691,13 @@ function pathFlag() {
 }
 
 function projectFlag() {
-  return { project: nonEmptyString("project") };
+  return { project: rawString };
 }
 
 function globFlag() {
   return {
     glob: {
-      type: [nonEmptyString("glob")] as const,
+      type: [rawString] as const,
       alias: "g",
       default: () => [],
     },
@@ -561,17 +705,17 @@ function globFlag() {
 }
 
 function timeoutFlag() {
-  return { timeoutMs: positiveInteger("timeout-ms") };
+  return { timeoutMs: rawString };
 }
 
 function rgSearchFlags() {
   return {
     ignoreCase: Boolean,
     hidden: Boolean,
-    context: positiveInteger("context"),
+    context: rawString,
     filesWithMatches: Boolean,
     count: Boolean,
-    limit: positiveInteger("limit"),
+    limit: rawString,
     // See rgFlags()'s own comment for what these do and do NOT fix (a wrap-tolerant query is
     // still the caller's job; this only lifts rg's per-line restriction so that query can work).
     multiline: Boolean,
@@ -579,29 +723,49 @@ function rgSearchFlags() {
   };
 }
 
-async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
+async function runRoute(
+  rawRoute: Route,
+  values: SearchFlags,
+): Promise<Result<number, Error>> {
   const queries = values.query ?? [];
   const paths = values.path ?? [];
   const timeoutMs = values.timeoutMs ?? 120_000;
-  const cwd = targetProject(values.project);
+  const project = targetProject(values.project);
+  if (project.isErr()) return err(project.error);
+  const cwd = project.value;
   if (rawRoute === "symbol") {
     const symbol = exactlyOneQuery(rawRoute, queries);
+    if (symbol.isErr()) return err(symbol.error);
     process.stderr.write(
       `FATAL: route=symbol belongs to Serena, not shell search; ` +
-        `use Serena definitions/references for '${symbol}'\n`,
+        `use Serena definitions/references for '${symbol.value}'\n`,
     );
-    return 2;
+    return ok(2);
   }
-  if (rawRoute === "concept" || rawRoute === "battery") {
-    if (rawRoute === "concept") {
-      exactlyOneQuery(rawRoute, queries);
-    } else if (
-      queries.length < 3 ||
-      queries.some((query) => query.trim() === "")
-    ) {
-      throw new Error("battery requires at least 3 non-empty --query values");
+  if (rawRoute === "concept") {
+    const query = exactlyOneQuery(rawRoute, queries);
+    if (query.isErr()) return err(query.error);
+    const pathCount = atMostOnePath(rawRoute, paths);
+    if (pathCount.isErr()) return err(pathCount.error);
+    return runCccSearch(
+      rawRoute,
+      queries,
+      paths[0],
+      values.limit ?? 8,
+      timeoutMs,
+      values.refresh ?? false,
+      cwd,
+      values.project !== undefined,
+    );
+  }
+  if (rawRoute === "battery") {
+    if (queries.length < 3 || queries.some((query) => query.trim() === "")) {
+      return err(
+        new Error("battery requires at least 3 non-empty --query values"),
+      );
     }
-    atMostOnePath(rawRoute, paths);
+    const pathCount = atMostOnePath(rawRoute, paths);
+    if (pathCount.isErr()) return err(pathCount.error);
     return runCccSearch(
       rawRoute,
       queries,
@@ -615,8 +779,10 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
   }
   if (rawRoute === "structural") {
     const query = exactlyOneQuery(rawRoute, queries);
-    atMostOnePath(rawRoute, paths);
-    return runCccGrep(query, paths[0], timeoutMs, cwd);
+    if (query.isErr()) return err(query.error);
+    const pathCount = atMostOnePath(rawRoute, paths);
+    if (pathCount.isErr()) return err(pathCount.error);
+    return runCccGrep(query.value, paths[0], timeoutMs, cwd);
   }
   if (rawRoute === "files") {
     return runRg(
@@ -630,9 +796,10 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
   }
   // rawRoute is now narrowed to "literal" | "exhaustive" — the two remaining Route members.
   const query = exactlyOneQuery(rawRoute, queries);
+  if (query.isErr()) return err(query.error);
   return runRg(
     rawRoute,
-    query,
+    query.value,
     paths.length > 0 ? paths : ["."],
     values,
     timeoutMs,
@@ -643,12 +810,14 @@ async function runRoute(rawRoute: Route, values: SearchFlags): Promise<number> {
 async function runRouteCommand(
   route: Route,
   positionals: readonly string[],
-  flags: SearchFlags,
-): Promise<void> {
-  process.exitCode = await runRoute(
-    route,
+  flags: RawSearchFlags,
+): Promise<Result<number, Error>> {
+  if (argumentError !== undefined) return err(argumentError);
+  const validated = validateSearchFlags(
     withPositionals(route, positionals, flags),
   );
+  if (validated.isErr()) return err(validated.error);
+  return runRoute(route, validated.value);
 }
 
 // grep's order: `rr text 'x' src lib` = `rr text --query 'x' --path src --path lib`. Without
@@ -657,8 +826,8 @@ async function runRouteCommand(
 function withPositionals(
   route: Route,
   positionals: readonly string[],
-  flags: SearchFlags,
-): SearchFlags {
+  flags: RawSearchFlags,
+): RawSearchFlags {
   if (positionals.length === 0) return flags;
   if (route === "files")
     return { ...flags, glob: [...(flags.glob ?? []), ...positionals] };
@@ -696,12 +865,12 @@ function routeCommand(route: Route) {
           ...queryFlag(),
           ...pathFlag(),
           ...projectFlag(),
-          limit: positiveInteger("limit"),
+          limit: rawString,
           ...timeoutFlag(),
           refresh: Boolean,
         },
       },
-      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+      (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
     );
   }
   if (route === "literal" || route === "exhaustive") {
@@ -722,7 +891,7 @@ function routeCommand(route: Route) {
           ...rgSearchFlags(),
         },
       },
-      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+      (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
     );
   }
   if (route === "files") {
@@ -742,7 +911,7 @@ function routeCommand(route: Route) {
           hidden: Boolean,
         },
       },
-      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+      (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
     );
   }
   if (route === "structural") {
@@ -761,7 +930,7 @@ function routeCommand(route: Route) {
           ...timeoutFlag(),
         },
       },
-      (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+      (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
     );
   }
   return command(
@@ -774,7 +943,7 @@ function routeCommand(route: Route) {
       help: { description: DESCRIBE[route] },
       flags: { ...queryFlag(), ...timeoutFlag() },
     },
-    (parsed) => runRouteCommand(route, parsed._, parsed.flags),
+    (parsed) => recordResult(runRouteCommand(route, parsed._, parsed.flags)),
   );
 }
 
@@ -785,20 +954,24 @@ async function runDefinition(
   limit: number,
   cwd: string,
   json: boolean,
-): Promise<number> {
+): Promise<Result<number, Error>> {
   const project = findRegisteredProject(cwd);
   if (project === null || project === "") {
-    throw new Error(
-      `definition requested, but ${cwd} is not inside a ccc-registered project`,
+    return err(
+      new Error(
+        `definition requested, but ${cwd} is not inside a ccc-registered project`,
+      ),
     );
   }
-  const a = await findDefinitions(project, query, limit);
+  const answer = await findDefinitions(project, query, limit);
+  if (answer.isErr()) return err(answer.error);
+  const a = answer.value;
   for (const n of a.notes) process.stderr.write(`NOTE: ${n}\n`);
   if (json) {
     process.stdout.write(
       `${JSON.stringify({ ...a, cards: a.cards.map(({ body: _b, ...c }) => c) })}\n`,
     );
-    return a.strength === "none" ? 1 : 0;
+    return ok(a.strength === "none" ? 1 : 0);
   }
   process.stderr.write(
     `ROUTE: definition -> catalog (${a.catalogSize} definitions)${a.reranked ? ` + judge=${a.judge}` : ""} project=${project}\n`,
@@ -809,7 +982,7 @@ async function runDefinition(
       "RESULT: UNRANKED route=definition; the reranker was unavailable (see NOTE), so the cards are in " +
         "embedding order and NOTHING is judged a match or an absence. Read the cards yourself, or retry.\n",
     );
-    return 0;
+    return ok(0);
   }
   if (a.strength === "none") {
     process.stdout.write(
@@ -817,13 +990,13 @@ async function runDefinition(
         "NOT matches. Searched definitions (functions, types) only: an inline snippet or a script body " +
         "is not covered — `concept` searches everything.\n",
     );
-    return 1;
+    return ok(1);
   }
   process.stdout.write(
     `RESULT: PASS route=definition strength=${a.strength} best=${a.best.toFixed(2)} ` +
       `judge=${a.judge} (strong: the same function; likely: read it before writing a new one)\n`,
   );
-  return 0;
+  return ok(0);
 }
 
 function definitionCommand() {
@@ -843,20 +1016,38 @@ function definitionCommand() {
       flags: {
         ...queryFlag(),
         ...projectFlag(),
-        limit: positiveInteger("limit"),
+        limit: rawString,
         json: Boolean,
       },
     },
     async (parsed) => {
+      if (argumentError !== undefined) {
+        commandResult = err(argumentError);
+        return;
+      }
       // `rr exists '<what it does>'` = `rr exists --query '<what it does>'`.
       const query = exactlyOneQuery("exists", [
         ...(parsed.flags.query ?? []),
         ...parsed._,
       ]);
-      process.exitCode = await runDefinition(
-        query,
-        parsed.flags.limit ?? 5,
-        targetProject(parsed.flags.project),
+      if (query.isErr()) {
+        commandResult = err(query.error);
+        return;
+      }
+      const limit = positiveInteger(parsed.flags.limit, "limit");
+      if (limit.isErr()) {
+        commandResult = err(limit.error);
+        return;
+      }
+      const project = targetProject(parsed.flags.project);
+      if (project.isErr()) {
+        commandResult = err(project.error);
+        return;
+      }
+      commandResult = await runDefinition(
+        query.value,
+        limit.value ?? 5,
+        project.value,
         parsed.flags.json ?? false,
       );
     },
@@ -877,31 +1068,60 @@ function indexCommand() {
       },
     },
     async (parsed) => {
-      if (parsed._.length > 0) {
-        throw new Error(
-          `unexpected positional arguments: ${parsed._.join(" ")}`,
-        );
+      if (argumentError !== undefined) {
+        commandResult = err(argumentError);
+        return;
       }
-      process.exitCode = await runIndexWrapper(
-        parsed.flags.timeoutMs ?? 600_000,
-      );
+      if (parsed._.length > 0) {
+        commandResult = err(
+          new Error(`unexpected positional arguments: ${parsed._.join(" ")}`),
+        );
+        return;
+      }
+      const timeout = positiveInteger(parsed.flags.timeoutMs, "timeout-ms");
+      if (timeout.isErr()) {
+        commandResult = err(timeout.error);
+        return;
+      }
+      const indexResult = await runIndexWrapper(timeout.value ?? 600_000);
+      if (indexResult.isErr()) {
+        commandResult = err(indexResult.error);
+        return;
+      }
+      commandResult = indexResult.map(() => indexResult.value);
       // Warm the definition catalog too, so the first `definition` query after an index does not
       // pay the build. Its failure is reported, never turned into an index failure.
       const project = findRegisteredProject(process.cwd());
-      if (process.exitCode === 0 && project !== null && project !== "") {
+      if (indexResult.value === 0 && project !== null && project !== "") {
         const notes: string[] = [];
-        const warmed = await attempt(() => refreshCatalog(project, notes));
+        const warmed = await fromAsyncThrowable(
+          () => refreshCatalog(project, notes),
+          asError,
+        )();
         for (const n of notes) process.stderr.write(`NOTE: ${n}\n`);
-        if (!warmed.ok)
-          process.stderr.write(
-            `NOTE: definition catalog not refreshed: ${String(warmed.error)}\n`,
-          );
+        warmed.match(
+          (result) => {
+            if (result.isErr())
+              process.stderr.write(
+                `NOTE: definition catalog not refreshed: ${String(result.error)}\n`,
+              );
+          },
+          (error) =>
+            process.stderr.write(
+              `NOTE: definition catalog not refreshed: ${String(error)}\n`,
+            ),
+        );
       }
     },
   );
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<Result<number, Error>> {
+  argumentError = undefined;
+  commandResult = ok(0);
+  const argv = normalizeNegativeNumericValues(Bun.argv.slice(2));
+  const missing = missingFlagValue(argv);
+  if (missing !== undefined) return err(missing);
   await cli(
     {
       name: "repo-retrieve",
@@ -919,11 +1139,20 @@ async function main(): Promise<void> {
       ],
     },
     (parsed) => {
-      if (parsed._.route === undefined) throw new Error("missing route");
-      throw new Error(`unknown route '${parsed._.route}'`);
+      if (argumentError !== undefined) {
+        commandResult = err(argumentError);
+      } else if (parsed._.route === undefined) {
+        commandResult = err(new Error("missing route"));
+      } else {
+        commandResult = err(new Error(`unknown route '${parsed._.route}'`));
+      }
     },
-    Bun.argv.slice(2),
+    argv,
   );
+  if (argumentError !== undefined) return err(argumentError);
+  if (commandResult.isErr()) return commandResult;
+  if (typeof process.exitCode === "number") return ok(process.exitCode);
+  return ok(commandResult.value);
 }
 
 const ErrnoSchema = z.object({ code: z.string() });
@@ -934,13 +1163,29 @@ if (import.meta.main) {
   // The consumer chose to stop reading; no further result can be delivered.
   process.stdout.on("error", (error) => {
     if (ErrnoSchema.safeParse(error).data?.code === "EPIPE") process.exit(0);
-    throw error;
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
   });
-  await main().then(undefined, (error: unknown) => {
-    process.stderr.write(
-      `FATAL: ${error instanceof Error ? error.message : String(error)}\n` +
-        "Run 'repo-retrieve --help' for usage.\n",
-    );
-    process.exitCode = 2;
-  });
+  const execution = await fromAsyncThrowable(main, asError)();
+  execution.match(
+    (result) =>
+      result.match(
+        (code) => process.exit(code),
+        (error) => {
+          process.stderr.write(
+            `FATAL: ${error.message}\n` +
+              "Run 'repo-retrieve --help' for usage.\n",
+          );
+          process.exit(2);
+        },
+      ),
+    (error) => {
+      process.stderr.write(
+        `FATAL: ${error.message}\nRun 'repo-retrieve --help' for usage.\n`,
+      );
+      process.exit(2);
+    },
+  );
 }

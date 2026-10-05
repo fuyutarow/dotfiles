@@ -4,9 +4,14 @@ import { cli } from "cleye";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
+
+type Outcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 type CommandResult = Readonly<{
   exitCode: number;
@@ -62,7 +67,7 @@ function writeDiagnosticLines(output: string): void {
   }
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<Outcome<number>> {
   const parsed = cli(
     {
       name: "probe-models.ts",
@@ -77,9 +82,10 @@ async function main(): Promise<void> {
 
   const agy = Bun.which(process.env.AGY_BIN ?? "agy");
   if (agy === null)
-    throw new Error(
-      "agy not on PATH — environment problem, not a model result",
-    );
+    return {
+      ok: false,
+      error: "agy not on PATH — environment problem, not a model result",
+    };
   const version = await run([agy, "--version"], 30_000);
   const foundVersion = version.output.match(/\d+\.\d+\.\d+/u)?.[0];
   if (foundVersion !== undefined && !atLeast(foundVersion, "1.1.2")) {
@@ -95,7 +101,7 @@ async function main(): Promise<void> {
     );
     const roster = await run([agy, "models"], 60_000);
     process.stdout.write(roster.output);
-    process.exit(roster.exitCode === 0 ? 0 : 2);
+    return { ok: true, value: roster.exitCode === 0 ? 0 : 2 };
   }
 
   let failures = 0;
@@ -122,18 +128,25 @@ async function main(): Promise<void> {
     }
     let note = `rc=${result.exitCode}`;
     if (result.exitCode === 0)
-      note = "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)";
+      note =
+        "rc=0 but stdout != 'OK' (empty/other) — possible <1.1.2 swallowed-error landmine (antigravity-cli#76)";
     if (result.timedOut) note = "timeout — not a catalog verdict";
     process.stdout.write(`RESULT: INCONCLUSIVE ${model} (${note})\n`);
     writeDiagnosticLines(result.output);
     failures += 1;
   }
-  process.exit(failures === 0 ? 0 : 1);
+  return { ok: true, value: failures === 0 ? 0 : 1 };
 }
 
-await main().catch((error) => {
-  process.stderr.write(
-    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+const result = await Promise.try(main).then(
+  (value): Outcome<number> => value,
+  (error: unknown): Outcome<number> => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  }),
+);
+if (!result.ok) {
+  process.stderr.write(`FATAL: ${result.error}\n`);
   process.exit(2);
-});
+}
+process.exit(result.value);

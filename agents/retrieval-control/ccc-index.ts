@@ -24,10 +24,13 @@ import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { jsonOf, z } from "../hooks/zod.ts";
+import { err, fromAsyncThrowable, ok, type Result } from "neverthrow";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
-import { attempt } from "../hooks/attempt.ts";
+
+const asError = (error: unknown): Error =>
+  error instanceof Error ? error : new Error(String(error));
 
 export function findRegisteredProject(start: string): string | null {
   let current = resolve(start);
@@ -115,8 +118,10 @@ const INDEX_ATTEMPTS = 3;
 
 // The watermark lives beside the DB it certifies — in ccc's DB dir, which is outside the repo
 // whenever COCOINDEX_CODE_DB_PATH_MAPPING relocates it (see ccc-db-dir.ts).
-function watermarkPath(project: string): string {
-  return join(resolveDbDir(project), WATERMARK_BASENAME);
+function watermarkPath(project: string): Result<string, Error> {
+  return resolveDbDir(project).map((directory) =>
+    join(directory, WATERMARK_BASENAME),
+  );
 }
 
 type WatermarkRead =
@@ -124,16 +129,19 @@ type WatermarkRead =
   | { kind: "missing" }
   | { kind: "invalid" };
 
-async function readWatermark(project: string): Promise<WatermarkRead> {
-  const file = Bun.file(watermarkPath(project));
-  if (!(await file.exists())) return { kind: "missing" };
-  const parsed = await attempt(async (): Promise<Watermark> => {
-    const text = await file.text();
-    const value = jsonOf(WatermarkSchema).safeParse(text);
-    if (value.success) return value.data;
-    throw new Error("invalid watermark shape");
-  });
-  return parsed.ok ? { kind: "ok", value: parsed.value } : { kind: "invalid" };
+async function readWatermark(
+  project: string,
+): Promise<Result<WatermarkRead, Error>> {
+  const path = watermarkPath(project);
+  if (path.isErr()) return err(path.error);
+  const file = Bun.file(path.value);
+  if (!(await file.exists())) return ok({ kind: "missing" });
+  const text = await fromAsyncThrowable(() => file.text(), asError)();
+  if (text.isErr()) return ok({ kind: "invalid" });
+  const value = jsonOf(WatermarkSchema).safeParse(text.value);
+  return ok(
+    value.success ? { kind: "ok", value: value.data } : { kind: "invalid" },
+  );
 }
 
 async function writeWatermark(
@@ -144,16 +152,19 @@ async function writeWatermark(
   // this file. Widening this parameter type is itself the signal that someone is trying to
   // reintroduce the deleted command's write path.
   source: "index",
-): Promise<void> {
+): Promise<Result<void, Error>> {
   const value: Watermark = {
     head,
     indexedAt: Temporal.Now.instant().toString({ fractionalSecondDigits: 3 }),
     source,
   };
   const path = watermarkPath(project);
-  const tmp = `${path}.tmp-${process.pid}`;
-  await Bun.write(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(tmp, path); // same directory -> atomic on a POSIX filesystem
+  if (path.isErr()) return err(path.error);
+  const tmp = `${path.value}.tmp-${process.pid}`;
+  return fromAsyncThrowable(async () => {
+    await Bun.write(tmp, `${JSON.stringify(value, null, 2)}\n`);
+    await rename(tmp, path.value); // same directory -> atomic on a POSIX filesystem
+  }, asError)();
 }
 
 const SETTINGS_BASENAME = "settings.yml";
@@ -168,16 +179,20 @@ const SETTINGS_BASENAME = "settings.yml";
 // Only TOP-LEVEL files count, plus the contents of ccc's `cocoindex.db/` directory. Under a DB
 // path mapping, a nested project's DB dir sits inside this one (ccc-db-dir.ts), and a recursive
 // walk would count that project's artifacts as this project's.
-async function hasIndexArtifacts(project: string): Promise<boolean> {
-  const dir = resolveDbDir(project);
+async function hasIndexArtifacts(
+  project: string,
+): Promise<Result<boolean, Error>> {
+  const resolved = resolveDbDir(project);
+  if (resolved.isErr()) return err(resolved.error);
+  const dir = resolved.value;
   // Wrapped in a plain (non-overloaded) local function so `ReturnType<typeof list>` resolves to
   // the type these exact arguments (default utf8 encoding, withFileTypes: true) actually select
   // -- Dirent<string>[]. `Awaited<ReturnType<typeof readdir>>` directly does not: readdir's LAST
   // overload signature returns Dirent<Buffer>[], and ReturnType on an overloaded function always
   // picks that last signature, never the one these arguments select.
   const list = () => readdir(dir, { recursive: true, withFileTypes: true });
-  const listed = await attempt(list);
-  if (!listed.ok) return false;
+  const listed = await fromAsyncThrowable(list, asError)();
+  if (listed.isErr()) return ok(false);
   const entries = listed.value;
   const cccStore = join(dir, "cocoindex.db");
   for (const entry of entries) {
@@ -192,9 +207,9 @@ async function hasIndexArtifacts(project: string): Promise<boolean> {
     ) {
       continue; // our own watermark, not a ccc-owned artifact
     }
-    return true;
+    return ok(true);
   }
-  return false;
+  return ok(false);
 }
 
 // null means "no usable HEAD" (not a git repo, or an unborn branch with zero commits) -- a real,
@@ -222,24 +237,40 @@ async function hasIndexArtifacts(project: string): Promise<boolean> {
 // any unindexed project gets: NO_INDEX (exit 3), never a silent pass. One `repo-retrieve index`
 // closes that gap permanently, including for a project that never has and never will have a git
 // HEAD.
-async function gitHead(project: string): Promise<string | null> {
+async function gitHead(project: string): Promise<Result<string | null, Error>> {
   const git = requireExecutable("git");
-  const result = await runChildCaptured(
-    [git, "-C", project, "rev-parse", "HEAD"],
-    10_000,
-    false,
+  if (git.isErr()) return err(git.error);
+  const child = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [git.value, "-C", project, "rev-parse", "HEAD"],
+        10_000,
+        false,
+      ),
+    asError,
+  )();
+  return child.map((result) =>
+    result.exitCode === 0 ? result.stdout.trim() : null,
   );
-  return result.exitCode === 0 ? result.stdout.trim() : null;
 }
 
-async function isWorkingTreeDirty(project: string): Promise<boolean> {
+async function isWorkingTreeDirty(
+  project: string,
+): Promise<Result<boolean, Error>> {
   const git = requireExecutable("git");
-  const result = await runChildCaptured(
-    [git, "-C", project, "status", "--porcelain"],
-    10_000,
-    false,
+  if (git.isErr()) return err(git.error);
+  const child = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [git.value, "-C", project, "status", "--porcelain"],
+        10_000,
+        false,
+      ),
+    asError,
+  )();
+  return child.map(
+    (result) => result.exitCode === 0 && result.stdout.trim() !== "",
   );
-  return result.exitCode === 0 && result.stdout.trim() !== "";
 }
 
 const AUTO_INDEX_MS = 120_000;
@@ -249,38 +280,48 @@ const AUTO_INDEX_MS = 120_000;
 // already indexing — a search would then wait out the whole bound behind another project.
 async function autoCatchUp(
   project: string,
-): Promise<{ ok: boolean; why: string }> {
+): Promise<Result<{ ok: boolean; why: string }, Error>> {
   if (process.env.REPO_RETRIEVE_AUTO_INDEX === "0") {
-    return {
+    return ok({
       ok: false,
       why: "Automatic catch-up is disabled (REPO_RETRIEVE_AUTO_INDEX=0).",
-    };
+    });
   }
-  if (!(await hasIndexArtifacts(project))) {
-    return { ok: false, why: "No index exists to catch up incrementally." };
-  }
+  const artifacts = await hasIndexArtifacts(project);
+  if (artifacts.isErr()) return err(artifacts.error);
+  if (!artifacts.value)
+    return ok({ ok: false, why: "No index exists to catch up incrementally." });
   const ccc = requireExecutable("ccc");
-  const status = await runChildCaptured(
-    [ccc, "daemon", "status"],
-    10_000,
-    false,
-    project,
-  );
+  if (ccc.isErr()) return err(ccc.error);
+  const statusResult = await fromAsyncThrowable(
+    () =>
+      runChildCaptured([ccc.value, "daemon", "status"], 10_000, false, project),
+    asError,
+  )();
+  if (statusResult.isErr()) return err(statusResult.error);
+  const status = statusResult.value;
   const busy = status.stdout
     .split("\n")
     .filter((line) => line.includes("[indexing]"))
     .map((line) => line.replace("[indexing]", "").trim());
   if (busy.length > 0) {
-    return {
+    return ok({
       ok: false,
       why: `Automatic catch-up skipped: the ccc daemon is indexing ${busy.join(", ")}.`,
-    };
+    });
   }
   const started = Temporal.Now.instant().epochMilliseconds;
   process.stderr.write(
     `NOTE: index trails HEAD; catching up (bounded ${AUTO_INDEX_MS / 1000}s)\n`,
   );
-  const run = await reindexCertified(project, ccc, AUTO_INDEX_MS, true);
+  const runResult = await reindexCertified(
+    project,
+    ccc.value,
+    AUTO_INDEX_MS,
+    true,
+  );
+  if (runResult.isErr()) return err(runResult.error);
+  const run = runResult.value;
   const seconds = (
     (Temporal.Now.instant().epochMilliseconds - started) /
     1000
@@ -289,12 +330,12 @@ async function autoCatchUp(
     process.stderr.write(
       `NOTE: caught up in ${seconds}s; index certified at HEAD=${headLabel(run.head)}\n`,
     );
-    return { ok: true, why: "" };
+    return ok({ ok: true, why: "" });
   }
-  return {
+  return ok({
     ok: false,
     why: `Automatic catch-up did not certify the index (exit ${run.code} after ${seconds}s).`,
-  };
+  });
 }
 
 function scopeLine(drift: ScopeDrift | null): string {
@@ -327,27 +368,33 @@ export async function checkIndexFreshness(
   project: string,
   route: string,
   allowCatchUp = true,
-): Promise<Freshness> {
-  const currentHead = await gitHead(project);
-  const watermark = await readWatermark(project);
+): Promise<Result<Freshness, Error>> {
+  const watermarkFile = watermarkPath(project);
+  if (watermarkFile.isErr()) return err(watermarkFile.error);
+  const headResult = await gitHead(project);
+  if (headResult.isErr()) return err(headResult.error);
+  const currentHead = headResult.value;
+  const watermarkResult = await readWatermark(project);
+  if (watermarkResult.isErr()) return err(watermarkResult.error);
+  const watermark = watermarkResult.value;
 
   if (watermark.kind === "missing") {
-    return {
+    return ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
-        `no freshness watermark at ${watermarkPath(project)}; current HEAD=${headLabel(currentHead)}; ` +
+        `no freshness watermark at ${watermarkFile.value}; current HEAD=${headLabel(currentHead)}; ` +
         `an unindexed project is treated as stale, never as fresh. Remedy: ${remedy(project)}\n`,
-    };
+    });
   }
   if (watermark.kind === "invalid") {
-    return {
+    return ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
-        `watermark at ${watermarkPath(project)} is unreadable/corrupt; current HEAD=${headLabel(currentHead)}; ` +
+        `watermark at ${watermarkFile.value} is unreadable/corrupt; current HEAD=${headLabel(currentHead)}; ` +
         `Remedy: ${remedy(project)}\n`,
-    };
+    });
   }
   // A watermark written by the deleted `stamp` subcommand is a self-asserted claim that was never
   // backed by an observed reindex -- it is refused outright, on sight, regardless of whether its
@@ -355,15 +402,15 @@ export async function checkIndexFreshness(
   // because its shape now parses the same way. See the Watermark.source comment for why this
   // legacy value is still accepted as syntactically valid instead of falling into "invalid" above.
   if (watermark.value.source === "stamp") {
-    return {
+    return ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
-        `watermark at ${watermarkPath(project)} has source="stamp", written by the deleted ` +
+        `watermark at ${watermarkFile.value} has source="stamp", written by the deleted ` +
         `'stamp' subcommand, which asserted freshness without ever running an indexer; such a ` +
         `watermark is never trusted, regardless of whether its recorded HEAD still matches. ` +
         `Remedy: ${remedy(project)}\n`,
-    };
+    });
   }
   // A HEAD mismatch is stale only if something the index covers changed. When every path
   // changed since the watermark is outside ccc's scope (its own matcher decides — ccc-scope.ts),
@@ -371,17 +418,21 @@ export async function checkIndexFreshness(
   // This is not "serving stale with a warning": the index IS current. When the scope cannot be
   // decided, or any in-scope path changed, the refusal below stands (owner ruling 2026-09-25:
   // never serve stale results).
-  const drift =
+  let drift: ScopeDrift | null = null;
+  if (
     watermark.value.head !== currentHead &&
     watermark.value.head !== null &&
     currentHead !== null
-      ? await inScopeChanges(
-          project,
-          requireExecutable("ccc"),
-          watermark.value.head,
-          currentHead,
-        )
-      : null;
+  ) {
+    const ccc = requireExecutable("ccc");
+    if (ccc.isErr()) return err(ccc.error);
+    drift = await inScopeChanges(
+      project,
+      ccc.value,
+      watermark.value.head,
+      currentHead,
+    );
+  }
   if (drift !== null && drift.inScope.length === 0) {
     process.stderr.write(
       `NOTE: index built at HEAD=${headLabel(watermark.value.head)}; HEAD is now ` +
@@ -394,9 +445,19 @@ export async function checkIndexFreshness(
     // 2026-09-25). firedancer commits ~43 times an hour; the post-commit re-index skips whenever
     // the shared daemon is busy and never retries, so searches there answered NO_INDEX for
     // stretches, and a pipeline filtering for hits read that as "no hits" (2026-09-25).
-    const catchUp = allowCatchUp ? await autoCatchUp(project) : null;
+    const catchUpResult = allowCatchUp ? await autoCatchUp(project) : null;
+    let catchUpError: Error | undefined;
+    const catchUp =
+      catchUpResult?.match(
+        (value) => value,
+        (error) => {
+          catchUpError = error;
+          return null;
+        },
+      ) ?? null;
+    if (catchUpError !== undefined) return err(catchUpError);
     if (catchUp?.ok === true) return checkIndexFreshness(project, route, false);
-    return {
+    return ok({
       status: "stale",
       // indexedAt is surfaced here (2026-09-04) because this is the ONE NO_INDEX case where a
       // real index exists and was genuinely fresh at some point -- the launch checklist's row 7
@@ -415,23 +476,25 @@ export async function checkIndexFreshness(
         scopeLine(drift) +
         (catchUp === null ? "" : `${catchUp.why} `) +
         `Remedy: ${remedy(project)}\n`,
-    };
+    });
   }
   // Cheap sanity check, NOT a security boundary (a hand-written watermark file cannot be told
   // apart from a real one by anything in this file — see the TRUST LAW note at the top): catches
   // a watermark that describes an index that was never built at all, e.g. hand-planted in a
   // directory `ccc index` never touched. See hasIndexArtifacts().
-  if (!(await hasIndexArtifacts(project))) {
-    return {
+  const artifacts = await hasIndexArtifacts(project);
+  if (artifacts.isErr()) return err(artifacts.error);
+  if (!artifacts.value) {
+    return ok({
       status: "stale",
       message:
         `RESULT: NO_INDEX route=${route} engine=ccc project=${project}; ` +
-        `watermark at ${watermarkPath(project)} matches HEAD=${headLabel(currentHead)}, but no ccc ` +
-        `index artifacts exist under ${resolveDbDir(project)}; a watermark describing ` +
+        `watermark at ${watermarkFile.value} matches HEAD=${headLabel(currentHead)}, but no ccc ` +
+        `index artifacts exist under ${dirname(watermarkFile.value)}; a watermark describing ` +
         `an index that was never built is refused. Remedy: ${remedy(project)}\n`,
-    };
+    });
   }
-  return { status: "fresh", watermark: watermark.value };
+  return ok({ status: "fresh", watermark: watermark.value });
 }
 
 // The index run itself: `ccc index`, HEAD stability (retrying through in-scope drift), the
@@ -443,7 +506,7 @@ async function reindexCertified(
   ccc: string,
   timeoutMs: number,
   childToStderr: boolean,
-): Promise<{ code: number; head: string | null }> {
+): Promise<Result<{ code: number; head: string | null }, Error>> {
   let head: string | null = null;
   let certified = false;
   for (
@@ -451,30 +514,39 @@ async function reindexCertified(
     indexAttempt <= INDEX_ATTEMPTS && !certified;
     indexAttempt++
   ) {
-    const headBefore = await gitHead(project);
+    const headBeforeResult = await gitHead(project);
+    if (headBeforeResult.isErr()) return err(headBeforeResult.error);
+    const headBefore = headBeforeResult.value;
 
     process.stderr.write(`ROUTE: index -> ccc index project=${project}\n`);
-    const exitCode = childToStderr
-      ? await runChildToStderr([ccc, "index"], timeoutMs, project)
-      : await runChild([ccc, "index"], timeoutMs, project);
+    const child = await fromAsyncThrowable(
+      () =>
+        childToStderr
+          ? runChildToStderr([ccc, "index"], timeoutMs, project)
+          : runChild([ccc, "index"], timeoutMs, project),
+      asError,
+    )();
+    if (child.isErr()) return err(child.error);
+    const exitCode = child.value;
     if (exitCode !== 0) {
       process.stderr.write(
         `FATAL: ccc index failed (exit ${exitCode}); watermark left unchanged so the gate stays ` +
           "honest rather than reporting a failed reindex as fresh\n",
       );
-      return { code: exitCode, head: null };
+      return ok({ code: exitCode, head: null });
     }
 
-    const headAfter = await gitHead(project);
+    const headAfterResult = await gitHead(project);
+    if (headAfterResult.isErr()) return err(headAfterResult.error);
+    const headAfter = headAfterResult.value;
     head = headAfter;
     if (headBefore === headAfter) {
       certified = true; // confirmed stable across the whole run: safe to certify
       break;
     }
-    const drift =
-      headBefore !== null && headAfter !== null
-        ? await inScopeChanges(project, ccc, headBefore, headAfter)
-        : null;
+    const scopeResult = await scopeDrift(project, ccc, headBefore, headAfter);
+    if (scopeResult.isErr()) return err(scopeResult.error);
+    const drift = scopeResult.value;
     if (drift !== null && drift.inScope.length === 0) {
       process.stderr.write(
         `NOTE: HEAD moved during 'ccc index' (${headLabel(headBefore)} -> ${headLabel(headAfter)}), ` +
@@ -499,25 +571,43 @@ async function reindexCertified(
         "Watermark left unwritten -- re-run 'repo-retrieve index' once commits to indexed paths " +
         "pause\n",
     );
-    return { code: 2, head: null };
+    return ok({ code: 2, head: null });
   }
 
   // The daemon wrote the index wherever ITS COCOINDEX_CODE_DB_PATH_MAPPING points; this process
   // resolves the DB dir from its own. If the two disagree (a daemon started before the mapping
   // was set, a shell that never read zsh/zshenv), the index exists and this process cannot see
   // it — certifying it here would put the watermark beside no DB. Refuse, and name the fix.
-  if (!(await hasIndexArtifacts(project))) {
+  const artifacts = await hasIndexArtifacts(project);
+  if (artifacts.isErr()) return err(artifacts.error);
+  if (!artifacts.value) {
+    const dbDir = resolveDbDir(project);
+    if (dbDir.isErr()) return err(dbDir.error);
     process.stderr.write(
-      `FATAL: 'ccc index' succeeded but no index artifacts exist under ${resolveDbDir(project)}; ` +
+      `FATAL: 'ccc index' succeeded but no index artifacts exist under ${dbDir.value}; ` +
         "the daemon and this process resolve different DB dirs. Compare the 'DB path mappings' " +
         `line of 'ccc doctor' with this process's COCOINDEX_CODE_DB_PATH_MAPPING ` +
         `(${process.env.COCOINDEX_CODE_DB_PATH_MAPPING ?? "unset"}). Watermark left unwritten\n`,
     );
-    return { code: 2, head: null };
+    return ok({ code: 2, head: null });
   }
 
-  await writeWatermark(project, head, "index");
-  return { code: 0, head };
+  const watermarkWrite = await writeWatermark(project, head, "index");
+  if (watermarkWrite.isErr()) return err(watermarkWrite.error);
+  return ok({ code: 0, head });
+}
+
+async function scopeDrift(
+  project: string,
+  ccc: string,
+  before: string | null,
+  after: string | null,
+): Promise<Result<ScopeDrift | null, Error>> {
+  if (before === null || after === null) return ok(null);
+  return fromAsyncThrowable(
+    () => inScopeChanges(project, ccc, before, after),
+    asError,
+  )();
 }
 
 async function runChildToStderr(
@@ -555,14 +645,17 @@ async function runChildToStderr(
 // freshness without ever observing an indexer run, and was deleted because that assertion could
 // not be verified -- see the file header). The only way to make the watermark fresh again is to
 // run `repo-retrieve index`, which reindexes AND records the result in one step.
-export async function runIndexWrapper(timeoutMs: number): Promise<number> {
+export async function runIndexWrapper(
+  timeoutMs: number,
+): Promise<Result<number, Error>> {
   const project = findRegisteredProject(process.cwd());
   if (project === undefined || project === null || project === "") {
-    throw new Error(
-      `index requested, but ${process.cwd()} is not ccc-registered`,
+    return err(
+      new Error(`index requested, but ${process.cwd()} is not ccc-registered`),
     );
   }
   const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return err(ccc.error);
 
   // Read HEAD both before and after the (potentially long-running) `ccc index` child. If they
   // disagree, a structural git mutation (commit, checkout, rebase, branch switch) landed WHILE
@@ -582,10 +675,19 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
   // at headAfter would build, so headAfter is certified. Otherwise the scan is re-run — ccc
   // indexes incrementally, so a repeat costs only what changed — up to INDEX_ATTEMPTS times
   // (firedancer 2026-09-25: ten agents committing every 1–2 min; a human needed three tries).
-  const certifiedRun = await reindexCertified(project, ccc, timeoutMs, false);
-  if (certifiedRun.code !== 0) return certifiedRun.code;
+  const certifiedResult = await reindexCertified(
+    project,
+    ccc.value,
+    timeoutMs,
+    false,
+  );
+  if (certifiedResult.isErr()) return err(certifiedResult.error);
+  const certifiedRun = certifiedResult.value;
+  if (certifiedRun.code !== 0) return ok(certifiedRun.code);
   const head = certifiedRun.head;
-  if (head !== null && (await isWorkingTreeDirty(project))) {
+  const dirty = await isWorkingTreeDirty(project);
+  if (dirty.isErr()) return err(dirty.error);
+  if (head !== null && dirty.value) {
     process.stderr.write(
       "NOTE: working tree has uncommitted changes; the index reflects those edits, but only " +
         `HEAD=${head} is recorded\n`,
@@ -602,5 +704,5 @@ export async function runIndexWrapper(timeoutMs: number): Promise<number> {
     `RESULT: INDEXED project=${project} head=${headLabel(head)} source=index ` +
       "confidence=verified(index)\n",
   );
-  return 0;
+  return ok(0);
 }

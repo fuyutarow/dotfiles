@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { cli } from "cleye";
 import { asRecord, runClaude, type RunConfig } from "./run-claude.ts";
 
+
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -98,10 +100,6 @@ function nonEmpty(value: string, fallback: string): string {
   return value === "" ? fallback : value;
 }
 
-function usage(): never {
-  throw new Error("usage: bun probe-models.ts <model> [<model> ...]");
-}
-
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -114,12 +112,20 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   const models = parsed._;
-  if (models.length === 0) usage();
+  if (models.length === 0) {
+    process.stderr.write(
+      "FATAL: usage: bun probe-models.ts <model> [<model> ...]\n",
+    );
+    process.exit(2);
+  }
   const maxBudgetUsd = Number(
     process.env.CLAUDE_PROBE_MAX_BUDGET_USD ?? "0.20",
   );
   if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd <= 0) {
-    throw new Error("CLAUDE_PROBE_MAX_BUDGET_USD must be a positive number");
+    process.stderr.write(
+      "FATAL: CLAUDE_PROBE_MAX_BUDGET_USD must be a positive number\n",
+    );
+    process.exit(2);
   }
   const records = await probeModels(models, {
     claudeBin: process.env.CLAUDE_BIN ?? "claude",
@@ -140,7 +146,7 @@ async function main(): Promise<void> {
 }
 
 async function runMain(): Promise<void> {
-  await main().catch((error) => {
+  await Promise.try(main).then(undefined, (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`FATAL: ${message}\n`);
     process.exit(2);

@@ -112,17 +112,6 @@ const HOST_PAGEREADS_WARN = 100; // /s; the recovering host settled to 0-15, the
 const SPIN_CPU_SECONDS = 3600; // the 2026-09-09 zombies had each burned >70h of CPU
 const CRASH_WARN = 1; // NvContainer crash-looped ~29,000 times; one per hour is already wrong
 
-class UsageError extends Error {}
-
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
-  }
-}
-
 type Ran = { code: number; out: string; timedOut: boolean };
 
 // Every subprocess goes through here. The drain is RACED against the abort rather than merely
@@ -598,6 +587,13 @@ function report(
   );
 }
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -634,7 +630,8 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
+    process.stderr.write(`FATAL: Unexpected argument '${parsed._[0]}'\n`);
+    process.exit(2);
   }
 
   const guestLeg: Leg =
@@ -734,6 +731,6 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main().catch((err) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
+    process.exit(1);
   });
 }

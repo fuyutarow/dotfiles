@@ -17,16 +17,12 @@ import { jsonText } from "./zod.ts";
 export type Obj = Readonly<Record<string, unknown>>;
 
 /**
- * JSON text -> unknown, THROWING on a JSON syntax error (callers wrap it in try/attempt and treat
- * the throw as "no payload"). Decoded by the repo's zod codec, so no hook calls JSON.parse itself;
- * parse the result with the readers below.
+ * JSON text -> decoded value, or undefined on invalid JSON. Decoded by the repo's zod codec, so no
+ * hook calls JSON.parse itself; parse the result with the readers below.
  */
 export const parseJson = (text: string): unknown => {
   const parsed = jsonText.safeParse(text);
-  if (!parsed.success) {
-    throw new SyntaxError(parsed.error.issues[0]?.message ?? "not valid JSON");
-  }
-  return parsed.data;
+  return parsed.success ? parsed.data : undefined;
 };
 
 /**

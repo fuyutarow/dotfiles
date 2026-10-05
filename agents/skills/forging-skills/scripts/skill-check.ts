@@ -8,7 +8,8 @@ const BudgetSchema = z.object({ maxListingChars: z.unknown() });
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -196,7 +197,11 @@ function versionHeaderBlockLengths(bodyLines: string[]): number[] {
       continue;
     }
     let end = index + 1;
-    while (end < bodyLines.length && bodyLines[end]?.trim().startsWith(">") === true) end += 1;
+    while (
+      end < bodyLines.length &&
+      bodyLines[end]?.trim().startsWith(">") === true
+    )
+      end += 1;
     blocks.push(end - index);
     index = end;
   }
@@ -219,7 +224,9 @@ function countLongTableCells(bodyLines: string[]): number {
     let cells = trimmed.split("|");
     if (trimmed.startsWith("|")) cells = cells.slice(1);
     if (trimmed.endsWith("|")) cells = cells.slice(0, -1);
-    longCells += cells.filter((cell) => Array.from(cell.trim()).length > 400).length;
+    longCells += cells.filter(
+      (cell) => Array.from(cell.trim()).length > 400,
+    ).length;
   }
   return longCells;
 }
@@ -249,7 +256,10 @@ async function checkDirectory(input: string): Promise<void> {
     fail(directory, `name '${name}' violates ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`);
   }
   if (Array.from(name).length > 64)
-    fail(directory, `name '${name}' exceeds 64 chars (${Array.from(name).length})`);
+    fail(
+      directory,
+      `name '${name}' exceeds 64 chars (${Array.from(name).length})`,
+    );
   if (name.includes("--"))
     fail(directory, `name '${name}' has consecutive hyphens`);
   if (/(claude|anthropic)/iu.test(name) && name !== "driving-claude") {
@@ -289,7 +299,10 @@ async function checkDirectory(input: string): Promise<void> {
     (await readdir(referencesDirectory))
       .filter((entry) => entry.endsWith(".md") && !body.includes(entry))
       .forEach((entry) => {
-        fail(directory, `references/${entry} exists but is never mentioned in SKILL.md`);
+        fail(
+          directory,
+          `references/${entry} exists but is never mentioned in SKILL.md`,
+        );
       });
   }
   for (const reference of listedReferences(metadata.lines)) {

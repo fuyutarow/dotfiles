@@ -32,18 +32,22 @@ type Entry = { name?: string; at: number };
 type Agent = { sessionId?: string | undefined; name?: string | undefined };
 
 // `claude agents --json` output as a list of agents, read field by field. Output that is not a
-// list, or a null entry, throws — as iterating it did before, which makes the lookup fail.
-function agentsOf(parsed: unknown): Agent[] {
+// Malformed output is an error value; the caller treats it like a failed lookup.
+function agentsOf(
+  parsed: unknown,
+): { ok: true; value: Agent[] } | { ok: false; error: string } {
   const list = arr(parsed);
   if (list === undefined) {
-    throw new TypeError("claude agents --json did not print a list");
+    return { ok: false, error: "claude agents --json did not print a list" };
   }
-  return list.map((a): Agent => {
+  const agents: Agent[] = [];
+  for (const a of list) {
     if (a === null || a === undefined) {
-      throw new TypeError("claude agents --json listed a null agent");
+      return { ok: false, error: "claude agents --json listed a null agent" };
     }
-    return { sessionId: strAt(a, "sessionId"), name: strAt(a, "name") };
-  });
+    agents.push({ sessionId: strAt(a, "sessionId"), name: strAt(a, "name") });
+  }
+  return { ok: true, value: agents };
 }
 
 function buildEntries(
@@ -85,11 +89,12 @@ async function agentName(sid: string): Promise<string | undefined> {
       encoding: "utf8",
       timeout: 3000,
     });
-    const list = agentsOf(parseJson(out));
+    const listed = agentsOf(parseJson(out));
+    if (!listed.ok) return null;
     const now = Temporal.Now.instant().epochMilliseconds;
-    return buildEntries(list, sid, now);
+    return buildEntries(listed.value, sid, now);
   });
-  if (!fetched.ok) return undefined; // `claude` missing/slow/errored -> caller falls back
+  if (!fetched.ok || fetched.value === null) return undefined; // `claude` missing/slow/errored -> caller falls back
   const next = fetched.value;
   // cache write failed (e.g. read-only fs) -> value below still returned, just not persisted
   await attemptOr(() => {

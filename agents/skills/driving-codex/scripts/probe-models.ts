@@ -2,11 +2,9 @@
 
 import { cli } from "cleye";
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
-}
+type Outcome =
+  | { ok: true; exitCode: number }
+  | { ok: false; error: string; exitCode: 1 | 2 };
 
 type CommandResult = Readonly<{
   exitCode: number;
@@ -52,25 +50,52 @@ function firstMatches(
     .slice(0, limit);
 }
 
-async function main(): Promise<void> {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<Outcome> {
+  const args = Bun.argv.slice(2);
+  if (args.includes("--__proto__"))
+    return {
+      ok: false,
+      error: "unknown option '--__proto__'",
+      exitCode: 2,
+    };
+  if (args.length === 0) {
+    return {
+      ok: false,
+      error: 'Missing required parameter "models"',
+      exitCode: 1,
+    };
+  }
   const parsed = cli(
     {
       name: "probe-models.ts",
       parameters: ["<models...>"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
-    Bun.argv.slice(2),
+    args,
   );
   const models = parsed._;
   if (models.length === 0)
-    throw new Error("usage: bun probe-models.ts <model> [...]");
+    return {
+      ok: false,
+      error: 'Missing required parameter "models"',
+      exitCode: 1,
+    };
   const codex = Bun.which(process.env.CODEX_BIN ?? "codex");
   if (codex === null)
-    throw new Error(
-      "codex not on PATH — environment problem, not a model result",
-    );
+    return {
+      ok: false,
+      error: "codex not on PATH — environment problem, not a model result",
+      exitCode: 2,
+    };
   const cwd = process.env.PROBE_DIR ?? process.cwd();
   let failures = 0;
 
@@ -127,12 +152,24 @@ async function main(): Promise<void> {
     }
     failures += 1;
   }
-  process.exit(failures === 0 ? 0 : 1);
+  return { ok: true, exitCode: failures === 0 ? 0 : 1 };
 }
 
-await main().catch((error) => {
-  process.stderr.write(
-    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
-  process.exit(2);
-});
+const outcome = await Promise.try(main).then(
+  (value) => value,
+  (error: unknown): Outcome => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+    exitCode: 2,
+  }),
+);
+if (!outcome.ok) {
+  if (outcome.exitCode === 1) {
+    process.stderr.write(`Error: ${outcome.error}\n\n`);
+    process.stdout.write("Usage: probe-models.ts [flags...] <models...>\n");
+  } else {
+    process.stderr.write(`FATAL: ${outcome.error}\n`);
+  }
+  process.exit(outcome.exitCode);
+}
+process.exit(outcome.exitCode);

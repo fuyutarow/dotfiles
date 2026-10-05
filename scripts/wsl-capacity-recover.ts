@@ -10,7 +10,13 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { z } from "../agents/hooks/zod.ts";
 
 // Consumer: a user-systemd timer and the Claude storage hook. One short run checks the Windows
@@ -43,6 +49,7 @@ const POWERSHELL =
 const WSL_DISTRO = "Ubuntu-24.04";
 const MEMORY_AVAILABLE_EMERGENCY_MB = 2048;
 const HARD_PAGE_READS_EMERGENCY_PER_SECOND = 500;
+let cliError: string | undefined;
 
 type Policy = {
   path: string;
@@ -72,7 +79,7 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`Unknown option '--${flag}'`);
+    cliError = `Unknown option '--${flag}'`;
   }
 }
 
@@ -84,11 +91,15 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-function policyFromToml(path: string): Policy {
-  const parsed: unknown = Bun.TOML.parse(readFileSync(path, "utf8"));
+function policyFromToml(path: string): Result<Policy, Error> {
+  const decoded = fromThrowable((): unknown =>
+    Bun.TOML.parse(readFileSync(path, "utf8")),
+  )();
+  if (decoded.isErr()) return err(new Error(String(decoded.error)));
+  const parsed = decoded.value;
   const host = record(record(record(parsed)?.drive)?.host);
   if (host === undefined) {
-    throw new Error(`missing drive.host in ${path}`);
+    return err(new Error(`missing drive.host in ${path}`));
   }
   if (
     typeof host.path !== "string" ||
@@ -99,24 +110,25 @@ function policyFromToml(path: string): Policy {
     host.stop_gib <= 0 ||
     host.deny_gib <= host.stop_gib
   ) {
-    throw new Error(
-      `drive.host needs path and 0 < stop_gib < deny_gib in ${path}`,
+    return err(
+      new Error(`drive.host needs path and 0 < stop_gib < deny_gib in ${path}`),
     );
   }
-  return {
+  return ok({
     path: host.path,
     denyBytes: host.deny_gib * GiB,
     stopBytes: host.stop_gib * GiB,
-  };
+  });
 }
 
-function freeBytes(path: string): number {
-  const fs = statfsSync(path);
-  const value = fs.bavail * fs.bsize;
+function freeBytes(path: string): Result<number, Error> {
+  const stats = fromThrowable(() => statfsSync(path))();
+  if (stats.isErr()) return err(new Error(String(stats.error)));
+  const value = stats.value.bavail * stats.value.bsize;
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`${path} returned an invalid free-byte count`);
+    return err(new Error(`${path} returned an invalid free-byte count`));
   }
-  return value;
+  return ok(value);
 }
 
 function gib(bytes: number): string {
@@ -277,14 +289,16 @@ exit $LASTEXITCODE
   return result.value.code === 0 && !result.value.timedOut;
 }
 
-async function reclaim(policy: Policy): Promise<number> {
+async function reclaim(policy: Policy): Promise<Result<number, Error>> {
   const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
   const steps: [string, ...string[]][] = [
     ["reclaim:host", "--", "--execute"],
     ["reclaim:builds"],
     ["reclaim:clean"],
   ];
-  let free = freeBytes(policy.path);
+  const initial = freeBytes(policy.path);
+  if (initial.isErr()) return err(initial.error);
+  let free = initial.value;
   markAttempt();
   for (const [task, ...args] of steps) {
     if (free >= policy.denyBytes) break;
@@ -295,7 +309,9 @@ async function reclaim(policy: Policy): Promise<number> {
         task === "reclaim:builds" ? 180_000 : 120_000,
       ),
     )();
-    free = freeBytes(policy.path);
+    const measured = freeBytes(policy.path);
+    if (measured.isErr()) return err(measured.error);
+    free = measured.value;
     if (result.isOk()) {
       process.stdout.write(
         `RECLAIM task=${task} exit=${result.value.code} timeout=${result.value.timedOut} ` +
@@ -307,7 +323,7 @@ async function reclaim(policy: Policy): Promise<number> {
       );
     }
   }
-  return free;
+  return ok(free);
 }
 
 export function startTicks(stat: string): string | null {
@@ -459,7 +475,9 @@ export async function stopCompute(targets: StopTarget[]): Promise<void> {
   }
 }
 
-async function emergencyBuildReclaim(policy: Policy): Promise<number> {
+async function emergencyBuildReclaim(
+  policy: Policy,
+): Promise<Result<number, Error>> {
   // This is a regenerable Cargo target, never research output. It is cleaned only after the
   // emergency stop, and only after every observed Cargo/rustc/clippy process has exited.
   const project = join(homedir(), "Workspace/polysearch-rs");
@@ -472,17 +490,21 @@ async function emergencyBuildReclaim(policy: Policy): Promise<number> {
     return freeBytes(policy.path);
   }
   const mise = Bun.which("mise") ?? "/home/linuxbrew/.linuxbrew/bin/mise";
-  const before = freeBytes(policy.path);
+  const beforeResult = freeBytes(policy.path);
+  if (beforeResult.isErr()) return err(beforeResult.error);
+  const before = beforeResult.value;
   const result = await fromAsyncThrowable(() =>
     runBounded([mise, "exec", "--", "cargo", "clean"], 300_000, project),
   )();
-  const after = freeBytes(policy.path);
+  const afterResult = freeBytes(policy.path);
+  if (afterResult.isErr()) return err(afterResult.error);
+  const after = afterResult.value;
   process.stdout.write(
     `BUILD_RECLAIM exit=${result.isOk() ? result.value.code : "error"} ` +
       `host_delta=${gib(after - before)} ` +
       `detail=${JSON.stringify(result.isOk() ? result.value.output : String(result.error))}\n`,
   );
-  return after;
+  return ok(after);
 }
 
 async function main(): Promise<void> {
@@ -504,16 +526,36 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 0)
-    throw new Error(`Unexpected argument '${parsed._[0]}'`);
+  if (cliError !== undefined) {
+    process.stderr.write(`FATAL: ${cliError}\n`);
+    process.exit(2);
+  }
+  if (parsed._.length > 0) {
+    process.stderr.write(`FATAL: Unexpected argument '${parsed._[0]}'\n`);
+    process.exit(2);
+  }
   if (parsed.flags.config !== POLICY_PATH && parsed.flags.dryRun !== true) {
-    throw new Error("--config override is permitted only with --dry-run");
+    process.stderr.write(
+      "FATAL: --config override is permitted only with --dry-run\n",
+    );
+    process.exit(2);
   }
-  const policy = policyFromToml(parsed.flags.config);
+  const policyResult = policyFromToml(parsed.flags.config);
+  if (policyResult.isErr()) {
+    process.stderr.write(`FATAL: ${String(policyResult.error)}\n`);
+    process.exit(2);
+  }
+  const policy = policyResult.value;
   if (!process.platform.includes("linux") || !policy.path.startsWith("/mnt/")) {
-    throw new Error("WSL host path required");
+    process.stderr.write("FATAL: WSL host path required\n");
+    process.exit(2);
   }
-  let free = freeBytes(policy.path);
+  const initialFree = freeBytes(policy.path);
+  if (initialFree.isErr()) {
+    process.stderr.write(`FATAL: ${String(initialFree.error)}\n`);
+    process.exit(2);
+  }
+  let free = initialFree.value;
   const memoryBefore = await probeHostMemory();
   if (memoryBefore === null) {
     process.stderr.write("WARN Windows memory could not be measured\n");
@@ -548,9 +590,21 @@ async function main(): Promise<void> {
     // Stop the known writers before a potentially slow cache walk. Once C: is at this floor,
     // spending minutes scanning while they keep writing can exhaust Windows first.
     await stopCompute(liveTargets());
-    free = freeBytes(policy.path);
+    const measured = freeBytes(policy.path);
+    if (measured.isErr()) {
+      process.stderr.write(`FATAL: ${String(measured.error)}\n`);
+      process.exit(2);
+    }
+    free = measured.value;
   }
-  if (runReclaim) free = await reclaim(policy);
+  if (runReclaim) {
+    const reclaimed = await reclaim(policy);
+    if (reclaimed.isErr()) {
+      process.stderr.write(`FATAL: ${String(reclaimed.error)}\n`);
+      process.exit(2);
+    }
+    free = reclaimed.value;
+  }
   let memoryStillLow = memoryLow;
   if (memoryLow) {
     await dropPageCache();
@@ -564,15 +618,30 @@ async function main(): Promise<void> {
   }
   if (memoryStillLow || (!diskEmergency && free < policy.stopBytes)) {
     await stopCompute(liveTargets());
-    free = freeBytes(policy.path);
+    const measured = freeBytes(policy.path);
+    if (measured.isErr()) {
+      process.stderr.write(`FATAL: ${String(measured.error)}\n`);
+      process.exit(2);
+    }
+    free = measured.value;
   }
   if (diskEmergency && free < policy.denyBytes) {
-    free = await emergencyBuildReclaim(policy);
+    const reclaimed = await emergencyBuildReclaim(policy);
+    if (reclaimed.isErr()) {
+      process.stderr.write(`FATAL: ${String(reclaimed.error)}\n`);
+      process.exit(2);
+    }
+    free = reclaimed.value;
   }
   if (free < policy.stopBytes) {
     // A service may have restarted while cleanup ran. Repeat the containment check.
     await stopCompute(liveTargets());
-    free = freeBytes(policy.path);
+    const measured = freeBytes(policy.path);
+    if (measured.isErr()) {
+      process.stderr.write(`FATAL: ${String(measured.error)}\n`);
+      process.exit(2);
+    }
+    free = measured.value;
   }
   if (free < policy.denyBytes || memoryStillLow) {
     process.stdout.write(

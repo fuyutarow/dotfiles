@@ -43,15 +43,6 @@ const SETTLE_MS = 5_000; // let the distro finish booting before the state read
 
 class UsageError extends Error {}
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
-  }
-}
-
 type Ran = { code: number; out: string; timedOut: boolean };
 
 // Every subprocess bounded, drain raced against the abort: killing ssh does not close a pipe a
@@ -133,7 +124,14 @@ async function guestReachable(guest: string): Promise<boolean> {
   return !r.timedOut && r.code === 0;
 }
 
-async function main(): Promise<void> {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<number | Error> {
   const parsed = cli(
     {
       name: "wsl-wake.ts",
@@ -160,13 +158,13 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
+    return new UsageError(`Unexpected argument '${parsed._[0]}'`);
   }
   const { guest, distro } = parsed.flags;
 
   if (Bun.which("ssh") === undefined) {
     console.log("no ssh on PATH");
-    process.exit(1);
+    return 1;
   }
 
   const candidates = hostCandidates(parsed.flags.host);
@@ -181,7 +179,7 @@ async function main(): Promise<void> {
     console.log(
       "  Tailscale unattended. Override HostName in ~/.ssh/config.local if the name will not resolve.",
     );
-    process.exit(1);
+    return 1;
   }
   const { host } = reached;
   console.log(`host:   ${host}`);
@@ -191,7 +189,7 @@ async function main(): Promise<void> {
     console.log(
       `guest:  ${(await guestReachable(guest)) ? "reachable" : "unreachable"}`,
     );
-    return;
+    return 0;
   }
 
   if (!reached.out.includes("Running")) {
@@ -208,7 +206,7 @@ async function main(): Promise<void> {
       console.log(
         `ssh timed out after ${SSH_MS / 1000}s while starting the distro`,
       );
-      process.exit(1);
+      return 1;
     }
     await Bun.sleep(SETTLE_MS);
     const after = await probeState(host, distro);
@@ -217,7 +215,7 @@ async function main(): Promise<void> {
       console.log(
         `FAILED: ${distro} did not reach Running${wake.out !== "" ? ` — ${wake.out}` : ""}`,
       );
-      process.exit(1);
+      return 1;
     }
   } else {
     console.log("already running");
@@ -227,7 +225,7 @@ async function main(): Promise<void> {
   // verify; if it is silent, start sshd through the host — the distro being up is not the goal.
   if (await guestReachable(guest)) {
     console.log(`guest:  ${guest} reachable`);
-    return;
+    return 0;
   }
   console.log(`guest:  ${guest} not answering — starting sshd via ${host}`);
   await run(
@@ -243,17 +241,23 @@ async function main(): Promise<void> {
   await Bun.sleep(SETTLE_MS);
   if (await guestReachable(guest)) {
     console.log(`guest:  ${guest} reachable after sshd start`);
-    return;
+    return 0;
   }
   console.log(
     `guest:  ${guest} STILL unreachable — distro is Running but ssh is not; check tailscaled inside the guest`,
   );
-  process.exit(1);
+  return 1;
 }
 
 if (import.meta.main) {
-  await main().catch((err) => {
-    console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
-  });
+  const result = await Promise.try(main).then(
+    (value) => value,
+    (error: unknown) =>
+      new Error(error instanceof Error ? error.message : String(error)),
+  );
+  if (result instanceof Error) {
+    console.error(`FATAL: ${result.message}`);
+    process.exit(result instanceof UsageError ? 2 : 1);
+  }
+  process.exit(result);
 }

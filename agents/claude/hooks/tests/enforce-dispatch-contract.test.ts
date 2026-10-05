@@ -20,10 +20,11 @@ const agent = (input: Record<string, unknown>, tool = "Agent") => ({
   tool_input: { prompt: `${RESOURCE}\nx`, ...input },
 });
 const decisionOf = (stdout: string) => {
+  const text = stdout.trim();
+  const parsed = text === "" ? undefined : parseJson(stdout);
+  if (text !== "") expect(parsed).not.toBeUndefined();
   const output =
-    stdout.trim() === ""
-      ? undefined
-      : at(parseJson(stdout), "hookSpecificOutput");
+    parsed === undefined ? undefined : at(parsed, "hookSpecificOutput");
   return {
     decision: strAt(output, "permissionDecision"),
     reason: strAt(output, "permissionDecisionReason") ?? "",

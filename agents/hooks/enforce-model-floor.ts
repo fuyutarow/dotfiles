@@ -40,6 +40,14 @@ function loadConfig(): ReturnType<typeof parseFloorConfig> {
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
+  if (payload === undefined) {
+    // FATAL: the payload is not JSON, so no axis could be evaluated; fail closed with the one fix
+    decidePre(
+      "deny",
+      "model-floor: hook error while judging a model order (invalid JSON payload) — failing closed. " +
+        "Fix agents/hooks/enforce-model-floor.ts in dotfiles before retrying.",
+    );
+  }
   if (strAt(payload, "tool_name") !== "Bash") return;
   const command = strAt(payload, "tool_input", "command");
   if (command === undefined || !MAYBE_A_MODEL_CLI.test(command)) return;

@@ -28,15 +28,9 @@ import { cli } from "cleye";
 
 type Tool = { exts: string[]; command: string; files: string[] };
 
-class UsageError extends Error {}
+type ParseTool = { ok: true; value: Tool } | { ok: false; error: string };
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown option '--${flag}'`);
-  }
-}
-
-function parseTool(spec: string): Tool {
+function parseTool(spec: string): ParseTool {
   const cut = spec.indexOf("=");
   const exts = spec
     .slice(0, Math.max(cut, 0))
@@ -45,9 +39,12 @@ function parseTool(spec: string): Tool {
     .filter((e) => e !== "");
   const command = cut < 0 ? "" : spec.slice(cut + 1).trim();
   if (exts.length === 0 || command === "") {
-    throw new UsageError(`--tool expects '<ext>[,<ext>…]=<command>', got '${spec}'`);
+    return {
+      ok: false,
+      error: `--tool expects '<ext>[,<ext>…]=<command>', got '${spec}'`,
+    };
   }
-  return { exts, command, files: [] };
+  return { ok: true, value: { exts, command, files: [] } };
 }
 
 async function git(
@@ -73,7 +70,12 @@ const nul = (s: string) => s.split("\0").filter((p) => p !== "");
 // Every path whose worktree differs from the index, plus untracked files: the set a formatter must
 // not grow. Compared before and after to catch a tool that strays outside its file list.
 async function dirtyOutside(root: string): Promise<Set<string>> {
-  const r = await git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const r = await git(root, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
   const dirty = new Set<string>();
   const entries = nul(r.out);
   for (let i = 0; i < entries.length; i++) {
@@ -91,6 +93,13 @@ async function hashes(root: string, files: string[]): Promise<string[]> {
   return r.out.trim().split("\n");
 }
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<number> {
   const parsed = cli(
     {
@@ -98,19 +107,36 @@ async function main(): Promise<number> {
       parameters: [],
       flags: {
         tool: { type: [String], description: "'<ext>[,<ext>…]=<command>'" },
-        exclude: { type: [String], description: "glob of staged paths to leave alone" },
+        exclude: {
+          type: [String],
+          description: "glob of staged paths to leave alone",
+        },
       },
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`unexpected argument: ${parsed._[0]} (this command takes no positionals)`);
+    process.stderr.write(
+      `FATAL: unexpected argument: ${parsed._[0]} (this command takes no positionals)\n`,
+    );
+    return 2;
   }
-  const tools = parsed.flags.tool.map(parseTool);
-  if (tools.length === 0) throw new UsageError("at least one --tool is required");
+  const parsedTools = parsed.flags.tool.map(parseTool);
+  const invalidTool = parsedTools.find((result) => !result.ok);
+  if (invalidTool !== undefined && !invalidTool.ok) {
+    process.stderr.write(`FATAL: ${invalidTool.error}\n`);
+    return 2;
+  }
+  const tools = parsedTools.flatMap((result) =>
+    result.ok ? [result.value] : [],
+  );
+  if (tools.length === 0) {
+    process.stderr.write("FATAL: at least one --tool is required\n");
+    return 2;
+  }
   const excludes = parsed.flags.exclude.map((g) => new Bun.Glob(g));
 
   const top = await git(process.cwd(), ["rev-parse", "--show-toplevel"]);
@@ -122,28 +148,46 @@ async function main(): Promise<number> {
 
   // Added, copied, modified, renamed — a deleted path has nothing to format. Regular files only
   // (mode 100644/100755): a symlink or submodule is not source to format.
-  const staged = nul((await git(root, ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"])).out);
+  const staged = nul(
+    (
+      await git(root, [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--diff-filter=ACMR",
+      ])
+    ).out,
+  );
   const modes = new Map(
-    nul((await git(root, ["ls-files", "-s", "-z", "--", ...staged])).out).map((line) => {
-      const [meta = "", path = ""] = line.split("\t");
-      return [path, meta.split(" ")[0] ?? ""] as const;
-    }),
+    nul((await git(root, ["ls-files", "-s", "-z", "--", ...staged])).out).map(
+      (line) => {
+        const [meta = "", path = ""] = line.split("\t");
+        return [path, meta.split(" ")[0] ?? ""] as const;
+      },
+    ),
   );
   for (const path of staged) {
     const mode = modes.get(path);
     if (mode !== "100644" && mode !== "100755") continue;
     if (excludes.some((g) => g.match(path))) continue;
-    const ext = path.includes(".") ? (path.split(".").pop() ?? "").toLowerCase() : "";
+    const ext = path.includes(".")
+      ? (path.split(".").pop() ?? "").toLowerCase()
+      : "";
     tools.find((t) => t.exts.includes(ext))?.files.push(path);
   }
   const targets = tools.flatMap((t) => t.files);
   if (targets.length === 0) {
-    process.stdout.write("RESULT: fmt:staged — no staged file matches a --tool extension\n");
+    process.stdout.write(
+      "RESULT: fmt:staged — no staged file matches a --tool extension\n",
+    );
     return 0;
   }
 
   // A partially staged file: its worktree is not what is being committed.
-  const partial = nul((await git(root, ["diff", "--name-only", "-z", "--", ...targets])).out);
+  const partial = nul(
+    (await git(root, ["diff", "--name-only", "-z", "--", ...targets])).out,
+  );
   if (partial.length > 0) {
     for (const path of partial) {
       process.stdout.write(
@@ -152,7 +196,9 @@ async function main(): Promise<number> {
           `(\`git stash push --keep-index -- ${path}\`), then commit again\n`,
       );
     }
-    process.stdout.write(`RESULT: fmt:staged refused ${partial.length} partially staged file(s); nothing was changed\n`);
+    process.stdout.write(
+      `RESULT: fmt:staged refused ${partial.length} partially staged file(s); nothing was changed\n`,
+    );
     return 1;
   }
 
@@ -161,15 +207,20 @@ async function main(): Promise<number> {
   let failed = false;
   for (const tool of tools) {
     if (tool.files.length === 0) continue;
-    const child = Bun.spawn(["sh", "-c", `${tool.command} "$@"`, "fmt-staged", ...tool.files], {
-      cwd: root,
-      stdout: "inherit",
-      stderr: "inherit",
-    });
+    const child = Bun.spawn(
+      ["sh", "-c", `${tool.command} "$@"`, "fmt-staged", ...tool.files],
+      {
+        cwd: root,
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
     const code = await child.exited;
     if (code !== 0) {
       failed = true;
-      process.stdout.write(`FAIL: \`${tool.command}\` exited ${code} on ${tool.files.length} staged file(s)\n`);
+      process.stdout.write(
+        `FAIL: \`${tool.command}\` exited ${code} on ${tool.files.length} staged file(s)\n`,
+      );
     }
   }
 
@@ -186,7 +237,9 @@ async function main(): Promise<number> {
   }
   if (failed || strayed.length > 0) {
     for (const path of changed) {
-      process.stdout.write(`CHANGED: ${path} (left in the worktree, not re-staged — the gate failed)\n`);
+      process.stdout.write(
+        `CHANGED: ${path} (left in the worktree, not re-staged — the gate failed)\n`,
+      );
     }
     process.stdout.write("RESULT: fmt:staged failed; nothing was re-staged\n");
     return 1;
@@ -194,7 +247,9 @@ async function main(): Promise<number> {
   if (changed.length > 0) {
     const add = await git(root, ["add", "--", ...changed]);
     if (add.code !== 0) {
-      process.stdout.write(`FAIL: git add of the formatted files failed: ${add.err.trim()}\n`);
+      process.stdout.write(
+        `FAIL: git add of the formatted files failed: ${add.err.trim()}\n`,
+      );
       return 1;
     }
     for (const path of changed) process.stdout.write(`FORMATTED: ${path}\n`);
@@ -207,7 +262,9 @@ async function main(): Promise<number> {
 }
 
 const code = await main().catch((error: unknown) => {
-    process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 2;
-  });
+  process.stderr.write(
+    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+  );
+  return 2;
+});
 process.exitCode = code;

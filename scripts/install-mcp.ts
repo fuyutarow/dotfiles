@@ -56,20 +56,19 @@ class UsageError extends Error {}
 
 // Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name at the
 // pre-assignment boundary. Every ordinary unknown remains Cleye strictFlags' responsibility.
+let prototypeFlagSeen = false;
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    prototypeFlagSeen = true;
   }
 }
 
 function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
+  void flag;
+  return (value) => value;
 }
 
 type ServerEntry = {
@@ -254,7 +253,7 @@ export class AbortError extends Error {
  * (stdout+stderr inherited), and a nonzero exit (or a failed spawn, e.g. binary missing) throws
  * an AbortError carrying that exit code, aborting the whole run exactly where the shell would
  * have. */
-function runOrAbort(bin: string, args: string[]): void {
+function runOrAbort(bin: string, args: string[]): AbortError | undefined {
   const exitCode = fromThrowable(Bun.spawnSync)([bin, ...args], {
     stdout: "inherit",
     stderr: "inherit",
@@ -270,18 +269,24 @@ function runOrAbort(bin: string, args: string[]): void {
     },
   );
   if (exitCode !== 0) {
-    throw new AbortError(
+    return new AbortError(
       `${bin} ${args.join(" ")} failed (exit ${exitCode})`,
       exitCode,
     );
   }
+  return undefined;
 }
 
 /** `mcp add` (or its dry-run announcement), shared by both the Claude and Codex call sites since
  * each just builds an argv array and branches on --dry-run the same way. */
-function runOrPrintAdd(bin: string, args: string[], dryRun: boolean): void {
+function runOrPrintAdd(
+  bin: string,
+  args: string[],
+  dryRun: boolean,
+): AbortError | undefined {
   if (dryRun) print(`[dry-run] would run: ${bin} ${args.join(" ")}`);
-  else runOrAbort(bin, args);
+  else return runOrAbort(bin, args);
+  return undefined;
 }
 
 /** codex's remove-then-add pair for one server; only called when a codex binary resolves. */
@@ -289,7 +294,7 @@ function registerWithCodex(
   codexBin: string,
   plan: Plan,
   dryRun: boolean,
-): void {
+): AbortError | undefined {
   if (dryRun) {
     print(
       `[dry-run] would run: ${codexBin} mcp remove ${plan.name} (errors ignored)`,
@@ -303,10 +308,9 @@ function registerWithCodex(
       ? ["mcp", "add", plan.name, "--url", plan.url]
       : ["mcp", "add", plan.name, "--", ...plan.execTokens];
   if (dryRun || plan.url === "") {
-    runOrPrintAdd(codexBin, addArgs, dryRun);
-    return;
+    return runOrPrintAdd(codexBin, addArgs, dryRun);
   }
-  addCodexHttpServer(codexBin, plan.name, addArgs);
+  return addCodexHttpServer(codexBin, plan.name, addArgs);
 }
 
 // `codex mcp add --url` writes the server at once, then starts an OAuth login for a server that
@@ -319,14 +323,14 @@ function addCodexHttpServer(
   codexBin: string,
   name: string,
   addArgs: string[],
-): void {
+): AbortError | undefined {
   const add = fromThrowable(Bun.spawnSync)([codexBin, ...addArgs], {
     stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
     timeout: CODEX_ADD_BOUND_MS,
   });
-  if (add.isOk() && add.value.exitCode === 0) return;
+  if (add.isOk() && add.value.exitCode === 0) return undefined;
   // bounded: a list reads the config file; 15 s is generous.
   const list = fromThrowable(Bun.spawnSync)([codexBin, "mcp", "list"], {
     stdin: "ignore",
@@ -340,7 +344,7 @@ function addCodexHttpServer(
       .split("\n")
       .some((line) => line.trim().split(/\s+/u)[0] === name);
   if (!listed) {
-    throw new AbortError(
+    return new AbortError(
       `${codexBin} ${addArgs.join(" ")} did not register '${name}'`,
       add.isOk() ? (add.value.exitCode ?? 1) : 127,
     );
@@ -349,6 +353,7 @@ function addCodexHttpServer(
     `codex: '${name}' registered; its OAuth login did not finish within ${CODEX_ADD_BOUND_MS / 1000}s ` +
       `(no browser here) — run \`codex mcp login ${name}\` where one is, if the server needs it`,
   );
+  return undefined;
 }
 
 /** One undeclared-but-live server's removal for MCP_PRUNE=1 — claude first, then codex when a
@@ -403,7 +408,7 @@ function printDriftReport(
   }
 }
 
-function main(): void {
+function main(): AbortError | UsageError | undefined {
   const parsed = cli(
     {
       name: "install-mcp.ts",
@@ -427,16 +432,24 @@ function main(): void {
     undefined,
     Bun.argv.slice(2),
   );
+  if (prototypeFlagSeen) return new UsageError("Unknown option '--__proto__'");
 
   // Cleye owns generated help/strict ordinary flags. The explicit [] positional schema does not
   // consume arguments, so reject any excess operand before side effects begin.
   if (parsed._.length > 0) {
-    throw new Error(
+    return new UsageError(
       `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
     );
   }
 
   const values = parsed.flags;
+  for (const [flag, value] of Object.entries(values)) {
+    if (flag !== "dryRun" && value === "") {
+      return new UsageError(
+        `--${flag.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)} requires a value`,
+      );
+    }
+  }
   const dryRun = values.dryRun;
   // `${DOTFILES:-$HOME/dotfiles}` (bash `:-`) applies ONLY to DOTFILES — the nested $HOME is a
   // bare, unguarded expansion with no empty-check of its own. So DOTFILES needs the
@@ -463,14 +476,20 @@ function main(): void {
   // Unguarded in the original (`command -v ccc || uv tool install …`) — a failed install aborts
   // the whole task before a single server is touched.
   const cccAvailable = which(cccBin);
-  if (isUnavailable(cccAvailable)) {
+  const installFailure =
+    isUnavailable(cccAvailable) && !dryRun
+      ? runOrAbort(uvBin, [
+          "tool",
+          "install",
+          "--upgrade",
+          "cocoindex-code[full]",
+        ])
+      : undefined;
+  if (isUnavailable(cccAvailable) && dryRun) {
     const uvArgs = ["tool", "install", "--upgrade", "cocoindex-code[full]"];
-    if (dryRun) {
-      print(`[dry-run] would run: ${uvBin} ${uvArgs.join(" ")}`);
-    } else {
-      runOrAbort(uvBin, uvArgs);
-    }
+    print(`[dry-run] would run: ${uvBin} ${uvArgs.join(" ")}`);
   }
+  if (installFailure !== undefined) return installFailure;
 
   const servers = loadMcpServers(mcpJsonPath);
   const names = Object.keys(servers).toSorted();
@@ -490,11 +509,13 @@ function main(): void {
       plan.url !== ""
         ? ["mcp", "add", "-s", "user", "--transport", plan.type, name, plan.url]
         : ["mcp", "add", "-s", "user", name, "--", ...plan.execTokens];
-    runOrPrintAdd(claudeBin, addArgs, dryRun);
+    const claudeFailure = runOrPrintAdd(claudeBin, addArgs, dryRun);
+    if (claudeFailure !== undefined) return claudeFailure;
 
-    if (which(codexBin)) {
-      registerWithCodex(codexBin, plan, dryRun);
-    }
+    const codexFailure = which(codexBin)
+      ? registerWithCodex(codexBin, plan, dryRun)
+      : undefined;
+    if (codexFailure !== undefined) return codexFailure;
 
     print(`registered: ${name} (${plan.display})`);
   }
@@ -528,6 +549,7 @@ function main(): void {
   print(
     "tip: run 'ccc index <repo>' once to warm cocoindex-code's embedding model.",
   );
+  return undefined;
 }
 
 // Guarded (unlike the sibling link:skills port): THIS file is also `import`ed by its own test
@@ -540,25 +562,22 @@ function main(): void {
 // Global boundary, not a try/catch: main() is sync, so it has no `.catch()` to hang off — this
 // is the sync equivalent of BG1's mandated `main().catch(...)`.
 if (import.meta.main) {
-  process.on("uncaughtException", (error) => {
-    if (error instanceof AbortError) {
-      // Parity with `set -eu`: the original prints NOTHING of its own on abort — the failing
-      // command's own diagnostic already went to (inherited) stderr above — and the shell exits
-      // with THAT command's real status, not a synthesized message and not a hardcoded 1.
-      process.exit(error.exitCode);
-    }
-    if (error instanceof UsageError) {
-      process.stderr.write(`FATAL: ${error.message}\n`);
-      process.exit(2);
-    }
-    // No shell analogue: this is outside the modeled `set -eu` subprocess path entirely (e.g. a
-    // bug in this port's own flag parsing) — surface it loudly rather than swallow it silently.
+  const result = await Promise.try(main).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  if (result.ok && result.value === undefined) {
+    process.exitCode = 0;
+  } else if (result.ok && result.value instanceof AbortError) {
+    process.exitCode = result.value.exitCode;
+  } else if (result.ok && result.value instanceof UsageError) {
+    process.stderr.write(`FATAL: ${result.value.message}\n`);
+    process.exitCode = 2;
+  } else if (!result.ok) {
+    const error = result.error;
     process.stderr.write(
       `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(1);
-  });
-
-  main();
-  process.exit(0);
+    process.exitCode = 1;
+  }
 }

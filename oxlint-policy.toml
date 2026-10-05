@@ -166,6 +166,24 @@ bad = ["declare function g(): void;\nexport function f(): void {\n  try {\n    g
 good = ["declare function g(): void;\nexport function f(): void {\n  g();\n}\n"]
 
 [[custom]]
+id = "no-throw"
+kind = "syntax"
+target = "ThrowStatement"
+since = "2026-10-06"
+message = "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value — neverthrow's err()/errAsync() and Result where the file may import it, else a tagged union like agents/hooks/attempt.ts's Attempt; the entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
+bad = ["export function f(x: number): number {\n  if (x < 0) throw new Error(\"negative\");\n  return x;\n}\n"]
+good = ["import { err, ok, type Result } from \"neverthrow\";\nexport function f(x: number): Result<number, string> {\n  return x < 0 ? err(\"negative\") : ok(x);\n}\n"]
+
+[[custom]]
+id = "no-promise-reject"
+kind = "syntax"
+target = "CallExpression[callee.object.name='Promise'][callee.property.name='reject']"
+since = "2026-10-06"
+message = "Promise.reject is a throw by another name (no-throw): return errAsync()/a ResultAsync, or an Attempt-style tagged union."
+bad = ["export const f = (): Promise<never> => Promise.reject(new Error(\"no\"));\n"]
+good = ["import { errAsync, type ResultAsync } from \"neverthrow\";\nexport const f = (): ResultAsync<never, string> => errAsync(\"no\");\n"]
+
+[[custom]]
 id = "no-stdin-listener"
 kind = "syntax"
 target = "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]"

@@ -29,6 +29,7 @@
 // usage errors (including `--__proto__` and missing flag values) exit 2.
 
 import {
+  existsSync,
   mkdtempSync,
   readdirSync,
   realpathSync,
@@ -40,7 +41,7 @@ import { join } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 
-class UsageError extends Error {}
+let prototypeFlagError: string | undefined;
 
 // Cleye 2.6.0's strictFlags misses --__proto__; reject that prototype-sensitive name before
 // assignment. Every ordinary unknown remains Cleye strictFlags' responsibility.
@@ -49,13 +50,12 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    prototypeFlagError = `Unknown option '--${flag}'`;
   }
 }
 
-function nonEmptyString(flag: string): (value: string) => string {
+function nonEmptyString(_flag: string): (value: string) => string {
   return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
     return value;
   };
 }
@@ -380,23 +380,37 @@ function runCargoStep(home: string, dryRun: boolean): StepOutcome {
   // $HOME is empty (yielding e.g. "/.cargo/registry/src"). path.join(home, ...) would instead
   // DROP that leading separator for an empty `home`, silently turning an absolute path into a
   // CWD-relative one — dangerous here since the result is handed straight to `rip`.
+  // Only the caches that exist: rip exits nonzero on a missing path, and a box with no git
+  // checkouts was reported as "reclaimed nothing for cargo" (Vast, 2026-10-06).
   const paths = [
     `${home}/.cargo/registry/src`,
     `${home}/.cargo/registry/cache`,
     `${home}/.cargo/git/checkouts`,
-  ];
+  ].filter((p) => existsSync(p));
   if (dryRun) {
-    console.log(`[dry-run] would run: rip ${paths.join(" ")}`);
+    console.log(
+      paths.length === 0
+        ? "[dry-run] cargo: no download caches present"
+        : `[dry-run] would run: rip ${paths.join(" ")}`,
+    );
     return "dry-run";
   }
+  if (paths.length === 0) {
+    console.log("• cargo: no download caches present — nothing to clear");
+    return "ok";
+  }
   console.log("• cargo registry/git caches (rip → graveyard)");
-  // bounded: mirrors the original `rip ... 2>/dev/null || true` — no timeout there either.
-  return fromThrowable(Bun.spawnSync)(["rip", ...paths], {
+  // bounded: rip renames within the filesystem; no timeout, as in the original.
+  const ripped = fromThrowable(Bun.spawnSync)(["rip", ...paths], {
     stdout: "inherit",
-    stderr: "ignore",
-  })
-    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
-    .unwrapOr("failed");
+    stderr: "inherit",
+  });
+  if (ripped.isErr() || ripped.value.exitCode !== 0) return "failed";
+  // rip deletes by RENAME: nothing is freed yet. Say so, or the after: line reads as a no-op.
+  console.log(
+    "  moved to rip's graveyard — the space comes back only after `mise run reclaim:purge` (human-only)",
+  );
+  return "ok";
 }
 
 // huggingface_hub: `scan_cache_dir().delete_revisions(...)` removes only "detached" revisions —
@@ -451,13 +465,22 @@ function main(): void {
     Bun.argv.slice(2),
   );
 
+  if (prototypeFlagError !== undefined || parsed.flags.home === "") {
+    const message = prototypeFlagError ?? "--home requires a value";
+    console.error(`FATAL: ${message}`);
+    process.exitCode = 2;
+    return;
+  }
+
   // The explicit [] schema leaves excess operands visible for the pre-existing fatal contract.
   if (parsed._.length > 0) {
     // Preserve the flag-only contract: the explicit empty positional schema leaves any operand
     // visible here for refusal before cleanup begins.
-    throw new Error(
-      `Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
+    console.error(
+      `FATAL: Unexpected argument '${parsed._[0]}'. This command does not take positional arguments`,
     );
+    process.exitCode = 1;
+    return;
   }
 
   // original never validates $HOME — an unset/empty $HOME is passed straight through to
@@ -559,7 +582,10 @@ function main(): void {
       `⚠️  reclaimed nothing for ${failed.length} tool(s): ${failed.join(", ")}`,
     );
     console.log(
-      '   A mise-shimmed tool exits "No version is set for shim" wherever no config DECLARES it',
+      "   Each step's own error is printed above it. One common cause:",
+    );
+    console.log(
+      '   a mise-shimmed tool exits "No version is set for shim" wherever no config DECLARES it',
     );
     console.log(
       "   (INV-6) — the CACHE is global but the shim is not, so a non-interactive",
@@ -581,6 +607,6 @@ if (import.meta.main) {
     main();
   }).then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
+    process.exit(err instanceof Error && err.message.includes("Usage") ? 2 : 1);
   });
 }

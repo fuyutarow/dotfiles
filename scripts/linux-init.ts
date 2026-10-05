@@ -51,6 +51,7 @@ const MISE_NAME: Readonly<Record<string, string>> = {
   "rm-improved": "github:nivekuil/rip",
   procs: "github:dalance/procs",
   rustup: "rust",
+  kondo: "github:tbillington/kondo",
 };
 // Not installed here, for a stated reason (printed, never silent).
 const SKIP: Readonly<Record<string, string>> = {

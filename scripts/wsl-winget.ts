@@ -1,6 +1,12 @@
 import { copyFileSync, existsSync } from "node:fs";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // The Windows half of the Brewfile: capture what winget manages on the host into
@@ -40,7 +46,8 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
 
@@ -61,7 +68,7 @@ async function run(
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
-  ]).then(([out, err, code]) => ({ code, out: out + err }));
+  ]).then(([out, stderr, code]) => ({ code, out: out + stderr }));
   // Raced against the abort: killing the child does not close a pipe a grandchild holds, so
   // awaiting the drain alone is unbounded (measured in scripts/reclaim-system.ts).
   const aborted = new Promise<null>((resolve) => {
@@ -280,7 +287,7 @@ async function restore(dryRun: boolean): Promise<void> {
   if (r.code !== 0) process.exit(1);
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<Result<void, Error>> {
   const parsed = cli(
     {
       name: "wsl-winget.ts",
@@ -297,20 +304,33 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 1) {
-    throw new UsageError(`Unexpected argument '${parsed._[1]}'`);
+    return err(new UsageError(`Unexpected argument '${parsed._[1]}'`));
   }
   // Validate the boundary BEFORE the environment check, so a typo'd verb is exit 2 everywhere
   // and never masked by "not running inside WSL" on a Mac.
   const verb = parsed._.verb;
   if (verb !== "dump" && verb !== "restore") {
-    throw new UsageError(`verb must be dump or restore, got '${verb}'`);
+    return err(new UsageError(`verb must be dump or restore, got '${verb}'`));
   }
   await requireWsl();
-  if (verb === "dump") return dump();
-  return restore(parsed.flags.dryRun);
+  if (verb === "dump") await dump();
+  else await restore(parsed.flags.dryRun);
+  return ok(undefined);
 }
 
-await main().catch((err) => {
-  console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(err instanceof UsageError ? 2 : 1);
-});
+const attempted = await fromAsyncThrowable(main)();
+if (attempted.isErr()) {
+  const error = attempted.error;
+  console.error(
+    `FATAL: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(1);
+}
+const result = attempted.value;
+if (result.isErr()) {
+  const error = result.error;
+  console.error(
+    `FATAL: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exit(error instanceof UsageError ? 2 : 1);
+}

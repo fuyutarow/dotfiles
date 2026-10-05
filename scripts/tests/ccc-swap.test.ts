@@ -63,7 +63,7 @@ function resolveRealBun(): string {
     if (!existsSync(candidate)) continue;
     if (!realpathSync(candidate).includes("mise")) return candidate;
   }
-  throw new Error("no non-mise-shim `bun` found on PATH for the test harness");
+  return process.execPath;
 }
 const REAL_BUN = resolveRealBun();
 
@@ -241,7 +241,10 @@ describe("readEmbeddingModel / replaceEmbeddingModel", () => {
   });
 
   test("replaces only the model line and preserves every comment/other line verbatim", () => {
-    const replaced = replaceEmbeddingModel(yaml, "new/model-b");
+    const result = replaceEmbeddingModel(yaml, "new/model-b");
+    expect(result.isOk()).toBe(true);
+    if (result.isErr()) return;
+    const replaced = result.value;
     expect(readEmbeddingModel(replaced)).toBe("new/model-b");
     expect(replaced).toContain("# header comment");
     expect(replaced).toContain("provider: sentence-transformers");
@@ -249,10 +252,14 @@ describe("readEmbeddingModel / replaceEmbeddingModel", () => {
     expect(replaced.split("\n").length).toBe(yaml.split("\n").length);
   });
 
-  test("throws when there is no embedding/model block to replace", () => {
-    expect(() =>
-      replaceEmbeddingModel("daemon:\n  idle_timeout_minutes: 5\n", "x/y"),
-    ).toThrow();
+  test("returns an error when there is no embedding/model block to replace", () => {
+    const result = replaceEmbeddingModel(
+      "daemon:\n  idle_timeout_minutes: 5\n",
+      "x/y",
+    );
+    expect(result.isErr()).toBe(true);
+    if (result.isErr())
+      expect(result.error).toContain("refusing to guess its shape");
   });
 });
 
@@ -642,7 +649,8 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     // the parked prev generation IS the original live content, byte for byte
     const [firstGeneration] = gens;
     if (firstGeneration === undefined) {
-      throw new Error("expected exactly one parked generation");
+      expect(firstGeneration).toBeDefined();
+      return;
     }
     expect(sha256(join(firstGeneration.path, "target_sqlite.db"))).toBe(
       preBuildLiveHash,
@@ -679,7 +687,8 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
     // and it is NOT the same generation any more — it is the just-parked post-cutover state
     const [parkedPostCutoverGeneration] = genAfterRollback;
     if (parkedPostCutoverGeneration === undefined) {
-      throw new Error("expected exactly one post-cutover generation");
+      expect(parkedPostCutoverGeneration).toBeDefined();
+      return;
     }
     expect(
       sha256(join(parkedPostCutoverGeneration.path, "target_sqlite.db")),
@@ -834,7 +843,9 @@ describe("CLI: cutover under a mapping with a nested project (worktree hazard)",
     const [parentGen] = parentGens;
     const [childGen] = childGens;
     if (parentGen === undefined || childGen === undefined) {
-      throw new Error("expected exactly one parked generation per project");
+      expect(parentGen).toBeDefined();
+      expect(childGen).toBeDefined();
+      return;
     }
     expect(sha256(join(parentGen.path, "target_sqlite.db"))).toBe(
       parentPreHash,

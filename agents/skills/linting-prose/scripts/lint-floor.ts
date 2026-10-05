@@ -17,7 +17,8 @@ if (
   Object.getPrototypeOf(parsed.unknownFlags) !== Object.prototype ||
   Object.keys(parsed.unknownFlags).length > 0
 ) {
-  throw new Error("type-flag forwarding invariant violated");
+  process.stderr.write("type-flag forwarding invariant violated\n");
+  process.exit(1);
 }
 const bannedAfterSeparator = parsed._["--"].some(
   (argument) => argument === "--fix" || argument === "--fix-dry-run",

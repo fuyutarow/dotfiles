@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decisionOf, runHook, tempDir } from "./helpers.ts";
+import { decisionOf as decisionResult, runHook, tempDir } from "./helpers.ts";
+
+async function decisionOf(stdout: string) {
+  const result = await decisionResult(stdout);
+  expect(result.ok).toBe(true);
+  if (result.ok) return result.value;
+  return {};
+}
 
 const HOOK = "enforce-no-new-bash.ts";
 
@@ -25,26 +32,29 @@ function fixture(name: string, content: string): string {
 }
 
 describe("enforce-no-new-bash", () => {
-  test("nudges a small new .sh through additionalContext, without a decision", () => {
+  test("nudges a small new .sh through additionalContext, without a decision", async () => {
     const r = runHook(
       HOOK,
       write(join(tempDir("nonewbash-"), "x.sh"), lines(5)),
     );
     expect(r.code).toBe(0);
-    const d = decisionOf(r.stdout);
+    const d = await decisionOf(r.stdout);
     expect(d.permissionDecision).toBeUndefined();
     expect(d.additionalContext).toContain("no-new-bash");
     expect(d.additionalContext).toContain("bun");
     expect(d.additionalContext).toContain("# shim:");
   });
 
-  test("12 lines passes, 13 lines is denied for a new file", () => {
+  test("12 lines passes, 13 lines is denied for a new file", async () => {
     const dir = tempDir("nonewbash-");
     expect(
-      decisionOf(runHook(HOOK, write(join(dir, "a.sh"), lines(12))).stdout)
-        .permissionDecision,
+      (
+        await decisionOf(
+          runHook(HOOK, write(join(dir, "a.sh"), lines(12))).stdout,
+        )
+      ).permissionDecision,
     ).toBeUndefined();
-    const d = decisionOf(
+    const d = await decisionOf(
       runHook(HOOK, write(join(dir, "b.sh"), lines(13))).stdout,
     );
     expect(d.permissionDecision).toBe("deny");
@@ -52,36 +62,36 @@ describe("enforce-no-new-bash", () => {
     expect(d.permissionDecisionReason).toContain("new file");
   });
 
-  test("an Edit that grows a script past the limit is denied", () => {
+  test("an Edit that grows a script past the limit is denied", async () => {
     const p = fixture("grow.sh", lines(12));
-    const d = decisionOf(
+    const d = await decisionOf(
       runHook(HOOK, edit(p, "echo 3\n", "echo 3\necho extra\n")).stdout,
     );
     expect(d.permissionDecision).toBe("deny");
     expect(d.permissionDecisionReason).toContain("was 12");
   });
 
-  test("a legacy script over the limit may be fixed without growing, with a nudge", () => {
+  test("a legacy script over the limit may be fixed without growing, with a nudge", async () => {
     const p = fixture("legacy.sh", lines(40));
-    const same = decisionOf(
+    const same = await decisionOf(
       runHook(HOOK, edit(p, "echo 3\n", "echo three\n")).stdout,
     );
     expect(same.permissionDecision).toBeUndefined();
     expect(same.additionalContext).toContain("no-new-bash");
-    const grown = decisionOf(
+    const grown = await decisionOf(
       runHook(HOOK, edit(p, "echo 3\n", "echo 3\necho 3b\n")).stdout,
     );
     expect(grown.permissionDecision).toBe("deny");
   });
 
-  test("detects shell by shebang when the path has no .sh extension", () => {
+  test("detects shell by shebang when the path has no .sh extension", async () => {
     const dir = tempDir("nonewbash-");
     for (const head of [
       "#!/usr/bin/env bash",
       "#!/bin/zsh",
       "#!/usr/bin/env -S bash -eu",
     ]) {
-      const d = decisionOf(
+      const d = await decisionOf(
         runHook(HOOK, write(join(dir, "tool"), lines(20, head))).stdout,
       );
       expect(d.permissionDecision).toBe("deny");
@@ -103,7 +113,7 @@ describe("enforce-no-new-bash", () => {
     }
   });
 
-  test("vendored and on-disk bootstrap shims are exempt; a new file cannot self-declare bootstrap", () => {
+  test("vendored and on-disk bootstrap shims are exempt; a new file cannot self-declare bootstrap", async () => {
     const vendored = fixture(
       "herdr.sh",
       lines(40, "#!/bin/sh\n# installed by herdr"),
@@ -121,7 +131,7 @@ describe("enforce-no-new-bash", () => {
     ).toBe("");
 
     const fresh = join(tempDir("nonewbash-"), "new.sh");
-    const d = decisionOf(
+    const d = await decisionOf(
       runHook(HOOK, write(fresh, lines(20, "#!/bin/sh\n# shim: bootstrap")))
         .stdout,
     );
@@ -135,7 +145,7 @@ describe("enforce-no-new-bash", () => {
     expect(r.stdout).toBe("");
   });
 
-  test("MultiEdit is replayed in order", () => {
+  test("MultiEdit is replayed in order", async () => {
     const p = fixture("multi.sh", lines(12));
     const r = runHook(HOOK, {
       tool_name: "MultiEdit",
@@ -147,6 +157,8 @@ describe("enforce-no-new-bash", () => {
         ],
       },
     });
-    expect(decisionOf(r.stdout).permissionDecisionReason).toContain("14 lines");
+    expect((await decisionOf(r.stdout)).permissionDecisionReason).toContain(
+      "14 lines",
+    );
   });
 });

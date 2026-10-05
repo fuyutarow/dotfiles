@@ -38,7 +38,13 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { attempt, attemptOr } from "../hooks/attempt.ts";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { jsonOf, z } from "../hooks/zod.ts";
 import { typesafeKey } from "../hooks/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
@@ -84,11 +90,13 @@ export type RetrievalConfig = {
   thresholds: Record<Judge, Thresholds>;
 };
 
-function configuredString(value: unknown, key: string): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string")
-    throw new Error(`${key} must be a string when present`);
-  return value;
+function configuredString(
+  value: unknown,
+  key: string,
+): Result<string | undefined, Error> {
+  if (value === undefined) return ok(undefined);
+  if (typeof value === "string") return ok(value);
+  return err(new Error(`${key} must be a string when present`));
 }
 
 const CONFIG = join(import.meta.dir, "retrieval.toml");
@@ -108,105 +116,146 @@ const clampProbability = (p: number): number =>
   Math.min(1 - 1e-4, Math.max(1e-4, p));
 
 // retrieval.toml, validated: a wrong value names the key and stops, never a guessed default.
-export function loadRetrievalConfig(path = CONFIG): RetrievalConfig {
-  const parsedToml: unknown = Bun.TOML.parse(readFileSync(path, "utf8"));
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+export function loadRetrievalConfig(
+  path = CONFIG,
+): Result<RetrievalConfig, Error> {
+  const text = fromThrowable(() => readFileSync(path, "utf8"), asError)();
+  if (text.isErr()) return err(text.error);
+  const parsed = fromThrowable(
+    (): unknown => Bun.TOML.parse(text.value),
+    asError,
+  )();
+  if (parsed.isErr()) return err(parsed.error);
+  const parsedToml = parsed.value;
   const raw = asTable(parsedToml) ?? {};
   const d = asTable(raw.definition) ?? {};
-  const fail = (key: string, want: string): never => {
-    throw new Error(`${path}: definition.${key} must be ${want}`);
-  };
-  const num = (t: Table, key: string, at: string): number => {
+  const fail = (key: string, want: string): Error =>
+    new Error(`${path}: definition.${key} must be ${want}`);
+  const num = (t: Table, key: string, at: string): Result<number, Error> => {
     const v = t[key];
     return typeof v === "number" && Number.isFinite(v)
-      ? v
-      : fail(`${at}${key}`, "a finite number");
+      ? ok(v)
+      : err(fail(`${at}${key}`, "a finite number"));
   };
-  const count = (key: string): number => {
+  const count = (key: string): Result<number, Error> => {
     const v = d[key];
     return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 200
-      ? v
-      : fail(key, "an integer in 1..200");
+      ? ok(v)
+      : err(fail(key, "an integer in 1..200"));
   };
-  const table = (t: unknown, key: string): Table =>
-    asTable(t) ?? fail(key, "a table");
+  const table = (t: unknown, key: string): Result<Table, Error> => {
+    const value = asTable(t);
+    return value === undefined ? err(fail(key, "a table")) : ok(value);
+  };
 
   const recallCount = count("recall");
+  if (recallCount.isErr()) return err(recallCount.error);
   const pool = count("pool");
-  if (pool > recallCount) fail("pool", `at most recall (${recallCount})`);
+  if (pool.isErr()) return err(pool.error);
+  if (pool.value > recallCount.value)
+    return err(fail("pool", `at most recall (${recallCount.value})`));
 
   const p = table(d.priors, "priors");
+  if (p.isErr()) return err(p.error);
+  const publicPrior = num(p.value, "public", "priors.");
+  if (publicPrior.isErr()) return err(publicPrior.error);
+  const documentedPrior = num(p.value, "documented", "priors.");
+  if (documentedPrior.isErr()) return err(documentedPrior.error);
+  const privatePrior = num(p.value, "private", "priors.");
+  if (privatePrior.isErr()) return err(privatePrior.error);
+  const testPrior = num(p.value, "test", "priors.");
+  if (testPrior.isErr()) return err(testPrior.error);
   const priors = {
-    public: num(p, "public", "priors."),
-    documented: num(p, "documented", "priors."),
-    private: num(p, "private", "priors."),
-    test: num(p, "test", "priors."),
+    public: publicPrior.value,
+    documented: documentedPrior.value,
+    private: privatePrior.value,
+    test: testPrior.value,
   };
 
   const judgeValue = d.judge;
   if (judgeValue !== "jev" && judgeValue !== "local")
-    fail("judge", '"jev" or "local"');
+    return err(fail("judge", '"jev" or "local"'));
   const judge: Judge = judgeValue === "jev" ? "jev" : "local";
   const endpoints = table(d.jev_endpoints, "jev_endpoints");
+  if (endpoints.isErr()) return err(endpoints.error);
   const providerValue = d.jev_provider;
   const provider =
-    typeof providerValue === "string"
-      ? providerValue
-      : fail("jev_provider", "a configured provider");
-  const e =
-    asTable(endpoints[provider]) ??
-    fail(
-      "jev_provider",
-      `one of [definition.jev_endpoints.*] (${Object.keys(endpoints).join(", ")})`,
+    typeof providerValue === "string" ? providerValue : undefined;
+  if (provider === undefined)
+    return err(fail("jev_provider", "a configured provider"));
+  const e = asTable(endpoints.value[provider]);
+  if (e === undefined)
+    return err(
+      fail(
+        "jev_provider",
+        `one of [definition.jev_endpoints.*] (${Object.keys(endpoints.value).join(", ")})`,
+      ),
     );
   const urlValue = e.url;
-  const url =
-    typeof urlValue === "string"
-      ? urlValue
-      : fail(`jev_endpoints.${provider}.url`, "an https:// URL");
+  const url = typeof urlValue === "string" ? urlValue : undefined;
+  if (url === undefined)
+    return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
   if (!url.startsWith("https://"))
-    fail(`jev_endpoints.${provider}.url`, "an https:// URL");
+    return err(fail(`jev_endpoints.${provider}.url`, "an https:// URL"));
   const model = configuredString(e.model, `jev_endpoints.${provider}.model`);
+  if (model.isErr()) return err(model.error);
   const whenExhausted = configuredString(
     e.when_exhausted,
     `jev_endpoints.${provider}.when_exhausted`,
   );
+  if (whenExhausted.isErr()) return err(whenExhausted.error);
   const jevEndpoint: JevEndpoint = { url };
-  if (model !== undefined) jevEndpoint.model = model;
-  if (whenExhausted !== undefined) jevEndpoint.whenExhausted = whenExhausted;
+  if (model.value !== undefined) jevEndpoint.model = model.value;
+  if (whenExhausted.value !== undefined)
+    jevEndpoint.whenExhausted = whenExhausted.value;
 
   const noEgress = NoEgressSchema.safeParse(d.no_egress);
-  const noEgressPaths = noEgress.success
-    ? noEgress.data
-    : fail("no_egress", "a list of paths");
+  const noEgressPaths = noEgress.success ? noEgress.data : undefined;
+  if (noEgressPaths === undefined)
+    return err(fail("no_egress", "a list of paths"));
 
   const ths = table(d.thresholds, "thresholds");
-  const thresholdsOf = (j: Judge): Thresholds => {
-    const t = table(ths[j], `thresholds.${j}`);
+  if (ths.isErr()) return err(ths.error);
+  const thresholdsOf = (j: Judge): Result<Thresholds, Error> => {
+    const t = table(ths.value[j], `thresholds.${j}`);
+    if (t.isErr()) return err(t.error);
     const at = `thresholds.${j}.`;
-    const th = {
-      strong: num(t, "strong", at),
-      likely: num(t, "likely", at),
-      hook: num(t, "hook", at),
-    };
+    const strong = num(t.value, "strong", at);
+    if (strong.isErr()) return err(strong.error);
+    const likely = num(t.value, "likely", at);
+    if (likely.isErr()) return err(likely.error);
+    const hook = num(t.value, "hook", at);
+    if (hook.isErr()) return err(hook.error);
+    const th = { strong: strong.value, likely: likely.value, hook: hook.value };
     // Ordered bands: below likely = absent, likely..strong = read first, strong.. = this one.
-    if (!(th.likely < th.strong)) fail(`${at}likely`, "below strong");
-    if (!(th.hook >= th.strong)) fail(`${at}hook`, "at least strong");
-    return th;
+    if (!(th.likely < th.strong))
+      return err(fail(`${at}likely`, "below strong"));
+    if (!(th.hook >= th.strong))
+      return err(fail(`${at}hook`, "at least strong"));
+    return ok(th);
   };
+  const jevThresholds = thresholdsOf("jev");
+  if (jevThresholds.isErr()) return err(jevThresholds.error);
+  const localThresholds = thresholdsOf("local");
+  if (localThresholds.isErr()) return err(localThresholds.error);
   const thresholds: Record<Judge, Thresholds> = {
-    jev: thresholdsOf("jev"),
-    local: thresholdsOf("local"),
+    jev: jevThresholds.value,
+    local: localThresholds.value,
   };
 
-  return {
-    recall: recallCount,
-    pool,
+  return ok({
+    recall: recallCount.value,
+    pool: pool.value,
     priors,
     judge,
     jevEndpoint,
     noEgress: noEgressPaths.map((entry) => expandHome(entry)),
     thresholds,
-  };
+  });
 }
 
 function judgeFor(project: string, cfg: RetrievalConfig): Judge {
@@ -238,22 +287,40 @@ type Meta = z.output<typeof MetaSchema>;
 const SCAN_EVERY_MS = 60_000;
 
 // The interpreter that can import cocoindex: the `ccc` script's own shebang (same as ccc-scope.ts).
-function cccPython(): string {
-  const ccc = realpathSync(requireExecutable("ccc"));
-  const line = readFileSync(ccc, "utf8").split("\n", 1)[0] ?? "";
-  const py = line.startsWith("#!/") ? line.slice(2).trim() : "";
-  if (!/\/python[0-9.]*$/u.test(py))
-    throw new Error(`cannot find ccc's Python interpreter (shebang of ${ccc})`);
-  return py;
+function cccPython(): Result<string, Error> {
+  const executable = requireExecutable("ccc");
+  if (executable.isErr()) return err(executable.error);
+  const resolved = fromThrowable(
+    () => realpathSync(executable.value),
+    asError,
+  )();
+  if (resolved.isErr()) return err(resolved.error);
+  const shebangLine = fromThrowable(
+    () => readFileSync(resolved.value, "utf8").split("\n", 1)[0] ?? "",
+    asError,
+  )();
+  if (shebangLine.isErr()) return err(shebangLine.error);
+  const py = shebangLine.value.startsWith("#!/")
+    ? shebangLine.value.slice(2).trim()
+    : "";
+  return /\/python[0-9.]*$/u.test(py)
+    ? ok(py)
+    : err(
+        new Error(
+          `cannot find ccc's Python interpreter (shebang of ${resolved.value})`,
+        ),
+      );
 }
 
 async function git(project: string, args: string[]): Promise<string | null> {
-  const r = await runChildCaptured(
-    ["git", "-C", project, ...args],
-    15_000,
-    false,
+  const result = await fromAsyncThrowable(
+    () => runChildCaptured(["git", "-C", project, ...args], 15_000, false),
+    asError,
+  )();
+  return result.match(
+    (r) => (r.exitCode === 0 ? r.stdout : null),
+    () => null,
   );
-  return r.exitCode === 0 ? r.stdout : null;
 }
 
 // Paths that may differ from what the catalog was built from: commits since its HEAD plus the
@@ -293,11 +360,17 @@ const mdName = (text: string) =>
   `${createHash("sha1").update(text).digest("hex").slice(0, 20)}.md`;
 
 // A JSON file's content, decoded and validated by the caller's schema in one zod step. A file that
-// does not match is an error NAMING the file (callers already treat a throw here as "no catalog").
-function readJsonOf<S extends z.ZodType>(schema: S, path: string): z.output<S> {
-  const r = jsonOf(schema).safeParse(readFileSync(path, "utf8"));
-  if (!r.success) throw new Error(`${path}: ${r.error.message}`);
-  return r.data;
+// does not match is an error NAMING the file (callers already treat an error here as "no catalog").
+function readJsonOf<S extends z.ZodType>(
+  schema: S,
+  path: string,
+): Result<z.output<S>, Error> {
+  const text = fromThrowable(() => readFileSync(path, "utf8"), asError)();
+  if (text.isErr()) return err(text.error);
+  const parsed = jsonOf(schema).safeParse(text.value);
+  return parsed.success
+    ? ok(parsed.data)
+    : err(new Error(`${path}: ${parsed.error.message}`));
 }
 
 const DefsCacheSchema = z.object({
@@ -311,21 +384,33 @@ const DefsCacheSchema = z.object({
 });
 const RecordsSchema = z.record(z.string(), z.array(DefinitionSchema));
 
-function loadDefinitions(cachePath: string): {
-  defs: Definition[];
-  files: string[];
-} {
+function loadDefinitions(cachePath: string): Result<
+  {
+    defs: Definition[];
+    files: string[];
+  },
+  Error
+> {
   const cache = readJsonOf(DefsCacheSchema, cachePath);
-  const publics = new Set(Object.values(cache.files).flatMap((f) => f.publics));
-  const defs = Object.values(cache.files).flatMap((f) =>
+  if (cache.isErr()) return err(cache.error);
+  const publics = new Set(
+    Object.values(cache.value.files).flatMap((f) => f.publics),
+  );
+  const defs = Object.values(cache.value.files).flatMap((f) =>
     f.records.map((r) => ({ ...r, public: r.public || publics.has(r.name) })),
   );
-  return { defs, files: Object.keys(cache.files) };
+  return ok({ defs, files: Object.keys(cache.value.files) });
 }
 
 const statKey = (project: string, rel: string): string => {
   const st = statSync(join(project, rel), { throwIfNoEntry: false });
   return st !== undefined ? `${st.size} ${st.mtimeMs}` : "gone";
+};
+
+type Catalog = {
+  dir: string;
+  defs: Definition[];
+  byFile: Map<string, Definition[]>;
 };
 
 // Bring the catalog to the working tree. Returns the definitions and the catalog dir.
@@ -340,15 +425,16 @@ const statKey = (project: string, rel: string): string => {
 export async function refreshCatalog(
   project: string,
   notes: string[],
-): Promise<{
-  dir: string;
-  defs: Definition[];
-  byFile: Map<string, Definition[]>;
-}> {
-  const dir = catalogDir(project);
+): Promise<Result<Catalog, Error>> {
+  const directory = fromThrowable(() => catalogDir(project), asError)();
+  if (directory.isErr()) return err(directory.error);
+  const dir = directory.value;
   const metaPath = join(dir, "catalog.json");
   const recordsPath = join(dir, "records.json");
-  const meta = await attemptOr(() => readJsonOf(MetaSchema, metaPath), null);
+  const meta = readJsonOf(MetaSchema, metaPath).match(
+    (value) => value,
+    () => null,
+  );
   const head = (await git(project, ["rev-parse", "HEAD"]))?.trim() ?? null;
   const now = Temporal.Now.instant().epochMilliseconds;
   const recent =
@@ -360,19 +446,33 @@ export async function refreshCatalog(
   let only: string[] | null = null;
   let checkedAt = now;
   if (recent) {
-    only = Object.entries(meta.files)
-      .filter(([rel, k]) => statKey(project, rel) !== k)
-      .map(([rel]) => rel);
+    const scanned = fromThrowable(
+      () =>
+        Object.entries(meta.files)
+          .filter(([rel, k]) => statKey(project, rel) !== k)
+          .map(([rel]) => rel),
+      asError,
+    )();
+    if (scanned.isErr()) return err(scanned.error);
+    only = scanned.value;
     checkedAt = meta.checkedAt;
   } else if (meta !== null && existsSync(recordsPath)) {
     only = await changedSince(project, meta.head);
   }
   if (recent && only?.length === 0) return readCatalog(dir);
-  const rebuilt = await rebuild(dir, project, only);
-  const files = Object.fromEntries(
-    rebuilt.files.map((rel) => [rel, statKey(project, rel)]),
-  );
-  writeAtomic(
+  const rebuiltResult = await rebuild(dir, project, only);
+  if (rebuiltResult.isErr()) return err(rebuiltResult.error);
+  const rebuilt = rebuiltResult.value;
+  const filesResult = fromThrowable(
+    () =>
+      Object.fromEntries(
+        rebuilt.files.map((rel) => [rel, statKey(project, rel)]),
+      ),
+    asError,
+  )();
+  if (filesResult.isErr()) return err(filesResult.error);
+  const files = filesResult.value;
+  const written = writeAtomic(
     metaPath,
     JSON.stringify({
       project,
@@ -383,6 +483,7 @@ export async function refreshCatalog(
       count: rebuilt.count,
     } satisfies Meta),
   );
+  if (written.isErr()) return err(written.error);
   notes.push(
     `catalog ${meta !== null ? "refreshed" : "built"}: ${rebuilt.count} definitions` +
       (only === null ? " (full scan)" : ` (${only.length} changed path(s))`),
@@ -390,15 +491,11 @@ export async function refreshCatalog(
   return readCatalog(dir);
 }
 
-function readCatalog(dir: string): {
-  dir: string;
-  defs: Definition[];
-  byFile: Map<string, Definition[]>;
-} {
-  const byFile = new Map(
-    Object.entries(readJsonOf(RecordsSchema, join(dir, "records.json"))),
-  );
-  return { dir, defs: [...byFile.values()].flat(), byFile };
+function readCatalog(dir: string): Result<Catalog, Error> {
+  const records = readJsonOf(RecordsSchema, join(dir, "records.json"));
+  if (records.isErr()) return err(records.error);
+  const byFile = new Map(Object.entries(records.value));
+  return ok({ dir, defs: [...byFile.values()].flat(), byFile });
 }
 
 // Re-extract (changed files only — ccc_defs.py keeps a per-file cache), rewrite the catalog's
@@ -407,69 +504,99 @@ async function rebuild(
   dir: string,
   project: string,
   only: string[] | null,
-): Promise<{ count: number; files: string[] }> {
+): Promise<Result<{ count: number; files: string[] }, Error>> {
   const cachePath = join(dir, "defs-cache.json");
   const onlyPath = join(dir, `only.${process.pid}.json`);
-  if (only !== null) writeFileSync(onlyPath, JSON.stringify(only));
+  const setup = fromThrowable(() => {
+    if (only !== null) writeFileSync(onlyPath, JSON.stringify(only));
+    mkdirSync(join(dir, "defs"), { recursive: true });
+    mkdirSync(join(dir, ".cocoindex_code"), { recursive: true });
+    const settings = join(dir, ".cocoindex_code/settings.yml");
+    if (!existsSync(settings)) {
+      writeFileSync(
+        settings,
+        "include_patterns:\n- 'defs/**/*.md'\nexclude_patterns:\n- '**/.cocoindex_code'\n",
+      );
+    }
+  }, asError)();
+  if (setup.isErr()) return err(setup.error);
   const onlyArgs =
     only !== null && existsSync(cachePath) ? ["--only", onlyPath] : [];
-  mkdirSync(join(dir, "defs"), { recursive: true });
-  mkdirSync(join(dir, ".cocoindex_code"), { recursive: true });
-  const settings = join(dir, ".cocoindex_code/settings.yml");
-  if (!existsSync(settings)) {
-    writeFileSync(
-      settings,
-      "include_patterns:\n- 'defs/**/*.md'\nexclude_patterns:\n- '**/.cocoindex_code'\n",
+  const python = cccPython();
+  if (python.isErr()) return err(python.error);
+  const extract = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [python.value, SCRIPT, project, cachePath, cachePath, ...onlyArgs],
+        600_000,
+        false,
+      ),
+    asError,
+  )();
+  if (extract.isErr()) return err(extract.error);
+  const cleanup = fromThrowable(() => {
+    if (only !== null && existsSync(onlyPath)) unlinkSync(onlyPath);
+  }, asError)();
+  if (cleanup.isErr()) return err(cleanup.error);
+  if (extract.value.exitCode !== 0)
+    return err(
+      new Error(
+        `ccc_defs.py failed: ${extract.value.stderr.trim().slice(-400)}`,
+      ),
     );
-  }
-  const extract = await runChildCaptured(
-    [cccPython(), SCRIPT, project, cachePath, cachePath, ...onlyArgs],
-    600_000,
-    false,
-  );
-  if (only !== null && existsSync(onlyPath)) unlinkSync(onlyPath);
-  if (extract.exitCode !== 0)
-    throw new Error(`ccc_defs.py failed: ${extract.stderr.trim().slice(-400)}`);
-  const { defs, files } = loadDefinitions(cachePath);
+  const definitions = loadDefinitions(cachePath);
+  if (definitions.isErr()) return err(definitions.error);
+  const { defs, files } = definitions.value;
   const wanted = new Map<string, Definition[]>();
   let written = 0;
-  for (const d of defs) {
-    const text = mdText(d);
-    const name = mdName(text);
-    wanted.set(name, [...(wanted.get(name) ?? []), d]);
-    const path = join(dir, "defs", name);
-    if (existsSync(path)) continue;
-    writeFileSync(path, text);
-    written += 1;
-  }
-  const stale = readdirSync(join(dir, "defs")).filter((f) => !wanted.has(f));
-  for (const f of stale) unlinkSync(join(dir, "defs", f));
-  writeAtomic(
+  const generated = fromThrowable(() => {
+    for (const d of defs) {
+      const text = mdText(d);
+      const name = mdName(text);
+      wanted.set(name, [...(wanted.get(name) ?? []), d]);
+      const path = join(dir, "defs", name);
+      if (existsSync(path)) continue;
+      writeFileSync(path, text);
+      written += 1;
+    }
+    const stale = readdirSync(join(dir, "defs")).filter((f) => !wanted.has(f));
+    for (const f of stale) unlinkSync(join(dir, "defs", f));
+    return stale;
+  }, asError)();
+  if (generated.isErr()) return err(generated.error);
+  const stale = generated.value;
+  const recordsWrite = writeAtomic(
     join(dir, "records.json"),
     JSON.stringify(Object.fromEntries(wanted)),
   );
+  if (recordsWrite.isErr()) return err(recordsWrite.error);
   // An edit that only moved definitions (line numbers live in records.json, not in the indexed
   // text) changes no catalog file: nothing to embed, no daemon round trip.
   if (written + stale.length > 0) {
-    const index = await runChildCaptured(
-      [requireExecutable("ccc"), "index"],
-      900_000,
-      false,
-      dir,
-    );
-    if (index.exitCode !== 0)
-      throw new Error(
-        `catalog index failed: ${index.stderr.trim().slice(-400)}`,
+    const ccc = requireExecutable("ccc");
+    if (ccc.isErr()) return err(ccc.error);
+    const index = await fromAsyncThrowable(
+      () => runChildCaptured([ccc.value, "index"], 900_000, false, dir),
+      asError,
+    )();
+    if (index.isErr()) return err(index.error);
+    if (index.value.exitCode !== 0)
+      return err(
+        new Error(
+          `catalog index failed: ${index.value.stderr.trim().slice(-400)}`,
+        ),
       );
   }
-  return { count: defs.length, files };
+  return ok({ count: defs.length, files });
 }
 
 // A reader in another session must never see half a file.
-function writeAtomic(path: string, text: string): void {
+function writeAtomic(path: string, text: string): Result<void, Error> {
   const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, path);
+  return fromThrowable(() => {
+    writeFileSync(tmp, text);
+    renameSync(tmp, path);
+  }, asError)();
 }
 
 // ccc search --json: only the path is read; the rest of each result is ignored.
@@ -482,28 +609,33 @@ async function recall(
   dir: string,
   query: string,
   limit: number,
-): Promise<Hit[]> {
-  const r = await runChildCaptured(
-    [
-      requireExecutable("ccc"),
-      "search",
-      "--json",
-      "--limit",
-      String(limit),
-      query,
-    ],
-    120_000,
-    false,
-    dir,
-  );
+): Promise<Result<Hit[], Error>> {
+  const ccc = requireExecutable("ccc");
+  if (ccc.isErr()) return err(ccc.error);
+  const result = await fromAsyncThrowable(
+    () =>
+      runChildCaptured(
+        [ccc.value, "search", "--json", "--limit", String(limit), query],
+        120_000,
+        false,
+        dir,
+      ),
+    asError,
+  )();
+  if (result.isErr()) return err(result.error);
+  const r = result.value;
   if (r.exitCode !== 0)
-    throw new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`);
-  const found = jsonOf(SearchSchema).safeParse(r.stdout);
-  if (!found.success)
-    throw new Error(
-      `catalog search printed no result list: ${found.error.message}`,
+    return err(
+      new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`),
     );
-  return found.data.results;
+  const found = jsonOf(SearchSchema).safeParse(r.stdout);
+  return found.success
+    ? ok(found.data.results)
+    : err(
+        new Error(
+          `catalog search printed no result list: ${found.error.message}`,
+        ),
+      );
 }
 
 const rerankSocket = (): string =>
@@ -569,30 +701,32 @@ export async function rerank(
     const n = s.write(pending);
     pending = pending.subarray(n);
   };
-  const connected = await attempt(() =>
-    Bun.connect({
-      unix: rerankSocket(),
-      socket: {
-        open: flush,
-        drain: (s) => {
-          if (pending.length > 0) flush(s);
+  const connected = await fromAsyncThrowable(
+    () =>
+      Bun.connect({
+        unix: rerankSocket(),
+        socket: {
+          open: flush,
+          drain: (s) => {
+            if (pending.length > 0) flush(s);
+          },
+          data: (s, chunk) => {
+            reply += chunk.toString();
+            if (!reply.includes("\n")) return;
+            finish();
+            s.end();
+          },
+          close: () => {
+            finish();
+          },
+          error: (_s, e) => {
+            done({ reason: `reranker socket error: ${String(e)}` });
+          },
         },
-        data: (s, chunk) => {
-          reply += chunk.toString();
-          if (!reply.includes("\n")) return;
-          finish();
-          s.end();
-        },
-        close: () => {
-          finish();
-        },
-        error: (_s, e) => {
-          done({ reason: `reranker socket error: ${String(e)}` });
-        },
-      },
-    }),
-  );
-  if (!connected.ok)
+      }),
+    asError,
+  )();
+  if (connected.isErr())
     done({
       reason: `cannot connect to the reranker: ${String(connected.error)}`,
     });
@@ -616,10 +750,13 @@ export async function findDefinitions(
   limit: number,
   exclude?: (d: Definition) => boolean,
   refresh = true,
-): Promise<DefinitionAnswer> {
+): Promise<Result<DefinitionAnswer, Error>> {
   const notes: string[] = [];
-  if (!refresh && !existsSync(join(catalogDir(project), "records.json"))) {
-    return {
+  const directory = fromThrowable(() => catalogDir(project), asError)();
+  if (directory.isErr()) return err(directory.error);
+  const catalogPath = directory.value;
+  if (!refresh && !existsSync(join(catalogPath, "records.json"))) {
+    return ok({
       cards: [],
       strength: "none",
       best: -99,
@@ -627,23 +764,36 @@ export async function findDefinitions(
       judge: "none",
       catalogSize: 0,
       notes: ["no catalog yet"],
-    };
+    });
   }
-  const { dir, defs, byFile } = refresh
+  const catalog = refresh
     ? await refreshCatalog(project, notes)
-    : readCatalog(catalogDir(project));
+    : readCatalog(catalogPath);
+  if (catalog.isErr()) return err(catalog.error);
+  const { dir, defs, byFile } = catalog.value;
   const cfg = loadRetrievalConfig();
-  const hits = await recall(dir, query, cfg.recall);
+  if (cfg.isErr()) return err(cfg.error);
+  const hits = await recall(dir, query, cfg.value.recall);
+  if (hits.isErr()) return err(hits.error);
 
   const owners = ownersOf(defs);
-  const order = candidates(hits, byFile, owners, exclude).slice(0, cfg.pool);
-  const { judge, result } = await judgeCandidates(
-    query,
-    order.map((definition) => rerankText(definition)),
-    judgeFor(project, cfg),
-    cfg.jevEndpoint,
-    notes,
+  const order = candidates(hits.value, byFile, owners, exclude).slice(
+    0,
+    cfg.value.pool,
   );
+  const judged = await fromAsyncThrowable(
+    () =>
+      judgeCandidates(
+        query,
+        order.map((definition) => rerankText(definition)),
+        judgeFor(project, cfg.value),
+        cfg.value.jevEndpoint,
+        notes,
+      ),
+    asError,
+  )();
+  if (judged.isErr()) return err(judged.error);
+  const { judge, result } = judged.value;
   const scores = result.scores ?? null;
   const reranked = scores !== null;
   if (result.reason !== undefined)
@@ -652,18 +802,18 @@ export async function findDefinitions(
   const raw = scores ?? order.map((_, i) => order.length - i);
   const ranked = toCards(
     order,
-    finalScores(order, raw, owners, cfg.priors),
+    finalScores(order, raw, owners, cfg.value.priors),
   ).slice(0, limit);
   const best = ranked[0]?.score ?? -99;
-  return {
+  return ok({
     cards: ranked,
-    strength: strengthOf(best, reranked, cfg.thresholds[judge]),
+    strength: strengthOf(best, reranked, cfg.value.thresholds[judge]),
     best,
     reranked,
     judge: reranked ? judge : "none",
     catalogSize: defs.length,
     notes,
-  };
+  });
 }
 
 // The configured judge; Jev failing (network, quota, bad key) falls back to the local reranker and
@@ -718,19 +868,23 @@ export async function judgeJev(
     ),
   });
   for (let attempt_ = 0; attempt_ <= JEV_RETRIES; attempt_ += 1) {
-    const res = await attempt(() =>
-      fetch(endpoint.url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        body,
-        signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
-      }),
-    );
-    if (!res.ok) return { reason: `request failed: ${String(res.error)}` };
-    const status = res.value.status;
+    const response = await fromAsyncThrowable(
+      () =>
+        fetch(endpoint.url, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          body,
+          signal: AbortSignal.timeout(JEV_TIMEOUT_MS),
+        }),
+      asError,
+    )();
+    if (response.isErr())
+      return { reason: `request failed: ${String(response.error)}` };
+    const res = response.value;
+    const status = res.status;
     if ((status === 429 || status === 529) && attempt_ < JEV_RETRIES) {
       await Bun.sleep(500 * 2 ** attempt_);
       continue;
@@ -745,7 +899,11 @@ export async function judgeJev(
         reason: `HTTP 402 at ${provider}: no credit left — ${endpoint.whenExhausted ?? "top up"}`,
       };
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
-    const answered = await attemptOr(() => res.value.text(), "");
+    const answerText = await fromAsyncThrowable(() => res.text(), asError)();
+    const answered = answerText.match(
+      (text) => text,
+      () => "",
+    );
     const json = jsonOf(JevAnswerSchema).safeParse(answered).data;
     const ps = docs.map((_, i) => json?.answers?.[definitionId(i)]?.noul);
     const numbers = ps.flatMap((p) => (typeof p === "number" ? [p] : []));
@@ -764,15 +922,21 @@ export async function judgeJev(
 export async function candidatePool(
   project: string,
   query: string,
-): Promise<{ name: string; text: string; def: Definition }[]> {
+): Promise<Result<{ name: string; text: string; def: Definition }[], Error>> {
   const cfg = loadRetrievalConfig();
-  const { dir, defs, byFile } = await refreshCatalog(project, []);
-  const order = candidates(
-    await recall(dir, query, cfg.recall),
-    byFile,
-    ownersOf(defs),
-  ).slice(0, cfg.pool);
-  return order.map((def) => ({ name: def.name, text: rerankText(def), def }));
+  if (cfg.isErr()) return err(cfg.error);
+  const catalog = await refreshCatalog(project, []);
+  if (catalog.isErr()) return err(catalog.error);
+  const { dir, defs, byFile } = catalog.value;
+  const hits = await recall(dir, query, cfg.value.recall);
+  if (hits.isErr()) return err(hits.error);
+  const order = candidates(hits.value, byFile, ownersOf(defs)).slice(
+    0,
+    cfg.value.pool,
+  );
+  return ok(
+    order.map((def) => ({ name: def.name, text: rerankText(def), def })),
+  );
 }
 
 // private helper key -> the public definitions in its file whose body calls it.

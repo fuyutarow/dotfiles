@@ -79,7 +79,13 @@ import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
-import { fromAsyncThrowable, fromThrowable } from "neverthrow";
+import {
+  err,
+  fromAsyncThrowable,
+  fromThrowable,
+  ok,
+  type Result,
+} from "neverthrow";
 import { match } from "ts-pattern";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
@@ -105,16 +111,9 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`Unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: Unknown option '--${flag}'\n`);
+    process.exit(2);
   }
-}
-
-/** A present flag with no value becomes '' under a raw String parser; throw instead. */
-function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new Error(`${flag} requires a value`);
-    return value;
-  };
 }
 
 // Infra denylist: package-manager / tool caches that structurally cannot hold a hand-registered
@@ -143,9 +142,9 @@ const DEFAULT_KEEP = 1;
 // Pure / testable helpers
 // ---------------------------------------------------------------------------------------------
 
-export function resolveHome(homeFlag: string | undefined): string {
+export function resolveHome(homeFlag: string | undefined): string | null {
   const home = homeFlag ?? process.env.HOME ?? homedir();
-  if (home === "") throw new Error("cannot resolve $HOME (pass --home)");
+  if (home === "") return null;
   // Canonical, symlinks resolved: ccc keys a project's DB by the path the OS reports (os.getcwd()
   // resolves symlinks — macOS's /var is /private/var), so a DB-path mapping built from the
   // unresolved spelling never matched, and a shadow build wrote into the LIVE index. The
@@ -410,7 +409,7 @@ export function readEmbeddingModel(yamlText: string): string | null {
 export function replaceEmbeddingModel(
   yamlText: string,
   newModel: string,
-): string {
+): Result<string, string> {
   let inEmbeddingBlock = false;
   let replaced = false;
   const out = yamlText.split("\n").map((line) => {
@@ -429,11 +428,11 @@ export function replaceEmbeddingModel(
     return line;
   });
   if (!replaced) {
-    throw new Error(
+    return err(
       "no 'embedding: / model:' block found in global_settings.yml — refusing to guess its shape",
     );
   }
-  return out.join("\n");
+  return ok(out.join("\n"));
 }
 
 export function parseChunksAndFiles(stdout: string): {
@@ -736,11 +735,12 @@ export async function moveDbArtifact(
     await cp(src, dst, { recursive: true, errorOnExist: true });
     const dstBytes = pathSizeBytes(dst);
     if (dstBytes !== srcBytes) {
-      throw new Error(
+      return err(
         `byte mismatch after cross-device copy: src=${srcBytes} dst=${dstBytes}`,
       );
     }
     await removeDir(src);
+    return ok(undefined);
   })();
   if (copyResult.isErr()) {
     const copyError = copyResult.error;
@@ -749,6 +749,8 @@ export async function moveDbArtifact(
       error: copyError instanceof Error ? copyError.message : String(copyError),
     };
   }
+  if (copyResult.value.isErr())
+    return { ok: false, error: copyResult.value.error };
   return { ok: true };
 }
 
@@ -782,6 +784,17 @@ interface Ctx {
   // (which fully replaces the subprocess's env — see ccc-swap.test.ts's `runScript`) is the same
   // code path as production, never a separate branch that could drift.
   env: Record<string, string | undefined>;
+  dbDirError: Error | undefined;
+}
+
+function dbDirForCommand(project: string, ctx: Ctx): string | null {
+  return resolveDbDir(project, ctx.env).match(
+    (directory) => directory,
+    (error) => {
+      ctx.dbDirError = error;
+      return null;
+    },
+  );
 }
 
 function cmdDiscover(ctx: Ctx): number {
@@ -797,16 +810,23 @@ function cmdDiscover(ctx: Ctx): number {
     return 0;
   }
 
-  const rows = projects.map((root) => {
-    const dbDir = resolveDbDir(root, ctx.env);
+  const rows: Array<{
+    root: string;
+    dim: number | null;
+    chunks: number | null;
+    size: number;
+  }> = [];
+  for (const root of projects) {
+    const dbDir = dbDirForCommand(root, ctx);
+    if (dbDir === null) return 2;
     const dbPath = join(dbDir, TARGET_SQLITE_DB);
-    return {
+    rows.push({
       root,
       dim: computeIndexDimension(dbPath),
       chunks: countIndexedRows(dbPath),
       size: dbArtifactsSizeBytes(dbDir),
-    };
-  });
+    });
+  }
 
   const modeDim = pickModeDimension(rows.map((r) => r.dim));
 
@@ -864,14 +884,10 @@ async function cmdBuild(
     return 2;
   }
   const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
-  const shadowYamlResult = fromThrowable(() =>
-    replaceEmbeddingModel(liveYaml, flags.model),
-  )();
+  const shadowYamlResult = replaceEmbeddingModel(liveYaml, flags.model);
   if (shadowYamlResult.isErr()) {
     const error = shadowYamlResult.error;
-    process.stderr.write(
-      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    process.stderr.write(`FATAL: ${error}\n`);
     return 2;
   }
   const shadowYaml = shadowYamlResult.value;
@@ -919,12 +935,12 @@ async function cmdBuild(
   // safety property (build never writes to a live index) is PROVEN below, not asserted. Bounded
   // to DB_ARTIFACTS by name (never the whole live DB dir) — see the file header's nested-project
   // hazard.
-  const liveSnapshots = new Map(
-    projects.map((root) => [
-      root,
-      snapshotDbArtifacts(resolveDbDir(root, ctx.env)),
-    ]),
-  );
+  const liveSnapshots = new Map<string, Map<string, FileSnapshot>>();
+  for (const root of projects) {
+    const dbDir = dbDirForCommand(root, ctx);
+    if (dbDir === null) return 2;
+    liveSnapshots.set(root, snapshotDbArtifacts(dbDir));
+  }
 
   await mkdir(ctx.shadowDir, { recursive: true });
   await writeFile(
@@ -994,10 +1010,9 @@ async function cmdBuild(
   for (const root of projects) {
     const before = liveSnapshots.get(root);
     if (before === undefined) continue;
-    const diff = diffSnapshots(
-      before,
-      snapshotDbArtifacts(resolveDbDir(root, ctx.env)),
-    );
+    const dbDir = dbDirForCommand(root, ctx);
+    if (dbDir === null) return 2;
+    const diff = diffSnapshots(before, snapshotDbArtifacts(dbDir));
     if (diff.length > 0) liveTouched.push(`${root}: ${diff.join(", ")}`);
   }
   if (liveTouched.length > 0) {
@@ -1056,15 +1071,33 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
   const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
   const previousModel = readEmbeddingModel(liveYaml);
 
-  const checks = projects.map((root) => {
+  const checks: Array<{
+    root: string;
+    shadowDbDir: string;
+    shadowDb: string;
+    liveDbDir: string;
+    dim: number | null;
+    rows: number | null;
+    ready: boolean;
+  }> = [];
+  for (const root of projects) {
     const shadowDbDir = mirrorShadowDbDir(ctx.shadowDir, root);
     const shadowDb = join(shadowDbDir, TARGET_SQLITE_DB);
     const dim = computeIndexDimension(shadowDb);
-    const rows = countIndexedRows(shadowDb);
-    const liveDbDir = resolveDbDir(root, ctx.env);
-    const ready = existsSync(shadowDb) && dim !== null && (rows ?? 0) > 0;
-    return { root, shadowDbDir, shadowDb, liveDbDir, dim, rows, ready };
-  });
+    const rowCount = countIndexedRows(shadowDb);
+    const liveDbDir = dbDirForCommand(root, ctx);
+    if (liveDbDir === null) return 2;
+    const ready = existsSync(shadowDb) && dim !== null && (rowCount ?? 0) > 0;
+    checks.push({
+      root,
+      shadowDbDir,
+      shadowDb,
+      liveDbDir,
+      dim,
+      rows: rowCount,
+      ready,
+    });
+  }
 
   const problems: string[] = [];
   for (const c of checks) {
@@ -1180,11 +1213,12 @@ async function cmdCutover(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     ),
     "utf8",
   );
-  await writeFile(
-    liveGlobalSettingsPath,
-    replaceEmbeddingModel(liveYaml, newModel),
-    "utf8",
-  );
+  const updatedYaml = replaceEmbeddingModel(liveYaml, newModel);
+  if (updatedYaml.isErr()) {
+    process.stderr.write(`FATAL: ${updatedYaml.error}\n`);
+    return 2;
+  }
+  await writeFile(liveGlobalSettingsPath, updatedYaml.value, "utf8");
   process.stdout.write(
     `CUTOVER: ${liveGlobalSettingsPath} embedding.model -> ${newModel} (was ${previousModel ?? "unknown"})\n`,
   );
@@ -1208,10 +1242,16 @@ async function cmdRollback(
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
-  const perProject = projects.map((root) => {
-    const liveDbDir = resolveDbDir(root, ctx.env);
-    return { root, liveDbDir, gens: listPrevGenerations(liveDbDir) };
-  });
+  const perProject: Array<{
+    root: string;
+    liveDbDir: string;
+    gens: PrevGeneration[];
+  }> = [];
+  for (const root of projects) {
+    const liveDbDir = dbDirForCommand(root, ctx);
+    if (liveDbDir === null) return 2;
+    perProject.push({ root, liveDbDir, gens: listPrevGenerations(liveDbDir) });
+  }
   const withGens = perProject.filter((p) => p.gens.length > 0);
   if (withGens.length === 0) {
     process.stdout.write(
@@ -1344,11 +1384,12 @@ async function cmdRollback(
     existsSync(liveGlobalSettingsPath)
   ) {
     const liveYaml = await readFile(liveGlobalSettingsPath, "utf8");
-    await writeFile(
-      liveGlobalSettingsPath,
-      replaceEmbeddingModel(liveYaml, previousModel),
-      "utf8",
-    );
+    const updatedYaml = replaceEmbeddingModel(liveYaml, previousModel);
+    if (updatedYaml.isErr()) {
+      process.stderr.write(`FATAL: ${updatedYaml.error}\n`);
+      return 2;
+    }
+    await writeFile(liveGlobalSettingsPath, updatedYaml.value, "utf8");
     process.stdout.write(
       `ROLLBACK: ${liveGlobalSettingsPath} embedding.model restored -> ${previousModel}\n`,
     );
@@ -1376,10 +1417,12 @@ async function cmdGc(
     excludeDirNames: ctx.excludeDirNames,
     excludeAbsolutePaths: [ctx.shadowDir, ...ctx.excludePaths],
   });
-  const perProject = projects.map((root) => ({
-    root,
-    gens: listPrevGenerations(resolveDbDir(root, ctx.env)),
-  }));
+  const perProject: Array<{ root: string; gens: PrevGeneration[] }> = [];
+  for (const root of projects) {
+    const dbDir = dbDirForCommand(root, ctx);
+    if (dbDir === null) return 2;
+    perProject.push({ root, gens: listPrevGenerations(dbDir) });
+  }
 
   const toDelete: PrevGeneration[] = [];
   for (const p of perProject) {
@@ -1446,7 +1489,12 @@ async function cmdGc(
  * settings.yml is never touched, so `from` (`<root>/.cocoindex_code/`) ends up holding only it.
  */
 async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
-  const mappings = parseMapping(ctx.env[MAPPING_ENV]);
+  const mappingResult = parseMapping(ctx.env[MAPPING_ENV]);
+  if (mappingResult.isErr()) {
+    ctx.dbDirError = mappingResult.error;
+    return 2;
+  }
+  const mappings = mappingResult.value;
   if (mappings.length === 0) {
     process.stdout.write(
       `NOTE: ${MAPPING_ENV} is unset or maps nothing — nothing to relocate\n`,
@@ -1465,11 +1513,12 @@ async function cmdRelocate(ctx: Ctx, flags: { yes: boolean }): Promise<number> {
     return 0;
   }
 
-  const plans = projects.map((root) => ({
-    root,
-    from: join(root, SETTINGS_DIR_NAME),
-    to: resolveDbDir(root, ctx.env),
-  }));
+  const plans: Array<{ root: string; from: string; to: string }> = [];
+  for (const root of projects) {
+    const to = dbDirForCommand(root, ctx);
+    if (to === null) return 2;
+    plans.push({ root, from: join(root, SETTINGS_DIR_NAME), to });
+  }
 
   const conflicts: string[] = [];
   const work: Array<{
@@ -1588,18 +1637,18 @@ const VERBS = [
 type Verb = (typeof VERBS)[number];
 
 const SWAP_FLAGS = {
-  shadowDir: { type: nonEmptyString("--shadow-dir") },
-  home: { type: nonEmptyString("--home") },
-  model: { type: nonEmptyString("--model") },
+  shadowDir: { type: String },
+  home: { type: String },
+  model: { type: String },
   force: { type: Boolean, default: false },
   yes: { type: Boolean, default: false },
   keep: { type: Number, default: DEFAULT_KEEP },
-  generation: { type: nonEmptyString("--generation") },
-  cccBin: { type: nonEmptyString("--ccc-bin") },
+  generation: { type: String },
+  cccBin: { type: String },
   timeoutMs: { type: Number, default: DEFAULT_TIMEOUT_MS },
   // `as const` pins this to the readonly one-tuple cleye's Flags type requires for a
   // multi-value flag; a bare array literal infers as a general array and fails assignability.
-  exclude: { type: [nonEmptyString("--exclude")] as const, default: () => [] },
+  exclude: { type: [String] as const, default: () => [] },
 };
 
 type SwapFlags = {
@@ -1618,17 +1667,26 @@ type SwapFlags = {
   exclude: string[];
 };
 
-async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
+async function runVerb(
+  verb: Verb,
+  flags: SwapFlags,
+): Promise<Result<number, Error>> {
   const keep = flags.keep;
   if (keep === null || !Number.isFinite(keep) || keep < 0) {
-    throw new Error("--keep must be a non-negative number");
+    process.stderr.write("FATAL: --keep must be a non-negative number\n");
+    return ok(2);
   }
   const timeoutMs = flags.timeoutMs;
   if (timeoutMs === null || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("--timeout-ms must be a positive number");
+    process.stderr.write("FATAL: --timeout-ms must be a positive number\n");
+    return ok(2);
   }
 
   const home = resolveHome(flags.home);
+  if (home === null) {
+    process.stderr.write("FATAL: cannot resolve $HOME (pass --home)\n");
+    return ok(2);
+  }
   const shadowDir = resolveShadowDir(home, flags.shadowDir);
   const liveSettingsDir = resolveLiveSettingsDir(
     home,
@@ -1651,12 +1709,14 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
     cccBin,
     timeoutMs,
     env: process.env,
+    dbDirError: undefined,
   };
-  return match(verb)
+  const code = await match(verb)
     .with("discover", () => cmdDiscover(ctx))
     .with("build", () => {
       if (flags.model === undefined || flags.model === "") {
-        throw new Error("build requires --model <hf-id>");
+        process.stderr.write("FATAL: build requires --model <hf-id>\n");
+        return 2;
       }
       return cmdBuild(ctx, {
         model: flags.model,
@@ -1671,9 +1731,12 @@ async function runVerb(verb: Verb, flags: SwapFlags): Promise<number> {
     .with("gc", () => cmdGc(ctx, { yes: flags.yes, keep }))
     .with("relocate", () => cmdRelocate(ctx, { yes: flags.yes }))
     .exhaustive();
+  return ctx.dbDirError === undefined ? ok(code) : err(ctx.dbDirError);
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<number> {
+  let entryError: string | undefined;
+  let exitCode = 0;
   await cli(
     {
       name: "ccc-swap.ts",
@@ -1696,9 +1759,20 @@ async function main(): Promise<void> {
           },
           async (parsed) => {
             if (parsed._.length > 0) {
-              throw new Error(`Unexpected argument '${parsed._[0]}'`);
+              process.stderr.write(
+                `FATAL: Unexpected argument '${parsed._[0]}'\n`,
+              );
+              exitCode = 2;
+              return;
             }
-            process.exitCode = await runVerb(verb, parsed.flags);
+            const result = await runVerb(verb, parsed.flags);
+            exitCode = result.match(
+              (code) => code,
+              (error) => {
+                process.stderr.write(`FATAL: ${error.message}\n`);
+                return 2;
+              },
+            );
           },
         ),
       ),
@@ -1708,19 +1782,29 @@ async function main(): Promise<void> {
         parsed._.verb === undefined ||
         !VERBS.some((v) => v === parsed._.verb)
       ) {
-        throw new Error(`usage: bun ccc-swap.ts <${VERBS.join("|")}> [flags]`);
+        entryError = `usage: bun ccc-swap.ts <${VERBS.join("|")}> [flags]`;
+        return;
       }
-      throw new Error(`Unexpected argument '${parsed._[1]}'`);
+      entryError = `Unexpected argument '${parsed._[1]}'`;
     },
     Bun.argv.slice(2),
   );
+  if (entryError !== undefined) {
+    process.stderr.write(`FATAL: ${entryError}\n`);
+    return 2;
+  }
+  return exitCode;
 }
 
 if (import.meta.main) {
-  await main().catch((error) => {
-    process.stderr.write(
-      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-    process.exitCode = 2;
-  });
+  const exitCode = await Promise.try(main).then(
+    (code) => code,
+    (error: unknown) => {
+      process.stderr.write(
+        `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      return 2;
+    },
+  );
+  process.exit(exitCode);
 }

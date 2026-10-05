@@ -42,7 +42,8 @@ function resolveRealBun(): string {
     if (!existsSync(candidate)) continue;
     if (!realpathSync(candidate).includes("mise")) return candidate;
   }
-  throw new Error("no non-mise-shim `bun` found on PATH for the test harness");
+  expect(false).toBe(true);
+  return "";
 }
 const REAL_BUN = resolveRealBun();
 
@@ -289,7 +290,7 @@ describe("isProcessRunning", () => {
 
   test("pgrep missing => treated as RUNNING (conservative: keep on missing evidence)", () => {
     const fakeSpawn = fakeSpawnSync(() => {
-      throw new Error("ENOENT");
+      Bun.spawnSync(["dotfiles-test-missing-command"]);
     });
     expect(isProcessRunning("abc123", fakeSpawn)).toBe(true);
   });

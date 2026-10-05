@@ -64,7 +64,7 @@ export function buildSerenaManifest(
     .update(options.project)
     .digest("hex")
     .slice(0, 16);
-  return validateManifest({
+  return {
     schema: 1,
     job_id: `serena-${projectHash}`,
     run_class: "service",
@@ -84,23 +84,22 @@ export function buildSerenaManifest(
     child_fanout: 0,
     walltime_seconds: options.walltimeSeconds,
     cleanup: { mode: "term-then-kill", grace_seconds: 10 },
-  });
+  } satisfies ResourceManifest;
 }
 
+let prototypeFlagSeen = false;
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    prototypeFlagSeen = true;
   }
 }
 
 function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
+  void flag;
+  return (value) => value;
 }
 
 function integerFlag(
@@ -109,21 +108,17 @@ function integerFlag(
   maximum: number,
 ): (value: string) => number {
   return (value) => {
-    if (!/^\d+$/u.test(value)) {
-      throw new UsageError(`${flag} must be an integer`);
-    }
-    const parsed = Number(value);
-    if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
-      throw new UsageError(`${flag} must be in [${minimum}, ${maximum}]`);
-    }
-    return parsed;
+    void flag;
+    void minimum;
+    void maximum;
+    return /^\d+$/u.test(value) ? Number(value) : Number.NaN;
   };
 }
 
-function existingProject(path: string): string {
+function existingProject(path: string): string | UsageError {
   const resolved = fromThrowable(() => realpathSync(resolve(path)))();
   if (resolved.isErr()) {
-    throw new UsageError(
+    return new UsageError(
       `cannot resolve project '${path}': ${
         resolved.error instanceof Error
           ? resolved.error.message
@@ -132,9 +127,17 @@ function existingProject(path: string): string {
     );
   }
   const project = resolved.value;
-  if (!statSync(project).isDirectory()) {
-    throw new UsageError(`project is not a directory: ${project}`);
-  }
+  const directory = fromThrowable((candidate: string) => statSync(candidate))(
+    project,
+  );
+  if (directory.isErr())
+    return new UsageError(
+      directory.error instanceof Error
+        ? directory.error.message
+        : String(directory.error),
+    );
+  if (!directory.value.isDirectory())
+    return new UsageError(`project is not a directory: ${project}`);
   return project;
 }
 
@@ -178,25 +181,82 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
+  if (prototypeFlagSeen) {
+    process.stderr.write("USAGE: Unknown option '--__proto__'\n");
+    process.exitCode = 2;
+    return;
+  }
   if (parsed._.length > 0) {
-    throw new UsageError(`unexpected argument '${parsed._[0]}'`);
+    process.stderr.write(`USAGE: unexpected argument '${parsed._[0]}'\n`);
+    process.exitCode = 2;
+    return;
   }
   if (parsed.flags.project === undefined) {
-    throw new UsageError("--project is required");
+    process.stderr.write("USAGE: --project is required\n");
+    process.exitCode = 2;
+    return;
+  }
+  const requiredTextFlags = [
+    ["--project", parsed.flags.project],
+    ["--context", parsed.flags.context],
+  ] as const;
+  for (const [flag, value] of requiredTextFlags) {
+    if (value === "") {
+      process.stderr.write(`USAGE: ${flag} requires a value\n`);
+      process.exitCode = 2;
+      return;
+    }
   }
   if (Bun.which("uvx") === null) {
-    throw new UsageError("uvx is required to start pinned Serena");
+    process.stderr.write("USAGE: uvx is required to start pinned Serena\n");
+    process.exitCode = 2;
+    return;
   }
 
   const project = existingProject(parsed.flags.project);
-  const manifest = buildSerenaManifest({
-    project,
-    cpuThreads: parsed.flags.cpuThreads,
-    ramBytes: parsed.flags.ramGib * GiB,
-    processes: parsed.flags.processes,
-    scratchBytes: parsed.flags.scratchGib * GiB,
-    walltimeSeconds: parsed.flags.walltimeSeconds,
-  });
+  if (project instanceof UsageError) {
+    process.stderr.write(`USAGE: ${project.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const integerFlags = [
+    ["--port", parsed.flags.port, 1_024, 65_535],
+    ["--cpu-threads", parsed.flags.cpuThreads, 1, 8],
+    ["--ram-gib", parsed.flags.ramGib, 1, 16],
+    ["--processes", parsed.flags.processes, 3, 32],
+    ["--scratch-gib", parsed.flags.scratchGib, 0, 32],
+    ["--walltime-seconds", parsed.flags.walltimeSeconds, 60, 86_400],
+  ] as const;
+  for (const [flag, value, minimum, maximum] of integerFlags) {
+    if (!Number.isSafeInteger(value)) {
+      process.stderr.write(`USAGE: ${flag} must be an integer\n`);
+      process.exitCode = 2;
+      return;
+    }
+    if (value < minimum || value > maximum) {
+      process.stderr.write(
+        `USAGE: ${flag} must be in [${minimum}, ${maximum}]\n`,
+      );
+      process.exitCode = 2;
+      return;
+    }
+  }
+  const manifestResult = validateManifest(
+    buildSerenaManifest({
+      project,
+      cpuThreads: parsed.flags.cpuThreads,
+      ramBytes: parsed.flags.ramGib * GiB,
+      processes: parsed.flags.processes,
+      scratchBytes: parsed.flags.scratchGib * GiB,
+      walltimeSeconds: parsed.flags.walltimeSeconds,
+    }),
+  );
+  if (manifestResult.isErr()) {
+    process.stderr.write(`USAGE: ${manifestResult.error.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const manifest = manifestResult.value;
   const command = buildSerenaCommand({
     project,
     context: parsed.flags.context,
@@ -211,8 +271,13 @@ async function main(): Promise<void> {
     "Keep this process in the foreground; Ctrl-C performs TERM→KILL cleanup. " +
       "Register the HTTP endpoint only in the intended project/session.\n",
   );
-  const result = await executeJob(manifest, command, { cwd: project });
-  process.exitCode = result.exitCode;
+  const execution = await executeJob(manifest, command, { cwd: project });
+  if (execution.isErr()) {
+    process.stderr.write(`ERROR: ${execution.error.message}\n`);
+    process.exitCode = 70;
+    return;
+  }
+  process.exitCode = execution.value.exitCode;
 }
 
 if (import.meta.main) {

@@ -83,6 +83,11 @@ function applyEdits(text: string, edits: readonly unknown[]): string | null {
 
 function main(): void {
   const payload = readStdinJson();
+  if (payload === undefined) {
+    process.stderr.write("enforce-no-new-bash: invalid JSON payload\n");
+    process.exitCode = 1;
+    return;
+  }
   const tool = strAt(payload, "tool_name");
   const input = at(payload, "tool_input");
   const path = strAt(input, "file_path");

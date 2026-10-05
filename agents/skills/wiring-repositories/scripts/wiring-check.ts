@@ -21,12 +21,13 @@ import { cli } from "cleye";
 import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
 
 /** `.claude/settings.json` `permissions.deny`, the only part of the file JJ-2 reads. */
-const DenyRulesSchema = z.object({ permissions: z.object({ deny: z.array(z.unknown()) }) });
+const DenyRulesSchema = z.object({
+  permissions: z.object({ deny: z.array(z.unknown()) }),
+});
 
 function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
+  void type;
+  void flag;
 }
 
 type Finding = { readonly tag: string; readonly msg: string };
@@ -59,13 +60,25 @@ const waived = new Map<string, string>();
  * outside, and S1 exists to tell them apart.
  */
 function parseWaivers(mise: string): void {
-  for (const m of mise.matchAll(/^\s*#\s*wiring-check:\s*waive\s+(\S+)\s+--\s+(.+)$/gmu)) {
+  for (const m of mise.matchAll(
+    /^\s*#\s*wiring-check:\s*waive\s+(\S+)\s+--\s+(.+)$/gmu,
+  )) {
     if (m[1] !== undefined && m[2] !== undefined) waived.set(m[1], m[2].trim());
   }
 }
 
-type Task = { readonly run: string; readonly alias: string[]; readonly deps: string[]; readonly hasRun: boolean; readonly raw: boolean };
-type MiseRun = { readonly tasks: string[]; readonly swallowed: string[]; readonly serial: boolean };
+type Task = {
+  readonly run: string;
+  readonly alias: string[];
+  readonly deps: string[];
+  readonly hasRun: boolean;
+  readonly raw: boolean;
+};
+type MiseRun = {
+  readonly tasks: string[];
+  readonly swallowed: string[];
+  readonly serial: boolean;
+};
 
 /**
  * Top-level `[tasks.x]` / `[tasks."x:y"]` headers, with their RUN bodies isolated.
@@ -92,7 +105,8 @@ function miseTasks(src: string): Map<string, Task> {
   let inRun = false;
 
   const flush = (): void => {
-    if (name !== undefined) out.set(name, { run: run.join("\n"), alias, deps, hasRun, raw });
+    if (name !== undefined)
+      out.set(name, { run: run.join("\n"), alias, deps, hasRun, raw });
     run = [];
     alias = [];
     deps = [];
@@ -102,15 +116,16 @@ function miseTasks(src: string): Map<string, Task> {
     inRun = false;
   };
   const takeDeps = (text: string): void => {
-    for (const d of text.matchAll(/["']([^"']+)["']/gu)) if (d[1] !== undefined) deps.push(d[1]);
+    for (const d of text.matchAll(/["']([^"']+)["']/gu))
+      if (d[1] !== undefined) deps.push(d[1]);
   };
 
   src.split("\n").forEach((line) => {
     const activeDelimiter = multi;
     if (activeDelimiter !== undefined && inRun) run.push(line);
     if (activeDelimiter !== undefined && line.includes(activeDelimiter)) {
-        multi = undefined;
-        inRun = false;
+      multi = undefined;
+      inRun = false;
     }
     if (activeDelimiter !== undefined) {
       return;
@@ -141,9 +156,9 @@ function miseTasks(src: string): Map<string, Task> {
       const open = /^('''|""")/u.exec(rest);
       const delim = open?.[1] ?? "";
       const after = rest.slice(delim.length);
-        // A body that opens AND closes on one line (`run = '''cmd'''`) is not multi-line. Treating
-        // it as open swallowed every task until the next triple quote — 150 lines of dotfiles'
-        // mise.toml, `lint` and `fmt:check` among them (found 2026-09-22).
+      // A body that opens AND closes on one line (`run = '''cmd'''`) is not multi-line. Treating
+      // it as open swallowed every task until the next triple quote — 150 lines of dotfiles'
+      // mise.toml, `lint` and `fmt:check` among them (found 2026-09-22).
       if (open !== null && after.includes(delim) && key === "run")
         run.push(after.slice(0, after.indexOf(delim)));
       if (open !== null && after.includes(delim)) return;
@@ -152,7 +167,10 @@ function miseTasks(src: string): Map<string, Task> {
         inRun = key === "run";
         return;
       }
-      const values = Array.from(rest.matchAll(/["']([^"']+)["']/gu), (match) => match[1]).flatMap((value) => value === undefined ? [] : [value]);
+      const values = Array.from(
+        rest.matchAll(/["']([^"']+)["']/gu),
+        (match) => match[1],
+      ).flatMap((value) => (value === undefined ? [] : [value]));
       alias.push(...(key === "alias" ? values : []));
       run.push(...(key === "alias" ? [] : [rest]));
       return;
@@ -185,11 +203,15 @@ function miseTasks(src: string): Map<string, Task> {
  */
 function pathTokens(body: string, root: string): string[] {
   const home = process.env["HOME"] ?? "";
-  return [...body.matchAll(/[\w./${}~-]*[\w-]\.(?:ts|js|sh|jl|py|rs|toml|json)\b/gu)]
-    .map((m) => m[0]
-      .replaceAll(/\{\{\s*config_root\s*\}\}/gu, root)
-      .replaceAll(/\$\{HOME\}|\$HOME/gu, home)
-      .replace(/^~(?=\/)/u, home))
+  return [
+    ...body.matchAll(/[\w./${}~-]*[\w-]\.(?:ts|js|sh|jl|py|rs|toml|json)\b/gu),
+  ]
+    .map((m) =>
+      m[0]
+        .replaceAll(/\{\{\s*config_root\s*\}\}/gu, root)
+        .replaceAll(/\$\{HOME\}|\$HOME/gu, home)
+        .replace(/^~(?=\/)/u, home),
+    )
     .filter((p) => !p.startsWith("http") && !/[${}]/u.test(p));
 }
 
@@ -199,17 +221,28 @@ async function readIf(path: string): Promise<string | undefined> {
   return readFile(path, "utf8");
 }
 
-function checkHookTask(entry: string, task: string, root: string, tasks: Map<string, Task>): void {
+function checkHookTask(
+  entry: string,
+  task: string,
+  root: string,
+  tasks: Map<string, Task>,
+): void {
   if (!tasks.has(task)) {
-    fail("ORDER-2", `.githooks/${entry} calls \`mise run ${task}\`, which mise.toml does not define. ` +
-      `git reports nothing — commits pass ungated.`);
+    fail(
+      "ORDER-2",
+      `.githooks/${entry} calls \`mise run ${task}\`, which mise.toml does not define. ` +
+        `git reports nothing — commits pass ungated.`,
+    );
     return;
   }
   const paths = pathTokens(tasks.get(task)?.run ?? "", root);
   for (const path of paths) {
     if (existsSync(resolve(root, path))) continue;
-    fail("ORDER-2", `.githooks/${entry} -> \`mise run ${task}\` -> missing file \`${path}\`. ` +
-      `The chain resolves until the last link; nothing reports the break.`);
+    fail(
+      "ORDER-2",
+      `.githooks/${entry} -> \`mise run ${task}\` -> missing file \`${path}\`. ` +
+        `The chain resolves until the last link; nothing reports the break.`,
+    );
   }
 }
 
@@ -220,19 +253,28 @@ function checkThinHook(entry: string, raw: string): void {
     .map((line) => line.replace(/(^|\s)#.*$/u, "$1"))
     .join("\n")
     .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
-  const args = raw.split("\n").map((line) => line.replace(/(^|\s)#.*$/u, "$1")).join("\n");
+  const args = raw
+    .split("\n")
+    .map((line) => line.replace(/(^|\s)#.*$/u, "$1"))
+    .join("\n");
   if (entry !== "pre-commit" && /\$[123@*]|\$\{[123@*]/u.test(args)) {
-    notes.push(`.githooks/${entry} reads git's hook arguments, so the thin-wrapper rule does ` +
-      `not apply — it cannot be run standalone as a task.`);
+    notes.push(
+      `.githooks/${entry} reads git's hook arguments, so the thin-wrapper rule does ` +
+        `not apply — it cannot be run standalone as a task.`,
+    );
     return;
   }
   const tells: string[] = [];
   if (/\b(for|while)\s/u.test(code)) tells.push("a loop");
-  if (/\bgit\s+(?!rev-parse)[a-z-]+/u.test(code)) tells.push("git commands beyond rev-parse");
+  if (/\bgit\s+(?!rev-parse)[a-z-]+/u.test(code))
+    tells.push("git commands beyond rev-parse");
   if (tells.length > 0) {
-    fail("HOOK-1", `.githooks/${entry} carries logic (${tells.join(", ")}). A hook is a thin ` +
-      `wrapper; the body belongs in a \`hook:${entry}\` mise task. As written it is absent ` +
-      `from \`mise tasks\`, unrunnable without git, and untestable.`);
+    fail(
+      "HOOK-1",
+      `.githooks/${entry} carries logic (${tells.join(", ")}). A hook is a thin ` +
+        `wrapper; the body belongs in a \`hook:${entry}\` mise task. As written it is absent ` +
+        `from \`mise tasks\`, unrunnable without git, and untestable.`,
+    );
   }
 }
 
@@ -242,70 +284,125 @@ const GATE_VERBS: Record<string, Set<string>> = {
   "pre-push": new Set(["fmt:check", "lint", "test", "check"]),
 };
 
-function walkTaskDependencies(name: string, tasks: Map<string, Task>, reached: Set<string>): void {
+function walkTaskDependencies(
+  name: string,
+  tasks: Map<string, Task>,
+  reached: Set<string>,
+): void {
   if (reached.has(name)) return;
   reached.add(name);
   for (const dependency of tasks.get(name)?.deps ?? [])
     walkTaskDependencies(dependency, tasks, reached);
 }
 
-function checkGateTask(hook: string, gateTask: Task, tasks: Map<string, Task>): void {
+function checkGateTask(
+  hook: string,
+  gateTask: Task,
+  tasks: Map<string, Task>,
+): void {
   const stdinGate = hook === "pre-push" && gateTask.raw;
   if (gateTask.hasRun && !stdinGate) {
-    fail("HOOK-1", `\`hook:${hook}\` has a run body. A gate task is depends-only over contract ` +
-      `verbs (e.g. \`depends = ["fmt:staged", "lint"]\`); a body is a second gate that drifts from them.`);
+    fail(
+      "HOOK-1",
+      `\`hook:${hook}\` has a run body. A gate task is depends-only over contract ` +
+        `verbs (e.g. \`depends = ["fmt:staged", "lint"]\`); a body is a second gate that drifts from them.`,
+    );
   }
   const allowed = GATE_VERBS[hook] ?? new Set<string>();
-  const offVerb = gateTask.deps.filter((dependency) => !allowed.has(dependency));
+  const offVerb = gateTask.deps.filter(
+    (dependency) => !allowed.has(dependency),
+  );
   if (offVerb.length > 0) {
-    fail("HOOK-1", `\`hook:${hook}\` depends on ${offVerb.map((dependency) => `\`${dependency}\``).join(", ")} — not one of ` +
-      `its gate verbs (${[...allowed].map((verb) => `\`${verb}\``).join(", ")}). A repo-specific check goes in a ` +
-      `\`lint:*\` subtask so \`mise run lint\` runs it too.`);
+    fail(
+      "HOOK-1",
+      `\`hook:${hook}\` depends on ${offVerb.map((dependency) => `\`${dependency}\``).join(", ")} — not one of ` +
+        `its gate verbs (${[...allowed].map((verb) => `\`${verb}\``).join(", ")}). A repo-specific check goes in a ` +
+        `\`lint:*\` subtask so \`mise run lint\` runs it too.`,
+    );
   }
   if (gateTask.deps.length === 0 && !gateTask.hasRun && !stdinGate)
-    fail("HOOK-1", `\`hook:${hook}\` depends on nothing — the gate gates nothing.`);
+    fail(
+      "HOOK-1",
+      `\`hook:${hook}\` depends on nothing — the gate gates nothing.`,
+    );
   if (hook === "pre-commit" && !gateTask.deps.includes("fmt:staged")) {
-    fail("HOOK-1c", "`hook:pre-commit` does not depend on `fmt:staged` — the commit gate must fix " +
-      "the staged files in place (wiring-mise-tasks `fmt:staged`), not leave formatting to a " +
-      "whole-tree check.");
+    fail(
+      "HOOK-1c",
+      "`hook:pre-commit` does not depend on `fmt:staged` — the commit gate must fix " +
+        "the staged files in place (wiring-mise-tasks `fmt:staged`), not leave formatting to a " +
+        "whole-tree check.",
+    );
   }
   const reached = new Set<string>();
   if (hook === "pre-commit") {
-    for (const dependency of gateTask.deps) walkTaskDependencies(dependency, tasks, reached);
+    for (const dependency of gateTask.deps)
+      walkTaskDependencies(dependency, tasks, reached);
   }
   if (hook === "pre-commit" && reached.has("fmt:check")) {
-    fail("HOOK-1c", "`hook:pre-commit` reaches `fmt:check`, which checks the WHOLE tree: in a " +
-      "shared checkout any session's unstaged or untracked work refuses every session's commit. " +
-      "`fmt:staged` already covers what is being committed; keep `fmt:check` in `check` and pre-push.");
+    fail(
+      "HOOK-1c",
+      "`hook:pre-commit` reaches `fmt:check`, which checks the WHOLE tree: in a " +
+        "shared checkout any session's unstaged or untracked work refuses every session's commit. " +
+        "`fmt:staged` already covers what is being committed; keep `fmt:check` in `check` and pre-push.",
+    );
   }
 }
 
-function checkGateRun(hook: string, run: MiseRun, expected: string, tasks: Map<string, Task>): void {
+function checkGateRun(
+  hook: string,
+  run: MiseRun,
+  expected: string,
+  tasks: Map<string, Task>,
+): void {
   const wrong = run.tasks.filter((task) => task !== expected);
   if (wrong.length > 0) {
-    fail("HOOK-1", `.githooks/${hook} runs ${wrong.map((task) => `\`${task}\``).join(", ")}. A gate hook ` +
-      `runs exactly \`${expected}\`, declared in mise.toml as depends-only over contract verbs, ` +
-      `so mise.toml alone says what the gate does.`);
+    fail(
+      "HOOK-1",
+      `.githooks/${hook} runs ${wrong.map((task) => `\`${task}\``).join(", ")}. A gate hook ` +
+        `runs exactly \`${expected}\`, declared in mise.toml as depends-only over contract verbs, ` +
+        `so mise.toml alone says what the gate does.`,
+    );
   }
-  if (!tasks.has(expected)) fail("HOOK-1", `.githooks/${hook} has no \`${expected}\` in mise.toml to run.`);
+  if (!tasks.has(expected))
+    fail(
+      "HOOK-1",
+      `.githooks/${hook} has no \`${expected}\` in mise.toml to run.`,
+    );
   const swallowedTasks = run.swallowed.filter(
-    (task) => tasks.has(task) || Object.values(GATE_VERBS).some((verbs) => verbs.has(task)),
+    (task) =>
+      tasks.has(task) ||
+      Object.values(GATE_VERBS).some((verbs) => verbs.has(task)),
   );
   if (swallowedTasks.length > 0) {
-    fail("HOOK-3", `.githooks/${hook}: \`mise run ${run.tasks[0]} ${swallowedTasks.join(" ")}\` passes ` +
-      `${swallowedTasks.join(", ")} as ARGUMENTS to ${run.tasks[0]} — they never run, and the hook ` +
-      `exits 0. Separate tasks with \`:::\`.`);
+    fail(
+      "HOOK-3",
+      `.githooks/${hook}: \`mise run ${run.tasks[0]} ${swallowedTasks.join(" ")}\` passes ` +
+        `${swallowedTasks.join(", ")} as ARGUMENTS to ${run.tasks[0]} — they never run, and the hook ` +
+        `exits 0. Separate tasks with \`:::\`.`,
+    );
   }
   if (!run.serial) {
-    fail("HOOK-3", `.githooks/${hook} runs mise without \`--jobs 1\`. mise 2026.9.12's parallel ` +
-      `scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM (measured 2026-09-22) — ` +
-      `a red gate must refuse, not hang the commit.`);
+    fail(
+      "HOOK-3",
+      `.githooks/${hook} runs mise without \`--jobs 1\`. mise 2026.9.12's parallel ` +
+        `scheduler hung 3 of 6 runs of a failing aggregate and ignored SIGTERM (measured 2026-09-22) — ` +
+        `a red gate must refuse, not hang the commit.`,
+    );
   }
 }
 
-async function auditWiring(root: string, mise: string | undefined, settingsRaw: string | undefined): Promise<void> {
+async function auditWiring(
+  root: string,
+  mise: string | undefined,
+  settingsRaw: string | undefined,
+): Promise<void> {
   const sources: string[] = [];
-  for (const dir of [".claude/hooks", ".claude/tools", "scripts", ".githooks"]) {
+  for (const dir of [
+    ".claude/hooks",
+    ".claude/tools",
+    "scripts",
+    ".githooks",
+  ]) {
     const abs = join(root, dir);
     for (const file of existsSync(abs) ? await readdir(abs) : [])
       sources.push((await readIf(join(abs, file))) ?? "");
@@ -317,9 +414,12 @@ async function auditWiring(root: string, mise: string | undefined, settingsRaw: 
       .filter((file) => file.endsWith(".ts"))
       .filter((file) => !haystack.includes(file));
     if (inert.length > 0) {
-      fail("INERT", `${dir}/: ${inert.length} file(s) referenced by neither .claude/settings.json ` +
-        `nor mise.toml — ${inert.slice(0, 6).join(", ")}${inert.length > 6 ? ", …" : ""}. ` +
-        `Laid, never fires, never retired.`);
+      fail(
+        "INERT",
+        `${dir}/: ${inert.length} file(s) referenced by neither .claude/settings.json ` +
+          `nor mise.toml — ${inert.slice(0, 6).join(", ")}${inert.length > 6 ? ", …" : ""}. ` +
+          `Laid, never fires, never retired.`,
+      );
     }
   }
 }
@@ -328,17 +428,31 @@ async function main(): Promise<void> {
   const argv = cli({
     name: "wiring-check",
     flags: {
-      repo: { type: String, description: "repo root (default: cwd)", default: "." },
-      audit: { type: Boolean, description: "also report laid-but-inert wiring (S1 backwards)", default: false },
+      repo: {
+        type: String,
+        description: "repo root (default: cwd)",
+        default: ".",
+      },
+      audit: {
+        type: Boolean,
+        description: "also report laid-but-inert wiring (S1 backwards)",
+        default: false,
+      },
     },
     parameters: [],
     strictFlags: true,
     ignoreArgv: rejectPrototypeFlag,
   });
+  if (Bun.argv.slice(2).includes("--__proto__")) {
+    process.stderr.write("FATAL: unknown option '--__proto__'\n");
+    process.exit(2);
+  }
   // Cleye leaves excess positionals in `_` rather than refusing them, and this command takes
   // none — a stray argument means the caller expected a different interface (BG1).
   if (argv._.length > 0) {
-    process.stderr.write(`unexpected argument: ${argv._[0]} (this command takes no positionals)\n`);
+    process.stderr.write(
+      `unexpected argument: ${argv._[0]} (this command takes no positionals)\n`,
+    );
     process.exit(2);
   }
   const root = resolve(argv.flags.repo);
@@ -356,88 +470,133 @@ async function main(): Promise<void> {
   if (mise !== undefined) {
     const hasTools = /^\s*\[tools\]/mu.test(mise);
     const runners = ["julia", "cargo", "uv", "bun", "python", "rustc", "node"];
-    const used = [...new Set(runners.filter((r) =>
-      [...tasks.values()].some((t) => new RegExp(`(^|[\\s"'|=])${r}\\b`, "u").test(t.run))))];
+    const used = [
+      ...new Set(
+        runners.filter((r) =>
+          [...tasks.values()].some((t) =>
+            new RegExp(`(^|[\\s"'|=])${r}\\b`, "u").test(t.run),
+          ),
+        ),
+      ),
+    ];
     if (!hasTools && used.length > 0) {
-      fail("ORDER-1", `mise.toml has no [tools] section, but task bodies run: ${used.join(", ")}. ` +
-        `These resolve against ambient PATH — green here, different on another machine.`);
+      fail(
+        "ORDER-1",
+        `mise.toml has no [tools] section, but task bodies run: ${used.join(", ")}. ` +
+          `These resolve against ambient PATH — green here, different on another machine.`,
+      );
     }
   }
 
   // ---------------------------------------------------------------- `mise run` call sites
-//
-// Parsed, not pattern-matched. The first cut read `mise run --jobs 1 lint` as a call to a task
-// named `--jobs` (found 2026-09-22 when the gate shim gained `--jobs 1`), and `mise run a b` as a
-// call to both — but mise passes `b` as an ARGUMENT to `a` and never runs it. Only `:::` starts a
-// second task. Getting that wrong is the difference between a gate and a gate-shaped no-op.
-const RUN_FLAGS_WITH_VALUE = new Set(["-j", "--jobs", "-C", "--cd", "-E", "--env", "-o", "--output"]);
+  //
+  // Parsed, not pattern-matched. The first cut read `mise run --jobs 1 lint` as a call to a task
+  // named `--jobs` (found 2026-09-22 when the gate shim gained `--jobs 1`), and `mise run a b` as a
+  // call to both — but mise passes `b` as an ARGUMENT to `a` and never runs it. Only `:::` starts a
+  // second task. Getting that wrong is the difference between a gate and a gate-shaped no-op.
+  const RUN_FLAGS_WITH_VALUE = new Set([
+    "-j",
+    "--jobs",
+    "-C",
+    "--cd",
+    "-E",
+    "--env",
+    "-o",
+    "--output",
+  ]);
 
-function miseRuns(body: string): MiseRun[] {
-  const out: MiseRun[] = [];
-  for (const m of body.matchAll(/mise\s+run\b([^\n]*)/gu)) {
-    const toks = (m[1] ?? "").trim().split(/\s+/u).filter((t) => t !== "");
-    const taskNames: string[] = [];
-    const swallowed: string[] = [];
-    let serial = false;
-    let expectTask = true;
-    let skipNext = false;
-    let stopped = false;
-    toks.forEach((t, index) => {
-      if (stopped) return;
-      if (skipNext) { skipNext = false; return; }
-      if (t === ":::") {
-        expectTask = true;
-        return;
-      }
-      const option = t.startsWith("-");
-      if (option && /^(-j|--jobs)(=1)?$/u.test(t) && (t.endsWith("=1") || toks[index + 1] === "1")) serial = true;
-      if (option && RUN_FLAGS_WITH_VALUE.has(t)) skipNext = true;
-      if (option) return;
-      if (/^[;&|)]/u.test(t)) { stopped = true; return; }
-      if (expectTask) {
-        taskNames.push(t);
-        expectTask = false;
-      } else {
-        swallowed.push(t);
-      }
-    });
-    if (taskNames.length > 0) out.push({ tasks: taskNames, swallowed, serial });
+  function miseRuns(body: string): MiseRun[] {
+    const out: MiseRun[] = [];
+    for (const m of body.matchAll(/mise\s+run\b([^\n]*)/gu)) {
+      const toks = (m[1] ?? "")
+        .trim()
+        .split(/\s+/u)
+        .filter((t) => t !== "");
+      const taskNames: string[] = [];
+      const swallowed: string[] = [];
+      let serial = false;
+      let expectTask = true;
+      let skipNext = false;
+      let stopped = false;
+      toks.forEach((t, index) => {
+        if (stopped) return;
+        if (skipNext) {
+          skipNext = false;
+          return;
+        }
+        if (t === ":::") {
+          expectTask = true;
+          return;
+        }
+        const option = t.startsWith("-");
+        if (
+          option &&
+          /^(-j|--jobs)(=1)?$/u.test(t) &&
+          (t.endsWith("=1") || toks[index + 1] === "1")
+        )
+          serial = true;
+        if (option && RUN_FLAGS_WITH_VALUE.has(t)) skipNext = true;
+        if (option) return;
+        if (/^[;&|)]/u.test(t)) {
+          stopped = true;
+          return;
+        }
+        if (expectTask) {
+          taskNames.push(t);
+          expectTask = false;
+        } else {
+          swallowed.push(t);
+        }
+      });
+      if (taskNames.length > 0)
+        out.push({ tasks: taskNames, swallowed, serial });
+    }
+    return out;
   }
-  return out;
-}
 
-// ORDER-2 — the task AND the script it runs must exist before anything binds to them.
+  // ORDER-2 — the task AND the script it runs must exist before anything binds to them.
   const hooksDir = join(root, ".githooks");
   for (const entry of existsSync(hooksDir) ? await readdir(hooksDir) : []) {
-      const raw = (await readIf(join(hooksDir, entry))) ?? "";
-      // A MENTION IS NOT A CALL. `echo "... run 'mise run f' manually"` names a task without
-      // invoking it, and a hook's comment header names several. Reading either as a call site is
-      // the failure this house has recorded three times over; this check reproduced it on its
-      // first run against a third repo (proof-of-fire, 2026-08-30). Strip comments and quoted
-      // spans before looking for call sites.
-      const body = raw
-        .split("\n")
-        .map((l) => l.replace(/(^|\s)#.*$/u, "$1"))
-        .join("\n")
-        .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
-      for (const task of miseRuns(body).flatMap((r) => r.tasks)) {
-        checkHookTask(entry, task, root, tasks);
-      }
+    const raw = (await readIf(join(hooksDir, entry))) ?? "";
+    // A MENTION IS NOT A CALL. `echo "... run 'mise run f' manually"` names a task without
+    // invoking it, and a hook's comment header names several. Reading either as a call site is
+    // the failure this house has recorded three times over; this check reproduced it on its
+    // first run against a third repo (proof-of-fire, 2026-08-30). Strip comments and quoted
+    // spans before looking for call sites.
+    const body = raw
+      .split("\n")
+      .map((l) => l.replace(/(^|\s)#.*$/u, "$1"))
+      .join("\n")
+      .replaceAll(/'[^'\n]*'|"[^"\n]*"/gu, " ");
+    for (const task of miseRuns(body).flatMap((r) => r.tasks)) {
+      checkHookTask(entry, task, root, tasks);
+    }
   }
 
   // ORDER-3 — hooksPath must be set, and relative.
-  const hooksPath = (await $`git -C ${root} config --get core.hooksPath`.nothrow().quiet().text()).trim();
+  const hooksPath = (
+    await $`git -C ${root} config --get core.hooksPath`.nothrow().quiet().text()
+  ).trim();
   if (existsSync(hooksDir) && hooksPath === "") {
-    fail("ORDER-3", `.githooks/ exists but core.hooksPath is unset — the hooks never run.`);
+    fail(
+      "ORDER-3",
+      `.githooks/ exists but core.hooksPath is unset — the hooks never run.`,
+    );
   }
   if (hooksPath !== "" && hooksPath.startsWith("/")) {
-    fail("ORDER-3", `core.hooksPath is absolute (${hooksPath}) — it silently stops applying in any ` +
-      `clone or worktree. Set it relative: \`git config core.hooksPath .githooks\`.`);
+    fail(
+      "ORDER-3",
+      `core.hooksPath is absolute (${hooksPath}) — it silently stops applying in any ` +
+        `clone or worktree. Set it relative: \`git config core.hooksPath .githooks\`.`,
+    );
   }
   // resolve(), not join(): an absolute hooksPath must be tested as-is, or the two findings
   // compound into a false "does not exist" (caught by proof-of-fire, 2026-08-30).
   if (hooksPath !== "" && !existsSync(resolve(root, hooksPath))) {
-    fail("ORDER-3", `core.hooksPath points at ${hooksPath}, which does not exist.`);
+    fail(
+      "ORDER-3",
+      `core.hooksPath points at ${hooksPath}, which does not exist.`,
+    );
   }
 
   // HOOK-1 — a git hook is a THIN WRAPPER. The body belongs in a `hook:<name>` mise task.
@@ -466,7 +625,9 @@ function miseRuns(body: string): MiseRun[] {
     // exactly what broke dotfiles on 2026-09-22 (formatted, re-staged, never linted).
     const gateTask = tasks.get(`hook:${hook}`);
     if (gateTask !== undefined) checkGateTask(hook, gateTask, tasks);
-    const raw = existsSync(hooksDir) ? await readIf(join(hooksDir, hook)) : undefined;
+    const raw = existsSync(hooksDir)
+      ? await readIf(join(hooksDir, hook))
+      : undefined;
     if (raw === undefined) continue;
     const code = raw
       .split("\n")
@@ -477,21 +638,51 @@ function miseRuns(body: string): MiseRun[] {
     // `command -v mise` guard, echo, exit). A direct `polysearch hook pre-commit` or
     // `soks-govern … author-check` is the same disease as a hook:* task: `mise run check` does not
     // run it, so the manual gate and the commit gate differ. Put it in a `lint:*` subtask.
-    const PLUMBING = new Set(["mise", "command", "echo", "printf", "exit", "true", ":", "{", "}", "set"]);
-    const SHELL = /^(if|then|else|elif|fi|for|while|do|done|case|esac|\[|\[\[|\]|\)|\(|!)$/u;
+    const PLUMBING = new Set([
+      "mise",
+      "command",
+      "echo",
+      "printf",
+      "exit",
+      "true",
+      ":",
+      "{",
+      "}",
+      "set",
+    ]);
+    const SHELL =
+      /^(if|then|else|elif|fi|for|while|do|done|case|esac|\[|\[\[|\]|\)|\(|!)$/u;
     const foreign = new Set<string>();
-    const foreignHeads = code.split(/\n|&&|\|\||;/u)
-      .map((stmt) => stmt.trim().replace(/^exec\s+/u, "").split(/\s+/u)[0] ?? "")
-      .filter((head) => head !== "" && !PLUMBING.has(head) && !SHELL.test(head) && !/^[A-Za-z_]\w*=/u.test(head));
+    const foreignHeads = code
+      .split(/\n|&&|\|\||;/u)
+      .map(
+        (stmt) =>
+          stmt
+            .trim()
+            .replace(/^exec\s+/u, "")
+            .split(/\s+/u)[0] ?? "",
+      )
+      .filter(
+        (head) =>
+          head !== "" &&
+          !PLUMBING.has(head) &&
+          !SHELL.test(head) &&
+          !/^[A-Za-z_]\w*=/u.test(head),
+      );
     for (const head of foreignHeads) foreign.add(head);
     if (foreign.size > 0) {
-      fail("HOOK-1", `.githooks/${hook} executes ${[...foreign].map((c) => `\`${c}\``).join(", ")} ` +
-        `directly. \`mise run check\` never runs that, so the commit gate and the manual gate differ. ` +
-        `Move it into a \`lint:*\` (or \`check\`-reached) task and have the hook call the verbs.`);
+      fail(
+        "HOOK-1",
+        `.githooks/${hook} executes ${[...foreign].map((c) => `\`${c}\``).join(", ")} ` +
+          `directly. \`mise run check\` never runs that, so the commit gate and the manual gate differ. ` +
+          `Move it into a \`lint:*\` (or \`check\`-reached) task and have the hook call the verbs.`,
+      );
     }
     const runs = miseRuns(code);
     if (runs.length === 0 && foreign.size === 0) {
-      notes.push(`.githooks/${hook} executes nothing — it is bound but gates nothing.`);
+      notes.push(
+        `.githooks/${hook} executes nothing — it is bound but gates nothing.`,
+      );
     }
     for (const run of runs) checkGateRun(hook, run, `hook:${hook}`, tasks);
   }
@@ -505,9 +696,11 @@ function miseRuns(body: string): MiseRun[] {
     const bound = (await readdir(hooksDir)).includes("pre-commit");
     const gates = ["check", "lint", "fmt", "test"].filter((t) => tasks.has(t));
     if (!bound && gates.length > 0) {
-      notes.push(`No pre-commit hook is bound, yet mise defines ${gates.join(", ")}. ` +
-        `Those gates run only when someone remembers. If that is deliberate, say so where the ` +
-        `layer was admitted; if it is an omission, this is the failure the layer prevents.`);
+      notes.push(
+        `No pre-commit hook is bound, yet mise defines ${gates.join(", ")}. ` +
+          `Those gates run only when someone remembers. If that is deliberate, say so where the ` +
+          `layer was admitted; if it is an omission, this is the failure the layer prevents.`,
+      );
     }
   }
 
@@ -515,26 +708,41 @@ function miseRuns(body: string): MiseRun[] {
   const cccSettings = await readIf(join(root, ".cocoindex_code/settings.yml"));
   if (cccSettings !== undefined) {
     if (/^\s*-\s*['"]?\*\*\/\.\*/mu.test(cccSettings)) {
-      fail("ORDER-4", `.cocoindex_code/settings.yml excludes '**/.*' — every dotfile directory, ` +
-        `.claude/ included, is invisible to semantic search. Searches answer NO_MATCH, which reads ` +
-        `as absent. Decide this before registering; it shapes the index thereafter.`);
+      fail(
+        "ORDER-4",
+        `.cocoindex_code/settings.yml excludes '**/.*' — every dotfile directory, ` +
+          `.claude/ included, is invisible to semantic search. Searches answer NO_MATCH, which reads ` +
+          `as absent. Decide this before registering; it shapes the index thereafter.`,
+      );
     }
     // The corpus policy and the index have OPPOSITE fates, and a blanket ignore gets one wrong.
     // settings.yml IS scaffold — it decides what the index can ever see — so it belongs in git.
     // Everything else under .cocoindex_code/ is a per-clone daemon artifact. The pattern that
     // separates them (measured in this house): `/.cocoindex_code/*` + `!/.cocoindex_code/settings.yml`.
     const tracked = async (p: string): Promise<boolean> =>
-      (await $`git -C ${root} ls-files --error-unmatch -- ${p}`.nothrow().quiet()).exitCode === 0;
+      (
+        await $`git -C ${root} ls-files --error-unmatch -- ${p}`
+          .nothrow()
+          .quiet()
+      ).exitCode === 0;
     if (!(await tracked(".cocoindex_code/settings.yml"))) {
-      fail("ORDER-5", `.cocoindex_code/settings.yml is not tracked. The corpus policy decides what ` +
-        `the index can ever see — it is scaffold, not a local artifact. Version it and ignore the ` +
-        `rest: \`/.cocoindex_code/*\` + \`!/.cocoindex_code/settings.yml\`.`);
+      fail(
+        "ORDER-5",
+        `.cocoindex_code/settings.yml is not tracked. The corpus policy decides what ` +
+          `the index can ever see — it is scaffold, not a local artifact. Version it and ignore the ` +
+          `rest: \`/.cocoindex_code/*\` + \`!/.cocoindex_code/settings.yml\`.`,
+      );
     }
     if (await tracked(".cocoindex_code/target_sqlite.db")) {
-      fail("ORDER-5", `.cocoindex_code/target_sqlite.db is tracked — the local index is being committed.`);
+      fail(
+        "ORDER-5",
+        `.cocoindex_code/target_sqlite.db is tracked — the local index is being committed.`,
+      );
     }
-    notes.push(`The index itself is a per-clone artifact: a fresh clone is NOT searchable until ` +
-      `whoever clones it registers the repo themselves. Say so when handing the repo over.`);
+    notes.push(
+      `The index itself is a per-clone artifact: a fresh clone is NOT searchable until ` +
+        `whoever clones it registers the repo themselves. Say so when handing the repo over.`,
+    );
   }
 
   // JJ-2 — a colocated jj repo denies git to agents. jj runs no git hooks, and the commit gate is
@@ -544,17 +752,25 @@ function miseRuns(body: string): MiseRun[] {
     const denied = ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"];
     const noRules: unknown[] = [];
     const parsedRules = jsonOf(DenyRulesSchema).safeParse(settingsRaw ?? "{}");
-    const deny = parsedRules.success ? parsedRules.data.permissions.deny : noRules;
+    const deny = parsedRules.success
+      ? parsedRules.data.permissions.deny
+      : noRules;
     const missing = denied.filter((rule) => !deny.includes(rule));
     if (missing.length > 0) {
-      fail("JJ-2", `.jj/ exists but .claude/settings.json does not deny ${missing.join(", ")} — an ` +
-        `agent's \`git commit\` bypasses the \`mise run commit\` gate and the jj bookmark, silently.`);
+      fail(
+        "JJ-2",
+        `.jj/ exists but .claude/settings.json does not deny ${missing.join(", ")} — an ` +
+          `agent's \`git commit\` bypasses the \`mise run commit\` gate and the jj bookmark, silently.`,
+      );
     }
   }
 
   // JOINT — a repo-local hook file must be registered somewhere.
   if (settingsRaw !== undefined && !jsonText.safeParse(settingsRaw).success)
-    fail("JOINT", `.claude/settings.json is not valid JSON — the whole repo-local hook set is inert.`);
+    fail(
+      "JOINT",
+      `.claude/settings.json is not valid JSON — the whole repo-local hook set is inert.`,
+    );
 
   if (argv.flags.audit) {
     await auditWiring(root, mise, settingsRaw);
@@ -563,13 +779,19 @@ function miseRuns(body: string): MiseRun[] {
   for (const n of notes) process.stdout.write(`NOTE  ${n}\n`);
   for (const f of findings) process.stdout.write(`FAIL  [${f.tag}] ${f.msg}\n`);
   if (findings.length === 0) {
-    process.stdout.write(`OK    wiring joint coherent${argv.flags.audit ? " (incl. inert audit)" : ""}\n`);
-    process.stdout.write(`      This floor proves no INCOHERENCE. It does not prove any layer belongs here (S1).\n`);
+    process.stdout.write(
+      `OK    wiring joint coherent${argv.flags.audit ? " (incl. inert audit)" : ""}\n`,
+    );
+    process.stdout.write(
+      `      This floor proves no INCOHERENCE. It does not prove any layer belongs here (S1).\n`,
+    );
   }
   process.exit(findings.length === 0 ? 0 : 1);
 }
 
 await main().catch((e: unknown) => {
-  process.stderr.write(`FATAL: ${e instanceof Error ? e.message : String(e)}\n`);
+  process.stderr.write(
+    `FATAL: ${e instanceof Error ? e.message : String(e)}\n`,
+  );
   process.exit(2);
 });

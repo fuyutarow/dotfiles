@@ -279,7 +279,8 @@ function expectCode(value: unknown, code: string): void {
 }
 function section(value: TraceFixture, name: string): Rec {
   const found = value.authority[name];
-  if (found === undefined) throw new Error(`fixture is missing ${name}`);
+  expect(found).toBeDefined();
+  if (found === undefined) return {};
   return found;
 }
 function patchEvidence(event: Rec, patch: Rec): void {
@@ -289,7 +290,8 @@ function patchEvidence(event: Rec, patch: Rec): void {
 // this only guards noUncheckedIndexedAccess, the index is never actually out of range.
 function nth(list: Rec[], index: number): Rec {
   const item = list[index];
-  if (item === undefined) throw new Error(`fixture is missing event ${index}`);
+  expect(item).toBeDefined();
+  if (item === undefined) return {};
   return item;
 }
 function eventAt(value: TraceFixture, index: number): Rec {

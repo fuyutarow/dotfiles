@@ -25,9 +25,9 @@ const payload = parseJson(
 );
 
 describe("narrow: typed readers over untyped JSON", () => {
-  test("parseJson returns what JSON.parse does, and throws on bad JSON like it", () => {
+  test("parseJson returns decoded JSON and undefined on bad JSON", () => {
     expect(parseJson('{"a":1}')).toEqual({ a: 1 });
-    expect(() => parseJson("{not json")).toThrow();
+    expect(parseJson("{not json")).toBeUndefined();
   });
 
   test("obj accepts only plain objects", () => {

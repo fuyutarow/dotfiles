@@ -25,12 +25,6 @@
  */
 import { cli } from "cleye";
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown flag(s): --${flag}`);
-  }
-}
-
 type Finding = { level: "FAIL" | "WARN"; code: string; detail: string };
 
 const USAGE =
@@ -130,7 +124,14 @@ function inspect(
   return findings;
 }
 
-async function main(): Promise<void> {
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`unknown flag(s): --${flag}\n`);
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<void | Error> {
   // Cleye stops parsing at `--` and maps the remainder to the spread positional, so the probed
   // command's own flags reach it untouched and never register as unknown.
   //
@@ -151,11 +152,13 @@ async function main(): Promise<void> {
       parameters: ["[command...]"],
       flags: { timeout: Number, expectFail: Boolean, json: Boolean },
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     argv,
   );
+  if (argv.includes("--__proto__"))
+    return new Error("unknown flag(s): --__proto__");
 
   const command = parsed._.command;
   if (command.length === 0) {
@@ -176,7 +179,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (Bun.which(command[0] ?? "") === null && command[0]?.includes("/") !== true) {
+  if (
+    Bun.which(command[0] ?? "") === null &&
+    command[0]?.includes("/") !== true
+  ) {
     process.stderr.write(`FATAL: command not found on PATH: ${command[0]}\n`);
     process.exitCode = 2;
     return;
@@ -244,10 +250,14 @@ async function main(): Promise<void> {
     : 0;
 }
 
-await main().then(undefined, (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`FATAL: ${message}\n`);
+const outcome = await Promise.try(main).then(
+  (value) => value,
+  (error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+);
+if (outcome instanceof Error) {
+  process.stderr.write(`FATAL: ${outcome.message}\n`);
   process.exit(2);
-});
+}
 
 export { inspect };

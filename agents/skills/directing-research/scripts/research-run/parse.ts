@@ -84,7 +84,7 @@ function parseFields(
 
 async function readBounded(
   handle: Awaited<ReturnType<typeof open>>,
-): Promise<Uint8Array> {
+): Promise<{ ok: true; value: Uint8Array } | { ok: false; error: string }> {
   const buffer = Buffer.allocUnsafe(MAX_PACKET_BYTES + 1);
   let offset = 0;
   while (offset < buffer.length) {
@@ -98,58 +98,71 @@ async function readBounded(
     offset += bytesRead;
   }
   if (offset > MAX_PACKET_BYTES)
-    throw new Error(`packet exceeds ${MAX_PACKET_BYTES} bytes while reading`);
-  return buffer.subarray(0, offset);
+    return {
+      ok: false,
+      error: `packet exceeds ${MAX_PACKET_BYTES} bytes while reading`,
+    };
+  return { ok: true, value: buffer.subarray(0, offset) };
 }
 
 export async function loadPacket(
   path: string,
   kind: PacketKind,
   findings: Finding[],
-): Promise<LoadedPacket> {
+): Promise<{ ok: true; value: LoadedPacket } | { ok: false; error: string }> {
   const resolved = resolve(path);
-  const { canonicalPath, initialMetadata } = await Promise.try(() => {
+  const inspected = await Promise.try(() => {
     const metadata = lstatSync(resolved);
     return { canonicalPath: realpathSync(resolved), initialMetadata: metadata };
   }).then(
-    (value) => value,
-    (error: unknown) => {
-      throw new Error(
-        `cannot inspect ${path}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    },
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({
+      ok: false as const,
+      error: `cannot inspect ${path}: ${error instanceof Error ? error.message : String(error)}`,
+    }),
   );
+  if (!inspected.ok) return inspected;
+  const { canonicalPath, initialMetadata } = inspected.value;
   if (initialMetadata.isSymbolicLink() || canonicalPath !== resolved)
-    throw new Error(`symlink inputs are refused: ${path}`);
-  if (!initialMetadata.isFile()) throw new Error(`not a regular file: ${path}`);
-  await using handle = await Promise.try(() =>
+    return { ok: false, error: `symlink inputs are refused: ${path}` };
+  if (!initialMetadata.isFile())
+    return { ok: false, error: `not a regular file: ${path}` };
+  const opened = await Promise.try(() =>
     open(resolved, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)),
   ).then(
-    (value) => value,
-    (error: unknown) => {
-      throw new Error(
-        `cannot open ${path}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    },
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({
+      ok: false as const,
+      error: `cannot open ${path}: ${error instanceof Error ? error.message : String(error)}`,
+    }),
   );
+  if (!opened.ok) return opened;
+  await using handle = opened.value;
   const metadata = await handle.stat();
   if (
     metadata.dev !== initialMetadata.dev ||
     metadata.ino !== initialMetadata.ino
   )
-    throw new Error(`input changed during inspection: ${path}`);
-  if (!metadata.isFile()) throw new Error(`not a regular file: ${path}`);
+    return { ok: false, error: `input changed during inspection: ${path}` };
+  if (!metadata.isFile())
+    return { ok: false, error: `not a regular file: ${path}` };
   if (metadata.size > MAX_PACKET_BYTES)
-    throw new Error(
-      `packet exceeds ${MAX_PACKET_BYTES} bytes: ${path} (${metadata.size})`,
-    );
-  const bytes = await readBounded(handle);
+    return {
+      ok: false,
+      error: `packet exceeds ${MAX_PACKET_BYTES} bytes: ${path} (${metadata.size})`,
+    };
+  const read = await readBounded(handle);
+  if (!read.ok) return read;
+  const bytes = read.value;
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   return {
-    digest: sha256(bytes),
-    fields: parseFields(text, resolved, kind, findings),
-    kind,
-    path: resolved,
-    text,
+    ok: true,
+    value: {
+      digest: sha256(bytes),
+      fields: parseFields(text, resolved, kind, findings),
+      kind,
+      path: resolved,
+      text,
+    },
   };
 }

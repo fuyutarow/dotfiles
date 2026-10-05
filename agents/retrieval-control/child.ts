@@ -1,12 +1,13 @@
 // Bounded child-process helpers shared by the router (repo-retrieve.ts) and its ccc index
 // adapter (ccc-index.ts). Moved verbatim out of repo-retrieve.ts on 2026-09-22; the timeout
 // contract (exit 124 on abort) is part of repo-retrieve's documented exit codes.
+import { err, ok, type Result } from "neverthrow";
 
-export function requireExecutable(name: string): string {
+export function requireExecutable(name: string): Result<string, Error> {
   const executable = Bun.which(name);
   if (executable === null || executable === "")
-    throw new Error(`${name} is not available on PATH`);
-  return executable;
+    return err(new Error(`${name} is not available on PATH`));
+  return ok(executable);
 }
 
 export async function runChild(

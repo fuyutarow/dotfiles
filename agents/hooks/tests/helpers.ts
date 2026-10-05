@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { expect } from "bun:test";
 import { at, obj, parseJson, strAt } from "../narrow.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
@@ -34,9 +35,10 @@ export type Decision = {
 // PreToolUse hooks print one decision JSON on stdout (or nothing = silent pass).
 export function decisionOf(stdout: string): Decision | null {
   if (stdout.trim() === "") return null;
-  const out = at(parseJson(stdout), "hookSpecificOutput");
-  if (obj(out) === undefined)
-    throw new Error(`hook stdout has no hookSpecificOutput object: ${stdout}`);
+  const parsed = parseJson(stdout);
+  expect(parsed).not.toBeUndefined();
+  const out = at(parsed, "hookSpecificOutput");
+  if (obj(out) === undefined) return null;
   return {
     permissionDecision: strAt(out, "permissionDecision"),
     permissionDecisionReason: strAt(out, "permissionDecisionReason"),

@@ -9,14 +9,15 @@
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
 import { cli } from "cleye";
+import { err, ok, type Result } from "neverthrow";
 import { jsonOf, z } from "../hooks/zod.ts";
 import { findDefinitions } from "./definitions.ts";
 
-const rejectPrototypeFlag = (type: string, flag: string): void => {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    console.error(`bench-definitions: unknown option '--${flag}'`);
-    process.exit(2);
-  }
+let prototypeFlag = false;
+const rejectPrototypeFlag = (type: string, flag: string): boolean => {
+  const reject = type === "unknown-flag" && flag === "__proto__";
+  prototypeFlag = prototypeFlag || reject;
+  return reject;
 };
 const argv = cli(
   {
@@ -31,6 +32,10 @@ const argv = cli(
   undefined,
   Bun.argv.slice(2),
 );
+if (prototypeFlag) {
+  console.error("bench-definitions: unknown option '--__proto__'");
+  process.exit(2);
+}
 if (argv._.length > 0 || argv.flags.cases === "") {
   console.error("usage: bench-definitions --cases <file.json>");
   process.exit(2);
@@ -65,40 +70,53 @@ let absentRight = 0;
 let absentTotal = 0;
 const ms: number[] = [];
 
-async function runCase(c: Case, lang: "en" | "ja", q: string): Promise<void> {
+async function runCase(
+  c: Case,
+  lang: "en" | "ja",
+  q: string,
+): Promise<Result<void, Error>> {
   const t0 = performance.now();
   const a = await findDefinitions(project, q, 10);
+  if (a.isErr()) return err(a.error);
+  const answer = a.value;
   ms.push(performance.now() - t0);
-  for (const n of a.notes) console.error(`NOTE ${n}`);
+  for (const n of answer.notes) console.error(`NOTE ${n}`);
   if (c.truth.length === 0) {
     absentTotal += 1;
-    if (a.strength === "none") absentRight += 1;
-    const verdict = a.strength === "none" ? "OK" : "FALSE MATCH";
+    if (answer.strength === "none") absentRight += 1;
+    const verdict = answer.strength === "none" ? "OK" : "FALSE MATCH";
     console.log(
-      `${c.need} ${lang} absent  ${verdict} best=${a.best.toFixed(2)} top=${a.cards[0]?.name ?? "-"}`,
+      `${c.need} ${lang} absent  ${verdict} best=${answer.best.toFixed(2)} top=${answer.cards[0]?.name ?? "-"}`,
     );
-    return;
+    return ok(undefined);
   }
-  const rank = a.cards.findIndex((d) => c.truth.includes(d.name)) + 1;
+  const rank = answer.cards.findIndex((d) => c.truth.includes(d.name)) + 1;
   const t = (tally[lang] ??= { n: 0, top1: 0, top3: 0, top10: 0 });
   t.n += 1;
   if (rank === 1) t.top1 += 1;
   if (rank >= 1 && rank <= 3) t.top3 += 1;
   if (rank >= 1) t.top10 += 1;
-  const top = a.cards
+  const top = answer.cards
     .slice(0, 3)
     .map((d) => d.name)
     .join(", ");
   console.log(
-    `${c.need} ${lang} rank=${rank !== 0 ? rank : "×"} ${a.strength} best=${a.best.toFixed(2)} top=${top}`,
+    `${c.need} ${lang} rank=${rank !== 0 ? rank : "×"} ${answer.strength} best=${answer.best.toFixed(2)} top=${top}`,
   );
+  return ok(undefined);
 }
 
 const runs = spec.cases.flatMap((c) =>
   (["en", "ja"] as const).map((lang) => ({ c, lang, q: c[lang] })),
 );
-for (const { c, lang, q } of runs)
-  if (q !== undefined && q !== "") await runCase(c, lang, q);
+for (const { c, lang, q } of runs) {
+  if (q === undefined || q === "") continue;
+  const result = await runCase(c, lang, q);
+  if (result.isErr()) {
+    process.stderr.write(`${result.error.message}\n`);
+    process.exit(1);
+  }
+}
 ms.sort((x, y) => x - y);
 for (const [lang, t] of Object.entries(tally))
   console.log(

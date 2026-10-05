@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -51,16 +52,9 @@ async function runProbe(
 
 async function withProbeDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "probe-models-test-"));
-  return fn(dir).then(
-    async (value) => {
-      await rm(dir, { recursive: true, force: true });
-      return value;
-    },
-    async (error: unknown) => {
-      await rm(dir, { recursive: true, force: true });
-      throw error;
-    },
-  );
+  return Promise.try(() => fn(dir)).finally(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
 }
 
 describe("driving-codex probe-models.ts (current behavior, pre-refactor bracket)", () => {

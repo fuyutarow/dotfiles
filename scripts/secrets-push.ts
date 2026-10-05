@@ -30,17 +30,21 @@ function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
-  if (type === "unknown-flag" && flag === "__proto__")
-    throw new UsageError(`unknown flag(s): --${flag}`);
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(
+      `unknown flag(s): --${flag}\nUsage: mise run secrets:push -- <host>\n`,
+    );
+    process.exit(2);
+  }
 }
 
 const say = (line: string): void => {
   process.stdout.write(`secrets:push: ${line}\n`);
 };
 
-function fail(line: string): never {
+function fail(line: string): void {
   process.stderr.write(`secrets:push: ${line}\n`);
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 async function main(): Promise<void> {
@@ -58,28 +62,42 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 1)
-    throw new UsageError(
-      `one host only; unexpected: ${parsed._.slice(1).join(" ")}`,
+  if (parsed._.length > 1) {
+    process.stderr.write(
+      `one host only; unexpected: ${parsed._.slice(1).join(" ")}\nUsage: mise run secrets:push -- <host>\n`,
     );
+    process.exitCode = 2;
+    return;
+  }
   const host = parsed._.host;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(host))
-    throw new UsageError(`not an ssh Host alias: ${host}`);
-  if (Bun.which("age-keygen") === null)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(host)) {
+    process.stderr.write(
+      `not an ssh Host alias: ${host}\nUsage: mise run secrets:push -- <host>\n`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  if (Bun.which("age-keygen") === null) {
     fail("age-keygen is not installed here (brew install age)");
+    return;
+  }
 
   const check =
     await $`${SSH} ${host} ${"command -v fnox > /dev/null && echo fnox-ok; test -e ~/.config/fnox/config.toml && echo config-exists; true"}`
       .nothrow()
       .text();
-  if (!check.includes("fnox-ok"))
+  if (!check.includes("fnox-ok")) {
     fail(
       `fnox is not installed on ${host} (it is Brewfile.core: mise run linux:init there)`,
     );
-  if (check.includes("config-exists"))
+    return;
+  }
+  if (check.includes("config-exists")) {
     fail(
       `${host} already has ~/.config/fnox/config.toml — not overwritten; merge by hand or move it aside`,
     );
+    return;
+  }
 
   const dir = mkdtempSync(join(tmpdir(), "secrets-push-"));
   using _cleanup = {
@@ -92,7 +110,10 @@ async function main(): Promise<void> {
   const recipient = /^# public key: (age1\S+)$/mu.exec(
     readFileSync(identity, "utf8"),
   )?.[1];
-  if (recipient === undefined) fail("age-keygen wrote no public key");
+  if (recipient === undefined) {
+    fail("age-keygen wrote no public key");
+    return;
+  }
   const config = join(dir, "config.toml");
   writeFileSync(
     config,
@@ -102,34 +123,46 @@ async function main(): Promise<void> {
   );
   for (const name of SECRETS) {
     const value = await $`fnox get ${name}`.nothrow().quiet();
-    if (value.exitCode !== 0) fail(`this machine's fnox has no ${name}`);
+    if (value.exitCode !== 0) {
+      fail(`this machine's fnox has no ${name}`);
+      return;
+    }
     // stdin, never argv: the plaintext appears in no process listing.
     const set =
       await $`fnox -c ${config} set ${name} --provider age < ${value.stdout}`
         .env({ ...process.env, FNOX_AGE_KEY_FILE: identity })
         .nothrow()
         .quiet();
-    if (set.exitCode !== 0)
+    if (set.exitCode !== 0) {
       fail(`could not encrypt ${name}: ${set.stderr.toString().trim()}`);
+      return;
+    }
   }
 
   const install =
     await $`${SSH} ${host} ${"umask 077 && mkdir -p ~/.config/fnox && cat > ~/.config/fnox/age.txt"} < ${Bun.file(identity)}`.nothrow();
-  if (install.exitCode !== 0)
+  if (install.exitCode !== 0) {
     fail(`could not install the age identity on ${host}`);
+    return;
+  }
   const conf =
     await $`${SSH} ${host} ${"umask 077 && cat > ~/.config/fnox/config.toml"} < ${Bun.file(config)}`.nothrow();
-  if (conf.exitCode !== 0) fail(`could not install the fnox config on ${host}`);
+  if (conf.exitCode !== 0) {
+    fail(`could not install the fnox config on ${host}`);
+    return;
+  }
 
   for (const name of SECRETS) {
     const got =
       await $`${SSH} ${host} ${`fnox get ${name} > /dev/null && echo opened`}`
         .nothrow()
         .text();
-    if (!got.includes("opened"))
+    if (!got.includes("opened")) {
       fail(
         `${host}: fnox get ${name} did not open — config left in place for inspection`,
       );
+      return;
+    }
     say(
       `${name} → ${host}: age-encrypted in ~/.config/fnox/config.toml, opens there`,
     );

@@ -60,9 +60,7 @@ function gitCmd(dir: string, args: string[]): string {
     ["-C", dir, "-c", "commit.gpgsign=false", ...args],
     { encoding: "utf8" },
   );
-  if (result.status !== 0) {
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
-  }
+  expect(result.status).toBe(0);
   return result.stdout;
 }
 

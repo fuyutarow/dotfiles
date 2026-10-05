@@ -4,15 +4,6 @@ import { cli } from "cleye";
 // Consumer: agent/human verdict lines for a Blind-spot packet.
 // Structural floor only: this cannot validate creativity, completeness, importance, or truth.
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
-}
-
 type Table = Readonly<{
   headers: readonly string[];
   rows: readonly (readonly string[])[];
@@ -92,7 +83,10 @@ function sectionBody(text: string, label: string): string | undefined {
     .slice(start + 1)
     .findIndex((line) => headingLabel(line) !== undefined);
   const end = relativeEnd === -1 ? lines.length : start + 1 + relativeEnd;
-  return lines.slice(start + 1, end).join("\n").trim();
+  return lines
+    .slice(start + 1, end)
+    .join("\n")
+    .trim();
 }
 
 function tableCells(line: string): string[] {
@@ -134,7 +128,10 @@ function cell(
   return index === undefined ? undefined : row[index];
 }
 
-function fieldValue(body: string | undefined, label: string): string | undefined {
+function fieldValue(
+  body: string | undefined,
+  label: string,
+): string | undefined {
   if (body === undefined) return undefined;
   const escaped = label.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const pattern = new RegExp(
@@ -148,14 +145,15 @@ function fieldValue(body: string | undefined, label: string): string | undefined
   return undefined;
 }
 
-function provenance(value: string): "HUMAN" | "ARTIFACT" | "INFERENCE" | "UNELICITED" | undefined {
+function provenance(
+  value: string,
+): "HUMAN" | "ARTIFACT" | "INFERENCE" | "UNELICITED" | undefined {
   const normalized = cleanInline(value);
   const token = normalized.split(/\s+(?:—|-|:)\s+/u, 1)[0] ?? normalized;
   if (humanProvenancePattern.test(token)) return "HUMAN";
   if (/^ARTIFACT:.+/iu.test(normalized)) return "ARTIFACT";
   if (/^INFERENCE(?:\s*(?:—|-|:).*)?$/iu.test(normalized)) return "INFERENCE";
-  if (/^UNELICITED(?:\s*(?:—|-|:).*)?$/iu.test(normalized))
-    return "UNELICITED";
+  if (/^UNELICITED(?:\s*(?:—|-|:).*)?$/iu.test(normalized)) return "UNELICITED";
   return undefined;
 }
 
@@ -187,7 +185,12 @@ function checkSections(text: string): Verdict {
     );
   }
   return missing.length === 0
-    ? verdict("B1", "packet fields", "PASS", "all 10 required sections are present")
+    ? verdict(
+        "B1",
+        "packet fields",
+        "PASS",
+        "all 10 required sections are present",
+      )
     : verdict(
         "B1",
         "packet fields",
@@ -209,9 +212,24 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
       loadBearingIds: new Set(),
       table,
       verdicts: [
-        verdict("B2", "typed assumptions", "FAIL", "Assumption ledger table not found"),
-        verdict("B3", "separate axes", "FAIL", "four axis columns cannot be checked"),
-        verdict("B4", "depth selection", "FAIL", "LOAD-BEARING rows cannot be checked"),
+        verdict(
+          "B2",
+          "typed assumptions",
+          "FAIL",
+          "Assumption ledger table not found",
+        ),
+        verdict(
+          "B3",
+          "separate axes",
+          "FAIL",
+          "four axis columns cannot be checked",
+        ),
+        verdict(
+          "B4",
+          "depth selection",
+          "FAIL",
+          "LOAD-BEARING rows cannot be checked",
+        ),
       ],
     };
   }
@@ -251,10 +269,16 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
     const id = cleanInline(cell(row, idIndex) ?? "");
     const primary = cleanInline(cell(row, primaryIndex) ?? "").toUpperCase();
     const assumption = cleanInline(cell(row, assumptionIndex) ?? "");
-    const crossTags = cleanInline(cell(row, crossTagsIndex) ?? "").toUpperCase();
-    const selection = cleanInline(cell(row, selectionIndex) ?? "").toUpperCase();
+    const crossTags = cleanInline(
+      cell(row, crossTagsIndex) ?? "",
+    ).toUpperCase();
+    const selection = cleanInline(
+      cell(row, selectionIndex) ?? "",
+    ).toUpperCase();
     const evidence = cleanInline(cell(row, evidenceIndex) ?? "");
-    const uncertainty = cleanInline(cell(row, uncertaintyIndex) ?? "").toUpperCase();
+    const uncertainty = cleanInline(
+      cell(row, uncertaintyIndex) ?? "",
+    ).toUpperCase();
     const damage = cleanInline(cell(row, damageIndex) ?? "").toUpperCase();
     const cost = cleanInline(cell(row, costIndex) ?? "").toUpperCase();
 
@@ -273,14 +297,18 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
 
     const tags = crossTags.split(",").map((tag) => tag.trim());
     if (crossTags !== "NONE" && tags.some((tag) => !primarySlots.includes(tag)))
-      typedProblems.push(`row ${displayRow}: Cross-tags contain an unknown slot`);
+      typedProblems.push(
+        `row ${displayRow}: Cross-tags contain an unknown slot`,
+      );
 
     if (
       !/^(?:ARTIFACT:.+|INFERENCE|NONE)$/iu.test(evidence) &&
       !humanProvenancePattern.test(evidence)
     )
       axisProblems.push(`row ${displayRow}: invalid Evidence`);
-    if (!["SUPPORTED", "CONTESTED", "UNKNOWN", "UNELICITED"].includes(uncertainty))
+    if (
+      !["SUPPORTED", "CONTESTED", "UNKNOWN", "UNELICITED"].includes(uncertainty)
+    )
       axisProblems.push(`row ${displayRow}: invalid Uncertainty`);
     if (!["LOCAL", "FRAME", "DECISION", "DISCRIMINATOR"].includes(damage))
       axisProblems.push(`row ${displayRow}: invalid Frame damage`);
@@ -288,7 +316,9 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
       axisProblems.push(`row ${displayRow}: invalid Search cost`);
 
     if (selection === "LOAD-BEARING" && /^NONE SURFACED\b/iu.test(assumption)) {
-      typedProblems.push(`row ${displayRow}: NONE SURFACED cannot be LOAD-BEARING`);
+      typedProblems.push(
+        `row ${displayRow}: NONE SURFACED cannot be LOAD-BEARING`,
+      );
     }
     if (selection === "LOAD-BEARING" && !placeholder(id)) {
       loadBearingIds.add(id);
@@ -313,9 +343,11 @@ function checkLedger(body: string | undefined, fullText: string): LedgerState {
     )
   )
     axisProblems.push("packet-level scalar score is forbidden");
-  if (missingColumns.some((name) =>
-    ["Evidence", "Uncertainty", "Frame damage", "Search cost"].includes(name),
-  ))
+  if (
+    missingColumns.some((name) =>
+      ["Evidence", "Uncertainty", "Frame damage", "Search cost"].includes(name),
+    )
+  )
     axisProblems.push("the four axes do not have separate columns");
 
   const selectionCount = loadBearingIds.size;
@@ -397,7 +429,8 @@ function checkProbes(body: string | undefined): ProbeState {
 
   if (table.rows.length === 0 || table.rows.length > 3)
     problems.push(`expected 1-3 probes; found ${table.rows.length}`);
-  if (missing.length > 0) problems.push(`missing columns: ${missing.join(", ")}`);
+  if (missing.length > 0)
+    problems.push(`missing columns: ${missing.join(", ")}`);
 
   for (const [rowNumber, row] of table.rows.entries()) {
     const displayRow = rowNumber + 1;
@@ -426,14 +459,21 @@ function checkProbes(body: string | undefined): ProbeState {
         change,
       )
     )
-      problems.push(`row ${displayRow}: Decision change says no branch can change`);
+      problems.push(
+        `row ${displayRow}: Decision change says no branch can change`,
+      );
 
     if (
       humanProvenancePattern.test(source) &&
       (placeholder(answer) || /^UNELICITED$/iu.test(answer))
     ) {
-      problems.push(`row ${displayRow}: HUMAN provenance requires a real answer`);
-    } else if (humanProvenancePattern.test(source) && syntheticAnswerPattern.test(answer)) {
+      problems.push(
+        `row ${displayRow}: HUMAN provenance requires a real answer`,
+      );
+    } else if (
+      humanProvenancePattern.test(source) &&
+      syntheticAnswerPattern.test(answer)
+    ) {
       problems.push(`row ${displayRow}: HUMAN answer is explicitly synthetic`);
     } else if (humanProvenancePattern.test(source)) {
       hasHumanAnswer = true;
@@ -444,11 +484,10 @@ function checkProbes(body: string | undefined): ProbeState {
         `row ${displayRow}: Provenance must be HUMAN:<owner>@<attestation-locus> or UNELICITED`,
       );
     }
-    if (
-      /^UNELICITED$/iu.test(source) &&
-      !/^UNELICITED$/iu.test(answer)
-    )
-      problems.push(`row ${displayRow}: UNELICITED provenance requires UNELICITED answer`);
+    if (/^UNELICITED$/iu.test(source) && !/^UNELICITED$/iu.test(answer))
+      problems.push(
+        `row ${displayRow}: UNELICITED provenance requires UNELICITED answer`,
+      );
   }
 
   const allUnelicited =
@@ -530,7 +569,8 @@ function checkOpenResidual(body: string | undefined): Verdict {
   const normalized = body ?? "";
   const problems: string[] = [];
   if (placeholder(normalized)) problems.push("Open-set residual is blank");
-  if (!/\bOPEN\b/u.test(normalized)) problems.push("literal OPEN marker missing");
+  if (!/\bOPEN\b/u.test(normalized))
+    problems.push("literal OPEN marker missing");
   if (!/\bNON-EXHAUSTIVE\b/u.test(normalized))
     problems.push("literal NON-EXHAUSTIVE marker missing");
   return problems.length === 0
@@ -558,7 +598,8 @@ function checkStop(
   const code = stopCode(body);
   const rationale = body ?? "";
   const problems: string[] = [];
-  if (code === undefined) problems.push("canonical strategic stop code missing");
+  if (code === undefined)
+    problems.push("canonical strategic stop code missing");
   if (
     code === "DECISION-INSENSITIVE" &&
     (!/\b(?:no|cannot|can't|would not|does not|without)\b.{0,50}\b(?:change|alter|reopen)\b|変わらない|変更しない|再開しない/iu.test(
@@ -590,7 +631,9 @@ function checkStop(
       /人間|担当者|不在/u.test(rationale)
     )
   )
-    problems.push("HUMAN-UNAVAILABLE needs the absent human owner in its rationale");
+    problems.push(
+      "HUMAN-UNAVAILABLE needs the absent human owner in its rationale",
+    );
   if (
     (allUnelicited || /\bUNELICITED\b/u.test(depthBody ?? "")) &&
     code === "DECISION-INSENSITIVE"
@@ -618,7 +661,8 @@ function checkDiscoveries(body: string | undefined): Verdict {
   const sourceIndex = column(table, "Source");
   const consequenceIndex = column(table, "Consequence");
   const problems: string[] = [];
-  if (missing.length > 0) problems.push(`missing columns: ${missing.join(", ")}`);
+  if (missing.length > 0)
+    problems.push(`missing columns: ${missing.join(", ")}`);
   for (const [rowNumber, row] of table.rows.entries()) {
     const displayRow = rowNumber + 1;
     const discovery = cleanInline(cell(row, discoveryIndex) ?? "");
@@ -663,12 +707,16 @@ function checkBoundary(text: string): Verdict {
     .split(/\r?\n/u)
     .map((line) => headingLabel(line))
     .filter((label) => label !== undefined);
-  const leaked = headings.filter((label) =>
-    forbidden.has(label.toLowerCase()),
-  );
+  const leaked = headings.filter((label) => forbidden.has(label.toLowerCase()));
   const closureSurface = text
-    .replaceAll(/\bnot all (?:blind spots?|unknown unknowns).{0,50}\b(?:were )?(?:found|covered|enumerated|eliminated)\b/giu, "")
-    .replaceAll(/\b(?:did|does|do|can|could|will|would) not .{0,50}\b(?:all|every) (?:blind spots?|unknown unknowns)\b/giu, "");
+    .replaceAll(
+      /\bnot all (?:blind spots?|unknown unknowns).{0,50}\b(?:were )?(?:found|covered|enumerated|eliminated)\b/giu,
+      "",
+    )
+    .replaceAll(
+      /\b(?:did|does|do|can|could|will|would) not .{0,50}\b(?:all|every) (?:blind spots?|unknown unknowns)\b/giu,
+      "",
+    );
   const closureClaim =
     /\b(?:all|every)\s+(?:blind spots?|unknown unknowns).{0,40}\b(?:found|covered|enumerated|eliminated)\b/iu.test(
       closureSurface,
@@ -708,36 +756,49 @@ function checkBoundary(text: string): Verdict {
   const details = [
     leaked.length > 0 ? `forbidden headings: ${leaked.join(", ")}` : undefined,
     closureClaim ? "exhaustive blind-spot coverage claim found" : undefined,
-    readOrderViolation ? "packet explicitly says questions preceded reading" : undefined,
+    readOrderViolation
+      ? "packet explicitly says questions preceded reading"
+      : undefined,
     !handoffOwner ? "Handoff does not name an owner or NONE" : undefined,
-    handoffDecisionLeak ? "Handoff contains a solution/selection/commit verdict" : undefined,
+    handoffDecisionLeak
+      ? "Handoff contains a solution/selection/commit verdict"
+      : undefined,
   ].filter((detail) => detail !== undefined);
   return verdict("B10", "output boundary", "FAIL", details.join("; "));
 }
 
-async function input(): Promise<string> {
+async function input(): Promise<string | Error> {
   const parsed = cli(
     {
       name: "blind-spot-check.ts",
       parameters: ["[path]"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
   const path = parsed._.path;
   if (parsed._.length > 1)
-    throw new Error("usage: bun blind-spot-check.ts [packet.md|-]");
+    return new Error("usage: bun blind-spot-check.ts [packet.md|-]");
   if (path === undefined || path === "-")
     return new Response(Bun.stdin.stream()).text();
   if (!existsSync(path))
-    throw new Error(`blind-spot-check: file not found: ${path}`);
+    return new Error(`blind-spot-check: file not found: ${path}`);
   return Bun.file(path).text();
 }
 
-async function main(): Promise<void> {
-  const text = await input();
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
+async function main(): Promise<void | Error> {
+  const inputText = await input();
+  if (inputText instanceof Error) return inputText;
+  const text = inputText;
   const assumptionBody = sectionBody(text, "Assumption ledger");
   const probeBody = sectionBody(text, "Tacit-knowledge probes");
   const depthBody = sectionBody(text, "Depth trace");
@@ -749,7 +810,11 @@ async function main(): Promise<void> {
     probes.verdict,
     checkDepth(depthBody, ledger.loadBearingIds, probes.hasHumanAnswer),
     checkOpenResidual(sectionBody(text, "Open-set residual")),
-    checkStop(sectionBody(text, "Stop reason"), probes.allUnelicited, depthBody),
+    checkStop(
+      sectionBody(text, "Stop reason"),
+      probes.allUnelicited,
+      depthBody,
+    ),
     checkDiscoveries(sectionBody(text, "Discoveries")),
     checkBoundary(text),
   ];
@@ -774,9 +839,12 @@ async function main(): Promise<void> {
   process.exit(failures === 0 ? 0 : 1);
 }
 
-await main().catch((error) => {
-  process.stderr.write(
-    `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
-  );
+const outcome = await Promise.try(main).then(
+  (value) => value,
+  (error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+);
+if (outcome instanceof Error) {
+  process.stderr.write(`FATAL: ${outcome.message}\n`);
   process.exit(2);
-});
+}

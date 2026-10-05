@@ -11,21 +11,38 @@
 
 import { cli } from "cleye";
 
-function rejectPrototypeFlag(type: string, flag: string): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
-  }
-}
+// Unknown options are handled by Cleye after parsing the raw argument.
 
 const UNFALSIFIABLE = [
-  "integrity", "quality", "excellence", "respect", "innovation", "transparency",
-  "accountability", "teamwork", "customer focus", "safety first", "professionalism",
-  "誠実", "品質", "卓越", "尊重", "革新", "透明性", "責任感", "チームワーク", "安全第一",
+  "integrity",
+  "quality",
+  "excellence",
+  "respect",
+  "innovation",
+  "transparency",
+  "accountability",
+  "teamwork",
+  "customer focus",
+  "safety first",
+  "professionalism",
+  "誠実",
+  "品質",
+  "卓越",
+  "尊重",
+  "革新",
+  "透明性",
+  "責任感",
+  "チームワーク",
+  "安全第一",
 ];
 
 const SURFACE_TOKENS = [
-  "NUMBER-TRANSFERS-RIGHT", "STOP-AT-DETECTION", "CAP-PLUS-INCENTIVE-CUT",
-  "DEFAULT-NON-EXTENSION", "PROGRAM-DENIES", "ADVISORY",
+  "NUMBER-TRANSFERS-RIGHT",
+  "STOP-AT-DETECTION",
+  "CAP-PLUS-INCENTIVE-CUT",
+  "DEFAULT-NON-EXTENSION",
+  "PROGRAM-DENIES",
+  "ADVISORY",
 ];
 
 const TRADE_FORM = /(?:^|[^-<>=])[>＞](?:[^-<>=]|$)/u;
@@ -54,14 +71,14 @@ const findColumn = (header: string[], pattern: RegExp): number =>
 type RuleTable = { header: string[]; rows: string[][] };
 
 function tableRowsAfter(lines: string[], start: number): string[][] {
-	const rows: string[][] = [];
-	for (let index = start + 2; index < lines.length; index += 1) {
-		const row = lines[index] ?? "";
-		if (!row.trim().startsWith("|")) break;
-		if (TABLE_SEPARATOR.test(row.trim())) continue;
-		rows.push(cells(row));
-	}
-	return rows;
+  const rows: string[][] = [];
+  for (let index = start + 2; index < lines.length; index += 1) {
+    const row = lines[index] ?? "";
+    if (!row.trim().startsWith("|")) break;
+    if (TABLE_SEPARATOR.test(row.trim())) continue;
+    rows.push(cells(row));
+  }
+  return rows;
 }
 
 // A rule table is a markdown table whose header names both a rule column and a
@@ -96,19 +113,40 @@ async function checkFile(file: string): Promise<void> {
 
   // --- document-level requirements (D2, D6, D7) ---
   if (!/custodian|CUSTODIAN|管理者|所管/u.test(text)) {
-    fail(file, "no CUSTODIAN named — D2 requires one owner who may change this");
+    fail(
+      file,
+      "no CUSTODIAN named — D2 requires one owner who may change this",
+    );
   }
-  if (!/review-by|REVIEW-BY|next review|次回レビュー|レビュー期限/iu.test(text)) {
-    fail(file, "no review-by date — D2 requires a review commitment at publication");
+  if (
+    !/review-by|REVIEW-BY|next review|次回レビュー|レビュー期限/iu.test(text)
+  ) {
+    fail(
+      file,
+      "no review-by date — D2 requires a review commitment at publication",
+    );
   }
   if (!/retirement trigger|RETIREMENT TRIGGER|失効条件|撤回条件/iu.test(text)) {
-    fail(file, "no RETIREMENT TRIGGER — D2 requires the observable that retires a rule");
+    fail(
+      file,
+      "no RETIREMENT TRIGGER — D2 requires the observable that retires a rule",
+    );
   }
   if (!/deviation log|DEVIATION LOG|逸脱台帳|例外台帳/iu.test(text)) {
-    warn(file, "no DEVIATION LOG — D6 expects legitimate deviation to have a home");
+    warn(
+      file,
+      "no DEVIATION LOG — D6 expects legitimate deviation to have a home",
+    );
   }
-  if (!/advance non-compliance|ADVANCE NON-COMPLIANCE|事前非遵守|事前宣言/iu.test(text)) {
-    warn(file, "no ADVANCE NON-COMPLIANCE section — D6's advance-declaration instrument is absent");
+  if (
+    !/advance non-compliance|ADVANCE NON-COMPLIANCE|事前非遵守|事前宣言/iu.test(
+      text,
+    )
+  ) {
+    warn(
+      file,
+      "no ADVANCE NON-COMPLIANCE section — D6's advance-declaration instrument is absent",
+    );
   }
   if (!/divergence probe|DIVERGENCE PROBE|分岐テスト|分岐率/iu.test(text)) {
     warn(file, "no DIVERGENCE PROBE recorded — D7 is unpassed until it runs");
@@ -117,15 +155,27 @@ async function checkFile(file: string): Promise<void> {
   // --- rule-level requirements (D1, D5) ---
   const table = findRuleTable(lines);
   if (table === undefined) {
-    fail(file, "no rule table found — need a table with a rule column and a defeated-value column");
+    fail(
+      file,
+      "no rule table found — need a table with a rule column and a defeated-value column",
+    );
     return;
   }
 
   const ruleColumn = findColumn(table.header, /rule|規則|原則|条/iu);
-  const defeatedColumn = findColumn(table.header, /defeat|sacrific|犠牲|捨て|失う/iu);
-  const surfaceColumn = findColumn(table.header, /surface|拘束面|機構|enforce/iu);
+  const defeatedColumn = findColumn(
+    table.header,
+    /defeat|sacrific|犠牲|捨て|失う/iu,
+  );
+  const surfaceColumn = findColumn(
+    table.header,
+    /surface|拘束面|機構|enforce/iu,
+  );
   if (surfaceColumn === -1) {
-    fail(file, "rule table has no binding-surface column — D5 cannot be checked");
+    fail(
+      file,
+      "rule table has no binding-surface column — D5 cannot be checked",
+    );
   }
 
   if (table.rows.length === 0) fail(file, "rule table has no rows");
@@ -145,7 +195,7 @@ async function checkFile(file: string): Promise<void> {
       fail(file, `${label}: empty rule cell`);
       continue;
     }
-      if (!TRADE_FORM.test(rule)) {
+    if (!TRADE_FORM.test(rule)) {
       fail(file, `${label}: no "A > B" trade form in the rule cell — D1`);
     }
     if (defeated === "" || defeated === "-" || defeated === "—") {
@@ -156,24 +206,38 @@ async function checkFile(file: string): Promise<void> {
       (word) => lowered.includes(word.toLowerCase()) && !TRADE_FORM.test(rule),
     );
     if (bareValue !== undefined) {
-      fail(file, `${label}: bare value "${bareValue}" with no trade — fails the negation test (D1)`);
+      fail(
+        file,
+        `${label}: bare value "${bareValue}" with no trade — fails the negation test (D1)`,
+      );
     }
     if (/\bboth\b|も.*も大事|両立/u.test(rule)) {
       fail(file, `${label}: "both" with no ordering — trade-off erasure (D1)`);
     }
-    const surface = surfaceColumn === -1 ? undefined : row[surfaceColumn] ?? "";
-    if (surface !== undefined && (surface === "" || surface === "-" || surface === "—")) {
-      fail(file, `${label}: no binding surface named and not marked ADVISORY — D5`);
+    const surface =
+      surfaceColumn === -1 ? undefined : (row[surfaceColumn] ?? "");
+    if (
+      surface !== undefined &&
+      (surface === "" || surface === "-" || surface === "—")
+    ) {
+      fail(
+        file,
+        `${label}: no binding surface named and not marked ADVISORY — D5`,
+      );
     } else if (
       surface !== undefined &&
       !SURFACE_TOKENS.some((t) => surface.toUpperCase().includes(t))
     ) {
-      warn(file, `${label}: binding surface "${surface}" is not one of the named types or ADVISORY — check it is a real mechanism`);
+      warn(
+        file,
+        `${label}: binding surface "${surface}" is not one of the named types or ADVISORY — check it is a real mechanism`,
+      );
     }
   }
 }
 
 async function main(): Promise<void> {
+  const args = Bun.argv.slice(2);
   const parsed = cli(
     {
       name: "doctrine-check.ts",
@@ -181,14 +245,21 @@ async function main(): Promise<void> {
       // rather than cleye's exit-1 "missing parameter".
       parameters: ["[files...]"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
-    Bun.argv.slice(2),
+    [...args],
   );
+  if (
+    args.some((arg) => arg === "--__proto__" || arg.startsWith("--__proto__="))
+  ) {
+    process.stderr.write("FATAL: unknown option '--__proto__'\n");
+    process.exit(2);
+  }
   const files = parsed._;
   if (files.length === 0) {
-    process.stderr.write("usage: bun scripts/doctrine-check.ts <doctrine.md> [more.md ...]\n");
+    process.stderr.write(
+      "usage: bun scripts/doctrine-check.ts <doctrine.md> [more.md ...]\n",
+    );
     process.exit(2);
   }
   for (const file of files) await checkFile(file);
@@ -197,7 +268,9 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   await main().then(undefined, (error: unknown) => {
-    process.stderr.write(`FATAL: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `FATAL: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exit(2);
   });
 }

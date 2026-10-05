@@ -95,13 +95,10 @@ function toToml(doc: Doc): string {
   return `${out.join("\n")}\n`;
 }
 
-function present<T>(v: T | undefined, what: string): T {
-  if (v === undefined) throw new Error(`fixture config has no ${what}`);
-  return v;
-}
 const driveRow = (c: Doc, name: string): Row =>
-  present(c.drive[name], `drive.${name}`);
-const firstBudget = (c: Doc): Row => present(c.budget[0], "budget[0]");
+  c.drive[name] ?? (expect(c.drive[name]).toBeDefined(), {});
+const firstBudget = (c: Doc): Row =>
+  c.budget[0] ?? (expect(c.budget[0]).toBeDefined(), {});
 
 function config(edit: (c: Doc) => void): Record<string, string> {
   const c = decoded(Doc, Bun.TOML.parse(readFileSync(REAL, "utf8")));
@@ -385,7 +382,8 @@ describe("enforce-storage-headroom", () => {
     test("an invalid config denies with EVERY error in one decision, and names the escape", () => {
       const bad = config((c) => {
         driveRow(c, "host").deny_gib = "thirty"; // wrong type
-        present(c.launcher[0], "launcher[0]").comand = "typo"; // unknown key
+        (c.launcher[0] ?? (expect(c.launcher[0]).toBeDefined(), {})).comand =
+          "typo"; // unknown key
       });
       const d = decisionOf(runHook(HOOK, bash("ls"), bad).stdout);
       expect(d?.permissionDecision).toBe("deny");

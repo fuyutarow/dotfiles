@@ -5,14 +5,6 @@
 // test file flags them by design; the floor's targets are scripts, not tests.
 import { describe, expect, test } from "bun:test";
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error("prototype");
-  }
-}
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -177,10 +169,15 @@ describe("script-check floor", () => {
   });
 
   test("a package bin without a shebang FAILs (the symlink could not run)", () => {
-    const { out, code } = runFloor("export const ok = 1;\n", "cli.ts", undefined, {
-      bin: { cli: "cli.ts" },
-      mode: 0o755,
-    });
+    const { out, code } = runFloor(
+      "export const ok = 1;\n",
+      "cli.ts",
+      undefined,
+      {
+        bin: { cli: "cli.ts" },
+        mode: 0o755,
+      },
+    );
     expect(out).toContain("`bin` entry without a `#!/usr/bin/env bun` shebang");
     expect(code).toBe(1);
   });
@@ -207,7 +204,9 @@ describe("script-check floor", () => {
     );
     writeFileSync(join(dir, "bun.lock"), "{}\n");
     // bounded: one-shot floor run over a tiny fixture; maxBuffer caps runaway output
-    const proc = Bun.spawnSync(["bun", FLOOR, file], { maxBuffer: 1024 * 1024 });
+    const proc = Bun.spawnSync(["bun", FLOOR, file], {
+      maxBuffer: 1024 * 1024,
+    });
     rmSync(dir, { recursive: true, force: true });
     const out = proc.stdout.toString() + proc.stderr.toString();
     expect(out).not.toContain("shebang");
@@ -320,22 +319,17 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(code).toBe(1);
   });
 
-  test("ordinary Cleye cli with strict/prototype guard and deliberate spread PASSes", () => {
+  test("ordinary Cleye cli with a post-parse prototype guard and deliberate spread PASSes", () => {
     const { out, code } = runFloor(
       `
       import { cli } from "cleye";
-      function rejectPrototypeFlag(
-        type: "known-flag" | "unknown-flag" | "argument",
-        flag: string,
-      ): void {
-        if (type === "unknown-flag" && flag === "__proto__") throw new Error("prototype");
-      }
+      const args = Bun.argv.slice(2);
       const parsed = cli({
         name: "fixture",
         parameters: ["<file...>"],
         strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
-      }, undefined, Bun.argv.slice(2));
+      }, undefined, [...args]);
+      if (args.some((arg) => arg === "--__proto__")) process.exitCode = 2;
       process.stdout.write(parsed._.file.join("\\n"));
     `,
       "fixture.ts",
@@ -392,7 +386,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
       const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
-      if (parsed._.length > 0) throw new Error("unexpected positional");
+      if (parsed._.length > 0) process.exitCode = 2;
     `,
       "fixture.ts",
       { cleye: "2.6.0" },
@@ -407,7 +401,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
       import { cli } from "cleye";
       function rejectPrototypeFlag() {}
       function rejectUnexpectedArguments(unknownFlags: object, positionals: readonly string[]) {
-        if (Object.keys(unknownFlags).length > 0 || positionals.length > 0) throw new Error("unexpected");
+        if (Object.keys(unknownFlags).length > 0 || positionals.length > 0) return { ok: false, error: "unexpected" };
       }
       const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
       rejectUnexpectedArguments(parsed.unknownFlags, parsed._);
@@ -437,7 +431,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
         strictFlags: true,
         ignoreArgv: rejectPrototypeFlag,
       }, undefined, Bun.argv.slice(2));
-      if (parsed._.length > 0) throw new Error("unexpected positional");
+      if (parsed._.length > 0) process.exitCode = 2;
     `,
       "fixture.ts",
       { cleye: "2.6.0" },
@@ -453,7 +447,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
       function rejectPrototypeFlag() {}
       const run = command({ name: "run", parameters: [], strictFlags: true });
       const parsed = cli({ name: "fixture", commands: [run], parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
-      if (parsed._.length > 0) throw new Error("unexpected positional");
+      if (parsed._.length > 0) process.exitCode = 2;
     `,
       "fixture.ts",
       { cleye: "2.6.0" },
@@ -470,7 +464,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
       function rejectPrototypeFlag() {}
       const parsed = cli({ name: "fixture", parameters: [], strictFlags: true, ignoreArgv: rejectPrototypeFlag }, undefined, Bun.argv.slice(2));
       command("persist", parsed);
-      if (parsed._.length > 0) throw new Error("unexpected positional");
+      if (parsed._.length > 0) process.exitCode = 2;
     `,
       "fixture.ts",
       { cleye: "2.6.0" },
@@ -498,7 +492,7 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
       const parsed = typeFlag({}, [...args], {
         ignore: (type) => type === "unknown-flag" || type === "argument",
       });
-      if (Object.keys(parsed.unknownFlags).length > 0) throw new Error("invariant");
+      if (Object.keys(parsed.unknownFlags).length > 0) process.exitCode = 2;
       process.stdout.write(args.join("\\n"));
     `);
     expect(out).toContain("FAIL=0");
@@ -556,13 +550,12 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(benignExpression.code).toBe(0);
   });
 
-  test("Cleye maps declared positional schemas and the local guard rejects __proto__ before mutation", () => {
+  test("a preserved raw argv copy supports post-parse __proto__ validation", () => {
     const parsed = cli(
       {
         name: "fixture",
         parameters: ["<file...>"],
         strictFlags: true,
-        ignoreArgv: rejectPrototypeFlag,
         help: false,
       },
       undefined,
@@ -571,20 +564,16 @@ describe("script-check floor — Cleye argv boundary (F5/F8, BG1)", () => {
     expect(parsed._.file).toEqual(["first.ts", "second.ts"]);
 
     const prototypeArgv = ["--__proto__"];
-    expect(() =>
-      cli(
-        {
-          name: "fixture",
-          parameters: [],
-          strictFlags: true,
-          ignoreArgv: rejectPrototypeFlag,
-          help: false,
-        },
-        undefined,
-        prototypeArgv,
-      ),
-    ).toThrow("prototype");
-    expect(prototypeArgv).toEqual(["--__proto__"]);
+    const rawArgv = [...prototypeArgv];
+    const prototypeParsed = cli(
+      { name: "fixture", parameters: [], strictFlags: false, help: false },
+      undefined,
+      [...prototypeArgv],
+    );
+    expect(Object.hasOwn(prototypeParsed.unknownFlags, "__proto__")).toBe(
+      false,
+    );
+    expect(rawArgv).toEqual(["--__proto__"]);
   });
 
   test("the forwarding recipe leaves downstream token order and -- untouched", () => {

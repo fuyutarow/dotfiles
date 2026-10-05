@@ -62,7 +62,7 @@ import {
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { cli } from "cleye";
-import { fromThrowable } from "neverthrow";
+import { err, fromThrowable, ok, type Result } from "neverthrow";
 
 const USAGE =
   "Usage: bun scripts/link-skills.ts [--dry-run] [--dotfiles <path>] [--home <path>]\n";
@@ -76,15 +76,9 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
+    process.stderr.write(`unknown flag(s): --${flag}\n${USAGE}`);
+    process.exit(2);
   }
-}
-
-function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
 }
 
 function print(line: string): void {
@@ -261,7 +255,7 @@ function pruneDanglingSkillLink(
   print(`pruned (renamed/deleted): ${old}`);
 }
 
-function main(): void {
+function main(): Result<void, UsageError> {
   const parsed = cli(
     {
       name: "link-skills.ts",
@@ -274,13 +268,18 @@ function main(): void {
       },
       flags: {
         dryRun: { type: Boolean, default: false },
-        dotfiles: { type: nonEmptyString("--dotfiles") },
-        home: { type: nonEmptyString("--home") },
+        dotfiles: { type: String },
+        home: { type: String },
       },
     },
     undefined,
     Bun.argv.slice(2),
   );
+
+  if (parsed.flags.dotfiles === "")
+    return err(new UsageError("--dotfiles requires a value"));
+  if (parsed.flags.home === "")
+    return err(new UsageError("--home requires a value"));
 
   // The [] schema leaves unexpected operands in argv._; never let one fall through to a real
   // prune/relink pass.
@@ -288,8 +287,9 @@ function main(): void {
     process.stderr.write(
       `unexpected positional argument: ${parsed._[0]}\n${USAGE}`,
     );
-    process.exitCode = 2;
-    return;
+    return err(
+      new UsageError(`unexpected positional argument: ${parsed._[0]}`),
+    );
   }
 
   const dryRun = parsed.flags.dryRun;
@@ -408,6 +408,7 @@ function main(): void {
   );
 
   print(`✅ Agent link pass complete. Source root: ${dotfiles}`);
+  return ok(undefined);
 }
 
 // No outer abort here, matching the original's total tolerance: every mutation above already
@@ -427,7 +428,15 @@ process.on("uncaughtException", (error) => {
   process.exit(process.exitCode ?? 0);
 });
 
-main();
+const mainResult = fromThrowable(main)().andThen((result) => result);
+if (mainResult.isErr()) {
+  const message =
+    mainResult.error instanceof Error
+      ? mainResult.error.message
+      : String(mainResult.error);
+  process.stderr.write(`${message}\n${USAGE}`);
+  process.exitCode = 2;
+}
 // `?? 0` preserves the original's unconditional exit 0 for valid mutation paths. Locally caught
 // usage errors (including `--__proto__`) set exit 2 before this line; Cleye ordinary-unknown
 // strictness exits 1 inside the framework, before any filesystem work.

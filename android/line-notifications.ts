@@ -5,6 +5,13 @@
 // Verdicts: PASS/FAIL lines; exit 0 = policy holds, 1 = policy drift, 2 = tool failure.
 
 import { cli } from "cleye";
+import {
+  err,
+  fromAsyncThrowable,
+  ok as resultOk,
+  Result,
+  type Result as ResultType,
+} from "neverthrow";
 
 const LINE_PACKAGE = "jp.naver.line.android";
 const MESSAGE_CHANNEL = `${LINE_PACKAGE}.notification.NewMessages`;
@@ -13,14 +20,14 @@ const MODE_NAME = "カナモード";
 const EXPECTED_MODEL = "Pixel 9a";
 const EXPECTED_ANDROID = "17";
 
-class UsageError extends Error {}
+let cliError: string | undefined;
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
+    cliError = `Unknown option '--${flag}'`;
   }
 }
 
@@ -31,47 +38,65 @@ type Probe = {
   timedOut: boolean;
 };
 
-async function run(command: string[], timeoutMs = 15_000): Promise<Probe> {
-  const signal = AbortSignal.timeout(timeoutMs);
-  const proc = Bun.spawn(command, {
-    stdout: "pipe",
-    stderr: "pipe",
-    stdin: "ignore",
-    signal,
-    env: { ...process.env },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (stdout.length > 16_000_000) {
-    throw new Error(`${command[0]} output exceeded the safe inspection limit`);
-  }
-  return {
-    code,
-    stdout,
-    stderr: stderr.slice(0, 2_000),
-    timedOut: signal.aborted,
-  };
+async function run(
+  command: string[],
+  timeoutMs = 15_000,
+): Promise<ResultType<Probe, Error>> {
+  return fromAsyncThrowable(async () => {
+    const signal = AbortSignal.timeout(timeoutMs);
+    const proc = Bun.spawn(command, {
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      signal,
+      env: { ...process.env },
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (stdout.length > 16_000_000) {
+      return err(
+        new Error(`${command[0]} output exceeded the safe inspection limit`),
+      );
+    }
+    return resultOk({
+      code,
+      stdout,
+      stderr: stderr.slice(0, 2_000),
+      timedOut: signal.aborted,
+    });
+  })()
+    .mapErr((error: unknown) => new Error(String(error)))
+    .andThen((value) => value);
 }
 
-async function adb(args: string[], serial?: string): Promise<string> {
+async function adb(
+  args: string[],
+  serial?: string,
+): Promise<ResultType<string, Error>> {
   const command = [
     "adb",
     ...(serial !== undefined && serial !== "" ? ["-s", serial] : []),
     ...args,
   ];
-  const result = await run(command);
-  if (result.timedOut) throw new Error(`adb ${args[0]} timed out`);
+  const outcome = await run(command);
+  if (outcome.isErr()) return err(outcome.error);
+  const result = outcome.value;
+  if (result.timedOut) return err(new Error(`adb ${args[0]} timed out`));
   if (result.code !== 0) {
-    throw new Error(`adb ${args[0]} failed: ${result.stderr.trim()}`);
+    return err(new Error(`adb ${args[0]} failed: ${result.stderr.trim()}`));
   }
-  return result.stdout;
+  return resultOk(result.stdout);
 }
 
-async function connectedDevice(requestedSerial?: string): Promise<string> {
-  const output = await adb(["devices"]);
+async function connectedDevice(
+  requestedSerial?: string,
+): Promise<ResultType<string, Error>> {
+  const result = await adb(["devices"]);
+  if (result.isErr()) return err(result.error);
+  const output = result.value;
   const devices = output
     .split("\n")
     .slice(1)
@@ -81,20 +106,23 @@ async function connectedDevice(requestedSerial?: string): Promise<string> {
     .flatMap((serial) => (serial === undefined ? [] : [serial]));
   if (requestedSerial !== undefined && requestedSerial !== "") {
     if (!devices.includes(requestedSerial)) {
-      throw new Error(
-        "requested Android device is not connected and authorized",
+      return err(
+        new Error("requested Android device is not connected and authorized"),
       );
     }
-    return requestedSerial;
+    return resultOk(requestedSerial);
   }
   if (devices.length !== 1) {
-    throw new Error(
-      `expected exactly one authorized Android device; found ${devices.length}`,
+    return err(
+      new Error(
+        `expected exactly one authorized Android device; found ${devices.length}`,
+      ),
     );
   }
   const serial = devices[0];
-  if (serial === undefined) throw new Error("Android device serial is missing");
-  return serial;
+  if (serial === undefined)
+    return err(new Error("Android device serial is missing"));
+  return resultOk(serial);
 }
 
 export type PolicyFinding = { name: string; ok: boolean; detail: string };
@@ -231,7 +259,9 @@ function ringerMode(audioDump: string): string | undefined {
   return audioDump.match(/Ringer mode:\s*\n- mode \(internal\) = (\w+)/u)?.[1];
 }
 
-async function inspect(serial: string): Promise<PolicyFinding[]> {
+async function inspect(
+  serial: string,
+): Promise<Result<PolicyFinding[], Error>> {
   const [model, android, user, lockscreen, zen, notifications, audio] =
     await Promise.all([
       adb(["shell", "getprop", "ro.product.model"], serial),
@@ -251,40 +281,70 @@ async function inspect(serial: string): Promise<PolicyFinding[]> {
       adb(["shell", "dumpsys", "notification"], serial),
       adb(["shell", "dumpsys", "audio"], serial),
     ]);
-  const currentUser = Number(user.trim());
+  const combined = Result.combine([
+    model,
+    android,
+    user,
+    lockscreen,
+    zen,
+    notifications,
+    audio,
+  ]);
+  if (combined.isErr()) return err(combined.error);
+  const [
+    modelText,
+    androidText,
+    userText,
+    lockscreenText,
+    zenText,
+    notificationsText,
+    audioText,
+  ] = combined.value;
+  const currentUser = Number(userText.trim());
   if (!Number.isSafeInteger(currentUser) || currentUser < 0) {
-    throw new Error(`unexpected Android current user: ${user.trim()}`);
+    return err(
+      new Error(`unexpected Android current user: ${userText.trim()}`),
+    );
   }
-  return [
+  return resultOk([
     finding(
       "device",
-      model.trim() === EXPECTED_MODEL && android.trim() === EXPECTED_ANDROID,
-      `expected ${EXPECTED_MODEL} with Android ${EXPECTED_ANDROID}; found ${model.trim()} with Android ${android.trim()}`,
+      modelText.trim() === EXPECTED_MODEL &&
+        androidText.trim() === EXPECTED_ANDROID,
+      `expected ${EXPECTED_MODEL} with Android ${EXPECTED_ANDROID}; found ${modelText.trim()} with Android ${androidText.trim()}`,
     ),
     finding(
       "lockscreen",
-      lockscreen.trim() === "0",
+      lockscreenText.trim() === "0",
       "lock-screen notification display must be off",
     ),
-    ...inspectNotificationPolicy(notifications, zen, currentUser),
+    ...inspectNotificationPolicy(notificationsText, zenText, currentUser),
     finding(
       "ringer",
-      ringerMode(audio) === "VIBRATE",
-      `ringer mode must be VIBRATE; found ${ringerMode(audio) ?? "unknown"}`,
+      ringerMode(audioText) === "VIBRATE",
+      `ringer mode must be VIBRATE; found ${ringerMode(audioText) ?? "unknown"}`,
     ),
-  ];
+  ]);
 }
 
-async function assertTarget(serial: string): Promise<void> {
+async function assertTarget(serial: string): Promise<ResultType<void, Error>> {
   const [model, android] = await Promise.all([
     adb(["shell", "getprop", "ro.product.model"], serial),
     adb(["shell", "getprop", "ro.build.version.release"], serial),
   ]);
-  if (model.trim() !== EXPECTED_MODEL || android.trim() !== EXPECTED_ANDROID) {
-    throw new Error(
-      `refusing to change ${model.trim()} with Android ${android.trim()}; expected ${EXPECTED_MODEL} with Android ${EXPECTED_ANDROID}`,
+  if (model.isErr()) return err(model.error);
+  if (android.isErr()) return err(android.error);
+  if (
+    model.value.trim() !== EXPECTED_MODEL ||
+    android.value.trim() !== EXPECTED_ANDROID
+  ) {
+    return err(
+      new Error(
+        `refusing to change ${model.value.trim()} with Android ${android.value.trim()}; expected ${EXPECTED_MODEL} with Android ${EXPECTED_ANDROID}`,
+      ),
     );
   }
+  return resultOk(undefined);
 }
 
 function report(findings: PolicyFinding[]): number {
@@ -296,7 +356,68 @@ function report(findings: PolicyFinding[]): number {
   return findings.every((item) => item.ok) ? 0 : 1;
 }
 
-async function main(): Promise<void> {
+async function applyPolicy(serial: string): Promise<ResultType<void, Error>> {
+  const target = await assertTarget(serial);
+  if (target.isErr()) return err(target.error);
+  const hidden = await adb(
+    [
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "lock_screen_show_notifications",
+      "0",
+    ],
+    serial,
+  );
+  if (hidden.isErr()) return err(hidden.error);
+  const beforeResult = await inspect(serial);
+  if (beforeResult.isErr()) return err(beforeResult.error);
+  const before = beforeResult.value;
+  const guardFailed =
+    report(before.filter((item) => item.name !== "ringer")) !== 0;
+  const ringer = before.find((item) => item.name === "ringer");
+  if (guardFailed && ringer?.ok === true) {
+    const restored = await adb(
+      ["shell", "cmd", "audio", "set-ringer-mode", "SILENT"],
+      serial,
+    );
+    if (restored.isErr()) return err(restored.error);
+    process.stdout.write(
+      "SAFE: restored SILENT ringer mode after failed guards.\n",
+    );
+  }
+  if (guardFailed) {
+    process.stdout.write(
+      "NEXT: configure and activate the dedicated Mode as documented in android/README.md; VIBRATE was not enabled.\n",
+    );
+    process.exitCode = 1;
+    return resultOk(undefined);
+  }
+  const vibrated = await adb(
+    ["shell", "cmd", "audio", "set-ringer-mode", "VIBRATE"],
+    serial,
+  );
+  if (vibrated.isErr()) return err(vibrated.error);
+  const afterResult = await inspect(serial);
+  if (afterResult.isErr()) return err(afterResult.error);
+  if (report(afterResult.value) !== 0) {
+    const restored = await adb(
+      ["shell", "cmd", "audio", "set-ringer-mode", "SILENT"],
+      serial,
+    );
+    if (restored.isErr()) return err(restored.error);
+    process.stdout.write(
+      "SAFE: restored SILENT ringer mode after failed verification.\n",
+    );
+    process.exitCode = 1;
+    return resultOk(undefined);
+  }
+  process.exitCode = 0;
+  return resultOk(undefined);
+}
+
+async function main(): Promise<ResultType<void, Error>> {
   const parsed = cli(
     {
       name: "line-notifications.ts",
@@ -315,64 +436,28 @@ async function main(): Promise<void> {
     undefined,
     process.argv.slice(2),
   );
+  if (cliError !== undefined) return err(new Error(cliError));
   if (parsed._.length > 0)
-    throw new UsageError("unexpected positional argument");
+    return err(new Error("unexpected positional argument"));
   if (Bun.which("adb") === null)
-    throw new Error("adb is missing; install Android Platform Tools");
-  const serial = await connectedDevice(parsed.flags.serial);
-  if (parsed.flags.apply) {
-    await assertTarget(serial);
-    // Hide lock-screen notifications first. Never enable vibration until the Mode and
-    // channel checks pass; otherwise other applications could start vibrating.
-    await adb(
-      [
-        "shell",
-        "settings",
-        "put",
-        "secure",
-        "lock_screen_show_notifications",
-        "0",
-      ],
-      serial,
-    );
-    const before = await inspect(serial);
-    const guards = before.filter((item) => item.name !== "ringer");
-    const guardFailed = report(guards) !== 0;
-    if (
-      guardFailed &&
-      before.find((item) => item.name === "ringer")?.ok === true
-    ) {
-      await adb(["shell", "cmd", "audio", "set-ringer-mode", "SILENT"], serial);
-      process.stdout.write(
-        "SAFE: restored SILENT ringer mode after failed guards.\n",
-      );
-    }
-    if (guardFailed) {
-      process.stdout.write(
-        "NEXT: configure and activate the dedicated Mode as documented in android/README.md; VIBRATE was not enabled.\n",
-      );
-      process.exitCode = 1;
-      return;
-    }
-    await adb(["shell", "cmd", "audio", "set-ringer-mode", "VIBRATE"], serial);
-    const after = await inspect(serial);
-    if (report(after) !== 0) {
-      await adb(["shell", "cmd", "audio", "set-ringer-mode", "SILENT"], serial);
-      process.stdout.write(
-        "SAFE: restored SILENT ringer mode after failed verification.\n",
-      );
-      process.exitCode = 1;
-      return;
-    }
-    process.exitCode = 0;
-    return;
-  }
-  process.exitCode = report(await inspect(serial));
+    return err(new Error("adb is missing; install Android Platform Tools"));
+  const connected = await connectedDevice(parsed.flags.serial);
+  if (connected.isErr()) return err(connected.error);
+  const serial = connected.value;
+  if (parsed.flags.apply) return applyPolicy(serial);
+  const inspected = await inspect(serial);
+  if (inspected.isErr()) return err(inspected.error);
+  process.exitCode = report(inspected.value);
+  return resultOk(undefined);
 }
 
 if (import.meta.main) {
-  await main().catch((error: unknown) => {
-    process.stderr.write(`FATAL: ${String(error)}\n`);
+  const result = await fromAsyncThrowable(main)();
+  if (result.isErr()) {
+    process.stderr.write(`FATAL: ${String(result.error)}\n`);
     process.exitCode = 2;
-  });
+  } else if (result.value.isErr()) {
+    process.stderr.write(`FATAL: ${String(result.value.error)}\n`);
+    process.exitCode = 2;
+  }
 }

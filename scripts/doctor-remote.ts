@@ -32,14 +32,15 @@ const SSH = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15"] as const;
 // Markers are assembled by the remote shell (`@@""X`), so the echo of the typed line never matches.
 const MARK = (k: string): string => `@@""${k}`;
 
-class UsageError extends Error {}
-
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
+    process.stderr.write(
+      `unknown flag(s): --${flag}\nUsage: bun scripts/doctor-remote.ts <host>\n`,
+    );
+    process.exit(2);
   }
 }
 
@@ -421,13 +422,21 @@ async function main(): Promise<void> {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 1)
-    throw new UsageError(
-      `one host only; unexpected: ${parsed._.slice(1).join(" ")}`,
+  if (parsed._.length > 1) {
+    process.stderr.write(
+      `one host only; unexpected: ${parsed._.slice(1).join(" ")}\nUsage: bun scripts/doctor-remote.ts <host>\n`,
     );
+    process.exitCode = 2;
+    return;
+  }
   const host = parsed._.host;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(host))
-    throw new UsageError(`not an ssh Host alias: ${host}`);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(host)) {
+    process.stderr.write(
+      `not an ssh Host alias: ${host}\nUsage: bun scripts/doctor-remote.ts <host>\n`,
+    );
+    process.exitCode = 2;
+    return;
+  }
   const reach = await checkReach(host);
   const rest =
     reach.verdict === "PASS"
@@ -462,12 +471,7 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   const r = await attempt(main);
   if (!r.ok) {
-    const usage = r.error instanceof UsageError;
-    process.stderr.write(
-      usage
-        ? `${errorMessage(r.error)}\nUsage: bun scripts/doctor-remote.ts <host>\n`
-        : `FATAL: ${errorMessage(r.error)}\n`,
-    );
+    process.stderr.write(`FATAL: ${errorMessage(r.error)}\n`);
     process.exitCode = 2;
   }
 }

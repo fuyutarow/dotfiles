@@ -48,14 +48,25 @@ describe("definition cards", () => {
     expect(isTest({ file: "src/testing_utils.jl" })).toBe(false);
   });
   test("without a judge nothing is judged; with one, its thresholds decide", () => {
-    const local = loadRetrievalConfig().thresholds.local;
-    const jev = loadRetrievalConfig().thresholds.jev;
-    expect(strengthOf(9, false, local)).toBe("unranked");
-    expect(strengthOf(4.2, true, local)).toBe("strong");
-    expect(strengthOf(2, true, local)).toBe("likely");
-    expect(strengthOf(-3, true, local)).toBe("none");
-    expect(strengthOf(2.3, true, jev)).toBe("strong"); // p ~ 0.91
-    expect(strengthOf(-0.1, true, jev)).toBe("none"); // p < 0.5
+    const strengths = loadRetrievalConfig().match(
+      (config) => [
+        strengthOf(9, false, config.thresholds.local),
+        strengthOf(4.2, true, config.thresholds.local),
+        strengthOf(2, true, config.thresholds.local),
+        strengthOf(-3, true, config.thresholds.local),
+        strengthOf(2.3, true, config.thresholds.jev), // p ~ 0.91
+        strengthOf(-0.1, true, config.thresholds.jev), // p < 0.5
+      ],
+      (error) => [`ERROR: ${error.message}`],
+    );
+    expect(strengths).toEqual([
+      "unranked",
+      "strong",
+      "likely",
+      "none",
+      "strong",
+      "none",
+    ]);
   });
 });
 
@@ -65,27 +76,44 @@ describe("retrieval.toml", () => {
     "utf8",
   );
   test("the shipped file carries the hardcoded values it replaced (pool since re-measured)", () => {
-    const c = loadRetrievalConfig();
-    expect([c.recall, c.pool]).toEqual([40, 25]); // pool 40 -> 25: bench 2026-10-01
-    expect(c.priors).toEqual({
-      public: 1,
-      documented: 0.5,
-      private: -1.5,
-      test: -1.5,
-    });
-    expect(c.thresholds.local).toEqual({ strong: 4, likely: 1.5, hook: 7.5 });
-    expect(c.thresholds.jev).toEqual({ strong: 2.2, likely: 0, hook: 3.5 });
-    expect(c.jevEndpoint.url).toBe("https://jevtypesafeai.com/api/v1/decide");
+    const values = loadRetrievalConfig().match(
+      (config) => ({
+        recall: config.recall,
+        pool: config.pool,
+        priors: config.priors,
+        local: config.thresholds.local,
+        jev: config.thresholds.jev,
+      }),
+      (error) => `ERROR: ${error.message}`,
+    );
+    expect(values).toEqual({
+      recall: 40,
+      pool: 25,
+      priors: { public: 1, documented: 0.5, private: -1.5, test: -1.5 },
+      local: { strong: 4, likely: 1.5, hook: 7.5 },
+      jev: { strong: 2.2, likely: 0, hook: 3.5 },
+    }); // pool 40 -> 25: bench 2026-10-01
+    const endpointUrl = loadRetrievalConfig().match(
+      (config) => config.jevEndpoint.url,
+      (error) => `ERROR: ${error.message}`,
+    );
+    const whenExhausted = loadRetrievalConfig().match(
+      (config) => config.jevEndpoint.whenExhausted ?? "missing",
+      (error) => `ERROR: ${error.message}`,
+    );
+    expect(endpointUrl).toBe("https://jevtypesafeai.com/api/v1/decide");
+    expect(whenExhausted).toContain('jev_provider = "typesafe"');
     // Owner decision 2026-10-01: an exhausted reseller balance points to the official API.
-    expect(c.jevEndpoint.whenExhausted).toContain('jev_provider = "typesafe"');
-    expect(
-      loadFromText(
-        shipped.replace(
-          'jev_provider = "jevtypesafeai"',
-          'jev_provider = "typesafe"',
-        ),
-      )().jevEndpoint,
-    ).toEqual({
+    const officialEndpoint = loadFromText(
+      shipped.replace(
+        'jev_provider = "jevtypesafeai"',
+        'jev_provider = "typesafe"',
+      ),
+    )().match(
+      (config) => config.jevEndpoint,
+      (error) => `ERROR: ${error.message}`,
+    );
+    expect(officialEndpoint).toEqual({
       url: "https://api.typesafe.ai/v1/systemone",
       model: "jev-latest",
     });
@@ -130,7 +158,11 @@ describe("retrieval.toml", () => {
               'jev_provider = "typesafe"',
             )
         : shipped.replace(from, to);
-      expect(() => loadFromText(text)()).toThrow(err);
+      const message = loadFromText(text)().match(
+        () => "valid config unexpectedly accepted",
+        (error) => error.message,
+      );
+      expect(message).toMatch(err);
     }
   });
 });

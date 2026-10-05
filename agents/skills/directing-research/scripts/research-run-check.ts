@@ -15,18 +15,18 @@ import {
 } from "./research-run/packet-validation";
 import { loadPacket } from "./research-run/parse";
 
-function rejectPrototypeFlag(
-  type: "argument" | "known-flag" | "unknown-flag",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__")
-    throw new Error(`unknown option '--${flag}'`);
+function usageError(message: string): void {
+  process.stderr.write(
+    `FATAL: ${message}\nRun 'bun research-run-check.ts --help' for usage.\n`,
+  );
+  process.exitCode = 2;
 }
 
-function nonEmptyPath(value: string | undefined): string {
-  if (value === undefined || value.trim() === "")
-    throw new Error("option requires a non-empty path");
-  return value;
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
 }
 
 async function main(): Promise<void> {
@@ -38,17 +38,17 @@ async function main(): Promise<void> {
         intent: {
           description: "RUN INTENT path; repeat once per admitted run.",
           placeholder: "<path>",
-          type: [nonEmptyPath],
+          type: [String],
         },
         judgment: {
           description: "One RETROSPECTIVE JUDGMENT path.",
           placeholder: "<path>",
-          type: [nonEmptyPath],
+          type: [String],
         },
         receipt: {
           description: "Terminal RUN RECEIPT path; repeat once per intent.",
           placeholder: "<path>",
-          type: [nonEmptyPath],
+          type: [String],
         },
       },
       help: {
@@ -60,25 +60,43 @@ async function main(): Promise<void> {
         ],
       },
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
+        ignoreArgv: rejectPrototypeFlag,
     },
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 0)
-    throw new Error(`unexpected positional argument '${parsed._[0]}'`);
+  if (parsed._.length > 0) {
+    usageError(`unexpected positional argument '${parsed._[0]}'`);
+    return;
+  }
   const judgmentPaths = parsed.flags.judgment ?? [];
-  if (judgmentPaths.length === 0)
-    throw new Error("required option: --judgment <RETROSPECTIVE-JUDGMENT.md>");
-  if (judgmentPaths.length !== 1)
-    throw new Error("option --judgment must be provided exactly once");
+  if (judgmentPaths.length === 0) {
+    usageError("required option: --judgment <RETROSPECTIVE-JUDGMENT.md>");
+    return;
+  }
+  if (judgmentPaths.length !== 1) {
+    usageError("option --judgment must be provided exactly once");
+    return;
+  }
   const judgmentPath = judgmentPaths[0];
-  if (judgmentPath === undefined)
-    throw new Error("required option: --judgment <RETROSPECTIVE-JUDGMENT.md>");
+  if (judgmentPath === undefined || judgmentPath.trim() === "") {
+    usageError(
+      judgmentPath === undefined
+        ? "required option: --judgment <RETROSPECTIVE-JUDGMENT.md>"
+        : "option requires a non-empty path",
+    );
+    return;
+  }
   const intentPaths = parsed.flags.intent ?? [];
   const receiptPaths = parsed.flags.receipt ?? [];
-  if (intentPaths.length + receiptPaths.length + 1 > MAX_PACKET_COUNT)
-    throw new Error(`packet count exceeds ${MAX_PACKET_COUNT}`);
+  if ([...intentPaths, ...receiptPaths].some((path) => path.trim() === "")) {
+    usageError("option requires a non-empty path");
+    return;
+  }
+  if (intentPaths.length + receiptPaths.length + 1 > MAX_PACKET_COUNT) {
+    usageError(`packet count exceeds ${MAX_PACKET_COUNT}`);
+    return;
+  }
 
   const findings: Finding[] = [];
   const [intents, receipts, judgment] = await Promise.all([
@@ -90,10 +108,26 @@ async function main(): Promise<void> {
     ),
     loadPacket(judgmentPath, "judgment", findings),
   ]);
-  for (const intent of intents) validateIntent(intent, findings);
-  for (const receipt of receipts) validateReceipt(receipt, findings);
-  validateJudgment(judgment, findings);
-  validatePacketJoins(intents, receipts, judgment, findings);
+  const packetResults = [...intents, ...receipts, judgment];
+  const packetError = packetResults.find((packet) => !packet.ok);
+  if (packetError !== undefined && !packetError.ok) {
+    process.stderr.write(
+      `FATAL: ${packetError.error}\nRun 'bun research-run-check.ts --help' for usage.\n`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const intentPackets = intents.flatMap((packet) =>
+    packet.ok ? [packet.value] : [],
+  );
+  const receiptPackets = receipts.flatMap((packet) =>
+    packet.ok ? [packet.value] : [],
+  );
+  if (!judgment.ok) return;
+  for (const intent of intentPackets) validateIntent(intent, findings);
+  for (const receipt of receiptPackets) validateReceipt(receipt, findings);
+  validateJudgment(judgment.value, findings);
+  validatePacketJoins(intentPackets, receiptPackets, judgment.value, findings);
 
   for (const finding of findings)
     process.stdout.write(
@@ -102,7 +136,7 @@ async function main(): Promise<void> {
   process.stdout.write("----\n");
   if (findings.length === 0) {
     process.stdout.write(
-      `research-run floor: FAIL=0 intents=${intents.length} receipts=${receipts.length} auditability=${field(judgment, "AUDITABILITY") ?? "UNKNOWN"} (STRUCTURE ONLY; semantic judgment remains with directing-research)\n`,
+      `research-run floor: FAIL=0 intents=${intentPackets.length} receipts=${receiptPackets.length} auditability=${field(judgment.value, "AUDITABILITY") ?? "UNKNOWN"} (STRUCTURE ONLY; semantic judgment remains with directing-research)\n`,
     );
     return;
   }

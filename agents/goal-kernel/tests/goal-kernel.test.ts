@@ -11,14 +11,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Result } from "neverthrow";
 import { z } from "../../hooks/zod.ts";
 import {
-  activateGoal,
+  activateGoal as activateGoalResult,
   type GoalContract,
   goalKernelPaths,
-  listRunEvents,
+  listRunEvents as listRunEventsResult,
   processHookEvent,
-  recordRunDecision,
+  recordRunDecision as recordRunDecisionResult,
 } from "../kernel.ts";
 import { buildPostmortem } from "../postmortem.ts";
 import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
@@ -55,10 +56,25 @@ function workspace(): string {
 }
 
 function requiredRunId(result: Readonly<{ run_id?: string }>): string {
-  if (result.run_id === undefined) {
-    throw new Error("expected Goal Kernel hook result to include run_id");
-  }
-  return result.run_id;
+  expect(result.run_id).toBeDefined();
+  return result.run_id ?? "";
+}
+
+function unwrap<T, E>(result: Result<T, E>): T {
+  expect(result.isOk()).toBe(true);
+  return result._unsafeUnwrap();
+}
+
+async function activateGoal(root: string, contract: unknown) {
+  return unwrap(await activateGoalResult(root, contract));
+}
+
+async function listRunEvents(root: string, id: string) {
+  return unwrap(await listRunEventsResult(root, id));
+}
+
+async function recordRunDecision(root: string, id: string, decision: unknown) {
+  return unwrap(await recordRunDecisionResult(root, id, decision));
 }
 
 function goal(overrides: Partial<GoalContract> = {}): GoalContract {
@@ -121,9 +137,14 @@ describe("immutable Goal authority", () => {
     expect(snapshot.north_star).not.toContain("mutated");
     expect(first.goal_digest).toMatch(/^[a-f0-9]{64}$/u);
 
-    expect(
-      activateGoal(root, goal({ north_star: "conflict" })),
-    ).rejects.toThrow("already has a different digest");
+    const conflicting = await activateGoalResult(
+      root,
+      goal({ north_star: "conflict" }),
+    );
+    expect(conflicting.isErr()).toBe(true);
+    expect(conflicting._unsafeUnwrapErr().message).toContain(
+      "already has a different digest",
+    );
   });
 
   test("a run keeps its bound version when the active pointer changes", async () => {
@@ -168,7 +189,9 @@ describe("immutable Goal authority", () => {
     mkdirSync(state, { recursive: true, mode: 0o700 });
     const lock = join(state, ".activation.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    expect(activateGoal(root, goal())).rejects.toThrow("GK_BUSY");
+    const busy = await activateGoalResult(root, goal());
+    expect(busy.isErr()).toBe(true);
+    expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
     unlinkSync(lock);
     expect((await activateGoal(root, goal())).goal_version).toBe(1);
   });
@@ -348,17 +371,17 @@ describe("hook enforcement and privacy", () => {
       "events",
     );
     const eventName = readdirSync(eventsDir)[0];
-    if (eventName === undefined) throw new Error("expected one run event");
-    const eventPath = join(eventsDir, eventName);
+    expect(eventName).toBeDefined();
+    const eventPath = join(eventsDir, eventName ?? "");
     const event = decoded(
       StoredEventSchema,
       jsonValue(readFileSync(eventPath, "utf8")),
     );
     event.event_type = "tampered";
     writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
-    expect(listRunEvents(root, requiredRunId(start))).rejects.toThrow(
-      "digest mismatch",
-    );
+    const tampered = await listRunEventsResult(root, requiredRunId(start));
+    expect(tampered.isErr()).toBe(true);
+    expect(tampered._unsafeUnwrapErr().message).toContain("digest mismatch");
   });
 });
 
@@ -442,9 +465,11 @@ describe("decision lineage and postmortem reconstruction", () => {
       }),
     );
 
-    const report = await buildPostmortem(root, runId, {
+    const reportResult = await buildPostmortem(root, runId, {
       include_transcript: true,
     });
+    expect(reportResult.isOk()).toBe(true);
+    const report = unwrap(reportResult);
     expect(report.goal.goal_id).toBe("harness-postmortem");
     expect(report.decisions.map((decision) => decision.decision_id)).toEqual([
       "D-001",
@@ -486,13 +511,15 @@ describe("decision lineage and postmortem reconstruction", () => {
     };
     const lock = join(goalKernelPaths(root).runs, runId, ".decision.lock");
     writeFileSync(lock, "{}\n", { mode: 0o600 });
-    expect(recordRunDecision(root, runId, decision)).rejects.toThrow("GK_BUSY");
+    const busy = await recordRunDecisionResult(root, runId, decision);
+    expect(busy.isErr()).toBe(true);
+    expect(busy._unsafeUnwrapErr().message).toContain("GK_BUSY");
     unlinkSync(lock);
 
     await recordRunDecision(root, runId, decision);
-    expect(recordRunDecision(root, runId, decision)).rejects.toThrow(
-      "already exists",
-    );
+    const duplicate = await recordRunDecisionResult(root, runId, decision);
+    expect(duplicate.isErr()).toBe(true);
+    expect(duplicate._unsafeUnwrapErr().message).toContain("already exists");
     expect(
       (await listRunEvents(root, runId)).filter(
         (event) => event.event_type === "decision.recorded",
@@ -546,9 +573,11 @@ describe("decision lineage and postmortem reconstruction", () => {
         transcript_path: transcript,
       }),
     );
-    const report = await buildPostmortem(root, requiredRunId(start), {
-      include_transcript: true,
-    });
+    const report = unwrap(
+      await buildPostmortem(root, requiredRunId(start), {
+        include_transcript: true,
+      }),
+    );
     expect(report.transcript?.format).toBe("codex-jsonl");
     expect(report.transcript?.messages.map((message) => message.role)).toEqual([
       "user",

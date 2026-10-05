@@ -99,7 +99,7 @@ export function rosterTable(r: Roster): string {
     "| :-: | --- | --- | --: | --: | --: | --- | --- |";
   const rows = enabledChoices(r).map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? `\`agent-router run --choice ${c.id}\`` : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? "`agent-router run` (Jev picks)" : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
   );
   const off = r.choice.filter((c) => !c.enabled).map((c) => `\`${c.id}\``);
   const note =

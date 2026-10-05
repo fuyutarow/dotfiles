@@ -101,7 +101,7 @@ let sid = "";
 let count = 1;
 let rawArgs = "";
 const stdinRead = await attempt(() => readStdinJson());
-if (!stdinRead.ok) {
+if (!stdinRead.ok || stdinRead.value === undefined) {
   block("/quote could not read its hook input.");
 } else {
   const payload = stdinRead.value;
@@ -136,16 +136,23 @@ if (rawArgs !== "") {
 
 // Written every turn by capture-last-response.ts (Stop hook); newest last.
 // no history file -> handled as "nothing captured" below
-const turnsRead = await attempt(() =>
-  readFileSync(`${HOME}/.cache/claude/last-response/${sid}.jsonl`, "utf8")
+const turnsRead = await attempt(() => {
+  const turns: string[] = [];
+  for (const line of readFileSync(
+    `${HOME}/.cache/claude/last-response/${sid}.jsonl`,
+    "utf8",
+  )
     .split("\n")
-    .filter((l) => l.trim() !== "")
-    .flatMap((l) => {
-      const t = strAt(parseJson(l), "text");
-      return t === undefined ? [] : [t];
-    }),
-);
-const turns: string[] = turnsRead.ok ? turnsRead.value : [];
+    .filter((value) => value.trim() !== "")) {
+    const parsed = parseJson(line);
+    if (parsed === undefined) return null;
+    const text = strAt(parsed, "text");
+    if (text !== undefined) turns.push(text);
+  }
+  return turns;
+});
+const turns: string[] =
+  turnsRead.ok && turnsRead.value !== null ? turnsRead.value : [];
 
 if (turns.length === 0) {
   block(

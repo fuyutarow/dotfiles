@@ -158,6 +158,15 @@ const SELF_MATCHING_POLL_REASON =
 
 function main(): void {
   const payload = readStdinJson();
+  if (payload === undefined) {
+    // FATAL: the payload is not JSON, so no axis could be evaluated; fail closed with the one fix
+    decidePre(
+      "deny",
+      "supervised-execution: hook error while classifying the command " +
+        "(invalid JSON payload) — failing closed. " +
+        "Fix ~/.claude/hooks/enforce-supervised-execution.ts before retrying.",
+    );
+  }
   if (strAt(payload, "tool_name") !== "Bash") return;
   const command = strAt(payload, "tool_input", "command");
   if (command === undefined || command === "") return;

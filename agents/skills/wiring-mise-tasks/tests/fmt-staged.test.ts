@@ -33,7 +33,7 @@ const TOOL = `md=bun ${UPPER}`;
 
 function git(dir: string, ...args: string[]): string {
   const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+  expect(r.status, `git ${args.join(" ")}: ${r.stderr}`).toBe(0);
   return r.stdout;
 }
 

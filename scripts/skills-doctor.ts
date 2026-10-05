@@ -40,20 +40,19 @@ function print(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
+let prototypeFlagSeen = false;
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`unknown flag(s): --${flag}`);
+    prototypeFlagSeen = true;
   }
 }
 
 function nonEmptyString(flag: string): (value: string) => string {
-  return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
-    return value;
-  };
+  void flag;
+  return (value) => value;
 }
 
 function isDir(p: string): boolean {
@@ -219,6 +218,19 @@ function main(): void {
     undefined,
     Bun.argv.slice(2),
   );
+
+  if (prototypeFlagSeen) {
+    process.stderr.write(`unknown flag(s): --__proto__\n${USAGE}`);
+    process.exitCode = 2;
+    return;
+  }
+  for (const [flag, value] of Object.entries(parsed.flags)) {
+    if (value === "") {
+      process.stderr.write(`--${flag} requires a value\n${USAGE}`);
+      process.exitCode = 2;
+      return;
+    }
+  }
 
   if (parsed._.length > 0) {
     process.stderr.write(

@@ -121,6 +121,7 @@ function output(decision: "allow" | "deny", reason: string): void {
 async function main(): Promise<void> {
   const parsed = await attempt(() => parseJson(readFileSync(0, "utf8")));
   if (!parsed.ok) denyMalformed("invalid JSON payload");
+  if (parsed.value === undefined) denyMalformed("invalid JSON payload");
   const payload: unknown = parsed.value;
   const input = obj(at(payload, "tool_input"));
   if (

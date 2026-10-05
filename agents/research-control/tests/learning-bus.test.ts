@@ -587,8 +587,8 @@ describe("cross-section-learning-bus/v1", () => {
   test("replay is dropped without multiplying propagation or scientific metrics", () => {
     const value = input();
     const seededDelivery = value.artifacts.deliveries[0];
-    if (seededDelivery === undefined)
-      throw new Error("expected a seeded delivery");
+    expect(seededDelivery).toBeDefined();
+    if (seededDelivery === undefined) return;
     const replay = structuredClone(seededDelivery);
     replay.id = "delivery-replay";
     value.artifacts.deliveries.push(replay);
@@ -603,7 +603,8 @@ describe("cross-section-learning-bus/v1", () => {
   test("a replay cannot create a second local transfer commit", () => {
     const value = input();
     const seededCommit = value.artifacts.commits[0];
-    if (seededCommit === undefined) throw new Error("expected a seeded commit");
+    expect(seededCommit).toBeDefined();
+    if (seededCommit === undefined) return;
     const replay = structuredClone(seededCommit);
     replay.id = "commit-replay";
     value.artifacts.commits.push(replay);
@@ -615,7 +616,8 @@ describe("cross-section-learning-bus/v1", () => {
   test("a source commit publishes only one packet", () => {
     const value = input();
     const seededPacket = value.artifacts.packets[0];
-    if (seededPacket === undefined) throw new Error("expected a seeded packet");
+    expect(seededPacket).toBeDefined();
+    if (seededPacket === undefined) return;
     const replay = structuredClone(seededPacket);
     replay.id = "packet-replay";
     value.artifacts.packets.push(replay);
@@ -629,8 +631,8 @@ describe("cross-section-learning-bus/v1", () => {
     expect(codes(value)).toContain("TRANSFER_WITHOUT_COMMIT");
     const mismatched = input();
     const mismatchedPacket = mismatched.artifacts.packets[0];
-    if (mismatchedPacket === undefined)
-      throw new Error("expected a seeded packet");
+    expect(mismatchedPacket).toBeDefined();
+    if (mismatchedPacket === undefined) return;
     const packetBody = mismatchedPacket.body;
     packetBody.sourceCommitSha256 = digest("f");
     mismatchedPacket.sha256 = bodySha256(packetBody)!;
@@ -640,8 +642,8 @@ describe("cross-section-learning-bus/v1", () => {
     const value = input();
     const artifacts = value.artifacts;
     const packetEnvelope = artifacts.packets[0];
-    if (packetEnvelope === undefined)
-      throw new Error("expected a seeded packet");
+    expect(packetEnvelope).toBeDefined();
+    if (packetEnvelope === undefined) return;
     const packetBody = packetEnvelope.body;
     packetBody.sourceReceiptDigests = [
       ...decoded(z.array(z.string()), packetBody.sourceReceiptDigests),
@@ -672,23 +674,24 @@ describe("cross-section-learning-bus/v1", () => {
   ])("forbidden dependency %s is classified", (code, kind) => {
     const value = input();
     const p = value.artifacts.packets[0];
-    if (p === undefined) throw new Error("expected a seeded packet");
+    expect(p).toBeDefined();
+    if (p === undefined) return;
     p.dependencies = [{ kind, id: "wait", sha256: digest("d") }];
     expect(codes(value)).toContain(code);
   });
   test("programme visibility and auto-enactment fail closed", () => {
     const visible = input();
     const visiblePacket = visible.artifacts.packets[0];
-    if (visiblePacket === undefined)
-      throw new Error("expected a seeded packet");
+    expect(visiblePacket).toBeDefined();
+    if (visiblePacket === undefined) return;
     const packetBody = visiblePacket.body;
     packetBody.programmeVisible = true;
     visiblePacket.sha256 = bodySha256(packetBody)!;
     expect(codes(visible)).toContain("RAW_METHOD_LEAK_TO_PROGRAMME");
     const mutation = input();
     const mutationAdmission = mutation.artifacts.admissions[0];
-    if (mutationAdmission === undefined)
-      throw new Error("expected a seeded admission");
+    expect(mutationAdmission).toBeDefined();
+    if (mutationAdmission === undefined) return;
     const body = mutationAdmission.body;
     body.localStateMutation = true;
     mutationAdmission.sha256 = bodySha256(body)!;

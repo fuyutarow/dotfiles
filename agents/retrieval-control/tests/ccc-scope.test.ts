@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -15,13 +15,60 @@ import { inScopeChanges } from "../ccc-scope.ts";
 // answers. Skipped where ccc is absent.
 const ccc = Bun.which("ccc");
 const dirs: string[] = [];
+const originalRustLog = process.env.RUST_LOG;
+const bunSpawn = Bun.spawn;
+
+function spawnWithQuietTelemetry<
+  const In extends Bun.Spawn.Writable = "ignore",
+  const Out extends Bun.Spawn.Readable = "pipe",
+  const Err extends Bun.Spawn.Readable = "inherit",
+>(
+  options: Bun.Spawn.SpawnOptions<In, Out, Err> & { cmd: string[] },
+): Bun.Subprocess<In, Out, Err>;
+function spawnWithQuietTelemetry<
+  const In extends Bun.Spawn.Writable = "ignore",
+  const Out extends Bun.Spawn.Readable = "pipe",
+  const Err extends Bun.Spawn.Readable = "inherit",
+>(
+  cmds: string[],
+  options?: Bun.Spawn.SpawnOptions<In, Out, Err>,
+): Bun.Subprocess<In, Out, Err>;
+function spawnWithQuietTelemetry<
+  const In extends Bun.Spawn.Writable = "ignore",
+  const Out extends Bun.Spawn.Readable = "pipe",
+  const Err extends Bun.Spawn.Readable = "inherit",
+>(
+  input: string[] | (Bun.Spawn.SpawnOptions<In, Out, Err> & { cmd: string[] }),
+  options?: Bun.Spawn.SpawnOptions<In, Out, Err>,
+): Bun.Subprocess<In, Out, Err> {
+  if (Array.isArray(input)) {
+    if (options === undefined) return bunSpawn(input);
+    return bunSpawn(input, {
+      ...options,
+      env: { ...(options.env ?? process.env), RUST_LOG: "error" },
+    });
+  }
+  return bunSpawn({
+    ...input,
+    env: { ...(input.env ?? process.env), RUST_LOG: "error" },
+  });
+}
+
+beforeAll(() => {
+  // cocoindex_core's telemetry init diagnostic goes to stdout at INFO, ahead of the JSON result.
+  // Keep the installed matcher's protocol output machine-readable during this test.
+  Bun.spawn = spawnWithQuietTelemetry;
+});
 afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  Bun.spawn = bunSpawn;
+  if (originalRustLog === undefined) delete process.env.RUST_LOG;
+  else process.env.RUST_LOG = originalRustLog;
 });
 
 function git(dir: string, ...args: string[]): string {
   const r = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
-  if (r.status !== 0) throw new Error(r.stderr);
+  expect(r.status).toBe(0);
   return r.stdout.trim();
 }
 

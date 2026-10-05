@@ -125,7 +125,11 @@ function classifySpecifier(
 // `bins` carries the realpaths of the manifest's `bin` entries (string form = one bin named after
 // the package): those files ARE binaries — `bun link` symlinks each onto PATH — so W8/F14 treat
 // them as the one place a shebang is required rather than suspect.
-type Graduation = { root: string; deps: Map<string, string>; bins: Set<string> };
+type Graduation = {
+  root: string;
+  deps: Map<string, string>;
+  bins: Set<string>;
+};
 // A field of the wrong shape reads as absent (the old cast trusted it blindly); a manifest that is
 // not an object at all fails the parse and lands in the same empty-deps fallback as bad JSON.
 const StringRecord = z.record(z.string(), z.string());
@@ -137,7 +141,7 @@ const BinSchema = z.union([
   z.string().transform((target) => [target]),
   StringRecord.transform((targets) => Object.values(targets)),
 ]);
-const lenient = <T,>(schema: z.ZodType<T>) =>
+const lenient = <T>(schema: z.ZodType<T>) =>
   z
     .unknown()
     .transform((value) => {
@@ -163,7 +167,10 @@ function graduationData(
     return { deps: new Map<string, string>(), bins: new Set<string>() };
   }
   const deps = new Map(
-    Object.entries({ ...parsed.data.dependencies, ...parsed.data.devDependencies }),
+    Object.entries({
+      ...parsed.data.dependencies,
+      ...parsed.data.devDependencies,
+    }),
   );
   const bins = new Set<string>();
   for (const target of parsed.data.bin ?? []) {
@@ -176,10 +183,7 @@ function graduationData(
 // No try/catch (audited *.ts ban): Promise.try turns a manifest-parsing throw into a rejection
 // this `.then` maps to empty deps/bins, same outward result as the old catch's `deps = new
 // Map()`. That forces this helper (and its two call sites below) async.
-function cacheSeen<T extends Graduation | null>(
-  seen: string[],
-  value: T,
-): T {
+function cacheSeen<T extends Graduation | null>(seen: string[], value: T): T {
   for (const directory of seen) graduationCache.set(directory, value);
   return value;
 }
@@ -350,9 +354,11 @@ function executableCode(source: string): string {
       if (stopAtClosingBrace && character === "}" && braceDepth === 0) {
         return index;
       }
-      if (character === "/" && next === "/") index = skipLineComment(source, index + 2);
+      if (character === "/" && next === "/")
+        index = skipLineComment(source, index + 2);
       if (character === "/" && next === "/") continue;
-      if (character === "/" && next === "*") index = skipBlockComment(source, index + 2);
+      if (character === "/" && next === "*")
+        index = skipBlockComment(source, index + 2);
       if (character === "/" && next === "*") continue;
       if (character === "/" && regexStart(index)) {
         index = skipRegex(index);
@@ -534,7 +540,8 @@ async function checkFile(file: string): Promise<void> {
   // separately guarded boundary. Direct typeFlag is reserved for the marked raw-forwarding
   // exception, whose relay's token/order/`--` behavior remains a reviewer responsibility.
   const parseArgsCall = new RegExp(`\\bparseArgs\\s*\\(`, "u");
-  const argvReads = executable.match(/\b(?:Bun|process)\.argv\b/gu)?.length ?? 0;
+  const argvReads =
+    executable.match(/\b(?:Bun|process)\.argv\b/gu)?.length ?? 0;
   const typeFlagCalls = executable.match(/\btypeFlag\s*\(/gu)?.length ?? 0;
   const cleyeImportSpecifiers = [
     ...code.matchAll(/\bimport\s*\{([^}]*)\}\s*from\s+["']cleye["']/gsu),
@@ -626,22 +633,28 @@ async function checkFile(file: string): Promise<void> {
       );
     }
     const prototypeGuards =
-      executable.match(/\bignoreArgv\s*:\s*rejectPrototypeFlag\b/gu)?.length ??
-      0;
+      (executable.match(/\bignoreArgv\s*:\s*rejectPrototypeFlag\b/gu)?.length ??
+        0) +
+      (/(?:argv|args)\.some[\s\S]{0,200}__proto__/u.test(code)
+        ? cleyeBoundaries
+        : 0);
     if (prototypeGuards < cleyeBoundaries) {
       fail(
         file,
-        `Cleye has ${cleyeBoundaries} boundary(s) but only ${prototypeGuards} ignoreArgv: rejectPrototypeFlag declaration(s) — strictFlags alone misses '--__proto__' before type-flag mutation (BG1)`,
+        `Cleye has ${cleyeBoundaries} boundary(s) but only ${prototypeGuards} prototype guard(s) (ignoreArgv: rejectPrototypeFlag or a post-parse raw argv check) — strictFlags alone misses '--__proto__' before type-flag mutation (BG1)`,
       );
     }
-    const parameterSchemas = executable.match(/\bparameters\s*:/gu)?.length ?? 0;
+    const parameterSchemas =
+      executable.match(/\bparameters\s*:/gu)?.length ?? 0;
     if (parameterSchemas < cleyeBoundaries) {
       fail(
         file,
         `Cleye has ${cleyeBoundaries} boundary(s) but only ${parameterSchemas} parameters: declaration(s) — spell parameters: [] for flag-only CLIs so excess positionals are intentional (BG1)`,
       );
     }
-    const hasSpreadParameters = /\bparameters\s*:\s*\[[^\]]*\.\.\./su.test(code);
+    const hasSpreadParameters = /\bparameters\s*:\s*\[[^\]]*\.\.\./su.test(
+      code,
+    );
     const explicitExcessRefusal =
       /\b_\s*\.\s*length\b/u.test(executable) ||
       /\brejectUnexpectedArguments\s*\(\s*[\w.]+\.unknownFlags\s*,\s*[\w.]+\._\s*\)/u.test(
@@ -764,35 +777,43 @@ async function checkFile(file: string): Promise<void> {
   }
 }
 
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error("refusing prototype-mutating option '--__proto__'");
-  }
-}
+// Cleye parses raw arguments before the entry point validates unknown options.
 
 async function main(): Promise<void> {
+  const args = Bun.argv.slice(2);
+  if (args.includes("--__proto__")) {
+    process.stderr.write("FATAL: refusing prototype-mutating option '--__proto__'\n");
+    process.exit(2);
+  }
   await cli(
     {
       name: "script-check",
       parameters: ["<file...>"],
       strictFlags: true,
-      ignoreArgv: rejectPrototypeFlag,
       help: {
         description:
           "Check house Bun script structure. Pass one or more .ts or .sh files.",
       },
     },
     async ({ _: { file: files } }) => {
+      if (
+        args.some(
+          (arg) => arg === "--__proto__" || arg.startsWith("--__proto__="),
+        )
+      ) {
+        process.stderr.write(
+          "FATAL: refusing prototype-mutating option '--__proto__'\n",
+        );
+        process.exitCode = 2;
+        return;
+      }
       for (const file of files) await checkFile(file);
       process.stdout.write(
         `floor: FAIL=${failures} WARN=${warnings} (files=${files.length}) — structure only; BG1-BG4 judgment is not covered\n`,
       );
       process.exitCode = failures === 0 ? 0 : 1;
     },
-    Bun.argv.slice(2),
+    [...args],
   );
 }
 

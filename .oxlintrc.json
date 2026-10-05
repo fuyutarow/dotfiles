@@ -87,6 +87,14 @@
         "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
       },
       {
+        "selector": "ThrowStatement",
+        "message": "throw is banned: no-try left nothing to catch it, so a throw is a crash path no type shows. Return the failure as a value — neverthrow's err()/errAsync() and Result where the file may import it, else a tagged union like agents/hooks/attempt.ts's Attempt; the entry point matches the result, prints the message and calls process.exit(code). Code that throws (a library, JSON.parse) is wrapped once with fromThrowable/attempt."
+      },
+      {
+        "selector": "CallExpression[callee.object.name='Promise'][callee.property.name='reject']",
+        "message": "Promise.reject is a throw by another name (no-throw): return errAsync()/a ResultAsync, or an Attempt-style tagged union."
+      },
+      {
         "selector": "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]",
         "message": "a listener on process.stdin keeps the process alive after it has its answer: reclaim-purge printed '✅ purge 完了' and then hung (2026-10-06). Read one line with prompt() (null on EOF), all of stdin with Bun.stdin.text() (hooks: readStdinJson)."
       },

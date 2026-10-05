@@ -23,7 +23,6 @@ if OS.linux?
   brew "bubblewrap"   # bwrap: grok --sandbox needs it on Linux (refuses to start without it)
 end
 brew "yq"
-brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run reclaim:pick`
 brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)
 
 # TeX / LaTeX — base distribution differs by OS (see skill: compiling-latex → Environment).

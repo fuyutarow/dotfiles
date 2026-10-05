@@ -21,9 +21,8 @@ const loaded = parseFloorConfig(
     readFileSync(join(import.meta.dir, "..", "model-floor.toml"), "utf8"),
   ),
 );
-if (!loaded.ok)
-  throw new Error(`model-floor.toml invalid: ${loaded.errors.join("; ")}`);
-const FLOORS: Floors = loaded.floors;
+expect(loaded.ok).toBe(true);
+const FLOORS: Floors = loaded.ok ? loaded.floors : new Map();
 
 /** The verdicts for every order in a command ("ok" when it passes). */
 function verdicts(command: string): string[] {
@@ -33,8 +32,14 @@ const only = (command: string): Order => {
   const orders = ordersIn(command);
   expect(orders).toHaveLength(1);
   const first = orders[0];
-  if (first === undefined) throw new Error("no order");
-  return first;
+  return (
+    first ?? {
+      cli: "codex",
+      model: { kind: "absent" },
+      needsModel: false,
+      label: "codex",
+    }
+  );
 };
 
 describe("simpleCommands: words the way a shell cuts them", () => {

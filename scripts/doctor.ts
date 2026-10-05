@@ -659,15 +659,13 @@ export async function checkCapacityGuard(ctx: Ctx): Promise<Finding> {
 export async function checkCccDbMap(ctx: Ctx): Promise<Finding> {
   if (Bun.which("ccc") === undefined)
     return skip("ccc-db-map", "ccc is not installed");
-  const parsed = await attempt(() =>
-    parseMapping(process.env[MAPPING_ENV]).map(
-      (m) => `${m.source}=${m.target}`,
-    ),
+  const parsed = parseMapping(process.env[MAPPING_ENV]).map((mappings) =>
+    mappings.map((m) => `${m.source}=${m.target}`),
   );
-  if (!parsed.ok) {
+  if (parsed.isErr()) {
     return fail(
       "ccc-db-map",
-      `${MAPPING_ENV} is malformed: ${errorMessage(parsed.error)}`,
+      `${MAPPING_ENV} is malformed: ${parsed.error.message}`,
       "fix the export in zsh/zshenv",
     );
   }
@@ -1111,10 +1109,13 @@ async function main(): Promise<void> {
     .map((s) => s.trim())
     .filter(Boolean);
   const unknown = only.filter((n) => !CHECKS.some((c) => c.name === n));
-  if (unknown.length > 0)
-    throw new Error(
-      `DOCTOR_ONLY names unknown check(s): ${unknown.join(", ")}`,
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `FATAL: DOCTOR_ONLY names unknown check(s): ${unknown.join(", ")}\n`,
     );
+    process.exitCode = 2;
+    return;
+  }
   const selected =
     only.length > 0 ? CHECKS.filter((c) => only.includes(c.name)) : CHECKS;
   // Independent probes run concurrently; the report keeps the declared order.

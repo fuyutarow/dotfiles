@@ -40,17 +40,6 @@ const DISTRO_DEFAULT = "Ubuntu-24.04";
 const HOST_MS = 90_000;
 const GUEST_MS = 60_000;
 
-class UsageError extends Error {}
-
-function rejectPrototypeFlag(
-  type: "known-flag" | "unknown-flag" | "argument",
-  flag: string,
-): void {
-  if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError(`Unknown option '--${flag}'`);
-  }
-}
-
 export type Method = {
   name: "Optimize-VHD" | "diskpart";
   steps: (vhdxPath: string, distro: string) => string[];
@@ -179,6 +168,13 @@ export function probeFailure(
   return null;
 }
 
+function rejectPrototypeFlag(type: string, flag: string): void {
+  if (type === "unknown-flag" && flag === "__proto__") {
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = cli(
     {
@@ -200,7 +196,8 @@ async function main(): Promise<void> {
     Bun.argv.slice(2),
   );
   if (parsed._.length > 0) {
-    throw new UsageError(`Unexpected argument '${parsed._[0]}'`);
+    process.stderr.write(`FATAL: Unexpected argument '${parsed._[0]}'\n`);
+    process.exit(2);
   }
   const { host, guest, distro } = parsed.flags;
 
@@ -274,6 +271,6 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main().then(undefined, (err: unknown) => {
     console.error(`FATAL: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(err instanceof UsageError ? 2 : 1);
+    process.exit(1);
   });
 }

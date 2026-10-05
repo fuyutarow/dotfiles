@@ -63,18 +63,22 @@ type LookupOutcome = { done: true; name: string | undefined } | { done: false };
 type Agent = { sessionId?: string | undefined; name?: string | undefined };
 
 // `claude agents --json` output as a list of agents, read field by field. Output that is not a
-// list, or a null entry, throws — as iterating it did before, which ends this hook silently.
-function agentsOf(parsed: unknown): Agent[] {
+// Malformed output is an error value; the cosmetic hook gives up silently.
+function agentsOf(
+  parsed: unknown,
+): { ok: true; value: Agent[] } | { ok: false; error: string } {
   const list = arr(parsed);
   if (list === undefined) {
-    throw new TypeError("claude agents --json did not print a list");
+    return { ok: false, error: "claude agents --json did not print a list" };
   }
-  return list.map((a): Agent => {
+  const agents: Agent[] = [];
+  for (const a of list) {
     if (a === null || a === undefined) {
-      throw new TypeError("claude agents --json listed a null agent");
+      return { ok: false, error: "claude agents --json listed a null agent" };
     }
-    return { sessionId: strAt(a, "sessionId"), name: strAt(a, "name") };
-  });
+    agents.push({ sessionId: strAt(a, "sessionId"), name: strAt(a, "name") });
+  }
+  return { ok: true, value: agents };
 }
 
 function buildEntryMap(list: Agent[], now: number): Record<string, Entry> {
@@ -116,7 +120,7 @@ async function attemptLookup(
     });
     return parseJson(out);
   });
-  if (!r.ok) {
+  if (!r.ok || r.value === undefined) {
     if (lookupAttempt === LOOKUP_RETRIES) {
       return { done: true, name: undefined }; // `claude` missing/slow/errored
     }
@@ -124,9 +128,10 @@ async function attemptLookup(
     return { done: false };
   }
 
-  const list = agentsOf(r.value);
+  const listed = agentsOf(r.value);
+  if (!listed.ok) return { done: true, name: undefined };
   const now = Temporal.Now.instant().epochMilliseconds;
-  const next = buildEntryMap(list, now);
+  const next = buildEntryMap(listed.value, now);
   if (Object.hasOwn(next, sid)) {
     await persistFoundCache(next);
     return { done: true, name: next[sid]?.name };

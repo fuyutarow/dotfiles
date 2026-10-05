@@ -25,17 +25,16 @@ import { fromThrowable } from "neverthrow";
 import { z } from "../hooks/zod.ts";
 import releases from "./releases.toml";
 
-class UsageError extends Error {}
+let prototypeFlagError: string | undefined;
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new UsageError("unknown option '--__proto__'");
+    prototypeFlagError = "unknown option '--__proto__'";
   }
 }
 
-function nonEmptyString(flag: string): (value: string) => string {
+function nonEmptyString(_flag: string): (value: string) => string {
   return (value) => {
-    if (value === "") throw new UsageError(`${flag} requires a value`);
     return value;
   };
 }
@@ -81,6 +80,7 @@ let failures = 0;
 let warnings = 0;
 let quiet = false;
 let requestedToday: string | undefined;
+let forcedExitCode: number | undefined;
 
 function fail(msg: string): void {
   failures++;
@@ -153,8 +153,19 @@ function main(): void {
     undefined,
     Bun.argv.slice(2),
   );
-  if (parsed._.length > 0)
-    throw new Error(`unexpected positional argument '${parsed._[0]}'`);
+  if (prototypeFlagError !== undefined || parsed.flags.today === "") {
+    fail(
+      `check-releases crashed: ${prototypeFlagError ?? "--today requires a value"}`,
+    );
+    forcedExitCode = 2;
+    return;
+  }
+  if (parsed._.length > 0) {
+    fail(
+      `check-releases crashed: unexpected positional argument '${parsed._[0]}'`,
+    );
+    return;
+  }
   quiet = parsed.flags.quiet === true;
   requestedToday = parsed.flags.today;
 
@@ -279,10 +290,6 @@ function main(): void {
 const run = fromThrowable(main)();
 if (run.isErr()) {
   const e = run.error;
-  if (e instanceof UsageError) {
-    fail(`check-releases crashed: ${e.message}`);
-    process.exit(2);
-  }
   fail(`check-releases crashed: ${e instanceof Error ? e.message : String(e)}`);
 }
-process.exit(failures === 0 ? 0 : 1);
+process.exit(forcedExitCode ?? (failures === 0 ? 0 : 1));

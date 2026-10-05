@@ -109,7 +109,9 @@ async function main(): Promise<void> {
   // One budget for the whole check: past it, say nothing rather than stall the edit.
   const deadline = Temporal.Now.instant().epochMilliseconds + BUDGET_MS;
   // Per judge, retrieval.toml thresholds.<judge>.hook (stricter than the route's "strong").
-  const { thresholds } = loadRetrievalConfig();
+  const config = loadRetrievalConfig();
+  if (config.isErr()) return;
+  const { thresholds } = config.value;
   const hookMin = { jev: thresholds.jev.hook, local: thresholds.local.hook };
   for (const d of fresh) {
     if (Temporal.Now.instant().epochMilliseconds > deadline) break;
@@ -117,18 +119,20 @@ async function main(): Promise<void> {
     // written in the same edit are related by construction, not duplicates.
     const self = (x: Definition) => x.file === rel;
     const a = await findDefinitions(project, d.text, 3, self, false);
-    const top = a.cards[0];
+    if (a.isErr()) return;
+    const answer = a.value;
+    const top = answer.cards[0];
     // Stricter than the route's "strong": here the query is the new CODE, not a described need, and
     // the judge loosens on code-vs-code (2026-10-01: an argv helper "looked like" a directory
     // lister at local 6.3). A wrong interruption costs more than a missed one inside an edit.
     if (
       top === undefined ||
-      !a.reranked ||
-      top.score < hookMin[a.judge === "jev" ? "jev" : "local"]
+      !answer.reranked ||
+      top.score < hookMin[answer.judge === "jev" ? "jev" : "local"]
     )
       continue;
     findings.push(
-      `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, ${a.judge} score ${top.score.toFixed(1)}): ` +
+      `- new \`${d.name}\` looks like existing \`${top.name}\` (${top.file}:${top.start}, ${answer.judge} score ${top.score.toFixed(1)}): ` +
         top.signature.slice(0, 140),
     );
   }

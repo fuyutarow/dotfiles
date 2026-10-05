@@ -12,9 +12,14 @@ function rejectPrototypeFlag(
   flag: string,
 ): void {
   if (type === "unknown-flag" && flag === "__proto__") {
-    throw new Error(`unknown option '--${flag}'`);
+    process.stderr.write(`FATAL: unknown option '--${flag}'\n`);
+    process.exit(2);
   }
 }
+
+type Outcome<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: string };
 
 const claimTypes = new Set([
   "definition",
@@ -72,7 +77,9 @@ function reportRelationTarget(
 }
 
 const RecordSchema = z.record(z.string(), z.unknown());
-const NonemptyStringSchema = z.string().refine((text) => text.trim().length > 0);
+const NonemptyStringSchema = z
+  .string()
+  .refine((text) => text.trim().length > 0);
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined => {
   const parsed = RecordSchema.safeParse(value);
@@ -316,7 +323,9 @@ const checkFile = async (path: string): Promise<FileResult> => {
       continue;
     }
 
-    const rowReport = (message: string): void =>{  report(line, message); };
+    const rowReport = (message: string): void => {
+      report(line, message);
+    };
     const claimId = nonemptyString(row.claim_id);
     if (claimId === undefined) {
       rowReport("claim_id must be a non-empty string");
@@ -342,7 +351,11 @@ const checkFile = async (path: string): Promise<FileResult> => {
     }
 
     const validSourceCount = validateSources(row.sources, rowReport);
-    const derivedFrom = stringArray(row.derived_from, "derived_from", rowReport);
+    const derivedFrom = stringArray(
+      row.derived_from,
+      "derived_from",
+      rowReport,
+    );
     const relationTargets = validateRelations(row.relations, rowReport);
     const isLoadBearing = row.load_bearing === true;
     if (isLoadBearing) {
@@ -401,7 +414,7 @@ const checkFile = async (path: string): Promise<FileResult> => {
   };
 };
 
-const main = async (): Promise<void> => {
+const main = async (): Promise<Outcome<void>> => {
   const parsed = cli(
     {
       name: "check-ledger.ts",
@@ -413,11 +426,14 @@ const main = async (): Promise<void> => {
     Bun.argv.slice(2),
   );
   if (parsed._.length !== 1) {
-    throw new Error("check-ledger.ts accepts exactly one claims JSONL path");
+    return {
+      ok: false,
+      error: "check-ledger.ts accepts exactly one claims JSONL path",
+    };
   }
   const path = parsed._.claimsJsonl;
   if (!existsSync(path)) {
-    throw new Error(`file not found: ${path}`);
+    return { ok: false, error: `file not found: ${path}` };
   }
 
   const result = await checkFile(path);
@@ -425,13 +441,18 @@ const main = async (): Promise<void> => {
   if (result.findings > 0) {
     process.stdout.write(`RESULT: FAIL findings=${result.findings}\n`);
     process.exitCode = 1;
-    return;
+    return { ok: true, value: undefined };
   }
 
   process.stdout.write(`RESULT: PASS claims=${result.claims}\n`);
+  return { ok: true, value: undefined };
 };
 
-await main().catch((error: unknown) => {
-  process.stderr.write(`check-ledger: ${messageFrom(error)}\n`);
+const result = await Promise.try(main).then(
+  (value): Outcome<void> => value,
+  (error: unknown): Outcome<void> => ({ ok: false, error: messageFrom(error) }),
+);
+if (!result.ok) {
+  process.stderr.write(`check-ledger: ${result.error}\n`);
   process.exitCode = 2;
-});
+}

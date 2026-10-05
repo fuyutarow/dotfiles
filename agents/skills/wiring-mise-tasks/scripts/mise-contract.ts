@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
@@ -381,7 +381,12 @@ function checkBodies(source: string): [number, number] {
 async function check(
   rootInput: string,
 ): Promise<{ failures: number; environmentFailure: boolean }> {
+  // Real path: mise reports each task's source by its real path, so a root reached through a
+  // symlink (macOS /var -> /private/var, a linked checkout) otherwise matches none of its own
+  // tasks and reads as "contract not adopted".
+  // Messages keep the path the caller gave; only the source match uses the real path.
   const root = resolve(rootInput);
+  const realRoot = existsSync(root) ? realpathSync(root) : root;
   if (!existsSync(root)) {
     process.stdout.write(`ENV cannot cd to ${rootInput}\n`);
     return { failures: 0, environmentFailure: true };
@@ -398,7 +403,7 @@ async function check(
     return { failures: 0, environmentFailure: true };
   }
   const local = listed.tasks.filter((task) =>
-    task.source.startsWith(`${root}/`),
+    task.source.startsWith(`${realRoot}/`) || task.source.startsWith(`${root}/`),
   );
   if (local.length === 0) {
     process.stdout.write(

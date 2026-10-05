@@ -87,8 +87,17 @@ console.log(`jj-commit: ${sel.length} path(s)`);
 // feed the index-based gates with exactly these paths, then the gate .githooks/pre-commit runs
 await $`git reset -q`;
 await $`git add -A --pathspec-from-file=- --pathspec-file-nul < ${new Response(sel.join("\0"))}`;
-const gate = await $`mise run --jobs 1 hook:pre-commit`.nothrow();
-if (gate.exitCode !== 0) die("hook:pre-commit refused; nothing committed", 1);
+// The gate's output goes straight to the caller's stdout/stderr, never through a Bun Shell pipe:
+// that pipe is non-blocking, and a gate that prints a lot (soks's okf: ~400 lines) died mid-write
+// with "failed printing to stdout: Resource temporarily unavailable (os error 11)", refusing every
+// commit while the same gate passed when run directly. It is the caller's to read anyway.
+// bounded: the repo's own gate; each task it runs carries its own bound.
+const gate = Bun.spawn(["mise", "run", "--jobs", "1", "hook:pre-commit"], {
+  stdin: "ignore",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if ((await gate.exited) !== 0) die("hook:pre-commit refused; nothing committed", 1);
 
 // fmt:staged may have rewritten files in place; jj snapshots them. Commit exactly the selection.
 const filesets = sel.map((c) => `root-file:${JSON.stringify(c)}`);

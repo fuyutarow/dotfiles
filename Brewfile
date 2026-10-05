@@ -13,8 +13,6 @@ brew "coreutils"
 # fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
 # implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
 brew "git"
-brew "fnox"        # secrets: one CLI over the macOS Keychain (mac) and age files (WSL); config is
-                    # per machine in ~/.config/fnox/config.toml, never in this public repo
 brew "age"         # fnox age provider (WSL has no Secret Service, so its secrets are age-encrypted)
 brew "tmux"
 

@@ -33,7 +33,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { cli, command } from "cleye";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
@@ -300,6 +300,28 @@ function refuseUnrunnable(roster: Roster, id: string): Choice {
   return row;
 }
 
+// A luna row runs Codex. On a machine where Codex is not logged in every worker failed AFTER launch,
+// and the caller learned why only by reading the run's stderr (a rented box, 2026-10-06: two
+// workers "failed to start"). Ask Codex first, and refuse with the fix and where to run it.
+function refuseUnauthenticatedCodex(): void {
+  if (process.env.AGENT_ROUTER_CODEX_RUN !== undefined) return; // test seam: a fake codex-run
+  if (Bun.which("codex") === null)
+    fatal(
+      `codex is not installed on ${hostname()}: every luna worker would fail — install it there: mise run install:ai-clis (dotfiles)`,
+    );
+  // bounded: a status query reads a local file.
+  const r = Bun.spawnSync(["codex", "login", "status"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 15_000,
+  });
+  if (r.exitCode === 0) return;
+  const said = `${r.stdout.toString()}${r.stderr.toString()}`.trim();
+  fatal(
+    `codex is not logged in on ${hostname()} (${said === "" ? `exit ${r.exitCode}` : said}): every luna worker would fail — log in there with \`codex login --device-auth\` (finish it in a browser on any machine), then rerun`,
+  );
+}
+
 async function run(flags: RunFlags): Promise<number> {
   const roster = loadRosterOrDie();
   if (!existsSync(flags.promptFile))
@@ -309,6 +331,7 @@ async function run(flags: RunFlags): Promise<number> {
   const brief = readFileSync(flags.promptFile, "utf8");
   const pick = await pickFor(roster, flags.choice, brief, flags.cd);
   const row = refuseUnrunnable(roster, pick.choice);
+  refuseUnauthenticatedCodex();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
   const label =
     flags.label ??

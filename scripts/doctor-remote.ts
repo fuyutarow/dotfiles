@@ -5,6 +5,7 @@
 //   ssh-cmd    `ssh <host> 'cmd'` — herdr --remote's bridge lives here — finds the core CLIs
 //   login      an interactive login lands in zsh with the dotfiles aliases loaded
 //   pane       an interactive NON-login shell (how herdr opens a pane: `$SHELL`, no -l) does too
+//   agents     codex and claude logged in; Jev's key opens via fnox (else stated as WARN)
 //   time-zone  the box's clock reads the human's time zone (zsh/timezone, e.g. +0900)
 //   commands   every alias target and topic command (btm, herdr, …) resolves there
 //   smart-open a host tagged `Tag smart-open` gets its forwarded socket bound on attach
@@ -120,6 +121,54 @@ async function checkSshCmd(host: string): Promise<Finding> {
         "FAIL",
         `\`ssh ${host} cmd\` (herdr --remote's bridge) cannot find: ${missing.join(", ")}`,
         `on ${host}: mise run linux:init (rootless: see scripts/linux-init.ts header)`,
+      );
+}
+
+// The agents can work there: Codex and Claude logged in (a luna worker fails at launch without
+// Codex's login — 2026-10-06), and Jev's key opens through fnox (else agent-router uses its default
+// row and rr its local judge: stated, not silent).
+async function checkAgents(host: string): Promise<Finding> {
+  const probe = [
+    `codex login status > /dev/null 2>&1 && echo "${MARK("CODEX")}=in" || echo "${MARK("CODEX")}=out"`,
+    `claude auth status 2>/dev/null | grep -q '"loggedIn": true' && echo "${MARK("CLAUDE")}=in" || echo "${MARK("CLAUDE")}=out"`,
+    `fnox get TYPESAFE_API_KEY > /dev/null 2>&1 && echo "${MARK("JEV")}=yes" || echo "${MARK("JEV")}=no"`,
+  ].join("; ");
+  const r = await run(
+    [...SSH, host, `zsh -lc '${probe.replaceAll("'", "'\\''")}'`],
+    null,
+    60_000,
+  );
+  const codex = marker(r.out, "CODEX");
+  if (codex === null)
+    return finding(
+      "agents",
+      "WARN",
+      `the probe did not finish (exit ${r.code})`,
+    );
+  const out = [
+    ...(codex === "in"
+      ? []
+      : ["codex not logged in (every luna worker fails)"]),
+    ...(marker(r.out, "CLAUDE") === "in" ? [] : ["claude not logged in"]),
+  ];
+  if (out.length > 0)
+    return finding(
+      "agents",
+      "FAIL",
+      out.join("; "),
+      `on ${host}: codex login --device-auth / claude (log in once; finish in a browser on any machine)`,
+    );
+  return marker(r.out, "JEV") === "yes"
+    ? finding(
+        "agents",
+        "PASS",
+        "codex and claude logged in; Jev's key opens via fnox",
+      )
+    : finding(
+        "agents",
+        "WARN",
+        "codex and claude logged in; no Jev key here — agent-router uses its default row, rr its local judge",
+        `if ${host}'s root is trusted: mise run secrets:push -- ${host}`,
       );
 }
 
@@ -385,13 +434,21 @@ async function main(): Promise<void> {
       ? await Promise.all([
           checkSshCmd(host),
           checkTimeZone(host),
+          checkAgents(host),
           checkLogin(host),
           checkPane(host),
           checkCommands(host),
         ])
-      : (["ssh-cmd", "time-zone", "login", "pane", "commands"] as const).map(
-          (n) => finding(n, "SKIP", "host unreachable"),
-        );
+      : (
+          [
+            "ssh-cmd",
+            "time-zone",
+            "agents",
+            "login",
+            "pane",
+            "commands",
+          ] as const
+        ).map((n) => finding(n, "SKIP", "host unreachable"));
   // smart-open last and alone: it binds the forward, and the sessions above must not race it.
   const so =
     reach.verdict === "PASS"

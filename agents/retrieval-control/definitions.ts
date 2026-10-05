@@ -40,6 +40,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, attemptOr } from "../hooks/attempt.ts";
 import { jsonOf, z } from "../hooks/zod.ts";
+import { typesafeKey } from "../hooks/typesafe-key.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 
 // One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
@@ -676,15 +677,6 @@ async function judgeCandidates(
   return { judge: "local", result: await rerank(query, docs) };
 }
 
-function jevKey(): string | null {
-  const env = process.env.TYPESAFE_API_KEY;
-  if (env !== undefined && env !== "") return env;
-  const file = join(homedir(), ".config/typesafe/.env");
-  if (!existsSync(file)) return null;
-  const m = /^TYPESAFE_API_KEY=(\S+)$/mu.exec(readFileSync(file, "utf8"));
-  return m?.[1] ?? null;
-}
-
 // The Jev answer: only each slot's `noul` probability is read.
 const JevAnswerSchema = z.object({
   answers: z.record(z.string(), z.object({ noul: z.unknown() })).optional(),
@@ -699,9 +691,12 @@ export async function judgeJev(
   docs: string[],
   endpoint: JevEndpoint,
 ): Promise<RerankResult> {
-  const apiKey = jevKey();
-  if (apiKey === null)
-    return { reason: "no TYPESAFE_API_KEY (env or ~/.config/typesafe/.env)" };
+  // One key lookup for every Jev caller (agents/hooks/typesafe-key.ts: env, then fnox, then the
+  // dotenv file). This file had its own copy without fnox, so on a machine whose key lives in fnox
+  // `rr` reported "Jev unavailable" while agent-router used Jev (2026-10-06).
+  const lookup = typesafeKey();
+  if (!lookup.ok) return { reason: lookup.reason };
+  const apiKey = lookup.key;
   const body = JSON.stringify({
     ...(endpoint.model === undefined ? {} : { model: endpoint.model }),
     state: Object.fromEntries(docs.map((d, i) => [definitionId(i), d])),

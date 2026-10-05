@@ -546,7 +546,7 @@ pp() {
   fi
 }
 
-# `s` (= start) lives next to `start` in zsh/mac.zsh and zsh/wsl.zsh: plain Linux has no start.
+s() { print -r -- '{}' | bun ~/.claude/statusline-command.ts | grep -F 'Sys:' }  # the statusline's Sys row, sampled now (its one sampler; was `start` until 2026-10-06)
 
 # o / oo — one implementation for mac, WSL and Linux: smart-open/smart-open.ts (PATH command `smart-open`,
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,

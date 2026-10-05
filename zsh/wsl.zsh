@@ -130,7 +130,6 @@ _remote_uri_open() {
 }
 code() { _remote_uri_open code "$@" }             # `e` / `ee` (zsh/aliases.zsh) land here
 ide() { _remote_uri_open antigravity-ide "$@" }   # Antigravity IDE; its CLI is `agy`
-alias s='start'
 alias start='/mnt/c/Windows/System32/cmd.exe /c start'  # abs path, NOT a bare `cmd.exe` PATH shim.
 # WHY abs path: a bare `cmd.exe` on PATH makes Zed's remote-SSH probe (`cmd.exe /c ver`) exec the
 # real Windows cmd via WSL interop -> Zed misdetects this Linux box as Windows. See zprofile.wsl.

@@ -1,6 +1,6 @@
 // The gate that would have caught the 2026-05→08 shadowing. Consumer: `mise run lint:skills-wiring`
 // (wired into `mise run lint`) and any human running it directly. Output is verdict-style lines
-// plus a final PASS/FAIL, matching link-skills.ts / link-dots.sh.
+// plus a final PASS/FAIL, matching link-skills.ts / link-dots.ts.
 //
 // WHAT WENT WRONG, AND WHY A LINT CHECK IS THE FIX: link-skills.ts refuses to clobber a real
 // directory at ~/.claude/skills/<name>, which is correct — content this repo does not own must

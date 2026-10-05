@@ -18,7 +18,7 @@
 // Exempt, silently:
 //   - vendored shell that an external tool overwrites — detected from its own header
 //     (`installed by herdr` / `managed by herdr`), never from a marker the overwrite would erase;
-//   - bootstrap shims (`# shim: bootstrap`, e.g. scripts/link-dots.sh) — they run before bun
+//   - bootstrap shims (`# shim: bootstrap`, e.g. scripts/bootstrap-linux.sh) — they run before bun
 //     exists and must stay POSIX. The marker is honoured only when the file ON DISK already
 //     carries it, so a new file cannot exempt itself by declaring it.
 //

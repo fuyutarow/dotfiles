@@ -1,5 +1,5 @@
 # jj/config.toml — dotfiles-managed USER config for Jujutsu, shared by every repo on the machine.
-# Linked to ~/.config/jj/config.toml by scripts/link-dots.sh (jj reads $XDG_CONFIG_HOME or
+# Linked to ~/.config/jj/config.toml by scripts/link-dots.ts (jj reads $XDG_CONFIG_HOME or
 # ~/.config on Linux AND macOS). Edit here, never the linked copy.
 #
 # Repo-level config (`jj config set --repo`) is NOT in the repo: jj 0.45 keeps it under

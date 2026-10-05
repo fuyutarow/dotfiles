@@ -396,7 +396,7 @@ function main(): void {
   // bare, unguarded expansion with no empty-check of its own. So DOTFILES needs the
   // empty-normalizes-to-undefined trick (JS `??` is null/undefined only, unlike bash `:-`) to
   // avoid a real `DOTFILES=` env line wrongly resolving to "" instead of falling through to its
-  // default (same idiom as scripts/link-dots.sh:14, mise.toml:203) — but HOME must NOT get that
+  // default (same idiom as scripts/link-dots.ts's DOTFILES default, mise.toml:203) — but HOME must NOT get that
   // same guard: an exported-but-empty `HOME=` has to flow through as "" (yielding "/dotfiles",
   // not `${homedir()}/dotfiles`), exactly like bash's own bare `$HOME` expansion.
   const envHome = process.env.HOME;

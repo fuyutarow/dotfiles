@@ -76,7 +76,7 @@ type MiseRun = { readonly tasks: string[]; readonly swallowed: string[]; readonl
  *    ordinary shell. Reading that as a TOML section header silently truncates the parse, and
  *    every task after it disappears. The symptom is not an error; it is a check that quietly
  *    stops looking. So multi-line string state is tracked.
- * 2. **`description` is prose, not a call site.** A description naming `link-dots.sh` is not a
+ * 2. **`description` is prose, not a call site.** A description naming `link-dots.ts` is not a
  *    task invoking it. Only the `run` value feeds path and toolchain detection.
  */
 function miseTasks(src: string): Map<string, Task> {

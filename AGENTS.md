@@ -9,7 +9,7 @@ This repository's detailed operating context lives in `CLAUDE.md`. Before any no
 These mirror `CLAUDE.md`'s "Conventions to preserve" for Codex, which does not auto-load `CLAUDE.md`; on any conflict, `CLAUDE.md` wins and `README`'s **Design — the invariants** explains the reasoning.
 
 - Preserve the topic-first layout: one tool owns one directory.
-- Keep dotfile symlinks centralized in `scripts/link-dots.sh`.
+- Keep dotfile symlinks centralized in `scripts/link-dots.ts`.
 - Keep agent symlinks centralized in the `link:skills` task in `mise.toml`.
 - Do not reintroduce a `justfile`; this repo uses `mise.toml`.
 - For OS-dependent shell logic, use the existing `IS_MAC` / `IS_WSL` booleans from `zsh/aliases.zsh`.

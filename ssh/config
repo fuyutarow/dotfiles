@@ -1,5 +1,5 @@
 # SSH client policy — the TRANSPORT half of this repo's remote-access story.
-# Symlinked to ~/.ssh/config by scripts/link-dots.sh. OS-neutral: nothing here branches on
+# Symlinked to ~/.ssh/config by scripts/link-dots.ts. OS-neutral: nothing here branches on
 # macOS vs WSL, so there is no config.mac / config.wsl split.
 #
 # THE SPLIT, and why it is not negotiable. This repo is PUBLIC. A host inventory is
@@ -77,10 +77,16 @@ Host r99-wsl r99-wsl-code r99
 # herdr's bridge (`herdr --remote`). `originalhost`, not `host`: config.local has already rewritten
 # the hostname to an address. `ssh -G r99-wsl` (no command = shell) still shows it, which is what
 # the receiver and doctor ask.
-Match originalhost r99-wsl sessiontype shell
-    RemoteForward /tmp/smart-open-%r--%n.sock %d/.cache/smart-open/receiver.sock
-Match originalhost r99-wsl command "*herdr remote-client-bridge*"
-    RemoteForward /tmp/smart-open-%r--%n.sock %d/.cache/smart-open/receiver.sock
+#
+# THOSE TWO Match LINES LIVE IN ssh/smart-open-attach.conf, reached through config.d below, because
+# an older client does not skip them: OpenSSH < 9.9 rejects `sessiontype` / `command` as a FATAL
+# parse error, so EVERY ssh on that machine stops (2026-10-05, Ubuntu 24.04's 9.6 on a rented box).
+# Wrapping the Include in a false `Match exec` does not help — measured on 9.6, ssh parses an
+# included file even when its Match is false. So scripts/link-dots.ts links the file into
+# ~/.ssh/config.d only where `ssh -V` is >= 9.9; elsewhere the glob matches nothing (not an error).
+# `Match all` first: an Include belongs to the block it sits in, and this one must belong to none.
+Match all
+Include ~/.ssh/config.d/*.conf
 
 # r99-lan is the SAME Windows host as r99, over the LAN rather than the tailnet, and it exists
 # because Tailscale on Windows is a USER-SESSION GUI client: the tailnet address is unreachable

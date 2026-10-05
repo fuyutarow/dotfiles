@@ -1,6 +1,6 @@
 // Renders ~/.claude/settings.json from the committed base in this repo plus an untracked private
-// overlay. Consumer: scripts/link-dots.sh (and therefore `mise run link:dots` + the post-merge
-// hook). Output is verdict-style lines, matching link-dots.sh / link-skills.ts.
+// overlay. Consumer: scripts/link-dots.ts (and therefore `mise run link:dots` + the post-merge
+// hook). Output is verdict-style lines, matching link-dots.ts / link-skills.ts.
 //
 // WHY THIS FILE IS GENERATED AND NOT SYMLINKED — the one setting that forced it:
 // `autoMode` (auto-mode classifier rules: environment / allow / soft_deny / hard_deny) is
@@ -17,8 +17,9 @@
 // After changing agents/claude/settings.json, run `mise run link:dots` (the post-merge hook already
 // does this on every pull).
 //
-// NO FLAGS, NO DEPENDENCIES — deliberate. This runs from link-dots.sh, which on a fresh machine
-// executes BEFORE `mise run deps` restores node_modules, so importing cleye would break bootstrap.
+// NO FLAGS, NO DEPENDENCIES — deliberate. It must render on a half-set-up machine, before `mise run
+// deps` has restored node_modules (link-dots.sh called it exactly then until 2026-10-05; the .ts
+// port now runs after deps, but a settings render must not depend on that ordering holding).
 // With no argv read there is no Cleye boundary to owe (writing-bun-scripts BG1). The same
 // constraint is why this file's throw sites go through agents/hooks/attempt.ts rather than
 // neverthrow (`lint:ts` in mise.toml bans try/catch outright, with no per-file opt-out and no

@@ -5,7 +5,7 @@
 #   claude → agents/claude/settings.json  (.hooks)
 #   codex  → agents/codex/hooks.json      (.hooks)
 # and leaves every other entry alone. It owns exactly the hook commands that run through
-# ~/.agents/hooks/run.sh (agents/hooks, linked by scripts/link-dots.sh). `mise run test` fails
+# ~/.agents/hooks/run.sh (agents/hooks, linked by scripts/link-dots.ts). `mise run test` fails
 # when a vendor file drifts from this registry — hand edits to an owned entry do not survive.
 #
 # WHAT BELONGS HERE: a hook whose whole protocol surface is shared by the vendors it lists (see

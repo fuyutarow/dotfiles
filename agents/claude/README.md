@@ -84,7 +84,7 @@ runtime. An exit-zero ccc call with no result blocks is reported as `NO_MATCH`, 
 
 ## Deploy
 
-Symlinks are declared in `scripts/link-dots.sh` (Claude Code section, force
+Symlinks are declared in `scripts/link-dots.ts` (Claude Code section, force
 `ln -sfn` — overwrites the default `settings.json` that Claude Code auto-creates).
 
 ```sh

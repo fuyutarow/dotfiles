@@ -1,6 +1,6 @@
 # Mise configuration for dotfiles management — the ONLY task runner for this repo.
 # (justfile was retired; `j`/`jl` aliases remain for per-project justfiles elsewhere.)
-# Single sources of truth: symlinks -> scripts/link-dots.sh, tools -> Brewfile,
+# Single sources of truth: symlinks -> scripts/link-dots.ts, tools -> Brewfile,
 # tool check -> scripts/check-tools.sh.
 # 命名は wiring-mise-tasks 契約 (fmt/f fmt:check lint/l test/t up/u check/c)。この repo は
 # 言語プロジェクトでなく機械設定ゆえ setup は OS 別 init に分割:
@@ -430,9 +430,9 @@ description = "git post-commit body: warm the cocoindex index incrementally (`cc
 run = 'bun ~/dotfiles/scripts/hook-post-commit.ts'
 
 [tasks."hook:post-merge"]
-description = "git post-merge body: after a pull/merge, relink dotfiles (link-dots.sh, SAFE mode) then relink skills, so newly-pulled config appears with no manual step. Idempotent. Called by .githooks/post-merge."
+description = "git post-merge body: after a pull/merge, relink dotfiles (link-dots.ts, SAFE mode) then relink skills, so newly-pulled config appears with no manual step. Idempotent. Called by .githooks/post-merge."
 run = '''
-bash "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.sh" || true
+bun "${DOTFILES:-$HOME/dotfiles}/scripts/link-dots.ts"
 exec mise run link:skills
 '''
 
@@ -597,8 +597,8 @@ run = [
   "brew install sheldon coreutils",
   "brew bundle --file=~/dotfiles/Brewfile",
   { task = "mac:rosetta" },
+  { task = "deps" }, # before link:dots — scripts/link-dots.ts imports Cleye from node_modules
   { task = "link:dots" },
-  { task = "deps" },
   { task = "link:skills" },
   { task = "tmux:plugins" },
   { task = "mac:defaults" },
@@ -640,8 +640,8 @@ description = "~/Workspace の全 git repo の配線健全性を一望する (sc
 run = 'bun ~/dotfiles/scripts/repos-audit.ts'
 
 [tasks."link:dots"]
-description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.sh)"
-run = 'bash ~/dotfiles/scripts/link-dots.sh --force'
+description = "Create dotfile symlinks (OS-aware; single source: scripts/link-dots.ts)"
+run = 'bun ~/dotfiles/scripts/link-dots.ts --force'
 
 [tasks."tmux:plugins"]
 description = "Install tmux plugins via TPM (non-interactive; run after link-dots)"

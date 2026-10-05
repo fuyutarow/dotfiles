@@ -3,7 +3,7 @@
 // human or agent reading verdict lines; each FAIL carries the command that repairs it.
 //
 // It owns no rules of its own. Each check delegates to the file that already owns the fact:
-//   links       scripts/link-dots.sh --check     every declared symlink realized, no dangling ones
+//   links       scripts/link-dots.ts --check     every declared symlink realized, no dangling ones
 //   settings    scripts/render-claude-settings   ~/.claude/settings.json == a fresh render
 //   skills      scripts/skills-doctor.ts         no shadowed skill, wiring + ledger intact
 //   brew        Brewfile                         `brew bundle check` — declared tools installed
@@ -180,25 +180,25 @@ async function readJson(path: string): Promise<unknown> {
 
 export async function checkLinks(ctx: Ctx): Promise<Finding> {
   const r = await run(
-    ["bash", join(ctx.dotfiles, "scripts/link-dots.sh"), "--check"],
+    [process.execPath, join(ctx.dotfiles, "scripts/link-dots.ts"), "--check"],
     {
       ms: 30_000,
       env: { HOME: ctx.home, DOTFILES: ctx.dotfiles },
     },
   );
   if (r.timedOut)
-    return warn("links", "link-dots.sh --check timed out after 30s");
+    return warn("links", "link-dots.ts --check timed out after 30s");
   const driftLines = r.out.split("\n").filter((l) => l.startsWith("drift: "));
   if (r.code === 0 && driftLines.length === 0) {
     return pass(
       "links",
-      "every link declared in scripts/link-dots.sh is realized",
+      "every link declared in scripts/link-dots.ts is realized",
     );
   }
   if (driftLines.length === 0) {
     return warn(
       "links",
-      `link-dots.sh --check exited ${r.code} without a drift line`,
+      `link-dots.ts --check exited ${r.code} without a drift line`,
     );
   }
   return fail(
@@ -379,7 +379,7 @@ export async function checkBins(ctx: Ctx): Promise<Finding> {
     }
   }
   // A renamed or removed bin leaves bun's old link behind: it points through bun's global
-  // node_modules/dotfiles link, so link-dots.sh's "$DOTFILES/*" prune never sees it.
+  // node_modules/dotfiles link, so link-dots.ts's "$DOTFILES/*" prune never sees it.
   // No bin dir at all: the per-bin loop above already reported every declared command.
   const stale: string[] = existsSync(binDir)
     ? readdirSync(binDir)
@@ -984,7 +984,7 @@ async function main(): Promise<void> {
     home,
     dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
     isMac: process.platform === "darwin",
-    isWsl: /microsoft/iu.test(release()), // same test as link-dots.sh: `uname -r`
+    isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
   };
   const only = (process.env.DOCTOR_ONLY ?? "")
     .split(",")

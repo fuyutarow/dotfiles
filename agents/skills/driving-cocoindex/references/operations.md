@@ -17,7 +17,7 @@
   (`cocoindex-code[full]` → `cocoindex[sentence-transformers]` → `sentence-transformers` →
   **unconditional** `torch`/`transformers`/`scikit-learn`/`scipy`) makes it a genuinely heavier
   install. Base never pulls torch.
-- Dotfiles wiring (house-declarative, verbatim from `scripts/link-dots.sh`):
+- Dotfiles wiring (house-declarative, verbatim from `scripts/link-dots.ts`):
   `link cocoindex/global_settings.yml "$HOME/.cocoindex_code/global_settings.yml"` — this repo-local
   file is symlinked to the global settings path, so **no interactive `ccc init`** is needed globally
   on a fresh machine; only the per-project `ccc init` (§2) remains manual. `mise run cc:install-mcp`

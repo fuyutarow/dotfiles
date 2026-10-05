@@ -1,5 +1,5 @@
 # CocoIndex Code — global settings (dotfiles-managed).
-# Symlinked to ~/.cocoindex_code/global_settings.yml by scripts/link-dots.sh,
+# Symlinked to ~/.cocoindex_code/global_settings.yml by scripts/link-dots.ts,
 # so `ccc init` is NOT needed on a fresh machine. After editing, run `ccc doctor`.
 #
 # Local SentenceTransformers embeddings — fully offline, no API key (the [full] install).

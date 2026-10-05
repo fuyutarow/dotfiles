@@ -28,13 +28,13 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
 `zsh git jj smart-open tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
-Plumbing / single sources of truth: `scripts/link-dots.sh` (all symlinks, OS-aware),
+Plumbing / single sources of truth: `scripts/link-dots.ts` (all symlinks, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
 `*.win` = the Windows HOST under WSL (read by Windows, so copied, never symlinked).
 
 **Conventions to preserve:**
-1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.sh`.
+1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.ts`.
    Never recreate `common`/`mac`/`wsl` as OS-variance *bucket* dirs — OS variance of a
    cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` / `*.win` (or
    `mac.zsh` / `wsl.zsh`) files. `*.win` is the third target: the Windows HOST underneath WSL
@@ -44,7 +44,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
-3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.sh`
+3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.ts`
    (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
    tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
    phantom skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that
@@ -53,7 +53,7 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
    and shell scripts only. **ONE file is generated, not linked**:
    `~/.claude/settings.json` is rendered by `scripts/render-claude-settings.ts` (called from
-   `link-dots.sh`) from the committed base plus an untracked `~/.claude/settings.private.json`.
+   `link-dots.ts`) from the committed base plus an untracked `~/.claude/settings.private.json`.
    Forced, not preference — `autoMode` is read from user settings only, and its content is
    machine/repo-specific, so a symlink at this PUBLIC repo meant choosing between losing the
    setting and publishing a private project's structure. Cost: after editing

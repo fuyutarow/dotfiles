@@ -1,6 +1,6 @@
 // Claude Code statusLine — bun/TypeScript. mac & WSL.
 // Source of truth: ~/dotfiles/agents/claude/statusline-command.ts
-//   -> symlinked to ~/.claude/statusline-command.ts by scripts/link-dots.sh
+//   -> symlinked to ~/.claude/statusline-command.ts by scripts/link-dots.ts
 //   invoked as: bun ~/.claude/statusline-command.ts   (bun is the house Node runtime,
 //   present on both OSes via Brewfile). If bun is somehow absent the bar goes blank —
 //   the one regression vs the old POSIX-sh version, accepted because bun is the house

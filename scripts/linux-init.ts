@@ -9,6 +9,7 @@
 // Exit: 0 done · 1 a step failed (its output says which).
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   symlinkSync,
@@ -32,21 +33,33 @@ console.log(
 );
 await $`${BREW}/brew install ${remote}`;
 
-console.log("linux:init: linking dotfiles");
-await $`bash ${join(DOTFILES, "scripts/link-dots.sh")} --force`;
+// deps first: scripts/link-dots.ts imports Cleye from node_modules.
+console.log("linux:init: repo dependencies");
+await $`${BREW}/mise trust ${DOTFILES}/mise.toml`;
+await $`${BREW}/mise run deps`.cwd(DOTFILES);
 
-// `herdr --remote` and `mise run …` over a NON-interactive ssh see only what zsh/zshenv puts on
-// PATH (~/.local/bin, ~/.bun/bin), not linuxbrew. Expose exactly the commands a remote driver needs.
+console.log("linux:init: linking dotfiles");
+await $`${BREW}/mise run link:dots`.cwd(DOTFILES);
+// The post-merge hook relinks on every pull; without this a pull leaves new links unmade.
+await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
+
+// `herdr --remote` over a NON-interactive ssh sees only what zsh/zshenv puts on PATH (~/.local/bin,
+// ~/.bun/bin, the mise shims), not linuxbrew. Expose exactly the brew commands a remote driver
+// needs. NOT bun: it is a mise-declared tool, and a bun reachable from every directory is the
+// implicit global toolchain INV-6 forbids (doctor's mise-scope FAILed on it, 2026-10-05).
 const bin = join(homedir(), ".local/bin");
 mkdirSync(bin, { recursive: true });
-for (const cmd of ["herdr", "mise", "jj", "bun"]) {
+for (const cmd of ["herdr", "mise", "jj"]) {
   const link = join(bin, cmd);
   if (existsSync(link)) unlinkSync(link);
   symlinkSync(join(BREW, cmd), link);
 }
+const staleBun = join(bin, "bun");
+if (lstatSync(staleBun, { throwIfNoEntry: false })?.isSymbolicLink() === true) {
+  unlinkSync(staleBun);
+  console.log(`linux:init: removed ${staleBun} (INV-6: bun comes from mise)`);
+}
 
-console.log("linux:init: sheldon plugins and repo dependencies");
+console.log("linux:init: sheldon plugins");
 await $`${BREW}/sheldon lock`.nothrow();
-await $`${BREW}/mise trust ${DOTFILES}/mise.toml`;
-await $`${BREW}/mise run deps`.cwd(DOTFILES);
 console.log("linux:init: done — connect with `herdr --remote <host>`");

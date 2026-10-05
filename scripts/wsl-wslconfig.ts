@@ -41,7 +41,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
 // Consumer: human/agent running `mise run wsl:wslconfig`; output is verdict lines.
 //
 // WHY A COPY AND NOT A SYMLINK — the one place this repo cannot use its usual mechanism.
-// Every other dotfile is a symlink (scripts/link-dots.sh), because the consumer is a Linux or
+// Every other dotfile is a symlink (scripts/link-dots.ts), because the consumer is a Linux or
 // macOS program that follows them. .wslconfig is read by the Windows-side WSL service, and
 // Windows does not follow a symlink created inside WSL. So this file is COPIED, and a copy can
 // go stale — which is exactly why it gets a task of its own that reports drift instead of a

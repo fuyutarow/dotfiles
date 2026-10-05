@@ -1,4 +1,4 @@
-# topgrade — dotfiles-managed (symlinked to ~/.config/topgrade.toml by scripts/link-dots.sh).
+# topgrade — dotfiles-managed (symlinked to ~/.config/topgrade.toml by scripts/link-dots.ts).
 # Shared across mac & WSL. Step identifiers are the clap values from
 # `topgrade --disable __x__` (e.g. flutter, tlmgr, claude_code, juliaup, ...).
 

@@ -5,7 +5,7 @@
 
 ## How this works
 
-iTerm2's plist can't be symlinked the way other dotfiles are (`scripts/link-dots.sh`):
+iTerm2's plist can't be symlinked the way other dotfiles are (`scripts/link-dots.ts`):
 `~/Library/Preferences/com.googlecode.iterm2.plist` is owned and cached by `cfprefsd`, which
 rewrites the file underneath a symlink in ways that lose the link. Instead this topic dir uses
 iTerm2's own **"load preferences from a custom folder"** feature — iTerm2 reads and writes

@@ -1,5 +1,5 @@
 # cocoindex-code daemon — owned by systemd, resource-capped.
-# Symlinked to ~/.config/systemd/user/ccc-daemon.service by scripts/link-dots.sh.
+# Symlinked to ~/.config/systemd/user/ccc-daemon.service by scripts/link-dots.ts.
 # Enable with: mise run wsl:ccc-daemon
 #
 # WHY THIS UNIT EXISTS

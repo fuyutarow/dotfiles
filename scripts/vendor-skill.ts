@@ -1,6 +1,6 @@
 // Vendor a third-party Agent Skill into this repo, via the `skills` CLI (npm `skills`,
 // github.com/vercel-labs/skills). Consumer: human/agent running `mise run skills:add`.
-// Output is verdict-style lines, matching link-skills.ts / link-dots.sh, not a machine envelope.
+// Output is verdict-style lines, matching link-skills.ts / link-dots.ts, not a machine envelope.
 //
 // WHY A WRAPPER AT ALL — four measured behaviors of the bare CLI, each of which silently
 // damages this repo (1-3 probed 2026-08-14, 4 probed 2026-09-21, all against skills@1.5.22 in

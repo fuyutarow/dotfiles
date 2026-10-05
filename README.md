@@ -87,14 +87,14 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent tools (retrieval-control/ = repo-retrieve, resource-control/, …)
-├── scripts/     # plumbing — link-dots.sh (all symlinks), check-tools.sh
+├── scripts/     # plumbing — link-dots.ts (all symlinks), check-tools.sh
 ├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)
 └── mise.toml    # the task runner (no justfile)
 ```
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 
-- **Symlinks** → `scripts/link-dots.sh` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
+- **Symlinks** → `scripts/link-dots.ts` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
 - **Tools** → `Brewfile` · **Tasks** → `mise.toml` · **Agent + MCP config** → `agents/` and `.mcp.json`.
 
 ## Design — the invariants
@@ -102,7 +102,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 The rules that keep the repo coherent. The agent-facing operational encoding lives in
 [`CLAUDE.md`](CLAUDE.md) (Claude Code) and [`AGENTS.md`](AGENTS.md) (Codex).
 
-1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/link-dots.sh`.
+1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/link-dots.ts`.
    No `common` / `mac` / `wsl` bucket directories — OS variance goes *inside* the tool's directory.
 2. **Single source of truth.** Each fact has one home (see *Architecture → Single sources of truth*):
    to change it you edit one file, never many.
@@ -171,7 +171,7 @@ All repo tasks are defined in `mise.toml` (single task runner — no justfile he
 ```bash
 mise tasks            # list
 mise run up           # update everything (topgrade)
-mise run link:dots    # (re)create symlinks   — scripts/link-dots.sh
+mise run link:dots    # (re)create symlinks   — scripts/link-dots.ts
 mise run tools:audit  # audit CLI toolbox     — scripts/check-tools.sh
 mise run doctor       # does this machine realize the repo? (read-only) — scripts/doctor.ts
 mise run install:tools  # install toolbox     — Brewfile

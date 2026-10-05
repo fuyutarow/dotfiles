@@ -30,11 +30,32 @@ const ChoiceSchema = z.strictObject({
 });
 export type Choice = z.output<typeof ChoiceSchema>;
 
+// Where Jev is reached: the official API takes a `model`; the reseller's endpoint takes none.
+const JevEndpointSchema = z.discriminatedUnion("api", [
+  z.strictObject({
+    api: z.literal("typesafe"),
+    url: z.url(),
+    model: z.string().min(1),
+  }),
+  z.strictObject({ api: z.literal("reseller"), url: z.url() }),
+]);
+export type JevEndpoint = z.output<typeof JevEndpointSchema>;
+
+const AutoSchema = z.strictObject({
+  min_confidence: z.number().min(0).max(1),
+  max_task_chars: z.number().int().positive(),
+  timeout_ms: z.number().int().positive(),
+  no_egress: z.array(z.string()),
+  jev: JevEndpointSchema,
+});
+export type AutoPolicy = z.output<typeof AutoSchema>;
+
 const RosterSchema = z
   .strictObject({
     schema: z.literal(1),
     as_of: z.iso.date(),
     default: z.string(),
+    auto: AutoSchema,
     sources: z.record(z.string(), z.url()),
     choice: z.array(ChoiceSchema).min(1),
   })
@@ -67,7 +88,7 @@ export function rosterTable(r: Roster): string {
     "| :-: | --- | --- | --: | --: | --: | --- | --- |";
   const rows = enabledChoices(r).map(
     (c) =>
-      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? `\`codex-run --choice ${c.id}\`` : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
+      `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? `\`agent-router run --choice ${c.id}\`` : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
   );
   const off = r.choice.filter((c) => !c.enabled).map((c) => `\`${c.id}\``);
   const note =

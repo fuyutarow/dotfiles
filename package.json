@@ -9,7 +9,8 @@
     "repo-retrieve": "agents/retrieval-control/repo-retrieve.ts",
     "smart-open": "smart-open/smart-open.ts",
     "codex-run": "agents/skills/driving-codex/scripts/codex-run.ts",
-    "rr": "agents/retrieval-control/repo-retrieve.ts"
+    "rr": "agents/retrieval-control/repo-retrieve.ts",
+    "agent-router": "agents/routing-control/agent-router.ts"
   },
   "dependencies": {
     "cleye": "2.6.0",

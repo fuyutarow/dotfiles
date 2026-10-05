@@ -68,7 +68,7 @@ const claudeOn = enabledChoices(roster).some((c) => c.route === "claude");
 const block = [
   BEGIN,
   "<!-- GENERATED from agents/models/dispatch-roster.toml by scripts/render-roster.ts — edit the roster, then `mise run roster:render`; `mise run lint:roster` fails on drift. -->",
-  `- **Every dispatch picks exactly one row of this roster, like a radio button — no justification line. Luna first: the default is \`${roster.default}\`.**`,
+  `- **Every dispatch goes through \`agent-router run\`: Jev picks one row of this roster from the brief (zero-shot, logged with its probabilities), or you name one with \`--choice\` — no justification line. Luna first: when Jev is unsure or unavailable the default \`${roster.default}\` runs, and the receipt says why.**`,
   `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of ${roster.as_of}.`,
   "",
   ...rosterTable(roster)
@@ -77,12 +77,12 @@ const block = [
   "",
   ...(claudeOn
     ? [
-        `  How to choose: start at \`${roster.default}\`; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
-        "  How to run: a luna row is `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
+        `  How to choose: leave luna rows to Jev; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
+        "  How to run: a luna row is `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: without --choice Jev picks the row from the brief (falls back to the default, with the reason, when unsure), with `--choice <id>` it takes yours; it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
       ]
     : [
-        `  How to choose: start at \`${roster.default}\`; raise the luna effort for harder work (\`luna-max\` is the ceiling in this config).`,
-        "  How to run: `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
+        `  How to choose: leave it to Jev; name a row only when you know better (e.g. one effort higher after a failed run; \`luna-max\` is the ceiling in this config).`,
+        "  How to run: `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: without --choice Jev picks the row from the brief (falls back to the default, with the reason, when unsure), with `--choice <id>` it takes yours; it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
       ]),
   END,
 ].join("\n");

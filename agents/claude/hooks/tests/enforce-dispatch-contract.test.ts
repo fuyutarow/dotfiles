@@ -7,7 +7,7 @@ import { ROSTER_PATH } from "../../../models/roster.ts";
 import { runHook } from "./helpers.ts";
 
 // enforce-dispatch-contract: a dispatch picks one roster row (agents/models/dispatch-roster.toml).
-// Claude rows run as Agent subagents; luna rows run as `codex-run --choice <id>` from Bash, so an
+// Claude rows run as Agent subagents; luna rows run as `agent-router run --choice <id>` from Bash, so an
 // Agent call naming one is denied with that line; the Workflow tool is denied outright. Every deny
 // prints the table. CONFIG vs IMPLEMENTATION: `enabled = false` switches a row off without
 // removing its support, so the suite checks both the live config (luna only, 2026-10-05) and a
@@ -151,7 +151,7 @@ describe("enforce-dispatch-contract: luna rows are not subagents", () => {
       const d = decide(agent({ subagent_type: id }));
       expect(d.decision).toBe("deny");
       expect(d.reason).toContain(
-        `codex-run --choice ${id} --sandbox read-only`,
+        `agent-router run --choice ${id} --prompt-file <brief>`,
       );
     },
   );
@@ -190,7 +190,7 @@ describe("enforce-dispatch-contract: the Workflow tool is not used", () => {
     });
     expect(d.decision).toBe("deny");
     expect(d.reason).toContain("the Workflow tool is not used");
-    expect(d.reason).toContain("codex-run --choice");
+    expect(d.reason).toContain("agent-router run");
     expect(d.reason).not.toContain("Claude workers as Agent calls");
     expect(d.reason).toContain("| ● | `luna-high` |");
   });

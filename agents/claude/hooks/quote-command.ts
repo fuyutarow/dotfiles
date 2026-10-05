@@ -31,7 +31,7 @@ import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { promptHead, promptParts } from "./prompt-stamp.ts";
+import { stampMDHM } from "./prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
   MAX_QUOTE_TURNS as MAX_TURNS,
@@ -92,14 +92,12 @@ function downloadCommand(file: string): string | undefined {
 let sid = "";
 let count = 1;
 let rawArgs = "";
-let cwd = process.cwd();
 const stdinRead = await attempt(() => readStdinJson());
 if (!stdinRead.ok) {
   block("/quote could not read its hook input.");
 } else {
   const payload = stdinRead.value;
   sid = strAt(payload, "session_id") ?? sid;
-  cwd = strAt(payload, "cwd") ?? cwd;
   const args = at(payload, "command_args");
   const argText =
     typeof args === "number" || typeof args === "boolean"
@@ -164,15 +162,14 @@ const resolvedName = await attempt(() =>
 );
 if (resolvedName.ok && resolvedName.value) name = resolvedName.value;
 
-// Header carries everything the reader needs to place the quote without asking: which session
-// said it; the PS1 head `user@host:MM-DD HH:MM|~/cwd` — who, on which machine, when it was
-// quoted, where it was running — in the same shape as the prompt and the statusline's row 1
-// (one home: prompt-stamp.ts); how many turns are included (the count actually captured, not
-// necessarily the count requested — see the `short` fallback below); and how much text they're
-// about to read.
+// Header carries what the reader needs to place the quote without asking: which session said it;
+// when it was quoted (`MM-DD HH:MM`, the prompt's own stamp — one home: prompt-stamp.ts); how many
+// turns are included (the count actually captured, not necessarily the count requested — see the
+// `short` fallback below); and how much text they're about to read. Not who/where (user@host and
+// the cwd): the reader is handed a quote of a named session, and those two only added noise to it.
 const body = selected.join(TURN_SEPARATOR);
 const bodyBytes = Buffer.byteLength(body, "utf8");
-const header = `from ${name} | ${promptHead(promptParts(cwd))} | turns: ${selected.length} | ${bodyBytes}B`;
+const header = `from ${name} | ${stampMDHM(Temporal.Now.plainDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B`;
 const payloadText = `${header}\n${body}`;
 const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
 let short = "";

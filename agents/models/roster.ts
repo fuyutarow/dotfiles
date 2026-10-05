@@ -8,7 +8,10 @@ import { z } from "../hooks/zod.ts";
 
 export const ROSTER_PATH = join(import.meta.dir, "dispatch-roster.toml");
 
-const ChoiceSchema = z.object({
+// STRICT objects: an unknown key (a typo such as `enabeld`, or a switch this code does not read,
+// such as `allow_claude`) rejects the load instead of being silently dropped — the editor would
+// otherwise believe it took effect. Optional numbers mean "not on a primary page", not a default.
+const ChoiceSchema = z.strictObject({
   id: z.string().regex(/^[a-z]+-[a-z]+$/),
   route: z.enum(["luna", "claude"]),
   model: z.string(),
@@ -28,10 +31,11 @@ const ChoiceSchema = z.object({
 export type Choice = z.output<typeof ChoiceSchema>;
 
 const RosterSchema = z
-  .object({
+  .strictObject({
     schema: z.literal(1),
-    as_of: z.string(),
+    as_of: z.iso.date(),
     default: z.string(),
+    sources: z.record(z.string(), z.url()),
     choice: z.array(ChoiceSchema).min(1),
   })
   .refine((r) => r.choice.some((c) => c.id === r.default && c.enabled), {

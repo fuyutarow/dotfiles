@@ -14,6 +14,8 @@
 # the table and denied with "disabled in the roster". Turning one on is one line here, then
 # `mise run roster:render`. Current config (owner, 2026-10-05: 「今のconfigでは lunaだけに限定」):
 # luna rows on, Claude rows off.
+# CONFIGURATION CONTRACT (consumers, effective file, strict schema, accepted/rejected inputs):
+# agents/models/dispatch-roster.contract.md.
 # Read through agents/models/roster.ts by: the dispatch hook (allowed ids, the table on a deny),
 # `codex-run --choice` (model and effort of a luna row), and scripts/render-roster.ts (the table
 # in agents/claude/CLAUDE.md; `mise run lint:roster` fails on drift).

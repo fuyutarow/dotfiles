@@ -52,6 +52,16 @@ writeFileSync(
   ),
 );
 
+// A switch this code does not read: strict loading rejects it instead of dropping it silently.
+const UNKNOWN_KEY = join(scratch, "unknown-key.toml");
+writeFileSync(
+  UNKNOWN_KEY,
+  readFileSync(ROSTER_PATH, "utf8").replace(
+    "schema = 1\n",
+    "schema = 1\nallow_claude = true\n",
+  ),
+);
+
 // live: the committed config. allOn: the same rows, every one enabled.
 const decide = (payload: unknown) => decisionOf(runHook(HOOK, payload).stdout);
 const decideAllOn = (payload: unknown) =>
@@ -75,6 +85,16 @@ describe("enforce-dispatch-contract: enabled has no implicit default", () => {
       "cannot read agents/models/dispatch-roster.toml",
     );
     expect(d.reason).toContain("enabled");
+  });
+
+  test("an unknown key is rejected, not ignored — the editor would think it took effect", () => {
+    const d = decisionOf(
+      runHook(HOOK, agent({ subagent_type: "sonnet-high" }), {
+        DISPATCH_ROSTER_PATH: UNKNOWN_KEY,
+      }).stdout,
+    );
+    expect(d.decision).toBe("deny");
+    expect(d.reason).toContain("allow_claude");
   });
 });
 

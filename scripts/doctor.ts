@@ -449,7 +449,9 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
 export async function checkMiseScope(ctx: Ctx): Promise<Finding> {
   const r = await run(
     ["bun", join(ctx.dotfiles, "scripts/test-mise-scope.ts")],
-    { ms: 120_000 },
+    // cwd: the test opens zsh/tests/mise-scope.test.zsh by a repo-relative path; run from ~ it
+    // exited 127 and read as an INV-6 FAIL (2026-10-05).
+    { ms: 120_000, cwd: ctx.dotfiles },
   );
   if (r.timedOut)
     return warn("mise-scope", "test-mise-scope.ts timed out after 120s");

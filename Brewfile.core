@@ -37,3 +37,6 @@ brew "broot"        # tree/navigator
 brew "bottom"       # btm — config in bottom/, linked on every machine (declared nowhere until 2026-10-05)
 brew "btop"         # system monitor (tmux prefix+G popup)
 brew "tldr"         # better man (h)
+brew "shfmt"        # shell formatter — `mise run fmt:sh` / `fmt:check` / `lint:sh` (file discovery); core
+                    # since 2026-10-06: every machine that edits dotfiles runs `mise run lint`
+brew "shellcheck"   # bash static analysis — `mise run lint:sh`; core with shfmt (same reason)

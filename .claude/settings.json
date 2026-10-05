@@ -1,5 +1,14 @@
 {
   "permissions": {
-    "deny": ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"]
+    "deny": [
+      "Bash(git:*)",
+      "Bash(command git:*)",
+      "Bash(env git:*)",
+      "Bash(prettier:*)",
+      "Bash(npx prettier:*)",
+      "Bash(bunx prettier:*)",
+      "Bash(bunx --bun prettier:*)",
+      "Bash(pnpm dlx prettier:*)"
+    ]
   }
 }

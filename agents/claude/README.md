@@ -107,4 +107,4 @@ sudo apt install -y jq git
 Without `jq` the statusline degrades gracefully to line 1 only. The script is
 POSIX/dash-safe and reads `user@host`, cwd, git branch and the model/context
 from the JSON Claude Code pipes in, so the same file renders correctly on both
-mac (`fuyu@SophiaWilson:…`) and WSL (`fuyu@R99:…`) with no per-machine edits.
+mac (`fuyu@SophieWilson:…`) and WSL (`fuyu@R99:…`) with no per-machine edits.

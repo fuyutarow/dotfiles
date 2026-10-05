@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 import { existingGraveyards, graveyardCandidates } from "./graveyards";
+import { countEntries, newlines, progressLine } from "./purge-progress";
 
 // IRREVERSIBLE: empty EVERY graveyard — rip's, and the XDG trash beside it. This is the ONLY
 // step that actually frees disk: both mechanisms delete by RENAME, so the bytes stay on the
@@ -56,9 +57,66 @@ if (ans !== "yes") {
   process.exit(1);
 }
 
-// 絶対パスで shell の rm 無効化を回避
+// The delete is the slow part (one unlink per entry), so it reports progress — never a silent wait.
+// rm -v prints one line per entry it removed; counting those lines against countEntries() is the bar.
+// On a TTY the bar redraws in place; elsewhere (a log, a pipe) one line per 10% step.
+const tty = process.stdout.isTTY;
 for (const g of graves) {
-  await $`find ${g.path} -mindepth 1 -maxdepth 1 -exec /bin/rm -rf -- {} +`;
+  process.stdout.write(`${g.label}: 件数を数えています…\n`);
+  const total = countEntries(g.path);
+  if (total === 0) {
+    console.log(`${g.label}: 空です`);
+    continue;
+  }
+  const t0 = performance.now();
+  let done = 0;
+  let shown = -1; // TTY: last redraw time; else: last 10% step printed
+  const show = (final: boolean): void => {
+    const line = progressLine(done, total, performance.now() - t0);
+    if (tty) {
+      if (!final && performance.now() - shown < 100) return;
+      shown = performance.now();
+      process.stdout.write(`\r削除中 ${line}\u001B[K${final ? "\n" : ""}`);
+      return;
+    }
+    const step =
+      total === 0 ? 10 : Math.floor((Math.min(done, total) / total) * 10);
+    if (final || step > shown) {
+      shown = step;
+      process.stdout.write(`削除中 ${line}\n`);
+    }
+  };
+  show(false);
+  // 絶対パスで shell の rm 無効化を回避
+  const rm = Bun.spawn(
+    [
+      "find",
+      g.path,
+      "-mindepth",
+      "1",
+      "-maxdepth",
+      "1",
+      "-exec",
+      "/bin/rm",
+      "-rfv",
+      "--",
+      "{}",
+      "+",
+    ],
+    { stdout: "pipe", stderr: "inherit" },
+  );
+  for await (const chunk of rm.stdout) {
+    done += newlines(chunk);
+    show(false);
+  }
+  const code = await rm.exited;
+  show(true);
+  if (code !== 0) {
+    console.log(
+      `❌ ${g.path} の削除が exit ${code} で終わりました(上の rm のエラーを参照)。残りは削除していません。`,
+    );
+    process.exit(1);
+  }
 }
 
 const dfLine =

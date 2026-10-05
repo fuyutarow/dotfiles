@@ -58,3 +58,14 @@ test("anything but yes, and EOF, abort with exit 1 and remove nothing", () => {
     expect(existsSync(join(root, "g", "a"))).toBe(true);
   }
 });
+
+test("yes: the delete reports progress, ending at 100% of the counted entries", () => {
+  const { root, env } = fixture();
+  mkdirSync(join(root, "g", "d", "e"), { recursive: true });
+  writeFileSync(join(root, "g", "d", "e", "f"), "junk\n");
+  const r = purge("yes\n", env);
+  expect(r.code).toBe(0);
+  expect(r.out).toContain("件数を数えています");
+  // a + d + d/e + d/e/f = 4 entries; not a TTY, so plain lines, the last one final
+  expect(r.out).toContain("削除中 [████████████████████] 100%  4/4 件");
+});

@@ -97,7 +97,7 @@ All repo tasks go through **mise** (`mise tasks` to list):
 - **mac bootstrap**: `mise run mac:init` · **WSL bootstrap**: `mise run wsl:init` (see README)
 - **Throwaway Linux box** (rented GPU, fresh VM): as root `curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash`
   → `mise run linux:init`, then `herdr --remote <alias>`. dotfiles installs the **core dev utilities**
-  only (Brewfile `@core`); experiment toolchains are each repo's `mise.toml`, never dotfiles.
+  only (`Brewfile.core`, via mise; no root needed — see `scripts/linux-init.ts`); experiment toolchains are each repo's `mise.toml`, never dotfiles.
   Renting/destroying: `renting-cloud-gpus` skill.
 - **Relink dotfiles**: `mise run link:dots` · **Install tools**: `mise run install:tools`
 - **Audit tools**: `mise run tools:audit` · **Update everything**: `mise run up`

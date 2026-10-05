@@ -78,9 +78,10 @@ Ship a tree, not a checkout (`git archive` carries no `.git` history). Never wri
 
 ## 4b. House environment (dotfiles + `herdr --remote`), verified end to end 2026-10-05
 
-One command as root on the fresh instance builds the same environment as R99 (a non-root user,
-linuxbrew, the Brewfile `@core` entries, dotfile links, herdr/mise/jj/bun on the non-interactive
-PATH); toolchains such as Julia then come from the project's `mise.toml`:
+One command as root on the fresh instance builds the core dev environment (a non-root user, the
+`Brewfile.core` tools as mise-downloaded releases in ~/.local/bin, the agent CLIs, dotfile links);
+toolchains such as Julia then come from the project's `mise.toml`. Verify with
+`mise run doctor:remote -- <alias>` from the Mac:
 
 ```sh
 ssh -p <port> root@<host> 'curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash'

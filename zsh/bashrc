@@ -1,7 +1,7 @@
 # Linked to ~/.bashrc by scripts/link-dots.ts (Linux). Where bash is the login shell (sol), sshd
 # runs `ssh host 'cmd'` — and `herdr --remote`'s bridge — as `bash -c`, and bash reads only this
 # file there. So it gives the same thin environment zsh/zshenv gives zsh: user CLIs in ~/.local/bin
-# (herdr, mise, claude, the rootless @core tools) and bun's global bins in ~/.bun/bin. Nothing that
+# (herdr, mise, claude, the Brewfile.core tools) and bun's global bins in ~/.bun/bin. Nothing that
 # prints or hangs. An interactive bash is handed to a login zsh at the end of this file.
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;

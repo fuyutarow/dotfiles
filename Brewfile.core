@@ -1,0 +1,36 @@
+# The core dev utilities (README invariant 7): what EVERY machine gets — the Mac, WSL, a rented GPU
+# box, a shared server. Brewfile reads this file first, so the Mac and WSL install it with brew;
+# a throwaway Linux box gets the same names through `mise run linux:init`, which downloads each
+# one's prebuilt release (no Homebrew there; scripts/linux-init.ts says why). One list, two
+# installers. Experiment toolchains are not here: each repo's mise.toml declares its own.
+# Plain `brew "<name>"` lines only — scripts/linux-init.ts reads them without Ruby.
+
+brew "bat"          # better cat (alias: p)
+brew "eza"          # better ls (l, ll, la)
+brew "fd"           # better find (f)
+brew "gh"           # GitHub CLI — login is per box; never leave its token on a rented one
+brew "git-delta"    # better diff
+brew "jq"
+brew "just"         # task runner (j)
+brew "mise"
+brew "ripgrep"      # better grep (gr)
+brew "rm-improved"  # rip — the ONLY sanctioned file remover (rm is disabled)
+brew "sheldon"      # zsh plugins → zsh/aliases.zsh
+brew "herdr"        # agent multiplexer; `herdr --remote <host>` needs it on the remote too
+brew "topgrade"     # `mise run up` (m up)
+brew "zoxide"       # better cd (,)
+brew "bun"          # JS runtime: brew on Mac/WSL; on a throwaway box repos declare it (INV-6)
+brew "uv"           # Python tool runner: `uvx` + `uv tool install`; same INV-6 note as bun
+brew "atuin"        # shell history (Ctrl+R)
+brew "lazygit"      # git TUI (lg)
+brew "jj"           # Jujutsu (config: jj/)
+brew "direnv"
+brew "fzf"
+brew "dust"         # better du (du2)
+brew "procs"        # better ps
+brew "gping"        # ping with a graph
+brew "sd"           # sed replacement
+brew "choose-rust"  # cut replacement, binary `choose`
+brew "broot"        # tree/navigator
+brew "btop"         # system monitor (tmux prefix+G popup)
+brew "tldr"         # better man (h)

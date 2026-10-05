@@ -29,9 +29,9 @@ bun = "1.4"
 alias = "u"
 description = "Update system packages"
 # Never a silent success: until 2026-10-05 a missing topgrade printed "completed with some errors" and
-# exited 0 (a rented box, where topgrade was not yet @core).
+# exited 0 (a rented box, where topgrade was not yet a core tool).
 run = '''
-command -v topgrade > /dev/null || { echo "up: topgrade is not installed (Brewfile @core: mise run linux:init, or install:tools)" >&2; exit 1; }
+command -v topgrade > /dev/null || { echo "up: topgrade is not installed (Brewfile.core: mise run linux:init, or install:tools)" >&2; exit 1; }
 topgrade --disable containers || { echo "up: topgrade finished with failed steps (listed above)" >&2; exit 1; }
 '''
 
@@ -680,9 +680,10 @@ description = "Model-release SSOT floor (agents/models/releases.toml): staleness
 run = 'bun ~/dotfiles/agents/models/check-releases.ts'
 
 # A throwaway Linux box (rented GPU container, fresh VM): run scripts/bootstrap-linux.sh as root
-# (it ends by calling this as the target user). Only Brewfile entries marked @core; no systemd.
+# (it ends by calling this as the target user), or run it bare where there is no root (sol).
+# Only Brewfile.core, downloaded by mise; no Homebrew, no systemd.
 [tasks."linux:init"]
-description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile @core entries, dotfile links, herdr/mise/jj/bun on the non-interactive PATH (for herdr --remote). Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root"
+description = "Core dev utilities for a throwaway Linux box (experiment toolchains stay with each repo's mise.toml): Brewfile.core via mise prebuilt releases into ~/.local/bin (root or not), agent CLIs, dotfile links. Entry point from scratch: curl …/scripts/bootstrap-linux.sh | bash as root; without root see the scripts/linux-init.ts header. Check from your machine: mise run doctor:remote -- <host>"
 run = "bun ~/dotfiles/scripts/linux-init.ts"
 
 [tasks."wsl:init"]

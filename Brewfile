@@ -1,51 +1,22 @@
 # Single source of truth for CLI tooling (macOS AND WSL/linuxbrew).
 # Apply with: brew bundle --file=~/dotfiles/Brewfile
 # Check with: mise run tools:audit  (scripts/check-tools.sh)
-# `@core` in an entry's comment = also installed on a throwaway Linux box by `mise run linux:init`
-# (scripts/bootstrap-linux.sh); the core dev utilities (shell, search, VCS, herdr, mise); experiment toolchains belong to each repo's mise.toml.
+#
+# The core dev utilities — what every machine gets, rented boxes included — live in Brewfile.core
+# and are read in here first; this file adds what only the Mac and WSL carry. Until 2026-10-05 the
+# core set was a `# @core` comment on lines here, which brew could not see and which went missing
+# without any error (gh, topgrade). Brewfile is Ruby, so the split is one instance_eval line.
+instance_eval(File.read(File.join(__dir__, "Brewfile.core")))
 
 # Core CLI tools
-brew "bat"          # @core better cat (alias: p)
 brew "coreutils"
-brew "eza"          # @core better ls (l, ll, la)
-brew "fd"           # @core better find (f)
 # fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
 # implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
-brew "gh"           # @core GitHub CLI (clone private repos, PRs) — login is per box; never leave its token on a rented one
 brew "git"
-brew "git-delta"    # @core better diff
-brew "jq"           # @core
 brew "fnox"        # secrets: one CLI over the macOS Keychain (mac) and age files (WSL); config is
                     # per machine in ~/.config/fnox/config.toml, never in this public repo
 brew "age"         # fnox age provider (WSL has no Secret Service, so its secrets are age-encrypted)
-brew "just"         # @core task runner (j)
-brew "mise"         # @core
-brew "ripgrep"      # @core better grep (gr)
-brew "rm-improved"  # @core rip — the ONLY sanctioned file remover (rm is disabled)
-brew "sheldon"      # @core
 brew "tmux"
-brew "herdr"        # @core agent multiplexer (tmux-like workspace for AI coding agents) — config in herdr/, cross-OS
-brew "topgrade"     # @core `mise run up` (m up) — updates everything; a box without it cannot update
-brew "zoxide"       # @core better cd (,)
-brew "bun"          # @core JS runtime + pkg manager (homebrew-core; no tap. `bun upgrade` self-updates too)
-brew "uv"           # @core Python tool runner/installer: `uvx` (ephemeral, preferred) + `uv tool install` (ccc via
-                    # `mise run cc:install-mcp`). Its tool bins land in ~/.local/bin, on every shell's PATH via
-                    # zsh/zshenv. Was brew-installed by hand and never declared here until 2026-09-13 — a fresh
-                    # `brew bundle` would have skipped it and `cc:install-mcp` would have failed on the first step.
-
-# Productivity / TUI
-brew "atuin"        # @core shell history (Ctrl+R)
-brew "lazygit"      # @core git TUI (lg)
-brew "jj"           # @core Jujutsu VCS; colocated with git in dotfiles/firedancer (config: jj/)
-brew "direnv"       # @core
-brew "fzf"          # @core
-brew "dust"         # @core better du (du2)
-brew "procs"        # @core better ps
-brew "gping"        # @core ping with a graph (aliases.zsh relies on it; installed on the Mac but undeclared until 2026-10-05)
-brew "sd"           # @core sed replacement (aliases.zsh)
-brew "choose-rust"  # @core cut replacement, binary `choose` (aliases.zsh)
-brew "broot"        # @core tree/navigator (aliases.zsh)
-brew "btop"         # @core system monitor (tmux prefix+G popup)
 
 # Linux-desktop clipboard backends for tmux (WSL uses clip.exe, mac uses pbcopy — neither needs these)
 if OS.linux?
@@ -53,7 +24,6 @@ if OS.linux?
   brew "wl-clipboard" # Wayland clipboard (wl-copy/wl-paste)
   brew "bubblewrap"   # bwrap: grok --sandbox needs it on Linux (refuses to start without it)
 end
-brew "tldr"         # @core better man (h)
 brew "yq"
 brew "kondo"        # reclaims project build artifacts (node_modules/target/build…) — see `mise run reclaim:pick`
 brew "hunk"         # review-first terminal diff viewer for agent-authored changesets (alias: d)

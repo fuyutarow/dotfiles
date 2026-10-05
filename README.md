@@ -121,7 +121,7 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    Enforced by `mise run test:mise-scope`.
 7. **Core dev utilities, everywhere, at once; experiments belong to the repo.** On any machine —
    the Mac, R99, a rented GPU box, a fresh VM — dotfiles' job is to make the core dev utilities
-   (brew, herdr, mise, jj, gh, the shell and its aliases, the search/VCS CLIs — Brewfile `@core` — and the agent CLIs Claude Code and Codex, from their vendors' installers)
+   (brew, herdr, mise, jj, gh, the shell and its aliases, the search/VCS CLIs — `Brewfile.core` — and the agent CLIs Claude Code and Codex, from their vendors' installers)
    usable immediately, reachable with `herdr --remote`. It is not a portable container image, and
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
@@ -150,9 +150,10 @@ exec zsh
 
 ### Throwaway Linux box (rented GPU, fresh VM, container)
 
-dotfiles gives such a box the **core dev utilities** only — linuxbrew, the Brewfile entries marked
-`@core` (shell, search, VCS, herdr, mise …), the dotfile links — so it is usable at once and
-reachable with `herdr --remote`. It does **not** build experiment environments: Julia, CUDA, Python
+dotfiles gives such a box the **core dev utilities** only — `Brewfile.core` (shell, search, VCS,
+herdr, mise …) as prebuilt releases via mise, root or not, plus the agent CLIs and the dotfile
+links — so it is usable at once and reachable with `herdr --remote`. Verify it from your machine with
+`mise run doctor:remote -- <alias>`. It does **not** build experiment environments: Julia, CUDA, Python
 and their versions belong to each repo's `mise.toml` (`mise install` inside that repo).
 
 ```bash

@@ -31,7 +31,7 @@ import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { stampMDHM } from "./prompt-stamp.ts";
+import { promptParts, stampMDHM } from "./prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
   MAX_QUOTE_TURNS as MAX_TURNS,
@@ -173,11 +173,13 @@ if (resolvedName.ok && resolvedName.value !== "") name = resolvedName.value;
 // Header carries what the reader needs to place the quote without asking: which session said it;
 // when it was quoted (`MM-DD HH:MM`, the prompt's own stamp — one home: prompt-stamp.ts); how many
 // turns are included (the count actually captured, not necessarily the count requested — see the
-// `short` fallback below); and how much text they're about to read. Not who/where (user@host and
-// the cwd): the reader is handed a quote of a named session, and those two only added noise to it.
+// `short` fallback below); how much text they're about to read; and LAST, which machine it came
+// from (user@host, owner 2026-10-06): sessions now run on several boxes (the Mac, R99, a rented GPU
+// box, a shared server) and a session name alone no longer says where. Not the cwd — still noise.
 const body = selected.join(TURN_SEPARATOR);
 const bodyBytes = Buffer.byteLength(body, "utf8");
-const header = `from ${name} | ${stampMDHM(Temporal.Now.plainDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B`;
+const where = promptParts(process.cwd());
+const header = `from ${name} | ${stampMDHM(Temporal.Now.plainDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B | ${where.user}@${where.host}`;
 const payloadText = `${header}\n${body}`;
 const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
 let short = "";

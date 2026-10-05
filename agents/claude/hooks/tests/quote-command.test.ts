@@ -65,9 +65,9 @@ describe("quote-command: output mode follows the requested count", () => {
     const file = output.reason.match(/ at (\/\S+\.txt)\./u)?.[1];
     expect(file).toBeDefined();
     const text = readFileSync(file ?? "", "utf8");
-    // Head: from <name> | MM-DD HH:MM | turns: N | <bytes>B — no user@host, no cwd.
+    // Head: from <name> | MM-DD HH:MM | turns: N | <bytes>B | <user>@<host> — no cwd.
     expect(text.split("\n")[0]).toMatch(
-      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2} \| turns: 51 \| \d+B$/u,
+      /^from quote-test-session \| \d{2}-\d{2} \d{2}:\d{2} \| turns: 51 \| \d+B \| [^\s@|]+@[^\s@|]+$/u,
     );
     expect(text).toContain("turns: 51");
     expect(text).toContain("response 1");

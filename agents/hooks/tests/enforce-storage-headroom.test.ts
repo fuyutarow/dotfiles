@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
+
+// The host-drive cases measure the WSL host drive itself (/mnt/c): declared, so elsewhere SKIPs.
+const NO_WSL_HOST_DRIVE = !existsSync("/mnt/c");
 
 const HOOK = "enforce-storage-headroom.ts";
 
@@ -190,15 +199,18 @@ describe("enforce-storage-headroom", () => {
     expect(d?.permissionDecisionReason).toContain("guest /");
   });
 
-  test("an unreadable Windows drive denies compute on WSL", () => {
-    const cfg = config((c) => {
-      drives(0, 0, 0)(c);
-      driveRow(c, "host").path = "/missing-wsl-host-drive";
-    });
-    const d = decisionOf(runHook(HOOK, bash("cargo build"), cfg).stdout);
-    expect(d?.permissionDecision).toBe("deny");
-    expect(d?.permissionDecisionReason).toContain("could not be measured");
-  });
+  test.skipIf(NO_WSL_HOST_DRIVE)(
+    "an unreadable Windows drive denies compute on WSL",
+    () => {
+      const cfg = config((c) => {
+        drives(0, 0, 0)(c);
+        driveRow(c, "host").path = "/missing-wsl-host-drive";
+      });
+      const d = decisionOf(runHook(HOOK, bash("cargo build"), cfg).stdout);
+      expect(d?.permissionDecision).toBe("deny");
+      expect(d?.permissionDecisionReason).toContain("could not be measured");
+    },
+  );
 
   test("never blocks cleanup, reads, or git — even when full", () => {
     for (const command of [
@@ -234,13 +246,16 @@ describe("enforce-storage-headroom", () => {
     expect(r.stderr).not.toContain("storage-headroom");
   });
 
-  test("warns through additionalContext in the band below the warn line, without denying", () => {
-    // stderr with exit 0 never reaches the model on PreToolUse; the warning must ride the JSON.
-    const r = runHook(HOOK, bash("julia probe.jl"), WARN_ONLY);
-    const d = decisionOf(r.stdout);
-    expect(d?.permissionDecision).toBeUndefined();
-    expect(d?.additionalContext).toContain("storage-headroom: WARNING");
-  });
+  test.skipIf(NO_WSL_HOST_DRIVE)(
+    "warns through additionalContext in the band below the warn line, without denying",
+    () => {
+      // stderr with exit 0 never reaches the model on PreToolUse; the warning must ride the JSON.
+      const r = runHook(HOOK, bash("julia probe.jl"), WARN_ONLY);
+      const d = decisionOf(r.stdout);
+      expect(d?.permissionDecision).toBeUndefined();
+      expect(d?.additionalContext).toContain("storage-headroom: WARNING");
+    },
+  );
 
   describe("cargo target budget", () => {
     const budget = (warn: number, hostWarn = 0) =>
@@ -343,17 +358,20 @@ describe("enforce-storage-headroom", () => {
       );
     });
 
-    test("the drive warning and the target warning arrive in ONE decision", () => {
-      const { root, home } = workspace();
-      const r = runHook(
-        HOOK,
-        { ...bash("cargo build"), cwd: root },
-        { ...budget(0.001, 1_000_000), HOME: home },
-      );
-      const ctx = decisionOf(r.stdout)?.additionalContext ?? "";
-      expect(ctx).toContain("storage-headroom: WARNING host C:");
-      expect(ctx).toContain("cargo target");
-    });
+    test.skipIf(NO_WSL_HOST_DRIVE)(
+      "the drive warning and the target warning arrive in ONE decision",
+      () => {
+        const { root, home } = workspace();
+        const r = runHook(
+          HOOK,
+          { ...bash("cargo build"), cwd: root },
+          { ...budget(0.001, 1_000_000), HOME: home },
+        );
+        const ctx = decisionOf(r.stdout)?.additionalContext ?? "";
+        expect(ctx).toContain("storage-headroom: WARNING host C:");
+        expect(ctx).toContain("cargo target");
+      },
+    );
   });
 
   describe("config", () => {

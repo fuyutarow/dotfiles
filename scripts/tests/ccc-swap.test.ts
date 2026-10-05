@@ -90,7 +90,8 @@ function runScript(
 }
 
 function makeHome(): string {
-  return mkdtempSync(join(tmpdir(), "ccc-swap-home-"));
+  // Canonical (macOS: /var is /private/var): the script canonicalizes home, so the fixture must too.
+  return realpathSync(mkdtempSync(join(tmpdir(), "ccc-swap-home-")));
 }
 
 function makeProjectIndex(
@@ -321,7 +322,9 @@ describe("listPrevGenerations", () => {
   });
 
   test("mapped: siblings of a DB dir that lives outside the project root entirely", () => {
-    const mapTarget = mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-"));
+    const mapTarget = realpathSync(
+      mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-")),
+    );
     const mappedDbDir = join(mapTarget, "p");
     mkdirSync(join(mapTarget, "p.prev-300"), { recursive: true });
     mkdirSync(mappedDbDir, { recursive: true });
@@ -700,7 +703,7 @@ describe("CLI: full build -> cutover -> rollback -> gc lifecycle (fake-ccc)", ()
 // ---- relocated layout (COCOINDEX_CODE_DB_PATH_MAPPING) --------------------------------------
 
 function makeMapTarget(): string {
-  return mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-"));
+  return realpathSync(mkdtempSync(join(tmpdir(), "ccc-swap-maptarget-")));
 }
 
 function mapEnvFor(home: string, target: string): Record<string, string> {

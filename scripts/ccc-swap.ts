@@ -67,7 +67,13 @@
 // invalid flag input, ccc missing, malformed global_settings.yml, or a live index changed during
 // build — that last one should never happen and is a bug).
 
-import { existsSync, readdirSync, statSync, type Dirent } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  type Dirent,
+} from "node:fs";
 import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -140,7 +146,13 @@ const DEFAULT_KEEP = 1;
 export function resolveHome(homeFlag: string | undefined): string {
   const home = homeFlag ?? process.env.HOME ?? homedir();
   if (home === "") throw new Error("cannot resolve $HOME (pass --home)");
-  return resolve(home);
+  // Canonical, symlinks resolved: ccc keys a project's DB by the path the OS reports (os.getcwd()
+  // resolves symlinks — macOS's /var is /private/var), so a DB-path mapping built from the
+  // unresolved spelling never matched, and a shadow build wrote into the LIVE index. The
+  // FATAL-SAFETY check caught it (ccc-swap tests in macOS tmpdirs, 2026-10-06). Every project root
+  // and the shadow dir derive from this, so canonicalizing here covers them all.
+  const abs = resolve(home);
+  return existsSync(abs) ? realpathSync(abs) : abs;
 }
 
 export function resolveShadowDir(

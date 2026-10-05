@@ -45,6 +45,13 @@ import {
   type Reservation,
 } from "../agent-resource-run.ts";
 
+// Platform requirements, declared — a test that needs a facility this machine lacks is SKIPPED
+// and counted as such, never failed for that reason (macOS has no util-linux setsid/taskset; a
+// container has no user systemd).
+const NO_UTIL_LINUX =
+  Bun.which("taskset") === null || Bun.which("setsid") === null;
+const NO_CGROUP_SCOPES = NO_UTIL_LINUX || !probeKernelEnforcement().available;
+
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
 
@@ -697,9 +704,12 @@ describe("kernel enforcement", () => {
     }
   });
 
-  test("the current host accepts the required user-systemd properties", () => {
-    expect(probeKernelEnforcement()).toEqual({ available: true });
-  });
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "the current host accepts the required user-systemd properties",
+    () => {
+      expect(probeKernelEnforcement()).toEqual({ available: true });
+    },
+  );
 
   test("binds the reserved VRAM budget inside the job's CUDA runtime", () => {
     const manifest = gpuManifest();
@@ -955,21 +965,24 @@ describe("admission receipt", () => {
     ).toBe(false);
   });
 
-  test("check-only admission does not issue receipt identifiers", async () => {
-    const reports: string[] = [];
-    const result = await checkJob(cpuManifest(), {
-      stateDirectory: temporaryStateDirectory(),
-      snapshot: hostSnapshot(),
-      kernelEnforcement: { available: true },
-      report: (line) => {
-        reports.push(line);
-      },
-    });
-    expect(result).toMatchObject({ ok: true, exitCode: 0 });
-    expect(reports.join("\n")).toContain("check_only=true");
-    expect(reports.join("\n")).not.toContain("admission_id=");
-    expect(reports.join("\n")).not.toContain("receipt_sha256=");
-  });
+  test.skipIf(NO_UTIL_LINUX)(
+    "check-only admission does not issue receipt identifiers",
+    async () => {
+      const reports: string[] = [];
+      const result = await checkJob(cpuManifest(), {
+        stateDirectory: temporaryStateDirectory(),
+        snapshot: hostSnapshot(),
+        kernelEnforcement: { available: true },
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(reports.join("\n")).toContain("check_only=true");
+      expect(reports.join("\n")).not.toContain("admission_id=");
+      expect(reports.join("\n")).not.toContain("receipt_sha256=");
+    },
+  );
 
   // WHY skipIf, not a plain assertion (2026-09-12, tests/ move regression + invocation gap): this
   // test verifies a receipt-bearing CHILD from INSIDE a receipt-bearing PARENT, so it requires
@@ -1188,157 +1201,180 @@ describe("admission receipt", () => {
 });
 
 describe("bounded execution", () => {
-  test("fails closed when kernel enforcement is unavailable", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const reports: string[] = [];
-    const result = await checkJob(cpuManifest(), {
-      stateDirectory,
-      snapshot: hostSnapshot(),
-      kernelEnforcement: {
-        available: false,
-        reason: "fixture user manager unavailable",
-      },
-      hostOptIn: null, // hermetic: never this machine's own ~/.config/agent-resource/host.toml
-      report: (line) => {
-        reports.push(line);
-      },
-    });
-    expect(result).toMatchObject({
-      ok: false,
-      exitCode: 69,
-      reason: "admission",
-    });
-    expect(reports.join("\n")).toContain("kernel enforcement unavailable");
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
-
-  test("reclaims an old lock left before its owner file was written", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const lockDirectory = join(stateDirectory, ".lock");
-    mkdirSync(lockDirectory);
-    // utimes takes epoch SECONDS as a number.
-    const old = (Temporal.Now.instant().epochMilliseconds - 10_000) / 1000;
-    utimesSync(lockDirectory, old, old);
-    const result = await checkJob(cpuManifest(), {
-      stateDirectory,
-      snapshot: probeHostSnapshot(process.cwd()),
-    });
-    expect(result).toMatchObject({ ok: true, exitCode: 0 });
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
-
-  test("injects one-thread settings and releases the reservation", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const snapshot = probeHostSnapshot(process.cwd());
-    const result = await executeJob(
-      cpuManifest(),
-      [
-        "sh",
-        "-c",
-        'test "$OMP_NUM_THREADS" = 1 && test "$JULIA_NUM_THREADS" = 1',
-      ],
-      {
+  test.skipIf(NO_UTIL_LINUX)(
+    "fails closed when kernel enforcement is unavailable",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const reports: string[] = [];
+      const result = await checkJob(cpuManifest(), {
         stateDirectory,
-        snapshot,
-        monitorIntervalMs: 25,
-        manifestSource: manifestSourceFor(cpuManifest()),
-      },
-    );
-    expect(result).toMatchObject({ ok: true, exitCode: 0 });
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
-
-  test("reports a measured RAM peak and persists it beside the manifest", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const manifestDirectory = temporaryStateDirectory();
-    const manifest = cpuManifest();
-    const manifestPath = join(manifestDirectory, "job.resource.json");
-    const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
-    writeFileSync(manifestPath, manifestBytes);
-    const manifestSource = manifestSourceFromBytes(manifestPath, manifestBytes);
-    const reports: string[] = [];
-    const result = await executeJob(
-      manifest,
-      [
-        process.execPath,
-        "-e",
-        "Buffer.alloc(4 * 1024 * 1024, 1); await Bun.sleep(300);",
-      ],
-      {
-        stateDirectory,
-        snapshot: probeHostSnapshot(process.cwd()),
-        monitorIntervalMs: 25,
-        manifestSource,
+        snapshot: hostSnapshot(),
+        kernelEnforcement: {
+          available: false,
+          reason: "fixture user manager unavailable",
+        },
+        hostOptIn: null, // hermetic: never this machine's own ~/.config/agent-resource/host.toml
         report: (line) => {
           reports.push(line);
         },
-      },
-    );
-    expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 69,
+        reason: "admission",
+      });
+      expect(reports.join("\n")).toContain("kernel enforcement unavailable");
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
 
-    const release = reports.find((line) => line.startsWith("RELEASE "));
-    expect(release).toContain(`job=${manifest.job_id}`);
-    expect(release).toMatch(/ram_peak_measured_bytes=\d+/u);
-    expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/u);
-    expect(release).toContain("released_at=");
-    // A CPU-only manifest never samples VRAM — see executeJob's onSample.
-    expect(release).not.toContain("vram_peak_measured_bytes=");
-
-    const peakPath = `${manifestPath}.peak.json`;
-    const peakRaw = parseJson(readFileSync(peakPath, "utf8"));
-    const peak = PeakFieldsSchema.parse(peakRaw);
-    expect(peakRaw).toMatchObject({
-      schema: 1,
-      job_id: manifest.job_id,
-    });
-    expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/u);
-    expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
-    rmSync(peakPath);
-  });
-
-  test("terminates the whole process group at the walltime", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const snapshot = probeHostSnapshot(process.cwd());
-    const started = performance.now();
-    const result = await executeJob(
-      cpuManifest({ walltime_seconds: 1 }),
-      ["sh", "-c", "sleep 10"],
-      {
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "reclaims an old lock left before its owner file was written",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const lockDirectory = join(stateDirectory, ".lock");
+      mkdirSync(lockDirectory);
+      // utimes takes epoch SECONDS as a number.
+      const old = (Temporal.Now.instant().epochMilliseconds - 10_000) / 1000;
+      utimesSync(lockDirectory, old, old);
+      const result = await checkJob(cpuManifest(), {
         stateDirectory,
-        snapshot,
-        monitorIntervalMs: 25,
-        manifestSource: manifestSourceFor(cpuManifest({ walltime_seconds: 1 })),
-      },
-    );
-    expect(result).toMatchObject({
-      ok: false,
-      exitCode: 124,
-      reason: "walltime",
-    });
-    expect(performance.now() - started).toBeLessThan(4_000);
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
+        snapshot: probeHostSnapshot(process.cwd()),
+      });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
 
-  test("terminates a process fanout beyond the declared ceiling", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const snapshot = probeHostSnapshot(process.cwd());
-    const result = await executeJob(
-      cpuManifest({ processes: 1 }),
-      ["sh", "-c", "sleep 10 & wait"],
-      {
-        stateDirectory,
-        snapshot,
-        monitorIntervalMs: 25,
-        manifestSource: manifestSourceFor(cpuManifest({ processes: 1 })),
-      },
-    );
-    expect(result).toMatchObject({
-      ok: false,
-      exitCode: 137,
-      reason: "processes",
-    });
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "injects one-thread settings and releases the reservation",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const snapshot = probeHostSnapshot(process.cwd());
+      const result = await executeJob(
+        cpuManifest(),
+        [
+          "sh",
+          "-c",
+          'test "$OMP_NUM_THREADS" = 1 && test "$JULIA_NUM_THREADS" = 1',
+        ],
+        {
+          stateDirectory,
+          snapshot,
+          monitorIntervalMs: 25,
+          manifestSource: manifestSourceFor(cpuManifest()),
+        },
+      );
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
+
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "reports a measured RAM peak and persists it beside the manifest",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const manifestDirectory = temporaryStateDirectory();
+      const manifest = cpuManifest();
+      const manifestPath = join(manifestDirectory, "job.resource.json");
+      const manifestBytes = Buffer.from(JSON.stringify(manifest), "utf8");
+      writeFileSync(manifestPath, manifestBytes);
+      const manifestSource = manifestSourceFromBytes(
+        manifestPath,
+        manifestBytes,
+      );
+      const reports: string[] = [];
+      const result = await executeJob(
+        manifest,
+        [
+          process.execPath,
+          "-e",
+          "Buffer.alloc(4 * 1024 * 1024, 1); await Bun.sleep(300);",
+        ],
+        {
+          stateDirectory,
+          snapshot: probeHostSnapshot(process.cwd()),
+          monitorIntervalMs: 25,
+          manifestSource,
+          report: (line) => {
+            reports.push(line);
+          },
+        },
+      );
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+
+      const release = reports.find((line) => line.startsWith("RELEASE "));
+      expect(release).toContain(`job=${manifest.job_id}`);
+      expect(release).toMatch(/ram_peak_measured_bytes=\d+/u);
+      expect(release).toMatch(/ram_peak_source=(cgroup|sampled)/u);
+      expect(release).toContain("released_at=");
+      // A CPU-only manifest never samples VRAM — see executeJob's onSample.
+      expect(release).not.toContain("vram_peak_measured_bytes=");
+
+      const peakPath = `${manifestPath}.peak.json`;
+      const peakRaw = parseJson(readFileSync(peakPath, "utf8"));
+      const peak = PeakFieldsSchema.parse(peakRaw);
+      expect(peakRaw).toMatchObject({
+        schema: 1,
+        job_id: manifest.job_id,
+      });
+      expect(peak.ram_peak_source).toMatch(/^(cgroup|sampled)$/u);
+      expect(peak.ram_peak_measured_bytes).toBeGreaterThan(0);
+      rmSync(peakPath);
+    },
+  );
+
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "terminates the whole process group at the walltime",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const snapshot = probeHostSnapshot(process.cwd());
+      const started = performance.now();
+      const result = await executeJob(
+        cpuManifest({ walltime_seconds: 1 }),
+        ["sh", "-c", "sleep 10"],
+        {
+          stateDirectory,
+          snapshot,
+          monitorIntervalMs: 25,
+          manifestSource: manifestSourceFor(
+            cpuManifest({ walltime_seconds: 1 }),
+          ),
+        },
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 124,
+        reason: "walltime",
+      });
+      expect(performance.now() - started).toBeLessThan(4_000);
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
+
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "terminates a process fanout beyond the declared ceiling",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const snapshot = probeHostSnapshot(process.cwd());
+      const result = await executeJob(
+        cpuManifest({ processes: 1 }),
+        ["sh", "-c", "sleep 10 & wait"],
+        {
+          stateDirectory,
+          snapshot,
+          monitorIntervalMs: 25,
+          manifestSource: manifestSourceFor(cpuManifest({ processes: 1 })),
+        },
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 137,
+        reason: "processes",
+      });
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
 
   // This test deliberately triggers a REAL kernel OOM-kill against a REAL systemd scope —
   // it is not simulated (2026-09-04, recurred twice in one evening as "unattributed OOM kill on
@@ -1347,91 +1383,101 @@ describe("bounded execution", () => {
   // already rolled past the run and only a firedancer journal read settled it). Before
   // investigating an unattributed `agent-resource-*.scope` OOM-kill in dmesg or a journal, check
   // whether `bun test agents/resource-control/` ran around that time — this is very likely it.
-  test("the cgroup kills a job before it can exceed its RAM envelope", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const snapshot = probeHostSnapshot(process.cwd());
-    const started = performance.now();
-    const result = await executeJob(
-      cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
-      [
-        process.execPath,
-        "-e",
-        "const value = Buffer.alloc(256 * 1024 * 1024, 1); " +
-          "process.stdout.write(String(value.length)); await Bun.sleep(5_000);",
-      ],
-      {
-        stateDirectory,
-        snapshot,
-        monitorIntervalMs: 1_000,
-        manifestSource: manifestSourceFor(
-          cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
-        ),
-      },
-    );
-    expect(result).toMatchObject({
-      ok: false,
-      exitCode: 137,
-      reason: "command-exit",
-    });
-    expect(performance.now() - started).toBeLessThan(4_000);
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "the cgroup kills a job before it can exceed its RAM envelope",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const snapshot = probeHostSnapshot(process.cwd());
+      const started = performance.now();
+      const result = await executeJob(
+        cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
+        [
+          process.execPath,
+          "-e",
+          "const value = Buffer.alloc(256 * 1024 * 1024, 1); " +
+            "process.stdout.write(String(value.length)); await Bun.sleep(5_000);",
+        ],
+        {
+          stateDirectory,
+          snapshot,
+          monitorIntervalMs: 1_000,
+          manifestSource: manifestSourceFor(
+            cpuManifest({ host_ram_peak_bytes: 64 * MiB }),
+          ),
+        },
+      );
+      expect(result).toMatchObject({
+        ok: false,
+        exitCode: 137,
+        reason: "command-exit",
+      });
+      expect(performance.now() - started).toBeLessThan(4_000);
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
 
-  test("scope cleanup kills a descendant that escapes the process group", async () => {
-    const stateDirectory = temporaryStateDirectory();
-    const snapshot = probeHostSnapshot(process.cwd());
-    const pidFile = join(stateDirectory, "escaped.pid");
-    const result = await executeJob(
-      cpuManifest({ processes: 3 }),
-      [
-        "sh",
-        "-c",
-        `setsid sh -c 'echo $$ > ${pidFile}; exec sleep 10' & ` +
-          `while [ ! -s ${pidFile} ]; do sleep 0.01; done`,
-      ],
-      {
-        stateDirectory,
-        snapshot,
-        monitorIntervalMs: 25,
-        manifestSource: manifestSourceFor(cpuManifest({ processes: 3 })),
-      },
-    );
-    const escapedPid = Number(readFileSync(pidFile, "utf8").trim());
-    let escapedProcessIsLive = true;
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const statResult = fromThrowable(() =>
-        readFileSync(`/proc/${escapedPid}/stat`, "utf8"),
-      )();
-      if (statResult.isOk()) {
-        const stat = statResult.value;
-        const close = stat.lastIndexOf(")");
-        escapedProcessIsLive = close !== -1 && stat.slice(close + 2)[0] !== "Z";
-      } else {
-        escapedProcessIsLive = false;
+  test.skipIf(NO_CGROUP_SCOPES)(
+    "scope cleanup kills a descendant that escapes the process group",
+    async () => {
+      const stateDirectory = temporaryStateDirectory();
+      const snapshot = probeHostSnapshot(process.cwd());
+      const pidFile = join(stateDirectory, "escaped.pid");
+      const result = await executeJob(
+        cpuManifest({ processes: 3 }),
+        [
+          "sh",
+          "-c",
+          `setsid sh -c 'echo $$ > ${pidFile}; exec sleep 10' & ` +
+            `while [ ! -s ${pidFile} ]; do sleep 0.01; done`,
+        ],
+        {
+          stateDirectory,
+          snapshot,
+          monitorIntervalMs: 25,
+          manifestSource: manifestSourceFor(cpuManifest({ processes: 3 })),
+        },
+      );
+      const escapedPid = Number(readFileSync(pidFile, "utf8").trim());
+      let escapedProcessIsLive = true;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const statResult = fromThrowable(() =>
+          readFileSync(`/proc/${escapedPid}/stat`, "utf8"),
+        )();
+        if (statResult.isOk()) {
+          const stat = statResult.value;
+          const close = stat.lastIndexOf(")");
+          escapedProcessIsLive =
+            close !== -1 && stat.slice(close + 2)[0] !== "Z";
+        } else {
+          escapedProcessIsLive = false;
+        }
+        if (!escapedProcessIsLive) break;
+        await Bun.sleep(25);
       }
-      if (!escapedProcessIsLive) break;
-      await Bun.sleep(25);
-    }
 
-    expect(result).toMatchObject({ ok: true, exitCode: 0 });
-    expect(escapedProcessIsLive).toBe(false);
-    expect(readdirSync(stateDirectory)).toEqual(["escaped.pid"]);
-  });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      expect(escapedProcessIsLive).toBe(false);
+      expect(readdirSync(stateDirectory)).toEqual(["escaped.pid"]);
+    },
+  );
 
-  test("fails closed when systemd scope cleanup cannot be verified", () => {
-    const stateDirectory = temporaryStateDirectory();
-    expect(
-      executeJob(cpuManifest(), ["true"], {
-        stateDirectory,
-        snapshot: probeHostSnapshot(process.cwd()),
-        kernelEnforcement: { available: true },
-        monitorIntervalMs: 25,
-        systemdScopeCleanup: () => false,
-        manifestSource: manifestSourceFor(cpuManifest()),
-      }),
-    ).rejects.toThrow("failed to verify cleanup of systemd scope");
-    expect(readdirSync(stateDirectory)).toEqual([]);
-  });
+  test.skipIf(NO_UTIL_LINUX)(
+    "fails closed when systemd scope cleanup cannot be verified",
+    () => {
+      const stateDirectory = temporaryStateDirectory();
+      expect(
+        executeJob(cpuManifest(), ["true"], {
+          stateDirectory,
+          snapshot: probeHostSnapshot(process.cwd()),
+          kernelEnforcement: { available: true },
+          monitorIntervalMs: 25,
+          systemdScopeCleanup: () => false,
+          manifestSource: manifestSourceFor(cpuManifest()),
+        }),
+      ).rejects.toThrow("failed to verify cleanup of systemd scope");
+      expect(readdirSync(stateDirectory)).toEqual([]);
+    },
+  );
 });
 
 // A machine that can never have cgroup enforcement (a rented container, 2026-10-05) may opt into

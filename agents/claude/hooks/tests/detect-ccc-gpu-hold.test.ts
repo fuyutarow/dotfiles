@@ -6,6 +6,9 @@ import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempDir } from "./helpers.ts";
 
+// The hook names the ccc daemon by /proc/<pid>/cmdline (Linux procfs): declared, so macOS SKIPs.
+const NO_PROCFS = !existsSync("/proc/self/cmdline");
+
 const HOOK = "detect-ccc-gpu-hold.ts";
 const MIN = 60_000;
 
@@ -107,33 +110,39 @@ describe("detect-ccc-gpu-hold", () => {
     expect(existsSync(state)).toBe(false);
   });
 
-  test("indexing first observed: starts the clock, no alert yet", () => {
-    const { state, env } = setup({ apps: [daemon.pid!] });
-    expect(runHook(HOOK, payload(), env).stdout).toBe("");
-    const s = stateOf(state);
-    expect(s.pid).toBe(daemon.pid!);
-    expect(s.indexing).toEqual(["/w/qoed"]);
-    expect(
-      Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
-    ).toBeLessThan(MIN);
-  });
+  test.skipIf(NO_PROCFS)(
+    "indexing first observed: starts the clock, no alert yet",
+    () => {
+      const { state, env } = setup({ apps: [daemon.pid!] });
+      expect(runHook(HOOK, payload(), env).stdout).toBe("");
+      const s = stateOf(state);
+      expect(s.pid).toBe(daemon.pid!);
+      expect(s.indexing).toEqual(["/w/qoed"]);
+      expect(
+        Temporal.Now.instant().epochMilliseconds - s.indexingSinceMs,
+      ).toBeLessThan(MIN);
+    },
+  );
 
-  test("indexing past the threshold: alerts, labels util host-wide, never decides, never says stop", () => {
-    const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
-    const r = runHook(HOOK, payload(), env);
-    expect(r.code).toBe(0);
-    const out = Alert.parse(parseJson(r.stdout));
-    expect(out.systemMessage).toContain(
-      "indexing /w/qoed on the GPU for 20 min",
-    );
-    const ctx = out.hookSpecificOutput.additionalContext;
-    expect(ctx).toContain("host-wide GPU util 37%, VRAM 2385/12288 MiB");
-    expect(ctx).toContain("NOT the daemon's load");
-    expect(ctx).toContain("Do NOT stop ccc-daemon");
-    expect(ctx).not.toContain("systemctl --user stop");
-    expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
-    expect(out.hookSpecificOutput.permissionDecision).toBeUndefined();
-  });
+  test.skipIf(NO_PROCFS)(
+    "indexing past the threshold: alerts, labels util host-wide, never decides, never says stop",
+    () => {
+      const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
+      const r = runHook(HOOK, payload(), env);
+      expect(r.code).toBe(0);
+      const out = Alert.parse(parseJson(r.stdout));
+      expect(out.systemMessage).toContain(
+        "indexing /w/qoed on the GPU for 20 min",
+      );
+      const ctx = out.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain("host-wide GPU util 37%, VRAM 2385/12288 MiB");
+      expect(ctx).toContain("NOT the daemon's load");
+      expect(ctx).toContain("Do NOT stop ccc-daemon");
+      expect(ctx).not.toContain("systemctl --user stop");
+      expect(out.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+      expect(out.hookSpecificOutput.permissionDecision).toBeUndefined();
+    },
+  );
 
   test("an IDLE hold never alerts, however long, and resets the streak", () => {
     const { state, env } = setup({
@@ -145,28 +154,34 @@ describe("detect-ccc-gpu-hold", () => {
     expect(stateOf(state).indexingSinceMs).toBe(0);
   });
 
-  test("UserPromptSubmit gets the same alert under its own event name", () => {
-    const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
-    const out = HookEvent.parse(
-      parseJson(runHook(HOOK, payload("UserPromptSubmit"), env).stdout),
-    );
-    expect(out.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
-  });
+  test.skipIf(NO_PROCFS)(
+    "UserPromptSubmit gets the same alert under its own event name",
+    () => {
+      const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
+      const out = HookEvent.parse(
+        parseJson(runHook(HOOK, payload("UserPromptSubmit"), env).stdout),
+      );
+      expect(out.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    },
+  );
 
-  test("a session alerted recently is not re-alerted; another session is", () => {
-    const { env } = setup({
-      apps: [daemon.pid!],
-      state: streak(40, {
-        alerted: { s1: Temporal.Now.instant().epochMilliseconds - 5 * MIN },
-      }),
-    });
-    expect(runHook(HOOK, payload("PreToolUse", "s1"), env).stdout).toBe("");
-    expect(runHook(HOOK, payload("PreToolUse", "s2"), env).stdout).toContain(
-      "CCC-GPU-INDEXING",
-    );
-  });
+  test.skipIf(NO_PROCFS)(
+    "a session alerted recently is not re-alerted; another session is",
+    () => {
+      const { env } = setup({
+        apps: [daemon.pid!],
+        state: streak(40, {
+          alerted: { s1: Temporal.Now.instant().epochMilliseconds - 5 * MIN },
+        }),
+      });
+      expect(runHook(HOOK, payload("PreToolUse", "s1"), env).stdout).toBe("");
+      expect(runHook(HOOK, payload("PreToolUse", "s2"), env).stdout).toContain(
+        "CCC-GPU-INDEXING",
+      );
+    },
+  );
 
-  test("a different daemon PID restarts the clock", () => {
+  test.skipIf(NO_PROCFS)("a different daemon PID restarts the clock", () => {
     const { state, env } = setup({
       apps: [daemon.pid!],
       state: streak(60, { pid: 1 }),

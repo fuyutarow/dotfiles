@@ -38,7 +38,8 @@ function readWrittenWatermark(dir: string) {
 }
 
 function tempDir(prefix: string): string {
-  return mkdtempSync(join(tmpdir(), prefix));
+  // Canonical (macOS: /var is /private/var): the CLI and its children see resolved paths.
+  return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 }
 
 function registerProject(): string {
@@ -137,7 +138,7 @@ function fakeTools(): { bin: string; log: string } {
       path,
       `#!/bin/sh
 printf '%s\\n' '${name} '"$*" >> "$FAKE_SEARCH_LOG"
-if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$PWD" != "$FAKE_SEARCH_EXPECT_CWD" ]; then exit 9; fi
+if [ -n "\${FAKE_SEARCH_EXPECT_CWD:-}" ] && [ "$(pwd -P)" != "$(cd "$FAKE_SEARCH_EXPECT_CWD" && pwd -P)" ]; then exit 9; fi
 if [ "${name}" = ccc ] && [ "$1" = daemon ] && [ "$2" = status ]; then
 if [ "\${FAKE_CCC_INDEXING:-0}" = 1 ]; then
     printf 'Projects:\\n%s [indexing]\\n' "$PWD"
@@ -649,7 +650,9 @@ describe("repo-retrieve route contract", () => {
     const { dir } = registerFreshGitProject();
     const result = run(
       dir,
-      ["concept", "--query", "semantic request", "--timeout-ms", "30"],
+      // 2000, not 30: on macOS spawning the fake ccc alone can exceed 30 ms, which read as exit 124
+      // (timeout) instead of the 75 under test. 75 vs 124 is the assertion, not the bound.
+      ["concept", "--query", "semantic request", "--timeout-ms", "2000"],
       { FAKE_CCC_INDEXING: "1" },
     );
 
@@ -1561,7 +1564,7 @@ describe("repo-retrieve route contract", () => {
       "--query",
       "needle",
       "--timeoutMs",
-      "30",
+      "2000", // the spelling is under test, not the bound (30 ms timed out on macOS)
     ]);
 
     expect(result.code).toBe(0);

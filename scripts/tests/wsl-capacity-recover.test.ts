@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,6 +18,10 @@ import {
   stopCompute,
   type ComputeProcess,
 } from "../wsl-capacity-recover.ts";
+
+// The raw stop reads /proc/<pid>/stat for a process's start time (Linux procfs): declared, so macOS
+// SKIPs this case instead of failing it.
+const NO_PROCFS = !existsSync("/proc/self/stat");
 
 const p = (
   pid: number,
@@ -130,40 +140,45 @@ describe("WSL capacity recovery decisions", () => {
     ).toBe(true);
   });
 
-  test("raw process stop checks starttime and terminates only the selected PID", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "capacity-stop-"));
-    const executable = join(dir, "julia");
-    symlinkSync("/bin/sleep", executable);
-    const proc = Bun.spawn([executable, "60"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    using _cleanup = {
-      [Symbol.dispose]: () => {
-        if (proc.exitCode === null) proc.kill();
-        rmSync(dir, { recursive: true, force: true });
-      },
-    };
-    const ticks = startTicks(readFileSync(`/proc/${proc.pid}/stat`, "utf8"));
-    expect(ticks).not.toBeNull();
-    expect(readFileSync(`/proc/${proc.pid}/comm`, "utf8").trim()).toBe("julia");
-    await stopCompute([
-      {
-        kind: "pid",
-        pid: proc.pid,
-        startTicks: "wrong-generation",
-        comm: "julia",
-      },
-    ]);
-    expect(proc.exitCode).toBeNull();
-    await stopCompute([
-      {
-        kind: "pid",
-        pid: proc.pid,
-        startTicks: ticks ?? "",
-        comm: "julia",
-      },
-    ]);
-    expect(await proc.exited).not.toBe(0);
-  });
+  test.skipIf(NO_PROCFS)(
+    "raw process stop checks starttime and terminates only the selected PID",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "capacity-stop-"));
+      const executable = join(dir, "julia");
+      symlinkSync("/bin/sleep", executable);
+      const proc = Bun.spawn([executable, "60"], {
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      using _cleanup = {
+        [Symbol.dispose]: () => {
+          if (proc.exitCode === null) proc.kill();
+          rmSync(dir, { recursive: true, force: true });
+        },
+      };
+      const ticks = startTicks(readFileSync(`/proc/${proc.pid}/stat`, "utf8"));
+      expect(ticks).not.toBeNull();
+      expect(readFileSync(`/proc/${proc.pid}/comm`, "utf8").trim()).toBe(
+        "julia",
+      );
+      await stopCompute([
+        {
+          kind: "pid",
+          pid: proc.pid,
+          startTicks: "wrong-generation",
+          comm: "julia",
+        },
+      ]);
+      expect(proc.exitCode).toBeNull();
+      await stopCompute([
+        {
+          kind: "pid",
+          pid: proc.pid,
+          startTicks: ticks ?? "",
+          comm: "julia",
+        },
+      ]);
+      expect(await proc.exited).not.toBe(0);
+    },
+  );
 });

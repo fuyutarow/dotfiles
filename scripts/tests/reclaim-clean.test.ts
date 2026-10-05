@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   realpathSync,
@@ -27,6 +28,9 @@ import { z } from "../../agents/hooks/zod.ts";
 import {
   cleanupTempDir,
   freeSpace,
+  linkTargets,
+  prunePlan,
+  unprotected,
   isJuliaBusy,
   isUvBusy,
   resolveHome,
@@ -476,7 +480,7 @@ describe("reclaim-clean.ts CLI", () => {
       idx("go clean -cache"),
       idx("docker builder prune"),
       idx(`rip ${join(fixtureHome, ".cargo", "registry", "src")}`),
-      idx("mise prune --tools"),
+      idx("mise uninstall"),
     ];
     for (const i of order) expect(i).toBeGreaterThanOrEqual(0);
     for (let i = 1; i < order.length; i++) {
@@ -664,5 +668,53 @@ describe("reclaim-clean.ts CLI", () => {
       expect(err).toContain("--home requires a value");
       expect(out).not.toContain("before:");
     }
+  });
+});
+
+describe("reclaim-clean mise step: linux:init core installs survive the prune", () => {
+  const PLAN = [
+    "mise fnox@1.36.0 is prunable: no tracked config or tool stub requires fnox",
+    "mise fnox@1.36.0 [dryrun]                uninstall",
+    "mise fnox@1.36.0 [dryrun]                remove ~/.local/share/mise/installs/fnox/1.36.0",
+    "mise fnox@1.36.0 [dryrun]                remove ~/.cache/mise/fnox/1.36.0",
+    "mise direnv@2.37.1 [dryrun]              remove ~/.local/share/mise/installs/direnv/2.37.1",
+  ].join("\n");
+
+  test("prunePlan reads each tool@version and its INSTALL dir, not its cache dir", () => {
+    expect(prunePlan(PLAN)).toEqual([
+      { id: "fnox@1.36.0", dir: "~/.local/share/mise/installs/fnox/1.36.0" },
+      {
+        id: "direnv@2.37.1",
+        dir: "~/.local/share/mise/installs/direnv/2.37.1",
+      },
+    ]);
+  });
+
+  test("an install a ~/.local/bin link resolves into is kept; the rest is pruned", () => {
+    const home = mkdtempSync(join(tmpdir(), "cache-clean-mise-"));
+    const installs = join(home, ".local/share/mise/installs");
+    mkdirSync(join(installs, "direnv/2.37.1"), { recursive: true });
+    mkdirSync(join(installs, "fnox/1.36.0"), { recursive: true });
+    writeFileSync(join(installs, "direnv/2.37.1/direnv"), "");
+    // linux:init links through the `latest` alias, as measured.
+    symlinkSync("2.37.1", join(installs, "direnv/latest"));
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    symlinkSync(
+      join(installs, "direnv/latest/direnv"),
+      join(home, ".local/bin/direnv"),
+    );
+    const targets = linkTargets([join(home, ".local/bin")]);
+    expect(
+      unprotected(prunePlan(PLAN), targets, home).map((p) => p.id),
+    ).toEqual(["fnox@1.36.0"]);
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  test("a dangling link protects nothing (its install is already gone)", () => {
+    const home = mkdtempSync(join(tmpdir(), "cache-clean-mise-"));
+    mkdirSync(join(home, ".local/bin"), { recursive: true });
+    symlinkSync("/nonexistent/direnv", join(home, ".local/bin/direnv"));
+    expect(linkTargets([join(home, ".local/bin")])).toEqual([]);
+    rmSync(home, { recursive: true, force: true });
   });
 });

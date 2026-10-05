@@ -5,7 +5,9 @@
 //
 // Reclaims disk by clearing package/tool-manager GLOBAL caches (brew/bun/npm/pnpm/yarn/uv/pip/
 // go/docker/cargo/mise/julia/huggingface_hub). Safe — only regenerable caches, and only via each
-// tool's OWN gc/prune command: the tool itself judges what is unused, we never guess. That is the line
+// tool's OWN gc/prune command: the tool itself judges what is unused, we never guess. One
+// exception, measured: mise cannot see linux:init's undeclared core installs, so its prune plan is
+// filtered by the dotfiles links first (runMiseStep). That is the line
 // that keeps this script agent-blind-safe — a target that has no such built-in judgment (rustup
 // toolchains, vscode-server old versions) belongs in `reclaim:toolchains` instead, which writes an
 // explicit safety predicate rather than borrowing one. Best-effort by construction: every step
@@ -26,7 +28,13 @@
 // abort the pass. Parser refusal happens before cleanup: Cleye ordinary unknowns exit 1; local
 // usage errors (including `--__proto__` and missing flag values) exit 2.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
@@ -276,6 +284,95 @@ function runJuliaStep(dryRun: boolean): StepOutcome {
 // cargo: no built-in cache cleaner on stable — rip the regenerable download caches instead
 // (recoverable via rip's graveyard). Requires BOTH cargo and rip; no rm fallback here (matches
 // the original, which has no `|| rm -rf` on this line, only `|| true`).
+// ---- mise: prune, minus what linux:init installed -------------------------------------------
+//
+// `mise prune --tools` removes every installed version no TRACKED config requires. linux:init
+// installs the core tools (Brewfile.core) through mise WITHOUT declaring them anywhere (INV-6: no
+// global [tools]) and links their executables into ~/.local/bin and the runtime bin — so to mise
+// they are all unused. On 2026-10-06 one `reclaim:clean` deleted 28 of them on a plain-Linux box
+// (direnv, rg, fd, rip, gh, herdr, …), leaving dangling links and a shell hook that errored on
+// every prompt. mise's own judgment cannot see this use, so this step adds the one it lacks: an
+// install a dotfiles link resolves into is in use. The rest is uninstalled one by one, as mise
+// itself planned it (`--dry-run`), never the blanket `--yes`.
+
+/** `mise prune --tools --dry-run` output → each prunable `tool@version` and its install dir. */
+export function prunePlan(text: string): { id: string; dir: string }[] {
+  const plan: { id: string; dir: string }[] = [];
+  for (const line of text.split("\n")) {
+    const m = /^mise (\S+) \[dryrun\]\s+remove (\S+\/installs\/\S+)$/u.exec(
+      line.trim(),
+    );
+    if (m?.[1] !== undefined && m[2] !== undefined)
+      plan.push({ id: m[1], dir: m[2] });
+  }
+  return plan;
+}
+
+/** The real paths every symlink in `dirs` resolves to (a dangling one resolves to nothing). */
+export function linkTargets(dirs: readonly string[]): string[] {
+  return dirs.flatMap((dir) =>
+    fromThrowable(() => readdirSync(dir))()
+      .unwrapOr([])
+      .flatMap((name) =>
+        fromThrowable(() => realpathSync(join(dir, name)))()
+          .map((p) => [p])
+          .unwrapOr([]),
+      ),
+  );
+}
+
+/** The plan minus every install a dotfiles link resolves into (`~` in the plan is `home`). */
+export function unprotected(
+  plan: readonly { id: string; dir: string }[],
+  targets: readonly string[],
+  home: string,
+): { id: string; dir: string }[] {
+  return plan.filter(({ dir }) => {
+    const abs = dir.replace(/^~(?=\/)/u, home);
+    const real = fromThrowable(() => realpathSync(abs))().unwrapOr(abs);
+    return !targets.some((t) => t === real || t.startsWith(`${real}/`));
+  });
+}
+
+function runMiseStep(home: string, dryRun: boolean): StepOutcome {
+  if (!toolAvailable("mise")) return "absent";
+  // bounded: mise's own planning pass, local only.
+  const planned = fromThrowable(Bun.spawnSync)(
+    ["mise", "prune", "--tools", "--dry-run"],
+    { stdout: "pipe", stderr: "pipe", timeout: 60_000 },
+  );
+  if (planned.isErr() || planned.value.exitCode !== 0) return "failed";
+  const out = `${planned.value.stdout?.toString() ?? ""}${planned.value.stderr?.toString() ?? ""}`;
+  const plan = prunePlan(out);
+  const targets = linkTargets([
+    join(home, ".local/bin"),
+    join(home, ".local/share/dotfiles/runtime/bin"),
+  ]);
+  const prune = unprotected(plan, targets, home);
+  const kept = plan.filter((p) => !prune.includes(p)).map((p) => p.id);
+  if (kept.length > 0)
+    console.log(
+      `  mise: kept ${kept.length} linux:init core install(s): ${kept.join(", ")}`,
+    );
+  if (dryRun) {
+    console.log(
+      `[dry-run] would run: mise uninstall ${prune.length === 0 ? "(nothing)" : prune.map((p) => p.id).join(" ")}`,
+    );
+    return "dry-run";
+  }
+  console.log(
+    `• mise uninstall (prunable, not linux:init core): ${prune.length}`,
+  );
+  if (prune.length === 0) return "ok";
+  // bounded: mirrors the other steps — the outcome is reported, never acted on.
+  return fromThrowable(Bun.spawnSync)(
+    ["mise", "uninstall", ...prune.map((p) => p.id)],
+    { stdout: "inherit", stderr: "inherit" },
+  )
+    .map((proc): StepOutcome => (proc.exitCode === 0 ? "ok" : "failed"))
+    .unwrapOr("failed");
+}
+
 function runCargoStep(home: string, dryRun: boolean): StepOutcome {
   if (!toolAvailable("cargo") || !toolAvailable("rip")) return "absent";
   // Template-literal concatenation, NOT path.join: the original shell body builds these paths
@@ -452,17 +549,7 @@ function main(): void {
     ),
   );
   record("cargo", runCargoStep(home, dryRun));
-  record(
-    "mise",
-    runSimpleStep(
-      {
-        tool: "mise",
-        label: "mise prune --tools",
-        cmd: ["mise", "prune", "--tools", "--yes"],
-      },
-      dryRun,
-    ),
-  );
+  record("mise", runMiseStep(home, dryRun));
   record("julia", runJuliaStep(dryRun));
   record("huggingface_hub", runHuggingfaceStep(dryRun));
 

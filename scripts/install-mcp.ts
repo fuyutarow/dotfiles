@@ -302,7 +302,53 @@ function registerWithCodex(
     plan.url !== ""
       ? ["mcp", "add", plan.name, "--url", plan.url]
       : ["mcp", "add", plan.name, "--", ...plan.execTokens];
-  runOrPrintAdd(codexBin, addArgs, dryRun);
+  if (dryRun || plan.url === "") {
+    runOrPrintAdd(codexBin, addArgs, dryRun);
+    return;
+  }
+  addCodexHttpServer(codexBin, plan.name, addArgs);
+}
+
+// `codex mcp add --url` writes the server at once, then starts an OAuth login for a server that
+// offers one and waits for a browser to finish it — about five minutes on a headless box before
+// "deadline has elapsed" (measured 2026-10-06 on a rented box: 4:56). That wait is the login, not
+// the registration. So: bound the add, then ask codex itself whether the server is registered.
+// Registered without a login is a stated state, not a failure and not a silent success.
+const CODEX_ADD_BOUND_MS = 30_000;
+function addCodexHttpServer(
+  codexBin: string,
+  name: string,
+  addArgs: string[],
+): void {
+  const add = fromThrowable(Bun.spawnSync)([codexBin, ...addArgs], {
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    timeout: CODEX_ADD_BOUND_MS,
+  });
+  if (add.isOk() && add.value.exitCode === 0) return;
+  // bounded: a list reads the config file; 15 s is generous.
+  const list = fromThrowable(Bun.spawnSync)([codexBin, "mcp", "list"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+    timeout: 15_000,
+  });
+  const listed =
+    list.isOk() &&
+    (list.value.stdout?.toString() ?? "")
+      .split("\n")
+      .some((line) => line.trim().split(/\s+/u)[0] === name);
+  if (!listed) {
+    throw new AbortError(
+      `${codexBin} ${addArgs.join(" ")} did not register '${name}'`,
+      add.isOk() ? (add.value.exitCode ?? 1) : 127,
+    );
+  }
+  print(
+    `codex: '${name}' registered; its OAuth login did not finish within ${CODEX_ADD_BOUND_MS / 1000}s ` +
+      `(no browser here) — run \`codex mcp login ${name}\` where one is, if the server needs it`,
+  );
 }
 
 /** One undeclared-but-live server's removal for MCP_PRUNE=1 — claude first, then codex when a

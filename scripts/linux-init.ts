@@ -119,6 +119,9 @@ await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
 // installer into ~/.local/bin (mise.toml install:ai-clis says why not brew/npm).
 say("agent CLIs (Claude Code, Codex)");
 await $`${MISE} run install:ai-clis`.cwd(DOTFILES);
+// Their MCP servers (.mcp.json), registered in Claude Code AND Codex. Codex starts an OAuth login
+// a headless box cannot finish; install-mcp bounds that and says so (scripts/install-mcp.ts).
+await $`${MISE} run cc:install-mcp`.cwd(DOTFILES);
 
 say("sheldon plugins");
 await $`${join(BIN, "sheldon")} lock`;

@@ -1,0 +1,14 @@
+# Linked to ~/.bashrc by scripts/link-dots.ts (Linux). Where bash is the login shell (sol), sshd
+# runs `ssh host 'cmd'` — and `herdr --remote`'s bridge — as `bash -c`, and bash reads only this
+# file there. So it gives the same thin environment zsh/zshenv gives zsh: user CLIs in ~/.local/bin
+# (herdr, mise, claude, the rootless @core tools) and bun's global bins in ~/.bun/bin. Nothing that
+# prints or hangs. An interactive login is handed to zsh by bash_profile before this matters.
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH" ;;
+esac
+export PATH
+# Same reason as in zsh/zshenv (a host with unreadable files in /etc/pki/tls/certs).
+if [ -z "${SSL_CERT_FILE:-}" ] && [ -d /etc/pki/tls/certs ] && [ -r /etc/ssl/certs/ca-certificates.crt ]; then
+  export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+fi

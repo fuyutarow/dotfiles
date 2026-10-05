@@ -63,6 +63,11 @@ const LINKS: readonly (readonly [When, string, string])[] = [
   // runs and no alias exists (2026-10-05, Vast box: `l`/`p`/`h` not found).
   ["not-mac", "zsh/zprofile.wsl", ".zprofile"],
   ["all", "sheldon", ".config/sheldon"],
+  // bash where it is still the login shell and chsh is not ours (a shared server, sol): the login
+  // is handed to zsh, and `ssh host 'cmd'` (read: herdr --remote) gets zshenv's PATH. Plain Linux
+  // only — WSL's login shell is zsh and its distro ~/.bashrc is not ours to move aside.
+  ["linux", "zsh/bash_profile", ".bash_profile"],
+  ["linux", "zsh/bashrc", ".bashrc"],
 
   // --- git (per-OS identity/credential include) ---
   ["all", "git/gitconfig", ".gitconfig"],

@@ -1,0 +1,10 @@
+# Linked to ~/.bash_profile by scripts/link-dots.ts (Linux). Matters only where bash is still the
+# LOGIN shell and chsh is not ours — a shared server (sol, 2026-10-05). It keeps the system's
+# ~/.profile, then hands an interactive login to zsh, so the shell, aliases and prompt are the same
+# as everywhere else. A non-interactive `ssh host 'cmd'` never reads this file (see bashrc).
+[ -f "$HOME/.profile" ] && . "$HOME/.profile"
+if [ -t 0 ] && command -v zsh > /dev/null 2>&1; then
+  SHELL=$(command -v zsh)
+  export SHELL
+  exec zsh -l
+fi

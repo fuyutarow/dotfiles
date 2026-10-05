@@ -46,14 +46,10 @@ console.log(
   `上記 ${graves.length} 箇所の中身を完全に削除します。復元はできません。`,
 );
 
-process.stdout.write("続けるなら yes と入力: ");
-const ans = (
-  await new Promise<string>((resolve) => {
-    process.stdin.once("data", (d) => {
-      resolve(d.toString());
-    });
-  })
-).trim();
+// prompt() reads ONE line and lets go of stdin. The previous `process.stdin.once("data")` left
+// stdin open after the answer, so the process printed "✅ purge 完了" and then never exited — a
+// finished command that looked hung (a rented box, 2026-10-06). null = EOF: no answer is "no".
+const ans = (prompt("続けるなら yes と入力:") ?? "").trim();
 
 if (ans !== "yes") {
   console.log("中止しました。");

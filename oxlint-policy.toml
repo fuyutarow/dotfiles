@@ -163,6 +163,15 @@ bad = "declare function g(): void;\nexport function f(): void {\n  try {\n    g(
 good = "declare function g(): void;\nexport function f(): void {\n  g();\n}\n"
 
 [[custom]]
+id = "no-stdin-listener"
+kind = "syntax"
+target = "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]"
+since = "2026-10-06"
+message = "a listener on process.stdin keeps the process alive after it has its answer: reclaim-purge printed '✅ purge 完了' and then hung (2026-10-06). Read one line with prompt() (null on EOF), all of stdin with Bun.stdin.text() (hooks: readStdinJson)."
+bad = "process.stdin.once(\"data\", (d: Buffer) => {\n  void d;\n});\nexport {};\n"
+good = "export const answer = prompt(\"continue?\") ?? \"\";\n"
+
+[[custom]]
 id = "no-type-predicate"
 kind = "syntax"
 target = "TSTypePredicate"

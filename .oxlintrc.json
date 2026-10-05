@@ -87,6 +87,10 @@
         "message": "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
       },
       {
+        "selector": "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]",
+        "message": "a listener on process.stdin keeps the process alive after it has its answer: reclaim-purge printed '✅ purge 完了' and then hung (2026-10-06). Read one line with prompt() (null on EOF), all of stdin with Bun.stdin.text() (hooks: readStdinJson)."
+      },
+      {
         "selector": "TSTypePredicate",
         "message": "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
       },

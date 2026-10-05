@@ -23,15 +23,17 @@ const Report = z.looseObject({
   number_of_files: z.number(),
 });
 
-const policy = loadPolicy();
+const loaded = await loadPolicy();
+if (!loaded.ok) throw new Error(`oxlint-policy.toml: ${loaded.error}`);
+const policy = loaded.value;
 const scratch = mkdtempSync(join(tmpdir(), "oxlint-policy-"));
 afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-function lint(rule: CustomRule, which: "bad" | "good") {
-  const file = join(scratch, `${rule.id}.${which}.ts`);
-  writeFileSync(file, rule[which]);
+function lint(rule: CustomRule, which: "bad" | "good", i: number) {
+  const file = join(scratch, `${rule.id}.${which}.${i}.ts`);
+  writeFileSync(file, rule[which][i] ?? "");
   const r = Bun.spawnSync(
     ["bunx", "--bun", "oxlint", "-c", OXLINTRC_PATH, "--format", "json", file],
     { stdout: "pipe", stderr: "pipe", timeout: 60_000 },
@@ -56,17 +58,20 @@ describe("oxlint-policy: the committed .oxlintrc.json is a fresh render", () => 
   });
 });
 
-describe("oxlint-policy: every custom ban fires on bad and is silent on good", () => {
-  test.each(policy.custom.map((c) => [c.id, c] as const))(
+describe("oxlint-policy: every custom ban fires on each bad and is silent on each good", () => {
+  const cases = policy.custom.flatMap((c) =>
+    (["bad", "good"] as const).flatMap((which) =>
+      c[which].map((_, i) => [`${c.id} ${which}[${i}]`, c, which, i] as const),
+    ),
+  );
+  test.each(cases)(
     "%s",
-    (_id, rule) => {
-      const bad = lint(rule, "bad");
-      expect(bad.files).toBe(1);
-      expect(bad.hits).toBeGreaterThan(0);
-      const good = lint(rule, "good");
-      expect(good.files).toBe(1);
-      expect(good.hits).toBe(0);
+    (_name, rule, which, i) => {
+      const r = lint(rule, which, i);
+      expect(r.files).toBe(1);
+      if (which === "bad") expect(r.hits).toBeGreaterThan(0);
+      else expect(r.hits).toBe(0);
     },
-    120_000,
-  ); // two oxlint runs (each bounded at 60 s); 5 s timed out under load average 22
+    60_000,
+  ); // one oxlint run, bounded at 60 s
 });

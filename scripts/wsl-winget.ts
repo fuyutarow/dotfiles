@@ -149,6 +149,20 @@ const JsonRecordList = z.array(JsonRecord);
 const SourceName = z.object({ SourceDetails: z.object({ Name: z.string() }) });
 const PackageId = z.object({ PackageIdentifier: z.string() });
 
+// A winget export that is not the expected shape writes nothing (zod first: safeParse, then exit).
+function must<S extends z.ZodType>(
+  schema: S,
+  value: unknown,
+  what: string,
+): z.output<S> {
+  const checked = schema.safeParse(value);
+  if (checked.success) return checked.data;
+  console.log(
+    `  ${what} is not the expected shape — nothing written: ${checked.error.message}`,
+  );
+  return process.exit(1);
+}
+
 async function dump(): Promise<void> {
   const { win, wsl } = await scratch();
   console.log(
@@ -176,23 +190,30 @@ async function dump(): Promise<void> {
     );
     process.exit(1);
   }
-  const doc = jsonOf(JsonRecord).parse(await Bun.file(wsl).text());
+  const doc = must(
+    jsonOf(JsonRecord),
+    await Bun.file(wsl).text(),
+    "the export",
+  );
   // Every record is spread, never rebuilt from a schema's output: the tracked file keeps winget's
   // own key order and every field this script does not read.
-  const sources = (JsonRecordList.nullish().parse(doc.Sources) ?? []).map(
-    (src) => {
-      const packages = JsonRecordList.parse(src.Packages)
-        .map((p) => ({ id: PackageId.parse(p).PackageIdentifier, p }))
-        // Stable ordering so the tracked file diffs by content, not by winget's enumeration order.
-        .toSorted((a, b) => a.id.localeCompare(b.id))
-        .map((e) => e.p);
-      return {
-        name: SourceName.parse(src).SourceDetails.Name,
-        count: packages.length,
-        src: { ...src, Packages: packages },
-      };
-    },
-  );
+  const sources = (
+    must(JsonRecordList.nullish(), doc.Sources, "Sources") ?? []
+  ).map((src) => {
+    const packages = must(JsonRecordList, src.Packages, "a source's Packages")
+      .map((p) => ({
+        id: must(PackageId, p, "a package").PackageIdentifier,
+        p,
+      }))
+      // Stable ordering so the tracked file diffs by content, not by winget's enumeration order.
+      .toSorted((a, b) => a.id.localeCompare(b.id))
+      .map((e) => e.p);
+    return {
+      name: must(SourceName, src, "a source").SourceDetails.Name,
+      count: packages.length,
+      src: { ...src, Packages: packages },
+    };
+  });
   const total = sources.reduce((n, s) => n + s.count, 0);
   const sortedSources = sources.toSorted((a, b) =>
     a.name.localeCompare(b.name),

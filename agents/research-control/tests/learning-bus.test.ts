@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import {
   bodySha256,
   checkLearningBus,
   nearestRankPercentile,
 } from "../learning-bus.ts";
+import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 
 const digest = (digit: string) => digit.repeat(64);
 const at = (second: number) =>
@@ -643,7 +644,7 @@ describe("cross-section-learning-bus/v1", () => {
       throw new Error("expected a seeded packet");
     const packetBody = packetEnvelope.body;
     packetBody.sourceReceiptDigests = [
-      ...z.array(z.string()).parse(packetBody.sourceReceiptDigests),
+      ...decoded(z.array(z.string()), packetBody.sourceReceiptDigests),
       digest("f"),
     ];
     packetEnvelope.sha256 = bodySha256(packetBody)!;
@@ -711,7 +712,7 @@ describe("cross-section-learning-bus/v1", () => {
     expect(names).toEqual(["transfer-without-commit.json"]);
     for (const name of names) {
       const text = readFileSync(resolve(directory, name), "utf8");
-      const result = checkLearningBus(jsonText.parse(text));
+      const result = checkLearningBus(decodedJson(z.json(), text));
       expect(result.schema).toBe("cross-section-learning-bus/v1");
       expect(result.findings.map((finding) => finding.code)).toContain(
         "TRANSFER_WITHOUT_COMMIT",

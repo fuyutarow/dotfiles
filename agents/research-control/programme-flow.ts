@@ -389,7 +389,7 @@ export function checkProgrammeFlow(rawInput: unknown): FlowResult {
   const counts: R = record(input.counts) ?? {};
   if (
     ["candidateInventory", "builds", "searchReceipts", "learningCommits"].some(
-      (key) => key in counts,
+      (key) => Object.hasOwn(counts, key),
     )
   )
     add(

@@ -1,5 +1,6 @@
-// `mise run link:dots` — the single source of truth for dotfile symlinks (macOS, WSL, plain Linux).
-// Do not duplicate link lists anywhere else; add new links to LINKS below. Layout is topic-first:
+// `mise run link:dots` — realizes the dotfile links (macOS, WSL, plain Linux) declared in
+// scripts/config-registry.ts (LINKS, ETC_LINKS, RETIRED, TOOL_OWNED), then renders the generated half
+// of $HOME. Do not duplicate link lists anywhere else; add a link to LINKS there. Layout is topic-first:
 // one tool = one directory. Consumer: a human or agent reading verdict lines
 // (linked / skip / pruned / drift), and `mise run doctor`, which reads the `drift: ` lines.
 //
@@ -39,6 +40,13 @@ import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import {
+  ETC_LINKS,
+  LINKS,
+  RETIRED,
+  TOOL_OWNED,
+  type When,
+} from "./config-registry.ts";
 
 type Os = "mac" | "wsl" | "linux";
 type Mode = "safe" | "force" | "check";
@@ -49,161 +57,6 @@ export type Ctx = {
   mode: Mode;
   drift: string[];
 };
-
-// Where a link applies. Required on every row: no row is "everywhere" by omission.
-type When = "all" | "mac" | "wsl" | "linux" | "not-mac";
-
-// [when, repo-relative source, home-relative destination]
-const LINKS: readonly (readonly [When, string, string])[] = [
-  // --- zsh ---
-  ["all", "zsh/zshenv", ".zshenv"],
-  ["all", "zsh/zshrc", ".zshrc"],
-  ["mac", "zsh/zprofile.mac", ".zprofile"],
-  // zprofile.wsl is the Linux login profile (brew shellenv, PATH, sheldon → aliases); its WSL-only
-  // parts are guarded. Plain Linux gets it too: without it linuxbrew is off PATH, sheldon never
-  // runs and no alias exists (2026-10-05, Vast box: `l`/`p`/`h` not found).
-  ["not-mac", "zsh/zprofile.wsl", ".zprofile"],
-  ["all", "sheldon", ".config/sheldon"],
-  // bash where it is still the login shell and chsh is not ours (a shared server, sol): the login
-  // is handed to zsh, and `ssh host 'cmd'` (read: herdr --remote) gets zshenv's PATH. Plain Linux
-  // only — WSL's login shell is zsh and its distro ~/.bashrc is not ours to move aside.
-  ["linux", "zsh/bash_profile", ".bash_profile"],
-  ["linux", "zsh/bashrc", ".bashrc"],
-
-  // --- git (per-OS identity/credential include) ---
-  // git reads BOTH ~/.config/git/config and ~/.gitconfig. The repo's config is linked to the
-  // XDG one, which git only reads; ~/.gitconfig is TOOL_OWNED below, so `git config --global`
-  // (and gh/lfs, which call it) writes there, not through a link into the repo (INV-8, measured).
-  ["all", "git/gitconfig", ".config/git/config"],
-  ["mac", "git/local.mac", ".local-gitconfig"],
-  ["wsl", "git/local.wsl", ".local-gitconfig"],
-
-  // --- ssh (client POLICY only; the host inventory stays machine-local) ---
-  // ssh/config Includes ~/.ssh/config.local FIRST, and that file holds HostName/Port/User — a
-  // tailnet map that must never enter this PUBLIC repo. A missing config.local is not an error
-  // (ssh -G still resolves, exit 0), so a fresh clone links cleanly and simply has no hosts yet.
-  // The smart-open attach file is linked separately: it needs OpenSSH >= 9.9 (linkSshAttach).
-  ["all", "ssh/config", ".ssh/config"],
-
-  // --- tmux / herdr (herdr: the config file only — ~/.config/herdr/ also holds live sockets) ---
-  ["all", "tmux/tmux.conf", ".tmux.conf"],
-  ["all", "herdr/config.toml", ".config/herdr/config.toml"],
-
-  // --- claude code (user-level config; the repo's own project .claude/ is separate) ---
-  [
-    "all",
-    "agents/claude/statusline-command.ts",
-    ".claude/statusline-command.ts",
-  ],
-  ["all", "agents/claude/hooks", ".claude/hooks"],
-  // ~/.claude/CLAUDE.md, ~/.claude/settings.json and ~/.codex/hooks.json are RENDERED, not linked:
-  // each is a function of several declarations (scripts/render-home.ts, renderHome below).
-  ["all", "agents/claude/keybindings.json", ".claude/keybindings.json"],
-  // Per-file, NOT the whole ~/.claude/agents dir — that directory also holds an unrelated
-  // personal agent this repo does not own. Each Claude row of the dispatch roster is its own link.
-  [
-    "all",
-    "agents/claude/agents/sonnet-high.md",
-    ".claude/agents/sonnet-high.md",
-  ],
-  [
-    "all",
-    "agents/claude/agents/opus-medium.md",
-    ".claude/agents/opus-medium.md",
-  ],
-  [
-    "all",
-    "agents/claude/agents/sonnet-medium.md",
-    ".claude/agents/sonnet-medium.md",
-  ],
-
-  // --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
-  ["all", "agents/codex/hooks", ".codex/hooks"],
-
-  // --- vendor-neutral hooks (the hook analogue of ~/.agents/skills) ---
-  // hooks.toml there is wired into BOTH the rendered ~/.claude/settings.json and ~/.codex/hooks.json
-  // by scripts/render-home.ts, and both call them through this one path.
-  ["all", "agents/hooks", ".agents/hooks"],
-
-  // NOTE for every systemd unit below: `systemctl --user disable <unit>` DELETES the symlink placed
-  // in ~/.config/systemd/user/ (systemd treats any symlink in the unit path as an enablement link),
-  // so a disable leaves the unit `not-found`, not `disabled`. Re-run `mise run link:dots` after one.
-  //
-  // --- cocoindex-code (declarative global settings = no interactive `ccc init`) ---
-  [
-    "all",
-    "cocoindex/global_settings.yml",
-    ".cocoindex_code/global_settings.yml",
-  ],
-  // The daemon needs a systemd owner or it is spawned uncapped by whichever client calls first.
-  // Linking the unit also arms the client-side guard in zsh/zshenv. Activate: mise run wsl:ccc-daemon
-  [
-    "wsl",
-    "cocoindex/ccc-daemon.service.wsl",
-    ".config/systemd/user/ccc-daemon.service",
-  ],
-  [
-    "wsl",
-    "cocoindex/repo-retrieve-rerank.socket.wsl",
-    ".config/systemd/user/repo-retrieve-rerank.socket",
-  ],
-  [
-    "wsl",
-    "cocoindex/repo-retrieve-rerank.service.wsl",
-    ".config/systemd/user/repo-retrieve-rerank.service",
-  ],
-  [
-    "wsl",
-    "wsl/wsl-capacity-recover.service.wsl",
-    ".config/systemd/user/wsl-capacity-recover.service",
-  ],
-  [
-    "wsl",
-    "wsl/wsl-capacity-recover.timer.wsl",
-    ".config/systemd/user/wsl-capacity-recover.timer",
-  ],
-
-  // --- update steps, process monitor, jj ---
-  ["all", "topgrade/topgrade.toml", ".config/topgrade.toml"],
-  ["all", "bottom/bottom.toml", ".config/bottom/bottom.toml"],
-  // jj reads every conf.d/*.toml beside its user config; `jj config set --user` writes config.toml
-  // (TOOL_OWNED below) — but conf.d when config.toml is missing, hence the empty file (measured).
-  ["all", "jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
-
-  // --- lazygit (config dir differs by OS) ---
-  [
-    "mac",
-    "lazygit/config.yml",
-    "Library/Application Support/lazygit/config.yml",
-  ],
-  ["not-mac", "lazygit/config.yml", ".config/lazygit/config.yml"],
-
-  // --- karabiner (whole directory; a real one is moved aside only under --force) ---
-  ["mac", "karabiner", ".config/karabiner"],
-
-  // --- smart-open receiver (macOS: the machine you sit at; opens URLs forwarded from remote `o`) ---
-  [
-    "mac",
-    "smart-open/smart-open-receiver.plist.mac",
-    "Library/LaunchAgents/dotfiles.smart-open-receiver.plist",
-  ],
-];
-
-// WSL system config under /etc: needs root, so sudo is attempted only when a link is missing (a
-// pull must not re-prompt). Symlinks, not copies: each reader follows links fine.
-// .wslconfig is NOT here on purpose: the Windows-side WSL service cannot follow a WSL symlink, so
-// it is COPIED by `mise run wsl:wslconfig` (scripts/wsl-wslconfig.ts).
-const ETC_LINKS: readonly (readonly [string, string, string])[] = [
-  ["wsl/wsl.conf", "/etc/wsl.conf", "restart the distro"],
-  // 50- so it applies after the distro's own 10-* drop-ins and before 99-sysctl.conf.
-  ["wsl/sysctl.conf", "/etc/sysctl.d/50-dotfiles.conf", "sudo sysctl --system"],
-  // Lets the newest ssh connection re-bind smart-open's forwarded socket.
-  [
-    "wsl/sshd-dotfiles.conf",
-    "/etc/ssh/sshd_config.d/50-dotfiles.conf",
-    "sudo systemctl reload ssh",
-  ],
-];
 
 // Prune: a link this script USED to create keeps pointing into the repo after the source is
 // renamed or deleted. Only symlinks INTO this repo that no longer resolve are removed — foreign or
@@ -221,29 +74,6 @@ const PRUNE_DIRS = [
   ".config",
   ".ssh/config.d",
 ] as const;
-
-// Retired destinations: links that still RESOLVE but must not exist (the dangling prune cannot see
-// them). Until 2026-09-13 three .ts CLIs were hand-symlinked into ~/.local/bin; they are now
-// package.json `bin` entries that `bun link` (mise run deps) installs into ~/.bun/bin.
-// ~/.agents/.skill-lock.json was a link into agents/skills-lock.json so that `skills add -g`
-// wrote provenance THROUGH it into the repo; since 2026-10-06 (INV-8) scripts/vendor-skill.ts runs
-// the CLI in a throwaway HOME and writes the ledger itself, so no deployed path writes the repo.
-const RETIRED = [
-  ".agents/.skill-lock.json",
-  // Linked until 2026-10-06; the tools WRITE these (measured), so they became TOOL_OWNED.
-  ".gitconfig",
-  ".config/jj/config.toml",
-  ".local/bin/repo-search",
-  ".local/bin/agent-resource-run",
-  ".local/bin/serena-foreground",
-] as const;
-
-// Tool-owned: files a tool rewrites on command (`git config --global`, `jj config set --user`),
-// so they must be REAL machine-local files, never links into the repo — the repo's half rides in a
-// read-only path above (INV-8: data flows one way). Created empty when missing; never edited.
-// Measured 2026-10-06 in a throwaway HOME: with a link here, both commands rewrote the repo file
-// and kept the link; with the layout above, both wrote only this file.
-const TOOL_OWNED = [".gitconfig", ".config/jj/config.toml"] as const;
 
 class UsageError extends Error {}
 

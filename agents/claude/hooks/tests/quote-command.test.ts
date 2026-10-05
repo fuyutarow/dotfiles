@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
+import { decoded } from "../../../hooks/tests/decode.ts";
 
 const Output = z.object({ decision: z.string(), reason: z.string() });
 
@@ -41,7 +42,7 @@ function runQuote(
     home,
     turns,
     result,
-    output: Output.parse(parseJson(result.stdout)),
+    output: decoded(Output, parseJson(result.stdout)),
   };
 }
 

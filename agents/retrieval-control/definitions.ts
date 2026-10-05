@@ -292,11 +292,13 @@ function mdText(d: Definition): string {
 const mdName = (text: string) =>
   `${createHash("sha1").update(text).digest("hex").slice(0, 20)}.md`;
 
-// A JSON file's content, decoded and validated by the caller's schema in one zod step.
-const readJsonOf = <S extends z.ZodType>(
-  schema: S,
-  path: string,
-): z.output<S> => jsonOf(schema).parse(readFileSync(path, "utf8"));
+// A JSON file's content, decoded and validated by the caller's schema in one zod step. A file that
+// does not match is an error NAMING the file (callers already treat a throw here as "no catalog").
+function readJsonOf<S extends z.ZodType>(schema: S, path: string): z.output<S> {
+  const r = jsonOf(schema).safeParse(readFileSync(path, "utf8"));
+  if (!r.success) throw new Error(`${path}: ${r.error.message}`);
+  return r.data;
+}
 
 const DefsCacheSchema = z.object({
   files: z.record(
@@ -496,7 +498,12 @@ async function recall(
   );
   if (r.exitCode !== 0)
     throw new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`);
-  return jsonOf(SearchSchema).parse(r.stdout).results;
+  const found = jsonOf(SearchSchema).safeParse(r.stdout);
+  if (!found.success)
+    throw new Error(
+      `catalog search printed no result list: ${found.error.message}`,
+    );
+  return found.data.results;
 }
 
 const rerankSocket = (): string =>

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { decisionOf, runHook } from "./helpers.ts";
+import { decoded } from "../../../hooks/tests/decode.ts";
 
 const HOOK = "assign-command.ts";
 const Block = z.object({ decision: z.string(), reason: z.string() });
@@ -37,7 +38,7 @@ describe("assign-command: usage errors block without a model turn", () => {
   test("/assign with no role -> block, usage reason", () => {
     const r = runHook(HOOK, payload("/assign"));
     expect(r.code).toBe(0);
-    const out = Block.parse(parseJson(r.stdout));
+    const out = decoded(Block, parseJson(r.stdout));
     expect(out.decision).toBe("block");
     expect(out.reason).toMatch(/usage/iu);
   });
@@ -45,7 +46,7 @@ describe("assign-command: usage errors block without a model turn", () => {
   test("/assign with a malformed role -> block, shape reason", () => {
     const r = runHook(HOOK, payload("/assign BAD_ROLE"));
     expect(r.code).toBe(0);
-    const out = Block.parse(parseJson(r.stdout));
+    const out = decoded(Block, parseJson(r.stdout));
     expect(out.decision).toBe("block");
     expect(out.reason).toContain("BAD_ROLE");
   });

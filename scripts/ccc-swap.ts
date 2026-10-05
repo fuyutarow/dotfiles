@@ -1273,8 +1273,8 @@ async function cmdRollback(
     // best effort
     const markerResult = await fromAsyncThrowable(async () => {
       const text = await readFile(markerPath, "utf8");
-      const marker = jsonOf(CutoverMarkerSchema).parse(text);
-      return marker.previousModel ?? null;
+      const marker = jsonOf(CutoverMarkerSchema).safeParse(text);
+      return marker.success ? (marker.data.previousModel ?? null) : null;
     })();
     if (markerResult.isOk()) previousModel = markerResult.value;
   }

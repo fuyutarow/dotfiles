@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import {
   buildSampledLaunch,
   buildSystemdLaunch,
@@ -44,6 +44,7 @@ import {
   type ResourceManifest,
   type Reservation,
 } from "../agent-resource-run.ts";
+import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 
 // Platform requirements, declared — a test that needs a facility this machine lacks is SKIPPED
 // and counted as such, never failed for that reason (macOS has no util-linux setsid/taskset; a
@@ -55,7 +56,7 @@ const NO_CGROUP_SCOPES = NO_UTIL_LINUX || !probeKernelEnforcement().available;
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
 
-const parseJson = (text: string): unknown => jsonText.parse(text);
+const parseJson = (text: string): unknown => decodedJson(z.json(), text);
 
 // The fields of an admission receipt the tests read directly. Assertions on the whole receipt
 // (JSON.stringify round-trip, toMatchObject) stay on the unparsed value, whose key order is the
@@ -1064,7 +1065,7 @@ describe("admission receipt", () => {
         verifyAdmissionReceipt(outerPayload, outerReceiptSha256, outerCgroup),
       ).toBe(true);
       const outerReceiptRaw = parseJson(outerPayload);
-      const outerReceipt = ReceiptFieldsSchema.parse(outerReceiptRaw);
+      const outerReceipt = decoded(ReceiptFieldsSchema, outerReceiptRaw);
       expect(JSON.stringify(outerReceiptRaw)).toBe(outerPayload);
       expect(outerReceiptRaw).toMatchObject({
         schema: 1,
@@ -1124,7 +1125,8 @@ describe("admission receipt", () => {
       expect(admit).toContain("manifest_sha256=");
       expect(admit).toContain("receipt_sha256=");
 
-      const saved = SavedChildSchema.parse(
+      const saved = decoded(
+        SavedChildSchema,
         parseJson(readFileSync(receiptPath, "utf8")),
       );
       expect(saved.verified).toBe(true);
@@ -1162,7 +1164,7 @@ describe("admission receipt", () => {
         verifyAdmissionReceipt(innerPayload, innerReceiptSha256, saved.cgroup),
       ).toBe(true);
       const innerReceiptRaw = parseJson(innerPayload);
-      const innerReceipt = ReceiptFieldsSchema.parse(innerReceiptRaw);
+      const innerReceipt = decoded(ReceiptFieldsSchema, innerReceiptRaw);
       expect(JSON.stringify(innerReceiptRaw)).toBe(innerPayload);
       expect(innerReceiptRaw).toMatchObject({
         schema: 1,
@@ -1313,7 +1315,7 @@ describe("bounded execution", () => {
 
       const peakPath = `${manifestPath}.peak.json`;
       const peakRaw = parseJson(readFileSync(peakPath, "utf8"));
-      const peak = PeakFieldsSchema.parse(peakRaw);
+      const peak = decoded(PeakFieldsSchema, peakRaw);
       expect(peakRaw).toMatchObject({
         schema: 1,
         job_id: manifest.job_id,

@@ -95,8 +95,8 @@
         "message": "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
       },
       {
-        "selector": "BinaryExpression[operator='in'][left.type='Literal']",
-        "message": "probing with `\"key\" in value` is banned (writing-typescript): parse the value with a zod schema (safeParse); for your own union use a discriminant tag."
+        "selector": "BinaryExpression[operator='in']",
+        "message": "the `in` operator is banned (writing-typescript): a key probe is an unchecked shape claim. Parse the value with a zod schema (safeParse); for your own union use a discriminant tag; for a record's own key, Object.hasOwn(record, key)."
       },
       {
         "selector": "TSAsExpression:not([typeAnnotation.typeName.name='const'])",
@@ -107,11 +107,15 @@
         "message": "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
       },
       {
-        "selector": "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.property.name='codec'] *)",
+        "selector": "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)",
         "message": "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
       },
       {
-        "selector": "CallExpression[callee.property.name='json'][arguments.length=0]",
+        "selector": "CallExpression[callee.property.name='parse']:not([callee.object.name='JSON']):not([callee.object.object.name='Bun'])",
+        "message": "a throwing `.parse(...)` is banned (zod first): use `.safeParse(...)` and handle the failure as a value — `jsonOf(Schema).safeParse(text)` for JSON text, `Schema.safeParse(value)` otherwise. `jsonText.parse` and `jsonOf(..).parse` are the same throw. The one exemption is Bun's own text parsers (Bun.TOML.parse, Bun.YAML.parse — no safe variant): call one inside attempt() and pass its value to Schema.safeParse."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])",
         "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
       }
     ],

@@ -140,15 +140,19 @@ export function detectStowaways(
 // The ledger is read as a record: only `skills` is looked at, every other key is carried through.
 const LedgerDocSchema = z.record(z.string(), z.unknown());
 
-/** The ledger with `entries` merged into its `skills` (every other key and entry kept, `skills`
- * where it was). Throws when the committed ledger is unreadable — provenance is never guessed. */
+const LedgerSchema = z.looseObject({ skills: LedgerDocSchema.optional() });
+
+/** The ledger text with `entries` merged into its `skills` (every other key and entry kept,
+ * `skills` where it was), or undefined when the committed ledger is unreadable — provenance is
+ * never guessed. */
 export function mergeLedger(
   text: string,
   entries: Record<string, unknown>,
-): string {
-  const doc = jsonOf(LedgerDocSchema).parse(text);
-  const skills = LedgerDocSchema.parse(doc.skills ?? {});
-  return `${JSON.stringify({ ...doc, skills: { ...skills, ...entries } }, null, 2)}\n`;
+): string | undefined {
+  const doc = jsonOf(LedgerSchema).safeParse(text);
+  if (!doc.success) return undefined;
+  const skills = { ...doc.data.skills, ...entries };
+  return `${JSON.stringify({ ...doc.data, skills }, null, 2)}\n`;
 }
 
 function main(): void {
@@ -291,7 +295,8 @@ function main(): void {
     : undefined;
   const provenance = lock?.success === true ? lock.data.skills : {};
   const missing = names.filter(
-    (n) => !existsSync(`${staged}/${n}/SKILL.md`) || !(n in provenance),
+    (n) =>
+      !existsSync(`${staged}/${n}/SKILL.md`) || !Object.hasOwn(provenance, n),
   );
   if (missing.length > 0) {
     fail(
@@ -302,13 +307,16 @@ function main(): void {
     return;
   }
   const ledgerPath = `${dotfiles}/agents/skills-lock.json`;
-  const ledger = fromThrowable(() =>
-    mergeLedger(
-      existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : "{}",
-      Object.fromEntries(names.map((n) => [n, provenance[n]])),
-    ),
+  const ledgerText = fromThrowable(() =>
+    existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : "{}",
   )();
-  if (ledger.isErr()) {
+  const ledger = ledgerText.isOk()
+    ? mergeLedger(
+        ledgerText.value,
+        Object.fromEntries(names.map((n) => [n, provenance[n]])),
+      )
+    : undefined;
+  if (ledger === undefined) {
     fail(`FATAL: ${ledgerPath} is not a readable ledger — nothing was written`);
     process.exitCode = 1;
     return;
@@ -330,7 +338,7 @@ function main(): void {
       dereference: true,
     });
   }
-  writeFileSync(ledgerPath, ledger.value);
+  writeFileSync(ledgerPath, ledger);
 
   for (const n of names) print(`vendored: ${dotfiles}/agents/skills/${n}`);
   print(

@@ -533,7 +533,7 @@ function agentName(
   if (!listResult.success) return err("claude agents output unparsable");
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = agentNameEntries(listResult.data, now);
-  if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
+  if (!Object.hasOwn(next, sid)) next[sid] = { at: now }; // not listed yet -> cache the miss too
   // Keep every session's last-seen hint across this whole-file rewrite; record ours.
   for (const [id, entry] of Object.entries(next)) {
     const seen = id === sid ? hint : cache[id]?.hint;

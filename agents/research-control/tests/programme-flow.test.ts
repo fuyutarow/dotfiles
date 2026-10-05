@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import { checkProgrammeFlow } from "../programme-flow.ts";
+import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 
 const FlowBaseSchema = z.looseObject({ jobs: z.array(z.looseObject({})) });
 const TraceFixtureSchema = z.looseObject({
@@ -14,16 +15,17 @@ function fixture(name: string): unknown {
     resolve(import.meta.dir, "../fixtures", name),
     "utf8",
   );
-  return jsonText.parse(text);
+  return decodedJson(z.json(), text);
 }
 function flow(name: string): ReturnType<typeof checkProgrammeFlow> {
   return checkProgrammeFlow(fixture(name));
 }
 function flowBase(name: string): z.output<typeof FlowBaseSchema> {
-  return FlowBaseSchema.parse(fixture(name));
+  return decoded(FlowBaseSchema, fixture(name));
 }
 function traceFixture(): z.output<typeof TraceFixtureSchema> {
-  return TraceFixtureSchema.parse(
+  return decoded(
+    TraceFixtureSchema,
     fixture("valid-intent-receipt-learning.json"),
   );
 }

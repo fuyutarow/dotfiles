@@ -132,6 +132,7 @@ depends = [
   "lint:oxlint-policy",
   "vendor:deps:check",
   "lint:one-writer",
+  "lint:config-map",
   "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
@@ -210,6 +211,19 @@ run = "bun scripts/render-oxlintrc.ts --check"
 dir = "{{config_root}}"
 description = "INV-8 one writer per file: fail when a hand-written declaration carries content scripts/render-home.ts owns"
 run = "bun scripts/one-writer-check.ts"
+
+# The config registry (scripts/config-registry.ts) is the one table of every configuration surface:
+# source, deploy kind, consumer, writer, verifier. config:map prints it; lint:config-map fails when
+# a tracked config-shaped file is in no row, or a row names a source that does not exist.
+[tasks."config:map"]
+dir = "{{config_root}}"
+description = "Print every configuration surface (source → deployed, consumer, writer, verifier) from scripts/config-registry.ts. --json for a tool"
+run = "bun scripts/config-map.ts"
+
+[tasks."lint:config-map"]
+dir = "{{config_root}}"
+description = "Fail when a tracked config-shaped file is registered in no scripts/config-registry.ts row, or a row names a missing source"
+run = "bun scripts/config-map.ts --check"
 
 [tasks."vendor:deps"]
 dir = "{{config_root}}"

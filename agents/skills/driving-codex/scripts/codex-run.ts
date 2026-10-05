@@ -178,8 +178,8 @@ const { choice, sandbox, cd, timeoutS, promptFile } = argv.flags;
 if (choice !== undefined) {
   if (model !== undefined || effort !== undefined)
     refuse("give --choice OR --model/--effort, not both — --choice already sets model and effort");
-  const roster = await attempt(() => loadRoster());
-  if (!roster.ok) refuse(`cannot read the dispatch roster: ${errorMessage(roster.error)}`);
+  const roster = await loadRoster();
+  if (!roster.ok) refuse(`cannot read the dispatch roster: ${roster.error}`);
   const row = roster.value.choice.find((c) => c.id === choice);
   if (row?.route !== "luna" || !row.enabled)
     refuse(

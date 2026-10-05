@@ -160,7 +160,7 @@ function exactKeys(
     }
   }
   for (const key of required) {
-    if (!(key in value)) {
+    if (!Object.hasOwn(value, key)) {
       throw new GoalKernelError("GK_SCHEMA", `${locus} is missing '${key}'`);
     }
   }

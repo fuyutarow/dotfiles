@@ -48,7 +48,14 @@ const SpecSchema = z.object({
   cases: z.array(CaseSchema),
 });
 const specText = await Bun.file(argv.flags.cases).text();
-const spec = jsonOf(SpecSchema).parse(specText);
+const specRead = jsonOf(SpecSchema).safeParse(specText);
+if (!specRead.success) {
+  console.error(
+    `bench-definitions: ${argv.flags.cases} is not a case spec: ${specRead.error.message}`,
+  );
+  process.exit(2);
+}
+const spec = specRead.data;
 const project = spec.project.replace(/^~(?=\/)/u, homedir());
 const tally: Record<
   string,

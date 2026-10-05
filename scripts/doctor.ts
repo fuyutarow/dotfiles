@@ -60,6 +60,7 @@ import {
   parseMapping,
 } from "../agents/retrieval-control/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
+import { RENDERED } from "./config-registry.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
 import {
@@ -212,13 +213,12 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   );
 }
 
-// Every file scripts/render-home.ts writes, as a path under HOME. JSON ones compare as values (and
-// name the differing top-level keys); text compares byte-for-byte.
-const RENDERED = [
-  { rel: ".claude/settings.json", json: true },
-  { rel: ".codex/hooks.json", json: true },
-  { rel: ".claude/CLAUDE.md", json: false },
-] as const;
+// Every file scripts/render-home.ts writes (scripts/config-registry.ts RENDERED), as a path under
+// HOME. JSON ones compare as values (and name the differing top-level keys); text byte-for-byte.
+const RENDERED_FILES = RENDERED.map((r) => ({
+  rel: r.dest,
+  json: r.dest.endsWith(".json"),
+}));
 
 /** Why the deployed `live` is not the fresh render `want` (empty when it is). */
 async function renderedDiff(
@@ -274,7 +274,7 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
   }
   const details = (
     await Promise.all(
-      RENDERED.map(async ({ rel, json }) =>
+      RENDERED_FILES.map(async ({ rel, json }) =>
         renderedDiff(rel, json, join(ctx.home, rel), join(scratch, rel)),
       ),
     )
@@ -289,7 +289,7 @@ export async function checkRendered(ctx: Ctx): Promise<Finding> {
   }
   return pass(
     "rendered",
-    `${RENDERED.map((f) => `~/${f.rel}`).join(", ")} match a fresh render`,
+    `${RENDERED_FILES.map((f) => `~/${f.rel}`).join(", ")} match a fresh render`,
   );
 }
 

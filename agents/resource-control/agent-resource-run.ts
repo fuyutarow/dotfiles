@@ -273,13 +273,20 @@ export function loadResourcePolicy(
     );
   }
   // Every value was range-checked as a finite number by policyKeyErrors above.
+  // A non-number cannot reach here; were one to, NaN fails the schema below instead of a throw.
   const scaled = Object.entries(POLICY_RULES).map(
-    ([key, rule]): [string, number] => [
-      rule.field,
-      z.number().parse(raw[key]) * rule.scale,
-    ],
+    ([key, rule]): [string, number] => {
+      const n = z.number().safeParse(raw[key]);
+      return [rule.field, (n.success ? n.data : Number.NaN) * rule.scale];
+    },
   );
-  return ResourcePolicySchema.parse(Object.fromEntries(scaled));
+  const policy = ResourcePolicySchema.safeParse(Object.fromEntries(scaled));
+  if (!policy.success) {
+    throw new UsageError(
+      `resource policy '${path}' is invalid (admission refused, no defaults): ${policy.error.message}`,
+    );
+  }
+  return policy.data;
 }
 
 // Loaded once at startup. A broken policy does not crash the import: it is re-thrown as the
@@ -1396,9 +1403,10 @@ function liveReservations(stateDirectory: string): Reservation[] {
   for (const name of readdirSync(stateDirectory)) {
     if (!name.endsWith(".reservation.json")) continue;
     const path = join(stateDirectory, name);
-    const parsed = fromThrowable(() =>
-      reservationFrom(jsonText.parse(readFileSync(path, "utf8"))),
-    )();
+    const parsed = fromThrowable(() => {
+      const json = jsonText.safeParse(readFileSync(path, "utf8"));
+      return json.success ? reservationFrom(json.data) : null;
+    })();
     const reservation = parsed.isOk() ? parsed.value : null;
     if (reservation !== null && pidIsAlive(reservation.controller_pid)) {
       result.push(reservation);

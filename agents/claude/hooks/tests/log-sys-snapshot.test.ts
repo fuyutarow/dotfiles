@@ -5,6 +5,7 @@ import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempHome } from "./helpers.ts";
 import { promptParts } from "../prompt-stamp.ts";
+import { decoded } from "../../../hooks/tests/decode.ts";
 
 const HOOK = "log-sys-snapshot.ts";
 const LINE = "Sys: CPU 25% · RAM 18% (10.0/54.9G) · VRAM 28% (3.3/12.0G)";
@@ -43,7 +44,7 @@ const ESC = String.fromCodePoint(0x1b);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "gu");
 const Message = z.looseObject({ systemMessage: z.string() });
 const messageOf = (stdout: string): string =>
-  Message.parse(parseJson(stdout)).systemMessage;
+  decoded(Message, parseJson(stdout)).systemMessage;
 const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
@@ -93,7 +94,10 @@ describe("log-sys-snapshot", () => {
     const cache = join(home, ".cache", "claude", "statusline-sys.json");
     const colored =
       "\u001B[38;5;74mSys:\u001B[0m CPU \u001B[38;5;71m25%\u001B[0m";
-    const cur = z.looseObject({}).parse(parseJson(readFileSync(cache, "utf8")));
+    const cur = decoded(
+      z.looseObject({}),
+      parseJson(readFileSync(cache, "utf8")),
+    );
     writeFileSync(cache, JSON.stringify({ ...cur, ansi: colored }));
     expect(messageOf(fire(home, "Stop").stdout)).toContain(colored);
   });

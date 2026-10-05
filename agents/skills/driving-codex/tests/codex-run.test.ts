@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { jsonOf, z } from "../../../hooks/zod.ts";
+import { decodedJson } from "../../../hooks/tests/decode.ts";
 
 /**
  * codex-run.ts as a real child process against a fake `codex` (CODEX_RUN_BIN). The fake logs its
@@ -80,7 +81,7 @@ function run(args: string[], env: Record<string, string>, prompt = "Audit this."
   );
   const stdout = p.stdout.toString();
   const lines = stdout.trim().split("\n");
-  return { code: p.exitCode ?? -1, receipt: jsonOf(Receipt).parse(lines.at(-1) ?? ""), stdout, stderr: p.stderr.toString() };
+  return { code: p.exitCode ?? -1, receipt: decodedJson(Receipt, lines.at(-1) ?? ""), stdout, stderr: p.stderr.toString() };
 }
 const FULL = ["--model", "gpt-6-luna", "--effort", "medium", "--sandbox", "read-only", "--cd", tmpdir()];
 
@@ -100,7 +101,7 @@ describe("codex-run", () => {
     expect(r.receipt.last_message).toBe("VERDICT: fine");
     const file = r.receipt.receipt_file ?? "";
     expect(existsSync(file)).toBe(true);
-    expect(jsonOf(Receipt).parse(readFileSync(file, "utf8"))).toEqual(jsonOf(Receipt).parse(r.stdout));
+    expect(decodedJson(Receipt, readFileSync(file, "utf8"))).toEqual(decodedJson(Receipt, r.stdout));
     // C2: the triplet reaches codex explicitly, with --json and -o.
     const argv = readFileSync(log, "utf8").split("\n");
     for (const w of ["exec", "--json", "--skip-git-repo-check", "-m", "gpt-6-luna", "read-only", 'model_reasoning_effort="medium"', "-o"])

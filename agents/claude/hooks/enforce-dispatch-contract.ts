@@ -81,16 +81,14 @@ async function main(): Promise<void> {
   // Test seam: the hook tests point this at a fixture roster to prove the implementation still
   // serves a row the live config has switched off. Unset in normal use.
   const rosterPath = process.env.DISPATCH_ROSTER_PATH;
-  const loaded = await attempt(() =>
-    rosterPath === undefined || rosterPath === ""
-      ? loadRoster()
-      : loadRoster(rosterPath),
-  );
+  const loaded = await (rosterPath === undefined || rosterPath === ""
+    ? loadRoster()
+    : loadRoster(rosterPath));
   if (!loaded.ok) {
     // FATAL: without the roster no choice can be judged; the one fix is to repair the file.
     decidePre(
       "deny",
-      `dispatch-contract: cannot read ${ROSTER_FILE} (${errorMessage(loaded.error)}) — fix it, then re-invoke.`,
+      `dispatch-contract: cannot read ${ROSTER_FILE} (${loaded.error}) — fix it, then re-invoke.`,
     );
   }
   const roster = loaded.value;

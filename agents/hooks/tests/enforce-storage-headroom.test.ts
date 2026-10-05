@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
+import { decoded } from "./decode.ts";
 
 // The host-drive cases measure the WSL host drive itself (/mnt/c): declared, so elsewhere SKIPs.
 const NO_WSL_HOST_DRIVE = !existsSync("/mnt/c");
@@ -103,7 +104,7 @@ const driveRow = (c: Doc, name: string): Row =>
 const firstBudget = (c: Doc): Row => present(c.budget[0], "budget[0]");
 
 function config(edit: (c: Doc) => void): Record<string, string> {
-  const c = Doc.parse(Bun.TOML.parse(readFileSync(REAL, "utf8")));
+  const c = decoded(Doc, Bun.TOML.parse(readFileSync(REAL, "utf8")));
   edit(c);
   const path = join(
     mkdtempSync(join(tmpdir(), "storage-cfg-")),

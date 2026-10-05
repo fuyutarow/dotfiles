@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { jsonOf, z } from "../../../hooks/zod.ts";
+import { z } from "../../../hooks/zod.ts";
 import {
 	bindContinuationSlot,
 	continuationSlotPath,
@@ -18,6 +18,7 @@ import {
 	readContinuationBinding,
 	validateContinuationRecord,
 } from "../scripts/continuation-record";
+import { decodedJson } from "../../../hooks/tests/decode.ts";
 
 // What the code under test prints is parsed, never cast: the stdout/stderr of a subprocess is
 // untrusted text until a schema accepts it.
@@ -34,9 +35,9 @@ const HookDecisionSchema = z.object({
 	reason: z.string().optional(),
 });
 const checkpointOutput = (text: string) =>
-	jsonOf(CheckpointOutputSchema).parse(text);
+	decodedJson(CheckpointOutputSchema, text);
 const checkpointError = (text: string) =>
-	jsonOf(CheckpointErrorSchema).parse(text);
+	decodedJson(CheckpointErrorSchema, text);
 
 const temporaryDirectories: string[] = [];
 const skillDirectory = resolve(import.meta.dir, "..");
@@ -490,7 +491,7 @@ describe("compact lifecycle adapters", () => {
 
 			const result = run(hook, payload("PreCompact", root, session, "manual"));
 			expect(result.code).toBe(0);
-			const decision = jsonOf(HookDecisionSchema).parse(result.stdout);
+			const decision = decodedJson(HookDecisionSchema, result.stdout);
 			if (platform === "codex") {
 				expect(decision.continue).toBe(false);
 				expect(decision.stopReason).toContain("manual compact blocked");

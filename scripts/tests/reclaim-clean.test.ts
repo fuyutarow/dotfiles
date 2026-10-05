@@ -33,6 +33,7 @@ import {
   runSimpleStep,
   toolAvailable,
 } from "../reclaim-clean";
+import { decoded } from "../../agents/hooks/tests/decode.ts";
 
 const SCRIPT = new URL("../reclaim-clean.ts", import.meta.url).pathname;
 const HUGGINGFACE_SCRIPT = new URL("../huggingface-gc.py", import.meta.url)
@@ -185,7 +186,7 @@ describe("freeSpace", () => {
   test('df\'s own stderr is inherited, not suppressed (original `df -h "$HOME" | awk ...` never redirects it)', () => {
     let seenOpts: Record<string, unknown> | undefined;
     const fakeSpawn = fakeSpawnSync((args) => {
-      seenOpts = OptsSchema.parse(args[1]);
+      seenOpts = decoded(OptsSchema, args[1]);
       return { stdout: Buffer.from("") };
     });
     freeSpace("/whatever", fakeSpawn);
@@ -245,7 +246,7 @@ describe("isJuliaBusy", () => {
   test("checks by exact comm name (-x julia), not a cmdline substring", () => {
     let seenArgv: string[] | undefined;
     const fakeSpawn = fakeSpawnSync((args) => {
-      seenArgv = z.array(z.string()).parse(args[0]);
+      seenArgv = decoded(z.array(z.string()), args[0]);
       return { exitCode: 1 };
     });
     isJuliaBusy(fakeSpawn);
@@ -293,7 +294,7 @@ describe("cleanupTempDir", () => {
     const dir = makeTempDir();
     let seenOpts: Record<string, unknown> | undefined;
     const fakeSpawn = fakeSpawnSync((args) => {
-      seenOpts = OptsSchema.parse(args[1]);
+      seenOpts = decoded(OptsSchema, args[1]);
       return { exitCode: 0 };
     });
     cleanupTempDir(dir, { ripAvailable: true, spawn: fakeSpawn });

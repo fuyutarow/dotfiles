@@ -3,7 +3,8 @@
 // Run: bun test agents/skills/designing-interactions/tests
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "../../../hooks/zod.ts";
+import { decodedJson } from "../../../hooks/tests/decode.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const PROBE = join(ROOT, "scripts", "captive-probe.ts");
@@ -44,7 +45,7 @@ async function codes(
   const result = await probe(["--json", ...args]);
   return {
     exitCode: result.exitCode,
-    envelope: jsonOf(EnvelopeSchema).parse(result.stdout),
+    envelope: decodedJson(EnvelopeSchema, result.stdout),
   };
 }
 

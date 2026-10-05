@@ -158,7 +158,12 @@ function main(): void {
   quiet = parsed.flags.quiet === true;
   requestedToday = parsed.flags.today;
 
-  const { meta, model: models } = ReleasesSchema.parse(releases);
+  const checked = ReleasesSchema.safeParse(releases);
+  if (!checked.success) {
+    fail(`releases.toml does not match its schema: ${checked.error.message}`);
+    return;
+  }
+  const { meta, model: models } = checked.data;
   const today = todayStamp();
   const todayMs = parseDay(today);
 

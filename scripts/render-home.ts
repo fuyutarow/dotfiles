@@ -72,6 +72,7 @@ import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
 import { jsonText } from "../agents/hooks/zod.ts";
 import { loadRoster, rosterPolicy } from "../agents/models/roster.ts";
+import { RENDERED } from "./config-registry.ts";
 import {
   type HookSpec,
   loadRegistry,
@@ -213,10 +214,8 @@ const mdPath = `${dotfiles}/agents/claude/CLAUDE.md`;
 const rosterPath = `${dotfiles}/agents/models/dispatch-roster.toml`;
 const md = await attempt(() => readFileSync(mdPath, "utf8"));
 if (!md.ok) fatal(`FATAL: cannot read ${mdPath} — ${errorMessage(md.error)}`);
-const roster = await attempt(() => loadRoster(rosterPath));
-if (!roster.ok) {
-  fatal(`FATAL: cannot load ${rosterPath} — ${errorMessage(roster.error)}`);
-}
+const roster = await loadRoster(rosterPath);
+if (!roster.ok) fatal(`FATAL: cannot load ${rosterPath} — ${roster.error}`);
 const b = md.value.indexOf(BEGIN);
 const e = md.value.indexOf(END);
 if (b < 0 || e < b)
@@ -228,6 +227,17 @@ outputs.push({
 });
 
 // ── write ────────────────────────────────────────────────────────────────────────────────────
+// The registry (scripts/config-registry.ts RENDERED) is what doctor and lint:one-writer check; a
+// render that writes a path it does not list, or skips one it lists, is a bug caught here.
+const declared = RENDERED.map((r) => `${home}/${r.dest}`).toSorted();
+const produced = outputs.map((o) => o.dest).toSorted();
+if (!Bun.deepEquals(declared, produced)) {
+  fatal(
+    "FATAL: render-home's outputs differ from scripts/config-registry.ts RENDERED",
+    `  declared: ${declared.join(", ")}`,
+    `  produced: ${produced.join(", ")}`,
+  );
+}
 for (const { dest, text, from } of outputs) {
   // Already current → no write, no churn (this runs on every pull via the post-merge hook).
   if (

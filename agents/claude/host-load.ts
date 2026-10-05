@@ -21,7 +21,6 @@ import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
   type ExecFailure,
-  defaultOnInvalid,
   execBounded,
   execError,
   execWithin,
@@ -75,10 +74,12 @@ export const GPU_SAMPLE_TIMEOUT_SCHEMA = z.coerce
   .int()
   .min(100)
   .max(120_000);
-export const GPU_SAMPLE_TIMEOUT_MS = defaultOnInvalid(
-  GPU_SAMPLE_TIMEOUT_SCHEMA,
-  20_000,
-).parse(process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS);
+const gpuSampleTimeout = GPU_SAMPLE_TIMEOUT_SCHEMA.safeParse(
+  process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS,
+);
+export const GPU_SAMPLE_TIMEOUT_MS = gpuSampleTimeout.success
+  ? gpuSampleTimeout.data
+  : 20_000;
 // A last-good sample older than this is a claim about a moment too far back to still be useful;
 // beyond it the reading becomes n/a instead of a stale number.
 export const GPU_STALE_MAX_MS = 30 * 60_000;

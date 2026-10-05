@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import {
   activateGoal,
   type GoalContract,
@@ -21,10 +21,11 @@ import {
   recordRunDecision,
 } from "../kernel.ts";
 import { buildPostmortem } from "../postmortem.ts";
+import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 
 // Every parsed value enters the test as `unknown` (decoded by the repo's zod codec) and is read
 // through a schema (or compared whole with toEqual / toMatchObject).
-const jsonValue = (text: string): unknown => jsonText.parse(text);
+const jsonValue = (text: string): unknown => decodedJson(z.json(), text);
 
 const SnapshotSchema = z.object({ north_star: z.string() });
 const DenyOutputSchema = z.object({
@@ -112,7 +113,8 @@ describe("immutable Goal authority", () => {
     const first = await activateGoal(root, original);
 
     original.north_star = "mutated source object";
-    const snapshot = SnapshotSchema.parse(
+    const snapshot = decoded(
+      SnapshotSchema,
       jsonValue(readFileSync(first.snapshot_path, "utf8")),
     );
     expect(snapshot.north_star).toContain("run id reconstructs");
@@ -253,7 +255,7 @@ describe("hook enforcement and privacy", () => {
         tool_input: { command: "true" },
       }),
     );
-    const denied = DenyOutputSchema.parse(jsonValue(preTool.stdout));
+    const denied = decoded(DenyOutputSchema, jsonValue(preTool.stdout));
     expect(denied.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(denied.hookSpecificOutput.permissionDecisionReason).toContain(
       "GK_CONFIG_UNTRUSTED",
@@ -275,7 +277,7 @@ describe("hook enforcement and privacy", () => {
         }),
       );
       expect(result.exit_code).toBe(0);
-      const output = DenyOutputSchema.parse(jsonValue(result.stdout));
+      const output = decoded(DenyOutputSchema, jsonValue(result.stdout));
       expect(output.hookSpecificOutput.permissionDecision).toBe("deny");
       expect(output.hookSpecificOutput.permissionDecisionReason).toContain(
         "GK_AUTHORITY_UNAVAILABLE",
@@ -348,7 +350,8 @@ describe("hook enforcement and privacy", () => {
     const eventName = readdirSync(eventsDir)[0];
     if (eventName === undefined) throw new Error("expected one run event");
     const eventPath = join(eventsDir, eventName);
-    const event = StoredEventSchema.parse(
+    const event = decoded(
+      StoredEventSchema,
       jsonValue(readFileSync(eventPath, "utf8")),
     );
     event.event_type = "tampered";
@@ -576,7 +579,7 @@ describe("real protocol adapters", () => {
         encoding: "utf8",
       });
       expect(result.status).toBe(0);
-      const output = ContextOutputSchema.parse(jsonValue(result.stdout));
+      const output = decoded(ContextOutputSchema, jsonValue(result.stdout));
       expect(output.hookSpecificOutput.hookEventName).toBe("SessionStart");
       expect(output.hookSpecificOutput.additionalContext).toContain(
         "harness-postmortem",
@@ -718,7 +721,7 @@ describe("Cleye command boundary", () => {
     const status = run(["status", "--root", root, "--json"]);
     expect(status.code).toBe(0);
     expect(
-      StatusOutputSchema.parse(jsonValue(status.stdout)).active.goal
+      decoded(StatusOutputSchema, jsonValue(status.stdout)).active.goal
         .goal_version,
     ).toBe(1);
 
@@ -783,7 +786,7 @@ describe("Cleye command boundary", () => {
       report: { run_id: runId, provider: "codex", findings: [] },
     });
     expect(
-      PostmortemOutputSchema.parse(jsonValue(postmortem.stdout)).report
+      decoded(PostmortemOutputSchema, jsonValue(postmortem.stdout)).report
         .decisions,
     ).toHaveLength(2);
   });

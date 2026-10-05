@@ -127,7 +127,7 @@ async function attemptLookup(
   const list = agentsOf(r.value);
   const now = Temporal.Now.instant().epochMilliseconds;
   const next = buildEntryMap(list, now);
-  if (sid in next) {
+  if (Object.hasOwn(next, sid)) {
     await persistFoundCache(next);
     return { done: true, name: next[sid]?.name };
   }

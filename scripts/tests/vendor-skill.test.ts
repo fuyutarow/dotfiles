@@ -310,11 +310,18 @@ describe("vendor-skill: the import (one writer: this script, never the CLI)", ()
     cleanup(dotfiles, home);
   });
 
+  test("mergeLedger refuses an unreadable ledger instead of guessing", () => {
+    expect(mergeLedger("{ not json", { b: 2 })).toBeUndefined();
+    expect(
+      mergeLedger(JSON.stringify({ skills: [] }), { b: 2 }),
+    ).toBeUndefined();
+  });
+
   test("mergeLedger keeps every other key and entry", () => {
     const merged = jsonOf(Ledger).safeParse(
       mergeLedger(JSON.stringify({ version: 3, skills: { a: 1 }, x: true }), {
         b: 2,
-      }),
+      }) ?? "",
     );
     expect(merged.success).toBe(true);
     expect(merged.data).toEqual({

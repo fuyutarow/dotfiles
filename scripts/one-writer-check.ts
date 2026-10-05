@@ -18,6 +18,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
+import { RENDERED } from "./config-registry.ts";
 import { HooksConfigSchema, owned } from "./hook-registry.ts";
 
 const root = process.env.DOTFILES ?? join(import.meta.dir, "..");
@@ -70,11 +71,7 @@ if (b < 0 || e < b) {
     );
 }
 
-for (const rel of [
-  ".claude/settings.json",
-  ".codex/hooks.json",
-  ".claude/CLAUDE.md",
-]) {
+for (const rel of RENDERED.map((r) => r.dest)) {
   const p = join(home, rel);
   if (existsSync(p) && lstatSync(p).isSymbolicLink())
     violations.push(

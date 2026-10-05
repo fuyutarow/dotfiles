@@ -28,13 +28,15 @@ user's environment. It is **OS-neutral**: the same repo drives **macOS** and **W
 The annotated topic tree (every directory + what it holds + how it deploys) is the canonical
 **README → Architecture**; do not duplicate it here. Topics (one tool = one directory):
 `zsh git jj smart-open tmux herdr sheldon lazygit cocoindex topgrade agents` (both OSes), `karabiner` `macos` `iterm2` `edge` (mac), `wsl` (WSL).
-Plumbing / single sources of truth: `scripts/link-dots.ts` (all symlinks, OS-aware),
+Plumbing / single sources of truth: `scripts/config-registry.ts` (EVERY config surface — source,
+deploy kind, consumer, writer, verifier; `mise run config:map` prints it, `lint:config-map` fails on
+a config file in no row), `scripts/link-dots.ts` (realizes its links, OS-aware),
 `scripts/check-tools.sh`, `Brewfile` (tools), `mise.toml` (tasks, justfile retired), `.mcp.json` (MCP).
 OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` / `*.win` (or `mac.zsh` / `wsl.zsh`).
 `*.win` = the Windows HOST under WSL (read by Windows, so copied, never symlinked).
 
 **Conventions to preserve:**
-1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/link-dots.ts`.
+1. **Topic-first**: adding/removing a tool touches exactly ONE directory + `scripts/config-registry.ts`.
    Never recreate `common`/`mac`/`wsl` as OS-variance *bucket* dirs — OS variance of a
    cross-OS tool lives INSIDE that tool's topic dir as `*.mac` / `*.wsl` / `*.win` (or
    `mac.zsh` / `wsl.zsh`) files. `*.win` is the third target: the Windows HOST underneath WSL
@@ -44,7 +46,8 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    buckets.
 2. Shared files must never contain machine-absolute paths (`/Users/...`, `/home/...`) or
    unguarded OS-specific commands; branch on `$IS_MAC` / `$IS_WSL`, guard with existence checks.
-3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `scripts/link-dots.ts`
+3. Symlinks have exactly TWO homes, split by fan-out shape: dotfiles → `LINKS` in
+   `scripts/config-registry.ts` (realized by `scripts/link-dots.ts`)
    (one source → one destination); `agents/` → `mise.toml`'s `link:skills` (one source → N AI
    tools). Both PRUNE links into this repo that no longer resolve, so a rename cannot leave a
    phantom skill or a dead hook link behind. **PATH commands are neither**: a repo CLI that

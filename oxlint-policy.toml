@@ -122,7 +122,10 @@ reason = "No implicit truthiness: an empty string, 0 and null/undefined are diff
 rule = "typescript/no-explicit-any"
 reason = "`any` switches type checking off at the trust boundary; parse with zod instead."
 
-# --- custom bans: each carries its message and a bad/good pair the test lints --------------------
+# --- custom bans: each carries its message and bad/good snippets the test lints -------------------
+# Every snippet is linted on its own: each `bad` must fire, each `good` must stay silent. A `good`
+# should be the NEAREST legal neighbour of a `bad` (the exemption's edge), not unrelated code — a
+# silent unrelated file proves nothing about how narrow the rule is.
 # kind: global -> no-restricted-globals · syntax -> eslint-js/no-restricted-syntax (ESTree selector)
 #       import-path / import-pattern -> no-restricted-imports paths / patterns
 
@@ -132,8 +135,8 @@ kind = "global"
 target = "Date"
 since = "2026-10-03"
 message = "Date is banned: use Temporal (bun >= 1.4 ships it; mise.toml pins bun \"1.4\"; `mise run doctor` bun-floor guards the runtime)."
-bad = "export const t = Date.now();\n"
-good = "export const t = Temporal.Now.instant();\n"
+bad = ["export const t = Date.now();\n"]
+good = ["export const t = Temporal.Now.instant();\n"]
 
 [[custom]]
 id = "no-switch"
@@ -141,8 +144,8 @@ kind = "syntax"
 target = "SwitchStatement"
 since = "2026-10-03"
 message = "switch is banned: ts-pattern's match(..).exhaustive() where the file may import it, else an if/else chain or a lookup table."
-bad = "export function f(x: number): number {\n  switch (x) {\n    case 1:\n      return 1;\n    default:\n      return 0;\n  }\n}\n"
-good = "export function f(x: number): number {\n  return x === 1 ? 1 : 0;\n}\n"
+bad = ["export function f(x: number): number {\n  switch (x) {\n    case 1:\n      return 1;\n    default:\n      return 0;\n  }\n}\n"]
+good = ["export function f(x: number): number {\n  return x === 1 ? 1 : 0;\n}\n"]
 
 [[custom]]
 id = "no-nested-ternary"
@@ -150,8 +153,8 @@ kind = "syntax"
 target = "ConditionalExpression ConditionalExpression"
 since = "2026-10-03"
 message = "nested ternaries are banned: one level max; beyond that ts-pattern's match(), an if/else chain, or early returns."
-bad = "export const f = (a: boolean, b: boolean): number => (a ? (b ? 1 : 2) : 3);\n"
-good = "export const f = (a: boolean): number => (a ? 1 : 3);\n"
+bad = ["export const f = (a: boolean, b: boolean): number => (a ? (b ? 1 : 2) : 3);\n"]
+good = ["export const f = (a: boolean): number => (a ? 1 : 3);\n"]
 
 [[custom]]
 id = "no-try"
@@ -159,8 +162,8 @@ kind = "syntax"
 target = "TryStatement"
 since = "2026-10-03"
 message = "try is banned (catch AND finally): errors as values — neverthrow's fromThrowable/fromAsyncThrowable where the file may import it, else agents/hooks/attempt.ts (Promise.try, zero-dep), or Promise.try(fn).then(ok, err) inline in a self-contained skill; cleanup via using / await using / DisposableStack, or promise.finally()."
-bad = "declare function g(): void;\nexport function f(): void {\n  try {\n    g();\n  } finally {\n    g();\n  }\n}\n"
-good = "declare function g(): void;\nexport function f(): void {\n  g();\n}\n"
+bad = ["declare function g(): void;\nexport function f(): void {\n  try {\n    g();\n  } finally {\n    g();\n  }\n}\n"]
+good = ["declare function g(): void;\nexport function f(): void {\n  g();\n}\n"]
 
 [[custom]]
 id = "no-stdin-listener"
@@ -168,8 +171,8 @@ kind = "syntax"
 target = "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdin'][callee.property.name=/^(on|once|addListener|prependListener|prependOnceListener)$/]"
 since = "2026-10-06"
 message = "a listener on process.stdin keeps the process alive after it has its answer: reclaim-purge printed '✅ purge 完了' and then hung (2026-10-06). Read one line with prompt() (null on EOF), all of stdin with Bun.stdin.text() (hooks: readStdinJson)."
-bad = "process.stdin.once(\"data\", (d: Buffer) => {\n  void d;\n});\nexport {};\n"
-good = "export const answer = prompt(\"continue?\") ?? \"\";\n"
+bad = ["process.stdin.once(\"data\", (d: Buffer) => {\n  void d;\n});\nexport {};\n"]
+good = ["export const answer = prompt(\"continue?\") ?? \"\";\n"]
 
 [[custom]]
 id = "no-type-predicate"
@@ -177,17 +180,23 @@ kind = "syntax"
 target = "TSTypePredicate"
 since = "2026-10-03"
 message = "hand-written `x is T` guard is banned (writing-typescript): parse the value with a zod schema (safeParse) and use the parsed output; a guard drifts from the type it guards."
-bad = "export function isText(x: unknown): x is string {\n  return typeof x === \"string\";\n}\n"
-good = "export function isText(x: unknown): boolean {\n  return typeof x === \"string\";\n}\n"
+bad = ["export function isText(x: unknown): x is string {\n  return typeof x === \"string\";\n}\n"]
+good = ["export function isText(x: unknown): boolean {\n  return typeof x === \"string\";\n}\n"]
 
 [[custom]]
 id = "no-in-probe"
 kind = "syntax"
-target = "BinaryExpression[operator='in'][left.type='Literal']"
+target = "BinaryExpression[operator='in']"
 since = "2026-10-03"
-message = "probing with `\"key\" in value` is banned (writing-typescript): parse the value with a zod schema (safeParse); for your own union use a discriminant tag."
-bad = "export const has = (v: object): boolean => \"k\" in v;\n"
-good = "export const has = (v: { k?: number }): boolean => v.k !== undefined;\n"
+message = "the `in` operator is banned (writing-typescript): a key probe is an unchecked shape claim. Parse the value with a zod schema (safeParse); for your own union use a discriminant tag; for a record's own key, Object.hasOwn(record, key)."
+bad = [
+  "export const has = (v: object): boolean => \"k\" in v;\n",
+  "export const has = (v: object, k: string): boolean => k in v;\n",
+]
+good = [
+  "export const has = (v: object, k: string): boolean => Object.hasOwn(v, k);\n",
+  "export function keys(v: Record<string, number>): string[] {\n  return Object.keys(v);\n}\n",
+]
 
 [[custom]]
 id = "no-as-cast"
@@ -195,8 +204,8 @@ kind = "syntax"
 target = "TSAsExpression:not([typeAnnotation.typeName.name='const'])"
 since = "2026-10-03"
 message = "`as` cast is banned (writing-typescript): it asserts a type the compiler cannot verify. Parse with a zod schema, or use `satisfies` / inference. (`as const` is allowed.)"
-bad = "export const n = (v: unknown): number => v as number;\n"
-good = "export const pair = [1, 2] as const;\n"
+bad = ["export const n = (v: unknown): number => v as number;\n"]
+good = ["export const pair = [1, 2] as const;\n"]
 
 [[custom]]
 id = "no-angle-cast"
@@ -204,26 +213,50 @@ kind = "syntax"
 target = "TSTypeAssertion"
 since = "2026-10-03"
 message = "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
-bad = "export const n = (v: unknown): number => <number>v;\n"
-good = "export const pair = [1, 2] as const;\n"
+bad = ["export const n = (v: unknown): number => <number>v;\n"]
+good = ["export const pair = [1, 2] as const;\n"]
 
 [[custom]]
 id = "no-json-parse"
 kind = "syntax"
-target = "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.property.name='codec'] *)"
+target = "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.object.name='z'][callee.property.name='codec'] *)"
 since = "2026-10-04"
 message = "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
-bad = "export const v: unknown = JSON.parse(\"1\");\n"
-good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const c = z.codec(z.string(), z.unknown(), {\n  decode: (s: string): unknown => JSON.parse(s),\n  encode: (v: unknown): string => JSON.stringify(v),\n});\n"
+bad = [
+  "export const v: unknown = JSON.parse(\"1\");\n",
+  "declare const lib: { codec: (f: () => unknown) => unknown };\nexport const c = lib.codec((): unknown => JSON.parse(\"1\"));\n",
+]
+good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const c = z.codec(z.string(), z.unknown(), {\n  decode: (s: string): unknown => JSON.parse(s),\n  encode: (v: unknown): string => JSON.stringify(v),\n});\n"]
+
+[[custom]]
+id = "no-throwing-parse"
+kind = "syntax"
+target = "CallExpression[callee.property.name='parse']:not([callee.object.name='JSON']):not([callee.object.object.name='Bun'])"
+since = "2026-10-06"
+message = "a throwing `.parse(...)` is banned (zod first): use `.safeParse(...)` and handle the failure as a value — `jsonOf(Schema).safeParse(text)` for JSON text, `Schema.safeParse(value)` otherwise. `jsonText.parse` and `jsonOf(..).parse` are the same throw. The one exemption is Bun's own text parsers (Bun.TOML.parse, Bun.YAML.parse — no safe variant): call one inside attempt() and pass its value to Schema.safeParse."
+bad = [
+  "import { z } from \"./agents/hooks/zod.ts\";\nexport const n = z.number().parse(1);\n",
+  "import { jsonText } from \"./agents/hooks/zod.ts\";\nexport const v: unknown = jsonText.parse(\"1\");\n",
+  "import { jsonOf, z } from \"./agents/hooks/zod.ts\";\nexport const n = jsonOf(z.number()).parse(\"1\");\n",
+]
+good = [
+  "import { z } from \"./agents/hooks/zod.ts\";\nexport const r = z.number().safeParse(1);\n",
+  "import { jsonOf, z } from \"./agents/hooks/zod.ts\";\nexport const r = jsonOf(z.number()).safeParse(\"1\");\n",
+  "export const t: unknown = Bun.TOML.parse(\"a = 1\");\n",
+  "export const y: unknown = Bun.YAML.parse(\"a: 1\");\n",
+]
 
 [[custom]]
 id = "no-untyped-json-body"
 kind = "syntax"
-target = "CallExpression[callee.property.name='json'][arguments.length=0]"
+target = "CallExpression[callee.property.name='json'][arguments.length=0]:not([callee.object.name='z'])"
 since = "2026-10-04"
 message = "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
-bad = "export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"
-good = "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n"
+bad = ["export async function f(r: Response): Promise<unknown> {\n  return await r.json();\n}\n"]
+good = [
+  "export async function f(r: Response): Promise<string> {\n  return await r.text();\n}\n",
+  "import { z } from \"./agents/hooks/zod.ts\";\nexport const anyJson = z.json();\n",
+]
 
 [[custom]]
 id = "no-direct-zod"
@@ -231,8 +264,8 @@ kind = "import-path"
 target = "zod"
 since = "2026-10-04"
 message = "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
-bad = "import { z } from \"zod\";\nexport const s = z.string();\n"
-good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"
+bad = ["import { z } from \"zod\";\nexport const s = z.string();\n"]
+good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"]
 
 [[custom]]
 id = "no-direct-zod-subpath"
@@ -240,5 +273,5 @@ kind = "import-pattern"
 target = "zod/*"
 since = "2026-10-04"
 message = "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
-bad = "import { z } from \"zod/v4\";\nexport const s = z.string();\n"
-good = "import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"
+bad = ["import { z } from \"zod/v4\";\nexport const s = z.string();\n"]
+good = ["import { z } from \"./agents/hooks/zod.ts\";\nexport const s = z.string();\n"]

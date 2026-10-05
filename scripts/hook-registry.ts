@@ -71,7 +71,8 @@ export function parseRegistry(
     const at = `hook[${i}]`;
     const before = errors.length;
     // A non-table entry reads as an empty one: every field below is then absent.
-    const h = JsonObject.catch({}).parse(entry);
+    const parsed = JsonObject.safeParse(entry);
+    const h = parsed.success ? parsed.data : {};
     const { script, event, matcher, timeout, vendors } = h;
     const failClosed = h.fail_closed;
     if (typeof script !== "string" || !/^[\w.-]+\.ts$/u.test(script))

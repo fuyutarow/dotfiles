@@ -15,10 +15,6 @@ import { jsonOf, z } from "../hooks/zod.ts";
 
 export const recoverInvalid = <T extends z.ZodType>(schema: T) =>
   schema.optional().catch(undefined);
-export const defaultOnInvalid = <T extends z.ZodType>(
-  schema: T,
-  fallback: z.output<T>,
-) => schema.catch(fallback);
 // Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
 // shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
 export function readJson<S extends z.ZodType>(

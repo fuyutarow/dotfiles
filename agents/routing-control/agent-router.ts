@@ -70,9 +70,13 @@ function fatal(message: string): never {
   return process.exit(2);
 }
 
-function loadRosterOrDie(): Roster {
+async function loadRosterOrDie(): Promise<Roster> {
   const path = process.env.DISPATCH_ROSTER_PATH;
-  return path === undefined || path === "" ? loadRoster() : loadRoster(path);
+  const r = await (path === undefined || path === ""
+    ? loadRoster()
+    : loadRoster(path));
+  if (!r.ok) fatal(`cannot read the dispatch roster: ${r.error}`);
+  return r.value;
 }
 
 // --- the pick --------------------------------------------------------------------------------------
@@ -323,7 +327,7 @@ function refuseUnauthenticatedCodex(): void {
 }
 
 async function run(flags: RunFlags): Promise<number> {
-  const roster = loadRosterOrDie();
+  const roster = await loadRosterOrDie();
   if (!existsSync(flags.promptFile))
     fatal(`no such brief: ${flags.promptFile}`);
   if (!existsSync(flags.cd)) fatal(`no such --cd directory: ${flags.cd}`);
@@ -420,7 +424,7 @@ async function run(flags: RunFlags): Promise<number> {
 // --- pick / ls / stats -----------------------------------------------------------------------------
 
 async function pickOnly(promptFile: string, cd: string): Promise<number> {
-  const roster = loadRosterOrDie();
+  const roster = await loadRosterOrDie();
   if (!existsSync(promptFile)) fatal(`no such brief: ${promptFile}`);
   const brief = readFileSync(promptFile, "utf8");
   const pick = await pickFor(roster, "auto", brief, cd);

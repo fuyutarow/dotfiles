@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
-import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
+import { z } from "../../../hooks/zod.ts";
+import { decodedJson } from "../../../hooks/tests/decode.ts";
 
 const ModelEnvelope = z.object({ model: z.string() });
 
@@ -67,7 +68,7 @@ describe("driving-jev runner", () => {
       port: 0,
       async fetch(request) {
         observedAuthorization = request.headers.get("authorization") ?? "";
-        observedBody = jsonText.parse(await request.text());
+        observedBody = decodedJson(z.json(), await request.text());
         return Response.json({
           model: "jev-test",
           answers: { asks_for_refund: { type: "noul", noul: 0.9 } },
@@ -85,7 +86,7 @@ describe("driving-jev runner", () => {
     ]);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(jsonText.parse(result.stdout)).toEqual({
+    expect(decodedJson(z.json(), result.stdout)).toEqual({
       model: "jev-test",
       answers: { asks_for_refund: { type: "noul", noul: 0.9 } },
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -112,7 +113,7 @@ describe("driving-jev runner", () => {
       JSON.stringify(requestBody()),
     );
     expect(result.exitCode).toBe(0);
-    expect(jsonOf(ModelEnvelope).parse(result.stdout).model).toBe(
+    expect(decodedJson(ModelEnvelope, result.stdout).model).toBe(
       "jev-test",
     );
   });

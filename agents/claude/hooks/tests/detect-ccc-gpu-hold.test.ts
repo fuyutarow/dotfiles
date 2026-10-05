@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
 import { runHook, tempDir } from "./helpers.ts";
+import { decoded } from "../../../hooks/tests/decode.ts";
 
 // The hook names the ccc daemon by /proc/<pid>/cmdline (Linux procfs): declared, so macOS SKIPs.
 const NO_PROCFS = !existsSync("/proc/self/cmdline");
@@ -19,7 +20,7 @@ const State = z.looseObject({
   indexingSinceMs: z.number(),
 });
 const stateOf = (file: string) =>
-  State.parse(parseJson(readFileSync(file, "utf8")));
+  decoded(State, parseJson(readFileSync(file, "utf8")));
 // The alert JSON the hook prints on stdout.
 const Alert = z.looseObject({
   systemMessage: z.string(),
@@ -130,7 +131,7 @@ describe("detect-ccc-gpu-hold", () => {
       const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
       const r = runHook(HOOK, payload(), env);
       expect(r.code).toBe(0);
-      const out = Alert.parse(parseJson(r.stdout));
+      const out = decoded(Alert, parseJson(r.stdout));
       expect(out.systemMessage).toContain(
         "indexing /w/qoed on the GPU for 20 min",
       );
@@ -158,7 +159,8 @@ describe("detect-ccc-gpu-hold", () => {
     "UserPromptSubmit gets the same alert under its own event name",
     () => {
       const { env } = setup({ apps: [daemon.pid!], state: streak(20) });
-      const out = HookEvent.parse(
+      const out = decoded(
+        HookEvent,
         parseJson(runHook(HOOK, payload("UserPromptSubmit"), env).stdout),
       );
       expect(out.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");

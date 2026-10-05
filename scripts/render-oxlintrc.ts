@@ -27,8 +27,8 @@ const Custom = z.strictObject({
   target: z.string().min(1),
   since: z.iso.date(),
   message: z.string().min(1),
-  bad: z.string().min(1),
-  good: z.string().min(1),
+  bad: z.array(z.string().min(1)).min(1),
+  good: z.array(z.string().min(1)).min(1),
 });
 const PolicySchema = z
   .strictObject({
@@ -73,9 +73,18 @@ const PolicySchema = z
 export type Policy = z.output<typeof PolicySchema>;
 export type CustomRule = z.output<typeof Custom>;
 
-/** The parsed policy; throws with zod's reason when the file is missing or malformed. */
-export function loadPolicy(path = POLICY_PATH): Policy {
-  return PolicySchema.parse(Bun.TOML.parse(readFileSync(path, "utf8")));
+export type PolicyLoad =
+  | { readonly ok: true; readonly value: Policy }
+  | { readonly ok: false; readonly error: string };
+
+/** The parsed policy, or why not (missing file, bad TOML, or zod's reason) — never a throw. */
+export async function loadPolicy(path = POLICY_PATH): Promise<PolicyLoad> {
+  const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
+  if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
+  const r = PolicySchema.safeParse(raw.value);
+  return r.success
+    ? { ok: true, value: r.data }
+    : { ok: false, error: r.error.message };
 }
 
 const ofKind = (p: Policy, kind: CustomRule["kind"]): CustomRule[] =>
@@ -162,9 +171,8 @@ if (import.meta.main) {
   if (argv.flags.write && argv.flags.check)
     fatal("give --write or --check, not both");
 
-  const loaded = await attempt(() => loadPolicy());
-  if (!loaded.ok)
-    fatal(`cannot read oxlint-policy.toml: ${errorMessage(loaded.error)}`);
+  const loaded = await loadPolicy();
+  if (!loaded.ok) fatal(`cannot read oxlint-policy.toml: ${loaded.error}`);
   const next = renderOxlintrc(loaded.value);
 
   if (!argv.flags.write && !argv.flags.check) {

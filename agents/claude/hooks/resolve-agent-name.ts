@@ -61,7 +61,7 @@ function buildEntries(
     next[a.sessionId] =
       a.name !== undefined ? { name: a.name, at: now } : { at: now };
   }
-  if (!(sid in next)) next[sid] = { at: now };
+  if (!Object.hasOwn(next, sid)) next[sid] = { at: now };
   return next;
 }
 

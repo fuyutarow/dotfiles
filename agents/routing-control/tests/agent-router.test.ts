@@ -10,8 +10,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonOf, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import { ROSTER_PATH } from "../../models/roster.ts";
+import { decodedJson } from "../../hooks/tests/decode.ts";
 
 // agent-router: the one entry point. A fake codex-run stands in for the worker (it records its argv and
 // prints a receipt), a local server stands in for Jev, and every state file goes to a scratch dir.
@@ -130,7 +131,7 @@ describe("agent-router run", () => {
       "luna-high",
     ]);
     expect(r.code).toBe(0);
-    const receipt = jsonOf(Receipt).parse(r.out.trim());
+    const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("explicit");
     expect(receipt.worker.outcome).toBe("ok");
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
@@ -158,7 +159,7 @@ describe("agent-router run", () => {
       { FAKE_EXIT: "1" },
     );
     expect(r.code).toBe(1);
-    expect(jsonOf(Receipt).parse(r.out.trim()).worker.outcome).toBe(
+    expect(decodedJson(Receipt, r.out.trim()).worker.outcome).toBe(
       "codex-failed",
     );
   });
@@ -173,7 +174,7 @@ describe("agent-router run", () => {
       "--sandbox",
       "read-only",
     ]);
-    const receipt = jsonOf(Receipt).parse(r.out.trim());
+    const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("jev");
     expect(receipt.pick.choice).toBe("luna-max");
   });
@@ -189,7 +190,7 @@ describe("agent-router run", () => {
       "--sandbox",
       "read-only",
     ]);
-    const receipt = jsonOf(Receipt).parse(r.out.trim());
+    const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
     expect(receipt.pick.choice).toBe("luna-high");
     expect(receipt.pick.reason).toContain("confidence 0.20");
@@ -204,7 +205,7 @@ describe("agent-router run", () => {
         HOME: scratch,
       },
     );
-    const receipt = jsonOf(Receipt).parse(r.out.trim());
+    const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
     expect(receipt.pick.reason).toContain("no TYPESAFE_API_KEY");
   });
@@ -214,7 +215,7 @@ describe("agent-router run", () => {
       ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
       { DISPATCH_ROSTER_PATH: NO_EGRESS },
     );
-    const receipt = jsonOf(Receipt).parse(r.out.trim());
+    const receipt = decodedJson(Receipt, r.out.trim());
     expect(receipt.pick.source).toBe("default");
     expect(receipt.pick.reason).toContain("no_egress");
   });
@@ -294,12 +295,13 @@ describe("agent-router ls and stats", () => {
   test("stats counts picks by source and runs by row", async () => {
     const r = await router(["stats"]);
     expect(r.code).toBe(0);
-    const report = jsonOf(
+    const report = decodedJson(
       z.looseObject({
         by_source: z.record(z.string(), z.number()),
         per_choice: z.record(z.string(), z.unknown()),
       }),
-    ).parse(r.out.trim());
+      r.out.trim(),
+    );
     expect(report.by_source.explicit).toBeGreaterThan(0);
     expect(report.by_source.jev).toBeGreaterThan(0);
     expect(report.by_source.default).toBeGreaterThan(0);

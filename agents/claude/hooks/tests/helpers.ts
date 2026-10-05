@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "../../../hooks/zod.ts";
 import { parseJson } from "../../../hooks/narrow.ts";
+import { decoded } from "../../../hooks/tests/decode.ts";
 
 const HOOKS_DIR = join(import.meta.dir, "..");
 
@@ -47,7 +48,7 @@ export function decisionOf(stdout: string): Decision {
       "decisionOf: the hook printed nothing (silent pass), so there is no decision",
     );
   }
-  return DecisionEnvelope.parse(parseJson(stdout)).hookSpecificOutput;
+  return decoded(DecisionEnvelope, parseJson(stdout)).hookSpecificOutput;
 }
 
 export function tempDir(prefix: string): string {

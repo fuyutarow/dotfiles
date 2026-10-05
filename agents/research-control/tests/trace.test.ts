@@ -3,8 +3,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { jsonText, z } from "../../hooks/zod.ts";
+import { z } from "../../hooks/zod.ts";
 import { checkTrace } from "../trace.ts";
+import { decoded, decodedJson } from "../../hooks/tests/decode.ts";
 
 const digest = (digit: string) => digit.repeat(64);
 const at = (second: number) =>
@@ -22,7 +23,7 @@ type TraceFixture = {
 const RecSchema = z.looseObject({});
 // A parsed COPY of an object, for reading; mutate through the fixture itself.
 function rec(value: unknown): Rec {
-  return RecSchema.parse(value);
+  return decoded(RecSchema, value);
 }
 function trace(): TraceFixture {
   const semantic = {
@@ -413,7 +414,7 @@ describe("research-section-trace/v2 exact wire", () => {
       resolve(import.meta.dir, "../fixtures", name),
       "utf8",
     );
-    const value: unknown = jsonText.parse(text);
+    const value: unknown = decodedJson(z.json(), text);
     if (code === undefined) expect(checkTrace(value).ok).toBe(true);
     else expectCode(value, code);
   });

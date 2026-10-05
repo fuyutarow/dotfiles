@@ -5,6 +5,7 @@
 // Zero-install like the hooks: zod comes from agents/hooks/zod.ts (the committed bundle).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { attempt, errorMessage } from "../hooks/attempt.ts";
 import { z } from "../hooks/zod.ts";
 
 export const ROSTER_PATH = join(import.meta.dir, "dispatch-roster.toml");
@@ -68,9 +69,18 @@ const RosterSchema = z
   });
 export type Roster = z.output<typeof RosterSchema>;
 
-/** The parsed roster; throws (with zod's reason) when the file is missing or malformed. */
-export function loadRoster(path = ROSTER_PATH): Roster {
-  return RosterSchema.parse(Bun.TOML.parse(readFileSync(path, "utf8")));
+export type RosterLoad =
+  | { readonly ok: true; readonly value: Roster }
+  | { readonly ok: false; readonly error: string };
+
+/** The parsed roster, or why not (missing file, bad TOML, or zod's reason) — never a throw. */
+export async function loadRoster(path = ROSTER_PATH): Promise<RosterLoad> {
+  const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
+  if (!raw.ok) return { ok: false, error: errorMessage(raw.error) };
+  const r = RosterSchema.safeParse(raw.value);
+  return r.success
+    ? { ok: true, value: r.data }
+    : { ok: false, error: r.error.message };
 }
 
 /** The rows the current config allows. */

@@ -87,14 +87,18 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 ├── agents/      # AI-assistant config: claude/ (statusline, hooks, settings), codex/, commands/, skills/,
 │                #   hooks/ (vendor-neutral hooks: hooks.toml wires them into Claude AND Codex),
 │                #   and shared agent tools (retrieval-control/ = repo-retrieve, resource-control/, …)
-├── scripts/     # plumbing — link-dots.ts (all symlinks), check-tools.sh
+├── scripts/     # plumbing — config-registry.ts (every config surface), link-dots.ts (deploys it), check-tools.sh
 ├── Brewfile     # every CLI tool (mac casks gated by OS.mac?)
 └── mise.toml    # the task runner (no justfile)
 ```
 
 **Single sources of truth** — each fact has one home, so nothing drifts:
 
-- **Symlinks** → `scripts/link-dots.ts` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
+- **Every configuration surface** → `scripts/config-registry.ts`: for each one its source, how it
+  reaches the machine (link, rendered, tool-owned, applied, in-place, machine-local), its consumer,
+  its one writer and its verifier. `mise run config:map` prints it; `mise run lint:config-map` fails
+  on a config file in no row. The deploy code reads the same tables.
+- **Symlinks** → the registry's `LINKS`, realized by `scripts/link-dots.ts` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
 - **Rendered `$HOME` files** → `scripts/render-home.ts` (called by link-dots; checked by `mise run doctor`). See invariant 8.
 - **Tools** → `Brewfile` · **Tasks** → `mise.toml` · **Agent + MCP config** → `agents/` and `.mcp.json`.
 
@@ -103,7 +107,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 The rules that keep the repo coherent. The agent-facing operational encoding lives in
 [`CLAUDE.md`](CLAUDE.md) (Claude Code) and [`AGENTS.md`](AGENTS.md) (Codex).
 
-1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/link-dots.ts`.
+1. **Topic-first.** Adding or removing a tool touches exactly one directory plus `scripts/config-registry.ts`.
    No `common` / `mac` / `wsl` bucket directories — OS variance goes *inside* the tool's directory.
 2. **Single source of truth.** Each fact has one home (see *Architecture → Single sources of truth*):
    to change it you edit one file, never many.

@@ -16,8 +16,9 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
+import { jsonText, z } from "../../../hooks/zod.ts";
 import { tempDir, tempHome } from "./helpers.ts";
+import { decodedJson } from "../../../hooks/tests/decode.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "..", "statusline-command.ts");
 const ESC = String.fromCodePoint(27); // not a literal \u001b: the pattern then has no control character
@@ -102,7 +103,7 @@ function readCache<S extends z.ZodType>(
   schema: S,
 ): z.output<S> {
   const raw = readFileSync(join(home, ".cache", "claude", file), "utf8");
-  return jsonOf(schema).parse(raw);
+  return decodedJson(schema, raw);
 }
 
 function writeClaudeJson(home: string, body: string): void {

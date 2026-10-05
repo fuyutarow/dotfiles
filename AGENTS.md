@@ -18,6 +18,9 @@ These mirror `CLAUDE.md`'s "Conventions to preserve" for Codex, which does not a
   or not at all. Never `mise use -g`, never add a second version manager (fnm, nvm, volta) to a
   login shell, and never put the mise shim directory on an interactive shell's PATH — it is the
   delivery path for non-interactive shells only. Verify with `mise run test:mise-scope`.
+- Data flows one way (INV-8): declaration → render (`mise run link:dots`) → deployed `$HOME` →
+  runtime, one writer per file. Never generate into a hand-written file; never link a path a tool
+  writes. Verify with `mise run lint:one-writer` and `mise run doctor`.
 
 ## Agent Assets
 

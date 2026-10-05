@@ -7,7 +7,7 @@ import {
   type HooksConfig,
   parseRegistry,
   wire,
-} from "../wire-hooks.ts";
+} from "../hook-registry.ts";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -45,16 +45,13 @@ const vendorOnly: HooksConfig = {
 };
 
 describe("wire", () => {
-  test("the committed vendor files match hooks.toml (drift check)", () => {
+  test("the committed vendor files carry no registry-owned entry (one writer: lint:one-writer)", () => {
     const r = spawnSync(
       process.execPath,
-      [join(ROOT, "scripts/wire-hooks.ts"), "--check"],
-      {
-        encoding: "utf8",
-        env: { ...process.env, DOTFILES: ROOT },
-      },
+      [join(ROOT, "scripts/one-writer-check.ts")],
+      { encoding: "utf8", env: { ...process.env, DOTFILES: ROOT } },
     );
-    expect(r.stdout).not.toContain("drift:");
+    expect(r.stdout).not.toContain("two writers:");
     expect(r.status).toBe(0);
   });
 

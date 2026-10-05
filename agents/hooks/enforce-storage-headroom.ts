@@ -23,7 +23,7 @@
 // of it, visibly, for a cleanup that must build.
 //
 // FAIL CLOSED on hook errors (run.sh --fail-closed, matcher "Bash"). VENDOR-NEUTRAL since 2026-09-27:
-// wired into Claude Code AND Codex from agents/hooks/hooks.toml (`mise run hooks:wire`). Codex
+// wired into Claude Code AND Codex from agents/hooks/hooks.toml (rendered by scripts/render-home.ts). Codex
 // canonicalizes its shell tools to tool_name "Bash" + tool_input.command, so this file reads one
 // payload shape for both. The 2026-09-26 near-miss that forced it: a Codex session rebuilt 145 GB
 // of target/ with C: at 3% free because this gate was registered for Claude only.

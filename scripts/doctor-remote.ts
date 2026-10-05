@@ -5,7 +5,7 @@
 //   ssh-cmd    `ssh <host> 'cmd'` — herdr --remote's bridge lives here — finds the core CLIs
 //   login      an interactive login lands in zsh with the dotfiles aliases loaded
 //   pane       an interactive NON-login shell (how herdr opens a pane: `$SHELL`, no -l) does too
-//   time-zone  the box's clock reads the human's time zone (JST, +0900)
+//   time-zone  the box's clock reads the human's time zone (zsh/timezone, e.g. +0900)
 //   commands   every alias target and topic command (btm, herdr, …) resolves there
 //   smart-open a host tagged `Tag smart-open` gets its forwarded socket bound on attach
 // Every check here was first a hand-run ssh during the 2026-10-05 rentals, and two of them found
@@ -16,6 +16,8 @@
 // whose sshd lacks StreamLocalBindUnlink would otherwise refuse the next real attach.
 // Consumer: a human or agent reading verdict lines. Exit: 0 no FAIL · 1 a FAIL · 2 usage/FATAL.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 
@@ -123,9 +125,21 @@ async function checkSshCmd(host: string): Promise<Finding> {
 
 // The human's time zone reaches the box (zsh/zshenv, zsh/bashrc): a rented box runs in UTC, and a
 // TZ whose zone file is missing would silently fall back to UTC — so this asks the clock itself.
-const WANT_OFFSET = "+0900";
+// The zone NAME is read from this checkout's zsh/timezone (its one home); the offset to expect is
+// that zone's offset NOW, in `date +%z` form, so a DST zone is judged at the moment of the probe.
+const ZONE = readFileSync(
+  join(import.meta.dir, "..", "zsh", "timezone"),
+  "utf8",
+).trim();
+
+/** `date +%z` for `zone` at this instant: "+09:00" -> "+0900". */
+export function wantOffset(zone: string): string {
+  return Temporal.Now.zonedDateTimeISO(zone).offset.replace(":", "");
+}
+
 async function checkTimeZone(host: string): Promise<Finding> {
-  const probe = `echo "@@""TZOFF=$(date +%z)"; echo "@@""TZ=\${TZ:-unset}"; test -e /usr/share/zoneinfo/Asia/Tokyo && echo "@@""ZONEFILE=yes" || echo "@@""ZONEFILE=no"`;
+  const want = wantOffset(ZONE);
+  const probe = `echo "@@""TZOFF=$(date +%z)"; echo "@@""TZ=\${TZ:-unset}"; test -e /usr/share/zoneinfo/${ZONE} && echo "@@""ZONEFILE=yes" || echo "@@""ZONEFILE=no"`;
   const r = await run([...SSH, host, probe], null, 30_000);
   const off = marker(r.out, "TZOFF");
   if (off === null)
@@ -134,16 +148,20 @@ async function checkTimeZone(host: string): Promise<Finding> {
       "WARN",
       `the probe did not finish (exit ${r.code})`,
     );
-  if (off === WANT_OFFSET)
-    return finding("time-zone", "PASS", `${host}'s clock reads JST (${off})`);
+  if (off === want)
+    return finding(
+      "time-zone",
+      "PASS",
+      `${host}'s clock reads ${ZONE} (${off})`,
+    );
   const zoneFile = marker(r.out, "ZONEFILE") === "yes";
   return finding(
     "time-zone",
     "FAIL",
-    `${host}'s clock reads ${off}, not ${WANT_OFFSET} (TZ=${marker(r.out, "TZ") ?? "?"}, Asia/Tokyo zone file ${zoneFile ? "present" : "MISSING"})`,
+    `${host}'s clock reads ${off}, not ${want} (TZ=${marker(r.out, "TZ") ?? "?"}, ${ZONE} zone file ${zoneFile ? "present" : "MISSING"})`,
     zoneFile
-      ? "pull dotfiles there (zsh/zshenv and zsh/bashrc export TZ=Asia/Tokyo)"
-      : "install the tz database there (Debian/Ubuntu: tzdata) — without it TZ=Asia/Tokyo would read as UTC",
+      ? "pull dotfiles there (zsh/zshenv and zsh/bashrc export TZ from zsh/timezone)"
+      : `install the tz database there (Debian/Ubuntu: tzdata) — without it TZ=${ZONE} would read as UTC`,
   );
 }
 

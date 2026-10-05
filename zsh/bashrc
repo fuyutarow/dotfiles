@@ -8,9 +8,16 @@ case ":$PATH:" in
   *) PATH="$HOME/.local/bin:$HOME/.bun/bin:$PATH" ;;
 esac
 export PATH
-# The human's time zone, as in zsh/zshenv (a bash ssh-cmd shell must agree with zsh).
-if [ -z "${TZ:-}" ] && [ -e /usr/share/zoneinfo/Asia/Tokyo ]; then
-  export TZ=Asia/Tokyo
+# The human's time zone, as in zsh/zshenv (a bash ssh-cmd shell must agree with zsh): the name is
+# read from zsh/timezone beside this file. `read` is a builtin; the one readlink resolves ~/.bashrc.
+if [ -z "${TZ:-}" ]; then
+  _bashrc_tzf="$(readlink -f "${BASH_SOURCE[0]}")"
+  _bashrc_tzf="${_bashrc_tzf%/*}/timezone"
+  if [ -r "$_bashrc_tzf" ] && read -r _bashrc_tz < "$_bashrc_tzf" &&
+    [ -n "$_bashrc_tz" ] && [ -e "/usr/share/zoneinfo/$_bashrc_tz" ]; then
+    export TZ="$_bashrc_tz"
+  fi
+  unset _bashrc_tzf _bashrc_tz
 fi
 # Same reason as in zsh/zshenv (a host with unreadable files in /etc/pki/tls/certs).
 if [ -z "${SSL_CERT_FILE:-}" ] && [ -d /etc/pki/tls/certs ] && [ -r /etc/ssl/certs/ca-certificates.crt ]; then

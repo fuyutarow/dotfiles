@@ -51,13 +51,17 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    should be callable by name (`agent-resource-run`, `serena-foreground`, `repo-retrieve`) is a
    `package.json` `bin` entry, installed into `~/.bun/bin` by `bun link` (`mise run deps`) —
    never a hand-made symlink of a `.ts` into `~/.local/bin`, which holds standalone binaries
-   and shell scripts only. **ONE file is generated, not linked**:
-   `~/.claude/settings.json` is rendered by `scripts/render-claude-settings.ts` (called from
-   `link-dots.ts`) from the committed base plus an untracked `~/.claude/settings.private.json`.
-   Forced, not preference — `autoMode` is read from user settings only, and its content is
+   and shell scripts only. **Three files are RENDERED, not linked** (each is a function of several
+   declarations): `~/.claude/settings.json`, `~/.codex/hooks.json` and `~/.claude/CLAUDE.md`, by
+   `scripts/render-home.ts` (called from `link-dots.ts`). Inputs: the committed vendor files, an
+   untracked `~/.claude/settings.private.json`, `zsh/timezone` (→ `env.TZ`),
+   `agents/hooks/hooks.toml` (wired at render time) and the dispatch roster (→ CLAUDE.md block).
+   settings.json was forced first — `autoMode` is read from user settings only, and its content is
    machine/repo-specific, so a symlink at this PUBLIC repo meant choosing between losing the
-   setting and publishing a private project's structure. Cost: after editing
-   `agents/claude/settings.json`, run `mise run link:dots` (the post-merge hook already does).
+   setting and publishing a private project's structure. Cost: after editing any input, run
+   `mise run link:dots` (the post-merge hook already does). `~/.gitconfig` and
+   `~/.config/jj/config.toml` are **tool-owned** real files (the repo's halves are linked to
+   `~/.config/git/config` and `~/.config/jj/conf.d/dotfiles.toml`).
    Tool list lives ONLY in `Brewfile` (+
    `scripts/check-tools.sh` — a tool in the Brewfile but absent from that array is drift the
    check cannot catch). Repo tasks live ONLY in `mise.toml` — this repo has NO justfile
@@ -75,6 +79,13 @@ OS variance of a cross-OS tool lives INSIDE its topic dir as `*.mac` / `*.wsl` /
    non-interactive ONLY, because `ssh host 'cmd'` skips `.zshrc`. Never `mise use -g`, never
    add a second version manager to a login shell (fnm removed 2026-08-06), never put the shim
    dir on an interactive PATH. `mise run test:mise-scope` fails on all three.
+6a. **Data flows one way (INV-8).** declaration (repo) → render (`link:dots`) → deployed (`$HOME`)
+   → runtime; every file has ONE writer. Never generate INTO a hand-written file (no wired hook
+   entries in `agents/claude/settings.json` / `agents/codex/hooks.json`, no rendered roster in
+   `agents/claude/CLAUDE.md` — `mise run lint:one-writer` fails on both); never link a path a
+   tool writes (`git config --global`, `jj config set --user`) — make it tool-owned and give the
+   repo's half a read-only path; run a third-party fetch in a throwaway HOME and import it
+   (`skills:add`). A value has one home (the time zone is `zsh/timezone`).
 7. Startup debug logs are gated: `export DOTFILES_DEBUG=1` to see `[DEBUG]` lines (`_dbg`).
 8. **Skill naming** (`agents/skills/<name>/SKILL.md`): dir name **=** frontmatter `name:`, and
    skills use one consistent shape — the official-recommended **gerund** form

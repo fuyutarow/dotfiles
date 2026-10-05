@@ -6,21 +6,7 @@
   automatically restore its registration. Existing executable tools keep their own lifecycle.
 
 <!-- roster:begin -->
-<!-- GENERATED from agents/models/dispatch-roster.toml by scripts/render-roster.ts — edit the roster, then `mise run roster:render`; `mise run lint:roster` fails on drift. -->
-- **Every dispatch goes through `agent-router run`: Jev picks one row of this roster from the brief (zero-shot, logged with its probabilities), or you name one with `--choice` — no justification line. Luna first: when Jev is unsure or unavailable the default `luna-high` runs, and the receipt says why.**
-  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of 2026-10-05.
-
-  | pick | id | runs as | AA | TB4 | SciCode | $in/$out | use for |
-  | :-: | --- | --- | --: | --: | --: | --- | --- |
-  | ○ | `luna-medium` | `agent-router run --choice luna-medium` | 30 | 2.5 | 50.9 | $0.10/$0.50 | bulk read-only work: extraction, inventory, summaries, simple edits |
-  | ● | `luna-high` | `agent-router run --choice luna-high` | 33 | 4.5 | 50.3 | $0.10/$0.50 | the default worker: clear-spec code and text, fixes, tests |
-  | ○ | `luna-xhigh` | `agent-router run --choice luna-xhigh` | 35 | 8.1 | 51.7 | $0.10/$0.50 | harder single-file reasoning; still weak at long terminal sessions |
-  | ○ | `luna-max` | `agent-router run --choice luna-max` | 38 | 12.6 | 54.6 | $0.10/$0.50 | the deepest luna; try before a Claude choice |
-
-  Disabled in this config: `sonnet-medium`, `sonnet-high`, `opus-medium` — set `enabled = true` in agents/models/dispatch-roster.toml to allow one.
-
-  How to choose: leave it to Jev; name a row only when you know better (e.g. one effort higher after a failed run; `luna-max` is the ceiling in this config).
-  How to run: `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: without --choice Jev picks the row from the brief (falls back to the default, with the reason, when unsure), with `--choice <id>` it takes yours; it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.
+<!-- The dispatch policy is rendered HERE at deploy time (scripts/render-home.ts, from agents/models/dispatch-roster.toml) into ~/.claude/CLAUDE.md. This file keeps only the markers: one writer per file. -->
 <!-- roster:end -->
 - **Every dispatch declares its resource class exactly once.** Use
   `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,

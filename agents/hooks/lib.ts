@@ -1,5 +1,5 @@
 // Shared plumbing for VENDOR-NEUTRAL hooks (agents/hooks/), the hook analogue of agents/skills/:
-// one source, wired into every agent CLI by hooks.json → scripts/wire-hooks.ts. Bun runtime,
+// one source, wired into every agent CLI from hooks.toml by scripts/render-home.ts. Bun runtime,
 // node:-APIs only, zero npm deps — hooks must never trigger bun's auto-install at hook time.
 //
 // What makes a hook portable is its PROTOCOL SURFACE, and today Claude Code and Codex share it:

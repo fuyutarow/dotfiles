@@ -46,7 +46,7 @@ async function capture(cmd: string[], ms: number): Promise<string> {
 // Windows does not follow a symlink created inside WSL. So this file is COPIED, and a copy can
 // go stale — which is exactly why it gets a task of its own that reports drift instead of a
 // silent link that can never drift. It is the second generated-not-linked exception in this
-// repo, after ~/.claude/settings.json (scripts/render-claude-settings.ts).
+// repo, after ~/.claude/settings.json (scripts/render-home.ts).
 //
 // WHY IT IS TRACKED AT ALL. On 2026-09-09 this file was edited by scp'ing straight to the
 // Windows host — the machine ended up with settings that existed nowhere in the repo, which is

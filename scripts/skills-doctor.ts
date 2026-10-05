@@ -113,9 +113,9 @@ function checkShadowing(home: string, dotfiles: string): Finding[] {
 }
 
 /**
- * ~/.agents/skills is the cross-agent ("universal") skill home: Codex reads it directly, and
- * `skills add -g` writes real bytes into it. Pointing it at this repo is what makes a vendored
- * skill land in git instead of in an untracked corner of $HOME.
+ * ~/.agents/skills is the cross-agent ("universal") skill home: Codex reads it directly. It is a
+ * read-only projection of agents/skills (INV-8: nothing writes through it — scripts/vendor-skill.ts
+ * fetches in a throwaway HOME), so aimed elsewhere, Codex reads skills the repo does not declare.
  */
 function checkUniversalWiring(home: string, dotfiles: string): Finding[] {
   const universal = `${home}/.agents/skills`;
@@ -136,32 +136,24 @@ function checkUniversalWiring(home: string, dotfiles: string): Finding[] {
       line:
         `WIRING: ${universal} should be a symlink to ${expected} but is ` +
         `${target === null ? "not a symlink" : `aimed at ${target}`}. ` +
-        "A vendored skill fetched now would land outside the repo. Run: mise run link:skills",
+        "Codex would read skills this repo does not declare. Run: mise run link:skills",
     },
   ];
 }
 
-/** The provenance ledger only reaches git because ~/.agents/.skill-lock.json is a link into it. */
+/** INV-8: the committed ledger has ONE writer, scripts/vendor-skill.ts. A link from the deployed
+ * ~/.agents/.skill-lock.json into it (the pre-2026-10-06 layout) lets the skills CLI write the
+ * repo directly, so it must be gone — `mise run link:dots` removes it (RETIRED). */
 function checkLedgerWiring(home: string, dotfiles: string): Finding[] {
   const ledger = `${home}/.agents/.skill-lock.json`;
-  const expected = `${dotfiles}/agents/skills-lock.json`;
-  if (!existsSync(`${home}/.agents`)) {
-    return [
-      {
-        level: "SKIP",
-        line: `LEDGER: ${home}/.agents absent — nothing linked yet`,
-      },
-    ];
-  }
   const target = symlinkTarget(ledger);
-  if (target === expected) return [];
+  if (target === null || !target.startsWith(`${dotfiles}/`)) return [];
   return [
     {
       level: "FAIL",
       line:
-        `LEDGER: ${ledger} should be a symlink to ${expected} but is ` +
-        `${target === null ? "not a symlink" : `aimed at ${target}`}. ` +
-        "Provenance written by `skills add` would never be committed. Run: mise run link:dots",
+        `LEDGER: ${ledger} is a symlink into the repo (${target}) — a deployed path the skills CLI ` +
+        "writes through. Run: mise run link:dots",
     },
   ];
 }

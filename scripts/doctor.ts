@@ -4,7 +4,8 @@
 //
 // It owns no rules of its own. Each check delegates to the file that already owns the fact:
 //   links       scripts/link-dots.ts --check     every declared symlink realized, no dangling ones
-//   settings    scripts/render-claude-settings   ~/.claude/settings.json == a fresh render
+//   rendered    scripts/render-home.ts           ~/.claude/settings.json, ~/.codex/hooks.json and
+//                                                ~/.claude/CLAUDE.md == a fresh render
 //   skills      scripts/skills-doctor.ts         no shadowed skill, wiring + ledger intact
 //   brew        Brewfile                         `brew bundle check` — declared tools installed
 //   deps        package.json + node_modules      every pinned dependency installed at its pin
@@ -29,7 +30,7 @@
 //                                                remote name carrying the alias), on attach only
 //   iterm2      iterm2/             (mac only)   iTerm2 loads its prefs from this repo
 //
-// NO FLAGS, NO DEPENDENCIES — deliberate, like render-claude-settings.ts: the machine being
+// NO FLAGS, NO DEPENDENCIES — deliberate, like render-home.ts: the machine being
 // diagnosed may be half set up (no node_modules yet), and that is exactly when this must run.
 // With no argv read there is no Cleye boundary to owe (writing-bun-scripts BG1). Inputs come from
 // the environment so tests can point it at fixtures:
@@ -211,64 +212,85 @@ export async function checkLinks(ctx: Ctx): Promise<Finding> {
   );
 }
 
-export async function checkSettings(ctx: Ctx): Promise<Finding> {
-  const live = join(ctx.home, ".claude", "settings.json");
-  if (!existsSync(join(ctx.dotfiles, "agents/claude/settings.json"))) {
-    return skip("settings", "no agents/claude/settings.json in this checkout");
+// Every file scripts/render-home.ts writes, as a path under HOME. JSON ones compare as values (and
+// name the differing top-level keys); text compares byte-for-byte.
+const RENDERED = [
+  { rel: ".claude/settings.json", json: true },
+  { rel: ".codex/hooks.json", json: true },
+  { rel: ".claude/CLAUDE.md", json: false },
+] as const;
+
+/** Why the deployed `live` is not the fresh render `want` (empty when it is). */
+async function renderedDiff(
+  rel: string,
+  json: boolean,
+  live: string,
+  want: string,
+): Promise<string[]> {
+  if (!existsSync(live) || lstatSync(live).isSymbolicLink())
+    return [`${rel}: missing, or still a symlink into the repo`];
+  if (!json)
+    return readFileSync(live, "utf8") === readFileSync(want, "utf8")
+      ? []
+      : [`${rel}: differs from a fresh render`];
+  const have = await readJson(live);
+  if (have === null) return [`${rel}: not JSON`];
+  const wantObj = obj(await readJson(want)) ?? {};
+  const haveObj = obj(have) ?? {};
+  const keys = new Set([...Object.keys(wantObj), ...Object.keys(haveObj)]);
+  return [...keys]
+    .filter((k) => !Bun.deepEquals(wantObj[k], haveObj[k], true))
+    .map((k) => `${rel}: top-level key differs: ${k}`);
+}
+
+export async function checkRendered(ctx: Ctx): Promise<Finding> {
+  if (!existsSync(join(ctx.dotfiles, "scripts/render-home.ts"))) {
+    return skip("rendered", "no scripts/render-home.ts in this checkout");
   }
-  const scratch = mkdtempSync(join(tmpdir(), "doctor-settings-"));
-  // Cleanup runs on return AND on throw, same as the prior try/finally: the scratch directory is
-  // removed once this block ends, in either case.
+  const scratch = mkdtempSync(join(tmpdir(), "doctor-rendered-"));
+  // Cleanup runs on return AND on throw: the scratch directory is removed once this block ends.
   using _scratch = {
     [Symbol.dispose]: () => {
       rmSync(scratch, { recursive: true, force: true });
     },
   };
-  const r = await run(
-    ["bun", join(ctx.dotfiles, "scripts/render-claude-settings.ts")],
-    {
-      ms: 30_000,
-      env: {
-        HOME: scratch,
-        DOTFILES: ctx.dotfiles,
-        CLAUDE_SETTINGS_PRIVATE: join(
-          ctx.home,
-          ".claude",
-          "settings.private.json",
-        ),
-      },
+  const r = await run(["bun", join(ctx.dotfiles, "scripts/render-home.ts")], {
+    ms: 30_000,
+    env: {
+      HOME: scratch,
+      DOTFILES: ctx.dotfiles,
+      CLAUDE_SETTINGS_PRIVATE: join(
+        ctx.home,
+        ".claude",
+        "settings.private.json",
+      ),
     },
-  );
+  });
   if (r.timedOut || r.code !== 0) {
     return warn(
-      "settings",
-      `could not render a reference copy (exit ${r.code}): ${r.out.trim()}`,
+      "rendered",
+      `could not render a reference copy (exit ${r.code}): ${(r.out + r.err).trim()}`,
     );
   }
-  const want = await readJson(join(scratch, ".claude", "settings.json"));
-  const have = await readJson(live);
-  if (have === null) {
+  const details = (
+    await Promise.all(
+      RENDERED.map(async ({ rel, json }) =>
+        renderedDiff(rel, json, join(ctx.home, rel), join(scratch, rel)),
+      ),
+    )
+  ).flat();
+  if (details.length > 0) {
     return fail(
-      "settings",
-      `${live} is missing or not JSON`,
+      "rendered",
+      "a rendered file in $HOME is not a fresh render of the repo's declarations",
       "mise run link:dots",
+      details,
     );
   }
-  if (!Bun.deepEquals(want, have, true)) {
-    const wantObj = obj(want) ?? {};
-    const haveObj = obj(have) ?? {};
-    const keys = new Set([...Object.keys(wantObj), ...Object.keys(haveObj)]);
-    const differing = [...keys].filter(
-      (k) => !Bun.deepEquals(wantObj[k], haveObj[k], true),
-    );
-    return fail(
-      "settings",
-      `${live} differs from a fresh render of the committed base + private overlay`,
-      "mise run link:dots",
-      differing.map((k) => `top-level key differs: ${k}`),
-    );
-  }
-  return pass("settings", "~/.claude/settings.json matches a fresh render");
+  return pass(
+    "rendered",
+    `${RENDERED.map((f) => `~/${f.rel}`).join(", ")} match a fresh render`,
+  );
 }
 
 export async function checkSkills(ctx: Ctx): Promise<Finding> {
@@ -999,7 +1021,7 @@ type Check = {
 const always = () => null;
 export const CHECKS: Check[] = [
   { name: "links", run: checkLinks, applies: always },
-  { name: "settings", run: checkSettings, applies: always },
+  { name: "rendered", run: checkRendered, applies: always },
   { name: "skills", run: checkSkills, applies: always },
   {
     name: "brew",

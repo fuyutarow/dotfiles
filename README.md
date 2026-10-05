@@ -95,6 +95,7 @@ Topic-first: one tool owns one directory; OS variance lives inside it as `*.mac`
 **Single sources of truth** — each fact has one home, so nothing drifts:
 
 - **Symlinks** → `scripts/link-dots.ts` (OS-aware; a safe mode re-links on every `git pull` via `.githooks/post-merge`).
+- **Rendered `$HOME` files** → `scripts/render-home.ts` (called by link-dots; checked by `mise run doctor`). See invariant 8.
 - **Tools** → `Brewfile` · **Tasks** → `mise.toml` · **Agent + MCP config** → `agents/` and `.mcp.json`.
 
 ## Design — the invariants
@@ -126,6 +127,25 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    it never builds an experiment environment: Julia, CUDA, Python and their versions are each
    repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
    dotfiles bug, not a property of the machine. Entry points: *Setup* below.
+8. **Data flows one way; every file has one writer.** declaration (the repo, hand-written) →
+   render (`mise run link:dots`) → deployed (`$HOME`, never edited) → runtime. Nothing flows
+   back as data; the only way back is a check (`mise run doctor`, `link:dots --check`).
+   - A deployed path is a **link** when it is one declaration verbatim, and **rendered** when it
+     is a function of several (`scripts/render-home.ts`: `~/.claude/settings.json` = base +
+     private overlay + `zsh/timezone` + the hook registry; `~/.codex/hooks.json`;
+     `~/.claude/CLAUDE.md` = template + dispatch roster). A generator never writes INTO a
+     hand-written file — `mise run lint:one-writer` fails on registry hooks in a committed vendor
+     file or a rendered roster in the CLAUDE.md template.
+   - A file a tool rewrites on command is **tool-owned**: a real machine-local file, never a link
+     into the repo, with the repo's half in a path the tool only reads (`~/.gitconfig` beside the
+     linked `~/.config/git/config`; jj's `config.toml` beside the linked `conf.d/dotfiles.toml`).
+     Measured 2026-10-06: through a link, `git config --global` and `jj config set --user` both
+     rewrote the repo. Third-party fetches run in a throwaway HOME and are imported explicitly
+     (`mise run skills:add`).
+   - A value has one home: the zone name is `zsh/timezone`, read by zshenv/bashrc, rendered into
+     Claude Code's `env.TZ`, and expected by `doctor:remote`.
+   - Remaining human-driven write-through, by design: `sheldon add` (edits `sheldon/plugins.toml`,
+     measured) and Karabiner's GUI (macOS) are the owner editing the declaration through a tool.
 
 ## Setup
 

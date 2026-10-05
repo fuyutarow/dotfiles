@@ -25,11 +25,17 @@
 //      it does not stop the CLI grafting on a skill from a DIFFERENT repo.
 //
 // So this wrapper pins the version, forces `-g`, requires explicit skill names, REFUSES a name
-// this repo already owns, and diffs the skill directory before/after the fetch to catch and
-// remove any name #4 sneaks in that nobody asked for. The one thing it does NOT reimplement is
-// the fetch: with `-g` the CLI writes to ~/.agents/skills, which link-skills.ts already points at
-// agents/skills, so the bytes land in the repo on their own and `git status` is the review
-// surface.
+// this repo already owns, and imports ONLY the names asked for, so #4's stowaway never arrives.
+// The one thing it does NOT reimplement is the fetch.
+//
+// DATA FLOWS ONE WAY (INV-8, 2026-10-06). The CLI runs with HOME set to a throwaway directory,
+// so it writes nothing but that directory; THIS script is then the one writer of what enters the
+// repo: each requested agents/skills/<name>/ and its entry in agents/skills-lock.json. Until then
+// the CLI ran against the real HOME, where ~/.agents/skills and ~/.agents/.skill-lock.json were
+// links INTO the repo — so a third-party tool wrote the repo through a deployed path, stowaways
+// included, and a link aimed elsewhere sent the bytes outside it without a word. `git status`
+// stays the review surface. Test seam: VENDOR_SKILL_CLI names a script run with bun in place of
+// `bunx skills@…` (scripts/tests/fake-skills.ts).
 //
 // Usage: bun scripts/vendor-skill.ts <owner/repo> --skill <name> [--skill <name>…]
 //                                    [--force] [--dry-run] [--dotfiles <path>] [--home <path>]
@@ -42,16 +48,16 @@
 // (batched: every violating name is reported in ONE decision, never one-at-a-time).
 
 import {
+  cpSync,
   existsSync,
-  lstatSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, z } from "../agents/hooks/zod.ts";
@@ -94,33 +100,6 @@ function nonEmptyString(flag: string): (value: string) => string {
   };
 }
 
-/** Raw, non-canonicalizing symlink probe — the stored target string, never resolved. */
-function symlinkTarget(p: string): string | null {
-  const lstat = fromThrowable((path: string) => lstatSync(path))(p);
-  if (lstat.isErr() || !lstat.value.isSymbolicLink()) return null;
-  return readlinkSync(p);
-}
-
-/**
- * The load-bearing precondition. `-g` sends the real bytes to ~/.agents/skills; this repo only
- * receives them because link-skills.ts has pointed that path at agents/skills. If the link is
- * absent or aimed elsewhere, the fetch would succeed and land OUTSIDE the repo — the exact
- * invisible-copy failure this whole wrapper exists to prevent — so it is checked, never assumed.
- */
-function checkUniversalWiring(home: string, dotfiles: string): string | null {
-  const universal = `${home}/.agents/skills`;
-  const expected = `${dotfiles}/agents/skills`;
-  const target = symlinkTarget(universal);
-  if (target === expected) return null;
-  if (target === null && !existsSync(universal)) {
-    return `${universal} does not exist — run: mise run link:skills`;
-  }
-  if (target === null) {
-    return `${universal} is a real path, not a symlink into this repo — run: mise run link:skills`;
-  }
-  return `${universal} points at ${target}, not ${expected} — run: mise run link:skills`;
-}
-
 /** Skill names this repo already owns; vendoring over one destroys it (see header note 3). */
 function collidingNames(
   names: string[],
@@ -161,28 +140,15 @@ export function detectStowaways(
 // The ledger is read as a record: only `skills` is looked at, every other key is carried through.
 const LedgerDocSchema = z.record(z.string(), z.unknown());
 
-/** Best-effort: drop a stowaway's entry from the committed provenance ledger too, so the ledger
- * never records a name that no longer exists on disk (skills-doctor's ORPHAN check would flag
- * the reverse gap otherwise). Never fatal — the directory removal is the safety net that matters. */
-function scrubLedger(dotfiles: string, names: string[]): void {
-  const path = `${dotfiles}/agents/skills-lock.json`;
-  const text = fromThrowable(() => readFileSync(path, "utf8"))();
-  if (text.isErr()) return;
-  const doc = jsonOf(LedgerDocSchema).safeParse(text.value);
-  if (!doc.success) return;
-  const skills = LedgerDocSchema.safeParse(doc.data.skills);
-  if (!skills.success) return;
-  if (!names.some((name) => name in skills.data)) return;
-  // The rewritten ledger keeps every other key, and `skills` stays where it was.
-  const kept = Object.fromEntries(
-    Object.entries(skills.data).filter(([key]) => !names.includes(key)),
-  );
-  fromThrowable(() => {
-    writeFileSync(
-      path,
-      `${JSON.stringify({ ...doc.data, skills: kept }, null, 2)}\n`,
-    );
-  })();
+/** The ledger with `entries` merged into its `skills` (every other key and entry kept, `skills`
+ * where it was). Throws when the committed ledger is unreadable — provenance is never guessed. */
+export function mergeLedger(
+  text: string,
+  entries: Record<string, unknown>,
+): string {
+  const doc = jsonOf(LedgerDocSchema).parse(text);
+  const skills = LedgerDocSchema.parse(doc.skills ?? {});
+  return `${JSON.stringify({ ...doc, skills: { ...skills, ...entries } }, null, 2)}\n`;
 }
 
 function main(): void {
@@ -240,9 +206,6 @@ function main(): void {
   // problem and hiding a collision behind it would cost the caller a second round trip.
   const refusals: string[] = [];
 
-  const wiring = checkUniversalWiring(home, dotfiles);
-  if (wiring !== null) refusals.push(`WIRING: ${wiring}`);
-
   const collisions = collidingNames(names, dotfiles);
   if (collisions.length > 0 && !parsed.flags.force) {
     for (const { name, path } of collisions) {
@@ -287,53 +250,87 @@ function main(): void {
     return;
   }
 
-  const skillsDir = `${dotfiles}/agents/skills`;
-  const before = listSkillDirNames(skillsDir);
-
-  const proc = Bun.spawnSync(argv, {
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-    timeout: FETCH_TIMEOUT_MS,
-  });
+  // The fetch writes only a throwaway HOME (see DATA FLOWS ONE WAY). The package cache stays the
+  // real one, so a pinned CLI already fetched is not downloaded again.
+  const stage = mkdtempSync(`${tmpdir()}/vendor-skill-`);
+  using _stage = {
+    [Symbol.dispose]: () => {
+      rmSync(stage, { recursive: true, force: true });
+    },
+  };
+  const fake = process.env.VENDOR_SKILL_CLI;
+  const proc = Bun.spawnSync(
+    fake === undefined ? argv : [process.execPath, fake, ...argv.slice(2)],
+    {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+      timeout: FETCH_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        HOME: stage,
+        BUN_INSTALL_CACHE_DIR:
+          process.env.BUN_INSTALL_CACHE_DIR ?? `${home}/.bun/install/cache`,
+      },
+    },
+  );
   if (proc.exitCode !== 0) {
     fail(`FATAL: ${SKILLS_CLI} add exited ${proc.exitCode}`);
     process.exitCode = 1;
     return;
   }
 
-  // Header note 4: the CLI can graft on a skill nobody named. Diff, remove, scrub the ledger.
-  const stowaways = detectStowaways(
-    before,
-    listSkillDirNames(skillsDir),
-    names,
-  );
-  if (stowaways.length > 0) {
-    for (const n of stowaways) {
-      fromThrowable(() => {
-        rmSync(`${skillsDir}/${n}`, { recursive: true, force: true });
-      })();
-      print(
-        `STOWAWAY: removed ${skillsDir}/${n} — the CLI installed it without being asked ` +
-          "(see vendor-skill.ts header note 4)",
-      );
-    }
-    scrubLedger(dotfiles, stowaways);
-  }
-
-  // Post-condition: the CLI reports success per skill, but what matters here is whether the
-  // bytes actually arrived on the repo side of the symlink. Verify rather than trust the banner.
+  // Verify everything before writing anything: a skill without bytes or without provenance
+  // enters the repo as neither.
+  const staged = `${stage}/.agents/skills`;
+  const lockText = fromThrowable(() =>
+    readFileSync(`${stage}/.agents/.skill-lock.json`, "utf8"),
+  )();
+  const lock = lockText.isOk()
+    ? jsonOf(z.object({ skills: LedgerDocSchema })).safeParse(lockText.value)
+    : undefined;
+  const provenance = lock?.success === true ? lock.data.skills : {};
   const missing = names.filter(
-    (n) => !existsSync(`${dotfiles}/agents/skills/${n}/SKILL.md`),
+    (n) => !existsSync(`${staged}/${n}/SKILL.md`) || !(n in provenance),
   );
   if (missing.length > 0) {
-    fail(`FATAL: no SKILL.md landed for: ${missing.join(", ")}`);
     fail(
-      "  the fetch reported success but nothing reached the repo — inspect ~/.agents/skills",
+      `FATAL: the fetch reported success but left no SKILL.md or no ledger entry for: ${missing.join(", ")}`,
     );
+    fail("  nothing was written to the repo");
     process.exitCode = 1;
     return;
   }
+  const ledgerPath = `${dotfiles}/agents/skills-lock.json`;
+  const ledger = fromThrowable(() =>
+    mergeLedger(
+      existsSync(ledgerPath) ? readFileSync(ledgerPath, "utf8") : "{}",
+      Object.fromEntries(names.map((n) => [n, provenance[n]])),
+    ),
+  )();
+  if (ledger.isErr()) {
+    fail(`FATAL: ${ledgerPath} is not a readable ledger — nothing was written`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Header note 4: whatever the CLI grafted on stays in the throwaway HOME.
+  for (const n of detectStowaways([], listSkillDirNames(staged), names)) {
+    print(
+      `STOWAWAY: ignored ${n} — the CLI installed it without being asked ` +
+        "(see vendor-skill.ts header note 4)",
+    );
+  }
+
+  const skillsDir = `${dotfiles}/agents/skills`;
+  for (const n of names) {
+    rmSync(`${skillsDir}/${n}`, { recursive: true, force: true });
+    cpSync(`${staged}/${n}`, `${skillsDir}/${n}`, {
+      recursive: true,
+      dereference: true,
+    });
+  }
+  writeFileSync(ledgerPath, ledger.value);
 
   for (const n of names) print(`vendored: ${dotfiles}/agents/skills/${n}`);
   print(

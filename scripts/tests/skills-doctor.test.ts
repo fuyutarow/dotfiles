@@ -53,10 +53,6 @@ function makeWiredHome(dotfiles: string, skillNames: string[]): string {
     join(dotfiles, "agents", "skills"),
     join(home, ".agents", "skills"),
   );
-  symlinkSync(
-    join(dotfiles, "agents", "skills-lock.json"),
-    join(home, ".agents", ".skill-lock.json"),
-  );
   for (const name of skillNames) {
     symlinkSync(
       join(dotfiles, "agents", "skills", name),
@@ -109,7 +105,6 @@ describe("skills-doctor: healthy machine", () => {
     // Every skip is printed: a green run must never be mistakable for a run that checked.
     expect(out).toContain("⏭ SHADOW:");
     expect(out).toContain("⏭ WIRING:");
-    expect(out).toContain("⏭ LEDGER:");
     expect(out).toContain("✅ SKILLS-WIRING PASS");
     cleanup(dotfiles, home);
   });
@@ -163,30 +158,25 @@ describe("skills-doctor: SHADOW", () => {
 });
 
 describe("skills-doctor: WIRING and LEDGER", () => {
-  test("~/.agents/skills aimed somewhere else fails — a fetch would land outside the repo", () => {
+  test("~/.agents/skills aimed somewhere else fails — Codex would read undeclared skills", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
     const home = mkdtempSync(join(tmpdir(), "skills-doctor-home-"));
     mkdirSync(join(home, ".agents"), { recursive: true });
     symlinkSync("/somewhere/else", join(home, ".agents", "skills"));
-    symlinkSync(
-      join(dotfiles, "agents", "skills-lock.json"),
-      join(home, ".agents", ".skill-lock.json"),
-    );
 
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);
     expect(code).toBe(1);
     expect(out).toContain("WIRING:");
-    expect(out).toContain("would land outside the repo");
+    expect(out).toContain("skills this repo does not declare");
     cleanup(dotfiles, home);
   });
 
-  test("an unlinked provenance ledger fails — `skills add` output would never be committed", () => {
+  test("a ledger LINK into the repo fails — the skills CLI would write the repo through it (INV-8)", () => {
     const dotfiles = makeDotfiles(["alpha-skill"]);
-    const home = mkdtempSync(join(tmpdir(), "skills-doctor-home-"));
-    mkdirSync(join(home, ".agents"), { recursive: true });
+    const home = makeWiredHome(dotfiles, ["alpha-skill"]);
     symlinkSync(
-      join(dotfiles, "agents", "skills"),
-      join(home, ".agents", "skills"),
+      join(dotfiles, "agents", "skills-lock.json"),
+      join(home, ".agents", ".skill-lock.json"),
     );
 
     const { out, code } = run(["--dotfiles", dotfiles, "--home", home]);

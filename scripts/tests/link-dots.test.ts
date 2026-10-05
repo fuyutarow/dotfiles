@@ -20,6 +20,7 @@ import {
   applies,
   assertRoots,
   type Ctx,
+  ensureToolOwned,
   link,
   linkSshAttach,
   prune,
@@ -234,5 +235,44 @@ describe("CLI", () => {
     expect(r.exitCode).toBe(2);
     expect(r.stderr.toString()).toContain("not a dotfiles checkout");
     expect(readdirSync(home).filter((n) => !BUN_OWN.has(n))).toEqual([]);
+  });
+});
+
+describe("ensureToolOwned (INV-8: a file a tool writes is never a link into the repo)", () => {
+  test("the retired link into the repo is pruned, then an empty real file takes its place", () => {
+    const ctx = fixture("safe");
+    writeFileSync(join(ctx.dotfiles, "gitconfig"), "[user]\n");
+    symlinkSync(join(ctx.dotfiles, "gitconfig"), join(ctx.home, ".gitconfig"));
+    prune(ctx);
+    ensureToolOwned(ctx, join(ctx.home, ".gitconfig"));
+    expect(isLink(join(ctx.home, ".gitconfig"))).toBe(false);
+    expect(readFileSync(join(ctx.home, ".gitconfig"), "utf8")).toBe("");
+    // The repo file is untouched — the whole point.
+    expect(readFileSync(join(ctx.dotfiles, "gitconfig"), "utf8")).toBe(
+      "[user]\n",
+    );
+  });
+
+  test("an existing real file is the tool's and is never rewritten", () => {
+    const ctx = fixture("safe");
+    writeFileSync(join(ctx.home, ".gitconfig"), "[credential]\n");
+    ensureToolOwned(ctx, join(ctx.home, ".gitconfig"));
+    expect(readFileSync(join(ctx.home, ".gitconfig"), "utf8")).toBe(
+      "[credential]\n",
+    );
+  });
+
+  test("--check reports a missing one as drift and writes nothing", () => {
+    const ctx = fixture("check");
+    ensureToolOwned(ctx, join(ctx.home, ".config", "jj", "config.toml"));
+    expect(ctx.drift).toHaveLength(1);
+    expect(existsSync(join(ctx.home, ".config"))).toBe(false);
+  });
+
+  test("a foreign symlink is reported, never replaced", () => {
+    const ctx = fixture("safe");
+    symlinkSync("/elsewhere", join(ctx.home, ".gitconfig"));
+    ensureToolOwned(ctx, join(ctx.home, ".gitconfig"));
+    expect(readlinkSync(join(ctx.home, ".gitconfig"))).toBe("/elsewhere");
   });
 });

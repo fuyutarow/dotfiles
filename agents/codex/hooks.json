@@ -108,42 +108,6 @@
             "timeout": 5
           }
         ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-storage-headroom.ts"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-model-floor.ts"
-          }
-        ]
-      },
-      {
-        "matcher": "Grep|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-search-route.ts"
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh ~/.agents/hooks/run.sh --fail-closed enforce-repo-bash-deny.ts"
-          }
-        ]
       }
     ],
     "PostToolUse": [

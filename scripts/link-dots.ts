@@ -33,6 +33,7 @@ import {
   statSync,
   symlinkSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir, release } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
@@ -70,7 +71,10 @@ const LINKS: readonly (readonly [When, string, string])[] = [
   ["linux", "zsh/bashrc", ".bashrc"],
 
   // --- git (per-OS identity/credential include) ---
-  ["all", "git/gitconfig", ".gitconfig"],
+  // git reads BOTH ~/.config/git/config and ~/.gitconfig. The repo's config is linked to the
+  // XDG one, which git only reads; ~/.gitconfig is TOOL_OWNED below, so `git config --global`
+  // (and gh/lfs, which call it) writes there, not through a link into the repo (INV-8, measured).
+  ["all", "git/gitconfig", ".config/git/config"],
   ["mac", "git/local.mac", ".local-gitconfig"],
   ["wsl", "git/local.wsl", ".local-gitconfig"],
 
@@ -92,7 +96,8 @@ const LINKS: readonly (readonly [When, string, string])[] = [
     ".claude/statusline-command.ts",
   ],
   ["all", "agents/claude/hooks", ".claude/hooks"],
-  ["all", "agents/claude/CLAUDE.md", ".claude/CLAUDE.md"],
+  // ~/.claude/CLAUDE.md, ~/.claude/settings.json and ~/.codex/hooks.json are RENDERED, not linked:
+  // each is a function of several declarations (scripts/render-home.ts, renderHome below).
   ["all", "agents/claude/keybindings.json", ".claude/keybindings.json"],
   // Per-file, NOT the whole ~/.claude/agents dir — that directory also holds an unrelated
   // personal agent this repo does not own. Each Claude row of the dispatch roster is its own link.
@@ -112,19 +117,12 @@ const LINKS: readonly (readonly [When, string, string])[] = [
     ".claude/agents/sonnet-medium.md",
   ],
 
-  // --- third-party skill provenance ledger ---
-  // `bunx skills add -g` records where each vendored skill came from in ~/.agents/.skill-lock.json,
-  // one level ABOVE ~/.agents/skills, so without this link the provenance would never be committed.
-  // Measured: the CLI writes THROUGH this symlink and leaves it intact.
-  ["all", "agents/skills-lock.json", ".agents/.skill-lock.json"],
-
   // --- codex (user-level hooks; AGENTS.md / prompts / skills fan out via link:skills) ---
-  ["all", "agents/codex/hooks.json", ".codex/hooks.json"],
   ["all", "agents/codex/hooks", ".codex/hooks"],
 
   // --- vendor-neutral hooks (the hook analogue of ~/.agents/skills) ---
-  // hooks.toml there is wired into BOTH agents/claude/settings.json and agents/codex/hooks.json by
-  // `mise run hooks:wire`, and both call them through this one path.
+  // hooks.toml there is wired into BOTH the rendered ~/.claude/settings.json and ~/.codex/hooks.json
+  // by scripts/render-home.ts, and both call them through this one path.
   ["all", "agents/hooks", ".agents/hooks"],
 
   // NOTE for every systemd unit below: `systemctl --user disable <unit>` DELETES the symlink placed
@@ -168,7 +166,9 @@ const LINKS: readonly (readonly [When, string, string])[] = [
   // --- update steps, process monitor, jj ---
   ["all", "topgrade/topgrade.toml", ".config/topgrade.toml"],
   ["all", "bottom/bottom.toml", ".config/bottom/bottom.toml"],
-  ["all", "jj/config.toml", ".config/jj/config.toml"],
+  // jj reads every conf.d/*.toml beside its user config; `jj config set --user` writes config.toml
+  // (TOOL_OWNED below) — but conf.d when config.toml is missing, hence the empty file (measured).
+  ["all", "jj/config.toml", ".config/jj/conf.d/dotfiles.toml"],
 
   // --- lazygit (config dir differs by OS) ---
   [
@@ -211,6 +211,8 @@ const ETC_LINKS: readonly (readonly [string, string, string])[] = [
 // ~/.claude was, and retiring mcp-reaper left dead links in ~/.local/bin and the systemd dir.
 // A new destination directory needs a line here.
 const PRUNE_DIRS = [
+  ".config/git",
+  ".config/jj/conf.d",
   ".claude",
   ".claude/agents",
   ".local/bin",
@@ -223,11 +225,25 @@ const PRUNE_DIRS = [
 // Retired destinations: links that still RESOLVE but must not exist (the dangling prune cannot see
 // them). Until 2026-09-13 three .ts CLIs were hand-symlinked into ~/.local/bin; they are now
 // package.json `bin` entries that `bun link` (mise run deps) installs into ~/.bun/bin.
+// ~/.agents/.skill-lock.json was a link into agents/skills-lock.json so that `skills add -g`
+// wrote provenance THROUGH it into the repo; since 2026-10-06 (INV-8) scripts/vendor-skill.ts runs
+// the CLI in a throwaway HOME and writes the ledger itself, so no deployed path writes the repo.
 const RETIRED = [
+  ".agents/.skill-lock.json",
+  // Linked until 2026-10-06; the tools WRITE these (measured), so they became TOOL_OWNED.
+  ".gitconfig",
+  ".config/jj/config.toml",
   ".local/bin/repo-search",
   ".local/bin/agent-resource-run",
   ".local/bin/serena-foreground",
 ] as const;
+
+// Tool-owned: files a tool rewrites on command (`git config --global`, `jj config set --user`),
+// so they must be REAL machine-local files, never links into the repo — the repo's half rides in a
+// read-only path above (INV-8: data flows one way). Created empty when missing; never edited.
+// Measured 2026-10-06 in a throwaway HOME: with a link here, both commands rewrote the repo file
+// and kept the link; with the layout above, both wrote only this file.
+const TOOL_OWNED = [".gitconfig", ".config/jj/config.toml"] as const;
 
 class UsageError extends Error {}
 
@@ -384,13 +400,13 @@ function linkEtc(ctx: Ctx, rel: string, dst: string, apply: string): void {
   );
 }
 
-// settings.json is GENERATED, not linked — forced: `autoMode` is read from user settings ONLY and
-// its content is machine- and repo-specific, so a symlink at this PUBLIC repo meant publishing a
-// private project's paths. Committed base + untracked ~/.claude/settings.private.json, merged by
-// the zero-dependency renderer (it runs before `mise run deps` on a fresh machine).
-function renderSettings(ctx: Ctx): void {
+// The generated half of $HOME (settings.json, codex hooks.json, CLAUDE.md) is RENDERED, not linked:
+// each is a function of several declarations plus machine facts, and a symlink can point at only
+// one of them. scripts/render-home.ts is zero-dependency (it runs before `mise run deps` on a fresh
+// machine) and all-or-nothing (a bad input leaves every deployed file as it was).
+function renderHome(ctx: Ctx): void {
   const r = Bun.spawnSync(
-    [process.execPath, join(ctx.dotfiles, "scripts/render-claude-settings.ts")],
+    [process.execPath, join(ctx.dotfiles, "scripts/render-home.ts")],
     {
       stdout: "inherit",
       stderr: "inherit",
@@ -400,7 +416,7 @@ function renderSettings(ctx: Ctx): void {
   );
   if (r.exitCode !== 0)
     process.stderr.write(
-      "warn: settings render failed — ~/.claude/settings.json left as-is\n",
+      "warn: render-home failed — every rendered file in $HOME left as-is\n",
     );
 }
 
@@ -430,7 +446,7 @@ function pruneOne(ctx: Ctx, p: string, retired: boolean): void {
   if (target === null || !target.startsWith(`${ctx.dotfiles}/`)) return;
   if (!retired && existsSync(p)) return;
   const why = retired
-    ? "retired: now a package bin"
+    ? "retired: no longer declared (see RETIRED)"
     : "dangling link into the repo";
   if (ctx.mode === "check") {
     drift(ctx, `${p} (${why})`);
@@ -480,6 +496,30 @@ export function linkAll(ctx: Ctx, sshV: string): void {
     for (const [src, dst, apply] of ETC_LINKS) linkEtc(ctx, src, dst, apply);
   }
   prune(ctx);
+  for (const rel of TOOL_OWNED) ensureToolOwned(ctx, join(ctx.home, rel));
+}
+
+/** A real file the tool may write; an empty one when missing. Runs after prune, which removes a
+ * retired link here first. A foreign symlink is reported, never replaced. */
+export function ensureToolOwned(ctx: Ctx, p: string): void {
+  const st = lstatSync(p, { throwIfNoEntry: false });
+  if (st?.isFile() === true) return;
+  if (st !== undefined) {
+    if (ctx.mode === "check")
+      drift(ctx, `${p} (want a real tool-owned file; have ${whatIs(p)})`);
+    else
+      say(
+        `skip (tool-owned path is ${whatIs(p)}, not a file — fix by hand): ${p}`,
+      );
+    return;
+  }
+  if (ctx.mode === "check") {
+    drift(ctx, `${p} (want a real tool-owned file; have nothing)`);
+    return;
+  }
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, "");
+  say(`created (tool-owned, empty): ${p}`);
 }
 
 function main(): void {
@@ -534,7 +574,7 @@ function main(): void {
     process.exitCode = ctx.drift.length > 0 ? 1 : 0;
     return;
   }
-  renderSettings(ctx);
+  renderHome(ctx);
   if (ctx.os === "mac") loadSmartOpenReceiver(ctx);
   say("done.");
 }

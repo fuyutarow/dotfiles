@@ -91,7 +91,9 @@ fi
 
 # X11 configuration
 _dbg "Setting up X11"
-if [[ -f /etc/resolv.conf ]]; then
+# WSL only: the X server is the Windows host, reached as the resolv.conf nameserver. On plain Linux
+# (this profile is linked there too) that address is just a DNS server, so DISPLAY stays untouched.
+if [[ "$(uname -r)" == *[Mm]icrosoft* && -f /etc/resolv.conf ]]; then
   export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
 fi
 

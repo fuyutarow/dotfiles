@@ -119,6 +119,13 @@ The rules that keep the repo coherent. The agent-facing operational encoding liv
    never reads `.zshrc`, so it has no other way to reach a declared tool). Merging them puts a
    name like `npm` on every PATH for a tool nothing declared, which then refuses to run.
    Enforced by `mise run test:mise-scope`.
+7. **Core dev utilities, everywhere, at once; experiments belong to the repo.** On any machine —
+   the Mac, R99, a rented GPU box, a fresh VM — dotfiles' job is to make the core dev utilities
+   (brew, herdr, mise, jj, the shell and its aliases, the search/VCS CLIs; Brewfile `@core`)
+   usable immediately, reachable with `herdr --remote`. It is not a portable container image, and
+   it never builds an experiment environment: Julia, CUDA, Python and their versions are each
+   repo's `mise.toml` (`mise install` in that repo). A machine where an alias is missing is a
+   dotfiles bug, not a property of the machine. Entry points: *Setup* below.
 
 ## Setup
 

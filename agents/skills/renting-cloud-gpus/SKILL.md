@@ -51,9 +51,9 @@ choose tier + cap → search → create (label) → wait + prove reachable (boun
   → destroy → remove the alias → verify none left
 ```
 
-Division of labour: dotfiles installs only the core dev utilities (`scripts/bootstrap-linux.sh` →
-`mise run linux:init`, Brewfile `@core`); the experiment environment (Julia, CUDA, Python) is the
-repo's own `mise.toml`. Never hand-install a toolchain on the box.
+The bootstrap and the dotfiles/mise split are not this skill's: they are dotfiles' own operating
+principle (README *Design* invariant 7, *Setup → Throwaway Linux box*). This skill only rents,
+proves reachability, and destroys.
 
 Copyable commands, the pinned CLI version and the field reference: `references/vast-recipe.md`.
 Every step that can fail goes to **destroy**, not to "retry later".

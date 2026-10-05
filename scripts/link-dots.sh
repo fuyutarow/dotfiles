@@ -58,7 +58,10 @@ link zsh/zshenv "$HOME/.zshenv"
 link zsh/zshrc "$HOME/.zshrc"
 if $IS_MAC; then
   link zsh/zprofile.mac "$HOME/.zprofile"
-elif $IS_WSL; then
+else
+  # zprofile.wsl is the Linux login profile (brew shellenv, PATH, sheldon → aliases); its WSL-only
+  # parts are guarded. Plain Linux (a rented box, a VM) gets it too: without it linuxbrew is off
+  # PATH, sheldon never runs and no alias exists (2026-10-05, Vast box: `l`/`p`/`h` not found).
   link zsh/zprofile.wsl "$HOME/.zprofile"
 fi
 link sheldon "$HOME/.config/sheldon"

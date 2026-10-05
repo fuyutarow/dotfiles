@@ -40,7 +40,7 @@
 //                or say --here.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { z } from "../agents/hooks/zod.ts";
@@ -107,6 +107,14 @@ function pickForward(): { socket: string; alias: string } {
 }
 const FORWARD = pickForward();
 const SOCKET = FORWARD.socket;
+// What was searched, for the no-forward message: the pinned path, or the pattern a forward is bound
+// at (the alias part unknown on this side — the client chose it).
+const LOOKED_FOR =
+  process.env.SMART_OPEN_SOCKET ??
+  join(
+    process.env.SMART_OPEN_SOCKET_DIR ?? "/tmp",
+    `smart-open-${userInfo().username}--*.sock`,
+  );
 // An empty override is no override: an `export SMART_OPEN_SSH_HOST=` must not hide the name's alias.
 const configuredSshHost = process.env[SSH_HOST_ENV];
 const SSH_HOST =
@@ -339,8 +347,18 @@ async function landHere(
   why: string | undefined,
 ): Promise<boolean> {
   if (OVER_SSH && !argv.flags.here) {
+    // One finding per line, in the order a developer acts on them: what failed, what was looked
+    // for, why it matters, the fix (where to run it), and the escape hatch. <alias> is the client's
+    // ssh alias for this box — this side cannot know it, so it stays a placeholder.
     console.error(
-      `smart-open: not opened: ${why ?? `no smart-open forward at ${SOCKET}`}. This shell is over ssh, so this machine's screen is not the one you are looking at. The forward rides only on an interactive \`ssh <host>\` or \`herdr --remote <host>\` attach from the client — reattach (a herdr server keeps its first connection's forward and environment), or use --here to open it on this machine anyway.`,
+      [
+        "smart-open: not opened — no forward from your machine reaches this shell",
+        `  looked for: ${LOOKED_FOR} (${why ?? "none bound"})`,
+        "  why:  o/oo hand the target to the machine you sit at, through a socket your ssh/herdr attach forwards here",
+        "  fix:  on your machine, reattach: herdr --remote <alias>  (a herdr server keeps its first connection's forward)",
+        "        the host's ~/.ssh/config.local block needs `Tag smart-open`; check: mise run doctor:remote -- <alias>",
+        `  or:   ${isUrl(target) ? "o" : "oo"} --here ${isUrl(target) ? "<url>" : "<path>"}  opens it on this machine instead`,
+      ].join("\n"),
     );
     if (isUrl(target)) console.log(target);
     return false;

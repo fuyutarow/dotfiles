@@ -817,9 +817,18 @@ describe("a shell over ssh never opens on this machine's own screen", () => {
     });
     expect(r.code).toBe(1);
     expect(r.out.trim()).toBe("https://probe.invalid/ssh");
-    expect(r.err).toContain("not opened: no smart-open forward");
-    expect(r.err).toContain("herdr --remote");
-    expect(r.err).toContain("--here");
+    expect(r.err).toContain(
+      "not opened — no forward from your machine reaches this shell",
+    );
+    // Each line names one thing: what was searched (the pinned path here), the fix, the escape.
+    expect(r.err).toContain(
+      `looked for: ${join(dir, "absent.sock")} (none bound)`,
+    );
+    expect(r.err).toContain(
+      "fix:  on your machine, reattach: herdr --remote <alias>",
+    );
+    expect(r.err).toContain("Tag smart-open");
+    expect(r.err).toContain("o --here <url>");
     expect(localOpened()).toEqual([]);
   });
 

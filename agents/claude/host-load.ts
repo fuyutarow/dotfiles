@@ -15,6 +15,7 @@ import {
 import { dirname, join } from "node:path";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
+import { storageLine } from "../hooks/storage-line.ts";
 import { z } from "../hooks/zod.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
@@ -135,7 +136,11 @@ export function acquireGpuLock(): Result<GpuLock, string> {
   if (take()) return ok(lock);
   const held = fromThrowable(() => statSync(GPU_LOCK).mtimeMs)();
   const now = Temporal.Now.instant().epochMilliseconds;
-  if (held.isOk() && !within(held.value, now, GPU_LOCK_STALE_MS)) {
+  // Stale = OLD, nothing else. within() also rejects a timestamp in the future (right for a cache,
+  // where it means a stepped-back clock), but a lock dir created a moment ago has a sub-ms mtime that
+  // can sit a fraction of a ms past this integer `now` — and was then "broken" as stale, starting a
+  // second sampler (the O3 flake: ~1 in 10 renders of 6, before and after the host-load split).
+  if (held.isOk() && now - held.value >= GPU_LOCK_STALE_MS) {
     lock.release();
     if (take()) return ok(lock);
   }
@@ -146,6 +151,21 @@ export function acquireGpuLock(): Result<GpuLock, string> {
 export function ensureSampler(): Result<void, string> {
   const lock = acquireGpuLock();
   if (lock.isErr()) return ok(undefined); // one is already in flight: that is the goal
+  // Re-check under the lock (O3: one sample per TTL). The caller judged the cache expired BEFORE
+  // taking the lock; a sampler can finish and release in between, and this render would then start
+  // a second one for a sample that just landed — seen as 2 nvidia-smi runs for 6 concurrent renders
+  // (statusline-explicit-absence.test.ts O3, ~1 in 10 before the split, ~3 in 10 after it, because
+  // the sampler now starts faster).
+  // "Landed" means what vramFrac calls fresh: inside the TTL AND saying something (a reading, or why
+  // there is none) — the pre-2026-10-03 `{reading: null}` says neither and must not stop a sample.
+  const now = Temporal.Now.instant().epochMilliseconds;
+  const c = readJson(GPU_CACHE, GpuCacheSchema);
+  const says =
+    (c?.reading !== null && c?.reading !== undefined) || c?.why !== undefined;
+  if (c?.at !== undefined && within(c.at, now, GPU_SAMPLE_TTL_MS) && says) {
+    lock.value.release();
+    return ok(undefined);
+  }
   const started = fromThrowable(
     () => {
       const child = spawn(process.execPath, [import.meta.path], {
@@ -469,7 +489,9 @@ export const StorageConfigSchema = z.object({
       z.object({
         path: z.string().optional(),
         deny_gib: z.number().optional(),
+        deny_pct: z.number().optional(),
         warn_gib: z.number().optional(),
+        warn_pct: z.number().optional(),
       }),
     )
     .optional(),
@@ -513,9 +535,16 @@ export function diskReadings(): Result<DiskEntry[], string> {
     const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
     const freeG = (bavail * bsize) / 1024 ** 3;
     const totalG = usedG + freeG; // df's Use% denominator (reserved blocks excluded)
+    // The gate's own lines (agents/hooks/storage-line.ts), on the gate's own measure: free =
+    // bavail, size = blocks. The gate validates that each _pct is present; this reader is not the
+    // authority, so a missing share leaves the absolute size alone (100% of the drive never undercuts).
+    const free = bavail * bsize;
+    const size = blocks * bsize;
+    const line = (gib: number | undefined, pct: number | undefined): number =>
+      gib === undefined ? 0 : storageLine(gib, pct ?? 100, size);
     let col = "38;5;71";
-    if (d.warn_gib !== undefined && freeG < d.warn_gib) col = "38;5;178";
-    if (d.deny_gib !== undefined && freeG < d.deny_gib) col = "38;5;167";
+    if (free < line(d.warn_gib, d.warn_pct)) col = "38;5;178";
+    if (free < line(d.deny_gib, d.deny_pct)) col = "38;5;167";
     out.push({
       kind: "reading",
       label: diskLabel(path),

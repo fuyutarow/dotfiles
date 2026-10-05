@@ -43,6 +43,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { attempt, attemptOr, errorMessage } from "./attempt.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
+import { storageLine as effective } from "./storage-line.ts";
 import {
   type Obj,
   arr,
@@ -505,14 +506,6 @@ async function space(
     const s = statfsSync(path);
     return { free: s.bavail * s.bsize, total: s.blocks * s.bsize };
   }, null);
-}
-
-// A line in bytes: the smaller of an absolute size and a share of the drive. The sizes were set on
-// r99 (C: 931 GB, guest ~1 TB); on a 40 GB rented box `deny_gib = 40` alone denied every launch
-// with the disk 80% empty (2026-10-05). min() keeps r99's lines exactly and scales small disks.
-function effective(gibLine: number, pct: number, total: number | null): number {
-  const abs = gibLine * GiB;
-  return total === null ? abs : Math.min(abs, (pct / 100) * total);
 }
 
 // The hook only queues the bounded systemd recovery unit. A PreToolUse call must never wait for

@@ -273,43 +273,52 @@ async function checkSmartOpen(host: string): Promise<Finding> {
       "SKIP",
       `${host} carries no smart-open forward (add \`Tag smart-open\` to its config.local block to opt in)`,
     );
-  // LIVE = some process listens on the path (`ss -xl`): an attach's sshd, ours or another's. A
-  // socket file with no listener is a dead bind a dropped session left behind.
-  const probe =
+  // NEVER take a live socket (2026-10-06): on an sshd with StreamLocalBindUnlink (linux:init sets it
+  // where sudo is ours) a new attach does not fail on an existing socket, it STEALS it — and the
+  // probe used to remove "its" socket afterwards, which cut the forward of the human's own open
+  // `herdr --remote` session. So: look first over a command session (which carries no forward),
+  // and attach only when no one is listening; afterwards remove only a DEAD file (no listener).
+  // LIVE = some process listens on the path (`ss -xl`). A socket file with none is a dead bind.
+  const state =
     `test -S ${forward} && echo "${MARK("SOCK")}=present" || echo "${MARK("SOCK")}=absent"; ` +
     `ss -xlH 2> /dev/null | grep -qF " ${forward} " && echo "${MARK("LIVE")}=yes" || echo "${MARK("LIVE")}=no"`;
-  const r = await interactive(host, null, probe);
-  const sock = marker(r.out, "SOCK");
-  const live = marker(r.out, "LIVE") === "yes";
+  const before = await run([...SSH, host, state], null, 30_000);
+  if (marker(before.out, "LIVE") === "yes")
+    return finding(
+      "smart-open",
+      "PASS",
+      `a live attach holds ${forward} on ${host} — \`o\` there opens on its client (not probed further: an attach would take it over)`,
+    );
+  const r = await interactive(host, null, state);
+  const boundByUs = marker(r.out, "LIVE") === "yes";
   const refused = /remote port forwarding failed/u.test(r.err + r.out);
-  if (!refused && sock === "present" && live) {
-    // We bound it, and our session is gone: on an sshd without StreamLocalBindUnlink the file
-    // now refuses the next real attach, so remove the one WE made. Never touch a socket another
-    // session holds (the refused branches below leave it alone).
-    await run([...SSH, host, `rm -f ${forward}`], null, 30_000);
+  // Our session is gone now. Remove the file only if it is dead — never a socket someone listens on.
+  await run(
+    [
+      ...SSH,
+      host,
+      `test -S ${forward} && ! (ss -xlH 2> /dev/null | grep -qF " ${forward} ") && rm -f ${forward}; true`,
+    ],
+    null,
+    30_000,
+  );
+  if (boundByUs && !refused)
     return finding(
       "smart-open",
       "PASS",
       `an attach binds ${forward} on ${host}`,
     );
-  }
-  if (refused && live)
-    return finding(
-      "smart-open",
-      "WARN",
-      `${forward} on ${host} is held by another live session (an open \`herdr --remote\` / ssh master): \`o\` works there, but a second attach cannot bind until that one exits`,
-    );
   if (refused)
     return finding(
       "smart-open",
       "FAIL",
-      `${host} refused the forward: ${forward} is a dead bind (no listener) a dropped session left, and its sshd has no StreamLocalBindUnlink`,
-      `ssh ${host} rm -f ${forward}, then reattach (or StreamLocalBindUnlink yes in its sshd, where you have root)`,
+      `${host} refused the forward: ${forward} was a dead bind (no listener) a dropped session left, and its sshd has no StreamLocalBindUnlink — removed now`,
+      `reattach; for good: StreamLocalBindUnlink yes in its sshd (linux:init does it where sudo is ours)`,
     );
   return finding(
     "smart-open",
     "WARN",
-    `could not confirm the socket (probe: ${sock ?? "nothing"}, listener ${live ? "yes" : "no"})`,
+    `could not confirm the socket (before: ${marker(before.out, "SOCK") ?? "nothing"}, during attach: listener ${boundByUs ? "yes" : "no"})`,
   );
 }
 

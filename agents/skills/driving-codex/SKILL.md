@@ -177,29 +177,26 @@ codex reports tokens only — on subscriptions the binding constraint is each pl
 dollars. Cross-vendor cost beliefs are C4 material: measure, don't assume. Cost-model facts and
 the dated cross-vendor benchmark → `references/model-catalog.md`.
 
-## Embedding in Workflow scripts — the relay pattern
+## Fanning out luna workers — background `codex-run`, no Workflow
 
-`agent()` cannot BE codex; a relay can RUN it. The relay runs `codex-run`, this skill's PATH command
-(`scripts/codex-run.ts`, a package.json `bin`). It owns the recipe above: model, effort, sandbox and
-directory are required; the model floor is checked; stdin is closed; the wait is bounded and said;
-the receipt is one JSON line. Do not paste the raw `codex exec` recipe into a relay prompt.
+The Workflow tool is not used (owner, 2026-10-05: luna first, simplify): its agents can only be
+Claude models, and making them luna needs a gateway that turns Remote Control off for the whole
+session. Luna workers are `codex-run` calls from the main loop's Bash; the coordinator picks the
+row from `agents/models/dispatch-roster.toml` (`--choice luna-high` sets model and effort).
 
-1. Every `agent()` names its pair (`agentType: 'sonnet-high'`) and one resource declaration —
-   policy owned by `~/.claude/CLAUDE.md`.
-2. The relay's structured output is `{receipt_line: string, shell_exit: integer}`. The Workflow
-   script parses `receipt_line` itself. **RELAY-VERBATIM, enforced by shape**: never ask the relay
-   to fill receipt fields one by one. Observed 2026-10-05: a field-by-field schema let the relay
-   write its own shell exit into `codex_exit`, which the receipt did not contain.
-3. Pass the relay's Bash tool `timeout: 600000` and keep `--timeout-s` at or below 540. A longer run
-   is LONG-RUN (main-loop background) by the table above.
-4. Parallel local relays need P7: create one envelope per worker with
-   `codex-run … --emit-envelope /abs/job.resource.json` BEFORE starting the Workflow. Each relay
-   declares `RESOURCE-ENVELOPE(<that path>): agent-resource-run only` and runs
-   `agent-resource-run --manifest <path> -- codex-run …` (Linux only). A single quick call may
-   declare `RESOURCE-CLASS(NONCOMPUTE)`.
-5. Afterwards the main loop may compare each parsed receipt with its `receipt_file` on disk.
+1. One worker = one `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir>
+   --prompt-file <brief>`. Several workers = several such calls with `run_in_background: true`;
+   each re-invokes the coordinator when it exits.
+2. Read each worker's result from its JSON receipt (stdout, and `receipt_file` on disk): outcome,
+   codex exit, summed usage, last message, duration. A receipt is the evidence (C3); a summary
+   of it is not.
+3. Parallel local runs need P7: write one envelope per worker with `--emit-envelope
+   /abs/job.resource.json`, then run `agent-resource-run --manifest <path> -- codex-run …`
+   (Linux only). A single quick call needs none.
+4. A Claude row (`sonnet-*`, `opus-*`) is the Agent tool, `subagent_type` = the id; the dispatch
+   hook denies the Workflow tool and a luna id passed to Agent, printing the table.
 
-Copyable relay, verifier-trial template, and receipt fields → `references/workflow-relay.md`.
+Copyable briefs, receipt fields and the Sonnet-vs-luna verifier trial → `references/workflow-relay.md`.
 
 - **Timing**: a trivial ping returns in tens of seconds; real tasks take minutes — `pipeline()`
   over items; a barrier across codex calls wastes wall-clock equal to the call spread.
@@ -280,5 +277,5 @@ wiring FIRST; this skill supplies the codex invocation line.
 | `references/model-catalog.md` | DATED snapshot: probe-verified account catalog, CLI version floor, cache-refresh behavior, config defaults, per-call token overhead, error strings, cost model + cross-vendor baseline bench (C4 worked example), provenance grades | any model-name, availability, cost, or 使い分け question |
 | `scripts/probe-models.ts` | deterministic availability probe (floor — NOT semantic) | C1 gate — before asserting availability |
 | `scripts/codex-run.ts` (`codex-run`) | the one invocation: required flags, floor check, bounded and said wait, JSON receipt, `--emit-envelope` | every embedded call |
-| `references/workflow-relay.md` | relay prompt and schema, envelope steps, Sonnet-vs-Codex verifier trial (C4) template | building a Workflow that uses Codex workers |
+| `references/workflow-relay.md` | receipt fields, background fan-out, envelope steps, Sonnet-vs-luna verifier trial (C4) template | fanning out luna workers |
 | `tests/forge-verification-ledger.md` | forge provenance, calibration table, verification results | reforging this skill |

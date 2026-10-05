@@ -134,10 +134,11 @@ link agents/claude/hooks "$HOME/.claude/hooks"
 link agents/claude/CLAUDE.md "$HOME/.claude/CLAUDE.md"
 link agents/claude/keybindings.json "$HOME/.claude/keybindings.json"
 # Per-file, NOT the whole ~/.claude/agents dir — that directory also holds an unrelated
-# personal agent (114514.md) this repo does not own. The two dispatch-contract executors are
+# personal agent (114514.md) this repo does not own. The Claude rows of the dispatch roster are
 # each their own one-source -> one-destination link, exactly like every other entry here.
 link agents/claude/agents/sonnet-high.md "$HOME/.claude/agents/sonnet-high.md"
 link agents/claude/agents/opus-medium.md "$HOME/.claude/agents/opus-medium.md"
+link agents/claude/agents/sonnet-medium.md "$HOME/.claude/agents/sonnet-medium.md"
 
 # settings.json is GENERATED, not linked — the one exception in this file, and it is forced.
 # `autoMode` is read from user settings ONLY (ignored in project and local settings, per

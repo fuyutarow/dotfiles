@@ -158,6 +158,31 @@ describe("codex-run", () => {
     expect(existsSync(path)).toBe(false);
   });
 
+  test("--choice takes model and effort from the roster's luna row", () => {
+    const { bin, log } = fakeCodex(scratch());
+    const r = run(
+      ["--choice", "luna-max", "--sandbox", "read-only", "--cd", tmpdir()],
+      { CODEX_RUN_BIN: bin },
+    );
+    expect(r.code).toBe(0);
+    expect(r.receipt.model).toBe("gpt-6-luna");
+    const argv = readFileSync(log, "utf8").split("\n");
+    expect(argv).toContain('model_reasoning_effort="max"');
+  });
+
+  test.each([
+    [["--choice", "sonnet-high"], "is not a luna row"],
+    [["--choice", "luna-high", "--model", "gpt-6-luna"], "not both"],
+  ])("--choice %p is refused before codex starts", (args, why) => {
+    const { bin, log } = fakeCodex(scratch());
+    const r = run([...args, "--sandbox", "read-only", "--cd", tmpdir()], {
+      CODEX_RUN_BIN: bin,
+    });
+    expect(r.code).toBe(2);
+    expect(r.receipt.why).toContain(why);
+    expect(existsSync(log)).toBe(false);
+  });
+
   test("an empty prompt is refused", () => {
     const { bin, log } = fakeCodex(scratch());
     const r = run(FULL, { CODEX_RUN_BIN: bin }, "   \n");

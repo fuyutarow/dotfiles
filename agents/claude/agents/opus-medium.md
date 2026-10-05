@@ -1,11 +1,9 @@
 ---
 name: opus-medium
 description: >-
-  Escalation only — the prompt must carry one `ESCALATE(OPUS): <reason>` line (the dispatch
-  hook denies it otherwise). Use when Sonnet 5.5 high is not enough: an ambiguous spec, a
-  multi-repo or large refactor, design judgment, factual accuracy, or sonnet-high already
-  stuck on the same task. Runs on Opus at medium effort. Everything else — clear-spec
-  implementation, bug fixes, tests, terminal work — goes to sonnet-high, the default.
+  Claude row of the dispatch roster (agents/models/dispatch-roster.toml): Opus at medium
+  effort. For an ambiguous spec, design judgment, factual accuracy, or a multi-repo change.
+  Pick by the roster table; no justification line is required.
 model: opus
 effort: medium
 ---

@@ -1,4 +1,4 @@
-# Model roster — dated snapshot 2026-09-27
+# Model roster — dated snapshot 2026-10-05
 
 > **Snapshot verified**: 2026-07-31。**2026-08-26 に availability gate が一度失敗している**(下の記録)。model 名と現在のavailabilityはこの file の SOLE home。
 > 役の恒久規則は `SKILL.md`、過去の配役と根拠は `../tests/forge-verification-ledger.md` が持つ。
@@ -14,15 +14,18 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 |---|---|---|---|
 | supervisor / planning | Opus 5 | control plane only | executor、author、verifier、subagentへ配役しない。 |
 | supervisor / planning | gpt-5.6-sol | control plane only | executor、author、verifier、subagentへ配役しない。 |
-| delegated executor / verifier / outside observer | Sonnet 5.5 @ high (`subagent_type:"sonnet-high", model:"sonnet"`) — 既定 | 仕様が明確な実装、バグ修正、テスト、ターミナル作業、量産、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium", model:"opus"`) — 昇格のみ、prompt に `ESCALATE(OPUS): <理由>` を1行 | 仕様が曖昧、複数リポジトリや大規模リファクタ、設計判断、事実の正確さ、Sonnet が同じ作業で詰まった | authorならverifierはgpt-5.6-terra。 |
+| delegated executor / verifier / outside observer | Sonnet 5.5 @ medium (`subagent_type:"sonnet-medium"`) | 端末操作や多段の道具の使用など、luna が苦手な作業の軽い側 | authorならverifierはgpt-5.6-terra。 |
+| delegated executor / verifier / outside observer | Sonnet 5.5 @ high (`subagent_type:"sonnet-high"`) | 仕様が明確な実装、バグ修正、テスト、ターミナル作業、量産、independent verification、または外界観測 | authorならverifierはgpt-5.6-terra。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | Opus 5.5 @ medium (`subagent_type:"opus-medium"`) | 仕様が曖昧、複数リポジトリや大規模リファクタ、設計判断、事実の正確さ、Sonnet が同じ作業で詰まった | authorならverifierはgpt-5.6-terra。 |
 | delegated executor / verifier / outside observer | gpt-5.6-terra @ high (`model:"gpt-5.6-terra", reasoning_effort:"high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 | delegated executor / verifier / outside observer | gpt-6.1-sol 以上 @ medium or high (`model:"gpt-6.1-sol", reasoning_effort:"medium" or "high"`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
-| delegated executor / verifier / outside observer | gpt-6-luna @ any effort (`model:"gpt-6-luna", reasoning_effort:<any>`) | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
+| delegated executor / verifier / outside observer | gpt-6-luna @ any effort — Claude 側からは `codex-run --choice luna-<effort>`(既定 `luna-high`)、Codex 側は `model:"gpt-6-luna", reasoning_effort:<any>` | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 
-Claude側のdispatchはこの二組だけ(2026-09-27)。effortは暗黙継承しない:Agent/Taskは上の
-subagent_type+modelを必ず明示し、Workflowの`agent()`は`agentType:'sonnet-high'|'opus-medium'`
-か、`model`と`effort`のliteral(`sonnet`+`high` か `opus`+`medium`)で組を明示する。`enforce-dispatch-contract.ts`がそれ以外を拒否する。
+Claude 側の dispatch は `agents/models/dispatch-roster.toml`(2026-10-05、luna first)の表から1行を
+選ぶ。理由の記述はいらない(ラジオボタン式)。luna の行は main の Bash から
+`codex-run --choice <id>`(並列なら背景で複数)、Claude の行は Agent ツールの
+`subagent_type:"<id>"`。Workflow ツールは使わない。`enforce-dispatch-contract.ts` が、Workflow、
+表にない `subagent_type`、luna の id を Agent に渡したものを拒否し、表を示す。
 Codex側の`spawn_agent`も同様に`model`と`reasoning_effort`を必ず明示する(上の三系統のみ、
 2026-09-27、`agents/codex/hooks/enforce-dispatch-contract.ts`が強制。世代の下限は`agents/hooks/model-floor.toml`が持つ(sol >= 6.1 など。新世代は編集なしで通る)。gpt-6.1-sol は 2026-10-03 に probe で PROBE_OK)。
 

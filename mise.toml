@@ -129,6 +129,7 @@ depends = [
   "lint:ts",
   "lint:ts-ratchet",
   "vendor:deps:check",
+  "lint:roster",
   "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
@@ -186,6 +187,16 @@ run = "bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/cla
 dir = "{{config_root}}"
 description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
 run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks && bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/hooks"
+
+[tasks."roster:render"]
+dir = "{{config_root}}"
+description = "Render agents/models/dispatch-roster.toml (the radio table of dispatch choices, luna first) into agents/claude/CLAUDE.md"
+run = "bun scripts/render-roster.ts --write"
+
+[tasks."lint:roster"]
+dir = "{{config_root}}"
+description = "Fail when the roster table in agents/claude/CLAUDE.md is not a fresh render of agents/models/dispatch-roster.toml"
+run = "bun scripts/render-roster.ts --check"
 
 [tasks."vendor:deps"]
 dir = "{{config_root}}"

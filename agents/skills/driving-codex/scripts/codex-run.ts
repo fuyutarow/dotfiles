@@ -10,9 +10,11 @@
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
 //   C0  consumers   agent relay (primary), main loop, human; never interactive (stdin is closed).
-//   C1  invocation  codex-run --model M --effort E --sandbox S --cd DIR [--timeout-s N]
+//   C1  invocation  codex-run (--choice ID | --model M --effort E) --sandbox S --cd DIR [--timeout-s N]
 //                   [--receipt-dir D] (--prompt-file F | prompt on stdin)
 //                   model, effort, sandbox and cd are REQUIRED: a bare codex inherits config.toml.
+//                   --choice names a luna row of agents/models/dispatch-roster.toml (the radio
+//                   choice a coordinator makes) and supplies its model and effort.
 //   C2  effects     one codex subprocess, sandboxed as asked. read-only | workspace-write only;
 //                   danger-full-access belongs in an isolated runner, so it is refused here.
 //                   effort ultra (codex's own unbounded fan-out) is refused: P7 cannot admit it.
@@ -40,6 +42,7 @@ import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { jsonText, z } from "../../../hooks/zod.ts";
 import { attempt, errorMessage } from "../../../hooks/attempt.ts";
+import { loadRoster } from "../../../models/roster.ts";
 import { judge, ordersIn, parseFloorConfig } from "../../../hooks/model-orders.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -91,6 +94,10 @@ const argv = cli(
       ],
     },
     flags: {
+      choice: {
+        type: String,
+        description: "a luna row of agents/models/dispatch-roster.toml (sets model and effort)",
+      },
       model: { type: String, description: "exact model slug (checked against model-floor.toml)" },
       effort: { type: String, description: `reasoning effort: ${EFFORTS.join(" | ")}` },
       sandbox: { type: String, description: `codex sandbox: ${SANDBOXES.join(" | ")}` },
@@ -117,6 +124,10 @@ const argv = cli(
   Bun.argv.slice(2),
 );
 
+// Resolved model and effort: from --model/--effort, or from the roster row --choice names (below).
+// Declared before emit() so every receipt, refusals included, shows what was actually ordered.
+let model = argv.flags.model;
+let effort = argv.flags.effort;
 const t0 = performance.now();
 const elapsed = (): number => Math.round((performance.now() - t0) / 100) / 10;
 const startedAt = Temporal.Now.instant().toString();
@@ -129,8 +140,8 @@ function emit(outcome: Outcome, fields: Record<string, unknown>): never {
     schema: 1,
     run_id: runId,
     outcome,
-    model: argv.flags.model ?? null,
-    effort: argv.flags.effort ?? null,
+    model: model ?? null,
+    effort: effort ?? null,
     sandbox: argv.flags.sandbox ?? null,
     cwd: argv.flags.cd === undefined ? null : resolve(argv.flags.cd),
     started_at: startedAt,
@@ -160,7 +171,23 @@ function refuse(why: string): never {
 
 // --- C1/C2 checks: everything that can be refused before codex starts -------------------------
 if (argv._.length > 0) refuse(`unexpected argument: ${argv._[0]} (the prompt goes in --prompt-file or stdin)`);
-const { model, effort, sandbox, cd, timeoutS, promptFile } = argv.flags;
+const { choice, sandbox, cd, timeoutS, promptFile } = argv.flags;
+if (choice !== undefined) {
+  if (model !== undefined || effort !== undefined)
+    refuse("give --choice OR --model/--effort, not both — --choice already sets model and effort");
+  const roster = await attempt(() => loadRoster());
+  if (!roster.ok) refuse(`cannot read the dispatch roster: ${errorMessage(roster.error)}`);
+  const row = roster.value.choice.find((c) => c.id === choice);
+  if (row?.route !== "luna")
+    refuse(
+      `--choice '${choice}' is not a luna row of agents/models/dispatch-roster.toml (luna rows: ${roster.value.choice
+        .filter((c) => c.route === "luna")
+        .map((c) => c.id)
+        .join(", ")}); a claude row runs as an Agent subagent`,
+    );
+  model = row?.model;
+  effort = row?.effort;
+}
 const missing = [
   ["--model", model],
   ["--effort", effort],

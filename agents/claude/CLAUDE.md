@@ -5,22 +5,24 @@
   read its archived contract only if the task requires it; never invoke it by Skill name or
   automatically restore its registration. Existing executable tools keep their own lifecycle.
 
-- **Every dispatch names one of exactly two model+effort pairs, explicitly; Opus is
-  escalation-only.** **Sonnet 5.5 at `high`** is the default (clear-spec implementation, bug
-  fixes, tests, terminal work, bulk coding — within a few points of Opus medium, cheaper per
-  task). **Opus 5.5 at `medium`** only with exactly one `ESCALATE(OPUS): <reason>` line in the
-  prompt (Workflow: inside the same `agent()` call): ambiguous spec, multi-repo or large
-  refactor, design judgment, factual accuracy, or Sonnet already stuck on the task. Nothing is
-  implicit: the dispatch hook injects nothing and denies a missing or mismatched value.
-  Agent/Task: `subagent_type:"sonnet-high", model:"sonnet"` or
-  `subagent_type:"opus-medium", model:"opus"` (the two agent definitions carry the effort in
-  frontmatter; every other type, including forks, Explore, and general-purpose, is denied).
-  Workflow: EVERY `agent()` call names its pair — `agentType:'sonnet-high'` or
-  `agentType:'opus-medium'` alone, or one top-level literal `model:` AND `effort:` forming one
-  of the two pairs; aliases/indirection, nested options, spreads,
-  computed keys, child workflows, named workflows, and unreadable scripts are denied.
-  This is an enforcement rule, not a request: there is no bypass. The role binding is maintained
-  in `orchestrating-agents/references/model-roster.md`.
+<!-- roster:begin -->
+<!-- GENERATED from agents/models/dispatch-roster.toml by scripts/render-roster.ts — edit the roster, then `mise run roster:render`; `mise run lint:roster` fails on drift. -->
+- **Every dispatch picks exactly one row of this roster, like a radio button — no justification line. Luna first: the default is `luna-high`.**
+  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of 2026-10-05.
+
+  | pick | id | runs as | AA | TB4 | SciCode | $in/$out | use for |
+  | :-: | --- | --- | --: | --: | --: | --- | --- |
+  | ○ | `luna-medium` | `codex-run --choice luna-medium` | 30 | 2.5 | 50.9 | $0.10/$0.50 | bulk read-only work: extraction, inventory, summaries, simple edits |
+  | ● | `luna-high` | `codex-run --choice luna-high` | 33 | 4.5 | 50.3 | $0.10/$0.50 | the default worker: clear-spec code and text, fixes, tests |
+  | ○ | `luna-xhigh` | `codex-run --choice luna-xhigh` | 35 | 8.1 | 51.7 | $0.10/$0.50 | harder single-file reasoning; still weak at long terminal sessions |
+  | ○ | `luna-max` | `codex-run --choice luna-max` | 38 | 12.6 | 54.6 | $0.10/$0.50 | the deepest luna; try before a Claude choice |
+  | ○ | `sonnet-medium` | Agent `subagent_type:"sonnet-medium"` | 41 | 29.8 | 52.9 | $2/$10 | multi-step terminal/agentic work luna fails at |
+  | ○ | `sonnet-high` | Agent `subagent_type:"sonnet-high"` | 47 | 43.9 | 53.7 | $2/$10 | hard agentic work, long tool loops, live harness edits |
+  | ○ | `opus-medium` | Agent `subagent_type:"opus-medium"` | 51 | 52.5 | 59.3 | $4/$20 | ambiguous spec, design judgment, factual accuracy, multi-repo change |
+
+  How to choose: start at `luna-high`; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.
+  How to run: a luna row is `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster or luna `subagent_type`, and prints this table.
+<!-- roster:end -->
 - **Every dispatch declares its resource class exactly once.** Use
   `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,
   benchmark, resident service, parallel test, or nested fanout. Otherwise use

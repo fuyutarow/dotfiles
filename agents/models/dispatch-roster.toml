@@ -1,0 +1,121 @@
+# dispatch-roster — the ONE home of the models a coordinator may dispatch work to (luna first).
+#
+# A dispatch picks exactly one `id` here, like a radio button (no free-text justification):
+#   route = "luna"   — run from the main loop's Bash: `codex-run --choice <id> --sandbox … --cd …
+#                      --prompt-file …` (agents/skills/driving-codex). Codex is the worker's own
+#                      harness; several in the background for parallel work. No Claude tokens.
+#   route = "claude" — the Agent tool with `subagent_type: "<id>"` (agents/claude/agents/<id>.md).
+# The Workflow tool is not used (owner, 2026-10-05: luna first, simplify); the dispatch hook
+# denies it and points here.
+# Read through agents/models/roster.ts by: the dispatch hook (allowed ids, the table on a deny),
+# `codex-run --choice` (model and effort of a luna row), and scripts/render-roster.ts (the table
+# in agents/claude/CLAUDE.md; `mise run lint:roster` fails on drift).
+#
+# NUMBERS are copied from primary pages on `as_of` and verified by an independent second reader
+# (2026-10-05: 22/22 index and price values, 59/62 benchmark values confirmed; the three
+# unconfirmed were per-effort luna points of a vendor chart, not used here). A number absent from
+# a primary page is left out, never estimated. Refresh: re-read the pages, then edit here only.
+#   aa_index   Artificial Analysis Intelligence Index v4.3.2 (artificialanalysis.ai/models/<slug>)
+#   tb4        Terminal-Bench 4.0, AA's own run (agentic terminal tasks), percent
+#   scicode    SciCode, AA's own run (scientific code writing), percent
+#   coding_agent  AA Coding Agent Index v1.5 (DeepSWE v1.1 + SWE-Atlas-QnA + Terminal-Bench v4,
+#                 run inside each vendor's agent: Codex / Claude Code); only some rows are measured
+#   price_in / price_out  USD per 1M tokens, list price (OpenAI Standard short context; Anthropic
+#                 base, uncached)
+
+schema = 1
+as_of = "2026-10-05"
+default = "luna-high"
+
+[sources]
+aa_models = "https://artificialanalysis.ai/models/"
+aa_coding_agents = "https://artificialanalysis.ai/agents/coding-agents"
+openai_pricing = "https://developers.openai.com/api/docs/pricing"
+anthropic_pricing = "https://platform.claude.com/docs/en/about-claude/pricing"
+
+[[choice]]
+id = "luna-medium"
+route = "luna"
+model = "gpt-6-luna"
+effort = "medium"
+aa_index = 30
+tb4 = 2.5
+scicode = 50.9
+price_in = 0.10
+price_out = 0.50
+use_for = "bulk read-only work: extraction, inventory, summaries, simple edits"
+
+[[choice]]
+id = "luna-high"
+route = "luna"
+model = "gpt-6-luna"
+effort = "high"
+aa_index = 33
+tb4 = 4.5
+scicode = 50.3
+price_in = 0.10
+price_out = 0.50
+use_for = "the default worker: clear-spec code and text, fixes, tests"
+
+[[choice]]
+id = "luna-xhigh"
+route = "luna"
+model = "gpt-6-luna"
+effort = "xhigh"
+aa_index = 35
+tb4 = 8.1
+scicode = 51.7
+price_in = 0.10
+price_out = 0.50
+use_for = "harder single-file reasoning; still weak at long terminal sessions"
+
+[[choice]]
+id = "luna-max"
+route = "luna"
+model = "gpt-6-luna"
+effort = "max"
+aa_index = 38
+tb4 = 12.6
+scicode = 54.6
+coding_agent = 41.1
+price_in = 0.10
+price_out = 0.50
+use_for = "the deepest luna; try before a Claude choice"
+
+[[choice]]
+id = "sonnet-medium"
+route = "claude"
+model = "sonnet"
+effort = "medium"
+aa_index = 41
+tb4 = 29.8
+scicode = 52.9
+coding_agent = 45.9
+price_in = 2
+price_out = 10
+use_for = "multi-step terminal/agentic work luna fails at"
+
+[[choice]]
+id = "sonnet-high"
+route = "claude"
+model = "sonnet"
+effort = "high"
+aa_index = 47
+tb4 = 43.9
+scicode = 53.7
+coding_agent = 55.0
+price_in = 2
+price_out = 10
+use_for = "hard agentic work, long tool loops, live harness edits"
+
+[[choice]]
+id = "opus-medium"
+route = "claude"
+model = "opus"
+effort = "medium"
+aa_index = 51
+tb4 = 52.5
+scicode = 59.3
+price_in = 4
+price_out = 20
+use_for = "ambiguous spec, design judgment, factual accuracy, multi-repo change"

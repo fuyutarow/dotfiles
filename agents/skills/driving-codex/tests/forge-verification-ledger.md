@@ -268,3 +268,36 @@ WARN debt remains disclosed.
 This skill's SKILL.md gained one reciprocal routing row for `driving-git` (a new sibling). The
 prose-debt WARNs the floor reports predate that edit and are untouched by it. Waived for this
 seam edit; queue position: with the next reforge of this skill, not before.
+
+## 2026-10-05 — v2610.1.0: `codex-run` owns the invocation; relay returns the receipt line
+
+**Failure.** Relays rebuilt `codex exec` by hand every time and returned their own summaries. A
+`codex` wrapped by another command also escaped the model-floor hook, which reads only the Bash
+command line.
+
+**Change.** `scripts/codex-run.ts` (package.json `bin`) is the one invocation. It requires model,
+effort, sandbox and directory, refuses `danger-full-access` and `ultra`, and runs the floor
+judgment the hook runs (`model-orders.ts`). It closes stdin, bounds the wait, prints a heartbeat
+every 30 s, stops reading pipes 1 s after the child exits, and prints one JSON receipt that is
+also saved to a file. `--emit-envelope` writes the measured P7 envelope. SKILL.md's Workflow
+section now uses it; `references/workflow-relay.md` holds the relay, envelope steps, and the
+Sonnet-vs-Codex verifier trial template. The catalog gained a dated gpt-6 section.
+
+**Receipts.**
+
+| Check | Result |
+|---|---|
+| `bun test tests/codex-run.test.ts` | 13 pass: ok, six refusals with no codex start, empty prompt, codex failure, exit 0 without a message, timeout with heartbeat, envelope written / refused |
+| Script floor | `script-check.ts scripts/codex-run.ts`: FAIL=0 WARN=0 |
+| C1 probe | `RESULT: AVAILABLE gpt-6-luna (9,146 tokens)` |
+| Live run | effort low: ok, 5.6 s, receipt as above |
+| Live relay | field-by-field schema: relay invented `codex_exit` (2), absent from the receipt → design changed. String schema: `IDENTICAL: relayed receipt == file` |
+
+**Found while testing.** A killed child could leave a grandchild holding the stdout pipe, so the
+bound did not hold; the fix stops reading pipes 1 s after exit.
+`probe-models.test.ts` "PROBE_DIR is honored" fails on macOS in this run. The file is untouched by
+this change; a `/var` versus `/private/var` path is suspected and not verified.
+
+**Open.** `agent-resource-run` admission of the emitted envelope is checked on Linux (r99) only
+after deployment. The C4 trial itself has not been run.
+

@@ -23,7 +23,7 @@ description: >-
 
 # Driving Codex — the OpenAI Codex CLI as a headless worker
 
-> **Version**: v2608.1.0 (2026-08-03) — long/parallel runs require resource envelopes; unknown local fanout is denied.
+> **Version**: v2610.1.0 (2026-10-05) — `codex-run` owns the invocation; relays return the receipt line verbatim.
 > Prior versions and what each changed: `tests/forge-verification-ledger.md` §version history.
 > **Scope**: embedding `codex exec` as a worker under Claude Code — solo Bash calls, Agent-tool
 > subagents, Workflow scripts — plus model-availability probing, sandboxing, output parsing, and
@@ -177,29 +177,29 @@ codex reports tokens only — on subscriptions the binding constraint is each pl
 dollars. Cross-vendor cost beliefs are C4 material: measure, don't assume. Cost-model facts and
 the dated cross-vendor benchmark → `references/model-catalog.md`.
 
-## Embedding in Workflow scripts — the sonnet-wrapper pattern
+## Embedding in Workflow scripts — the relay pattern
 
-`agent()` cannot BE codex; a worker can RUN it. Proven end-to-end at forge time (2026-07-12):
-a live Workflow run's sonnet agent drove `codex exec` via Bash and relayed the C3 triple —
-result recorded in the ledger.
+`agent()` cannot BE codex; a relay can RUN it. The relay runs `codex-run`, this skill's PATH command
+(`scripts/codex-run.ts`, a package.json `bin`). It owns the recipe above: model, effort, sandbox and
+directory are required; the model floor is checked; stdin is closed; the wait is bounded and said;
+the receipt is one JSON line. Do not paste the raw `codex exec` recipe into a relay prompt.
 
-1. Every `agent()` passes `{model: 'sonnet'}` — the user-global PreToolUse hook denies the
-   Workflow otherwise (policy owned by `~/.claude/CLAUDE.md`, not here).
-2. The worker's prompt embeds the FULL recipe above verbatim — paraphrase drifts — plus the C3
-   RELAY demand.
-3. The worker's final text = the C3 triple (+ any parsed JSON), so the orchestrator gets
-   observables, not opinions.
+1. Every `agent()` names its pair (`agentType: 'sonnet-high'`) and one resource declaration —
+   policy owned by `~/.claude/CLAUDE.md`.
+2. The relay's structured output is `{receipt_line: string, shell_exit: integer}`. The Workflow
+   script parses `receipt_line` itself. **RELAY-VERBATIM, enforced by shape**: never ask the relay
+   to fill receipt fields one by one. Observed 2026-10-05: a field-by-field schema let the relay
+   write its own shell exit into `codex_exit`, which the receipt did not contain.
+3. Pass the relay's Bash tool `timeout: 600000` and keep `--timeout-s` at or below 540. A longer run
+   is LONG-RUN (main-loop background) by the table above.
+4. Parallel local relays need P7: create one envelope per worker with
+   `codex-run … --emit-envelope /abs/job.resource.json` BEFORE starting the Workflow. Each relay
+   declares `RESOURCE-ENVELOPE(<that path>): agent-resource-run only` and runs
+   `agent-resource-run --manifest <path> -- codex-run …` (Linux only). A single quick call may
+   declare `RESOURCE-CLASS(NONCOMPUTE)`.
+5. Afterwards the main loop may compare each parsed receipt with its `receipt_file` on disk.
 
-```js
-const codexAudit = (target) => agent(
-  `RESOURCE-CLASS(NONCOMPUTE): one bounded read-only Codex audit; no local fanout
-   You drive the Codex CLI. Run exactly:
-   timeout 600 codex exec --skip-git-repo-check --sandbox read-only -C <repo> \
-     -m <model-from-catalog> -c 'model_reasoning_effort="high"' \
-     'Audit ${target} for correctness. Verdict + evidence.' </dev/null
-   Relay VERBATIM: exit code, the "tokens used" line, the full final message.`,
-  {model: 'sonnet', phase: 'Audit', label: `codex:${target}`})
-```
+Copyable relay, verifier-trial template, and receipt fields → `references/workflow-relay.md`.
 
 - **Timing**: a trivial ping returns in tens of seconds; real tasks take minutes — `pipeline()`
   over items; a barrier across codex calls wastes wall-clock equal to the call spread.
@@ -279,4 +279,6 @@ wiring FIRST; this skill supplies the codex invocation line.
 |---|---|---|
 | `references/model-catalog.md` | DATED snapshot: probe-verified account catalog, CLI version floor, cache-refresh behavior, config defaults, per-call token overhead, error strings, cost model + cross-vendor baseline bench (C4 worked example), provenance grades | any model-name, availability, cost, or 使い分け question |
 | `scripts/probe-models.ts` | deterministic availability probe (floor — NOT semantic) | C1 gate — before asserting availability |
+| `scripts/codex-run.ts` (`codex-run`) | the one invocation: required flags, floor check, bounded and said wait, JSON receipt, `--emit-envelope` | every embedded call |
+| `references/workflow-relay.md` | relay prompt and schema, envelope steps, Sonnet-vs-Codex verifier trial (C4) template | building a Workflow that uses Codex workers |
 | `tests/forge-verification-ledger.md` | forge provenance, calibration table, verification results | reforging this skill |

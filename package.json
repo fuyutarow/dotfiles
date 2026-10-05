@@ -8,6 +8,7 @@
     "serena-foreground": "agents/serena-control/serena-foreground.ts",
     "repo-retrieve": "agents/retrieval-control/repo-retrieve.ts",
     "smart-open": "smart-open/smart-open.ts",
+    "codex-run": "agents/skills/driving-codex/scripts/codex-run.ts",
     "rr": "agents/retrieval-control/repo-retrieve.ts"
   },
   "dependencies": {

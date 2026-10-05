@@ -5,6 +5,21 @@
 > The durable rules (CATALOG-BY-PROBE, LEAST-PRIVILEGE, RELAY-VERBATIM) live in SKILL.md — this
 > file holds only the perishable facts.
 
+## gpt-6 generation — probed 2026-10-05
+
+| Model | Probe result | Evidence |
+|---|---|---|
+| `gpt-6-luna` | AVAILABLE | `probe-models.ts gpt-6-luna` → `RESULT: AVAILABLE gpt-6-luna (9,146 tokens)`, macOS, codex-cli 0.159.3 |
+
+`~/.codex/models_cache.json` (snapshot, not proof) lists `gpt-6-luna` with efforts low · medium ·
+high · xhigh · max, default medium, 272k context, `multi_agent_version` v2. The model floor
+(`agents/hooks/model-floor.toml`) allows luna >= 6.
+
+`codex-run` smoke, same day: effort low, read-only, trivial prompt — 5.6 s wall, 20,670 input
+tokens (12,032 cached), 6 output, peak RSS 191 MB for codex-run + codex. Through a sonnet-high
+Workflow relay: 8.1 s, receipt line relayed byte-identical to the receipt file.
+Not yet measured: luna as a verifier against the Sonnet baseline (C4, `workflow-relay.md`).
+
 ## Account catalog — probe-verified on THIS account, 2026-07-12
 
 `codex exec --skip-git-repo-check --sandbox read-only -m <model> -c 'model_reasoning_effort="low"'

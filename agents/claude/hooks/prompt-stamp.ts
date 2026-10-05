@@ -1,4 +1,4 @@
-// The zsh PROMPT's `user@host:MM-DD HH:MM|cwd` head (zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}|%~`),
+// The zsh PROMPT's `user@host:MM-DD HH:MM+09|cwd` head (zsh/zshrc: `%n@%m:%D{%m-%d %H:%M}<offset>|%~`),
 // as plain text — the one home for that shape. Consumers: statusline-command.ts (its row 1,
 // which it colors itself) and quote-command.ts (the /quote header, where it says who quoted
 // from where, and when). Zero-dep like every hook, so the statusline can import it too.
@@ -24,6 +24,23 @@ export const clockHM = (t: WallClock): string =>
 export const stampMDHM = (t: WallClock): string =>
   `${pad2(t.month)}-${pad2(t.day)} ${clockHM(t)}`;
 
+/**
+ * The UTC offset, ISO 8601 short form: "+09:00" -> "+09", "+05:30" -> "+0530", "+00:00" -> "+00".
+ * Machines now span time zones (the Mac in JST, a rented box in UTC), so a bare "00:47" no longer
+ * says when; an offset is unambiguous where an abbreviation ("JST", "IST") is not (owner, 2026-10-06).
+ * zsh/zshrc's prompt shortens %z the same way.
+ */
+export function offsetShort(z: Pick<Temporal.ZonedDateTime, "offset">): string {
+  const m = /^([+-]\d{2}):(\d{2})/u.exec(z.offset);
+  if (m === null) return z.offset;
+  const [, hh = "", mm = ""] = m;
+  return mm === "00" ? hh : `${hh}${mm}`;
+}
+
+/** "MM-DD HH:MM+09" — the prompt's stamp with its offset. */
+export const stampMDHMZ = (z: Temporal.ZonedDateTime): string =>
+  `${stampMDHM(z)}${offsetShort(z)}`;
+
 /** Unix epoch seconds -> local wall clock, in this process's time zone. */
 export const localFromEpochSec = (s: number): Temporal.ZonedDateTime =>
   Temporal.Instant.fromEpochMilliseconds(s * 1000).toZonedDateTimeISO(
@@ -45,22 +62,22 @@ export function tildePath(p: string, home = process.env.HOME ?? ""): string {
 export interface PromptParts {
   user: string;
   host: string; // %m: hostname up to the first dot
-  stamp: string; // "MM-DD HH:MM"
+  stamp: string; // "MM-DD HH:MM+09"
   cwd: string; // tilde-shortened
 }
 
 export function promptParts(
   cwd: string,
-  now: WallClock = Temporal.Now.plainDateTimeISO(),
+  now: Temporal.ZonedDateTime = Temporal.Now.zonedDateTimeISO(),
 ): PromptParts {
   return {
     user: userInfo().username,
     host: hostname().split(".")[0] ?? "",
-    stamp: stampMDHM(now),
+    stamp: stampMDHMZ(now),
     cwd: tildePath(cwd),
   };
 }
 
-/** "user@host:MM-DD HH:MM|~/cwd" — uncolored. */
+/** "user@host:MM-DD HH:MM+09|~/cwd" — uncolored. */
 export const promptHead = (p: PromptParts): string =>
   `${p.user}@${p.host}:${p.stamp}|${p.cwd}`;

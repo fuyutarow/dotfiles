@@ -31,7 +31,7 @@ import { basename, join } from "node:path";
 import { readStdinJson } from "./lib.ts";
 import { attempt } from "../../hooks/attempt.ts";
 import { at, parseJson, str, strAt } from "../../hooks/narrow.ts";
-import { promptParts, stampMDHM } from "./prompt-stamp.ts";
+import { promptParts, stampMDHMZ } from "./prompt-stamp.ts";
 import {
   CLIPBOARD_TURN_LIMIT,
   MAX_QUOTE_TURNS as MAX_TURNS,
@@ -179,7 +179,7 @@ if (resolvedName.ok && resolvedName.value !== "") name = resolvedName.value;
 const body = selected.join(TURN_SEPARATOR);
 const bodyBytes = Buffer.byteLength(body, "utf8");
 const where = promptParts(process.cwd());
-const header = `from ${name} | ${stampMDHM(Temporal.Now.plainDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B | ${where.user}@${where.host}`;
+const header = `from ${name} | ${stampMDHMZ(Temporal.Now.zonedDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B | ${where.user}@${where.host}`;
 const payloadText = `${header}\n${body}`;
 let short = "";
 if (selected.length < count) {

@@ -46,9 +46,20 @@ case "$HOST" in
   NEWLINE=$'\n'
   # prompt="%F{blue})%f "
   prompt="%F{blue}$%f "
-  datetime="%F{cyan}%D{%m-%d %H:%M}%f"
-
-  PROMPT="${uname}@${host}:${datetime}|${pwd}${NEWLINE}${prompt}"
+  # The UTC offset after the time, ISO 8601 short form (+09, +00, +0530): machines now span time
+  # zones (the Mac in JST, a rented box in UTC), and a bare 00:47 no longer says when. %z prints
+  # +0900, so the prompt is rebuilt before each line with the :00 dropped — the same shape as
+  # agents/claude/hooks/prompt-stamp.ts (statusline, /quote). Rebuilt per prompt, so a DST change
+  # or a TZ= edit shows at once.
+  _prompt_stamp() {
+    local fmt='%D{%z}' z
+    z=${(%)fmt}
+    [[ $z == [+-][0-9][0-9]00 ]] && z=${z[1,3]}
+    PROMPT="${uname}@${host}:%F{cyan}%D{%m-%d %H:%M}${z}%f|${pwd}${NEWLINE}${prompt}"
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _prompt_stamp
+  _prompt_stamp
   ;;
 esac
 

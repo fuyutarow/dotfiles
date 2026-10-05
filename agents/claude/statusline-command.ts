@@ -28,8 +28,10 @@
 //   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) · VRAM <pct>% (<used>/<total>G) · Disk ..
 //     (host load; ALWAYS present, and every reading in it is a value or `<label> n/a (<why>)` —
 //     CPU/RAM come from /proc on Linux and from os.cpus()/vm_stat on macOS, see cpuPct()/ramFrac();
-//     CPU needs a prior render to diff against, so its very first render reads n/a; VRAM that
-//     missed its bound shows the last good sample marked `stale <N>s`; a Mac without nvidia-smi
+//     CPU needs a prior render to diff against, so its very first render reads n/a; VRAM is
+//     read from a cache that a background sampler fills (see SAMPLE_ENV), so a render never waits
+//     for nvidia-smi: the first one reads `n/a (sampling in progress)`, a newer sample that has
+//     not landed shows the last good one, marked `stale <N>s` from 60 s on; a Mac without nvidia-smi
 //     has no VRAM segment at all, see vramGated(); see the EXPLICIT-ABSENCE law below)
 //   6 Job: ... (conditional: only while a job is admitted, an orphan lives, or the scan failed)
 //
@@ -42,11 +44,11 @@
 // TIGER-STYLE (practicing-tiger-style, explicit request 2026-09-12): every subprocess call in
 // buildDataframe() is bounded. Two calls — the `git rev-parse` branch lookup and the `ps
 // -eo` process-table scan — used to have NO timeout, unlike every other call here (agentName:
-// 3000ms, herdrSend: 200ms, vramFrac: 2000ms). A stale NFS-mounted repo, a held git index.lock,
+// 3000ms, herdrSend: 200ms; nvidia-smi is not a render child at all, see SAMPLE_ENV). A stale NFS-mounted repo, a held git index.lock,
 // or `ps` delayed by extreme scheduling pressure (this host has run 40+ concurrent Claude
 // sessions plus several 100%-CPU experiments at once, observed live) would hang either call
 // synchronously and freeze the whole render, not just its own segment. Both now share
-// ENRICHMENT_TIMEOUT_MS, reusing vramFrac's existing 2000ms rather than inventing a new number
+// ENRICHMENT_TIMEOUT_MS, reusing the 2000ms nvidia-smi had then rather than inventing a new number
 // for an equivalent risk. A call that hits its bound is caught and its segment prints n/a with
 // the reason (since 2026-10-03; it used to be omitted without a trace).
 //
@@ -63,9 +65,10 @@
 // Static safety comes from the zod schemas below (every external value is parsed, see ZOD FIRST)
 // + native `!= null` narrowing. Input: JSON via stdin from Claude Code.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -292,17 +295,33 @@ function execBounded(
       ran: false,
     });
   }
-  const bound = Math.min(ownBoundMs, Math.ceil(left));
+  return execWithin(
+    tool,
+    file,
+    args,
+    Math.min(ownBoundMs, Math.ceil(left)),
+    env,
+  );
+}
+// One child under ONE bound, with no render budget in the way: the render path goes through
+// execBounded above; the background GPU sampler (not a render) calls this directly.
+function execWithin(
+  tool: string,
+  file: string,
+  args: string[],
+  boundMs: number,
+  env?: NodeJS.ProcessEnv,
+): Result<string, ExecFailure> {
   return fromThrowable(
     () =>
       execFileSync(file, args, {
         stdio: ["ignore", "pipe", "pipe"],
         encoding: "utf8",
-        timeout: bound,
+        timeout: boundMs,
         ...(env ? { env } : {}),
       }),
     (e): ExecFailure => ({
-      why: failWhy(e, tool, bound),
+      why: failWhy(e, tool, boundMs),
       stderr: (execError(e).stderr ?? "").trim(),
       ran: true,
     }),
@@ -908,6 +927,17 @@ function memReading(usedG: number, totalG: number): MemReading | undefined {
 // show up promptly, since the bridge attaches after the command's own render.
 const GPU_CACHE = `${HOME}/.cache/claude/statusline-gpu.json`;
 const GPU_SAMPLE_TTL_MS = 5_000;
+// The sampler's bound. Measured 2026-10-05 under load average 22-26 (24 samples): nvidia-smi
+// p50 2.6 s, p90 5.6 s, max 12.6 s, 15 of 24 over the old 2 s bound. Above the
+// worst seen, so a slow answer is an answer; below "hung", so a dead driver is still named.
+// STATUSLINE_GPU_SAMPLE_TIMEOUT_MS lets the tests exercise the timeout without waiting it out.
+const GPU_SAMPLE_TIMEOUT_MS = z.coerce
+  .number()
+  .int()
+  .min(100)
+  .max(120_000)
+  .catch(20_000)
+  .parse(process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS);
 // A last-good sample older than this is a claim about a moment too far back to still be useful;
 // beyond it the reading becomes n/a instead of a stale number.
 const GPU_STALE_MAX_MS = 30 * 60_000;
@@ -930,68 +960,97 @@ type GpuCache = z.output<typeof GpuCacheSchema>;
 function within(at: number, now: number, windowMs: number): boolean {
   return now - at >= 0 && now - at < windowMs;
 }
-// ONE nvidia-smi in flight host-wide (Tiger ledger O3). While the driver hangs, every session
-// whose render lands in the 2 s hang window used to spawn its own nvidia-smi — at 40 sessions that
-// is ~16 stuck processes, the incident's load feeding itself. The lock is a directory because
-// mkdir is atomic (EEXIST for every loser) and needs no flags or libraries. Its owner is not
-// recorded: a lock older than GPU_LOCK_STALE_MS (the 2 s bound + margin) is a crashed holder's, and
-// is broken. A session that cannot take it serves the last cache — marked stale, with this reason —
-// instead of starting a second sampler.
+// SAMPLING IS OFF THE RENDER PATH (Tiger ledger O4, 2026-10-05). The bar used to run nvidia-smi
+// inside the render under a 2 s bound. Under load (load average 26 on 12 cores, plus the per-job
+// nvidia-smi pollers of agent-resource-run) nvidia-smi takes 2-10 s, so a bound shorter than its
+// service time failed nearly every attempt, and VRAM sat 264 s stale: an attempt-deadline below the
+// service time is starvation, not a timeout. Now the render only READS the cache and, when it has
+// expired, makes sure one sampler is running; the sampler is this same file started with
+// SAMPLE_ENV set, gets GPU_SAMPLE_TIMEOUT_MS (above the worst latency measured), and writes the cache.
+// The render never waits for it.
+// An environment variable, not argv: this file has no command line of its own (its input is the
+// stdin payload), so the mode is an internal channel between the render and the process it starts.
+const SAMPLE_ENV = "STATUSLINE_SAMPLE_GPU";
+// What a reading is marked with while the newest attempt has not finished (or there is none yet).
+const SAMPLING_WHY = "sampling in progress";
+// ONE nvidia-smi in flight host-wide (Tiger ledger O3). The lock is a directory because mkdir is
+// atomic (EEXIST for every loser) and needs no flags or libraries. The render that wins it hands
+// it to the sampler it starts (the sampler releases it when it ends), so while a sampler runs no
+// other session starts a second one — at 40 sessions that is the difference between one process and
+// a herd feeding the load that made nvidia-smi slow. Its owner is not recorded: a lock older than
+// GPU_LOCK_STALE_MS (the sample bound + start-up margin) is a crashed sampler's, and is broken.
 const GPU_LOCK = `${HOME}/.cache/claude/statusline-gpu.lock`;
-const GPU_LOCK_STALE_MS = 3_000;
-function acquireGpuLock(): Result<Disposable, string> {
+const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 15_000;
+interface GpuLock {
+  release(): void;
+}
+function acquireGpuLock(): Result<GpuLock, string> {
   const take = (): boolean =>
     fromThrowable(() => {
       mkdirSync(dirname(GPU_LOCK), { recursive: true });
       mkdirSync(GPU_LOCK);
     })().isOk();
-  const release = (): Disposable => ({
-    [Symbol.dispose]: () => {
+  const lock: GpuLock = {
+    release: () => {
       fromThrowable(() => rmdirSync(GPU_LOCK))();
     },
-  });
-  if (take()) return ok(release());
+  };
+  if (take()) return ok(lock);
   const held = fromThrowable(() => statSync(GPU_LOCK).mtimeMs)();
   const now = Temporal.Now.instant().epochMilliseconds;
   if (held.isOk() && !within(held.value, now, GPU_LOCK_STALE_MS)) {
-    fromThrowable(() => rmdirSync(GPU_LOCK))();
-    if (take()) return ok(release());
+    lock.release();
+    if (take()) return ok(lock);
   }
-  return err("nvidia-smi is being sampled by another session");
+  return err("another sampler holds the lock");
 }
-// Take one live sample and record it. `good` is the previous last-good sample, carried over a
-// failure so a transient miss can still be shown (marked stale) instead of turning into n/a.
-function resample(good: GpuCache["good"]): Result<MemReading, string> {
+// Render side: make sure a sampler is in flight, and return at once. Ok = one is running or was
+// just started; err = it could not be started (the reason is shown beside the reading).
+function ensureSampler(): Result<void, string> {
   const lock = acquireGpuLock();
-  if (lock.isErr()) return err(lock.error); // not cached: it describes this session, not the GPU
-  using _held = lock.value;
-  // Double-check under the lock: the session that held it before us has usually just refreshed
-  // the cache, and sampling again would be the very duplicate the lock exists to prevent.
-  const again = readJson(GPU_CACHE, GpuCacheSchema);
-  if (
-    again?.at !== undefined &&
-    again.reading &&
-    within(
-      again.at,
-      Temporal.Now.instant().epochMilliseconds,
-      GPU_SAMPLE_TTL_MS,
-    )
-  )
-    return ok(again.reading);
+  if (lock.isErr()) return ok(undefined); // one is already in flight: that is the goal
+  const started = fromThrowable(
+    () => {
+      const child = spawn(process.execPath, [import.meta.path], {
+        stdio: "ignore",
+        env: { ...process.env, [SAMPLE_ENV]: "1" },
+      });
+      child.once("error", () => lock.value.release());
+      child.unref(); // the render exits without waiting; the child is bounded by its own timeout
+    },
+    (e): string => `sampler not started (${failWhy(e, "bun")})`,
+  )();
+  if (started.isErr()) lock.value.release();
+  return started;
+}
+// Sampler side (`STATUSLINE_SAMPLE_GPU=1 bun statusline-command.ts`): take ONE sample under the long bound
+// and record it. `good` is the previous last-good sample, carried over a failure so a transient
+// miss can still be shown (marked stale) instead of turning into n/a. Returns the exit code; the
+// caller exits AFTER this returns, so the lock is released by `using` first. Refuses to run
+// without the lock: ensureSampler starts it and hands the lock over.
+function runSampler(): number {
+  if (!existsSync(GPU_LOCK)) {
+    process.stderr.write(
+      `statusline: ${SAMPLE_ENV} is set by the statusline, which holds ${GPU_LOCK}; refusing to run without it\n`,
+    );
+    return 2;
+  }
+  using _held: Disposable = {
+    [Symbol.dispose]: () => {
+      fromThrowable(() => rmdirSync(GPU_LOCK))();
+    },
+  };
+  const good = readJson(GPU_CACHE, GpuCacheSchema)?.good;
   const sampled = sampleVram();
-  // Stamped AFTER the sample returns: a timed-out sample blocked ~2 s, and stamping the
-  // entry with the pre-sample time would hand it to the next render already 2 s into its TTL.
+  // Stamped AFTER the sample returns, so the TTL runs from when the answer exists.
   const at = Temporal.Now.instant().epochMilliseconds;
-  // A sample that never ran (this render's budget was already spent) says nothing about the
-  // GPU, so it is NOT cached: caching it would pin "n/a" on every session for the whole TTL.
-  if (sampled.isErr() && !sampled.error.ran) return err(sampled.error.why);
   writeCache(
     GPU_CACHE,
     sampled.isOk()
       ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
       : { at, why: sampled.error.why, good }, // JSON drops an undefined `good`
   );
-  return sampled.mapErr((f) => f.why);
+  return 0;
 }
 // A Mac with no nvidia-smi has no discrete VRAM to read: Apple silicon's GPU shares the RAM the
 // row already shows. That is "does not exist", which the EXPLICIT-ABSENCE law keeps silent. On
@@ -1005,19 +1064,28 @@ function vramGated(): Result<MemReading, string> | undefined {
   return absent ? undefined : vram;
 }
 function vramFrac(): Result<MemReading, string> {
-  const now = Temporal.Now.instant().epochMilliseconds;
-  // A file that is missing or fails GpuCacheSchema is an empty cache: the sample is retaken.
+  // A missing tool needs no sampler to be known, and a Mac without one has no VRAM row (vramGated).
+  if (Bun.which("nvidia-smi") === null) return err("no nvidia-smi");
+  // A file that is missing or fails GpuCacheSchema is an empty cache. Read BEFORE taking `now`: the
+  // sampler is another process and may land a sample at any moment, and an entry stamped a few ms
+  // after a `now` taken first reads as "from the future" (within() rejects it, as it must for a
+  // stepped-back clock) — the reading would vanish for exactly one render (seen live, 2026-10-05).
   const cached: GpuCache = readJson(GPU_CACHE, GpuCacheSchema) ?? {};
+  const now = Temporal.Now.instant().epochMilliseconds;
+  // Fresh = an entry that says something (a reading, or why there is none) and is inside the TTL.
+  // The pre-2026-10-03 `{reading: null}` says neither, so it counts as expired.
   const fresh =
-    cached.at !== undefined && within(cached.at, now, GPU_SAMPLE_TTL_MS);
+    cached.at !== undefined &&
+    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
+    (cached.reading != null || cached.why !== undefined);
   if (fresh && cached.reading) return ok(cached.reading);
-  // A cached miss is served as-is for the TTL (one bounded sample per 5 s, not one per render).
-  const latest =
-    fresh && cached.why !== undefined ? err(cached.why) : resample(cached.good);
-  if (latest.isOk()) return latest;
-  const why = latest.error;
-  // The fresh sample failed. A recent good one is still better than nothing, provided its age
-  // and the failure are printed beside it; otherwise the reading is plainly n/a.
+  // Expired: refresh in the background and answer from what is cached NOW. A cached miss inside
+  // the TTL is served as-is, without starting another sampler (one attempt per TTL, not per render).
+  const started = fresh ? ok(undefined) : ensureSampler();
+  const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
+  // A last-good sample is still better than nothing, provided its age and the reason the newer
+  // one is missing are printed beside it (memSegment marks it from STALE_SHOW_S on); otherwise
+  // the reading is plainly n/a.
   const good = cached.good;
   if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
     const secs = Math.round((now - good.at) / 1000);
@@ -1032,13 +1100,13 @@ const NvidiaSmiSchema = z
   .string()
   .transform((out) => (out.split("\n")[0] ?? "").split(","))
   .pipe(z.tuple([MiB, MiB]));
-// err.ran = whether nvidia-smi was actually started (false: the render budget was already spent).
+// Runs in the sampler, under GPU_SAMPLE_TIMEOUT_MS — never inside a render.
 function sampleVram(): Result<MemReading, ExecFailure> {
-  return execBounded(
+  return execWithin(
     "nvidia-smi",
     "nvidia-smi",
     ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-    ENRICHMENT_TIMEOUT_MS,
+    GPU_SAMPLE_TIMEOUT_MS,
   ).andThen((out) => {
     const unparsable: ExecFailure = {
       why: "nvidia-smi output unparsable",
@@ -1727,6 +1795,8 @@ if (typeof Temporal === "undefined") {
   );
   process.exit(0);
 }
+// Sampler mode: take one GPU sample and exit. It never reads stdin and never renders.
+if (process.env[SAMPLE_ENV] === "1") process.exit(runSampler());
 const raw = await Bun.stdin.text();
 // unknown -> StatusInput at the trust boundary: parsed with StatusInputSchema, never cast. A
 // payload that is not JSON, or has a field of the wrong type, renders line 1 plus the first

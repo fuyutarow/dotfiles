@@ -21,6 +21,8 @@ const fieldLabels = [
 	"Machine mode",
 	"Machine framing",
 	"Machine compatibility",
+	"Waits / liveness",
+	"Fallbacks / handoffs",
 	"Positive receipt",
 	"Negative receipt",
 ] satisfies readonly string[];

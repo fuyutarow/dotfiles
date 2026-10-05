@@ -46,3 +46,13 @@ desk-check, a red/green floor test, and the collection floor.
 - A measured production failure caused by a diagnostic this card would accept.
 - A new adjacent skill changes the typed cut.
 - Replicated evidence on expert/running-system diagnostic recovery changes the bounded position.
+
+## 2026-10-05 — routing row: silence and false success go to the CLI contract first
+
+A command that goes silent, reports success when nothing happened, or quietly uses another target
+has no failure message to design yet. The routing table and F11 now send it to
+`designing-command-line-interfaces` C3/C4 first; this skill takes each failure that results. The
+description's Workflow-native clause was shortened to keep the collection within the listing
+ceiling, and its meaning is unchanged. Blind selection: the error-message design ask routed here in
+4/4 runs (receipts: `designing-command-line-interfaces/tests/forge-verification-ledger.md`
+2026-10-05).

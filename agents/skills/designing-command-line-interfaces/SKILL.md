@@ -3,18 +3,19 @@ name: designing-command-line-interfaces
 description: >-
   Designs and audits reusable CLI contracts: CLI design / CLI設計 / コマンド設計; subcommands,
   arguments/flags, help, stdin/stdout/stderr, exit status / 終了コード, machine-readable output,
-  TTY/noninteractive, dry-run/force, partial failure, and compatibility. Produces one CLI CONTRACT
-  joining invocation, effects, channels, outcomes, and evolution. Cuts: interaction meaning or
+  TTY/noninteractive, dry-run/force, partial failure, silent waits or fallbacks (沈黙・固まる, looks
+  hung, false success), and compatibility. Produces one CLI CONTRACT
+  (invocation, effects, channels, outcomes, evolution). Cuts: interaction meaning or
   reversibility → designing-interactions; one failure's message/locus/recovery card → designing-developer-diagnostics;
   config authority → governing-configuration-systems; version identifiers → designing-version-schemes;
   implementation → implementing-and-debugging/writing-*; existing CLI usage → driving-*; launch →
-  growing-oss-adoption. Workflow-native: contract decisions and acceptance stay SOLO; inventories and
-  transcript receipts may fan out. English skill; respond in the user's language.
+  growing-oss-adoption. Workflow-native: decisions stay SOLO; inventories may fan out. English skill;
+  respond in the user's language.
 ---
 
 # Designing command-line interfaces
 
-> **Version**: v2609.1.0 (2026-09-18) — initial forge from a bounded primary-source position.
+> **Version**: v2610.1.0 (2026-10-05) — liveness and outcome-honesty rows after the smart-open retro.
 
 ```sh
 for f in \
@@ -56,8 +57,8 @@ one interaction or one diagnostic.
 | **C0 CONSUMERS** | Which human, shell, CI, agent, or other caller regimes are supported? | Consumer/regime table; stop if the answer is only “users”. |
 | **C1 INVOCATION** | What grammar, parser profile, ordering, repetition, `--`, stdin, help, and examples are promised? | Invocation table and ambiguous/invalid cases. |
 | **C2 EFFECTS** | What effects, preview fidelity, force bypass, partial state, retry, and cancellation are promised? | Effects/recovery table. Action reversibility itself → `designing-interactions`. |
-| **C3 CHANNELS** | What belongs on stdout/stderr in human or machine modes, under TTY/non-TTY, with framing and compatibility? | Channel/mode matrix. A format name alone fails. |
-| **C4 OUTCOMES** | Which caller-relevant outcomes map to exit, status, output, and retry? | Outcome matrix. One diagnostic card → `designing-developer-diagnostics`. |
+| **C3 CHANNELS** | What belongs on stdout/stderr in human or machine modes, under TTY/non-TTY, with framing and compatibility? What does a human see during a wait? | Channel/mode matrix with liveness rows. A format name alone fails; so does an unbounded silent wait. |
+| **C4 OUTCOMES** | Which caller-relevant outcomes map to exit, status, output, and retry, including fallbacks and handed-off effects? | Outcome matrix. A fallback or unobservable result is never reported as plain success. One diagnostic card → `designing-developer-diagnostics`. |
 | **C5 EVOLUTION** | Which surfaces are stable, extensible, deprecated, or versioned, and what proves them? | Compatibility table plus positive and negative transcript receipts. Release identifier semantics → `designing-version-schemes`. |
 
 ## Workflow
@@ -103,7 +104,7 @@ Ordered co-fires:
 |---|---|---|
 | `references/invocation-and-discovery.md` | C0–C1 consumer, parser-profile, discovery, and input rules | Choosing consumers or invocation grammar. |
 | `references/effects-and-recovery.md` | C2 effects, preview, force, partial state, continuation, retry, cancellation | An action can change state or process many items. |
-| `references/channels-and-outcomes.md` | C3–C4 stream/mode and outcome rules | Allocating stdout/stderr, machine output, or exit behavior. |
+| `references/channels-and-outcomes.md` | C3–C4 stream/mode, outcome, and liveness/honesty rules | Allocating stdout/stderr, machine output, or exit behavior; any wait, fallback, or handoff. |
 | `references/evolution-and-verification.md` | C5 compatibility, receipts, sources, and limits | Making an evolution promise or accepting a contract. |
 | `scripts/cli-contract-check.ts` | Mechanical structural floor | After filling a contract; run, do not read as semantic proof. |
 | `tests/triggers.md` | F3 fire/no-fire desk-check | Editing the description or cuts. |

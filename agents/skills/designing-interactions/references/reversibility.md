@@ -115,6 +115,9 @@ budgets rather than adjectives:
 | **1 – 10 s** | attention held with effort | a visible but unintrusive indicator; determinate if you can |
 | **> 10 s** | attention lost; the user leaves | give a percent-done estimate and make the operation abandonable — and treat it as a candidate for delegation (U3), not a thing to watch |
 
+The windows apply to a command-line tool too, on stderr. `designing-command-line-interfaces` C3
+turns them into contract rows. Past the window, say what is awaited; then report the duration.
+
 The RAIL budgets are the implementation-side counterpart: input handlers under a 50 ms JS ceiling
 to hit a 100 ms response, animation work under ~10 ms per frame, idle work chunked to ≤50 ms slices
 and preempted by input. Budget per bucket, not against a single global "make it fast."

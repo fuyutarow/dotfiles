@@ -36,6 +36,13 @@ interface bestiary (Filter, Cantrip, Source, Sink, Compiler, ed, Roguelike, **Se
 Engine-and-Interface**) are the pattern vocabulary. Rule of Silence, verbatim in spirit: programs
 that babble should "not emit unrequested data at all."
 
+**Scope of Silence.** It governs unrequested output on a fast, documented success. It never
+licenses silence during a wait past the response-time windows (`reversibility.md` §5). It never
+licenses silence about a fallback or a failure, which Raymond's own Rule of Repair covers: fail
+noisily. A command that goes quiet for seconds, then reports success or quietly lands somewhere
+else, has misapplied the rule. That contract row is owned by `designing-command-line-interfaces`
+C3/C4.
+
 **Separated Engine-and-Interface is the pattern U3 actually wants.** It resolves the whole tension:
 the engine is drivable by anything; the interface is one of several front ends.
 

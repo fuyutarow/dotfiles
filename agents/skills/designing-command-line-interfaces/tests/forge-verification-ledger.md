@@ -80,3 +80,36 @@ draft retains source IDs and bounded claims solely for forge traceability.
 - The draft source position changes status, is rejected, or receives a canonical commit.
 - A command incident exposes an unnamed invocation, effect, channel, outcome, or compatibility boundary.
 - The checker accepts a missing/duplicate/placeholder field, an unknown regime, empty table, missing negative receipt, or machine mode without framing/compatibility.
+
+## 2026-10-05 — v2610.1.0: liveness and outcome honesty (smart-open retro)
+
+**F1 failure.** On r99 over ssh/herdr, smart-open sat silent 15 s on `explorer.exe` and then exited 0
+(locked desktop). It fell back silently to the remote's unattended screen. `oo` sat about 2 s silent
+while merely slow. The statusline marked `stale 12s` on nearly every render. The owner's retro asked
+whether the skills were defective, unread, or misapplied. All three applied: the skill was not
+loaded; the agent misapplied facts it had read; and the skill had no wait, fallback, or
+untrusted-status rule. Its description also lacked symptom words, so a silence report could not
+select it.
+
+**F2 placement.** These rules extend C3/C4 in this skill. They do not justify a new skill.
+`references/channels-and-outcomes.md` §Liveness and outcome honesty is the one home. The
+response-time windows stay with `designing-interactions` `reversibility.md` §5 and are referenced
+from there. The contract template and checker now require `Waits / liveness` and
+`Fallbacks / handoffs`; an explicit `none` passes. Four smart-open rows were added to the local
+failure corpus. Description: symptom vocabulary added, Workflow-native clause shortened (net within
+the listing ceiling: collection 56,054 of 56,059).
+
+**F3 receipts (2026-10-05).**
+
+| Check | Result |
+|---|---|
+| Checker tests | `bun test tests`: 15 pass, 0 fail (new: missing liveness field, placeholder vs explicit `none` fallback) |
+| Valid fixture | `CLI CONTRACT: FAIL=0` |
+| Script floor | `script-check.ts scripts/cli-contract-check.ts`: FAIL=0 WARN=0 |
+| Skill floor + listing budget | `skill-check.ts`: no WARN for this skill; collection 56,054 ≤ 56,059 |
+| Blind selection, independent | 4 sonnet-high evaluators, desk routing over a frozen 7-skill listing; old (A) and new (B) unlabeled, 2 runs each, 10 asks. A scored 8/10 and 6/10, B scored 8/10 and 8/10. On the three retro asks (silent wait, false success, silent fallback), A routed here 3/6 times and B 6/6. Every evaluator in both arms routed “CLI hangs in CI on a prompt” here; that row is now a declared co-fire with `designing-interactions` U3. |
+| Blind audit benefit, independent | 4 sonnet-high audits of pre-retro `smart-open.ts` (`1fa9fd5`), 2 per arm. Both arms found the silent fallback and the silent waits. Only B named `explorer.exe` always-success and the missing duration explicitly in both runs; A reached them partially. The benefit is modest and mostly in selection. |
+
+**Limits.** These are desk routing judgments, not live host selection. All evaluators were one model
+family, N=2 per arm. The audit target came from the incident itself, so it favours rules derived
+from that incident.

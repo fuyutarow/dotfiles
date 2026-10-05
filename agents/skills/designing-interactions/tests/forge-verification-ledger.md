@@ -135,3 +135,17 @@ SKILL.md technical-communication or table-cell debt. This description/seam edit 
 debt. Queue position: **2 — after writing-bun-scripts, at the next designing-interactions full
 reforge**. This waiver expires when that full reforge starts; do not use this narrow routing edit
 to declare the reference debt resolved.
+
+## 2026-10-05 — v2610.1.0: Silence scoped; latency windows named the one home
+
+The smart-open retro found the Rule of Silence quoted without scope. A tool that went quiet for
+seconds or fell back silently could cite it. `delegability.md` now scopes Silence to unrequested
+output on a fast, documented success. It excludes waits past `reversibility.md` §5 and fallbacks or
+failures (Rule of Repair). The contract row points to `designing-command-line-interfaces` C3/C4.
+§5 now states that its windows apply to CLIs on stderr and is indexed as the sole home of the
+response-time windows. Description: `feedback latency (応答時間, 待ち表示)` added, the
+Workflow-native clause shortened. The fire set gained a GUI frozen-feedback row and a CLI silent-wait
+near-miss. The CI-prompt-hang row is a declared co-fire. Blind selection receipts (4 evaluators,
+A/B) are in `designing-command-line-interfaces/tests/forge-verification-ledger.md` 2026-10-05; the
+GUI frozen-feedback ask routed here in all 4 runs. The prose-debt count is unchanged at 135 (the
+2026-09-18 waiver still applies); this edit added no sentence over 120 characters.

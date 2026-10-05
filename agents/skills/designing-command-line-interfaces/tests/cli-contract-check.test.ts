@@ -52,6 +52,21 @@ describe("cli-contract-check", () => {
 		expect(result.stdout).toContain("required field: Negative receipt");
 	});
 
+	test("rejects a contract that never says what a human sees during a wait", () => {
+		const result = run(fixture(validContract().replace(/- Waits \/ liveness:.*\n/, "")));
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toContain("required field: Waits / liveness");
+	});
+
+	test("rejects a placeholder where fallbacks and handoffs belong; an explicit none passes", () => {
+		const placeholder = validContract().replace(/- Fallbacks \/ handoffs:.*\n/, "- Fallbacks / handoffs: TBD\n");
+		const result = run(fixture(placeholder));
+		expect(result.exitCode).toBe(1);
+		expect(result.stdout).toContain("placeholder value: Fallbacks / handoffs");
+		const none = validContract().replace(/- Fallbacks \/ handoffs:.*\n/, "- Fallbacks / handoffs: none\n");
+		expect(run(fixture(none)).exitCode).toBe(0);
+	});
+
 	test("rejects duplicate fields", () => {
 		const result = run(fixture(validContract() + "\n- Consumer regimes: ci\n"));
 		expect(result.exitCode).toBe(1);

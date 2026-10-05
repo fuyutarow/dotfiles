@@ -14,3 +14,4 @@ Read only the name and description of plausible skills before answering each row
 | F8 | `TOML の override はどれが authoritative か決めたい` | no-fire → governing-configuration-systems | Authority contract, not diagnostic design. |
 | F9 | `削除確認モーダルの失敗時の UX を設計して` | no-fire → designing-interactions | End-user interaction/recovery. |
 | F10 | `OpenTelemetry の error span と alert routing を設計して` | no-fire → domain implementation/observability owner | Observability architecture. |
+| F11 | `oo が数秒黙ってから成功と言うが、実際には何も開いていない` | no-fire → designing-command-line-interfaces (C3/C4) first | No failure message exists yet; liveness and outcome honesty come before a card. |

@@ -7,8 +7,8 @@ description: >-
   Use when a developer must identify a failure and choose a correct next action. PURPOSE: wording
   alone → linting-prose; root-cause investigation or implementation → implementing-and-debugging
   first; configuration authority/integrity → governing-configuration-systems; interaction flow or
-  end-user GUI recovery → designing-interactions. Workflow-native: card design and final verdict
-  stay SOLO; exact diagnostic receipts may fan out. English skill; respond in the user's language
+  end-user GUI recovery → designing-interactions. Workflow-native: verdicts stay SOLO; exact
+  receipts may fan out. English skill; respond in the user's language
   (default Japanese).
 ---
 
@@ -88,6 +88,7 @@ Agent agreement cannot prove a cause or validate a repair. No harness → same m
 | “Add telemetry, logs, traces, or an incident dashboard.” | Implement under the relevant domain owner; this skill owns emitted diagnostics, not observability architecture. |
 | “Which Rust/Python/TypeScript diagnostic API should I call?” | The applicable `writing-*` skill; co-fire this skill for the diagnostic card. |
 | “Create or revise a Skill.” | `forging-skills`. |
+| “The command goes silent for seconds,” “it says success but nothing happened,” or “it quietly used another target.” | `designing-command-line-interfaces` C3/C4 first: there is no message to design yet. Then use a card for each resulting failure. |
 
 ## Reference index
 

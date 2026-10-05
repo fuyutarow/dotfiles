@@ -33,6 +33,7 @@
 - Machine mode: jsonl
 - Machine framing: one UTF-8 JSON object per line; no color or progress on stdout.
 - Machine compatibility: `jsonl` v1 fields are additive-only; unknown fields may be ignored.
+- Waits / liveness: remote API calls are bounded at 30 s; past 1 s a human TTY sees which record is awaited on stderr.
 
 | Mode / TTY | stdout | stderr | Decoration / framing |
 |---|---|---|---|
@@ -40,6 +41,8 @@
 | jsonl non-TTY | one JSON object per line | diagnostics only | UTF-8 JSON Lines v1; no color |
 
 ## C4 OUTCOMES
+
+- Fallbacks / handoffs: none; an unreachable API is a failure, never a switch to a cached copy.
 
 | Outcome class | Exit / status | Output | Retry / next action |
 |---|---|---|---|

@@ -3,17 +3,18 @@ name: designing-interactions
 description: >-
   Designs and audits INTERACTION surfaces: act meaning, hidden state, undo/recovery, and delegability
   across GUI, CLI/TUI, APIs, and agent tools. Use for UI/UX review, 画面設計, 操作フロー, modes,
-  モーダル, confirmation vs undo, 可逆性, wizard, captive UI, affordance, usability, 認知負荷, or
-  simple-vs-easy. CLI grammar, stdout/stderr and machine modes, exit/outcome mapping, and compatibility
+  モーダル, confirmation vs undo, 可逆性, wizard, captive UI, affordance, usability, 認知負荷,
+  feedback latency (応答時間, 待ち表示), or simple-vs-easy. CLI grammar, stdout/stderr and machine modes, exit/outcome mapping, and compatibility
   → designing-command-line-interfaces. Visual styling → frontend-design; charts → dataviz; behavior
   edits → implementing-and-debugging; wording → linting-prose; adoption → growing-oss-adoption.
-  Real-user attention needs a domain test. Verdicts stay SOLO; inventories may fan out. English skill;
-  answer in the user's language.
+  Real-user attention needs a domain test. Verdicts SOLO; inventories fan out. English skill; answer
+  in the user's language.
 ---
 
 # Designing interactions — what an act means, and who pays to know it
 
-> **Version**: v2607.1.0 (2026-07-28) — forged from a 15-agent, quote-audited survey.
+> **Version**: v2610.1.0 (2026-10-05) — Silence scoped; latency windows named the one home, CLI included.
+> Forged v2607.1.0 (2026-07-28) from a 15-agent, quote-audited survey.
 > Grades, counter-evidence, forbidden citations: `references/evidence.md` (SOLE grade home).
 
 ```sh
@@ -210,11 +211,12 @@ Re-run against name + description ONLY, after any description edit.
 |---|---|
 | 「この設定画面、モーダルだらけで使いにくい。直して」 | U1 + U4, the core territory |
 | "should this be a confirm dialog or an undo?" | U4's decision procedure |
-| "our CLI hangs when CI runs it" (no UX keyword at all) | U3 — a captive surface, described by symptom |
+| "our CLI hangs when CI runs it" (no UX keyword at all) | U3 — a captive surface, described by symptom; co-fires with `designing-command-line-interfaces` (its noninteractive path) |
 | 「wizard にすべきか、1画面のフォームにすべきか」 | forced-sequence judgement, U1 + U4 |
 | "review this API's tool surface — an agent keeps calling it wrong" | U3, agent-facing regime |
 | "is 'simple' the right goal here, or am I just making it familiar?" | U2's simple/easy split |
 | 「操作の意味が状態で変わるのが気持ち悪い」 (a feeling, no headline term) | U1 |
+| 「保存ボタンを押しても何も変わらず、固まったのか分からない」 | U4 §5 latency budget: feedback window missed |
 
 **MUST NOT fire — near-miss negatives:**
 
@@ -227,6 +229,7 @@ Re-run against name + description ONLY, after any description edit.
 | 「このReactコンポーネントの責務を分離して（表示は変えない）」 | `refactoring-code` |
 | "write a SKILL.md for interaction design" | `forging-skills` — this file's own forge |
 | "design the slide that demos our new flow" | `designing-presentations` |
+| 「`oo` が2秒黙ってから開く。何か表示してほしい」 | `designing-command-line-interfaces` C3 liveness (this file's §5 supplies the window) |
 
 ## Execution model — the gate VERDICTS are solo
 
@@ -260,5 +263,5 @@ is the failure mode — follow the map.*
 | `references/modes.md` | Raskin's definition and locus of attention · quasimodes · why status bars fail · accident empirics (Strasbourg A320, Therac-25, clinical devices) · object-verb / OOUI · the Apple 1987→2011→retired arc · Anti-Mac · GOMS | Working U1; anyone claims a mode is or is not acceptable |
 | `references/complexity.md` | Hickey's simple/easy and the complecting toolkit · Tesler's law and its critics · Out of the Tar Pit · Brooks · Ousterhout's deep modules · Norman on understandability · cognitive-load facts vs folklore · the U2 decision forks | Working U2; someone says "just simplify it" or "fewer options is better" |
 | `references/delegability.md` | Gancarz's tenets and the five arguments · ESR's rules and interface patterns · clig.dev / 12-factor / POSIX / GNU concrete rules · TTY and escape hatches · agent-facing tool design · accessibility as delegation · Worse-is-Better | Working U3; designing any command, API, or tool surface |
-| `references/reversibility.md` | Confirm-vs-undo and its three converging traditions · forcing-function types · undo architectures and costs (command, memento, LWW, OT, CRDT) · autosave · optimistic UI · latency budgets · local-first · when a wizard is right | Working U4; any destructive action or multi-user editing surface |
+| `references/reversibility.md` | Confirm-vs-undo and its three converging traditions · forcing-function types · undo architectures and costs (command, memento, LWW, OT, CRDT) · autosave · optimistic UI · latency budgets (the SOLE home of the response-time windows, CLI included) · local-first · when a wizard is right | Working U4; any destructive action or multi-user editing surface; any wait a user sits through |
 | `references/evidence.md` | **SOLE** source-grade table · **forbidden citations** (fabricated quotes, satire, untraceable statistics) · the calibration inversion · agent-epistemics delta · retrieval gaps · open questions | Before citing ANY source by name; before writing a number |

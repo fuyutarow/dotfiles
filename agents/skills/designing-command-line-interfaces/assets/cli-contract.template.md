@@ -33,12 +33,15 @@ does not prove semantic correctness, target behavior, or receipt truth.
 - Machine mode: {{none or named mode}}
 - Machine framing: {{none or framing/schema}}
 - Machine compatibility: {{none or stability/version promise}}
+- Waits / liveness: {{each external wait, its bound, and what a human sees past the response-time window; or none}}
 
 | Mode / TTY | stdout | stderr | Decoration / framing |
 |---|---|---|---|
 | {{mode}} | {{payload}} | {{diagnostic/progress}} | {{rule}} |
 
 ## C4 OUTCOMES
+
+- Fallbacks / handoffs: {{each fallback (stated or refused, with override) and each effect whose success is unobservable (handed off/unknown, never success); or none}}
 
 | Outcome class | Exit / status | Output | Retry / next action |
 |---|---|---|---|

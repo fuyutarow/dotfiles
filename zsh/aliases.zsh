@@ -546,7 +546,7 @@ pp() {
   fi
 }
 
-s() { print -r -- '{}' | bun ~/.claude/statusline-command.ts | grep -F 'Sys:' }  # the statusline's Sys row, sampled now (its one sampler; was `start` until 2026-10-06)
+alias s='bun ~/dotfiles/agents/claude/host-load.ts'  # the statusline's Sys row (CPU · RAM · VRAM · Disk), now — agents/claude/host-load.ts; was `start` until 2026-10-06
 
 # o / oo — one implementation for mac, WSL and Linux: smart-open/smart-open.ts (PATH command `smart-open`,
 # a package.json bin). A URL opens on the client you sit at when it is reachable over ssh/herdr,

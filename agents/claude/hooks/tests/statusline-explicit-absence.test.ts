@@ -165,7 +165,8 @@ describe("statusline Sys row: VRAM", () => {
       });
       const row = sysRow(renderSettled({ bin }).text);
       expect(row).toContain("VRAM 29% (3.5/12.0G)");
-      expect(row).not.toContain("n/a");
+      // VRAM only: this PATH holds just the fake nvidia-smi, so on macOS RAM reads n/a (no vm_stat).
+      expect(row).not.toContain("VRAM n/a");
     },
     SLOW,
   );

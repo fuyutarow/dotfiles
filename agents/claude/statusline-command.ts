@@ -27,7 +27,8 @@
 //   4 Rate: 5h..% ⟳...(...) · 7d..% ⟳...(...) [· <Model>..% ⟳...(...)]  (budget-over-time)
 //   5 Sys: CPU <pct>% · RAM <pct>% (<used>/<total>G) · VRAM <pct>% (<used>/<total>G) · Disk ..
 //     (host load; ALWAYS present, and every reading in it is a value or `<label> n/a (<why>)` —
-//     CPU/RAM come from /proc on Linux and from os.cpus()/vm_stat on macOS, see cpuPct()/ramFrac();
+//     read and rendered by host-load.ts (also `s` in a shell). CPU/RAM come from /proc on Linux and
+//     from os.cpus()/vm_stat on macOS, see cpuPct()/ramFrac() there;
 //     CPU needs a prior render to diff against, so its very first render reads n/a; VRAM is
 //     read from a cache that a background sampler fills (see SAMPLE_ENV), so a render never waits
 //     for nvidia-smi: the first one reads `n/a (sampling in progress)`, a newer sample that has
@@ -69,34 +70,34 @@
 // Static safety comes from the zod schemas below (every external value is parsed, see ZOD FIRST)
 // + native `!= null` narrowing. Input: JSON via stdin from Claude Code.
 
-import { execFileSync, spawn } from "node:child_process";
 import {
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
   readSync,
-  renameSync,
-  rmdirSync,
-  statfsSync,
   statSync,
-  unlinkSync,
-  writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { createConnection } from "node:net";
-import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
 import { activeDir, ActiveSchema } from "../routing-control/state.ts";
-const recoverInvalid = <T extends z.ZodType>(schema: T) =>
-  schema.optional().catch(undefined);
-const defaultOnInvalid = <T extends z.ZodType>(
-  schema: T,
-  fallback: z.output<T>,
-) => schema.catch(fallback);
+import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
+import {
+  ENRICHMENT_TIMEOUT_MS,
+  execBounded,
+  readJson,
+  writeCache,
+} from "./bounded.ts";
+import {
+  type DiskEntry,
+  type MemReading,
+  readHostLoad,
+  sysRow,
+  sysSegment,
+} from "./host-load.ts";
 import {
   clockHM,
   localFromEpochSec,
@@ -159,18 +160,6 @@ const StatusInputSchema = z.object({
 });
 type StatusInput = z.output<typeof StatusInputSchema>;
 
-// Read a JSON file and validate it. undefined = no usable file (missing, not JSON, or the wrong
-// shape) — the caller treats that as "expired" or reports its own n/a; it is never an assertion.
-function readJson<S extends z.ZodType>(
-  path: string,
-  schema: S,
-): z.output<S> | undefined {
-  const text = fromThrowable(() => readFileSync(path, "utf8"))();
-  if (text.isErr()) return undefined;
-  const checked = jsonOf(schema).safeParse(text.value);
-  return checked.success ? checked.data : undefined;
-}
-
 // Every value this file can show, already computed — the sole output of buildDataframe() and
 // sole input to render(). No ANSI codes, no row grouping, no ordering: a value here says
 // nothing about where or whether it appears on screen.
@@ -221,143 +210,9 @@ interface Dataframe {
 const HOME = process.env.HOME ?? "";
 
 // --- ANSI / glyph constants (literals so segment assembly stays readable) ---
-const ESC = "\u001B";
-const RST = `${ESC}[0m`;
-const DIM = `${ESC}[2m`;
 const SEP = ` ${DIM}|${RST} `;
-const MID = "·"; //   meter middot
 const BR = "⎇"; //    git branch glyph
 const RSET = "⟳"; //  rate-limit reset marker
-// Tiger-Style bound (see the header note above): the timeout shared by every "nice-to-have
-// enrichment" subprocess call in buildDataframe() that is not already governed by its own
-// specific number (agentName's 3000ms for `claude agents --json`, herdrSend's 200ms socket timer).
-const ENRICHMENT_TIMEOUT_MS = 2000;
-
-// EXPLICIT-ABSENCE law (owner ruling 2026-10-03: 「implicit display は本当によくない」). A value
-// the bar could not take is printed as `<label> n/a (<why>)`, never left off the row: a missing
-// segment reads as "there is nothing to show", which is a claim, and for a failed probe it is a
-// false one (2026-10-03: a loaded host made nvidia-smi miss its 2 s bound, the miss was cached as
-// "no GPU", and VRAM vanished while the card was fine). Absence stays silent ONLY where it means
-// the thing does not exist (not a repo -> no branch; no model-scoped weekly cap -> no segment).
-// rc:? above is the older instance of the same rule.
-const NA_COLOR = `${ESC}[38;5;178m`; // amber, same as rc:? — "unverified", not "bad"
-function naSegment(label: string, why: string): string {
-  return `${label} ${NA_COLOR}n/a${RST} ${DIM}(${why})${RST}`;
-}
-// What execFileSync's thrown error carries, parsed rather than probed with `in`/`typeof`. Each
-// field is read on its own (.catch): an error object that lacks or mangles one still yields the
-// others, and the all-missing case falls through to the generic "<tool> failed" below.
-const ExecErrorSchema = z.object({
-  code: recoverInvalid(z.string()),
-  status: recoverInvalid(z.number().nullish()),
-  signal: recoverInvalid(z.string().nullish()),
-  stderr: recoverInvalid(z.string()),
-});
-function execError(e: unknown): z.output<typeof ExecErrorSchema> {
-  const parsed = ExecErrorSchema.safeParse(e);
-  return parsed.success ? parsed.data : {};
-}
-// Why a bounded subprocess call failed, in the few words that tell a human what to fix: the tool
-// is not installed, it hit its bound, it ran and exited non-zero, or a signal killed it.
-function failWhy(
-  e: unknown,
-  tool: string,
-  timeoutMs: number = ENRICHMENT_TIMEOUT_MS,
-): string {
-  const x = execError(e);
-  if (x.code === "ENOENT") return `no ${tool}`;
-  if (x.code === "ETIMEDOUT") return `${tool} timeout ${timeoutMs}ms`;
-  if (typeof x.status === "number") return `${tool} exit ${x.status}`;
-  // Killed by a signal (an OOM kill under load has status null): name it.
-  if (x.signal !== undefined && x.signal !== "")
-    return `${tool} killed by ${x.signal}`;
-  if (x.code !== undefined && x.code !== "") return `${tool} ${x.code}`;
-  return `${tool} failed`;
-}
-
-// RENDER BUDGET (Tiger: bound the whole, not only each part). Every child below has its own
-// bound (2 s, claude agents 3 s), but they run one after another: ps + git + nvidia-smi +
-// claude agents hanging together is 9 s, longer than the 5 s statusLine.refreshInterval, so
-// renders overlap and the bar itself piles load onto the host whose load made the children
-// hang. All children share ONE deadline: each gets min(its own bound, what is left), and once
-// nothing is left a child is not started — its segment prints n/a with that reason. Chosen as
-// 4 s so the slowest possible render (budget + the 200 ms herdr push) ends inside one interval.
-// performance.now(): monotonic, immune to a clock step, and defined on a bun without Temporal
-// (the floor check at the bottom must still get to print its message).
-const RENDER_BUDGET_MS = 4000;
-const RENDER_T0 = performance.now();
-interface ExecFailure {
-  why: string; // the n/a reason, from failWhy
-  stderr: string; // trimmed; "" when the child printed none or never started
-  ran: boolean; // false: never started (budget spent) — says nothing about the tool, so never cache it
-}
-// Run one child inside the render budget. stderr is captured (not discarded) so a caller can
-// tell git's "not a git repository" from its other fatal errors.
-function execBounded(
-  tool: string,
-  file: string,
-  args: string[],
-  ownBoundMs: number,
-  env?: NodeJS.ProcessEnv,
-): Result<string, ExecFailure> {
-  const left = RENDER_BUDGET_MS - (performance.now() - RENDER_T0);
-  if (left <= 0) {
-    return err({
-      why: `${tool} not run, render budget ${RENDER_BUDGET_MS}ms spent`,
-      stderr: "",
-      ran: false,
-    });
-  }
-  return execWithin(
-    tool,
-    file,
-    args,
-    Math.min(ownBoundMs, Math.ceil(left)),
-    env,
-  );
-}
-// One child under ONE bound, with no render budget in the way: the render path goes through
-// execBounded above; the background GPU sampler (not a render) calls this directly.
-function execWithin(
-  tool: string,
-  file: string,
-  args: string[],
-  boundMs: number,
-  env?: NodeJS.ProcessEnv,
-): Result<string, ExecFailure> {
-  return fromThrowable(
-    () =>
-      execFileSync(file, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        encoding: "utf8",
-        timeout: boundMs,
-        ...(env !== undefined ? { env } : {}),
-      }),
-    (e): ExecFailure => ({
-      why: failWhy(e, tool, boundMs),
-      stderr: (execError(e).stderr ?? "").trim(),
-      ran: true,
-    }),
-  )();
-}
-
-// Write a cache file so no reader ever sees half of it: the whole file goes to a private temp
-// name and is renamed into place (atomic on one filesystem). A plain writeFileSync truncates
-// first, and these files are read by every other session on the host every 5 s — a reader landing
-// in the gap got invalid JSON, which reads as "no cache" (a false n/a, or an nvidia-smi spawn
-// nobody needed). Best-effort like every cache write: a failure leaves the old file and no temp.
-function writeCache(path: string, value: unknown): void {
-  const tmp = `${path}.${process.pid}.tmp`;
-  fromThrowable(() => {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(tmp, JSON.stringify(value));
-    renameSync(tmp, path);
-  })().mapErr(() => {
-    fromThrowable(() => {
-      unlinkSync(tmp);
-    })();
-  });
-}
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -833,17 +688,6 @@ async function reportToHerdr(
   }
 }
 
-// Usage-percent -> rounded int + threshold color (green <70 / yellow <90 / red >=90).
-function pctColor(i: number): string {
-  if (i >= 90) return "38;5;167";
-  if (i >= 70) return "38;5;178";
-  return "38;5;71";
-}
-function pctFmt(p: number): { pct: number; col: string } {
-  const pct = Math.round(p);
-  return { pct, col: pctColor(pct) };
-}
-
 // 5h reset: epoch s -> "⟳HH:MM(<h>h<mm>m)" — local clock + time remaining.
 function reset5(epoch: number): string {
   const clock = clockHM(localFromEpochSec(epoch));
@@ -951,379 +795,6 @@ function scanOutOfHarness(): {
     else if (ppid === "1" && args.includes("/scratchpad/")) orphans++;
   }
   return { jobs, orphans };
-}
-// Shared shape for a "used/total" memory-style reading (RAM, VRAM): both the fraction string
-// AND the percentage, since render() needs the percentage to threshold-color the segment the
-// same way every other percentage in this file is colored (pctFmt) — a plain fraction alone
-// cannot drive that.
-const MemReadingSchema = z.object({
-  frac: z.string(), // e.g. "16.2/54.9G"
-  pct: z.number(), // used/total*100, unrounded — pctFmt() rounds at render time
-  // Set only when this is the last GOOD sample served because the fresh one failed (VRAM only):
-  // how old it is and why the fresh one failed. render() prints it, so an old number is never
-  // shown as if it were current.
-  stale: z.object({ secs: z.number(), why: z.string() }).optional(),
-});
-type MemReading = z.output<typeof MemReadingSchema>;
-function memReading(usedG: number, totalG: number): MemReading | undefined {
-  if (!Number.isFinite(usedG) || !Number.isFinite(totalG) || totalG <= 0)
-    return undefined;
-  return {
-    frac: `${usedG.toFixed(1)}/${totalG.toFixed(1)}G`,
-    pct: (usedG / totalG) * 100,
-  };
-}
-
-// Called on EVERY render now (Sys row, below), not just while a job is admitted — the one
-// subprocess call among the three Sys readings, bounded like every other enrichment here.
-// nvidia-smi is ~170 ms of a ~200 ms render (measured 2026-10-01) and its answer is host-wide, so
-// one sample is shared by every session for GPU_SAMPLE_TTL_MS. That is what lets settings.json run
-// the bar every 5 s (statusLine.refreshInterval) — the cadence a Remote Control connect needs to
-// show up promptly, since the bridge attaches after the command's own render.
-const GPU_CACHE = `${HOME}/.cache/claude/statusline-gpu.json`;
-const GPU_SAMPLE_TTL_MS = 5_000;
-// The sampler's bound. Measured 2026-10-05 under load average 22-26 (24 samples): nvidia-smi
-// p50 2.6 s, p90 5.6 s, max 12.6 s, 15 of 24 over the old 2 s bound. Above the
-// worst seen, so a slow answer is an answer; below "hung", so a dead driver is still named.
-// STATUSLINE_GPU_SAMPLE_TIMEOUT_MS lets the tests exercise the timeout without waiting it out.
-const GPU_SAMPLE_TIMEOUT_SCHEMA = z.coerce.number().int().min(100).max(120_000);
-const GPU_SAMPLE_TIMEOUT_MS = defaultOnInvalid(
-  GPU_SAMPLE_TIMEOUT_SCHEMA,
-  20_000,
-).parse(process.env.STATUSLINE_GPU_SAMPLE_TIMEOUT_MS);
-// A last-good sample older than this is a claim about a moment too far back to still be useful;
-// beyond it the reading becomes n/a instead of a stale number.
-const GPU_STALE_MAX_MS = 30 * 60_000;
-// A last-good sample younger than this is shown without the `stale` marker (see memSegment).
-const STALE_SHOW_S = 60;
-// `reading`: the newest sample, set when it succeeded. `why`: set when it failed — a failure is
-// cached for the TTL like a success, so a hung nvidia-smi costs one bounded render per 5 s, not
-// every render. `good`: the newest SUCCESSFUL sample, kept across failures. The pre-2026-10-03
-// shape wrote `reading: null` for ANY failure ("no GPU"), which is how a timeout under load made
-// VRAM disappear; that shape carries no `why`, so it is simply treated as expired.
-const GpuCacheSchema = z.object({
-  at: z.number().optional(),
-  reading: MemReadingSchema.nullish(), // `null` is the pre-fix "no GPU" marker
-  why: z.string().optional(),
-  good: z.object({ at: z.number(), reading: MemReadingSchema }).optional(),
-});
-type GpuCache = z.output<typeof GpuCacheSchema>;
-// A timestamp is "within" a window only if it is not in the future: a clock stepped backwards
-// (WSL2 time sync after sleep) must not keep an old entry fresh for hours or print a negative age.
-function within(at: number, now: number, windowMs: number): boolean {
-  return now - at >= 0 && now - at < windowMs;
-}
-// SAMPLING IS OFF THE RENDER PATH (Tiger ledger O4, 2026-10-05). The bar used to run nvidia-smi
-// inside the render under a 2 s bound. Under load (load average 26 on 12 cores, plus the per-job
-// nvidia-smi pollers of agent-resource-run) nvidia-smi takes 2-10 s, so a bound shorter than its
-// service time failed nearly every attempt, and VRAM sat 264 s stale: an attempt-deadline below the
-// service time is starvation, not a timeout. Now the render only READS the cache and, when it has
-// expired, makes sure one sampler is running; the sampler is this same file started with
-// SAMPLE_ENV set, gets GPU_SAMPLE_TIMEOUT_MS (above the worst latency measured), and writes the cache.
-// The render never waits for it.
-// An environment variable, not argv: this file has no command line of its own (its input is the
-// stdin payload), so the mode is an internal channel between the render and the process it starts.
-const SAMPLE_ENV = "STATUSLINE_SAMPLE_GPU";
-// What a reading is marked with while the newest attempt has not finished (or there is none yet).
-const SAMPLING_WHY = "sampling in progress";
-// ONE nvidia-smi in flight host-wide (Tiger ledger O3). The lock is a directory because mkdir is
-// atomic (EEXIST for every loser) and needs no flags or libraries. The render that wins it hands
-// it to the sampler it starts (the sampler releases it when it ends), so while a sampler runs no
-// other session starts a second one — at 40 sessions that is the difference between one process and
-// a herd feeding the load that made nvidia-smi slow. Its owner is not recorded: a lock older than
-// GPU_LOCK_STALE_MS (the sample bound + start-up margin) is a crashed sampler's, and is broken.
-const GPU_LOCK = `${HOME}/.cache/claude/statusline-gpu.lock`;
-const GPU_LOCK_STALE_MS = GPU_SAMPLE_TIMEOUT_MS + 15_000;
-interface GpuLock {
-  release(): void;
-}
-function acquireGpuLock(): Result<GpuLock, string> {
-  const take = (): boolean =>
-    fromThrowable(() => {
-      mkdirSync(dirname(GPU_LOCK), { recursive: true });
-      mkdirSync(GPU_LOCK);
-    })().isOk();
-  const lock: GpuLock = {
-    release: () => {
-      fromThrowable(() => {
-        rmdirSync(GPU_LOCK);
-      })();
-    },
-  };
-  if (take()) return ok(lock);
-  const held = fromThrowable(() => statSync(GPU_LOCK).mtimeMs)();
-  const now = Temporal.Now.instant().epochMilliseconds;
-  if (held.isOk() && !within(held.value, now, GPU_LOCK_STALE_MS)) {
-    lock.release();
-    if (take()) return ok(lock);
-  }
-  return err("another sampler holds the lock");
-}
-// Render side: make sure a sampler is in flight, and return at once. Ok = one is running or was
-// just started; err = it could not be started (the reason is shown beside the reading).
-function ensureSampler(): Result<void, string> {
-  const lock = acquireGpuLock();
-  if (lock.isErr()) return ok(undefined); // one is already in flight: that is the goal
-  const started = fromThrowable(
-    () => {
-      const child = spawn(process.execPath, [import.meta.path], {
-        stdio: "ignore",
-        env: { ...process.env, [SAMPLE_ENV]: "1" },
-      });
-      child.once("error", () => {
-        lock.value.release();
-      });
-      child.unref(); // the render exits without waiting; the child is bounded by its own timeout
-    },
-    (e): string => `sampler not started (${failWhy(e, "bun")})`,
-  )();
-  if (started.isErr()) lock.value.release();
-  return started;
-}
-// Sampler side (`STATUSLINE_SAMPLE_GPU=1 bun statusline-command.ts`): take ONE sample under the long bound
-// and record it. `good` is the previous last-good sample, carried over a failure so a transient
-// miss can still be shown (marked stale) instead of turning into n/a. Returns the exit code; the
-// caller exits AFTER this returns, so the lock is released by `using` first. Refuses to run
-// without the lock: ensureSampler starts it and hands the lock over.
-function runSampler(): number {
-  if (!existsSync(GPU_LOCK)) {
-    process.stderr.write(
-      `statusline: ${SAMPLE_ENV} is set by the statusline, which holds ${GPU_LOCK}; refusing to run without it\n`,
-    );
-    return 2;
-  }
-  using _held: Disposable = {
-    [Symbol.dispose]: () => {
-      fromThrowable(() => {
-        rmdirSync(GPU_LOCK);
-      })();
-    },
-  };
-  const good = readJson(GPU_CACHE, GpuCacheSchema)?.good;
-  const sampled = sampleVram();
-  // Stamped AFTER the sample returns, so the TTL runs from when the answer exists.
-  const at = Temporal.Now.instant().epochMilliseconds;
-  writeCache(
-    GPU_CACHE,
-    sampled.isOk()
-      ? { at, reading: sampled.value, good: { at, reading: sampled.value } }
-      : { at, why: sampled.error.why, good }, // JSON drops an undefined `good`
-  );
-  return 0;
-}
-// A Mac with no nvidia-smi has no discrete VRAM to read: Apple silicon's GPU shares the RAM the
-// row already shows. That is "does not exist", which the EXPLICIT-ABSENCE law keeps silent. On
-// Linux a missing nvidia-smi stays n/a — there it is a broken GPU box, not a GPU-less one.
-function vramGated(): Result<MemReading, string> | undefined {
-  const vram = vramFrac();
-  const absent =
-    process.platform === "darwin" &&
-    vram.isErr() &&
-    vram.error === "no nvidia-smi";
-  return absent ? undefined : vram;
-}
-function vramFrac(): Result<MemReading, string> {
-  // A missing tool needs no sampler to be known, and a Mac without one has no VRAM row (vramGated).
-  if (Bun.which("nvidia-smi") === null) return err("no nvidia-smi");
-  // A file that is missing or fails GpuCacheSchema is an empty cache. Read BEFORE taking `now`: the
-  // sampler is another process and may land a sample at any moment, and an entry stamped a few ms
-  // after a `now` taken first reads as "from the future" (within() rejects it, as it must for a
-  // stepped-back clock) — the reading would vanish for exactly one render (seen live, 2026-10-05).
-  const cached: GpuCache = readJson(GPU_CACHE, GpuCacheSchema) ?? {};
-  const now = Temporal.Now.instant().epochMilliseconds;
-  // Fresh = an entry that says something (a reading, or why there is none) and is inside the TTL.
-  // The pre-2026-10-03 `{reading: null}` says neither, so it counts as expired.
-  const fresh =
-    cached.at !== undefined &&
-    within(cached.at, now, GPU_SAMPLE_TTL_MS) &&
-    ((cached.reading !== null && cached.reading !== undefined) ||
-      cached.why !== undefined);
-  if (fresh && cached.reading !== null && cached.reading !== undefined)
-    return ok(cached.reading);
-  // Expired: refresh in the background and answer from what is cached NOW. A cached miss inside
-  // the TTL is served as-is, without starting another sampler (one attempt per TTL, not per render).
-  const started = fresh ? ok(undefined) : ensureSampler();
-  const why = started.isErr() ? started.error : (cached.why ?? SAMPLING_WHY);
-  // A last-good sample is still better than nothing, provided its age and the reason the newer
-  // one is missing are printed beside it (memSegment marks it from STALE_SHOW_S on); otherwise
-  // the reading is plainly n/a.
-  const good = cached.good;
-  if (good !== undefined && within(good.at, now, GPU_STALE_MAX_MS)) {
-    const secs = Math.round((now - good.at) / 1000);
-    return ok({ ...good.reading, stale: { secs, why } });
-  }
-  return err(why);
-}
-// `nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits`: the first GPU's
-// line, "<used MiB>, <total MiB>". Whole numbers only — an empty field must not read as 0.
-const MiB = z.string().trim().regex(/^\d+$/u).transform(Number);
-const NvidiaSmiSchema = z
-  .string()
-  .transform((out) => (out.split("\n")[0] ?? "").split(","))
-  .pipe(z.tuple([MiB, MiB]));
-// Runs in the sampler, under GPU_SAMPLE_TIMEOUT_MS — never inside a render.
-function sampleVram(): Result<MemReading, ExecFailure> {
-  return execWithin(
-    "nvidia-smi",
-    "nvidia-smi",
-    ["--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
-    GPU_SAMPLE_TIMEOUT_MS,
-  ).andThen((out) => {
-    const unparsable: ExecFailure = {
-      why: "nvidia-smi output unparsable",
-      stderr: "",
-      ran: true,
-    };
-    const parsed = NvidiaSmiSchema.safeParse(out);
-    if (!parsed.success) return err(unparsable);
-    const [used, total] = parsed.data;
-    const reading = memReading(used / 1024, total / 1024);
-    return reading !== undefined ? ok(reading) : err(unparsable);
-  });
-}
-
-// Host RAM, Linux only (reads /proc/meminfo — instant, no subprocess). MemAvailable (not
-// MemFree) is what "used" is measured against: it already accounts for reclaimable page cache,
-// which MemFree does not, so MemFree would read as chronically "almost full" on a healthy box.
-// macOS host RAM: `vm_stat` (a few ms, no privileges) for the page counts, os.totalmem() for the
-// size. "Used" is Activity Monitor's Memory Used — app memory (anonymous minus purgeable pages) +
-// wired + compressed — NOT total minus "Pages free": macOS keeps free pages near zero by caching
-// files, so that would read as chronically full, the same trap MemFree is on Linux. Not `top -l 1`:
-// its PhysMem "used" counts that file cache too, and it costs a full process-table pass.
-const VmStatPage = z.string().regex(/^\d+$/u).transform(Number);
-function macRam(): Result<MemReading, string> {
-  return execBounded("vm_stat", "vm_stat", [], ENRICHMENT_TIMEOUT_MS)
-    .mapErr((f) => f.why)
-    .andThen((raw) => {
-      const size = raw.match(/page size of (\d+) bytes/u)?.[1];
-      const pages = (label: string): number | undefined => {
-        const line = raw.split("\n").find((l) => l.startsWith(`${label}:`));
-        const v = VmStatPage.safeParse(
-          line?.split(/\s+/u).pop()?.replace(/\.$/u, ""),
-        );
-        return v.success ? v.data : undefined;
-      };
-      const wired = pages("Pages wired down");
-      const compressed = pages("Pages occupied by compressor");
-      const anonymous = pages("Anonymous pages");
-      const purgeable = pages("Pages purgeable");
-      if (
-        size === undefined ||
-        wired === undefined ||
-        compressed === undefined ||
-        anonymous === undefined ||
-        purgeable === undefined
-      )
-        return err("vm_stat output unparsable");
-      const usedBytes =
-        (wired + compressed + Math.max(0, anonymous - purgeable)) *
-        Number(size);
-      const GiB = 1024 ** 3;
-      const reading = memReading(usedBytes / GiB, totalmem() / GiB);
-      return reading !== undefined
-        ? ok(reading)
-        : err("vm_stat output unparsable");
-    });
-}
-// macOS has no /proc: see macRam().
-function ramFrac(): Result<MemReading, string> {
-  if (process.platform === "darwin") return macRam();
-  return fromThrowable(
-    () => readFileSync("/proc/meminfo", "utf8"),
-    () => "no /proc/meminfo",
-  )().andThen((raw) => {
-    let totalKb: number | undefined;
-    let availKb: number | undefined;
-    for (const line of raw.split("\n")) {
-      if (line.startsWith("MemTotal:")) totalKb = Number(line.split(/\s+/u)[1]);
-      else if (line.startsWith("MemAvailable:"))
-        availKb = Number(line.split(/\s+/u)[1]);
-      if (totalKb !== undefined && availKb !== undefined) break;
-    }
-    if (totalKb === undefined || availKb === undefined)
-      return err("meminfo lacks MemTotal/MemAvailable");
-    const usedKb = totalKb - availKb;
-    const reading = memReading(usedKb / 1024 / 1024, totalKb / 1024 / 1024);
-    return reading !== undefined ? ok(reading) : err("meminfo unparsable");
-  });
-}
-
-// One /proc/stat snapshot alone cannot give a CPU percentage — its counters are cumulative
-// jiffies since boot, so a percentage needs the DELTA between two snapshots. Each statusline
-// render is a fresh process (see this file's header note), so that second snapshot has to be
-// the previous render's, kept on disk — same shape as AGENT_NAME_CACHE / RC_PROBE_CACHE above.
-const CPU_CACHE = `${HOME}/.cache/claude/statusline-cpu.json`;
-const CpuSampleSchema = z.object({
-  total: z.number(),
-  idle: z.number(),
-  at: z.number().optional(), // epoch ms the sample was taken; only the cached baseline carries it
-});
-type CpuSample = z.output<typeof CpuSampleSchema>;
-const CPU_BASELINE_MIN_MS = 2_000;
-const CPU_BASELINE_MAX_MS = 60_000;
-// Aggregate "cpu  ..." line (not a per-core "cpu0 ..." line): user+nice+system+idle+iowait+
-// irq+softirq+steal[+guest+guest_nice]. idle time is idle+iowait; total is the sum of every
-// field. On macOS (no /proc) the same cumulative counters come from os.cpus() — libuv's
-// host_processor_info, per-core ms since boot — summed over cores: no subprocess, and the same
-// two-sample delta. Not `top -l 2`: its first sample is the since-boot average, so a real
-// percentage costs a second sample ~1 s later (measured 1.9 s), most of ENRICHMENT_TIMEOUT_MS.
-// The units differ (jiffies vs ms) but a host only ever diffs against its own kind.
-function macCpuSample(): Result<CpuSample, string> {
-  const cores = cpus();
-  if (cores.length === 0) return err("os.cpus() returned no cores");
-  let total = 0;
-  let idle = 0;
-  for (const { times } of cores) {
-    total += times.user + times.nice + times.sys + times.idle + times.irq;
-    idle += times.idle;
-  }
-  return total > 0 ? ok({ total, idle }) : err("os.cpus() counters are zero");
-}
-function readCpuSample(): Result<CpuSample, string> {
-  if (process.platform === "darwin") return macCpuSample();
-  return fromThrowable(
-    () => readFileSync("/proc/stat", "utf8"),
-    () => "no /proc/stat",
-  )().andThen((raw) => {
-    const line = raw.split("\n").find((l) => l.startsWith("cpu "));
-    if (line === undefined || line === "")
-      return err("/proc/stat has no cpu line");
-    const fields = line.trim().split(/\s+/u).slice(1).map(Number);
-    const idle = (fields[3] ?? 0) + (fields[4] ?? 0);
-    const total = fields.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
-    return Number.isFinite(idle) && total > 0
-      ? ok({ total, idle })
-      : err("/proc/stat cpu line unparsable");
-  });
-}
-function cpuPct(): Result<number, string> {
-  const sampled = readCpuSample();
-  if (sampled.isErr()) return err(sampled.error); // no /proc (mac) / malformed line
-  const sample = sampled.value;
-  const now = Temporal.Now.instant().epochMilliseconds;
-  const prev = readJson(CPU_CACHE, CpuSampleSchema); // undefined: no usable baseline file
-  // Best-effort write of THIS render's sample for the NEXT render to diff against, unconditional
-  // on whether this render itself can show a value — same "write regardless, return what we
-  // have" shape as agentName()'s cache-miss path above. EXCEPT a baseline younger than
-  // CPU_BASELINE_MIN_MS is kept: the file is shared by every session, so overwriting it each
-  // render shrank the window to the gap since ANOTHER session's render (a few ms -> a coarse 0%
-  // or 100%).
-  const keep =
-    prev?.at !== undefined && within(prev.at, now, CPU_BASELINE_MIN_MS);
-  if (!keep) {
-    writeCache(CPU_CACHE, { ...sample, at: now });
-  }
-  if (prev === undefined) return err("no earlier sample to diff against"); // first render on this host
-  // A baseline with no timestamp (pre-2026-10-03 file), from the future (clock stepped back) or
-  // older than CPU_BASELINE_MAX_MS would be an average over some other period than "now".
-  if (prev.at === undefined || !within(prev.at, now, CPU_BASELINE_MAX_MS))
-    return err("no earlier sample from the last 60s");
-  const dTotal = sample.total - prev.total;
-  const dIdle = sample.idle - prev.idle;
-  // dTotal<=0 means no jiffies elapsed between two renders (or a counter reset) -> a division
-  // here would be by ~0 or negative, not a real rate; say so rather than show a bogus number.
-  if (dTotal <= 0) return err("no ticks since the last sample");
-  return ok(Math.max(0, Math.min(100, (1 - dIdle / dTotal) * 100)));
 }
 // elapsed: <h>h<mm>m past an hour, else <m>m<ss>s — same shape as the rate-limit countdowns.
 const dur = (s: number) =>
@@ -1453,12 +924,8 @@ async function buildDataframe(data: StatusInput): Promise<Dataframe> {
 
   const scan = scanOutOfHarness();
   const { jobs, orphans } = scan;
-  // Sys-row readings — always computed now, not gated on a job being admitted (see vramFrac()'s
-  // own header note for why paying nvidia-smi every render is fine).
-  const cpu = cpuPct();
-  const ram = ramFrac();
-  const vram = vramGated();
-  const disks = diskReadings();
+  // Sys-row readings (host-load.ts) — always computed now, not gated on a job being admitted.
+  const { cpuPct: cpu, ram, vram, disks } = readHostLoad();
 
   return {
     cwd,
@@ -1676,166 +1143,6 @@ function routeLines(runs: RouteRun[]): string[] {
     i === 0 ? `${RUN_LABEL} ${l}` : `${RUN_INDENT}${l}`,
   );
 }
-// Sys row: "CPU NN% · RAM NN% (X.X/Y.YG) · VRAM NN% (X.X/Y.YG) · Disk …" — each reading a value
-// or `n/a (<why>)` — host resource usage, always its own row like Job (never folded into Rate, which is API budget, not host load). All three
-// percentages share the same green/yellow/red pctFmt threshold as every other percentage in
-// this file; the fraction rides alongside each, dimmed, as supporting detail — same
-// percent-then-dim-detail shape rl5Segment/rl7Segment already use for their reset countdowns.
-function memSegment(label: string, m: MemReading): string {
-  const { pct, col } = pctFmt(m.pct);
-  let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
-  // A number old enough to mislead is never shown as a current one: amber `stale`, its age, and why.
-  // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
-  // and one session sampling for all, a reading tens of seconds old is the normal case, and the
-  // marker there was noise that buried the cases that matter.
-  if (m.stale !== undefined && m.stale.secs >= STALE_SHOW_S)
-    seg += ` ${NA_COLOR}stale ${m.stale.secs}s${RST} ${DIM}(${m.stale.why})${RST}`;
-  return seg;
-}
-// Disks: WHICH filesystems and at what free space they turn yellow/red are not decided here —
-// they are read from agents/hooks/storage-headroom.toml ([drive.*]: path, deny_gib, warn_gib),
-// the same file the storage gate enforces, so the bar and the gate can never disagree about a
-// threshold. statfs is a syscall (no subprocess), cheap enough for every render. A drive whose
-// path does not exist here (/mnt/c on macOS) is skipped, as the gate skips it.
-const STORAGE_CONFIG = join(
-  import.meta.dir,
-  "..",
-  "hooks",
-  "storage-headroom.toml",
-);
-interface DiskReading {
-  kind: "reading"; // discriminant: DiskEntry is told apart by this tag, not by probing for a key
-  label: string; // "Disk C:", "Disk WSL", or "Disk <path>" — see diskLabel
-  usedG: number;
-  totalG: number;
-  freeG: number;
-  col: string; // green / yellow (below warn_gib) / red (below deny_gib)
-}
-// "Disk C:" (a Windows drive under WSL, /mnt/<letter>), "Disk WSL" (the WSL guest root), or
-// "Disk <path>" elsewhere — a bare "C:" or "/" beside CPU/RAM/VRAM did not say what it was.
-const IS_WSL = fromThrowable(() =>
-  /microsoft/iu.test(readFileSync("/proc/version", "utf8")),
-)().unwrapOr(false);
-function diskLabel(path: string): string {
-  const m = path.match(/^\/mnt\/([a-z])$/u); // String.match: this file imports child_process (BG floor F4)
-  if (m?.[1] !== undefined && m[1] !== "") return `Disk ${m[1].toUpperCase()}:`;
-  if (path === "/" && IS_WSL) return "Disk WSL";
-  return `Disk ${path}`;
-}
-// A drive that statfs could not read, shown as `<label> n/a (<why>)`.
-interface DiskMiss {
-  kind: "miss";
-  label: string;
-  why: string;
-}
-type DiskEntry = DiskReading | DiskMiss;
-// err = the drive list itself could not be read, so WHICH disks to show is unknown.
-// Only the keys this file reads; the gate's own keys (label, stop_gib, ...) are not its business.
-const StorageConfigSchema = z.object({
-  drive: z
-    .record(
-      z.string(),
-      z.object({
-        path: z.string().optional(),
-        deny_gib: z.number().optional(),
-        warn_gib: z.number().optional(),
-      }),
-    )
-    .optional(),
-});
-function diskReadings(): Result<DiskEntry[], string> {
-  const raw = fromThrowable(
-    (): unknown => Bun.TOML.parse(readFileSync(STORAGE_CONFIG, "utf8")),
-    () => "storage-headroom.toml unreadable",
-  )();
-  if (raw.isErr()) return err(raw.error);
-  const parsed = StorageConfigSchema.safeParse(raw.value);
-  if (!parsed.success)
-    return err("storage-headroom.toml has an unexpected shape");
-  const drives = Object.values(parsed.data.drive ?? {});
-  // The config says WHICH disks to show: an empty list is the config failing to say, not "no disks".
-  if (drives.length === 0) return err("no [drive.*] in storage-headroom.toml");
-  const out: DiskEntry[] = [];
-  for (const d of drives) {
-    if (d.path === undefined) {
-      out.push({
-        kind: "miss",
-        label: "Disk",
-        why: "drive entry has no path",
-      });
-      continue;
-    }
-    const path = d.path;
-    const st = fromThrowable(
-      () => statfsSync(path),
-      (e): string => execError(e).code ?? "statfs failed",
-    )();
-    // ENOENT off WSL: this OS has no such drive (/mnt/c on macOS) — nothing to show. Under WSL
-    // /mnt/c is the host drive the storage gate exists to protect, so a missing mount is a drive
-    // that could not be read, like any other failure: shown as n/a.
-    if (st.isErr() && st.error === "ENOENT" && !IS_WSL) continue;
-    if (st.isErr()) {
-      out.push({ kind: "miss", label: diskLabel(path), why: st.error });
-      continue;
-    }
-    const { bsize, blocks, bfree, bavail } = st.value;
-    const usedG = ((blocks - bfree) * bsize) / 1024 ** 3;
-    const freeG = (bavail * bsize) / 1024 ** 3;
-    const totalG = usedG + freeG; // df's Use% denominator (reserved blocks excluded)
-    let col = "38;5;71";
-    if (d.warn_gib !== undefined && freeG < d.warn_gib) col = "38;5;178";
-    if (d.deny_gib !== undefined && freeG < d.deny_gib) col = "38;5;167";
-    out.push({
-      kind: "reading",
-      label: diskLabel(path),
-      usedG,
-      totalG,
-      freeG,
-      col,
-    });
-  }
-  return ok(out);
-}
-function diskSegment(d: DiskEntry): string {
-  if (d.kind === "miss") return naSegment(d.label, d.why);
-  const pct = Math.round((d.usedG / d.totalG) * 100);
-  return `${d.label} ${ESC}[${d.col}m${pct}%${RST} ${DIM}(${Math.round(d.usedG)}/${Math.round(d.totalG)}G)${RST}`;
-}
-// Every reading is a Result: ok renders the value, err renders `<label> n/a (<why>)` — see the
-// EXPLICIT-ABSENCE law at the top. The row therefore always carries CPU, RAM and VRAM.
-function sysSegment(
-  cpu: Result<number, string>,
-  ram: Result<MemReading, string>,
-  vram: Result<MemReading, string> | undefined,
-  disks: Result<DiskEntry[], string>,
-): string {
-  const parts: string[] = [
-    cpu.match(
-      (v) => {
-        const { pct, col } = pctFmt(v);
-        return `CPU ${ESC}[${col}m${pct}%${RST}`;
-      },
-      (why) => naSegment("CPU", why),
-    ),
-    ram.match(
-      (m) => memSegment("RAM", m),
-      (why) => naSegment("RAM", why),
-    ),
-    ...(vram === undefined
-      ? []
-      : [
-          vram.match(
-            (m) => memSegment("VRAM", m),
-            (why) => naSegment("VRAM", why),
-          ),
-        ]),
-    ...disks.match(
-      (ds) => ds.map((disk) => diskSegment(disk)),
-      (why) => [naSegment("Disk", why)],
-    ),
-  ];
-  return parts.join(` ${DIM}${MID}${RST} `);
-}
 // The PS1 head in PS1's own colors (%F{magenta}%n@%F{yellow}%m:%F{cyan}date|%F{green}%~). The
 // uncolored shape has one home, hooks/prompt-stamp.ts, shared with the /quote header.
 // Its stamp is render time = "as of" for every value on screen. settings.json's
@@ -1903,7 +1210,7 @@ function render(df: Dataframe): string {
     repoLine = joinText(repoLine, `${ESC}[38;5;140mwt: ${df.wt}${RST}`);
 
   // Always present: every reading in it is either a value or an explicit n/a.
-  const sysLine = `${ESC}[38;5;74mSys:${RST} ${sysSegment(df.cpuPct, df.ram, df.vram, df.disks)}`;
+  const sysLine = sysRow(df); // the Dataframe carries the HostLoad fields under the same names
 
   let jobLine: string | undefined;
   if (df.jobScanWhy !== undefined) {
@@ -1953,8 +1260,6 @@ if (typeof Temporal === "undefined") {
   );
   process.exit(0);
 }
-// Sampler mode: take one GPU sample and exit. It never reads stdin and never renders.
-if (process.env[SAMPLE_ENV] === "1") process.exit(runSampler());
 const raw = await Bun.stdin.text();
 // unknown -> StatusInput at the trust boundary: parsed with StatusInputSchema, never cast. A
 // payload that is not JSON, or has a field of the wrong type, renders line 1 plus the first

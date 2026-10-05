@@ -13,6 +13,12 @@ if [[ -z $HOMEBREW_PREFIX ]]; then
   done
   unset _brew
 fi
+# Runtimes on a box without Homebrew (scripts/linux-init.ts: bun, uv). Interactive shells only —
+# the same reach a brew-installed bun has on the Mac — so Claude Code's hooks (`bun …`) work, while
+# `ssh host 'cmd'` still finds no undeclared bun (INV-6; zshenv never adds this dir).
+_rt="$HOME/.local/share/dotfiles/runtime/bin"
+[[ -d $_rt && ":$PATH:" != *":$_rt:"* ]] && export PATH="$_rt:$PATH"
+unset _rt
 if ! type z &>/dev/null && command -v sheldon &>/dev/null; then
   _dbg "Loading sheldon from .zshrc"
   eval "$(sheldon source)"

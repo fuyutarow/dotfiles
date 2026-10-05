@@ -8,7 +8,10 @@
 // most bottles cannot relocate (prefix must be <= 26 chars, the length of /home/linuxbrew/.linuxbrew),
 // so it builds from source; and linuxbrew itself needs root and minutes. mise did 25 tools in ~20 s
 // on sol (2026-10-05). Nothing is declared in ~/.config/mise (INV-6: no global [tools]); mise is
-// only the downloader. Runtimes (bun, uv) are skipped: repos declare them, dotfiles' mise.toml too.
+// only the downloader. Runtimes (bun, uv) go to ~/.local/share/dotfiles/runtime/bin instead, which
+// zsh/zshrc puts on INTERACTIVE shells only — the reach brew's bun has on the Mac: Claude Code's
+// hooks run `bun …`, but `ssh host 'cmd'` must not find an undeclared bun (INV-6). Skipping them
+// outright (the first cut) left every Claude hook on sol failing.
 //
 // Bootstrap, no root needed (scripts/bootstrap-linux.sh does this as root after creating the user):
 //   curl -fsSL https://mise.run | sh
@@ -31,6 +34,8 @@ import { $ } from "bun";
 const DOTFILES = join(homedir(), "dotfiles");
 const BIN = join(homedir(), ".local/bin");
 const MISE = join(BIN, "mise");
+const RUNTIME_BIN = join(homedir(), ".local/share/dotfiles/runtime/bin");
+const RUNTIMES = new Set(["bun", "uv"]);
 
 // Brewfile name → mise tool, only where they differ; any other name is looked up as-is, and a
 // missing one fails `mise install` loudly.
@@ -41,11 +46,9 @@ const MISE_NAME: Readonly<Record<string, string>> = {
   "rm-improved": "github:nivekuil/rip",
   procs: "github:dalance/procs",
 };
-// Not installed here, each for a stated reason (printed, never silent).
+// Not installed here, for a stated reason (printed, never silent).
 const SKIP: Readonly<Record<string, string>> = {
   mise: "already the installer (~/.local/bin/mise)",
-  bun: "a runtime: declared per repo (INV-6), dotfiles' own mise.toml included",
-  uv: "a runtime: declared per repo (INV-6)",
 };
 
 const say = (line: string): void => {
@@ -77,13 +80,14 @@ function executables(binDir: string): string[] {
 
 for (const f of core.filter((x) => SKIP[x] !== undefined))
   say(`skip ${f}: ${SKIP[f]}`);
-const ids = core
-  .filter((f) => SKIP[f] === undefined)
-  .map((f) => `${MISE_NAME[f] ?? f}@latest`);
+const tools = core.filter((f) => SKIP[f] === undefined);
+const ids = tools.map((f) => `${MISE_NAME[f] ?? f}@latest`);
 say(`mise install ${ids.length} core tools (prebuilt releases)`);
 await $`${MISE} install ${ids}`;
 mkdirSync(BIN, { recursive: true });
-for (const id of ids) {
+mkdirSync(RUNTIME_BIN, { recursive: true });
+for (const [i, id] of ids.entries()) {
+  const dest = RUNTIMES.has(tools[i] ?? "") ? RUNTIME_BIN : BIN;
   // Ask mise where the binaries are: archive layouts differ (bat's sit under .mise-bins), so a
   // guessed <install>/bin missed them on the first real run (sol, 2026-10-05).
   const dirs = (await $`${MISE} bin-paths ${id}`.text())
@@ -94,7 +98,7 @@ for (const id of ids) {
     throw new Error(
       `${id}: mise bin-paths named no executable (${dirs.join(", ")})`,
     );
-  for (const exe of exes) relink(join(BIN, exe.split("/").pop() ?? ""), exe);
+  for (const exe of exes) relink(join(dest, exe.split("/").pop() ?? ""), exe);
 }
 
 // deps first: scripts/link-dots.ts imports Cleye from node_modules.

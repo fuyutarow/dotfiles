@@ -181,6 +181,8 @@ async function checkPane(host: string): Promise<Finding> {
 // 2026-10-05 boxes (gh, claude, topgrade, btm) — each found by hand. This asks for all of them at once.
 const TOPIC_COMMANDS = [
   "btm",
+  "bun", // interactive only: Claude Code hooks run `bun …` (zsh/zshrc runtime dir)
+
   "herdr",
   "jj",
   "lazygit",

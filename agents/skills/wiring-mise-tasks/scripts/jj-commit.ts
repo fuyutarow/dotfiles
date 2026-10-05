@@ -13,7 +13,8 @@
 // --records  every changed path under research_record/ (@ vs @-), EXCLUDING the directory of a run
 //            whose research_record/runs/<id>.json does not exist yet (a run in flight: commit only
 //            finished run dirs).
-// --push     then `jj git push --bookmark $BOOKMARK --remote origin`.
+// --push     then `jj git push --bookmark $BOOKMARK --remote origin` — fast-forward only: it fetches
+//            first and refuses (exit 1, commit kept) when $BOOKMARK@origin is not an ancestor.
 // BOOKMARK   env, default alpha.
 // Exit: 0 committed · 1 the gate refused (nothing committed) · 2 usage or empty selection.
 import { $ } from "bun";
@@ -131,6 +132,15 @@ console.log((await $`jj diff -r @- --stat`.text()).trim().split("\n").at(-1));
 await $`jj bookmark list ${bookmark}`;
 
 if (push) {
+  // Fast-forward only. `jj git push` moves a bookmark SIDEWAYS whenever the remote still matches the
+  // last fetch, i.e. it force-pushes; on 2026-10-06 that dropped two commits from alpha@origin that
+  // the local alpha did not contain. Fetch, and refuse unless the remote bookmark is an ancestor.
+  await $`jj git fetch --remote origin`.quiet().nothrow();
+  const remote = `${bookmark}@origin`;
+  const exists = (await $`jj log --no-graph -r ${`present(${remote})`} -T ${'"x"'}`.nothrow().text()).trim();
+  const behind = (await $`jj log --no-graph -r ${`::${remote} ~ ::${bookmark}`} -T ${'commit_id.short() ++ " " ++ description.first_line() ++ "\\n"'}`.nothrow().text()).trim();
+  if (exists === "x" && behind !== "")
+    die(`not pushed: ${remote} has commits ${bookmark} lacks (a push would drop them) — run \`mise run pull\`, then push:\n${behind}`, 1);
   // In a colocated repo jj refreshes Git HEAD/index after the push; another writer's index.lock
   // (polysearch LAND runs `git add`) can fail that refresh AFTER the remote moved (observed
   // 2026-09-30). Judge the push by the remote bookmark, not by the exit code.

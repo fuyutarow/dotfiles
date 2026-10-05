@@ -141,6 +141,22 @@ cd ~/dotfiles && brew install mise && mise run wsl:init
 exec zsh
 ```
 
+### Throwaway Linux box (rented GPU, fresh VM, container)
+
+dotfiles gives such a box the **core dev utilities** only — linuxbrew, the Brewfile entries marked
+`@core` (shell, search, VCS, herdr, mise …), the dotfile links — so it is usable at once and
+reachable with `herdr --remote`. It does **not** build experiment environments: Julia, CUDA, Python
+and their versions belong to each repo's `mise.toml` (`mise install` inside that repo).
+
+```bash
+# as root on the box (one line; creates user fuyu, then runs `mise run linux:init` as that user)
+curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash
+# from the Mac: a Host block in ~/.ssh/config.local (never this repo), then
+herdr --remote <alias>
+```
+
+Renting, choosing and destroying a GPU box (Vast.ai) is the `renting-cloud-gpus` skill.
+
 ## Tasks
 
 All repo tasks are defined in `mise.toml` (single task runner — no justfile here):

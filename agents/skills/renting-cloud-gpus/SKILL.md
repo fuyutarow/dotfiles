@@ -45,8 +45,15 @@ Keep these tokens stable: **DESTROY-NOT-STOP**, **NOTHING-LEFT-BEHIND**, **TIER-
 ## The lifecycle — one run
 
 ```text
-choose tier + cap → search → create (label) → wait (bounded) → ship → run → retrieve → destroy → verify none left
+choose tier + cap → search → create (label) → wait + prove reachable (bounded)
+  → bootstrap core dev utils (dotfiles one-liner) → ~/.ssh/config.local alias → herdr --remote
+  → ship code → `mise install` in the repo (its experiment env) → run → retrieve
+  → destroy → remove the alias → verify none left
 ```
+
+Division of labour: dotfiles installs only the core dev utilities (`scripts/bootstrap-linux.sh` →
+`mise run linux:init`, Brewfile `@core`); the experiment environment (Julia, CUDA, Python) is the
+repo's own `mise.toml`. Never hand-install a toolchain on the box.
 
 Copyable commands, the pinned CLI version and the field reference: `references/vast-recipe.md`.
 Every step that can fail goes to **destroy**, not to "retry later".

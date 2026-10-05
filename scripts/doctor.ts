@@ -85,6 +85,8 @@ export type Ctx = {
   dotfiles: string;
   isMac: boolean;
   isWsl: boolean;
+  /** Plain Linux (neither macOS nor WSL): a box scripts/linux-init.ts sets up with Brewfile.core only. */
+  isCoreBox: boolean;
 };
 
 // Generous on purpose: a doctor exists to be exhaustive, and a cap of 8 once hid the one dangling
@@ -437,8 +439,26 @@ export async function checkLoginShell(ctx: Ctx): Promise<Finding> {
     : (r.out.trim().split(":")[6] ?? "");
   if (shell === "")
     return warn("login-shell", "could not read the account's login shell");
-  return basename(shell) === "zsh"
-    ? pass("login-shell", `login shell is ${shell}`)
+  if (basename(shell) === "zsh")
+    return pass("login-shell", `login shell is ${shell}`);
+  // Where chsh is not ours (a shared server, sol): bash stays the login shell and hands every
+  // interactive shell to zsh — zsh/bash_profile for a login, zsh/bashrc for a herdr pane. Healthy
+  // only when BOTH handoffs are this repo's; doctor:remote checks the result from outside.
+  const handoff = [
+    [".bash_profile", "zsh/bash_profile"],
+    [".bashrc", "zsh/bashrc"],
+  ].every(([dst = "", src = ""]) => {
+    const link = join(ctx.home, dst);
+    return (
+      lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink() === true &&
+      readlinkSync(link) === join(ctx.dotfiles, src)
+    );
+  });
+  return basename(shell) === "bash" && handoff
+    ? pass(
+        "login-shell",
+        `login shell is ${shell}, handed to zsh by ~/.bash_profile and ~/.bashrc (this repo's)`,
+      )
     : fail(
         "login-shell",
         `login shell is ${shell}, not zsh`,
@@ -830,6 +850,14 @@ export async function checkSmartOpen(ctx: Ctx): Promise<Finding> {
     resolved
       .filter((l) => l.startsWith(`${key} `))
       .map((l) => l.slice(key.length + 1).trim());
+  // The forward is the CLIENT's side: only a machine that attaches to r99-wsl (its config.local
+  // gives the alias a HostName) carries it. A rented box or R99 itself never attaches there —
+  // `ssh -G` then echoes the alias back as the hostname, and there is nothing to check.
+  if (value("hostname")[0] === SMART_OPEN_HOST)
+    return skip(
+      "smart-open",
+      `this machine does not attach to ${SMART_OPEN_HOST} (no HostName for it in ~/.ssh/config.local)`,
+    );
   const user = value("user")[0];
   if (user === undefined)
     return warn("smart-open", "ssh -G printed no `user` line");
@@ -916,6 +944,53 @@ async function checkEditorAlias(
   );
 }
 
+// Brewfile name -> the command it puts on PATH, where they differ.
+const CORE_COMMAND: Readonly<Record<string, string>> = {
+  "git-delta": "delta",
+  ripgrep: "rg",
+  "rm-improved": "rip",
+  "choose-rust": "choose",
+  bottom: "btm",
+  rustup: "cargo",
+};
+// Where linux:init puts the runtimes (bun, uv, cargo, sccache): interactive shells only (INV-6).
+const RUNTIME_BIN = ".local/share/dotfiles/runtime/bin";
+
+// A core box has no Homebrew: linux:init downloads Brewfile.core through mise into ~/.local/bin
+// (runtimes into RUNTIME_BIN). So the question is not "is the formula installed" but "does every
+// core command resolve" — the thing a missing alias or a failed hook actually depends on.
+export async function checkCoreTools(ctx: Ctx): Promise<Finding> {
+  const text = await attemptOr(
+    () => readFileSync(join(ctx.dotfiles, "Brewfile.core"), "utf8"),
+    null,
+  );
+  if (text === null)
+    return fail(
+      "core-tools",
+      "no Brewfile.core in this checkout",
+      "jj/git pull",
+    );
+  const names = text
+    .split("\n")
+    .flatMap((l) => /^brew "([^"]+)"/u.exec(l)?.[1] ?? []);
+  const path = [
+    join(ctx.home, ".local/bin"),
+    join(ctx.home, RUNTIME_BIN),
+    process.env.PATH ?? "",
+  ].join(":");
+  const missing = names
+    .map((n) => CORE_COMMAND[n] ?? n)
+    .filter((cmd) => Bun.which(cmd, { PATH: path }) === null);
+  return missing.length === 0
+    ? pass("core-tools", `all ${names.length} Brewfile.core commands resolve`)
+    : fail(
+        "core-tools",
+        `${missing.length} Brewfile.core command(s) missing`,
+        "mise run linux:init",
+        missing,
+      );
+}
+
 type Check = {
   name: string;
   run: (ctx: Ctx) => Promise<Finding>;
@@ -926,7 +1001,22 @@ export const CHECKS: Check[] = [
   { name: "links", run: checkLinks, applies: always },
   { name: "settings", run: checkSettings, applies: always },
   { name: "skills", run: checkSkills, applies: always },
-  { name: "brew", run: checkBrew, applies: always },
+  {
+    name: "brew",
+    run: checkBrew,
+    applies: (c) =>
+      c.isCoreBox
+        ? "plain Linux gets Brewfile.core from mise (linux:init), not brew — see core-tools"
+        : null,
+  },
+  {
+    name: "core-tools",
+    run: checkCoreTools,
+    applies: (c) =>
+      c.isCoreBox
+        ? null
+        : "plain Linux only (Mac/WSL: the brew check covers it)",
+  },
   { name: "deps", run: checkDeps, applies: always },
   { name: "bins", run: checkBins, applies: always },
   { name: "git-hooks", run: checkGitHooks, applies: always },
@@ -956,7 +1046,12 @@ export const CHECKS: Check[] = [
     run: checkCapacityGuard,
     applies: (c) => (c.isWsl ? null : "WSL only"),
   },
-  { name: "ccc-db-map", run: checkCccDbMap, applies: always },
+  {
+    name: "ccc-db-map",
+    run: checkCccDbMap,
+    applies: (c) =>
+      c.isCoreBox ? "ccc is not a core tool (Brewfile.core)" : null,
+  },
   {
     name: "iterm2",
     run: checkIterm2,
@@ -987,6 +1082,7 @@ async function main(): Promise<void> {
     dotfiles: process.env.DOTFILES ?? join(home, "dotfiles"),
     isMac: process.platform === "darwin",
     isWsl: /microsoft/iu.test(release()), // same test as link-dots.ts: `uname -r`
+    isCoreBox: process.platform === "linux" && !/microsoft/iu.test(release()),
   };
   const only = (process.env.DOCTOR_ONLY ?? "")
     .split(",")

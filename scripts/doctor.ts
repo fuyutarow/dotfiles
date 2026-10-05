@@ -893,7 +893,7 @@ async function checkEditorAlias(
       return fail(
         "smart-open",
         `a command session to ${SMART_OPEN_HOST} carries the smart-open forward — every \`ssh ${SMART_OPEN_HOST} <cmd>\` steals the socket and leaves a dead bind`,
-        'scope the RemoteForward in ssh/config with `Match originalhost … sessiontype shell` / `command "*herdr remote-client-bridge*"`',
+        'scope the RemoteForward in ssh/smart-open-attach.conf with `Match tagged smart-open … sessiontype shell` / `command "*herdr remote-client-bridge*"`',
         [`have: ssh -G ${SMART_OPEN_HOST} true → remoteforward`],
       );
     return pass(

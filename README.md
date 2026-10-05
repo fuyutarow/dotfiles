@@ -158,7 +158,8 @@ and their versions belong to each repo's `mise.toml` (`mise install` inside that
 ```bash
 # as root on the box (one line; creates user fuyu, then runs `mise run linux:init` as that user)
 curl -fsSL https://raw.githubusercontent.com/fuyutarow/dotfiles/alpha/scripts/bootstrap-linux.sh | bash
-# from the Mac: a Host block in ~/.ssh/config.local (never this repo), then
+# from the Mac: a Host block in ~/.ssh/config.local (never this repo) — `Host <alias> <alias>-code`
+# plus `Tag smart-open`, so `o`/`oo` there open on the Mac — then
 herdr --remote <alias>
 ```
 

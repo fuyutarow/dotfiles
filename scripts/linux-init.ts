@@ -75,9 +75,8 @@ function relink(link: string, target: string): void {
   symlinkSync(target, link);
 }
 
-/** The executables a mise install ships: <dir>/bin/* when it has a bin dir, else <dir>/*. */
-function executables(dir: string): string[] {
-  const binDir = existsSync(join(dir, "bin")) ? join(dir, "bin") : dir;
+/** The executables in one of mise's bin dirs (mise's own answer, from `mise bin-paths`). */
+function executables(binDir: string): string[] {
   return readdirSync(binDir)
     .map((name) => join(binDir, name))
     .filter((p) => {
@@ -95,9 +94,16 @@ async function installRootless(): Promise<void> {
   await $`${MISE} install ${ids}`;
   mkdirSync(BIN, { recursive: true });
   for (const id of ids) {
-    const dir = (await $`${MISE} where ${id}`.text()).trim();
-    const exes = executables(dir);
-    if (exes.length === 0) throw new Error(`${id}: no executable under ${dir}`);
+    // Ask mise where the binaries are: archive layouts differ (bat's sit under .mise-bins), so a
+    // guessed <install>/bin missed them on the first real run (sol, 2026-10-05).
+    const dirs = (await $`${MISE} bin-paths ${id}`.text())
+      .split("\n")
+      .filter((l) => l !== "");
+    const exes = dirs.flatMap((d) => executables(d));
+    if (exes.length === 0)
+      throw new Error(
+        `${id}: mise bin-paths named no executable (${dirs.join(", ")})`,
+      );
     for (const exe of exes) relink(join(BIN, exe.split("/").pop() ?? ""), exe);
   }
 }

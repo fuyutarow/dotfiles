@@ -11,7 +11,7 @@ brew "eza"          # @core better ls (l, ll, la)
 brew "fd"           # @core better find (f)
 # fnm removed 2026-08-06 (INV-6): a second version manager that hooks every login shell is an
 # implicit global toolchain. Node is declared per project in mise.toml, or it does not exist.
-brew "gh"
+brew "gh"           # @core GitHub CLI (clone private repos, PRs) — login is per box; never leave its token on a rented one
 brew "git"
 brew "git-delta"    # @core better diff
 brew "jq"           # @core

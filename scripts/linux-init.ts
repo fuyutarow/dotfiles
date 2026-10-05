@@ -60,6 +60,12 @@ if (lstatSync(staleBun, { throwIfNoEntry: false })?.isSymbolicLink() === true) {
   console.log(`linux:init: removed ${staleBun} (INV-6: bun comes from mise)`);
 }
 
+// The agent CLIs are core too, but not Brewfile entries: each comes from its vendor's self-updating
+// installer into ~/.local/bin (mise.toml install:ai-clis says why not brew/npm). Missing on the first
+// rented box (2026-10-05: `claude: command not found` in a repo checkout).
+console.log("linux:init: agent CLIs (Claude Code, Codex)");
+await $`${BREW}/mise run install:ai-clis`.cwd(DOTFILES);
+
 console.log("linux:init: sheldon plugins");
 await $`${BREW}/sheldon lock`.nothrow();
 console.log("linux:init: done — connect with `herdr --remote <host>`");

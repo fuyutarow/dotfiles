@@ -14,7 +14,10 @@ import { join, resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
 import { jsonText, z } from "../../hooks/zod.ts";
 import {
+  buildSampledLaunch,
   buildSystemdLaunch,
+  readHostOptIn,
+  resolveEnforcement,
   commandEnvironment,
   createAdmissionReceipt,
   decideAdmission,
@@ -1195,6 +1198,7 @@ describe("bounded execution", () => {
         available: false,
         reason: "fixture user manager unavailable",
       },
+      hostOptIn: null, // hermetic: never this machine's own ~/.config/agent-resource/host.toml
       report: (line) => {
         reports.push(line);
       },
@@ -1428,4 +1432,114 @@ describe("bounded execution", () => {
     ).rejects.toThrow("failed to verify cleanup of systemd scope");
     expect(readdirSync(stateDirectory)).toEqual([]);
   });
+});
+
+// A machine that can never have cgroup enforcement (a rented container, 2026-10-05) may opt into
+// sampled enforcement, once, with a reason; nothing else changes (agent-resource-run.ts, Host opt-in).
+const optInFile = (text: string): string => {
+  const path = join(mkdtempSync(join(tmpdir(), "arr-host-")), "host.toml");
+  writeFileSync(path, text);
+  return path;
+};
+
+describe("sampled enforcement (host opt-in)", () => {
+  test("no file is no opt-in; a valid file carries its reason; an invalid one throws, never ignored", () => {
+    expect(readHostOptIn(join(tmpdir(), "arr-absent", "host.toml"))).toBeNull();
+    expect(
+      readHostOptIn(
+        optInFile(
+          'schema = 1\nsampled_enforcement_reason = "Vast container: no user systemd"\n',
+        ),
+      ),
+    ).toEqual({
+      sampled_enforcement_reason: "Vast container: no user systemd",
+    });
+    expect(() =>
+      readHostOptIn(
+        optInFile('schema = 1\nsampled_enforcement_reason = "  "\n'),
+      ),
+    ).toThrow("is invalid");
+    expect(() =>
+      readHostOptIn(
+        optInFile('schema = 1\nsampled_enforcement_reason = "x"\nextra = 1\n'),
+      ),
+    ).toThrow("is invalid");
+    expect(() => readHostOptIn(optInFile("schema = ["))).toThrow(
+      "not valid TOML",
+    );
+  });
+
+  test("cgroups win where they work; without them, no opt-in still refuses; with it, sampled", () => {
+    const optIn = { sampled_enforcement_reason: "rented container" };
+    expect(resolveEnforcement({ available: true }, optIn)).toEqual({
+      ok: true,
+      enforcement: { kind: "cgroup" },
+    });
+    const refused = resolveEnforcement(
+      { available: false, reason: "read-only cgroup" },
+      null,
+    );
+    expect(refused.ok).toBe(false);
+    expect(refused.ok ? "" : refused.reason).toContain(
+      "kernel enforcement unavailable",
+    );
+    expect(refused.ok ? "" : refused.reason).toContain("host.toml");
+    expect(
+      resolveEnforcement(
+        { available: false, reason: "read-only cgroup" },
+        optIn,
+      ),
+    ).toEqual({
+      ok: true,
+      enforcement: {
+        kind: "sampled",
+        reason: "read-only cgroup; host opt-in: rented container",
+      },
+    });
+  });
+
+  test("the sampled launch keeps the session and the affinity, and starts no systemd scope", () => {
+    const argv = buildSampledLaunch(reservation({ cpu_ids: [4, 5] }), [
+      "sh",
+      "-c",
+      "true",
+    ]);
+    expect(argv).toEqual([
+      "setsid",
+      "--wait",
+      "taskset",
+      "-c",
+      "4,5",
+      "sh",
+      "-c",
+      "true",
+    ]);
+    expect(argv).not.toContain("systemd-run");
+  });
+
+  // checkJob refuses before admission without setsid/taskset (Linux util-linux): skipped, and
+  // counted as skipped, on a machine that lacks them (macOS) rather than failing for that reason.
+  test.skipIf(Bun.which("taskset") === null || Bun.which("setsid") === null)(
+    "the ADMIT line says no cgroup bounds the job, and why",
+    async () => {
+      const reports: string[] = [];
+      const result = await checkJob(cpuManifest(), {
+        stateDirectory: temporaryStateDirectory(),
+        snapshot: hostSnapshot(),
+        kernelEnforcement: { available: false, reason: "read-only cgroup" },
+        hostOptIn: { sampled_enforcement_reason: "rented container" },
+        report: (line) => {
+          reports.push(line);
+        },
+      });
+      expect(result).toMatchObject({ ok: true, exitCode: 0 });
+      const admit = reports.join("\n");
+      expect(admit).toContain(
+        "enforcement=affinity+sampled-process-group cgroup=none",
+      );
+      expect(admit).toContain(
+        'cgroup_reason="read-only cgroup; host opt-in: rented container"',
+      );
+    },
+  );
 });

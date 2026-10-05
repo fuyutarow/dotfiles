@@ -181,7 +181,6 @@ const bodyBytes = Buffer.byteLength(body, "utf8");
 const where = promptParts(process.cwd());
 const header = `from ${name} | ${stampMDHM(Temporal.Now.plainDateTimeISO())} | turns: ${selected.length} | ${bodyBytes}B | ${where.user}@${where.host}`;
 const payloadText = `${header}\n${body}`;
-const scope = selected.length === 1 ? "" : ` (last ${selected.length} turns)`;
 let short = "";
 if (selected.length < count) {
   const plural = selected.length === 1 ? "" : "s";
@@ -215,7 +214,7 @@ if (count > CLIPBOARD_TURN_LIMIT) {
   const copied = await attempt(() => copyViaHerdr(command));
   if (copied.ok) {
     block(
-      `Download command copied to your local clipboard for "from ${name}"${scope}${short}. ` +
+      `Download command copied to your local clipboard for ${header}${short}. ` +
         `Run it in a local terminal to save the file in that terminal's current directory:\n${command}\n[${copied.value}]`,
     );
   } else {
@@ -239,5 +238,7 @@ if (!paneCopy.ok) {
 }
 
 block(
-  `Copied to clipboard as "from ${name}"${scope}${short}. [${paneCopy.value}]`,
+  // The header itself, not a paraphrase of it: what the human sees here is exactly the first line
+  // of what they will paste (owner, 2026-10-06).
+  `Copied to clipboard — ${header}${short} [${paneCopy.value}]`,
 );

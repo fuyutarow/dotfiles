@@ -72,6 +72,32 @@ JSON to `<manifest path>.peak.json`, so a caller can read its own job's measured
 capturing stdout at all; that file is overwritten per run, like every other piece of this
 runner's per-run state.
 
+## Machines without cgroup enforcement: the host opt-in
+
+Some machines can never pass the user-systemd probe — a rented container (Vast.ai, 2026-10-05) has
+a read-only cgroup tree, no `CAP_SYS_ADMIN` and no user systemd. Fail-closed there admits nothing.
+The machine's owner may opt in, once per machine and with a reason, in
+`~/.config/agent-resource/host.toml` (`AGENT_RESOURCE_HOST`, absolute, for tests):
+
+```toml
+schema = 1
+sampled_enforcement_reason = "Vast.ai container: read-only cgroup, no user systemd"
+```
+
+Jobs there run under the sampled ceilings every job already has — process-group RSS and process
+count (TERM→KILL on breach), walltime, CPU affinity — without the kernel's MemoryMax/TasksMax. The
+`ADMIT` line says `enforcement=affinity+sampled-process-group cgroup=none cgroup_reason="…"` and
+`scope_unit=none`; the job gets `AGENT_RESOURCE_ENFORCEMENT=sampled` (`cgroup` otherwise). Rules:
+
+- No file: refused exactly as before. An invalid file (bad TOML, empty reason, unknown key) refuses
+  with its error — it is never ignored.
+- Where cgroups work, they are used whatever the file says.
+- Not `prlimit` as a stand-in: `RLIMIT_AS` breaks CUDA's address-space reservation, and
+  `RLIMIT_NPROC` counts every process of the user, not the job's.
+- The receipt keeps schema 1, so its `scope_unit` names no live scope under sampled enforcement:
+  step (4) below cannot hold there, and `verifyAdmissionReceipt` returns false. A consumer that
+  needs provenance checks `AGENT_RESOURCE_ENFORCEMENT` first.
+
 ## Child admission receipt
 
 For an executing command, the runner reads the manifest as bytes, resolves its absolute path, and

@@ -6,6 +6,7 @@
 
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -18,7 +19,7 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
@@ -442,6 +443,8 @@ type ExecuteOptions = {
   cwd?: string;
   report?: (line: string) => void;
   kernelEnforcement?: KernelEnforcement;
+  /** Test seam for the host opt-in file; `null` = no opt-in. Default: readHostOptIn(). */
+  hostOptIn?: HostOptIn | null;
   systemdScopeCleanup?: (scopeUnit: string) => boolean;
   /** Required for child execution so the receipt can name the exact admitted manifest bytes. */
   manifestSource?: ManifestSource;
@@ -898,6 +901,82 @@ export function probeKernelEnforcement(): KernelEnforcement {
     };
   }
   return { available: true };
+}
+
+// --- Host opt-in: a machine where cgroup enforcement cannot exist --------------------------------
+// A rented container (Vast.ai, 2026-10-05) has a read-only cgroup tree, no CAP_SYS_ADMIN and no user
+// systemd: probeKernelEnforcement() can never pass there, and fail-closed admitted nothing at all.
+// Its owner may declare, ONCE PER MACHINE and with a reason, that jobs there run under the sampled
+// ceilings alone — the process-group RSS and process-count monitor, walltime, TERM→KILL that every
+// admitted job already runs — without the kernel's own MemoryMax/TasksMax. Never a default: no file
+// → refused exactly as before; and where cgroups DO work they are used, whatever the file says.
+// Not prlimit as a stand-in: RLIMIT_AS breaks CUDA's address-space reservation, and RLIMIT_NPROC
+// counts every process of the user, not the job's.
+export type HostOptIn = { sampled_enforcement_reason: string };
+export type Enforcement =
+  | { kind: "cgroup" }
+  | { kind: "sampled"; reason: string };
+const HostOptInSchema = z.strictObject({
+  schema: z.literal(1),
+  sampled_enforcement_reason: z.string().trim().min(1),
+});
+
+/** ~/.config/agent-resource/host.toml, or the absolute path in AGENT_RESOURCE_HOST (tests). */
+export function hostOptInPath(): string {
+  const override = process.env.AGENT_RESOURCE_HOST;
+  if (override === undefined || override === "")
+    return join(homedir(), ".config", "agent-resource", "host.toml");
+  if (!isAbsolute(override)) {
+    throw new UsageError(
+      `AGENT_RESOURCE_HOST must be an absolute path, got '${override}'`,
+    );
+  }
+  return override;
+}
+
+/** The host opt-in; null when the file does not exist. A file that exists but is invalid throws. */
+export function readHostOptIn(
+  path: string = hostOptInPath(),
+): HostOptIn | null {
+  if (!existsSync(path)) return null;
+  const raw = fromThrowable((): unknown =>
+    Bun.TOML.parse(readFileSync(path, "utf8")),
+  )();
+  if (raw.isErr())
+    throw new StateError(`host opt-in '${path}' is not valid TOML`);
+  const parsed = HostOptInSchema.safeParse(raw.value);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map(
+        (i) =>
+          `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`,
+      )
+      .join("; ");
+    throw new StateError(`host opt-in '${path}' is invalid: ${issues}`);
+  }
+  return { sampled_enforcement_reason: parsed.data.sampled_enforcement_reason };
+}
+
+export function resolveEnforcement(
+  kernel: KernelEnforcement,
+  optIn: HostOptIn | null,
+): { ok: true; enforcement: Enforcement } | { ok: false; reason: string } {
+  if (kernel.available) return { ok: true, enforcement: { kind: "cgroup" } };
+  if (optIn === null) {
+    return {
+      ok: false,
+      reason:
+        `kernel enforcement unavailable: ${kernel.reason} ` +
+        `(a machine that can never have it may opt into sampled enforcement in ${hostOptInPath()}; see README)`,
+    };
+  }
+  return {
+    ok: true,
+    enforcement: {
+      kind: "sampled",
+      reason: `${kernel.reason}; host opt-in: ${optIn.sampled_enforcement_reason}`,
+    },
+  };
 }
 
 function hostRamSafety(snapshot: HostSnapshot, policy: ResourcePolicy): number {
@@ -1816,6 +1895,21 @@ export function buildSystemdLaunch(
   };
 }
 
+/** Sampled enforcement: the same session and affinity as the scope launch, no systemd scope. */
+export function buildSampledLaunch(
+  reservation: Reservation,
+  command: string[],
+): string[] {
+  return [
+    "setsid",
+    "--wait",
+    "taskset",
+    "-c",
+    reservation.cpu_ids.join(","),
+    ...command,
+  ];
+}
+
 function scopeIsInactive(exitCode: number): boolean {
   return exitCode === 3 || exitCode === 4;
 }
@@ -1856,23 +1950,29 @@ function defaultReport(line: string): void {
 
 function admissionDescription(
   lease: Lease,
+  enforcement: Enforcement,
   receipt?: AdmissionReceipt,
 ): string {
   const device =
     lease.reservation.device.kind === "gpu"
       ? `gpu:${lease.reservation.device.gpu_id} vram_bytes=${lease.reservation.device.vram_peak_bytes}`
       : "cpu";
+  const scopeUnit =
+    enforcement.kind === "cgroup" ? scopeUnitFor(lease.reservation) : "none";
   const receiptFields =
     receipt === undefined
       ? ""
       : ` admission_id=${receipt.admissionId} ` +
         `reservation_id=${lease.reservation.reservation_id} ` +
-        `scope_unit=${scopeUnitFor(lease.reservation)} ` +
+        `scope_unit=${scopeUnit} ` +
         `manifest_sha256=${receipt.manifestSource.sha256} receipt_sha256=${receipt.sha256}`;
   return (
     `ADMIT job=${lease.reservation.job_id} cpu_ids=${lease.reservation.cpu_ids.join(",")} ` +
     `ram_bytes=${lease.reservation.host_ram_peak_bytes} device=${device} ` +
-    `enforcement=systemd-cgroup+affinity+sampled-process-group${receiptFields}`
+    (enforcement.kind === "cgroup"
+      ? "enforcement=systemd-cgroup+affinity+sampled-process-group"
+      : `enforcement=affinity+sampled-process-group cgroup=none cgroup_reason=${JSON.stringify(enforcement.reason)}`) +
+    receiptFields
   );
 }
 
@@ -1887,11 +1987,12 @@ export async function checkJob(
     );
     return { ok: false, exitCode: 69, reason: "admission" };
   }
-  const kernel = options.kernelEnforcement ?? probeKernelEnforcement();
-  if (!kernel.available) {
-    report(
-      `DENY job=${manifest.job_id} reason=kernel enforcement unavailable: ${kernel.reason}`,
-    );
+  const resolved = resolveEnforcement(
+    options.kernelEnforcement ?? probeKernelEnforcement(),
+    options.hostOptIn === undefined ? readHostOptIn() : options.hostOptIn,
+  );
+  if (!resolved.ok) {
+    report(`DENY job=${manifest.job_id} reason=${resolved.reason}`);
     return { ok: false, exitCode: 69, reason: "admission" };
   }
   const cwd = resolve(options.cwd ?? process.cwd());
@@ -1908,7 +2009,9 @@ export async function checkJob(
   // Cleanup runs on return AND on throw, in the same order the prior try/finally gave — releaseLease
   // is async, so this is an AsyncDisposable rather than the sync `using` used above.
   await using _lease = { [Symbol.asyncDispose]: () => releaseLease(acquired) };
-  report(`${admissionDescription(acquired)} check_only=true`);
+  report(
+    `${admissionDescription(acquired, resolved.enforcement)} check_only=true`,
+  );
   return { ok: true, exitCode: 0 };
 }
 
@@ -1962,13 +2065,15 @@ export async function executeJob(
     );
     return { ok: false, exitCode: 69, reason: "admission" };
   }
-  const kernel = options.kernelEnforcement ?? probeKernelEnforcement();
-  if (!kernel.available) {
-    report(
-      `DENY job=${manifest.job_id} reason=kernel enforcement unavailable: ${kernel.reason}`,
-    );
+  const resolved = resolveEnforcement(
+    options.kernelEnforcement ?? probeKernelEnforcement(),
+    options.hostOptIn === undefined ? readHostOptIn() : options.hostOptIn,
+  );
+  if (!resolved.ok) {
+    report(`DENY job=${manifest.job_id} reason=${resolved.reason}`);
     return { ok: false, exitCode: 69, reason: "admission" };
   }
+  const enforcement = resolved.enforcement;
   const snapshot = options.snapshot ?? probeHostSnapshot(cwd);
   const acquired = await acquireLease(
     manifest,
@@ -1985,7 +2090,7 @@ export async function executeJob(
     options.manifestSource,
     lease.reservation,
   );
-  report(admissionDescription(lease, receipt));
+  report(admissionDescription(lease, enforcement, receipt));
   const timeoutSignal = AbortSignal.timeout(manifest.walltime_seconds * 1_000);
   let walltimeFired = false;
   let interrupted = false;
@@ -2030,14 +2135,25 @@ export async function executeJob(
   // see `cleanupFailed` below.
   const runJob = async (): Promise<ExecutionResult | undefined> => {
     const launched = fromThrowable(() => {
-      const launch = buildSystemdLaunch(manifest, lease.reservation, command);
-      scopeUnit = launch.scopeUnit;
+      // Sampled enforcement: no scope (scopeUnit stays null, so cleanup has none to stop and the
+      // peak is the sampled one).
+      let argv = buildSampledLaunch(lease.reservation, command);
+      if (enforcement.kind === "cgroup") {
+        const launch = buildSystemdLaunch(manifest, lease.reservation, command);
+        scopeUnit = launch.scopeUnit;
+        argv = launch.argv;
+      }
       // bounded: AbortSignal enforces manifest.walltime_seconds; the monitor additionally
       // terminates the entire new session/process group for exact process-count breaches.
       // systemd independently enforces CPU, RAM, zero job swap, and a coarse task ceiling.
-      return Bun.spawn(launch.argv, {
+      return Bun.spawn(argv, {
         cwd,
-        env: commandEnvironment(manifest, lease.reservation, receipt),
+        env: {
+          ...commandEnvironment(manifest, lease.reservation, receipt),
+          // What actually bounds this job, for a launcher that records provenance: under
+          // "sampled" there is no scope, so the receipt's scope_unit names none (README).
+          AGENT_RESOURCE_ENFORCEMENT: enforcement.kind,
+        },
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",

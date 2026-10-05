@@ -104,6 +104,10 @@ describe("quote-command: output mode follows the requested count", () => {
       );
     });
     expect(output.reason).toContain("Download command copied");
+    // The block message carries the same header the quote starts with.
+    expect(output.reason).toMatch(
+      /for from \S+ \| \d{2}-\d{2} \d{2}:\d{2} \| turns: \d+ \| \d+B \| [^\s@|]+@[^\s@|.]+/u,
+    );
     expect(output.reason).toContain("[pane-test]");
     const copied = readFileSync(join(home, "clipboard.txt"), "utf8");
     expect(copied).toMatch(/^scp -P 2222 /u);

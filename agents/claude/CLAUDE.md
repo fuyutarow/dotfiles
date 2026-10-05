@@ -16,12 +16,11 @@
   | ● | `luna-high` | `codex-run --choice luna-high` | 33 | 4.5 | 50.3 | $0.10/$0.50 | the default worker: clear-spec code and text, fixes, tests |
   | ○ | `luna-xhigh` | `codex-run --choice luna-xhigh` | 35 | 8.1 | 51.7 | $0.10/$0.50 | harder single-file reasoning; still weak at long terminal sessions |
   | ○ | `luna-max` | `codex-run --choice luna-max` | 38 | 12.6 | 54.6 | $0.10/$0.50 | the deepest luna; try before a Claude choice |
-  | ○ | `sonnet-medium` | Agent `subagent_type:"sonnet-medium"` | 41 | 29.8 | 52.9 | $2/$10 | multi-step terminal/agentic work luna fails at |
-  | ○ | `sonnet-high` | Agent `subagent_type:"sonnet-high"` | 47 | 43.9 | 53.7 | $2/$10 | hard agentic work, long tool loops, live harness edits |
-  | ○ | `opus-medium` | Agent `subagent_type:"opus-medium"` | 51 | 52.5 | 59.3 | $4/$20 | ambiguous spec, design judgment, factual accuracy, multi-repo change |
 
-  How to choose: start at `luna-high`; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.
-  How to run: a luna row is `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster or luna `subagent_type`, and prints this table.
+  Disabled in this config: `sonnet-medium`, `sonnet-high`, `opus-medium` — set `enabled = true` in agents/models/dispatch-roster.toml to allow one.
+
+  How to choose: start at `luna-high`; raise the luna effort for harder work (`luna-max` is the ceiling in this config).
+  How to run: `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.
 <!-- roster:end -->
 - **Every dispatch declares its resource class exactly once.** Use
   `RESOURCE-CLASS(NONCOMPUTE): <reason>` only when the arm contains no numerical experiment,

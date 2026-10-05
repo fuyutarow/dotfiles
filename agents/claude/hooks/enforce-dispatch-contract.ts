@@ -18,6 +18,9 @@
 //   - Workflow: denied. Its agents can only be Claude models; luna fan-out is several
 //     `codex-run` calls in the background, Claude fan-out is several Agent calls.
 //   - No justification line (the old ESCALATE(OPUS)): the choice is the table.
+//   - CONFIG vs IMPLEMENTATION: a row with `enabled = false` in the roster is denied as disabled
+//     and left out of the table; everything else here still supports it, so turning it on is a
+//     config edit, not a code change. 2026-10-05 config: luna only (Claude rows off).
 // Every deny prints the table, so the coordinator can pick at once.
 //
 // FAIL CLOSED: an unreadable roster or any hook error denies; run.sh also denies when bun is
@@ -29,7 +32,12 @@ import {
 } from "../../resource-control/lib/dispatch-declaration.ts";
 import { attempt, errorMessage } from "../../hooks/attempt.ts";
 import { at, obj, strAt } from "../../hooks/narrow.ts";
-import { loadRoster, rosterTable, type Roster } from "../../models/roster.ts";
+import {
+  enabledChoices,
+  loadRoster,
+  rosterTable,
+  type Roster,
+} from "../../models/roster.ts";
 import { decidePre, readStdinJson } from "./lib.ts";
 
 const ROSTER_FILE = "agents/models/dispatch-roster.toml";
@@ -38,11 +46,18 @@ function familyPattern(family: string): RegExp {
   return new RegExp(`(?:^|[-_])${family}(?:$|[-_])`, "i");
 }
 
+function claudeEnabled(roster: Roster): boolean {
+  return enabledChoices(roster).some((c) => c.route === "claude");
+}
+
 function pickHelp(roster: Roster): string {
   return (
     `Pick one row (● = default) from ${ROSTER_FILE}:\n${rosterTable(roster)}\n` +
     `Luna: run \`codex-run --choice <id> --sandbox read-only --cd <dir> --prompt-file <brief>\` from Bash ` +
-    `(background it for parallel work). Claude: the Agent tool with subagent_type set to the id.`
+    `(background it for parallel work).` +
+    (claudeEnabled(roster)
+      ? " Claude: the Agent tool with subagent_type set to the id."
+      : " No Claude row is enabled in this config, so the Agent tool dispatches nothing.")
   );
 }
 
@@ -63,7 +78,14 @@ async function main(): Promise<void> {
   const tool = strAt(payload, "tool_name") ?? "";
   if (tool !== "Agent" && tool !== "Task" && tool !== "Workflow") return;
 
-  const loaded = await attempt(() => loadRoster());
+  // Test seam: the hook tests point this at a fixture roster to prove the implementation still
+  // serves a row the live config has switched off. Unset in normal use.
+  const rosterPath = process.env.DISPATCH_ROSTER_PATH;
+  const loaded = await attempt(() =>
+    rosterPath === undefined || rosterPath === ""
+      ? loadRoster()
+      : loadRoster(rosterPath),
+  );
   if (!loaded.ok) {
     // FATAL: without the roster no choice can be judged; the one fix is to repair the file.
     decidePre(
@@ -78,8 +100,9 @@ async function main(): Promise<void> {
     decidePre(
       "deny",
       "dispatch-contract: the Workflow tool is not used (luna first: its agents can only be Claude models). " +
-        "Fan out instead: luna workers as several `codex-run --choice <id>` calls in the background from Bash; " +
-        `Claude workers as Agent calls.\n${pickHelp(roster)}`,
+        "Fan out instead: luna workers as several `codex-run --choice <id>` calls in the background from Bash" +
+        (claudeEnabled(roster) ? "; Claude workers as Agent calls" : "") +
+        `.\n${pickHelp(roster)}`,
     );
   }
 
@@ -99,6 +122,10 @@ async function main(): Promise<void> {
   if (row === undefined) {
     problems.push(
       `${subagentType === null ? "subagent_type is missing" : `subagent_type '${subagentType}' is not a roster choice`}. ${pickHelp(roster)}`,
+    );
+  } else if (!row.enabled) {
+    problems.push(
+      `'${row.id}' is disabled in the roster (enabled = false in ${ROSTER_FILE}); the current config does not dispatch it. ${pickHelp(roster)}`,
     );
   } else if (row.route === "luna") {
     problems.push(

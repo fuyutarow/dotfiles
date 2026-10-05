@@ -358,7 +358,7 @@ agent枠と計算資源を別々に扱う。独立した有益な仕事は利用
 | 担い手 | 起動 | 並列にするとき | 受け取るもの |
 |---|---|---|---|
 | luna 行 | main loop の Bash で `codex-run --choice <id> --sandbox read-only\|workspace-write --cd <dir> --prompt-file <brief>` | 各呼び出しを background で起動する | 各 JSON receipt（`outcome`、`usage`、`last_message`） |
-| Claude 行 | Agent tool、`subagent_type` = 行の id | 一つの message に複数の Agent 呼び出しを並べる | agent の最終 text |
+| Claude 行（roster で `enabled = true` のときだけ。2026-10-05 の config は全て off） | Agent tool、`subagent_type` = 行の id | 一つの message に複数の Agent 呼び出しを並べる | agent の最終 text |
 | 他の CLI（grok、agy、ccc など） | 各 `driving-*` skill の一回呼び出しを Bash で | 各呼び出しを background で起動する | 各 skill が定める受領形 |
 
 Workflow tool は使わない。dispatch hook が拒否し、roster 表を返す。

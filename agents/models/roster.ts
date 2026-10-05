@@ -20,6 +20,8 @@ const ChoiceSchema = z.object({
   price_in: z.number(),
   price_out: z.number(),
   use_for: z.string(),
+  // The config switch: off keeps the row fully implemented but out of the table and denied.
+  enabled: z.boolean().default(true),
 });
 export type Choice = z.output<typeof ChoiceSchema>;
 
@@ -30,8 +32,8 @@ const RosterSchema = z
     default: z.string(),
     choice: z.array(ChoiceSchema).min(1),
   })
-  .refine((r) => r.choice.some((c) => c.id === r.default), {
-    message: "default names no choice id",
+  .refine((r) => r.choice.some((c) => c.id === r.default && c.enabled), {
+    message: "default names no enabled choice id",
   })
   .refine((r) => new Set(r.choice.map((c) => c.id)).size === r.choice.length, {
     message: "choice ids must be unique",
@@ -43,17 +45,31 @@ export function loadRoster(path = ROSTER_PATH): Roster {
   return RosterSchema.parse(Bun.TOML.parse(readFileSync(path, "utf8")));
 }
 
+/** The rows the current config allows. */
+export function enabledChoices(r: Roster): Choice[] {
+  return r.choice.filter((c) => c.enabled);
+}
+
 const num = (v: number | undefined): string => (v === undefined ? "–" : `${v}`);
 const price = (v: number): string => `$${v.toFixed(v < 1 ? 2 : 0)}`;
 
-/** The radio table a coordinator picks from: one row per choice, the default marked ●. */
+/** The radio table a coordinator picks from: one row per enabled choice, the default marked ●;
+ * disabled rows are named under it so turning one on is discoverable. */
 export function rosterTable(r: Roster): string {
   const head =
     "| pick | id | runs as | AA | TB4 | SciCode | $in/$out | use for |\n" +
     "| :-: | --- | --- | --: | --: | --: | --- | --- |";
-  const rows = r.choice.map(
+  const rows = enabledChoices(r).map(
     (c) =>
       `| ${c.id === r.default ? "●" : "○"} | \`${c.id}\` | ${c.route === "luna" ? `\`codex-run --choice ${c.id}\`` : `Agent \`subagent_type:"${c.id}"\``} | ${num(c.aa_index)} | ${num(c.tb4)} | ${num(c.scicode)} | ${price(c.price_in)}/${price(c.price_out)} | ${c.use_for} |`,
   );
-  return [head, ...rows].join("\n");
+  const off = r.choice.filter((c) => !c.enabled).map((c) => `\`${c.id}\``);
+  const note =
+    off.length === 0
+      ? []
+      : [
+          "",
+          `Disabled in this config: ${off.join(", ")} — set \`enabled = true\` in agents/models/dispatch-roster.toml to allow one.`,
+        ];
+  return [head, ...rows, ...note].join("\n");
 }

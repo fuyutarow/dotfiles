@@ -1,11 +1,17 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { at, obj, parseJson, strAt } from "../../../hooks/narrow.ts";
+import { ROSTER_PATH } from "../../../models/roster.ts";
 import { runHook } from "./helpers.ts";
 
 // enforce-dispatch-contract: a dispatch picks one roster row (agents/models/dispatch-roster.toml).
 // Claude rows run as Agent subagents; luna rows run as `codex-run --choice <id>` from Bash, so an
 // Agent call naming one is denied with that line; the Workflow tool is denied outright. Every deny
-// prints the table.
+// prints the table. CONFIG vs IMPLEMENTATION: `enabled = false` switches a row off without
+// removing its support, so the suite checks both the live config (luna only, 2026-10-05) and a
+// fixture roster with every row switched on.
 const HOOK = "enforce-dispatch-contract.ts";
 const RESOURCE =
   "RESOURCE-CLASS(NONCOMPUTE): hook fixture performs no numerical work";
@@ -24,31 +30,64 @@ const decisionOf = (stdout: string) => {
     output: obj(output),
   };
 };
-const decide = (payload: unknown) => decisionOf(runHook(HOOK, payload).stdout);
 
-describe("enforce-dispatch-contract: claude rows run as Agent subagents", () => {
+const scratch = mkdtempSync(join(tmpdir(), "dispatch-roster-"));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+const ALL_ON = join(scratch, "all-on.toml");
+writeFileSync(
+  ALL_ON,
+  readFileSync(ROSTER_PATH, "utf8").replaceAll(
+    "enabled = false",
+    "enabled = true",
+  ),
+);
+
+// live: the committed config. allOn: the same rows, every one enabled.
+const decide = (payload: unknown) => decisionOf(runHook(HOOK, payload).stdout);
+const decideAllOn = (payload: unknown) =>
+  decisionOf(runHook(HOOK, payload, { DISPATCH_ROSTER_PATH: ALL_ON }).stdout);
+
+describe("enforce-dispatch-contract: live config is luna only", () => {
+  test.each([["sonnet-medium"], ["sonnet-high"], ["opus-medium"]])(
+    "%s is denied as disabled, with how to turn it on",
+    (id) => {
+      const d = decide(agent({ subagent_type: id }));
+      expect(d.decision).toBe("deny");
+      expect(d.reason).toContain(`'${id}' is disabled in the roster`);
+      expect(d.reason).toContain("set `enabled = true`");
+      expect(d.reason).toContain("| ● | `luna-high` |");
+      expect(d.reason).toContain("No Claude row is enabled in this config");
+    },
+  );
+
+  test("the table lists only the luna rows", () => {
+    const d = decide(agent({ subagent_type: "Explore" }));
+    expect(d.reason).not.toContain("| `sonnet-high` |");
+    expect(d.reason).toContain(
+      "Disabled in this config: `sonnet-medium`, `sonnet-high`, `opus-medium`",
+    );
+  });
+});
+
+describe("enforce-dispatch-contract: an enabled claude row runs as an Agent subagent (implementation kept)", () => {
   test.each([
     ["sonnet-medium", "sonnet"],
     ["sonnet-high", "sonnet"],
     ["opus-medium", "opus"],
   ])("%s passes, with its family's model or none", (id, family) => {
     expect(
-      decide(agent({ subagent_type: id, model: family })).decision,
+      decideAllOn(agent({ subagent_type: id, model: family })).decision,
     ).toBeUndefined();
-    expect(decide(agent({ subagent_type: id })).decision).toBeUndefined();
+    expect(decideAllOn(agent({ subagent_type: id })).decision).toBeUndefined();
     expect(
-      decide(agent({ subagent_type: id }, "Task")).decision,
-    ).toBeUndefined();
-  });
-
-  test("opus needs no justification line any more", () => {
-    expect(
-      decide(agent({ subagent_type: "opus-medium", model: "opus" })).decision,
+      decideAllOn(agent({ subagent_type: id }, "Task")).decision,
     ).toBeUndefined();
   });
 
   test("a model of the other family is denied with the fix", () => {
-    const d = decide(agent({ subagent_type: "sonnet-high", model: "opus" }));
+    const d = decideAllOn(
+      agent({ subagent_type: "sonnet-high", model: "opus" }),
+    );
     expect(d.decision).toBe("deny");
     expect(d.reason).toContain(`set model:"sonnet" or omit it`);
   });
@@ -77,7 +116,6 @@ describe("enforce-dispatch-contract: anything off the roster is denied with the 
         `subagent_type '${id}' is not a roster choice`,
       );
       expect(d.reason).toContain("| ● | `luna-high` |");
-      expect(d.reason).toContain("`opus-medium`");
     },
   );
 
@@ -91,7 +129,7 @@ describe("enforce-dispatch-contract: anything off the roster is denied with the 
 });
 
 describe("enforce-dispatch-contract: the Workflow tool is not used", () => {
-  test("any Workflow call is denied, pointing at codex-run and Agent, with the table", () => {
+  test("any Workflow call is denied, pointing at codex-run, with the table", () => {
     const d = decide({
       tool_name: "Workflow",
       tool_input: {
@@ -102,13 +140,22 @@ describe("enforce-dispatch-contract: the Workflow tool is not used", () => {
     expect(d.decision).toBe("deny");
     expect(d.reason).toContain("the Workflow tool is not used");
     expect(d.reason).toContain("codex-run --choice");
+    expect(d.reason).not.toContain("Claude workers as Agent calls");
     expect(d.reason).toContain("| ● | `luna-high` |");
+  });
+
+  test("with Claude rows enabled the deny also names Agent fan-out", () => {
+    const d = decideAllOn({
+      tool_name: "Workflow",
+      tool_input: { script: "" },
+    });
+    expect(d.reason).toContain("Claude workers as Agent calls");
   });
 });
 
 describe("enforce-dispatch-contract: resource class", () => {
-  test("a valid choice without a resource declaration is denied", () => {
-    const d = decide({
+  test("an enabled choice without a resource declaration is denied", () => {
+    const d = decideAllOn({
       tool_name: "Agent",
       tool_input: { prompt: "x", subagent_type: "sonnet-high" },
     });

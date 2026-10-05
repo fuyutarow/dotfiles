@@ -7,6 +7,12 @@
 #   route = "claude" — the Agent tool with `subagent_type: "<id>"` (agents/claude/agents/<id>.md).
 # The Workflow tool is not used (owner, 2026-10-05: luna first, simplify); the dispatch hook
 # denies it and points here.
+#
+# CONFIG vs IMPLEMENTATION: `enabled` (default true) is the switch. A row with `enabled = false`
+# stays fully supported by the hook, codex-run and the agent definitions; it is only left out of
+# the table and denied with "disabled in the roster". Turning one on is one line here, then
+# `mise run roster:render`. Current config (owner, 2026-10-05: 「今のconfigでは lunaだけに限定」):
+# luna rows on, Claude rows off.
 # Read through agents/models/roster.ts by: the dispatch hook (allowed ids, the table on a deny),
 # `codex-run --choice` (model and effort of a luna row), and scripts/render-roster.ts (the table
 # in agents/claude/CLAUDE.md; `mise run lint:roster` fails on drift).
@@ -85,6 +91,7 @@ use_for = "the deepest luna; try before a Claude choice"
 [[choice]]
 id = "sonnet-medium"
 route = "claude"
+enabled = false
 model = "sonnet"
 effort = "medium"
 aa_index = 41
@@ -98,6 +105,7 @@ use_for = "multi-step terminal/agentic work luna fails at"
 [[choice]]
 id = "sonnet-high"
 route = "claude"
+enabled = false
 model = "sonnet"
 effort = "high"
 aa_index = 47
@@ -111,6 +119,7 @@ use_for = "hard agentic work, long tool loops, live harness edits"
 [[choice]]
 id = "opus-medium"
 route = "claude"
+enabled = false
 model = "opus"
 effort = "medium"
 aa_index = 51

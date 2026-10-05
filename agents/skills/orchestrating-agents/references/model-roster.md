@@ -22,7 +22,7 @@ authorとverifierを同じbearerにしない。outside observerはtechnical trut
 | delegated executor / verifier / outside observer | gpt-6-luna @ any effort — Claude 側からは `codex-run --choice luna-<effort>`(既定 `luna-high`)、Codex 側は `model:"gpt-6-luna", reasoning_effort:<any>` | production、independent verification、または外界観測 | authorならverifierはSonnet 5.5。outside observerはtechnical truthの根拠にしない。 |
 
 Claude 側の dispatch は `agents/models/dispatch-roster.toml`(2026-10-05、luna first)の表から1行を
-選ぶ。理由の記述はいらない(ラジオボタン式)。luna の行は main の Bash から
+選ぶ。理由の記述はいらない(ラジオボタン式)。各行の `enabled` がconfigのスイッチで、`false` の行は実装を残したまま表から外れ、hook が「disabled」として拒否する(2026-10-05 の config は luna のみ。Claude の行は off、`enabled = true` 一行で戻る)。luna の行は main の Bash から
 `codex-run --choice <id>`(並列なら背景で複数)、Claude の行は Agent ツールの
 `subagent_type:"<id>"`。Workflow ツールは使わない。`enforce-dispatch-contract.ts` が、Workflow、
 表にない `subagent_type`、luna の id を Agent に渡したものを拒否し、表を示す。

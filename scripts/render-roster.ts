@@ -12,7 +12,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
-import { loadRoster, rosterTable } from "../agents/models/roster.ts";
+import {
+  enabledChoices,
+  loadRoster,
+  rosterTable,
+} from "../agents/models/roster.ts";
 
 const CLAUDE_MD = join(import.meta.dir, "..", "agents", "claude", "CLAUDE.md");
 const BEGIN = "<!-- roster:begin -->";
@@ -59,6 +63,7 @@ if (argv.flags.write && argv.flags.check)
 const loaded = await attempt(() => loadRoster());
 if (!loaded.ok) fatal(`cannot read the roster: ${errorMessage(loaded.error)}`);
 const roster = loaded.value;
+const claudeOn = enabledChoices(roster).some((c) => c.route === "claude");
 
 const block = [
   BEGIN,
@@ -68,10 +73,17 @@ const block = [
   "",
   ...rosterTable(roster)
     .split("\n")
-    .map((l) => `  ${l}`),
+    .map((l) => (l === "" ? "" : `  ${l}`)),
   "",
-  `  How to choose: start at \`${roster.default}\`; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
-  "  How to run: a luna row is `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster or luna `subagent_type`, and prints this table.",
+  ...(claudeOn
+    ? [
+        `  How to choose: start at \`${roster.default}\`; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
+        "  How to run: a luna row is `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
+      ]
+    : [
+        `  How to choose: start at \`${roster.default}\`; raise the luna effort for harder work (\`luna-max\` is the ceiling in this config).`,
+        "  How to run: `codex-run --choice <id> --sandbox read-only|workspace-write --cd <dir> --prompt-file <brief>` from Bash — several in the background for parallel work; each returns a JSON receipt. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
+      ]),
   END,
 ].join("\n");
 

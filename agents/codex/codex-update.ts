@@ -32,8 +32,7 @@
 
 // Script-scoped, not a library: this import (not an `export {}`, now redundant with it in
 // scope) makes the file a module so the top-level `await` calls below are legal under tsgo.
-import { z } from "zod";
-import { attempt } from "../hooks/attempt.ts";
+import { jsonOf, z } from "../hooks/zod.ts";
 
 const CODEX = "codex";
 
@@ -72,9 +71,7 @@ async function daemonVersion(): Promise<DaemonVersion | null> {
   });
   const out = await new Response(proc.stdout).text();
   if ((await proc.exited) !== 0) return null;
-  const parsed = await attempt((): unknown => JSON.parse(out));
-  if (!parsed.ok) return null;
-  const version = DaemonVersionSchema.safeParse(parsed.value);
+  const version = jsonOf(DaemonVersionSchema).safeParse(out);
   return version.success ? version.data : null;
 }
 

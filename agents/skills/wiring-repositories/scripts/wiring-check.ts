@@ -18,7 +18,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
 
 /** `.claude/settings.json` `permissions.deny`, the only part of the file JJ-2 reads. */
 const DenyRulesSchema = z.object({ permissions: z.object({ deny: z.array(z.unknown()) }) });
@@ -538,13 +538,8 @@ function miseRuns(body: string): MiseRun[] {
   if (existsSync(join(root, ".jj"))) {
     const denied = ["Bash(git:*)", "Bash(command git:*)", "Bash(env git:*)"];
     const noRules: unknown[] = [];
-    const deny = await Promise.try((): unknown => JSON.parse(settingsRaw ?? "{}")).then(
-      (v) => {
-        const parsed = DenyRulesSchema.safeParse(v);
-        return parsed.success ? parsed.data.permissions.deny : noRules;
-      },
-      () => noRules,
-    );
+    const parsedRules = jsonOf(DenyRulesSchema).safeParse(settingsRaw ?? "{}");
+    const deny = parsedRules.success ? parsedRules.data.permissions.deny : noRules;
     const missing = denied.filter((rule) => !deny.includes(rule));
     if (missing.length > 0) {
       fail("JJ-2", `.jj/ exists but .claude/settings.json does not deny ${missing.join(", ")} — an ` +
@@ -554,13 +549,7 @@ function miseRuns(body: string): MiseRun[] {
 
   // JOINT — a repo-local hook file must be registered somewhere.
   if (settingsRaw !== undefined) {
-    // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
-    // `.then` maps to the same FAIL as the old catch branch.
-    const parsesClean = await Promise.try((): unknown => JSON.parse(settingsRaw)).then(
-      () => true,
-      () => false,
-    );
-    if (!parsesClean) {
+    if (!jsonText.safeParse(settingsRaw).success) {
       fail("JOINT", `.claude/settings.json is not valid JSON — the whole repo-local hook set is inert.`);
     }
   }

@@ -50,7 +50,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 class UsageError extends Error {}
 
@@ -157,10 +157,8 @@ export function commOnlyInSecond(a: string[], b: string[]): string[] {
 export function loadMcpServers(
   mcpJsonPath: string,
 ): Record<string, ServerEntry> {
-  const parsed = fromThrowable((): unknown =>
-    JSON.parse(readFileSync(mcpJsonPath, "utf8")),
-  )()
-    .map((raw) => McpJsonSchema.safeParse(raw))
+  const parsed = fromThrowable(() => readFileSync(mcpJsonPath, "utf8"))()
+    .map((text) => jsonOf(McpJsonSchema).safeParse(text))
     .unwrapOr(undefined);
   return parsed?.success ? (parsed.data.mcpServers ?? {}) : {};
 }

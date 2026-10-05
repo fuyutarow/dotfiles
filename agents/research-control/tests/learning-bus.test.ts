@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { z } from "zod";
+import { jsonText, z } from "../../hooks/zod.ts";
 import {
   bodySha256,
   checkLearningBus,
@@ -710,7 +710,7 @@ describe("cross-section-learning-bus/v1", () => {
     expect(names).toEqual(["transfer-without-commit.json"]);
     for (const name of names) {
       const text = readFileSync(resolve(directory, name), "utf8");
-      const result = checkLearningBus(((): unknown => JSON.parse(text))());
+      const result = checkLearningBus(jsonText.parse(text));
       expect(result.schema).toBe("cross-section-learning-bus/v1");
       expect(result.findings.map((finding) => finding.code)).toContain(
         "TRANSFER_WITHOUT_COMMIT",

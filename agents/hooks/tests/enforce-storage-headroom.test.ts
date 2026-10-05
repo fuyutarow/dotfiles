@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { z } from "../zod.ts";
 import { decisionOf, runHook } from "./helpers.ts";
 
 const HOOK = "enforce-storage-headroom.ts";

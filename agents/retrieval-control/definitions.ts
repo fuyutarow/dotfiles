@@ -38,8 +38,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
 import { attempt, attemptOr } from "../hooks/attempt.ts";
+import { jsonOf, z } from "../hooks/zod.ts";
 import { requireExecutable, runChildCaptured } from "./child.ts";
 
 // One definition as ccc_defs.py writes it (see its `Record:` line); every file this module reads
@@ -270,9 +270,11 @@ function mdText(d: Definition): string {
 const mdName = (text: string) =>
   `${createHash("sha1").update(text).digest("hex").slice(0, 20)}.md`;
 
-// A JSON file's content, still unknown: the caller's schema decides what it is.
-const readJsonText = (path: string): unknown =>
-  ((): unknown => JSON.parse(readFileSync(path, "utf8")))();
+// A JSON file's content, decoded and validated by the caller's schema in one zod step.
+const readJsonOf = <S extends z.ZodType>(
+  schema: S,
+  path: string,
+): z.output<S> => jsonOf(schema).parse(readFileSync(path, "utf8"));
 
 const DefsCacheSchema = z.object({
   files: z.record(
@@ -289,7 +291,7 @@ function loadDefinitions(cachePath: string): {
   defs: Definition[];
   files: string[];
 } {
-  const cache = DefsCacheSchema.parse(readJsonText(cachePath));
+  const cache = readJsonOf(DefsCacheSchema, cachePath);
   const publics = new Set(Object.values(cache.files).flatMap((f) => f.publics));
   const defs = Object.values(cache.files).flatMap((f) =>
     f.records.map((r) => ({ ...r, public: r.public || publics.has(r.name) })),
@@ -322,10 +324,7 @@ export async function refreshCatalog(
   const dir = catalogDir(project);
   const metaPath = join(dir, "catalog.json");
   const recordsPath = join(dir, "records.json");
-  const meta = await attemptOr(
-    () => MetaSchema.parse(readJsonText(metaPath)),
-    null,
-  );
+  const meta = await attemptOr(() => readJsonOf(MetaSchema, metaPath), null);
   const head = (await git(project, ["rev-parse", "HEAD"]))?.trim() ?? null;
   const now = Temporal.Now.instant().epochMilliseconds;
   const recent =
@@ -373,9 +372,7 @@ function readCatalog(dir: string): {
   byFile: Map<string, Definition[]>;
 } {
   const byFile = new Map(
-    Object.entries(
-      RecordsSchema.parse(readJsonText(join(dir, "records.json"))),
-    ),
+    Object.entries(readJsonOf(RecordsSchema, join(dir, "records.json"))),
   );
   return { dir, defs: [...byFile.values()].flat(), byFile };
 }
@@ -477,7 +474,7 @@ async function recall(
   );
   if (r.exitCode !== 0)
     throw new Error(`catalog search failed: ${r.stderr.trim().slice(-400)}`);
-  return SearchSchema.parse(((): unknown => JSON.parse(r.stdout))()).results;
+  return jsonOf(SearchSchema).parse(r.stdout).results;
 }
 
 const rerankSocket = (): string =>
@@ -515,8 +512,7 @@ export async function rerank(
   }
   const finish = async () => {
     const line = reply.split("\n", 1)[0] ?? "";
-    const parsedLine = await attemptOr((): unknown => JSON.parse(line), null);
-    const r = RerankReplySchema.safeParse(parsedLine).data;
+    const r = jsonOf(RerankReplySchema).safeParse(line).data;
     if (r?.scores !== undefined && r.scores.length === docs.length)
       return done({ scores: r.scores });
     return done({
@@ -713,11 +709,8 @@ export async function judgeJev(
         reason: `HTTP 402 at ${provider}: no credit left — ${endpoint.whenExhausted ?? "top up"}`,
       };
     if (status !== 200) return { reason: `HTTP ${status} at ${provider}` };
-    const answered = await attemptOr(async (): Promise<unknown> => {
-      const body: unknown = await res.value.json();
-      return body;
-    }, null);
-    const json = JevAnswerSchema.safeParse(answered).data;
+    const answered = await attemptOr(() => res.value.text(), "");
+    const json = jsonOf(JevAnswerSchema).safeParse(answered).data;
     const ps = docs.map((_, i) => json?.answers?.[id(i)]?.noul);
     const numbers = ps.flatMap((p) => (typeof p === "number" ? [p] : []));
     if (numbers.length !== ps.length) return { reason: "malformed answer" };

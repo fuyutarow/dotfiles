@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { z } from "../hooks/zod.ts";
 import releases from "./releases.toml";
 
 class UsageError extends Error {}

@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
 import { tempDir, tempHome } from "./helpers.ts";
 
 const STATUSLINE = join(import.meta.dir, "..", "..", "statusline-command.ts");
@@ -101,15 +101,13 @@ function readCache<S extends z.ZodType>(
   schema: S,
 ): z.output<S> {
   const raw = readFileSync(join(home, ".cache", "claude", file), "utf8");
-  const json = ((): unknown => JSON.parse(raw))();
-  return schema.parse(json);
+  return jsonOf(schema).parse(raw);
 }
 // What a concurrent reader would see: no file yet, a whole JSON document, or half of one.
 function cacheFileState(path: string): "missing" | "valid" | "torn" {
   const read = fromThrowable(() => readFileSync(path, "utf8"))();
   if (read.isErr()) return "missing";
-  const parsed = fromThrowable((): unknown => JSON.parse(read.value))();
-  return parsed.isOk() ? "valid" : "torn";
+  return jsonText.safeParse(read.value).success ? "valid" : "torn";
 }
 const GpuMissSchema = z.object({
   at: z.number(),

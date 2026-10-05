@@ -23,7 +23,7 @@
 import { readdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../hooks/zod.ts";
 import { resolveDbDir } from "./ccc-db-dir.ts";
 import { inScopeChanges, type ScopeDrift } from "./ccc-scope.ts";
 import { requireExecutable, runChild, runChildCaptured } from "./child.ts";
@@ -129,9 +129,7 @@ async function readWatermark(project: string): Promise<WatermarkRead> {
   if (!(await file.exists())) return { kind: "missing" };
   const parsed = await attempt(async (): Promise<Watermark> => {
     const text = await file.text();
-    const value = WatermarkSchema.safeParse(
-      ((): unknown => JSON.parse(text))(),
-    );
+    const value = jsonOf(WatermarkSchema).safeParse(text);
     if (value.success) return value.data;
     throw new Error("invalid watermark shape");
   });

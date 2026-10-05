@@ -56,7 +56,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { cli, command } from "cleye";
-import { z } from "zod";
+import { z } from "../hooks/zod.ts";
 import {
   checkIndexFreshness,
   citationToken,

@@ -11,7 +11,7 @@
 //              null = no daemon running, which is not drift: the next start reads `persisted`.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../hooks/zod.ts";
 import { attempt } from "../hooks/attempt.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
@@ -37,11 +37,9 @@ export async function readDeclared(dotfiles: string): Promise<boolean | Error> {
 
 async function readJson(path: string): Promise<Record<string, unknown> | null> {
   if (!existsSync(path)) return null;
-  const r = await attempt((): unknown =>
-    JSON.parse(readFileSync(path, "utf8")),
-  );
+  const r = await attempt(() => readFileSync(path, "utf8"));
   if (!r.ok) return null;
-  const parsed = RecordSchema.safeParse(r.value);
+  const parsed = jsonOf(RecordSchema).safeParse(r.value);
   return parsed.success ? parsed.data : null;
 }
 

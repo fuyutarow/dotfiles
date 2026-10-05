@@ -14,7 +14,7 @@ import {
 } from "node:path";
 import { cli } from "cleye";
 import { parseDocument } from "yaml";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 type Layer =
 	| "OKF"
@@ -369,11 +369,11 @@ const locatorResolutionError = async (
 		return undefined;
 	}
 
-	const parsedAttempt = await attempt<unknown>((): unknown => JSON.parse(content));
-	if (!parsedAttempt.ok) {
-		return `json-pointer requires valid JSON: ${parsedAttempt.error instanceof Error ? parsedAttempt.error.message : String(parsedAttempt.error)}`;
+	const decoded = jsonText.safeParse(content);
+	if (!decoded.success) {
+		return `json-pointer requires valid JSON: ${decoded.error.issues[0]?.message ?? "invalid JSON"}`;
 	}
-	let current: unknown = parsedAttempt.value;
+	let current: unknown = decoded.data;
 	for (const token of locator.tokens) {
 		if (Array.isArray(current)) {
 			if (!/^(?:0|[1-9]\d*)$/.test(token)) {
@@ -868,15 +868,15 @@ const readAllMarkdown = async (root: string): Promise<string[]> => {
 const parseRdTypeRegistryText = async (
 	source: string,
 ): Promise<RdTypeRegistryParse> => {
-	const parsedAttempt = await attempt<unknown>((): unknown => JSON.parse(source));
-	if (!parsedAttempt.ok) {
+	const decoded = jsonText.safeParse(source);
+	if (!decoded.success) {
 		return {
 			findings: [
 				{ code: "RDN002", message: "rd-types.json must be valid JSON" },
 			],
 		};
 	}
-	const parsed = asRecord(parsedAttempt.value);
+	const parsed = asRecord(decoded.data);
 	const typeCodes = asRecord(parsed?.type_codes);
 	const document = parseDocument(source, {
 		prettyErrors: true,

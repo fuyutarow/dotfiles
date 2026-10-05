@@ -21,7 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { z } from "../../agents/hooks/zod.ts";
 import {
   cleanupTempDir,
   freeSpace,

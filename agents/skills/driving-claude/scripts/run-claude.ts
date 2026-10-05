@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -118,15 +118,14 @@ export async function runClaude(config: RunConfig): Promise<RunResult> {
   ]);
   const timedOut = signal.aborted;
 
-  // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
-  // `.then` maps to the same `parseError` message, leaving `claude` undefined as before.
-  const parsed = await Promise.try((): unknown => JSON.parse(stdout)).then(
-    (ok): ParsedStdout => ({ claude: ok, parseError: undefined }),
-    (error: unknown): ParsedStdout => ({
-      claude: undefined,
-      parseError: error instanceof Error ? error.message : String(error),
-    }),
-  );
+  // A JSON syntax error is a zod issue (never a throw); its message is "not valid JSON: <parser text>"; the prefix is dropped to keep the old parseError.
+  const decoded = jsonText.safeParse(stdout);
+  const parsed: ParsedStdout = decoded.success
+    ? { claude: decoded.data, parseError: undefined }
+    : {
+        claude: undefined,
+        parseError: (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, ""),
+      };
   const claude = parsed.claude;
   const parseError = parsed.parseError;
 

@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 const RecordSchema = z.record(z.string(), z.unknown());
 
@@ -49,16 +49,9 @@ async function run(
   };
 }
 
-// No try/catch (audited *.ts ban); Promise.try turns the JSON.parse throw into a rejection this
-// `.then` maps to `undefined`, same as the old catch branch.
-async function jsonRecord(
-  value: string,
-): Promise<Record<string, unknown> | undefined> {
-  const parsed: unknown = await Promise.try((): unknown => JSON.parse(value)).then(
-    (ok) => ok,
-    () => undefined,
-  );
-  const record = RecordSchema.safeParse(parsed);
+// A malformed body is a zod issue, never a throw: it maps to `undefined`, same as the old catch.
+function jsonRecord(value: string): Record<string, unknown> | undefined {
+  const record = jsonText.pipe(RecordSchema).safeParse(value);
   return record.success ? record.data : undefined;
 }
 
@@ -87,7 +80,7 @@ async function probeAll(models: readonly string[], grok: string): Promise<number
       120_000,
     );
     const envelope =
-      result.exitCode === 0 ? await jsonRecord(result.output) : undefined;
+      result.exitCode === 0 ? jsonRecord(result.output) : undefined;
     const text = envelope?.text;
     const usage = RecordSchema.safeParse(envelope?.usage);
     const tokens =

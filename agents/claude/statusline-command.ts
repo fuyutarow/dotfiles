@@ -84,7 +84,7 @@ import { dirname, join } from "node:path";
 import { createConnection } from "node:net";
 import { cpus, totalmem } from "node:os";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../hooks/zod.ts";
 import {
   clockHM,
   localFromEpochSec,
@@ -153,11 +153,9 @@ function readJson<S extends z.ZodType>(
   path: string,
   schema: S,
 ): z.output<S> | undefined {
-  const parsed = fromThrowable((): unknown =>
-    JSON.parse(readFileSync(path, "utf8")),
-  )();
-  if (parsed.isErr()) return undefined;
-  const checked = schema.safeParse(parsed.value);
+  const text = fromThrowable(() => readFileSync(path, "utf8"))();
+  if (text.isErr()) return undefined;
+  const checked = jsonOf(schema).safeParse(text.value);
   return checked.success ? checked.data : undefined;
 }
 
@@ -355,10 +353,14 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 // mid-write), or a part has an unexpected shape: that part is then UNKNOWN, which render() says,
 // instead of reading as "no account" / "no cap". A part that is validly absent is the real absence.
 function readClaudeJson(): Result<unknown, string> {
-  return fromThrowable(
-    (): unknown => JSON.parse(readFileSync(`${HOME}/.claude.json`, "utf8")),
-    () => "~/.claude.json unreadable",
+  const unreadable = "~/.claude.json unreadable";
+  const text = fromThrowable(
+    () => readFileSync(`${HOME}/.claude.json`, "utf8"),
+    () => unreadable,
   )();
+  if (text.isErr()) return err(text.error);
+  const parsed = jsonText.safeParse(text.value);
+  return parsed.success ? ok(parsed.data) : err(unreadable);
 }
 const AccountSchema = z.object({
   oauthAccount: maybe(z.object({ emailAddress: maybe(z.string()) })),
@@ -635,13 +637,10 @@ function agentName(
     AGENT_LIST_TIMEOUT_MS,
   );
   if (outResult.isErr()) return err(outResult.error.why); // `claude` missing/slow/errored/over budget
-  const listResult = fromThrowable((): unknown =>
-    JSON.parse(outResult.value),
-  )().map((v) => AgentListSchema.safeParse(v));
-  if (listResult.isErr() || !listResult.value.success)
-    return err("claude agents output unparsable");
+  const listResult = jsonOf(AgentListSchema).safeParse(outResult.value);
+  if (!listResult.success) return err("claude agents output unparsable");
   const now = Temporal.Now.instant().epochMilliseconds;
-  const next = agentNameEntries(listResult.value.data, now);
+  const next = agentNameEntries(listResult.data, now);
   if (!(sid in next)) next[sid] = { at: now }; // not listed yet -> cache the miss too
   // Keep every session's last-seen hint across this whole-file rewrite; record ours.
   for (const [id, entry] of Object.entries(next)) {
@@ -1801,13 +1800,13 @@ const raw = await Bun.stdin.text();
 // unknown -> StatusInput at the trust boundary: parsed with StatusInputSchema, never cast. A
 // payload that is not JSON, or has a field of the wrong type, renders line 1 plus the first
 // reason — the whole bar saying "the input is wrong" beats a bar built from half-trusted values.
-const json = fromThrowable((): unknown => JSON.parse(raw))();
-if (json.isErr()) {
+const json = jsonText.safeParse(raw);
+if (!json.success) {
   process.stdout.write(`${coloredHead(promptParts(process.env.PWD ?? ""))}\n`);
   process.stdout.write(`${DIM}Model: ? | invalid statusline JSON${RST}`);
   process.exit(0);
 }
-const payload = StatusInputSchema.safeParse(json.value);
+const payload = StatusInputSchema.safeParse(json.data);
 if (!payload.success) {
   const issue = payload.error.issues[0];
   const where = (issue?.path ?? []).map(String).join(".") || "(root)";

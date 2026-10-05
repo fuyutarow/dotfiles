@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../../../hooks/zod.ts";
 
 const hook = join(import.meta.dir, "..", "enforce-dispatch-contract.ts");
 const resourceMessage = (message: string) =>
@@ -30,8 +30,7 @@ const DecisionOutput = z.object({
 });
 
 function decision(stdout: string) {
-  const raw = (): unknown => JSON.parse(stdout);
-  return DecisionOutput.parse(raw()).hookSpecificOutput;
+  return jsonOf(DecisionOutput).parse(stdout).hookSpecificOutput;
 }
 
 const pre = (tool_input: unknown) => ({ tool_name: "Agent", tool_input });

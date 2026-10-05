@@ -5,7 +5,7 @@
 
 import { resolve } from "node:path";
 import { cli, command } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../hooks/zod.ts";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
 import {
   activateGoal,
@@ -42,13 +42,19 @@ function workspaceRoot(explicit: string | undefined): Promise<string> {
 }
 
 async function readJsonFile(path: string, locus: string): Promise<unknown> {
-  const result = await attempt(() => Bun.file(resolve(path)).json());
-  if (!result.ok) {
+  const text = await attempt(() => Bun.file(resolve(path)).text());
+  if (!text.ok) {
     throw new UsageError(
-      `${locus} is unreadable JSON: ${errorMessage(result.error)}`,
+      `${locus} is unreadable JSON: ${errorMessage(text.error)}`,
     );
   }
-  return result.value;
+  const parsed = jsonText.safeParse(text.value);
+  if (!parsed.success) {
+    throw new UsageError(
+      `${locus} is unreadable JSON: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+    );
+  }
+  return parsed.data;
 }
 
 function jsonLine(value: unknown): void {

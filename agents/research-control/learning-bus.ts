@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { z } from "../hooks/zod.ts";
 import { checkTrace, type Finding, type TraceResult } from "./trace.ts";
 
 /** A deliberately small, closed V0 wire for checking lateral transfer records. */

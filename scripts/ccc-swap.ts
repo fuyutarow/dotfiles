@@ -75,7 +75,7 @@ import { Database } from "bun:sqlite";
 import { cli, command } from "cleye";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
 import { match } from "ts-pattern";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import {
   DB_ARTIFACTS,
   MAPPING_ENV,
@@ -1207,9 +1207,7 @@ async function cmdRollback(
     // best effort
     const markerResult = await fromAsyncThrowable(async () => {
       const text = await readFile(markerPath, "utf8");
-      const marker = CutoverMarkerSchema.parse(
-        ((): unknown => JSON.parse(text))(),
-      );
+      const marker = jsonOf(CutoverMarkerSchema).parse(text);
       return marker.previousModel ?? null;
     })();
     if (markerResult.isOk()) previousModel = markerResult.value;

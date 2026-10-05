@@ -21,7 +21,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../hooks/zod.ts";
 
 const KiB = 1024;
 const MiB = 1024 ** 2;
@@ -1216,12 +1216,12 @@ function handleLockAcquisitionError(
 const LockOwnerSchema = z.object({ pid: z.number() });
 
 function readOwnerPid(lockDirectory: string): number | null {
-  const result = fromThrowable((): unknown =>
-    JSON.parse(readFileSync(join(lockDirectory, "owner.json"), "utf8")),
+  const result = fromThrowable(() =>
+    readFileSync(join(lockDirectory, "owner.json"), "utf8"),
   )();
   if (result.isErr()) return null;
   // The owner may still be writing. Age decides whether this becomes stale.
-  const owner = LockOwnerSchema.safeParse(result.value);
+  const owner = jsonOf(LockOwnerSchema).safeParse(result.value);
   return owner.success ? owner.data.pid : null;
 }
 
@@ -1306,9 +1306,7 @@ function liveReservations(stateDirectory: string): Reservation[] {
     if (!name.endsWith(".reservation.json")) continue;
     const path = join(stateDirectory, name);
     const parsed = fromThrowable(() =>
-      reservationFrom(
-        ((): unknown => JSON.parse(readFileSync(path, "utf8")))(),
-      ),
+      reservationFrom(jsonText.parse(readFileSync(path, "utf8"))),
     )();
     const reservation = parsed.isOk() ? parsed.value : null;
     if (reservation !== null && pidIsAlive(reservation.controller_pid)) {
@@ -1685,9 +1683,9 @@ export function verifyAdmissionReceipt(
 ): boolean {
   if (!isSha256Hex(expectedSha256)) return false;
   if (sha256Hex(Buffer.from(payload, "utf8")) !== expectedSha256) return false;
-  const parsedResult = fromThrowable((): unknown => JSON.parse(payload))();
-  if (parsedResult.isErr()) return false;
-  const receipt = admissionReceiptPayloadFrom(parsedResult.value);
+  const parsedResult = jsonText.safeParse(payload);
+  if (!parsedResult.success) return false;
+  const receipt = admissionReceiptPayloadFrom(parsedResult.data);
   if (receipt === null || JSON.stringify(receipt) !== payload) return false;
   return cgroupText.split("\n").some((line) => {
     const cgroupPath = line.split(":", 3)[2];
@@ -2209,10 +2207,7 @@ async function main(): Promise<void> {
     throw new UsageError("--manifest is required");
   }
   const manifestPath = resolve(parsed.flags.manifest);
-  const readResult = fromThrowable(() => {
-    const bytes = readFileSync(manifestPath);
-    return { bytes, raw: ((): unknown => JSON.parse(bytes.toString()))() };
-  })();
+  const readResult = fromThrowable(() => readFileSync(manifestPath))();
   if (readResult.isErr()) {
     throw new UsageError(
       `cannot read manifest '${manifestPath}': ${
@@ -2222,8 +2217,16 @@ async function main(): Promise<void> {
       }`,
     );
   }
-  const manifestBytes = readResult.value.bytes;
-  const raw = readResult.value.raw;
+  const manifestBytes = readResult.value;
+  const rawResult = jsonText.safeParse(manifestBytes.toString());
+  if (!rawResult.success) {
+    throw new UsageError(
+      `cannot read manifest '${manifestPath}': ${rawResult.error.issues
+        .map((issue) => issue.message)
+        .join("; ")}`,
+    );
+  }
+  const raw = rawResult.data;
   const parsedManifest = validateManifest(raw);
   // manifestSource hashes the TEMPLATE file's own bytes, unmodified by --job-id: the receipt
   // then proves "this exact declared envelope shape" independent of which job identity a given

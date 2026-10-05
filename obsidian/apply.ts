@@ -1,7 +1,7 @@
 import { cli } from "cleye";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Bring EVERY registered Obsidian vault in line with this directory (single source):
 //   app.json     — keys merged into each vault's .obsidian/app.json
@@ -52,10 +52,17 @@ const PluginSchema = z.object({
 });
 type Plugin = z.output<typeof PluginSchema>;
 
+// A JSON syntax error keeps its parser text; any other mismatch is "not a <what>".
+function jsonFailure(path: string, what: string, error: z.ZodError): Error {
+  const syntax = error.issues.find(
+    (i) => i.code === "invalid_format" && i.format === "json",
+  );
+  return new Error(`${path}: ${syntax?.message ?? `not a ${what}`}`);
+}
+
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
-  const data: unknown = await Bun.file(path).json();
-  const record = RecordSchema.safeParse(data);
-  if (!record.success) throw new Error(`${path}: not a JSON object`);
+  const record = jsonOf(RecordSchema).safeParse(await Bun.file(path).text());
+  if (!record.success) throw jsonFailure(path, "JSON object", record.error);
   return record.data;
 }
 
@@ -156,9 +163,9 @@ async function pluginFixes(dir: string, id: string, p: Plugin): Promise<Fix[]> {
 
 async function enableFix(dir: string, ids: string[]): Promise<Fix[]> {
   const target = join(dir, "community-plugins.json");
-  const raw: unknown = existsSync(target) ? await Bun.file(target).json() : [];
-  const list = z.array(z.unknown()).safeParse(raw);
-  if (!list.success) throw new Error(`${target}: not a JSON array`);
+  const text = existsSync(target) ? await Bun.file(target).text() : "[]";
+  const list = jsonOf(z.array(z.unknown())).safeParse(text);
+  if (!list.success) throw jsonFailure(target, "JSON array", list.error);
   const current = list.data;
   const missing = ids.filter((id) => !current.includes(id));
   if (missing.length === 0) return [];

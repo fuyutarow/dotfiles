@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "../hooks/zod.ts";
 import { checkTrace } from "./trace.ts";
 
 export const FLOW_SCHEMA = "programme-flow/v2";

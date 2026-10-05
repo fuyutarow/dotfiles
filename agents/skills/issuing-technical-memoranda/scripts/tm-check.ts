@@ -13,7 +13,7 @@
  */
 
 import { cli } from "cleye";
-import { z } from "zod";
+import { z } from "../../../hooks/zod.ts";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUIRED = ["tm", "title", "date", "author", "authority", "release", "to"] as const;

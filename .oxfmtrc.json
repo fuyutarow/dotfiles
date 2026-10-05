@@ -13,5 +13,5 @@
   "bracketSpacing": true,
   "sortImports": false,
   "sortPackageJson": false,
-  "ignorePatterns": ["**/node_modules", "agents/skills", "**/bun.lock"]
+  "ignorePatterns": ["**/node_modules", "agents/skills", "**/bun.lock", "agents/hooks/vendor"]
 }

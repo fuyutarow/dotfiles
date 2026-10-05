@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../../../hooks/zod.ts";
 import { probeModels } from "../scripts/probe-models.ts";
 import { asRecord, runClaude, toRelay } from "../scripts/run-claude.ts";
 
 const ErrorEnvelope = z.object({ exit_code: z.number(), error: z.string() });
 
 function parseErrorEnvelope(stdout: string): z.output<typeof ErrorEnvelope> {
-  return ErrorEnvelope.parse(((): unknown => JSON.parse(stdout))());
+  return jsonOf(ErrorEnvelope).parse(stdout);
 }
 
 const fixture = resolve(import.meta.dir, "fake-claude.ts");

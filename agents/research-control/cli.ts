@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { cli } from "cleye";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
+import { jsonText } from "../hooks/zod.ts";
 import { checkTrace } from "./trace.ts";
 
 class UsageError extends Error {}
@@ -23,15 +24,21 @@ async function main(): Promise<void> {
     throw new UsageError(
       "research-section-trace accepts exactly one trace path",
     );
-  const parsedTrace = await attempt(() =>
-    Bun.file(resolve(parsed._.trace)).json(),
+  const traceText = await attempt(() =>
+    Bun.file(resolve(parsed._.trace)).text(),
   );
-  if (!parsedTrace.ok) {
+  if (!traceText.ok) {
     throw new UsageError(
-      `trace is unreadable JSON: ${errorMessage(parsedTrace.error)}`,
+      `trace is unreadable JSON: ${errorMessage(traceText.error)}`,
     );
   }
-  const result = checkTrace(parsedTrace.value);
+  const parsedTrace = jsonText.safeParse(traceText.value);
+  if (!parsedTrace.success) {
+    throw new UsageError(
+      `trace is unreadable JSON: ${parsedTrace.error.issues[0]?.message ?? "invalid JSON"}`,
+    );
+  }
+  const result = checkTrace(parsedTrace.data);
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (!result.ok) process.exitCode = 1;
 }

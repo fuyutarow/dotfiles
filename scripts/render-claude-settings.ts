@@ -47,6 +47,7 @@ import {
 import { homedir } from "node:os";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
+import { jsonText } from "../agents/hooks/zod.ts";
 
 function print(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -66,7 +67,11 @@ const destPath = `${home}/.claude/settings.json`;
 
 async function readJson(path: string): Promise<Record<string, unknown>> {
   const text = await Bun.file(path).text();
-  const parsed = obj(((): unknown => JSON.parse(text))());
+  const decoded = jsonText.safeParse(text);
+  if (!decoded.success) {
+    throw new Error(decoded.error.issues.map((i) => i.message).join("; "));
+  }
+  const parsed = obj(decoded.data);
   if (parsed === undefined) throw new Error("not a JSON object");
   return parsed;
 }

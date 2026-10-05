@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../../../hooks/zod.ts";
 
 /**
  * codex-run.ts as a real child process against a fake `codex` (CODEX_RUN_BIN). The fake logs its
@@ -11,8 +11,6 @@ import { z } from "zod";
  */
 
 const script = resolve(import.meta.dir, "../scripts/codex-run.ts");
-// JSON from a file or a child's stdout, as unknown: every use below parses it with a schema.
-const json = (text: string): unknown => JSON.parse(text);
 const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
@@ -82,8 +80,7 @@ function run(args: string[], env: Record<string, string>, prompt = "Audit this."
   );
   const stdout = p.stdout.toString();
   const lines = stdout.trim().split("\n");
-  const json = ((): unknown => JSON.parse(lines[lines.length - 1] ?? ""))();
-  return { code: p.exitCode ?? -1, receipt: Receipt.parse(json), stdout, stderr: p.stderr.toString() };
+  return { code: p.exitCode ?? -1, receipt: jsonOf(Receipt).parse(lines[lines.length - 1] ?? ""), stdout, stderr: p.stderr.toString() };
 }
 const FULL = ["--model", "gpt-6-luna", "--effort", "medium", "--sandbox", "read-only", "--cd", tmpdir()];
 
@@ -103,7 +100,7 @@ describe("codex-run", () => {
     expect(r.receipt.last_message).toBe("VERDICT: fine");
     const file = r.receipt.receipt_file ?? "";
     expect(existsSync(file)).toBe(true);
-    expect(Receipt.parse(json(readFileSync(file, "utf8")))).toEqual(Receipt.parse(json(r.stdout)));
+    expect(jsonOf(Receipt).parse(readFileSync(file, "utf8"))).toEqual(jsonOf(Receipt).parse(r.stdout));
     // C2: the triplet reaches codex explicitly, with --json and -o.
     const argv = readFileSync(log, "utf8").split("\n");
     for (const w of ["exec", "--json", "--skip-git-repo-check", "-m", "gpt-6-luna", "read-only", 'model_reasoning_effort="medium"', "-o"])
@@ -138,15 +135,15 @@ describe("codex-run", () => {
     );
     expect(p.exitCode).toBe(0);
     expect(existsSync(log)).toBe(false);
-    const env = z
-      .object({
+    const env = jsonOf(
+      z.object({
         schema: z.literal(1),
         job_id: z.literal("luna-verify-1"),
         child_fanout: z.literal(0),
         walltime_seconds: z.literal(330),
         device: z.object({ kind: z.literal("cpu"), gpu_status: z.literal("not-beneficial") }),
-      })
-      .safeParse(json(readFileSync(path, "utf8")));
+      }),
+    ).safeParse(readFileSync(path, "utf8"));
     expect(env.success).toBe(true);
   });
 

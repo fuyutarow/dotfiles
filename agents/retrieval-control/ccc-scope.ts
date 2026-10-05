@@ -10,8 +10,8 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
 import { attempt } from "../hooks/attempt.ts";
+import { jsonOf, z } from "../hooks/zod.ts";
 
 // The `ccc` entry point is a uv-tool script whose shebang names the interpreter that can import
 // cocoindex_code.
@@ -76,9 +76,7 @@ export async function inScopeChanges(
     JSON.stringify(changed),
   );
   if (out === null) return null;
-  const parsed = await attempt((): unknown => JSON.parse(out));
-  if (!parsed.ok) return null;
-  const inScope = InScopeSchema.safeParse(parsed.value);
+  const inScope = jsonOf(InScopeSchema).safeParse(out);
   return inScope.success
     ? { changed: changed.length, inScope: inScope.data }
     : null;

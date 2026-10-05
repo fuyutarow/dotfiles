@@ -1,5 +1,5 @@
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { z } from "../hooks/zod.ts";
 
 export const SCHEMA = "research-section-trace/v2";
 export type Finding = { code: string; eventId?: string; message: string };

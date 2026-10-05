@@ -6,7 +6,7 @@
 
 import { readSync } from "node:fs";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 import {
   continuationProjectRoot,
   inspectContinuationRecord,
@@ -130,10 +130,9 @@ export function runCompactHook(platform: Platform): void {
   fromThrowable((): void => {
     const raw = readBoundedStdin();
     if (raw === undefined) return;
-    const output = handleCompactHook(
-      platform,
-      ((): unknown => JSON.parse(raw))(),
-    );
+    const decoded = jsonText.safeParse(raw);
+    if (!decoded.success) return;
+    const output = handleCompactHook(platform, decoded.data);
     if (output !== undefined) process.stdout.write(`${output}\n`);
   })();
 }

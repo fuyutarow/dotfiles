@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
+import { jsonText } from "../hooks/zod.ts";
 import {
   asRecord,
   assertReadableRegularFile,
@@ -356,12 +357,12 @@ async function parseTranscript(path: string): Promise<TranscriptReadout> {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (line === undefined || line.trim() === "") continue;
-    const parsedLine = await attempt((): unknown => JSON.parse(line));
-    if (!parsedLine.ok) {
+    const parsedLine = jsonText.safeParse(line);
+    if (!parsedLine.success) {
       parseErrors += 1;
       continue;
     }
-    const entry = asRecord(parsedLine.value);
+    const entry = asRecord(parsedLine.data);
     if (entry === undefined) continue;
 
     const parsed = parseTranscriptEntry(entry, index + 1, toolCalls, textBytes);

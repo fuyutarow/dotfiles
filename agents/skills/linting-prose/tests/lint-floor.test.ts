@@ -6,7 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, z } from "../../../hooks/zod.ts";
 
 const RelayedSchema = z.array(z.string());
 const FLOOR = new URL("../scripts/lint-floor.ts", import.meta.url).pathname;
@@ -76,7 +76,7 @@ describe("lint-floor passthrough (no --fix)", () => {
     const { out, err, code } = run(["--__proto__", "target.md"], {
       PATH: `${dir}:${process.env.PATH ?? ""}`,
     });
-    const relayed = RelayedSchema.parse(((): unknown => JSON.parse(out))());
+    const relayed = jsonOf(RelayedSchema).parse(out);
     expect(relayed.slice(-2)).toEqual(["--__proto__", "target.md"]);
     expect(err).toBe("");
     expect(code).toBe(0);
@@ -97,7 +97,7 @@ describe("lint-floor passthrough (no --fix)", () => {
       ["--version", "--", "--downstream-only", "target.md"],
       { PATH: `${dir}:${process.env.PATH ?? ""}` },
     );
-    const relayed = RelayedSchema.parse(((): unknown => JSON.parse(out))());
+    const relayed = jsonOf(RelayedSchema).parse(out);
     expect(relayed.slice(-4)).toEqual([
       "--version",
       "--",

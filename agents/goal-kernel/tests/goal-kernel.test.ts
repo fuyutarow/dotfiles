@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonText, z } from "../../hooks/zod.ts";
 import {
   activateGoal,
   type GoalContract,
@@ -22,9 +22,9 @@ import {
 } from "../kernel.ts";
 import { buildPostmortem } from "../postmortem.ts";
 
-// JSON.parse returns `any`; every parsed value enters the test as `unknown` and is read through a
-// schema (or compared whole with toEqual / toMatchObject).
-const jsonOf = (text: string): unknown => JSON.parse(text);
+// Every parsed value enters the test as `unknown` (decoded by the repo's zod codec) and is read
+// through a schema (or compared whole with toEqual / toMatchObject).
+const jsonValue = (text: string): unknown => jsonText.parse(text);
 
 const SnapshotSchema = z.object({ north_star: z.string() });
 const DenyOutputSchema = z.object({
@@ -113,7 +113,7 @@ describe("immutable Goal authority", () => {
 
     original.north_star = "mutated source object";
     const snapshot = SnapshotSchema.parse(
-      jsonOf(readFileSync(first.snapshot_path, "utf8")),
+      jsonValue(readFileSync(first.snapshot_path, "utf8")),
     );
     expect(snapshot.north_star).toContain("run id reconstructs");
     expect(snapshot.north_star).not.toContain("mutated");
@@ -195,7 +195,7 @@ describe("hook enforcement and privacy", () => {
         "codex",
         hookPayload(workspace(), "codex-neutral", event),
       );
-      expect(jsonOf(unconfigured.stdout)).toEqual({});
+      expect(jsonValue(unconfigured.stdout)).toEqual({});
 
       const root = workspace();
       await activateGoal(root, goal());
@@ -203,7 +203,7 @@ describe("hook enforcement and privacy", () => {
         "codex",
         hookPayload(root, "codex-neutral", event),
       );
-      expect(jsonOf(configured.stdout)).toEqual({});
+      expect(jsonValue(configured.stdout)).toEqual({});
     },
   );
 
@@ -253,7 +253,7 @@ describe("hook enforcement and privacy", () => {
         tool_input: { command: "true" },
       }),
     );
-    const denied = DenyOutputSchema.parse(jsonOf(preTool.stdout));
+    const denied = DenyOutputSchema.parse(jsonValue(preTool.stdout));
     expect(denied.hookSpecificOutput.permissionDecision).toBe("deny");
     expect(denied.hookSpecificOutput.permissionDecisionReason).toContain(
       "GK_CONFIG_UNTRUSTED",
@@ -275,7 +275,7 @@ describe("hook enforcement and privacy", () => {
         }),
       );
       expect(result.exit_code).toBe(0);
-      const output = DenyOutputSchema.parse(jsonOf(result.stdout));
+      const output = DenyOutputSchema.parse(jsonValue(result.stdout));
       expect(output.hookSpecificOutput.permissionDecision).toBe("deny");
       expect(output.hookSpecificOutput.permissionDecisionReason).toContain(
         "GK_AUTHORITY_UNAVAILABLE",
@@ -349,7 +349,7 @@ describe("hook enforcement and privacy", () => {
     if (eventName === undefined) throw new Error("expected one run event");
     const eventPath = join(eventsDir, eventName);
     const event = StoredEventSchema.parse(
-      jsonOf(readFileSync(eventPath, "utf8")),
+      jsonValue(readFileSync(eventPath, "utf8")),
     );
     event.event_type = "tampered";
     writeFileSync(eventPath, `${JSON.stringify(event)}\n`);
@@ -578,7 +578,7 @@ describe("real protocol adapters", () => {
         encoding: "utf8",
       });
       expect(result.status).toBe(0);
-      const output = ContextOutputSchema.parse(jsonOf(result.stdout));
+      const output = ContextOutputSchema.parse(jsonValue(result.stdout));
       expect(output.hookSpecificOutput.hookEventName).toBe("SessionStart");
       expect(output.hookSpecificOutput.additionalContext).toContain(
         "harness-postmortem",
@@ -597,7 +597,7 @@ describe("real protocol adapters", () => {
         encoding: "utf8",
       });
       expect(result.status).toBe(0);
-      expect(jsonOf(result.stdout)).toEqual({});
+      expect(jsonValue(result.stdout)).toEqual({});
     },
   );
 
@@ -634,7 +634,7 @@ describe("real protocol adapters", () => {
       });
       expect(observe.status).toBe(0);
       expect(observe.stderr).toContain("event was not observed");
-      expect(jsonOf(observe.stdout)).toEqual({});
+      expect(jsonValue(observe.stdout)).toEqual({});
 
       const available = spawnSync("/bin/sh", [runner, "--enforce"], {
         input: payload,
@@ -712,7 +712,7 @@ describe("Cleye command boundary", () => {
     writeFileSync(contract, `${JSON.stringify(goal())}\n`);
     const activated = run(["activate", contract, "--root", root, "--json"]);
     expect(activated.code).toBe(0);
-    expect(jsonOf(activated.stdout)).toMatchObject({
+    expect(jsonValue(activated.stdout)).toMatchObject({
       ok: true,
       command: "activate",
       goal_id: "harness-postmortem",
@@ -720,7 +720,8 @@ describe("Cleye command boundary", () => {
     const status = run(["status", "--root", root, "--json"]);
     expect(status.code).toBe(0);
     expect(
-      StatusOutputSchema.parse(jsonOf(status.stdout)).active.goal.goal_version,
+      StatusOutputSchema.parse(jsonValue(status.stdout)).active.goal
+        .goal_version,
     ).toBe(1);
 
     const extra = run([
@@ -770,7 +771,7 @@ describe("Cleye command boundary", () => {
       "--json",
     ]);
     expect(decided.code).toBe(0);
-    expect(jsonOf(decided.stdout)).toMatchObject({
+    expect(jsonValue(decided.stdout)).toMatchObject({
       ok: true,
       command: "decide",
       event: { decision: { decision_id: "D-002" } },
@@ -778,13 +779,14 @@ describe("Cleye command boundary", () => {
 
     const postmortem = run(["postmortem", runId, "--root", root, "--json"]);
     expect(postmortem.code).toBe(0);
-    expect(jsonOf(postmortem.stdout)).toMatchObject({
+    expect(jsonValue(postmortem.stdout)).toMatchObject({
       ok: true,
       command: "postmortem",
       report: { run_id: runId, provider: "codex", findings: [] },
     });
     expect(
-      PostmortemOutputSchema.parse(jsonOf(postmortem.stdout)).report.decisions,
+      PostmortemOutputSchema.parse(jsonValue(postmortem.stdout)).report
+        .decisions,
     ).toHaveLength(2);
   });
 });

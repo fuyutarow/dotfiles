@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { attempt, errorMessage } from "../hooks/attempt.ts";
+import { jsonText } from "../hooks/zod.ts";
 
 export type Provider = "claude" | "codex";
 
@@ -609,16 +610,21 @@ async function withExclusiveStateLock<T>(
 }
 
 async function readJson(path: string, locus: string): Promise<unknown> {
-  const result = await attempt((): unknown =>
-    JSON.parse(readFileSync(path, "utf8")),
-  );
-  if (!result.ok) {
+  const text = await attempt(() => readFileSync(path, "utf8"));
+  if (!text.ok) {
     throw new GoalKernelError(
       "GK_STATE",
-      `${locus} is unreadable: ${errorMessage(result.error)}`,
+      `${locus} is unreadable: ${errorMessage(text.error)}`,
     );
   }
-  return result.value;
+  const parsed = jsonText.safeParse(text.value);
+  if (!parsed.success) {
+    throw new GoalKernelError(
+      "GK_STATE",
+      `${locus} is unreadable: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+    );
+  }
+  return parsed.data;
 }
 
 function inside(root: string, candidate: string): boolean {
@@ -1475,17 +1481,17 @@ export async function processHookEvent(
 }
 
 export async function runGoalKernelHook(provider: Provider): Promise<void> {
-  const parsed = await attempt((): unknown =>
-    JSON.parse(readFileSync(0, "utf8")),
-  );
-  if (!parsed.ok) {
-    process.stderr.write(
-      `goal-kernel: malformed hook JSON: ${errorMessage(parsed.error)}\n`,
-    );
+  const stdin = await attempt(() => readFileSync(0, "utf8"));
+  const failure = stdin.ok ? undefined : errorMessage(stdin.error);
+  const parsed = stdin.ok ? jsonText.safeParse(stdin.value) : undefined;
+  if (failure !== undefined || !parsed?.success) {
+    const reason =
+      failure ?? parsed?.error?.issues.map((i) => i.message).join("; ") ?? "";
+    process.stderr.write(`goal-kernel: malformed hook JSON: ${reason}\n`);
     process.exitCode = 1;
     return;
   }
-  const result = await processHookEvent(provider, parsed.value);
+  const result = await processHookEvent(provider, parsed.data);
   if (result.stdout !== "") process.stdout.write(result.stdout);
   if (result.stderr !== "") process.stderr.write(result.stderr);
   process.exitCode = result.exit_code;

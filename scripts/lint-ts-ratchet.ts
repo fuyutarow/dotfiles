@@ -13,20 +13,17 @@
 
 import { readFileSync } from "node:fs";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonText, z } from "../agents/hooks/zod.ts";
 
-const parse = (raw: string): unknown => JSON.parse(raw);
-
-const config = fromThrowable(() =>
-  parse(readFileSync(".oxlintrc.json", "utf8")),
-)();
-if (config.isErr()) {
+const text = fromThrowable(() => readFileSync(".oxlintrc.json", "utf8"))();
+const config = text.isOk() ? jsonText.safeParse(text.value) : undefined;
+if (!config?.success) {
   console.error("lint:ts-ratchet: .oxlintrc.json is unreadable");
   process.exit(2);
 }
 
 const shape = z.object({ overrides: z.array(z.unknown()).optional() });
-const checked = shape.safeParse(config.value);
+const checked = shape.safeParse(config.data);
 if (!checked.success) {
   console.error("lint:ts-ratchet: .oxlintrc.json has an unexpected shape");
   process.exit(2);

@@ -58,8 +58,8 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
 import { attempt } from "../agents/hooks/attempt.ts";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 import { ACK_MS, editorHost, receiverSocket, SETTLE_MS } from "./sockets.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -352,9 +352,8 @@ const MessageSchema = z.record(z.string(), z.unknown());
 
 async function handle(line: string): Promise<string> {
   if (line.length > MAX_LINE) return "refused: too long";
-  const parsed = await attempt((): unknown => JSON.parse(line));
-  const checked = parsed.ok ? MessageSchema.safeParse(parsed.value) : undefined;
-  const msg = checked?.success ? checked.data : undefined;
+  const checked = jsonOf(MessageSchema).safeParse(line);
+  const msg = checked.success ? checked.data : undefined;
   if (msg !== undefined && Object.hasOwn(msg, "path"))
     return handlePath(msg["path"], msg["kind"], msg["host"]);
   const rawUrl = msg?.["url"];

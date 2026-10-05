@@ -60,6 +60,7 @@ import {
 } from "../agents/retrieval-control/ccc-db-dir.ts";
 import { attempt, attemptOr, errorMessage } from "../agents/hooks/attempt.ts";
 import { obj } from "../agents/hooks/narrow.ts";
+import { jsonText } from "../agents/hooks/zod.ts";
 import {
   drift,
   readDeclared,
@@ -156,8 +157,11 @@ const fail = (
 });
 
 // The parsed JSON as `unknown` (null = missing or not JSON); each caller reads it through obj().
-function readJson(path: string): Promise<unknown> {
-  return attemptOr((): unknown => JSON.parse(readFileSync(path, "utf8")), null);
+async function readJson(path: string): Promise<unknown> {
+  const text = await attemptOr(() => readFileSync(path, "utf8"), null);
+  if (text === null) return null;
+  const decoded = jsonText.safeParse(text);
+  return decoded.success ? decoded.data : null;
 }
 
 export async function checkLinks(ctx: Ctx): Promise<Finding> {

@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../../agents/hooks/zod.ts";
 
 const SCRIPT = join(import.meta.dir, "..", "render-claude-settings.ts");
 
@@ -51,12 +51,10 @@ function dest(home: string): string {
   return join(home, ".claude", "settings.json");
 }
 
-const parseJson = (text: string): unknown => JSON.parse(text);
-
 function readDest(home: string): Record<string, unknown> {
-  return z
-    .record(z.string(), z.unknown())
-    .parse(parseJson(readFileSync(dest(home), "utf8")));
+  return jsonOf(z.record(z.string(), z.unknown())).parse(
+    readFileSync(dest(home), "utf8"),
+  );
 }
 
 function cleanup(...dirs: string[]): void {
@@ -153,7 +151,7 @@ describe("render-claude-settings: the legacy symlink", () => {
     expect(lstatSync(dest(home)).isSymbolicLink()).toBe(false);
     // The repo-side base must be untouched — writing THROUGH the old link would have edited it.
     expect(
-      parseJson(
+      jsonText.parse(
         readFileSync(
           join(dotfiles, "agents", "claude", "settings.json"),
           "utf8",

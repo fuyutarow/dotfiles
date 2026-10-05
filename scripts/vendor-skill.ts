@@ -54,7 +54,7 @@ import {
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 /** Pinned deliberately: `add` is the one command here that can overwrite repo content. */
 const SKILLS_CLI = "skills@1.5.22";
@@ -166,11 +166,9 @@ const LedgerDocSchema = z.record(z.string(), z.unknown());
  * the reverse gap otherwise). Never fatal — the directory removal is the safety net that matters. */
 function scrubLedger(dotfiles: string, names: string[]): void {
   const path = `${dotfiles}/agents/skills-lock.json`;
-  const parsed = fromThrowable((): unknown =>
-    JSON.parse(readFileSync(path, "utf8")),
-  )();
-  if (parsed.isErr()) return;
-  const doc = LedgerDocSchema.safeParse(parsed.value);
+  const text = fromThrowable(() => readFileSync(path, "utf8"))();
+  if (text.isErr()) return;
+  const doc = jsonOf(LedgerDocSchema).safeParse(text.value);
   if (!doc.success) return;
   const skills = LedgerDocSchema.safeParse(doc.data.skills);
   if (!skills.success) return;

@@ -9,7 +9,7 @@
 // NO_DEFINITION (strength "none"); it is counted under "absent".
 import { homedir } from "node:os";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonOf, z } from "../hooks/zod.ts";
 import { findDefinitions } from "./definitions.ts";
 
 const rejectPrototypeFlag = (type: string, flag: string): void => {
@@ -48,7 +48,7 @@ const SpecSchema = z.object({
   cases: z.array(CaseSchema),
 });
 const specText = await Bun.file(argv.flags.cases).text();
-const spec = SpecSchema.parse(((): unknown => JSON.parse(specText))());
+const spec = jsonOf(SpecSchema).parse(specText);
 const project = spec.project.replace(/^~(?=\/)/, homedir());
 const tally: Record<
   string,

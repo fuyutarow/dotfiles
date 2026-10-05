@@ -1,5 +1,5 @@
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // Wire the vendor-neutral hooks (agents/hooks/hooks.toml) into every agent CLI's hook config.
 // Consumer: `mise run hooks:wire` (write) and `mise run test` via tests/wire-hooks.test.ts (check).
@@ -221,7 +221,7 @@ async function main(): Promise<number> {
   for (const vendor of VENDORS) {
     const path = targets[vendor];
     const text = await Bun.file(path).text();
-    const config = JsonObject.parse(((): unknown => JSON.parse(text))());
+    const config = jsonOf(JsonObject).parse(text);
     const next = `${JSON.stringify({ ...config, hooks: wire(toHooksConfig(config.hooks ?? {}), specs, vendor) }, null, 2)}\n`;
     const rel = path.slice(root.length).replace(/^\//, "");
     if (next === text) {

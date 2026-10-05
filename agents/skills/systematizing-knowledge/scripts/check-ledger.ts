@@ -5,7 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 function rejectPrototypeFlag(
   type: "known-flag" | "unknown-flag" | "argument",
@@ -285,18 +285,13 @@ const checkFile = async (path: string): Promise<FileResult> => {
       continue;
     }
 
-    // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
-    // `.then` maps to `undefined`, so the invalid-JSON report below is unchanged.
-    const value: unknown = await Promise.try((): unknown => JSON.parse(rawLine)).then(
-      (ok) => ok,
-      () => undefined,
-    );
-    if (value === undefined) {
+    const decoded = jsonText.safeParse(rawLine);
+    if (!decoded.success) {
       report(line, "invalid JSON");
       continue;
     }
 
-    const row = asRecord(value);
+    const row = asRecord(decoded.data);
     if (row === undefined) {
       report(line, "row must be a JSON object");
       continue;

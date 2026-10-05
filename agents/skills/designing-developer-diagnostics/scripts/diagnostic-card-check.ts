@@ -1,5 +1,5 @@
 import { cli } from "cleye";
-import { z } from "zod";
+import { z } from "../../../hooks/zod.ts";
 
 const RecoveryModeSchema = z.enum(["exact", "conditional", "investigate", "none"]);
 

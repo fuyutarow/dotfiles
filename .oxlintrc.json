@@ -9,7 +9,8 @@
   "ignorePatterns": [
     "node_modules",
     "archives",
-    "agents/claude/hooks/repo-retrieve.ts"
+    "agents/claude/hooks/repo-retrieve.ts",
+    "agents/hooks/vendor"
   ],
   "rules": {
     "max-depth": ["warn", 2],
@@ -51,8 +52,12 @@
         "message": "`<T>value` cast is banned (writing-typescript): parse with a zod schema, or use `satisfies` / inference."
       },
       {
-        "selector": ":not(ArrowFunctionExpression[returnType.typeAnnotation.type='TSUnknownKeyword']) > CallExpression[callee.object.name='JSON'][callee.property.name='parse']",
-        "message": "JSON.parse returns `any`: write it as the body of `(): unknown => JSON.parse(..)` and parse the result with a zod schema (safeParse). A type annotation alone validates nothing."
+        "selector": "CallExpression[callee.object.name='JSON'][callee.property.name='parse']:not(CallExpression[callee.property.name='codec'] *)",
+        "message": "JSON.parse is banned (zod first). Decode JSON text with zod in one step: `jsonOf(Schema).safeParse(text)` — import { jsonOf, z } from agents/hooks/zod.ts (relative path). It returns the typed value, or a zod error that covers both bad JSON (code invalid_format) and the wrong shape: no try, no `unknown` round-trip, no annotation. For the raw JSON value use `jsonText` from the same module."
+      },
+      {
+        "selector": "CallExpression[callee.property.name='json'][arguments.length=0]",
+        "message": "`.json()` returns `any` (zod first): read `.text()` and decode it with `jsonOf(Schema).safeParse(text)` from agents/hooks/zod.ts, so the body is validated where it enters."
       }
     ],
     "typescript/no-unsafe-assignment": "error",
@@ -60,6 +65,23 @@
     "typescript/no-unsafe-argument": "error",
     "typescript/no-unsafe-member-access": "error",
     "typescript/no-unsafe-type-assertion": "error",
-    "typescript/no-explicit-any": "error"
+    "typescript/no-explicit-any": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "zod",
+            "message": "Import `z` (and `jsonOf` for JSON text) from agents/hooks/zod.ts (relative path), the repo's one zod: hooks run before `bun install`, so zod ships as a generated bundle and every file uses that same copy."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["zod/*"],
+            "message": "Import `z` from agents/hooks/zod.ts (relative path), the repo's one zod."
+          }
+        ]
+      }
+    ]
   }
 }

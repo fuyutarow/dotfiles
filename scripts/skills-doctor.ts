@@ -27,7 +27,7 @@ import {
 import { homedir } from "node:os";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonText, z } from "../agents/hooks/zod.ts";
 
 const USAGE =
   "Usage: bun scripts/skills-doctor.ts [--dotfiles <path>] [--home <path>]\n";
@@ -180,13 +180,15 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
       },
     ];
   }
-  const namesResult = fromThrowable(() => {
-    const parsed = ((): unknown => JSON.parse(readFileSync(path, "utf8")))();
-    const ledger = LedgerSchema.safeParse(parsed);
-    return ledger.success ? Object.keys(ledger.data.skills).sort() : [];
-  })();
-  if (namesResult.isErr()) {
-    const error = namesResult.error;
+  const textResult = fromThrowable(() => readFileSync(path, "utf8"))();
+  const decoded = textResult.isOk()
+    ? jsonText.safeParse(textResult.value)
+    : undefined;
+  if (textResult.isErr() || !decoded?.success) {
+    const error = textResult.isErr()
+      ? textResult.error
+      : (decoded?.error?.issues.map((i) => i.message).join("; ") ??
+        "not valid JSON");
     return [
       {
         level: "FAIL",
@@ -194,7 +196,9 @@ function checkLedgerOrphans(dotfiles: string): Finding[] {
       },
     ];
   }
-  return namesResult.value
+  const ledger = LedgerSchema.safeParse(decoded.data);
+  const names = ledger.success ? Object.keys(ledger.data.skills).sort() : [];
+  return names
     .filter((n) => !existsSync(`${dotfiles}/agents/skills/${n}/SKILL.md`))
     .map((n) => ({
       level: "FAIL" as const,

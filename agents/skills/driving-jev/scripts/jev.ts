@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 // Consumer: machine. Success is one JSON value on stdout; diagnostics stay on stderr.
 
@@ -184,13 +184,12 @@ async function readRequest(path: string): Promise<unknown> {
 }
 
 async function parseRequestJson(text: string): Promise<unknown> {
-  const parsed = await Promise.try((): unknown => JSON.parse(text)).then(
-    (value) => value,
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new JevCliError(2, `request is not valid JSON: ${message}`);
-    },
-  );
+  const decoded = jsonText.safeParse(text);
+  if (!decoded.success) {
+    const message = (decoded.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, "");
+    throw new JevCliError(2, `request is not valid JSON: ${message}`);
+  }
+  const parsed = decoded.data;
   return validateRequest(parsed);
 }
 
@@ -273,13 +272,12 @@ async function main(): Promise<void> {
     );
   }
 
-  const result = await Promise.try((): unknown => JSON.parse(body)).then(
-    (value) => value,
-    (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
-    },
-  );
+  const decodedResult = jsonText.safeParse(body);
+  if (!decodedResult.success) {
+    const message = (decodedResult.error.issues[0]?.message ?? "").replace(/^not valid JSON: /, "");
+    throw new JevCliError(5, `provider returned invalid JSON: ${message}`);
+  }
+  const result = decodedResult.data;
   const resultRecord = asRecord(result);
   if (
     resultRecord === undefined ||

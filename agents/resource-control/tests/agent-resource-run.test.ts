@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonText, z } from "../../hooks/zod.ts";
 import {
   buildSystemdLaunch,
   commandEnvironment,
@@ -45,7 +45,7 @@ import {
 const GiB = 1024 ** 3;
 const MiB = 1024 ** 2;
 
-const parseJson = (text: string): unknown => JSON.parse(text);
+const parseJson = (text: string): unknown => jsonText.parse(text);
 
 // The fields of an admission receipt the tests read directly. Assertions on the whole receipt
 // (JSON.stringify round-trip, toMatchObject) stay on the unparsed value, whose key order is the

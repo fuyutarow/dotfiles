@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { z } from "zod";
+import { jsonText, z } from "../../hooks/zod.ts";
 import { checkProgrammeFlow } from "../programme-flow.ts";
 
 const FlowBaseSchema = z.looseObject({ jobs: z.array(z.looseObject({})) });
@@ -14,7 +14,7 @@ function fixture(name: string): unknown {
     resolve(import.meta.dir, "../fixtures", name),
     "utf8",
   );
-  return ((): unknown => JSON.parse(text))();
+  return jsonText.parse(text);
 }
 function flow(name: string): ReturnType<typeof checkProgrammeFlow> {
   return checkProgrammeFlow(fixture(name));

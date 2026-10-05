@@ -128,6 +128,7 @@ depends = [
   "lint:bun",
   "lint:ts",
   "lint:ts-ratchet",
+  "vendor:deps:check",
   "typecheck",
   "lint:skills-index",
   "lint:skills-wiring",
@@ -185,6 +186,16 @@ run = "bun agents/skills/operating-the-harness/scripts/scope-check.ts agents/cla
 dir = "{{config_root}}"
 description = "Batched-diagnostics floor (operating-the-harness §3): every deny site in a PreToolUse gate declares FATAL / SINGLE-AXIS / BATCHED, and a BATCHED gate carries a test proving two violations return in one decision"
 run = "bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/claude/hooks && bun agents/skills/operating-the-harness/scripts/gate-diagnostics-check.ts agents/hooks"
+
+[tasks."vendor:deps"]
+dir = "{{config_root}}"
+description = "Regenerate agents/hooks/vendor/deps.{js,d.ts}: the one zod (+ neverthrow fromThrowable) every file imports via agents/hooks/zod.ts — hooks run before bun install, so it is a committed bundle built from the pinned packages"
+run = "bun scripts/vendor-deps.ts"
+
+[tasks."vendor:deps:check"]
+dir = "{{config_root}}"
+description = "Fail when the committed zod bundle is not what the pinned packages build to (run vendor:deps and commit)"
+run = "bun scripts/vendor-deps.ts --check"
 
 [tasks."lint:bun"]
 dir = "{{config_root}}"

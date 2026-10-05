@@ -1,7 +1,7 @@
-// Typed access to untyped JSON for HOOKS — zero-dep (not even node:), because a hook runs before
-// `mise run deps` has necessarily restored node_modules and so can import nothing but node:/bun:
-// (writing-bun-scripts BG3: "Hooks: no imports beyond node:/bun:, ever"). That is why hooks cannot
-// use zod, the house tool for this; this file is the hook-sized version of the same idea.
+// Typed access to untyped JSON for HOOKS — a hook runs before `mise run deps` has necessarily
+// restored node_modules, so the only non-builtin it may import is zod.ts, the vendored zod bundle
+// beside this file (zero-install). This file is the hook-sized version of a zod schema: readers
+// over `unknown` for hooks that narrow by hand.
 //
 // What it replaces: a hook payload used to be `any` ("kept loose on purpose"), so
 // `payload?.tool_input?.command` type-checked whatever it held. The lint floor now forbids `any`
@@ -12,10 +12,22 @@
 //
 // Everything here narrows with typeof / Array.isArray only: no guard functions, no casts.
 
+import { jsonText } from "./zod.ts";
+
 export type Obj = Readonly<Record<string, unknown>>;
 
-/** JSON text -> unknown. The one place hooks call JSON.parse; parse the result with the readers below. */
-export const parseJson = (text: string): unknown => JSON.parse(text);
+/**
+ * JSON text -> unknown, THROWING on a JSON syntax error (callers wrap it in try/attempt and treat
+ * the throw as "no payload"). Decoded by the repo's zod codec, so no hook calls JSON.parse itself;
+ * parse the result with the readers below.
+ */
+export const parseJson = (text: string): unknown => {
+  const parsed = jsonText.safeParse(text);
+  if (!parsed.success) {
+    throw new SyntaxError(parsed.error.issues[0]?.message ?? "not valid JSON");
+  }
+  return parsed.data;
+};
 
 /**
  * A plain object (not null, not an array) as a string-keyed record; else undefined.

@@ -11,7 +11,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromAsyncThrowable, fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { z } from "../agents/hooks/zod.ts";
 
 // Consumer: a user-systemd timer and the Claude storage hook. One short run checks the Windows
 // drive and host RAM under WSL, reclaims only the repository's unattended-safe tiers, and stops

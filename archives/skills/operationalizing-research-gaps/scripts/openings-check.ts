@@ -24,7 +24,12 @@ function rejectPrototypeFlag(
 }
 
 const ROW_TYPES = new Set(["GAP", "CONTRADICTION", "NON-ADJACENCY", "TASK"]);
-const REASONS = new Set(["INSUFFICIENT", "INCONSISTENT", "BIASED", "WRONG-QUESTION"]);
+const REASONS = new Set([
+  "INSUFFICIENT",
+  "INCONSISTENT",
+  "BIASED",
+  "WRONG-QUESTION",
+]);
 const HEADER_TOKENS = [
   "SOURCE POSITION:",
   "COVERAGE:",
@@ -36,7 +41,12 @@ const HEADER_TOKENS = [
 const FORBIDDEN_KEYS = ["PRIORITY", "RANK", "SCORE", "WEIGHT"];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-type Row = { id: string; type: string; line: number; cells: Map<string, string> };
+type Row = {
+  id: string;
+  type: string;
+  line: number;
+  cells: Map<string, string>;
+};
 
 function parseRows(text: string): { rows: Row[]; headerText: string } {
   const lines = text.split("\n");
@@ -50,7 +60,12 @@ function parseRows(text: string): { rows: Row[]; headerText: string } {
     const rowHeader = /^###\s+(\S+)\s+[·|]\s+(.+?)\s*$/.exec(line);
     if (rowHeader) {
       if (headerEnd === lines.length) headerEnd = i;
-      current = { id: rowHeader[1]!, type: rowHeader[2]!, line: i + 1, cells: new Map() };
+      current = {
+        id: rowHeader[1]!,
+        type: rowHeader[2]!,
+        line: i + 1,
+        cells: new Map(),
+      };
       currentKey = null;
       rows.push(current);
       continue;
@@ -81,17 +96,27 @@ function checkFile(path: string, text: string): string[] {
   const { rows, headerText } = parseRows(text);
 
   for (const token of HEADER_TOKENS) {
-    if (!headerText.includes(token)) fail(`sheet header is missing the literal token "${token}"`);
+    if (!headerText.includes(token))
+      fail(`sheet header is missing the literal token "${token}"`);
   }
 
   for (const key of FORBIDDEN_KEYS) {
     const re = new RegExp(`^\\s*${key}:`, "m");
-    if (re.test(text)) fail(`forbidden ranking field "${key}:" — openings are never ranked or scored`);
+    if (re.test(text))
+      fail(
+        `forbidden ranking field "${key}:" — openings are never ranked or scored`,
+      );
   }
 
-  if (rows.length === 0) fail("no rows found; a row header looks like '### OPN-001 · GAP'");
+  if (rows.length === 0)
+    fail("no rows found; a row header looks like '### OPN-001 · GAP'");
 
-  const counts: Record<string, number> = { GAP: 0, CONTRADICTION: 0, "NON-ADJACENCY": 0, TASK: 0 };
+  const counts: Record<string, number> = {
+    GAP: 0,
+    CONTRADICTION: 0,
+    "NON-ADJACENCY": 0,
+    TASK: 0,
+  };
   const seen = new Set<string>();
 
   for (const row of rows) {
@@ -100,40 +125,51 @@ function checkFile(path: string, text: string): string[] {
     seen.add(row.id);
 
     if (!ROW_TYPES.has(row.type)) {
-      fail(`${at}: type "${row.type}" is not one of ${[...ROW_TYPES].join(", ")}`);
+      fail(
+        `${at}: type "${row.type}" is not one of ${[...ROW_TYPES].join(", ")}`,
+      );
       continue;
     }
     counts[row.type] = (counts[row.type] ?? 0) + 1;
 
     for (const required of ["ANCHOR", "BODY", "RETIRED-BY", "TO", "EXPIRES"]) {
-      if (!(row.cells.get(required) ?? "")) fail(`${at}: missing or empty ${required}:`);
+      if (!(row.cells.get(required) ?? ""))
+        fail(`${at}: missing or empty ${required}:`);
     }
 
     const expires = row.cells.get("EXPIRES") ?? "";
-    if (expires && !ISO_DATE.test(expires)) fail(`${at}: EXPIRES "${expires}" is not an ISO date`);
+    if (expires && !ISO_DATE.test(expires))
+      fail(`${at}: EXPIRES "${expires}" is not an ISO date`);
 
     if (row.type === "NON-ADJACENCY") {
-      if (!(row.cells.get("MECHANISM") ?? "")) fail(`${at}: NON-ADJACENCY needs MECHANISM:`);
+      if (!(row.cells.get("MECHANISM") ?? ""))
+        fail(`${at}: NON-ADJACENCY needs MECHANISM:`);
       if (row.cells.has("RELATION")) {
-        fail(`${at}: NON-ADJACENCY must not carry RELATION: — a relation is a thesis, not an opening`);
+        fail(
+          `${at}: NON-ADJACENCY must not carry RELATION: — a relation is a thesis, not an opening`,
+        );
       }
     } else {
       const reason = row.cells.get("REASON") ?? "";
       if (!reason) fail(`${at}: missing REASON:`);
-      else if (!REASONS.has(reason)) fail(`${at}: REASON "${reason}" not in ${[...REASONS].join(", ")}`);
+      else if (!REASONS.has(reason))
+        fail(`${at}: REASON "${reason}" not in ${[...REASONS].join(", ")}`);
     }
 
     if (row.type === "TASK") {
       const referee = row.cells.get("REFEREE") ?? "";
       if (!referee) fail(`${at}: TASK needs REFEREE:`);
-      else if (!referee.includes("threshold=")) fail(`${at}: REFEREE has no fixed "threshold="`);
+      else if (!referee.includes("threshold="))
+        fail(`${at}: REFEREE has no fixed "threshold="`);
     }
   }
 
   const tail = counts["NON-ADJACENCY"] ?? 0;
   const core = (counts.GAP ?? 0) + (counts.TASK ?? 0);
   if (tail > core) {
-    fail(`tail cap: ${tail} NON-ADJACENCY rows exceed ${core} GAP+TASK rows — bind more observations`);
+    fail(
+      `tail cap: ${tail} NON-ADJACENCY rows exceed ${core} GAP+TASK rows — bind more observations`,
+    );
   }
   return findings;
 }

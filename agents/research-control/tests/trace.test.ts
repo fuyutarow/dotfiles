@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { z } from "zod";
+import { jsonText, z } from "../../hooks/zod.ts";
 import { checkTrace } from "../trace.ts";
 
 const digest = (digit: string) => digit.repeat(64);
@@ -411,7 +411,7 @@ describe("research-section-trace/v2 exact wire", () => {
       resolve(import.meta.dir, "../fixtures", name),
       "utf8",
     );
-    const value: unknown = ((): unknown => JSON.parse(text))();
+    const value: unknown = jsonText.parse(text);
     if (code === undefined) expect(checkTrace(value).ok).toBe(true);
     else expectCode(value, code);
   });

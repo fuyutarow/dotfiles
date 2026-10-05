@@ -38,7 +38,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 import { attempt, errorMessage } from "../../../hooks/attempt.ts";
 import { judge, ordersIn, parseFloorConfig } from "../../../hooks/model-orders.ts";
 
@@ -301,8 +301,8 @@ const TurnCompleted = z.object({
 const usage: Usage = { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0 };
 let turns = 0;
 for (const line of events.split("\n")) {
-  const json = fromThrowable((): unknown => JSON.parse(line))();
-  const turn = json.isOk() ? TurnCompleted.safeParse(json.value) : undefined;
+  const json = jsonText.safeParse(line);
+  const turn = json.success ? TurnCompleted.safeParse(json.data) : undefined;
   if (!turn?.success) continue;
   turns += 1;
   usage.input_tokens += turn.data.usage.input_tokens;

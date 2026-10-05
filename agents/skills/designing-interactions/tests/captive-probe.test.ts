@@ -3,7 +3,7 @@
 // Run: bun test agents/skills/designing-interactions/tests
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { z } from "zod";
+import { jsonOf, jsonText, z } from "../../../hooks/zod.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const PROBE = join(ROOT, "scripts", "captive-probe.ts");
@@ -44,7 +44,7 @@ async function codes(
   const result = await probe(["--json", ...args]);
   return {
     exitCode: result.exitCode,
-    envelope: EnvelopeSchema.parse(((): unknown => JSON.parse(result.stdout))()),
+    envelope: jsonOf(EnvelopeSchema).parse(result.stdout),
   };
 }
 
@@ -125,7 +125,7 @@ describe("captive-probe contract", () => {
   test("verdict lines are the default consumer; --json switches to the envelope", async () => {
     const lines = await probe(fixture("prompts.ts"));
     expect(lines.stdout).toStartWith("FAIL PROMPT-WITHOUT-TTY:");
-    expect((): unknown => JSON.parse(lines.stdout)).toThrow();
+    expect(jsonText.safeParse(lines.stdout).success).toBe(false);
   });
 
   test("exits 2 with usage on no command", async () => {

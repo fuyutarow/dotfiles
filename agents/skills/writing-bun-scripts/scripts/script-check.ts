@@ -42,7 +42,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonOf, z } from "../../../hooks/zod.ts";
 
 let failures = 0;
 let warnings = 0;
@@ -158,9 +158,7 @@ async function findGraduation(fromFile: string): Promise<Graduation | null> {
     const manifest = join(directory, "package.json");
     if (existsSync(manifest) && existsSync(join(directory, "bun.lock"))) {
       const { deps, bins } = await Promise.try((): { deps: Map<string, string>; bins: Set<string> } => {
-        const parsed = ManifestSchema.parse(
-          ((): unknown => JSON.parse(readFileSync(manifest, "utf8")))(),
-        );
+        const parsed = jsonOf(ManifestSchema).parse(readFileSync(manifest, "utf8"));
         const parsedDeps = new Map(
           Object.entries({ ...parsed.dependencies, ...parsed.devDependencies }),
         );

@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync } from "node:fs";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
-import { z } from "zod";
+import { jsonOf, z } from "../agents/hooks/zod.ts";
 
 // The Windows half of the Brewfile: capture what winget manages on the host into
 // wsl/winget.win.json, or restore the host from it. Consumer: human/agent running
@@ -170,8 +170,7 @@ async function dump(): Promise<void> {
     );
     process.exit(1);
   }
-  const raw: unknown = await Bun.file(wsl).json();
-  const doc = JsonRecord.parse(raw);
+  const doc = jsonOf(JsonRecord).parse(await Bun.file(wsl).text());
   // Every record is spread, never rebuilt from a schema's output: the tracked file keeps winget's
   // own key order and every field this script does not read.
   const sources = (JsonRecordList.nullish().parse(doc.Sources) ?? []).map(

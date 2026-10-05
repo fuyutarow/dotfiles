@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 const BudgetSchema = z.object({ maxListingChars: z.unknown() });
 
@@ -369,12 +369,15 @@ async function reportListingBudget(
     failures += 1;
     return;
   }
-  // No try/catch (audited *.ts ban): Promise.try turns a read/parse throw into a rejection this
-  // `.then` maps to a tagged error, so the FAIL message below is byte-identical to before.
+  // No try/catch (audited *.ts ban): Promise.try turns a read throw into a rejection this
+  // `.then` maps to a tagged error; a JSON syntax error comes back from jsonText as an issue.
   const parsed = await Promise.try(async () => {
     const text = await Bun.file(budgetPath).text();
-    const raw = ((): unknown => JSON.parse(text))();
-    const budget = BudgetSchema.safeParse(raw);
+    const raw = jsonText.safeParse(text);
+    if (!raw.success) {
+      return { ok: false as const, error: raw.error.issues[0]?.message };
+    }
+    const budget = BudgetSchema.safeParse(raw.data);
     return {
       ok: true as const,
       value: budget.success ? budget.data.maxListingChars : undefined,

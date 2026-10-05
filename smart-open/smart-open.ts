@@ -42,8 +42,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
 import { attempt, errorMessage } from "../agents/hooks/attempt.ts";
+import { z } from "../agents/hooks/zod.ts";
 import {
   ACK_MS,
   editorHost,

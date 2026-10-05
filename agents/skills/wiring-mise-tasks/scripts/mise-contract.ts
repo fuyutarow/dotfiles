@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cli } from "cleye";
-import { z } from "zod";
+import { jsonText, z } from "../../../hooks/zod.ts";
 
 function rejectPrototypeFlag(type: string, flag: string): void {
   if (type === "unknown-flag" && flag === "__proto__") {
@@ -68,12 +68,11 @@ async function miseTasks(
     child.exited,
   ]);
   if (exitCode !== 0) return { tasks: [], error: stderr };
-  // No try/catch (audited *.ts ban): Promise.try turns a JSON.parse throw into a rejection this
-  // `.then` maps to the same error tag as the old catch branch.
-  return Promise.try(() => tasks(((): unknown => JSON.parse(stdout))())).then(
-    (ok) => ({ tasks: ok }),
-    () => ({ tasks: [], error: "mise returned invalid JSON" }),
-  );
+  const decoded = jsonText.safeParse(stdout);
+  if (!decoded.success) {
+    return { tasks: [], error: "mise returned invalid JSON" };
+  }
+  return { tasks: tasks(decoded.data) };
 }
 
 function topLevelToml(source: string): string[] {

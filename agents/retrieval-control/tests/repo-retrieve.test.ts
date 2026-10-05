@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import { jsonOf, z } from "../../hooks/zod.ts";
 
 const ROUTER = join(import.meta.dir, "..", "repo-retrieve.ts");
 const COMPATIBILITY_PATH = join(
@@ -32,8 +32,8 @@ const WrittenWatermarkSchema = z.object({
 
 // The watermark file `index` wrote, parsed — an unparseable file fails the test loudly.
 function readWrittenWatermark(dir: string) {
-  return WrittenWatermarkSchema.parse(
-    ((): unknown => JSON.parse(readFileSync(watermarkFilePath(dir), "utf8")))(),
+  return jsonOf(WrittenWatermarkSchema).parse(
+    readFileSync(watermarkFilePath(dir), "utf8"),
   );
 }
 

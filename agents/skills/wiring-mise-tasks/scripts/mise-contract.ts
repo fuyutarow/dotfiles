@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { jsonText, z } from "../../../hooks/zod.ts";
 
@@ -284,6 +284,45 @@ function declaredTools(source: string): Set<string> {
   return out;
 }
 
+// --- C-C MINOR-PINNED (added 2026-10-05) ----------------------------------------------------
+// A runtime pinned to a patch ("1.4.0") is never bumped, so it goes stale, and with mise's
+// auto_install it reinstalls that old release on use. Measured 2026-10-05: soks, OpenFactory/soks
+// and polysearch-rs pinned bun 1.4.0, Coral-dpp and four DPP repos 1.2.22, qoed 1.3.14, and r99
+// had 1.4.0 reinstalled beside 1.4.2. The owner's rule: bun is "1.4" everywhere, no exception.
+// The house value lives in ONE place, the dotfiles mise.toml beside this skill; other tools only
+// warn on a patch pin, since their owners choose the version.
+const HOUSE_TOML = join(import.meta.dir, "..", "..", "..", "..", "mise.toml");
+function toolPins(source: string): Map<string, string> {
+  const m = /\[tools\]([\s\S]*?)(?=\n\[|$)/.exec(source);
+  const out = new Map<string, string>();
+  for (const line of (m?.[1] ?? "").split("\n")) {
+    const k = /^\s*(?:"([^"]+)"|([A-Za-z0-9_.-]+))\s*=\s*"([^"]*)"/.exec(line);
+    if (k) out.set((k[1] ?? k[2] ?? "").toLowerCase(), k[3] ?? "");
+  }
+  return out;
+}
+async function checkPins(source: string): Promise<[number, number]> {
+  let failures = 0;
+  let warnings = 0;
+  const house = existsSync(HOUSE_TOML)
+    ? toolPins(await readFile(HOUSE_TOML, "utf8")).get("bun")
+    : undefined;
+  for (const [tool, pin] of toolPins(source)) {
+    if (tool === "bun" && house !== undefined && pin !== house) {
+      process.stdout.write(
+        `FAIL  pin: bun = "${pin}" — the house pin is bun = "${house}" (a minor, tracking its newest patch); write bun = "${house}"\n`,
+      );
+      failures += 1;
+    } else if (/^\d+\.\d+\.\d+$/.test(pin)) {
+      process.stdout.write(
+        `WARN  pin: ${tool} = "${pin}" is a patch pin — it is never bumped and mise auto_install reinstalls it; pin the minor ("${pin.split(".").slice(0, 2).join(".")}")\n`,
+      );
+      warnings += 1;
+    }
+  }
+  return [failures, warnings];
+}
+
 // Returns [failures, warnings] and prints its own lines, matching this script's style.
 function checkBodies(source: string): [number, number] {
   let failures = 0;
@@ -425,11 +464,13 @@ async function check(
     }
   }
   if (existsSync(tomlPath)) {
-    const [bodyFailures, bodyWarnings] = checkBodies(
-      await readFile(tomlPath, "utf8"),
-    );
+    const source = await readFile(tomlPath, "utf8");
+    const [bodyFailures, bodyWarnings] = checkBodies(source);
     failures += bodyFailures;
     warnings += bodyWarnings;
+    const [pinFailures, pinWarnings] = await checkPins(source);
+    failures += pinFailures;
+    warnings += pinWarnings;
   }
 
   // `hook:<event>` names mirror git's own hook file names 1:1 (.githooks/pre-commit ->

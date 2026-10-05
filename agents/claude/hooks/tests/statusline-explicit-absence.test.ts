@@ -156,7 +156,22 @@ describe("statusline Sys row: VRAM", () => {
     SLOW,
   );
 
-  test("a failed sample shows the last good one, marked stale with age and reason", () => {
+  test("a failed sample shows the last good one, marked stale with age and reason once it is 60 s old", () => {
+    const home = tempHome();
+    const at = nowMs();
+    seedGpuCache(home, {
+      at: at - 120_000,
+      why: "nvidia-smi timeout 2000ms",
+      good: { at: at - 90_000, reading: { frac: "3.5/12.0G", pct: 29.2 } },
+    });
+    const row = sysRow(
+      render({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
+    );
+    expect(row).toContain("VRAM 29% (3.5/12.0G)");
+    expect(row).toMatch(/stale (9[0-9])s \(nvidia-smi exit 9\)/);
+  });
+
+  test("a last-good under 60 s old is shown plainly: that age is the normal case, not news", () => {
     const home = tempHome();
     const at = nowMs();
     seedGpuCache(home, {
@@ -168,7 +183,7 @@ describe("statusline Sys row: VRAM", () => {
       render({ home, bin: binWith({ "nvidia-smi": "exit 9" }) }).text,
     );
     expect(row).toContain("VRAM 29% (3.5/12.0G)");
-    expect(row).toMatch(/stale (4[0-9]|5[0-9])s \(nvidia-smi exit 9\)/);
+    expect(row).not.toContain("stale");
   });
 
   test("a last-good older than 30 min is n/a, not a stale number", () => {
@@ -619,9 +634,8 @@ describe("statusline resource bounds", () => {
     const row = sysRow(render({ home, bin }).text);
     expect(invocations(log)).toBe(0);
     expect(row).toContain("VRAM 29% (3.5/12.0G)");
-    expect(row).toMatch(
-      /stale \d+s \(nvidia-smi is being sampled by another session\)/,
-    );
+    // 30 s old: under the 60 s marker threshold, so the value shows plainly.
+    expect(row).not.toContain("stale");
   });
 });
 

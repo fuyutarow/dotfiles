@@ -911,6 +911,8 @@ const GPU_SAMPLE_TTL_MS = 5_000;
 // A last-good sample older than this is a claim about a moment too far back to still be useful;
 // beyond it the reading becomes n/a instead of a stale number.
 const GPU_STALE_MAX_MS = 30 * 60_000;
+// A last-good sample younger than this is shown without the `stale` marker (see memSegment).
+const STALE_SHOW_S = 60;
 // `reading`: the newest sample, set when it succeeded. `why`: set when it failed — a failure is
 // cached for the TTL like a success, so a hung nvidia-smi costs one bounded render per 5 s, not
 // every render. `good`: the newest SUCCESSFUL sample, kept across failures. The pre-2026-10-03
@@ -1464,8 +1466,11 @@ function admittedJobSegment(jobs: Admitted[], orphans: number): string {
 function memSegment(label: string, m: MemReading): string {
   const { pct, col } = pctFmt(m.pct);
   let seg = `${label} ${ESC}[${col}m${pct}%${RST} ${DIM}(${m.frac})${RST}`;
-  // An old number is never shown as a current one: amber `stale`, its age, and why it is old.
-  if (m.stale)
+  // A number old enough to mislead is never shown as a current one: amber `stale`, its age, and why.
+  // Under STALE_SHOW_S it is not marked (owner ruling 2026-10-05): with the bar refreshing every 5 s
+  // and one session sampling for all, a reading tens of seconds old is the normal case, and the
+  // marker there was noise that buried the cases that matter.
+  if (m.stale && m.stale.secs >= STALE_SHOW_S)
     seg += ` ${NA_COLOR}stale ${m.stale.secs}s${RST} ${DIM}(${m.stale.why})${RST}`;
   return seg;
 }

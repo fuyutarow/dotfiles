@@ -33,3 +33,22 @@ export const ActiveSchema = z.strictObject({
   cwd: z.string(),
 });
 export type Active = z.output<typeof ActiveSchema>;
+
+/** What a running worker is doing, beside its marker: `<run_id>.progress.json` in activeDir.
+ *  Written by codex-run from codex's own `--json` events (agent-router passes the path in
+ *  CODEX_RUN_PROGRESS_FILE), read by the statusline `Run:` row, removed with the marker. codex
+ *  reports token usage only when a turn completes (a luna run is one turn), so live tokens do not
+ *  exist; the counts here are commands run and distinct files changed so far. */
+export const progressFile = (
+  runId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string => join(activeDir(env), `${runId}.progress.json`);
+
+export const ProgressSchema = z.strictObject({
+  schema: z.literal(STATE_SCHEMA),
+  at: z.string(),
+  last: z.string(),
+  commands: z.number().int().nonnegative(),
+  files: z.number().int().nonnegative(),
+});
+export type Progress = z.output<typeof ProgressSchema>;

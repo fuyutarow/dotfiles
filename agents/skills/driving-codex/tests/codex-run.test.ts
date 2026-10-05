@@ -39,6 +39,8 @@ case "$FAKE_CODEX_MODE" in
   nolast) echo '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"reasoning_output_tokens":0}}'; exit 0 ;;
 esac
 echo '{"type":"thread.started"}'
+echo '{"type":"item.started","item":{"type":"command_execution","command":"bun test"}}'
+echo '{"type":"item.completed","item":{"type":"file_change","changes":[{"path":"/w/kernel.ts"}]}}'
 echo 'not json at all'
 echo '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":7,"reasoning_output_tokens":3}}'
 echo '{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":1}}'
@@ -77,7 +79,9 @@ function run(args: string[], env: Record<string, string>, prompt = "Audit this."
   writeFileSync(promptFile, prompt);
   const p = Bun.spawnSync(
     ["bun", script, "--receipt-dir", join(dir, "receipts"), "--prompt-file", promptFile, ...args],
-    { env: { ...process.env, ...env }, stdin: "ignore", timeout: 30_000 },
+    // CODEX_RUN_HOST_FILE defaults to a path that does not exist: a box that really carries a host
+    // declaration (a rented container) must not flip every sandbox assertion in this suite.
+    { env: { ...process.env, CODEX_RUN_HOST_FILE: join(dir, "no-host.toml"), ...env }, stdin: "ignore", timeout: 30_000 },
   );
   const stdout = p.stdout.toString();
   const lines = stdout.trim().split("\n");
@@ -123,6 +127,66 @@ describe("codex-run", () => {
     expect(r.code).toBe(2);
     expect(r.receipt.outcome).toBe("refused");
     expect(r.receipt.why).toContain(why);
+    expect(existsSync(log)).toBe(false);
+  });
+
+  test("a host declaration runs codex unsandboxed, says so on stderr, and records why", () => {
+    const dir = scratch();
+    const { bin, log } = fakeCodex(dir);
+    const host = join(dir, "host.toml");
+    writeFileSync(host, 'schema = 1\nunsandboxed_reason = "Vast container: seccomp blocks user namespaces"\n');
+    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
+    expect(r.code).toBe(0);
+    const argv = readFileSync(log, "utf8").split("\n");
+    expect(argv).toContain("danger-full-access");
+    expect(argv).not.toContain("read-only");
+    expect(r.stderr).toContain("UNSANDBOXED: asked for read-only, running danger-full-access");
+    expect(r.stderr).toContain("seccomp blocks user namespaces");
+    const Sandbox = z.object({ sandbox: z.string(), sandbox_effective: z.string(), unsandboxed_reason: z.string() });
+    expect(decodedJson(Sandbox, r.stdout.trim())).toEqual({
+      sandbox: "read-only",
+      sandbox_effective: "danger-full-access",
+      unsandboxed_reason: "Vast container: seccomp blocks user namespaces",
+    });
+  });
+
+  test("CODEX_RUN_PROGRESS_FILE gets the final progress record (the statusline Run: row's source)", () => {
+    const dir = scratch();
+    const { bin } = fakeCodex(dir);
+    const file = join(dir, "run.progress.json");
+    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_PROGRESS_FILE: file });
+    expect(r.code).toBe(0);
+    const Progress = z.object({ schema: z.literal(1), last: z.string(), commands: z.number(), files: z.number() });
+    expect(decodedJson(Progress, readFileSync(file, "utf8"))).toEqual({
+      schema: 1,
+      last: "✎ kernel.ts",
+      commands: 1,
+      files: 1,
+    });
+    // usage is still summed from the same stream the progress was folded from
+    expect(r.receipt.usage?.input_tokens).toBe(110);
+  });
+
+  test("no host declaration: the asked sandbox, and the receipt says so", () => {
+    const { bin } = fakeCodex(scratch());
+    const r = run(FULL, { CODEX_RUN_BIN: bin });
+    const Sandbox = z.object({ sandbox_effective: z.string(), unsandboxed_reason: z.null() });
+    expect(decodedJson(Sandbox, r.stdout.trim())).toEqual({ sandbox_effective: "read-only", unsandboxed_reason: null });
+    expect(r.stderr).not.toContain("UNSANDBOXED");
+  });
+
+  test.each([
+    ["an empty reason", 'schema = 1\nunsandboxed_reason = "  "\n'],
+    ["an unknown key", 'schema = 1\nunsandboxed_reason = "x"\nnetwork = true\n'],
+    ["not TOML", "schema = = 1\n"],
+  ])("a malformed host declaration (%s) is refused before codex starts", (_name, text) => {
+    const dir = scratch();
+    const { bin, log } = fakeCodex(dir);
+    const host = join(dir, "host.toml");
+    writeFileSync(host, text);
+    const r = run(FULL, { CODEX_RUN_BIN: bin, CODEX_RUN_HOST_FILE: host });
+    expect(r.code).toBe(2);
+    expect(r.receipt.why).toContain("is not a valid host declaration");
     expect(existsSync(log)).toBe(false);
   });
 

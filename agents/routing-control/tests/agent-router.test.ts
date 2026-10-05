@@ -19,19 +19,38 @@ import { decodedJson } from "../../hooks/tests/decode.ts";
 
 const CLI = join(import.meta.dir, "..", "agent-router.ts");
 const scratch = mkdtempSync(join(tmpdir(), "agent-router-test-"));
+// Every request body the fake Jev received, in order (what left the machine).
+const bodies: string[] = [];
 const server = Bun.serve({
   port: 0,
   fetch: async (req) => {
     const body = await req.text();
+    bodies.push(body);
     const confidence = body.includes("LOWCONF") ? 0.2 : 0.9;
+    // A grade question is answered under "grade"; evidence saying GRADE=<g> picks that grade.
+    if (body.includes('"grade":{"type":"choice"')) {
+      const g = /GRADE=(\w+)/u.exec(body)?.[1] ?? "partial";
+      return Response.json({
+        answers: {
+          grade: {
+            type: "choice",
+            choice: g,
+            confidence,
+            probabilities: { [g]: confidence },
+          },
+        },
+      });
+    }
+    // A brief saying PICK=<id> makes the fake Jev choose that row (a disabled or Claude row too).
+    const choice = /PICK=([\w-]+)/u.exec(body)?.[1] ?? "luna-max";
     return Response.json({
       model: "fake-jev",
       answers: {
         worker: {
           type: "choice",
-          choice: "luna-max",
+          choice,
           confidence,
-          probabilities: { "luna-max": confidence },
+          probabilities: { [choice]: confidence },
         },
       },
       usage: { input_tokens: 10, output_tokens: 2 },
@@ -118,7 +137,7 @@ const Receipt = z.looseObject({
 describe("agent-router run", () => {
   const b = brief("task", "Fix the flaky test in scripts/tests.\n");
 
-  test("an explicit row runs codex-run with that row, logs, and leaves no running marker", async () => {
+  test("Jev's row runs codex-run with that row, logs, and leaves no running marker", async () => {
     const r = await router([
       "run",
       "--prompt-file",
@@ -127,15 +146,13 @@ describe("agent-router run", () => {
       scratch,
       "--sandbox",
       "read-only",
-      "--choice",
-      "luna-high",
     ]);
     expect(r.code).toBe(0);
     const receipt = decodedJson(Receipt, r.out.trim());
-    expect(receipt.pick.source).toBe("explicit");
+    expect(receipt.pick.source).toBe("jev");
     expect(receipt.worker.outcome).toBe("ok");
     expect(readFileSync(join(scratch, "argv.log"), "utf8")).toContain(
-      '"--choice","luna-high"',
+      '"--choice","luna-max"',
     );
     expect(
       readFileSync(join(scratch, "state", "runs.jsonl"), "utf8"),
@@ -145,17 +162,7 @@ describe("agent-router run", () => {
 
   test("the worker's exit code is agent-router's exit code", async () => {
     const r = await router(
-      [
-        "run",
-        "--prompt-file",
-        b,
-        "--cd",
-        scratch,
-        "--sandbox",
-        "read-only",
-        "--choice",
-        "luna-high",
-      ],
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
       { FAKE_EXIT: "1" },
     );
     expect(r.code).toBe(1);
@@ -220,25 +227,9 @@ describe("agent-router run", () => {
     expect(receipt.pick.reason).toContain("no_egress");
   });
 
-  test("a disabled row is refused before anything starts", async () => {
-    const r = await router([
-      "run",
-      "--prompt-file",
-      b,
-      "--cd",
-      scratch,
-      "--sandbox",
-      "read-only",
-      "--choice",
-      "sonnet-high",
-    ]);
-    expect(r.code).toBe(2);
-    expect(r.err).toContain("disabled in the roster");
-  });
-
-  test("an enabled Claude row is refused with the Agent call to make", async () => {
-    const r = await router(
-      [
+  test("--choice is refused before anything starts: Jev alone picks the row", async () => {
+    for (const id of ["luna-high", "luna-max"]) {
+      const r = await router([
         "run",
         "--prompt-file",
         b,
@@ -247,8 +238,34 @@ describe("agent-router run", () => {
         "--sandbox",
         "read-only",
         "--choice",
-        "sonnet-high",
-      ],
+        id,
+      ]);
+      expect([id, r.code]).toEqual([id, 2]);
+      expect(r.err).toContain("Jev alone picks the row");
+      expect(r.err).toContain("use_for");
+    }
+  });
+
+  test("Jev naming a disabled row falls back to the default and says why", async () => {
+    const pick = brief("pick-disabled", "PICK=sonnet-high do the thing\n");
+    const r = await router([
+      "run",
+      "--prompt-file",
+      pick,
+      "--cd",
+      scratch,
+      "--sandbox",
+      "read-only",
+    ]);
+    const receipt = decodedJson(Receipt, r.out.trim());
+    expect(receipt.pick.source).toBe("default");
+    expect(receipt.pick.reason).toContain("not an enabled row");
+  });
+
+  test("Jev naming an enabled Claude row is refused with the Agent call to make", async () => {
+    const pick = brief("pick-claude", "PICK=sonnet-high do the thing\n");
+    const r = await router(
+      ["run", "--prompt-file", pick, "--cd", scratch, "--sandbox", "read-only"],
       { DISPATCH_ROSTER_PATH: ALL_ON },
     );
     expect(r.code).toBe(2);
@@ -302,7 +319,8 @@ describe("agent-router ls and stats", () => {
       }),
       r.out.trim(),
     );
-    expect(report.by_source.explicit).toBeGreaterThan(0);
+    // No run is explicit any more (--choice is refused); old logs may still hold some.
+    expect(report.by_source.explicit).toBe(0);
     expect(report.by_source.jev).toBeGreaterThan(0);
     expect(report.by_source.default).toBeGreaterThan(0);
     expect(Object.keys(report.per_choice)).toContain("luna-max");
@@ -321,5 +339,125 @@ describe("agent-router ls and stats", () => {
         })
       ).code,
     ).toBe(0);
+  });
+});
+
+describe("agent-router grade", () => {
+  // Each test gets its own state dir and one real (fake-worker) run to grade.
+  async function oneRun(
+    name: string,
+  ): Promise<{ state: string; runId: string }> {
+    const state = join(scratch, `grade-${name}`);
+    const b = brief(`grade-${name}`, "Remove every throw from x.ts.\n");
+    const r = await router(
+      ["run", "--prompt-file", b, "--cd", scratch, "--sandbox", "read-only"],
+      { AGENT_ROUTER_STATE_DIR: state },
+    );
+    const runId = decodedJson(
+      z.looseObject({ run_id: z.string() }),
+      r.out.trim(),
+    ).run_id;
+    return { state, runId };
+  }
+  const evidenceFile = (name: string, text: string): string => {
+    const p = join(scratch, `evidence-${name}.txt`);
+    writeFileSync(p, text);
+    return p;
+  };
+
+  test("Jev's grade is appended beside the run, and stats counts it per row", async () => {
+    const { state, runId } = await oneRun("pass");
+    const ev = evidenceFile(
+      "pass",
+      "lint 0 errors; tsgo 0; bun test 24 pass 0 fail. GRADE=pass\n",
+    );
+    const g = await router(["grade", runId, "--evidence", ev], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(g.code).toBe(0);
+    expect(g.err).toContain(`${runId} graded pass`);
+    const Graded = z.looseObject({
+      kind: z.literal("grade"),
+      grade: z.string(),
+      needs_review: z.boolean(),
+    });
+    expect(decodedJson(Graded, g.out.trim())).toMatchObject({
+      grade: "pass",
+      needs_review: false,
+    });
+    // what Jev read: the evidence, the worker's report, the brief
+    const sent = bodies.at(-1) ?? "";
+    expect(sent).toContain("GRADE=pass");
+    expect(sent).toContain("Remove every throw");
+    const s = await router(["stats"], { AGENT_ROUTER_STATE_DIR: state });
+    const Report = z.looseObject({
+      per_choice: z.record(
+        z.string(),
+        z.looseObject({ graded: z.record(z.string(), z.number()) }),
+      ),
+    });
+    expect(
+      decodedJson(Report, s.out.trim()).per_choice["luna-max"]?.graded,
+    ).toEqual({ pass: 1, partial: 0, fail: 0 });
+  });
+
+  test("the grade history reaches Jev with each row when it next routes", async () => {
+    const { state, runId } = await oneRun("history");
+    await router(
+      ["grade", runId, "--evidence", evidenceFile("history", "GRADE=fail\n")],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    await router(["pick", "--prompt-file", brief("next", "next task\n")], {
+      AGENT_ROUTER_STATE_DIR: state,
+    });
+    expect(bodies.at(-1)).toContain(
+      "graded runs so far: 0 pass, 0 partial, 1 fail",
+    );
+  });
+
+  test("a low-confidence grade is kept but marked needs_review", async () => {
+    const { state, runId } = await oneRun("low");
+    const g = await router(
+      [
+        "grade",
+        runId,
+        "--evidence",
+        evidenceFile("low", "LOWCONF GRADE=pass\n"),
+      ],
+      {
+        AGENT_ROUTER_STATE_DIR: state,
+      },
+    );
+    expect(g.code).toBe(0);
+    expect(g.err).toContain("NEEDS REVIEW");
+  });
+
+  test("refused, nothing recorded: unknown run, missing evidence, Jev unavailable", async () => {
+    const { state, runId } = await oneRun("refused");
+    const ev = evidenceFile("refused", "GRADE=pass\n");
+    const cases: [string[], Record<string, string>, string][] = [
+      [["grade", "no-such-run", "--evidence", ev], {}, "no run no-such-run"],
+      [
+        ["grade", runId, "--evidence", join(scratch, "missing.txt")],
+        {},
+        "no such evidence file",
+      ],
+      [["grade", runId], {}, "grade needs --evidence"],
+      [
+        ["grade", runId, "--evidence", ev],
+        { TYPESAFE_API_KEY: "", PATH: "/usr/bin:/bin", HOME: scratch },
+        "not graded: jev unavailable",
+      ],
+    ];
+    for (const [args, env, why] of cases) {
+      const r = await router(args, { AGENT_ROUTER_STATE_DIR: state, ...env });
+      expect([why, r.code]).toEqual([why, 2]);
+      expect(r.err).toContain(why);
+    }
+    expect(readFileSync(join(state, "runs.jsonl"), "utf8")).not.toContain(
+      '"kind":"grade"',
+    );
   });
 });

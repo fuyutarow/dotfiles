@@ -60,7 +60,9 @@ Stable tokens even inside Japanese prose: **CATALOG-BY-PROBE**, **LEAST-PRIVILEG
 > probe is ASYMMETRIC: exit 0 proves available; a 400 refusal proves only that THAT STRING is
 > not served — see C1.
 > Sandboxing is **LEAST-PRIVILEGE**: probes and audits run `read-only`; only edit tasks get
-> `workspace-write`; `danger-full-access` never leaves an isolated runner. And availability is
+> `workspace-write`; `danger-full-access` never leaves an isolated runner — a box that IS one
+> (a rented container whose seccomp refuses codex's bwrap) says so in
+> `~/.config/codex-run/host.toml`, and codex-run reports every unsandboxed run. And availability is
 > not rank — **RANK-BY-MEASUREMENT**: promotion to a standing role takes a measured
 > head-to-head (C4), never name/version arithmetic — and the same goes for COST: "vendor X is
 > cheaper" is a hypothesis until both sides' ledgers are read (ccusage), never a premise.

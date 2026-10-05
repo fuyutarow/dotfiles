@@ -19,6 +19,7 @@
 //   ~/.local/bin/mise x bun@1.4 -- bun ~/dotfiles/scripts/linux-init.ts
 // Exit: 0 done · 1 a step failed (its output says which).
 import {
+  existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
@@ -99,10 +100,12 @@ for (const [i, id] of ids.entries()) {
     .split("\n")
     .filter((l) => l !== "");
   const exes = dirs.flatMap((d) => executables(d));
-  if (exes.length === 0)
-    throw new Error(
-      `${id}: mise bin-paths named no executable (${dirs.join(", ")})`,
+  if (exes.length === 0) {
+    process.stderr.write(
+      `${id}: mise bin-paths named no executable (${dirs.join(", ")})\n`,
     );
+    process.exit(1);
+  }
   for (const exe of exes) relink(join(dest, exe.split("/").pop() ?? ""), exe);
 }
 
@@ -115,6 +118,16 @@ say("linking dotfiles");
 await $`${MISE} run link:dots`.cwd(DOTFILES);
 // The post-merge hook relinks on every pull; without this a pull leaves new links unmade.
 await $`git -C ${DOTFILES} config core.hooksPath .githooks`;
+// Agents record and sync this repo through jj (`mise run commit` / `mise run pull`), but the
+// bootstrap clones with git: sol's checkout had no .jj and `mise run pull` failed with "There is no
+// jj repo" (2026-10-06). Colocate once; jj is a Brewfile.core tool, linked above.
+if (!existsSync(join(DOTFILES, ".jj"))) {
+  say("jj: colocating the dotfiles checkout");
+  await $`${join(BIN, "jj")} git init --colocate`.cwd(DOTFILES);
+  await $`${join(BIN, "jj")} bookmark track alpha --remote=origin`.cwd(
+    DOTFILES,
+  );
+}
 
 // The agent CLIs are core too, but not Brewfile entries: each comes from its vendor's self-updating
 // installer into ~/.local/bin (mise.toml install:ai-clis says why not brew/npm).

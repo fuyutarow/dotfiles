@@ -44,6 +44,15 @@ function marker(
   );
 }
 
+const progress = (last: string, ageS: number): string =>
+  JSON.stringify({
+    schema: 1,
+    at: Temporal.Now.instant().subtract({ seconds: ageS }).toString(),
+    last,
+    commands: 12,
+    files: 3,
+  });
+
 async function render(stateDir: string): Promise<string> {
   const p = Bun.spawn([process.execPath, STATUSLINE], {
     stdin: new Blob([PAYLOAD]),
@@ -62,7 +71,9 @@ describe("statusline Run row", () => {
     const dir = join(scratch, "live");
     marker(dir, "a", process.pid, "lint batch 7");
     const out = await render(dir);
-    expect(out).toMatch(/^Run: luna-high 1m3\d+s lint batch 7$/mu);
+    expect(out).toMatch(
+      /^Run: luna-high 1m3\d+s lint batch 7 │ no event yet$/mu,
+    );
   });
 
   test("several workers: one line each, longest-running first, aligned under Run:", async () => {
@@ -71,8 +82,37 @@ describe("statusline Run row", () => {
     marker(dir, "long", process.pid, "long one", 600);
     const lines = (await render(dir)).split("\n");
     const at = lines.findIndex((l) => l.startsWith("Run: "));
-    expect(lines[at]).toMatch(/^Run: luna-high 10m0\ds long one$/u);
-    expect(lines[at + 1]).toMatch(/^ {5}luna-high 0m3\ds short one$/u);
+    expect(lines[at]).toMatch(
+      /^Run: luna-high 10m0\ds long one │ no event yet$/u,
+    );
+    expect(lines[at + 1]).toMatch(
+      /^ {5}luna-high 0m3\ds short one │ no event yet$/u,
+    );
+  });
+
+  test("a worker with a progress file shows its latest event and its counts", async () => {
+    const dir = join(scratch, "progress");
+    marker(dir, "p", process.pid, "nothrow-0");
+    writeFileSync(
+      join(dir, "active", "p.progress.json"),
+      progress("$ bun test kernel.test.ts", 2),
+    );
+    expect(await render(dir)).toMatch(
+      /^Run: luna-high 1m3\d+s nothrow-0 │ \$ bun test kernel\.test\.ts · 12 cmd · 3 files$/mu,
+    );
+    // a quiet worker (reasoning) is shown with the age of its last event, not as if it were live
+    writeFileSync(
+      join(dir, "active", "p.progress.json"),
+      progress("✎ kernel.ts", 125),
+    );
+    expect(await render(dir)).toMatch(
+      /│ ✎ kernel\.ts \(2m0\ds ago\) · 12 cmd · 3 files$/mu,
+    );
+    // the progress file is never mistaken for a second worker
+    expect(
+      (await render(dir)).split("\n").filter((l) => l.includes("luna-high"))
+        .length,
+    ).toBe(1);
   });
 
   test("more workers than the cap: the rest are counted, not dropped silently", async () => {

@@ -7,6 +7,9 @@
 // drifts: edit the TOML, never the JSON.
 //
 // Modes: --write rewrites .oxlintrc.json · --check exits 1 on drift · neither prints the JSON.
+// --repo DIR renders ANOTHER repo's .oxlintrc.json from this same policy plus that repo's own
+// oxlint-policy.local.toml, which may only ADD ignores (each with its reason): one policy for every
+// repo of the owner (firedancer, 2026-10-06), and a consumer cannot quietly weaken a rule.
 // Exit: 0 ok / up to date · 1 drift (--check) · 2 FATAL (usage, unreadable or invalid policy).
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -71,6 +74,35 @@ const PolicySchema = z
     message: "custom ids must be unique",
   });
 export type Policy = z.output<typeof PolicySchema>;
+
+const LocalSchema = z.strictObject({
+  schema: z.literal(1),
+  ignore: z.array(
+    z.strictObject({ pattern: z.string().min(1), reason: z.string().min(1) }),
+  ),
+});
+export const LOCAL_POLICY = "oxlint-policy.local.toml";
+
+/** The policy for a consumer repo: this policy with the repo's own ignores appended. */
+export async function loadRepoPolicy(
+  repo: string,
+  base: Policy,
+): Promise<PolicyLoad> {
+  const path = join(repo, LOCAL_POLICY);
+  const raw = await attempt(() => Bun.TOML.parse(readFileSync(path, "utf8")));
+  if (!raw.ok)
+    return {
+      ok: false,
+      error: `${path}: ${errorMessage(raw.error)} (create it: schema = 1 and [[ignore]] pattern/reason entries, possibly none)`,
+    };
+  const local = LocalSchema.safeParse(raw.value);
+  if (!local.success)
+    return { ok: false, error: `${path}: ${local.error.message}` };
+  return {
+    ok: true,
+    value: { ...base, ignore: [...base.ignore, ...local.data.ignore] },
+  };
+}
 export type CustomRule = z.output<typeof Custom>;
 
 export type PolicyLoad =
@@ -162,6 +194,10 @@ if (import.meta.main) {
           default: false,
           description: "exit 1 when .oxlintrc.json is stale",
         },
+        repo: {
+          type: String,
+          description: `render DIR/.oxlintrc.json instead: this policy + DIR/${LOCAL_POLICY}`,
+        },
       },
     },
     undefined,
@@ -173,13 +209,20 @@ if (import.meta.main) {
 
   const loaded = await loadPolicy();
   if (!loaded.ok) fatal(`cannot read oxlint-policy.toml: ${loaded.error}`);
-  const next = renderOxlintrc(loaded.value);
+  const repo = argv.flags.repo;
+  if (repo === "") fatal("--repo needs a directory");
+  const policy =
+    repo === undefined ? loaded : await loadRepoPolicy(repo, loaded.value);
+  if (!policy.ok) fatal(policy.error);
+  const target =
+    repo === undefined ? OXLINTRC_PATH : join(repo, ".oxlintrc.json");
+  const next = renderOxlintrc(policy.value);
 
   if (!argv.flags.write && !argv.flags.check) {
     process.stdout.write(next);
     process.exit(0);
   }
-  const current = await attempt(() => readFileSync(OXLINTRC_PATH, "utf8"));
+  const current = await attempt(() => readFileSync(target, "utf8"));
   const same = current.ok && current.value === next;
   if (argv.flags.check && same) {
     console.log("render-oxlintrc: up to date");
@@ -187,14 +230,12 @@ if (import.meta.main) {
   }
   if (argv.flags.check) {
     console.log(
-      "render-oxlintrc: DRIFT — .oxlintrc.json is not a fresh render of oxlint-policy.toml; edit the TOML, then run `mise run oxlint:render`",
+      `render-oxlintrc: DRIFT — ${target} is not a fresh render of the policy; edit the TOML, then rerun with --write${repo === undefined ? " (mise run oxlint:render)" : ` --repo ${repo}`}`,
     );
     process.exit(1);
   }
-  if (!same) writeFileSync(OXLINTRC_PATH, next);
+  if (!same) writeFileSync(target, next);
   console.log(
-    same
-      ? "render-oxlintrc: up to date"
-      : "render-oxlintrc: wrote .oxlintrc.json",
+    same ? "render-oxlintrc: up to date" : `render-oxlintrc: wrote ${target}`,
   );
 }

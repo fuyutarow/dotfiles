@@ -16,7 +16,9 @@
 //                   --choice names a luna row of agents/models/dispatch-roster.toml (the radio
 //                   choice a coordinator makes) and supplies its model and effort.
 //   C2  effects     one codex subprocess, sandboxed as asked. read-only | workspace-write only;
-//                   danger-full-access belongs in an isolated runner, so it is refused here.
+//                   danger-full-access is never asked for here (refused); the one way codex runs
+//                   unsandboxed is a box's own host declaration (HOST DECLARATION below), stated
+//                   on stderr and in the receipt (sandbox_effective, unsandboxed_reason).
 //                   effort ultra (codex's own unbounded fan-out) is refused: P7 cannot admit it.
 //   C3  channels    stdout: exactly one JSON receipt line (schema 1, additive-only).
 //                   stderr: liveness — a start line, a line every HEARTBEAT_S while waiting, an end
@@ -35,7 +37,7 @@
 // The receipt is also written to --receipt-dir (default $TMPDIR/codex-run) so the main loop can
 // re-read it after the call: a summary can paraphrase stdout, not the file.
 import { mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { cli } from "cleye";
 import { fromThrowable } from "neverthrow";
@@ -43,6 +45,7 @@ import { jsonText, z } from "../../../hooks/zod.ts";
 import { attempt, errorMessage } from "../../../hooks/attempt.ts";
 import { loadRoster } from "../../../models/roster.ts";
 import { judge, ordersIn, parseFloorConfig } from "../../../hooks/model-orders.ts";
+import { progressWriter } from "./codex-progress.ts";
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 const SANDBOXES = ["read-only", "workspace-write"];
@@ -131,6 +134,9 @@ const argv = cli(
 // Declared before emit() so every receipt, refusals included, shows what was actually ordered.
 let model = argv.flags.model;
 let effort = argv.flags.effort;
+// Set once the host declaration is read (below); null in a receipt emitted before that.
+let codexSandbox: string | undefined;
+let unsandboxedReason: string | undefined;
 const t0 = performance.now();
 const elapsed = (): number => Math.round((performance.now() - t0) / 100) / 10;
 const startedAt = Temporal.Now.instant().toString();
@@ -146,6 +152,9 @@ function emit(outcome: Outcome, fields: Record<string, unknown>): never {
     model: model ?? null,
     effort: effort ?? null,
     sandbox: argv.flags.sandbox ?? null,
+    // additive (C5): what codex actually ran with, and why it differs from `sandbox`
+    sandbox_effective: codexSandbox ?? null,
+    unsandboxed_reason: unsandboxedReason ?? null,
     cwd: argv.flags.cd === undefined ? null : resolve(argv.flags.cd),
     started_at: startedAt,
     elapsed_s: elapsed(),
@@ -228,6 +237,31 @@ const floorProblem = await attempt(() => {
 if (!floorProblem.ok) refuse(`cannot read the model floor ${FLOOR_CONFIG}: ${errorMessage(floorProblem.error)}`);
 if (floorProblem.value !== undefined) refuse(floorProblem.value);
 
+// HOST DECLARATION: a box where codex's own sandbox cannot exist. codex sandboxes with bwrap on
+// Linux, which needs an unprivileged user namespace; a Docker-default container (seccomp filter, no
+// CAP_SYS_ADMIN — Vast.ai, measured 2026-10-06: `unshare -U` = EPERM) refuses that to every process,
+// so every run there died before its first command. Such a box opts in, per box, with
+// ~/.config/codex-run/host.toml (`schema = 1`, `unsandboxed_reason = "<why this box is itself the
+// isolation>"`): the run then uses danger-full-access, says so on stderr every time, and records the
+// reason in the receipt. No file = the sandbox asked for; a malformed file = refused, never guessed.
+const HOST_FILE =
+  process.env.CODEX_RUN_HOST_FILE ??
+  join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "codex-run", "host.toml");
+const HostDeclaration = z
+  .object({ schema: z.literal(1), unsandboxed_reason: z.string().trim().min(1) })
+  .strict();
+const hostText = await attempt(() => readFileSync(HOST_FILE, "utf8"));
+if (hostText.ok) {
+  const toml = await attempt(() => Bun.TOML.parse(hostText.value));
+  const parsed = toml.ok ? HostDeclaration.safeParse(toml.value) : undefined;
+  if (parsed?.success !== true)
+    refuse(
+      `${HOST_FILE} is not a valid host declaration (want exactly: schema = 1, unsandboxed_reason = "<why this box is itself the isolation>"): ${toml.ok ? (parsed?.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") ?? "") : errorMessage(toml.error)}`,
+    );
+  unsandboxedReason = parsed.data.unsandboxed_reason;
+}
+codexSandbox = unsandboxedReason === undefined ? String(sandbox) : "danger-full-access";
+
 // Measured 2026-10-05 on macOS: codex-run + codex (gpt-6-luna, effort low, read-only) peaked at
 // 191 MB RSS (`/usr/bin/time -l`) and used 1.7 s CPU in a 5.6 s run — a network-bound client.
 const MEASURED_PEAK_BYTES = 191_217_664;
@@ -280,7 +314,7 @@ const cmd = [
   "--json",
   "--skip-git-repo-check",
   "--sandbox",
-  String(sandbox),
+  codexSandbox,
   "-C",
   resolve(String(cd)),
   "-m",
@@ -291,7 +325,11 @@ const cmd = [
   lastFile,
   prompt,
 ];
-say(`started ${model} effort=${effort} sandbox=${sandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`);
+if (unsandboxedReason !== undefined)
+  say(
+    `UNSANDBOXED: asked for ${sandbox}, running danger-full-access — ${HOST_FILE} declares this box the isolation: ${unsandboxedReason}`,
+  );
+say(`started ${model} effort=${effort} sandbox=${codexSandbox} in ${resolve(String(cd))}, bound ${timeoutS} s`);
 const deadline = AbortSignal.timeout(timeoutS * 1000);
 const spawned = await attempt(() =>
   // stdin "ignore" is the `</dev/null` of the recipe: codex exec reads stdin and would hang on an
@@ -309,12 +347,38 @@ const heartbeat = setInterval(
 // the pipe open, and the bound must hold even then.
 const PIPE_GRACE_MS = 1_000;
 const graced = (r: Promise<string>): Promise<string> =>
-  Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]);
-const outText = new Response(proc.stdout).text();
-const errRead = new Response(proc.stderr).text();
-const code = await proc.exited;
-const [events, errText] = await Promise.all([graced(outText), graced(errRead)]);
+  proc.exited.then(() => Promise.race([r, Bun.sleep(PIPE_GRACE_MS).then(() => "")]));
+// stdout is read as it arrives: every JSONL line also feeds the statusline's progress file when
+// agent-router asked for one (CODEX_RUN_PROGRESS_FILE; codex-progress.ts). What was read before a
+// grace cut-off is kept, not dropped.
+const progress =
+  process.env.CODEX_RUN_PROGRESS_FILE === undefined ? undefined : progressWriter(process.env.CODEX_RUN_PROGRESS_FILE);
+let streamed = "";
+function readEvents(): Promise<string> {
+  const decoder = new TextDecoder();
+  let pending = "";
+  const sink = new WritableStream<Uint8Array>({
+    write(chunk) {
+      const text = decoder.decode(chunk, { stream: true });
+      streamed += text;
+      const lines = `${pending}${text}`.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) progress?.feed(line);
+    },
+  });
+  return proc.stdout.pipeTo(sink).then(() => streamed);
+}
+// Both readers start now; each is cut PIPE_GRACE_MS after the child exits (graced waits for that).
+const [code, eventsRead, errText] = await Promise.all([
+  proc.exited,
+  graced(readEvents()),
+  graced(new Response(proc.stderr).text()),
+]);
+const events = eventsRead === "" ? streamed : eventsRead;
 clearInterval(heartbeat);
+progress?.flush();
+if (progress !== undefined && progress.failedWrites() > 0)
+  say(`progress file ${process.env.CODEX_RUN_PROGRESS_FILE}: ${progress.failedWrites()} write(s) failed — the Run: row was not live for them`);
 
 // Usage is the sum over every turn.completed event (`--json` JSONL); a line that is not JSON, or
 // an event of another shape, carries no usage and is skipped.

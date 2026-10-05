@@ -97,7 +97,7 @@ tb4 = 8.1
 scicode = 51.7
 price_in = 0.10
 price_out = 0.50
-use_for = "harder single-file reasoning; still weak at long terminal sessions"
+use_for = "wide or risky refactors across many files (measured 2026-10-06: 3/3 complete, 0 regressions where luna-high was 6/7 with 2), and harder reasoning; still weak at long terminal sessions"
 
 [[choice]]
 id = "luna-max"

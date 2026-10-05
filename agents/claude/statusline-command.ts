@@ -83,7 +83,12 @@ import { join } from "node:path";
 import { createConnection } from "node:net";
 import { err, fromThrowable, ok, type Result } from "neverthrow";
 import { jsonOf, jsonText, z } from "../hooks/zod.ts";
-import { activeDir, ActiveSchema } from "../routing-control/state.ts";
+import {
+  activeDir,
+  ActiveSchema,
+  progressFile,
+  ProgressSchema,
+} from "../routing-control/state.ts";
 import { DIM, ESC, MID, NA_COLOR, RST, naSegment, pctFmt } from "./ansi.ts";
 import {
   ENRICHMENT_TIMEOUT_MS,
@@ -1084,6 +1089,24 @@ interface RouteRun {
   label: string;
   secs: number;
   alive: boolean;
+  // what the worker is doing (codex-run progress file); undefined until its first event lands
+  doing:
+    | { last: string; commands: number; files: number; ageSecs: number }
+    | undefined;
+}
+const readText = fromThrowable((path: string) => readFileSync(path, "utf8"));
+function doingOf(runId: string): RouteRun["doing"] {
+  const text = readText(progressFile(runId));
+  if (text.isErr()) return undefined;
+  const parsed = jsonOf(ProgressSchema).safeParse(text.value);
+  if (!parsed.success) return undefined;
+  const p = parsed.data;
+  return {
+    last: p.last,
+    commands: p.commands,
+    files: p.files,
+    ageSecs: sinceSecs(p.at).unwrapOr(0),
+  };
 }
 const pidAlive = fromThrowable((pid: number) => process.kill(pid, 0));
 const sinceSecs = fromThrowable((iso: string) =>
@@ -1102,7 +1125,7 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
   if (names.isErr()) return err(`cannot list ${dir}`);
   return ok(
     names.value
-      .filter((n) => n.endsWith(".json"))
+      .filter((n) => n.endsWith(".json") && !n.endsWith(".progress.json"))
       .flatMap((n) => {
         const parsed = jsonOf(ActiveSchema).safeParse(
           readFileSync(join(dir, n), "utf8"),
@@ -1115,6 +1138,7 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
             label: a.label,
             secs: sinceSecs(a.started_at).unwrapOr(0),
             alive: pidAlive(a.pid).isOk(),
+            doing: doingOf(a.run_id),
           },
         ];
       }),
@@ -1127,13 +1151,22 @@ function routeRuns(): Result<RouteRun[], string> | undefined {
 const RUN_LINES = 6;
 const RUN_LABEL = `${ESC}[38;5;109mRun:${RST}`;
 const RUN_INDENT = "     ";
+// "│ $ bun test x.ts · 12 cmd · 3 files": the worker's latest event, then what it has done so far.
+// Older than a minute it says how old (a worker deep in reasoning prints nothing for a while — that
+// is shown as age, not hidden). No progress file yet = no event yet, said as such.
+function doingText(d: RouteRun["doing"]): string {
+  if (d === undefined) return `${DIM}│ no event yet${RST}`;
+  const age = d.ageSecs >= 60 ? ` ${DIM}(${dur(d.ageSecs)} ago)${RST}` : "";
+  return `${DIM}│${RST} ${d.last}${age} ${DIM}· ${d.commands} cmd · ${d.files} files${RST}`;
+}
 function routeLines(runs: RouteRun[]): string[] {
   const live = runs.filter((r) => r.alive).toSorted((a, b) => b.secs - a.secs);
   const stale = runs.length - live.length;
   const lines = live
     .slice(0, RUN_LINES)
     .map(
-      (r) => `${r.choice} ${dur(r.secs)} ${DIM}${r.label.slice(0, 48)}${RST}`,
+      (r) =>
+        `${r.choice} ${dur(r.secs)} ${DIM}${r.label.slice(0, 32)}${RST} ${doingText(r.doing)}`,
     );
   if (live.length > RUN_LINES)
     lines.push(`${DIM}+${live.length - RUN_LINES} more${RST}`);

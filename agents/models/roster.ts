@@ -118,7 +118,7 @@ export function rosterTable(r: Roster): string {
 export function rosterPolicy(r: Roster): string {
   const claudeOn = enabledChoices(r).some((c) => c.route === "claude");
   return [
-    `- **Every dispatch goes through \`agent-router run\`: Jev picks one row of this roster from the brief (zero-shot, logged with its probabilities), or you name one with \`--choice\` — no justification line. Luna first: when Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
+    `- **Every dispatch goes through \`agent-router run\`: Jev alone picks one row of this roster from the brief (zero-shot, logged with its probabilities); \`--choice\` is refused — a wrong pick is fixed in the brief or the row's use_for, never by overriding Jev. Luna first: when Jev is unsure or unavailable the default \`${r.default}\` runs, and the receipt says why.**`,
     `  AA = Artificial Analysis Intelligence Index; TB4 = Terminal-Bench 4.0 and SciCode, AA's own runs (percent); list price USD per 1M tokens; as of ${r.as_of}.`,
     "",
     ...rosterTable(r)
@@ -127,12 +127,12 @@ export function rosterPolicy(r: Roster): string {
     "",
     ...(claudeOn
       ? [
-          `  How to choose: leave luna rows to Jev; raise the luna effort before leaving luna; take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
-          "  How to run: a luna row is `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: without --choice Jev picks the row from the brief (falls back to the default, with the reason, when unsure), with `--choice <id>` it takes yours; it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
+          `  How to choose: Jev picks luna rows (no --choice); take a Claude row for long terminal or agentic loops (the TB4 gap) or judgment.`,
+          "  How to run: a luna row is `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: Jev picks the row from the brief (falls back to the default, with the reason, when unsure); it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. A Claude row is the Agent tool with `subagent_type` set to the id. The Workflow tool is not used; the dispatch hook denies it, and any off-roster, disabled or luna `subagent_type`, and prints this table.",
         ]
       : [
-          `  How to choose: leave it to Jev; name a row only when you know better (e.g. one effort higher after a failed run; \`luna-max\` is the ceiling in this config).`,
-          "  How to run: `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: without --choice Jev picks the row from the brief (falls back to the default, with the reason, when unsure), with `--choice <id>` it takes yours; it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
+          `  How to choose: you do not — Jev does (\`--choice\` is refused). Give it what it needs in the brief: scope (files, size), what is at risk (live hooks, harness), expected difficulty.`,
+          "  How to run: `agent-router run --prompt-file <brief> --cd <dir> --sandbox read-only|workspace-write` from Bash — the one entry point: Jev picks the row from the brief (falls back to the default, with the reason, when unsure); it logs the pick, shows the run in the statusline, and prints a JSON receipt. Several in the background for parallel work; `agent-router ls` / `agent-router stats`. This config enables no Claude row, so the Agent tool and the Workflow tool dispatch nothing; the dispatch hook denies both and prints this table.",
         ]),
   ].join("\n");
 }

@@ -6,10 +6,11 @@
 //
 // CLI CONTRACT (designing-command-line-interfaces C0–C5)
 //   C1  agent-router run  --prompt-file F --cd DIR --sandbox read-only|workspace-write
-//                     [--choice ID|auto] [--label TEXT] [--timeout-s N]
+//                     [--label TEXT]   (--choice is refused: Jev alone picks) [--timeout-s N]
 //       agent-router pick --prompt-file F [--cd DIR]     the auto pick only; starts nothing
 //       agent-router ls                                  running workers (stale ones flagged)
 //       agent-router stats                               picks, confidence, fallbacks, cost, outcomes
+//       agent-router grade RUN_ID --evidence F           Jev grades a finished run pass|partial|fail
 //   C2  effects  run starts `codex-run --choice <row>` (agents/skills/driving-codex) as a child; a
 //                Claude row is refused with the Agent call to make instead (the CLI cannot start a
 //                Claude subagent). State lives outside the repo: $XDG_STATE_HOME/agent-router
@@ -48,6 +49,7 @@ import {
 import {
   activeDir,
   ActiveSchema,
+  progressFile,
   stateDir,
   STATE_SCHEMA,
   type Active,
@@ -81,15 +83,14 @@ async function loadRosterOrDie(): Promise<Roster> {
 
 // --- the pick --------------------------------------------------------------------------------------
 
+const JevChoice = z.looseObject({
+  choice: z.string(),
+  probabilities: z.record(z.string(), z.number()).optional(),
+  confidence: z.number().optional(),
+});
 const JevAnswer = z.looseObject({
   model: z.string().optional(),
-  answers: z.looseObject({
-    worker: z.looseObject({
-      choice: z.string(),
-      probabilities: z.record(z.string(), z.number()).optional(),
-      confidence: z.number().optional(),
-    }),
-  }),
+  answers: z.record(z.string(), JevChoice),
   usage: z.looseObject({}).optional(),
 });
 
@@ -127,8 +128,17 @@ function underNoEgress(cwd: string, paths: string[]): string | undefined {
 }
 
 function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
+  const tally = gradeTally();
   const criteria = Object.fromEntries(
-    enabledChoices(roster).map((c) => [c.id, c.use_for]),
+    enabledChoices(roster).map((c) => {
+      const t = tally.get(c.id);
+      return [
+        c.id,
+        t === undefined
+          ? c.use_for
+          : `${c.use_for} (graded runs so far: ${t.pass} pass, ${t.partial} partial, ${t.fail} fail)`,
+      ];
+    }),
   );
   const body: Record<string, unknown> = {
     state: { task: brief.slice(0, roster.auto.max_task_chars) },
@@ -145,21 +155,24 @@ function jevRequest(roster: Roster, brief: string): Record<string, unknown> {
   return body;
 }
 
-async function askJev(roster: Roster, brief: string): Promise<Pick> {
-  const fallback = (reason: string, jev?: JevTrace): Pick => ({
-    source: "default",
-    choice: roster.default,
-    reason,
-    ...(jev === undefined ? {} : { jev }),
-  });
-  const request = jevRequest(roster, brief);
+type JevReply =
+  | { ok: true; answer: z.output<typeof JevChoice>; trace: JevTrace }
+  | { ok: false; reason: string; trace: JevTrace };
+
+/** One Choice question to Jev — the routing pick and the grade both go through here. */
+async function askJevChoice(
+  roster: Roster,
+  request: Record<string, unknown>,
+  question: string,
+): Promise<JevReply> {
   const trace: JevTrace = {
     endpoint: roster.auto.jev.url,
     request,
     latency_ms: 0,
   };
   const key = typesafeKey();
-  if (!key.ok) return fallback(`jev unavailable: ${key.reason}`, trace);
+  if (!key.ok)
+    return { ok: false, reason: `jev unavailable: ${key.reason}`, trace };
   trace.key_source = key.source;
   const started = performance.now();
   const res = await attempt(() =>
@@ -176,7 +189,7 @@ async function askJev(roster: Roster, brief: string): Promise<Pick> {
   if (!res.ok) {
     trace.latency_ms = Math.round(performance.now() - started);
     trace.error = errorMessage(res.error);
-    return fallback(`jev request failed: ${trace.error}`, trace);
+    return { ok: false, reason: `jev request failed: ${trace.error}`, trace };
   }
   const text = await res.value.text();
   trace.latency_ms = Math.round(performance.now() - started);
@@ -184,9 +197,23 @@ async function askJev(roster: Roster, brief: string): Promise<Pick> {
   const parsed = jsonOf(JevAnswer).safeParse(text);
   trace.response = parsed.success ? parsed.data : text.slice(0, 2000);
   if (res.value.status !== 200)
-    return fallback(`jev HTTP ${res.value.status}`, trace);
-  if (!parsed.success) return fallback("jev answer did not parse", trace);
-  return judge(roster, parsed.data.answers.worker, trace, fallback);
+    return { ok: false, reason: `jev HTTP ${res.value.status}`, trace };
+  const answer = parsed.success ? parsed.data.answers[question] : undefined;
+  if (answer === undefined)
+    return { ok: false, reason: "jev answer did not parse", trace };
+  return { ok: true, answer, trace };
+}
+
+async function askJev(roster: Roster, brief: string): Promise<Pick> {
+  const fallback = (reason: string, jev?: JevTrace): Pick => ({
+    source: "default",
+    choice: roster.default,
+    reason,
+    ...(jev === undefined ? {} : { jev }),
+  });
+  const reply = await askJevChoice(roster, jevRequest(roster, brief), "worker");
+  if (!reply.ok) return fallback(reply.reason, reply.trace);
+  return judge(roster, reply.answer, reply.trace, fallback);
 }
 
 function judge(
@@ -229,12 +256,9 @@ function judge(
 
 async function pickFor(
   roster: Roster,
-  choice: string,
   brief: string,
   cwd: string,
 ): Promise<Pick> {
-  if (choice !== "auto")
-    return { source: "explicit", choice, reason: "--choice given" };
   const blocked = underNoEgress(cwd, roster.auto.no_egress);
   if (blocked !== undefined)
     return {
@@ -331,9 +355,14 @@ async function run(flags: RunFlags): Promise<number> {
   if (!existsSync(flags.promptFile))
     fatal(`no such brief: ${flags.promptFile}`);
   if (!existsSync(flags.cd)) fatal(`no such --cd directory: ${flags.cd}`);
-  if (flags.choice !== "auto") refuseUnrunnable(roster, flags.choice);
+  // Owner 2026-10-06 「jev routingに一元化しろ、何度目だ」: the coordinator kept naming rows itself.
+  // A wrong pick is fixed where Jev reads, the brief or the row use_for, never by overriding Jev.
+  if (flags.choice !== "auto")
+    fatal(
+      `--choice ${flags.choice} refused: Jev alone picks the row. If Jev picks wrong, say more in the brief (scope, files, risk) or fix that row use_for in agents/models/dispatch-roster.toml`,
+    );
   const brief = readFileSync(flags.promptFile, "utf8");
-  const pick = await pickFor(roster, flags.choice, brief, flags.cd);
+  const pick = await pickFor(roster, brief, flags.cd);
   const row = refuseUnrunnable(roster, pick.choice);
   refuseUnauthenticatedCodex();
   const runId = `${now().replaceAll(":", "-")}-${process.pid}`;
@@ -362,6 +391,8 @@ async function run(flags: RunFlags): Promise<number> {
   mkdirSync(ACTIVE_DIR, { recursive: true });
   const marker = join(ACTIVE_DIR, `${runId}.json`);
   writeFileSync(marker, JSON.stringify(active));
+  // codex-run folds its own --json events into this file; the statusline Run: row reads it.
+  const progress = progressFile(runId);
 
   const args = [
     CODEX_RUN,
@@ -381,10 +412,12 @@ async function run(flags: RunFlags): Promise<number> {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "inherit",
+    env: { ...process.env, CODEX_RUN_PROGRESS_FILE: progress },
   });
   const stop = (signal: NodeJS.Signals, code: number): void => {
     child.kill(signal);
     rmSync(marker, { force: true });
+    rmSync(progress, { force: true });
     process.exit(code);
   };
   process.on("SIGINT", () => {
@@ -397,6 +430,7 @@ async function run(flags: RunFlags): Promise<number> {
   const out = await new Response(child.stdout).text();
   const exit = await child.exited;
   rmSync(marker, { force: true });
+  rmSync(progress, { force: true });
   const worker = jsonOf(WorkerReceipt).safeParse(out.trim());
   const receipt = {
     schema: SCHEMA,
@@ -427,7 +461,7 @@ async function pickOnly(promptFile: string, cd: string): Promise<number> {
   const roster = await loadRosterOrDie();
   if (!existsSync(promptFile)) fatal(`no such brief: ${promptFile}`);
   const brief = readFileSync(promptFile, "utf8");
-  const pick = await pickFor(roster, "auto", brief, cd);
+  const pick = await pickFor(roster, brief, cd);
   appendLog({
     kind: "pick",
     at: now(),
@@ -461,6 +495,8 @@ function ls(): number {
 
 const LogLine = z.looseObject({
   kind: z.string(),
+  run_id: z.string().optional(),
+  brief: z.looseObject({ path: z.string() }).optional(),
   pick: z.looseObject({
     source: z.string(),
     choice: z.string(),
@@ -474,6 +510,7 @@ const LogLine = z.looseObject({
     .looseObject({
       outcome: z.string().optional(),
       elapsed_s: z.number().optional(),
+      last_message: z.string().optional(),
       usage: z
         .looseObject({
           input_tokens: z.number().optional(),
@@ -494,6 +531,7 @@ const quantile = (xs: number[], q: number): number | undefined => {
 
 function perChoice(lines: Logged[]): Record<string, unknown> {
   const runs = lines.filter((l) => l.kind === "run");
+  const tally = gradeTally();
   const ids = [...new Set(runs.map((l) => l.pick.choice))];
   return Object.fromEntries(
     ids.map((id) => {
@@ -515,6 +553,7 @@ function perChoice(lines: Logged[]): Record<string, unknown> {
             (s, l) => s + (l.worker?.usage?.output_tokens ?? 0),
             0,
           ),
+          graded: tally.get(id) ?? { pass: 0, partial: 0, fail: 0 },
         },
       ];
     }),
@@ -530,6 +569,121 @@ function readLog(): Logged[] {
       const p = jsonOf(LogLine).safeParse(l);
       return p.success ? [p.data] : [];
     });
+}
+
+// --- grade: Jev judges a finished run from evidence the coordinator collected ----------------------
+//
+// Owner 2026-10-06: 「その様な業務こそ jevにやらせましょう」. A run's `exit` says only that the worker
+// stopped; whether its work was right is a separate fact. The coordinator runs the external checks
+// (lint, typecheck, tests against a baseline) and passes their output as --evidence; Jev reads that,
+// the worker's own report and the brief, and answers pass | partial | fail. The grade is appended to
+// runs.jsonl beside the run, with Jev's probabilities; below min_confidence it is marked
+// needs_review. No Jev answer = no grade (refused, exit 2), never a default.
+
+const GRADES = {
+  pass: "Every check in `evidence` passed and the worker finished its whole assigned scope: no new failures against the baseline, nothing left undone, no test weakened or deleted.",
+  partial:
+    "The work is usable but not complete: part of the scope was left, a fix was owed elsewhere (another file, another worker), or the coordinator had to repair a regression it introduced.",
+  fail: "The work is not usable: checks fail, most of the scope is undone, or it broke something that had to be reverted.",
+} as const;
+const GradeEnum = z.enum(["pass", "partial", "fail"]);
+type Grade = z.output<typeof GradeEnum>;
+
+const GradeLine = z.looseObject({
+  kind: z.literal("grade"),
+  run_id: z.string(),
+  grade: GradeEnum,
+  needs_review: z.boolean(),
+});
+
+/** The latest grade per run_id (a regrade replaces the earlier one). */
+function readGrades(): Map<string, z.output<typeof GradeLine>> {
+  const grades = new Map<string, z.output<typeof GradeLine>>();
+  if (!existsSync(LOG_FILE)) return grades;
+  for (const l of readFileSync(LOG_FILE, "utf8").split("\n")) {
+    const p = jsonOf(GradeLine).safeParse(l);
+    if (p.success) grades.set(p.data.run_id, p.data);
+  }
+  return grades;
+}
+
+/** Per roster row: how its graded runs went — fed to Jev with each row's use_for. */
+function gradeTally(): Map<string, Record<Grade, number>> {
+  const grades = readGrades();
+  const tally = new Map<string, Record<Grade, number>>();
+  for (const logged of readLog()) {
+    const g =
+      logged.run_id === undefined ? undefined : grades.get(logged.run_id);
+    if (logged.kind !== "run" || g === undefined) continue;
+    const t = tally.get(logged.pick.choice) ?? { pass: 0, partial: 0, fail: 0 };
+    t[g.grade] += 1;
+    tally.set(logged.pick.choice, t);
+  }
+  return tally;
+}
+
+const GRADE_TEXT_CHARS = 6000;
+
+async function grade(runId: string, evidencePath: string): Promise<number> {
+  const roster = await loadRosterOrDie();
+  const logged = readLog().find((l) => l.kind === "run" && l.run_id === runId);
+  if (logged === undefined)
+    fatal(`no run ${runId} in ${LOG_FILE} (agent-router stats lists the log)`);
+  if (!existsSync(evidencePath))
+    fatal(
+      `no such evidence file: ${evidencePath} — put the check output there (lint, typecheck, tests vs baseline)`,
+    );
+  const evidence = readFileSync(evidencePath, "utf8");
+  const briefPath = logged.brief?.path;
+  const brief =
+    briefPath !== undefined && existsSync(briefPath)
+      ? readFileSync(briefPath, "utf8")
+      : "(brief file no longer exists)";
+  const request: Record<string, unknown> = {
+    state: {
+      task: brief.slice(0, GRADE_TEXT_CHARS),
+      worker_report: (logged.worker?.last_message ?? "(no report)").slice(
+        0,
+        GRADE_TEXT_CHARS,
+      ),
+      evidence: evidence.slice(0, GRADE_TEXT_CHARS),
+    },
+    questions: {
+      grade: {
+        type: "choice",
+        instructions:
+          "How did the worker do on `task`? Judge by `evidence` (checks the coordinator ran), not by `worker_report` (the worker's own claim); where they disagree, `evidence` wins.",
+        criteria: GRADES,
+      },
+    },
+  };
+  if (roster.auto.jev.api === "typesafe") request.model = roster.auto.jev.model;
+  const reply = await askJevChoice(roster, request, "grade");
+  if (!reply.ok) fatal(`not graded: ${reply.reason}`);
+  const answer = reply.answer;
+  const graded = GradeEnum.safeParse(answer.choice);
+  if (!graded.success)
+    fatal(`not graded: jev answered '${answer.choice}', not pass|partial|fail`);
+  const confidence = answer.confidence ?? 0;
+  const record = {
+    kind: "grade",
+    run_id: runId,
+    grade: graded.data,
+    confidence,
+    probabilities: answer.probabilities ?? {},
+    needs_review: confidence < roster.auto.min_confidence,
+    evidence: { path: resolve(evidencePath), sha256: sha256(evidence) },
+    graded_at: now(),
+    jev: reply.trace,
+  };
+  appendLog(record);
+  console.error(
+    `agent-router: ${runId} graded ${answer.choice} (confidence ${confidence.toFixed(2)}${record.needs_review ? `, below ${roster.auto.min_confidence}: NEEDS REVIEW` : ""})`,
+  );
+  process.stdout.write(
+    `${JSON.stringify({ schema: SCHEMA, ...record, jev: undefined })}\n`,
+  );
+  return 0;
 }
 
 function stats(): number {
@@ -573,17 +727,6 @@ const rejectPrototypeFlag = (type: string, flag: string): void => {
   if (type === "unknown-flag" && flag === "__proto__")
     fatal(`unknown option '--${flag}'`);
 };
-const requiredText = (v: string): string => {
-  if (v === "") throw new Error("a value is required");
-  return v;
-};
-const seconds = (v: string): number => {
-  const n = Number(v);
-  if (!Number.isInteger(n) || n <= 0)
-    throw new Error(`not a positive whole number of seconds: ${v}`);
-  return n;
-};
-
 const argv = cli({
   name: "agent-router",
   strictFlags: true,
@@ -601,32 +744,33 @@ const argv = cli({
       parameters: [],
       flags: {
         promptFile: {
-          type: requiredText,
+          type: String,
           description: "the brief (Markdown) the worker gets",
         },
         cd: {
-          type: requiredText,
+          type: String,
           description: "the worker's working directory",
         },
         sandbox: {
-          type: requiredText,
+          type: String,
           description: "read-only | workspace-write",
         },
         choice: {
-          type: requiredText,
+          type: String,
           default: "auto",
-          description: "a roster row id, or auto (Jev picks)",
+          description:
+            "refused unless auto: Jev alone picks the row (kept so the refusal can say why)",
         },
         label: {
-          type: requiredText,
+          type: String,
           description: "short name shown by ls and the statusline",
         },
         timeoutS: {
-          type: seconds,
+          type: String,
           description: "worker wall clock (codex-run --timeout-s)",
         },
       },
-      help: { description: "pick a row (or take --choice) and run the worker" },
+      help: { description: "Jev picks a row; run the worker" },
     }),
     command({
       name: "pick",
@@ -635,11 +779,11 @@ const argv = cli({
       parameters: [],
       flags: {
         promptFile: {
-          type: requiredText,
+          type: String,
           description: "the brief to classify",
         },
         cd: {
-          type: requiredText,
+          type: String,
           default: ".",
           description: "the directory the brief would run in (no_egress)",
         },
@@ -660,12 +804,41 @@ const argv = cli({
       parameters: [],
       help: { description: "pick and outcome statistics from runs.jsonl" },
     }),
+    command({
+      name: "grade",
+      strictFlags: true,
+      ignoreArgv: rejectPrototypeFlag,
+      parameters: ["<run_id>"],
+      flags: {
+        evidence: {
+          type: String,
+          description:
+            "file holding the checks you ran on the run's work (lint, typecheck, tests vs baseline)",
+        },
+      },
+      help: {
+        description:
+          "Jev grades a finished run pass|partial|fail from your evidence; appended to runs.jsonl",
+      },
+    }),
   ],
 });
 
 async function main(): Promise<number | undefined> {
   if (argv.command === "run") {
     const f = argv.flags;
+    if (
+      [f.promptFile, f.cd, f.sandbox, f.choice, f.label].some(
+        (value) => value === "",
+      )
+    )
+      fatal("a value is required");
+    const timeoutS = f.timeoutS === undefined ? undefined : Number(f.timeoutS);
+    if (
+      timeoutS !== undefined &&
+      (!Number.isInteger(timeoutS) || timeoutS <= 0)
+    )
+      fatal(`not a positive whole number of seconds: ${f.timeoutS}`);
     if (
       f.promptFile === undefined ||
       f.cd === undefined ||
@@ -682,15 +855,23 @@ async function main(): Promise<number | undefined> {
       sandbox: f.sandbox,
       choice: f.choice,
       label: f.label,
-      timeoutS: f.timeoutS,
+      timeoutS,
     });
   }
   if (argv.command === "pick") {
+    if (argv.flags.promptFile === "" || argv.flags.cd === "")
+      fatal("a value is required");
     if (argv.flags.promptFile === undefined) fatal("pick needs --prompt-file");
     return pickOnly(argv.flags.promptFile, argv.flags.cd);
   }
   if (argv.command === "ls") return ls();
   if (argv.command === "stats") return stats();
+  if (argv.command === "grade") {
+    const evidence = argv.flags.evidence;
+    if (evidence === undefined || evidence === "")
+      fatal("grade needs --evidence <file> (the checks you ran on the work)");
+    return grade(argv._.runId, evidence);
+  }
   return undefined;
 }
 

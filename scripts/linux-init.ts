@@ -35,7 +35,8 @@ const DOTFILES = join(homedir(), "dotfiles");
 const BIN = join(homedir(), ".local/bin");
 const MISE = join(BIN, "mise");
 const RUNTIME_BIN = join(homedir(), ".local/share/dotfiles/runtime/bin");
-const RUNTIMES = new Set(["bun", "uv", "rustup"]);
+// sccache rides with cargo: the profiles set RUSTC_WRAPPER=sccache, so it must reach every shell cargo does.
+const RUNTIMES = new Set(["bun", "uv", "rustup", "sccache"]);
 // Core agent CLIs that are not Brewfile entries on Linux (on the Mac agy is a cask). Same mise path.
 const AGENT_TOOLS = ["agy"] as const;
 

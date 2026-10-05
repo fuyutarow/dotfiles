@@ -182,6 +182,8 @@ async function checkPane(host: string): Promise<Finding> {
 const TOPIC_COMMANDS = [
   "btm",
   "bun", // interactive only: Claude Code hooks run `bun …` (zsh/zshrc runtime dir)
+  "cargo",
+  "sccache", // RUSTC_WRAPPER=sccache is unconditional: without it every cargo call fails
 
   "herdr",
   "jj",

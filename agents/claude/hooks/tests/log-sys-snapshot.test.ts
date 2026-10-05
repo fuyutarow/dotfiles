@@ -46,7 +46,7 @@ const messageOf = (stdout: string): string =>
 const body = (stdout: string): string =>
   messageOf(stdout)
     .replace(ANSI, "")
-    .replace(/^\d\d-\d\d \d\d:\d\d \| /u, "");
+    .replace(/^\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| /u, ""); // the prompt-stamp.ts shape, offset included
 const fire = (home: string, event: string) =>
   runHook(HOOK, { hook_event_name: event, session_id: "s1" }, { HOME: home });
 
@@ -61,7 +61,7 @@ describe("log-sys-snapshot", () => {
     const msg = messageOf(fire(homeWithCache(1_000), "Stop").stdout);
     expect(msg).not.toContain("\n");
     expect(msg.replace(ANSI, "")).toMatch(
-      /^\d\d-\d\d \d\d:\d\d \| Sys: CPU 25%/u,
+      /^\d\d-\d\d \d\d:\d\d [+-]\d\d(?:\d\d)? \| Sys: CPU 25%/u,
     );
   });
   test("PostToolUse within a minute of the last line stays silent", () => {

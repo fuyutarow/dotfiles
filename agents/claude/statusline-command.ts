@@ -102,6 +102,7 @@ import {
   clockHM,
   localFromEpochSec,
   nowEpochSec,
+  pad2,
   promptParts,
   stampMDHM,
   type PromptParts,
@@ -213,8 +214,6 @@ const HOME = process.env.HOME ?? "";
 const SEP = ` ${DIM}|${RST} `;
 const BR = "⎇"; //    git branch glyph
 const RSET = "⟳"; //  rate-limit reset marker
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 // Which Claude account this CLI is authenticated as, AND the per-model weekly caps below —
 // one parse of ~/.claude.json serves both, the same file `claude` itself writes on login and

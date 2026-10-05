@@ -23,6 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { attempt } from "../../hooks/attempt.ts";
 import { arr, at, parseJson, str, strAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
+import { stampMDHMZ } from "./prompt-stamp.ts";
 
 const HOME = process.env.HOME ?? "";
 const CACHE = `${HOME}/.cache/claude/statusline-sys.json`;
@@ -36,10 +37,6 @@ const RST = "\u001B[0m";
 const DIM = "\u001B[2m";
 const SEP = ` ${DIM}|${RST} `; // the statusline's own separator
 const MIN_GAP_MS = 60_000;
-
-function p2(n: number): string {
-  return String(n).padStart(2, "0");
-}
 
 async function main(): Promise<void> {
   const payload = readStdinJson();
@@ -71,10 +68,9 @@ async function main(): Promise<void> {
     const row = strAt(r, "ansi") ?? strAt(r, "line");
     return row === undefined || row === "" ? [] : [row];
   });
-  // One record per line: "MM-DD HH:MM | Ctx: … | Rate: … | Sys: …" — the time is this event's (the
-  // mobile app shows none), the separator is the bar's SEP.
-  const t = Temporal.Now.plainDateTimeISO();
-  const time = `${p2(t.month)}-${p2(t.day)} ${p2(t.hour)}:${p2(t.minute)}`;
+  // One record per line: "MM-DD HH:MM +09 | Ctx: … | Rate: … | Sys: …" — the time is this event's
+  // (the mobile app shows none), in the prompt's own shape (prompt-stamp.ts); the separator is SEP.
+  const time = stampMDHMZ(Temporal.Now.zonedDateTimeISO());
   const shown = [`${DIM}${time}${RST}`, ...rows, sys].join(SEP);
 
   const statePath = `${STATE_DIR}/${key}.last`;

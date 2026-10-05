@@ -8,7 +8,10 @@
 
 import { hostname, userInfo } from "node:os";
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
+// THE ONE HOME for how a wall-clock time is shown (2026-10-06: a Stop hook formatted its own
+// "MM-DD HH:MM" and never got the offset the prompt, statusline and /quote had). Anything that
+// prints a time imports from here; a second padStart-and-join elsewhere is the bug to look for.
+export const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** Anything carrying local wall-clock fields: PlainDateTime or ZonedDateTime. */
 type WallClock = Pick<
@@ -40,6 +43,10 @@ export function offsetShort(z: Pick<Temporal.ZonedDateTime, "offset">): string {
 /** "MM-DD HH:MM +09" — the prompt's stamp with its offset, spaced for legibility (owner, 2026-10-06). */
 export const stampMDHMZ = (z: Temporal.ZonedDateTime): string =>
   `${stampMDHM(z)} ${offsetShort(z)}`;
+
+/** "HH:MM +09" — a clock time with its offset. */
+export const clockHMZ = (z: Temporal.ZonedDateTime): string =>
+  `${clockHM(z)} ${offsetShort(z)}`;
 
 /** Unix epoch seconds -> local wall clock, in this process's time zone. */
 export const localFromEpochSec = (s: number): Temporal.ZonedDateTime =>

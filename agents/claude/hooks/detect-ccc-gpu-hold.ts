@@ -38,6 +38,7 @@ import { dirname, join } from "node:path";
 import { attempt, attemptOr } from "../../hooks/attempt.ts";
 import { at, obj, parseJson, strAt, strsAt } from "../../hooks/narrow.ts";
 import { readStdinJson } from "./lib.ts";
+import { clockHMZ, localFromEpochSec } from "./prompt-stamp.ts";
 
 const INDEXING_ALERT_MS = 15 * 60_000;
 const REALERT_MS = 30 * 60_000;
@@ -168,11 +169,9 @@ function hostGpuLine(): string {
     : "host-wide GPU util/VRAM unreadable";
 }
 
+// "HH:MM +09", the prompt's own clock shape (prompt-stamp.ts), not a locale's.
 function clock(ms: number): string {
-  return Temporal.Instant.fromEpochMilliseconds(ms).toLocaleString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return clockHMZ(localFromEpochSec(ms / 1000));
 }
 
 async function main(): Promise<void> {
